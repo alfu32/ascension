@@ -139,6 +139,16 @@ impl Rules {
                 });
             }
         }
+        for row in self.faction_aliases.values().flatten() {
+            if self.kind(row.def_id) == Some(DefKind::Faction) {
+                problems.push(Problem {
+                    message: format!(
+                        "faction_alias on {}: a faction cannot be aliased",
+                        self.label(row.def_id)
+                    ),
+                });
+            }
+        }
         problems
     }
 

@@ -206,7 +206,12 @@ Moving a step to another age is a one-row change in `prerequisite`.
 `map_style_feature.region_kind` says whether a feature belongs on a planet
 or in space. The result is stored once: whole-map arrays in `map_grid`, the
 regions in `map_region`, and every deposit, forest stand, rare resource and
-resource planet as an `entity` row of class `node`. Meshes and materials
+resource planet as an `entity` row of class `node`. The generator takes one
+faction per player and gives each race present its own home planet (adding
+planets when the style has fewer than there are races); `per_player` features
+are placed around each start, `scattered` planet features on every planet.
+The rules loader resolves names through `Rules::display_name`
+(`faction_alias`, nearest ancestor first) and races through `Rules::race_of`. Meshes and materials
 flagged `baked` are produced before the first tick. Nothing is generated
 while the match runs.
 

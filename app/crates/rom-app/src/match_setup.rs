@@ -76,30 +76,52 @@ fn snap(coordinate: i32, size: i64) -> i32 {
     ((i64::from(coordinate) - size * 500 + 500).div_euclid(1000) * 1000 + size * 500) as i32
 }
 
-/// Builds the world: one player per map start, each with a city and builders, and the map's
-/// nodes owned by the neutral player 0.
-pub fn build_match(rules: &Arc<Rules>, map: &GeneratedMap, seed: u64) -> Result<Match, SetupError> {
-    let city = city_type(rules).ok_or(SetupError::NoCity)?;
-    let builder = builder_type(rules).ok_or(SetupError::NoBuilder)?;
-    let (city_id, builder_id) = (city.id, builder.id);
-    let first_age = *rules
+/// The age matches start in: the first by ordinal.
+pub fn start_age(rules: &Rules) -> Option<DefId> {
+    rules
         .ages
         .values()
         .min_by_key(|age| (age.ordinal, age.id))
-        .map(|age| &age.id)
-        .ok_or(SetupError::NoFaction)?;
-    let mut factions: Vec<DefId> = rules
-        .factions
-        .values()
-        .filter(|f| {
-            f.playable && rules.is_available(city_id, f.id) && rules.is_available(builder_id, f.id)
-        })
-        .map(|f| f.id)
-        .collect();
-    if factions.is_empty() {
-        factions = rules.factions.keys().copied().collect();
+        .map(|age| age.id)
+}
+
+/// The factions of `players` default players: races in id order take turns, each giving its
+/// start factions in id order, so with three races four players are two groups of the first
+/// race and one group of each other. Chosen through the start-age window and the race
+/// ancestry, never by key or name.
+pub fn default_factions(rules: &Rules, players: u32) -> Vec<DefId> {
+    let Some(age) = start_age(rules) else {
+        return Vec::new();
+    };
+    let mut by_race: BTreeMap<DefId, Vec<DefId>> = BTreeMap::new();
+    for faction in rules.playable_start_factions(age) {
+        by_race
+            .entry(rules.race_of(faction))
+            .or_default()
+            .push(faction);
     }
-    if factions.is_empty() {
+    let races: Vec<&Vec<DefId>> = by_race.values().collect();
+    (0..players as usize)
+        .map(|i| {
+            let groups = races[i % races.len()];
+            groups[(i / races.len()) % groups.len()]
+        })
+        .collect()
+}
+
+/// Builds the world: one player per map start with the given faction, each with a city and
+/// builders, and the map's nodes owned by the neutral player 0. Every player is on its own team.
+pub fn build_match(
+    rules: &Arc<Rules>,
+    map: &GeneratedMap,
+    factions: &[DefId],
+    seed: u64,
+) -> Result<Match, SetupError> {
+    let city = city_type(rules).ok_or(SetupError::NoCity)?;
+    let builder = builder_type(rules).ok_or(SetupError::NoBuilder)?;
+    let (city_id, builder_id) = (city.id, builder.id);
+    let first_age = start_age(rules).ok_or(SetupError::NoFaction)?;
+    if factions.is_empty() || factions.len() != map.starts.len() {
         return Err(SetupError::NoFaction);
     }
     let resources: BTreeMap<DefId, i64> = rules
@@ -126,8 +148,8 @@ pub fn build_match(rules: &Arc<Rules>, map: &GeneratedMap, seed: u64) -> Result<
         techs: BTreeMap::new(),
     };
     let mut players = vec![player(0, factions[0])];
-    for index in 0..map.starts.len() {
-        players.push(player(index as u32 + 1, factions[index % factions.len()]));
+    for (index, faction) in factions.iter().enumerate() {
+        players.push(player(index as u32 + 1, *faction));
     }
     let mut world = World::new(Arc::clone(rules), map.grid.clone(), seed, players)?;
 
@@ -200,7 +222,7 @@ mod tests {
     #[test]
     fn match_setup_spawns_city_and_builders_per_player() {
         let content = content(3);
-        let setup = build_match(&content.rules, &content.map, 1).expect("match");
+        let setup = build_match(&content.rules, &content.map, &content.factions, 1).expect("match");
         let world = &setup.world;
         assert_eq!(setup.starts.len(), 3);
         let city = city_type(&content.rules).expect("a city type");
@@ -266,5 +288,74 @@ mod tests {
             world.players().find(|p| p.id == NEUTRAL).map(|p| p.team),
             Some(0)
         );
+    }
+
+    fn races_of(content: &crate::terrain::Content, factions: &[DefId]) -> Vec<DefId> {
+        factions.iter().map(|f| content.rules.race_of(*f)).collect()
+    }
+
+    #[test]
+    fn default_factions_cover_every_race() {
+        let content = content(4);
+        let rules = &content.rules;
+        assert_eq!(content.factions.len(), 4);
+        let races = races_of(&content, &content.factions);
+        let every_race: std::collections::BTreeSet<DefId> = rules
+            .factions
+            .values()
+            .filter(|f| f.kind == rom_rules::FactionKind::Race && f.playable)
+            .map(|f| f.id)
+            .collect();
+        assert_eq!(
+            races
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>(),
+            every_race
+        );
+        // Two groups of the first race, one of each other race, all different factions.
+        assert_eq!(races.iter().filter(|r| **r == races[0]).count(), 2);
+        let distinct: std::collections::BTreeSet<_> = content.factions.iter().collect();
+        assert_eq!(distinct.len(), 4);
+        let at_start = rules.playable_start_factions(start_age(rules).unwrap());
+        assert!(content.factions.iter().all(|f| at_start.contains(f)));
+    }
+
+    #[test]
+    fn players_receive_their_faction_and_distinct_teams() {
+        let content = content(4);
+        let setup = build_match(&content.rules, &content.map, &content.factions, 1).expect("match");
+        let mut teams = Vec::new();
+        for (index, faction) in content.factions.iter().enumerate() {
+            let player = setup
+                .world
+                .players()
+                .find(|p| p.id == PlayerId(index as u32 + 1))
+                .expect("player");
+            assert_eq!(player.faction, *faction);
+            teams.push(player.team);
+        }
+        teams.sort_unstable();
+        teams.dedup();
+        assert_eq!(teams.len(), 4);
+        assert!(build_match(&content.rules, &content.map, &content.factions[..2], 1).is_err());
+    }
+
+    #[test]
+    fn match_setup_places_each_race_on_its_home_planet() {
+        let content = content(4);
+        let setup = build_match(&content.rules, &content.map, &content.factions, 1).expect("match");
+        let races = races_of(&content, &content.factions);
+        for (index, start) in setup.starts.iter().enumerate() {
+            let entity = setup.world.entity(start.city).expect("city");
+            let (x, y) = (entity.pos.x / 1000, entity.pos.y / 1000);
+            let at = (y as usize) * content.map.grid.width as usize + x as usize;
+            let region = content.map.regions[content.map.region[at] as usize];
+            assert_eq!(region.home_race, Some(races[index]), "player {index}");
+        }
+        let homes: std::collections::BTreeSet<_> = (0..4)
+            .map(|i| content.map.start_region(i).unwrap())
+            .collect();
+        assert_eq!(homes.len(), 3);
     }
 }

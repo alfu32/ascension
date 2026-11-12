@@ -191,8 +191,13 @@ fn world_view(
 fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThread, String> {
     let content = terrain::generate_content(options)?;
     bridge.publish_terrain(Arc::new(terrain::to_scene(&content.map)));
-    let mut game = build_match(&content.rules, &content.map, options.seed)
-        .map_err(|error| format!("setting up the match: {error}"))?;
+    let mut game = build_match(
+        &content.rules,
+        &content.map,
+        &content.factions,
+        options.seed,
+    )
+    .map_err(|error| format!("setting up the match: {error}"))?;
     let wanderers = add_stress_units(&mut game, options.stress_units, options.seed);
     let driver = options
         .demo

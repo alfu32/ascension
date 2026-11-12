@@ -330,7 +330,7 @@ mod tests {
             ..Options::default()
         })
         .expect("content");
-        let game = build_match(&content.rules, &content.map, 1).expect("match");
+        let game = build_match(&content.rules, &content.map, &content.factions, 1).expect("match");
         let world = &game.world;
         let snapshot = snapshot_of(world);
         assert_eq!(snapshot.tick, world.tick());

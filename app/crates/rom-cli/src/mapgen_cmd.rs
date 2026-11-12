@@ -5,12 +5,13 @@ use std::{fs, path::PathBuf};
 use rom_mapgen::{GeneratedMap, MapRequest, generate};
 use rom_rules::{DefId, Layer, Rules};
 
-const USAGE: &str = "usage: rom mapgen --db <rules.db> --style <key> --seed <n> --players <n> --size <W>x<H> [--ppm <file>]";
+const USAGE: &str = "usage: rom mapgen --db <rules.db> --style <key> --seed <n> (--players <n> | --factions <key,key,...>) --size <W>x<H> [--ppm <file>]";
 
 /// Runs the subcommand with the arguments after `mapgen`.
 pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::error::Error>> {
     let (mut db, mut style, mut seed, mut players, mut size, mut ppm) =
         (None, None, None, None, None, None);
+    let mut factions: Option<Vec<String>> = None;
     while let Some(flag) = args.next() {
         let value = args
             .next()
@@ -20,6 +21,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
             "--style" => style = Some(value),
             "--seed" => seed = Some(value.parse::<u64>()?),
             "--players" => players = Some(value.parse::<u32>()?),
+            "--factions" => factions = Some(value.split(',').map(str::to_owned).collect()),
             "--size" => {
                 let (w, h) = value.split_once('x').ok_or("size must look like 256x256")?;
                 size = Some((w.parse::<u32>()?, h.parse::<u32>()?));
@@ -28,11 +30,10 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
             _ => return Err(format!("unknown argument: {flag}").into()),
         }
     }
-    let (db, style, seed, players, (width, height)) = (
+    let (db, style, seed, (width, height)) = (
         db.ok_or(USAGE)?,
         style.ok_or(USAGE)?,
         seed.ok_or(USAGE)?,
-        players.ok_or(USAGE)?,
         size.ok_or(USAGE)?,
     );
     let conn =
@@ -41,6 +42,27 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
     let style_id = rules
         .id_of(&style)
         .ok_or_else(|| format!("unknown style {style}"))?;
+    let player_factions = match (factions, players) {
+        (Some(_), Some(_)) => return Err("use either --players or --factions".into()),
+        (Some(keys), None) => keys
+            .iter()
+            .map(|key| {
+                rules
+                    .id_of(key)
+                    .filter(|id| rules.factions.contains_key(id))
+                    .ok_or_else(|| format!("unknown faction {key}"))
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        (None, Some(n)) => {
+            let first = rules
+                .factions
+                .values()
+                .find(|f| f.playable)
+                .ok_or("the rules have no playable faction")?;
+            vec![first.id; n as usize]
+        }
+        (None, None) => return Err(USAGE.into()),
+    };
     let map = generate(
         &rules,
         &MapRequest {
@@ -48,9 +70,25 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
             seed,
             width,
             height,
-            players,
+            player_factions: player_factions.clone(),
         },
     )?;
+    let mut homes: Vec<(rom_rules::DefId, Vec<usize>)> = Vec::new();
+    for (index, faction) in player_factions.iter().enumerate() {
+        let race = rules.race_of(*faction);
+        match homes.iter_mut().find(|(r, _)| *r == race) {
+            Some((_, players)) => players.push(index + 1),
+            None => homes.push((race, vec![index + 1])),
+        }
+    }
+    homes.sort_by_key(|(race, _)| *race);
+    let homes: Vec<String> = homes
+        .iter()
+        .map(|(race, players)| {
+            let list: Vec<String> = players.iter().map(usize::to_string).collect();
+            format!("{}:{}", rules.key(*race), list.join("+"))
+        })
+        .collect();
     let fairness = map.fairness(&rules);
     let total = u64::from(width) * u64::from(height);
     let share = |layer: Layer| {
@@ -63,7 +101,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
         n * 100 / total
     };
     println!(
-        "map {width}x{height} regions={} starts={} nodes={} land={}% sea={}% space={}% fair={} hash={:016x}",
+        "map {width}x{height} regions={} starts={} nodes={} land={}% sea={}% space={}% fair={} hash={:016x} homes={}",
         map.regions.len(),
         map.starts.len(),
         map.nodes.len(),
@@ -71,7 +109,8 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
         share(Layer::Fluid),
         share(Layer::Space),
         if fairness.is_empty() { "yes" } else { "no" },
-        map.hash()
+        map.hash(),
+        homes.join(",")
     );
     for problem in &fairness {
         eprintln!("unfair: {problem}");

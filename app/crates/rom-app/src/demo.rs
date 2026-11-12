@@ -305,7 +305,8 @@ mod tests {
             ..Options::default()
         })
         .expect("content");
-        let mut game = build_match(&content.rules, &content.map, 1).expect("match");
+        let mut game =
+            build_match(&content.rules, &content.map, &content.factions, 1).expect("match");
         let mut driver = DemoDriver::new(&game, 1, Vec::new());
         let mut errors = Vec::new();
         for _ in 0..600 {

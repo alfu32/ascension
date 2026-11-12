@@ -89,6 +89,62 @@ impl Rules {
         self.modifiers.get(&source).map_or(&[], Vec::as_slice)
     }
 
+    /// The name `def` goes by for `faction`: its own alias, else the nearest ancestor's, else
+    /// the definition's own name.
+    pub fn display_name(&self, def: DefId, faction: DefId) -> &str {
+        if let Some(rows) = self.faction_aliases.get(&def) {
+            let mut current = Some(faction);
+            let mut visited = std::collections::BTreeSet::new();
+            while let Some(id) = current {
+                if !visited.insert(id) {
+                    break;
+                }
+                if let Some(row) = rows.iter().find(|row| row.faction_id == id) {
+                    return &row.name;
+                }
+                current = self.factions.get(&id).and_then(|row| row.parent_id);
+            }
+        }
+        &self.def(def).name
+    }
+
+    /// The faction of kind `race` at the top of `faction`'s parent chain (the faction itself if
+    /// it has no race ancestor).
+    pub fn race_of(&self, faction: DefId) -> DefId {
+        let mut current = faction;
+        let mut visited = std::collections::BTreeSet::new();
+        while visited.insert(current) {
+            let Some(row) = self.factions.get(&current) else {
+                break;
+            };
+            if row.kind == FactionKind::Race {
+                return current;
+            }
+            match row.parent_id {
+                Some(parent) => current = parent,
+                None => break,
+            }
+        }
+        faction
+    }
+
+    /// Playable factions whose age window contains `age`, in id order.
+    pub fn playable_start_factions(&self, age: DefId) -> Vec<DefId> {
+        let Some(at) = self.ages.get(&age).map(|a| a.ordinal) else {
+            return Vec::new();
+        };
+        let ordinal = |id: Option<DefId>| id.and_then(|id| self.ages.get(&id)).map(|a| a.ordinal);
+        self.factions
+            .values()
+            .filter(|f| {
+                f.playable
+                    && ordinal(f.first_age_id).is_none_or(|first| first <= at)
+                    && ordinal(f.last_age_id).is_none_or(|last| at <= last)
+            })
+            .map(|f| f.id)
+            .collect()
+    }
+
     /// Tests roster availability, inheriting listings from faction ancestors.
     pub fn is_available(&self, def: DefId, faction: DefId) -> bool {
         let Some(rows) = self.availability.get(&def) else {

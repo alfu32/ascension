@@ -622,3 +622,69 @@ fn player_stat_ignores_conditions_and_entity_targets() {
     );
     assert_eq!(rules.modifiers_from(DefId(20))[0].op, ModifierOp::Add);
 }
+
+#[test]
+fn display_name_prefers_own_alias_then_ancestor_then_default() {
+    let rules = seed();
+    let id = |key: &str| rules.id_of(key).unwrap();
+    let (city, citizen) = (id("bld.city"), id("unit.citizen"));
+    // An Avian flight calls the city "Roost" through its race.
+    assert_eq!(rules.display_name(city, id("nation.highwind")), "Roost");
+    assert_eq!(rules.display_name(city, id("race.avian")), "Roost");
+    assert_eq!(
+        rules.display_name(citizen, id("nation.ashscale")),
+        "Hatchling"
+    );
+    // No alias anywhere up the chain: the definition's own name.
+    assert_eq!(rules.display_name(city, id("nation.romans")), "City");
+    // A faction's own alias wins over its race's.
+    let rules = tiny("INSERT INTO def(id,kind,key,name) VALUES
+        (50,'faction','race.test','Test race'),(52,'faction','nation.test','Test nation');
+        INSERT INTO faction(id,kind,parent_id) VALUES (50,'race',NULL),(52,'nation',50);
+        INSERT INTO faction_alias(def_id,faction_id,name) VALUES (10,50,'Race name'),(10,52,'Own name');");
+    assert_eq!(rules.display_name(DefId(10), DefId(52)), "Own name");
+    assert_eq!(rules.display_name(DefId(10), DefId(50)), "Race name");
+    assert_eq!(rules.display_name(DefId(10), DefId(0)), "Test node");
+}
+
+#[test]
+fn race_of_walks_to_the_race() {
+    let rules = seed();
+    let id = |key: &str| rules.id_of(key).unwrap();
+    assert_eq!(rules.race_of(id("nation.romans")), id("race.human"));
+    assert_eq!(rules.race_of(id("bloc.europe")), id("race.human"));
+    assert_eq!(rules.race_of(id("nation.mirefang")), id("race.reptilian"));
+    assert_eq!(rules.race_of(id("race.avian")), id("race.avian"));
+}
+
+#[test]
+fn playable_start_factions_at_first_age_are_nations_and_groups_only() {
+    let rules = seed();
+    let first = rules
+        .ages
+        .values()
+        .min_by_key(|age| (age.ordinal, age.id))
+        .unwrap()
+        .id;
+    let start = rules.playable_start_factions(first);
+    assert!(start.windows(2).all(|w| w[0] < w[1]));
+    assert!(!start.is_empty());
+    for f in &start {
+        assert_eq!(rules.factions[f].kind, rom_rules::FactionKind::Nation);
+    }
+    let races: std::collections::BTreeSet<_> = start.iter().map(|f| rules.race_of(*f)).collect();
+    assert_eq!(races.len(), 3);
+    assert!(start.contains(&rules.id_of("nation.romans").unwrap()));
+    assert!(!start.contains(&rules.id_of("bloc.europe").unwrap()));
+    assert!(!start.contains(&rules.id_of("race.human").unwrap()));
+}
+
+#[test]
+fn alias_on_a_faction_is_reported() {
+    assert_problem(
+        "INSERT INTO faction_alias(def_id,faction_id,name)
+        SELECT a.id,b.id,'X' FROM def a,def b WHERE a.key='nation.romans' AND b.key='race.avian';",
+        "faction_alias",
+        &["nation.romans"],
+    );
+}

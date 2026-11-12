@@ -10,13 +10,44 @@ fn rules() -> Rules {
 }
 
 fn request(rules: &Rules, style: &str, seed: u64, players: u32, side: u32) -> MapRequest {
+    let faction = rules.id_of("nation.romans").unwrap_or(DefId(0));
+    MapRequest::uniform(
+        rules.id_of(style).unwrap(),
+        seed,
+        side,
+        side,
+        players,
+        faction,
+    )
+}
+
+/// A request with one player per key, in order.
+fn request_for(rules: &Rules, style: &str, seed: u64, keys: &[&str], side: u32) -> MapRequest {
     MapRequest {
         style: rules.id_of(style).unwrap(),
         seed,
         width: side,
         height: side,
-        players,
+        player_factions: keys.iter().map(|k| rules.id_of(k).unwrap()).collect(),
     }
+}
+
+const THREE_RACES: [&str; 6] = [
+    "nation.romans",
+    "nation.ashscale",
+    "nation.highwind",
+    "nation.greeks",
+    "nation.mirefang",
+    "nation.reedmarsh",
+];
+
+fn planets(m: &GeneratedMap) -> Vec<(usize, rom_mapgen::Region)> {
+    m.regions
+        .iter()
+        .copied()
+        .enumerate()
+        .filter(|(_, g)| g.kind == RegionKind::Planet)
+        .collect()
 }
 
 fn make(rules: &Rules, style: &str, seed: u64, players: u32, side: u32) -> GeneratedMap {
@@ -99,8 +130,11 @@ fn planet_count_matches_style() {
             r.map_styles[&r.id_of(style).unwrap()].planets
         );
         assert_eq!(m.regions[0].kind, RegionKind::Space);
-        assert!(planets[0].1.home);
-        assert_eq!(planets.iter().filter(|p| p.1.home).count(), 1);
+        assert!(planets[0].1.home_race.is_some());
+        assert_eq!(
+            planets.iter().filter(|p| p.1.home_race.is_some()).count(),
+            1
+        );
         let home_area = planets[0].1.w * planets[0].1.h;
         assert!(planets.iter().all(|p| p.1.w * p.1.h <= home_area));
         for (i, (_, a)) in planets.iter().enumerate() {
@@ -126,7 +160,11 @@ fn starts_are_on_buildable_land_and_apart() {
     for players in [2, 4, 8] {
         let m = make(&r, "map.one_world", 11, players, 256);
         assert_eq!(m.starts.len(), players as usize);
-        let home = m.regions.iter().position(|g| g.home).unwrap();
+        let home = m
+            .regions
+            .iter()
+            .position(|g| g.home_race.is_some())
+            .unwrap();
         let g = m.regions[home];
         let min = i64::from(g.w.min(g.h) / 4);
         for (i, s) in m.starts.iter().enumerate() {
@@ -265,4 +303,173 @@ fn too_many_players_is_an_error() {
     let r = rules();
     let req = request(&r, "map.one_world", 1, 4, 16);
     assert_eq!(generate(&r, &req), Err(MapGenError::NoRoomForPlayers(4)));
+}
+
+fn centre(g: &rom_mapgen::Region) -> (i64, i64) {
+    (
+        i64::from(g.x) + i64::from(g.w) / 2,
+        i64::from(g.y) + i64::from(g.h) / 2,
+    )
+}
+
+#[test]
+fn each_race_gets_its_own_home_planet() {
+    let r = rules();
+    let req = request_for(&r, "map.many_worlds", 5, &THREE_RACES, 384);
+    let m = generate(&r, &req).unwrap();
+    assert_eq!(m.starts.len(), 6);
+    let homes: Vec<_> = planets(&m)
+        .into_iter()
+        .filter(|(_, g)| g.home_race.is_some())
+        .collect();
+    assert_eq!(homes.len(), 3);
+    let area = |g: &rom_mapgen::Region| g.w * g.h;
+    for (_, p) in planets(&m) {
+        if p.home_race.is_none() {
+            assert!(homes.iter().all(|(_, h)| area(h) >= area(&p)));
+        }
+    }
+    for (i, f) in req.player_factions.iter().enumerate() {
+        let region = m.start_region(i).unwrap();
+        assert_eq!(
+            m.regions[region].home_race,
+            Some(r.race_of(*f)),
+            "player {i}"
+        );
+    }
+    let mut used: Vec<_> = (0..6).map(|i| m.start_region(i).unwrap()).collect();
+    used.sort_unstable();
+    used.dedup();
+    assert_eq!(used.len(), 3);
+}
+
+#[test]
+fn same_race_players_share_a_planet_and_are_apart() {
+    let r = rules();
+    let m = generate(
+        &r,
+        &request_for(&r, "map.many_worlds", 9, &THREE_RACES, 384),
+    )
+    .unwrap();
+    for (a, b) in [(0, 3), (1, 4), (2, 5)] {
+        assert_eq!(m.start_region(a), m.start_region(b));
+        let g = m.regions[m.start_region(a).unwrap()];
+        let min = i64::from(g.w.min(g.h) / 4);
+        assert!(d2(tile(m.starts[a]), tile(m.starts[b])) >= min * min);
+    }
+    assert_ne!(m.start_region(0), m.start_region(1));
+}
+
+#[test]
+fn home_planets_are_far_apart() {
+    let r = rules();
+    for seed in 0..20 {
+        let m = generate(
+            &r,
+            &request_for(&r, "map.many_worlds", seed, &THREE_RACES, 384),
+        )
+        .unwrap();
+        let homes: Vec<_> = m.regions.iter().filter(|g| g.home_race.is_some()).collect();
+        for (i, a) in homes.iter().enumerate() {
+            for b in &homes[i + 1..] {
+                assert!(
+                    d2(centre(a), centre(b)) >= 150 * 150,
+                    "seed {seed}: homes too close"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn single_race_request_matches_previous_layout_rules() {
+    let r = rules();
+    let m = generate(&r, &request(&r, "map.many_worlds", 4, 4, 384)).unwrap();
+    let homes = planets(&m)
+        .into_iter()
+        .filter(|(_, g)| g.home_race.is_some())
+        .count();
+    assert_eq!(homes, 1);
+    assert_eq!(planets(&m).len(), 4);
+    assert_eq!(m.fairness(&r), Vec::<String>::new());
+    let first = m.start_region(0).unwrap();
+    assert!((0..4).all(|i| m.start_region(i) == Some(first)));
+}
+
+#[test]
+fn planet_count_grows_to_fit_races() {
+    let r = rules();
+    let m = generate(&r, &request_for(&r, "map.one_world", 2, &THREE_RACES, 256)).unwrap();
+    assert_eq!(planets(&m).len(), 3);
+    assert_eq!(
+        planets(&m)
+            .iter()
+            .filter(|(_, g)| g.home_race.is_some())
+            .count(),
+        3
+    );
+    assert_eq!(m.fairness(&r), Vec::<String>::new());
+}
+
+#[test]
+fn too_many_races_for_the_map_is_an_error() {
+    let r = rules();
+    let req = request_for(&r, "map.many_worlds", 1, &THREE_RACES, 24);
+    assert_eq!(generate(&r, &req), Err(MapGenError::TooManyRaces(3)));
+}
+
+#[test]
+fn many_worlds_has_features_after_seed_change() {
+    let r = rules();
+    let style = r.id_of("map.many_worlds").unwrap();
+    assert!(r.map_style_features[&style].len() >= 5);
+    let m = generate(
+        &r,
+        &request_for(&r, "map.many_worlds", 3, &THREE_RACES, 384),
+    )
+    .unwrap();
+    let features = m
+        .grid
+        .terrain
+        .iter()
+        .filter(|t| {
+            r.terrains.contains_key(t)
+                && ![m.base.land, m.base.shallow, m.base.deep, m.base.space].contains(t)
+        })
+        .count();
+    assert!(features > 0);
+    assert!(!m.nodes.is_empty());
+    // Every planet carries a relic site.
+    let relics = r.id_of("node.relics").unwrap();
+    for (id, _) in planets(&m) {
+        assert!(
+            m.nodes.iter().any(|n| {
+                let (x, y) = tile(n.pos);
+                n.entity_type == relics && usize::from(m.region[(y * 384 + x) as usize]) == id
+            }),
+            "planet {id} has no relic site"
+        );
+    }
+}
+
+#[test]
+fn fairness_passes_for_50_seeds_three_races() {
+    let r = rules();
+    for seed in 0..50 {
+        let m = generate(
+            &r,
+            &request_for(&r, "map.many_worlds", seed, &THREE_RACES, 384),
+        )
+        .unwrap();
+        assert_eq!(m.fairness(&r), Vec::<String>::new(), "seed {seed}");
+    }
+}
+
+#[test]
+fn same_request_same_map_with_factions() {
+    let r = rules();
+    let req = request_for(&r, "map.many_worlds", 6, &THREE_RACES, 384);
+    let (a, b) = (generate(&r, &req).unwrap(), generate(&r, &req).unwrap());
+    assert_eq!(a, b);
+    assert_eq!(a.hash(), b.hash());
 }

@@ -976,6 +976,18 @@ pub struct FactionName {
     /// The `name` column.
     pub name: String,
 }
+/// One `faction_alias` row: a definition's name for one faction.
+#[derive(Debug, Clone)]
+pub struct FactionAlias {
+    /// The `def_id` column.
+    pub def_id: DefId,
+    /// The `faction_id` column.
+    pub faction_id: DefId,
+    /// The `name` column.
+    pub name: String,
+    /// The `descr` column.
+    pub descr: String,
+}
 /// One `availability` row.
 #[derive(Debug, Clone)]
 pub struct Availability {
@@ -1774,6 +1786,8 @@ pub struct Rules {
     pub faction_transitions: BTreeMap<DefId, Vec<FactionTransition>>,
     /// Loaded `faction_name` rows, keyed by their owning id or key.
     pub faction_names: BTreeMap<DefId, Vec<FactionName>>,
+    /// Loaded `faction_alias` rows, keyed by the aliased definition.
+    pub faction_aliases: BTreeMap<DefId, Vec<FactionAlias>>,
     /// Loaded `availability` rows, keyed by their owning id or key.
     pub availability: BTreeMap<DefId, Vec<Availability>>,
     /// Loaded `resource_yield` rows, keyed by their owning id or key.

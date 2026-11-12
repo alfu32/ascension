@@ -441,6 +441,9 @@ WITH v(k,rk,p,c0,c1,s0,s1,d0,d1) AS (VALUES
   ('node.ore_planet','space','scattered',6,10,1,1,0,0), ('ter.nebula','space','scattered',2,3,6,12,0,0))
 INSERT INTO map_style_feature(map_style_id,feature_def_id,region_kind,pattern,clumps_min,clumps_max,size_min,size_max,start_min_dist,start_max_dist)
  SELECT (SELECT id FROM def WHERE key='map.one_world'), d.id, v.rk, v.p, v.c0, v.c1, v.s0, v.s1, v.d0, v.d1 FROM v JOIN def d ON d.key=v.k;
+INSERT INTO map_style_feature(map_style_id,feature_def_id,region_kind,pattern,clumps_min,clumps_max,size_min,size_max,start_min_dist,start_max_dist)
+ SELECT (SELECT id FROM def WHERE key='map.many_worlds'), feature_def_id, region_kind, pattern, clumps_min, clumps_max, size_min, size_max, start_min_dist, start_max_dist
+ FROM map_style_feature WHERE map_style_id=(SELECT id FROM def WHERE key='map.one_world') ORDER BY id;
 
 INSERT INTO match_option VALUES
  ('start_age','Start Age','age.ancient'), ('end_age','End Age','age.galactic'),

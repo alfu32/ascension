@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 /// Usage text printed for `--help` and after argument errors.
 pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <file.png>] \
-[--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] \
+[--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] \
 [--map-size <width>x<height>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
 [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-hud] [--hud-scale <percent>] [--stats]";
 
@@ -28,6 +28,8 @@ pub struct Options {
     pub seed: u64,
     /// Number of players.
     pub players: u32,
+    /// Faction keys, one per player; `None` picks the default mix of races.
+    pub factions: Option<Vec<String>>,
     /// Map size in tiles.
     pub map_size: (u32, u32),
     /// Camera placement: target x and y in tiles, distance, yaw and pitch in degrees.
@@ -64,6 +66,7 @@ impl Default for Options {
             style: None,
             seed: 1,
             players: 4,
+            factions: None,
             map_size: (256, 256),
             camera: None,
             boxes: 0,
@@ -114,6 +117,17 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                     return Err("--players expects at least 1".into());
                 }
                 options.players = players;
+            }
+            "--factions" => {
+                let keys: Vec<String> = value("--factions")?
+                    .split(',')
+                    .map(|key| key.trim().to_owned())
+                    .collect();
+                if keys.iter().any(String::is_empty) {
+                    return Err("--factions expects keys separated by commas".into());
+                }
+                options.players = keys.len() as u32;
+                options.factions = Some(keys);
             }
             "--map-size" => options.map_size = parse_map_size(&value("--map-size")?)?,
             "--camera" => options.camera = Some(parse_camera(&value("--camera")?)?),
@@ -248,6 +262,20 @@ mod tests {
         assert!(parse(args(&["--camera", "1,2,3"])).is_err());
         assert!(parse(args(&["--map-size", "0x5"])).is_err());
         assert!(parse(args(&["--players", "0"])).is_err());
+    }
+
+    #[test]
+    fn parses_factions() {
+        let o = parse(args(&["--factions", "nation.romans,nation.ashscale"])).unwrap();
+        assert_eq!(o.players, 2);
+        assert_eq!(
+            o.factions,
+            Some(vec![
+                "nation.romans".to_owned(),
+                "nation.ashscale".to_owned()
+            ])
+        );
+        assert!(parse(args(&["--factions", "a,,b"])).is_err());
     }
 
     #[test]

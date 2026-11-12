@@ -245,6 +245,20 @@ fn load_faction_name(conn: &Connection) -> Result<Vec<FactionName>, RulesError> 
         },
     )
 }
+fn load_faction_alias(conn: &Connection) -> Result<Vec<FactionAlias>, RulesError> {
+    read(
+        conn,
+        "SELECT * FROM faction_alias ORDER BY def_id, faction_id",
+        |row| {
+            Ok(FactionAlias {
+                def_id: DefId(row.get("def_id")?),
+                faction_id: DefId(row.get("faction_id")?),
+                name: row.get("name")?,
+                descr: row.get("descr")?,
+            })
+        },
+    )
+}
 fn load_availability(conn: &Connection) -> Result<Vec<Availability>, RulesError> {
     read(
         conn,
@@ -1008,6 +1022,7 @@ impl Rules {
             group(load_movement_class_terrain(conn)?, |r| r.movement_class_id);
         rules.faction_transitions = group(load_faction_transition(conn)?, |r| r.from_faction_id);
         rules.faction_names = group(load_faction_name(conn)?, |r| r.faction_id);
+        rules.faction_aliases = group(load_faction_alias(conn)?, |r| r.def_id);
         rules.availability = group(load_availability(conn)?, |r| r.def_id);
         rules.resource_yields = group(load_resource_yield(conn)?, |r| r.rare_resource_id);
         rules.damage_classes = load_damage_class(conn)?

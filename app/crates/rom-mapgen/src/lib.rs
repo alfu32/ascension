@@ -3,12 +3,15 @@
 
 use rom_rules::{DefId, FeaturePattern, Layer, MapStyleFeature, Rules};
 use rom_sim::{MapGrid, Pos, SimRng, integer_sqrt};
+use std::collections::BTreeSet;
 use thiserror::Error;
 
 pub use rom_rules::RegionKind;
 
 /// Largest accepted side length in tiles.
 pub const MAX_SIDE: u32 = 4096;
+/// Smallest cell side, in tiles, in which a home planet of a multi-race map may be set.
+const MIN_HOME_CELL: u32 = 16;
 /// Radius, in tiles, around a start that features never cover.
 const START_CLEAR_RADIUS: i64 = 3;
 /// Radius, in tiles, of the land every start needs.
@@ -27,8 +30,28 @@ pub struct MapRequest {
     pub width: u32,
     /// Height in tiles.
     pub height: u32,
-    /// Number of player starts.
-    pub players: u32,
+    /// The faction of each player, in player order; its length is the player count.
+    pub player_factions: Vec<DefId>,
+}
+
+impl MapRequest {
+    /// A request where all `players` have the same faction.
+    pub fn uniform(
+        style: DefId,
+        seed: u64,
+        width: u32,
+        height: u32,
+        players: u32,
+        faction: DefId,
+    ) -> Self {
+        Self {
+            style,
+            seed,
+            width,
+            height,
+            player_factions: vec![faction; players as usize],
+        }
+    }
 }
 
 /// One rectangular area of the map.
@@ -44,8 +67,8 @@ pub struct Region {
     pub w: u32,
     /// Height in tiles.
     pub h: u32,
-    /// True for the shared home planet.
-    pub home: bool,
+    /// The race that starts on this planet, if it is a home planet.
+    pub home_race: Option<DefId>,
 }
 
 /// A resource node placed on the map.
@@ -106,9 +129,12 @@ pub enum MapGenError {
     /// A feature row names something that is neither terrain nor a node.
     #[error("feature {0:?} is neither a terrain nor a node")]
     UnsupportedFeature(DefId),
-    /// The home planet cannot hold that many well-separated starts.
+    /// A home planet cannot hold that many well-separated starts.
     #[error("no room for {0} players on the home planet")]
     NoRoomForPlayers(u32),
+    /// The map has no room for one planet per race.
+    #[error("the map is too small for {0} home planets")]
+    TooManyRaces(u32),
     /// The grid could not be built.
     #[error("invalid grid")]
     Grid,
@@ -187,8 +213,9 @@ fn plan_regions(
     space_pct: i64,
     width: u32,
     height: u32,
+    races: &[DefId],
     rng: &mut SimRng,
-) -> Vec<Region> {
+) -> Result<Vec<Region>, MapGenError> {
     let n = planets;
     let mut cols = isqrt(u64::from(n));
     if cols * cols < n {
@@ -197,23 +224,44 @@ fn plan_regions(
     let cols = cols.max(1);
     let rows = n.div_ceil(cols);
     let (cw, ch) = (width / cols, height / rows);
+    if races.len() > 1 && cw.min(ch) < MIN_HOME_CELL {
+        return Err(MapGenError::TooManyRaces(races.len() as u32));
+    }
     let planet_pct = (100 - space_pct.clamp(0, 99)) as u64;
     // An ellipse fills about 78.5 % of its rectangle.
     let total_area = u64::from(width) * u64::from(height) * planet_pct * 1273 / 100_000;
-    let home_cell = if n > 1 { rng.range(0, n) } else { 0 };
+    let homes = races.len().max(1) as u32;
+    // Home cells: the first at random, each next as far as possible from those already taken.
+    let cell_dist = |a: u32, b: u32| {
+        let (ax, ay) = (i64::from(a % cols), i64::from(a / cols));
+        let (bx, by) = (i64::from(b % cols), i64::from(b / cols));
+        (ax - bx).pow(2) + (ay - by).pow(2)
+    };
+    let mut home_cells: Vec<u32> = vec![if n > 1 { rng.range(0, n) } else { 0 }];
+    while home_cells.len() < races.len() {
+        let next = (0..n)
+            .filter(|c| !home_cells.contains(c))
+            .max_by_key(|&c| {
+                let near = home_cells.iter().map(|&h| cell_dist(h, c)).min();
+                (near.unwrap_or(0), std::cmp::Reverse(c))
+            })
+            .expect("planets >= races");
+        home_cells.push(next);
+    }
     let mut regions = vec![Region {
         kind: RegionKind::Space,
         x: 0,
         y: 0,
         w: width,
         h: height,
-        home: false,
+        home_race: None,
     }];
-    let mut cells: Vec<u32> = vec![home_cell];
-    cells.extend((0..n).filter(|c| *c != home_cell));
+    let mut cells: Vec<u32> = home_cells.clone();
+    cells.extend((0..n).filter(|c| !home_cells.contains(c)));
     for (i, cell) in cells.into_iter().enumerate() {
-        let weight = if i == 0 { 2 } else { 1 };
-        let area = total_area * weight / u64::from(n + 1);
+        let is_home = i < races.len();
+        let weight = if is_home { 2 } else { 1 };
+        let area = total_area * weight / u64::from(n + homes);
         let margin = (cw.min(ch) / 16).max(2);
         let max_w = cw.saturating_sub(2 * margin).max(1);
         let max_h = ch.saturating_sub(2 * margin).max(1);
@@ -236,10 +284,10 @@ fn plan_regions(
             y,
             w,
             h,
-            home: i == 0,
+            home_race: races.get(i).copied(),
         });
     }
-    regions
+    Ok(regions)
 }
 
 struct Field<'a> {
@@ -321,6 +369,8 @@ struct Builder<'a> {
     rng: SimRng,
     map: GeneratedMap,
     start_tiles: Vec<(i64, i64)>,
+    /// Region id of each player's home planet.
+    start_regions: Vec<u16>,
     protected: Vec<bool>,
     occupied: Vec<bool>,
 }
@@ -384,70 +434,84 @@ impl Builder<'_> {
         good * 100 >= total * 70
     }
 
-    fn place_starts(&mut self, players: u32) -> Result<(), MapGenError> {
-        let home = *self
-            .map
-            .regions
-            .iter()
-            .find(|r| r.kind == RegionKind::Planet && r.home)
-            .ok_or(MapGenError::NoRoomForPlayers(players))?;
+    /// Places every player's start on the home planet of that player's race.
+    fn place_starts(&mut self, races: &[DefId], player_races: &[DefId]) -> Result<(), MapGenError> {
         let sums = self.row_sums();
-        let collect = |this: &Self, strict: bool| {
-            let mut out = Vec::new();
-            for y in home.y..home.y + home.h {
-                for x in home.x..home.x + home.w {
-                    if this.start_ok(&sums, i64::from(x), i64::from(y), strict) {
-                        out.push((i64::from(x), i64::from(y)));
-                    }
-                }
-            }
-            out
-        };
-        let mut candidates = collect(self, true);
-        if candidates.len() < players as usize {
-            candidates = collect(self, false);
-        }
-        if candidates.len() < players as usize {
-            return Err(MapGenError::NoRoomForPlayers(players));
-        }
-        let min_sep = i64::from(home.w.min(home.h) / 4);
-        let mut best: Option<Vec<(i64, i64)>> = None;
-        for _attempt in 0..24 {
-            let first = candidates[self.rng.range(0, candidates.len() as u32) as usize];
-            let mut chosen = vec![first];
-            while chosen.len() < players as usize {
-                let mut pick = None;
-                let mut best_d = -1;
-                for &c in &candidates {
-                    let d = chosen.iter().map(|&s| dist2(s, c)).min().unwrap_or(0);
-                    if d > best_d {
-                        best_d = d;
-                        pick = Some(c);
-                    }
-                }
-                chosen.push(pick.expect("candidates are not empty"));
-            }
-            let spread = chosen
+        let mut tiles = vec![(0_i64, 0_i64); player_races.len()];
+        let mut homes = vec![0_u16; player_races.len()];
+        for &race in races {
+            let players: Vec<usize> = (0..player_races.len())
+                .filter(|&p| player_races[p] == race)
+                .collect();
+            let count = players.len() as u32;
+            let (id, home) = self
+                .map
+                .regions
                 .iter()
                 .enumerate()
-                .flat_map(|(i, a)| chosen[i + 1..].iter().map(move |b| dist2(*a, *b)))
-                .min()
-                .unwrap_or(i64::MAX);
-            if spread >= min_sep * min_sep {
-                best = Some(chosen);
-                break;
+                .find(|(_, r)| r.kind == RegionKind::Planet && r.home_race == Some(race))
+                .map(|(i, r)| (i as u16, *r))
+                .ok_or(MapGenError::NoRoomForPlayers(count))?;
+            let collect = |this: &Self, strict: bool| {
+                let mut out = Vec::new();
+                for y in home.y..home.y + home.h {
+                    for x in home.x..home.x + home.w {
+                        if this.start_ok(&sums, i64::from(x), i64::from(y), strict) {
+                            out.push((i64::from(x), i64::from(y)));
+                        }
+                    }
+                }
+                out
+            };
+            let mut candidates = collect(self, true);
+            if candidates.len() < players.len() {
+                candidates = collect(self, false);
             }
-        }
-        let chosen = best.ok_or(MapGenError::NoRoomForPlayers(players))?;
-        for &(x, y) in &chosen {
-            self.map.starts.push(centre_of(x, y));
-            for (a, b) in disc_tiles(x, y, START_CLEAR_RADIUS) {
-                if let Some(i) = self.idx(a, b) {
-                    self.protected[i] = true;
+            if candidates.len() < players.len() {
+                return Err(MapGenError::NoRoomForPlayers(count));
+            }
+            let min_sep = i64::from(home.w.min(home.h) / 4);
+            let mut best: Option<Vec<(i64, i64)>> = None;
+            for _attempt in 0..24 {
+                let first = candidates[self.rng.range(0, candidates.len() as u32) as usize];
+                let mut chosen = vec![first];
+                while chosen.len() < players.len() {
+                    let mut pick = None;
+                    let mut best_d = -1;
+                    for &c in &candidates {
+                        let d = chosen.iter().map(|&s| dist2(s, c)).min().unwrap_or(0);
+                        if d > best_d {
+                            best_d = d;
+                            pick = Some(c);
+                        }
+                    }
+                    chosen.push(pick.expect("candidates are not empty"));
+                }
+                let spread = chosen
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(i, a)| chosen[i + 1..].iter().map(move |b| dist2(*a, *b)))
+                    .min()
+                    .unwrap_or(i64::MAX);
+                if spread >= min_sep * min_sep {
+                    best = Some(chosen);
+                    break;
+                }
+            }
+            let chosen = best.ok_or(MapGenError::NoRoomForPlayers(count))?;
+            for (&p, &(x, y)) in players.iter().zip(&chosen) {
+                tiles[p] = (x, y);
+                homes[p] = id;
+                for (a, b) in disc_tiles(x, y, START_CLEAR_RADIUS) {
+                    if let Some(i) = self.idx(a, b) {
+                        self.protected[i] = true;
+                    }
                 }
             }
         }
-        self.start_tiles = chosen;
+        self.map.starts = tiles.iter().map(|&(x, y)| centre_of(x, y)).collect();
+        self.start_tiles = tiles;
+        self.start_regions = homes;
         Ok(())
     }
 
@@ -465,6 +529,7 @@ impl Builder<'_> {
         &mut self,
         base: DefId,
         near: Option<(i64, i64)>,
+        only_region: Option<u16>,
         row: &MapStyleFeature,
     ) -> Option<(i64, i64)> {
         let (min, max) = (row.start_min_dist.max(0), row.start_max_dist.max(0));
@@ -477,6 +542,9 @@ impl Builder<'_> {
             for x in x0.max(0)..=x1.min(self.w() - 1) {
                 let i = (y * self.w() + x) as usize;
                 if self.map.grid.terrain[i] != base || self.protected[i] || self.occupied[i] {
+                    continue;
+                }
+                if only_region.is_some_and(|id| self.map.region[i] != id) {
                     continue;
                 }
                 let ok = match near {
@@ -548,16 +616,30 @@ impl Builder<'_> {
                 if !self.roll(row.chance_pct) {
                     continue;
                 }
+                let region = (row.region_kind == RegionKind::Planet).then(|| self.start_regions[p]);
                 for _ in 0..self.count(row.clumps_min, row.clumps_max) {
                     let near = Some(self.start_tiles[p]);
-                    if let Some(t) = self.pick_seed_tile(base, near, row) {
+                    if let Some(t) = self.pick_seed_tile(base, near, region, row) {
+                        self.apply_clump(row, base, t);
+                    }
+                }
+            }
+        } else if row.region_kind == RegionKind::Planet {
+            for id in 1..self.map.regions.len() as u16 {
+                if self.map.regions[usize::from(id)].kind != RegionKind::Planet
+                    || !self.roll(row.chance_pct)
+                {
+                    continue;
+                }
+                for _ in 0..self.count(row.clumps_min, row.clumps_max) {
+                    if let Some(t) = self.pick_seed_tile(base, None, Some(id), row) {
                         self.apply_clump(row, base, t);
                     }
                 }
             }
         } else if self.roll(row.chance_pct) {
             for _ in 0..self.count(row.clumps_min, row.clumps_max) {
-                if let Some(t) = self.pick_seed_tile(base, None, row) {
+                if let Some(t) = self.pick_seed_tile(base, None, None, row) {
                     self.apply_clump(row, base, t);
                 }
             }
@@ -579,7 +661,8 @@ pub fn generate(rules: &Rules, request: &MapRequest) -> Result<GeneratedMap, Map
     {
         return Err(MapGenError::InvalidRequest("size out of range"));
     }
-    if request.players == 0 || request.players > 64 {
+    let players = request.player_factions.len();
+    if players == 0 || players > 64 {
         return Err(MapGenError::InvalidRequest("players must be 1..=64"));
     }
     if !(1..=64).contains(&style.planets) {
@@ -589,13 +672,22 @@ pub fn generate(rules: &Rules, request: &MapRequest) -> Result<GeneratedMap, Map
     let (width, height) = (request.width, request.height);
     let tiles = width as usize * height as usize;
     let mut rng = SimRng::new(mix64(request.seed));
-    let regions = plan_regions(
-        style.planets as u32,
-        style.space_pct,
-        width,
-        height,
-        &mut rng,
-    );
+    let player_races: Vec<DefId> = request
+        .player_factions
+        .iter()
+        .map(|f| rules.race_of(*f))
+        .collect();
+    let races: Vec<DefId> = player_races
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let planets = (style.planets as u32).max(races.len() as u32);
+    if planets > 64 {
+        return Err(MapGenError::TooManyRaces(races.len() as u32));
+    }
+    let regions = plan_regions(planets, style.space_pct, width, height, &races, &mut rng)?;
 
     let mut terrain = vec![base.space; tiles];
     let mut heights = vec![0_u8; tiles];
@@ -627,10 +719,11 @@ pub fn generate(rules: &Rules, request: &MapRequest) -> Result<GeneratedMap, Map
             style: request.style,
         },
         start_tiles: Vec::new(),
+        start_regions: Vec::new(),
         protected: vec![false; tiles],
         occupied: vec![false; tiles],
     };
-    b.place_starts(request.players)?;
+    b.place_starts(&races, &player_races)?;
     let mut rows: Vec<&MapStyleFeature> = rules
         .map_style_features
         .get(&request.style)
@@ -644,6 +737,13 @@ pub fn generate(rules: &Rules, request: &MapRequest) -> Result<GeneratedMap, Map
 }
 
 impl GeneratedMap {
+    /// The region id of the planet player `index` starts on.
+    pub fn start_region(&self, index: usize) -> Option<usize> {
+        let (x, y) = tile_of(*self.starts.get(index)?);
+        let at = (y * i64::from(self.grid.width) + x) as usize;
+        self.region.get(at).map(|r| usize::from(*r))
+    }
+
     /// Returns problems that make the map unfair; empty means fair.
     pub fn fairness(&self, rules: &Rules) -> Vec<String> {
         let mut problems = Vec::new();

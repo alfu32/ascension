@@ -8,6 +8,7 @@ use rom_render::{TerrainScene, TileKind};
 use rom_rules::{DefId, Rules, build_rules_db};
 
 use crate::args::Options;
+use crate::match_setup::default_factions;
 
 const SCHEMA: &str = include_str!("../../../db/schema.sql");
 const SEED: &str = include_str!("../../../db/seed.sql");
@@ -24,6 +25,8 @@ pub struct Content {
     pub rules: Arc<Rules>,
     /// The generated map.
     pub map: GeneratedMap,
+    /// The faction of each player, in player order.
+    pub factions: Vec<DefId>,
 }
 
 /// Generates the map the options ask for.
@@ -40,6 +43,21 @@ pub fn generate_content(options: &Options) -> Result<Content, String> {
             .next()
             .ok_or("the rules define no map style")?,
     };
+    let factions = match &options.factions {
+        Some(keys) => keys
+            .iter()
+            .map(|key| {
+                rules
+                    .id_of(key)
+                    .filter(|id| rules.factions.contains_key(id))
+                    .ok_or_else(|| format!("unknown faction {key:?}"))
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        None => default_factions(&rules, options.players),
+    };
+    if factions.is_empty() {
+        return Err("the rules define no playable faction".into());
+    }
     let map = generate(
         &rules,
         &MapRequest {
@@ -47,13 +65,14 @@ pub fn generate_content(options: &Options) -> Result<Content, String> {
             seed: options.seed,
             width: options.map_size.0,
             height: options.map_size.1,
-            players: options.players,
+            player_factions: factions.clone(),
         },
     )
     .map_err(|error| format!("generating the map: {error}"))?;
     Ok(Content {
         rules: Arc::new(rules),
         map,
+        factions,
     })
 }
 
@@ -123,13 +142,7 @@ mod tests {
         let style = *rules.map_styles.keys().next().expect("a map style");
         let map = generate(
             &rules,
-            &MapRequest {
-                style,
-                seed: 3,
-                width: 96,
-                height: 96,
-                players: 3,
-            },
+            &MapRequest::uniform(style, 3, 96, 96, 3, *rules.factions.keys().next().unwrap()),
         )
         .expect("map");
         let scene = to_scene(&map);
