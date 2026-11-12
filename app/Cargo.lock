@@ -108,6 +108,7 @@ name = "rom-cli"
 version = "0.0.6"
 dependencies = [
  "rom-rules",
+ "rom-sim",
  "rusqlite",
 ]
 
@@ -134,6 +135,10 @@ version = "0.0.6"
 [[package]]
 name = "rom-sim"
 version = "0.0.6"
+dependencies = [
+ "rom-rules",
+ "thiserror",
+]
 
 [[package]]
 name = "rsqlite-vfs"
