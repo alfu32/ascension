@@ -114,6 +114,17 @@ impl World {
 impl World {
     /// Builds two opposing lines, thirty tiles apart, on a crossable 96×96 map.
     pub fn battle_scenario(rules: Arc<Rules>, seed: u64, per_side: u32) -> Result<Self, SimError> {
+        Self::battle_scenario_swapped(rules, seed, per_side, false)
+    }
+
+    /// Builds the battle with player ids exchanged when `swap` is true; positions
+    /// and entity allocation stay the same so ownership is the only difference.
+    pub fn battle_scenario_swapped(
+        rules: Arc<Rules>,
+        seed: u64,
+        per_side: u32,
+        swap: bool,
+    ) -> Result<Self, SimError> {
         let et = rules
             .entity_types
             .values()
@@ -157,6 +168,7 @@ impl World {
             players,
         )?;
         for side in 1..=2 {
+            let owner = PlayerId(if swap { 3 - side } else { side });
             let (x, target) = if side == 1 {
                 (33000, 63000)
             } else {
@@ -164,9 +176,9 @@ impl World {
             };
             for n in 0..per_side {
                 let y = (1000 + u64::from(n) * 94000 / u64::from(per_side.max(1))) as i32;
-                let id = world.spawn(type_id, PlayerId(side), Pos { x, y })?;
+                let id = world.spawn(type_id, owner, Pos { x, y })?;
                 world.submit(Command {
-                    player: PlayerId(side),
+                    player: owner,
                     executor: id,
                     kind: "attack_move".into(),
                     subject: None,

@@ -472,17 +472,69 @@ fn race_modifier_changes_max_hp_keeping_ratio() {
 }
 
 #[test]
-fn nature_is_not_automatically_acquired_and_ties_use_lower_id() {
+fn nature_is_not_automatically_acquired_and_ties_use_geometry() {
+    // Ties used to go to the lower id, which always favoured whoever spawned first.
     let mut w = world("");
     let a = spawn(&mut w, "unit.spearman", 1, at(20000, 20000));
     spawn(&mut w, "unit.citizen", 0, at(21000, 20000));
     let first = spawn(&mut w, "unit.citizen", 2, at(23000, 20000));
-    spawn(&mut w, "unit.citizen", 2, at(17000, 20000));
+    let second = spawn(&mut w, "unit.citizen", 2, at(17000, 20000));
     stance(&mut w, a, "aggressive");
+    // Both have the same relative rank; the final geometric tie uses position.
+    assert!(first < second);
     w.step();
-    assert!(w.entity(a).unwrap().orders().is_empty());
+    assert_eq!(w.entity(a).unwrap().orders()[0].target_entity, Some(second));
+}
+
+#[test]
+fn simultaneous_strikes_both_land() {
+    // Without a range override both are melee: whoever updates first must not win.
+    let mut w = world("");
+    let a = spawn(&mut w, "unit.spearman", 1, at(10000, 10000));
+    let b = spawn(&mut w, "unit.spearman", 2, at(10200, 10000));
+    injure(&mut w, a, 7);
+    injure(&mut w, b, 7);
+    attack(&mut w, a, b);
+    attack(&mut w, b, a);
     w.step();
-    assert_eq!(w.entity(a).unwrap().orders()[0].target_entity, Some(first));
+    assert!(w.entity(a).is_none() && w.entity(b).is_none());
+    assert_eq!(w.stats().kills[&PlayerId(1)], 1);
+    assert_eq!(w.stats().kills[&PlayerId(2)], 1);
+}
+
+#[test]
+fn simultaneous_attackers_do_not_cancel_after_an_earlier_lethal_hit() {
+    let mut w = world("");
+    let a = spawn(&mut w, "unit.spearman", 1, at(10000, 10000));
+    let b = spawn(&mut w, "unit.spearman", 1, at(10400, 10000));
+    let target = spawn(&mut w, "unit.spearman", 2, at(10200, 10000));
+    injure(&mut w, target, 7);
+    attack(&mut w, a, target);
+    attack(&mut w, b, target);
+    w.step();
+    assert!(w.entity(target).is_none());
+    assert!(!w.entity(a).unwrap().cooldowns.is_empty());
+    assert_eq!(
+        w.entity(a).unwrap().cooldowns,
+        w.entity(b).unwrap().cooldowns
+    );
+}
+
+#[test]
+fn melee_pair_closing_in_strikes_on_the_same_tick() {
+    // Approaching from equal distances, neither may get the first blow by update order.
+    let mut w = world("");
+    let a = spawn(&mut w, "unit.spearman", 1, at(10000, 10000));
+    let b = spawn(&mut w, "unit.spearman", 2, at(14000, 10000));
+    attack(&mut w, a, b);
+    attack(&mut w, b, a);
+    while hp(&w, a) == 110 && hp(&w, b) == 110 && w.tick() < 200 {
+        w.step();
+    }
+    assert!(hp(&w, a) < 110);
+    assert_eq!(hp(&w, a), hp(&w, b));
+    ticks(&mut w, 600);
+    assert!(w.entity(a).is_none() && w.entity(b).is_none());
 }
 
 #[test]
@@ -621,6 +673,28 @@ fn hash_covers_combat_healing_projectiles_and_statistics() {
     changes(&mut w, |w| w.hits[0].weapon_id += 1);
     changes(&mut w, |w| w.hits[0].target = a);
     changes(&mut w, |w| w.hits[0].damage += 1);
+    changes(&mut w, |w| w.seen.push(at(1, 2)));
+    changes(&mut w, |w| w.seen[0].x += 1);
+    changes(&mut w, |w| w.spent.push(a));
+    changes(&mut w, |w| w.spent[0] = b);
+    changes(&mut w, |w| {
+        w.shots.push(super::PendingShot {
+            origin: at(1, 2),
+            target_pos: at(3, 4),
+            accuracy: 50,
+            hit: w.hits[0].clone(),
+        })
+    });
+    changes(&mut w, |w| w.shots[0].origin.x += 1);
+    changes(&mut w, |w| w.shots[0].target_pos.y += 1);
+    changes(&mut w, |w| w.shots[0].accuracy += 1);
+    changes(&mut w, |w| w.shots[0].hit.land_tick += 1);
+    changes(&mut w, |w| w.shots[0].hit.attacker = a);
+    changes(&mut w, |w| w.shots[0].hit.owner = PlayerId(1));
+    changes(&mut w, |w| w.shots[0].hit.source_type.0 += 1);
+    changes(&mut w, |w| w.shots[0].hit.weapon_id += 1);
+    changes(&mut w, |w| w.shots[0].hit.target = b);
+    changes(&mut w, |w| w.shots[0].hit.damage += 1);
     changes(&mut w, |w| {
         w.stats.kills.insert(PlayerId(1), 2);
     });

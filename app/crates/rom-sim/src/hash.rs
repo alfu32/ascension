@@ -139,7 +139,7 @@ impl World {
     /// Hashes complete mutable state in little-endian field order with FNV-1a 64.
     pub fn hash(&self) -> u64 {
         let mut hash = StateHash(0xcbf29ce484222325);
-        hash.bytes(b"rom-sim-state-5");
+        hash.bytes(b"rom-sim-state-6");
         hash.u64(self.tick);
         hash.u64(self.rng.state());
         hash.u32(self.next_entity_id);
@@ -230,6 +230,29 @@ impl World {
         }
         hash.u64(self.hits.len() as u64);
         for hit in &self.hits {
+            hash.u64(hit.land_tick);
+            hash.u32(hit.attacker.0);
+            hash.u32(hit.owner.0);
+            hash.u32(hit.source_type.0);
+            hash.u32(hit.weapon_id);
+            hash.u32(hit.target.0);
+            hash.bytes(&hit.damage.to_le_bytes());
+        }
+        // These buffers are empty between ticks, but cover them for internal hashes too.
+        hash.u64(self.seen.len() as u64);
+        for pos in &self.seen {
+            hash.pos(*pos);
+        }
+        hash.u64(self.spent.len() as u64);
+        for id in &self.spent {
+            hash.u32(id.0);
+        }
+        hash.u64(self.shots.len() as u64);
+        for shot in &self.shots {
+            hash.pos(shot.origin);
+            hash.pos(shot.target_pos);
+            hash.u32(shot.accuracy);
+            let hit = &shot.hit;
             hash.u64(hit.land_tick);
             hash.u32(hit.attacker.0);
             hash.u32(hit.owner.0);

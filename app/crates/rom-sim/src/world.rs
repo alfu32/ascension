@@ -46,6 +46,7 @@ pub struct Stats {
 #[derive(Debug)]
 pub struct World {
     pub(crate) hits: Vec<crate::combat::PendingHit>,
+    pub(crate) shots: Vec<crate::combat::PendingShot>,
     pub(crate) tick: u64,
     pub(crate) rng: SimRng,
     pub(crate) rules: Arc<Rules>,
@@ -60,6 +61,11 @@ pub struct World {
     pub(crate) pathing: Pathing,
     pub(crate) avoid: Avoidance,
     pub(crate) economy: EconomyIndex,
+    /// Positions by entity id as they stood when the order phase began; empty
+    /// between ticks. Combat reads other entities here so update order cannot matter.
+    pub(crate) seen: Vec<Pos>,
+    /// Attackers that spent themselves this tick; emptied when hits land.
+    pub(crate) spent: Vec<EntityId>,
     spatial: SpatialGrid,
 }
 
@@ -136,6 +142,7 @@ impl World {
         let avoid = Avoidance::new(&rules, map.width, map.height);
         Ok(Self {
             hits: Vec::new(),
+            shots: Vec::new(),
             tick: 0,
             rng: SimRng::new(seed),
             rules,
@@ -143,6 +150,8 @@ impl World {
             pathing,
             avoid,
             economy: EconomyIndex::default(),
+            seen: Vec::new(),
+            spent: Vec::new(),
             players: by_id,
             entities: vec![None],
             pending: Vec::new(),
@@ -428,8 +437,11 @@ impl World {
         Ok(id)
     }
 
-    /// Finds idle work, applies inputs, advances entities by id, runs path searches,
-    /// separates overlapping units, and distributes income.
+    /// Finds idle work, applies inputs, chooses attack-move targets, advances entities
+    /// by id, runs path searches, separates overlapping units, lands every hit of the
+    /// tick together, and distributes income. Combat decisions see other entities as
+    /// they were when the order phase began, so the id order of updates cannot decide
+    /// who strikes first.
     pub fn step(&mut self) {
         self.find_idle_work();
         self.acquire_idle();
@@ -449,6 +461,11 @@ impl World {
                 .orders
                 .push_back(order);
         }
+        self.acquire_attack_moves();
+        // `avoid.pos` mirrors every entity's position until the first move below.
+        if self.has_enemies() {
+            self.seen.clone_from(&self.avoid.pos);
+        }
         let count = self.entities.len();
         let mut moved = Vec::new();
         for index in 1..count {
@@ -466,6 +483,8 @@ impl World {
         }
         self.run_path_searches();
         self.separate_units(&moved);
+        self.seen.clear();
+        self.fire_shots();
         self.land_projectiles();
         self.remove_dead();
         self.pay_income();

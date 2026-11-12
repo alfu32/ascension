@@ -6,7 +6,12 @@ use std::{path::PathBuf, sync::Arc};
 
 pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::error::Error>> {
     let (mut db, mut seed, mut ticks, mut per_side) = (None, None, None, None);
+    let mut swap = false;
     while let Some(flag) = args.next() {
+        if flag == "--swap" {
+            swap = true;
+            continue;
+        }
         let value = args
             .next()
             .ok_or_else(|| format!("missing value for {flag}"))?;
@@ -23,10 +28,11 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
     )?;
     let rules = Arc::new(Rules::load(&conn)?);
-    let mut world = World::battle_scenario(
+    let mut world = World::battle_scenario_swapped(
         rules,
         seed.ok_or("missing --seed")?,
         per_side.ok_or("missing --per-side")?,
+        swap,
     )?;
     for _ in 0..ticks.ok_or("missing --ticks")? {
         world.step();
