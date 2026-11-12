@@ -73,6 +73,12 @@ pub struct Entity {
     pub build_progress: Option<u32>,
     /// Fractional movement numerator, with denominator 100 × ticks per second.
     pub move_remainder: i128,
+    /// Worker capacity computed when this gather site becomes complete.
+    pub gather_slots: i64,
+    /// Gather site whose slot this worker currently occupies.
+    pub work_site: Option<EntityId>,
+    /// Consecutive idle ticks since the last work search or accepted command.
+    pub idle_ticks: u64,
     pub(crate) orders: VecDeque<Order>,
 }
 

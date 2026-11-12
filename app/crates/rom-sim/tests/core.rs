@@ -522,6 +522,9 @@ fn unsupported_kinds_fail_when_activated() {
 fn every_vocabulary_kind_validates_its_component_and_target() {
     let rules = rules();
     let mut world = world_with(rules.clone(), "ter.plain");
+    let farm = world
+        .spawn(rules.id_of("bld.farm").unwrap(), OWNER, Pos::default())
+        .unwrap();
     for kind in rules
         .order_kinds
         .values()
@@ -539,6 +542,9 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
                 }
                 OrderTarget::Entity => command.target_entity = Some(id),
                 OrderTarget::Def => command.subject = Some(et.id),
+            }
+            if kind.key == "harvest" {
+                command.target_entity = Some(farm);
             }
             match world.submit(command) {
                 Ok(_) => {
