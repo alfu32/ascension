@@ -120,6 +120,16 @@ Crate: `rom-rules` only (and `rom-cli` for one subcommand).
   `weapon_without_target_is_reported` (each: seed + a few bad rows → the matching problem, naming a key).
 - `unknown_enum_value_is_a_load_error`.
 
+## Resolved before you start
+
+- `game_constant.value` is now `INTEGER` (it was `REAL`, which contradicted the
+  integers-only rule). Load it as `i64`.
+- For any further mismatch of that size — a column type or default that
+  conflicts with the integers-only rule — take the strictest integer-only
+  reading, make the loader reject values that do not fit, list it in your
+  final message, and **continue**. Stop only for something that would change
+  the structure of the schema (a missing table, column or relationship).
+
 ## Rules that matter most
 
 - Integers only. No floats anywhere in this crate.
