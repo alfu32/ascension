@@ -14,17 +14,25 @@
 <stop offset="0" stop-color="#1c4a66"/><stop offset="0.6" stop-color="#0d2233"/><stop offset="1" stop-color="#0c1118"/></radialGradient>
 <filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.6"/></filter>
 </defs>
-<path d="M10.0 -14.0L1662.0 -14.0L1682.0 6.0L1682.0 110.0L1662.0 130.0L10.0 130.0L-10.0 110.0L-10.0 6.0Z" fill="#2e1e0a" />
-<path d="M10.4 -13.2L1661.6 -13.2L1681.2 6.4L1681.2 109.6L1661.6 129.2L10.4 129.2L-9.2 109.6L-9.2 6.4Z" fill="url(#goldv)" />
-<path d="M11.2 -11.5L1660.8 -11.5L1679.5 7.2L1679.5 108.8L1660.8 127.5L11.2 127.5L-7.5 108.8L-7.5 7.2Z" fill="url(#goldr)" opacity="0.9"/>
-<path d="M12.1 -9.8L1659.9 -9.8L1677.8 8.1L1677.8 107.9L1659.9 125.8L12.1 125.8L-5.8 107.9L-5.8 8.1Z" fill="#1d1408" />
-<path d="M12.5 -9.0L1659.5 -9.0L1677.0 8.5L1677.0 107.5L1659.5 125.0L12.5 125.0L-5.0 107.5L-5.0 8.5Z" fill="url(#panel)" fill-opacity="0.94"/>
-<line x1="150" y1="128" x2="225" y2="128" stroke="#3fd0ff" stroke-width="6.0" stroke-opacity="0.75" filter="url(#blur)"/>
+<path d="M16.0 -14.0L1656.0 -14.0L1682.0 12.0L1682.0 104.0L1656.0 130.0L16.0 130.0L-10.0 104.0L-10.0 12.0Z" fill="#2e1e0a" />
+<path d="M16.4 -13.2L1655.6 -13.2L1681.2 12.4L1681.2 103.6L1655.6 129.2L16.4 129.2L-9.2 103.6L-9.2 12.4Z" fill="url(#goldv)" />
+<path d="M18.8 -8.5L1653.2 -8.5L1676.5 14.8L1676.5 101.2L1653.2 124.5L18.8 124.5L-4.5 101.2L-4.5 14.8Z" fill="url(#goldr)" opacity="0.9"/>
+<path d="M21.1 -3.8L1650.9 -3.8L1671.8 17.1L1671.8 98.9L1650.9 119.8L21.1 119.8L0.2 98.9L0.2 17.1Z" fill="#1d1408" />
+<path d="M21.5 -3.0L1650.5 -3.0L1671.0 17.5L1671.0 98.5L1650.5 119.0L21.5 119.0L1.0 98.5L1.0 17.5Z" fill="url(#panel)" fill-opacity="0.94"/>
+<path d="M23.0 0.0L1649.0 0.0L1668.0 19.0L1668.0 97.0L1649.0 116.0L23.0 116.0L4.0 97.0L4.0 19.0Z" fill="none" stroke="#b88a45" stroke-width="1.2" stroke-opacity="0.65"/>
+<path d="M-2 24 L-2 8 L14 -8 H46" fill="none" stroke="#e8c98a" stroke-width="2"/>
+<path d="M-2 92 L-2 108 L14 124 H46" fill="none" stroke="#6b4a1f" stroke-width="3"/>
+<path d="M1674 24 L1674 8 L1658 -8 H1626" fill="none" stroke="#e8c98a" stroke-width="2"/>
+<path d="M1674 92 L1674 108 L1658 124 H1626" fill="none" stroke="#6b4a1f" stroke-width="3"/>
+<rect x="148.0" y="126.0" width="79.0" height="4.0" rx="2.0" fill="#3fd0ff" opacity="0.7" filter="url(#blur)"/>
 <line x1="150" y1="128" x2="225" y2="128" stroke="#3fd0ff" stroke-width="2.0" stroke-opacity="0.95"/>
-<line x1="1490" y1="128" x2="1575" y2="128" stroke="#3fd0ff" stroke-width="6.0" stroke-opacity="0.75" filter="url(#blur)"/>
+<line x1="150" y1="128" x2="225" y2="128" stroke="#c2f4ff" stroke-width="0.8" stroke-opacity="0.8"/>
+<rect x="1488.0" y="126.0" width="89.0" height="4.0" rx="2.0" fill="#3fd0ff" opacity="0.7" filter="url(#blur)"/>
 <line x1="1490" y1="128" x2="1575" y2="128" stroke="#3fd0ff" stroke-width="2.0" stroke-opacity="0.95"/>
-<line x1="790" y1="130" x2="880" y2="130" stroke="#3fd0ff" stroke-width="6.0" stroke-opacity="0.75" filter="url(#blur)"/>
+<line x1="1490" y1="128" x2="1575" y2="128" stroke="#c2f4ff" stroke-width="0.8" stroke-opacity="0.8"/>
+<rect x="788.0" y="128.0" width="94.0" height="4.0" rx="2.0" fill="#3fd0ff" opacity="0.7" filter="url(#blur)"/>
 <line x1="790" y1="130" x2="880" y2="130" stroke="#3fd0ff" stroke-width="2.0" stroke-opacity="0.95"/>
+<line x1="790" y1="130" x2="880" y2="130" stroke="#c2f4ff" stroke-width="0.8" stroke-opacity="0.8"/>
 <line x1="232" y1="14" x2="232" y2="120" stroke="#b88a45" stroke-width="1.5" stroke-opacity="0.8"/>
 <line x1="978" y1="14" x2="978" y2="120" stroke="#b88a45" stroke-width="1.5" stroke-opacity="0.8"/>
 <line x1="1326" y1="14" x2="1326" y2="120" stroke="#b88a45" stroke-width="1.5" stroke-opacity="0.8"/>

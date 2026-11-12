@@ -6,7 +6,7 @@ use std::path::PathBuf;
 pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <file.png>] \
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] \
 [--map-size <width>x<height>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
-[--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers]";
+[--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-hud] [--hud-scale <percent>] [--stats]";
 
 /// Default canvas size in pixels when `--size` is not given.
 pub const DEFAULT_SIZE: (u32, u32) = (1280, 800);
@@ -44,6 +44,12 @@ pub struct Options {
     pub after_seconds: f64,
     /// Draw the player-start pillars.
     pub start_markers: bool,
+    /// Hide the match HUD.
+    pub no_hud: bool,
+    /// Override automatic HUD scaling (25 to 200 percent of design pixels).
+    pub hud_scale: Option<u32>,
+    /// Show diagnostic frame and simulation counters.
+    pub stats: bool,
     /// Print usage and exit.
     pub help: bool,
 }
@@ -66,6 +72,9 @@ impl Default for Options {
             stress_units: 0,
             after_seconds: 1.0,
             start_markers: false,
+            no_hud: false,
+            hud_scale: None,
+            stats: false,
             help: false,
         }
     }
@@ -110,6 +119,17 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             "--camera" => options.camera = Some(parse_camera(&value("--camera")?)?),
             "--boxes" => options.boxes = number("--boxes", &value("--boxes")?)?,
             "--demo" => options.demo = true,
+            "--no-hud" => options.no_hud = true,
+            "--stats" => options.stats = true,
+            "--hud-scale" => {
+                let text = value("--hud-scale")?;
+                options.hud_scale = Some(
+                    text.parse::<u32>()
+                        .ok()
+                        .filter(|p| (25..=200).contains(p))
+                        .ok_or_else(|| format!("--hud-scale expects 25 to 200, got {text:?}"))?,
+                );
+            }
             "--start-markers" => options.start_markers = true,
             "--speed" => {
                 let text = value("--speed")?;
@@ -248,6 +268,16 @@ mod tests {
         assert_eq!(options.after_seconds, 20.0);
         assert!(parse(args(&["--speed", "0"])).is_err());
         assert!(parse(args(&["--after", "-1"])).is_err());
+    }
+
+    #[test]
+    fn parses_hud_options() {
+        let o = parse(args(&["--no-hud", "--hud-scale", "85", "--stats"])).unwrap();
+        assert!(o.no_hud && o.stats);
+        assert_eq!(o.hud_scale, Some(85));
+        for value in ["0", "201", "bad"] {
+            assert!(parse(args(&["--hud-scale", value])).is_err());
+        }
     }
 
     #[test]

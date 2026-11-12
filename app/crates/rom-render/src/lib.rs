@@ -9,6 +9,13 @@
 
 mod camera;
 mod entities;
+pub mod hud;
+pub mod hud_atlas;
+mod hud_gpu;
+pub mod hud_layout;
+pub mod hud_minimap;
+pub mod hud_preview;
+pub mod hud_text;
 mod mailbox;
 mod pixels;
 mod scene;
@@ -31,3 +38,5 @@ pub use terrain::{
 pub use worker::{
     MAX_RENDER_SCALE, MIN_RENDER_SCALE, RenderBridge, RenderWorker, ShutdownHandle, scaled_size,
 };
+
+pub use hud::{HudResearch, HudResource, HudSelection, HudSnapshot};

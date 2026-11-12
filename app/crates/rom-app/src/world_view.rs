@@ -26,6 +26,7 @@ const PIXELS_PER_WHEEL_STEP: f32 = 80.0;
 /// Full-window canvas showing the latest frame, with a stats overlay on top.
 pub struct WorldView {
     bridge: RenderBridge,
+    show_stats: bool,
     sim: SimLink,
     focus: FocusHandle,
     pending: Option<Frame>,
@@ -42,6 +43,7 @@ impl WorldView {
     pub fn new(
         bridge: RenderBridge,
         sim: SimLink,
+        show_stats: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -80,6 +82,7 @@ impl WorldView {
         .detach();
         Self {
             bridge,
+            show_stats,
             sim,
             focus,
             pending: None,
@@ -209,6 +212,14 @@ impl Render for WorldView {
                 .into_any_element(),
         };
 
+        let overlay = self.show_stats.then(|| {
+            stats_overlay(
+                self.bridge.stats(),
+                self.bridge.render_scale(),
+                self.recent_presents.len(),
+                self.sim.report(),
+            )
+        });
         div()
             .id("world-view")
             .track_focus(&self.focus)
@@ -282,25 +293,20 @@ impl Render for WorldView {
             }))
             .child(layout_probe)
             .child(picture)
-            .child(stats_overlay(
-                &self.bridge.stats(),
-                self.bridge.render_scale(),
-                self.recent_presents.len(),
-                &self.sim.report(),
-            ))
+            .children(overlay)
     }
 }
 
 /// Small GPUI panel drawn above the frame image.
 fn stats_overlay(
-    stats: &RenderStats,
+    stats: RenderStats,
     scale: u32,
     shown_last_second: usize,
-    sim: &SimReport,
+    sim: SimReport,
 ) -> impl IntoElement {
     div()
         .absolute()
-        .top(px(10.0))
+        .top(px(150.0))
         .right(px(10.0))
         .px(px(10.0))
         .py(px(6.0))

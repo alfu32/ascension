@@ -37,11 +37,12 @@ pub fn tile_colour(kind: TileKind, height: u8, features: &BTreeMap<u16, [u8; 3]>
 
 /// The map as RGBA pixels, at most [`MAX_MINIMAP_SIDE`] on a side: `(width, height, pixels)`.
 pub fn terrain_pixels(scene: &TerrainScene) -> (u32, u32, Vec<u8>) {
-    let step = scene.width.max(scene.height).div_ceil(MAX_MINIMAP_SIDE).max(1);
-    let (width, height) = (
-        (scene.width / step).max(1),
-        (scene.height / step).max(1),
-    );
+    let step = scene
+        .width
+        .max(scene.height)
+        .div_ceil(MAX_MINIMAP_SIDE)
+        .max(1);
+    let (width, height) = ((scene.width / step).max(1), (scene.height / step).max(1));
     let mut pixels = Vec::with_capacity(width as usize * height as usize * 4);
     for y in 0..height {
         for x in 0..width {
@@ -61,7 +62,12 @@ pub fn fit_map(map_width: u32, map_height: u32, view: Rect) -> Rect {
     let (mw, mh) = (map_width.max(1) as f32, map_height.max(1) as f32);
     let scale = (view.w / mw).min(view.h / mh);
     let (w, h) = (mw * scale, mh * scale);
-    Rect::new(view.x + (view.w - w) / 2.0, view.y + (view.h - h) / 2.0, w, h)
+    Rect::new(
+        view.x + (view.w - w) / 2.0,
+        view.y + (view.h - h) / 2.0,
+        w,
+        h,
+    )
 }
 
 /// Screen position on the minimap of the tile position `(x, y)`.
@@ -98,12 +104,7 @@ pub fn ndc_centre_y(area: Rect, height: f32) -> f32 {
 /// ground plane `y = 0`, for a camera whose projection centre was moved to the middle of the
 /// area. Returns tile positions `[x, z]` in the order top-left, top-right, bottom-right,
 /// bottom-left. Corners whose ray misses the ground are pushed out to `far` tiles.
-pub fn ground_footprint(
-    camera: &Camera,
-    frame: (f32, f32),
-    area: Rect,
-    far: f32,
-) -> [[f32; 2]; 4] {
+pub fn ground_footprint(camera: &Camera, frame: (f32, f32), area: Rect, far: f32) -> [[f32; 2]; 4] {
     let eye = camera.position();
     let forward = normalised(sub(camera.target, eye));
     let right = normalised(cross(forward, [0.0, 1.0, 0.0]));
@@ -151,8 +152,14 @@ mod tests {
         let shallow = tile_colour(TileKind::ShallowSea, 128, &features);
         let deep = tile_colour(TileKind::DeepSea, 128, &features);
         let space = tile_colour(TileKind::Space, 128, &features);
-        assert!(land[1] > land[0] && land[1] > land[2], "land is green: {land:?}");
-        assert!(shallow[2] > shallow[0] && shallow[2] > shallow[1], "shallow is blue");
+        assert!(
+            land[1] > land[0] && land[1] > land[2],
+            "land is green: {land:?}"
+        );
+        assert!(
+            shallow[2] > shallow[0] && shallow[2] > shallow[1],
+            "shallow is blue"
+        );
         assert!(deep[2] > deep[0] && deep[2] > deep[1], "deep is blue");
         let luma = |c: [u8; 3]| u32::from(c[0]) + u32::from(c[1]) + u32::from(c[2]);
         assert!(luma(deep) < luma(shallow));
@@ -162,7 +169,10 @@ mod tests {
         // Unknown features are grey; height shading makes high ground lighter.
         let unknown = tile_colour(TileKind::Feature(99), 128, &features);
         assert!((i32::from(unknown[0]) - i32::from(unknown[2])).abs() <= 2);
-        assert!(luma(tile_colour(TileKind::Land, 255, &features)) > luma(tile_colour(TileKind::Land, 0, &features)));
+        assert!(
+            luma(tile_colour(TileKind::Land, 255, &features))
+                > luma(tile_colour(TileKind::Land, 0, &features))
+        );
     }
 
     #[test]
@@ -179,7 +189,7 @@ mod tests {
         let (w, h, pixels) = terrain_pixels(&scene);
         assert!(w <= MAX_MINIMAP_SIDE && h <= MAX_MINIMAP_SIDE);
         assert_eq!(pixels.len(), (w * h * 4) as usize);
-        assert!(pixels.chunks_exact(4).all(|p| p[3] == 255));
+        assert!(pixels.as_chunks::<4>().0.iter().all(|p| p[3] == 255));
     }
 
     #[test]
@@ -209,8 +219,14 @@ mod tests {
         // The centre of the area looks at the target, so the target lies inside the polygon.
         let xs: Vec<f32> = footprint.iter().map(|p| p[0]).collect();
         let zs: Vec<f32> = footprint.iter().map(|p| p[1]).collect();
-        let (min_x, max_x) = (xs.iter().cloned().fold(f32::MAX, f32::min), xs.iter().cloned().fold(f32::MIN, f32::max));
-        let (min_z, max_z) = (zs.iter().cloned().fold(f32::MAX, f32::min), zs.iter().cloned().fold(f32::MIN, f32::max));
+        let (min_x, max_x) = (
+            xs.iter().cloned().fold(f32::MAX, f32::min),
+            xs.iter().cloned().fold(f32::MIN, f32::max),
+        );
+        let (min_z, max_z) = (
+            zs.iter().cloned().fold(f32::MAX, f32::min),
+            zs.iter().cloned().fold(f32::MIN, f32::max),
+        );
         assert!(min_x < 100.0 && max_x > 100.0 && min_z < 100.0 && max_z > 100.0);
         // Looking along -z from +z: the far edge is wider than the near edge.
         let far_width = (footprint[1][0] - footprint[0][0]).abs();
@@ -219,4 +235,44 @@ mod tests {
         // Left and right are mirror images around the target.
         assert!((footprint[0][0] + footprint[1][0] - 200.0).abs() < 0.1);
     }
+}
+
+/// An entity dot or camera outline segment, already in minimap screen coordinates.
+#[derive(Clone, Copy, Debug)]
+pub enum MapMark {
+    /// Owner-coloured entity dot.
+    Dot(Rect, [u8; 4]),
+    /// Camera footprint edge.
+    Line((f32, f32), (f32, f32)),
+}
+
+/// Current entity dots and ground-plane camera outline; consumers clip to `area`.
+pub fn marks(
+    entities: &[crate::EntityView],
+    camera: &Camera,
+    layout: &crate::hud_layout::HudLayout,
+    map_size: (u32, u32),
+    area: Rect,
+) -> Vec<MapMark> {
+    let mut marks = Vec::with_capacity(entities.len() + 4);
+    for e in entities {
+        let (x, y) = tile_to_minimap(e.x, e.y, map_size, area);
+        let side = (if e.building { 4.0 } else { 2.0 }) * layout.scale;
+        let rgb = crate::owner_color(e.owner).map(|c| (c * 255.0).round() as u8);
+        marks.push(MapMark::Dot(
+            Rect::new(x - side / 2.0, y - side / 2.0, side, side),
+            [rgb[0], rgb[1], rgb[2], 255],
+        ));
+    }
+    let points = ground_footprint(
+        camera,
+        (layout.width, layout.height),
+        layout.world_area(),
+        map_size.0.max(map_size.1) as f32 * 4.0,
+    )
+    .map(|p| tile_to_minimap(p[0], p[1], map_size, area));
+    for i in 0..4 {
+        marks.push(MapMark::Line(points[i], points[(i + 1) % 4]));
+    }
+    marks
 }

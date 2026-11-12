@@ -46,6 +46,17 @@ pub enum Align {
     Right,
 }
 
+/// Appearance and alignment of one live text run.
+#[derive(Clone, Copy, Debug)]
+pub struct TextStyle {
+    /// Baked size to use.
+    pub size: TextSize,
+    /// Alignment relative to the anchor.
+    pub align: Align,
+    /// RGBA tint for the white glyphs.
+    pub colour: [u8; 4],
+}
+
 #[derive(Clone, Copy, Debug)]
 struct Glyph {
     /// Atlas rectangle.
@@ -74,6 +85,8 @@ pub struct GlyphQuad {
     pub src: (u32, u32, u32, u32),
     /// Destination top-left corner in pixels.
     pub dst: (i32, i32),
+    /// Straight RGBA text colour.
+    pub colour: [u8; 4],
 }
 
 /// The baked glyphs of both sizes.
@@ -203,6 +216,23 @@ impl GlyphAtlas {
             .sum()
     }
 
+    /// Appends tinted glyph quads at the anchor and baseline, returning the pen end.
+    pub fn draw(
+        &self,
+        text: &str,
+        style: TextStyle,
+        x: i32,
+        baseline: i32,
+        out: &mut Vec<GlyphQuad>,
+    ) -> i32 {
+        let start = out.len();
+        let end = self.layout(text, style.size, style.align, x, baseline, out);
+        for q in &mut out[start..] {
+            q.colour = style.colour;
+        }
+        end
+    }
+
     /// Lays `text` out with its baseline at `baseline` and appends the glyph quads to `out`.
     ///
     /// Returns the x position after the last glyph (the pen end). With [`Align::Right`] that is
@@ -230,6 +260,7 @@ impl GlyphAtlas {
                 out.push(GlyphQuad {
                     src: (glyph.x, glyph.y, glyph.w, glyph.h),
                     dst: (pen + glyph.left, baseline - glyph.top),
+                    colour: [255; 4],
                 });
             }
             pen += glyph.advance;

@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Writes the HUD vector artwork (chrome/*.svg and icons/*.svg) next to this file.
 
-The SVG files are the source of truth that the game embeds; this script is how they were
-authored and can be run again after tuning a shape: `python3 generate.py`.
+This script is the authored source; the generated SVG files are committed and embedded.
+Regenerate after tuning a shape with `python3 generate.py`; verify with `python3 generate.py --check`.
 Chrome files use design-space units (1672 x 941 HUD design, see app/docs/hud.md); icons use a
 64 x 64 view box. No file contains text or numbers: the game draws all of those live.
 """
 import math
 import os
+import sys
+
+CHECK = "--check" in sys.argv
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -23,8 +26,14 @@ def write(folder, name, width, height, body, defs=""):
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
         f'viewBox="0 0 {width} {height}">\n<defs>\n{defs}</defs>\n{body}</svg>\n'
     )
-    with open(os.path.join(HERE, folder, name + ".svg"), "w") as handle:
-        handle.write(text)
+    path = os.path.join(HERE, folder, name + ".svg")
+    if CHECK:
+        with open(path) as handle:
+            if handle.read() != text:
+                raise SystemExit(f"generated SVG differs: {path}")
+    else:
+        with open(path, "w") as handle:
+            handle.write(text)
 
 
 # ---------------------------------------------------------------- chrome helpers
@@ -72,6 +81,11 @@ def bevel(x, y, w, h, t=4.0, c=12, fill="url(#panel)", opacity=0.94):
     out += shape(*inset(x, y, w, h, c, t * 0.5), "url(#goldr)", 'opacity="0.9"')
     out += shape(*inset(x, y, w, h, c, t - 0.8), "#1d1408")
     out += shape(*inset(x, y, w, h, c, t), fill, f'fill-opacity="{opacity}"')
+    if t >= 10:
+        out += shape(*inset(x, y, w, h, c, t + 3), "none", f'stroke="{GOLD_M}" stroke-width="1.2" stroke-opacity="0.65"')
+        for xx, flip in ((x + 8, 1), (x + w - 8, -1)):
+            out += f'<path d="M{xx} {y + 38} L{xx} {y + 22} L{xx + flip * 16} {y + 6} H{xx + flip * 48}" fill="none" stroke="{GOLD_L}" stroke-width="2"/>\n'
+            out += f'<path d="M{xx} {y + h - 38} L{xx} {y + h - 22} L{xx + flip * 16} {y + h - 6} H{xx + flip * 48}" fill="none" stroke="{GOLD_D}" stroke-width="3"/>\n'
     return out
 
 
@@ -91,8 +105,12 @@ def gold_slot(x, y, w, h, c=6):
 
 
 def glow(x1, y1, x2, y2, w=2.0):
-    out = f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{CYAN}" stroke-width="{w * 3}" stroke-opacity="0.75" filter="url(#blur)"/>\n'
+    # Blur a filled shape: a line has a zero-area SVG filter bounding box.
+    px, py = min(x1, x2) - w, min(y1, y2) - w
+    width, height = abs(x2 - x1) + w * 2, abs(y2 - y1) + w * 2
+    out = f'<rect x="{px}" y="{py}" width="{width}" height="{height}" rx="{w}" fill="{CYAN}" opacity="0.7" filter="url(#blur)"/>\n'
     out += f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{CYAN}" stroke-width="{w}" stroke-opacity="0.95"/>\n'
+    out += f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#c2f4ff" stroke-width="{w * 0.4}" stroke-opacity="0.8"/>\n'
     return out
 
 
@@ -124,7 +142,7 @@ def laurel(cx, cy, radius, a0, a1, count, outward=1, length=16, width=7):
 
 def top_bar():
     w, h = 1672, 135
-    b = bevel(-10, -14, w + 20, 144, t=5, c=20)
+    b = bevel(-10, -14, w + 20, 144, t=11, c=26)
     # Cyan accents on the lower edge.
     b += glow(150, 128, 225, 128) + glow(1490, 128, 1575, 128) + glow(790, 130, 880, 130)
     b += rule(232, 14, 232, 120, GOLD_M) + rule(978, 14, 978, 120, GOLD_M) + rule(1326, 14, 1326, 120, GOLD_M)
@@ -145,7 +163,7 @@ def top_bar():
     write("chrome", "research_row", 266, 31, row, CHROME_DEFS)
 
     # Filler for windows wider than the design: a slice of the bar.
-    f = bevel(-40, -14, 96, 144, t=5, c=0)
+    f = bevel(-40, -14, 96, 144, t=11, c=0)
     write("chrome", "bar_fill", 16, 135, f, CHROME_DEFS)
 
 
@@ -161,8 +179,8 @@ def emblem():
     for x, hh in ((100, 14), (110, 24), (118, 18), (132, 22), (141, 12)):
         b += f'<path d="M{x} 40 L{x + 3.5} {40 - hh} L{x + 7} 40Z" fill="#0b1a26" stroke="{GOLD_M}" stroke-width="1"/>\n'
     # Laurels.
-    b += laurel(125, 76, 104, 100, 160, 7, 1)
-    b += laurel(125, 76, 104, 80, 20, 7, -1)
+    b += laurel(125, 50, 113, 130, 185, 9, 1, 16, 7)
+    b += laurel(125, 50, 113, 50, -5, 9, -1, 16, 7)
     # Plaque.
     b += bevel(18, 42, 214, 64, t=4, c=14, fill="url(#panel)", opacity=1.0)
     b += rule(40, 71, 210, 71, GOLD_M, 1, 0.55)
@@ -182,7 +200,7 @@ def bottom_left():
     b += bevel(22, 644 - oy, 580, 34, t=3, c=(10, 14, 14, 10), fill="url(#slot)")
     b += glow(420, 677 - oy, 596, 677 - oy, 1.6)
     # Main frame.
-    b += bevel(0, 680 - oy, 612, 261, t=4.5, c=(14, 14, 0, 14))
+    b += bevel(0, 680 - oy, 612, 261, t=11, c=(22, 22, 8, 22))
     b += glow(200, 940 - oy, 290, 940 - oy)
     # Palette tab strip: arrows and four tabs.
     b += slot(22, 692 - oy, 28, 38, 7)
@@ -210,8 +228,9 @@ def minimap_frame():
     b += f'<path d="{body}" fill-rule="evenodd" fill="{OUT}"/>\n'
     ring = poly(outer[0] + 1, outer[1] + 1, outer[2] - 2, outer[3] - 2, 15) + poly(hole[0] - 5, hole[1] - 5, hole[2] + 10, hole[3] + 10, 15)
     b += f'<path d="{ring}" fill-rule="evenodd" fill="url(#goldv)"/>\n'
-    ring2 = poly(outer[0] + 3.5, outer[1] + 3.5, outer[2] - 7, outer[3] - 7, 13) + poly(hole[0] - 3, hole[1] - 3, hole[2] + 6, hole[3] + 6, 13)
+    ring2 = poly(outer[0] + 7, outer[1] + 7, outer[2] - 14, outer[3] - 14, 12) + poly(hole[0] - 3, hole[1] - 3, hole[2] + 6, hole[3] + 6, 13)
     b += f'<path d="{ring2}" fill-rule="evenodd" fill="url(#panel)"/>\n'
+    b += f'<path d="{poly(outer[0] + 3, outer[1] + 3, outer[2] - 6, outer[3] - 6, 14)}" fill="none" stroke="url(#goldr)" stroke-width="2.2"/>\n'
     # Window rim: cyan glow around the opening.
     rim = poly(hole[0] - 2, hole[1] - 2, hole[2] + 4, hole[3] + 4, 14)
     b += f'<path d="{rim}" fill="none" stroke="{CYAN}" stroke-width="5" stroke-opacity="0.55" filter="url(#blur)"/>\n'
@@ -220,7 +239,7 @@ def minimap_frame():
     # Button column backing.
     b += rule(62, 96, 62, 240, GOLD_M, 1.2, 0.6)
     # Globe emblem on top.
-    b += laurel(172, 42, 44, 195, 345, 8, 1, 14, 6)
+    b += laurel(172, 26, 38, 25, 155, 9, 1, 14, 6)
     b += f'<circle cx="172" cy="38" r="27" fill="url(#panel)" stroke="url(#goldv)" stroke-width="5"/>\n'
     b += f'<circle cx="172" cy="38" r="20" fill="url(#sphere)" stroke="{GOLD_M}" stroke-width="1.5"/>\n'
     for rx in (8, 15):
@@ -237,7 +256,7 @@ def minimap_frame():
 
 def bottom_right():
     w, h, ox, oy = 697, 279, 975, 662
-    b = bevel(0, 672 - oy, 697, 269, t=4.5, c=(14, 14, 0, 14))
+    b = bevel(0, 672 - oy, 697, 269, t=11, c=(22, 22, 8, 22))
     b += glow(300, 940 - oy, 390, 940 - oy) + glow(5, 672 - oy + 3, 140, 672 - oy + 3, 1.4)
     # Selection panel: title rule, portrait slot with a placeholder silhouette, six sub-slots.
     b += bevel(6, 677 - oy, 354, 252, t=2.5, c=8, fill="url(#slot)")

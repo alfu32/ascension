@@ -256,6 +256,7 @@ fn publish(world: &World, link: &SimLink, bridge: &RenderBridge) {
         .entities
         .store(snapshot.entities.len() as u32, Ordering::Relaxed);
     bridge.publish_snapshot(Arc::new(snapshot));
+    bridge.publish_hud(Arc::new(crate::hud::snapshot_of(world)));
 }
 
 /// Copies the world's entities into plain render data, in id order.

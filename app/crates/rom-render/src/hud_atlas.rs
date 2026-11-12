@@ -10,73 +10,274 @@ use resvg::{tiny_skia, usvg};
 
 /// Every SVG source embedded in the binary, by atlas name (`folder/file` without extension).
 pub const SOURCES: &[(&str, &str)] = &[
-    ("chrome/bar_fill", include_str!("../../../assets/hud/chrome/bar_fill.svg")),
-    ("chrome/bottom_left", include_str!("../../../assets/hud/chrome/bottom_left.svg")),
-    ("chrome/bottom_right", include_str!("../../../assets/hud/chrome/bottom_right.svg")),
-    ("chrome/button", include_str!("../../../assets/hud/chrome/button.svg")),
-    ("chrome/cell", include_str!("../../../assets/hud/chrome/cell.svg")),
-    ("chrome/cell_wide", include_str!("../../../assets/hud/chrome/cell_wide.svg")),
-    ("chrome/clock", include_str!("../../../assets/hud/chrome/clock.svg")),
-    ("chrome/emblem", include_str!("../../../assets/hud/chrome/emblem.svg")),
-    ("chrome/minimap", include_str!("../../../assets/hud/chrome/minimap.svg")),
-    ("chrome/research_row", include_str!("../../../assets/hud/chrome/research_row.svg")),
-    ("chrome/tab_active", include_str!("../../../assets/hud/chrome/tab_active.svg")),
-    ("chrome/tile", include_str!("../../../assets/hud/chrome/tile.svg")),
-    ("chrome/topbar", include_str!("../../../assets/hud/chrome/topbar.svg")),
-    ("icons/arrow_left", include_str!("../../../assets/hud/icons/arrow_left.svg")),
-    ("icons/arrow_right", include_str!("../../../assets/hud/icons/arrow_right.svg")),
-    ("icons/centre", include_str!("../../../assets/hud/icons/centre.svg")),
-    ("icons/chat", include_str!("../../../assets/hud/icons/chat.svg")),
-    ("icons/cities", include_str!("../../../assets/hud/icons/cities.svg")),
-    ("icons/clock", include_str!("../../../assets/hud/icons/clock.svg")),
-    ("icons/cmd_attack", include_str!("../../../assets/hud/icons/cmd_attack.svg")),
-    ("icons/cmd_attack_move", include_str!("../../../assets/hud/icons/cmd_attack_move.svg")),
-    ("icons/cmd_build", include_str!("../../../assets/hud/icons/cmd_build.svg")),
-    ("icons/cmd_cancel", include_str!("../../../assets/hud/icons/cmd_cancel.svg")),
-    ("icons/cmd_follow", include_str!("../../../assets/hud/icons/cmd_follow.svg")),
-    ("icons/cmd_garrison", include_str!("../../../assets/hud/icons/cmd_garrison.svg")),
-    ("icons/cmd_guard", include_str!("../../../assets/hud/icons/cmd_guard.svg")),
-    ("icons/cmd_hold", include_str!("../../../assets/hud/icons/cmd_hold.svg")),
-    ("icons/cmd_move", include_str!("../../../assets/hud/icons/cmd_move.svg")),
-    ("icons/cmd_patrol", include_str!("../../../assets/hud/icons/cmd_patrol.svg")),
-    ("icons/cmd_rally", include_str!("../../../assets/hud/icons/cmd_rally.svg")),
-    ("icons/cmd_repair", include_str!("../../../assets/hud/icons/cmd_repair.svg")),
-    ("icons/cmd_stop", include_str!("../../../assets/hud/icons/cmd_stop.svg")),
-    ("icons/cmd_unload", include_str!("../../../assets/hud/icons/cmd_unload.svg")),
-    ("icons/commerce", include_str!("../../../assets/hud/icons/commerce.svg")),
-    ("icons/diplomacy", include_str!("../../../assets/hud/icons/diplomacy.svg")),
-    ("icons/event", include_str!("../../../assets/hud/icons/event.svg")),
-    ("icons/flag", include_str!("../../../assets/hud/icons/flag.svg")),
-    ("icons/help", include_str!("../../../assets/hud/icons/help.svg")),
-    ("icons/menu", include_str!("../../../assets/hud/icons/menu.svg")),
-    ("icons/objectives", include_str!("../../../assets/hud/icons/objectives.svg")),
-    ("icons/pause", include_str!("../../../assets/hud/icons/pause.svg")),
-    ("icons/population", include_str!("../../../assets/hud/icons/population.svg")),
-    ("icons/res_energy", include_str!("../../../assets/hud/icons/res_energy.svg")),
-    ("icons/res_food", include_str!("../../../assets/hud/icons/res_food.svg")),
-    ("icons/res_knowledge", include_str!("../../../assets/hud/icons/res_knowledge.svg")),
-    ("icons/res_metal", include_str!("../../../assets/hud/icons/res_metal.svg")),
-    ("icons/res_oil", include_str!("../../../assets/hud/icons/res_oil.svg")),
-    ("icons/res_timber", include_str!("../../../assets/hud/icons/res_timber.svg")),
-    ("icons/res_wealth", include_str!("../../../assets/hud/icons/res_wealth.svg")),
-    ("icons/research", include_str!("../../../assets/hud/icons/research.svg")),
-    ("icons/stat_armour", include_str!("../../../assets/hud/icons/stat_armour.svg")),
-    ("icons/stat_attack", include_str!("../../../assets/hud/icons/stat_attack.svg")),
-    ("icons/stat_garrison", include_str!("../../../assets/hud/icons/stat_garrison.svg")),
-    ("icons/stat_hp", include_str!("../../../assets/hud/icons/stat_hp.svg")),
-    ("icons/stat_range", include_str!("../../../assets/hud/icons/stat_range.svg")),
-    ("icons/stat_workers", include_str!("../../../assets/hud/icons/stat_workers.svg")),
-    ("icons/tab_build", include_str!("../../../assets/hud/icons/tab_build.svg")),
-    ("icons/tab_diplomacy", include_str!("../../../assets/hud/icons/tab_diplomacy.svg")),
-    ("icons/tab_economy", include_str!("../../../assets/hud/icons/tab_economy.svg")),
-    ("icons/tab_military", include_str!("../../../assets/hud/icons/tab_military.svg")),
-    ("icons/tab_order", include_str!("../../../assets/hud/icons/tab_order.svg")),
-    ("icons/tab_political", include_str!("../../../assets/hud/icons/tab_political.svg")),
-    ("icons/tab_research", include_str!("../../../assets/hud/icons/tab_research.svg")),
-    ("icons/tab_train", include_str!("../../../assets/hud/icons/tab_train.svg")),
-    ("icons/tab_wonders", include_str!("../../../assets/hud/icons/tab_wonders.svg")),
-    ("icons/zoom_in", include_str!("../../../assets/hud/icons/zoom_in.svg")),
-    ("icons/zoom_out", include_str!("../../../assets/hud/icons/zoom_out.svg")),
+    (
+        "chrome/bar_fill",
+        include_str!("../../../assets/hud/chrome/bar_fill.svg"),
+    ),
+    (
+        "chrome/bottom_left",
+        include_str!("../../../assets/hud/chrome/bottom_left.svg"),
+    ),
+    (
+        "chrome/bottom_right",
+        include_str!("../../../assets/hud/chrome/bottom_right.svg"),
+    ),
+    (
+        "chrome/button",
+        include_str!("../../../assets/hud/chrome/button.svg"),
+    ),
+    (
+        "chrome/cell",
+        include_str!("../../../assets/hud/chrome/cell.svg"),
+    ),
+    (
+        "chrome/cell_wide",
+        include_str!("../../../assets/hud/chrome/cell_wide.svg"),
+    ),
+    (
+        "chrome/clock",
+        include_str!("../../../assets/hud/chrome/clock.svg"),
+    ),
+    (
+        "chrome/emblem",
+        include_str!("../../../assets/hud/chrome/emblem.svg"),
+    ),
+    (
+        "chrome/minimap",
+        include_str!("../../../assets/hud/chrome/minimap.svg"),
+    ),
+    (
+        "chrome/research_row",
+        include_str!("../../../assets/hud/chrome/research_row.svg"),
+    ),
+    (
+        "chrome/tab_active",
+        include_str!("../../../assets/hud/chrome/tab_active.svg"),
+    ),
+    (
+        "chrome/tile",
+        include_str!("../../../assets/hud/chrome/tile.svg"),
+    ),
+    (
+        "chrome/topbar",
+        include_str!("../../../assets/hud/chrome/topbar.svg"),
+    ),
+    (
+        "icons/arrow_left",
+        include_str!("../../../assets/hud/icons/arrow_left.svg"),
+    ),
+    (
+        "icons/arrow_right",
+        include_str!("../../../assets/hud/icons/arrow_right.svg"),
+    ),
+    (
+        "icons/centre",
+        include_str!("../../../assets/hud/icons/centre.svg"),
+    ),
+    (
+        "icons/chat",
+        include_str!("../../../assets/hud/icons/chat.svg"),
+    ),
+    (
+        "icons/cities",
+        include_str!("../../../assets/hud/icons/cities.svg"),
+    ),
+    (
+        "icons/clock",
+        include_str!("../../../assets/hud/icons/clock.svg"),
+    ),
+    (
+        "icons/cmd_attack",
+        include_str!("../../../assets/hud/icons/cmd_attack.svg"),
+    ),
+    (
+        "icons/cmd_attack_move",
+        include_str!("../../../assets/hud/icons/cmd_attack_move.svg"),
+    ),
+    (
+        "icons/cmd_build",
+        include_str!("../../../assets/hud/icons/cmd_build.svg"),
+    ),
+    (
+        "icons/cmd_cancel",
+        include_str!("../../../assets/hud/icons/cmd_cancel.svg"),
+    ),
+    (
+        "icons/cmd_follow",
+        include_str!("../../../assets/hud/icons/cmd_follow.svg"),
+    ),
+    (
+        "icons/cmd_garrison",
+        include_str!("../../../assets/hud/icons/cmd_garrison.svg"),
+    ),
+    (
+        "icons/cmd_guard",
+        include_str!("../../../assets/hud/icons/cmd_guard.svg"),
+    ),
+    (
+        "icons/cmd_hold",
+        include_str!("../../../assets/hud/icons/cmd_hold.svg"),
+    ),
+    (
+        "icons/cmd_move",
+        include_str!("../../../assets/hud/icons/cmd_move.svg"),
+    ),
+    (
+        "icons/cmd_patrol",
+        include_str!("../../../assets/hud/icons/cmd_patrol.svg"),
+    ),
+    (
+        "icons/cmd_rally",
+        include_str!("../../../assets/hud/icons/cmd_rally.svg"),
+    ),
+    (
+        "icons/cmd_repair",
+        include_str!("../../../assets/hud/icons/cmd_repair.svg"),
+    ),
+    (
+        "icons/cmd_stop",
+        include_str!("../../../assets/hud/icons/cmd_stop.svg"),
+    ),
+    (
+        "icons/cmd_unload",
+        include_str!("../../../assets/hud/icons/cmd_unload.svg"),
+    ),
+    (
+        "icons/commerce",
+        include_str!("../../../assets/hud/icons/commerce.svg"),
+    ),
+    (
+        "icons/diplomacy",
+        include_str!("../../../assets/hud/icons/diplomacy.svg"),
+    ),
+    (
+        "icons/event",
+        include_str!("../../../assets/hud/icons/event.svg"),
+    ),
+    (
+        "icons/flag",
+        include_str!("../../../assets/hud/icons/flag.svg"),
+    ),
+    (
+        "icons/help",
+        include_str!("../../../assets/hud/icons/help.svg"),
+    ),
+    (
+        "icons/menu",
+        include_str!("../../../assets/hud/icons/menu.svg"),
+    ),
+    (
+        "icons/objectives",
+        include_str!("../../../assets/hud/icons/objectives.svg"),
+    ),
+    (
+        "icons/pause",
+        include_str!("../../../assets/hud/icons/pause.svg"),
+    ),
+    (
+        "icons/population",
+        include_str!("../../../assets/hud/icons/population.svg"),
+    ),
+    (
+        "icons/res_energy",
+        include_str!("../../../assets/hud/icons/res_energy.svg"),
+    ),
+    (
+        "icons/res_food",
+        include_str!("../../../assets/hud/icons/res_food.svg"),
+    ),
+    (
+        "icons/res_knowledge",
+        include_str!("../../../assets/hud/icons/res_knowledge.svg"),
+    ),
+    (
+        "icons/res_metal",
+        include_str!("../../../assets/hud/icons/res_metal.svg"),
+    ),
+    (
+        "icons/res_oil",
+        include_str!("../../../assets/hud/icons/res_oil.svg"),
+    ),
+    (
+        "icons/res_timber",
+        include_str!("../../../assets/hud/icons/res_timber.svg"),
+    ),
+    (
+        "icons/res_wealth",
+        include_str!("../../../assets/hud/icons/res_wealth.svg"),
+    ),
+    (
+        "icons/research",
+        include_str!("../../../assets/hud/icons/research.svg"),
+    ),
+    (
+        "icons/stat_armour",
+        include_str!("../../../assets/hud/icons/stat_armour.svg"),
+    ),
+    (
+        "icons/stat_attack",
+        include_str!("../../../assets/hud/icons/stat_attack.svg"),
+    ),
+    (
+        "icons/stat_garrison",
+        include_str!("../../../assets/hud/icons/stat_garrison.svg"),
+    ),
+    (
+        "icons/stat_hp",
+        include_str!("../../../assets/hud/icons/stat_hp.svg"),
+    ),
+    (
+        "icons/stat_range",
+        include_str!("../../../assets/hud/icons/stat_range.svg"),
+    ),
+    (
+        "icons/stat_workers",
+        include_str!("../../../assets/hud/icons/stat_workers.svg"),
+    ),
+    (
+        "icons/tab_build",
+        include_str!("../../../assets/hud/icons/tab_build.svg"),
+    ),
+    (
+        "icons/tab_diplomacy",
+        include_str!("../../../assets/hud/icons/tab_diplomacy.svg"),
+    ),
+    (
+        "icons/tab_economy",
+        include_str!("../../../assets/hud/icons/tab_economy.svg"),
+    ),
+    (
+        "icons/tab_military",
+        include_str!("../../../assets/hud/icons/tab_military.svg"),
+    ),
+    (
+        "icons/tab_order",
+        include_str!("../../../assets/hud/icons/tab_order.svg"),
+    ),
+    (
+        "icons/tab_political",
+        include_str!("../../../assets/hud/icons/tab_political.svg"),
+    ),
+    (
+        "icons/tab_research",
+        include_str!("../../../assets/hud/icons/tab_research.svg"),
+    ),
+    (
+        "icons/tab_train",
+        include_str!("../../../assets/hud/icons/tab_train.svg"),
+    ),
+    (
+        "icons/tab_wonders",
+        include_str!("../../../assets/hud/icons/tab_wonders.svg"),
+    ),
+    (
+        "icons/zoom_in",
+        include_str!("../../../assets/hud/icons/zoom_in.svg"),
+    ),
+    (
+        "icons/zoom_out",
+        include_str!("../../../assets/hud/icons/zoom_out.svg"),
+    ),
 ];
 
 /// Edge of an icon in design pixels when baked; icons are drawn at or below this size.
@@ -100,6 +301,7 @@ pub struct AtlasRect {
 }
 
 impl AtlasRect {
+    #[cfg(test)]
     fn overlaps(&self, other: &AtlasRect) -> bool {
         self.x < other.x + other.w
             && other.x < self.x + self.w
@@ -172,11 +374,21 @@ fn rasterise(
     let size = tree.size();
     let (zoom_x, zoom_y, width, height) = if name.starts_with("icons/") {
         let edge = (ICON_DESIGN_SIZE * scale).ceil().max(8.0);
-        (edge / size.width(), edge / size.height(), edge as u32, edge as u32)
+        (
+            edge / size.width(),
+            edge / size.height(),
+            edge as u32,
+            edge as u32,
+        )
     } else {
         let width = (size.width() * scale).ceil().max(1.0);
         let height = (size.height() * scale).ceil().max(1.0);
-        (width / size.width(), height / size.height(), width as u32, height as u32)
+        (
+            width / size.width(),
+            height / size.height(),
+            width as u32,
+            height as u32,
+        )
     };
     let mut pixmap = tiny_skia::Pixmap::new(width, height).ok_or(AtlasError::Pixmap(name))?;
     resvg::render(
@@ -185,7 +397,7 @@ fn rasterise(
         &mut pixmap.as_mut(),
     );
     let mut pixels = pixmap.take();
-    for pixel in pixels.chunks_exact_mut(4) {
+    for pixel in pixels.as_chunks_mut::<4>().0 {
         let alpha = u32::from(pixel[3]);
         if alpha != 0 && alpha != 255 {
             for channel in &mut pixel[..3] {
@@ -206,10 +418,7 @@ pub fn bake(scale: f32) -> Result<AtlasImage, AtlasError> {
     bake_sources(SOURCES, scale)
 }
 
-fn bake_sources(
-    sources: &[(&'static str, &str)],
-    scale: f32,
-) -> Result<AtlasImage, AtlasError> {
+fn bake_sources(sources: &[(&'static str, &str)], scale: f32) -> Result<AtlasImage, AtlasError> {
     let options = usvg::Options::default();
     let mut baked = sources
         .iter()
@@ -217,8 +426,15 @@ fn bake_sources(
         .collect::<Result<Vec<_>, _>>()?;
     baked.sort_by(|a, b| b.height.cmp(&a.height).then(a.name.cmp(b.name)));
 
-    let widest = baked.iter().map(|b| b.width + PADDING * 2).max().unwrap_or(1);
-    let width = widest.next_power_of_two().clamp(1024, MAX_ATLAS_WIDTH).max(widest);
+    let widest = baked
+        .iter()
+        .map(|b| b.width + PADDING * 2)
+        .max()
+        .unwrap_or(1);
+    let width = widest
+        .next_power_of_two()
+        .clamp(1024, MAX_ATLAS_WIDTH)
+        .max(widest);
     let mut placements = Vec::with_capacity(baked.len());
     let (mut x, mut y, mut row_height) = (PADDING, PADDING, 0);
     for item in &baked {
@@ -274,14 +490,21 @@ mod tests {
             for row in 0..rect.h {
                 let start = (((rect.y + row) * atlas.width + rect.x) * 4) as usize;
                 opaque += atlas.rgba[start..start + rect.w as usize * 4]
-                    .chunks_exact(4)
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
                     .filter(|px| px[3] > 128)
                     .count();
             }
             assert!(opaque > 20, "{name} draws nothing");
         }
         // Pieces the layout relies on exist.
-        for name in ["chrome/topbar", "chrome/tile", "chrome/minimap", "icons/res_food"] {
+        for name in [
+            "chrome/topbar",
+            "chrome/tile",
+            "chrome/minimap",
+            "icons/res_food",
+        ] {
             assert!(atlas.rect(name).is_some(), "{name} missing");
         }
     }
@@ -297,7 +520,10 @@ mod tests {
             }
             for (i, (a_name, a)) in rects.iter().enumerate() {
                 for (b_name, b) in &rects[i + 1..] {
-                    assert!(!a.overlaps(b), "{a_name} overlaps {b_name} at scale {scale}");
+                    assert!(
+                        !a.overlaps(b),
+                        "{a_name} overlaps {b_name} at scale {scale}"
+                    );
                 }
             }
         }
@@ -319,20 +545,83 @@ mod tests {
         );
     }
 
-    /// Writes the atlas as a PNG when `HUD_ATLAS_DUMP` names a file; a development aid.
     #[test]
-    fn dump_atlas_when_asked() {
-        let Ok(path) = std::env::var("HUD_ATLAS_DUMP") else {
-            return;
-        };
-        let scale = std::env::var("HUD_ATLAS_SCALE")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(1.0);
-        let atlas = bake(scale).expect("bake");
-        image::RgbaImage::from_raw(atlas.width, atlas.height, atlas.rgba)
-            .expect("image")
-            .save(path)
-            .expect("save");
+    fn all_authored_files_and_required_glyphs_are_embedded() {
+        use std::collections::BTreeSet;
+        let listed: BTreeSet<_> = SOURCES.iter().map(|(name, _)| name.to_string()).collect();
+        for folder in ["chrome", "icons"] {
+            for file in std::fs::read_dir(format!(
+                "{}/../../assets/hud/{folder}",
+                env!("CARGO_MANIFEST_DIR")
+            ))
+            .unwrap()
+            {
+                let path = file.unwrap().path();
+                if path.extension().is_some_and(|e| e == "svg") {
+                    let name = format!("{folder}/{}", path.file_stem().unwrap().to_str().unwrap());
+                    assert!(listed.contains(&name), "unembedded SVG: {name}");
+                }
+            }
+        }
+        for name in [
+            "res_food",
+            "res_timber",
+            "res_metal",
+            "res_wealth",
+            "res_knowledge",
+            "res_oil",
+            "res_energy",
+            "commerce",
+            "population",
+            "cities",
+            "research",
+            "clock",
+            "diplomacy",
+            "chat",
+            "menu",
+            "pause",
+            "help",
+            "objectives",
+            "zoom_in",
+            "zoom_out",
+            "centre",
+            "flag",
+            "stat_hp",
+            "stat_attack",
+            "stat_armour",
+            "stat_range",
+            "stat_garrison",
+            "stat_workers",
+            "tab_political",
+            "tab_military",
+            "tab_economy",
+            "tab_diplomacy",
+            "tab_wonders",
+            "tab_build",
+            "tab_order",
+            "tab_train",
+            "tab_research",
+            "arrow_left",
+            "arrow_right",
+            "cmd_move",
+            "cmd_attack",
+            "cmd_attack_move",
+            "cmd_stop",
+            "cmd_hold",
+            "cmd_patrol",
+            "cmd_guard",
+            "cmd_follow",
+            "cmd_rally",
+            "cmd_garrison",
+            "cmd_unload",
+            "cmd_repair",
+            "cmd_build",
+            "cmd_cancel",
+        ] {
+            assert!(
+                listed.contains(&format!("icons/{name}")),
+                "missing glyph: {name}"
+            );
+        }
     }
 }

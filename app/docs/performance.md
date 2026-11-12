@@ -199,3 +199,19 @@ With 5,000 wandering units the simulation still kept 19.9 of 20 ticks per second
 render thread stayed at about 60 frames per second; the extra cost is about 3 ms per frame
 (frame time 8.1 ms to 11.1 ms), mostly building the instance list on the CPU. A screenshot of
 the default demo after 20 s is in `docs/img/demo.png`.
+
+## HUD chrome (task 11)
+
+HUD-on GPU measurements are pending the orchestrator's display-enabled run.
+This implementer was explicitly restricted to CPU previews and compilation;
+no application window was opened, no GPU screenshot was produced, and no FPS
+number is claimed. Run the following to obtain the required bench line:
+
+```sh
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --demo --seed 1 --size 1280x800 --bench 10
+```
+
+The HUD uses one artwork atlas texture, one glyph atlas texture, and a terrain
+minimap texture uploaded once per terrain. Each frame adds textured quads,
+entity dots and the camera footprint. Atlas/glyph baking happens at startup
+and after scale changes beyond 10%, outside steady-state frame costs.

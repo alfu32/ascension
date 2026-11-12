@@ -304,6 +304,20 @@ impl HudLayout {
         )
     }
 
+    /// True for an inert HUD surface that consumes pointer input.
+    pub fn contains_hud(&self, x: f32, y: f32) -> bool {
+        y < TOP_BAR_HEIGHT * self.scale
+            || [
+                (Group::BottomLeft, Rect::new(0.0, 680.0, 612.0, 261.0)),
+                (Group::BottomRight, Rect::new(975.0, 672.0, 697.0, 269.0)),
+            ]
+            .into_iter()
+            .any(|(g, r)| self.map(g, r).contains(x, y))
+            || [Region::MessageLines, Region::HelpLine, Region::MinimapFrame]
+                .into_iter()
+                .any(|r| self.rect(r).contains(x, y))
+    }
+
     /// Screen rectangle of a region.
     pub fn rect(&self, region: Region) -> Rect {
         self.map(region.group(), region.design())
@@ -388,14 +402,14 @@ mod tests {
                     if a.parent() == Some(*b) || b.parent() == Some(*a) {
                         continue;
                     }
-                    // Children of one parent may stand in for each other (portrait or grid).
-                    if a.parent().is_some() && a.parent() == b.parent() {
+                    // The multi-selection grid replaces the portrait, stats and sub-slots.
+                    if (*a == Region::MultiGrid || *b == Region::MultiGrid)
+                        && a.parent().is_some()
+                        && a.parent() == b.parent()
+                    {
                         continue;
                     }
-                    assert!(
-                        !a.design().overlaps(&b.design()),
-                        "{a:?} overlaps {b:?}"
-                    );
+                    assert!(!a.design().overlaps(&b.design()), "{a:?} overlaps {b:?}");
                 }
             }
         }

@@ -39,6 +39,7 @@ pub fn run(options: &Options) -> ExitCode {
         }
     };
     bridge.publish_render_scale(options.scale);
+    bridge.publish_hud_options(!options.no_hud, options.hud_scale);
     let mut sim = match start_simulation(options, &bridge) {
         Ok(sim) => sim,
         Err(error) => {
@@ -70,7 +71,7 @@ pub fn run(options: &Options) -> ExitCode {
         let canvas = size(px(width as f32), px(height as f32));
         let mut window_options = WindowOptions {
             titlebar: Some(TitlebarOptions {
-                title: Some("Rise of Man".into()),
+                title: Some("Ascension: Rise of Man".into()),
                 ..Default::default()
             }),
             app_id: Some("rise-of-man".into()),
@@ -88,7 +89,14 @@ pub fn run(options: &Options) -> ExitCode {
             window_options.window_decorations = Some(WindowDecorations::Client);
             let exit_code = Arc::clone(&app_exit_code);
             cx.open_window(window_options, move |window, cx| {
-                let view = world_view(&bridge, &shutdown, &sim_link, options.size, window, cx);
+                let view = world_view(
+                    &bridge,
+                    &shutdown,
+                    &sim_link,
+                    (options.size, options.stats),
+                    window,
+                    cx,
+                );
                 if let Some(seconds) = options.bench_seconds {
                     let bench = bench::Bench {
                         seconds,
@@ -121,7 +129,14 @@ pub fn run(options: &Options) -> ExitCode {
         } else {
             window_options.window_bounds = Some(WindowBounds::centered(canvas, cx));
             cx.open_window(window_options, move |window, cx| {
-                let view = world_view(&bridge, &shutdown, &sim_link, options.size, window, cx);
+                let view = world_view(
+                    &bridge,
+                    &shutdown,
+                    &sim_link,
+                    (options.size, options.stats),
+                    window,
+                    cx,
+                );
                 cx.new(|cx| Root::new(view, window, cx))
             })
             .map(|_| ())
@@ -147,7 +162,7 @@ fn world_view(
     bridge: &RenderBridge,
     shutdown: &ShutdownHandle,
     sim: &SimLink,
-    (width, height): (u32, u32),
+    ((width, height), stats): ((u32, u32), bool),
     window: &mut Window,
     cx: &mut App,
 ) -> Entity<WorldView> {
@@ -169,7 +184,7 @@ fn world_view(
         ));
     }
     let (bridge, sim) = (bridge.clone(), sim.clone());
-    cx.new(|cx| WorldView::new(bridge, sim, window, cx))
+    cx.new(|cx| WorldView::new(bridge, sim, stats, window, cx))
 }
 
 /// Generates the map, publishes its terrain, builds the match and starts the simulation thread.
