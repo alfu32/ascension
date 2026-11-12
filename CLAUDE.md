@@ -44,7 +44,10 @@ Rules:
 1. Every delegated task gets a card in the template from the implementation
    plan. An agent starts with no context: name the exact docs, tables and
    files it must read.
-2. One git worktree per task. Parallel tasks must not share a crate.
+2. One git worktree per task, under `../rise-of-man-worktrees/<task>`. Parallel
+   tasks must not share a crate. Task cards live in `app/docs/tasks/`; the
+   ledger `app/docs/tasks/STATUS.md` is updated at every state change and
+   describes what to do when an implementer hits a usage limit.
 3. Review the diff and the gate output, not the agent's summary. A task is
    done only when the release gate passes in its worktree.
 4. A task that fails review twice on one model is escalated, not retried a
