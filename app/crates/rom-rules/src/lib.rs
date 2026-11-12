@@ -5,6 +5,131 @@ use std::path::Path;
 use rusqlite::{Connection, backup::Backup};
 use thiserror::Error;
 
+mod load;
+mod model;
+mod modifiers;
+mod validate;
+
+pub use model::*;
+pub use modifiers::Context;
+pub use validate::Problem;
+
+/// Errors encountered while decoding the typed rules model.
+#[derive(Debug, Error)]
+pub enum RulesError {
+    /// SQLite failed to read a table or convert a column to its integer/text type.
+    #[error(transparent)]
+    Sql(#[from] rusqlite::Error),
+    /// A closed vocabulary or boolean column contains an unsupported value.
+    #[error("{table} row {row}, {column}: {value:?}; expected {expected}")]
+    InvalidValue {
+        table: String,
+        row: String,
+        column: String,
+        value: String,
+        expected: &'static str,
+    },
+    /// A component refers to an entity type absent from the database.
+    #[error("{table} refers to missing entity type {id:?}")]
+    MissingEntity { table: String, id: DefId },
+    /// A definition id requires a vector larger than the available capacity.
+    #[error("cannot allocate definition index for {0:?}")]
+    DefinitionCapacity(DefId),
+}
+
+impl Rules {
+    /// Returns a definition; `id` must belong to this rules catalogue.
+    pub fn def(&self, id: DefId) -> &Definition {
+        self.definitions[id.0 as usize]
+            .as_ref()
+            .expect("definition id must belong to this rules catalogue")
+    }
+
+    /// Finds a definition by its stable authoring key.
+    pub fn id_of(&self, key: &str) -> Option<DefId> {
+        self.ids_by_key.get(key).copied()
+    }
+
+    /// Returns the stable key of a definition in this catalogue.
+    pub fn key(&self, id: DefId) -> &str {
+        &self.def(id).key
+    }
+
+    /// Counts definitions, excluding unused slots in the id vector.
+    pub fn definition_count(&self) -> usize {
+        self.ids_by_key.len()
+    }
+
+    /// Looks up an entity type and its attached components.
+    pub fn entity_type(&self, id: DefId) -> Option<&EntityType> {
+        self.entity_types.get(&id)
+    }
+
+    /// Tests membership in a tag by its tag-table id.
+    pub fn has_tag(&self, def: DefId, tag: u32) -> bool {
+        self.tags_by_def
+            .get(&def)
+            .is_some_and(|tags| tags.contains(&tag))
+    }
+
+    /// Returns combat effectiveness, defaulting to 100 percent for a missing row.
+    pub fn damage_pct(&self, damage_class: u32, armor_class: u32) -> i64 {
+        self.damage_matrix
+            .get(&(damage_class, armor_class))
+            .map_or(100, |row| row.pct)
+    }
+
+    /// Returns a global integer tunable, or `None` when it is absent.
+    pub fn constant(&self, key: &str) -> Option<i64> {
+        self.game_constants.get(key).map(|row| row.value)
+    }
+
+    /// Returns every modifier from a source, including timed, aura and relation effects.
+    pub fn modifiers_from(&self, source: DefId) -> &[Modifier] {
+        self.modifiers.get(&source).map_or(&[], Vec::as_slice)
+    }
+
+    /// Tests roster availability, inheriting listings from faction ancestors.
+    pub fn is_available(&self, def: DefId, faction: DefId) -> bool {
+        let Some(rows) = self.availability.get(&def) else {
+            return true;
+        };
+        let mut current = Some(faction);
+        let mut visited = std::collections::BTreeSet::new();
+        while let Some(id) = current {
+            if !visited.insert(id) {
+                break;
+            }
+            if rows.iter().any(|row| row.faction_id == id) {
+                return true;
+            }
+            current = self.factions.get(&id).and_then(|row| row.parent_id);
+        }
+        false
+    }
+
+    /// Tests every prerequisite OR-group using active techs/ages and owned entity types.
+    pub fn is_unlocked(&self, def: DefId, active: &ActiveSources, owned: &Owned) -> bool {
+        let mut groups = std::collections::BTreeMap::new();
+        for row in self.prerequisites.get(&def).into_iter().flatten() {
+            let id = row.requires_def_id;
+            let met = if let Some(age) = self.ages.get(&id) {
+                active.iter().any(|source| {
+                    self.ages
+                        .get(source)
+                        .is_some_and(|later| later.ordinal >= age.ordinal)
+                })
+            } else if self.techs.contains_key(&id) {
+                active.contains(&id)
+            } else {
+                self.entity_types.contains_key(&id) && owned.contains(&id)
+            };
+            *groups.entry(row.alt_group).or_insert(false) |= met;
+        }
+        groups.values().all(|met| *met)
+    }
+}
+
 /// Errors encountered while building, checking, or writing the rules database.
 #[derive(Debug, Error)]
 pub enum RulesBuildError {

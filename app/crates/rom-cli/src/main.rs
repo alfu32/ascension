@@ -1,6 +1,6 @@
 use std::{env, path::PathBuf, process::ExitCode};
 
-use rom_rules::{build_rules_db, write_rules_db};
+use rom_rules::{Rules, build_rules_db, write_rules_db};
 
 fn main() -> ExitCode {
     match run() {
@@ -14,8 +14,38 @@ fn main() -> ExitCode {
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = env::args().skip(1);
-    if args.next().as_deref() != Some("build-rules") {
-        return Err("usage: rom build-rules --schema <path> --seed <path> --out <path>".into());
+    let command = args
+        .next()
+        .ok_or("usage: rom <build-rules|check-rules> [options]")?;
+    if command == "check-rules" {
+        if args.next().as_deref() != Some("--db") {
+            return Err("usage: rom check-rules --db <path>".into());
+        }
+        let path = args.next().ok_or("missing --db path")?;
+        if args.next().is_some() {
+            return Err("usage: rom check-rules --db <path>".into());
+        }
+        let conn = rusqlite::Connection::open_with_flags(
+            path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )?;
+        let rules = Rules::load(&conn)?;
+        let problems = rules.validate();
+        for problem in &problems {
+            println!("{problem}");
+        }
+        if !problems.is_empty() {
+            return Err(format!("{} rules problems", problems.len()).into());
+        }
+        println!(
+            "rules ok: {} definitions, {} modifiers",
+            rules.definition_count(),
+            rules.modifiers.values().map(Vec::len).sum::<usize>()
+        );
+        return Ok(());
+    }
+    if command != "build-rules" {
+        return Err("usage: rom <build-rules|check-rules> [options]".into());
     }
 
     let mut schema = None;
