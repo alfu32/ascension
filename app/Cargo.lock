@@ -97,15 +97,15 @@ dependencies = [
 
 [[package]]
 name = "rom-ai"
-version = "0.0.3"
+version = "0.0.4"
 
 [[package]]
 name = "rom-app"
-version = "0.0.3"
+version = "0.0.4"
 
 [[package]]
 name = "rom-cli"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "rom-rules",
  "rusqlite",
@@ -113,15 +113,15 @@ dependencies = [
 
 [[package]]
 name = "rom-mapgen"
-version = "0.0.3"
+version = "0.0.4"
 
 [[package]]
 name = "rom-render"
-version = "0.0.3"
+version = "0.0.4"
 
 [[package]]
 name = "rom-rules"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "rusqlite",
  "thiserror",
@@ -129,11 +129,11 @@ dependencies = [
 
 [[package]]
 name = "rom-save"
-version = "0.0.3"
+version = "0.0.4"
 
 [[package]]
 name = "rom-sim"
-version = "0.0.3"
+version = "0.0.4"
 
 [[package]]
 name = "rsqlite-vfs"

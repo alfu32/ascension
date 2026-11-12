@@ -17,6 +17,9 @@ pub enum RulesBuildError {
     /// An entity type has no production path.
     #[error("lint_unproducible failed: {rows:?}")]
     Unproducible { rows: Vec<String> },
+    /// The seed defined nothing, so there are no rules to ship.
+    #[error("rules database is empty: the seed created no definitions")]
+    Empty,
     /// SQLite reported an error while processing the database.
     #[error(transparent)]
     Sql(#[from] rusqlite::Error),
@@ -56,6 +59,11 @@ pub fn build_rules_db(schema_sql: &str, seed_sql: &str) -> Result<Connection, Ru
             }
             other => RulesBuildError::Sql(other),
         });
+    }
+
+    let definitions: i64 = conn.query_row("SELECT COUNT(*) FROM def", [], |row| row.get(0))?;
+    if definitions == 0 {
+        return Err(RulesBuildError::Empty);
     }
 
     let foreign_keys = foreign_key_rows(&conn)?;
@@ -165,6 +173,14 @@ mod tests {
         let error = build_rules_db(SCHEMA, &seed).unwrap_err();
         assert!(matches!(error, RulesBuildError::Unproducible { .. }));
         assert!(error.to_string().contains("unit.orphan"));
+    }
+
+    #[test]
+    fn empty_seed_is_rejected() {
+        assert!(matches!(
+            build_rules_db(SCHEMA, ""),
+            Err(RulesBuildError::Empty)
+        ));
     }
 
     #[test]
