@@ -472,17 +472,57 @@ fn race_modifier_changes_max_hp_keeping_ratio() {
 }
 
 #[test]
-fn nature_is_not_automatically_acquired_and_ties_use_lower_id() {
+fn nature_is_not_automatically_acquired_and_ties_use_the_tick_rank() {
+    // Ties used to go to the lower id, which always favoured whoever spawned first.
     let mut w = world("");
     let a = spawn(&mut w, "unit.spearman", 1, at(20000, 20000));
     spawn(&mut w, "unit.citizen", 0, at(21000, 20000));
     let first = spawn(&mut w, "unit.citizen", 2, at(23000, 20000));
-    spawn(&mut w, "unit.citizen", 2, at(17000, 20000));
+    let second = spawn(&mut w, "unit.citizen", 2, at(17000, 20000));
     stance(&mut w, a, "aggressive");
     w.step();
     assert!(w.entity(a).unwrap().orders().is_empty());
+    let rank = |t: EntityId| crate::rng::tie_rank(w.tick(), a.0, t.0);
+    let expected = if rank(first) < rank(second) {
+        first
+    } else {
+        second
+    };
     w.step();
-    assert_eq!(w.entity(a).unwrap().orders()[0].target_entity, Some(first));
+    assert_eq!(w.entity(a).unwrap().orders()[0].target_entity, Some(expected));
+}
+
+#[test]
+fn simultaneous_strikes_both_land() {
+    // Without a range override both are melee: whoever updates first must not win.
+    let mut w = world("");
+    let a = spawn(&mut w, "unit.spearman", 1, at(10000, 10000));
+    let b = spawn(&mut w, "unit.spearman", 2, at(10200, 10000));
+    injure(&mut w, a, 7);
+    injure(&mut w, b, 7);
+    attack(&mut w, a, b);
+    attack(&mut w, b, a);
+    w.step();
+    assert!(w.entity(a).is_none() && w.entity(b).is_none());
+    assert_eq!(w.stats().kills[&PlayerId(1)], 1);
+    assert_eq!(w.stats().kills[&PlayerId(2)], 1);
+}
+
+#[test]
+fn melee_pair_closing_in_strikes_on_the_same_tick() {
+    // Approaching from equal distances, neither may get the first blow by update order.
+    let mut w = world("");
+    let a = spawn(&mut w, "unit.spearman", 1, at(10000, 10000));
+    let b = spawn(&mut w, "unit.spearman", 2, at(14000, 10000));
+    attack(&mut w, a, b);
+    attack(&mut w, b, a);
+    while hp(&w, a) == 110 && hp(&w, b) == 110 && w.tick() < 200 {
+        w.step();
+    }
+    assert!(hp(&w, a) < 110);
+    assert_eq!(hp(&w, a), hp(&w, b));
+    ticks(&mut w, 600);
+    assert!(w.entity(a).is_none() && w.entity(b).is_none());
 }
 
 #[test]

@@ -132,10 +132,16 @@ impl World {
                 "raze" => self.rules.entity_types[&t.type_id].class == EntityClass::Building,
                 _ => false,
             };
-            Some((!preferred, e.pos.distance_squared_wide(t.pos), target))
+            let rank = crate::rng::tie_rank(self.tick, id.0, target.0);
+            Some((
+                !preferred,
+                e.pos.distance_squared_wide(self.seen_pos(target)),
+                rank,
+                target,
+            ))
         })
         .min()
-        .map(|(_, _, id)| id)
+        .map(|(_, _, _, id)| id)
     }
 
     fn automatic_attack(&mut self, id: EntityId, target: EntityId, home: Option<Pos>) {
@@ -186,6 +192,40 @@ impl World {
                     (behavior == "defensive").then(|| self.entity(id).expect("attacker").pos);
                 self.automatic_attack(id, target, home);
             }
+        }
+    }
+
+    /// Gives due attack-move orders without a live target the nearest enemy. Every
+    /// choice is made from the state at the start of the tick, before anything moves.
+    pub(crate) fn acquire_attack_moves(&mut self) {
+        if !self
+            .players
+            .values()
+            .any(|p| self.players.values().any(|q| p.team != q.team))
+        {
+            return;
+        }
+        let found: Vec<_> = self
+            .entities()
+            .filter(|e| {
+                self.acquisition_due(e.id)
+                    && e.orders.front().is_some_and(|o| {
+                        o.kind == "attack_move"
+                            && o.target_entity
+                                .is_none_or(|t| self.entity(t).is_none_or(|t| t.hp <= 0))
+                    })
+            })
+            .filter_map(|e| Some((e.id, self.acquire_target(e.id, "aggressive")?)))
+            .collect();
+        for (id, target) in found {
+            let order = self.entities[id.0 as usize]
+                .as_mut()
+                .expect("acquiring entity")
+                .orders
+                .front_mut()
+                .expect("attack move");
+            order.target_entity = Some(target);
+            order.movement = None;
         }
     }
 

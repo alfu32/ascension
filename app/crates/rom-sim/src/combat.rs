@@ -1,7 +1,7 @@
 //! Integer combat resolution, projectile delivery, and end-of-tick deaths.
 
 use crate::{Command, EntityId, Order, OrderStatus, PlayerId, Pos, SimError, World};
-use crate::{construction::footprint, movement::Walk, pathing::TileRect};
+use crate::{construction::footprint, movement::Walk, pathing::TileRect, rng::tie_rank};
 use rom_rules::{Context, EntityClass, Layer, Weapon};
 
 #[derive(Debug, Clone)]
@@ -70,6 +70,13 @@ impl World {
         Ok(())
     }
 
+    /// Where combat sees an entity: its position when this tick's order phase began,
+    /// or its current position outside that phase and for entities created during it.
+    pub(crate) fn seen_pos(&self, id: EntityId) -> Pos {
+        let live = self.entity(id).expect("seen entity").pos;
+        self.seen.get(id.0 as usize).copied().unwrap_or(live)
+    }
+
     pub(crate) fn target_layer(&self, id: EntityId) -> Layer {
         let e = self.entity(id).expect("target");
         let et = &self.rules.entity_types[&e.type_id];
@@ -80,22 +87,25 @@ impl World {
         {
             Layer::Air
         } else {
-            self.rules.terrains[&self.map.terrain_at_pos(e.pos).expect("entity on map")].layer
+            let pos = self.seen_pos(id);
+            self.rules.terrains[&self.map.terrain_at_pos(pos).expect("entity on map")].layer
         }
     }
 
-    /// Distance from the attacker's centre to the target's rectangle or circle.
+    /// Distance from the attacker's centre to the target's rectangle or circle, with
+    /// the target where it was seen at the start of the order phase.
     pub(crate) fn target_distance(&self, from: Pos, target: EntityId) -> u64 {
         let e = self.entity(target).expect("target");
         let et = &self.rules.entity_types[&e.type_id];
+        let pos = self.seen_pos(target);
         if et.class == EntityClass::Building {
-            let b = footprint(et, e.pos);
+            let b = footprint(et, pos);
             from.distance(Pos {
                 x: i64::from(from.x).clamp(b[0], b[2]) as i32,
                 y: i64::from(from.y).clamp(b[1], b[3]) as i32,
             })
         } else {
-            from.distance(e.pos).saturating_sub(et.radius.max(0) as u64)
+            from.distance(pos).saturating_sub(et.radius.max(0) as u64)
         }
     }
 
@@ -125,12 +135,6 @@ impl World {
                 order.target_entity = None;
                 order.movement = None;
             }
-            if order.target_entity.is_none() && self.acquisition_due(id) {
-                order.target_entity = self.acquire_target(id, "aggressive");
-                if order.target_entity.is_some() {
-                    order.movement = None;
-                }
-            }
             if order.target_entity.is_none() {
                 let goal = order.target_pos.expect("attack move point");
                 if self.walk(id, order, goal, None, true) == Walk::Arrived {
@@ -155,7 +159,7 @@ impl World {
             return;
         }
         let target_id = target.id;
-        let target_pos = target.pos;
+        let target_pos = self.seen_pos(target_id);
         if let Some(home) = order.home
             && target_pos.distance(home) > 6000
         {
@@ -191,7 +195,7 @@ impl World {
                 }
                 let target = self.entity(target_id).expect("target");
                 let et = &self.rules.entity_types[&target.type_id];
-                let bounds = (et.class == EntityClass::Building).then(|| footprint(et, target.pos));
+                let bounds = (et.class == EntityClass::Building).then(|| footprint(et, target_pos));
                 let goal = if let Some(b) = bounds {
                     let p = self.entity(id).expect("attacker").pos;
                     Pos {
@@ -238,7 +242,7 @@ impl World {
             );
             order.movement = None;
             if weapon.consumed {
-                e.hp = 0;
+                self.spent.push(id);
             }
             if hit {
                 let travel = if weapon.projectile_speed > 0 {
@@ -248,7 +252,9 @@ impl World {
                 } else {
                     0
                 };
-                let hit = PendingHit {
+                // Even an instant blow lands with the rest of the tick's hits, so a
+                // target struck earlier in id order can still strike back this tick.
+                self.hits.push(PendingHit {
                     land_tick: self.tick.saturating_add(travel),
                     attacker: id,
                     owner,
@@ -256,12 +262,7 @@ impl World {
                     weapon_id: weapon.id,
                     target: target_id,
                     damage,
-                };
-                if travel == 0 {
-                    self.impact(&hit);
-                } else {
-                    self.hits.push(hit);
-                }
+                });
             }
             return;
         }
@@ -326,16 +327,24 @@ impl World {
         }
     }
 
+    /// Lands every hit due this tick, then removes the hit points of spent attackers.
+    /// Hit points only add up, so landing order decides just the kill credit and whom
+    /// an idle victim retaliates against; a per-tick rank keeps that fair.
     pub(crate) fn land_projectiles(&mut self) {
-        let mut remaining = Vec::new();
-        for hit in std::mem::take(&mut self.hits) {
-            if hit.land_tick <= self.tick {
-                self.impact(&hit);
-            } else {
-                remaining.push(hit);
+        let (mut landing, remaining): (Vec<_>, Vec<_>) = std::mem::take(&mut self.hits)
+            .into_iter()
+            .partition(|hit| hit.land_tick <= self.tick);
+        self.hits = remaining;
+        let tick = self.tick;
+        landing.sort_by_cached_key(|hit| tie_rank(tick, hit.attacker.0, hit.target.0));
+        for hit in &landing {
+            self.impact(hit);
+        }
+        for id in std::mem::take(&mut self.spent) {
+            if let Some(e) = self.entities[id.0 as usize].as_mut() {
+                e.hp = 0;
             }
         }
-        self.hits = remaining;
     }
 
     pub(crate) fn remove_dead(&mut self) {
