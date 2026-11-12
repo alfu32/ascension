@@ -1,0 +1,23 @@
+[workspace]
+members = [
+    "crates/rom-rules",
+    "crates/rom-sim",
+    "crates/rom-mapgen",
+    "crates/rom-ai",
+    "crates/rom-save",
+    "crates/rom-render",
+    "crates/rom-app",
+    "crates/rom-cli",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.0.3"
+edition = "2024"
+rust-version = "1.99.1"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+rom-rules = { path = "crates/rom-rules" }
+rusqlite = { version = "=0.42.0", features = ["bundled", "backup"] }
+thiserror = "2"
