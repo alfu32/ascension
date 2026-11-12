@@ -4814,6 +4814,8 @@ dependencies = [
  "rom-mapgen",
  "rom-render",
  "rom-rules",
+ "rom-sim",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

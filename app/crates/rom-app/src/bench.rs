@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 use gpui::{App, AsyncApp, Entity, Timer};
 use rom_render::{RenderBridge, ShutdownHandle, scaled_size};
 
+use crate::sim_thread::SimLink;
 use crate::world_view::WorldView;
 
 /// Time allowed for the window to open and deliver its first frame.
@@ -32,12 +33,13 @@ pub fn start(
     bench: Bench,
     view: Entity<WorldView>,
     bridge: RenderBridge,
+    sim: SimLink,
     shutdown: ShutdownHandle,
     exit_code: Arc<AtomicU8>,
     cx: &mut App,
 ) {
     cx.spawn(async move |cx| {
-        match measure(bench, &view, &bridge, cx).await {
+        match measure(bench, &view, &bridge, &sim, cx).await {
             Ok(line) => println!("{line}"),
             Err(error) => {
                 eprintln!("rise-of-man: benchmark failed: {error}");
@@ -92,6 +94,7 @@ async fn measure(
     bench: Bench,
     view: &Entity<WorldView>,
     bridge: &RenderBridge,
+    sim: &SimLink,
     cx: &mut AsyncApp,
 ) -> Result<String, String> {
     wait_until_ready(view, bridge, cx).await?;
@@ -130,6 +133,11 @@ async fn measure(
     eprintln!(
         "bench-detail rendered={rendered} rendered_fps={:.1} render_target={render_width}x{render_height} seconds={elapsed:.2}",
         rendered as f64 / elapsed
+    );
+    let report = sim.report();
+    eprintln!(
+        "bench-detail sim_tick={} sim_ticks_per_second={:.1} entities={}",
+        report.tick, report.ticks_per_second, report.entities
     );
     Ok(format!(
         "bench size={}x{} scale={} frames={shown} fps={:.1} frame_ms_avg={:.2} frame_ms_max={:.2} readback_ms_avg={:.2} readback_ms_max={:.2}",

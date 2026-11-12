@@ -9,7 +9,7 @@ use gpui::{App, AsyncApp, Entity, Timer};
 use rom_render::image::{ImageFormat, RgbaImage};
 use rom_render::{FramePixels, RenderBridge, ShutdownHandle};
 
-use crate::bench::{WARM_UP, wait_until_ready};
+use crate::bench::wait_until_ready;
 use crate::world_view::WorldView;
 
 /// Time allowed for the render thread to hand over the requested frame.
@@ -18,6 +18,7 @@ const SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Starts the capture; it writes the file, stops the render thread and quits the app.
 pub fn start(
     path: PathBuf,
+    after: Duration,
     view: Entity<WorldView>,
     bridge: RenderBridge,
     shutdown: ShutdownHandle,
@@ -25,7 +26,7 @@ pub fn start(
     cx: &mut App,
 ) {
     cx.spawn(async move |cx| {
-        match capture(&path, &view, &bridge, cx).await {
+        match capture(&path, after, &view, &bridge, cx).await {
             Ok(size) => println!("screenshot {} {}x{}", path.display(), size.0, size.1),
             Err(error) => {
                 eprintln!("rise-of-man: screenshot failed: {error}");
@@ -40,12 +41,13 @@ pub fn start(
 
 async fn capture(
     path: &Path,
+    after: Duration,
     view: &Entity<WorldView>,
     bridge: &RenderBridge,
     cx: &mut AsyncApp,
 ) -> Result<(u32, u32), String> {
     wait_until_ready(view, bridge, cx).await?;
-    Timer::after(WARM_UP).await;
+    Timer::after(after).await;
     bridge.request_snapshot();
     let started = Instant::now();
     let pixels = loop {

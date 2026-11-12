@@ -15,3 +15,5 @@ gpui-component.workspace = true
 rom-render.workspace = true
 rom-rules.workspace = true
 rom-mapgen = { path = "../rom-mapgen" }
+rom-sim = { path = "../rom-sim" }
+thiserror.workspace = true

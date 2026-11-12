@@ -12,10 +12,13 @@ use raylib::prelude::{
     Shader, Vector2, Vector3, WeakMaterial,
 };
 
+use std::sync::Arc;
+
 use crate::camera::Camera;
+use crate::entities::{EntityView, Surface, build_instances};
 use crate::terrain::{
-    ChunkMesh, STAR_COUNT, Shape, TerrainScene, build_sea_chunks, build_terrain_chunks,
-    ground_height, star_field, star_triangles,
+    ChunkMesh, STAR_COUNT, TerrainScene, build_sea_chunks, build_terrain_chunks, ground_height,
+    star_field, star_triangles,
 };
 
 /// Width of the ground in tiles.
@@ -24,9 +27,8 @@ const GROUND_TILES: f32 = 256.0;
 const LIGHT_DIRECTION: [f32; 3] = [-0.45, -1.0, -0.3];
 const SKY: Color = Color::new(146, 178, 204, 255);
 const SPACE: Color = Color::new(1, 2, 5, 255);
-/// Height of a player-start pillar and of a node box, in tiles.
+/// Height of a player-start pillar, in tiles.
 const PILLAR_HEIGHT: f32 = 8.0;
-const NODE_SIZE: f32 = 0.7;
 const PLAYER_COLORS: [Color; 8] = [
     Color::new(220, 60, 60, 255),
     Color::new(60, 110, 230, 255),
@@ -117,6 +119,37 @@ out vec4 finalColor;
 void main() {
     float diffuse = max(dot(normalize(fragNormal), -normalize(lightDirection)), 0.0);
     finalColor = vec4(fragTint * (0.3 + 0.7 * diffuse), 1.0);
+}
+"#;
+
+// Entities are unit cubes; each instance carries its colour in the cells `m3`, `m7` and `m11` of
+// its transform, which an affine matrix leaves at zero.
+const ENTITY_VS: &str = r#"#version 330
+in vec3 vertexPosition;
+in vec3 vertexNormal;
+in mat4 instanceTransform;
+uniform mat4 mvp;
+out vec3 fragNormal;
+flat out vec3 fragTint;
+void main() {
+    mat4 transform = instanceTransform;
+    fragTint = vec3(transform[0][3], transform[1][3], transform[2][3]);
+    transform[0][3] = 0.0;
+    transform[1][3] = 0.0;
+    transform[2][3] = 0.0;
+    fragNormal = mat3(transform) * vertexNormal;
+    gl_Position = mvp * transform * vec4(vertexPosition, 1.0);
+}
+"#;
+
+const ENTITY_FS: &str = r#"#version 330
+in vec3 fragNormal;
+flat in vec3 fragTint;
+uniform vec3 lightDirection;
+out vec4 finalColor;
+void main() {
+    float diffuse = max(dot(normalize(fragNormal), -normalize(lightDirection)), 0.0);
+    finalColor = vec4(fragTint * (0.38 + 0.72 * diffuse), 1.0);
 }
 "#;
 
@@ -219,7 +252,11 @@ pub(crate) struct Scene {
     box_material: WeakMaterial,
     ground_material: WeakMaterial,
     /// Kept alive for the materials above, which point at them.
-    _shaders: [Shader; 5],
+    entity_material: WeakMaterial,
+    _shaders: [Shader; 6],
+    entity_transforms: Vec<Matrix>,
+    instances: Vec<[f32; 16]>,
+    draw_markers: bool,
     movers: Vec<Mover>,
     transforms: Vec<Matrix>,
 }
@@ -230,10 +267,32 @@ struct TerrainGpu {
     sea: Vec<Mesh>,
     /// Player pillars: centre, size and colour.
     pillars: Vec<(Vector3, Vector3, Color)>,
-    /// Node boxes: centre and size.
-    nodes: Vec<(Vector3, Vector3)>,
+    /// Surface sampler for entities.
+    surface: Surface,
     /// Map centre in tiles, where the stress-test boxes are centred.
     centre: [f32; 2],
+}
+
+/// A column-major array as a raylib matrix.
+fn matrix_of(m: &[f32; 16]) -> Matrix {
+    Matrix {
+        m0: m[0],
+        m1: m[1],
+        m2: m[2],
+        m3: m[3],
+        m4: m[4],
+        m5: m[5],
+        m6: m[6],
+        m7: m[7],
+        m8: m[8],
+        m9: m[9],
+        m10: m[10],
+        m11: m[11],
+        m12: m[12],
+        m13: m[13],
+        m14: m[14],
+        m15: m[15],
+    }
 }
 
 /// Uploads one chunk of mesh data.
@@ -278,9 +337,16 @@ impl Scene {
             rl.load_shader_from_memory(thread, Some(GROUND_VS), Some(GROUND_FS));
         let mut terrain_shader =
             rl.load_shader_from_memory(thread, Some(TERRAIN_VS), Some(TERRAIN_FS));
+        let mut entity_shader =
+            rl.load_shader_from_memory(thread, Some(ENTITY_VS), Some(ENTITY_FS));
         let sea_shader = rl.load_shader_from_memory(thread, Some(COLOR_VS), Some(COLOR_FS));
         let star_shader = rl.load_shader_from_memory(thread, Some(STAR_VS), Some(COLOR_FS));
-        for shader in [&mut box_shader, &mut ground_shader, &mut terrain_shader] {
+        for shader in [
+            &mut box_shader,
+            &mut ground_shader,
+            &mut terrain_shader,
+            &mut entity_shader,
+        ] {
             let location = shader.get_shader_location("lightDirection");
             shader.set_shader_value(location, LIGHT_DIRECTION);
         }
@@ -290,6 +356,8 @@ impl Scene {
         ground_material.set_shader(&ground_shader);
         let mut terrain_material = rl.load_material_default(thread);
         terrain_material.set_shader(&terrain_shader);
+        let mut entity_material = rl.load_material_default(thread);
+        entity_material.set_shader(&entity_shader);
         let mut sea_material = rl.load_material_default(thread);
         sea_material.set_shader(&sea_shader);
         let mut star_material = rl.load_material_default(thread);
@@ -314,13 +382,18 @@ impl Scene {
             star_material,
             box_material,
             ground_material,
+            entity_material,
             _shaders: [
                 box_shader,
                 ground_shader,
                 terrain_shader,
                 sea_shader,
                 star_shader,
+                entity_shader,
             ],
+            entity_transforms: Vec::new(),
+            instances: Vec::new(),
+            draw_markers: false,
             transforms: Vec::new(),
             movers: Vec::new(),
         }
@@ -332,7 +405,7 @@ impl Scene {
     pub(crate) fn set_terrain(
         &mut self,
         thread: &RaylibThread,
-        scene: &TerrainScene,
+        scene: &Arc<TerrainScene>,
     ) -> (usize, f32, f32) {
         self.terrain = None;
         if !scene.is_valid() {
@@ -340,9 +413,10 @@ impl Scene {
             return (0, 0.0, 0.0);
         }
         let started = Instant::now();
-        let shape = Shape::new(scene);
-        let land = build_terrain_chunks(scene, &shape);
-        let sea = build_sea_chunks(scene, &shape);
+        let surface = Surface::new(Arc::clone(scene));
+        let shape = surface.shape();
+        let land = build_terrain_chunks(scene, shape);
+        let sea = build_sea_chunks(scene, shape);
         let built = Instant::now();
         let land_meshes: Vec<Mesh> = land.iter().filter_map(|c| upload(thread, c)).collect();
         let sea_meshes: Vec<Mesh> = sea.iter().filter_map(|c| upload(thread, c)).collect();
@@ -354,7 +428,7 @@ impl Scene {
             .iter()
             .enumerate()
             .map(|(i, &(x, y))| {
-                let ground = ground_height(scene, &shape, x, y);
+                let ground = ground_height(scene, shape, x, y);
                 (
                     Vector3::new(x, ground + PILLAR_HEIGHT / 2.0, y),
                     Vector3::new(0.5, PILLAR_HEIGHT, 0.5),
@@ -362,22 +436,11 @@ impl Scene {
                 )
             })
             .collect();
-        let nodes = scene
-            .nodes
-            .iter()
-            .map(|&(x, y)| {
-                let ground = ground_height(scene, &shape, x, y);
-                (
-                    Vector3::new(x, ground + NODE_SIZE / 2.0, y),
-                    Vector3::new(NODE_SIZE, NODE_SIZE, NODE_SIZE),
-                )
-            })
-            .collect();
         self.terrain = Some(TerrainGpu {
             land: land_meshes,
             sea: sea_meshes,
             pillars,
-            nodes,
+            surface,
             centre: [scene.width as f32 / 2.0, scene.height as f32 / 2.0],
         });
         (
@@ -385,6 +448,25 @@ impl Scene {
             (built - started).as_secs_f32() * 1_000.0,
             (uploaded - built).as_secs_f32() * 1_000.0,
         )
+    }
+
+    /// Turns `views` into instance transforms for the next draw; without a terrain nothing is drawn.
+    pub(crate) fn prepare_entities(
+        &mut self,
+        views: &[EntityView],
+        camera_yaw: f32,
+        start_markers: bool,
+    ) {
+        self.draw_markers = start_markers;
+        self.entity_transforms.clear();
+        let Some(terrain) = &self.terrain else {
+            return;
+        };
+        let mut instances = std::mem::take(&mut self.instances);
+        build_instances(views, &terrain.surface, camera_yaw, &mut instances);
+        self.entity_transforms
+            .extend(instances.iter().map(matrix_of));
+        self.instances = instances;
     }
 
     /// Draws the scene for `camera` at `seconds` into `target`.
@@ -440,11 +522,17 @@ impl Scene {
                 for mesh in &terrain.land {
                     world.draw_mesh(mesh, self.terrain_material.clone(), Matrix::identity());
                 }
-                for (centre, size, color) in &terrain.pillars {
-                    world.draw_cube_v(*centre, *size, *color);
+                if self.draw_markers {
+                    for (centre, size, color) in &terrain.pillars {
+                        world.draw_cube_v(*centre, *size, *color);
+                    }
                 }
-                for (centre, size) in &terrain.nodes {
-                    world.draw_cube_v(*centre, *size, Color::new(250, 215, 40, 255));
+                if !self.entity_transforms.is_empty() {
+                    world.draw_mesh_instanced(
+                        &self.box_mesh,
+                        self.entity_material.clone(),
+                        &self.entity_transforms,
+                    );
                 }
                 if !self.transforms.is_empty() {
                     world.draw_mesh_instanced(

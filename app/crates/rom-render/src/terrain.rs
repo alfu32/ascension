@@ -339,7 +339,7 @@ pub fn home_camera(scene: &TerrainScene) -> Camera {
         .unwrap_or((scene.width as f32 / 2.0, scene.height as f32 / 2.0));
     Camera {
         target: [x, 0.0, z],
-        distance: 70.0,
+        distance: 48.0,
         pitch: 38_f32.to_radians(),
         bounds: map_bounds(scene),
         ..Camera::default()

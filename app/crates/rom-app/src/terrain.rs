@@ -1,6 +1,7 @@
 //! Start-up content: rules built in memory, a generated map, and its conversion to a render scene.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use rom_mapgen::{GeneratedMap, MapRequest, generate};
 use rom_render::{TerrainScene, TileKind};
@@ -17,8 +18,16 @@ pub fn load_rules() -> Result<Rules, String> {
     Rules::load(&conn).map_err(|error| format!("loading rules: {error}"))
 }
 
-/// Generates the map the options ask for and converts it for rendering.
-pub fn build_scene(options: &Options) -> Result<TerrainScene, String> {
+/// The rules and the map the options ask for.
+pub struct Content {
+    /// The loaded rules.
+    pub rules: Arc<Rules>,
+    /// The generated map.
+    pub map: GeneratedMap,
+}
+
+/// Generates the map the options ask for.
+pub fn generate_content(options: &Options) -> Result<Content, String> {
     let rules = load_rules()?;
     let style = match &options.style {
         Some(key) => rules
@@ -42,7 +51,10 @@ pub fn build_scene(options: &Options) -> Result<TerrainScene, String> {
         },
     )
     .map_err(|error| format!("generating the map: {error}"))?;
-    Ok(to_scene(&map))
+    Ok(Content {
+        rules: Arc::new(rules),
+        map,
+    })
 }
 
 /// A colour derived from a definition id: a hue from a hash, fixed saturation and value.

@@ -173,3 +173,29 @@ The largest canvas this display allows is 1882×1080 (a 1920×1080 request is
 clamped by the window manager). The terrain adds almost nothing to the frame
 time at 1280×800; read-back still dominates. Screenshots are kept in
 `docs/img/terrain-home.png` and `docs/img/terrain-worlds.png`.
+
+## Live entities (task 10)
+
+The simulation runs on its own thread (20 ticks per second at `--speed 100`) and publishes a
+plain snapshot after every tick; the render thread keeps the last two, interpolates positions
+and facing by wall-clock time, and draws units, buildings, nodes and health bars with one
+instanced draw call (unit cubes whose colour rides in the unused matrix cells). The default
+demo has 4 players with a city and 5 builders each plus the map's nodes (37 entities). The
+stress case adds 5,000 wandering units on the same 256×256 map (`--boxes` stays 0). Both runs:
+1280×800, scale 100, seed 1, 10 s, on the machine described above (quiet desktop).
+
+```
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --demo --seed 1 --size 1280x800 --bench 10
+bench-detail sim_tick=226 sim_ticks_per_second=20.0 entities=37
+bench size=1280x800 scale=100 frames=599 fps=59.9 frame_ms_avg=8.13 frame_ms_max=13.18 readback_ms_avg=7.97 readback_ms_max=12.98
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --demo --stress-units 5000 --seed 1 --size 1280x800 --bench 10
+bench-detail sim_tick=226 sim_ticks_per_second=19.9 entities=5037
+bench size=1280x800 scale=100 frames=584 fps=58.4 frame_ms_avg=11.12 frame_ms_max=17.50 readback_ms_avg=9.63 readback_ms_max=15.81
+```
+
+Two earlier runs of the same commands gave 57.0 fps (default demo) and 59.9 fps (stress), so
+the shown rate varies by a couple of frames per second between runs as in the earlier tables.
+With 5,000 wandering units the simulation still kept 19.9 of 20 ticks per second, and the
+render thread stayed at about 60 frames per second; the extra cost is about 3 ms per frame
+(frame time 8.1 ms to 11.1 ms), mostly building the instance list on the CPU. A screenshot of
+the default demo after 20 s is in `docs/img/demo.png`.

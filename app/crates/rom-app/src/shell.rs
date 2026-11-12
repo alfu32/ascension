@@ -3,6 +3,7 @@
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::time::Duration;
 
 use gpui::{
     App, AppContext, Application, Bounds, Entity, TitlebarOptions, Window, WindowBounds,
@@ -13,7 +14,10 @@ use rom_render::{Camera, RenderBridge, RenderWorker, ShutdownHandle};
 
 use crate::args::Options;
 use crate::bench;
+use crate::demo::{DemoDriver, add_stress_units};
+use crate::match_setup::build_match;
 use crate::screenshot;
+use crate::sim_thread::{SimLink, SimThread};
 use crate::terrain;
 use crate::world_view::WorldView;
 
@@ -35,14 +39,15 @@ pub fn run(options: &Options) -> ExitCode {
         }
     };
     bridge.publish_render_scale(options.scale);
-    match terrain::build_scene(options) {
-        Ok(scene) => bridge.publish_terrain(Arc::new(scene)),
+    let mut sim = match start_simulation(options, &bridge) {
+        Ok(sim) => sim,
         Err(error) => {
             eprintln!("rise-of-man: {error}");
             worker.stop();
             return ExitCode::FAILURE;
         }
-    }
+    };
+    let sim_link = sim.link();
     if let Some([x, y, distance, yaw, pitch]) = options.camera {
         bridge.publish_camera(Camera {
             target: [x, 0.0, y],
@@ -53,6 +58,7 @@ pub fn run(options: &Options) -> ExitCode {
         });
     }
     bridge.publish_box_count(options.boxes);
+    bridge.publish_start_markers(options.start_markers);
     let shutdown = worker.shutdown_handle();
     let exit_code = Arc::new(AtomicU8::new(0));
     let app_exit_code = Arc::clone(&exit_code);
@@ -82,16 +88,32 @@ pub fn run(options: &Options) -> ExitCode {
             window_options.window_decorations = Some(WindowDecorations::Client);
             let exit_code = Arc::clone(&app_exit_code);
             cx.open_window(window_options, move |window, cx| {
-                let view = world_view(&bridge, &shutdown, options.size, window, cx);
+                let view = world_view(&bridge, &shutdown, &sim_link, options.size, window, cx);
                 if let Some(seconds) = options.bench_seconds {
                     let bench = bench::Bench {
                         seconds,
                         requested: options.size,
                         scale: options.scale,
                     };
-                    bench::start(bench, view.clone(), bridge, shutdown, exit_code, cx);
+                    bench::start(
+                        bench,
+                        view.clone(),
+                        bridge,
+                        sim_link,
+                        shutdown,
+                        exit_code,
+                        cx,
+                    );
                 } else if let Some(path) = options.screenshot.clone() {
-                    screenshot::start(path, view.clone(), bridge, shutdown, exit_code, cx);
+                    screenshot::start(
+                        path,
+                        Duration::from_secs_f64(options.after_seconds),
+                        view.clone(),
+                        bridge,
+                        shutdown,
+                        exit_code,
+                        cx,
+                    );
                 }
                 view
             })
@@ -99,7 +121,7 @@ pub fn run(options: &Options) -> ExitCode {
         } else {
             window_options.window_bounds = Some(WindowBounds::centered(canvas, cx));
             cx.open_window(window_options, move |window, cx| {
-                let view = world_view(&bridge, &shutdown, options.size, window, cx);
+                let view = world_view(&bridge, &shutdown, &sim_link, options.size, window, cx);
                 cx.new(|cx| Root::new(view, window, cx))
             })
             .map(|_| ())
@@ -115,6 +137,7 @@ pub fn run(options: &Options) -> ExitCode {
         }
         cx.activate(true);
     });
+    sim.stop();
     worker.stop();
     ExitCode::from(exit_code.load(Ordering::Relaxed))
 }
@@ -123,14 +146,17 @@ pub fn run(options: &Options) -> ExitCode {
 fn world_view(
     bridge: &RenderBridge,
     shutdown: &ShutdownHandle,
+    sim: &SimLink,
     (width, height): (u32, u32),
     window: &mut Window,
     cx: &mut App,
 ) -> Entity<WorldView> {
     let close_shutdown = shutdown.clone();
+    let close_sim = sim.clone();
     // GPUI's X11 client holds its state borrowed while asking this, so calling `cx.quit()`
     // here panics; the event loop ends by itself once the last window is gone.
     window.on_window_should_close(cx, move |_, _| {
+        close_sim.request_stop();
         close_shutdown.stop_and_wait();
         true
     });
@@ -142,6 +168,20 @@ fn world_view(
             px(height as f32 / scale_factor),
         ));
     }
-    let bridge = bridge.clone();
-    cx.new(|cx| WorldView::new(bridge, window, cx))
+    let (bridge, sim) = (bridge.clone(), sim.clone());
+    cx.new(|cx| WorldView::new(bridge, sim, window, cx))
+}
+
+/// Generates the map, publishes its terrain, builds the match and starts the simulation thread.
+fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThread, String> {
+    let content = terrain::generate_content(options)?;
+    bridge.publish_terrain(Arc::new(terrain::to_scene(&content.map)));
+    let mut game = build_match(&content.rules, &content.map, options.seed)
+        .map_err(|error| format!("setting up the match: {error}"))?;
+    let wanderers = add_stress_units(&mut game, options.stress_units, options.seed);
+    let driver = options
+        .demo
+        .then(|| DemoDriver::new(&game, options.seed, wanderers));
+    SimThread::spawn(game.world, driver, options.speed_pct, bridge.clone())
+        .map_err(|error| format!("could not start the simulation thread: {error}"))
 }

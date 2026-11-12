@@ -11,6 +11,7 @@ use raylib::consts::PixelFormat;
 use raylib::prelude::{RaylibRenderTexture2D, RaylibTexture2D, RenderTexture2D, TraceLogLevel};
 
 use crate::camera::{Camera, CameraController, InputEvent};
+use crate::entities::{EntitySnapshot, EntityView, SnapshotPair};
 use crate::mailbox::{Frame, FrameMailbox, FramePixels};
 use crate::pixels::rgba_to_bgra_flipped;
 use crate::scene::Scene;
@@ -46,6 +47,8 @@ struct Shared {
     terrain: Mutex<Option<Arc<TerrainScene>>>,
     terrain_ready: AtomicBool,
     box_count: AtomicU32,
+    snapshots: Mutex<SnapshotPair>,
+    start_markers: AtomicBool,
     snapshot_wanted: AtomicBool,
     snapshot: Mutex<Option<Arc<FramePixels>>>,
     stats: Mutex<RenderStats>,
@@ -86,6 +89,17 @@ impl RenderBridge {
     /// Sets how many stress-test boxes are drawn (0 for none).
     pub fn publish_box_count(&self, count: u32) {
         self.shared.box_count.store(count, Ordering::Relaxed);
+    }
+
+    /// Hands over the newest entity snapshot; the render thread keeps the last two and
+    /// interpolates between them by the wall-clock time since the newer one arrived.
+    pub fn publish_snapshot(&self, snapshot: Arc<EntitySnapshot>) {
+        lock(&self.shared.snapshots).push(snapshot, Instant::now());
+    }
+
+    /// Shows or hides the player-start pillars (hidden by default).
+    pub fn publish_start_markers(&self, visible: bool) {
+        self.shared.start_markers.store(visible, Ordering::Relaxed);
     }
 
     /// Asks for a copy of the next finished frame; fetch it with [`Self::take_snapshot`].
@@ -172,6 +186,8 @@ impl RenderWorker {
             terrain: Mutex::new(None),
             terrain_ready: AtomicBool::new(false),
             box_count: AtomicU32::new(0),
+            snapshots: Mutex::new(SnapshotPair::default()),
+            start_markers: AtomicBool::new(false),
             snapshot_wanted: AtomicBool::new(false),
             snapshot: Mutex::new(None),
             stats: Mutex::new(RenderStats::default()),
@@ -237,6 +253,7 @@ fn render_loop(shared: &Shared) {
     let mut camera = Camera::default();
     let mut controller = CameraController::default();
     let mut stats = StatsWindow::default();
+    let mut blended: Vec<EntityView> = Vec::new();
     let mut sequence = 0_u64;
     let started = Instant::now();
     let mut last_frame = started;
@@ -302,6 +319,13 @@ fn render_loop(shared: &Shared) {
         };
         let elapsed = frame_start.duration_since(started).as_secs_f32();
         let boxes = shared.box_count.load(Ordering::Relaxed) as usize;
+        let pair = lock(&shared.snapshots).clone();
+        pair.blend_at(frame_start, &mut blended);
+        scene.prepare_entities(
+            &blended,
+            camera.yaw,
+            shared.start_markers.load(Ordering::Relaxed),
+        );
         scene.draw(&mut rl, &thread, texture, &camera, elapsed, boxes);
 
         let readback_start = Instant::now();
