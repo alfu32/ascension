@@ -107,6 +107,7 @@ version = "0.0.8"
 name = "rom-cli"
 version = "0.0.8"
 dependencies = [
+ "rom-mapgen",
  "rom-rules",
  "rom-sim",
  "rusqlite",
@@ -115,6 +116,12 @@ dependencies = [
 [[package]]
 name = "rom-mapgen"
 version = "0.0.8"
+dependencies = [
+ "rom-rules",
+ "rom-sim",
+ "rusqlite",
+ "thiserror",
+]
 
 [[package]]
 name = "rom-render"
