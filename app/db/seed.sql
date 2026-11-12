@@ -129,7 +129,14 @@ INSERT INTO movement_class_terrain
  JOIN movement_class m ON m.key=v.m JOIN def d ON d.key=v.t;
 
 INSERT INTO def(kind,key,name) VALUES
- ('faction','race.human','Humanity'), ('faction','npc.nature','Nature'),
+ ('faction','race.human','Humanity'), ('faction','race.reptilian','Reptilians'), ('faction','race.avian','Avians'),
+ ('faction','npc.nature','Nature'),
+ ('faction','nation.ashscale','Ashscale Brood'),
+ ('faction','nation.mirefang','Mirefang Brood'),
+ ('faction','nation.sunstone','Sunstone Brood'),
+ ('faction','nation.highwind','Highwind Flight'),
+ ('faction','nation.reedmarsh','Reedmarsh Flight'),
+ ('faction','nation.stormcrest','Stormcrest Flight'),
  ('faction','bloc.africa','Africa'), ('faction','bloc.americas','Americas'), ('faction','bloc.asia','Asia'),
  ('faction','bloc.europe','Europe'), ('faction','bloc.oceania','Oceania'),
  ('faction','nation.romans','Romans'),
@@ -148,6 +155,14 @@ INSERT INTO def(kind,key,name) VALUES
  ('faction','nation.maori','Maori');
 WITH v(k,kind,parent,play,first,last) AS (VALUES
   ('race.human','race',NULL,1,'age.starfaring',NULL),
+  ('race.reptilian','race',NULL,1,'age.starfaring',NULL),
+  ('race.avian','race',NULL,1,'age.starfaring',NULL),
+  ('nation.ashscale','nation','race.reptilian',1,'age.ancient','age.fusion'),
+  ('nation.mirefang','nation','race.reptilian',1,'age.ancient','age.fusion'),
+  ('nation.sunstone','nation','race.reptilian',1,'age.ancient','age.fusion'),
+  ('nation.highwind','nation','race.avian',1,'age.ancient','age.fusion'),
+  ('nation.reedmarsh','nation','race.avian',1,'age.ancient','age.fusion'),
+  ('nation.stormcrest','nation','race.avian',1,'age.ancient','age.fusion'),
   ('npc.nature','npc',NULL,0,NULL,NULL),
   ('bloc.africa','bloc','race.human',1,'age.automation','age.fusion'),
   ('bloc.americas','bloc','race.human',1,'age.automation','age.fusion'),
@@ -299,6 +314,12 @@ WITH v(f,t,x,forced) AS (VALUES
   ('nation.aztecs','bloc.americas','tech.continental_union',1),
   ('nation.inca','bloc.americas','tech.continental_union',1),
   ('nation.maori','bloc.oceania','tech.continental_union',1),
+  ('nation.ashscale','race.reptilian','tech.unification',1),
+  ('nation.mirefang','race.reptilian','tech.unification',1),
+  ('nation.sunstone','race.reptilian','tech.unification',1),
+  ('nation.highwind','race.avian','tech.unification',1),
+  ('nation.reedmarsh','race.avian','tech.unification',1),
+  ('nation.stormcrest','race.avian','tech.unification',1),
   ('bloc.africa','race.human','tech.unification',1), ('bloc.americas','race.human','tech.unification',1),
   ('bloc.asia','race.human','tech.unification',1), ('bloc.europe','race.human','tech.unification',1),
   ('bloc.oceania','race.human','tech.unification',1)
@@ -355,6 +376,26 @@ WITH v(k,t,s,op,n) AS (VALUES ('tech.religion','temple','border_radius','add',20
   ('tech.religion','city','hp','pct',25))
 INSERT INTO modifier(source_def_id,target_tag_id,stat_key,op,value)
  SELECT d.id, t.id, v.s, v.op, v.n FROM v JOIN def d ON d.key=v.k JOIN tag t ON t.key=v.t;
+-- Continental blocs are a human stage: only humans (and their nations) can research the union.
+INSERT INTO availability(def_id,faction_id)
+ SELECT t.id, f.id FROM def t, def f WHERE t.key='tech.continental_union' AND f.key='race.human';
+-- Race traits (placeholders): the same roster, tilted by a few modifiers.
+INSERT INTO modifier(source_def_id,target_tag_id,stat_key,op,value)
+ SELECT d.id, t.id, v.s, v.op, v.n FROM (SELECT 1) JOIN (
+   SELECT 'race.reptilian' AS k,'biological' AS t,'hp' AS s,'pct' AS op,15 AS n
+   UNION ALL SELECT 'race.reptilian','biological','speed','pct',-5
+   UNION ALL SELECT 'race.avian','biological','speed','pct',15
+   UNION ALL SELECT 'race.avian','biological','los','pct',25
+   UNION ALL SELECT 'race.avian','biological','hp','pct',-10) v
+ JOIN def d ON d.key=v.k JOIN tag t ON t.key=v.t;
+-- The same building under each race's own name.
+INSERT INTO faction_alias(def_id,faction_id,name)
+ SELECT x.id, f.id, v.n FROM (
+   SELECT 'bld.city' AS x,'race.reptilian' AS f,'Warren' AS n
+   UNION ALL SELECT 'bld.city','race.avian','Roost'
+   UNION ALL SELECT 'unit.citizen','race.reptilian','Hatchling'
+   UNION ALL SELECT 'unit.citizen','race.avian','Fledgling') v
+ JOIN def x ON x.key=v.x JOIN def f ON f.key=v.f;
 -- Rare resource bonus: holding Relics makes research faster.
 INSERT INTO modifier(source_def_id,stat_key,op,value)
  SELECT id,'research_time','pct',-33 FROM def WHERE key='rare.relics';

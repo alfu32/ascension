@@ -111,10 +111,21 @@ age 13.
 | 5+ | Medic | biological, fast, short range, spends energy | barracks |
 | 7+ | Repair drone | mechanical | factory / barracks |
 
+### The three races
+
+| Race | Home | Early identity (nation-like groups) | Then | Placeholder traits |
+| --- | --- | --- | --- | --- |
+| Humanity | own world | historical nations | continental blocs (ages 8–9), united humanity on reaching space | none (the baseline) |
+| Reptilians | own world | broods (invented: Ashscale, Mirefang, Sunstone) | one people on reaching space | tougher (+15 % hit points), slightly slower |
+| Avians | own world | flights (invented: Highwind, Reedmarsh, Stormcrest) | one people on reaching space | faster (+15 %), see farther (+25 %), more fragile |
+
+Decided: every race has nation-like groups in its early ages, so each home
+world has rivals of the same race before first contact; and a match starts
+with **one world per race**. The continental-bloc stage is specific to
+humans (the union technology is available to humans only); the other races
+go straight from their groups to one people when they reach space.
+
 ## Open questions
 
-- Which other races, and their themes. The original brief named an
-  energy-based and a bio-engineered people.
-- Do other races have nation-like subdivisions in their early ages, as humans do?
-- May a match put two races on one home world, or is one world per race a rule?
 - Names for ages 8–13, for each race's ages, and the final human nation list.
+- Real traits and race-only units for Reptilians and Avians (the seed has placeholders).
