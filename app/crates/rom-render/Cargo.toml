@@ -4,3 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+
+[dependencies]
+image.workspace = true
+raylib.workspace = true

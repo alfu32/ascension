@@ -15,6 +15,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.99.1
         with:
           components: clippy, rustfmt
+      # Headers and libraries for raylib (built from source with CMake) and GPUI (X11, fonts).
+      - name: Install graphics build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake clang libclang-dev pkg-config \
+            libfontconfig1-dev libfreetype6-dev libx11-dev libxcursor-dev libxrandr-dev \
+            libxinerama-dev libxi-dev libgl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked

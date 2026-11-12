@@ -8,3 +8,8 @@ license.workspace = true
 [[bin]]
 name = "rise-of-man"
 path = "src/main.rs"
+
+[dependencies]
+gpui.workspace = true
+gpui-component.workspace = true
+rom-render.workspace = true

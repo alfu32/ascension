@@ -9,6 +9,7 @@ members = [
     "crates/rom-app",
     "crates/rom-cli",
 ]
+exclude = ["vendor"]
 resolver = "3"
 
 [workspace.package]
@@ -21,3 +22,14 @@ license = "MIT OR Apache-2.0"
 rom-rules = { path = "crates/rom-rules" }
 rusqlite = { version = "=0.42.0", features = ["bundled", "backup"] }
 thiserror = "2"
+rom-render = { path = "crates/rom-render" }
+gpui = { version = "=0.2.2", default-features = false, features = ["font-kit", "x11"] }
+gpui-component = { version = "=0.5.1", default-features = false }
+raylib = "=6.0.0"
+image = { version = "=0.25.10", default-features = false, features = ["png"] }
+
+[patch.crates-io]
+# gpui-component 0.5.1 with highlighter and input-refresh fixes; see vendor/gpui-component/PATCHES.md.
+gpui-component = { path = "vendor/gpui-component" }
+# GPUI 0.2.2 resolves xattr 0.2.3, whose Linux branch uses ENOATTR; the copy maps it to ENODATA.
+xattr = { path = "vendor/xattr" }
