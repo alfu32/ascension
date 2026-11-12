@@ -40,8 +40,7 @@ impl SimRng {
     }
 }
 
-/// A stateless rank for breaking ties between `a` and `b` in `tick`. It replaces
-/// "lowest id first" so that no entity, and so no player, is always preferred.
+/// A stateless rank for two geometric coordinates in `tick`, used for target ties.
 pub(crate) fn tie_rank(tick: u64, a: u32, b: u32) -> u64 {
     let mut z = tick
         .wrapping_mul(0x9e3779b97f4a7c15)
@@ -56,7 +55,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tie_rank_favours_neither_id() {
+    fn tie_rank_varies_with_tick() {
         let lower_first = (0..1000)
             .filter(|tick| tie_rank(*tick, 7, 3) < tie_rank(*tick, 7, 9))
             .count();

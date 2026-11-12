@@ -1,7 +1,7 @@
 //! Integer combat resolution, projectile delivery, and end-of-tick deaths.
 
 use crate::{Command, EntityId, Order, OrderStatus, PlayerId, Pos, SimError, World};
-use crate::{construction::footprint, movement::Walk, pathing::TileRect, rng::tie_rank};
+use crate::{construction::footprint, movement::Walk, pathing::TileRect};
 use rom_rules::{Context, EntityClass, Layer, Weapon};
 
 #[derive(Debug, Clone)]
@@ -15,7 +15,22 @@ pub(crate) struct PendingHit {
     pub damage: i64,
 }
 
+/// A firing decision, rolled after all executors have advanced.
+#[derive(Debug, Clone)]
+pub(crate) struct PendingShot {
+    pub origin: Pos,
+    pub target_pos: Pos,
+    pub accuracy: u32,
+    pub hit: PendingHit,
+}
+
 impl World {
+    pub(crate) fn has_enemies(&self) -> bool {
+        self.players
+            .values()
+            .any(|p| self.players.values().any(|q| p.team != q.team))
+    }
+
     /// Returns whether the owners belong to different teams.
     pub fn enemies(&self, a: PlayerId, b: PlayerId) -> bool {
         self.players
@@ -233,7 +248,7 @@ impl World {
             let accuracy = (i128::from(weapon.accuracy_pct)
                 - i128::from(weapon.accuracy_falloff) * i128::from(distance) / 1000)
                 .clamp(5, 100) as u32;
-            let hit = self.rng.range(0, 100) < accuracy;
+            let origin = attacker.pos;
             let e = self.entities[id.0 as usize].as_mut().expect("attacker");
             e.cooldowns.insert(
                 weapon.id,
@@ -244,17 +259,20 @@ impl World {
             if weapon.consumed {
                 self.spent.push(id);
             }
-            if hit {
-                let travel = if weapon.projectile_speed > 0 {
-                    (u128::from(distance) * self.pathing.tick_rate as u128
-                        / weapon.projectile_speed as u128)
-                        .max(1) as u64
-                } else {
-                    0
-                };
-                // Even an instant blow lands with the rest of the tick's hits, so a
-                // target struck earlier in id order can still strike back this tick.
-                self.hits.push(PendingHit {
+            let travel = if weapon.projectile_speed > 0 {
+                (u128::from(distance) * self.pathing.tick_rate as u128
+                    / weapon.projectile_speed as u128)
+                    .max(1) as u64
+            } else {
+                0
+            };
+            // Even an instant blow lands with the rest of the tick's hits, so a
+            // target struck earlier in id order can still strike back this tick.
+            self.shots.push(PendingShot {
+                origin,
+                target_pos,
+                accuracy,
+                hit: PendingHit {
                     land_tick: self.tick.saturating_add(travel),
                     attacker: id,
                     owner,
@@ -262,10 +280,33 @@ impl World {
                     weapon_id: weapon.id,
                     target: target_id,
                     damage,
-                });
-            }
+                },
+            });
             return;
         }
+    }
+
+    /// Assigns the single RNG's rolls in geometric order, independent of entity ids.
+    pub(crate) fn fire_shots(&mut self) {
+        let mut shots = std::mem::take(&mut self.shots);
+        shots.sort_by_key(|s| {
+            (
+                s.origin.x,
+                s.origin.y,
+                s.target_pos.x,
+                s.target_pos.y,
+                s.hit.source_type,
+                s.hit.weapon_id,
+                s.hit.damage,
+                s.accuracy,
+            )
+        });
+        for shot in shots.drain(..) {
+            if self.rng.range(0, 100) < shot.accuracy {
+                self.hits.push(shot.hit);
+            }
+        }
+        self.shots = shots;
     }
 
     fn hit_damage(&self, hit: &PendingHit, weapon: &Weapon, target: EntityId) -> i64 {
@@ -329,14 +370,17 @@ impl World {
 
     /// Lands every hit due this tick, then removes the hit points of spent attackers.
     /// Hit points only add up, so landing order decides just the kill credit and whom
-    /// an idle victim retaliates against; a per-tick rank keeps that fair.
+    /// an idle victim retaliates against. Geometry makes that independent of ids.
     pub(crate) fn land_projectiles(&mut self) {
         let (mut landing, remaining): (Vec<_>, Vec<_>) = std::mem::take(&mut self.hits)
             .into_iter()
             .partition(|hit| hit.land_tick <= self.tick);
         self.hits = remaining;
-        let tick = self.tick;
-        landing.sort_by_cached_key(|hit| tie_rank(tick, hit.attacker.0, hit.target.0));
+        landing.sort_by_cached_key(|hit| {
+            let origin = self.entity(hit.attacker).map(|e| (e.pos.x, e.pos.y));
+            let target = self.entity(hit.target).map(|e| (e.pos.x, e.pos.y));
+            (origin, target, hit.source_type, hit.weapon_id, hit.damage)
+        });
         for hit in &landing {
             self.impact(hit);
         }

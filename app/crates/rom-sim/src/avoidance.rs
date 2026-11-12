@@ -130,13 +130,23 @@ impl Avoidance {
 }
 
 /// The push `b` receives from `a` (and `a` the opposite), if their circles overlap.
-fn separation(a: EntityId, pa: Pos, radius: i64, b: &Slot) -> Option<(i64, i64)> {
+fn separation(a: EntityId, pa: Pos, radius: i64, b: &Slot, starts: &[Pos]) -> Option<(i64, i64)> {
     let sum = radius + b.radius;
     let squared = pa.distance_squared_wide(b.pos);
     if squared >= (sum as u128) * (sum as u128) {
         return None;
     }
-    let (dx, dy, distance) = if squared == 0 {
+    let origin = starts.get(a.0 as usize).copied().unwrap_or(pa);
+    let other_origin = starts.get(b.id.0 as usize).copied().unwrap_or(b.pos);
+    let (dx, dy, distance) = if squared == 0 && origin != other_origin {
+        // Units that meet at exactly the same point retain their approach direction.
+        // Using ids here makes a crossing change direction when armies spawn in reverse.
+        (
+            i64::from(other_origin.x) - i64::from(origin.x),
+            i64::from(other_origin.y) - i64::from(origin.y),
+            origin.distance(other_origin) as i64,
+        )
+    } else if squared == 0 {
         // Coincident centres separate along a direction derived from both ids.
         let (low, high) = (a.0.min(b.id.0), a.0.max(b.id.0));
         let (x, y) = DIRECTIONS[(low.wrapping_mul(31) ^ high) as usize % 8];
@@ -264,7 +274,7 @@ impl World {
                     if slot.id == a || (slot.id < a && flags[slot.id.0 as usize]) {
                         continue;
                     }
-                    if let Some((x, y)) = separation(a, pa, motion.radius, slot) {
+                    if let Some((x, y)) = separation(a, pa, motion.radius, slot, &self.seen) {
                         // Zero-range weapons must reach the target's edge. Allow the
                         // pursuing pair to close rather than pushing them apart forever.
                         let closing = |attacker, target| {

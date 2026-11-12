@@ -1,4 +1,4 @@
-//! Combat stance selection and staggered automatic acquisition.
+//! Combat stance selection and periodic automatic acquisition.
 
 use crate::{Command, EntityId, PlayerId, Pos, SimError, World};
 use rom_rules::{DefId, EntityClass, StanceFamily};
@@ -58,8 +58,9 @@ impl World {
         &self.rules.stances[&e.stance].behavior
     }
 
-    pub(crate) fn acquisition_due(&self, id: EntityId) -> bool {
-        self.tick % 10 == u64::from(id.0) % 10
+    fn acquisition_due(&self) -> bool {
+        // A shared phase bounds searches without giving spawn order a reaction lead.
+        self.tick.is_multiple_of(10)
     }
 
     pub(crate) fn acquire_target(&self, id: EntityId, behavior: &str) -> Option<EntityId> {
@@ -132,16 +133,25 @@ impl World {
                 "raze" => self.rules.entity_types[&t.type_id].class == EntityClass::Building,
                 _ => false,
             };
-            let rank = crate::rng::tie_rank(self.tick, id.0, target.0);
+            let pos = self.seen_pos(target);
+            // Geometry survives renumbering. The unsigned horizontal displacement
+            // also gives reflected lines the same choice between neighbours.
+            let rank = crate::rng::tie_rank(
+                self.tick,
+                e.pos.x.abs_diff(pos.x),
+                pos.y.wrapping_sub(e.pos.y) as u32,
+            );
             Some((
                 !preferred,
                 e.pos.distance_squared_wide(self.seen_pos(target)),
                 rank,
+                pos.y,
+                pos.x,
                 target,
             ))
         })
         .min()
-        .map(|(_, _, _, id)| id)
+        .map(|(_, _, _, _, _, id)| id)
     }
 
     fn automatic_attack(&mut self, id: EntityId, target: EntityId, home: Option<Pos>) {
@@ -166,11 +176,7 @@ impl World {
 
     pub(crate) fn acquire_idle(&mut self) {
         // The movement benchmark and peaceful worlds avoid spatial searches entirely.
-        if !self
-            .players
-            .values()
-            .any(|p| self.players.values().any(|q| p.team != q.team))
-        {
+        if !self.acquisition_due() || !self.has_enemies() {
             return;
         }
         let pending: std::collections::BTreeSet<_> =
@@ -178,10 +184,7 @@ impl World {
         let ids: Vec<_> = self
             .entities()
             .filter(|e| {
-                e.orders.is_empty()
-                    && e.build_progress.is_none()
-                    && !pending.contains(&e.id)
-                    && self.acquisition_due(e.id)
+                e.orders.is_empty() && e.build_progress.is_none() && !pending.contains(&e.id)
             })
             .map(|e| e.id)
             .collect();
@@ -198,22 +201,17 @@ impl World {
     /// Gives due attack-move orders without a live target the nearest enemy. Every
     /// choice is made from the state at the start of the tick, before anything moves.
     pub(crate) fn acquire_attack_moves(&mut self) {
-        if !self
-            .players
-            .values()
-            .any(|p| self.players.values().any(|q| p.team != q.team))
-        {
+        if !self.acquisition_due() || !self.has_enemies() {
             return;
         }
         let found: Vec<_> = self
             .entities()
             .filter(|e| {
-                self.acquisition_due(e.id)
-                    && e.orders.front().is_some_and(|o| {
-                        o.kind == "attack_move"
-                            && o.target_entity
-                                .is_none_or(|t| self.entity(t).is_none_or(|t| t.hp <= 0))
-                    })
+                e.orders.front().is_some_and(|o| {
+                    o.kind == "attack_move"
+                        && o.target_entity
+                            .is_none_or(|t| self.entity(t).is_none_or(|t| t.hp <= 0))
+                })
             })
             .filter_map(|e| Some((e.id, self.acquire_target(e.id, "aggressive")?)))
             .collect();

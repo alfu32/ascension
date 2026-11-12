@@ -46,6 +46,7 @@ pub struct Stats {
 #[derive(Debug)]
 pub struct World {
     pub(crate) hits: Vec<crate::combat::PendingHit>,
+    pub(crate) shots: Vec<crate::combat::PendingShot>,
     pub(crate) tick: u64,
     pub(crate) rng: SimRng,
     pub(crate) rules: Arc<Rules>,
@@ -141,6 +142,7 @@ impl World {
         let avoid = Avoidance::new(&rules, map.width, map.height);
         Ok(Self {
             hits: Vec::new(),
+            shots: Vec::new(),
             tick: 0,
             rng: SimRng::new(seed),
             rules,
@@ -461,7 +463,9 @@ impl World {
         }
         self.acquire_attack_moves();
         // `avoid.pos` mirrors every entity's position until the first move below.
-        self.seen.clone_from(&self.avoid.pos);
+        if self.has_enemies() {
+            self.seen.clone_from(&self.avoid.pos);
+        }
         let count = self.entities.len();
         let mut moved = Vec::new();
         for index in 1..count {
@@ -477,9 +481,10 @@ impl World {
                 moved.push(id);
             }
         }
-        self.seen.clear();
         self.run_path_searches();
         self.separate_units(&moved);
+        self.seen.clear();
+        self.fire_shots();
         self.land_projectiles();
         self.remove_dead();
         self.pay_income();
