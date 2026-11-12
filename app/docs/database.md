@@ -1,6 +1,6 @@
 # Game database
 
-Files: [`../db/schema.sql`](../db/schema.sql) (78 tables, 4 views) and
+Files: [`../db/schema.sql`](../db/schema.sql) (84 tables, 4 views) and
 [`../db/seed.sql`](../db/seed.sql) (a small placeholder dataset that exercises
 every part of the schema). Both load cleanly in SQLite ≥ 3.37:
 
@@ -210,6 +210,14 @@ resource planet as an `entity` row of class `node`. Meshes and materials
 flagged `baked` are produced before the first tick. Nothing is generated
 while the match runs.
 
+### 9. Computer opponents are data too
+
+`ai_profile` + `ai_profile_weight` (personality), `ai_opening_step` (opening
+list) and `ai_difficulty` (thinking speed, order budget, reaction time,
+mistakes). A computer player acts only by adding rows to `order`, like a
+human. Its memory is saved in `player_ai_state`. See
+`research/05-computer-opponents.md`.
+
 ## Adding content (checklist for implementers)
 
 **A new unit**
@@ -233,7 +241,6 @@ does not exist, add the stat to `stat` and implement that one stat in code.
   file, not game rules. See `research/04-hud-and-screens.md`.
 - **Scenario scripting / triggers** — later.
 - **Balanced content** — the seed has placeholder numbers and ~13 entity types.
-- **AI personality data** — `player.ai_profile` is the hook.
 
 ## Decided
 

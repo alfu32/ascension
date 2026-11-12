@@ -577,6 +577,57 @@ CREATE TABLE victory (
   timer_ticks INTEGER NOT NULL DEFAULT 0
 ) STRICT;
 
+-- ── A13. Computer opponents ─────────────────────────────────────────────────
+-- A computer player issues the same orders as a human through the order book.
+-- Personality and skill are data; the decision code is shared by all profiles.
+CREATE TABLE ai_profile (
+  key   TEXT PRIMARY KEY,              -- balanced | rusher | builder | raider | turtle | explorer
+  name  TEXT NOT NULL,
+  descr TEXT NOT NULL DEFAULT ''
+) STRICT, WITHOUT ROWID;
+
+-- Tunable weights read by the decision code. Unknown keys are a data error.
+CREATE TABLE ai_weight_key (
+  key  TEXT PRIMARY KEY,               -- 'econ.worker_target_pct','mil.attack_ratio_pct','tech.age_priority' …
+  default_value INTEGER NOT NULL,
+  note TEXT NOT NULL DEFAULT ''
+) STRICT, WITHOUT ROWID;
+
+CREATE TABLE ai_profile_weight (
+  profile_key TEXT NOT NULL REFERENCES ai_profile(key),
+  weight_key  TEXT NOT NULL REFERENCES ai_weight_key(key),
+  value       INTEGER NOT NULL,
+  PRIMARY KEY (profile_key, weight_key)
+) STRICT, WITHOUT ROWID;
+
+-- Opening book: an ordered list of steps followed until it runs out or the
+-- player is attacked; after that the general planner takes over.
+CREATE TABLE ai_opening_step (
+  profile_key TEXT NOT NULL REFERENCES ai_profile(key),
+  seq         INTEGER NOT NULL,
+  action      TEXT NOT NULL CHECK (action IN ('train','construct','research','assign_workers','scout','found_city')),
+  subject_def_id INTEGER REFERENCES def(id),
+  count       INTEGER NOT NULL DEFAULT 1,   -- have at least this many (existing + queued)
+  blocking    INTEGER NOT NULL DEFAULT 1,   -- wait for resources instead of skipping
+  PRIMARY KEY (profile_key, seq)
+) STRICT, WITHOUT ROWID;
+
+-- Skill level. Honest limits first (speed, attention); bonuses only at the top.
+CREATE TABLE ai_difficulty (
+  key   TEXT PRIMARY KEY,
+  name  TEXT NOT NULL,
+  rank  INTEGER NOT NULL UNIQUE,
+  think_interval_ticks INTEGER NOT NULL,  -- how often the planner runs
+  orders_per_minute    INTEGER NOT NULL,  -- action budget
+  reaction_ticks       INTEGER NOT NULL,  -- delay before responding to a new threat
+  mistake_pct          INTEGER NOT NULL DEFAULT 0, -- chance to pick the 2nd-best option
+  uses_formations      INTEGER NOT NULL DEFAULT 1,
+  uses_abilities       INTEGER NOT NULL DEFAULT 1,
+  retreats             INTEGER NOT NULL DEFAULT 1,
+  income_bonus_pct     INTEGER NOT NULL DEFAULT 0, -- applied as an ordinary modifier
+  sees_all             INTEGER NOT NULL DEFAULT 0  -- ignores fog of war
+) STRICT, WITHOUT ROWID;
+
 -- Order vocabulary. `needs` names the et_* component the executor must have.
 CREATE TABLE order_kind (
   key    TEXT PRIMARY KEY,
@@ -642,6 +693,17 @@ CREATE TABLE player (
 CREATE TABLE player_explored (
   player_id INTEGER PRIMARY KEY REFERENCES player(id),
   data      BLOB NOT NULL              -- 1 bit per tile
+) STRICT;
+
+-- A computer player's memory (plans, known enemy positions, army groups),
+-- serialised so a loaded game continues exactly as it would have.
+CREATE TABLE player_ai_state (
+  player_id  INTEGER PRIMARY KEY REFERENCES player(id),
+  profile_key TEXT NOT NULL REFERENCES ai_profile(key),
+  difficulty_key TEXT NOT NULL REFERENCES ai_difficulty(key),
+  rng_state  INTEGER NOT NULL,
+  opening_seq INTEGER NOT NULL DEFAULT 0,
+  data       BLOB NOT NULL             -- versioned binary snapshot
 ) STRICT;
 
 CREATE TABLE player_resource (

@@ -407,6 +407,45 @@ INSERT INTO match_option_choice VALUES
  ('reveal','normal','Normal',0), ('reveal','explored','Explored',1), ('reveal','all','All Visible',2),
  ('elimination','conquest','Conquest',0), ('elimination','capital','Capital',1), ('elimination','sudden_death','Sudden Death',2);
 
+-- ── computer opponents ──────────────────────────────────────────────────────
+INSERT INTO ai_profile VALUES
+ ('balanced','Balanced','adapts to what it sees'),
+ ('rusher','Rush and Raid','early army, constant pressure on workers and trade'),
+ ('builder','Boom and Build','economy and technology first, strong late'),
+ ('turtle','Fortress','defends borders, wins by wonders or territory');
+INSERT INTO ai_weight_key VALUES
+ ('econ.worker_share_pct',55,'share of population kept as workers'),
+ ('econ.expand_eagerness',50,'0-100: how soon a new city is founded when the limit allows'),
+ ('tech.age_priority',50,'0-100: preference for advancing in age over other research'),
+ ('mil.army_share_pct',40,'share of population kept as military'),
+ ('mil.attack_ratio_pct',130,'attack when own strength is this % of the known enemy strength'),
+ ('mil.retreat_ratio_pct',60,'pull back when the local ratio falls below this'),
+ ('mil.raid_share_pct',10,'share of the army sent after workers and trade'),
+ ('mil.defense_share_pct',25,'share of the army kept at home'),
+ ('scout.units',1,'units kept exploring'),
+ ('space.claim_eagerness',60,'0-100: priority of resource planets once in space');
+INSERT INTO ai_profile_weight VALUES
+ ('rusher','econ.worker_share_pct',40), ('rusher','mil.army_share_pct',55), ('rusher','mil.attack_ratio_pct',100),
+ ('rusher','mil.raid_share_pct',30), ('rusher','tech.age_priority',25),
+ ('builder','econ.worker_share_pct',65), ('builder','mil.army_share_pct',25), ('builder','tech.age_priority',80),
+ ('builder','econ.expand_eagerness',85), ('builder','mil.attack_ratio_pct',170),
+ ('turtle','mil.defense_share_pct',70), ('turtle','mil.attack_ratio_pct',250), ('turtle','econ.expand_eagerness',30);
+WITH v(p,seq,a,k,n) AS (VALUES
+  ('balanced',0,'train','unit.citizen',6), ('balanced',1,'construct','bld.farm',3),
+  ('balanced',2,'construct','bld.library',1), ('balanced',3,'train','unit.citizen',10),
+  ('balanced',4,'construct','bld.barracks',1), ('balanced',5,'research','tech.age.classical',1),
+  ('rusher',0,'train','unit.citizen',5), ('rusher',1,'construct','bld.farm',2),
+  ('rusher',2,'construct','bld.barracks',1), ('rusher',3,'train','unit.spearman',6))
+INSERT INTO ai_opening_step(profile_key,seq,action,subject_def_id,count)
+ SELECT v.p, v.seq, v.a, d.id, v.n FROM v JOIN def d ON d.key=v.k;
+INSERT INTO ai_difficulty(key,name,rank,think_interval_ticks,orders_per_minute,reaction_ticks,mistake_pct,uses_formations,uses_abilities,retreats,income_bonus_pct,sees_all) VALUES
+ ('easiest','Easiest',0,100,20,200,30,0,0,0,0,0),
+ ('easy','Easy',1,60,40,120,20,0,0,1,0,0),
+ ('moderate','Moderate',2,40,80,60,10,1,1,1,0,0),
+ ('tough','Tough',3,20,160,30,3,1,1,1,0,0),
+ ('tougher','Tougher',4,10,300,10,0,1,1,1,0,0),
+ ('toughest','Toughest',5,10,300,10,0,1,1,1,25,0);
+
 INSERT INTO def(kind,key,name) VALUES ('victory','win.conquest','Conquest'), ('victory','win.territory','Territory');
 INSERT INTO victory(id,rule,threshold,timer_ticks)
  SELECT id, substr(key,5), CASE key WHEN 'win.territory' THEN 70 ELSE 0 END, CASE key WHEN 'win.territory' THEN 6000 ELSE 0 END
