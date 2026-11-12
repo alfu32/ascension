@@ -1,3 +1,5 @@
+mod mapgen_cmd;
+
 use std::{env, path::PathBuf, process::ExitCode, sync::Arc};
 
 use rom_rules::{Rules, build_rules_db, write_rules_db};
@@ -17,6 +19,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let command = args
         .next()
         .ok_or("usage: rom <build-rules|check-rules|run> [options]")?;
+    if command == "mapgen" {
+        return mapgen_cmd::run(args);
+    }
     if command == "run" {
         return run_simulation(args);
     }
