@@ -14,6 +14,11 @@ The current state of every task is in `app/docs/tasks/STATUS.md`.
 
 ## Decisions already made (do not reopen without the owner)
 
+- The game is titled **Ascension**, subtitle **Rise of Man**. The repository
+  folder and crate prefix (`rom-`) keep their names.
+- The HUD mock-ups and icon sheets in `app/docs/img/` are look-and-feel
+  references only. The layout and chrome are approved; the HUD is authored
+  as vector artwork and rasterised by the game (`app/docs/hud.md`). No fantasy subjects.
 - One map holds planetary terrains, open space and resource planets from the
   first tick. Each player's view widens when that player reaches the space age.
 - Resource planets are claimed by keeping a starship beside them; planetary
@@ -49,11 +54,13 @@ Rules:
    tasks must not share a crate. Task cards live in `app/docs/tasks/`; the
    ledger `app/docs/tasks/STATUS.md` is updated at every state change and
    describes what to do when an implementer hits a usage limit.
-3. Review the diff and the gate output, not the agent's summary. A task is
+3. Stage files by name when committing (`git add <paths>`), never `git add -A`:
+   the owner drops files into the tree and they must not be published unseen.
+4. Review the diff and the gate output, not the agent's summary. A task is
    done only when the release gate passes in its worktree.
-4. A task that fails review twice on one model is escalated, not retried a
+5. A task that fails review twice on one model is escalated, not retried a
    third time.
-5. Never relax a hard rule to make a task pass. If the schema is missing
+6. Never relax a hard rule to make a task pass. If the schema is missing
    something, change the schema deliberately (lint views empty, seed loads)
    and note it in `app/docs/database.md`.
 

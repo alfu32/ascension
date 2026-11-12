@@ -1,10 +1,10 @@
-# Rise of Man
+# Ascension — Rise of Man
 
 A real-time strategy game spanning early history to an age of galactic empires.
 Rust, raylib 6 (offscreen 3D) inside a GPUI shell, procedural meshes and
 shader materials.
 
-Status: exploration and planning. No application code yet.
+Status: in development. See the task ledger for what works today.
 
 | Path | Contents |
 | --- | --- |
@@ -17,6 +17,8 @@ Status: exploration and planning. No application code yet.
 | `app/db/seed.sql` | small placeholder dataset that exercises the schema |
 | `app/docs/database.md` | explanation of the schema and how to add content |
 | `app/docs/implementation-plan.md` | crates, ground rules, phases and milestones |
+| `app/docs/hud.md` | in-match HUD design: style, layout rectangles, how it is produced |
+| `app/docs/tasks/STATUS.md` | task ledger: what is running, merged or blocked |
 
 ```sh
 sqlite3 /tmp/rom.db < app/db/schema.sql && sqlite3 /tmp/rom.db < app/db/seed.sql
