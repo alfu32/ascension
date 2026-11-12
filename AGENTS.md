@@ -120,6 +120,14 @@ not suppress them or relax the gate.
 - Commit messages: a short imperative subject, then what changed and why.
 - Work on a branch or worktree per task; never commit build output.
 
+## Running the application during a task
+
+- Close windows only through the application itself (its own exit path, a
+  timed `--bench` run, or ending the process). Never use window-manipulation
+  tools such as `xdotool` or `wmctrl` to close, kill or destroy windows: doing
+  so has crashed the desktop's window-decoration helper.
+- Do not change desktop, compositor or system settings, and do not use `sudo`.
+
 ## Reporting a finished task
 
 State the commands you ran and their outcome, list files changed, and name

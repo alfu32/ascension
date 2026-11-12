@@ -288,7 +288,7 @@ fn paint_planet(field: &mut Field, id: u16, r: &Region, seed: u64, fluid_pct: i6
         } else {
             field.base.deep
         };
-        field.height[idx] = (h >> 8) as u8;
+        field.height[idx] = (h >> 8).clamp(0, 255) as u8;
         field.region[idx] = id;
     }
 }

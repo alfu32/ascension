@@ -102,7 +102,7 @@ fn ppm_bytes(map: &GeneratedMap) -> Vec<u8> {
         .map(|(t, height)| {
             let b = map.base;
             if *t == b.land {
-                let g = 70 + (*height as u32 * 3 / 4) as u8;
+                let g = (70 + u32::from(*height) * 3 / 4).min(255) as u8;
                 [g / 3, g, g / 4]
             } else if *t == b.shallow {
                 [0x6a, 0xb8, 0xe8]
