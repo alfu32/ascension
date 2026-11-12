@@ -93,6 +93,7 @@ fn run_simulation(
     let mut seed = None;
     let mut ticks = None;
     let mut units = None;
+    let mut obstacles = 0;
     while let Some(flag) = args.next() {
         let value = args
             .next()
@@ -102,6 +103,7 @@ fn run_simulation(
             "--seed" => seed = Some(value.parse::<u64>()?),
             "--ticks" => ticks = Some(value.parse::<u64>()?),
             "--units" => units = Some(value.parse::<u32>()?),
+            "--obstacles" => obstacles = value.parse::<u32>()?,
             _ => return Err(format!("unknown argument: {flag}").into()),
         }
     }
@@ -112,7 +114,7 @@ fn run_simulation(
     let conn =
         rusqlite::Connection::open_with_flags(db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     let rules = Arc::new(Rules::load(&conn)?);
-    let mut world = rom_sim::World::movement_scenario(rules, seed, units)?;
+    let mut world = rom_sim::World::obstacle_scenario(rules, seed, units, obstacles)?;
     for _ in 0..ticks {
         world.step();
     }

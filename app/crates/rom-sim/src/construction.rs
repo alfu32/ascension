@@ -1,6 +1,6 @@
 //! Tile-aligned placement and cooperative construction work.
 
-use crate::{EntityId, Order, OrderStatus, Pos, SimError, World, entity::move_entity};
+use crate::{EntityId, Order, OrderStatus, Pos, SimError, World};
 use rom_rules::{DefId, EntityClass, EntityType};
 
 pub(crate) fn footprint(et: &EntityType, pos: Pos) -> [i64; 4] {
@@ -92,6 +92,8 @@ impl World {
         site.gather_slots = 0;
         site.hp = (i128::from(site.hp) * i128::from(pct) / 100) as i64;
         order.target_entity = Some(id);
+        self.refresh_site(id);
+        self.economy.dirty.insert(id);
     }
 
     pub(crate) fn advance_construction(&mut self, builder: EntityId, order: &mut Order) {
@@ -118,28 +120,8 @@ impl World {
             .clamp(0, i64::from(u32::MAX)) as u32;
         order.total_ticks = Some(u64::from(total));
         let bounds = footprint(&self.rules.entity_types[&site.type_id], site.pos);
-        let builder_pos = self.entity(builder).expect("builder").pos;
-        let closest = Pos {
-            x: i64::from(builder_pos.x).clamp(bounds[0], bounds[2]) as i32,
-            y: i64::from(builder_pos.y).clamp(bounds[1], bounds[3]) as i32,
-        };
-        let reach = self
-            .rules
-            .constant("build.reach")
-            .expect("validated build reach") as u128;
-        if builder_pos.distance_squared_wide(closest) > reach * reach {
-            let mut movement = order.clone();
-            movement.target_pos = Some(closest);
-            let entity = self.entities[builder.0 as usize].as_mut().expect("builder");
-            move_entity(entity, &mut movement, &self.rules, &self.map);
-            order.movement = movement.movement;
-            if let OrderStatus::Failed(reason) = movement.status {
-                order.status = OrderStatus::Failed(reason);
-                return;
-            }
-            if entity.pos.distance_squared_wide(closest) > reach * reach {
-                return;
-            }
+        if !self.approach(builder, order, bounds) {
+            return;
         }
         let et = &self.rules.entity_types[&self.entity(builder).expect("builder").type_id];
         let Some(component) = et.builder.as_ref() else {
@@ -186,6 +168,8 @@ impl World {
                 .as_mut()
                 .expect("site")
                 .gather_slots = slots;
+            self.refresh_site(site_id);
+            self.economy.dirty.insert(site_id);
         }
     }
 }

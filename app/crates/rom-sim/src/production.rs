@@ -1,10 +1,30 @@
 //! Shared queue scheduling and population-gated unit completion.
 
-use crate::{EntityId, Order, OrderStatus, Pos, World, entity::move_entity};
+use crate::{EntityId, Order, OrderStatus, Pos, World, movement::Walk};
 use std::collections::VecDeque;
 
 impl World {
     pub(crate) fn advance_executor(&mut self, id: EntityId) {
+        if self.entities[id.0 as usize]
+            .as_ref()
+            .expect("executor")
+            .orders
+            .is_empty()
+        {
+            return;
+        }
+        self.run_orders(id);
+        if self.entities[id.0 as usize]
+            .as_ref()
+            .expect("executor")
+            .orders
+            .is_empty()
+        {
+            self.economy.dirty.insert(id);
+        }
+    }
+
+    fn run_orders(&mut self, id: EntityId) {
         let mut worked = false;
         while let Some(mut order) = self.entities[id.0 as usize]
             .as_mut()
@@ -42,14 +62,12 @@ impl World {
                         break;
                     }
                     worked = true;
-                    if order.kind == "move" && order.target_pos.is_some() {
+                    if order.kind == "move" {
                         order.progress_ticks += 1;
-                        move_entity(
-                            self.entities[id.0 as usize].as_mut().expect("executor"),
-                            &mut order,
-                            &self.rules,
-                            &self.map,
-                        );
+                        let goal = order.target_pos.expect("point movement");
+                        if self.walk(id, &mut order, goal, None, true) == Walk::Arrived {
+                            order.status = OrderStatus::Done;
+                        }
                     } else if order.kind == "harvest" {
                         self.advance_harvest(id, &mut order);
                     } else {

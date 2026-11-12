@@ -2,10 +2,14 @@
 
 use crate::{
     SimError,
+    avoidance::{Avoidance, Motion},
+    construction::footprint,
     entity::{Entity, EntityId, Player, PlayerId},
+    income::EconomyIndex,
     map::MapGrid,
     math::Pos,
     order::{Command, Order, OrderId, OrderStatus, has_component, target_matches},
+    pathing::{PathStats, Pathing},
     rng::SimRng,
     spatial::SpatialGrid,
 };
@@ -48,6 +52,9 @@ pub struct World {
     pub(crate) next_order_id: u64,
     pub(crate) stats: Stats,
     pub(crate) income_remainders: BTreeMap<(PlayerId, DefId), i64>,
+    pub(crate) pathing: Pathing,
+    pub(crate) avoid: Avoidance,
+    pub(crate) economy: EconomyIndex,
     spatial: SpatialGrid,
 }
 
@@ -99,6 +106,9 @@ impl World {
                 return Err(SimError::InvalidRules(key));
             }
         }
+        if rules.constant("path.nodes_per_tick").is_some_and(|v| v < 1) {
+            return Err(SimError::InvalidRules("path.nodes_per_tick"));
+        }
         let mut by_id = BTreeMap::new();
         for player in players {
             if !rules.factions.contains_key(&player.faction)
@@ -108,11 +118,16 @@ impl World {
                 return Err(SimError::InvalidPlayer);
             }
         }
+        let pathing = Pathing::new(&rules, &map);
+        let avoid = Avoidance::new(&rules, map.width, map.height);
         Ok(Self {
             tick: 0,
             rng: SimRng::new(seed),
             rules,
             map,
+            pathing,
+            avoid,
+            economy: EconomyIndex::default(),
             players: by_id,
             entities: vec![None],
             pending: Vec::new(),
@@ -122,72 +137,6 @@ impl World {
             income_remainders: BTreeMap::new(),
             spatial: SpatialGrid::default(),
         })
-    }
-
-    /// Builds the CLI's seeded 128×128 movement scenario using only components and ids.
-    pub fn movement_scenario(rules: Arc<Rules>, seed: u64, units: u32) -> Result<Self, SimError> {
-        let entity_type = rules
-            .entity_types
-            .values()
-            .find(|et| et.movement.is_some())
-            .ok_or(SimError::ScenarioUnavailable("moving entity type"))?;
-        let type_id = entity_type.id;
-        let class = entity_type
-            .movement
-            .as_ref()
-            .expect("selected moving type")
-            .movement_class_id;
-        let terrain = rules
-            .movement_class_terrain
-            .get(&class)
-            .into_iter()
-            .flatten()
-            .map(|row| row.terrain_id)
-            .min()
-            .ok_or(SimError::ScenarioUnavailable("passable terrain"))?;
-        let player = Player {
-            id: PlayerId(1),
-            team: 1,
-            faction: *rules
-                .factions
-                .keys()
-                .next()
-                .ok_or(SimError::ScenarioUnavailable("faction"))?,
-            resources: BTreeMap::new(),
-            techs: BTreeMap::new(),
-            age: *rules
-                .ages
-                .keys()
-                .next()
-                .ok_or(SimError::ScenarioUnavailable("age"))?,
-        };
-        let mut world = Self::new(
-            rules,
-            MapGrid::new(128, 128, vec![terrain; 128 * 128])?,
-            seed,
-            vec![player],
-        )?;
-        for _ in 0..units {
-            let pos = Pos {
-                x: world.rng.range(0, 128_000) as i32,
-                y: world.rng.range(0, 128_000) as i32,
-            };
-            let id = world.spawn(type_id, PlayerId(1), pos)?;
-            let target = Pos {
-                x: world.rng.range(0, 128_000) as i32,
-                y: world.rng.range(0, 128_000) as i32,
-            };
-            world.submit(Command {
-                player: PlayerId(1),
-                executor: id,
-                kind: "move".into(),
-                subject: None,
-                target_entity: None,
-                target_pos: Some(target),
-                queue: false,
-            })?;
-        }
-        Ok(world)
     }
 
     /// Returns the number of completed simulation ticks.
@@ -240,6 +189,11 @@ impl World {
         self.stats
     }
 
+    /// Returns path-search counters.
+    pub fn path_stats(&self) -> PathStats {
+        self.pathing.stats
+    }
+
     /// Spawns a checked entity with its type's full hit points.
     pub fn spawn(
         &mut self,
@@ -280,7 +234,39 @@ impl World {
         }));
         self.next_entity_id = next;
         self.spatial.insert(id, pos);
+        let et = &self.rules.entity_types[&type_id];
+        self.pathing.occupy(et, footprint(et, pos), true);
+        self.avoid.set(id, Motion::of(&self.rules, type_id), pos);
+        if et.gather_site.is_some() {
+            self.economy.sites.insert(id);
+        }
+        self.refresh_income(id);
+        self.economy.dirty.insert(id);
         Ok(id)
+    }
+
+    /// Updates grids and indexes after an entity's type changed from `old`.
+    pub(crate) fn retyped(&mut self, id: EntityId, old: DefId) {
+        let entity = self.entity(id).expect("retyped entity");
+        let (pos, new) = (entity.pos, entity.type_id);
+        let before = &self.rules.entity_types[&old];
+        self.pathing.occupy(before, footprint(before, pos), false);
+        let after = &self.rules.entity_types[&new];
+        self.pathing.occupy(after, footprint(after, pos), true);
+        self.avoid.set(id, Motion::of(&self.rules, new), pos);
+        if after.gather_site.is_some() {
+            self.economy.sites.insert(id);
+        } else {
+            self.economy.sites.remove(&id);
+        }
+        self.refresh_site(id);
+        self.economy.dirty.insert(id);
+    }
+
+    /// Moves an entity between spatial cells after its position changed.
+    pub(crate) fn relocate(&mut self, id: EntityId, from: Pos, to: Pos) {
+        self.spatial.relocate(id, from, to);
+        self.avoid.pos[id.0 as usize] = to;
     }
 
     /// Removes an entity and cancels both its live and pending orders.
@@ -291,6 +277,21 @@ impl World {
             .and_then(Option::take)
             .ok_or(SimError::UnknownExecutor(id))?;
         self.spatial.remove(id, entity.pos);
+        let et = &self.rules.entity_types[&entity.type_id];
+        self.pathing.occupy(et, footprint(et, entity.pos), false);
+        self.avoid.set(id, None, entity.pos);
+        self.economy.idle.remove(&id);
+        self.economy.dirty.remove(&id);
+        self.economy.sites.remove(&id);
+        self.refresh_income(id);
+        if let Some(site) = entity.work_site
+            && let Some(set) = self.economy.occupants.get_mut(&site)
+        {
+            set.remove(&id);
+            if set.is_empty() {
+                self.economy.occupants.remove(&site);
+            }
+        }
         self.release_site_workers(id);
         self.stats.orders_cancelled += entity.orders.len() as u64;
         self.pending.retain(|(order, _)| {
@@ -355,6 +356,7 @@ impl World {
             .as_mut()
             .expect("checked executor")
             .idle_ticks = 0;
+        self.economy.dirty.insert(command.executor);
         for (resource, amount) in &payment {
             *self
                 .players
@@ -396,7 +398,8 @@ impl World {
         Ok(id)
     }
 
-    /// Finds idle work, applies inputs, advances entities by id, and distributes income.
+    /// Finds idle work, applies inputs, advances entities by id, runs path searches,
+    /// separates overlapping units, and distributes income.
     pub fn step(&mut self) {
         self.find_idle_work();
         for (mut order, append) in std::mem::take(&mut self.pending) {
@@ -415,6 +418,7 @@ impl World {
                 .push_back(order);
         }
         let count = self.entities.len();
+        let mut moved = Vec::new();
         for index in 1..count {
             let id = EntityId(index as u32);
             let Some(old) = self.entity(id).map(|e| e.pos) else {
@@ -423,10 +427,14 @@ impl World {
             self.advance_executor(id);
             let new = self.entity(id).expect("executor persists").pos;
             if old != new {
-                self.spatial.relocate(id, old, new);
+                self.relocate(id, old, new);
+                moved.push(id);
             }
         }
+        self.run_path_searches();
+        self.separate_units(&moved);
         self.pay_income();
+        self.pathing.end_tick();
         self.tick = self.tick.checked_add(1).expect("simulation tick exhausted");
     }
 }

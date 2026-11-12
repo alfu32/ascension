@@ -41,7 +41,8 @@ impl World {
             .techs
             .entry(subject)
             .or_default() += 1;
-        for effect in self.rules.tech_effects.get(&subject).into_iter().flatten() {
+        let rules = self.rules.clone();
+        for effect in rules.tech_effects.get(&subject).into_iter().flatten() {
             let Some(target) = effect.target_def_id else {
                 continue;
             };
@@ -53,6 +54,7 @@ impl World {
                     self.players.get_mut(&player).expect("owner").faction = target
                 }
                 TechEffectKind::UpgradeType => {
+                    let mut changed = Vec::new();
                     for entity in self
                         .entities
                         .iter_mut()
@@ -63,7 +65,11 @@ impl World {
                         let new_hp = self.rules.entity_types[&target].hp;
                         entity.hp = (i128::from(entity.hp) * i128::from(new_hp)
                             / i128::from(old_hp)) as i64;
+                        changed.push((entity.id, entity.type_id));
                         entity.type_id = target;
+                    }
+                    for (id, old) in changed {
+                        self.retyped(id, old);
                     }
                 }
                 _ => {}

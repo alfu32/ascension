@@ -179,10 +179,8 @@ impl World {
     }
 
     pub(crate) fn cancel_orders(&mut self, executor: EntityId) {
-        self.entities[executor.0 as usize]
-            .as_mut()
-            .expect("live executor")
-            .work_site = None;
+        self.set_work_site(executor, None);
+        self.economy.dirty.insert(executor);
         let orders = std::mem::take(
             &mut self.entities[executor.0 as usize]
                 .as_mut()

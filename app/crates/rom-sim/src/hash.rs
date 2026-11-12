@@ -1,6 +1,7 @@
 //! Stable field-by-field FNV-1a state serialization.
 
-use crate::{Order, OrderStatus, Pos, World};
+use crate::{Order, OrderStatus, Pos, World, pathing::Pathing};
+use std::cmp::Reverse;
 
 struct StateHash(u64);
 
@@ -69,7 +70,66 @@ impl StateHash {
             h.pos(movement.origin);
             h.u64(movement.distance);
             h.u64(movement.traveled);
+            h.pos(movement.goal);
+            h.u64(movement.waypoints.len() as u64);
+            for point in &movement.waypoints {
+                h.pos(*point);
+            }
+            h.u64(movement.index as u64);
+            h.optional(movement.request, Self::u64);
+            h.u32(movement.repaths);
         });
+    }
+
+    fn tile(&mut self, tile: (i32, i32)) {
+        self.bytes(&tile.0.to_le_bytes());
+        self.bytes(&tile.1.to_le_bytes());
+    }
+
+    fn pathing(&mut self, pathing: &Pathing) {
+        self.u64(pathing.next_request);
+        self.u64(pathing.queue.len() as u64);
+        for request in &pathing.queue {
+            self.u64(request.id);
+            self.u32(request.class);
+            self.tile(request.start);
+            self.tile(request.goal);
+            self.u64(request.waiters.len() as u64);
+            for (entity, order) in &request.waiters {
+                self.u32(entity.0);
+                self.u64(order.0);
+            }
+        }
+        self.optional(pathing.search.as_ref(), |h, search| {
+            h.u64(search.request);
+            h.u32(search.target);
+            h.tile(search.anchor);
+            h.u64(search.best.0);
+            h.u32(search.best.1);
+            h.u64(search.expanded);
+            let open = search.open.clone().into_sorted_vec();
+            h.u64(open.len() as u64);
+            for Reverse((f, g, tile)) in open {
+                h.u64(f);
+                h.u64(g);
+                h.u32(tile);
+            }
+            for (index, stamp) in pathing.stamp.iter().enumerate() {
+                if *stamp == search.generation {
+                    h.u64(index as u64);
+                    h.u64(pathing.g[index]);
+                    h.u32(pathing.parent[index]);
+                    h.bytes(&[u8::from(pathing.closed[index] == search.generation)]);
+                }
+            }
+        });
+        self.u64(pathing.occupancy.len() as u64);
+        for count in &pathing.occupancy {
+            self.u32(*count);
+        }
+        self.u64(pathing.stats.searches);
+        self.u64(pathing.stats.nodes);
+        self.u64(pathing.stats.repaths);
     }
 }
 
@@ -77,7 +137,7 @@ impl World {
     /// Hashes complete mutable state in little-endian field order with FNV-1a 64.
     pub fn hash(&self) -> u64 {
         let mut hash = StateHash(0xcbf29ce484222325);
-        hash.bytes(b"rom-sim-state-3");
+        hash.bytes(b"rom-sim-state-4");
         hash.u64(self.tick);
         hash.u64(self.rng.state());
         hash.u32(self.next_entity_id);
@@ -147,6 +207,23 @@ impl World {
         hash.u64(self.stats.orders_unsupported);
         hash.u64(self.stats.orders_no_slot);
         hash.u64(self.stats.orders_target_gone);
+        hash.pathing(&self.pathing);
+        hash.u64(self.avoid.awake.len() as u64);
+        for id in &self.avoid.awake {
+            hash.u32(id.0);
+        }
+        hash.u64(self.economy.rates.len() as u64);
+        for ((player, resource), rate) in &self.economy.rates {
+            hash.u32(player.0);
+            hash.u32(resource.0);
+            hash.bytes(&rate.to_le_bytes());
+        }
+        for set in [&self.economy.idle, &self.economy.dirty] {
+            hash.u64(set.len() as u64);
+            for id in set {
+                hash.u32(id.0);
+            }
+        }
         hash.0
     }
 }
@@ -154,8 +231,9 @@ impl World {
 #[cfg(test)]
 mod tests {
     use super::StateHash;
-    use crate::{Command, EntityId, OrderStatus, Pos, World};
+    use crate::{Command, EntityId, OrderStatus, PlayerId, Pos, World};
     use rom_rules::{Rules, build_rules_db};
+    use std::cmp::Reverse;
     use std::sync::Arc;
 
     fn scenario() -> World {
@@ -290,6 +368,92 @@ mod tests {
         world.step();
         changes(&mut world, |w| {
             w.entities[1].as_mut().unwrap().orders.swap(0, 1)
+        });
+    }
+
+    #[test]
+    fn hash_covers_paths_searches_avoidance_and_economy_indexes() {
+        let conn = build_rules_db(
+            include_str!("../../../db/schema.sql"),
+            include_str!("../../../db/seed.sql"),
+        )
+        .unwrap();
+        conn.execute_batch("UPDATE game_constant SET value=3 WHERE key='path.nodes_per_tick';")
+            .unwrap();
+        let mut world =
+            World::obstacle_scenario(Arc::new(Rules::load(&conn).unwrap()), 7, 40, 30).unwrap();
+        world.step();
+        assert!(world.pathing.search.is_some());
+        changes(&mut world, |w| {
+            w.pathing.search.as_mut().unwrap().expanded += 1
+        });
+        changes(&mut world, |w| {
+            w.pathing.search.as_mut().unwrap().best.1 += 1
+        });
+        changes(&mut world, |w| {
+            w.pathing.search.as_mut().unwrap().target += 1
+        });
+        changes(&mut world, |w| {
+            let search = w.pathing.search.as_mut().unwrap();
+            let entry = search.open.pop().unwrap();
+            search
+                .open
+                .push(Reverse((entry.0.0 + 1, entry.0.1, entry.0.2)));
+        });
+        changes(&mut world, |w| {
+            let index = w
+                .pathing
+                .stamp
+                .iter()
+                .position(|s| *s == w.pathing.generation)
+                .unwrap();
+            w.pathing.g[index] += 1;
+        });
+        changes(&mut world, |w| w.pathing.queue[0].goal.0 += 1);
+        changes(&mut world, |w| {
+            w.pathing.queue[0].waiters.pop();
+        });
+        changes(&mut world, |w| w.pathing.next_request += 1);
+        changes(&mut world, |w| w.pathing.occupancy[5] += 1);
+        changes(&mut world, |w| w.pathing.stats.repaths += 1);
+        changes(&mut world, |w| w.pathing.stats.nodes += 1);
+        changes(&mut world, |w| w.pathing.stats.searches += 1);
+        let walker = world
+            .entities()
+            .find(|e| {
+                e.orders
+                    .front()
+                    .and_then(|o| o.movement.as_ref())
+                    .is_some_and(|m| m.request.is_some())
+            })
+            .unwrap()
+            .id;
+        fn state(w: &mut World, walker: EntityId) -> &mut crate::order::MoveState {
+            w.entities[walker.0 as usize].as_mut().unwrap().orders[0]
+                .movement
+                .as_mut()
+                .unwrap()
+        }
+        changes(&mut world, |w| {
+            *state(w, walker).request.as_mut().unwrap() += 1
+        });
+        changes(&mut world, |w| state(w, walker).goal.x += 1);
+        changes(&mut world, |w| {
+            state(w, walker).waypoints.push(Pos::default())
+        });
+        changes(&mut world, |w| state(w, walker).index += 1);
+        changes(&mut world, |w| state(w, walker).repaths += 1);
+        changes(&mut world, |w| w.avoid.awake.push(EntityId(99)));
+        changes(&mut world, |w| {
+            w.economy
+                .rates
+                .insert((PlayerId(1), rom_rules::DefId(1)), 1);
+        });
+        changes(&mut world, |w| {
+            w.economy.idle.insert(EntityId(99));
+        });
+        changes(&mut world, |w| {
+            w.economy.dirty.insert(EntityId(98));
         });
     }
 

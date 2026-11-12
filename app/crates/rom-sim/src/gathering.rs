@@ -1,7 +1,7 @@
 //! Gather-site capacity, worker assignment, and delayed automatic orders.
 
+use crate::construction::footprint;
 use crate::{Command, EntityId, Order, OrderStatus, Pos, SimError, World};
-use crate::{construction::footprint, entity::move_entity};
 use rom_rules::DefId;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -61,10 +61,7 @@ impl World {
 
     pub(crate) fn advance_harvest(&mut self, worker: EntityId, order: &mut Order) {
         let Some(site) = order.target_entity.and_then(|id| self.entity(id)) else {
-            self.entities[worker.0 as usize]
-                .as_mut()
-                .expect("worker")
-                .work_site = None;
+            self.set_work_site(worker, None);
             order.status = OrderStatus::Failed("target_gone".into());
             return;
         };
@@ -73,61 +70,50 @@ impl World {
             return;
         }
         let bounds = footprint(&self.rules.entity_types[&site.type_id], site.pos);
-        let pos = self.entity(worker).expect("worker").pos;
-        let closest = Pos {
-            x: i64::from(pos.x).clamp(bounds[0], bounds[2]) as i32,
-            y: i64::from(pos.y).clamp(bounds[1], bounds[3]) as i32,
-        };
-        let reach = self.rules.constant("build.reach").expect("validated reach") as u128;
         order.progress_ticks = order.progress_ticks.saturating_add(1);
-        if pos.distance_squared_wide(closest) > reach * reach {
-            let mut movement = order.clone();
-            movement.target_pos = Some(closest);
-            let entity = self.entities[worker.0 as usize].as_mut().expect("worker");
-            move_entity(entity, &mut movement, &self.rules, &self.map);
-            order.movement = movement.movement;
-            if let OrderStatus::Failed(reason) = movement.status {
-                order.status = OrderStatus::Failed(reason);
-                return;
-            }
-            if entity.pos.distance_squared_wide(closest) > reach * reach {
-                return;
-            }
+        if !self.approach(worker, order, bounds) {
+            return;
         }
         let occupied = self
-            .entities()
-            .filter(|e| e.work_site == Some(site_id))
-            .count() as i64;
+            .economy
+            .occupants
+            .get(&site_id)
+            .map_or(0, BTreeSet::len) as i64;
         if occupied >= self.entity(site_id).expect("site").gather_slots {
             order.status = OrderStatus::Failed("no_slot".into());
             return;
         }
-        self.entities[worker.0 as usize]
-            .as_mut()
-            .expect("worker")
-            .work_site = Some(site_id);
+        self.set_work_site(worker, Some(site_id));
     }
 
     pub(crate) fn interrupt_harvest(&mut self, executor: EntityId) {
+        self.set_work_site(executor, None);
         let entity = self.entities[executor.0 as usize]
             .as_mut()
             .expect("executor");
-        entity.work_site = None;
         if entity.orders.front().is_some_and(|o| o.kind == "harvest") {
             entity.orders.pop_front();
             self.stats.orders_cancelled += 1;
+            self.economy.dirty.insert(executor);
         }
     }
 
     pub(crate) fn release_site_workers(&mut self, site: EntityId) {
-        for entity in self.entities.iter_mut().flatten() {
-            if entity.work_site == Some(site) {
-                entity.work_site = None;
-            }
+        let workers: Vec<_> = self
+            .economy
+            .occupants
+            .get(&site)
+            .into_iter()
+            .flatten()
+            .copied()
+            .collect();
+        for worker in workers {
+            self.set_work_site(worker, None);
         }
         // Also fail walking and queued harvests; terminal history is not retained.
         let mut failed = Vec::new();
         for entity in self.entities.iter_mut().flatten() {
+            let before = failed.len();
             entity.orders.retain(|o| {
                 let remove = o.kind == "harvest" && o.target_entity == Some(site);
                 if remove {
@@ -135,6 +121,9 @@ impl World {
                 }
                 !remove
             });
+            if failed.len() != before {
+                self.economy.dirty.insert(entity.id);
+            }
         }
         self.pending.retain(|(o, _)| {
             let remove = o.kind == "harvest" && o.target_entity == Some(site);
@@ -150,66 +139,100 @@ impl World {
         }
     }
 
-    pub(crate) fn find_idle_work(&mut self) {
-        let delay = self
-            .rules
-            .constant("citizen.auto_work_delay_ticks")
-            .expect("validated delay") as u64;
+    fn idle_capable(&self, id: EntityId, pending: &BTreeSet<EntityId>) -> bool {
+        self.entity(id).is_some_and(|e| {
+            e.orders.is_empty()
+                && e.work_site.is_none()
+                && e.build_progress.is_none()
+                && !pending.contains(&id)
+                && !self.rules.entity_types[&e.type_id].harvester.is_empty()
+        })
+    }
+
+    /// Claims per gather site: slot holders plus executors of live or pending harvest orders.
+    fn harvest_claims(&self) -> BTreeMap<EntityId, BTreeSet<EntityId>> {
         let mut claims: BTreeMap<EntityId, BTreeSet<EntityId>> = BTreeMap::new();
-        for worker in self.entities() {
-            if let Some(site) = worker.work_site {
-                claims.entry(site).or_default().insert(worker.id);
-            }
+        for (site, workers) in &self.economy.occupants {
+            claims.entry(*site).or_default().extend(workers);
         }
-        let mut busy = BTreeSet::new();
         for order in self.all_orders() {
-            busy.insert(order.executor);
             if order.kind == "harvest"
                 && let Some(site) = order.target_entity
             {
                 claims.entry(site).or_default().insert(order.executor);
             }
         }
-        for index in 1..self.entities.len() {
-            let Some(worker) = self.entities[index].as_mut() else {
-                continue;
-            };
-            if busy.contains(&worker.id)
-                || worker.work_site.is_some()
-                || self.rules.entity_types[&worker.type_id]
-                    .harvester
-                    .is_empty()
-                || worker.build_progress.is_some()
-            {
-                worker.idle_ticks = 0;
-                continue;
+        claims
+    }
+
+    pub(crate) fn find_idle_work(&mut self) {
+        let delay = self
+            .rules
+            .constant("citizen.auto_work_delay_ticks")
+            .expect("validated delay") as u64;
+        if !self.economy.dirty.is_empty() {
+            let pending: BTreeSet<_> = self.pending.iter().map(|(o, _)| o.executor).collect();
+            for id in std::mem::take(&mut self.economy.dirty) {
+                if self.idle_capable(id, &pending) {
+                    self.economy.idle.insert(id);
+                } else {
+                    self.economy.idle.remove(&id);
+                    if let Some(entity) = self
+                        .entities
+                        .get_mut(id.0 as usize)
+                        .and_then(Option::as_mut)
+                    {
+                        entity.idle_ticks = 0;
+                    }
+                }
             }
+        }
+        let mut claims: Option<BTreeMap<EntityId, BTreeSet<EntityId>>> = None;
+        let idle: Vec<_> = self.economy.idle.iter().copied().collect();
+        for id in idle {
+            let worker = self.entities[id.0 as usize].as_mut().expect("idle worker");
             worker.idle_ticks += 1;
             if worker.idle_ticks < delay {
                 continue;
             }
             worker.idle_ticks = 0;
-            let id = worker.id;
             let worker = self.entity(id).expect("worker");
-            let target = self
-                .entities()
+            let harvester = &self.rules.entity_types[&worker.type_id].harvester;
+            let candidates: Vec<_> = self
+                .economy
+                .sites
+                .iter()
+                .filter_map(|site| self.entity(*site))
                 .filter(|site| {
                     site.owner == worker.owner
                         && site.build_progress.is_none()
-                        && site.gather_slots
-                            > claims.get(&site.id).map_or(0, |ids| ids.len() as i64)
+                        && site.gather_slots > 0
                         && self.rules.entity_types[&site.type_id]
                             .gather_site
                             .as_ref()
                             .is_some_and(|s| {
-                                self.rules.entity_types[&worker.type_id]
-                                    .harvester
-                                    .iter()
-                                    .any(|h| h.resource_id == s.resource_id)
+                                harvester.iter().any(|h| h.resource_id == s.resource_id)
                             })
                 })
-                .min_by_key(|site| (worker.pos.distance_squared_wide(site.pos), site.id))
-                .map(|site| site.id);
+                .map(|site| {
+                    (
+                        worker.pos.distance_squared_wide(site.pos),
+                        site.id,
+                        site.gather_slots,
+                    )
+                })
+                .collect();
+            if candidates.is_empty() {
+                continue;
+            }
+            let claims = claims.get_or_insert_with(|| self.harvest_claims());
+            let target = candidates
+                .into_iter()
+                .filter(|(_, site, slots)| {
+                    *slots > claims.get(site).map_or(0, |ids| ids.len() as i64)
+                })
+                .min_by_key(|(distance, site, _)| (*distance, *site))
+                .map(|(_, site, _)| site);
             if let Some(site) = target {
                 let command = Command {
                     player: worker.owner,

@@ -1,5 +1,6 @@
 //! Deterministic game simulation.
 
+mod avoidance;
 mod construction;
 mod economy;
 mod entity;
@@ -8,10 +9,13 @@ mod hash;
 mod income;
 mod map;
 mod math;
+mod movement;
 mod order;
+mod pathing;
 mod production;
 mod research;
 mod rng;
+mod scenario;
 mod spatial;
 mod world;
 
@@ -20,6 +24,7 @@ pub use income::Income;
 pub use map::MapGrid;
 pub use math::{Pos, integer_sqrt};
 pub use order::{Command, Order, OrderId, OrderKindKey, OrderStatus};
+pub use pathing::PathStats;
 pub use rng::SimRng;
 pub use world::{Stats, World};
 

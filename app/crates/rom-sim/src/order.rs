@@ -78,11 +78,36 @@ pub struct Order {
     pub(crate) movement: Option<MoveState>,
 }
 
+/// Walking progress: the current straight segment and the remaining waypoints.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct MoveState {
+    /// Where the current segment started.
     pub origin: Pos,
+    /// Rounded-up length of the current segment.
     pub distance: u64,
+    /// Distance covered along the current segment.
     pub traveled: u64,
+    /// This walker's final point, including any group offset.
+    pub goal: Pos,
+    /// Intermediate points of a smoothed path, walked before `goal`.
+    pub waypoints: Vec<Pos>,
+    /// Segments completed; the walk has arrived once this exceeds `waypoints.len()`.
+    pub index: usize,
+    /// Search this walker is waiting for.
+    pub request: Option<u64>,
+    /// Repaths since the last waypoint was reached.
+    pub repaths: u32,
+}
+
+impl MoveState {
+    /// End of the current segment, or None once arrived.
+    pub fn target(&self) -> Option<Pos> {
+        match self.index.cmp(&self.waypoints.len()) {
+            std::cmp::Ordering::Less => Some(self.waypoints[self.index]),
+            std::cmp::Ordering::Equal => Some(self.goal),
+            std::cmp::Ordering::Greater => None,
+        }
+    }
 }
 
 pub(crate) fn has_component(entity: &EntityType, needs: &str) -> bool {

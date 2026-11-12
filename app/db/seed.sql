@@ -23,7 +23,8 @@ INSERT INTO game_constant(key,value,unit,note) VALUES
  ('player.city_limit.base',1,'cities','before modifiers (stat city_limit)'),
  ('player.commerce_cap.base',70,'per period','before modifiers (stat commerce_cap)'),
  ('build.site_start_hp_pct',10,'%','hit points of a building site when placed'),
- ('build.reach',1500,'milli-tiles','how close a builder must be to the footprint to work');
+ ('build.reach',1500,'milli-tiles','how close a builder must be to the footprint to work'),
+ ('path.nodes_per_tick',20000,'nodes','path-search nodes expanded per tick across all searches');
 
 INSERT INTO layer VALUES
  ('ground','solid surface'), ('fluid','sea'), ('subfluid','underwater'),
