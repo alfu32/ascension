@@ -69,13 +69,39 @@ Two kinds of world:
 3. Age 10 onward: reaching space unites the blocs as **Humanity**. Players
    remain rivals; they share a roster, not a side.
 
-## Parked: the third stage
+## Races (decided)
 
-The original idea continued past Galactic Empires: a hyperdrive between
-galaxies and an evolution into an energy-based or bio-engineered race. It is
-set aside because there is no clean transition into it. The game ends at
-age 13. If it returns, body-type tags already decide who can heal whom and
-which damage hurts most, so new races would be data, not new rules.
+The player chooses a race **before the match** and keeps it for the whole
+game. This replaces the earlier idea of evolving into another race late on,
+which had no clean transition.
+
+- Each race starts on **its own home world** — a separate planetary terrain on
+  the same map.
+- Every race climbs an **equivalent** ladder of ages and technologies: the
+  same rules and the same numbers by default, under the race's own names and
+  look, with a limited set of race-only substitutes and bonuses.
+- Races cannot reach each other before the space age. They **meet in space**
+  after age 8–10, when ships can cross between worlds — first contact happens
+  naturally, at whatever moment each side gets there.
+- Until then, rivals are players of the **same race on the same world**
+  (for humans: other nations). A match may also give each player a world alone.
+
+What this needs, all already possible in the data model:
+
+| Need | Mechanism |
+| --- | --- |
+| Same thing, different name per race | `faction_alias` |
+| Same thing, different look per race | `entity_visual.faction_id` |
+| A race-only unit in place of a shared one | `entity_type.replaces_id` + `availability` |
+| Race bonuses | `modifier` rows with the race as source |
+| Who heals whom, what damage hurts | body tags (`biological`, `mechanical`, …) |
+| One home world per race | `map_region.home_faction_id`; the map style needs at least as many planets as races in the match |
+
+Symmetric rules keep balance manageable: races differ by a chosen list of
+substitutes and modifiers, not by separate rule sets.
+
+Still parked: travel between galaxies (the old third stage). The game ends at
+age 13.
 
 ## Healers across the timeline
 
@@ -87,5 +113,8 @@ which damage hurts most, so new races would be data, not new rules.
 
 ## Open questions
 
-- Names for ages 8–13.
-- The final nation list.
+- Which other races, and their themes. The original brief named an
+  energy-based and a bio-engineered people.
+- Do other races have nation-like subdivisions in their early ages, as humans do?
+- May a match put two races on one home world, or is one world per race a rule?
+- Names for ages 8–13, for each race's ages, and the final human nation list.

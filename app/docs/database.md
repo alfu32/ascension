@@ -1,6 +1,6 @@
 # Game database
 
-Files: [`../db/schema.sql`](../db/schema.sql) (84 tables, 4 views) and
+Files: [`../db/schema.sql`](../db/schema.sql) (85 tables, 4 views) and
 [`../db/seed.sql`](../db/seed.sql) (a small placeholder dataset that exercises
 every part of the schema). Both load cleanly in SQLite ≥ 3.37:
 
@@ -250,10 +250,12 @@ does not exist, add the stat to `stat` and implement that one stat in code.
   buildings and ground battles.
 - Identity ladder: historical nation → continental bloc → united humanity
   (section 7).
-- The game ends with the Galactic Empires age. The intergalactic stage and
-  the two non-human races are **parked**: no clean transition was found. The
-  schema needs no change to add them later (a third tier, two `race`
-  factions, optional `faction_transition` rows).
+- **Races are chosen before the match.** Each race starts on its own home
+  world, develops equivalent technology under its own names and look
+  (`faction_alias`, `entity_visual`), and meets the others only in space.
+  Races differ through substitutes (`replaces_id`), `availability` and
+  `modifier` rows, not through separate rule sets.
+- The game ends with the Galactic Empires age. Travel between galaxies stays parked.
 - Fixed 20-tick simulation; game speed is a user-settable percentage.
 
 ## Naming rule

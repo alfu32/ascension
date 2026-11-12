@@ -20,7 +20,9 @@ The current state of every task is in `app/docs/tasks/STATUS.md`.
   terrains host buildings and ground battles.
 - Identity ladder: historical nation (ages 0–7) → continental bloc (8–9) →
   united humanity (10+).
-- The game ends at age 13. The intergalactic stage and non-human races are parked.
+- A player picks a race before the match and keeps it. Races start on
+  separate home worlds with equivalent technology and meet only in space.
+- The game ends at age 13. Travel between galaxies is parked.
 - Simulation fixed at 20 ticks per game second; game speed is a user setting.
 - SQLite is the authoring and save format; the tick loop never runs SQL.
 - In-match HUD is drawn by raylib; all other screens are GPUI.

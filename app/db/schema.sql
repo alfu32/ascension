@@ -141,9 +141,11 @@ CREATE TABLE faction (
   last_age_id  INTEGER REFERENCES age(id)           -- nations stop existing after unification
 ) STRICT;
 
--- Identity ladder: nation → continental bloc (forced, after the contemporary
--- ages) → united humanity (forced, on reaching space). `forced = 0` rows would
--- express an optional change of identity (not used at present). A faction is an identity and a
+-- A player picks a RACE before the match and keeps it. Inside the human race
+-- the identity ladder is nation → continental bloc (forced, after the
+-- contemporary ages) → united humanity (forced, on reaching space). Other
+-- races have their own ladder or none. Races start on separate home worlds,
+-- develop equivalent technology, and meet only once they reach space. A faction is an identity and a
 -- roster, not a side: several players may share one faction and still be at war.
 CREATE TABLE faction_transition (
   from_faction_id INTEGER NOT NULL REFERENCES faction(id),
@@ -159,6 +161,17 @@ CREATE TABLE faction_name (            -- leader / city / planet name pools
   seq        INTEGER NOT NULL,
   name       TEXT NOT NULL,
   PRIMARY KEY (faction_id, kind, seq)
+) STRICT, WITHOUT ROWID;
+
+-- A race may call a shared definition by its own name: the same age, tech,
+-- unit or building is "equivalent" across races and only the label (and the
+-- look, through entity_visual) differs. Children inherit from the parent faction.
+CREATE TABLE faction_alias (
+  def_id     INTEGER NOT NULL REFERENCES def(id) ON DELETE CASCADE,
+  faction_id INTEGER NOT NULL REFERENCES faction(id),
+  name       TEXT NOT NULL,
+  descr      TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (def_id, faction_id)
 ) STRICT, WITHOUT ROWID;
 
 -- Restriction list. No rows for a def = available to every faction.
@@ -673,7 +686,7 @@ CREATE TABLE map_region (
   tier      TEXT NOT NULL REFERENCES map_scale(key),  -- tier a player needs to see / enter it
   name      TEXT NOT NULL,
   x INTEGER NOT NULL, y INTEGER NOT NULL, w INTEGER NOT NULL, h INTEGER NOT NULL,  -- bounding box, tiles
-  home      INTEGER NOT NULL DEFAULT 0  -- 1 = starting terrain shared by the players
+  home_faction_id INTEGER REFERENCES faction(id)  -- race whose players start here; NULL = not a home world
 ) STRICT;
 
 CREATE TABLE player (
