@@ -90,4 +90,7 @@ grep -rniE "<reference game names>" . --include='*.md' --include='*.sql' --inclu
 ```
 
 Bump `version`, commit, tag without a `v` prefix, push branch and tag.
-Commit, tag and push only when the owner asks.
+
+Standing instruction from the owner: **always commit, tag and push** finished,
+verified work to `main` without asking. This covers ordinary forward commits
+only — never force pushes, history rewrites or tag deletion.
