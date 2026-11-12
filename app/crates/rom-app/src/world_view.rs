@@ -6,6 +6,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::sim_thread::{SimLink, SimReport};
 use gpui::{
     Context, FocusHandle, ImageSource, InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent,
     MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit, ParentElement, Pixels,
@@ -25,6 +26,7 @@ const PIXELS_PER_WHEEL_STEP: f32 = 80.0;
 /// Full-window canvas showing the latest frame, with a stats overlay on top.
 pub struct WorldView {
     bridge: RenderBridge,
+    sim: SimLink,
     focus: FocusHandle,
     pending: Option<Frame>,
     presented: Option<Arc<RenderImage>>,
@@ -37,7 +39,12 @@ pub struct WorldView {
 
 impl WorldView {
     /// Creates the view and starts polling the frame mailbox.
-    pub fn new(bridge: RenderBridge, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        bridge: RenderBridge,
+        sim: SimLink,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let focus = cx.focus_handle();
         window.focus(&focus);
         cx.on_release_in(window, |view, window, _| {
@@ -73,6 +80,7 @@ impl WorldView {
         .detach();
         Self {
             bridge,
+            sim,
             focus,
             pending: None,
             presented: None,
@@ -152,6 +160,10 @@ impl WorldView {
             "pagedown" => self
                 .bridge
                 .publish_render_scale(current.saturating_sub(SCALE_STEP)),
+            "=" | "+" => self
+                .sim
+                .set_speed(self.sim.speed().saturating_mul(2).min(1600)),
+            "-" => self.sim.set_speed((self.sim.speed() / 2).max(6)),
             name => {
                 if let Some(key) = Key::from_name(name) {
                     self.bridge.push_input(InputEvent::KeyDown(key));
@@ -274,12 +286,18 @@ impl Render for WorldView {
                 &self.bridge.stats(),
                 self.bridge.render_scale(),
                 self.recent_presents.len(),
+                &self.sim.report(),
             ))
     }
 }
 
 /// Small GPUI panel drawn above the frame image.
-fn stats_overlay(stats: &RenderStats, scale: u32, shown_last_second: usize) -> impl IntoElement {
+fn stats_overlay(
+    stats: &RenderStats,
+    scale: u32,
+    shown_last_second: usize,
+    sim: &SimReport,
+) -> impl IntoElement {
     div()
         .absolute()
         .top(px(10.0))
@@ -309,7 +327,11 @@ fn stats_overlay(stats: &RenderStats, scale: u32, shown_last_second: usize) -> i
             "read-back {:.1} ms avg, {:.1} ms max",
             stats.readback_ms_avg, stats.readback_ms_max
         ))
-        .child("PgUp/PgDn: render scale")
+        .child(format!(
+            "tick {}, {:.1} ticks/s, {} entities",
+            sim.tick, sim.ticks_per_second, sim.entities
+        ))
+        .child("PgUp/PgDn: render scale, +/-: sim speed")
 }
 
 /// Evicts `image` from the GPU atlas two frames from now, once no frame can still reference it.

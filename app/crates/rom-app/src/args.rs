@@ -5,7 +5,8 @@ use std::path::PathBuf;
 /// Usage text printed for `--help` and after argument errors.
 pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <file.png>] \
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] \
-[--map-size <width>x<height>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>]";
+[--map-size <width>x<height>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
+[--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers]";
 
 /// Default canvas size in pixels when `--size` is not given.
 pub const DEFAULT_SIZE: (u32, u32) = (1280, 800);
@@ -33,6 +34,16 @@ pub struct Options {
     pub camera: Option<[f32; 5]>,
     /// Number of moving stress-test boxes.
     pub boxes: u32,
+    /// Run the scripted demo driver on the simulation thread.
+    pub demo: bool,
+    /// Simulation speed in percent of the normal 20 ticks per second.
+    pub speed_pct: u32,
+    /// Extra wandering units spawned at the start.
+    pub stress_units: u32,
+    /// Seconds to wait after the first frame before a screenshot is taken.
+    pub after_seconds: f64,
+    /// Draw the player-start pillars.
+    pub start_markers: bool,
     /// Print usage and exit.
     pub help: bool,
 }
@@ -50,6 +61,11 @@ impl Default for Options {
             map_size: (256, 256),
             camera: None,
             boxes: 0,
+            demo: false,
+            speed_pct: 100,
+            stress_units: 0,
+            after_seconds: 1.0,
+            start_markers: false,
             help: false,
         }
     }
@@ -93,6 +109,27 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             "--map-size" => options.map_size = parse_map_size(&value("--map-size")?)?,
             "--camera" => options.camera = Some(parse_camera(&value("--camera")?)?),
             "--boxes" => options.boxes = number("--boxes", &value("--boxes")?)?,
+            "--demo" => options.demo = true,
+            "--start-markers" => options.start_markers = true,
+            "--speed" => {
+                let text = value("--speed")?;
+                options.speed_pct = text
+                    .parse::<u32>()
+                    .ok()
+                    .filter(|speed| (1..=10_000).contains(speed))
+                    .ok_or_else(|| format!("--speed expects 1 to 10000, got {text:?}"))?;
+            }
+            "--stress-units" => {
+                options.stress_units = number("--stress-units", &value("--stress-units")?)?;
+            }
+            "--after" => {
+                let text = value("--after")?;
+                options.after_seconds = text
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|seconds| seconds.is_finite() && *seconds >= 0.0)
+                    .ok_or_else(|| format!("--after expects seconds, got {text:?}"))?;
+            }
             "-h" | "--help" => options.help = true,
             other => return Err(format!("unknown argument {other:?}")),
         }
@@ -191,6 +228,26 @@ mod tests {
         assert!(parse(args(&["--camera", "1,2,3"])).is_err());
         assert!(parse(args(&["--map-size", "0x5"])).is_err());
         assert!(parse(args(&["--players", "0"])).is_err());
+    }
+
+    #[test]
+    fn parses_simulation_options() {
+        let options = parse(args(&[
+            "--demo",
+            "--speed",
+            "250",
+            "--stress-units",
+            "5000",
+            "--after",
+            "20",
+        ]))
+        .expect("valid arguments");
+        assert!(options.demo);
+        assert_eq!(options.speed_pct, 250);
+        assert_eq!(options.stress_units, 5000);
+        assert_eq!(options.after_seconds, 20.0);
+        assert!(parse(args(&["--speed", "0"])).is_err());
+        assert!(parse(args(&["--after", "-1"])).is_err());
     }
 
     #[test]

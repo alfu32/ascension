@@ -2,8 +2,11 @@
 
 mod args;
 mod bench;
+mod demo;
+mod match_setup;
 mod screenshot;
 mod shell;
+mod sim_thread;
 mod terrain;
 mod world_view;
 

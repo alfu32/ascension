@@ -4,9 +4,11 @@
 //! Other threads talk to it only through the cloneable [`RenderBridge`]: they
 //! publish the layout, render scale, camera and input, and take the newest
 //! [`Frame`] from a one-slot mailbox. The terrain is described by a plain
-//! [`TerrainScene`], published once and meshed on the render thread.
+//! [`TerrainScene`], published once and meshed on the render thread. Entities arrive as plain
+//! [`EntitySnapshot`]s; the render thread keeps the last two and interpolates between them.
 
 mod camera;
+mod entities;
 mod mailbox;
 mod pixels;
 mod scene;
@@ -15,6 +17,9 @@ mod terrain;
 mod worker;
 
 pub use camera::{Camera, CameraController, InputEvent, Key, PointerButton};
+pub use entities::{
+    EntitySnapshot, EntityView, OWNER_COLORS, SnapshotPair, Surface, build_instances, owner_color,
+};
 pub use image;
 pub use mailbox::{Frame, FrameMailbox, FramePixels};
 pub use pixels::rgba_to_bgra_flipped;
