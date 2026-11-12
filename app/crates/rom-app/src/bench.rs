@@ -10,9 +10,9 @@ use rom_render::{RenderBridge, ShutdownHandle, scaled_size};
 use crate::world_view::WorldView;
 
 /// Time allowed for the window to open and deliver its first frame.
-const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+pub const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 /// Time after the first correctly sized frame before measuring starts.
-const WARM_UP: Duration = Duration::from_secs(1);
+pub const WARM_UP: Duration = Duration::from_secs(1);
 /// How often the last-second maxima are sampled.
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(250);
 
@@ -50,38 +50,54 @@ pub fn start(
     .detach();
 }
 
+/// Frames shown so far and the size of the newest one.
+fn presented(view: &Entity<WorldView>, cx: &mut AsyncApp) -> Result<(u64, (u32, u32)), String> {
+    view.read_with(cx, |view, _| view.presented())
+        .map_err(|error| format!("window closed: {error}"))
+}
+
+/// Waits until the terrain is meshed and a frame at the canvas size has been shown.
+pub async fn wait_until_ready(
+    view: &Entity<WorldView>,
+    bridge: &RenderBridge,
+    cx: &mut AsyncApp,
+) -> Result<(), String> {
+    let started = Instant::now();
+    loop {
+        Timer::after(Duration::from_millis(50)).await;
+        let (frames, size) = presented(view, cx)?;
+        let layout = bridge.layout();
+        if frames > 0
+            && bridge.terrain_ready()
+            && layout.0 > 0
+            && size == scaled_size(layout, bridge.render_scale())
+        {
+            return Ok(());
+        }
+        if started.elapsed() > STARTUP_TIMEOUT {
+            return Err(format!(
+                "no frame at the canvas size within {} s (canvas {}x{}, last frame {}x{}, terrain ready: {})",
+                STARTUP_TIMEOUT.as_secs(),
+                layout.0,
+                layout.1,
+                size.0,
+                size.1,
+                bridge.terrain_ready()
+            ));
+        }
+    }
+}
+
 async fn measure(
     bench: Bench,
     view: &Entity<WorldView>,
     bridge: &RenderBridge,
     cx: &mut AsyncApp,
 ) -> Result<String, String> {
-    let presented = |cx: &mut AsyncApp| {
-        view.read_with(cx, |view, _| view.presented())
-            .map_err(|error| format!("window closed: {error}"))
-    };
-
-    let started = Instant::now();
-    loop {
-        Timer::after(Duration::from_millis(50)).await;
-        let (frames, size) = presented(cx)?;
-        let layout = bridge.layout();
-        if frames > 0 && layout.0 > 0 && size == scaled_size(layout, bridge.render_scale()) {
-            break;
-        }
-        if started.elapsed() > STARTUP_TIMEOUT {
-            return Err(format!(
-                "no frame at the canvas size within {} s (canvas {}x{}, last frame {}x{})",
-                STARTUP_TIMEOUT.as_secs(),
-                layout.0,
-                layout.1,
-                size.0,
-                size.1
-            ));
-        }
-    }
+    wait_until_ready(view, bridge, cx).await?;
     Timer::after(WARM_UP).await;
 
+    let presented = |cx: &mut AsyncApp| presented(view, cx);
     let first = bridge.stats();
     let (first_presented, _) = presented(cx)?;
     let begin = Instant::now();

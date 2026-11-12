@@ -9,10 +9,12 @@ use gpui::{
     WindowDecorations, WindowOptions, point, px, size,
 };
 use gpui_component::Root;
-use rom_render::{RenderBridge, RenderWorker, ShutdownHandle};
+use rom_render::{Camera, RenderBridge, RenderWorker, ShutdownHandle};
 
 use crate::args::Options;
 use crate::bench;
+use crate::screenshot;
+use crate::terrain;
 use crate::world_view::WorldView;
 
 /// Opens the window and runs until it is closed (or the benchmark finishes).
@@ -33,6 +35,24 @@ pub fn run(options: &Options) -> ExitCode {
         }
     };
     bridge.publish_render_scale(options.scale);
+    match terrain::build_scene(options) {
+        Ok(scene) => bridge.publish_terrain(Arc::new(scene)),
+        Err(error) => {
+            eprintln!("rise-of-man: {error}");
+            worker.stop();
+            return ExitCode::FAILURE;
+        }
+    }
+    if let Some([x, y, distance, yaw, pitch]) = options.camera {
+        bridge.publish_camera(Camera {
+            target: [x, 0.0, y],
+            distance,
+            yaw: yaw.to_radians(),
+            pitch: pitch.to_radians(),
+            ..Camera::default()
+        });
+    }
+    bridge.publish_box_count(options.boxes);
     let shutdown = worker.shutdown_handle();
     let exit_code = Arc::new(AtomicU8::new(0));
     let app_exit_code = Arc::clone(&exit_code);
@@ -50,36 +70,39 @@ pub fn run(options: &Options) -> ExitCode {
             app_id: Some("rise-of-man".into()),
             ..Default::default()
         };
-        let opened = match options.bench_seconds {
-            // The benchmark window has no title bar or component frame (which pads client-decorated
-            // windows for a shadow), so the whole requested size is canvas even at monitor size.
-            Some(seconds) => {
-                window_options.window_bounds = Some(WindowBounds::Windowed(Bounds::new(
-                    point(px(0.0), px(0.0)),
-                    canvas,
-                )));
-                window_options.window_decorations = Some(WindowDecorations::Client);
-                let bench = bench::Bench {
-                    seconds,
-                    requested: options.size,
-                    scale: options.scale,
-                };
-                let exit_code = Arc::clone(&app_exit_code);
-                cx.open_window(window_options, move |window, cx| {
-                    let view = world_view(&bridge, &shutdown, options.size, window, cx);
+        let fixed_window = options.bench_seconds.is_some() || options.screenshot.is_some();
+        let opened = if fixed_window {
+            // Benchmark and screenshot windows have no title bar or component frame (which pads
+            // client-decorated windows for a shadow), so the whole requested size is canvas even
+            // at monitor size.
+            window_options.window_bounds = Some(WindowBounds::Windowed(Bounds::new(
+                point(px(0.0), px(0.0)),
+                canvas,
+            )));
+            window_options.window_decorations = Some(WindowDecorations::Client);
+            let exit_code = Arc::clone(&app_exit_code);
+            cx.open_window(window_options, move |window, cx| {
+                let view = world_view(&bridge, &shutdown, options.size, window, cx);
+                if let Some(seconds) = options.bench_seconds {
+                    let bench = bench::Bench {
+                        seconds,
+                        requested: options.size,
+                        scale: options.scale,
+                    };
                     bench::start(bench, view.clone(), bridge, shutdown, exit_code, cx);
-                    view
-                })
-                .map(|_| ())
-            }
-            None => {
-                window_options.window_bounds = Some(WindowBounds::centered(canvas, cx));
-                cx.open_window(window_options, move |window, cx| {
-                    let view = world_view(&bridge, &shutdown, options.size, window, cx);
-                    cx.new(|cx| Root::new(view, window, cx))
-                })
-                .map(|_| ())
-            }
+                } else if let Some(path) = options.screenshot.clone() {
+                    screenshot::start(path, view.clone(), bridge, shutdown, exit_code, cx);
+                }
+                view
+            })
+            .map(|_| ())
+        } else {
+            window_options.window_bounds = Some(WindowBounds::centered(canvas, cx));
+            cx.open_window(window_options, move |window, cx| {
+                let view = world_view(&bridge, &shutdown, options.size, window, cx);
+                cx.new(|cx| Root::new(view, window, cx))
+            })
+            .map(|_| ())
         };
         if let Err(error) = opened {
             eprintln!("rise-of-man: could not open the window: {error:#}");

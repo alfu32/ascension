@@ -15,6 +15,7 @@ use crate::mailbox::{Frame, FrameMailbox, FramePixels};
 use crate::pixels::rgba_to_bgra_flipped;
 use crate::scene::Scene;
 use crate::stats::{RenderStats, StatsWindow};
+use crate::terrain::{TerrainScene, home_camera, overview_camera};
 
 /// Smallest internal render scale, in percent of the canvas size.
 pub const MIN_RENDER_SCALE: u32 = 50;
@@ -42,6 +43,11 @@ struct Shared {
     camera: Mutex<Option<Camera>>,
     input: Mutex<Vec<InputEvent>>,
     mailbox: FrameMailbox,
+    terrain: Mutex<Option<Arc<TerrainScene>>>,
+    terrain_ready: AtomicBool,
+    box_count: AtomicU32,
+    snapshot_wanted: AtomicBool,
+    snapshot: Mutex<Option<Arc<FramePixels>>>,
     stats: Mutex<RenderStats>,
     stop: AtomicBool,
     finished: (Mutex<bool>, Condvar),
@@ -64,7 +70,36 @@ impl RenderBridge {
         *lock(&self.shared.layout)
     }
 
-    /// Replaces the render thread's camera.
+    /// Hands the render thread a terrain to mesh and draw, replacing any earlier one.
+    ///
+    /// The camera moves to the scene's first player start and is bounded by the map.
+    pub fn publish_terrain(&self, scene: Arc<TerrainScene>) {
+        self.shared.terrain_ready.store(false, Ordering::Release);
+        *lock(&self.shared.terrain) = Some(scene);
+    }
+
+    /// True once the render thread has built the meshes of the last published terrain.
+    pub fn terrain_ready(&self) -> bool {
+        self.shared.terrain_ready.load(Ordering::Acquire)
+    }
+
+    /// Sets how many stress-test boxes are drawn (0 for none).
+    pub fn publish_box_count(&self, count: u32) {
+        self.shared.box_count.store(count, Ordering::Relaxed);
+    }
+
+    /// Asks for a copy of the next finished frame; fetch it with [`Self::take_snapshot`].
+    pub fn request_snapshot(&self) {
+        *lock(&self.shared.snapshot) = None;
+        self.shared.snapshot_wanted.store(true, Ordering::Release);
+    }
+
+    /// The frame requested by [`Self::request_snapshot`] (BGRA, top-down), once it exists.
+    pub fn take_snapshot(&self) -> Option<Arc<FramePixels>> {
+        lock(&self.shared.snapshot).take()
+    }
+
+    /// Replaces the render thread's camera. Its bounds stay those of the current terrain.
     pub fn publish_camera(&self, camera: Camera) {
         *lock(&self.shared.camera) = Some(camera);
     }
@@ -134,6 +169,11 @@ impl RenderWorker {
             camera: Mutex::new(None),
             input: Mutex::new(Vec::new()),
             mailbox: FrameMailbox::default(),
+            terrain: Mutex::new(None),
+            terrain_ready: AtomicBool::new(false),
+            box_count: AtomicU32::new(0),
+            snapshot_wanted: AtomicBool::new(false),
+            snapshot: Mutex::new(None),
             stats: Mutex::new(RenderStats::default()),
             stop: AtomicBool::new(false),
             finished: (Mutex::new(false), Condvar::new()),
@@ -210,8 +250,24 @@ fn render_loop(shared: &Shared) {
             .min(0.1);
         last_frame = frame_start;
 
+        let published_terrain = lock(&shared.terrain).take();
+        if let Some(terrain) = published_terrain {
+            let (meshes, build_ms, upload_ms) = scene.set_terrain(&thread, &terrain);
+            let (home, overview) = (home_camera(&terrain), overview_camera(&terrain));
+            controller.set_scene_cameras(home, overview);
+            camera = home;
+            eprintln!(
+                "terrain-mesh tiles={}x{} meshes={meshes} build_ms={build_ms:.1} upload_ms={upload_ms:.1}",
+                terrain.width, terrain.height
+            );
+            shared.terrain_ready.store(true, Ordering::Release);
+        }
         if let Some(published) = lock(&shared.camera).take() {
-            camera = published;
+            camera = Camera {
+                bounds: camera.bounds,
+                ..published
+            }
+            .limited();
         }
         let events = std::mem::take(&mut *lock(&shared.input));
         for event in events {
@@ -245,7 +301,8 @@ fn render_loop(shared: &Shared) {
             continue;
         };
         let elapsed = frame_start.duration_since(started).as_secs_f32();
-        scene.draw(&mut rl, &thread, texture, &camera, elapsed);
+        let boxes = shared.box_count.load(Ordering::Relaxed) as usize;
+        scene.draw(&mut rl, &thread, texture, &camera, elapsed, boxes);
 
         let readback_start = Instant::now();
         let Some(pixels) = read_back(texture) else {
@@ -255,8 +312,12 @@ fn render_loop(shared: &Shared) {
         };
         let finished_at = Instant::now();
         sequence += 1;
+        let pixels = Arc::new(pixels);
+        if shared.snapshot_wanted.swap(false, Ordering::AcqRel) {
+            *lock(&shared.snapshot) = Some(Arc::clone(&pixels));
+        }
         shared.mailbox.publish(Frame {
-            pixels: Arc::new(pixels),
+            pixels,
             width: size.0,
             height: size.1,
             sequence,

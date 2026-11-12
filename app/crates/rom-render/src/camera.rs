@@ -1,7 +1,7 @@
 //! Strategy-view camera and the input rules that move it.
 
-/// Half the width of the proof map in tiles; the camera target stays inside it.
-const MAP_HALF_EXTENT: f32 = 128.0;
+/// Half the width of the proof map in tiles; the default bounds of a camera.
+const DEFAULT_HALF_EXTENT: f32 = 128.0;
 /// Pointer distance from the canvas edge, in physical pixels, that starts edge panning.
 const EDGE_PIXELS: f32 = 8.0;
 /// Pan speed as a fraction of the camera distance per second.
@@ -22,6 +22,8 @@ pub struct Camera {
     pub pitch: f32,
     /// Distance from the target to the eye, in tiles.
     pub distance: f32,
+    /// Area the target is kept in, as `[min_x, min_z, max_x, max_z]` in tiles.
+    pub bounds: [f32; 4],
 }
 
 impl Default for Camera {
@@ -31,6 +33,12 @@ impl Default for Camera {
             yaw: 45_f32.to_radians(),
             pitch: 50_f32.to_radians(),
             distance: 60.0,
+            bounds: [
+                -DEFAULT_HALF_EXTENT,
+                -DEFAULT_HALF_EXTENT,
+                DEFAULT_HALF_EXTENT,
+                DEFAULT_HALF_EXTENT,
+            ],
         }
     }
 }
@@ -39,7 +47,7 @@ impl Camera {
     /// Closest allowed zoom, in tiles.
     pub const MIN_DISTANCE: f32 = 8.0;
     /// Farthest allowed zoom, in tiles.
-    pub const MAX_DISTANCE: f32 = 220.0;
+    pub const MAX_DISTANCE: f32 = 1500.0;
     /// Flattest allowed view, in radians.
     pub const MIN_PITCH: f32 = 0.35;
     /// Steepest allowed view (almost straight down), in radians.
@@ -77,12 +85,19 @@ impl Camera {
         self.clamp();
     }
 
+    /// This camera with distance, pitch and target brought inside their limits.
+    pub fn limited(mut self) -> Self {
+        self.clamp();
+        self
+    }
+
     fn clamp(&mut self) {
         self.distance = self.distance.clamp(Self::MIN_DISTANCE, Self::MAX_DISTANCE);
         self.pitch = self.pitch.clamp(Self::MIN_PITCH, Self::MAX_PITCH);
-        self.target[0] = self.target[0].clamp(-MAP_HALF_EXTENT, MAP_HALF_EXTENT);
+        let [min_x, min_z, max_x, max_z] = self.bounds;
+        self.target[0] = self.target[0].clamp(min_x, max_x.max(min_x));
         self.target[1] = 0.0;
-        self.target[2] = self.target[2].clamp(-MAP_HALF_EXTENT, MAP_HALF_EXTENT);
+        self.target[2] = self.target[2].clamp(min_z, max_z.max(min_z));
     }
 }
 
@@ -108,8 +123,10 @@ pub enum Key {
     PanLeft,
     /// Move the view right (D, right arrow).
     PanRight,
-    /// Restore the default camera (R).
+    /// Go back to the camera the scene started with (R).
     ResetCamera,
+    /// Frame the whole map (Home).
+    FrameMap,
 }
 
 impl Key {
@@ -121,6 +138,7 @@ impl Key {
             "a" | "left" => Some(Self::PanLeft),
             "d" | "right" => Some(Self::PanRight),
             "r" => Some(Self::ResetCamera),
+            "home" => Some(Self::FrameMap),
             _ => None,
         }
     }
@@ -131,7 +149,7 @@ impl Key {
             Self::PanBack => Some(1),
             Self::PanLeft => Some(2),
             Self::PanRight => Some(3),
-            Self::ResetCamera => None,
+            Self::ResetCamera | Self::FrameMap => None,
         }
     }
 }
@@ -186,12 +204,20 @@ pub struct CameraController {
     pointer: Option<[f32; 2]>,
     rotating: bool,
     viewport: [f32; 2],
+    home: Option<Camera>,
+    overview: Option<Camera>,
 }
 
 impl CameraController {
     /// Sets the canvas size in physical pixels, used for edge panning.
     pub fn set_viewport(&mut self, width: u32, height: u32) {
         self.viewport = [width as f32, height as f32];
+    }
+
+    /// Sets the cameras the reset and frame-map keys go to.
+    pub fn set_scene_cameras(&mut self, home: Camera, overview: Camera) {
+        self.home = Some(home);
+        self.overview = Some(overview);
     }
 
     /// Applies one input event.
@@ -219,7 +245,12 @@ impl CameraController {
                 }
             }
             InputEvent::Wheel { steps } => camera.zoom(steps),
-            InputEvent::KeyDown(Key::ResetCamera) => *camera = Camera::default(),
+            InputEvent::KeyDown(Key::ResetCamera) => *camera = self.home.unwrap_or_default(),
+            InputEvent::KeyDown(Key::FrameMap) => {
+                if let Some(overview) = self.overview {
+                    *camera = overview;
+                }
+            }
             InputEvent::KeyDown(key) => {
                 if let Some(index) = key.held_index() {
                     self.held[index] = true;
@@ -334,5 +365,30 @@ mod tests {
         camera.pan(4.0, 4.0);
         CameraController::default().apply(&mut camera, InputEvent::KeyDown(Key::ResetCamera));
         assert_eq!(camera, Camera::default());
+    }
+
+    #[test]
+    fn target_stays_inside_the_scene_bounds_and_home_key_frames_the_map() {
+        let home = Camera {
+            bounds: [0.0, 0.0, 40.0, 30.0],
+            target: [10.0, 0.0, 10.0],
+            ..Camera::default()
+        };
+        let overview = Camera {
+            target: [20.0, 0.0, 15.0],
+            distance: 90.0,
+            ..home
+        };
+        let mut camera = home;
+        camera.pan(1_000.0, -1_000.0);
+        assert!(camera.target[0] <= 40.0 && camera.target[2] <= 30.0);
+        camera.pan(-1_000.0, 1_000.0);
+        assert!(camera.target[0] >= 0.0 && camera.target[2] >= 0.0);
+        let mut controller = CameraController::default();
+        controller.set_scene_cameras(home, overview);
+        controller.apply(&mut camera, InputEvent::KeyDown(Key::FrameMap));
+        assert_eq!(camera, overview);
+        controller.apply(&mut camera, InputEvent::KeyDown(Key::ResetCamera));
+        assert_eq!(camera, home);
     }
 }
