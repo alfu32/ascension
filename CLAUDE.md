@@ -9,9 +9,8 @@ of this file is about how the orchestrating session runs the work.
 
 ## Status
 
-Planning is complete and tagged `0.0.2`. Implementation follows
-`app/docs/implementation-plan.md`, phase by phase. No application code
-existed at the time of writing; check `app/Cargo.toml` before assuming.
+Implementation follows `app/docs/implementation-plan.md`, phase by phase.
+The current state of every task is in `app/docs/tasks/STATUS.md`.
 
 ## Decisions already made (do not reopen without the owner)
 
@@ -70,7 +69,10 @@ codex exec review
 ```
 
 - Model: `gpt-6.1-sol` at high reasoning effort (owner's choice), passed per run.
-- Network access lets `cargo` fetch crates; `--add-dir <repo>/.git` lets it commit from a worktree.
+- Network access lets `cargo` fetch crates.
+- Codex cannot commit from a worktree (the shared `.git` stays read-only in its
+  sandbox even with `--add-dir`). Tell it not to commit; the orchestrator
+  commits after review.
 - Pass sandbox and approval options per run; do not edit `~/.codex/config.toml`.
 - It bills the owner's OpenAI account and sends prompts and file contents
   there. Use it for the purposes in the table above, not for anything

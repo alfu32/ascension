@@ -6,7 +6,7 @@ it; nothing needed to continue lives only in a chat or a temporary folder.
 
 | Task | Card | Branch | Implementer | State | Notes |
 | --- | --- | --- | --- | --- | --- |
-| 0 — workspace skeleton and rules-database build | `0-skeleton.md` | `task/0-skeleton` | Codex (`gpt-6-luna`, started before the model was chosen) | running | — |
+| 0 — workspace skeleton and rules-database build | `0-skeleton.md` | `task/0-skeleton` | Codex (`gpt-6-luna`, started before the model was chosen) | merged in 0.0.3 | Gate re-run by the orchestrator: fmt, clippy, 5 tests, `rules.db: 100 definitions, 84 tables`. Codex could not commit from the worktree; the orchestrator committed. |
 
 States: `ready` → `running` → `review` → `merged`; or `blocked` (say why),
 `handed over` (say to whom and from which commit).
