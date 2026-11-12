@@ -19,11 +19,15 @@ use std::{
     sync::Arc,
 };
 
-/// Aggregate terminal-order counts; no finished order history is retained.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+/// Aggregate order counts and per-player combat totals.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Stats {
     /// Successfully completed orders, including stop.
     pub orders_done: u64,
+    /// Enemy kills credited to each player.
+    pub kills: BTreeMap<PlayerId, u64>,
+    /// Combat deaths, including consumed attackers, for each player.
+    pub losses: BTreeMap<PlayerId, u64>,
     /// Failed orders of all kinds.
     pub orders_failed: u64,
     /// Orders cancelled by replacement, stop, or despawning.
@@ -41,6 +45,7 @@ pub struct Stats {
 /// Deterministic match state, mutated through setup operations and commands.
 #[derive(Debug)]
 pub struct World {
+    pub(crate) hits: Vec<crate::combat::PendingHit>,
     pub(crate) tick: u64,
     pub(crate) rng: SimRng,
     pub(crate) rules: Arc<Rules>,
@@ -91,6 +96,8 @@ impl World {
             ));
         }
         for (key, minimum, maximum) in [
+            ("combat.min_damage", 1, i64::MAX),
+            ("unit.respond_range", 0, i64::MAX),
             ("player.pop_cap.base", 0, i64::MAX),
             ("build.site_start_hp_pct", 0, 100),
             ("build.reach", 0, i64::MAX),
@@ -109,6 +116,13 @@ impl World {
         if rules.constant("path.nodes_per_tick").is_some_and(|v| v < 1) {
             return Err(SimError::InvalidRules("path.nodes_per_tick"));
         }
+        if !rules
+            .stances
+            .values()
+            .any(|s| s.family == rom_rules::StanceFamily::Combat && s.behavior == "aggressive")
+        {
+            return Err(SimError::InvalidRules("aggressive combat stance"));
+        }
         let mut by_id = BTreeMap::new();
         for player in players {
             if !rules.factions.contains_key(&player.faction)
@@ -121,6 +135,7 @@ impl World {
         let pathing = Pathing::new(&rules, &map);
         let avoid = Avoidance::new(&rules, map.width, map.height);
         Ok(Self {
+            hits: Vec::new(),
             tick: 0,
             rng: SimRng::new(seed),
             rules,
@@ -184,9 +199,9 @@ impl World {
         self.entities.iter().flatten()
     }
 
-    /// Returns terminal-order counters.
-    pub fn stats(&self) -> Stats {
-        self.stats
+    /// Returns terminal-order counters and per-player kills and losses.
+    pub fn stats(&self) -> &Stats {
+        &self.stats
     }
 
     /// Returns path-search counters.
@@ -225,6 +240,17 @@ impl World {
             pos,
             facing: 0,
             hp,
+            max_hp: hp,
+            los: 0,
+            stance: self.default_stance(),
+            cooldowns: BTreeMap::new(),
+            energy: self.rules.entity_types[&type_id]
+                .energy
+                .as_ref()
+                .map_or(0, |e| e.max),
+            energy_remainder: 0,
+            heal_remainder: 0,
+            killer: None,
             build_progress: None,
             move_remainder: 0,
             gather_slots,
@@ -232,6 +258,7 @@ impl World {
             idle_ticks: 0,
             orders: VecDeque::new(),
         }));
+        self.refresh_entity_stats(id);
         self.next_entity_id = next;
         self.spatial.insert(id, pos);
         let et = &self.rules.entity_types[&type_id];
@@ -346,6 +373,7 @@ impl World {
         if command.kind == "harvest" {
             self.validate_harvest(&command)?;
         }
+        self.validate_combat_order(&command)?;
         let payment = self.validate_economy_order(&mut command)?;
         let next = self
             .next_order_id
@@ -387,6 +415,8 @@ impl World {
                 status: OrderStatus::Queued,
                 progress_ticks: 0,
                 issued_tick: self.tick,
+                automatic: false,
+                home: None,
                 movement: None,
                 payment,
                 total_ticks,
@@ -402,6 +432,8 @@ impl World {
     /// separates overlapping units, and distributes income.
     pub fn step(&mut self) {
         self.find_idle_work();
+        self.acquire_idle();
+        self.regenerate_energy();
         for (mut order, append) in std::mem::take(&mut self.pending) {
             if order.kind == "construct" {
                 self.create_site(&mut order);
@@ -425,6 +457,7 @@ impl World {
                 continue;
             };
             self.advance_executor(id);
+            self.heal_idle(id);
             let new = self.entity(id).expect("executor persists").pos;
             if old != new {
                 self.relocate(id, old, new);
@@ -433,6 +466,8 @@ impl World {
         }
         self.run_path_searches();
         self.separate_units(&moved);
+        self.land_projectiles();
+        self.remove_dead();
         self.pay_income();
         self.pathing.end_tick();
         self.tick = self.tick.checked_add(1).expect("simulation tick exhausted");

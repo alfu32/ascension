@@ -65,6 +65,21 @@ pub struct Entity {
     pub facing: u16,
     /// Current hit points.
     pub hp: i64,
+    /// Effective maximum hit points, retained for ratio-preserving updates.
+    pub max_hp: i64,
+    /// Effective line of sight in milli-tiles.
+    pub los: i64,
+    /// Combat stance definition.
+    pub stance: DefId,
+    /// Earliest tick at which each weapon id can fire again.
+    pub cooldowns: BTreeMap<u32, u64>,
+    /// Current energy pool.
+    pub energy: i64,
+    /// Fractional regeneration numerator, over ticks per second.
+    pub energy_remainder: i64,
+    /// Fractional healing numerator, over ticks per second.
+    pub heal_remainder: i64,
+    pub(crate) killer: Option<PlayerId>,
     /// Completed construction ticks; None means complete.
     pub build_progress: Option<u32>,
     /// Fractional movement numerator, with denominator 100 × ticks per second.

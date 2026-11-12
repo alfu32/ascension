@@ -525,6 +525,23 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
     let farm = world
         .spawn(rules.id_of("bld.farm").unwrap(), OWNER, Pos::default())
         .unwrap();
+    let enemy = world
+        .spawn(
+            rules.id_of("unit.citizen").unwrap(),
+            PlayerId(2),
+            Pos::default(),
+        )
+        .unwrap();
+    let patient = world
+        .spawn(rules.id_of("unit.citizen").unwrap(), OWNER, Pos::default())
+        .unwrap();
+    let mechanical = world
+        .spawn(
+            rules.id_of("unit.repair_drone").unwrap(),
+            OWNER,
+            Pos::default(),
+        )
+        .unwrap();
     for kind in rules
         .order_kinds
         .values()
@@ -545,6 +562,20 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
             }
             if kind.key == "harvest" {
                 command.target_entity = Some(farm);
+            }
+            if kind.key == "attack" {
+                command.target_entity = Some(enemy);
+            }
+            if kind.key == "heal" {
+                command.target_entity = Some(
+                    if et.healer.as_ref().is_some_and(|h| {
+                        rules.has_tag(rules.id_of("unit.citizen").unwrap(), h.target_tag_id)
+                    }) {
+                        patient
+                    } else {
+                        mechanical
+                    },
+                );
             }
             match world.submit(command) {
                 Ok(_) => {

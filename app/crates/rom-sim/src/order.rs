@@ -75,6 +75,10 @@ pub struct Order {
     pub payment: Vec<(DefId, i64)>,
     /// Fractional construction work, with denominator 100.
     pub build_remainder: i64,
+    /// Whether this order was created by automatic combat acquisition.
+    pub automatic: bool,
+    /// Original position for a defensive pursuit or return.
+    pub home: Option<Pos>,
     pub(crate) movement: Option<MoveState>,
 }
 

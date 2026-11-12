@@ -57,6 +57,8 @@ impl StateHash {
                 self.text(reason);
             }
         }
+        self.bytes(&[u8::from(order.automatic)]);
+        self.optional(order.home, Self::pos);
         self.u64(order.progress_ticks);
         self.u64(order.issued_tick);
         self.optional(order.total_ticks, Self::u64);
@@ -137,7 +139,7 @@ impl World {
     /// Hashes complete mutable state in little-endian field order with FNV-1a 64.
     pub fn hash(&self) -> u64 {
         let mut hash = StateHash(0xcbf29ce484222325);
-        hash.bytes(b"rom-sim-state-4");
+        hash.bytes(b"rom-sim-state-5");
         hash.u64(self.tick);
         hash.u64(self.rng.state());
         hash.u32(self.next_entity_id);
@@ -179,6 +181,18 @@ impl World {
             hash.pos(entity.pos);
             hash.bytes(&entity.facing.to_le_bytes());
             hash.bytes(&entity.hp.to_le_bytes());
+            hash.bytes(&entity.max_hp.to_le_bytes());
+            hash.bytes(&entity.los.to_le_bytes());
+            hash.u32(entity.stance.0);
+            hash.u64(entity.cooldowns.len() as u64);
+            for (weapon, ready) in &entity.cooldowns {
+                hash.u32(*weapon);
+                hash.u64(*ready);
+            }
+            hash.bytes(&entity.energy.to_le_bytes());
+            hash.bytes(&entity.energy_remainder.to_le_bytes());
+            hash.bytes(&entity.heal_remainder.to_le_bytes());
+            hash.optional(entity.killer, |h, id| h.u32(id.0));
             hash.optional(entity.build_progress, StateHash::u32);
             hash.bytes(&entity.move_remainder.to_le_bytes());
             hash.bytes(&entity.gather_slots.to_le_bytes());
@@ -207,6 +221,23 @@ impl World {
         hash.u64(self.stats.orders_unsupported);
         hash.u64(self.stats.orders_no_slot);
         hash.u64(self.stats.orders_target_gone);
+        for counts in [&self.stats.kills, &self.stats.losses] {
+            hash.u64(counts.len() as u64);
+            for (player, count) in counts {
+                hash.u32(player.0);
+                hash.u64(*count);
+            }
+        }
+        hash.u64(self.hits.len() as u64);
+        for hit in &self.hits {
+            hash.u64(hit.land_tick);
+            hash.u32(hit.attacker.0);
+            hash.u32(hit.owner.0);
+            hash.u32(hit.source_type.0);
+            hash.u32(hit.weapon_id);
+            hash.u32(hit.target.0);
+            hash.bytes(&hit.damage.to_le_bytes());
+        }
         hash.pathing(&self.pathing);
         hash.u64(self.avoid.awake.len() as u64);
         for id in &self.avoid.awake {

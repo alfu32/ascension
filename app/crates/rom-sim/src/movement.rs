@@ -89,9 +89,10 @@ impl World {
         if state.target().is_none() {
             return Walk::Arrived;
         }
+        let speed = self.effective_stat(id, "speed", motion.speed).max(0);
         let denominator = i128::from(self.pathing.tick_rate) * 100;
         let entity = self.entities[id.0 as usize].as_mut().expect("walker");
-        let budget = i128::from(motion.speed) * i128::from(pct) + entity.move_remainder;
+        let budget = i128::from(speed) * i128::from(pct) + entity.move_remainder;
         // Wide division is slow; take the 64-bit path whenever the budget fits.
         let (mut step, remainder) = match (i64::try_from(budget), i64::try_from(denominator)) {
             (Ok(b), Ok(d)) => (i128::from(b / d), i128::from(b % d)),

@@ -110,3 +110,72 @@ impl World {
         Ok(world)
     }
 }
+
+impl World {
+    /// Builds two opposing lines, thirty tiles apart, on a crossable 96×96 map.
+    pub fn battle_scenario(rules: Arc<Rules>, seed: u64, per_side: u32) -> Result<Self, SimError> {
+        let et = rules
+            .entity_types
+            .values()
+            .find(|e| e.movement.is_some() && !e.weapons.is_empty())
+            .ok_or(SimError::ScenarioUnavailable("armed moving entity type"))?;
+        let type_id = et.id;
+        let class = et.movement.as_ref().expect("moving type").movement_class_id;
+        let terrain = rules
+            .movement_class_terrain
+            .get(&class)
+            .into_iter()
+            .flatten()
+            .filter(|r| r.speed_pct > 0)
+            .map(|r| r.terrain_id)
+            .min()
+            .ok_or(SimError::ScenarioUnavailable("crossable terrain"))?;
+        let faction = *rules
+            .factions
+            .keys()
+            .next()
+            .ok_or(SimError::ScenarioUnavailable("faction"))?;
+        let age = *rules
+            .ages
+            .keys()
+            .next()
+            .ok_or(SimError::ScenarioUnavailable("age"))?;
+        let players = (1..=2)
+            .map(|n| Player {
+                id: PlayerId(n),
+                team: n,
+                faction,
+                age,
+                resources: BTreeMap::new(),
+                techs: BTreeMap::new(),
+            })
+            .collect();
+        let mut world = Self::new(
+            rules,
+            MapGrid::new(96, 96, vec![terrain; 96 * 96])?,
+            seed,
+            players,
+        )?;
+        for side in 1..=2 {
+            let (x, target) = if side == 1 {
+                (33000, 63000)
+            } else {
+                (63000, 33000)
+            };
+            for n in 0..per_side {
+                let y = (1000 + u64::from(n) * 94000 / u64::from(per_side.max(1))) as i32;
+                let id = world.spawn(type_id, PlayerId(side), Pos { x, y })?;
+                world.submit(Command {
+                    player: PlayerId(side),
+                    executor: id,
+                    kind: "attack_move".into(),
+                    subject: None,
+                    target_entity: None,
+                    target_pos: Some(Pos { x: target, y }),
+                    queue: false,
+                })?;
+            }
+        }
+        Ok(world)
+    }
+}

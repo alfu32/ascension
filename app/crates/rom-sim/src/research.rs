@@ -61,10 +61,6 @@ impl World {
                         .flatten()
                         .filter(|e| e.owner == player && Some(e.type_id) == effect.from_def_id)
                     {
-                        let old_hp = self.rules.entity_types[&entity.type_id].hp.max(1);
-                        let new_hp = self.rules.entity_types[&target].hp;
-                        entity.hp = (i128::from(entity.hp) * i128::from(new_hp)
-                            / i128::from(old_hp)) as i64;
                         changed.push((entity.id, entity.type_id));
                         entity.type_id = target;
                     }
@@ -74,6 +70,14 @@ impl World {
                 }
                 _ => {}
             }
+        }
+        let ids: Vec<_> = self
+            .entities()
+            .filter(|e| e.owner == player)
+            .map(|e| e.id)
+            .collect();
+        for id in ids {
+            self.refresh_entity_stats(id);
         }
     }
 

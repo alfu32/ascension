@@ -52,7 +52,7 @@ impl World {
                 "move" if order.target_pos.is_none() => {
                     order.status = OrderStatus::Failed("unsupported".into());
                 }
-                "move" | "construct" | "repair" | "harvest" => {
+                "move" | "construct" | "repair" | "harvest" | "attack" | "attack_move" | "heal" => {
                     if worked {
                         self.entities[id.0 as usize]
                             .as_mut()
@@ -62,10 +62,15 @@ impl World {
                         break;
                     }
                     worked = true;
-                    if order.kind == "move" {
+                    if order.kind == "attack" || order.kind == "attack_move" {
+                        self.advance_combat(id, &mut order);
+                    } else if order.kind == "heal" {
+                        self.advance_heal(id, &mut order);
+                    } else if order.kind == "move" {
                         order.progress_ticks += 1;
                         let goal = order.target_pos.expect("point movement");
-                        if self.walk(id, &mut order, goal, None, true) == Walk::Arrived {
+                        let spread = !order.automatic;
+                        if self.walk(id, &mut order, goal, None, spread) == Walk::Arrived {
                             order.status = OrderStatus::Done;
                         }
                     } else if order.kind == "harvest" {

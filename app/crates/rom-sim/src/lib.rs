@@ -1,11 +1,13 @@
 //! Deterministic game simulation.
 
 mod avoidance;
+mod combat;
 mod construction;
 mod economy;
 mod entity;
 mod gathering;
 mod hash;
+mod healing;
 mod income;
 mod map;
 mod math;
@@ -17,6 +19,7 @@ mod research;
 mod rng;
 mod scenario;
 mod spatial;
+mod stance;
 mod world;
 
 pub use entity::{Entity, EntityId, Player, PlayerId};
@@ -34,6 +37,15 @@ use thiserror::Error;
 /// Invalid setup or input, rejected without changing simulation state.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum SimError {
+    /// Combat requires an existing enemy target.
+    #[error("invalid attack target")]
+    InvalidAttackTarget,
+    /// Healing requires another friendly entity with the supported tag.
+    #[error("invalid heal target")]
+    InvalidHealTarget,
+    /// The selected definition is not a combat stance.
+    #[error("invalid combat stance")]
+    InvalidStance,
     /// Map dimensions or storage are invalid.
     #[error("invalid map dimensions or terrain storage")]
     InvalidMap,

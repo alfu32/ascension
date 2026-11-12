@@ -265,6 +265,22 @@ impl World {
                         continue;
                     }
                     if let Some((x, y)) = separation(a, pa, motion.radius, slot) {
+                        // Zero-range weapons must reach the target's edge. Allow the
+                        // pursuing pair to close rather than pushing them apart forever.
+                        let closing = |attacker, target| {
+                            self.entity(attacker).is_some_and(|e| {
+                                e.orders.front().is_some_and(|o| {
+                                    matches!(o.kind.as_str(), "attack" | "attack_move")
+                                        && o.target_entity == Some(target)
+                                }) && self.rules.entity_types[&e.type_id]
+                                    .weapons
+                                    .iter()
+                                    .any(|w| w.range_max == 0)
+                            })
+                        };
+                        if closing(a, slot.id) || closing(slot.id, a) {
+                            continue;
+                        }
                         pushes.push((slot.id, x, y));
                         pushes.push((a, -x, -y));
                     }

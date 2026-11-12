@@ -101,7 +101,7 @@ impl World {
             order.status = OrderStatus::Failed("target_gone".into());
             return;
         };
-        if site.owner != order.player {
+        if site.hp <= 0 || site.owner != order.player {
             order.status = OrderStatus::Failed("target_gone".into());
             return;
         }
@@ -138,7 +138,7 @@ impl World {
         let et = &self.rules.entity_types[&site.type_id];
         if progress >= total {
             site.build_progress = None;
-            site.hp = et.hp;
+            site.hp = site.max_hp;
             for bonus in &et.completion_bonus {
                 let balance = self
                     .players
@@ -156,9 +156,9 @@ impl World {
                 .rules
                 .constant("build.site_start_hp_pct")
                 .expect("site hp");
-            let initial = i128::from(et.hp) * i128::from(pct) / 100;
+            let initial = i128::from(site.max_hp) * i128::from(pct) / 100;
             site.hp = (initial
-                + (i128::from(et.hp) - initial) * i128::from(progress) / i128::from(total))
+                + (i128::from(site.max_hp) - initial) * i128::from(progress) / i128::from(total))
                 as i64;
         }
         if progress >= total {
