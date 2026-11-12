@@ -2,7 +2,9 @@
 
 mod args;
 mod bench;
+mod screenshot;
 mod shell;
+mod terrain;
 mod world_view;
 
 use std::process::ExitCode;

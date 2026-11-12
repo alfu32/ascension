@@ -2,6 +2,8 @@
 
 /// Converts bottom-up RGBA rows (raylib read-back) into top-down BGRA rows (GPUI).
 ///
+/// The world view is opaque, so alpha is forced to 255 (translucent water would otherwise lower it).
+///
 /// Returns `None` when `rgba` does not hold exactly `width * height` pixels.
 pub fn rgba_to_bgra_flipped(rgba: &[u8], width: usize, height: usize) -> Option<Vec<u8>> {
     let row = width.checked_mul(4)?;
@@ -16,7 +18,7 @@ pub fn rgba_to_bgra_flipped(rgba: &[u8], width: usize, height: usize) -> Option<
         let (dst, _) = dst.as_chunks_mut::<4>();
         let (src, _) = src.as_chunks::<4>();
         for (d, s) in dst.iter_mut().zip(src) {
-            *d = [s[2], s[1], s[0], s[3]];
+            *d = [s[2], s[1], s[0], 255];
         }
     }
     Some(bgra)
@@ -37,8 +39,8 @@ mod tests {
         assert_eq!(
             bgra,
             vec![
-                11, 10, 9, 12, 15, 14, 13, 16, // top row: C, D
-                3, 2, 1, 4, 7, 6, 5, 8, // bottom row: A, B
+                11, 10, 9, 255, 15, 14, 13, 255, // top row: C, D
+                3, 2, 1, 255, 7, 6, 5, 255, // bottom row: A, B
             ]
         );
     }

@@ -1,0 +1,155 @@
+//! Start-up content: rules built in memory, a generated map, and its conversion to a render scene.
+
+use std::collections::BTreeMap;
+
+use rom_mapgen::{GeneratedMap, MapRequest, generate};
+use rom_render::{TerrainScene, TileKind};
+use rom_rules::{DefId, Rules, build_rules_db};
+
+use crate::args::Options;
+
+const SCHEMA: &str = include_str!("../../../db/schema.sql");
+const SEED: &str = include_str!("../../../db/seed.sql");
+
+/// Builds the rules from the embedded schema and seed.
+pub fn load_rules() -> Result<Rules, String> {
+    let conn = build_rules_db(SCHEMA, SEED).map_err(|error| format!("building rules: {error}"))?;
+    Rules::load(&conn).map_err(|error| format!("loading rules: {error}"))
+}
+
+/// Generates the map the options ask for and converts it for rendering.
+pub fn build_scene(options: &Options) -> Result<TerrainScene, String> {
+    let rules = load_rules()?;
+    let style = match &options.style {
+        Some(key) => rules
+            .id_of(key)
+            .filter(|id| rules.map_styles.contains_key(id))
+            .ok_or_else(|| format!("unknown map style {key:?}"))?,
+        None => *rules
+            .map_styles
+            .keys()
+            .next()
+            .ok_or("the rules define no map style")?,
+    };
+    let map = generate(
+        &rules,
+        &MapRequest {
+            style,
+            seed: options.seed,
+            width: options.map_size.0,
+            height: options.map_size.1,
+            players: options.players,
+        },
+    )
+    .map_err(|error| format!("generating the map: {error}"))?;
+    Ok(to_scene(&map))
+}
+
+/// A colour derived from a definition id: a hue from a hash, fixed saturation and value.
+fn feature_color(id: u16) -> [u8; 3] {
+    let hash = u32::from(id).wrapping_mul(0x9e37_79b1) >> 8;
+    let hue = (hash % 360) as f32 / 60.0;
+    let x = 1.0 - (hue % 2.0 - 1.0).abs();
+    let (r, g, b) = match hue as u32 {
+        0 => (1.0, x, 0.0),
+        1 => (x, 1.0, 0.0),
+        2 => (0.0, 1.0, x),
+        3 => (0.0, x, 1.0),
+        4 => (x, 0.0, 1.0),
+        _ => (1.0, 0.0, x),
+    };
+    let channel = |c: f32| ((0.25 + 0.75 * c) * 255.0) as u8;
+    [channel(r), channel(g), channel(b)]
+}
+
+/// Converts a generated map: tile kinds from the base terrains, other terrains as features,
+/// starts and nodes from milli-tiles to tiles.
+pub fn to_scene(map: &GeneratedMap) -> TerrainScene {
+    let base = map.base;
+    let mut feature_colors = BTreeMap::new();
+    let kinds = map
+        .grid
+        .terrain
+        .iter()
+        .map(|&id: &DefId| {
+            if id == base.land {
+                TileKind::Land
+            } else if id == base.shallow {
+                TileKind::ShallowSea
+            } else if id == base.deep {
+                TileKind::DeepSea
+            } else if id == base.space {
+                TileKind::Space
+            } else {
+                let feature = u16::try_from(id.0).unwrap_or(u16::MAX);
+                feature_colors
+                    .entry(feature)
+                    .or_insert_with(|| feature_color(feature));
+                TileKind::Feature(feature)
+            }
+        })
+        .collect();
+    let tiles = |x: i32, y: i32| (x as f32 / 1000.0, y as f32 / 1000.0);
+    TerrainScene {
+        width: map.grid.width,
+        height: map.grid.height,
+        heights: map.height.clone(),
+        kinds,
+        feature_colors,
+        starts: map.starts.iter().map(|p| tiles(p.x, p.y)).collect(),
+        nodes: map.nodes.iter().map(|n| tiles(n.pos.x, n.pos.y)).collect(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generated_map_converts_to_terrain_scene() {
+        let rules = load_rules().expect("rules");
+        let style = *rules.map_styles.keys().next().expect("a map style");
+        let map = generate(
+            &rules,
+            &MapRequest {
+                style,
+                seed: 3,
+                width: 96,
+                height: 96,
+                players: 3,
+            },
+        )
+        .expect("map");
+        let scene = to_scene(&map);
+        assert!(scene.is_valid());
+        assert_eq!((scene.width, scene.height), (96, 96));
+        assert_eq!(scene.heights, map.height);
+        for (id, kind) in map.grid.terrain.iter().zip(&scene.kinds) {
+            match kind {
+                TileKind::Land => assert_eq!(*id, map.base.land),
+                TileKind::ShallowSea => assert_eq!(*id, map.base.shallow),
+                TileKind::DeepSea => assert_eq!(*id, map.base.deep),
+                TileKind::Space => assert_eq!(*id, map.base.space),
+                TileKind::Feature(feature) => {
+                    assert!(
+                        ![
+                            map.base.land,
+                            map.base.shallow,
+                            map.base.deep,
+                            map.base.space
+                        ]
+                        .contains(id)
+                    );
+                    assert!(scene.feature_colors.contains_key(feature));
+                }
+            }
+        }
+        assert_eq!(scene.starts.len(), 3);
+        assert_eq!(scene.nodes.len(), map.nodes.len());
+        for (start, pos) in scene.starts.iter().zip(&map.starts) {
+            assert_eq!(*start, (pos.x as f32 / 1000.0, pos.y as f32 / 1000.0));
+        }
+        let (x, y) = scene.starts[0];
+        assert!((0.0..96.0).contains(&x) && (0.0..96.0).contains(&y));
+    }
+}

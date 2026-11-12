@@ -149,3 +149,27 @@ second, asynchronous read-back through pixel-buffer objects (and doing the
 channel swap on the GPU), should be a follow-up task before shadows and a
 real HUD are added. Shown-frame losses that remain come from the UI side, not
 the renderer.
+
+## Terrain scene (task 8)
+
+The scene is now a generated map (default style, seed 1, 4 players, 256×256
+tiles): chunked terrain meshes with vertex colours and sun lighting, a
+translucent sea, 3,000 stars and start/node markers. The 5,000 moving boxes are
+off by default (`--boxes <n>`). Mesh build for the 256×256 map: about 9 ms for
+the vertex data plus about 8 ms for the upload (30 meshes); for a 384×384
+`map.many_worlds` map 16 ms plus 13 ms (54 meshes). Printed once as
+`terrain-mesh` on stderr when the terrain is published.
+
+```
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --bench 10 --size 1280x800 --scale 100
+bench size=1280x800 scale=100 frames=599 fps=59.9 frame_ms_avg=8.59 frame_ms_max=13.84 readback_ms_avg=8.43 readback_ms_max=13.62
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --bench 10 --size 1920x1080 --scale 100
+bench size=1882x1080 scale=100 frames=562 fps=56.2 frame_ms_avg=12.26 frame_ms_max=24.95 readback_ms_avg=12.11 readback_ms_max=24.74
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --bench 10 --size 1280x800 --scale 100 --boxes 5000
+bench size=1280x800 scale=100 frames=560 fps=56.0 frame_ms_avg=9.84 frame_ms_max=16.15 readback_ms_avg=9.43 readback_ms_max=15.70
+```
+
+The largest canvas this display allows is 1882×1080 (a 1920×1080 request is
+clamped by the window manager). The terrain adds almost nothing to the frame
+time at 1280×800; read-back still dominates. Screenshots are kept in
+`docs/img/terrain-home.png` and `docs/img/terrain-worlds.png`.

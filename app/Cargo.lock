@@ -4811,7 +4811,9 @@ version = "0.0.10"
 dependencies = [
  "gpui",
  "gpui-component",
+ "rom-mapgen",
  "rom-render",
+ "rom-rules",
 ]
 
 [[package]]
