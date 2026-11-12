@@ -10,6 +10,7 @@ it; nothing needed to continue lives only in a chat or a temporary folder.
 | 1 — stack proof: raylib world view inside GPUI, measured | `1-stack-proof.md` | `task/1-stack-proof` | Opus agent | running | worktree `../rise-of-man-worktrees/1-stack-proof` |
 | 2 — typed rules loader, validation, modifier engine | `2-rules-loader.md` | `task/2-rules-loader` | Codex (`gpt-6.1-sol`, high) | merged in 0.0.6 | First run stopped correctly on a schema conflict (`game_constant.value` was `REAL`, fixed in 0.0.5). Second run complete. Gate re-run by the orchestrator: fmt, clippy, 39 tests, `rules ok: 100 definitions, 4 modifiers`. |
 | 3 — simulation core: state, tick loop, order book, straight-line movement | `3-sim-core.md` | `task/3-sim-core` | Codex (`gpt-6.1-sol`, high) | merged in 0.0.7 | Gate re-run by the orchestrator: fmt, clippy, 80 tests; same seed gives the same hash, another seed a different one; 10,000 units × 6,000 ticks in 2.0 s. Follow-ups: entity slots are never compacted; order kind is stored as text per order. |
+| 4 — production, construction and research orders | `4-production.md` | `task/4-production` | Codex (`gpt-6.1-sol`, high) | running | worktree `../rise-of-man-worktrees/4-production`; orchestrator commits |
 
 States: `ready` → `running` → `review` → `merged`; or `blocked` (say why),
 `handed over` (say to whom and from which commit).
