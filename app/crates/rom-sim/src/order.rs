@@ -69,6 +69,12 @@ pub struct Order {
     pub progress_ticks: u64,
     /// World tick at submission.
     pub issued_tick: u64,
+    /// Captured production duration, or the current construction duration.
+    pub total_ticks: Option<u64>,
+    /// Resource amounts actually paid at submission, in resource id order.
+    pub payment: Vec<(DefId, i64)>,
+    /// Fractional construction work, with denominator 100.
+    pub build_remainder: i64,
     pub(crate) movement: Option<MoveState>,
 }
 

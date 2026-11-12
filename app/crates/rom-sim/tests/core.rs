@@ -23,6 +23,8 @@ fn player(rules: &Rules, id: PlayerId) -> Player {
     Player {
         id,
         team: id.0,
+        resources: Default::default(),
+        techs: Default::default(),
         faction: *rules.factions.keys().next().unwrap(),
         age: *rules.ages.keys().next().unwrap(),
     }
@@ -520,7 +522,11 @@ fn unsupported_kinds_fail_when_activated() {
 fn every_vocabulary_kind_validates_its_component_and_target() {
     let rules = rules();
     let mut world = world_with(rules.clone(), "ter.plain");
-    for kind in rules.order_kinds.values() {
+    for kind in rules
+        .order_kinds
+        .values()
+        .filter(|kind| !matches!(kind.key.as_str(), "train" | "research" | "construct"))
+    {
         let mut accepted = false;
         let mut rejected = false;
         for et in rules.entity_types.values() {
@@ -556,11 +562,18 @@ fn subjects_and_construction_placement_are_accepted() {
     let mut world = world();
     let id = citizen(&mut world, Pos::default());
     let mut command = untargeted(id, "construct", false);
-    command.subject = world.rules().id_of("bld.temple");
-    command.target_pos = Some(Pos { x: 1000, y: 1000 });
+    command.subject = world.rules().id_of("bld.farm");
+    command.target_pos = Some(Pos {
+        x: 10_000,
+        y: 10_000,
+    });
+    world
+        .grant(OWNER, world.rules().id_of("res.timber").unwrap(), 50)
+        .unwrap();
     world.submit(command).unwrap();
     world.step();
-    assert_eq!(world.stats().orders_unsupported, 1);
+    assert_eq!(world.stats().orders_unsupported, 0);
+    assert_eq!(world.entities().count(), 2);
 }
 
 #[test]

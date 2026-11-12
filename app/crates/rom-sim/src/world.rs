@@ -2,7 +2,7 @@
 
 use crate::{
     SimError,
-    entity::{Entity, EntityId, Player, PlayerId, advance, cancel_queue},
+    entity::{Entity, EntityId, Player, PlayerId},
     map::MapGrid,
     math::Pos,
     order::{Command, Order, OrderId, OrderStatus, has_component, target_matches},
@@ -78,6 +78,19 @@ impl World {
                 "tick rate must be positive and movement nonnegative",
             ));
         }
+        for (key, minimum, maximum) in [
+            ("player.pop_cap.base", 0, i64::MAX),
+            ("build.site_start_hp_pct", 0, 100),
+            ("build.reach", 0, i64::MAX),
+            ("economy.cancel_refund_pct", 0, 100),
+        ] {
+            if rules
+                .constant(key)
+                .is_none_or(|v| v < minimum || v > maximum)
+            {
+                return Err(SimError::InvalidRules(key));
+            }
+        }
         let mut by_id = BTreeMap::new();
         for player in players {
             if !rules.factions.contains_key(&player.faction)
@@ -131,6 +144,8 @@ impl World {
                 .keys()
                 .next()
                 .ok_or(SimError::ScenarioUnavailable("faction"))?,
+            resources: BTreeMap::new(),
+            techs: BTreeMap::new(),
             age: *rules
                 .ages
                 .keys()
@@ -246,6 +261,7 @@ impl World {
             pos,
             facing: 0,
             hp,
+            build_progress: None,
             move_remainder: 0,
             orders: VecDeque::new(),
         }));
@@ -290,7 +306,7 @@ impl World {
     }
 
     /// Validates now and defers queue mutation until the next step.
-    pub fn submit(&mut self, command: Command) -> Result<OrderId, SimError> {
+    pub fn submit(&mut self, mut command: Command) -> Result<OrderId, SimError> {
         let entity = self
             .entity(command.executor)
             .ok_or(SimError::UnknownExecutor(command.executor))?;
@@ -312,11 +328,30 @@ impl World {
         if !target_matches(&command, kind.target) {
             return Err(SimError::WrongTargetShape);
         }
+        let payment = self.validate_economy_order(&mut command)?;
         let next = self
             .next_order_id
             .checked_add(1)
             .ok_or(SimError::IdExhausted)?;
         let id = OrderId(self.next_order_id);
+        for (resource, amount) in &payment {
+            *self
+                .players
+                .get_mut(&command.player)
+                .expect("checked owner")
+                .resources
+                .entry(*resource)
+                .or_default() -= amount;
+        }
+        let total_ticks = if command.kind == "repair" {
+            command
+                .target_entity
+                .and_then(|id| self.entity(id))
+                .filter(|site| site.owner == command.player && site.build_progress.is_some())
+                .map(|_| 0)
+        } else {
+            None
+        };
         self.pending.push((
             Order {
                 id,
@@ -330,6 +365,9 @@ impl World {
                 progress_ticks: 0,
                 issued_tick: self.tick,
                 movement: None,
+                payment,
+                total_ticks,
+                build_remainder: 0,
             },
             command.queue,
         ));
@@ -339,25 +377,30 @@ impl World {
 
     /// Applies pending inputs, advances entities by id, updates buckets, then increments tick.
     pub fn step(&mut self) {
-        for (order, append) in self.pending.drain(..) {
-            let entity = self.entities[order.executor.0 as usize]
-                .as_mut()
-                .expect("despawn cancels pending orders");
+        for (mut order, append) in std::mem::take(&mut self.pending) {
+            if order.kind == "construct" {
+                self.create_site(&mut order);
+            }
             if !append {
-                cancel_queue(entity, &mut self.stats);
+                self.cancel_orders(order.executor);
             }
-            entity.orders.push_back(order);
+            self.entities[order.executor.0 as usize]
+                .as_mut()
+                .expect("despawn cancels pending orders")
+                .orders
+                .push_back(order);
         }
-        let mut moved = Vec::new();
-        for entity in self.entities.iter_mut().flatten() {
-            let old = entity.pos;
-            advance(entity, &self.rules, &self.map, &mut self.stats);
-            if entity.pos != old {
-                moved.push((entity.id, old, entity.pos));
+        let count = self.entities.len();
+        for index in 1..count {
+            let id = EntityId(index as u32);
+            let Some(old) = self.entity(id).map(|e| e.pos) else {
+                continue;
+            };
+            self.advance_executor(id);
+            let new = self.entity(id).expect("executor persists").pos;
+            if old != new {
+                self.spatial.relocate(id, old, new);
             }
-        }
-        for (id, from, to) in moved {
-            self.spatial.relocate(id, from, to);
         }
         self.tick = self.tick.checked_add(1).expect("simulation tick exhausted");
     }

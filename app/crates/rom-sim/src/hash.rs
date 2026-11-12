@@ -58,6 +58,13 @@ impl StateHash {
         }
         self.u64(order.progress_ticks);
         self.u64(order.issued_tick);
+        self.optional(order.total_ticks, Self::u64);
+        self.bytes(&order.build_remainder.to_le_bytes());
+        self.u64(order.payment.len() as u64);
+        for (resource, amount) in &order.payment {
+            self.u32(resource.0);
+            self.bytes(&amount.to_le_bytes());
+        }
         self.optional(order.movement.as_ref(), |h, movement| {
             h.pos(movement.origin);
             h.u64(movement.distance);
@@ -70,7 +77,7 @@ impl World {
     /// Hashes complete mutable state in little-endian field order with FNV-1a 64.
     pub fn hash(&self) -> u64 {
         let mut hash = StateHash(0xcbf29ce484222325);
-        hash.bytes(b"rom-sim-state-1");
+        hash.bytes(b"rom-sim-state-2");
         hash.u64(self.tick);
         hash.u64(self.rng.state());
         hash.u32(self.next_entity_id);
@@ -87,6 +94,16 @@ impl World {
             hash.u32(player.team);
             hash.u32(player.faction.0);
             hash.u32(player.age.0);
+            hash.u64(player.resources.len() as u64);
+            for (id, amount) in &player.resources {
+                hash.u32(id.0);
+                hash.bytes(&amount.to_le_bytes());
+            }
+            hash.u64(player.techs.len() as u64);
+            for (id, times) in &player.techs {
+                hash.u32(id.0);
+                hash.u32(*times);
+            }
         }
         hash.u64(self.entities().count() as u64);
         for entity in self.entities() {
@@ -96,6 +113,7 @@ impl World {
             hash.pos(entity.pos);
             hash.bytes(&entity.facing.to_le_bytes());
             hash.bytes(&entity.hp.to_le_bytes());
+            hash.optional(entity.build_progress, StateHash::u32);
             hash.bytes(&entity.move_remainder.to_le_bytes());
             hash.u64(entity.orders.len() as u64);
             for order in &entity.orders {
@@ -177,6 +195,12 @@ mod tests {
             changes(&mut world, |w| {
                 w.entities[index].as_mut().unwrap().move_remainder += 1
             });
+            changes(&mut world, |w| {
+                w.entities[index].as_mut().unwrap().build_progress = Some(0)
+            });
+            changes(&mut world, |w| {
+                w.entities[index].as_mut().unwrap().build_progress = Some(1)
+            });
         }
     }
 
@@ -190,6 +214,13 @@ mod tests {
         changes(&mut world, |w| {
             w.pending[0].0.subject = Some(w.pending[1].0.subject.unwrap_or(rom_rules::DefId(1)))
         });
+        changes(&mut world, |w| w.pending[0].0.total_ticks = Some(10));
+        changes(&mut world, |w| w.pending[0].0.build_remainder = 25);
+        changes(&mut world, |w| {
+            w.pending[0].0.payment.push((rom_rules::DefId(1), 20))
+        });
+        changes(&mut world, |w| w.pending[0].0.payment[0].1 += 1);
+        changes(&mut world, |w| w.pending[0].0.payment[0].0.0 += 1);
         world.step();
         changes(&mut world, |w| {
             w.entities[1].as_mut().unwrap().orders[0].progress_ticks += 1
@@ -261,6 +292,36 @@ mod tests {
         });
         changes(&mut world, |w| {
             w.players.get_mut(&player).unwrap().age.0 += 1
+        });
+        changes(&mut world, |w| {
+            w.players
+                .get_mut(&player)
+                .unwrap()
+                .resources
+                .insert(rom_rules::DefId(1), 10);
+        });
+        changes(&mut world, |w| {
+            *w.players
+                .get_mut(&player)
+                .unwrap()
+                .resources
+                .get_mut(&rom_rules::DefId(1))
+                .unwrap() += 1;
+        });
+        changes(&mut world, |w| {
+            w.players
+                .get_mut(&player)
+                .unwrap()
+                .techs
+                .insert(rom_rules::DefId(2), 1);
+        });
+        changes(&mut world, |w| {
+            *w.players
+                .get_mut(&player)
+                .unwrap()
+                .techs
+                .get_mut(&rom_rules::DefId(2))
+                .unwrap() += 1;
         });
         changes(&mut world, |w| w.stats.orders_done += 1);
         changes(&mut world, |w| w.stats.orders_failed += 1);

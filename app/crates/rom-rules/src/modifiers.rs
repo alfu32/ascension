@@ -66,13 +66,26 @@ impl Rules {
 
     /// Applies all-cost then resource-specific effects to base costs, clamping at zero.
     pub fn cost_of(&self, def: DefId, active: &ActiveSources) -> Vec<(DefId, i64)> {
+        self.cost_of_ramped(def, active, 0)
+    }
+
+    /// Like [`Rules::cost_of`], with each base amount raised by `ramp × owned` before modifiers.
+    pub fn cost_of_ramped(
+        &self,
+        def: DefId,
+        active: &ActiveSources,
+        owned: u64,
+    ) -> Vec<(DefId, i64)> {
         let context = Context::default();
         self.costs
             .get(&def)
             .into_iter()
             .flatten()
             .map(|row| {
-                let all = self.entity_stat("cost.all", def, row.amount, active, &context);
+                let base = (i128::from(row.amount) + i128::from(row.ramp) * i128::from(owned))
+                    .clamp(i128::from(i64::MIN), i128::from(i64::MAX))
+                    as i64;
+                let all = self.entity_stat("cost.all", def, base, active, &context);
                 let value = self
                     .key(row.resource_id)
                     .strip_prefix("res.")

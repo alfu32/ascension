@@ -1,12 +1,12 @@
 //! Stable identifiers and read-only entity views.
 
 use crate::{
-    MapGrid, Order, OrderStatus, Pos, Stats,
+    MapGrid, Order, OrderStatus, Pos,
     math::{facing, integer_sqrt},
     order::MoveState,
 };
 use rom_rules::{DefId, Rules};
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 
 /// An entity slot that is never assigned to another entity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -27,6 +27,31 @@ pub struct Player {
     pub faction: DefId,
     /// Current age definition.
     pub age: DefId,
+    /// Available resource balances.
+    pub resources: BTreeMap<DefId, i64>,
+    /// Number of completed researches per technology.
+    pub techs: BTreeMap<DefId, u32>,
+}
+
+impl Player {
+    /// Returns researched technologies, current age, and faction in id order.
+    pub fn active_sources(&self) -> rom_rules::ActiveSources {
+        self.techs
+            .iter()
+            .filter(|(_, times)| **times > 0)
+            .map(|(id, _)| *id)
+            .chain([self.age, self.faction])
+            .collect()
+    }
+
+    /// Returns types of completed entities owned in the supplied world.
+    pub fn owned_types(&self, world: &crate::World) -> rom_rules::Owned {
+        world
+            .entities()
+            .filter(|e| e.owner == self.id && e.build_progress.is_none())
+            .map(|e| e.type_id)
+            .collect()
+    }
 }
 
 /// An entity snapshot; World exposes immutable references only.
@@ -44,6 +69,8 @@ pub struct Entity {
     pub facing: u16,
     /// Current hit points.
     pub hp: i64,
+    /// Completed construction ticks; None means complete.
+    pub build_progress: Option<u32>,
     /// Fractional movement numerator, with denominator 100 × ticks per second.
     pub move_remainder: i128,
     pub(crate) orders: VecDeque<Order>,
@@ -53,49 +80,6 @@ impl Entity {
     /// Returns the executor's orders from active/front to last queued.
     pub fn orders(&self) -> &VecDeque<Order> {
         &self.orders
-    }
-}
-
-pub(crate) fn cancel_queue(entity: &mut Entity, stats: &mut Stats) {
-    for order in &mut entity.orders {
-        order.status = OrderStatus::Cancelled;
-    }
-    stats.orders_cancelled += entity.orders.len() as u64;
-    entity.orders.clear();
-}
-
-pub(crate) fn advance(entity: &mut Entity, rules: &Rules, map: &MapGrid, stats: &mut Stats) {
-    let mut moved_this_tick = false;
-    while let Some(mut order) = entity.orders.pop_front() {
-        order.status = OrderStatus::Active;
-        if order.kind == "stop" {
-            cancel_queue(entity, stats);
-            order.status = OrderStatus::Done;
-        } else if order.kind != "move" || order.target_pos.is_none() {
-            order.status = OrderStatus::Failed("unsupported".into());
-        } else if moved_this_tick {
-            entity.orders.push_front(order);
-            break;
-        } else {
-            moved_this_tick = true;
-            order.progress_ticks += 1;
-            move_entity(entity, &mut order, rules, map);
-        }
-        match order.status {
-            OrderStatus::Done => stats.orders_done += 1,
-            OrderStatus::Failed(reason) => {
-                stats.orders_failed += 1;
-                match reason.as_str() {
-                    "no_path" => stats.orders_no_path += 1,
-                    "unsupported" => stats.orders_unsupported += 1,
-                    _ => unreachable!("only core failure reasons are emitted"),
-                }
-            }
-            _ => {
-                entity.orders.push_front(order);
-                break;
-            }
-        }
     }
 }
 
@@ -109,7 +93,7 @@ fn terrain_speed(rules: &Rules, map: &MapGrid, class: u32, pos: Pos) -> Option<i
         .map(|row| row.speed_pct)
 }
 
-fn move_entity(entity: &mut Entity, order: &mut Order, rules: &Rules, map: &MapGrid) {
+pub(crate) fn move_entity(entity: &mut Entity, order: &mut Order, rules: &Rules, map: &MapGrid) {
     let Some(movement) = rules
         .entity_type(entity.type_id)
         .and_then(|et| et.movement.as_ref())

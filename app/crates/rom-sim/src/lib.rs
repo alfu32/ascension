@@ -1,10 +1,14 @@
 //! Deterministic game simulation.
 
+mod construction;
+mod economy;
 mod entity;
 mod hash;
 mod map;
 mod math;
 mod order;
+mod production;
+mod research;
 mod rng;
 mod spatial;
 mod world;
@@ -61,6 +65,45 @@ pub enum SimError {
     /// Required constants or movement values are invalid.
     #[error("invalid simulation rules: {0}")]
     InvalidRules(&'static str),
+    /// No matching production row or valid subject class exists.
+    #[error("production is not permitted")]
+    ProductionUnavailable,
+    /// The executor is an unfinished site.
+    #[error("executor is incomplete")]
+    IncompleteExecutor,
+    /// The subject is absent from the faction roster.
+    #[error("subject is unavailable to this faction")]
+    Unavailable,
+    /// Subject prerequisites are unmet.
+    #[error("subject is locked")]
+    Locked,
+    /// An entity limit has been reached.
+    #[error("entity limit reached")]
+    LimitReached,
+    /// The producer's order queue is full.
+    #[error("production queue is full")]
+    QueueFull,
+    /// One or more resource balances cannot cover the payment.
+    #[error("insufficient resources")]
+    InsufficientResources,
+    /// A nonrepeatable technology has already been researched.
+    #[error("technology is already researched")]
+    AlreadyResearched,
+    /// This player already has an order for the technology.
+    #[error("technology is already queued")]
+    ResearchQueued,
+    /// Another technology in this exclusive group is researched or queued.
+    #[error("exclusive technology conflict")]
+    ExclusiveResearch,
+    /// The footprint intersects another building or reserved construction.
+    #[error("building footprint overlaps")]
+    PlacementOverlap,
+    /// A covered terrain tile cannot support construction.
+    #[error("terrain is not buildable")]
+    UnbuildableTerrain,
+    /// Resource setup names a nonresource definition.
+    #[error("unknown resource {0:?}")]
+    UnknownResource(DefId),
     /// The catalogue cannot supply the requested headless scenario.
     #[error("no eligible {0} for movement scenario")]
     ScenarioUnavailable(&'static str),
