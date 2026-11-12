@@ -11,4 +11,5 @@ path = "src/main.rs"
 
 [dependencies]
 rom-rules.workspace = true
+rom-sim = { path = "../rom-sim" }
 rusqlite.workspace = true

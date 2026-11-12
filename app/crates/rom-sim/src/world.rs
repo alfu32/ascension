@@ -1,0 +1,407 @@
+//! Owned simulation state and the fixed tick pipeline.
+
+use crate::{
+    SimError,
+    entity::{Entity, EntityId, Player, PlayerId},
+    map::MapGrid,
+    math::Pos,
+    order::{Command, Order, OrderId, OrderStatus, has_component, target_matches},
+    rng::SimRng,
+    spatial::SpatialGrid,
+};
+use rom_rules::{DefId, Rules};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    sync::Arc,
+};
+
+/// Aggregate terminal-order counts; no finished order history is retained.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct Stats {
+    /// Successfully completed orders, including stop.
+    pub orders_done: u64,
+    /// Failed orders of all kinds.
+    pub orders_failed: u64,
+    /// Orders cancelled by replacement, stop, or despawning.
+    pub orders_cancelled: u64,
+    /// Orders failed because the next position was inaccessible.
+    pub orders_no_path: u64,
+    /// Orders failed because their behavior is not implemented yet.
+    pub orders_unsupported: u64,
+}
+
+/// Deterministic match state, mutated through setup operations and commands.
+#[derive(Debug)]
+pub struct World {
+    pub(crate) tick: u64,
+    pub(crate) rng: SimRng,
+    pub(crate) rules: Arc<Rules>,
+    pub(crate) map: MapGrid,
+    pub(crate) players: BTreeMap<PlayerId, Player>,
+    pub(crate) entities: Vec<Option<Entity>>,
+    pub(crate) pending: Vec<(Order, bool)>,
+    pub(crate) next_entity_id: u32,
+    pub(crate) next_order_id: u64,
+    pub(crate) stats: Stats,
+    spatial: SpatialGrid,
+}
+
+impl World {
+    /// Establishes a checked map and players before the first tick.
+    pub fn new(
+        rules: Arc<Rules>,
+        map: MapGrid,
+        seed: u64,
+        players: Vec<Player>,
+    ) -> Result<Self, SimError> {
+        map.validate()?;
+        for terrain in &map.terrain {
+            if !rules.terrains.contains_key(terrain) {
+                return Err(SimError::UnknownTerrain(*terrain));
+            }
+        }
+        if rules
+            .constant("sim.ticks_per_second")
+            .is_none_or(|v| v <= 0)
+            || rules
+                .entity_types
+                .values()
+                .filter_map(|e| e.movement.as_ref())
+                .any(|m| m.speed < 0)
+            || rules
+                .movement_class_terrain
+                .values()
+                .flatten()
+                .any(|row| row.speed_pct < 0)
+        {
+            return Err(SimError::InvalidRules(
+                "tick rate must be positive and movement nonnegative",
+            ));
+        }
+        for (key, minimum, maximum) in [
+            ("player.pop_cap.base", 0, i64::MAX),
+            ("build.site_start_hp_pct", 0, 100),
+            ("build.reach", 0, i64::MAX),
+            ("economy.cancel_refund_pct", 0, 100),
+        ] {
+            if rules
+                .constant(key)
+                .is_none_or(|v| v < minimum || v > maximum)
+            {
+                return Err(SimError::InvalidRules(key));
+            }
+        }
+        let mut by_id = BTreeMap::new();
+        for player in players {
+            if !rules.factions.contains_key(&player.faction)
+                || !rules.ages.contains_key(&player.age)
+                || by_id.insert(player.id, player).is_some()
+            {
+                return Err(SimError::InvalidPlayer);
+            }
+        }
+        Ok(Self {
+            tick: 0,
+            rng: SimRng::new(seed),
+            rules,
+            map,
+            players: by_id,
+            entities: vec![None],
+            pending: Vec::new(),
+            next_entity_id: 1,
+            next_order_id: 1,
+            stats: Stats::default(),
+            spatial: SpatialGrid::default(),
+        })
+    }
+
+    /// Builds the CLI's seeded 128×128 movement scenario using only components and ids.
+    pub fn movement_scenario(rules: Arc<Rules>, seed: u64, units: u32) -> Result<Self, SimError> {
+        let entity_type = rules
+            .entity_types
+            .values()
+            .find(|et| et.movement.is_some())
+            .ok_or(SimError::ScenarioUnavailable("moving entity type"))?;
+        let type_id = entity_type.id;
+        let class = entity_type
+            .movement
+            .as_ref()
+            .expect("selected moving type")
+            .movement_class_id;
+        let terrain = rules
+            .movement_class_terrain
+            .get(&class)
+            .into_iter()
+            .flatten()
+            .map(|row| row.terrain_id)
+            .min()
+            .ok_or(SimError::ScenarioUnavailable("passable terrain"))?;
+        let player = Player {
+            id: PlayerId(1),
+            team: 1,
+            faction: *rules
+                .factions
+                .keys()
+                .next()
+                .ok_or(SimError::ScenarioUnavailable("faction"))?,
+            resources: BTreeMap::new(),
+            techs: BTreeMap::new(),
+            age: *rules
+                .ages
+                .keys()
+                .next()
+                .ok_or(SimError::ScenarioUnavailable("age"))?,
+        };
+        let mut world = Self::new(
+            rules,
+            MapGrid::new(128, 128, vec![terrain; 128 * 128])?,
+            seed,
+            vec![player],
+        )?;
+        for _ in 0..units {
+            let pos = Pos {
+                x: world.rng.range(0, 128_000) as i32,
+                y: world.rng.range(0, 128_000) as i32,
+            };
+            let id = world.spawn(type_id, PlayerId(1), pos)?;
+            let target = Pos {
+                x: world.rng.range(0, 128_000) as i32,
+                y: world.rng.range(0, 128_000) as i32,
+            };
+            world.submit(Command {
+                player: PlayerId(1),
+                executor: id,
+                kind: "move".into(),
+                subject: None,
+                target_entity: None,
+                target_pos: Some(target),
+                queue: false,
+            })?;
+        }
+        Ok(world)
+    }
+
+    /// Returns the number of completed simulation ticks.
+    pub fn tick(&self) -> u64 {
+        self.tick
+    }
+
+    /// Returns the immutable rules catalogue.
+    pub fn rules(&self) -> &Arc<Rules> {
+        &self.rules
+    }
+
+    /// Returns the generated map.
+    pub fn map(&self) -> &MapGrid {
+        &self.map
+    }
+
+    /// Iterates players in ascending id order.
+    pub fn players(&self) -> impl Iterator<Item = &Player> {
+        self.players.values()
+    }
+
+    /// Returns the complete random generator state without advancing it.
+    pub fn rng(&self) -> &SimRng {
+        &self.rng
+    }
+
+    /// Returns the next entity id, which never decreases.
+    pub fn next_entity_id(&self) -> EntityId {
+        EntityId(self.next_entity_id)
+    }
+
+    /// Returns the next order id, which never decreases.
+    pub fn next_order_id(&self) -> OrderId {
+        OrderId(self.next_order_id)
+    }
+
+    /// Looks up an entity in constant time.
+    pub fn entity(&self, id: EntityId) -> Option<&Entity> {
+        self.entities.get(id.0 as usize).and_then(Option::as_ref)
+    }
+
+    /// Iterates live entities in ascending id order, skipping vacant slots.
+    pub fn entities(&self) -> impl Iterator<Item = &Entity> {
+        self.entities.iter().flatten()
+    }
+
+    /// Returns terminal-order counters.
+    pub fn stats(&self) -> Stats {
+        self.stats
+    }
+
+    /// Spawns a checked entity with its type's full hit points.
+    pub fn spawn(
+        &mut self,
+        type_id: DefId,
+        owner: PlayerId,
+        pos: Pos,
+    ) -> Result<EntityId, SimError> {
+        let hp = self
+            .rules
+            .entity_type(type_id)
+            .ok_or(SimError::UnknownType(type_id))?
+            .hp;
+        if !self.players.contains_key(&owner) {
+            return Err(SimError::UnknownPlayer(owner));
+        }
+        if self.map.terrain_at_pos(pos).is_none() {
+            return Err(SimError::OutsideMap);
+        }
+        let next = self
+            .next_entity_id
+            .checked_add(1)
+            .ok_or(SimError::IdExhausted)?;
+        let id = EntityId(self.next_entity_id);
+        self.entities.push(Some(Entity {
+            id,
+            type_id,
+            owner,
+            pos,
+            facing: 0,
+            hp,
+            build_progress: None,
+            move_remainder: 0,
+            orders: VecDeque::new(),
+        }));
+        self.next_entity_id = next;
+        self.spatial.insert(id, pos);
+        Ok(id)
+    }
+
+    /// Removes an entity and cancels both its live and pending orders.
+    pub fn despawn(&mut self, id: EntityId) -> Result<(), SimError> {
+        let entity = self
+            .entities
+            .get_mut(id.0 as usize)
+            .and_then(Option::take)
+            .ok_or(SimError::UnknownExecutor(id))?;
+        self.spatial.remove(id, entity.pos);
+        self.stats.orders_cancelled += entity.orders.len() as u64;
+        self.pending.retain(|(order, _)| {
+            if order.executor == id {
+                self.stats.orders_cancelled += 1;
+                false
+            } else {
+                true
+            }
+        });
+        Ok(())
+    }
+
+    /// Returns exact radius matches in ascending id order, including the boundary.
+    pub fn entities_in_radius(&self, center: Pos, radius: u32) -> Vec<EntityId> {
+        let squared = u128::from(radius) * u128::from(radius);
+        let mut ids: Vec<_> = self
+            .spatial
+            .candidates(center, radius)
+            .filter(|id| {
+                self.entity(*id)
+                    .is_some_and(|e| e.pos.distance_squared_wide(center) <= squared)
+            })
+            .collect();
+        ids.sort_unstable();
+        ids
+    }
+
+    /// Validates now and defers queue mutation until the next step.
+    pub fn submit(&mut self, mut command: Command) -> Result<OrderId, SimError> {
+        let entity = self
+            .entity(command.executor)
+            .ok_or(SimError::UnknownExecutor(command.executor))?;
+        if entity.owner != command.player {
+            return Err(SimError::ForeignOwner(command.executor));
+        }
+        let kind = self
+            .rules
+            .order_kinds
+            .get(&command.kind)
+            .ok_or_else(|| SimError::UnknownKind(command.kind.clone()))?;
+        let et = self
+            .rules
+            .entity_type(entity.type_id)
+            .expect("spawn validates type");
+        if !has_component(et, &kind.needs) {
+            return Err(SimError::MissingComponent(kind.needs.clone()));
+        }
+        if !target_matches(&command, kind.target) {
+            return Err(SimError::WrongTargetShape);
+        }
+        let payment = self.validate_economy_order(&mut command)?;
+        let next = self
+            .next_order_id
+            .checked_add(1)
+            .ok_or(SimError::IdExhausted)?;
+        let id = OrderId(self.next_order_id);
+        for (resource, amount) in &payment {
+            *self
+                .players
+                .get_mut(&command.player)
+                .expect("checked owner")
+                .resources
+                .entry(*resource)
+                .or_default() -= amount;
+        }
+        let total_ticks = if command.kind == "repair" {
+            command
+                .target_entity
+                .and_then(|id| self.entity(id))
+                .filter(|site| site.owner == command.player && site.build_progress.is_some())
+                .map(|_| 0)
+        } else {
+            None
+        };
+        self.pending.push((
+            Order {
+                id,
+                player: command.player,
+                executor: command.executor,
+                kind: command.kind,
+                subject: command.subject,
+                target_entity: command.target_entity,
+                target_pos: command.target_pos,
+                status: OrderStatus::Queued,
+                progress_ticks: 0,
+                issued_tick: self.tick,
+                movement: None,
+                payment,
+                total_ticks,
+                build_remainder: 0,
+            },
+            command.queue,
+        ));
+        self.next_order_id = next;
+        Ok(id)
+    }
+
+    /// Applies pending inputs, advances entities by id, updates buckets, then increments tick.
+    pub fn step(&mut self) {
+        for (mut order, append) in std::mem::take(&mut self.pending) {
+            if order.kind == "construct" {
+                self.create_site(&mut order);
+            }
+            if !append {
+                self.cancel_orders(order.executor);
+            }
+            self.entities[order.executor.0 as usize]
+                .as_mut()
+                .expect("despawn cancels pending orders")
+                .orders
+                .push_back(order);
+        }
+        let count = self.entities.len();
+        for index in 1..count {
+            let id = EntityId(index as u32);
+            let Some(old) = self.entity(id).map(|e| e.pos) else {
+                continue;
+            };
+            self.advance_executor(id);
+            let new = self.entity(id).expect("executor persists").pos;
+            if old != new {
+                self.spatial.relocate(id, old, new);
+            }
+        }
+        self.tick = self.tick.checked_add(1).expect("simulation tick exhausted");
+    }
+}

@@ -4803,11 +4803,11 @@ dependencies = [
 
 [[package]]
 name = "rom-ai"
-version = "0.0.4"
+version = "0.0.8"
 
 [[package]]
 name = "rom-app"
-version = "0.0.4"
+version = "0.0.8"
 dependencies = [
  "gpui",
  "gpui-component",
@@ -4816,19 +4816,20 @@ dependencies = [
 
 [[package]]
 name = "rom-cli"
-version = "0.0.4"
+version = "0.0.8"
 dependencies = [
  "rom-rules",
+ "rom-sim",
  "rusqlite",
 ]
 
 [[package]]
 name = "rom-mapgen"
-version = "0.0.4"
+version = "0.0.8"
 
 [[package]]
 name = "rom-render"
-version = "0.0.4"
+version = "0.0.8"
 dependencies = [
  "image",
  "raylib",
@@ -4836,7 +4837,7 @@ dependencies = [
 
 [[package]]
 name = "rom-rules"
-version = "0.0.4"
+version = "0.0.8"
 dependencies = [
  "rusqlite",
  "thiserror 2.0.21",
@@ -4844,11 +4845,15 @@ dependencies = [
 
 [[package]]
 name = "rom-save"
-version = "0.0.4"
+version = "0.0.8"
 
 [[package]]
 name = "rom-sim"
-version = "0.0.4"
+version = "0.0.8"
+dependencies = [
+ "rom-rules",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "ropey"

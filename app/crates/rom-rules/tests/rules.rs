@@ -1,0 +1,624 @@
+use rom_rules::{
+    ActiveSources, Condition, Context, DefId, Layer, ModifierOp, Owned, Rules, RulesError,
+    build_rules_db,
+};
+use rusqlite::Connection;
+
+const SCHEMA: &str = include_str!("../../../db/schema.sql");
+const SEED: &str = include_str!("../../../db/seed.sql");
+const TINY: &str = "
+    INSERT INTO def(id,kind,key,name) VALUES
+        (10,'entity_type','node.test','Test node'),
+        (20,'tech','tech.test','Test technology'),
+        (30,'tech','tech.other','Other technology'),
+        (40,'resource','res.food','Food'),
+        (41,'resource','res.timber','Timber');
+    INSERT INTO entity_type(id,class,build_ticks) VALUES (10,'node',123);
+    INSERT INTO tech(id,kind,research_ticks) VALUES (20,'upgrade',10),(30,'upgrade',10);
+    INSERT INTO resource(id,kind,abbrev) VALUES (40,'base','F'),(41,'base','T');
+    INSERT INTO tag(id,key) VALUES (1,'test');
+    INSERT INTO def_tag VALUES (10,1);
+    INSERT INTO stat(key,scope) VALUES
+        ('hp','entity'),('build_time','entity'),('cost.all','entity'),
+        ('cost.food','entity'),('cost.timber','entity'),('research_time','player');
+";
+
+fn seed_db() -> Connection {
+    build_rules_db(SCHEMA, SEED).unwrap()
+}
+
+fn seed() -> Rules {
+    Rules::load(&seed_db()).unwrap()
+}
+
+fn tiny(extra: &str) -> Rules {
+    let conn = build_rules_db(SCHEMA, &format!("{TINY}\n{extra}")).unwrap();
+    Rules::load(&conn).unwrap()
+}
+
+fn sources(rules: &Rules, keys: &[&str]) -> ActiveSources {
+    keys.iter().map(|key| rules.id_of(key).unwrap()).collect()
+}
+
+fn stat(rules: &Rules, active: &ActiveSources) -> i64 {
+    rules.entity_stat("hp", DefId(10), 100, active, &Context::default())
+}
+
+#[test]
+fn loads_seed() {
+    let rules = seed();
+    let citizen = rules
+        .entity_type(rules.id_of("unit.citizen").unwrap())
+        .unwrap();
+    assert!(citizen.movement.is_some());
+    assert!(citizen.builder.is_some());
+    assert_eq!(citizen.harvester.len(), 1);
+    let temple = rules.id_of("bld.temple").unwrap();
+    assert!(rules.entity_type(temple).unwrap().producer.is_some());
+    assert_eq!(rules.key(temple), "bld.temple");
+    assert_eq!(rules.definition_count(), 100);
+    assert_eq!(rules.constant("sim.ticks_per_second"), Some(20));
+    assert_eq!(rules.constant("absent"), None);
+    let melee = rules
+        .damage_classes
+        .values()
+        .find(|row| row.key == "melee")
+        .unwrap()
+        .id;
+    let structure = rules
+        .armor_classes
+        .values()
+        .find(|row| row.key == "structure")
+        .unwrap()
+        .id;
+    assert_eq!(rules.damage_pct(melee, structure), 50);
+    assert_eq!(rules.damage_pct(999, 999), 100);
+    let priest = rules.id_of("unit.priest").unwrap();
+    assert!(
+        rules.production[&temple]
+            .iter()
+            .any(|row| row.product_def_id == priest)
+    );
+    assert!(
+        rules.production_by_product[&priest]
+            .iter()
+            .any(|row| row.producer_type_id == temple)
+    );
+    assert_eq!(citizen.weapons[0].targets[0].layer, Layer::Ground);
+}
+
+#[test]
+fn seed_validates() {
+    assert_eq!(seed().validate(), vec![]);
+}
+
+#[test]
+fn abundance_makes_everything_free() {
+    let rules = seed();
+    let active = sources(&rules, &["tech.age.abundance"]);
+    let spearman = rules.id_of("unit.spearman").unwrap();
+    assert_eq!(rules.cost_of(spearman, &active).len(), 2);
+    assert!(
+        rules
+            .cost_of(spearman, &active)
+            .iter()
+            .all(|(_, amount)| *amount == 0)
+    );
+    assert_eq!(
+        rules.build_ticks(spearman, &active),
+        rules.build_ticks(spearman, &ActiveSources::new())
+    );
+    for def in rules.definitions.iter().flatten() {
+        assert!(
+            rules
+                .cost_of(def.id, &active)
+                .iter()
+                .all(|(_, amount)| *amount == 0),
+            "{}",
+            def.key
+        );
+    }
+}
+
+#[test]
+fn religion_extends_temple_border() {
+    let rules = seed();
+    let active = sources(&rules, &["tech.religion"]);
+    for (key, expected) in [("bld.temple", 4000), ("bld.barracks", 2000)] {
+        assert_eq!(
+            rules.entity_stat(
+                "border_radius",
+                rules.id_of(key).unwrap(),
+                2000,
+                &active,
+                &Context::default()
+            ),
+            expected
+        );
+    }
+}
+
+#[test]
+fn religion_pct_on_city_hp() {
+    let rules = seed();
+    let active = sources(&rules, &["tech.religion"]);
+    assert_eq!(
+        rules.entity_stat(
+            "hp",
+            rules.id_of("bld.city").unwrap(),
+            1200,
+            &active,
+            &Context::default()
+        ),
+        1500
+    );
+}
+
+#[test]
+fn relics_speed_research() {
+    let rules = seed();
+    assert_eq!(
+        rules.player_stat("research_time", 1000, &sources(&rules, &["rare.relics"])),
+        670
+    );
+}
+
+#[test]
+fn op_order_set_add_pct_mul() {
+    let rules = tiny(
+        "INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES
+        (20,'hp','mul',133),(20,'hp','pct',17),(20,'hp','add',9),(20,'hp','set',101);",
+    );
+    // (101 + 9) * 117 / 100 = 128; 128 * 133 / 100 = 170.
+    assert_eq!(stat(&rules, &ActiveSources::from([DefId(20)])), 170);
+}
+
+#[test]
+fn largest_set_wins_and_negative_rounding_is_toward_zero() {
+    let rules = tiny(
+        "INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES
+        (20,'hp','set',-11),(20,'hp','set',-9),(20,'hp','pct',50),
+        (20,'hp','mul',150),(20,'hp','mul',50);",
+    );
+    // -9 * 150 / 100 = -13; -13 * 150 / 100 = -19; -19 * 50 / 100 = -9.
+    assert_eq!(stat(&rules, &ActiveSources::from([DefId(20)])), -9);
+}
+
+#[test]
+fn stack_group_keeps_strongest() {
+    let rules = tiny(
+        "INSERT INTO modifier(source_def_id,stat_key,op,value,stack_group) VALUES
+        (20,'hp','pct',10,'same'),(30,'hp','pct',25,'same');",
+    );
+    assert_eq!(
+        stat(&rules, &ActiveSources::from([DefId(20), DefId(30)])),
+        125
+    );
+}
+
+#[test]
+fn stack_groups_compare_absolute_values_and_keep_ops_separate() {
+    let rules = tiny(
+        "INSERT INTO modifier(source_def_id,stat_key,op,value,stack_group) VALUES
+        (20,'hp','pct',10,'same'),(30,'hp','pct',-25,'same'),
+        (20,'hp','add',20,'same'),(30,'hp','add',-5,'same');",
+    );
+    assert_eq!(
+        stat(&rules, &ActiveSources::from([DefId(20), DefId(30)])),
+        90
+    );
+}
+
+#[test]
+fn stack_group_ties_use_lowest_modifier_id() {
+    let rules = tiny(
+        "INSERT INTO modifier(id,source_def_id,stat_key,op,value,stack_group) VALUES
+        (2,20,'hp','pct',25,'same'),(1,30,'hp','pct',-25,'same');",
+    );
+    assert_eq!(
+        stat(&rules, &ActiveSources::from([DefId(20), DefId(30)])),
+        75
+    );
+}
+
+#[test]
+fn condition_requires_context_flag() {
+    for (condition, context) in [
+        (
+            "in_own_territory",
+            Context {
+                in_own_territory: true,
+                ..Context::default()
+            },
+        ),
+        (
+            "in_enemy_territory",
+            Context {
+                in_enemy_territory: true,
+                ..Context::default()
+            },
+        ),
+        (
+            "garrisoned",
+            Context {
+                garrisoned: true,
+                ..Context::default()
+            },
+        ),
+        (
+            "near_supply",
+            Context {
+                near_supply: true,
+                ..Context::default()
+            },
+        ),
+        (
+            "entrenched",
+            Context {
+                entrenched: true,
+                ..Context::default()
+            },
+        ),
+        (
+            "on_high_ground",
+            Context {
+                on_high_ground: true,
+                ..Context::default()
+            },
+        ),
+    ] {
+        let rules = tiny(&format!(
+            "INSERT INTO modifier(source_def_id,stat_key,op,value,condition) VALUES (20,'hp','add',10,'{condition}');"
+        ));
+        let active = ActiveSources::from([DefId(20)]);
+        assert_eq!(stat(&rules, &active), 100, "{condition}");
+        assert_eq!(
+            rules.entity_stat("hp", DefId(10), 100, &active, &context),
+            110,
+            "{condition}"
+        );
+    }
+}
+
+#[test]
+fn simulation_dependent_effects_are_exposed_but_not_applied() {
+    let rules = tiny("INSERT INTO modifier(source_def_id,stat_key,op,value,aura_radius,duration_ticks,applies_to) VALUES
+        (20,'hp','add',10,0,NULL,'owner'),(20,'hp','add',20,NULL,0,'owner'),
+        (20,'hp','add',30,NULL,NULL,'allies'),(20,'hp','add',40,NULL,NULL,'enemies'),
+        (20,'hp','add',50,NULL,NULL,'everyone');");
+    assert_eq!(stat(&rules, &ActiveSources::from([DefId(20)])), 100);
+    assert_eq!(rules.modifiers_from(DefId(20)).len(), 5);
+    assert_eq!(rules.modifiers_from(DefId(999)).len(), 0);
+    assert_eq!(rules.modifiers_from(DefId(20))[0].aura_radius, Some(0));
+    assert_eq!(rules.modifiers_from(DefId(20))[1].duration_ticks, Some(0));
+}
+
+#[test]
+fn targeting_accepts_exact_def_or_tag_or_no_target() {
+    let rules = tiny(
+        "INSERT INTO modifier(source_def_id,stat_key,op,value,target_def_id,target_tag_id) VALUES
+        (20,'hp','add',1,10,NULL),(20,'hp','add',2,NULL,1),
+        (20,'hp','add',4,NULL,NULL),(20,'hp','add',8,20,NULL),
+        (20,'hp','add',16,20,1);",
+    );
+    assert_eq!(stat(&rules, &ActiveSources::from([DefId(20)])), 123);
+    assert_eq!(stat(&rules, &ActiveSources::new()), 100);
+}
+
+#[test]
+fn mul_steps_follow_modifier_ids_across_sources() {
+    let rules = tiny(
+        "INSERT INTO modifier(id,source_def_id,stat_key,op,value) VALUES
+        (1,30,'hp','mul',133),(2,20,'hp','mul',150);",
+    );
+    assert_eq!(
+        rules.entity_stat(
+            "hp",
+            DefId(10),
+            1,
+            &ActiveSources::from([DefId(20), DefId(30)]),
+            &Context::default()
+        ),
+        1
+    );
+}
+
+#[test]
+fn costs_apply_all_then_resource_stat_and_clamp_to_zero() {
+    let rules = tiny(
+        "INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES (10,40,100,999),(10,41,5,999);
+        INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES
+        (20,'cost.all','add',10),(20,'cost.food','pct',50),(20,'cost.timber','add',-100),
+        (20,'build_time','pct',-50);",
+    );
+    let active = ActiveSources::from([DefId(20)]);
+    assert_eq!(
+        rules.cost_of(DefId(10), &active),
+        vec![(DefId(40), 165), (DefId(41), 0)]
+    );
+    assert_eq!(rules.build_ticks(DefId(10), &active), 61);
+}
+
+#[test]
+fn extreme_integer_values_do_not_wrap() {
+    let rules = tiny(
+        "INSERT INTO modifier(source_def_id,stat_key,op,value,stack_group) VALUES
+        (20,'hp','pct',-9223372036854775808,'extreme'),
+        (30,'hp','pct',9223372036854775807,'extreme');",
+    );
+    assert_eq!(
+        stat(&rules, &ActiveSources::from([DefId(20), DefId(30)])),
+        i64::MIN + 100
+    );
+}
+
+#[test]
+fn priest_needs_religion() {
+    let rules = seed();
+    let priest = rules.id_of("unit.priest").unwrap();
+    assert!(!rules.is_unlocked(priest, &ActiveSources::new(), &Owned::new()));
+    assert!(rules.is_unlocked(priest, &sources(&rules, &["tech.religion"]), &Owned::new()));
+}
+
+#[test]
+fn age_requirement_met_by_later_age() {
+    let rules = seed();
+    let temple = rules.id_of("bld.temple").unwrap();
+    for (age, expected) in [
+        ("age.ancient", false),
+        ("age.classical", true),
+        ("age.medieval", true),
+    ] {
+        assert_eq!(
+            rules.is_unlocked(temple, &sources(&rules, &[age]), &Owned::new()),
+            expected
+        );
+    }
+}
+
+#[test]
+fn prerequisites_are_and_of_or_groups_and_owned_types_are_distinct_from_sources() {
+    let rules = tiny("INSERT INTO prerequisite VALUES (30,20,0),(30,10,0),(30,40,1);");
+    // A resource is not a supported prerequisite, even if active or owned.
+    assert!(!rules.is_unlocked(
+        DefId(30),
+        &ActiveSources::from([DefId(20), DefId(40)]),
+        &Owned::from([DefId(40)])
+    ));
+    let rules = tiny(
+        "INSERT INTO def(id,kind,key,name) VALUES (11,'entity_type','node.other','Other node');
+        INSERT INTO entity_type(id,class) VALUES (11,'node');
+        INSERT INTO prerequisite VALUES (30,20,0),(30,10,0),(30,11,1);",
+    );
+    assert!(!rules.is_unlocked(
+        DefId(30),
+        &ActiveSources::from([DefId(20), DefId(10)]),
+        &Owned::new()
+    ));
+    assert!(rules.is_unlocked(
+        DefId(30),
+        &ActiveSources::new(),
+        &Owned::from([DefId(10), DefId(11)])
+    ));
+    assert!(rules.is_unlocked(DefId(20), &ActiveSources::new(), &Owned::new()));
+}
+
+#[test]
+fn availability_inherits_from_parent_faction() {
+    let rules = tiny("INSERT INTO def(id,kind,key,name) VALUES
+        (50,'faction','race.test','Test race'),(51,'faction','bloc.test','Test bloc'),
+        (52,'faction','nation.test','Test nation'),(53,'faction','nation.other','Other nation');
+        INSERT INTO faction(id,kind,parent_id) VALUES (50,'race',NULL),(51,'bloc',50),(52,'nation',51),(53,'nation',NULL);
+        INSERT INTO availability VALUES (10,50);");
+    assert!(rules.is_available(DefId(10), DefId(52)));
+    assert!(rules.is_available(DefId(10), DefId(50)));
+    assert!(!rules.is_available(DefId(10), DefId(53)));
+    assert!(rules.is_available(DefId(20), DefId(53)));
+}
+
+fn assert_problem(extra: &str, invariant: &str, keys: &[&str]) {
+    let conn = seed_db();
+    conn.execute_batch(extra).unwrap();
+    let problems = Rules::load(&conn).unwrap().validate();
+    assert!(
+        problems
+            .iter()
+            .any(|problem| problem.message.contains(invariant)
+                && keys.iter().all(|key| problem.message.contains(key))),
+        "{problems:#?}"
+    );
+}
+
+#[test]
+fn prerequisite_cycle_is_reported() {
+    assert_problem(
+        "INSERT INTO prerequisite SELECT a.id,b.id,0 FROM def a,def b
+        WHERE (a.key='tech.religion' AND b.key='unit.priest');",
+        "prerequisite cycle",
+        &["tech.religion", "unit.priest"],
+    );
+}
+
+#[test]
+fn prerequisite_cycles_of_any_length_and_upgrade_loops_are_reported() {
+    assert_problem(
+        "INSERT INTO prerequisite SELECT a.id,b.id,0 FROM def a,def b WHERE
+        (a.key='tech.religion' AND b.key='bld.temple') OR
+        (a.key='age.classical' AND b.key='unit.priest');",
+        "prerequisite cycle",
+        &[
+            "tech.religion",
+            "unit.priest",
+            "bld.temple",
+            "age.classical",
+        ],
+    );
+    assert_problem(
+        "UPDATE entity_type SET upgrades_from_id=id WHERE id=(SELECT id FROM def WHERE key='unit.citizen');",
+        "upgrade chain cycle",
+        &["unit.citizen"],
+    );
+    assert_problem("UPDATE entity_type SET upgrades_from_id=(SELECT id FROM def WHERE key='unit.priest') WHERE id=(SELECT id FROM def WHERE key='unit.citizen');
+        UPDATE entity_type SET upgrades_from_id=(SELECT id FROM def WHERE key='unit.citizen') WHERE id=(SELECT id FROM def WHERE key='unit.priest');", "upgrade chain cycle", &["unit.citizen", "unit.priest"]);
+}
+
+#[test]
+fn production_mode_mismatch_is_reported() {
+    assert_problem(
+        "UPDATE production SET mode='research' WHERE product_def_id=(SELECT id FROM def WHERE key='unit.priest');",
+        "production",
+        &["unit.priest", "bld.temple"],
+    );
+    assert_problem(
+        "UPDATE production SET mode='train' WHERE product_def_id=(SELECT id FROM def WHERE key='tech.religion');",
+        "production",
+        &["tech.religion"],
+    );
+}
+
+#[test]
+fn missing_production_components_are_reported() {
+    assert_problem(
+        "DELETE FROM et_producer WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.temple');",
+        "production",
+        &["bld.temple", "unit.priest"],
+    );
+    assert_problem(
+        "DELETE FROM et_builder;",
+        "production",
+        &["unit.citizen", "bld.temple"],
+    );
+}
+
+#[test]
+fn weapon_without_target_is_reported() {
+    assert_problem(
+        "DELETE FROM et_weapon_target WHERE weapon_id IN (SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.spearman'));",
+        "no target layers",
+        &["unit.spearman"],
+    );
+}
+
+#[test]
+fn targeted_player_stat_is_reported() {
+    assert_problem(
+        "INSERT INTO modifier(source_def_id,stat_key,op,value,target_def_id) SELECT id,'research_time','add',1,id FROM def WHERE key='tech.religion';",
+        "player stat",
+        &["research_time", "tech.religion"],
+    );
+    assert_problem(
+        "INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) SELECT id,'research_time','add',1,(SELECT id FROM tag WHERE key='city') FROM def WHERE key='tech.religion';",
+        "player stat",
+        &["research_time", "tech.religion", "city"],
+    );
+}
+
+#[test]
+fn wrong_tech_effect_targets_are_reported() {
+    for effect in ["set_age", "unlock", "change_faction", "upgrade_type"] {
+        for target in ["NULL", "(SELECT id FROM def WHERE key='res.food')"] {
+            assert_problem(
+                &format!(
+                    "INSERT INTO tech_effect(tech_id,effect,target_def_id) SELECT id,'{effect}',{target} FROM def WHERE key='tech.religion';"
+                ),
+                "tech_effect",
+                &["tech.religion"],
+            );
+        }
+    }
+}
+
+#[test]
+fn non_tech_faction_trigger_is_reported() {
+    assert_problem(
+        "UPDATE faction_transition SET trigger_tech_id=(SELECT id FROM def WHERE key='unit.citizen');",
+        "faction_transition",
+        &["nation.romans", "bloc.europe", "unit.citizen"],
+    );
+}
+
+#[test]
+fn unknown_enum_value_is_a_load_error() {
+    let conn = seed_db();
+    conn.execute_batch("PRAGMA ignore_check_constraints=ON; UPDATE entity_type SET class='unknown' WHERE id=(SELECT id FROM def WHERE key='unit.citizen');").unwrap();
+    let citizen: i64 = conn
+        .query_row("SELECT id FROM def WHERE key='unit.citizen'", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    let error = Rules::load(&conn).unwrap_err();
+    match error {
+        RulesError::InvalidValue {
+            table,
+            row,
+            column,
+            value,
+            ..
+        } => {
+            assert_eq!(table, "entity_type");
+            assert_eq!(row, format!("id={citizen}"));
+            assert_eq!(column, "class");
+            assert_eq!(value, "unknown");
+        }
+        other => panic!("unexpected error: {other}"),
+    }
+}
+
+#[test]
+fn sparse_ids_and_optional_values_are_preserved() {
+    let rules = tiny(
+        "INSERT INTO et_supply VALUES (10,3000,NULL); INSERT INTO et_node(entity_type_id,resource_id) VALUES (10,40);",
+    );
+    assert!(rules.definitions[0].is_none());
+    assert_eq!(rules.definitions.len(), 42);
+    assert_eq!(rules.def(DefId(10)).id, DefId(10));
+    assert_eq!(
+        rules.entity_types[&DefId(10)]
+            .supply
+            .as_ref()
+            .unwrap()
+            .stock,
+        None
+    );
+    assert_eq!(
+        rules.entity_types[&DefId(10)].node.as_ref().unwrap().amount,
+        None
+    );
+    assert_eq!(rules.id_of("absent"), None);
+}
+
+#[test]
+fn invalid_booleans_and_out_of_range_ids_are_rejected() {
+    let conn = seed_db();
+    conn.execute_batch("UPDATE et_movement SET packs=2;")
+        .unwrap();
+    assert!(matches!(
+        Rules::load(&conn),
+        Err(RulesError::InvalidValue { .. })
+    ));
+    let conn = seed_db();
+    conn.execute_batch(
+        "INSERT INTO def(id,kind,key,name) VALUES (-1,'tech','tech.negative','Negative');",
+    )
+    .unwrap();
+    assert!(Rules::load(&conn).is_err());
+}
+
+#[test]
+fn player_stat_ignores_conditions_and_entity_targets() {
+    let rules = tiny(
+        "INSERT INTO modifier(source_def_id,stat_key,op,value,condition,target_def_id) VALUES
+        (20,'research_time','add',10,'',NULL),
+        (20,'research_time','add',20,'garrisoned',NULL),
+        (20,'research_time','add',40,'',10);",
+    );
+    assert_eq!(
+        rules.player_stat("research_time", 100, &ActiveSources::from([DefId(20)])),
+        110
+    );
+    assert_eq!(
+        rules.modifiers_from(DefId(20))[1].condition,
+        Condition::Garrisoned
+    );
+    assert_eq!(rules.modifiers_from(DefId(20))[0].op, ModifierOp::Add);
+}

@@ -33,7 +33,7 @@ CREATE TABLE schema_meta (
 -- Global tunables (tick rate, respond ranges, flank bonus, refund rate …).
 CREATE TABLE game_constant (
   key   TEXT PRIMARY KEY,
-  value REAL NOT NULL,
+  value INTEGER NOT NULL,   -- integers only; express fractions as percentages or milli-units
   unit  TEXT NOT NULL DEFAULT '',
   note  TEXT NOT NULL DEFAULT ''
 ) STRICT;
