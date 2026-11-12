@@ -8,10 +8,15 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use raylib::consts::PixelFormat;
-use raylib::prelude::{RaylibRenderTexture2D, RaylibTexture2D, RenderTexture2D, TraceLogLevel};
+use raylib::prelude::{
+    RaylibRenderTexture2D, RaylibTexture2D, RaylibTextureModeExt, RenderTexture2D, TraceLogLevel,
+};
 
 use crate::camera::{Camera, CameraController, InputEvent};
 use crate::entities::{EntitySnapshot, EntityView, SnapshotPair};
+use crate::hud::HudSnapshot;
+use crate::hud_gpu::{HudGpu, MinimapGpu};
+use crate::hud_layout::HudLayout;
 use crate::mailbox::{Frame, FrameMailbox, FramePixels};
 use crate::pixels::rgba_to_bgra_flipped;
 use crate::scene::Scene;
@@ -48,6 +53,10 @@ struct Shared {
     terrain_ready: AtomicBool,
     box_count: AtomicU32,
     snapshots: Mutex<SnapshotPair>,
+    hud: Mutex<Arc<HudSnapshot>>,
+    hud_visible: AtomicBool,
+    pointer_over_hud: AtomicBool,
+    hud_scale: AtomicU32,
     start_markers: AtomicBool,
     snapshot_wanted: AtomicBool,
     snapshot: Mutex<Option<Arc<FramePixels>>>,
@@ -97,6 +106,24 @@ impl RenderBridge {
         lock(&self.shared.snapshots).push(snapshot, Instant::now());
     }
 
+    /// Publishes the newest immutable interface snapshot.
+    pub fn publish_hud(&self, snapshot: Arc<HudSnapshot>) {
+        *lock(&self.shared.hud) = snapshot;
+    }
+
+    /// Configures HUD visibility and optional scale in percent of design pixels.
+    pub fn publish_hud_options(&self, visible: bool, percent: Option<u32>) {
+        self.shared.hud_visible.store(visible, Ordering::Relaxed);
+        self.shared
+            .hud_scale
+            .store(percent.unwrap_or(0), Ordering::Relaxed);
+    }
+
+    /// Whether HUD drawing is enabled.
+    pub fn hud_visible(&self) -> bool {
+        self.shared.hud_visible.load(Ordering::Relaxed)
+    }
+
     /// Shows or hides the player-start pillars (hidden by default).
     pub fn publish_start_markers(&self, visible: bool) {
         self.shared.start_markers.store(visible, Ordering::Relaxed);
@@ -133,7 +160,32 @@ impl RenderBridge {
 
     /// Queues an input event for the next frame.
     pub fn push_input(&self, event: InputEvent) {
-        lock(&self.shared.input).push(event);
+        let position = match event {
+            InputEvent::PointerMoved { x, y }
+            | InputEvent::ButtonDown { x, y, .. }
+            | InputEvent::ButtonUp { x, y, .. } => Some((x, y)),
+            _ => None,
+        };
+        if let Some((x, y)) = position {
+            let size = self.layout();
+            let percent = self.shared.hud_scale.load(Ordering::Relaxed);
+            let layout = HudLayout::new(size.0, size.1, (percent > 0).then_some(percent));
+            self.shared.pointer_over_hud.store(
+                self.hud_visible() && layout.contains_hud(x, y),
+                Ordering::Relaxed,
+            );
+        }
+        let over = self.hud_visible() && self.shared.pointer_over_hud.load(Ordering::Relaxed);
+        let mut input = lock(&self.shared.input);
+        match event {
+            InputEvent::ButtonDown { .. } | InputEvent::Wheel { .. } if over => {}
+            InputEvent::PointerMoved { .. } if over => input.push(InputEvent::PointerLeft),
+            InputEvent::ButtonUp { .. } if over => {
+                input.push(event);
+                input.push(InputEvent::PointerLeft);
+            }
+            _ => input.push(event),
+        }
     }
 
     /// Takes the newest finished frame, if one arrived since the last call.
@@ -187,6 +239,10 @@ impl RenderWorker {
             terrain_ready: AtomicBool::new(false),
             box_count: AtomicU32::new(0),
             snapshots: Mutex::new(SnapshotPair::default()),
+            hud: Mutex::new(Arc::new(HudSnapshot::default())),
+            hud_visible: AtomicBool::new(true),
+            pointer_over_hud: AtomicBool::new(false),
+            hud_scale: AtomicU32::new(0),
             start_markers: AtomicBool::new(false),
             snapshot_wanted: AtomicBool::new(false),
             snapshot: Mutex::new(None),
@@ -245,10 +301,12 @@ fn render_loop(shared: &Shared) {
     let (mut rl, thread) = raylib::init()
         .log_level(TraceLogLevel::LOG_WARNING)
         .size(640, 480)
-        .title("Rise of Man renderer")
+        .title("Ascension: Rise of Man renderer")
         .hidden()
         .build();
     let mut scene = Scene::load(&mut rl, &thread);
+    let mut hud: Option<HudGpu> = None;
+    let mut minimap: Option<MinimapGpu> = None;
     let mut target: Option<(RenderTexture2D, (u32, u32))> = None;
     let mut camera = Camera::default();
     let mut controller = CameraController::default();
@@ -270,6 +328,17 @@ fn render_loop(shared: &Shared) {
         let published_terrain = lock(&shared.terrain).take();
         if let Some(terrain) = published_terrain {
             let (meshes, build_ms, upload_ms) = scene.set_terrain(&thread, &terrain);
+            minimap = if terrain.is_valid() {
+                match MinimapGpu::load(&mut rl, &thread, &terrain) {
+                    Ok(map) => Some(map),
+                    Err(error) => {
+                        eprintln!("rom-render: minimap: {error}");
+                        None
+                    }
+                }
+            } else {
+                None
+            };
             let (home, overview) = (home_camera(&terrain), overview_camera(&terrain));
             controller.set_scene_cameras(home, overview);
             camera = home;
@@ -326,7 +395,38 @@ fn render_loop(shared: &Shared) {
             camera.yaw,
             shared.start_markers.load(Ordering::Relaxed),
         );
+        let hud_visible = shared.hud_visible.load(Ordering::Relaxed);
+        let percent = shared.hud_scale.load(Ordering::Relaxed);
+        // Scale explicit HUD pixels with the offscreen render target, just like automatic scale.
+        let mut hud_layout = HudLayout::new(size.0, size.1, None);
+        if percent > 0 {
+            hud_layout.scale = percent as f32 / 100.0 * size.0 as f32 / layout.0 as f32;
+        }
+        scene.projection_centre_y = if hud_visible {
+            crate::hud_minimap::ndc_centre_y(hud_layout.world_area(), size.1 as f32)
+        } else {
+            0.0
+        };
         scene.draw(&mut rl, &thread, texture, &camera, elapsed, boxes);
+        if hud_visible {
+            if hud
+                .as_ref()
+                .is_none_or(|h| h.needs_rebake(hud_layout.scale))
+            {
+                match HudGpu::load(&mut rl, &thread, hud_layout.scale) {
+                    Ok(baked) => hud = Some(baked),
+                    Err(error) => eprintln!("rom-render: HUD: {error}"),
+                }
+            }
+            if let Some(hud) = &mut hud {
+                let snapshot = Arc::clone(&lock(&shared.hud));
+                let mut drawing = rl.begin_texture_mode(&thread, texture);
+                if let Some(map) = &minimap {
+                    map.draw(&mut drawing, &hud_layout, &blended, &camera);
+                }
+                hud.draw(&mut drawing, &hud_layout, &snapshot);
+            }
+        }
 
         let readback_start = Instant::now();
         let Some(pixels) = read_back(texture) else {
@@ -363,6 +463,8 @@ fn render_loop(shared: &Shared) {
         }
     }
     // Free GPU objects while the GL context still exists; `rl` closes it when dropped last.
+    drop(hud);
+    drop(minimap);
     drop(target);
     drop(scene);
 }

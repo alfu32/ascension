@@ -3,6 +3,7 @@
 mod args;
 mod bench;
 mod demo;
+mod hud;
 mod match_setup;
 mod screenshot;
 mod shell;

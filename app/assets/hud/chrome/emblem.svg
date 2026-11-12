@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="250" height="135" viewBox="0 0 250 135">
+<defs>
+<linearGradient id="goldv" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#e8c98a"/><stop offset="0.45" stop-color="#b88a45"/><stop offset="1" stop-color="#6b4a1f"/></linearGradient>
+<linearGradient id="goldr" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#6b4a1f"/><stop offset="0.55" stop-color="#b88a45"/><stop offset="1" stop-color="#e8c98a"/></linearGradient>
+<linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#141b24"/><stop offset="1" stop-color="#0c1118"/></linearGradient>
+<linearGradient id="slot" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#0e141c"/><stop offset="1" stop-color="#0a0e14"/></linearGradient>
+<linearGradient id="fadeh" x1="0" y1="0" x2="1" y2="0">
+<stop offset="0" stop-color="#0c1118" stop-opacity="0.86"/><stop offset="0.8" stop-color="#0c1118" stop-opacity="0.7"/><stop offset="1" stop-color="#0c1118" stop-opacity="0"/></linearGradient>
+<radialGradient id="sphere" cx="0.4" cy="0.35" r="0.8">
+<stop offset="0" stop-color="#1c4a66"/><stop offset="0.6" stop-color="#0d2233"/><stop offset="1" stop-color="#0c1118"/></radialGradient>
+<filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.6"/></filter>
+</defs>
+<circle cx="125" cy="30" r="31" fill="url(#sphere)" stroke="url(#goldv)" stroke-width="4"/>
+<path d="M104 34 Q125 22 146 34" stroke="#3fd0ff" stroke-opacity="0.6" stroke-width="1.5" fill="none"/>
+<path d="M96 26 Q125 14 154 26" stroke="#3fd0ff" stroke-opacity="0.4" stroke-width="1.2" fill="none"/>
+<rect x="93.5" y="52.5" width="63.0" height="3.0" rx="1.5" fill="#3fd0ff" opacity="0.7" filter="url(#blur)"/>
+<line x1="95" y1="54" x2="155" y2="54" stroke="#3fd0ff" stroke-width="1.5" stroke-opacity="0.95"/>
+<line x1="95" y1="54" x2="155" y2="54" stroke="#c2f4ff" stroke-width="0.6000000000000001" stroke-opacity="0.8"/>
+<path d="M100 40 L103.5 26 L107 40Z" fill="#0b1a26" stroke="#b88a45" stroke-width="1"/>
+<path d="M110 40 L113.5 16 L117 40Z" fill="#0b1a26" stroke="#b88a45" stroke-width="1"/>
+<path d="M118 40 L121.5 22 L125 40Z" fill="#0b1a26" stroke="#b88a45" stroke-width="1"/>
+<path d="M132 40 L135.5 18 L139 40Z" fill="#0b1a26" stroke="#b88a45" stroke-width="1"/>
+<path d="M141 40 L144.5 28 L148 40Z" fill="#0b1a26" stroke="#b88a45" stroke-width="1"/>
+<ellipse cx="52.4" cy="136.6" rx="8.0" ry="3.5" transform="rotate(248.0 52.4 136.6)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="52.4" cy="136.6" rx="6.4" ry="3.15" transform="rotate(192.0 52.4 136.6)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="42.5" cy="127.2" rx="8.0" ry="3.5" transform="rotate(254.9 42.5 127.2)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="42.5" cy="127.2" rx="6.4" ry="3.15" transform="rotate(198.9 42.5 127.2)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="33.9" cy="116.8" rx="8.0" ry="3.5" transform="rotate(261.8 33.9 116.8)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="33.9" cy="116.8" rx="6.4" ry="3.15" transform="rotate(205.8 33.9 116.8)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="26.5" cy="105.4" rx="8.0" ry="3.5" transform="rotate(268.6 26.5 105.4)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="26.5" cy="105.4" rx="6.4" ry="3.15" transform="rotate(212.6 26.5 105.4)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="20.6" cy="93.2" rx="8.0" ry="3.5" transform="rotate(275.5 20.6 93.2)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="20.6" cy="93.2" rx="6.4" ry="3.15" transform="rotate(219.5 20.6 93.2)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="16.2" cy="80.4" rx="8.0" ry="3.5" transform="rotate(282.4 16.2 80.4)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="16.2" cy="80.4" rx="6.4" ry="3.15" transform="rotate(226.4 16.2 80.4)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="13.3" cy="67.2" rx="8.0" ry="3.5" transform="rotate(289.2 13.3 67.2)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="13.3" cy="67.2" rx="6.4" ry="3.15" transform="rotate(233.2 13.3 67.2)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="12.1" cy="53.7" rx="8.0" ry="3.5" transform="rotate(296.1 12.1 53.7)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="12.1" cy="53.7" rx="6.4" ry="3.15" transform="rotate(240.1 12.1 53.7)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="12.4" cy="40.2" rx="8.0" ry="3.5" transform="rotate(303.0 12.4 40.2)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="12.4" cy="40.2" rx="6.4" ry="3.15" transform="rotate(247.0 12.4 40.2)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="197.6" cy="136.6" rx="8.0" ry="3.5" transform="rotate(112.0 197.6 136.6)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="197.6" cy="136.6" rx="6.4" ry="3.15" transform="rotate(168.0 197.6 136.6)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="207.5" cy="127.2" rx="8.0" ry="3.5" transform="rotate(105.1 207.5 127.2)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="207.5" cy="127.2" rx="6.4" ry="3.15" transform="rotate(161.1 207.5 127.2)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="216.1" cy="116.8" rx="8.0" ry="3.5" transform="rotate(98.2 216.1 116.8)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="216.1" cy="116.8" rx="6.4" ry="3.15" transform="rotate(154.2 216.1 116.8)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="223.5" cy="105.4" rx="8.0" ry="3.5" transform="rotate(91.4 223.5 105.4)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="223.5" cy="105.4" rx="6.4" ry="3.15" transform="rotate(147.4 223.5 105.4)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="229.4" cy="93.2" rx="8.0" ry="3.5" transform="rotate(84.5 229.4 93.2)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="229.4" cy="93.2" rx="6.4" ry="3.15" transform="rotate(140.5 229.4 93.2)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="233.8" cy="80.4" rx="8.0" ry="3.5" transform="rotate(77.6 233.8 80.4)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="233.8" cy="80.4" rx="6.4" ry="3.15" transform="rotate(133.6 233.8 80.4)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="236.7" cy="67.2" rx="8.0" ry="3.5" transform="rotate(70.8 236.7 67.2)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="236.7" cy="67.2" rx="6.4" ry="3.15" transform="rotate(126.8 236.7 67.2)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="237.9" cy="53.7" rx="8.0" ry="3.5" transform="rotate(63.9 237.9 53.7)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="237.9" cy="53.7" rx="6.4" ry="3.15" transform="rotate(119.9 237.9 53.7)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="237.6" cy="40.2" rx="8.0" ry="3.5" transform="rotate(57.0 237.6 40.2)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<ellipse cx="237.6" cy="40.2" rx="6.4" ry="3.15" transform="rotate(113.0 237.6 40.2)" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="0.8"/>
+<path d="M32.0 42.0L218.0 42.0L232.0 56.0L232.0 92.0L218.0 106.0L32.0 106.0L18.0 92.0L18.0 56.0Z" fill="#2e1e0a" />
+<path d="M32.4 42.8L217.6 42.8L231.2 56.4L231.2 91.6L217.6 105.2L32.4 105.2L18.8 91.6L18.8 56.4Z" fill="url(#goldv)" />
+<path d="M33.0 44.0L217.0 44.0L230.0 57.0L230.0 91.0L217.0 104.0L33.0 104.0L20.0 91.0L20.0 57.0Z" fill="url(#goldr)" opacity="0.9"/>
+<path d="M33.6 45.2L216.4 45.2L228.8 57.6L228.8 90.4L216.4 102.8L33.6 102.8L21.2 90.4L21.2 57.6Z" fill="#1d1408" />
+<path d="M34.0 46.0L216.0 46.0L228.0 58.0L228.0 90.0L216.0 102.0L34.0 102.0L22.0 90.0L22.0 58.0Z" fill="url(#panel)" fill-opacity="1.0"/>
+<line x1="40" y1="71" x2="210" y2="71" stroke="#b88a45" stroke-width="1" stroke-opacity="0.55"/>
+<path d="M125 134 L112 118 L125 106 L138 118Z" fill="url(#goldv)" stroke="#2e1e0a" stroke-width="1.2"/>
+<line x1="60" y1="118" x2="108" y2="118" stroke="#b88a45" stroke-width="2" stroke-opacity="0.9"/>
+<line x1="142" y1="118" x2="190" y2="118" stroke="#b88a45" stroke-width="2" stroke-opacity="0.9"/>
+</svg>

@@ -239,6 +239,7 @@ pub(crate) fn mover_transform(mover: &Mover, seconds: f32) -> Matrix {
 
 /// GPU resources of the proof scene. Create, draw and drop on the render thread only.
 pub(crate) struct Scene {
+    pub(crate) projection_centre_y: f32,
     box_mesh: Mesh,
     ground_mesh: Mesh,
     star_mesh: Option<Mesh>,
@@ -373,6 +374,7 @@ impl Scene {
             },
         );
         Self {
+            projection_centre_y: 0.0,
             box_mesh: Mesh::gen_mesh_cube(thread, 1.0, 1.0, 1.0),
             ground_mesh: Mesh::gen_mesh_plane(thread, GROUND_TILES, GROUND_TILES, 1, 1),
             star_mesh,
@@ -514,9 +516,11 @@ impl Scene {
                 45.0,
             );
             let mut backdrop = drawing.begin_mode3D(sky);
+            shift_projection(self.projection_centre_y);
             backdrop.draw_mesh(stars, self.star_material.clone(), Matrix::identity());
         }
         let mut world = drawing.begin_mode3D(view);
+        shift_projection(self.projection_centre_y);
         match &self.terrain {
             Some(terrain) => {
                 for mesh in &terrain.land {
@@ -560,6 +564,16 @@ impl Scene {
                 }
             }
         }
+    }
+}
+
+/// Moves the perspective vanishing point to the centre of the unobscured world band.
+fn shift_projection(centre_y: f32) {
+    // SAFETY: the render thread has an active GL context and has just entered 3D mode.
+    unsafe {
+        let mut projection = raylib::ffi::rlGetMatrixProjection();
+        projection.m9 = -centre_y;
+        raylib::ffi::rlSetMatrixProjection(projection);
     }
 }
 

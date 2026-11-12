@@ -8,3 +8,5 @@ license.workspace = true
 [dependencies]
 image.workspace = true
 raylib.workspace = true
+resvg.workspace = true
+fontdue.workspace = true

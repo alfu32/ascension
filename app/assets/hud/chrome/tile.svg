@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="58" height="52" viewBox="0 0 58 52">
+<defs>
+<linearGradient id="goldv" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#e8c98a"/><stop offset="0.45" stop-color="#b88a45"/><stop offset="1" stop-color="#6b4a1f"/></linearGradient>
+<linearGradient id="goldr" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#6b4a1f"/><stop offset="0.55" stop-color="#b88a45"/><stop offset="1" stop-color="#e8c98a"/></linearGradient>
+<linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#141b24"/><stop offset="1" stop-color="#0c1118"/></linearGradient>
+<linearGradient id="slot" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#0e141c"/><stop offset="1" stop-color="#0a0e14"/></linearGradient>
+<linearGradient id="fadeh" x1="0" y1="0" x2="1" y2="0">
+<stop offset="0" stop-color="#0c1118" stop-opacity="0.86"/><stop offset="0.8" stop-color="#0c1118" stop-opacity="0.7"/><stop offset="1" stop-color="#0c1118" stop-opacity="0"/></linearGradient>
+<radialGradient id="sphere" cx="0.4" cy="0.35" r="0.8">
+<stop offset="0" stop-color="#1c4a66"/><stop offset="0.6" stop-color="#0d2233"/><stop offset="1" stop-color="#0c1118"/></radialGradient>
+<filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.6"/></filter>
+</defs>
+<path d="M8.0 0.0L50.0 0.0L58.0 8.0L58.0 44.0L50.0 52.0L8.0 52.0L0.0 44.0L0.0 8.0Z" fill="url(#goldv)" />
+<path d="M8.8 1.6L49.2 1.6L56.4 8.8L56.4 43.2L49.2 50.4L8.8 50.4L1.6 43.2L1.6 8.8Z" fill="url(#slot)" />
+<path d="M9.3 2.6L48.7 2.6L55.4 9.3L55.4 42.7L48.7 49.4L9.3 49.4L2.6 42.7L2.6 9.3Z" fill="none" stroke="#000" stroke-opacity="0.45" stroke-width="1"/>
+</svg>

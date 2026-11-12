@@ -105,3 +105,51 @@ readability, as long as the arrangement and the chrome style are kept.
   HUD does not hard-code any unit or building.
 - Hit-testing: a pointer event inside a HUD region is consumed by the HUD and
   not passed to the world view.
+
+## Implementation and preview (task 11)
+
+`assets/hud/generate.py` is the authored source for all committed SVGs. Run
+`python3 assets/hud/generate.py` from `app/` to regenerate, or append `--check`
+to verify that the committed outputs match. The embed table in
+`rom-render/src/hud_atlas.rs` lists every file; tests check both file coverage
+and every required glyph name. The bundled DejaVu Sans Bold licence is in
+`assets/fonts/LICENSE-DejaVu.txt`.
+
+`HudPainter` builds a common list of artwork, text and progress quads. The
+render thread draws that list with two uploaded atlas textures; the CPU
+preview samples the same atlases and rectangles without calling raylib.
+Both use the same minimap colours, aspect fit, entity dots and ground-plane
+camera footprint. The terrain texture is baked once per terrain publication.
+Atlas textures and glyphs are rebaked when scale differs by more than 10%.
+
+```sh
+cargo run -p rom-render --example hud_preview -- docs/img/hud-preview.png 1672 941
+cargo run -p rom-render --example hud_preview -- /tmp/hud-preview-720.png 1280 720
+```
+
+The preview uses explicitly fictional sample counters and a small synthetic
+map, with an empty selection and production queue. It is not a live-game
+screenshot. Both preview and GPU sampling use bilinear filtering.
+
+The application publishes HUD data for player 1 each tick. Income and the
+commerce counter are **per configured income period**, as returned by
+`World::income`, independent of real-time simulation speed. Commerce shows
+the highest effective commerce-limited resource rate against its per-resource
+cap; rates are not summed because the simulation caps each resource separately.
+Resource artwork is presentation metadata selected by abbreviation, while
+availability follows `first_age_id` and age ordinal. Stock and caps use the
+simulation's APIs and the same player stats and constants.
+
+Only active, front research orders appear; the captured `total_ticks` supplies
+the progress denominator. The public simulation API exposes neither an event
+stream nor pending orders before the next tick; messages remain empty until
+an event feed exists, and submitted research appears after activation. No
+simulation crate or database change is needed.
+
+`--no-hud` hides the HUD and restores the full-frame projection centre.
+`--hud-scale 25..200` overrides the automatic scale as a percentage of design
+pixels (and follows the internal render scale). Oversized explicit scales can
+crop panels. Diagnostic GPUI text is hidden unless `--stats` is supplied.
+HUD surfaces consume pointer input; their controls are inert in this task.
+The world projection centre and minimap footprint both use the centre of the
+band between the top bar and bottom panels.

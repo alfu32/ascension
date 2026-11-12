@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="135" viewBox="0 0 16 135">
+<defs>
+<linearGradient id="goldv" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#e8c98a"/><stop offset="0.45" stop-color="#b88a45"/><stop offset="1" stop-color="#6b4a1f"/></linearGradient>
+<linearGradient id="goldr" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#6b4a1f"/><stop offset="0.55" stop-color="#b88a45"/><stop offset="1" stop-color="#e8c98a"/></linearGradient>
+<linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#141b24"/><stop offset="1" stop-color="#0c1118"/></linearGradient>
+<linearGradient id="slot" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#0e141c"/><stop offset="1" stop-color="#0a0e14"/></linearGradient>
+<linearGradient id="fadeh" x1="0" y1="0" x2="1" y2="0">
+<stop offset="0" stop-color="#0c1118" stop-opacity="0.86"/><stop offset="0.8" stop-color="#0c1118" stop-opacity="0.7"/><stop offset="1" stop-color="#0c1118" stop-opacity="0"/></linearGradient>
+<radialGradient id="sphere" cx="0.4" cy="0.35" r="0.8">
+<stop offset="0" stop-color="#1c4a66"/><stop offset="0.6" stop-color="#0d2233"/><stop offset="1" stop-color="#0c1118"/></radialGradient>
+<filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.6"/></filter>
+</defs>
+<path d="M-40.0 -14.0L56.0 -14.0L56.0 -14.0L56.0 130.0L56.0 130.0L-40.0 130.0L-40.0 130.0L-40.0 -14.0Z" fill="#2e1e0a" />
+<path d="M-37.7 -13.2L53.7 -13.2L55.2 -11.7L55.2 127.7L53.7 129.2L-37.7 129.2L-39.2 127.7L-39.2 -11.7Z" fill="url(#goldv)" />
+<path d="M-33.0 -8.5L49.0 -8.5L50.5 -7.0L50.5 123.0L49.0 124.5L-33.0 124.5L-34.5 123.0L-34.5 -7.0Z" fill="url(#goldr)" opacity="0.9"/>
+<path d="M-28.3 -3.8L44.3 -3.8L45.8 -2.3L45.8 118.3L44.3 119.8L-28.3 119.8L-29.8 118.3L-29.8 -2.3Z" fill="#1d1408" />
+<path d="M-27.5 -3.0L43.5 -3.0L45.0 -1.5L45.0 117.5L43.5 119.0L-27.5 119.0L-29.0 117.5L-29.0 -1.5Z" fill="url(#panel)" fill-opacity="0.94"/>
+<path d="M-24.5 0.0L40.5 0.0L42.0 1.5L42.0 114.5L40.5 116.0L-24.5 116.0L-26.0 114.5L-26.0 1.5Z" fill="none" stroke="#b88a45" stroke-width="1.2" stroke-opacity="0.65"/>
+<path d="M-32 24 L-32 8 L-16 -8 H16" fill="none" stroke="#e8c98a" stroke-width="2"/>
+<path d="M-32 92 L-32 108 L-16 124 H16" fill="none" stroke="#6b4a1f" stroke-width="3"/>
+<path d="M48 24 L48 8 L32 -8 H0" fill="none" stroke="#e8c98a" stroke-width="2"/>
+<path d="M48 92 L48 108 L32 124 H0" fill="none" stroke="#6b4a1f" stroke-width="3"/>
+</svg>
