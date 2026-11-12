@@ -59,11 +59,15 @@ Installed as `codex` (non-interactive: `codex exec`). It reads `AGENTS.md`.
 
 ```sh
 # implement a task in a worktree; prompt is the task card
-codex exec -C <worktree> -s workspace-write -o <result-file> - < <task-card>
+codex exec -m gpt-6.1-sol -c model_reasoning_effort=high \
+  -C <worktree> -s workspace-write -c sandbox_workspace_write.network_access=true \
+  --add-dir <repo>/.git -o <result-file> - < <task-card>
 # second opinion on a branch
 codex exec review
 ```
 
+- Model: `gpt-6.1-sol` at high reasoning effort (owner's choice), passed per run.
+- Network access lets `cargo` fetch crates; `--add-dir <repo>/.git` lets it commit from a worktree.
 - Pass sandbox and approval options per run; do not edit `~/.codex/config.toml`.
 - It bills the owner's OpenAI account and sends prompts and file contents
   there. Use it for the purposes in the table above, not for anything
