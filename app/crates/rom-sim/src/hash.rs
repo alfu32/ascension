@@ -77,7 +77,7 @@ impl World {
     /// Hashes complete mutable state in little-endian field order with FNV-1a 64.
     pub fn hash(&self) -> u64 {
         let mut hash = StateHash(0xcbf29ce484222325);
-        hash.bytes(b"rom-sim-state-2");
+        hash.bytes(b"rom-sim-state-3");
         hash.u64(self.tick);
         hash.u64(self.rng.state());
         hash.u32(self.next_entity_id);
@@ -105,6 +105,12 @@ impl World {
                 hash.u32(*times);
             }
         }
+        hash.u64(self.income_remainders.len() as u64);
+        for ((player, resource), remainder) in &self.income_remainders {
+            hash.u32(player.0);
+            hash.u32(resource.0);
+            hash.bytes(&remainder.to_le_bytes());
+        }
         hash.u64(self.entities().count() as u64);
         for entity in self.entities() {
             hash.u32(entity.id.0);
@@ -115,6 +121,9 @@ impl World {
             hash.bytes(&entity.hp.to_le_bytes());
             hash.optional(entity.build_progress, StateHash::u32);
             hash.bytes(&entity.move_remainder.to_le_bytes());
+            hash.bytes(&entity.gather_slots.to_le_bytes());
+            hash.optional(entity.work_site, |h, id| h.u32(id.0));
+            hash.u64(entity.idle_ticks);
             hash.u64(entity.orders.len() as u64);
             for order in &entity.orders {
                 hash.u64(order.id.0);
@@ -136,6 +145,8 @@ impl World {
         hash.u64(self.stats.orders_cancelled);
         hash.u64(self.stats.orders_no_path);
         hash.u64(self.stats.orders_unsupported);
+        hash.u64(self.stats.orders_no_slot);
+        hash.u64(self.stats.orders_target_gone);
         hash.0
     }
 }
@@ -194,6 +205,15 @@ mod tests {
             changes(&mut world, |w| w.entities[index].as_mut().unwrap().hp -= 1);
             changes(&mut world, |w| {
                 w.entities[index].as_mut().unwrap().move_remainder += 1
+            });
+            changes(&mut world, |w| {
+                w.entities[index].as_mut().unwrap().gather_slots += 1
+            });
+            changes(&mut world, |w| {
+                w.entities[index].as_mut().unwrap().work_site = Some(EntityId(1))
+            });
+            changes(&mut world, |w| {
+                w.entities[index].as_mut().unwrap().idle_ticks += 1
             });
             changes(&mut world, |w| {
                 w.entities[index].as_mut().unwrap().build_progress = Some(0)
@@ -326,5 +346,15 @@ mod tests {
         changes(&mut world, |w| w.stats.orders_done += 1);
         changes(&mut world, |w| w.stats.orders_failed += 1);
         changes(&mut world, |w| w.stats.orders_cancelled += 1);
+        changes(&mut world, |w| w.stats.orders_no_slot += 1);
+        changes(&mut world, |w| w.stats.orders_target_gone += 1);
+        changes(&mut world, |w| {
+            w.income_remainders.insert((player, rom_rules::DefId(1)), 1);
+        });
+        changes(&mut world, |w| {
+            *w.income_remainders
+                .get_mut(&(player, rom_rules::DefId(1)))
+                .unwrap() += 1;
+        });
     }
 }

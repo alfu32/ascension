@@ -28,6 +28,10 @@ pub struct Stats {
     pub orders_no_path: u64,
     /// Orders failed because their behavior is not implemented yet.
     pub orders_unsupported: u64,
+    /// Harvest orders failed because no slot was free on arrival.
+    pub orders_no_slot: u64,
+    /// Orders failed because their target disappeared.
+    pub orders_target_gone: u64,
 }
 
 /// Deterministic match state, mutated through setup operations and commands.
@@ -43,6 +47,7 @@ pub struct World {
     pub(crate) next_entity_id: u32,
     pub(crate) next_order_id: u64,
     pub(crate) stats: Stats,
+    pub(crate) income_remainders: BTreeMap<(PlayerId, DefId), i64>,
     spatial: SpatialGrid,
 }
 
@@ -83,6 +88,9 @@ impl World {
             ("build.site_start_hp_pct", 0, 100),
             ("build.reach", 0, i64::MAX),
             ("economy.cancel_refund_pct", 0, 100),
+            ("economy.income_period_ticks", 1, i64::MAX),
+            ("player.commerce_cap.base", 0, i64::MAX),
+            ("citizen.auto_work_delay_ticks", 0, i64::MAX),
         ] {
             if rules
                 .constant(key)
@@ -111,6 +119,7 @@ impl World {
             next_entity_id: 1,
             next_order_id: 1,
             stats: Stats::default(),
+            income_remainders: BTreeMap::new(),
             spatial: SpatialGrid::default(),
         })
     }
@@ -254,6 +263,7 @@ impl World {
             .checked_add(1)
             .ok_or(SimError::IdExhausted)?;
         let id = EntityId(self.next_entity_id);
+        let gather_slots = self.gather_slots(type_id, pos);
         self.entities.push(Some(Entity {
             id,
             type_id,
@@ -263,6 +273,9 @@ impl World {
             hp,
             build_progress: None,
             move_remainder: 0,
+            gather_slots,
+            work_site: None,
+            idle_ticks: 0,
             orders: VecDeque::new(),
         }));
         self.next_entity_id = next;
@@ -278,6 +291,7 @@ impl World {
             .and_then(Option::take)
             .ok_or(SimError::UnknownExecutor(id))?;
         self.spatial.remove(id, entity.pos);
+        self.release_site_workers(id);
         self.stats.orders_cancelled += entity.orders.len() as u64;
         self.pending.retain(|(order, _)| {
             if order.executor == id {
@@ -328,12 +342,19 @@ impl World {
         if !target_matches(&command, kind.target) {
             return Err(SimError::WrongTargetShape);
         }
+        if command.kind == "harvest" {
+            self.validate_harvest(&command)?;
+        }
         let payment = self.validate_economy_order(&mut command)?;
         let next = self
             .next_order_id
             .checked_add(1)
             .ok_or(SimError::IdExhausted)?;
         let id = OrderId(self.next_order_id);
+        self.entities[command.executor.0 as usize]
+            .as_mut()
+            .expect("checked executor")
+            .idle_ticks = 0;
         for (resource, amount) in &payment {
             *self
                 .players
@@ -375,14 +396,17 @@ impl World {
         Ok(id)
     }
 
-    /// Applies pending inputs, advances entities by id, updates buckets, then increments tick.
+    /// Finds idle work, applies inputs, advances entities by id, and distributes income.
     pub fn step(&mut self) {
+        self.find_idle_work();
         for (mut order, append) in std::mem::take(&mut self.pending) {
             if order.kind == "construct" {
                 self.create_site(&mut order);
             }
             if !append {
                 self.cancel_orders(order.executor);
+            } else {
+                self.interrupt_harvest(order.executor);
             }
             self.entities[order.executor.0 as usize]
                 .as_mut()
@@ -402,6 +426,7 @@ impl World {
                 self.spatial.relocate(id, old, new);
             }
         }
+        self.pay_income();
         self.tick = self.tick.checked_add(1).expect("simulation tick exhausted");
     }
 }

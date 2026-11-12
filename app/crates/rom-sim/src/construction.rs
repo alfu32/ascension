@@ -3,7 +3,7 @@
 use crate::{EntityId, Order, OrderStatus, Pos, SimError, World, entity::move_entity};
 use rom_rules::{DefId, EntityClass, EntityType};
 
-fn footprint(et: &EntityType, pos: Pos) -> [i64; 4] {
+pub(crate) fn footprint(et: &EntityType, pos: Pos) -> [i64; 4] {
     let x = i64::from(pos.x);
     let y = i64::from(pos.y);
     [
@@ -89,6 +89,7 @@ impl World {
             .expect("validated site hp constant");
         let site = self.entities[id.0 as usize].as_mut().expect("new site");
         site.build_progress = Some(0);
+        site.gather_slots = 0;
         site.hp = (i128::from(site.hp) * i128::from(pct) / 100) as i64;
         order.target_entity = Some(id);
     }
@@ -177,6 +178,14 @@ impl World {
             site.hp = (initial
                 + (i128::from(et.hp) - initial) * i128::from(progress) / i128::from(total))
                 as i64;
+        }
+        if progress >= total {
+            let site = self.entity(site_id).expect("site");
+            let slots = self.gather_slots(site.type_id, site.pos);
+            self.entities[site_id.0 as usize]
+                .as_mut()
+                .expect("site")
+                .gather_slots = slots;
         }
     }
 }

@@ -32,7 +32,7 @@ impl World {
                 "move" if order.target_pos.is_none() => {
                     order.status = OrderStatus::Failed("unsupported".into());
                 }
-                "move" | "construct" | "repair" => {
+                "move" | "construct" | "repair" | "harvest" => {
                     if worked {
                         self.entities[id.0 as usize]
                             .as_mut()
@@ -50,6 +50,8 @@ impl World {
                             &self.rules,
                             &self.map,
                         );
+                    } else if order.kind == "harvest" {
+                        self.advance_harvest(id, &mut order);
                     } else {
                         self.advance_construction(id, &mut order);
                     }
@@ -160,7 +162,7 @@ impl World {
         };
     }
 
-    fn finish_order(&mut self, order: &Order) -> bool {
+    pub(crate) fn finish_order(&mut self, order: &Order) -> bool {
         match &order.status {
             OrderStatus::Done => self.stats.orders_done += 1,
             OrderStatus::Failed(reason) => {
@@ -168,6 +170,8 @@ impl World {
                 match reason.as_str() {
                     "no_path" => self.stats.orders_no_path += 1,
                     "unsupported" => self.stats.orders_unsupported += 1,
+                    "no_slot" => self.stats.orders_no_slot += 1,
+                    "target_gone" => self.stats.orders_target_gone += 1,
                     _ => {}
                 }
             }

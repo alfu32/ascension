@@ -3,7 +3,9 @@
 mod construction;
 mod economy;
 mod entity;
+mod gathering;
 mod hash;
+mod income;
 mod map;
 mod math;
 mod order;
@@ -14,6 +16,7 @@ mod spatial;
 mod world;
 
 pub use entity::{Entity, EntityId, Player, PlayerId};
+pub use income::Income;
 pub use map::MapGrid;
 pub use math::{Pos, integer_sqrt};
 pub use order::{Command, Order, OrderId, OrderKindKey, OrderStatus};
@@ -104,6 +107,9 @@ pub enum SimError {
     /// Resource setup names a nonresource definition.
     #[error("unknown resource {0:?}")]
     UnknownResource(DefId),
+    /// Harvesting requires a complete, friendly site with a compatible resource.
+    #[error("invalid harvest target")]
+    InvalidHarvestTarget,
     /// The catalogue cannot supply the requested headless scenario.
     #[error("no eligible {0} for movement scenario")]
     ScenarioUnavailable(&'static str),
