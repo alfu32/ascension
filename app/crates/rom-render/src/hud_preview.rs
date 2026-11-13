@@ -93,7 +93,14 @@ pub fn render(
         layout,
         (terrain.width, terrain.height),
         area,
-    ) {
+    )
+    .into_iter()
+    .chain(hud_minimap::city_radius_marks(
+        &snapshot.city_radii,
+        (terrain.width, terrain.height),
+        area,
+        None,
+    )) {
         match mark {
             MapMark::Dot(r, c) => {
                 for y in r.y.floor() as i32..r.bottom().ceil() as i32 {
@@ -117,6 +124,7 @@ pub fn render(
     for q in quads {
         let (data, width) = match q.texture {
             HudTexture::Artwork => (&painter.artwork.rgba[..], painter.artwork.width),
+            HudTexture::Greyscale => (&painter.greyscale[..], painter.artwork.width),
             HudTexture::Glyphs => (&painter.glyphs.rgba[..], painter.glyphs.width),
             HudTexture::Solid => (&[255, 255, 255, 255][..], 1),
         };

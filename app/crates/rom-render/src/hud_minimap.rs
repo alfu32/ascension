@@ -330,6 +330,36 @@ pub fn planet_pixel_tiles(n: u32) -> Vec<u32> {
     tiles
 }
 
+/// Thin economic-radius circles, projected to either surface's minimap.
+pub fn city_radius_marks(
+    cities: &[crate::hud::HudCityRadius],
+    size: (u32, u32),
+    area: Rect,
+    globe: Option<&crate::Globe>,
+) -> Vec<MapMark> {
+    use crate::Footing;
+    let mut marks = Vec::new();
+    for city in cities.iter().filter(|c| c.minimap && c.economic > 0) {
+        let project = |i: usize| {
+            let angle = i as f32 / 128.0 * std::f32::consts::TAU;
+            let r = city.economic as f32 / 1000.0;
+            let (x, y) = (city.x as f32 / 1000.0, city.y as f32 / 1000.0);
+            let (dx, dy) = (r * angle.cos(), r * angle.sin());
+            match globe {
+                Some(g) => dir_to_minimap(g.point(city.face, x, y, (dx, dy), 0.0), area),
+                None => tile_to_minimap(x + dx, y + dy, size, area),
+            }
+        };
+        for i in 0..128 {
+            let (a, b) = (project(i), project(i + 1));
+            if (a.0 - b.0).abs() < area.w / 2.0 {
+                marks.push(MapMark::Line(a, b));
+            }
+        }
+    }
+    marks
+}
+
 /// The planet as an equirectangular RGBA image of [`GLOBE_MINIMAP_SIZE`]: longitude runs left to
 /// right, latitude from the north pole at the top.
 pub fn planet_pixels(planet: &crate::globe::PlanetScene) -> (u32, u32, Vec<u8>) {

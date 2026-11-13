@@ -53,6 +53,20 @@ pub struct ScriptSetup {
 }
 
 impl ScriptSetup {
+    /// Applies parsed resource grants before the first simulation tick.
+    pub fn apply_grants(&self, world: &mut rom_sim::World) -> Result<(), String> {
+        for (key, amount) in &self.grants {
+            let resource = world
+                .rules()
+                .id_of(key)
+                .ok_or_else(|| format!("unknown resource {key:?}"))?;
+            world
+                .grant(crate::selection::PLAYER, resource, *amount)
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
     /// Reads the `grant-age` and `grant` lines of a script.
     pub fn scan(text: &str) -> Result<Self, String> {
         let mut setup = Self::default();
@@ -95,6 +109,8 @@ pub enum ScriptAction {
     SelectShips,
     /// Select player one's finished buildings that train units other than from a city.
     SelectProducers,
+    /// Select finished producers that offer track research.
+    SelectResearchers,
     /// Set the game speed in percent.
     Speed(u32),
 }
@@ -145,6 +161,10 @@ impl Script {
                 (Some(_), Some("grant-age" | "grant")) => continue,
                 (Some(tick), Some("ships")) => {
                     actions.push((tick, ScriptAction::SelectShips));
+                    continue;
+                }
+                (Some(tick), Some("researchers")) => {
+                    actions.push((tick, ScriptAction::SelectResearchers));
                     continue;
                 }
                 (Some(tick), Some("producers")) => {
@@ -338,6 +358,7 @@ fn parse_line(
         "hud" => {
             let region = match arg(0)? {
                 "tab" => HudRegionKind::PaletteTab,
+                "data" => HudRegionKind::DataTab,
                 "arrow" => HudRegionKind::PaletteArrow,
                 "slot" => HudRegionKind::CommandSlot,
                 "queue" => HudRegionKind::QueueItem,

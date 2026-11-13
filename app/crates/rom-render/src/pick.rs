@@ -43,6 +43,8 @@ pub enum HudRegionKind {
     Minimap,
     /// Minimap button: zoom in, zoom out, centre on selection, signal.
     MinimapButton,
+    /// One of the five data tabs.
+    DataTab,
     /// Any other HUD surface; it consumes the press.
     Panel,
 }
@@ -479,6 +481,17 @@ pub fn hud_target(
             }
         }
     }
+    for i in 0..5 {
+        if layout
+            .map(
+                crate::hud_layout::Group::BottomRight,
+                Rect::new(1350.0, 695.0 + i as f32 * 42.0, 132.0, 38.0),
+            )
+            .contains(x, y)
+        {
+            return target(HudRegionKind::DataTab, i);
+        }
+    }
     let queued = hud.queue.as_ref().map_or(0, |q| q.items.len());
     for i in 0..queued.min(3) {
         if layout.queue_row(i).contains(x, y) {
@@ -634,6 +647,31 @@ struct Press {
     dragging: bool,
 }
 
+/// Translates the flat camera by the ground distance between two screen rays.
+fn drag_pan(
+    camera: &mut Camera,
+    view: &View,
+    from: (f32, f32),
+    to: (f32, f32),
+    ground: &dyn Fn(f32, f32) -> f32,
+) {
+    let Some(anchor) = view.terrain_point(from.0, from.1, ground) else {
+        return;
+    };
+    let ray = view.ray(to.0, to.1);
+    let eye = view.eye();
+    if ray[1] >= -1e-6 {
+        return;
+    }
+    let t = (anchor[1] - eye[1]) / ray[1];
+    if t < 0.0 {
+        return;
+    }
+    camera.target[0] += anchor[0] - (eye[0] + ray[0] * t);
+    camera.target[2] += anchor[2] - (eye[2] + ray[2] * t);
+    *camera = camera.limited();
+}
+
 /// Turns pointer input into pick events and tracks what the pointer is over.
 #[derive(Clone, Debug, Default)]
 pub struct PickController {
@@ -641,9 +679,15 @@ pub struct PickController {
     press: Option<Press>,
     last_click: Option<(u64, f32, f32)>,
     last_hover: Option<(f32, f32)>,
+    pan: Option<(PointerButton, f32, f32)>,
 }
 
 impl PickController {
+    /// Whether a ground drag currently owns the pointer.
+    pub fn is_panning(&self) -> bool {
+        self.pan.is_some()
+    }
+
     /// The HUD element under the pointer, for rollover help.
     pub fn hover(&self, ctx: &PickContext) -> Option<HudTarget> {
         let (x, y) = self.pointer?;
@@ -683,11 +727,27 @@ impl PickController {
         event: InputEvent,
         ctx: &PickContext,
         camera: &mut Camera,
-        orbit: Option<&mut OrbitCamera>,
+        mut orbit: Option<&mut OrbitCamera>,
     ) -> Vec<PickEvent> {
         let mut out = Vec::new();
         match event {
             InputEvent::PointerMoved { x, y } => {
+                if let Some((button, last_x, last_y)) = self.pan {
+                    if let Some(orbit) = orbit.as_deref_mut() {
+                        if let Some(globe) = ctx.globe {
+                            let a = ctx.view.surface_point(last_x, last_y, Ground::Globe(globe));
+                            let b = ctx.view.surface_point(x, y, Ground::Globe(globe));
+                            if let (Some(a), Some(b)) = (a, b) {
+                                orbit.drag_surface(b.point, a.point);
+                            }
+                        }
+                    } else {
+                        drag_pan(camera, &ctx.view, (last_x, last_y), (x, y), ctx.ground);
+                    }
+                    self.pan = Some((button, x, y));
+                    self.pointer = Some((x, y));
+                    return out;
+                }
                 self.pointer = Some((x, y));
                 if let Some(press) = &mut self.press
                     && (x - press.x).hypot(y - press.y) > DRAG_PIXELS
@@ -696,10 +756,29 @@ impl PickController {
                 }
                 self.hover_event(ctx, x, y, &mut out);
             }
-            InputEvent::PointerLeft => self.pointer = None,
+            InputEvent::PointerLeft => {
+                self.pointer = None;
+                self.pan = None;
+            }
             InputEvent::ButtonDown { button, x, y, mods } => {
                 self.pointer = Some((x, y));
+                if !self.over_hud(ctx, x, y)
+                    && ((button == PointerButton::Middle && !mods.shift)
+                        || (button == PointerButton::Right
+                            && orbit.is_none()
+                            && ctx.hud.selected.is_empty()
+                            && ctx.hud.placement.is_none()))
+                {
+                    self.pan = Some((button, x, y));
+                    return out;
+                }
                 self.button_down(button, (x, y), mods, ctx, camera, orbit, &mut out);
+            }
+            InputEvent::ButtonUp { button, x, y, .. }
+                if self.pan.is_some_and(|p| p.0 == button) =>
+            {
+                self.pan = None;
+                self.pointer = Some((x, y));
             }
             InputEvent::ButtonUp {
                 button: PointerButton::Left,
@@ -717,7 +796,10 @@ impl PickController {
                 modifiers: mods,
             }),
             InputEvent::Escape => out.push(PickEvent::Escape),
-            InputEvent::ReleaseAll => self.press = None,
+            InputEvent::ReleaseAll => {
+                self.press = None;
+                self.pan = None;
+            }
             _ => {}
         }
         out
@@ -1033,6 +1115,163 @@ mod tests {
             map_size: (200, 200),
             now_ms: 0,
         }
+    }
+
+    #[test]
+    fn drag_pan_keeps_the_point_under_the_cursor() {
+        for (size, centre_y) in [((1672.0, 941.0), 0.2), ((1280.0, 800.0), 0.0)] {
+            let mut camera = camera();
+            let from = (size.0 * 0.5, size.1 * 0.45);
+            let to = (from.0 + 90.0, from.1 + 55.0);
+            let before = View::new(&camera, size, centre_y);
+            let anchor = before.terrain_point(from.0, from.1, FLAT).unwrap();
+            drag_pan(&mut camera, &before, from, to, FLAT);
+            let after = View::new(&camera, size, centre_y);
+            let moved = after.terrain_point(to.0, to.1, FLAT).unwrap();
+            assert!((anchor[0] - moved[0]).abs() < 0.002);
+            assert!((anchor[2] - moved[2]).abs() < 0.002);
+        }
+    }
+
+    #[test]
+    fn drag_pan_preserves_a_point_on_a_hill() {
+        let mut camera = camera();
+        let slope = |x: f32, y: f32| 0.02 * x + 0.01 * y;
+        let from = (650.0, 360.0);
+        let to = (710.0, 390.0);
+        let view = View::new(&camera, (1280.0, 800.0), 0.2);
+        let anchor = view.terrain_point(from.0, from.1, &slope).unwrap();
+        drag_pan(&mut camera, &view, from, to, &slope);
+        let view = View::new(&camera, (1280.0, 800.0), 0.2);
+        let after = view.terrain_point(to.0, to.1, &slope).unwrap();
+        assert!((anchor[0] - after[0]).hypot(anchor[2] - after[2]) < 0.002);
+    }
+
+    #[test]
+    fn globe_drag_keeps_the_surface_point_under_the_cursor() {
+        let n = 64;
+        let globe = Globe::new(&crate::PlanetScene {
+            n,
+            kinds: vec![crate::TileKind::Land; 6 * (n * n) as usize],
+            heights: vec![0; 6 * (n * n) as usize],
+            feature_colors: Default::default(),
+            starts: vec![],
+            nodes: vec![],
+        });
+        let layout = layout();
+        let hud = HudSnapshot::default();
+        let from = layout.world_area().centre();
+        let to = (from.0 + 70.0, from.1 + 35.0);
+        for (lon, lat) in [(35.0, 25.0), (179.0, 80.0), (-90.0, -60.0)] {
+            let mut orbit = OrbitCamera::at(lon, lat, 35.0, 20.0, globe.radius(), 120.0);
+            let ctx = PickContext {
+                layout,
+                view: canvas_view_orbit(&orbit, &layout, true),
+                entities: &[],
+                ground: FLAT,
+                globe: Some(&globe),
+                hud: &hud,
+                hud_visible: true,
+                map_size: (n, n),
+                now_ms: 0,
+            };
+            let anchor = ctx
+                .view
+                .surface_point(from.0, from.1, Ground::Globe(&globe))
+                .unwrap()
+                .point;
+            let mut picker = PickController::default();
+            let mut flat_camera = camera();
+            for event in [
+                InputEvent::ButtonDown {
+                    button: PointerButton::Middle,
+                    x: from.0,
+                    y: from.1,
+                    mods: Modifiers::default(),
+                },
+                InputEvent::PointerMoved { x: to.0, y: to.1 },
+            ] {
+                assert!(
+                    picker
+                        .handle_with_orbit(event, &ctx, &mut flat_camera, Some(&mut orbit))
+                        .is_empty()
+                );
+            }
+            let after = canvas_view_orbit(&orbit, &layout, true);
+            let (x, y, _) = after.project(anchor).unwrap();
+            assert!((x - to.0).hypot(y - to.1) < 0.1, "{lon}, {lat}: {x}, {y}");
+        }
+    }
+
+    #[test]
+    fn middle_drag_pans_and_right_drag_requires_an_empty_selection() {
+        let mut cam = camera();
+        let layout = HudLayout::new(1280, 800, None);
+        let mut hud = HudSnapshot::default();
+        // Use explicit contexts because they borrow the snapshot.
+        for button in [PointerButton::Middle, PointerButton::Right] {
+            let mut picker = PickController::default();
+            let ctx = PickContext {
+                layout,
+                view: canvas_view(&cam, &layout, false),
+                entities: &[],
+                ground: FLAT,
+                globe: None,
+                hud: &hud,
+                hud_visible: false,
+                map_size: (200, 200),
+                now_ms: 0,
+            };
+            assert!(
+                picker
+                    .handle(
+                        InputEvent::ButtonDown {
+                            button,
+                            x: 640.0,
+                            y: 400.0,
+                            mods: Modifiers::default()
+                        },
+                        &ctx,
+                        &mut cam
+                    )
+                    .is_empty()
+            );
+            assert!(picker.is_panning());
+            let previous = cam.target;
+            picker.handle(
+                InputEvent::PointerMoved { x: 690.0, y: 420.0 },
+                &ctx,
+                &mut cam,
+            );
+            assert_ne!(cam.target, previous);
+            picker.handle(InputEvent::ReleaseAll, &ctx, &mut cam);
+            assert!(!picker.is_panning());
+        }
+        hud.selected = vec![1];
+        let ctx = PickContext {
+            layout,
+            view: canvas_view(&cam, &layout, false),
+            entities: &[],
+            ground: FLAT,
+            globe: None,
+            hud: &hud,
+            hud_visible: false,
+            map_size: (200, 200),
+            now_ms: 0,
+        };
+        let mut picker = PickController::default();
+        let events = picker.handle(
+            InputEvent::ButtonDown {
+                button: PointerButton::Right,
+                x: 640.0,
+                y: 400.0,
+                mods: Modifiers::default(),
+            },
+            &ctx,
+            &mut cam,
+        );
+        assert!(!picker.is_panning());
+        assert!(matches!(events.as_slice(), [PickEvent::RightClick { .. }]));
     }
 
     #[test]

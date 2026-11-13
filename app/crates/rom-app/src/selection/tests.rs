@@ -12,15 +12,19 @@ struct Fx {
 }
 
 fn fixture_with(stock: i64) -> Fx {
+    fixture_config(stock, "age.ancient", &[])
+}
+
+fn fixture_config(stock: i64, age: &str, researched: &[&str]) -> Fx {
     let rules = Arc::new(crate::terrain::load_rules().expect("rules"));
     let id = |key: &str| rules.id_of(key).expect("definition");
     let player = |n: u32| Player {
         id: PlayerId(n),
         team: n,
-        age: id("age.ancient"),
+        age: id(age),
         faction: id("nation.romans"),
         resources: rules.resources.keys().map(|r| (*r, stock)).collect(),
-        techs: BTreeMap::new(),
+        techs: researched.iter().map(|key| (id(key), 1)).collect(),
     };
     let map = MapGrid::new(64, 64, vec![id("ter.plain"); 64 * 64]).expect("map");
     let world =
@@ -454,9 +458,19 @@ fn palette_lists_production_rows_for_selected_type() {
     fx.click(producer, false);
     let palette = fx.hud_snapshot().palette.expect("palette");
     assert_eq!(palette.tab, PaletteTab::Train);
+    // Ancient producers show the first step of each line; successors are hidden.
     let train_rows = fx.rules.production[&pt]
         .iter()
-        .filter(|r| r.mode == ProductionMode::Train)
+        .filter(|r| {
+            r.mode == ProductionMode::Train
+                && fx.rules.entity_types[&r.product_def_id]
+                    .upgrades_from_id
+                    .is_none()
+                && fx.rules.is_available(
+                    r.product_def_id,
+                    fx.world.players().find(|p| p.id == PLAYER).unwrap().faction,
+                )
+        })
         .count();
     assert_eq!(palette.buttons.len(), train_rows);
     assert!(!palette.tabs[PaletteTab::Build.index()]);
@@ -478,10 +492,10 @@ fn locked_and_unaffordable_buttons_are_disabled_with_reason() {
     for page in 0..fx.hud_snapshot().palette.unwrap().pages {
         fx.ctl.page = page;
         for button in fx.hud_snapshot().palette.unwrap().buttons {
-            if !button.enabled && button.reason.starts_with("Requires") {
+            if !button.state.enabled() && button.state.reason().starts_with("Needs") {
                 seen_locked = true;
             }
-            assert_eq!(button.enabled, button.reason.is_empty());
+            assert_eq!(button.state.enabled(), button.state.reason().is_empty());
         }
     }
     // Locked rows exist in every rules database that has prerequisites; check the research and
@@ -496,7 +510,7 @@ fn locked_and_unaffordable_buttons_are_disabled_with_reason() {
             PaletteTab::Research
         };
         for button in fx.hud_snapshot().palette.unwrap().buttons {
-            seen_locked |= !button.enabled && button.reason.starts_with("Requires");
+            seen_locked |= !button.state.enabled() && button.state.reason().starts_with("Needs");
         }
     }
     assert!(seen_locked, "at least one row is locked at the start");
@@ -511,12 +525,14 @@ fn locked_and_unaffordable_buttons_are_disabled_with_reason() {
         .filter(|b| !b.price.is_empty())
         .collect();
     assert!(!priced.is_empty());
-    assert!(priced.iter().all(|b| !b.enabled && !b.reason.is_empty()));
     assert!(
         priced
             .iter()
-            .any(|b| b.reason.starts_with("Not enough") || b.reason.starts_with("Requires"))
+            .all(|b| !b.state.enabled() && !b.state.reason().is_empty())
     );
+    assert!(priced.iter().any(
+        |b| b.state.reason().starts_with("Not enough") || b.state.reason().starts_with("Needs")
+    ));
     // Pressing a disabled button does nothing but explain.
     let slot = priced[0].slot;
     poor.hud(HudRegionKind::CommandSlot, slot, PointerButton::Left, false);
@@ -534,7 +550,7 @@ fn train_button_submits_and_queue_shows_progress() {
     let button = palette
         .buttons
         .iter()
-        .find(|b| b.enabled)
+        .find(|b| b.state.enabled())
         .expect("a trainable unit");
     let (slot, name) = (button.slot, button.name.clone());
     let before = fx.stock();
@@ -573,7 +589,7 @@ fn cancel_from_queue_refunds() {
         .unwrap()
         .buttons
         .iter()
-        .find(|b| b.enabled)
+        .find(|b| b.state.enabled())
         .unwrap()
         .slot;
     let before = fx.stock();
@@ -670,7 +686,7 @@ fn placement_check_reports_valid_and_invalid() {
         .unwrap()
         .buttons
         .iter()
-        .find(|b| b.enabled && b.name == name)
+        .find(|b| b.state.enabled() && b.name == name)
         .unwrap()
         .slot;
     fx.hud(HudRegionKind::CommandSlot, slot, PointerButton::Left, false);
@@ -808,7 +824,7 @@ fn placement_on_the_sphere_matches_check_placement() {
     let slot = hud
         .palette
         .as_ref()
-        .and_then(|p| p.buttons.iter().find(|b| b.enabled))
+        .and_then(|p| p.buttons.iter().find(|b| b.state.enabled()))
         .expect("an enabled button")
         .slot;
     ctl.handle(
@@ -997,4 +1013,399 @@ fn pos_of(surface: SurfacePos) -> Pos {
         face: surface.face,
         ..Pos::default()
     }
+}
+
+#[test]
+fn button_states_follow_rules_and_stock() {
+    let mut fx = fixture();
+    let civic = fx.rules.id_of("tech.civic.1").unwrap();
+    assert_eq!(
+        crate::hud::button_state(&fx.world, civic, false),
+        ButtonState::Ready
+    );
+    let poor = fixture_with(0);
+    assert!(
+        matches!(crate::hud::button_state(&poor.world, civic, false),
+        ButtonState::Unaffordable { missing } if missing.len() == 2 && missing.iter().all(|(_, n)| *n == 200))
+    );
+    let locked = fx.rules.id_of("tech.civic.2").unwrap();
+    assert!(matches!(crate::hud::button_state(&fx.world, locked, false),
+        ButtonState::Locked { reason } if reason.contains("Classical")));
+    let done = fixture_config(0, "age.ancient", &["tech.civic.1"]);
+    assert_eq!(
+        crate::hud::button_state(&done.world, civic, false),
+        ButtonState::Done
+    );
+    let library = fx.spawn(fx.rules.id_of("bld.library").unwrap(), 1, 20, 20);
+    fx.click(library, false);
+    fx.ctl.tab = PaletteTab::Research;
+    fx.hud(HudRegionKind::CommandSlot, 0, PointerButton::Left, false);
+    // Submission is already reflected before the public queue exposes it.
+    assert_eq!(
+        fx.hud_snapshot().palette.unwrap().buttons[0].state,
+        ButtonState::InProgress { pct: 0 }
+    );
+    fx.step(5);
+    assert!(matches!(crate::hud::button_state(&fx.world, civic, false),
+        ButtonState::InProgress { pct } if pct > 0 && pct < 100));
+    assert!(
+        !fx.hud_snapshot().palette.unwrap().buttons[0]
+            .state
+            .enabled()
+    );
+}
+
+#[test]
+fn library_shows_next_level_per_track_and_next_age() {
+    let mut fx = fixture_config(10_000, "age.ancient", &["tech.civic.1"]);
+    let library = fx.spawn(fx.rules.id_of("bld.library").unwrap(), 1, 20, 20);
+    fx.click(library, false);
+    fx.ctl.tab = PaletteTab::Research;
+    let (palette, actions) = fx.ctl.palette(&fx.world).unwrap();
+    let shown: Vec<_> = actions
+        .iter()
+        .filter_map(|(_, a)| {
+            if let Action::Research(d) = a {
+                Some(*d)
+            } else {
+                None
+            }
+        })
+        .collect();
+    let track_levels: Vec<_> = shown
+        .iter()
+        .filter_map(|id| {
+            let t = &fx.rules.techs[id];
+            (t.kind == rom_rules::TechKind::Track).then_some((t.track.as_str(), t.level))
+        })
+        .collect();
+    assert_eq!(
+        track_levels,
+        vec![
+            ("civic", 2),
+            ("commerce", 1),
+            ("military", 1),
+            ("science", 1)
+        ]
+    );
+    let ages: Vec<_> = shown
+        .iter()
+        .filter(|id| fx.rules.techs[id].kind == rom_rules::TechKind::Age)
+        .collect();
+    assert_eq!(ages, vec![&fx.rules.id_of("tech.age.classical").unwrap()]);
+    assert!(palette.buttons.iter().all(|b| b.state != ButtonState::Done));
+    assert_eq!(shown[4], fx.rules.id_of("tech.age.classical").unwrap());
+}
+
+#[test]
+fn obsolete_steps_are_hidden() {
+    let rules = crate::terrain::load_rules().unwrap();
+    let keys: Vec<_> = rules
+        .techs
+        .keys()
+        .map(|id| rules.def(*id).key.as_str())
+        .collect();
+    let mut fx = fixture_config(10_000, "age.galactic", &keys);
+    let pt = fx.rules.id_of("bld.barracks").unwrap();
+    let producer = fx.spawn(pt, 1, 20, 20);
+    fx.click(producer, false);
+    fx.ctl.tab = PaletteTab::Train;
+    let (_, actions) = fx.ctl.palette(&fx.world).unwrap();
+    let player = fx.world.players().find(|p| p.id == PLAYER).unwrap();
+    let active = player.active_sources();
+    let owned = fx.world.owned_types(PLAYER);
+    let train: Vec<_> = actions
+        .iter()
+        .filter_map(|(_, a)| {
+            if let Action::Train(d) = a {
+                Some(*d)
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert!(!train.is_empty());
+    assert!(
+        train
+            .iter()
+            .all(|d| !fx.rules.is_obsolete(*d, &active, &owned)
+                && fx.rules.is_unlocked(*d, &active, &owned))
+    );
+    assert!(
+        fx.rules.production[&pt]
+            .iter()
+            .any(|r| r.mode == ProductionMode::Train
+                && fx.rules.is_obsolete(r.product_def_id, &active, &owned)
+                && !train.contains(&r.product_def_id))
+    );
+    // At the start, locked successors are absent even when the current step is unaffordable.
+    let mut early = fixture_with(0);
+    let producer = early.spawn(pt, 1, 20, 20);
+    early.click(producer, false);
+    early.ctl.tab = PaletteTab::Train;
+    assert!(
+        early
+            .hud_snapshot()
+            .palette
+            .unwrap()
+            .buttons
+            .iter()
+            .all(|b| matches!(
+                b.state,
+                ButtonState::Unaffordable { .. } | ButtonState::Locked { .. }
+            ))
+    );
+    // A line with no unlocked step still previews its first step in greyscale.
+    let future = early.rules.id_of("bld.airfield").unwrap();
+    let producer = early.spawn(future, 1, 40, 40);
+    early.click(producer, false);
+    early.ctl.tab = PaletteTab::Train;
+    let (palette, actions) = early.ctl.palette(&early.world).unwrap();
+    assert!(!palette.buttons.is_empty());
+    assert!(
+        palette
+            .buttons
+            .iter()
+            .all(|b| matches!(b.state, ButtonState::Locked { .. }))
+    );
+    for (_, action) in actions {
+        if let Action::Train(def) = action {
+            assert!(early.rules.entity_types[&def].upgrades_from_id.is_none());
+        }
+    }
+}
+
+#[test]
+fn locked_buildings_are_shown_greyscale() {
+    let mut fx = fixture();
+    let b = fx.spawn(fx.mover(), 1, 10, 10);
+    fx.click(b, false);
+    let pages = fx.hud_snapshot().palette.unwrap().pages;
+    let mut locked = 0;
+    let mut shown = 0;
+    for page in 0..pages {
+        fx.ctl.page = page;
+        for button in fx.hud_snapshot().palette.unwrap().buttons {
+            shown += 1;
+            if let ButtonState::Locked { reason } = button.state {
+                assert!(reason.starts_with("Needs"));
+                locked += 1;
+            }
+        }
+    }
+    // The renderer consumes Locked as desaturated artwork, not just a dark tint.
+    let layout = rom_render::hud_layout::HudLayout::new(1672, 941, None);
+    let mut painter = rom_render::hud::HudPainter::bake(1.0).unwrap();
+    let snapshot = fx.hud_snapshot();
+    assert!(
+        painter
+            .compose(&layout, &snapshot)
+            .iter()
+            .any(|q| matches!(q.texture, rom_render::hud::HudTexture::Greyscale))
+    );
+    assert!(locked > 0);
+    assert_eq!(
+        shown,
+        fx.rules.production[&fx.mover()]
+            .iter()
+            .filter(|r| r.mode == ProductionMode::Construct)
+            .count()
+    );
+}
+
+#[test]
+fn research_overview_marks_done_next_and_locked() {
+    use rom_render::ResearchCell;
+    let mut fx = fixture_config(10_000, "age.ancient", &["tech.civic.1"]);
+    let library = fx.spawn(fx.rules.id_of("bld.library").unwrap(), 1, 20, 20);
+    fx.click(library, false);
+    fx.ctl.tab = PaletteTab::Research;
+    fx.hud(HudRegionKind::CommandSlot, 1, PointerButton::Left, false);
+    fx.hud(HudRegionKind::DataTab, 4, PointerButton::Left, false);
+    let hud = fx.hud_snapshot();
+    assert_eq!(hud.data_tab, 4);
+    assert_eq!(hud.overview.tracks.len(), 4);
+    assert!(hud.overview.tracks.iter().all(|t| t.levels.len() == 13));
+    assert_eq!(
+        &hud.overview.tracks[0].levels[..3],
+        &[ResearchCell::Done, ResearchCell::Next, ResearchCell::Locked]
+    );
+    assert_eq!(hud.overview.tracks[1].levels[0], ResearchCell::InProgress);
+    assert_eq!(hud.overview.ages.len(), 14);
+    assert_eq!(
+        &hud.overview.ages[..3],
+        &[ResearchCell::Done, ResearchCell::Next, ResearchCell::Locked]
+    );
+}
+
+#[test]
+fn rejection_messages_name_the_rule() {
+    let fx = fixture();
+    assert_eq!(
+        rejection_message(&fx.world, &SimError::CitiesTooClose, None),
+        "Too close to another city (20 tiles)"
+    );
+    assert_eq!(
+        rejection_message(&fx.world, &SimError::NotInOwnTerritory, None),
+        "Outside your borders"
+    );
+    let barracks = fx.rules.id_of("bld.barracks").unwrap();
+    assert_eq!(
+        rejection_message(&fx.world, &SimError::Locked, Some(barracks)),
+        "Needs Militia"
+    );
+    assert_eq!(
+        rejection_message(&fx.world, &SimError::NotInCityRadius, None),
+        "Outside a city's economic radius"
+    );
+    let mut fx = fixture_config(10_000, "age.ancient", &["tech.civic.1"]);
+    let city_type = fx.rules.id_of("bld.city").unwrap();
+    fx.spawn(city_type, 1, 20, 20);
+    let builder = fx.spawn(fx.mover(), 1, 10, 10);
+    fx.click(builder, false);
+    fx.hud(HudRegionKind::CommandSlot, 0, PointerButton::Left, false);
+    fx.ctl.place(&mut fx.world, at(30, 20), false);
+    assert_eq!(
+        fx.hud_snapshot().events.last().unwrap(),
+        "Too close to another city (20 tiles)"
+    );
+    fx.ctl.place(&mut fx.world, at(60, 60), false);
+    assert_eq!(
+        fx.hud_snapshot().events.last().unwrap(),
+        "Outside your borders"
+    );
+}
+
+#[test]
+fn task_30_scripts_reach_the_capture_states_without_a_window() {
+    use crate::script::{Script, ScriptAction, ScriptContext, ScriptSetup};
+    let options = crate::args::Options::default();
+    let content = crate::terrain::generate_content(&options).unwrap();
+    for (text, city_script) in [
+        (
+            include_str!("../../../../docs/tasks/30-palette-script.txt"),
+            false,
+        ),
+        (
+            include_str!("../../../../docs/tasks/30-city-script.txt"),
+            true,
+        ),
+    ] {
+        let mut game =
+            crate::match_setup::build_match(&content.rules, &content.map, &content.factions, 1)
+                .unwrap();
+        ScriptSetup::scan(text)
+            .unwrap()
+            .apply_grants(&mut game.world)
+            .unwrap();
+        let start = &game.starts[0];
+        let context = ScriptContext::of(start);
+        let mut script = Script::parse(text, &context, &|dx, dy| {
+            let pos = game.world.offset(start.city_pos, dx, dy);
+            SurfacePos {
+                face: pos.face,
+                x: i64::from(pos.x),
+                y: i64::from(pos.y),
+            }
+        })
+        .unwrap();
+        let mut ctl = Controller::new();
+        for _ in 0..710 {
+            for action in script.due_actions(game.world.tick()) {
+                match action {
+                    ScriptAction::SelectResearchers => ctl.select_researchers(&game.world),
+                    ScriptAction::SelectProducers => ctl.select_producers(&game.world),
+                    ScriptAction::SelectShips => ctl.select_own_ships(&game.world),
+                    ScriptAction::Speed(_) => {}
+                }
+            }
+            for event in script.due(game.world.tick()) {
+                ctl.handle(&mut game.world, event);
+            }
+            game.world.step();
+            ctl.after_step(&mut game.world);
+        }
+        let mut hud = HudSnapshot::default();
+        ctl.fill(&game.world, &mut hud);
+        if city_script {
+            let scene = crate::terrain::to_scene(&content.map);
+            let camera = rom_render::home_camera(&scene);
+            let surface = rom_render::Surface::new(Arc::new(scene));
+            let layout = rom_render::hud_layout::HudLayout::new(1672, 941, None);
+            let view = rom_render::pick::canvas_view(&camera, &layout, true);
+            let preview = hud.placement.as_ref().expect("placement preview");
+            // Keep the full contour and four tiles of ghost clearance visible in the capture.
+            for dx in [-0.5, 0.5] {
+                for dy in [-0.5, 0.5] {
+                    let x = preview.x as f32 / 1000.0 + dx * f32::from(preview.width);
+                    let y = preview.y as f32 / 1000.0 + dy * f32::from(preview.height);
+                    for lift in [0.0, 4.0] {
+                        let (px, py, _) = view
+                            .project([x, surface.height(x, y) + lift, y])
+                            .expect("placement in front of camera");
+                        assert!(
+                            !layout.contains_hud(px, py) && layout.world_area().contains(px, py),
+                            "placement is hidden by the HUD at {px}, {py}"
+                        );
+                    }
+                }
+            }
+            assert_eq!(
+                hud.placement.as_ref().map(|p| p.valid),
+                Some(Some(true)),
+                "{hud:?}"
+            );
+            assert!(
+                hud.city_radii
+                    .iter()
+                    .any(|c| c.economic == 16_000 && c.spacing == 20_000 && c.minimap)
+            );
+        } else {
+            let palette = hud.palette.as_ref().expect("library selected");
+            assert_eq!(palette.tab, PaletteTab::Research);
+            assert!(
+                palette
+                    .buttons
+                    .iter()
+                    .any(|b| matches!(b.state, ButtonState::InProgress { pct } if pct > 0))
+            );
+            assert!(
+                palette
+                    .buttons
+                    .iter()
+                    .any(|b| matches!(b.state, ButtonState::Unaffordable { .. }))
+            );
+            assert!(
+                palette
+                    .buttons
+                    .iter()
+                    .any(|b| matches!(b.state, ButtonState::Locked { .. }))
+            );
+            assert!(
+                hud.overview
+                    .tracks
+                    .iter()
+                    .any(|t| t.levels.contains(&rom_render::ResearchCell::Done))
+            );
+            assert_eq!(hud.data_tab, 4);
+        }
+    }
+}
+
+#[test]
+fn prerequisite_help_ignores_satisfied_or_groups() {
+    let fx = fixture_config(10_000, "age.ancient", &["tech.military.1"]);
+    let advance = fx.rules.id_of("tech.age.classical").unwrap();
+    let reason = crate::hud::unmet(&fx.world, advance);
+    assert!(reason.contains("Barter") && reason.contains("Writing"));
+    assert!(!reason.contains("Militia") && !reason.contains("Chiefdom"));
+    let fx = fixture_config(
+        10_000,
+        "age.ancient",
+        &["tech.military.1", "tech.science.1"],
+    );
+    assert_eq!(
+        crate::hud::button_state(&fx.world, advance, false),
+        ButtonState::Ready
+    );
 }

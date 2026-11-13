@@ -750,18 +750,20 @@ fn render_loop(shared: &Shared) {
         }
         controller.set_viewport(layout.0, layout.1);
         orbit_controller.set_viewport(layout.0, layout.1);
-        match (orbit.as_mut(), zoom.as_mut()) {
-            (Some(orbit), Some(zoom)) => {
-                // A camera reset by the planet controller moves the log-distance with it.
-                zoom.adopt_orbit(orbit);
-                zoom.advance(seconds);
-                zoom.sync_orbit(orbit);
-                if zoom.pans_planet() {
-                    orbit_controller.advance(orbit, seconds);
+        if !picker.is_panning() {
+            match (orbit.as_mut(), zoom.as_mut()) {
+                (Some(orbit), Some(zoom)) => {
+                    // A camera reset by the planet controller moves the log-distance with it.
+                    zoom.adopt_orbit(orbit);
+                    zoom.advance(seconds);
+                    zoom.sync_orbit(orbit);
+                    if zoom.pans_planet() {
+                        orbit_controller.advance(orbit, seconds);
+                    }
                 }
+                (Some(orbit), None) => orbit_controller.advance(orbit, seconds),
+                (None, _) => controller.advance(&mut camera, seconds),
             }
-            (Some(orbit), None) => orbit_controller.advance(orbit, seconds),
-            (None, _) => controller.advance(&mut camera, seconds),
         }
 
         if let Some(zoom) = &zoom {
@@ -878,7 +880,14 @@ fn render_loop(shared: &Shared) {
                     }
                     _ => {
                         if let Some(map) = &minimap {
-                            map.draw(&mut drawing, &hud_layout, &blended, &camera, orbit.as_ref());
+                            map.draw(
+                                &mut drawing,
+                                &hud_layout,
+                                &blended,
+                                &camera,
+                                orbit.as_ref(),
+                                &hud_snapshot.city_radii,
+                            );
                         }
                     }
                 }

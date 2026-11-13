@@ -164,3 +164,47 @@ become spheres. Keyboard: palette slots are Q W E R T / A S D F G / Z X C V B; a
 camera, End resets it, Home frames the map, Ctrl+0..9 stores a group, 0..9 recalls it, A arms
 attack-move when slot A is empty. Hidden `--script <file>` replays pick events (see
 `rom-app/src/script.rs`); `docs/tasks/15-demo-script.txt` produced `docs/img/hud-selection.png`.
+
+## Controls
+
+Middle-button drag pans at ground speed. On a flat map the point under the
+cursor stays under it; on a globe the view follows a great circle.
+Right-button drag also pans on a flat map when nothing is selected and no
+placement is active. Shift+middle-button drag rotates the view. The wheel
+zooms, arrow keys and the screen edges pan, End restores the starting view,
+and Home frames the map or globe. Existing selection, order and palette
+hotkeys are unchanged.
+
+## Palette states and research
+
+Ready commands use their normal gold artwork. Unaffordable commands are
+darkened; locked commands use a cached greyscale atlas. Hover shows the
+name, current ramped price and missing resources or first unmet prerequisite
+OR-group. Completed nonrepeatable research uses a gold check badge; queued
+research has a cyan progress bar and cannot be submitted twice.
+
+A producer's RESEARCH palette shows the lowest unresearched level of each
+track, the next age, and its other unresearched technologies. Completed
+technologies remain visible in the RESEARCH data tab: four track rows of
+13 squares and age pips (gold = done, cyan = queued or active, white outline =
+next, grey = later). Obsolete unit steps and locked successors are hidden;
+a line with no unlocked step previews its first step in greyscale.
+Building pages retain locked buildings and use the authored grid order.
+
+Selecting a city shows all own completed cities' economic radii as thin
+white dashed circles and as circles on the minimap. Placement also shows
+economic radii when the building requires them; city placement shows red
+spacing circles around every existing city. The placement footprint has a
+thick green/red contour and an owner-colour translucent ghost at the future
+building's height. Fresh construction sites retain a dashed contour and the
+ghost until their first construction work.
+
+The CPU HUD preview includes all five button states and a sample research
+overview. It uses the same artwork and quad composition as the GPU HUD:
+`cargo run -p rom-render --example hud_preview -- docs/img/hud-states-preview.png 1672 941`.
+This is synthetic interface data, not a match screenshot.
+
+Script support adds `researchers` (select completed track-research producers)
+and `hud data 4` (open the research overview). Setup resource `grant` lines
+also apply to flat and single-sphere matches. The task 30 scripts use real
+construction and research orders, then slow the simulation for capture.

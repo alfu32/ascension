@@ -119,7 +119,7 @@ pub enum PointerButton {
     Left,
     /// Secondary button.
     Right,
-    /// Wheel button; dragging with it rotates the camera.
+    /// Wheel button; dragging pans, Shift-drag rotates the camera.
     Middle,
 }
 
@@ -257,10 +257,10 @@ impl CameraController {
                 self.pointer = Some([x, y]);
             }
             InputEvent::PointerLeft => self.pointer = None,
-            InputEvent::ButtonDown { button, x, y, .. } => {
+            InputEvent::ButtonDown { button, x, y, mods } => {
                 self.pointer = Some([x, y]);
                 if button == PointerButton::Middle {
-                    self.rotating = true;
+                    self.rotating = mods.shift;
                 }
             }
             InputEvent::ButtonUp { button, x, y, .. } => {
@@ -333,6 +333,29 @@ mod tests {
 
     fn close(a: f32, b: f32) -> bool {
         (a - b).abs() < 1e-4
+    }
+
+    #[test]
+    fn rotation_requires_shift_middle_drag() {
+        for shift in [false, true] {
+            let mut camera = Camera::default();
+            let before = camera;
+            let mut controller = CameraController::default();
+            controller.apply(
+                &mut camera,
+                InputEvent::ButtonDown {
+                    button: PointerButton::Middle,
+                    x: 400.0,
+                    y: 300.0,
+                    mods: Modifiers {
+                        shift,
+                        ..Modifiers::default()
+                    },
+                },
+            );
+            controller.apply(&mut camera, InputEvent::PointerMoved { x: 450.0, y: 320.0 });
+            assert_eq!(camera != before, shift);
+        }
     }
 
     #[test]

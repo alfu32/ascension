@@ -364,6 +364,7 @@ fn run(
                     match action {
                         ScriptAction::SelectShips => controller.select_own_ships(&world),
                         ScriptAction::SelectProducers => controller.select_producers(&world),
+                        ScriptAction::SelectResearchers => controller.select_researchers(&world),
                         ScriptAction::Speed(percent) => link.set_speed(percent),
                     }
                 }

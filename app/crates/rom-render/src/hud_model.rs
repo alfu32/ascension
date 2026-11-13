@@ -47,6 +47,98 @@ pub fn slot_of_key(ch: char) -> Option<usize> {
         .position(|key| key.eq_ignore_ascii_case(&ch))
 }
 
+/// Availability and progress of one palette command.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum ButtonState {
+    /// Requirements and price are met.
+    #[default]
+    Ready,
+    /// Resource icon names and the amounts still needed.
+    Unaffordable { missing: Vec<(String, i64)> },
+    /// First unmet requirement in player-facing words.
+    Locked { reason: String },
+    /// A completed, nonrepeatable technology.
+    Done,
+    /// A queued or active research order.
+    InProgress { pct: u32 },
+}
+
+impl ButtonState {
+    /// Whether pressing this button can submit an order.
+    pub fn enabled(&self) -> bool {
+        matches!(self, Self::Ready)
+    }
+
+    /// Rollover and event explanation.
+    pub fn reason(&self) -> String {
+        match self {
+            Self::Locked { reason } => reason.clone(),
+            Self::Unaffordable { missing } => format!(
+                "Not enough {}",
+                missing
+                    .iter()
+                    .map(|(icon, amount)| format!(
+                        "{} (short {amount})",
+                        icon.trim_start_matches("icons/res_")
+                    ))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Self::Done => "Researched".into(),
+            Self::InProgress { pct } => format!("Research queued / in progress ({pct}%)"),
+            Self::Ready => String::new(),
+        }
+    }
+}
+
+/// A cell in the research overview.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResearchCell {
+    /// Completed research or age.
+    Done,
+    /// Queued or active research.
+    InProgress,
+    /// Lowest unresearched level, or the next age.
+    Next,
+    /// A later level or age.
+    Locked,
+}
+
+/// A track's label and levels in ascending order.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResearchTrack {
+    /// Display label supplied by the app.
+    pub label: String,
+    /// One cell per level.
+    pub levels: Vec<ResearchCell>,
+}
+
+/// All research tracks and age pips, independent of the selected producer.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ResearchOverview {
+    /// Tracks in metadata order.
+    pub tracks: Vec<ResearchTrack>,
+    /// Ages in ordinal order.
+    pub ages: Vec<ResearchCell>,
+}
+
+/// A city radius to draw on the current surface.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HudCityRadius {
+    /// Surface face.
+    pub face: u8,
+    /// Centre in milli-tiles.
+    pub x: i32,
+    /// Centre in milli-tiles.
+    pub y: i32,
+    /// Economic radius in milli-tiles; zero when only spacing is shown.
+    pub economic: i64,
+    /// Exclusion radius in milli-tiles; zero outside city placement.
+    pub spacing: i64,
+    /// Show the economic radius on the minimap.
+    pub minimap: bool,
+}
+
 /// One command button.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HudButton {
@@ -58,10 +150,8 @@ pub struct HudButton {
     pub name: String,
     /// Price line, empty when free.
     pub price: String,
-    /// False when locked, unaffordable or otherwise unusable.
-    pub enabled: bool,
-    /// Why the button is disabled, empty when enabled.
-    pub reason: String,
+    /// Availability or progress, computed by the app.
+    pub state: ButtonState,
     /// True while the button's mode is active (placement, stance).
     pub armed: bool,
 }
@@ -197,6 +287,10 @@ pub struct HudPlacement {
     pub x: i32,
     /// Footprint centre, south, in milli-tiles.
     pub y: i32,
+    /// Render type, used to match the procedural building's height.
+    pub kind: u16,
+    /// Owner colour of the future building.
+    pub owner: u8,
     /// Whether the position is currently valid; `None` before the first answer.
     pub valid: Option<bool>,
 }

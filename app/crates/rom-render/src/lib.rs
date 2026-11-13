@@ -62,8 +62,9 @@ pub use zoom::Level;
 
 pub use hud::{HudResearch, HudResource, HudSelection, HudSnapshot};
 pub use hud_model::{
-    HudButton, HudCard, HudMarker, HudPalette, HudPlacement, HudQueue, HudQueueItem, HudTile,
-    MarkerKind, PaletteTab, SLOT_KEYS, slot_of_key,
+    ButtonState, HudButton, HudCard, HudCityRadius, HudMarker, HudPalette, HudPlacement, HudQueue,
+    HudQueueItem, HudTile, MarkerKind, PaletteTab, ResearchCell, ResearchOverview, ResearchTrack,
+    SLOT_KEYS, slot_of_key,
 };
 pub use pick::{
     Ground, HudRegionKind, HudTarget, PickContext, PickController, PickEvent, View, flat_surface,
