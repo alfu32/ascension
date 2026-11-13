@@ -341,7 +341,11 @@ impl World {
     }
 
     fn impact(&mut self, hit: &PendingHit) {
-        let Some(impact) = self.entity(hit.target).map(|e| e.pos) else {
+        let Some(impact) = self
+            .entity(hit.target)
+            .filter(|e| !e.neutralised && self.enemies(hit.owner, e.owner))
+            .map(|e| e.pos)
+        else {
             return;
         };
         let weapon = self.rules.entity_types[&hit.source_type]
@@ -413,9 +417,22 @@ impl World {
         let dead: Vec<_> = self
             .entities()
             .filter(|e| e.hp <= 0)
-            .map(|e| (e.id, e.owner, e.type_id, e.killer))
+            .map(|e| {
+                (
+                    e.id,
+                    e.owner,
+                    e.type_id,
+                    e.killer,
+                    e.build_progress.is_none(),
+                )
+            })
             .collect();
-        for (id, owner, type_id, killer) in dead {
+        for (id, owner, type_id, killer, complete) in dead {
+            // A complete capturable building is disabled instead; an unfinished site dies.
+            if complete && self.is_capturable(type_id) {
+                self.neutralise(id);
+                continue;
+            }
             *self.stats.losses.entry(owner).or_default() += 1;
             if let Some(killer) = killer {
                 *self.stats.kills.entry(killer).or_default() += 1;

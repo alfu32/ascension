@@ -127,6 +127,9 @@ impl World {
         {
             return Err(SimError::ProductionUnavailable);
         }
+        if executor.assimilation_until.is_some() {
+            return Err(SimError::InactiveExecutor);
+        }
         if executor.build_progress.is_some() {
             return Err(SimError::IncompleteExecutor);
         }

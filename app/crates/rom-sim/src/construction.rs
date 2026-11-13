@@ -169,6 +169,16 @@ impl World {
             order.status = OrderStatus::Failed("target_gone".into());
             return;
         };
+        if site.neutralised && site.owner == order.player && order.kind == "repair" {
+            let site_id = site.id;
+            let at = site.pos;
+            let bounds = footprint(&self.rules.entity_types[&site.type_id], at);
+            if self.approach(builder, order, at, bounds) {
+                self.restore_city(site_id, order.player);
+                order.status = OrderStatus::Done;
+            }
+            return;
+        }
         if site.hp <= 0 || site.owner != order.player {
             order.status = OrderStatus::Failed("target_gone".into());
             return;
@@ -239,6 +249,7 @@ impl World {
             self.refresh_site(site_id);
             self.economy.dirty.insert(site_id);
             self.refresh_territory(site_id);
+            self.note_capital(site_id);
         }
     }
 }

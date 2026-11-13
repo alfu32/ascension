@@ -30,7 +30,12 @@ impl World {
         let site = command
             .target_entity
             .and_then(|id| self.entity(id))
-            .filter(|e| e.owner == command.player && e.build_progress.is_none())
+            .filter(|e| {
+                e.owner == command.player
+                    && e.build_progress.is_none()
+                    && !e.neutralised
+                    && e.assimilation_until.is_none()
+            })
             .ok_or(SimError::InvalidHarvestTarget)?;
         let resource = self.rules.entity_types[&site.type_id]
             .gather_site
@@ -198,6 +203,8 @@ impl World {
                     site.owner == worker.owner
                         && site.pos.body == worker.pos.body
                         && site.build_progress.is_none()
+                        && !site.neutralised
+                        && site.assimilation_until.is_none()
                         && site.gather_slots > 0
                         && self.rules.entity_types[&site.type_id]
                             .gather_site

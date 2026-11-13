@@ -55,6 +55,9 @@ impl World {
         let Some(entity) = self.entity(id) else {
             return terms;
         };
+        if entity.neutralised || entity.assimilation_until.is_some() {
+            return terms;
+        }
         let et = &self.rules.entity_types[&entity.type_id];
         if let Some(body) = self
             .space
@@ -75,6 +78,8 @@ impl World {
         if let Some(site) = entity.work_site.and_then(|id| self.entity(id))
             && site.owner == entity.owner
             && site.build_progress.is_none()
+            && !site.neutralised
+            && site.assimilation_until.is_none()
             && let Some(gather) = &self.rules.entity_types[&site.type_id].gather_site
             && let Some(harvester) = et
                 .harvester

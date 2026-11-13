@@ -20,6 +20,7 @@ impl World {
         id: EntityId,
         stance: DefId,
     ) -> Result<(), SimError> {
+        self.check_orders_open(player)?;
         let entity = self.entity(id).ok_or(SimError::UnknownExecutor(id))?;
         if entity.owner != player {
             return Err(SimError::ForeignOwner(id));
@@ -69,6 +70,9 @@ impl World {
             return None;
         }
         let et = &self.rules.entity_types[&e.type_id];
+        if e.neutralised || self.player_status(e.owner) == Some(crate::PlayerStatus::Defeated) {
+            return None;
+        }
         if et.weapons.is_empty() || behavior == "hold_fire" {
             return None;
         }

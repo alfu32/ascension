@@ -132,7 +132,7 @@ fn minimum_damage_is_one() {
 
 #[test]
 fn ranged_building_attacks_enemy_in_range_only() {
-    let mut w = world("");
+    let mut w = world("UPDATE game_constant SET value=0 WHERE key='combat.attrition_per_period';");
     let city = spawn(&mut w, "bld.city", 1, at(20000, 20000));
     let near = spawn(&mut w, "unit.citizen", 2, at(30000, 20000));
     // Out of range but still inside the city's line of sight.

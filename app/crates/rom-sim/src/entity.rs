@@ -81,6 +81,12 @@ pub struct Entity {
     pub energy_remainder: i64,
     /// Fractional healing numerator, over ticks per second.
     pub heal_remainder: i64,
+    /// Fractional attrition damage numerator, over the income period.
+    pub attrition_remainder: i64,
+    /// Capturable building disabled at zero hit points.
+    pub neutralised: bool,
+    /// Tick at which a captured building finishes assimilation.
+    pub assimilation_until: Option<u64>,
     pub(crate) killer: Option<PlayerId>,
     /// Completed construction ticks; None means complete.
     pub build_progress: Option<u32>,

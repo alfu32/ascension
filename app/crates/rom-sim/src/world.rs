@@ -27,6 +27,8 @@ use std::{
 /// Aggregate order counts and per-player combat totals.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Stats {
+    /// Enemy cities captured during the match.
+    pub cities_captured: u64,
     /// Successfully completed orders, including stop.
     pub orders_done: u64,
     /// Enemy kills credited to each player.
@@ -50,6 +52,8 @@ pub struct Stats {
 /// Deterministic match state, mutated through setup operations and commands.
 #[derive(Debug)]
 pub struct World {
+    pub(crate) victory: crate::victory::VictoryState,
+    pub(crate) capture: crate::capture::CaptureState,
     pub(crate) hits: Vec<crate::combat::PendingHit>,
     pub(crate) shots: Vec<crate::combat::PendingShot>,
     pub(crate) tick: u64,
@@ -182,6 +186,10 @@ impl World {
         }
         for (key, minimum, maximum) in [
             ("combat.min_damage", 1, i64::MAX),
+            ("combat.attrition_per_period", 0, i64::MAX),
+            ("combat.attrition_floor_hp", 0, 1),
+            ("city.assimilate_ticks", 0, i64::MAX),
+            ("victory.capital_hold_ticks", 0, i64::MAX),
             ("unit.respond_range", 0, i64::MAX),
             ("player.pop_cap.base", 0, i64::MAX),
             ("build.site_start_hp_pct", 0, 100),
@@ -221,7 +229,10 @@ impl World {
         }
         let avoid = Avoidance::new(&rules);
         let tick_rate = rules.constant("sim.ticks_per_second").unwrap_or(1).max(1);
+        let victory = crate::victory::VictoryState::new(&rules, &by_id)?;
         Ok(Self {
+            victory,
+            capture: crate::capture::CaptureState::default(),
             hits: Vec::new(),
             shots: Vec::new(),
             tick: 0,
@@ -437,6 +448,9 @@ impl World {
                 .map_or(0, |e| e.max),
             energy_remainder: 0,
             heal_remainder: 0,
+            attrition_remainder: 0,
+            neutralised: false,
+            assimilation_until: None,
             killer: None,
             build_progress: site.then_some(0),
             move_remainder: 0,
@@ -446,6 +460,7 @@ impl World {
             idle_ticks: 0,
             orders: VecDeque::new(),
         }));
+        self.note_capital(id);
         self.refresh_entity_stats(id);
         self.next_entity_id = next;
         let surface = &mut self.surfaces[slot];
@@ -516,6 +531,8 @@ impl World {
             .get_mut(id.0 as usize)
             .and_then(Option::take)
             .ok_or(SimError::UnknownExecutor(id))?;
+        self.capture.neutralised.remove(&id);
+        self.capture.assimilating.remove(&id);
         let slot = self.slot(entity.pos.body);
         let surface = &mut self.surfaces[slot];
         surface.spatial.remove(id, entity.pos);
@@ -580,9 +597,13 @@ impl World {
 
     /// Validates now and defers queue mutation until the next step.
     pub fn submit(&mut self, mut command: Command) -> Result<OrderId, SimError> {
+        self.check_orders_open(command.player)?;
         let entity = self
             .entity(command.executor)
             .ok_or(SimError::UnknownExecutor(command.executor))?;
+        if entity.neutralised {
+            return Err(SimError::InactiveExecutor);
+        }
         if entity.owner != command.player {
             return Err(SimError::ForeignOwner(command.executor));
         }
@@ -729,7 +750,9 @@ impl World {
         self.seen.clear();
         self.fire_shots();
         self.land_projectiles();
+        self.apply_attrition();
         self.remove_dead();
+        self.update_captures();
         self.remember_touched();
         self.update_claims();
         self.pay_income();
@@ -738,5 +761,6 @@ impl World {
         }
         self.tick = self.tick.checked_add(1).expect("simulation tick exhausted");
         self.arrive_transits();
+        self.update_victory();
     }
 }
