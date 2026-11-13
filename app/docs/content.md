@@ -46,10 +46,13 @@ The content is too large to type by hand row by row. It is **generated**:
 **The Library** researches four tracks of 13 levels each, and the age advances.
 
 - Track level *L* (1–13) requires age *L − 1* and level *L − 1* of the same track.
-- Advancing from age *k* to *k + 1* (`tech.age.<next>`) requires age *k* and two
-  track techs of level *k + 1*: (**Military** or **Civic**) and (**Commerce** or
-  **Science**) — two prerequisite OR-groups. In the Ancient age a player
-  researches two level-1 techs, then advances to Classical.
+- Advancing from age *k* to *k + 1* (`tech.age.<next>`) requires age *k* and all
+  four track techs of level *k + 1* (Military, Civic, Commerce, Science), one
+  prerequisite group each. In the Ancient age a player researches the four
+  level-1 techs, then advances to Classical.
+- The Library palette is a grid: one row per age, the age advance in the first
+  column and Military, Civic, Commerce, Science in the next four; three ages
+  per page. Projects (Continental Union, Unification) are on their own page.
 - Age techs cost food and knowledge (from Classical), growing with the age;
   Abundance (12) and later cost nothing but take time (the Abundance modifier
   makes every cost zero).

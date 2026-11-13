@@ -128,7 +128,7 @@ def generate():
         definition('tech', key, name)
         row('tech', id=Ref(key), kind=kind, track=track, level=level, research_ticks=ticks)
         need(key, 'age.' + AGES[age])
-        research.append((building, age, len(research), key))
+        research.append((building, age, len(research), key, kind, track))
         cost(key, prices)
     def weapon(key, damage, dc, reach, layers, cooldown=30):
         row('et_weapon', entity_type_id=Ref(key), damage=damage, damage_class_id=Ref(dc, 'damage_class'),
@@ -362,8 +362,9 @@ def generate():
         if age >= 12:
             prices = {}
         tech(key, 'Advance to ' + AGES[age].title(), age - 1, 'library', 600 + 200 * (age - 1), prices, 'age', level=age)
-        for track in TRACKS:
-            need(key, f'tech.{track}.{age}', 1 if track in ('military', 'civic') else 2)
+        # An age advance needs all four track levels of its row, one prerequisite group each.
+        for group, track in enumerate(TRACKS, 1):
+            need(key, f'tech.{track}.{age}', group)
         row('tech_effect', tech_id=Ref(key), effect='set_age', target_def_id=Ref('age.' + AGES[age]))
     modifier('tech.age.abundance', 'cost.all', 0, 'mul')
     for building, stat, entries in RESEARCH:
@@ -406,8 +407,16 @@ def generate():
     for key, age, ticks in [('continental_union', 8, 3000), ('unification', 10, 4000)]:
         tech('tech.' + key, key.replace('_', ' ').title(), age, 'library', ticks, {'knowledge': 1000}, 'project')
     row('tech_effect', tech_id=Ref('tech.unification'), effect='change_faction', target_def_id=Ref('race.human'))
-    for building, _, _, key in sorted(research, key=lambda r: (r[1], r[2])):
-        produce('bld.' + building, key, 'research', 'research')
+    # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
+    # three ages per page. Other research is listed by the age it needs.
+    grid_columns = ['age'] + list(TRACKS)
+    for building, age, _, key, kind, track in sorted(research, key=lambda r: (r[1], r[2])):
+        if kind in ('age', 'track'):
+            page = 'research' if age < 3 else f'research_{age // 3 + 1}'
+            row('production', producer_type_id=Ref('bld.' + building), product_def_id=Ref(key), mode='research',
+                ui_page=page, ui_col=grid_columns.index(track or 'age'), ui_row=age % 3)
+        else:
+            produce('bld.' + building, key, 'research', 'projects' if kind == 'project' else 'research')
     # Upgraded producers retain their whole palette, including subsequent upgrades.
     for base, steps in building_variants:
         for key, _ in steps:

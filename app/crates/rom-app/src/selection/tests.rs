@@ -1393,16 +1393,25 @@ fn task_30_scripts_reach_the_capture_states_without_a_window() {
 }
 
 #[test]
-fn prerequisite_help_ignores_satisfied_or_groups() {
+fn prerequisite_help_names_only_missing_tracks() {
     let fx = fixture_config(10_000, "age.ancient", &["tech.military.1"]);
     let advance = fx.rules.id_of("tech.age.classical").unwrap();
     let reason = crate::hud::unmet(&fx.world, advance);
-    assert!(reason.contains("Barter") && reason.contains("Writing"));
-    assert!(!reason.contains("Militia") && !reason.contains("Chiefdom"));
+    assert!(!reason.contains("Militia"));
+    assert!(
+        ["Chiefdom", "Barter", "Writing"]
+            .iter()
+            .any(|n| reason.contains(n))
+    );
     let fx = fixture_config(
         10_000,
         "age.ancient",
-        &["tech.military.1", "tech.science.1"],
+        &[
+            "tech.military.1",
+            "tech.civic.1",
+            "tech.commerce.1",
+            "tech.science.1",
+        ],
     );
     assert_eq!(
         crate::hud::button_state(&fx.world, advance, false),

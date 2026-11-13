@@ -1056,7 +1056,7 @@ mod content_tests {
     }
 
     #[test]
-    fn classical_needs_two_level_one_tracks() {
+    fn classical_needs_all_four_level_one_tracks() {
         let mut a = audit();
         let r = a.world.rules.clone();
         let library = a
@@ -1090,6 +1090,15 @@ mod content_tests {
             .unwrap()
             .techs
             .insert(r.id_of("tech.commerce.1").unwrap(), 1);
+        assert_eq!(a.world.submit(order.clone()), Err(SimError::Locked));
+        for track in ["tech.civic.1", "tech.science.1"] {
+            a.world
+                .players
+                .get_mut(&PlayerId(1))
+                .unwrap()
+                .techs
+                .insert(r.id_of(track).unwrap(), 1);
+        }
         a.world.submit(order).unwrap();
     }
 

@@ -936,7 +936,7 @@ fn every_age_has_an_advance_tech() {
 }
 
 #[test]
-fn age_advance_needs_two_tracks() {
+fn age_advance_needs_all_four_tracks() {
     let r = seed();
     for age in r.ages.values().filter(|a| a.ordinal > 0) {
         let advance = r
@@ -955,21 +955,15 @@ fn age_advance_needs_two_tracks() {
             .values()
             .filter(|t| t.kind == rom_rules::TechKind::Track && t.level == age.ordinal)
             .collect();
-        for left in &tracks {
-            let one = ActiveSources::from([previous, left.id]);
-            assert!(!r.is_unlocked(advance.id, &one, &Owned::new()));
-            for right in &tracks {
-                let valid = matches!(left.track.as_str(), "military" | "civic")
-                    != matches!(right.track.as_str(), "military" | "civic");
-                assert_eq!(
-                    r.is_unlocked(
-                        advance.id,
-                        &ActiveSources::from([previous, left.id, right.id]),
-                        &Owned::new()
-                    ),
-                    valid
-                );
-            }
+        assert_eq!(tracks.len(), 4);
+        let all: ActiveSources = std::iter::once(previous)
+            .chain(tracks.iter().map(|t| t.id))
+            .collect();
+        assert!(r.is_unlocked(advance.id, &all, &Owned::new()));
+        for missing in &tracks {
+            let without: ActiveSources =
+                all.iter().copied().filter(|id| *id != missing.id).collect();
+            assert!(!r.is_unlocked(advance.id, &without, &Owned::new()));
         }
     }
 }

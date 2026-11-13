@@ -432,11 +432,16 @@ fn bootstrap_to_classical_age_using_only_orders() {
             .find(|e| e.type_id == id(&w, "bld.library"))
             .unwrap()
             .id;
-        // The generated age advance needs two Library tracks. Grant their
-        // starting budget, then obtain both prerequisites through normal orders.
-        w.grant(OWNER, id(&w, "res.food"), 400).unwrap();
-        w.grant(OWNER, id(&w, "res.timber"), 400).unwrap();
-        for track in ["tech.military.1", "tech.commerce.1"] {
+        // The generated age advance needs all four Library tracks. Grant their
+        // starting budget, then obtain the prerequisites through normal orders.
+        w.grant(OWNER, id(&w, "res.food"), 800).unwrap();
+        w.grant(OWNER, id(&w, "res.timber"), 800).unwrap();
+        for track in [
+            "tech.military.1",
+            "tech.civic.1",
+            "tech.commerce.1",
+            "tech.science.1",
+        ] {
             w.submit(research(&w, library, track)).unwrap();
             ticks(&mut w, 400);
         }
