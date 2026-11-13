@@ -275,6 +275,52 @@ pub fn unit_height(view: &EntityView) -> f32 {
     (unit_width(view) * 1.8).max(0.9)
 }
 
+/// The box that stands for `view` when picking: centre `[east, up, south]`, size and yaw in
+/// degrees, matching how [`build_instances`] draws the entity. `ground` samples the surface.
+pub fn pick_box(view: &EntityView, ground: &dyn Fn(f32, f32) -> f32) -> ([f32; 3], [f32; 3], f32) {
+    let base = ground(view.x, view.y);
+    if view.building {
+        let (w, h) = (
+            f32::from(view.footprint.0.max(1)),
+            f32::from(view.footprint.1.max(1)),
+        );
+        let progress = view.under_construction.map_or(1.0, |p| p.clamp(0.0, 1.0));
+        let body = building_height(view) * progress.max(0.12) + 0.2;
+        ([view.x, base + body / 2.0, view.y], [w, body, h], 0.0)
+    } else if view.owner == 0 {
+        (
+            [view.x, base + 0.35, view.y],
+            [0.7, 0.7, 0.7],
+            view.facing_deg,
+        )
+    } else {
+        let (width, height) = (unit_width(view), unit_height(view));
+        (
+            [view.x, base + height / 2.0, view.y],
+            [width, height, width],
+            view.facing_deg,
+        )
+    }
+}
+
+/// The eight corners of a box from [`pick_box`].
+pub fn box_corners(centre: [f32; 3], size: [f32; 3], yaw_deg: f32) -> [[f32; 3]; 8] {
+    let (sin, cos) = yaw_deg.to_radians().sin_cos();
+    let (ax, az) = ([cos, 0.0, sin], [-sin, 0.0, cos]);
+    let mut corners = [[0.0; 3]; 8];
+    for (i, corner) in corners.iter_mut().enumerate() {
+        let sx = if i & 1 == 0 { -0.5 } else { 0.5 } * size[0];
+        let sy = if i & 2 == 0 { -0.5 } else { 0.5 } * size[1];
+        let sz = if i & 4 == 0 { -0.5 } else { 0.5 } * size[2];
+        *corner = [
+            centre[0] + ax[0] * sx + az[0] * sz,
+            centre[1] + sy,
+            centre[2] + ax[2] * sx + az[2] * sz,
+        ];
+    }
+    corners
+}
+
 /// Appends the instances that draw `views`; `camera_yaw` (radians) turns health bars to the camera.
 pub fn build_instances(
     views: &[EntityView],

@@ -14,16 +14,19 @@ pub mod hud_atlas;
 mod hud_gpu;
 pub mod hud_layout;
 pub mod hud_minimap;
+pub mod hud_model;
 pub mod hud_preview;
 pub mod hud_text;
 mod mailbox;
+mod overlay;
+pub mod pick;
 mod pixels;
 mod scene;
 mod stats;
 mod terrain;
 mod worker;
 
-pub use camera::{Camera, CameraController, InputEvent, Key, PointerButton};
+pub use camera::{Camera, CameraController, InputEvent, Key, Modifiers, PointerButton};
 pub use entities::{
     EntitySnapshot, EntityView, OWNER_COLORS, SnapshotPair, Surface, build_instances, owner_color,
 };
@@ -40,3 +43,8 @@ pub use worker::{
 };
 
 pub use hud::{HudResearch, HudResource, HudSelection, HudSnapshot};
+pub use hud_model::{
+    HudButton, HudCard, HudMarker, HudPalette, HudPlacement, HudQueue, HudQueueItem, HudTile,
+    MarkerKind, PaletteTab, SLOT_KEYS, slot_of_key,
+};
+pub use pick::{HudRegionKind, HudTarget, PickContext, PickController, PickEvent, View};

@@ -153,3 +153,14 @@ crop panels. Diagnostic GPUI text is hidden unless `--stats` is supplied.
 HUD surfaces consume pointer input; their controls are inert in this task.
 The world projection centre and minimap footprint both use the centre of the
 band between the top bar and bottom panels.
+
+## Selection and orders (task 15)
+
+The render thread picks (`rom-render/src/pick.rs`) and sends `PickEvent`s over a channel; the
+simulation thread (`rom-app/src/selection.rs`) owns selection, control groups and placement
+and publishes the selection panel, palette, queue and overlay data in `HudSnapshot`.
+`View::terrain_point` is the single camera-ray to terrain function; replace it when planets
+become spheres. Keyboard: palette slots are Q W E R T / A S D F G / Z X C V B; arrows pan the
+camera, End resets it, Home frames the map, Ctrl+0..9 stores a group, 0..9 recalls it, A arms
+attack-move when slot A is empty. Hidden `--script <file>` replays pick events (see
+`rom-app/src/script.rs`); `docs/tasks/15-demo-script.txt` produced `docs/img/hud-selection.png`.

@@ -1,0 +1,6 @@
+# Replayed by --script (tick, command). Box-select the five builders, open BUILD,
+# enter placement for the first building and hover a spot beside the city.
+4  box builders
+8  hud tab 0
+10 hud slot 0
+14 hover @9,4

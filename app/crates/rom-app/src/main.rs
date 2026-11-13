@@ -6,6 +6,8 @@ mod demo;
 mod hud;
 mod match_setup;
 mod screenshot;
+mod script;
+mod selection;
 mod shell;
 mod sim_thread;
 mod terrain;

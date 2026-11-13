@@ -175,6 +175,30 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../assets/hud/icons/pause.svg"),
     ),
     (
+        "icons/pic_house",
+        include_str!("../../../assets/hud/icons/pic_house.svg"),
+    ),
+    (
+        "icons/pic_person",
+        include_str!("../../../assets/hud/icons/pic_person.svg"),
+    ),
+    (
+        "icons/pic_scroll",
+        include_str!("../../../assets/hud/icons/pic_scroll.svg"),
+    ),
+    (
+        "icons/pic_shield",
+        include_str!("../../../assets/hud/icons/pic_shield.svg"),
+    ),
+    (
+        "icons/pic_tower",
+        include_str!("../../../assets/hud/icons/pic_tower.svg"),
+    ),
+    (
+        "icons/pic_wonder",
+        include_str!("../../../assets/hud/icons/pic_wonder.svg"),
+    ),
+    (
         "icons/population",
         include_str!("../../../assets/hud/icons/population.svg"),
     ),

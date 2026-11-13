@@ -336,6 +336,57 @@ impl HudLayout {
         )
     }
 
+    /// Screen rectangle of palette tab `index` (0 to 3).
+    pub fn palette_tab(&self, index: usize) -> Rect {
+        self.map(
+            Group::BottomLeft,
+            Rect::new(54.0 + index as f32 * 130.0, 692.0, 126.0, 38.0),
+        )
+    }
+
+    /// Screen rectangle of the palette page arrow: 0 for previous, 1 for next.
+    pub fn palette_arrow(&self, index: usize) -> Rect {
+        let x = if index == 0 { 22.0 } else { 570.0 };
+        self.map(Group::BottomLeft, Rect::new(x, 692.0, 30.0, 38.0))
+    }
+
+    /// Screen rectangle of the icon slot of production queue row `index` (0 to 2).
+    pub fn queue_slot(&self, index: usize) -> Rect {
+        self.map(
+            Group::BottomLeft,
+            Rect::new(386.0, 772.0 + index as f32 * 49.0, 40.0, 38.0),
+        )
+    }
+
+    /// Screen rectangle of the whole production queue row `index`.
+    pub fn queue_row(&self, index: usize) -> Rect {
+        self.map(
+            Group::BottomLeft,
+            Rect::new(380.0, 768.0 + index as f32 * 49.0, 218.0, 46.0),
+        )
+    }
+
+    /// Screen rectangle of multi-selection tile `index` (0 to 11, row by row).
+    pub fn multi_tile(&self, index: usize) -> Rect {
+        self.map(
+            Group::BottomRight,
+            Rect::new(
+                1000.0 + (index % 4) as f32 * 83.0,
+                716.0 + (index / 4) as f32 * 65.0,
+                78.0,
+                60.0,
+            ),
+        )
+    }
+
+    /// Screen rectangle of minimap button `index` (zoom in, zoom out, centre, signal).
+    pub fn minimap_button(&self, index: usize) -> Rect {
+        self.map(
+            Group::BottomCentre,
+            Rect::new(636.0, 702.0 + index as f32 * 43.0, 38.0, 38.0),
+        )
+    }
+
     /// Screen rectangle of the vertical band between the top bar and the bottom groups,
     /// full width: the part of the frame the world is meant to be read in.
     pub fn world_area(&self) -> Rect {

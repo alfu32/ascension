@@ -16,6 +16,8 @@ use std::sync::Arc;
 
 use crate::camera::Camera;
 use crate::entities::{EntityView, Surface, build_instances};
+use crate::hud::HudSnapshot;
+use crate::overlay::{OverlayGeometry, build_overlays};
 use crate::terrain::{
     ChunkMesh, STAR_COUNT, TerrainScene, build_sea_chunks, build_terrain_chunks, ground_height,
     star_field, star_triangles,
@@ -260,6 +262,7 @@ pub(crate) struct Scene {
     draw_markers: bool,
     movers: Vec<Mover>,
     transforms: Vec<Matrix>,
+    overlay: OverlayGeometry,
 }
 
 /// Meshes and markers of the published terrain.
@@ -398,6 +401,37 @@ impl Scene {
             draw_markers: false,
             transforms: Vec::new(),
             movers: Vec::new(),
+            overlay: OverlayGeometry::default(),
+        }
+    }
+
+    /// The surface of the published terrain, for height sampling.
+    pub(crate) fn surface(&self) -> Option<&Surface> {
+        self.terrain.as_ref().map(|t| &t.surface)
+    }
+
+    /// Builds the selection, marker and placement overlays for the next draw.
+    pub(crate) fn prepare_overlays(
+        &mut self,
+        views: &[EntityView],
+        hud: &HudSnapshot,
+        camera_yaw: f32,
+    ) {
+        match &self.terrain {
+            Some(terrain) => {
+                let surface = &terrain.surface;
+                build_overlays(
+                    views,
+                    &|x, y| surface.height(x, y),
+                    hud,
+                    camera_yaw,
+                    &mut self.overlay,
+                );
+            }
+            None => {
+                self.overlay.lines.clear();
+                self.overlay.tris.clear();
+            }
         }
     }
 
@@ -547,6 +581,26 @@ impl Scene {
                 }
                 for mesh in &terrain.sea {
                     world.draw_mesh(mesh, self.sea_material.clone(), Matrix::identity());
+                }
+                for tri in &self.overlay.tris {
+                    let colour =
+                        Color::new(tri.colour[0], tri.colour[1], tri.colour[2], tri.colour[3]);
+                    let [a, b, c] = tri.v.map(|p| Vector3::new(p[0], p[1], p[2]));
+                    world.draw_triangle3D(a, b, c, colour);
+                    world.draw_triangle3D(a, c, b, colour);
+                }
+                for line in &self.overlay.lines {
+                    let colour = Color::new(
+                        line.colour[0],
+                        line.colour[1],
+                        line.colour[2],
+                        line.colour[3],
+                    );
+                    world.draw_line3D(
+                        Vector3::new(line.a[0], line.a[1], line.a[2]),
+                        Vector3::new(line.b[0], line.b[1], line.b[2]),
+                        colour,
+                    );
                 }
             }
             None => {
