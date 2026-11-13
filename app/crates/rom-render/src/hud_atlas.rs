@@ -71,6 +71,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../assets/hud/icons/arrow_right.svg"),
     ),
     (
+        "icons/badge_done",
+        include_str!("../../../assets/hud/icons/badge_done.svg"),
+    ),
+    (
         "icons/centre",
         include_str!("../../../assets/hud/icons/centre.svg"),
     ),

@@ -510,6 +510,7 @@ def icons():
     )
     I["pic_person"] = person(32, 18, 10, 16, 32, 58)
     I["pic_wonder"] = P(star_path(32, 34, 28, 12)) + C(32, 34, 6, "#2a1a08", 1.5)
+    I["badge_done"] = C(32, 32, 27) + S("M18 33 L28 44 L47 21", 8, "#2a1a08")
     I["event"] = P("M26 6 H38 L36 38 H28Z") + C(32, 52, 5)
     for name, art in I.items():
         write("icons", name, 64, 64, art, ICON_DEFS)
