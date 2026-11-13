@@ -15,7 +15,7 @@ use raylib::prelude::{
 use std::sync::Arc;
 
 use crate::camera::Camera;
-use crate::entities::{EntityView, Surface, build_instances, build_instances_on};
+use crate::entities::{EntityView, Surface, build_instances_with_casters_on};
 use crate::globe::{ChunkBounds, CullView, Globe, PlanetScene};
 use crate::graticule::{GraticuleLine, graticule_fade, graticule_on};
 use crate::hud::HudSnapshot;
@@ -379,6 +379,9 @@ pub(crate) struct Scene {
     /// What is in space, and which ships are selected, for the next draw.
     space_state: space::SpaceState,
     entity_transforms: Vec<Matrix>,
+    /// Entity bodies only; camera-facing health bars never cast shadows.
+    entity_casters: Vec<Matrix>,
+    caster_ranges: Vec<std::ops::Range<usize>>,
     instances: Vec<[f32; 16]>,
     draw_markers: bool,
     movers: Vec<Mover>,
@@ -584,6 +587,8 @@ impl Scene {
             space: None,
             space_state: space::SpaceState::default(),
             entity_transforms: Vec::new(),
+            entity_casters: Vec::new(),
+            caster_ranges: Vec::new(),
             instances: Vec::new(),
             draw_markers: false,
             transforms: Vec::new(),
@@ -1042,17 +1047,34 @@ impl Scene {
     ) {
         self.draw_markers = start_markers;
         self.entity_transforms.clear();
+        self.entity_casters.clear();
         let mut instances = std::mem::take(&mut self.instances);
         if let (Some(gpu), Some(orbit)) = (&self.globe, orbit) {
-            build_instances_on(views, &*gpu.globe, orbit.right(), &mut instances);
+            build_instances_with_casters_on(
+                views,
+                &*gpu.globe,
+                orbit.right(),
+                &mut instances,
+                &mut self.caster_ranges,
+            );
         } else if let Some(terrain) = &self.terrain {
-            build_instances(views, &terrain.surface, camera_yaw, &mut instances);
+            build_instances_with_casters_on(
+                views,
+                &terrain.surface,
+                [camera_yaw.cos(), 0.0, -camera_yaw.sin()],
+                &mut instances,
+                &mut self.caster_ranges,
+            );
         } else {
             self.instances = instances;
             return;
         }
         self.entity_transforms
             .extend(instances.iter().map(matrix_of));
+        for range in &self.caster_ranges {
+            self.entity_casters
+                .extend_from_slice(&self.entity_transforms[range.clone()]);
+        }
         self.instances = instances;
     }
 

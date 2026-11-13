@@ -277,11 +277,14 @@ palette occupies G. `--graticule off` starts with the lines hidden.
 
 Shadows use a 2048² RGB-packed render target, 3×3 PCF, slope-scaled depth bias
 and a normal offset. The fitted camera encloses the visible surface, including
-the street-level horizon, rather than the entire planet. The map is reused
+raised terrain beyond the street-level sea horizon, rather than the entire
+planet. Its depth range includes terrain chunks and entity bounds overlapping
+the receiver footprint, so tall and offscreen casters are not clipped. The map is reused
 until the light turns by 0.15°, the fitted view changes or caster geometry
 changes. Above 0.8 planet radii in orbit distance the pass is skipped and the
 soft terminator supplies globe lighting. Entity colours retain neutral fill
 through the day and night; daylight shadows remain visible on them.
+Camera-facing health bars do not cast shadows or invalidate the cached map.
 
 GPU measurements for the completed implementation are **pending the
 orchestrator's display-enabled run**. The continuation sandbox cannot open a
@@ -307,7 +310,9 @@ orientation, shadow fit and sky gradient. Also inspect the outward-fading
 halo around the globe and habitable system bodies, its brighter day side,
 and the surface-to-space transition. The sky and halo colour/intensity,
 star fade, lighting directions, graticule geometry and light-camera fit are
-covered by headless unit tests.
+covered by headless unit tests. Regression tests also sample raised receivers
+around the horizon, fit tall casters without widening the map, and verify that
+damage and health-bar rotation leave caster geometry unchanged.
 
 For matched surface-sky captures, use the same low camera in fixed daylight
 and fixed midnight. The globe and system captures in the task card exercise

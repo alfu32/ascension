@@ -96,6 +96,27 @@ impl LightFit {
         q[0].abs() <= 1.0 && q[1].abs() <= 1.0 && (0.0..=1.0).contains(&q[2])
     }
 
+    /// Extends the depth range for caster bounds overlapping the receiver footprint. Tall or
+    /// offscreen casters stay in the pass without widening the fitted map.
+    pub fn with_casters(mut self, casters: impl IntoIterator<Item = ([f32; 3], f32)>) -> Self {
+        let old_top = dot(self.eye, self.toward);
+        let (mut top, mut bottom) = (old_top, old_top - self.far);
+        for (centre, radius) in casters {
+            let d = sub(centre, self.eye);
+            if dot(d, self.right).abs() <= self.half + radius
+                && dot(d, self.up).abs() <= self.half + radius
+            {
+                let depth = dot(centre, self.toward);
+                top = top.max(depth + radius + 1.0);
+                bottom = bottom.min(depth - radius - 1.0);
+            }
+        }
+        self.eye = add(self.eye, scale(self.toward, top - old_top));
+        self.far = top - bottom;
+        self.target = sub(self.eye, scale(self.toward, self.far));
+        self
+    }
+
     /// Whether a sphere around `centre` of `radius` overlaps the box, across the light and
     /// between the clip planes.
     pub fn may_touch(&self, centre: [f32; 3], radius: f32) -> bool {
@@ -113,12 +134,23 @@ impl LightFit {
     }
 }
 
-/// Conservative bounds of the visible sea-level sphere, including the horizon. Extrema of the
-/// sphere clipped by the view planes avoid losing distant receivers at street level.
+/// Conservative bounds of visible terrain, including relief beyond the sea-level horizon.
+/// Fits the view-clipped terrain envelope above the sea's occluding tangent cone.
 pub fn globe_footprint(orbit: &OrbitCamera, view: &View) -> Vec<[f32; 3]> {
-    let radius = orbit.radius;
+    let sea_radius = orbit.radius;
+    let radius = sea_radius + crate::terrain::RELIEF;
     let eye = view.eye();
-    let mut planes = vec![(unit(eye), radius * radius / dot(eye, eye).sqrt())];
+    let eye_distance = dot(eye, eye).sqrt();
+    // At height h a receiver can be visible beyond the sea's horizon by acos(R / (R+h)).
+    // The tangent from the eye to the sea sets the lowest possible axial coordinate of any
+    // visible point in the terrain envelope, not just points on its outer sphere.
+    let tangent_length = (eye_distance * eye_distance - sea_radius * sea_radius)
+        .max(0.0)
+        .sqrt();
+    let horizon = (sea_radius * sea_radius
+        - tangent_length * (radius * radius - sea_radius * sea_radius).sqrt())
+        / eye_distance;
+    let mut planes = vec![(unit(eye), horizon)];
     planes.extend(view_planes(view));
     let axes = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
     let mut candidates = Vec::new();
@@ -153,7 +185,28 @@ pub fn globe_footprint(orbit: &OrbitCamera, view: &View) -> Vec<[f32; 3]> {
             candidates.extend([add(centre, tangent), sub(centre, tangent)]);
         }
     }
-    candidates.retain(|&p| planes.iter().all(|&(n, d)| dot(n, p) >= d - 0.001));
+    // The camera can sit inside the terrain envelope. Extrema then also occur at vertices of
+    // the clipping planes inside the ball, rather than on its surface.
+    for (i, &(a, da)) in planes.iter().enumerate() {
+        for (j, &(b, db)) in planes.iter().enumerate().skip(i + 1) {
+            for &(c, dc) in &planes[j + 1..] {
+                let denominator = dot(a, cross(b, c));
+                if denominator.abs() < 1e-6 {
+                    continue;
+                }
+                candidates.push(scale(
+                    add(
+                        add(scale(cross(b, c), da), scale(cross(c, a), db)),
+                        scale(cross(a, b), dc),
+                    ),
+                    1.0 / denominator,
+                ));
+            }
+        }
+    }
+    candidates.retain(|&p| {
+        dot(p, p) <= radius * radius + 0.01 && planes.iter().all(|&(n, d)| dot(n, p) >= d - 0.001)
+    });
     if candidates.is_empty() {
         return vec![orbit.target()];
     }
@@ -308,6 +361,56 @@ mod tests {
                 if orbit.distance < 20.0 {
                     assert!(fit.half < R * 0.5, "{}", fit.half);
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn light_camera_covers_raised_terrain_at_the_horizon() {
+        for (orbit, view) in views() {
+            let eye = view.eye();
+            let toward = dir_from_lon_lat(0.7, 0.2);
+            let fit = LightFit::around(&globe_footprint(&orbit, &view), toward, 11.0).unwrap();
+            for lat in -90..=90 {
+                for lon in -180..180 {
+                    let p = scale(
+                        dir_from_lon_lat((lon as f32).to_radians(), (lat as f32).to_radians()),
+                        R + crate::terrain::RELIEF,
+                    );
+                    let Some((x, y, _)) = view.project(p) else {
+                        continue;
+                    };
+                    if !(0.0..=1280.0).contains(&x) || !(0.0..=800.0).contains(&y) {
+                        continue;
+                    }
+                    let ray = sub(p, eye);
+                    let length = dot(ray, ray).sqrt();
+                    let ray = scale(ray, 1.0 / length);
+                    let along = -dot(eye, ray);
+                    let miss = dot(eye, eye) - along * along - R * R;
+                    if miss < 0.0 && (0.0..length).contains(&(along - (-miss).sqrt())) {
+                        continue; // Hidden behind the sea-level sphere.
+                    }
+                    assert!(fit.contains(p), "raised receiver {p:?} outside {fit:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn tall_and_offscreen_casters_keep_the_receiver_footprint() {
+        let points = [[-4.0, 0.0, -4.0], [4.0, 0.0, 4.0]];
+        let fit = LightFit::around(&points, [0.0, 1.0, 0.0], 6.0).unwrap();
+        let tall = ([0.0, 30.0, 0.0], 8.0);
+        let outside = ([1_000.0, 400.0, 0.0], 10.0);
+        assert!(!fit.contains(tall.0));
+        let extended = fit.with_casters([tall, outside]);
+        assert_eq!(extended, fit.with_casters([tall]));
+        assert_eq!(extended.half, fit.half);
+        assert!(points.iter().all(|&p| extended.contains(p)));
+        for axis in [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]] {
+            for sign in [-1.0, 1.0] {
+                assert!(extended.contains(add(tall.0, scale(axis, sign * tall.1))));
             }
         }
     }

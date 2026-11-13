@@ -535,10 +535,33 @@ pub fn build_instances_on(
     right: [f32; 3],
     out: &mut Vec<[f32; 16]>,
 ) {
+    instances_on(views, ground, right, out, None);
+}
+
+/// Builds display instances and records which ones are bodies that cast shadows.
+pub(crate) fn build_instances_with_casters_on(
+    views: &[EntityView],
+    ground: &dyn Footing,
+    right: [f32; 3],
+    out: &mut Vec<[f32; 16]>,
+    casters: &mut Vec<std::ops::Range<usize>>,
+) {
+    casters.clear();
+    instances_on(views, ground, right, out, Some(casters));
+}
+
+fn instances_on(
+    views: &[EntityView],
+    ground: &dyn Footing,
+    right: [f32; 3],
+    out: &mut Vec<[f32; 16]>,
+    mut casters: Option<&mut Vec<std::ops::Range<usize>>>,
+) {
     out.clear();
     for view in views {
         let frame = ground.frame(view.face, view.x, view.y);
         let base = ground.height_at(view.face, view.x, view.y);
+        let body_start = out.len();
         let top = if view.building {
             push_building(view, ground, &frame, base, out)
         } else if view.owner == 0 {
@@ -546,6 +569,9 @@ pub fn build_instances_on(
         } else {
             push_unit(view, &frame, out)
         };
+        if let Some(casters) = casters.as_mut() {
+            casters.push(body_start..out.len());
+        }
         if view.hp_frac < 1.0 {
             let width = if view.building {
                 f32::from(view.footprint.0.max(view.footprint.1)).max(1.0)
@@ -780,6 +806,40 @@ mod tests {
             starts: Vec::new(),
             nodes: Vec::new(),
         }))
+    }
+
+    #[test]
+    fn health_bars_do_not_cast_shadows_or_change_caster_geometry() {
+        let ground = hill();
+        let mut unit = view(1, 1.7, 2.2, 90.0);
+        let mut building = view(2, 2.0, 2.0, 0.0);
+        building.building = true;
+        building.footprint = (2, 2);
+        let mut node = view(3, 0.5, 0.5, 0.0);
+        node.owner = 0;
+        let mut display = Vec::new();
+        let mut ranges = Vec::new();
+        let mut bodies = |views: &[EntityView], right| {
+            build_instances_with_casters_on(views, &ground, right, &mut display, &mut ranges);
+            let casters: Vec<_> = ranges
+                .iter()
+                .flat_map(|r| display[r.clone()].iter().copied())
+                .collect();
+            (display.clone(), casters)
+        };
+        let (healthy, expected) = bodies(&[unit, building, node], [1.0, 0.0, 0.0]);
+        assert_eq!(healthy, expected);
+        unit.hp_frac = 0.7;
+        building.hp_frac = 0.3;
+        let (injured, casters) = bodies(&[unit, building, node], [1.0, 0.0, 0.0]);
+        assert_eq!(casters, expected);
+        assert_eq!(injured.len(), healthy.len() + 4);
+        let (turned, casters) = bodies(&[unit, building, node], [0.0, 0.0, 1.0]);
+        assert_ne!(turned, injured, "health bars turn toward the camera");
+        assert_eq!(casters, expected, "bodies keep the cached shadow map");
+        unit.x += 0.2;
+        let (_, moved) = bodies(&[unit, building, node], [0.0, 0.0, 1.0]);
+        assert_ne!(moved, expected, "moving a body invalidates the shadow map");
     }
 
     #[test]

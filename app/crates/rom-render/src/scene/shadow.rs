@@ -13,7 +13,7 @@ use crate::shadow::{LightFit, SHADOW_MAP_SIZE, flat_footprint, globe_footprint};
 pub(super) const SHADOW_SLOT: i32 = 1;
 /// Orbit distance, in planet radii, beyond which the globe uses the terminator only.
 const GLOBE_SHADOW_RADII: f32 = 0.8;
-/// Height above the ground of the tallest caster (relief, buildings and units), in tiles.
+/// Margin around the receiver footprint; caster bounds extend the light's depth range.
 const CASTER_HEIGHT: f32 = RELIEF + 6.0;
 /// Turn of the light, in radians, below which the last map is kept (0.15°).
 const LIGHT_STEP: f32 = 0.002_618;
@@ -120,6 +120,20 @@ fn caster_geometry(transforms: &[Matrix]) -> Vec<[f32; 12]> {
         .collect()
 }
 
+/// Bounding sphere of a transformed unit cube; tint cells do not affect the geometry.
+fn caster_bounds(m: &Matrix) -> ([f32; 3], f32) {
+    let squared = m.m0 * m.m0
+        + m.m1 * m.m1
+        + m.m2 * m.m2
+        + m.m4 * m.m4
+        + m.m5 * m.m5
+        + m.m6 * m.m6
+        + m.m8 * m.m8
+        + m.m9 * m.m9
+        + m.m10 * m.m10;
+    ([m.m12, m.m13, m.m14], 0.5 * squared.sqrt())
+}
+
 /// Binds the shadow map to its texture unit for the draws that follow, or unbinds it.
 pub(super) fn bind_shadow_map(texture: Option<u32>) {
     // SAFETY: the render thread has an active GL context; this only changes the texture bound to
@@ -204,11 +218,18 @@ impl Scene {
         self.ensure_shadow(rl, thread);
         let gpu = self.globe.as_ref()?;
         let shadow = self.shadow.as_mut()?;
-        let fit = LightFit::around(&footprint, shadow.steady(toward), CASTER_HEIGHT)?;
+        let fit = LightFit::around(&footprint, shadow.steady(toward), CASTER_HEIGHT)?.with_casters(
+            gpu.land.iter().map(|(_, b)| (b.centre, b.radius)).chain(
+                gpu.markers
+                    .iter()
+                    .chain(&self.entity_casters)
+                    .map(caster_bounds),
+            ),
+        );
         let wanted = Drawn {
             fit,
             casters: [
-                caster_geometry(&self.entity_transforms),
+                caster_geometry(&self.entity_casters),
                 caster_geometry(&gpu.markers),
             ],
         };
@@ -227,7 +248,7 @@ impl Scene {
                     pass.draw_mesh(&shaded.mesh, shadow.depth.clone(), Matrix::identity());
                 }
             }
-            for transforms in [&gpu.markers, &self.entity_transforms] {
+            for transforms in [&gpu.markers, &self.entity_casters] {
                 if !transforms.is_empty() {
                     pass.draw_mesh_instanced(
                         &self.box_mesh,
@@ -260,11 +281,22 @@ impl Scene {
         self.ensure_shadow(rl, thread);
         let terrain = self.terrain.as_ref()?;
         let shadow = self.shadow.as_mut()?;
-        let fit = LightFit::around(&footprint, toward, CASTER_HEIGHT)?;
+        let fit = LightFit::around(&footprint, toward, CASTER_HEIGHT)?.with_casters(
+            terrain
+                .land_bounds
+                .iter()
+                .map(|b| (b.centre, b.radius))
+                .chain(
+                    self.entity_casters
+                        .iter()
+                        .chain(&self.transforms)
+                        .map(caster_bounds),
+                ),
+        );
         let wanted = Drawn {
             fit,
             casters: [
-                caster_geometry(&self.entity_transforms),
+                caster_geometry(&self.entity_casters),
                 caster_geometry(&self.transforms),
             ],
         };
@@ -283,7 +315,7 @@ impl Scene {
                     pass.draw_mesh(&shaded.mesh, shadow.depth.clone(), Matrix::identity());
                 }
             }
-            for transforms in [&self.entity_transforms, &self.transforms] {
+            for transforms in [&self.entity_casters, &self.transforms] {
                 if !transforms.is_empty() {
                     pass.draw_mesh_instanced(
                         &self.box_mesh,
