@@ -52,7 +52,7 @@ fn id(world: &World, key: &str) -> DefId {
     world.rules().id_of(key).unwrap()
 }
 fn at(x: i32, y: i32) -> Pos {
-    Pos { x, y }
+    Pos::flat(x, y)
 }
 fn spawn(world: &mut World, key: &str, pos: Pos) -> EntityId {
     world.spawn(id(world, key), OWNER, pos).unwrap()

@@ -226,7 +226,7 @@ fn terrain_colour(t: DefId, height: u8, b: BaseTerrains) -> [u8; 3] {
     }
 }
 
-fn sphere_colours(map: &SpherePlanet) -> Vec<[u8; 3]> {
+pub(crate) fn sphere_colours(map: &SpherePlanet) -> Vec<[u8; 3]> {
     let mut pixels: Vec<_> = map
         .terrain
         .iter()
@@ -240,6 +240,36 @@ fn sphere_colours(map: &SpherePlanet) -> Vec<[u8; 3]> {
         pixels[map.surface.index(p.tile())] = [255; 3];
     }
     pixels
+}
+
+/// A planet of `n` tiles per face edge from the first map style, with `players`
+/// starts for the first playable faction.
+pub(crate) fn first_style_planet(
+    rules: &Rules,
+    seed: u64,
+    n: u32,
+    players: u32,
+) -> Result<SpherePlanet, Box<dyn std::error::Error>> {
+    let style = *rules
+        .map_styles
+        .keys()
+        .next()
+        .ok_or("the rules have no map style")?;
+    let faction = rules
+        .factions
+        .values()
+        .find(|f| f.playable)
+        .ok_or("the rules have no playable faction")?
+        .id;
+    Ok(generate_sphere(
+        rules,
+        &SphereRequest {
+            style,
+            seed,
+            n,
+            player_factions: vec![faction; players as usize],
+        },
+    )?)
 }
 
 // Presentation only: floating-point longitude/latitude never enters generation
@@ -267,7 +297,7 @@ fn sphere_ppm(map: &SpherePlanet, pixels: &[[u8; 3]], height: u32) -> Vec<u8> {
     out
 }
 
-fn net_ppm(map: &SpherePlanet, pixels: &[[u8; 3]]) -> Vec<u8> {
+pub(crate) fn net_ppm(map: &SpherePlanet, pixels: &[[u8; 3]]) -> Vec<u8> {
     let n = map.surface.n;
     let (width, height) = (4 * n, 3 * n);
     let mut out = format!("P6\n{width} {height}\n255\n").into_bytes();

@@ -135,24 +135,22 @@ impl World {
                 _ => false,
             };
             let pos = self.seen_pos(target);
+            let (dx, dy) = self.geo.vector(e.pos, pos)?;
             // Geometry survives renumbering. The unsigned horizontal displacement
             // also gives reflected lines the same choice between neighbours.
-            let rank = crate::rng::tie_rank(
-                self.tick,
-                e.pos.x.abs_diff(pos.x),
-                pos.y.wrapping_sub(e.pos.y) as u32,
-            );
+            let rank = crate::rng::tie_rank(self.tick, dx.unsigned_abs() as u32, dy as i32 as u32);
             Some((
                 !preferred,
-                e.pos.distance_squared_wide(self.seen_pos(target)),
+                self.geo.rank_distance(e.pos, pos),
                 rank,
+                pos.face,
                 pos.y,
                 pos.x,
                 target,
             ))
         })
         .min()
-        .map(|(_, _, _, _, _, id)| id)
+        .map(|(_, _, _, _, _, _, id)| id)
     }
 
     fn automatic_attack(&mut self, id: EntityId, target: EntityId, home: Option<Pos>) {

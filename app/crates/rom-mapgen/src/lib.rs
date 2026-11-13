@@ -358,10 +358,7 @@ fn tile_of(p: Pos) -> (i64, i64) {
 }
 
 fn centre_of(x: i64, y: i64) -> Pos {
-    Pos {
-        x: (x * 1000 + 500) as i32,
-        y: (y * 1000 + 500) as i32,
-    }
+    Pos::flat((x * 1000 + 500) as i32, (y * 1000 + 500) as i32)
 }
 
 fn dist2(a: (i64, i64), b: (i64, i64)) -> i64 {

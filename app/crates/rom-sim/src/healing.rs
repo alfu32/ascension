@@ -40,7 +40,11 @@ impl World {
             && !self.enemies(h.owner, t.owner)
             && t.hp > 0
             && self.rules.has_tag(t.type_id, spec.target_tag_id)
-            && (!range || h.pos.distance(t.pos) <= spec.range.max(0) as u64)
+            && (!range
+                || self
+                    .geo
+                    .distance(h.pos, t.pos)
+                    .is_some_and(|d| d <= spec.range.max(0) as u64))
     }
 
     fn heal_target(&mut self, healer: EntityId, target: EntityId) {

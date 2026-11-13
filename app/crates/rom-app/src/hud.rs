@@ -152,13 +152,13 @@ mod tests {
         let (mut world, rules) = scenario();
         let id = |key: &str| rules.id_of(key).unwrap();
         world
-            .spawn(id("bld.city"), PlayerId(1), Pos { x: 30000, y: 30000 })
+            .spawn(id("bld.city"), PlayerId(1), Pos::flat(30000, 30000))
             .unwrap();
         let farm = world
-            .spawn(id("bld.farm"), PlayerId(1), Pos { x: 10000, y: 10000 })
+            .spawn(id("bld.farm"), PlayerId(1), Pos::flat(10000, 10000))
             .unwrap();
         let worker = world
-            .spawn(id("unit.citizen"), PlayerId(1), Pos { x: 10000, y: 12000 })
+            .spawn(id("unit.citizen"), PlayerId(1), Pos::flat(10000, 12000))
             .unwrap();
         world
             .submit(command(worker, "harvest", None, Some(farm)))
@@ -191,6 +191,7 @@ mod tests {
                     Pos {
                         x: 2000 + n * 6000,
                         y: 50000,
+                        face: 0,
                     },
                 )
                 .unwrap();
@@ -201,6 +202,7 @@ mod tests {
                     Pos {
                         x: 2000 + n * 6000,
                         y: 52000,
+                        face: 0,
                     },
                 )
                 .unwrap();
@@ -259,7 +261,7 @@ mod tests {
             .spawn(
                 rules.id_of("bld.library").unwrap(),
                 PlayerId(1),
-                Pos { x: 20000, y: 20000 },
+                Pos::flat(20000, 20000),
             )
             .unwrap();
         let tech = rules.id_of("tech.age.classical").unwrap();

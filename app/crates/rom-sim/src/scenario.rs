@@ -1,7 +1,10 @@
 //! Seeded headless scenarios for the command-line runner and benchmarks.
 
-use crate::{Command, MapGrid, Player, PlayerId, Pos, SimError, SimRng, World};
-use rom_rules::Rules;
+use crate::{
+    Command, MapGrid, Player, PlayerId, Pos, SimError, SimRng, Topology, World, geometry::Geometry,
+};
+use rom_geo::CubeSurface;
+use rom_rules::{DefId, Rules};
 use std::{collections::BTreeMap, sync::Arc};
 
 /// Mixed into the seed so obstacle placement does not disturb unit placement.
@@ -21,25 +24,8 @@ impl World {
         units: u32,
         obstacle_pct: u32,
     ) -> Result<Self, SimError> {
-        let entity_type = rules
-            .entity_types
-            .values()
-            .find(|et| et.movement.is_some())
-            .ok_or(SimError::ScenarioUnavailable("moving entity type"))?;
-        let type_id = entity_type.id;
-        let class = entity_type
-            .movement
-            .as_ref()
-            .expect("selected moving type")
-            .movement_class_id;
+        let (type_id, class, terrain) = mover(&rules, false)?;
         let rows = rules.movement_class_terrain.get(&class);
-        let terrain = rows
-            .into_iter()
-            .flatten()
-            .filter(|row| row.speed_pct > 0)
-            .map(|row| row.terrain_id)
-            .min()
-            .ok_or(SimError::ScenarioUnavailable("passable terrain"))?;
         let mut tiles = vec![terrain; 128 * 128];
         if obstacle_pct > 0 {
             if obstacle_pct >= 100 {
@@ -65,38 +51,23 @@ impl World {
                 }
             }
         }
-        let player = Player {
-            id: PlayerId(1),
-            team: 1,
-            faction: *rules
-                .factions
-                .keys()
-                .next()
-                .ok_or(SimError::ScenarioUnavailable("faction"))?,
-            resources: BTreeMap::new(),
-            techs: BTreeMap::new(),
-            age: *rules
-                .ages
-                .keys()
-                .next()
-                .ok_or(SimError::ScenarioUnavailable("age"))?,
-        };
-        let mut world = Self::new(rules, MapGrid::new(128, 128, tiles)?, seed, vec![player])?;
+        let players = scenario_players(&rules, 1)?;
+        let mut world = Self::new(rules, MapGrid::new(128, 128, tiles)?, seed, players)?;
         for _ in 0..units {
             let pos = loop {
-                let pos = Pos {
-                    x: world.rng.range(0, 128_000) as i32,
-                    y: world.rng.range(0, 128_000) as i32,
-                };
+                let pos = Pos::flat(
+                    world.rng.range(0, 128_000) as i32,
+                    world.rng.range(0, 128_000) as i32,
+                );
                 if world.pathing.speed_pct(class, pos) > 0 {
                     break pos;
                 }
             };
             let id = world.spawn(type_id, PlayerId(1), pos)?;
-            let target = Pos {
-                x: world.rng.range(0, 128_000) as i32,
-                y: world.rng.range(0, 128_000) as i32,
-            };
+            let target = Pos::flat(
+                world.rng.range(0, 128_000) as i32,
+                world.rng.range(0, 128_000) as i32,
+            );
             world.submit(Command {
                 player: PlayerId(1),
                 executor: id,
@@ -125,42 +96,8 @@ impl World {
         per_side: u32,
         swap: bool,
     ) -> Result<Self, SimError> {
-        let et = rules
-            .entity_types
-            .values()
-            .find(|e| e.movement.is_some() && !e.weapons.is_empty())
-            .ok_or(SimError::ScenarioUnavailable("armed moving entity type"))?;
-        let type_id = et.id;
-        let class = et.movement.as_ref().expect("moving type").movement_class_id;
-        let terrain = rules
-            .movement_class_terrain
-            .get(&class)
-            .into_iter()
-            .flatten()
-            .filter(|r| r.speed_pct > 0)
-            .map(|r| r.terrain_id)
-            .min()
-            .ok_or(SimError::ScenarioUnavailable("crossable terrain"))?;
-        let faction = *rules
-            .factions
-            .keys()
-            .next()
-            .ok_or(SimError::ScenarioUnavailable("faction"))?;
-        let age = *rules
-            .ages
-            .keys()
-            .next()
-            .ok_or(SimError::ScenarioUnavailable("age"))?;
-        let players = (1..=2)
-            .map(|n| Player {
-                id: PlayerId(n),
-                team: n,
-                faction,
-                age,
-                resources: BTreeMap::new(),
-                techs: BTreeMap::new(),
-            })
-            .collect();
+        let (type_id, _, terrain) = mover(&rules, true)?;
+        let players = scenario_players(&rules, 2)?;
         let mut world = Self::new(
             rules,
             MapGrid::new(96, 96, vec![terrain; 96 * 96])?,
@@ -176,14 +113,191 @@ impl World {
             };
             for n in 0..per_side {
                 let y = (1000 + u64::from(n) * 94000 / u64::from(per_side.max(1))) as i32;
-                let id = world.spawn(type_id, owner, Pos { x, y })?;
+                let id = world.spawn(type_id, owner, Pos::flat(x, y))?;
                 world.submit(Command {
                     player: owner,
                     executor: id,
                     kind: "attack_move".into(),
                     subject: None,
                     target_entity: None,
-                    target_pos: Some(Pos { x: target, y }),
+                    target_pos: Some(Pos::flat(target, y)),
+                    queue: false,
+                })?;
+            }
+        }
+        Ok(world)
+    }
+}
+
+/// The first moving type (armed when `armed`), its movement class, and the lowest-id
+/// terrain it can cross.
+fn mover(rules: &Rules, armed: bool) -> Result<(DefId, u32, DefId), SimError> {
+    let et = rules
+        .entity_types
+        .values()
+        .find(|e| e.movement.is_some() && (!armed || !e.weapons.is_empty()))
+        .ok_or(SimError::ScenarioUnavailable(if armed {
+            "armed moving entity type"
+        } else {
+            "moving entity type"
+        }))?;
+    let class = et.movement.as_ref().expect("moving type").movement_class_id;
+    let terrain = rules
+        .movement_class_terrain
+        .get(&class)
+        .into_iter()
+        .flatten()
+        .filter(|r| r.speed_pct > 0)
+        .map(|r| r.terrain_id)
+        .min()
+        .ok_or(SimError::ScenarioUnavailable(if armed {
+            "crossable terrain"
+        } else {
+            "passable terrain"
+        }))?;
+    Ok((et.id, class, terrain))
+}
+
+/// Players 1..=count on teams of their own, with the first faction and age.
+fn scenario_players(rules: &Rules, count: u32) -> Result<Vec<Player>, SimError> {
+    let faction = *rules
+        .factions
+        .keys()
+        .next()
+        .ok_or(SimError::ScenarioUnavailable("faction"))?;
+    let age = *rules
+        .ages
+        .keys()
+        .next()
+        .ok_or(SimError::ScenarioUnavailable("age"))?;
+    Ok((1..=count)
+        .map(|n| Player {
+            id: PlayerId(n),
+            team: n,
+            faction,
+            age,
+            resources: BTreeMap::new(),
+            techs: BTreeMap::new(),
+        })
+        .collect())
+}
+
+/// Largest displacement along each axis for a sphere movement order, in milli-tiles.
+const SPHERE_MOVE_SPAN: i64 = 64_000;
+/// Distance of each battle line from the face edge between them, in milli-tiles.
+const LINE_DEPTH: i64 = 15_000;
+/// Length of each battle line, as in the flat battle.
+const LINE_LENGTH: i64 = 94_000;
+/// Radius around the edge midpoint levelled to crossable ground for a battle.
+const BATTLEFIELD_RADIUS: i64 = 60_000;
+/// The battle's home face and the edge it fights across: face 1's top edge meets face 4
+/// with a quarter turn, so the lines also exercise frame rotation.
+const BATTLE_FACE: u8 = 1;
+
+impl World {
+    /// The movement scenario on a sphere planet: `units` of the first moving type on
+    /// random passable tiles, each ordered to a random point up to 64 tiles away along
+    /// each local axis, crossing face edges where that leads.
+    pub fn sphere_movement_scenario(
+        rules: Arc<Rules>,
+        surface: CubeSurface,
+        terrain: Vec<DefId>,
+        seed: u64,
+        units: u32,
+    ) -> Result<Self, SimError> {
+        let (type_id, class, _) = mover(&rules, false)?;
+        let players = scenario_players(&rules, 1)?;
+        let mut world = Self::from_sphere(rules, surface, terrain, &[], seed, players)?;
+        let geo = world.geo.clone();
+        if (0..geo.tiles()).all(|i| world.pathing.speed_pct(class, geo.index_centre(i)) == 0) {
+            return Err(SimError::ScenarioUnavailable("passable terrain"));
+        }
+        let side = surface.n * 1000;
+        let span = SPHERE_MOVE_SPAN.min(i64::from(side) / 2);
+        for _ in 0..units {
+            let pos = loop {
+                let pos = Pos {
+                    face: world.rng.range(0, 6) as u8,
+                    x: world.rng.range(0, side) as i32,
+                    y: world.rng.range(0, side) as i32,
+                };
+                if world.pathing.speed_pct(class, pos) > 0 {
+                    break pos;
+                }
+            };
+            let id = world.spawn(type_id, PlayerId(1), pos)?;
+            let dx = i64::from(world.rng.range(0, 2 * span as u32 + 1)) - span;
+            let dy = i64::from(world.rng.range(0, 2 * span as u32 + 1)) - span;
+            let target = geo.offset(pos, dx, dy).0;
+            world.submit(Command {
+                player: PlayerId(1),
+                executor: id,
+                kind: "move".into(),
+                subject: None,
+                target_entity: None,
+                target_pos: Some(target),
+                queue: false,
+            })?;
+        }
+        Ok(world)
+    }
+
+    /// The battle on a sphere planet: the two lines of the flat battle, thirty tiles
+    /// apart, on opposite sides of a face edge so the fight crosses it. Ground around
+    /// the edge is levelled to the crossable terrain first, as the flat battle's map is
+    /// uniform. Needs at least 128 tiles per face edge.
+    pub fn sphere_battle_scenario(
+        rules: Arc<Rules>,
+        surface: CubeSurface,
+        mut terrain: Vec<DefId>,
+        seed: u64,
+        per_side: u32,
+        swap: bool,
+    ) -> Result<Self, SimError> {
+        if surface.n < 128 {
+            return Err(SimError::ScenarioUnavailable(
+                "sphere of at least 128 tiles per face",
+            ));
+        }
+        let (type_id, _, ground) = mover(&rules, true)?;
+        let geo = Geometry::new(Topology::Cube(surface)).ok_or(SimError::InvalidMap)?;
+        if terrain.len() != geo.tiles() {
+            return Err(SimError::InvalidMap);
+        }
+        let side = i64::from(surface.n) * 1000;
+        let middle = Pos {
+            face: BATTLE_FACE,
+            x: (side / 2) as i32,
+            y: 0,
+        };
+        for index in geo.disc(middle, BATTLEFIELD_RADIUS).flatten() {
+            terrain[index] = ground;
+        }
+        let players = scenario_players(&rules, 2)?;
+        let mut world = Self::from_sphere(rules, surface, terrain, &[], seed, players)?;
+        let line = |n: u32| {
+            let along = side / 2 - LINE_LENGTH / 2
+                + (1000 + i64::from(n) * LINE_LENGTH / i64::from(per_side.max(1)));
+            let near = Pos {
+                face: BATTLE_FACE,
+                x: along as i32,
+                y: LINE_DEPTH as i32,
+            };
+            (near, geo.offset(near, 0, -2 * LINE_DEPTH).0)
+        };
+        for side in 1..=2 {
+            let owner = PlayerId(if swap { 3 - side } else { side });
+            for n in 0..per_side {
+                let (near, far) = line(n);
+                let (start, target) = if side == 1 { (near, far) } else { (far, near) };
+                let id = world.spawn(type_id, owner, start)?;
+                world.submit(Command {
+                    player: owner,
+                    executor: id,
+                    kind: "attack_move".into(),
+                    subject: None,
+                    target_entity: None,
+                    target_pos: Some(target),
                     queue: false,
                 })?;
             }

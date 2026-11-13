@@ -40,6 +40,7 @@ fn at(x: i32, y: i32) -> Pos {
     Pos {
         x: x * 1000 + 500,
         y: y * 1000 + 500,
+        face: 0,
     }
 }
 
@@ -624,6 +625,7 @@ fn placement_check_reports_valid_and_invalid() {
     let free = Pos {
         x: snap(30_000, et.footprint_w),
         y: snap(20_000, et.footprint_h),
+        face: 0,
     };
     assert_eq!(placement_check(&fx.world, building, free), Ok(()));
     assert_eq!(
@@ -631,7 +633,7 @@ fn placement_check_reports_valid_and_invalid() {
         Err(SimError::PlacementOverlap)
     );
     assert_eq!(
-        placement_check(&fx.world, building, Pos { x: 100, y: 100 }),
+        placement_check(&fx.world, building, Pos::flat(100, 100)),
         Err(SimError::OutsideMap)
     );
     // The submit result agrees on a valid and an invalid spot.

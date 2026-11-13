@@ -122,10 +122,26 @@ fn hash_changes_when_any_entity_moves() {
         }
         let id = EntityId(moving_index + 1);
         moving
-            .submit(move_command(id, Pos { x: 1000, y: 0 }, false))
+            .submit(move_command(
+                id,
+                Pos {
+                    x: 1000,
+                    y: 0,
+                    face: 0,
+                },
+                false,
+            ))
             .unwrap();
-        idle.submit(move_command(id, Pos { x: 0, y: 1000 }, false))
-            .unwrap();
+        idle.submit(move_command(
+            id,
+            Pos {
+                x: 0,
+                y: 1000,
+                face: 0,
+            },
+            false,
+        ))
+        .unwrap();
         moving.step();
         idle.step();
         assert_ne!(moving.entity(id).unwrap().pos, idle.entity(id).unwrap().pos);
@@ -134,10 +150,15 @@ fn hash_changes_when_any_entity_moves() {
 }
 
 fn assert_arrival(mut world: World, distance: i32, ticks: u64) {
-    let origin = Pos { x: 500, y: 500 };
+    let origin = Pos {
+        x: 500,
+        y: 500,
+        face: 0,
+    };
     let target = Pos {
         x: origin.x + distance,
         y: origin.y,
+        face: 0,
     };
     let id = citizen(&mut world, origin);
     world.submit(move_command(id, target, false)).unwrap();
@@ -192,8 +213,19 @@ fn slow_diagonal_motion_accumulates_without_stalling_or_drifting() {
         "UPDATE et_movement SET speed=20 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.citizen');",
     );
     let mut world = world_with(rules, "ter.plain");
-    let id = citizen(&mut world, Pos { x: 100, y: 100 });
-    let target = Pos { x: 107, y: 107 };
+    let id = citizen(
+        &mut world,
+        Pos {
+            x: 100,
+            y: 100,
+            face: 0,
+        },
+    );
+    let target = Pos {
+        x: 107,
+        y: 107,
+        face: 0,
+    };
     world.submit(move_command(id, target, false)).unwrap();
     for _ in 0..9 {
         world.step();
@@ -213,9 +245,24 @@ fn terrain_speed_uses_the_tile_stood_on_each_tick() {
     let plain = rules.id_of("ter.plain").unwrap();
     let forest = rules.id_of("ter.forest").unwrap();
     let mut world = world_on(rules, vec![plain, forest], 2, 1);
-    let id = citizen(&mut world, Pos { x: 935, y: 0 });
+    let id = citizen(
+        &mut world,
+        Pos {
+            x: 935,
+            y: 0,
+            face: 0,
+        },
+    );
     world
-        .submit(move_command(id, Pos { x: 1500, y: 0 }, false))
+        .submit(move_command(
+            id,
+            Pos {
+                x: 1500,
+                y: 0,
+                face: 0,
+            },
+            false,
+        ))
         .unwrap();
     world.step();
     assert_eq!(world.entity(id).unwrap().pos.x, 1000);
@@ -231,10 +278,22 @@ fn impassable_terrain_fails_the_order() {
     let plain = rules.id_of("ter.plain").unwrap();
     let deep = rules.id_of("ter.deep").unwrap();
     let mut world = world_on(rules, vec![plain, deep], 2, 1);
-    let pos = Pos { x: 990, y: 0 };
+    let pos = Pos {
+        x: 990,
+        y: 0,
+        face: 0,
+    };
     let id = citizen(&mut world, pos);
     world
-        .submit(move_command(id, Pos { x: 1500, y: 0 }, false))
+        .submit(move_command(
+            id,
+            Pos {
+                x: 1500,
+                y: 0,
+                face: 0,
+            },
+            false,
+        ))
         .unwrap();
     world.step();
     assert_eq!(world.entity(id).unwrap().pos, pos);
@@ -248,10 +307,46 @@ fn impassable_terrain_fails_the_order() {
 #[test]
 fn leaving_the_map_fails_the_order() {
     for (pos, target) in [
-        (Pos::default(), Pos { x: -100, y: 0 }),
-        (Pos::default(), Pos { x: 0, y: -100 }),
-        (Pos { x: 31_990, y: 0 }, Pos { x: 32_100, y: 0 }),
-        (Pos { x: 0, y: 31_990 }, Pos { x: 0, y: 32_100 }),
+        (
+            Pos::default(),
+            Pos {
+                x: -100,
+                y: 0,
+                face: 0,
+            },
+        ),
+        (
+            Pos::default(),
+            Pos {
+                x: 0,
+                y: -100,
+                face: 0,
+            },
+        ),
+        (
+            Pos {
+                x: 31_990,
+                y: 0,
+                face: 0,
+            },
+            Pos {
+                x: 32_100,
+                y: 0,
+                face: 0,
+            },
+        ),
+        (
+            Pos {
+                x: 0,
+                y: 31_990,
+                face: 0,
+            },
+            Pos {
+                x: 0,
+                y: 32_100,
+                face: 0,
+            },
+        ),
     ] {
         let mut world = world();
         let id = citizen(&mut world, pos);
@@ -269,10 +364,22 @@ fn arrival_checks_destination_terrain_before_snapping() {
     let plain = rules.id_of("ter.plain").unwrap();
     let deep = rules.id_of("ter.deep").unwrap();
     let mut world = world_on(rules, vec![plain, deep], 2, 1);
-    let pos = Pos { x: 990, y: 0 };
+    let pos = Pos {
+        x: 990,
+        y: 0,
+        face: 0,
+    };
     let id = citizen(&mut world, pos);
     world
-        .submit(move_command(id, Pos { x: 1000, y: 0 }, false))
+        .submit(move_command(
+            id,
+            Pos {
+                x: 1000,
+                y: 0,
+                face: 0,
+            },
+            false,
+        ))
         .unwrap();
     world.step();
     assert_eq!(world.entity(id).unwrap().pos, pos);
@@ -284,10 +391,26 @@ fn commands_apply_next_tick_in_submission_order() {
     let mut world = world();
     let id = citizen(&mut world, Pos::default());
     let first = world
-        .submit(move_command(id, Pos { x: 1000, y: 0 }, false))
+        .submit(move_command(
+            id,
+            Pos {
+                x: 1000,
+                y: 0,
+                face: 0,
+            },
+            false,
+        ))
         .unwrap();
     let second = world
-        .submit(move_command(id, Pos { x: 0, y: 1000 }, false))
+        .submit(move_command(
+            id,
+            Pos {
+                x: 0,
+                y: 1000,
+                face: 0,
+            },
+            false,
+        ))
         .unwrap();
     assert!(second > first);
     assert_eq!(world.tick(), 0);
@@ -295,7 +418,14 @@ fn commands_apply_next_tick_in_submission_order() {
     assert!(world.entity(id).unwrap().orders().is_empty());
     world.step();
     let entity = world.entity(id).unwrap();
-    assert_eq!(entity.pos, Pos { x: 0, y: 65 });
+    assert_eq!(
+        entity.pos,
+        Pos {
+            x: 0,
+            y: 65,
+            face: 0
+        }
+    );
     assert_eq!(entity.orders().len(), 1);
     assert_eq!(entity.orders()[0].id, second);
     assert_eq!(entity.orders()[0].issued_tick, 0);
@@ -309,10 +439,26 @@ fn queue_flag_appends_and_replace_clears() {
     let mut world = world();
     let id = citizen(&mut world, Pos::default());
     let a = world
-        .submit(move_command(id, Pos { x: 1000, y: 0 }, false))
+        .submit(move_command(
+            id,
+            Pos {
+                x: 1000,
+                y: 0,
+                face: 0,
+            },
+            false,
+        ))
         .unwrap();
     let b = world
-        .submit(move_command(id, Pos { x: 2000, y: 0 }, true))
+        .submit(move_command(
+            id,
+            Pos {
+                x: 2000,
+                y: 0,
+                face: 0,
+            },
+            true,
+        ))
         .unwrap();
     world.step();
     assert_eq!(
@@ -330,14 +476,29 @@ fn queue_flag_appends_and_replace_clears() {
         OrderStatus::Queued
     );
     let replacement = world
-        .submit(move_command(id, Pos { x: 65, y: 1000 }, false))
+        .submit(move_command(
+            id,
+            Pos {
+                x: 65,
+                y: 1000,
+                face: 0,
+            },
+            false,
+        ))
         .unwrap();
     assert_eq!(world.entity(id).unwrap().orders().len(), 2);
     world.step();
     let entity = world.entity(id).unwrap();
     assert_eq!(entity.orders().len(), 1);
     assert_eq!(entity.orders()[0].id, replacement);
-    assert_eq!(entity.pos, Pos { x: 65, y: 65 });
+    assert_eq!(
+        entity.pos,
+        Pos {
+            x: 65,
+            y: 65,
+            face: 0
+        }
+    );
     assert_eq!(world.stats().orders_cancelled, 2);
 }
 
@@ -346,10 +507,26 @@ fn finishing_an_order_activates_the_next_without_a_second_movement_step() {
     let mut world = world();
     let id = citizen(&mut world, Pos::default());
     world
-        .submit(move_command(id, Pos { x: 65, y: 0 }, false))
+        .submit(move_command(
+            id,
+            Pos {
+                x: 65,
+                y: 0,
+                face: 0,
+            },
+            false,
+        ))
         .unwrap();
     let next = world
-        .submit(move_command(id, Pos { x: 130, y: 0 }, true))
+        .submit(move_command(
+            id,
+            Pos {
+                x: 130,
+                y: 0,
+                face: 0,
+            },
+            true,
+        ))
         .unwrap();
     world.step();
     let entity = world.entity(id).unwrap();
@@ -367,10 +544,26 @@ fn stop_clears_the_queue() {
     let mut world = world();
     let id = citizen(&mut world, Pos::default());
     world
-        .submit(move_command(id, Pos { x: 1000, y: 0 }, false))
+        .submit(move_command(
+            id,
+            Pos {
+                x: 1000,
+                y: 0,
+                face: 0,
+            },
+            false,
+        ))
         .unwrap();
     world
-        .submit(move_command(id, Pos { x: 2000, y: 0 }, true))
+        .submit(move_command(
+            id,
+            Pos {
+                x: 2000,
+                y: 0,
+                face: 0,
+            },
+            true,
+        ))
         .unwrap();
     world.step();
     let before = world.entity(id).unwrap().pos;
@@ -388,11 +581,27 @@ fn queued_stop_clears_orders_behind_it_when_it_becomes_active() {
     let mut world = world();
     let id = citizen(&mut world, Pos::default());
     world
-        .submit(move_command(id, Pos { x: 130, y: 0 }, false))
+        .submit(move_command(
+            id,
+            Pos {
+                x: 130,
+                y: 0,
+                face: 0,
+            },
+            false,
+        ))
         .unwrap();
     world.submit(untargeted(id, "stop", true)).unwrap();
     world
-        .submit(move_command(id, Pos { x: 1000, y: 0 }, true))
+        .submit(move_command(
+            id,
+            Pos {
+                x: 1000,
+                y: 0,
+                face: 0,
+            },
+            true,
+        ))
         .unwrap();
     world.step();
     assert_eq!(world.entity(id).unwrap().orders().len(), 3);
@@ -486,7 +695,15 @@ fn component_validation_follows_the_rules_requirement() {
         )
         .unwrap();
     world
-        .submit(move_command(id, Pos { x: 1000, y: 0 }, false))
+        .submit(move_command(
+            id,
+            Pos {
+                x: 1000,
+                y: 0,
+                face: 0,
+            },
+            false,
+        ))
         .unwrap();
     world.step();
     assert_eq!(world.stats().orders_unsupported, 1);
@@ -498,7 +715,15 @@ fn unsupported_kinds_fail_when_activated() {
     let mut world = world();
     let id = citizen(&mut world, Pos::default());
     world
-        .submit(move_command(id, Pos { x: 130, y: 0 }, false))
+        .submit(move_command(
+            id,
+            Pos {
+                x: 130,
+                y: 0,
+                face: 0,
+            },
+            false,
+        ))
         .unwrap();
     world.submit(untargeted(id, "explore", true)).unwrap();
     let mut follow = untargeted(id, "move", true);
@@ -605,6 +830,7 @@ fn subjects_and_construction_placement_are_accepted() {
             Pos {
                 x: 20_500,
                 y: 20_500,
+                face: 0,
             },
         )
         .unwrap();
@@ -614,6 +840,7 @@ fn subjects_and_construction_placement_are_accepted() {
     command.target_pos = Some(Pos {
         x: 10_000,
         y: 10_000,
+        face: 0,
     });
     world
         .grant(OWNER, world.rules().id_of("res.timber").unwrap(), 50)
@@ -665,6 +892,7 @@ fn assert_queries_match(world: &World, rng: &mut SimRng) {
         let center = Pos {
             x: rng.range(0, 40_000) as i32 - 4000,
             y: rng.range(0, 40_000) as i32 - 4000,
+            face: 0,
         };
         let radius = rng.range(0, 20_000);
         let expected: Vec<_> = world
@@ -684,11 +912,13 @@ fn spatial_query_matches_brute_force() {
         let pos = Pos {
             x: rng.range(0, 32_000) as i32,
             y: rng.range(0, 32_000) as i32,
+            face: 0,
         };
         let id = citizen(&mut world, pos);
         let target = Pos {
             x: rng.range(0, 32_000) as i32,
             y: rng.range(0, 32_000) as i32,
+            face: 0,
         };
         world.submit(move_command(id, target, false)).unwrap();
     }
@@ -706,11 +936,32 @@ fn spatial_query_matches_brute_force() {
 #[test]
 fn spatial_query_includes_exact_boundary_and_extreme_queries() {
     let mut world = world();
-    let a = citizen(&mut world, Pos { x: 4000, y: 3000 });
-    citizen(&mut world, Pos { x: 4000, y: 3001 });
+    let a = citizen(
+        &mut world,
+        Pos {
+            x: 4000,
+            y: 3000,
+            face: 0,
+        },
+    );
+    citizen(
+        &mut world,
+        Pos {
+            x: 4000,
+            y: 3001,
+            face: 0,
+        },
+    );
     assert_eq!(world.entities_in_radius(Pos::default(), 5000), vec![a]);
     assert_eq!(
-        world.entities_in_radius(Pos { x: 4000, y: 3000 }, 0),
+        world.entities_in_radius(
+            Pos {
+                x: 4000,
+                y: 3000,
+                face: 0
+            },
+            0
+        ),
         vec![a]
     );
     assert!(
@@ -718,7 +969,8 @@ fn spatial_query_includes_exact_boundary_and_extreme_queries() {
             .entities_in_radius(
                 Pos {
                     x: i32::MIN,
-                    y: i32::MIN
+                    y: i32::MIN,
+                    face: 0
                 },
                 1
             )
@@ -729,7 +981,8 @@ fn spatial_query_includes_exact_boundary_and_extreme_queries() {
             .entities_in_radius(
                 Pos {
                     x: i32::MIN,
-                    y: i32::MIN
+                    y: i32::MIN,
+                    face: 0
                 },
                 u32::MAX
             )
@@ -743,7 +996,15 @@ fn despawn_removes_from_spatial_grid() {
     let mut world = world();
     let id = citizen(&mut world, Pos::default());
     world
-        .submit(move_command(id, Pos { x: 1000, y: 0 }, false))
+        .submit(move_command(
+            id,
+            Pos {
+                x: 1000,
+                y: 0,
+                face: 0,
+            },
+            false,
+        ))
         .unwrap();
     assert_eq!(world.entities_in_radius(Pos::default(), 0), vec![id]);
     world.despawn(id).unwrap();
@@ -759,7 +1020,15 @@ fn despawn_cancels_live_and_pending_orders() {
     let mut world = world();
     let id = citizen(&mut world, Pos::default());
     world
-        .submit(move_command(id, Pos { x: 1000, y: 0 }, false))
+        .submit(move_command(
+            id,
+            Pos {
+                x: 1000,
+                y: 0,
+                face: 0,
+            },
+            false,
+        ))
         .unwrap();
     world.step();
     world.submit(untargeted(id, "stop", false)).unwrap();
@@ -781,7 +1050,15 @@ fn map_bounds_and_invalid_spawns_are_checked_without_consuming_ids() {
     let type_id = world.rules().id_of("unit.citizen").unwrap();
     let hash = world.hash();
     assert_eq!(
-        world.spawn(type_id, OWNER, Pos { x: -1, y: 0 }),
+        world.spawn(
+            type_id,
+            OWNER,
+            Pos {
+                x: -1,
+                y: 0,
+                face: 0
+            }
+        ),
         Err(SimError::OutsideMap)
     );
     assert_eq!(

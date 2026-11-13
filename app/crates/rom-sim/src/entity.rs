@@ -61,7 +61,8 @@ pub struct Entity {
     pub owner: PlayerId,
     /// Current milli-tile position.
     pub pos: Pos,
-    /// Facing in degrees, clockwise from positive x.
+    /// Facing in degrees, clockwise from positive x of the entity's face; it turns with
+    /// the face frame when the entity crosses a face edge.
     pub facing: u16,
     /// Current hit points.
     pub hp: i64,

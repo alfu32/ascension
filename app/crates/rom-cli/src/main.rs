@@ -104,6 +104,7 @@ fn run_simulation(
     let mut ticks = None;
     let mut units = None;
     let mut obstacles = 0;
+    let mut sphere = None;
     while let Some(flag) = args.next() {
         let value = args
             .next()
@@ -114,6 +115,7 @@ fn run_simulation(
             "--ticks" => ticks = Some(value.parse::<u64>()?),
             "--units" => units = Some(value.parse::<u32>()?),
             "--obstacles" => obstacles = value.parse::<u32>()?,
+            "--sphere" => sphere = Some(value.parse::<u32>()?),
             _ => return Err(format!("unknown argument: {flag}").into()),
         }
     }
@@ -124,7 +126,22 @@ fn run_simulation(
     let conn =
         rusqlite::Connection::open_with_flags(db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     let rules = Arc::new(Rules::load(&conn)?);
-    let mut world = rom_sim::World::obstacle_scenario(rules, seed, units, obstacles)?;
+    let mut world = match sphere {
+        Some(n) => {
+            if obstacles != 0 {
+                return Err("--obstacles applies to the flat map only".into());
+            }
+            let planet = mapgen_cmd::first_style_planet(&rules, seed, n, 1)?;
+            rom_sim::World::sphere_movement_scenario(
+                rules,
+                planet.surface,
+                planet.terrain,
+                seed,
+                units,
+            )?
+        }
+        None => rom_sim::World::obstacle_scenario(rules, seed, units, obstacles)?,
+    };
     for _ in 0..ticks {
         world.step();
     }

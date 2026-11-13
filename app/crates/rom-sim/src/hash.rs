@@ -1,6 +1,6 @@
 //! Stable field-by-field FNV-1a state serialization.
 
-use crate::{Order, OrderStatus, Pos, World, pathing::Pathing};
+use crate::{Order, OrderStatus, Pos, Topology, World, geometry::Tile, pathing::Pathing};
 use std::cmp::Reverse;
 
 struct StateHash(u64);
@@ -26,6 +26,7 @@ impl StateHash {
     fn pos(&mut self, pos: Pos) {
         self.bytes(&pos.x.to_le_bytes());
         self.bytes(&pos.y.to_le_bytes());
+        self.bytes(&[pos.face]);
     }
 
     fn optional<T>(&mut self, value: Option<T>, encode: impl FnOnce(&mut Self, T)) {
@@ -83,9 +84,10 @@ impl StateHash {
         });
     }
 
-    fn tile(&mut self, tile: (i32, i32)) {
-        self.bytes(&tile.0.to_le_bytes());
-        self.bytes(&tile.1.to_le_bytes());
+    fn tile(&mut self, tile: Tile) {
+        self.bytes(&[tile.face]);
+        self.bytes(&tile.x.to_le_bytes());
+        self.bytes(&tile.y.to_le_bytes());
     }
 
     fn pathing(&mut self, pathing: &Pathing) {
@@ -139,11 +141,22 @@ impl World {
     /// Hashes complete mutable state in little-endian field order with FNV-1a 64.
     pub fn hash(&self) -> u64 {
         let mut hash = StateHash(0xcbf29ce484222325);
-        hash.bytes(b"rom-sim-state-7");
+        hash.bytes(b"rom-sim-state-8");
         hash.u64(self.tick);
         hash.u64(self.rng.state());
         hash.u32(self.next_entity_id);
         hash.u64(self.next_order_id);
+        match self.geo.topology {
+            Topology::Flat { width, height } => {
+                hash.bytes(&[0]);
+                hash.u32(width);
+                hash.u32(height);
+            }
+            Topology::Cube(surface) => {
+                hash.bytes(&[1]);
+                hash.u32(surface.n);
+            }
+        }
         hash.u32(self.map.width);
         hash.u32(self.map.height);
         hash.u64(self.map.terrain.len() as u64);
@@ -533,7 +546,7 @@ mod tests {
                 .unwrap();
             w.pathing.g[index] += 1;
         });
-        changes(&mut world, |w| w.pathing.queue[0].goal.0 += 1);
+        changes(&mut world, |w| w.pathing.queue[0].goal.x += 1);
         changes(&mut world, |w| {
             w.pathing.queue[0].waiters.pop();
         });

@@ -103,6 +103,7 @@ fn pos_of(point: (f32, f32)) -> Pos {
     Pos {
         x: (point.0 * 1000.0).round() as i32,
         y: (point.1 * 1000.0).round() as i32,
+        face: 0,
     }
 }
 
@@ -952,6 +953,7 @@ impl Controller {
         let centre = Pos {
             x: snap(at.x, p.footprint.0),
             y: snap(at.y, p.footprint.1),
+            face: 0,
         };
         if p.centre != Some(centre) {
             p.centre = Some(centre);
@@ -982,6 +984,7 @@ impl Controller {
         let centre = Pos {
             x: snap(at.x, p.footprint.0),
             y: snap(at.y, p.footprint.1),
+            face: 0,
         };
         let rules = world.rules().clone();
         let mut builders: Vec<(i64, EntityId)> = self

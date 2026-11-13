@@ -21,12 +21,15 @@ mod research;
 mod rng;
 mod scenario;
 mod spatial;
+#[cfg(test)]
+mod sphere_tests;
 mod stance;
 mod territory;
 mod vision;
 mod world;
 
 pub use entity::{Entity, EntityId, Player, PlayerId};
+pub use geometry::Topology;
 pub use income::Income;
 pub use map::MapGrid;
 pub use math::{Pos, integer_sqrt};
@@ -120,6 +123,9 @@ pub enum SimError {
     /// Another technology in this exclusive group is researched or queued.
     #[error("exclusive technology conflict")]
     ExclusiveResearch,
+    /// On a sphere, a building footprint must lie within one face.
+    #[error("building footprint crosses a face edge")]
+    CrossesFaceEdge,
     /// The footprint intersects another building or reserved construction.
     #[error("building footprint overlaps")]
     PlacementOverlap,

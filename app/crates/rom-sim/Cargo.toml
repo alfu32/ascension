@@ -6,5 +6,6 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+rom-geo = { path = "../rom-geo" }
 rom-rules.workspace = true
 thiserror.workspace = true

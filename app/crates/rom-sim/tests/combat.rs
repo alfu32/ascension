@@ -50,14 +50,18 @@ fn lines(rules: Arc<Rules>, seed: u64, sizes: [u32; 2], reverse: bool) -> World 
         let owner = PlayerId(side as u32 + 1);
         for row in 0..sizes[side] {
             let y = (1000 + u64::from(row) * 94000 / u64::from(sizes[side])) as i32;
-            let executor = w.spawn(type_id, owner, Pos { x, y }).unwrap();
+            let executor = w.spawn(type_id, owner, Pos { x, y, face: 0 }).unwrap();
             w.submit(Command {
                 player: owner,
                 executor,
                 kind: "attack_move".into(),
                 subject: None,
                 target_entity: None,
-                target_pos: Some(Pos { x: target, y }),
+                target_pos: Some(Pos {
+                    x: target,
+                    y,
+                    face: 0,
+                }),
                 queue: false,
             })
             .unwrap();

@@ -35,7 +35,7 @@ fn world(sql: &str) -> World {
 }
 
 fn at(x: i32, y: i32) -> Pos {
-    Pos { x, y }
+    Pos::flat(x, y)
 }
 fn ticks(w: &mut World, n: u64) {
     for _ in 0..n {

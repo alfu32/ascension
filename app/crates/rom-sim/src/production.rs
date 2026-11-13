@@ -160,25 +160,22 @@ impl World {
         }
         let entity = self.entity(producer).expect("producer");
         let et = &self.rules.entity_types[&entity.type_id];
-        let right = i64::from(entity.pos.x) + et.footprint_w * 500 + 1;
-        let left = i64::from(entity.pos.x) - et.footprint_w * 500 - 1;
-        let bottom = i64::from(entity.pos.y) + et.footprint_h * 500 + 1;
-        let top = i64::from(entity.pos.y) - et.footprint_h * 500 - 1;
-        let max_x = i64::from(self.map.width) * 1000 - 1;
-        let max_y = i64::from(self.map.height) * 1000 - 1;
-        let (x, y) = [
-            (right, i64::from(entity.pos.y)),
-            (left, i64::from(entity.pos.y)),
-            (i64::from(entity.pos.x), bottom),
-            (i64::from(entity.pos.x), top),
-        ]
-        .into_iter()
-        .find(|(x, y)| (0..=max_x).contains(x) && (0..=max_y).contains(y))
-        .unwrap_or((right, i64::from(entity.pos.y)));
-        let pos = Pos {
-            x: x.clamp(0, max_x) as i32,
-            y: y.clamp(0, max_y) as i32,
-        };
+        let (across, down) = (et.footprint_w * 500 + 1, et.footprint_h * 500 + 1);
+        // Just outside the footprint's right, left, bottom or top edge; on a sphere
+        // the first of these always exists, across a face edge if need be.
+        let pos = [(across, 0), (-across, 0), (0, down), (0, -down)]
+            .into_iter()
+            .map(|(dx, dy)| self.geo.offset(entity.pos, dx, dy).0)
+            .find(|p| self.geo.contains(*p))
+            .unwrap_or_else(|| {
+                let (width, height) = self.geo.face_size();
+                let clamp = |v: i64, size: i32| v.clamp(0, i64::from(size) * 1000 - 1) as i32;
+                Pos {
+                    x: clamp(i64::from(entity.pos.x) + across, width),
+                    y: clamp(i64::from(entity.pos.y), height),
+                    face: entity.pos.face,
+                }
+            });
         order.status = match self.spawn(subject, order.player, pos) {
             Ok(_) => OrderStatus::Done,
             Err(_) => OrderStatus::Failed("id_exhausted".into()),

@@ -29,16 +29,29 @@ impl World {
         let snap = |coordinate: i32, size: i64| {
             ((i64::from(coordinate) - size * 500 + 500).div_euclid(1000) * 1000 + size * 500) as i32
         };
+        let requested = pos;
         let pos = Pos {
             x: snap(pos.x, et.footprint_w),
             y: snap(pos.y, et.footprint_h),
+            face: pos.face,
         };
-        let bounds = footprint(et, pos);
-        if bounds[0] < 0
-            || bounds[1] < 0
-            || bounds[2] > i64::from(self.map.width) * 1000
-            || bounds[3] > i64::from(self.map.height) * 1000
-        {
+        let fits = self.geo.footprint_fits(footprint(et, pos));
+        if self.geo.is_flat() {
+            return if fits {
+                Ok(pos)
+            } else {
+                Err(SimError::OutsideMap)
+            };
+        }
+        // On a sphere a requested point must be on the surface, and the footprint
+        // snapped around it must lie within that point's face.
+        if !self.geo.contains(requested) {
+            return Err(SimError::OutsideMap);
+        }
+        if !fits {
+            return Err(SimError::CrossesFaceEdge);
+        }
+        if !self.geo.contains(pos) {
             return Err(SimError::OutsideMap);
         }
         Ok(pos)
@@ -76,26 +89,31 @@ impl World {
             .ok_or(SimError::UnknownType(subject))?;
         let pos = self.snap_placement(subject, pos)?;
         let bounds = footprint(et, pos);
-        for (x, y) in crate::geometry::footprint_tiles(bounds) {
-            let terrain = self.map.terrain_at(x, y).expect("checked bounds");
-            if !self.rules.terrains[&terrain].buildable {
+        for tile in self.geo.footprint_tiles(pos.face, bounds) {
+            let index = self.geo.index_of(tile).expect("checked bounds");
+            if !self.rules.terrains[&self.map.terrain[index]].buildable {
                 return Err(SimError::UnbuildableTerrain);
             }
         }
+        // Footprints lie within one face, so only footprints on the same face can overlap.
         if self.entities().any(|e| {
             let other = &self.rules.entity_types[&e.type_id];
-            other.class == EntityClass::Building && overlaps(bounds, footprint(other, e.pos))
+            other.class == EntityClass::Building
+                && e.pos.face == pos.face
+                && overlaps(bounds, footprint(other, e.pos))
         }) || self
             .all_orders()
             .filter(|o| o.kind == "construct" && o.target_entity.is_none())
             .any(|o| {
-                overlaps(
-                    bounds,
-                    footprint(
-                        &self.rules.entity_types[&o.subject.expect("construction subject")],
-                        o.target_pos.expect("placement"),
-                    ),
-                )
+                let at = o.target_pos.expect("placement");
+                at.face == pos.face
+                    && overlaps(
+                        bounds,
+                        footprint(
+                            &self.rules.entity_types[&o.subject.expect("construction subject")],
+                            at,
+                        ),
+                    )
             })
         {
             return Err(SimError::PlacementOverlap);
@@ -150,7 +168,7 @@ impl World {
             .clamp(0, i64::from(u32::MAX)) as u32;
         order.total_ticks = Some(u64::from(total));
         let bounds = footprint(&self.rules.entity_types[&site.type_id], site.pos);
-        if !self.approach(builder, order, bounds) {
+        if !self.approach(builder, order, site.pos.face, bounds) {
             return;
         }
         let et = &self.rules.entity_types[&self.entity(builder).expect("builder").type_id];

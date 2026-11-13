@@ -1,21 +1,30 @@
 //! Integer geometry in milli-tiles.
 
-/// A position in milli-tiles; positive y faces 90 degrees.
+/// A position in milli-tiles on one face of the surface; positive y faces 90 degrees.
+/// A flat map has only face 0; on a cube sphere x and y are local to the face.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Pos {
     /// Horizontal position in milli-tiles.
     pub x: i32,
     /// Vertical position in milli-tiles.
     pub y: i32,
+    /// Face of the surface, 0..6 on a cube sphere and always 0 on a flat map.
+    pub face: u8,
 }
 
 impl Pos {
-    /// Returns squared distance, saturating only beyond the range of i64.
+    /// A position on face 0, the only face of a flat map.
+    pub const fn flat(x: i32, y: i32) -> Self {
+        Self { x, y, face: 0 }
+    }
+
+    /// Planar squared distance on one face, saturating only beyond the range of i64.
+    /// It ignores faces; `World::distance` measures across a sphere's face edges.
     pub fn distance_squared(self, other: Self) -> i64 {
         self.distance_squared_wide(other).min(i64::MAX as u128) as i64
     }
 
-    /// Returns Euclidean distance rounded down to whole milli-tiles.
+    /// Planar Euclidean distance rounded down to whole milli-tiles; ignores faces.
     pub fn distance(self, other: Self) -> u64 {
         integer_sqrt(self.distance_squared_wide(other))
     }
@@ -50,9 +59,8 @@ pub(crate) fn mul_div(a: i64, b: i64, c: i64) -> i64 {
     }
 }
 
-pub(crate) fn facing(from: Pos, to: Pos) -> u16 {
-    let dx = i64::from(to.x) - i64::from(from.x);
-    let dy = i64::from(to.y) - i64::from(from.y);
+/// Facing of a local vector in degrees, clockwise from positive x.
+pub(crate) fn facing_of(dx: i64, dy: i64) -> u16 {
     let (ax, ay) = (dx.abs(), dy.abs());
     if ax == 0 && ay == 0 {
         return 0;
@@ -86,10 +94,12 @@ mod tests {
         let a = Pos {
             x: i32::MIN,
             y: i32::MIN,
+            face: 0,
         };
         let b = Pos {
             x: i32::MAX,
             y: i32::MAX,
+            face: 0,
         };
         assert_eq!(a.distance_squared(b), i64::MAX);
         assert_eq!(a.distance(b), 6_074_000_998);
@@ -110,7 +120,7 @@ mod tests {
         .into_iter()
         .enumerate()
         {
-            assert_eq!(facing(Pos::default(), Pos { x, y }), i as u16 * 45);
+            assert_eq!(facing_of(x, y), i as u16 * 45);
         }
     }
 }

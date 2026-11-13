@@ -1,5 +1,6 @@
 //! Movement-class cost grids, line-of-sight checks, and integer A* spread over ticks.
 
+use crate::geometry::{Geometry, Tile};
 use crate::{EntityId, MapGrid, OrderId, Pos, integer_sqrt};
 use rom_rules::{EntityClass, EntityType, Rules};
 use std::{
@@ -24,6 +25,8 @@ const NEIGHBOURS: [(i32, i32); 8] = [
     (-1, 1),
     (-1, -1),
 ];
+/// For each diagonal in `NEIGHBOURS`, the slots of its two side neighbours.
+const SIDES: [(usize, usize); 4] = [(0, 2), (0, 3), (1, 2), (1, 3)];
 
 /// Path-search counters, kept for tests and diagnostics.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -36,9 +39,10 @@ pub struct PathStats {
     pub repaths: u64,
 }
 
-/// Half-open tile rectangle `[x0, x1) × [y0, y1)`.
+/// Half-open tile rectangle `[x0, x1) × [y0, y1)` on one face.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct TileRect {
+    pub face: u8,
     pub x0: i32,
     pub y0: i32,
     pub x1: i32,
@@ -46,12 +50,13 @@ pub(crate) struct TileRect {
 }
 
 impl TileRect {
-    /// Tiles touched by milli-tile bounds `[min_x, min_y, max_x, max_y]`.
-    pub fn covering(bounds: [i64; 4]) -> Self {
+    /// Tiles touched by milli-tile bounds `[min_x, min_y, max_x, max_y]` on a face.
+    pub fn covering(face: u8, bounds: [i64; 4]) -> Self {
         let up = |v: i64| (v + 999).div_euclid(1000);
         let x0 = bounds[0].div_euclid(1000);
         let y0 = bounds[1].div_euclid(1000);
         Self {
+            face,
             x0: x0.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
             y0: y0.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
             x1: up(bounds[2]).max(x0 + 1).min(i64::from(i32::MAX)) as i32,
@@ -59,27 +64,11 @@ impl TileRect {
         }
     }
 
-    fn contains(&self, x: i32, y: i32) -> bool {
-        (self.x0..self.x1).contains(&x) && (self.y0..self.y1).contains(&y)
+    fn contains(&self, tile: Tile) -> bool {
+        tile.face == self.face
+            && (self.x0..self.x1).contains(&tile.x)
+            && (self.y0..self.y1).contains(&tile.y)
     }
-}
-
-pub(crate) fn tile_of(pos: Pos) -> (i32, i32) {
-    (pos.x.div_euclid(1000), pos.y.div_euclid(1000))
-}
-
-pub(crate) fn centre(tile: (i32, i32)) -> Pos {
-    Pos {
-        x: tile.0 * 1000 + 500,
-        y: tile.1 * 1000 + 500,
-    }
-}
-
-/// Ceiling of the Euclidean distance, as straight-line movement measures it.
-pub(crate) fn ceil_distance(from: Pos, to: Pos) -> u64 {
-    let squared = from.distance_squared_wide(to);
-    let root = integer_sqrt(squared);
-    root + u64::from(u128::from(root) * u128::from(root) < squared)
 }
 
 #[derive(Debug)]
@@ -97,8 +86,8 @@ struct ClassGrid {
 pub(crate) struct PathRequest {
     pub id: u64,
     pub class: u32,
-    pub start: (i32, i32),
-    pub goal: (i32, i32),
+    pub start: Tile,
+    pub goal: Tile,
     pub waiters: Vec<(EntityId, OrderId)>,
 }
 
@@ -108,8 +97,8 @@ pub(crate) struct Search {
     pub request: u64,
     /// Tile actually searched for: the goal, or the open tile nearest to it.
     pub target: u32,
-    /// Goal clamped onto the map; "nearest reachable" is measured to it.
-    pub anchor: (i32, i32),
+    /// Goal clamped onto the surface; "nearest reachable" is measured to it.
+    pub anchor: Tile,
     pub open: BinaryHeap<Reverse<(u64, u64, u32)>>,
     /// Closest expanded tile to the anchor: (squared distance, tile).
     pub best: (u64, u32),
@@ -119,15 +108,14 @@ pub(crate) struct Search {
 
 /// A finished search: tiles from start to end and whether the goal was reached.
 pub(crate) struct Found {
-    pub tiles: Vec<(i32, i32)>,
+    pub tiles: Vec<Tile>,
     pub reached: bool,
 }
 
 /// Per-class grids, building occupancy, and the budgeted search queue.
 #[derive(Debug)]
 pub(crate) struct Pathing {
-    pub width: i32,
-    pub height: i32,
+    pub geo: Geometry,
     classes: BTreeMap<u32, ClassGrid>,
     /// Number of building footprints covering each tile.
     pub occupancy: Vec<u32>,
@@ -145,14 +133,18 @@ pub(crate) struct Pathing {
     pub parent: Vec<u32>,
     pub stamp: Vec<u32>,
     pub closed: Vec<u32>,
+    /// Heuristic per tile, valid where `stamp` equals the search generation.
+    h: Vec<u64>,
     pub generation: u32,
+    /// Tile centres in space on a cube (doubled milli-tiles); empty for a flat map.
+    space: Vec<[i32; 3]>,
     // Per-tick group registry, emptied at the end of every tick.
-    spread: BTreeMap<(i32, i32), u32>,
-    shared: BTreeMap<(u32, i32, i32, i32, i32), u64>,
+    spread: BTreeMap<(u8, i32, i32), u32>,
+    shared: BTreeMap<(u32, u8, i32, i32, Tile), u64>,
 }
 
 impl Pathing {
-    pub fn new(rules: &Rules, map: &MapGrid) -> Self {
+    pub fn new(rules: &Rules, map: &MapGrid, geo: Geometry) -> Self {
         let tiles = map.terrain.len();
         let mut classes = BTreeMap::new();
         for movement in rules
@@ -211,9 +203,15 @@ impl Pathing {
             .map(|et| et.radius.max(0))
             .max()
             .unwrap_or(0);
+        let space = if geo.is_flat() {
+            Vec::new()
+        } else {
+            (0..tiles)
+                .map(|i| geo.space_point(i).map(|v| v as i32))
+                .collect()
+        };
         Self {
-            width: map.width as i32,
-            height: map.height as i32,
+            geo,
             classes,
             occupancy: vec![0; tiles],
             queue: VecDeque::new(),
@@ -229,33 +227,26 @@ impl Pathing {
             parent: vec![0; tiles],
             stamp: vec![0; tiles],
             closed: vec![0; tiles],
+            h: vec![0; tiles],
             generation: 0,
+            space,
             spread: BTreeMap::new(),
             shared: BTreeMap::new(),
         }
     }
 
-    fn index(&self, x: i32, y: i32) -> Option<usize> {
-        (x >= 0 && y >= 0 && x < self.width && y < self.height)
-            .then(|| y as usize * self.width as usize + x as usize)
-    }
-
-    fn coords(&self, index: u32) -> (i32, i32) {
-        (
-            (index % self.width as u32) as i32,
-            (index / self.width as u32) as i32,
-        )
-    }
-
-    /// Adds or removes one building footprint from the occupancy layer.
-    pub fn occupy(&mut self, et: &EntityType, bounds: [i64; 4], add: bool) {
+    /// Adds or removes one building footprint on a face from the occupancy layer.
+    pub fn occupy(&mut self, et: &EntityType, face: u8, bounds: [i64; 4], add: bool) {
         if et.class != EntityClass::Building {
             return;
         }
-        let rect = TileRect::covering(bounds);
-        for y in rect.y0.max(0)..rect.y1.min(self.height) {
-            for x in rect.x0.max(0)..rect.x1.min(self.width) {
-                let index = self.index(x, y).expect("clipped to map");
+        let rect = TileRect::covering(face, bounds);
+        let (width, height) = self.geo.face_size();
+        for y in rect.y0.max(0)..rect.y1.min(height) {
+            for x in rect.x0.max(0)..rect.x1.min(width) {
+                let Some(index) = self.geo.index_of(Tile::new(face, x, y)) else {
+                    continue;
+                };
                 if add {
                     self.occupancy[index] += 1;
                 } else {
@@ -267,46 +258,60 @@ impl Pathing {
 
     /// Speed percentage for a class on the tile under `pos`; flyers always 100.
     pub fn speed_pct(&self, class: u32, pos: Pos) -> u32 {
-        let (x, y) = tile_of(pos);
-        match (self.classes.get(&class), self.index(x, y)) {
+        match (self.classes.get(&class), self.geo.pos_index(pos)) {
             (Some(grid), Some(index)) => grid.pct[index],
             _ => 0,
         }
     }
 
     /// Whether a class may enter a tile; `exempt` lifts building occupancy only.
-    pub fn passable(&self, class: u32, x: i32, y: i32, exempt: Option<TileRect>) -> bool {
-        let (Some(grid), Some(index)) = (self.classes.get(&class), self.index(x, y)) else {
+    pub fn passable(&self, class: u32, tile: Tile, exempt: Option<TileRect>) -> bool {
+        let (Some(grid), Some(index)) = (self.classes.get(&class), self.geo.index_of(tile)) else {
             return false;
         };
         grid.flies
             || (grid.pct[index] > 0
-                && (self.occupancy[index] == 0 || exempt.is_some_and(|r| r.contains(x, y))))
+                && (self.occupancy[index] == 0 || exempt.is_some_and(|r| r.contains(tile))))
     }
 
     /// Whether every tile the segment touches after its first is passable,
     /// treating exact corner crossings as touching both side tiles.
     /// Tiles are half-open, so a point on a boundary belongs to the higher tile.
+    /// On the cube the segment is drawn in the start's face plane across at most one
+    /// edge; it is blocked beyond half a face and where it enters a corner's gap.
     pub fn line_clear(&self, class: u32, from: Pos, to: Pos, exempt: Option<TileRect>) -> bool {
-        let (mut tx, mut ty) = tile_of(from);
-        let (ex, ey) = tile_of(to);
+        let Some((dx, dy)) = self.geo.vector(from, to) else {
+            return false;
+        };
+        let (mut tx, mut ty) = (from.x.div_euclid(1000), from.y.div_euclid(1000));
+        let ex = (i64::from(from.x) + dx).div_euclid(1000) as i32;
+        let ey = (i64::from(from.y) + dy).div_euclid(1000) as i32;
         if (tx, ty) == (ex, ey) {
             return self.classes.contains_key(&class);
         }
         let Some(grid) = self.classes.get(&class) else {
             return false;
         };
+        let flat = self.geo.is_flat();
+        let (width, height) = self.geo.face_size();
+        let face = from.face;
         let open = |x: i32, y: i32| -> bool {
-            if x < 0 || y < 0 || x >= self.width || y >= self.height {
-                return false;
-            }
-            let index = y as usize * self.width as usize + x as usize;
+            let index = if flat {
+                if x < 0 || y < 0 || x >= width || y >= height {
+                    return false;
+                }
+                y as usize * width as usize + x as usize
+            } else {
+                match self.geo.plane_index(face, x, y) {
+                    Some(index) => index,
+                    None => return false,
+                }
+            };
             grid.flies
                 || (grid.pct[index] > 0
-                    && (self.occupancy[index] == 0 || exempt.is_some_and(|r| r.contains(x, y))))
+                    && (self.occupancy[index] == 0
+                        || exempt.is_some_and(|r| r.contains(self.geo.tile_at(index)))))
         };
-        let dx = i64::from(to.x) - i64::from(from.x);
-        let dy = i64::from(to.y) - i64::from(from.y);
         let (sx, sy) = (dx.signum() as i32, dy.signum() as i32);
         let (adx, ady) = (i128::from(dx.abs()), i128::from(dy.abs()));
         let limit = (ex - tx).unsigned_abs() + (ey - ty).unsigned_abs() + 2;
@@ -392,7 +397,7 @@ impl Pathing {
 
     /// Next spread index for a goal point within the current tick, across all classes.
     pub fn join_spread(&mut self, goal: Pos) -> u32 {
-        let counter = self.spread.entry((goal.x, goal.y)).or_default();
+        let counter = self.spread.entry((goal.face, goal.x, goal.y)).or_default();
         let index = *counter;
         *counter += 1;
         index
@@ -406,14 +411,14 @@ impl Pathing {
         from: Pos,
         goal: Pos,
     ) -> u64 {
-        let start = tile_of(from);
-        let goal = tile_of(goal);
+        let start = self.geo.tile_of(from);
+        let goal = self.geo.tile_of(goal);
         let key = (
             class,
-            start.0.div_euclid(4),
-            start.1.div_euclid(4),
-            goal.0,
-            goal.1,
+            start.face,
+            start.x.div_euclid(4),
+            start.y.div_euclid(4),
+            goal,
         );
         if let Some(id) = self.shared.get(&key)
             && let Some(request) = self.queue.iter_mut().find(|r| r.id == *id)
@@ -440,34 +445,48 @@ impl Pathing {
         self.shared.clear();
     }
 
-    fn heuristic(&self, class: u32, tile: u32, target: u32) -> u64 {
-        let (x, y) = self.coords(tile);
-        let (tx, ty) = self.coords(target);
-        let (dx, dy) = (u64::from(x.abs_diff(tx)), u64::from(y.abs_diff(ty)));
-        (STRAIGHT * dx.max(dy) + (DIAGONAL - STRAIGHT) * dx.min(dy))
-            * self.classes[&class].min_weight
+    /// Lower bound of the remaining cost, in step weights. Flat: octile tiles. Cube:
+    /// 9.8 per tile of straight-line distance in space, below every step's cost per
+    /// tile it can cover (10 straight, 14/√2 diagonal), so it stays consistent.
+    fn heuristic(&self, min_weight: u64, tile: u32, target: u32) -> u64 {
+        if self.space.is_empty() {
+            let (a, b) = (
+                self.geo.tile_at(tile as usize),
+                self.geo.tile_at(target as usize),
+            );
+            let (dx, dy) = (u64::from(a.x.abs_diff(b.x)), u64::from(a.y.abs_diff(b.y)));
+            return (STRAIGHT * dx.max(dy) + (DIAGONAL - STRAIGHT) * dx.min(dy)) * min_weight;
+        }
+        let squared = self.space_distance_squared(tile, target);
+        // Doubled milli-tiles: 2000 per tile.
+        integer_sqrt(u128::from(squared)) * 98 / 20_000 * min_weight
     }
 
     /// Open tile nearest the anchor (ties by index); the start tile always counts as open.
-    fn nearest_open(&self, class: u32, anchor: (i32, i32), start: u32) -> Option<u32> {
-        let span = self.width.max(self.height);
+    fn nearest_open(&self, class: u32, anchor: Tile, start: u32) -> Option<u32> {
+        if !self.geo.is_flat() {
+            return self.nearest_open_cube(class, anchor, start);
+        }
+        let (width, height) = self.geo.face_size();
+        let span = width.max(height);
         let mut best: Option<(u64, u32)> = None;
         for ring in 0..=span {
             if best.is_some_and(|(d, _)| (ring as u64) * (ring as u64) > d) {
                 break;
             }
-            for y in anchor.1 - ring..=anchor.1 + ring {
-                for x in anchor.0 - ring..=anchor.0 + ring {
-                    if (x - anchor.0).abs() != ring && (y - anchor.1).abs() != ring {
+            for y in anchor.y - ring..=anchor.y + ring {
+                for x in anchor.x - ring..=anchor.x + ring {
+                    if (x - anchor.x).abs() != ring && (y - anchor.y).abs() != ring {
                         continue;
                     }
-                    let Some(index) = self.index(x, y) else {
+                    let tile = Tile::new(0, x, y);
+                    let Some(index) = self.geo.index_of(tile) else {
                         continue;
                     };
-                    if index as u32 != start && !self.passable(class, x, y, None) {
+                    if index as u32 != start && !self.passable(class, tile, None) {
                         continue;
                     }
-                    let (dx, dy) = (i64::from(x - anchor.0), i64::from(y - anchor.1));
+                    let (dx, dy) = (i64::from(x - anchor.x), i64::from(y - anchor.y));
                     let key = ((dx * dx + dy * dy) as u64, index as u32);
                     if best.is_none_or(|b| key < b) {
                         best = Some(key);
@@ -478,21 +497,57 @@ impl Pathing {
         best.map(|(_, index)| index)
     }
 
+    /// Breadth-first rings over the cube's neighbours; once an open tile is found, a few
+    /// more rings decide the nearest in space (ties by index).
+    fn nearest_open_cube(&self, class: u32, anchor: Tile, start: u32) -> Option<u32> {
+        let origin = self.geo.index_of(anchor).expect("clamped anchor");
+        let mut seen = vec![false; self.geo.tiles()];
+        seen[origin] = true;
+        let mut ring = vec![origin as u32];
+        let mut best: Option<(u64, u32)> = None;
+        let mut stop_after = u32::MAX;
+        let mut depth = 0_u32;
+        while !ring.is_empty() && depth <= stop_after {
+            for &index in &ring {
+                if index == start || self.passable(class, self.geo.tile_at(index as usize), None) {
+                    let key = (self.space_distance_squared(index, origin as u32), index);
+                    if best.is_none_or(|b| key < b) {
+                        best = Some(key);
+                    }
+                }
+            }
+            if best.is_some() && stop_after == u32::MAX {
+                // Ring k lies within k·√2 tiles: rings past 1.5·k + 1 cannot be nearer.
+                stop_after = depth + depth / 2 + 1;
+            }
+            let mut next = Vec::new();
+            for &index in &ring {
+                for neighbour in self.geo.neighbours(index as usize, &NEIGHBOURS) {
+                    if neighbour != u32::MAX && !seen[neighbour as usize] {
+                        seen[neighbour as usize] = true;
+                        next.push(neighbour);
+                    }
+                }
+            }
+            next.sort_unstable();
+            ring = next;
+            depth += 1;
+        }
+        best.map(|(_, index)| index)
+    }
+
     /// Initialises the search for the front request.
     pub fn begin(&mut self) {
         let request = self.queue.front().expect("queued request");
         let (id, class, goal) = (request.id, request.class, request.goal);
         let start = self
-            .index(request.start.0, request.start.1)
+            .geo
+            .index_of(request.start)
             .expect("units stand on the map") as u32;
-        let anchor = (
-            goal.0.clamp(0, self.width - 1),
-            goal.1.clamp(0, self.height - 1),
-        );
-        let goal_open =
-            self.index(goal.0, goal.1).is_some() && self.passable(class, goal.0, goal.1, None);
+        let anchor = self.geo.clamp_tile(goal);
+        let goal_open = self.geo.index_of(goal).is_some() && self.passable(class, goal, None);
         let target = if goal_open {
-            self.index(anchor.0, anchor.1).expect("clamped") as u32
+            self.geo.index_of(anchor).expect("clamped") as u32
         } else {
             self.nearest_open(class, anchor, start).unwrap_or(start)
         };
@@ -506,7 +561,8 @@ impl Pathing {
         self.stamp[start as usize] = generation;
         self.g[start as usize] = 0;
         self.parent[start as usize] = start;
-        let h = self.heuristic(class, start, target);
+        let h = self.heuristic(self.classes[&class].min_weight, start, target);
+        self.h[start as usize] = h;
         let mut open = BinaryHeap::new();
         open.push(Reverse((h, h, start)));
         self.stats.searches += 1;
@@ -529,23 +585,16 @@ impl Pathing {
             (request.class, request.goal)
         };
         let grid = &self.classes[&class];
-        let (width, height) = (self.width, self.height);
+        let geo = &self.geo;
+        let flat = geo.is_flat();
+        let anchor = geo.index_of(search.anchor).expect("clamped anchor") as u32;
+        let (width, height) = geo.face_size();
         let occupancy = &self.occupancy;
-        let open_tile = |x: i32, y: i32| -> bool {
-            if x < 0 || y < 0 || x >= width || y >= height {
-                return false;
-            }
-            let index = y as usize * width as usize + x as usize;
-            grid.flies || (grid.pct[index] > 0 && occupancy[index] == 0)
+        let open_tile = |index: u32| -> bool {
+            index != u32::MAX
+                && (grid.flies || (grid.pct[index as usize] > 0 && occupancy[index as usize] == 0))
         };
-        let (tx, ty) = (
-            (search.target % width as u32) as i32,
-            (search.target / width as u32) as i32,
-        );
-        let heuristic = |x: i32, y: i32| -> u64 {
-            let (dx, dy) = (u64::from(x.abs_diff(tx)), u64::from(y.abs_diff(ty)));
-            (STRAIGHT * dx.max(dy) + (DIAGONAL - STRAIGHT) * dx.min(dy)) * grid.min_weight
-        };
+        let target = search.target;
         let generation = search.generation;
         let mut used = 0;
         let mut end = None;
@@ -561,38 +610,62 @@ impl Pathing {
             self.closed[index] = generation;
             used += 1;
             search.expanded += 1;
-            let (x, y) = ((tile % width as u32) as i32, (tile / width as u32) as i32);
-            let (ax, ay) = (
-                i64::from(x - search.anchor.0),
-                i64::from(y - search.anchor.1),
-            );
-            let distance = (ax * ax + ay * ay) as u64;
+            let distance = if flat {
+                let (x, y) = ((tile % width as u32) as i32, (tile / width as u32) as i32);
+                let (ax, ay) = (
+                    i64::from(x - search.anchor.x),
+                    i64::from(y - search.anchor.y),
+                );
+                (ax * ax + ay * ay) as u64
+            } else {
+                self.space_distance_squared(tile, anchor)
+            };
             if (distance, tile) < search.best {
                 search.best = (distance, tile);
             }
-            if tile == search.target {
+            if tile == target {
                 end = Some(tile);
                 break;
             }
-            for (dx, dy) in NEIGHBOURS {
-                let (nx, ny) = (x + dx, y + dy);
-                let diagonal = dx != 0 && dy != 0;
-                if !open_tile(nx, ny)
-                    || (diagonal && (!open_tile(x + dx, y) || !open_tile(x, y + dy)))
+            let neighbours = if flat {
+                let (x, y) = ((tile % width as u32) as i32, (tile / width as u32) as i32);
+                NEIGHBOURS.map(|(dx, dy)| {
+                    let (nx, ny) = (x + dx, y + dy);
+                    if nx < 0 || ny < 0 || nx >= width || ny >= height {
+                        u32::MAX
+                    } else {
+                        (ny as usize * width as usize + nx as usize) as u32
+                    }
+                })
+            } else {
+                geo.neighbours(index, &NEIGHBOURS)
+            };
+            for (slot, next) in neighbours.into_iter().enumerate() {
+                let diagonal = slot >= 4;
+                if !open_tile(next)
+                    || (diagonal && {
+                        let (a, b) = SIDES[slot - 4];
+                        !open_tile(neighbours[a]) || !open_tile(neighbours[b])
+                    })
                 {
                     continue;
                 }
-                let next = ny as usize * width as usize + nx as usize;
+                let next = next as usize;
                 if self.closed[next] == generation {
                     continue;
                 }
                 let base = if diagonal { DIAGONAL } else { STRAIGHT };
                 let cost = self.g[index] + base * u64::from(grid.weight[next]);
-                if self.stamp[next] != generation || cost < self.g[next] {
+                let fresh = self.stamp[next] != generation;
+                if fresh || cost < self.g[next] {
+                    // Each tile's square root is taken once per search.
+                    if fresh {
+                        self.h[next] = self.heuristic(grid.min_weight, next as u32, target);
+                    }
                     self.stamp[next] = generation;
                     self.g[next] = cost;
                     self.parent[next] = tile;
-                    let h = heuristic(nx, ny);
+                    let h = self.h[next];
                     search.open.push(Reverse((cost + h, h, next as u32)));
                 }
             }
@@ -602,15 +675,26 @@ impl Pathing {
             self.search = Some(search);
             return (used, None);
         };
-        let mut tiles = vec![self.coords(end)];
+        let mut tiles = vec![self.geo.tile_at(end as usize)];
         let mut tile = end;
         while self.parent[tile as usize] != tile {
             tile = self.parent[tile as usize];
-            tiles.push(self.coords(tile));
+            tiles.push(self.geo.tile_at(tile as usize));
         }
         tiles.reverse();
-        let reached = self.coords(end) == goal;
+        let reached = self.geo.tile_at(end as usize) == goal;
         (used, Some(Found { tiles, reached }))
+    }
+}
+
+impl Pathing {
+    /// Squared straight-line distance between two cube tile centres in space
+    /// (doubled milli-tiles).
+    fn space_distance_squared(&self, a: u32, b: u32) -> u64 {
+        let (p, q) = (self.space[a as usize], self.space[b as usize]);
+        (0..3)
+            .map(|i| (i64::from(p[i]) - i64::from(q[i])).pow(2) as u64)
+            .sum()
     }
 }
 
@@ -641,16 +725,38 @@ mod tests {
             })
             .collect();
         let map = MapGrid::new(width as u32, height as u32, terrain).unwrap();
+        let geo = Geometry::new(crate::Topology::Flat {
+            width: map.width,
+            height: map.height,
+        })
+        .unwrap();
         let class = rules.entity_types[&rules.id_of("unit.citizen").unwrap()]
             .movement
             .as_ref()
             .unwrap()
             .movement_class_id;
-        (Pathing::new(&rules, &map), class)
+        (Pathing::new(&rules, &map, geo), class)
     }
 
     fn at(x: i32, y: i32) -> Pos {
-        Pos { x, y }
+        Pos::flat(x, y)
+    }
+
+    fn tile(t: (i32, i32)) -> Tile {
+        Tile::new(0, t.0, t.1)
+    }
+
+    fn centre(t: (i32, i32)) -> Pos {
+        at(t.0 * 1000 + 500, t.1 * 1000 + 500)
+    }
+
+    fn index(grid: &Pathing, x: i32, y: i32) -> usize {
+        grid.geo.index_of(tile((x, y))).unwrap()
+    }
+
+    fn coords(grid: &Pathing, index: u32) -> (i32, i32) {
+        let t = grid.geo.tile_at(index as usize);
+        (t.x, t.y)
     }
 
     #[test]
@@ -668,14 +774,18 @@ mod tests {
         grid.queue.push_back(PathRequest {
             id: 1,
             class,
-            start,
-            goal,
+            start: tile(start),
+            goal: tile(goal),
             waiters: Vec::new(),
         });
         grid.begin();
         let (_, found) = grid.advance(u64::MAX);
         grid.queue.pop_front();
         found.expect("unbounded budget finishes")
+    }
+
+    fn coords_of(found: &Found) -> Vec<(i32, i32)> {
+        found.tiles.iter().map(|t| (t.x, t.y)).collect()
     }
 
     fn cost(grid: &Pathing, class: u32, tiles: &[(i32, i32)]) -> u64 {
@@ -687,7 +797,7 @@ mod tests {
                 } else {
                     STRAIGHT
                 };
-                let index = grid.index(pair[1].0, pair[1].1).unwrap();
+                let index = index(grid, pair[1].0, pair[1].1);
                 base * u64::from(grid.classes[&class].weight[index])
             })
             .sum()
@@ -713,12 +823,12 @@ mod tests {
         let (mut grid, class) = setup(&[".#", "#."]);
         let found = find(&mut grid, class, (0, 0), (1, 1));
         assert!(!found.reached);
-        assert_eq!(found.tiles, vec![(0, 0)]);
+        assert_eq!(coords_of(&found), vec![(0, 0)]);
         // One blocked side forces the orthogonal detour.
         let (mut grid, class) = setup(&[".#", ".."]);
         let found = find(&mut grid, class, (0, 0), (1, 1));
         assert!(found.reached);
-        assert_eq!(found.tiles, vec![(0, 0), (0, 1), (1, 1)]);
+        assert_eq!(coords_of(&found), vec![(0, 0), (0, 1), (1, 1)]);
         // Every diagonal step of a path on a cluttered grid has both side tiles open.
         let mut rng = crate::SimRng::new(11);
         for _ in 0..40 {
@@ -726,12 +836,12 @@ mod tests {
             let rows: Vec<&str> = rows.iter().map(String::as_str).collect();
             let (mut grid, class) = setup(&rows);
             let found = find(&mut grid, class, (0, 0), (23, 23));
-            for pair in found.tiles.windows(2) {
+            for pair in coords_of(&found).windows(2) {
                 let ((x0, y0), (x1, y1)) = (pair[0], pair[1]);
-                assert!(grid.passable(class, x1, y1, None));
+                assert!(grid.passable(class, tile((x1, y1)), None));
                 if x0 != x1 && y0 != y1 {
-                    assert!(grid.passable(class, x1, y0, None));
-                    assert!(grid.passable(class, x0, y1, None));
+                    assert!(grid.passable(class, tile((x1, y0)), None));
+                    assert!(grid.passable(class, tile((x0, y1)), None));
                 }
             }
         }
@@ -756,18 +866,15 @@ mod tests {
                 if g > best[tile as usize] {
                     continue;
                 }
-                let (x, y) = grid.coords(tile);
+                let (x, y) = coords(&grid, tile);
                 for (dx, dy) in NEIGHBOURS {
                     let (nx, ny) = (x + dx, y + dy);
                     let diagonal = dx != 0 && dy != 0;
-                    if !grid.passable(class, nx, ny, None)
-                        || (diagonal
-                            && (!grid.passable(class, x + dx, y, None)
-                                || !grid.passable(class, x, y + dy, None)))
-                    {
+                    let free = |x, y| grid.passable(class, Tile::new(0, x, y), None);
+                    if !free(nx, ny) || (diagonal && (!free(x + dx, y) || !free(x, y + dy))) {
                         continue;
                     }
-                    let next = grid.index(nx, ny).unwrap();
+                    let next = index(&grid, nx, ny);
                     let step = if diagonal { DIAGONAL } else { STRAIGHT };
                     let cost = g + step * u64::from(grid.classes[&class].weight[next]);
                     if cost < best[next] {
@@ -776,12 +883,12 @@ mod tests {
                     }
                 }
             }
-            let reference = best[grid.index(goal.0, goal.1).unwrap()];
-            if !grid.passable(class, goal.0, goal.1, None) || reference == u64::MAX {
+            let reference = best[index(&grid, goal.0, goal.1)];
+            if !grid.passable(class, tile(goal), None) || reference == u64::MAX {
                 assert!(!found.reached);
             } else {
                 assert!(found.reached);
-                assert_eq!(cost(&grid, class, &found.tiles), reference);
+                assert_eq!(cost(&grid, class, &coords_of(&found)), reference);
             }
         }
     }
@@ -791,7 +898,7 @@ mod tests {
         // An L-shaped detour around one block needs only its corner.
         let (mut grid, class) = setup(&[".....", ".###.", ".###.", ".###.", "....."]);
         let found = find(&mut grid, class, (0, 4), (4, 0));
-        let points: Vec<Pos> = found.tiles[1..].iter().map(|t| centre(*t)).collect();
+        let points: Vec<Pos> = coords_of(&found)[1..].iter().map(|t| centre(*t)).collect();
         let smooth = grid.smooth(class, centre((0, 4)), &points);
         assert!(points.len() >= 6);
         assert_eq!(smooth.len(), 2);
@@ -805,7 +912,7 @@ mod tests {
             let (mut grid, class) = setup(&rows);
             let start = at(500, 500);
             let found = find(&mut grid, class, (0, 0), (23, 23));
-            let points: Vec<Pos> = found.tiles[1..].iter().map(|t| centre(*t)).collect();
+            let points: Vec<Pos> = coords_of(&found)[1..].iter().map(|t| centre(*t)).collect();
             if points.is_empty() {
                 continue;
             }
