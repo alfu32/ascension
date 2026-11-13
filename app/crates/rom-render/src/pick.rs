@@ -1148,6 +1148,62 @@ mod tests {
     }
 
     #[test]
+    fn globe_drag_keeps_the_surface_point_under_the_cursor() {
+        let n = 64;
+        let globe = Globe::new(&crate::PlanetScene {
+            n,
+            kinds: vec![crate::TileKind::Land; 6 * (n * n) as usize],
+            heights: vec![0; 6 * (n * n) as usize],
+            feature_colors: Default::default(),
+            starts: vec![],
+            nodes: vec![],
+        });
+        let layout = layout();
+        let hud = HudSnapshot::default();
+        let from = layout.world_area().centre();
+        let to = (from.0 + 70.0, from.1 + 35.0);
+        for (lon, lat) in [(35.0, 25.0), (179.0, 80.0), (-90.0, -60.0)] {
+            let mut orbit = OrbitCamera::at(lon, lat, 35.0, 20.0, globe.radius(), 120.0);
+            let ctx = PickContext {
+                layout,
+                view: canvas_view_orbit(&orbit, &layout, true),
+                entities: &[],
+                ground: FLAT,
+                globe: Some(&globe),
+                hud: &hud,
+                hud_visible: true,
+                map_size: (n, n),
+                now_ms: 0,
+            };
+            let anchor = ctx
+                .view
+                .surface_point(from.0, from.1, Ground::Globe(&globe))
+                .unwrap()
+                .point;
+            let mut picker = PickController::default();
+            let mut flat_camera = camera();
+            for event in [
+                InputEvent::ButtonDown {
+                    button: PointerButton::Middle,
+                    x: from.0,
+                    y: from.1,
+                    mods: Modifiers::default(),
+                },
+                InputEvent::PointerMoved { x: to.0, y: to.1 },
+            ] {
+                assert!(
+                    picker
+                        .handle_with_orbit(event, &ctx, &mut flat_camera, Some(&mut orbit))
+                        .is_empty()
+                );
+            }
+            let after = canvas_view_orbit(&orbit, &layout, true);
+            let (x, y, _) = after.project(anchor).unwrap();
+            assert!((x - to.0).hypot(y - to.1) < 0.1, "{lon}, {lat}: {x}, {y}");
+        }
+    }
+
+    #[test]
     fn middle_drag_pans_and_right_drag_requires_an_empty_selection() {
         let mut cam = camera();
         let layout = HudLayout::new(1280, 800, None);

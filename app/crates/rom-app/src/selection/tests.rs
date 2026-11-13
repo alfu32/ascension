@@ -1328,6 +1328,28 @@ fn task_30_scripts_reach_the_capture_states_without_a_window() {
         let mut hud = HudSnapshot::default();
         ctl.fill(&game.world, &mut hud);
         if city_script {
+            let scene = crate::terrain::to_scene(&content.map);
+            let camera = rom_render::home_camera(&scene);
+            let surface = rom_render::Surface::new(Arc::new(scene));
+            let layout = rom_render::hud_layout::HudLayout::new(1672, 941, None);
+            let view = rom_render::pick::canvas_view(&camera, &layout, true);
+            let preview = hud.placement.as_ref().expect("placement preview");
+            // Keep the full contour and four tiles of ghost clearance visible in the capture.
+            for dx in [-0.5, 0.5] {
+                for dy in [-0.5, 0.5] {
+                    let x = preview.x as f32 / 1000.0 + dx * f32::from(preview.width);
+                    let y = preview.y as f32 / 1000.0 + dy * f32::from(preview.height);
+                    for lift in [0.0, 4.0] {
+                        let (px, py, _) = view
+                            .project([x, surface.height(x, y) + lift, y])
+                            .expect("placement in front of camera");
+                        assert!(
+                            !layout.contains_hud(px, py) && layout.world_area().contains(px, py),
+                            "placement is hidden by the HUD at {px}, {py}"
+                        );
+                    }
+                }
+            }
             assert_eq!(
                 hud.placement.as_ref().map(|p| p.valid),
                 Some(Some(true)),
