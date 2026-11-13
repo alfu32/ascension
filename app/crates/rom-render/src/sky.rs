@@ -88,6 +88,67 @@ pub fn backdrop(sun_height: f32, altitude: f32, radius: f32) -> Sky {
     toward_space(local_sky(sun_height), space_share(altitude, radius))
 }
 
+/// Sine of the angle the visible horizon dips below horizontal at `altitude`.
+pub fn horizon_dip(altitude: f32, radius: f32) -> f32 {
+    let below = radius / (radius + altitude.max(0.0));
+    (1.0 - below * below).max(0.0).sqrt()
+}
+
+/// Sky colour along a unit view `ray`, with local vertical `up` and light direction `toward`.
+/// The dome shader uses the same gradient and directional twilight glow.
+pub fn dome_colour(sky: &Sky, ray: [f32; 3], up: [f32; 3], toward: [f32; 3], dip: f32) -> [f32; 3] {
+    let dot = |a: [f32; 3], b: [f32; 3]| (0..3).map(|i| a[i] * b[i]).sum::<f32>();
+    let vertical = dot(ray, up);
+    let height = (vertical + dip) / (1.0 + dip);
+    let colour = mix(
+        sky.horizon,
+        sky.zenith,
+        1.0 - (1.0 - height.clamp(0.0, 1.0)).powi(4),
+    );
+    let across = [0, 1, 2].map(|i| ray[i] - up[i] * vertical);
+    let sun_across = [0, 1, 2].map(|i| toward[i] - up[i] * dot(toward, up));
+    let length = |v| dot(v, v).sqrt();
+    let side = if length(across) > 1e-4 && length(sun_across) > 1e-4 {
+        (dot(across, sun_across) / (length(across) * length(sun_across))).max(0.0)
+    } else {
+        0.0
+    };
+    let low = 1.0 - (height.abs() * 3.0).clamp(0.0, 1.0);
+    mix(
+        colour,
+        sky.glow,
+        sky.glow_strength * side * side * low * low * 0.85,
+    )
+}
+
+/// GLSL counterpart of [`dome_colour`].
+pub(crate) const DOME_FS: &str = r#"#version 330
+in vec3 fragDir;
+uniform vec3 up;
+uniform vec3 toSun;
+uniform vec3 zenith;
+uniform vec3 horizon;
+uniform vec3 glow;
+uniform float glowStrength;
+uniform float dip;
+out vec4 finalColor;
+void main() {
+    vec3 d = normalize(fragDir);
+    float vertical = dot(d, up);
+    float h = (vertical + dip) / (1.0 + dip);
+    vec3 colour = mix(horizon, zenith, 1.0 - pow(1.0 - clamp(h, 0.0, 1.0), 4.0));
+    vec3 across = d - up * vertical;
+    vec3 sunAcross = toSun - up * dot(toSun, up);
+    float side = 0.0;
+    if (length(across) > 1e-4 && length(sunAcross) > 1e-4) {
+        side = max(dot(normalize(across), normalize(sunAcross)), 0.0);
+    }
+    float low = 1.0 - clamp(abs(h) * 3.0, 0.0, 1.0);
+    colour = mix(colour, glow, glowStrength * side * side * low * low * 0.85);
+    finalColor = vec4(colour, 1.0);
+}
+"#;
+
 /// Thickness of the atmosphere halo around a habitable planet, as a fraction of its radius.
 pub const HALO_THICKNESS: f32 = 0.06;
 /// Opacity of the halo at its brightest.
@@ -232,5 +293,27 @@ mod tests {
             assert!(jump < 0.02, "altitude {}: {jump}", step as f32 * 0.5);
             last = now;
         }
+    }
+
+    #[test]
+    fn dome_gradient_and_twilight_follow_the_local_horizon() {
+        let up = [0.0, 1.0, 0.0];
+        let toward = [0.0, 0.0, 1.0];
+        let noon = local_sky(1.0);
+        assert_eq!(dome_colour(&noon, up, up, toward, 0.0), noon.zenith);
+        assert_eq!(dome_colour(&noon, toward, up, toward, 0.0), noon.horizon);
+        let dusk = local_sky(0.0);
+        let front = dome_colour(&dusk, toward, up, toward, 0.0);
+        let back = dome_colour(&dusk, [0.0, 0.0, -1.0], up, toward, 0.0);
+        assert!(front[0] > back[0] && front[2] < back[2]);
+        // Overhead light has no horizontal glow direction, even with horizon dip.
+        assert!(
+            dome_colour(&dusk, up, up, up, 0.5)
+                .iter()
+                .all(|v| v.is_finite())
+        );
+        assert_eq!(horizon_dip(0.0, 122.0), 0.0);
+        assert!(horizon_dip(10.0, 122.0) > 0.0);
+        assert!(horizon_dip(10.0, 122.0) < horizon_dip(50.0, 122.0));
     }
 }

@@ -148,6 +148,41 @@ pub fn rotate_y(v: [f32; 3], angle: f32) -> [f32; 3] {
     [v[0] * cos + v[2] * sin, v[1], -v[0] * sin + v[2] * cos]
 }
 
+/// Rigid orientation carrying a planet's light direction into its system's star direction.
+/// Latitude alignment also handles axial tilt and fixed screenshot lighting.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PlanetFrame {
+    light_lon: f32,
+    light_lat: f32,
+    star_lon: f32,
+    star_lat: f32,
+}
+
+impl PlanetFrame {
+    /// Aligns `toward` in planet space with the direction from `planet` to `star`.
+    pub fn aligned(toward: [f32; 3], planet: [f32; 3], star: [f32; 3]) -> Self {
+        let (light_lon, light_lat) = lon_lat_of(toward);
+        let (star_lon, star_lat) = lon_lat_of(sub(star, planet));
+        Self {
+            light_lon,
+            light_lat,
+            star_lon,
+            star_lat,
+        }
+    }
+
+    /// Carries a point or vector from planet space to system space, without translation.
+    pub fn carry(&self, v: [f32; 3]) -> [f32; 3] {
+        let v = rotate_x(rotate_y(v, -self.light_lon), self.light_lat);
+        rotate_y(rotate_x(v, -self.star_lat), self.star_lon)
+    }
+}
+
+fn rotate_x(v: [f32; 3], angle: f32) -> [f32; 3] {
+    let (sin, cos) = angle.sin_cos();
+    [v[0], v[1] * cos - v[2] * sin, v[1] * sin + v[2] * cos]
+}
+
 /// Half-width of the soft terminator band, as the sine of the angle from the terminator.
 pub const TERMINATOR: f32 = 0.12;
 /// Light on the day side that does not depend on the slope.
@@ -179,6 +214,17 @@ pub fn terrain_light(sun_height: f32, diffuse: f32, visibility: f32) -> [f32; 3]
     NIGHT_AMBIENT.map(|night| night + (day - night) * t)
 }
 
+/// Neutral overhead fill preserves entity colours throughout the day; daylight shadows still
+/// show on entities. `upward` is the normal's cosine with the local vertical.
+pub fn entity_light(sun_height: f32, upward: f32, visibility: f32) -> f32 {
+    (0.55 + 0.45 * upward.max(0.0)) * (1.0 - daylight(sun_height) * (1.0 - visibility))
+}
+
+/// Sea highlight strength for the normal's cosine with the light/eye half-vector.
+pub fn sea_glint(sun_height: f32, half_cosine: f32, diffuse: f32, visibility: f32) -> f32 {
+    half_cosine.max(0.0).powi(64) * diffuse.max(0.0) * visibility * daylight(sun_height)
+}
+
 /// The GLSL of [`daylight`], [`terrain_light`] and the shadow lookup, shared by the lit shaders.
 /// Expects the uniforms `toSun`, `planet`, `lightVP`, `shadowMap`, `shadows`, `depthBias` and
 /// `normalBias`.
@@ -197,6 +243,10 @@ const float DAY_AMBIENT = {DAY_AMBIENT:.4};
 const float DIRECT = {DIRECT:.4};
 const vec3 NIGHT_AMBIENT = vec3({:.4}, {:.4}, {:.4});
 const float SHADOW_STRENGTH = {SHADOW_STRENGTH:.4};
+vec3 terrainFactor(float sunHeight, float diffuse, float lit) {{
+    vec3 day = vec3(DAY_AMBIENT + DIRECT * max(diffuse, 0.0) * lit);
+    return mix(NIGHT_AMBIENT, day, smoothstep(-TERMINATOR, TERMINATOR, sunHeight));
+}}
 float daylight(vec3 world) {{
     if (planet == 0) return 1.0;
     return smoothstep(-TERMINATOR, TERMINATOR, dot(normalize(world), toSun));
@@ -222,6 +272,12 @@ vec3 terrainLight(vec3 world, vec3 normal) {{
     float lit = diffuse > 0.0 ? visibility(world, normal) : 1.0;
     vec3 day = vec3(DAY_AMBIENT + DIRECT * diffuse * lit);
     return mix(NIGHT_AMBIENT, day, daylight(world));
+}}
+float entityLight(vec3 world, vec3 normal) {{
+    vec3 up = planet == 1 ? normalize(world) : vec3(0.0, 1.0, 0.0);
+    float fill = 0.55 + 0.45 * max(dot(normal, up), 0.0);
+    float lit = dot(normal, toSun) > 0.0 ? visibility(world, normal) : 1.0;
+    return fill * (1.0 - daylight(world) * (1.0 - lit));
 }}
 "#,
         NIGHT_AMBIENT[0], NIGHT_AMBIENT[1], NIGHT_AMBIENT[2],
@@ -385,5 +441,63 @@ mod tests {
             let in_system = rotate_y(toward, spin);
             assert!(close(in_system, unit(sub([0.0; 3], planet)), 1e-5));
         }
+    }
+
+    #[test]
+    fn planet_frame_aligns_tilted_and_fixed_light() {
+        let planet = [1200.0, 100.0, -800.0];
+        let star = [-300.0, -20.0, 400.0];
+        for settings in [
+            SunSettings::default(),
+            SunSettings {
+                axial_tilt_mdeg: 23_440,
+                ..SunSettings::default()
+            },
+            SunSettings {
+                fixed: true,
+                ..SunSettings::default()
+            },
+            SunSettings {
+                fixed: true,
+                midnight: true,
+                ..SunSettings::default()
+            },
+        ] {
+            let clock = SunClock::new(settings, Some(home()));
+            for tick in [0, 777, 3_000, 6_001] {
+                let toward = clock.toward(tick);
+                let frame = PlanetFrame::aligned(toward, planet, star);
+                assert!(close(frame.carry(toward), unit(sub(star, planet)), 1e-5));
+                let axes =
+                    [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]].map(|v| frame.carry(v));
+                assert!(dot(axes[0], axes[1]).abs() < 1e-5);
+                assert!(close(cross(axes[0], axes[1]), axes[2], 1e-5));
+            }
+        }
+    }
+
+    #[test]
+    fn entity_colours_keep_the_same_fill_at_night() {
+        for upward in [-1.0, 0.0, 0.5, 1.0] {
+            assert_eq!(
+                entity_light(1.0, upward, 1.0),
+                entity_light(-1.0, upward, 1.0)
+            );
+            assert!(entity_light(1.0, upward, 0.5) < entity_light(1.0, upward, 1.0));
+            assert_eq!(
+                entity_light(-1.0, upward, 0.5),
+                entity_light(-1.0, upward, 1.0)
+            );
+        }
+    }
+
+    #[test]
+    fn sea_highlight_fades_with_daylight_and_shadow() {
+        assert_eq!(sea_glint(-1.0, 1.0, 1.0, 1.0), 0.0);
+        assert_eq!(sea_glint(1.0, 1.0, -1.0, 1.0), 0.0);
+        assert_eq!(sea_glint(1.0, 1.0, 1.0, 0.0), 0.0);
+        assert_eq!(sea_glint(1.0, 1.0, 1.0, 1.0), 1.0);
+        assert!(sea_glint(0.0, 1.0, 0.1, 1.0) < 0.1);
+        assert!(sea_glint(1.0, 0.9, 1.0, 1.0) < 0.01);
     }
 }

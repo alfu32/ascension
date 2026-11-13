@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use crate::orbit::{MIN_DISTANCE, OrbitCamera};
 use crate::pick::View;
-use crate::sun::{planet_spin, rotate_y};
+use crate::sun::PlanetFrame;
 use crate::universe::{BodyViewKind, HOME_PLANET_RADIUS, PlacedBody, UniverseScene};
 
 /// Half the width of a cross-fade, in log-distance units.
@@ -329,7 +329,7 @@ pub struct ZoomCamera {
     held: [bool; 4],
     clicks: ClickTracker,
     /// Turn of the loaded planet about its axis from the planet frame into the system frame.
-    spin: f32,
+    planet_frame: PlanetFrame,
 }
 
 impl ZoomCamera {
@@ -369,7 +369,7 @@ impl ZoomCamera {
             map_offset: [0.0; 3],
             held: [false; 4],
             clicks: ClickTracker::default(),
-            spin: 0.0,
+            planet_frame: PlanetFrame::default(),
         };
         camera.l = camera.l.min(camera.l_cap());
         camera
@@ -558,13 +558,14 @@ impl ZoomCamera {
             .iter()
             .find(|p| self.scene.bodies[p.body].kind == BodyViewKind::Star)
             .map_or([0.0; 3], |p| p.pos);
-        self.spin = pos.map_or(0.0, |pos| planet_spin(toward, pos, star));
+        self.planet_frame = pos.map_or_else(PlanetFrame::default, |pos| {
+            PlanetFrame::aligned(toward, pos, star)
+        });
     }
 
-    /// Turn about the planet axis, in radians, from the loaded planet's frame into the system
-    /// frame (see [`Self::follow_sun`]).
-    pub fn spin(&self) -> f32 {
-        self.spin
+    /// Carries a vector from the loaded planet frame into the system frame.
+    pub fn planet_to_system(&self, vector: [f32; 3]) -> [f32; 3] {
+        self.planet_frame.carry(vector)
     }
 
     /// Records a pan key being held or released (`index`: forward, back, left, right).
@@ -590,7 +591,7 @@ impl ZoomCamera {
             .and_then(|b| self.placed.iter().find(|p| p.body == b))
             .map_or([0.0; 3], |p| p.pos);
         let base = if self.anchored_at_surface() {
-            globe_to_system(&self.scale, anchor, rotate_y(orbit.target(), self.spin))
+            globe_to_system(&self.scale, anchor, self.planet_to_system(orbit.target()))
         } else {
             anchor
         };
@@ -928,7 +929,6 @@ mod tests {
         let (mut zoom, mut orbit) = camera(Level::StarMap);
         let home = [0.3_f32, -0.2, 0.9];
         let length = home.iter().map(|c| c * c).sum::<f32>().sqrt();
-        let clock = SunClock::new(SunSettings::default(), Some(home.map(|c| c / length)));
         let surface = zoom.surface_body().expect("the home globe is loaded");
         let planet = zoom
             .placed()
@@ -948,25 +948,38 @@ mod tests {
             1.0 / to_star.iter().map(|c| c * c).sum::<f32>().sqrt(),
         );
         let s = *zoom.scale();
-        for tick in [0, 1, 1_500, 2_999, 6_000, 12_345, 1_000_001] {
-            // The globe's light direction at this tick, carried into the system frame the way the
-            // planet is drawn there, points from the planet to its star.
-            let toward = clock.toward(tick);
-            zoom.follow_sun(toward);
-            let carried = crate::sun::rotate_y(toward, zoom.spin());
-            assert!(
-                (0..3).all(|i| (carried[i] - to_star[i]).abs() < 1e-4),
-                "tick {tick}: {carried:?} vs {to_star:?}"
-            );
-            // The point under the light on the globe is the system-view planet's point nearest
-            // the star, and the camera's centre follows the same turn.
-            orbit.look_at(toward);
-            zoom.set_l(s.l_globe_system);
-            let under = zoom.system_target(&orbit);
-            let surface_distance = sub3(star, under).iter().map(|c| c * c).sum::<f32>().sqrt();
-            let centre_distance = sub3(star, planet).iter().map(|c| c * c).sum::<f32>().sqrt();
-            let drawn_radius = R * s.system_per_tile();
-            assert!((centre_distance - surface_distance - drawn_radius).abs() < 0.5);
+        for settings in [
+            SunSettings::default(),
+            SunSettings {
+                axial_tilt_mdeg: 23_440,
+                ..SunSettings::default()
+            },
+            SunSettings {
+                fixed: true,
+                ..SunSettings::default()
+            },
+        ] {
+            let clock = SunClock::new(settings, Some(home.map(|c| c / length)));
+            for tick in [0, 1, 1_500, 2_999, 6_000, 12_345, 1_000_001] {
+                // The globe's light direction at this tick, carried into the system frame the way the
+                // planet is drawn there, points from the planet to its star.
+                let toward = clock.toward(tick);
+                zoom.follow_sun(toward);
+                let carried = zoom.planet_to_system(toward);
+                assert!(
+                    (0..3).all(|i| (carried[i] - to_star[i]).abs() < 1e-4),
+                    "tick {tick}: {carried:?} vs {to_star:?}"
+                );
+                // The point under the light on the globe is the system-view planet's point nearest
+                // the star, and the camera's centre follows the same turn.
+                orbit.look_at(toward);
+                zoom.set_l(s.l_globe_system);
+                let under = zoom.system_target(&orbit);
+                let surface_distance = sub3(star, under).iter().map(|c| c * c).sum::<f32>().sqrt();
+                let centre_distance = sub3(star, planet).iter().map(|c| c * c).sum::<f32>().sqrt();
+                let drawn_radius = R * s.system_per_tile();
+                assert!((centre_distance - surface_distance - drawn_radius).abs() < 0.5);
+            }
         }
     }
 

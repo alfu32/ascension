@@ -265,3 +265,55 @@ by the read-back in every row (11-15 ms), not by drawing.
 | `--sphere 192 --demo` (reference) | `bench size=1280x800 scale=100 frames=532 fps=53.2 frame_ms_avg=12.18 frame_ms_max=45.41 readback_ms_avg=10.64 readback_ms_max=30.76` |
 
 Screenshots: `docs/img/zoom-globe.png`, `zoom-system.png`, `zoom-starmap.png`, `zoom-capped.png`.
+
+## Day/night lighting, shadows, sky and atmosphere (task 28)
+
+The directional light that represents the sun orbits the planet orb once per
+6,000 simulation ticks by default. The snapshot tick drives terrain lighting,
+the local sky, star fade and the atmosphere halo; pausing freezes all of them.
+`--sun fixed` keeps the light over the initial view; `--sun night` is a fixed
+midnight preview. `G` toggles the graticule; Shift+G works when the command
+palette occupies G. `--graticule off` starts with the lines hidden.
+
+Shadows use a 2048² RGB-packed render target, 3×3 PCF, slope-scaled depth bias
+and a normal offset. The fitted camera encloses the visible surface, including
+the street-level horizon, rather than the entire planet. The map is reused
+until the light turns by 0.15°, the fitted view changes or caster geometry
+changes. Above 0.8 planet radii in orbit distance the pass is skipped and the
+soft terminator supplies globe lighting. Entity colours retain neutral fill
+through the day and night; daylight shadows remain visible on them.
+
+GPU measurements for the completed implementation are **pending the
+orchestrator's display-enabled run**. The continuation sandbox cannot open a
+window. No new FPS numbers or screenshots were produced here, and the 55 fps
+target has not been verified. Capture the actual bench lines with these
+commands from `app/` (fixed daylight ensures the street and mid shadow passes
+are active even when the chosen camera is far from the home start):
+
+```sh
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --sun fixed --size 1280x800 --orbit 0,10,12,30 --bench 10
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --sun fixed --size 1280x800 --orbit 0,10,90,0 --bench 10
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --sun fixed --size 1280x800 --orbit 0,10,330,0 --bench 10
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --demo --seed 1 --size 1280x800 --bench 10
+```
+
+The WIP commit supplied `docs/img/sun-globe.png` and `sun-later.png` (two
+terminator positions and graticule), `shadows-street.png` (street scene),
+`sun-system.png` (star-facing planet lighting), and `sky-day.png` /
+`sky-night.png` (blue sky versus stars over the same terrain). These are
+inherited reference captures, not evidence for the final code: regenerate
+the task-card screenshots to check the corrected entity fill, system-frame
+orientation, shadow fit and sky gradient. Also inspect the outward-fading
+halo around the globe and habitable system bodies, its brighter day side,
+and the surface-to-space transition. The sky and halo colour/intensity,
+star fade, lighting directions, graticule geometry and light-camera fit are
+covered by headless unit tests.
+
+For matched surface-sky captures, use the same low camera in fixed daylight
+and fixed midnight. The globe and system captures in the task card exercise
+the atmosphere halo from outside:
+
+```sh
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --sun fixed --size 1280x720 --orbit 0,10,8,0 --no-hud --after 1 --screenshot target/sky-day.png
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --sun night --size 1280x720 --orbit 0,10,8,0 --no-hud --after 1 --screenshot target/sky-night.png
+```

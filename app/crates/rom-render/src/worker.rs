@@ -256,7 +256,7 @@ impl RenderBridge {
     }
 
     /// Shows or hides the latitude and longitude lines of a sphere planet (shown by default; the
-    /// `G` key toggles them when the command palette leaves it free).
+    /// `G` key toggles them when the command palette leaves it free; Shift+G always toggles).
     pub fn publish_graticule(&self, visible: bool) {
         self.shared.graticule.store(visible, Ordering::Relaxed);
     }
@@ -508,7 +508,8 @@ fn render_loop(shared: &Shared) {
                 let started_at = Instant::now();
                 let built_globe = Arc::new(Globe::new(&planet));
                 let geometry_ms = millis(started_at.elapsed());
-                let clock = SunClock::new(planet.sun, settings.home.map(|s| built_globe.dir_of(s)));
+                let home_start = settings.home.or_else(|| planet.starts.first().copied());
+                let clock = SunClock::new(planet.sun, home_start.map(|s| built_globe.dir_of(s)));
                 let tick = lock(&shared.snapshots).latest_tick().unwrap_or(0);
                 let (meshes, build_ms, upload_ms) =
                     scene.set_planet(&thread, &planet, &built_globe, clock.light(tick));
@@ -965,7 +966,7 @@ fn render_loop(shared: &Shared) {
 }
 
 /// Whether `event` is the graticule key: `G` without Ctrl or Alt while the command palette has
-/// no button on that key.
+/// no button on that key, or Shift+G even when a palette command uses G.
 fn graticule_key(event: InputEvent, hud: &HudSnapshot) -> bool {
     let InputEvent::Hotkey { ch, mods } = event else {
         return false;
@@ -974,9 +975,11 @@ fn graticule_key(event: InputEvent, hud: &HudSnapshot) -> bool {
         return false;
     }
     let slot = crate::hud_model::slot_of_key(ch);
-    !hud.palette
-        .as_ref()
-        .is_some_and(|p| p.buttons.iter().any(|b| Some(b.slot) == slot))
+    mods.shift
+        || !hud
+            .palette
+            .as_ref()
+            .is_some_and(|p| p.buttons.iter().any(|b| Some(b.slot) == slot))
 }
 
 /// The farthest level the zoom may reach now.
@@ -1235,6 +1238,53 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn graticule_toggle_preserves_palette_commands() {
+        use crate::camera::Modifiers;
+        use crate::hud_model::{HudButton, HudPalette};
+        let key = |mods| InputEvent::Hotkey { ch: 'g', mods };
+        let mut hud = HudSnapshot::default();
+        assert!(graticule_key(key(Modifiers::default()), &hud));
+        hud.palette = Some(HudPalette {
+            buttons: vec![HudButton {
+                slot: 9,
+                icon: String::new(),
+                name: String::new(),
+                price: String::new(),
+                enabled: true,
+                reason: String::new(),
+                armed: false,
+            }],
+            ..HudPalette::default()
+        });
+        assert!(!graticule_key(key(Modifiers::default()), &hud));
+        assert!(graticule_key(
+            key(Modifiers {
+                shift: true,
+                ..Modifiers::default()
+            }),
+            &hud
+        ));
+        assert!(!graticule_key(
+            key(Modifiers {
+                ctrl: true,
+                ..Modifiers::default()
+            }),
+            &hud
+        ));
+        assert!(!graticule_key(
+            key(Modifiers {
+                alt: true,
+                ..Modifiers::default()
+            }),
+            &hud
+        ));
+        let bridge = RenderBridge::detached();
+        assert!(bridge.graticule());
+        bridge.publish_graticule(false);
+        assert!(!bridge.graticule());
+    }
 
     #[test]
     fn scaled_size_rounds_and_clamps() {

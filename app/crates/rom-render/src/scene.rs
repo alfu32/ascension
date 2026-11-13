@@ -152,7 +152,9 @@ void main() {{
     float lit = diffuse > 0.0 ? visibility(fragPosition, normal) : 1.0;
     float day = daylight(fragPosition);
     vec3 toEye = normalize(viewPosition - fragPosition);
-    float glint = pow(max(dot(normal, normalize(toSun + toEye)), 0.0), 64.0) * diffuse * lit * day;
+    vec3 halfVector = toSun + toEye;
+    float halfCosine = dot(normal, halfVector / max(length(halfVector), 0.00001));
+    float glint = pow(max(halfCosine, 0.0), 64.0) * diffuse * lit * day;
     vec3 light = mix(NIGHT_AMBIENT, vec3(DAY_AMBIENT + DIRECT * diffuse * lit), day);
     vec3 color = fragColor.rgb * light + vec3(0.30, 0.34, 0.38) * glint;
     finalColor = vec4(color, min(fragColor.a + glint * 0.4, 1.0));
@@ -210,8 +212,7 @@ void main() {
 }
 "#;
 
-/// Entities: lit by the sun by day with shadows; at night an overhead fill keeps their owner
-/// colours as readable as by day.
+/// Neutral fill keeps entity colours stable through the day; daylight shadows remain visible.
 fn entity_fs() -> String {
     format!(
         r#"#version 330
@@ -222,12 +223,7 @@ out vec4 finalColor;
 {}
 void main() {{
     vec3 normal = normalize(fragNormal);
-    float diffuse = max(dot(normal, toSun), 0.0);
-    float lit = diffuse > 0.0 ? visibility(fragWorld, normal) : 1.0;
-    float day = 0.38 + 0.72 * diffuse * lit;
-    vec3 up = planet == 1 ? normalize(fragWorld) : vec3(0.0, 1.0, 0.0);
-    float night = 0.55 + 0.45 * max(dot(normal, up), 0.0);
-    finalColor = vec4(fragTint * mix(night, day, daylight(fragWorld)), 1.0);
+    finalColor = vec4(fragTint * entityLight(fragWorld, normal), 1.0);
 }}
 "#,
         sun::glsl_lighting()
@@ -940,8 +936,7 @@ impl Scene {
         let altitude = orbit.altitude();
         let sun_height = (0..3).map(|i| orbit.dir[i] * toward[i]).sum::<f32>();
         let backdrop = crate::sky::backdrop(sun_height, altitude, orbit.radius);
-        let below = orbit.radius / (orbit.radius + altitude.max(0.0));
-        let dip = (1.0 - below * below).max(0.0).sqrt();
+        let dip = crate::sky::horizon_dip(altitude, orbit.radius);
         self.sky.set_sky(&backdrop, orbit.dir, toward, dip);
         self.set_star_fade(backdrop.stars);
         let halo = crate::sky::space_share(altitude, orbit.radius);
@@ -971,8 +966,7 @@ impl Scene {
         drawing.clear_background(SPACE);
         sky::draw_backdrop(
             &mut drawing,
-            [0, 1, 2].map(|i| target_point[i] - eye[i]),
-            up,
+            ([0, 1, 2].map(|i| target_point[i] - eye[i]), up),
             self.projection_centre_y,
             &backdrop,
             &self.sky,
@@ -1110,8 +1104,10 @@ impl Scene {
             // the view but never move when the camera pans.
             sky::draw_backdrop(
                 &mut drawing,
-                [0, 1, 2].map(|i| camera.target[i] - eye[i]),
-                [0.0, 1.0, 0.0],
+                (
+                    [0, 1, 2].map(|i| camera.target[i] - eye[i]),
+                    [0.0, 1.0, 0.0],
+                ),
                 self.projection_centre_y,
                 &backdrop,
                 &self.sky,

@@ -20,34 +20,6 @@ void main() {
 }
 "#;
 
-// Deeper overhead, paler at the horizon, and a dusk glow low on the sun's side.
-const SKY_FS: &str = r#"#version 330
-in vec3 fragDir;
-uniform vec3 up;
-uniform vec3 toSun;
-uniform vec3 zenith;
-uniform vec3 horizon;
-uniform vec3 glow;
-uniform float glowStrength;
-uniform float dip;
-out vec4 finalColor;
-void main() {
-    vec3 d = normalize(fragDir);
-    // Height above the visible horizon, which dips below the horizontal on a round planet.
-    float h = (dot(d, up) + dip) / (1.0 + dip);
-    vec3 colour = mix(horizon, zenith, 1.0 - pow(1.0 - clamp(h, 0.0, 1.0), 4.0));
-    vec3 across = d - up * h;
-    vec3 sunAcross = toSun - up * dot(toSun, up);
-    float side = 0.0;
-    if (length(across) > 1e-4 && length(sunAcross) > 1e-4) {
-        side = max(dot(normalize(across), normalize(sunAcross)), 0.0);
-    }
-    float low = 1.0 - clamp(abs(h) * 3.0, 0.0, 1.0);
-    colour = mix(colour, glow, glowStrength * side * side * low * low * 0.85);
-    finalColor = vec4(colour, 1.0);
-}
-"#;
-
 pub(super) const STAR_FS: &str = r#"#version 330
 in vec4 fragColor;
 uniform float fade;
@@ -110,7 +82,8 @@ pub(super) struct SkyGpu {
 
 impl SkyGpu {
     pub(super) fn load(rl: &mut RaylibHandle, thread: &RaylibThread) -> Self {
-        let sky_shader = rl.load_shader_from_memory(thread, Some(SKY_VS), Some(SKY_FS));
+        let sky_shader =
+            rl.load_shader_from_memory(thread, Some(SKY_VS), Some(crate::sky::DOME_FS));
         let mut sky_material = rl.load_material_default(thread);
         sky_material.set_shader(&sky_shader);
         let halo_shader = rl.load_shader_from_memory(thread, Some(HALO_VS), Some(&halo_fs()));
@@ -148,7 +121,6 @@ impl SkyGpu {
 
     /// Sets the halo of a planet of `radius` at `centre`, `thickness` radii deep, seen from
     /// `eye`, lit from `toward` and drawn at `strength` (0 to 1).
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn set_halo(
         &mut self,
         centre: [f32; 3],
@@ -232,11 +204,9 @@ impl Scene {
 
 /// Draws the backdrop seen from a camera at the origin looking along `forward` with `up`: the
 /// sky dome unless it is plain space, then the stars unless the sky hides them.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn draw_backdrop(
     drawing: &mut RaylibTextureMode<'_, '_, RaylibHandle>,
-    forward: [f32; 3],
-    up: [f32; 3],
+    (forward, up): ([f32; 3], [f32; 3]),
     centre_y: f32,
     sky: &Sky,
     sky_gpu: &SkyGpu,

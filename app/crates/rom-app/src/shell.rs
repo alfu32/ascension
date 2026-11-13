@@ -236,6 +236,17 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
         let sun = terrain::sun_settings(&content.rules, options);
         let mut universe_host = UniverseHost::new(universe.clone(), BodyId(home_body), home_system);
         universe_host.sun = sun;
+        for start in &game.starts {
+            let at = start.city_pos;
+            universe_host.remember_home_start(
+                at.body,
+                SurfacePos {
+                    face: at.face,
+                    x: i64::from(at.x),
+                    y: i64::from(at.y),
+                },
+            );
+        }
         host = Some(universe_host);
         bridge.publish_zoom_all(options.zoom_all);
         bridge.publish_universe(

@@ -56,12 +56,21 @@ orbits the planet orb" — never that the sun or star orbits the planet.
    drawn just above the surface (and sea), each with its own subtle colour
    (equator and prime meridian slightly stronger), fading out at street-level
    zoom; on the minimap (sphere modes): the same lines on the equirectangular
-   image. A toggle key (`G`) and an option `--graticule off`. Default on.
+   image. A toggle key (`G`; Shift+G when the command palette occupies G) and an
+   option `--graticule off`. Default on.
 5. **System view:** planets in the system view are lit by the system's star
    (light from the star's position), so the day side faces the star; the
    globe's sun direction at the same tick must agree with it (the planet's
    rotation phase from step 1 is defined relative to the star direction).
-6. **Record** bench lines in `app/docs/performance.md` for street, mid and
+6. **Day/night sky.** Near the surface, show a blue daytime sky with a paler
+   horizon, a warm directional dawn/dusk glow, then navy and black at night.
+   Fade stars in after dusk. Blend smoothly into black space with altitude.
+   Drive all colours and fades from the same snapshot-tick lighting.
+7. **Atmosphere halo.** Draw a blue atmosphere just outside the planet limb
+   at globe zoom and around habitable planets in system view. Keep it bright
+   on the day side, faint at night, warm near the terminator and fading
+   outward; blend into it smoothly when leaving the surface sky.
+8. **Record** bench lines in `app/docs/performance.md` for street, mid and
    globe zoom with shadows on.
 
 ## Tests to add (no window, no GPU)
@@ -73,6 +82,8 @@ orbits the planet orb" — never that the sun or star orbits the planet.
 - `graticule_lines_lie_on_their_latitudes` (sampled vertices of each line within 0.1° of its latitude; prime meridian at longitude 0).
 - `minimap_graticule_rows_match_latitudes`.
 - `system_view_and_globe_agree_on_the_sun` (direction from planet to star equals the globe's sun direction at the same tick).
+- Sky colour, directional twilight glow, star fade, altitude blend and halo
+  intensity are pure functions covered by tests, without a window or GPU.
 
 ## Done when (from `app/`)
 

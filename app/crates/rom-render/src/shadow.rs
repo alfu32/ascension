@@ -7,10 +7,6 @@ use crate::pick::View;
 
 /// Side of the shadow map in texels.
 pub const SHADOW_MAP_SIZE: u32 = 2048;
-/// Rays across each side of the canvas when tracing the view footprint.
-const FOOTPRINT_RAYS: usize = 9;
-/// Farthest a footprint point may lie from the camera target, in camera distances.
-const FOOTPRINT_REACH: f32 = 3.0;
 
 /// The light camera: an orthographic box looking along the light.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -117,75 +113,108 @@ impl LightFit {
     }
 }
 
-/// Points of the planet surface (the sea-level sphere of `orbit.radius`) seen through `view`:
-/// where a grid of rays meets the sphere, or, for rays that pass it, the horizon point below
-/// them. Points are kept within a few camera distances of the target.
+/// Conservative bounds of the visible sea-level sphere, including the horizon. Extrema of the
+/// sphere clipped by the view planes avoid losing distant receivers at street level.
 pub fn globe_footprint(orbit: &OrbitCamera, view: &View) -> Vec<[f32; 3]> {
     let radius = orbit.radius;
     let eye = view.eye();
-    let target = orbit.target();
-    let reach = orbit.distance * FOOTPRINT_REACH;
-    let (w, h) = view.size();
-    let mut points = vec![target];
-    for j in 0..FOOTPRINT_RAYS {
-        for i in 0..FOOTPRINT_RAYS {
-            let px = w * i as f32 / (FOOTPRINT_RAYS - 1) as f32;
-            let py = h * j as f32 / (FOOTPRINT_RAYS - 1) as f32;
-            let ray = view.ray(px, py);
-            let along = -dot(eye, ray);
-            let closest = add(eye, scale(ray, along));
-            let miss = dot(closest, closest) - radius * radius;
-            let hit = if along > 0.0 && miss <= 0.0 {
-                add(eye, scale(ray, along - (-miss).sqrt()))
-            } else {
-                // The horizon below the ray: its closest approach brought down to the sphere.
-                scale(unit(closest), radius)
-            };
-            points.push(limit(hit, target, reach, radius));
+    let mut planes = vec![(unit(eye), radius * radius / dot(eye, eye).sqrt())];
+    planes.extend(view_planes(view));
+    let axes = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+    let mut candidates = Vec::new();
+    for axis in axes {
+        candidates.extend([scale(axis, radius), scale(axis, -radius)]);
+        for &(n, d) in &planes {
+            let centre = scale(n, d);
+            let r = (radius * radius - d * d).max(0.0).sqrt();
+            let tangent = unit(sub(axis, scale(n, dot(axis, n))));
+            candidates.extend([
+                add(centre, scale(tangent, r)),
+                sub(centre, scale(tangent, r)),
+            ]);
         }
     }
-    points
-}
-
-/// Ground points (the plane y = 0) of a flat map seen through `view` from `camera`, within the
-/// map of `size` tiles and a few camera distances of the target.
-pub fn flat_footprint(camera: &Camera, view: &View, size: (u32, u32)) -> Vec<[f32; 3]> {
-    let eye = view.eye();
-    let target = [camera.target[0], 0.0, camera.target[2]];
-    let reach = camera.distance * FOOTPRINT_REACH;
-    let (w, h) = view.size();
-    let (mw, mh) = (size.0 as f32, size.1 as f32);
-    let mut points = vec![target];
-    for j in 0..FOOTPRINT_RAYS {
-        for i in 0..FOOTPRINT_RAYS {
-            let px = w * i as f32 / (FOOTPRINT_RAYS - 1) as f32;
-            let py = h * j as f32 / (FOOTPRINT_RAYS - 1) as f32;
-            let ray = view.ray(px, py);
-            let ground = if ray[1] < -1e-4 {
-                add(eye, scale(ray, -eye[1] / ray[1]))
-            } else {
-                add(eye, scale(unit([ray[0], 0.0, ray[2]]), reach * 2.0))
-            };
-            let mut p = [ground[0], 0.0, ground[2]];
-            let offset = sub(p, target);
-            let length = dot(offset, offset).sqrt();
-            if length > reach {
-                p = add(target, scale(offset, reach / length));
+    for (i, &(a, da)) in planes.iter().enumerate() {
+        for &(b, db) in &planes[i + 1..] {
+            let ab = dot(a, b);
+            let denominator = 1.0 - ab * ab;
+            if denominator < 1e-6 {
+                continue;
             }
-            points.push([p[0].clamp(0.0, mw), 0.0, p[2].clamp(0.0, mh)]);
+            let centre = add(
+                scale(a, (da - ab * db) / denominator),
+                scale(b, (db - ab * da) / denominator),
+            );
+            let remaining = radius * radius - dot(centre, centre);
+            if remaining < 0.0 {
+                continue;
+            }
+            let tangent = scale(unit(cross(a, b)), remaining.sqrt());
+            candidates.extend([add(centre, tangent), sub(centre, tangent)]);
         }
+    }
+    candidates.retain(|&p| planes.iter().all(|&(n, d)| dot(n, p) >= d - 0.001));
+    if candidates.is_empty() {
+        return vec![orbit.target()];
+    }
+    let lo = axes.map(|a| {
+        candidates
+            .iter()
+            .map(|&p| dot(a, p))
+            .fold(f32::INFINITY, f32::min)
+    });
+    let hi = axes.map(|a| {
+        candidates
+            .iter()
+            .map(|&p| dot(a, p))
+            .fold(f32::NEG_INFINITY, f32::max)
+    });
+    // A world-aligned box encloses the clipped spherical patch in every light orientation.
+    (0..8)
+        .map(|i| [0, 1, 2].map(|j| if i & (1 << j) == 0 { lo[j] } else { hi[j] }))
+        .collect()
+}
+
+/// Exact polygon of the flat map's sea-level plane inside the view frustum.
+pub fn flat_footprint(_camera: &Camera, view: &View, size: (u32, u32)) -> Vec<[f32; 3]> {
+    let (w, h) = (size.0 as f32, size.1 as f32);
+    let mut points = vec![[0.0, 0.0, 0.0], [w, 0.0, 0.0], [w, 0.0, h], [0.0, 0.0, h]];
+    for (n, d) in view_planes(view) {
+        let mut clipped = Vec::new();
+        for i in 0..points.len() {
+            let (a, b) = (points[i], points[(i + 1) % points.len()]);
+            let (da, db) = (dot(n, a) - d, dot(n, b) - d);
+            if da >= 0.0 {
+                clipped.push(a);
+            }
+            if (da >= 0.0) != (db >= 0.0) {
+                clipped.push(add(a, scale(sub(b, a), da / (da - db))));
+            }
+        }
+        points = clipped;
     }
     points
 }
 
-/// `p` pulled toward `target` to within `reach`, kept on the sphere of `radius`.
-fn limit(p: [f32; 3], target: [f32; 3], reach: f32, radius: f32) -> [f32; 3] {
-    let offset = sub(p, target);
-    let length = dot(offset, offset).sqrt();
-    if length <= reach {
-        return p;
-    }
-    scale(unit(add(target, scale(offset, reach / length))), radius)
+/// Inward-facing side planes of the camera pyramid, in world coordinates.
+fn view_planes(view: &View) -> Vec<([f32; 3], f32)> {
+    let (w, h) = view.size();
+    let rays = [
+        view.ray(0.0, 0.0),
+        view.ray(w, 0.0),
+        view.ray(w, h),
+        view.ray(0.0, h),
+    ];
+    let centre = view.ray(w / 2.0, h / 2.0);
+    (0..4)
+        .map(|i| {
+            let mut n = unit(cross(rays[i], rays[(i + 1) % 4]));
+            if dot(n, centre) < 0.0 {
+                n = scale(n, -1.0);
+            }
+            (n, dot(n, view.eye()))
+        })
+        .collect()
 }
 
 fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
@@ -229,6 +258,9 @@ mod tests {
             (0.0, 10.0, 12.0, 30.0),
             (40.0, -20.0, 48.0, 0.0),
             (-120.0, 50.0, 90.0, 200.0),
+            (179.0, 89.0, 8.0, 270.0),
+            (-179.0, -89.0, 20.0, 90.0),
+            (83.0, 0.0, 97.0, 270.0),
         ]
         .into_iter()
         .map(|(lon, lat, distance, heading)| {
@@ -243,7 +275,7 @@ mod tests {
     fn light_camera_covers_the_visible_surface() {
         for (orbit, view) in views() {
             let footprint = globe_footprint(&orbit, &view);
-            assert!(footprint.len() > 50);
+            assert_eq!(footprint.len(), 8);
             for lon in [-70.0_f32, 0.0, 33.0, 160.0] {
                 let toward = dir_from_lon_lat(lon.to_radians(), 0.2);
                 let fit = LightFit::around(&footprint, toward, 6.0).expect("a fit");
@@ -266,12 +298,10 @@ mod tests {
                             continue;
                         }
                         let hit = add(eye, scale(ray, along - (-miss).sqrt()));
-                        if dot(sub(hit, orbit.target()), sub(hit, orbit.target())).sqrt()
-                            < orbit.distance * FOOTPRINT_REACH * 0.9
-                        {
-                            let q = fit.project(hit);
-                            assert!(q[0].abs() <= 1.0 && q[1].abs() <= 1.0, "{hit:?}");
-                        }
+                        assert!(
+                            fit.contains(hit),
+                            "visible receiver {hit:?} outside {fit:?}"
+                        );
                     }
                 }
                 // Not the whole planet: the box is much smaller than the globe at street level.
@@ -309,5 +339,16 @@ mod tests {
         }
         let fit = LightFit::around(&points, unit([0.45, 1.0, 0.3]), 6.0).unwrap();
         assert!(points.iter().all(|&p| fit.contains(p)));
+        for y in (0..=256).step_by(4) {
+            for x in (0..=256).step_by(4) {
+                let p = [x as f32, 0.0, y as f32];
+                if let Some((px, py, _)) = view.project(p)
+                    && (0.0..=1280.0).contains(&px)
+                    && (0.0..=800.0).contains(&py)
+                {
+                    assert!(fit.contains(p), "visible flat receiver {p:?}");
+                }
+            }
+        }
     }
 }

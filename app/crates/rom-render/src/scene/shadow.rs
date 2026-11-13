@@ -34,10 +34,10 @@ pub(super) struct ShadowUniforms {
 }
 
 /// What the current map was drawn for.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 struct Drawn {
     fit: LightFit,
-    casters: [f32; 2],
+    casters: [Vec<[f32; 12]>; 2],
 }
 
 /// The shadow target, the depth materials and the last map drawn.
@@ -108,11 +108,16 @@ fn dot3(a: [f32; 3], b: [f32; 3]) -> f32 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 
-/// A cheap fingerprint of instance transforms, to notice casters that moved.
-fn fingerprint(transforms: &[Matrix]) -> f32 {
-    transforms.iter().fold(transforms.len() as f32, |sum, m| {
-        sum + m.m12 + 3.1 * m.m13 + 7.3 * m.m14 + 0.37 * m.m0 + 0.71 * m.m2 + 0.13 * m.m5
-    })
+/// Exact geometry of the instances; tint lives in unused matrix cells and cannot cast a shadow.
+fn caster_geometry(transforms: &[Matrix]) -> Vec<[f32; 12]> {
+    transforms
+        .iter()
+        .map(|m| {
+            [
+                m.m0, m.m1, m.m2, m.m4, m.m5, m.m6, m.m8, m.m9, m.m10, m.m12, m.m13, m.m14,
+            ]
+        })
+        .collect()
 }
 
 /// Binds the shadow map to its texture unit for the draws that follow, or unbinds it.
@@ -203,8 +208,8 @@ impl Scene {
         let wanted = Drawn {
             fit,
             casters: [
-                fingerprint(&self.entity_transforms),
-                fingerprint(&gpu.markers),
+                caster_geometry(&self.entity_transforms),
+                caster_geometry(&gpu.markers),
             ],
         };
         if let Some(uniforms) = shadow.reuse(&wanted) {
@@ -259,8 +264,8 @@ impl Scene {
         let wanted = Drawn {
             fit,
             casters: [
-                fingerprint(&self.entity_transforms),
-                fingerprint(&self.transforms),
+                caster_geometry(&self.entity_transforms),
+                caster_geometry(&self.transforms),
             ],
         };
         if let Some(uniforms) = shadow.reuse(&wanted) {
@@ -293,5 +298,27 @@ impl Scene {
         let uniforms = uniforms(&fit, light_vp);
         shadow.last = Some((wanted, uniforms));
         Some(uniforms)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn caster_cache_detects_opposite_moves_and_rotation() {
+        let original = [Matrix::identity(); 2];
+        let mut moved = original;
+        moved[0].m12 += 1.0;
+        moved[1].m12 -= 1.0;
+        assert_ne!(caster_geometry(&original), caster_geometry(&moved));
+        let mut turned = original;
+        turned[0].m8 = 0.1;
+        assert_ne!(caster_geometry(&original), caster_geometry(&turned));
+        let mut tinted = original;
+        tinted[0].m3 = 0.7;
+        tinted[0].m7 = 0.4;
+        tinted[0].m11 = 0.2;
+        assert_eq!(caster_geometry(&original), caster_geometry(&tinted));
     }
 }

@@ -32,6 +32,7 @@ pub struct UniverseHost {
     /// The system of that planet.
     pub home_system: u32,
     scenes: BTreeMap<BodyId, Arc<rom_render::PlanetScene>>,
+    home_starts: BTreeMap<BodyId, SurfacePos>,
     /// How the light that represents the sun moves over every planet shown.
     pub sun: rom_render::SunSettings,
 }
@@ -44,8 +45,14 @@ impl UniverseHost {
             viewed: home,
             home_system,
             scenes: BTreeMap::new(),
+            home_starts: BTreeMap::new(),
             sun: rom_render::SunSettings::default(),
         }
+    }
+
+    /// Keeps each planet's first starting city as its lighting phase when revisiting it.
+    pub fn remember_home_start(&mut self, body: BodyId, at: SurfacePos) {
+        self.home_starts.entry(body).or_insert(at);
     }
 
     /// Makes `body` the planet shown: generates and adds its surface when the world has none,
@@ -79,12 +86,13 @@ impl UniverseHost {
             self.scenes.insert(body, Arc::new(scene));
         }
         self.viewed = body;
-        let home = self
-            .universe
-            .starts
-            .first()
-            .filter(|(b, _)| *b == body.0)
-            .map(|(_, at)| *at);
+        let home = self.home_starts.get(&body).copied().or_else(|| {
+            self.universe
+                .starts
+                .iter()
+                .find(|(b, _)| *b == body.0)
+                .map(|(_, at)| *at)
+        });
         bridge.publish_planet(
             Arc::clone(&self.scenes[&body]),
             OrbitSettings {
