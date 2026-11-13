@@ -22,7 +22,7 @@ INSERT INTO game_constant(key,value,unit,note) VALUES
  ('victory.capital_hold_ticks',2400,'ticks','continuous enemy capital occupation before defeat'),
  ('unit.respond_range',12000,'milli-tiles','aggressive stance acquisition'),
  ('citizen.auto_work_delay_ticks',200,'ticks','idle workers look for work after this'),
- ('city.spacing',24000,'milli-tiles','minimum distance between cities'),
+ ('city.spacing',20000,'milli-tiles','minimum distance between cities; below a city border radius so a second city fits inside the first one''s borders'),
  ('city.assimilate_ticks',2400,'ticks','captured city becomes yours after this'),
  ('player.pop_cap.base',50,'pop','before modifiers (stat pop_cap)'),
  ('player.city_limit.base',1,'cities','before modifiers (stat city_limit)'),
@@ -528,7 +528,7 @@ INSERT INTO et_producer(entity_type_id) VALUES ((SELECT id FROM def WHERE key='b
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.city'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.city'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.city'),(SELECT id FROM tag WHERE key='city'));
-INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) VALUES ((SELECT id FROM def WHERE key='bld.city'),1,24000,20000,1);
+INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) VALUES ((SELECT id FROM def WHERE key='bld.city'),1,40000,16000,1);
 INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='bld.city'),8,(SELECT id FROM damage_class WHERE key='pierce'),10000,30);
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.city')),'ground');
 INSERT INTO et_container(entity_type_id,capacity,heals,adds_firepower) VALUES ((SELECT id FROM def WHERE key='bld.city'),10,1,1);

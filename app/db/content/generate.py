@@ -195,8 +195,8 @@ def generate():
         if key in ('city', 'temple', 'fort', 'spaceport'):
             tag(full, key if key != 'spaceport' else 'production')
             row('et_territory', entity_type_id=Ref(full), is_city=int(key == 'city'),
-                border_radius={'city': 24000, 'temple': 2000, 'fort': 14000, 'spaceport': 12000}[key],
-                economic_radius=20000 if key == 'city' else 0, capturable=int(key == 'city'))
+                border_radius={'city': 40000, 'temple': 2000, 'fort': 14000, 'spaceport': 12000}[key],
+                economic_radius=16000 if key == 'city' else 0, capturable=int(key == 'city'))
         if key in ('city', 'tower', 'fort'):
             weapon(full, 8 + age * 2, 'pierce' if age < 3 else 'explosive', 10000, ['ground'])
         if key == 'city':
