@@ -447,6 +447,7 @@ fn publish(
     }
     if let Some(player) = world.players().find(|p| p.id == crate::selection::PLAYER) {
         bridge.publish_zoom_cap(crate::universe_view::max_level(world.rules(), player.age));
+        bridge.publish_view_range(crate::universe_view::view_range(world.rules(), player.age));
     }
     if world.tick().is_multiple_of(VISION_INTERVAL) {
         bridge.publish_vision(Arc::new(fog.build_on(world, body)));

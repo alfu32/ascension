@@ -28,6 +28,19 @@ pub(crate) fn button_state(world: &World, def: DefId, pending: bool) -> ButtonSt
     {
         return ButtonState::Done;
     }
+    // An age advance to an age the player has reached is done, however it was reached.
+    if rules
+        .techs
+        .get(&def)
+        .is_some_and(|t| t.kind == TechKind::Age)
+        && rules.tech_effects.get(&def).into_iter().flatten().any(|e| {
+            e.effect == TechEffectKind::SetAge
+                && e.target_def_id
+                    .is_some_and(|id| rules.ages[&id].ordinal <= rules.ages[&player.age].ordinal)
+        })
+    {
+        return ButtonState::Done;
+    }
     if let Some(order) = world
         .entities()
         .filter(|e| e.owner == player.id)

@@ -35,6 +35,15 @@ pub fn max_level(rules: &Rules, age: DefId) -> Level {
     }
 }
 
+/// The largest ground half-width, in milli-tiles, the camera of a player in `age` may show on the
+/// home planet; 0 for the whole globe (and for an unknown age).
+pub fn view_range(rules: &Rules, age: DefId) -> u32 {
+    rules
+        .ages
+        .get(&age)
+        .map_or(0, |age| u32::try_from(age.view_range).unwrap_or(0))
+}
+
 /// Converts a generated universe. `start_bodies` holds the home planet of each player in player
 /// order; a home planet takes the colour of the first player living there.
 pub fn to_universe_scene(universe: &Universe, start_bodies: &[u32]) -> UniverseScene {
@@ -107,6 +116,22 @@ mod tests {
         let first = rules.ages.values().min_by_key(|a| a.ordinal).unwrap();
         assert_eq!(max_level(&rules, first.id), Level::Globe);
         assert_eq!(max_level(&rules, DefId(u32::MAX)), Level::Globe);
+    }
+
+    #[test]
+    fn zoom_cap_follows_the_age() {
+        let rules = load_rules().expect("rules");
+        let by_ordinal = |n: i64| rules.ages.values().find(|a| a.ordinal == n).unwrap().id;
+        let mut last = 0;
+        for n in 0..=8 {
+            let range = view_range(&rules, by_ordinal(n));
+            assert!(range > last, "age {n} must see more than the one before");
+            assert_eq!(max_level(&rules, by_ordinal(n)), Level::Globe);
+            last = range;
+        }
+        // The whole globe is allowed from the age before space, and nothing is known of a stray id.
+        assert_eq!(view_range(&rules, by_ordinal(9)), 0);
+        assert_eq!(view_range(&rules, DefId(u32::MAX)), 0);
     }
 
     #[test]

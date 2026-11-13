@@ -189,6 +189,14 @@ pub(crate) struct MinimapGpu {
     globe: Option<Arc<Globe>>,
     /// Start directions on a sphere planet, shown until entities arrive.
     starts: Vec<[f32; 3]>,
+    /// The direction each pixel of a sphere minimap faces, for the night side.
+    dirs: Vec<[f32; 3]>,
+    /// The light direction the night side was last drawn for.
+    light: Option<[f32; 3]>,
+    /// Whether `shaded` holds the fog-shaded picture (otherwise `base` is the picture).
+    fogged: bool,
+    /// Scratch for the picture with the night side.
+    lit: Vec<u8>,
 }
 impl MinimapGpu {
     pub(crate) fn load(
@@ -205,6 +213,10 @@ impl MinimapGpu {
             shaded: Vec::new(),
             globe: None,
             starts: Vec::new(),
+            dirs: Vec::new(),
+            light: None,
+            fogged: false,
+            lit: Vec::new(),
         })
     }
     /// The equirectangular minimap of a sphere planet.
@@ -223,6 +235,10 @@ impl MinimapGpu {
             shaded: Vec::new(),
             globe: Some(Arc::clone(globe)),
             starts: planet.starts.iter().map(|&s| globe.dir_of(s)).collect(),
+            dirs: hud_minimap::planet_pixel_dirs(),
+            light: None,
+            fogged: false,
+            lit: Vec::new(),
         })
     }
     /// Darkens the picture by the tile shades (see [`crate::vision::VisionMap::tile_shades`]).
@@ -231,7 +247,39 @@ impl MinimapGpu {
             return;
         }
         shade_pixels(&self.base, &self.tiles, shades, &mut self.shaded);
-        if let Err(error) = self.texture.update_texture(&self.shaded) {
+        self.fogged = true;
+        self.refresh();
+    }
+    /// Darkens the side of a sphere minimap that faces away from the light `toward` (a unit
+    /// direction from the planet centre); redrawn only when the light moved about one pixel.
+    pub(crate) fn set_light(&mut self, toward: [f32; 3]) {
+        if self.globe.is_none() {
+            return;
+        }
+        if self
+            .light
+            .is_some_and(|last| !hud_minimap::light_moved(last, toward))
+        {
+            return;
+        }
+        self.light = Some(toward);
+        self.refresh();
+    }
+    /// Uploads the picture: fog shading first, then the night side.
+    fn refresh(&mut self) {
+        let picture = if self.fogged {
+            &self.shaded
+        } else {
+            &self.base
+        };
+        let result = match self.light {
+            Some(toward) if !self.dirs.is_empty() => {
+                hud_minimap::night_pixels(picture, &self.dirs, toward, &mut self.lit);
+                self.texture.update_texture(&self.lit)
+            }
+            _ => self.texture.update_texture(picture),
+        };
+        if let Err(error) = result {
             eprintln!("rom-render: minimap shading: {error}");
         }
     }

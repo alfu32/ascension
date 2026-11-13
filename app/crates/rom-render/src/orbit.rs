@@ -12,6 +12,12 @@ use crate::terrain::{cross, normalize};
 pub const MIN_DISTANCE: f32 = 8.0;
 /// Angle from straight down at the closest zoom, in radians (about 70 degrees: toward the horizon).
 pub const STREET_TILT: f32 = 1.22;
+/// Angle from straight down over the low zoom range, in radians (60 degrees: an isometric view).
+pub const ISO_TILT: f32 = 1.047;
+/// Distance up to which the tilt stays [`ISO_TILT`], in tiles: about where age 4's view range ends.
+pub const ISO_UNTIL: f32 = 130.0;
+/// Ground half-width seen straight down per unit of eye distance (vertical field of view and aspect).
+const HALF_WIDTH_PER_DISTANCE: f32 = 0.6;
 /// Distance of the default home view, in tiles.
 pub const HOME_DISTANCE: f32 = 48.0;
 /// Zoom factor per wheel step.
@@ -83,6 +89,8 @@ pub struct OrbitCamera {
     pub radius: f32,
     /// Largest allowed distance in tiles (a parameter; the world model limits it by age).
     pub max_distance: f32,
+    /// Largest ground half-width the view may show, in tiles; 0 = no limit (the age decides it).
+    pub view_limit: f32,
 }
 
 impl OrbitCamera {
@@ -94,7 +102,40 @@ impl OrbitCamera {
             distance: max_distance,
             radius,
             max_distance: max_distance.max(MIN_DISTANCE),
+            view_limit: 0.0,
         }
+    }
+
+    /// Sets the largest ground half-width in milli-tiles (0 = the whole globe) and re-clamps.
+    pub fn set_view_range(&mut self, milli_tiles: u32) {
+        self.view_limit = milli_tiles as f32 / 1000.0;
+        self.clamp();
+    }
+
+    /// Ground half-width in tiles the view shows at `distance`, allowing for the tilt there.
+    pub fn half_width_at(&self, distance: f32) -> f32 {
+        let tilt = self.tilt_at(distance).min(1.2);
+        distance * HALF_WIDTH_PER_DISTANCE / tilt.cos()
+    }
+
+    /// The largest eye distance now allowed: `max_distance`, or less when the view range of the
+    /// age limits the ground shown.
+    pub fn distance_cap(&self) -> f32 {
+        if self.view_limit <= 0.0 {
+            return self.max_distance;
+        }
+        let mut best = MIN_DISTANCE;
+        let steps = 200;
+        let span = (self.max_distance / MIN_DISTANCE).ln();
+        for i in 0..=steps {
+            let d = MIN_DISTANCE * (span * i as f32 / steps as f32).exp();
+            if self.half_width_at(d) <= self.view_limit {
+                best = d;
+            } else if d > ISO_UNTIL {
+                break;
+            }
+        }
+        best.min(self.max_distance)
     }
 
     /// The default largest distance for a planet: three radii.
@@ -122,16 +163,32 @@ impl OrbitCamera {
     /// Distance clamped into `MIN_DISTANCE..=max_distance`, heading wrapped.
     fn clamp(&mut self) {
         self.dir = normalize(self.dir);
-        self.distance = self.distance.clamp(MIN_DISTANCE, self.max_distance);
+        self.distance = self.distance.clamp(MIN_DISTANCE, self.distance_cap());
         self.heading = self.heading.rem_euclid(std::f32::consts::TAU);
     }
 
-    /// Angle from straight down in radians: [`STREET_TILT`] at the closest zoom, 0 at the largest.
+    /// Angle from straight down in radians: a little over [`ISO_TILT`] at the closest zoom,
+    /// [`ISO_TILT`] up to [`ISO_UNTIL`], then easing to 0 at the largest distance.
     pub fn tilt(&self) -> f32 {
-        let span = (self.max_distance / MIN_DISTANCE).ln().max(1e-6);
-        let f = ((self.distance / MIN_DISTANCE).ln() / span).clamp(0.0, 1.0);
-        let eased = f * f * (3.0 - 2.0 * f);
-        STREET_TILT * (1.0 - eased)
+        self.tilt_at(self.distance)
+    }
+
+    fn tilt_at(&self, distance: f32) -> f32 {
+        let smooth = |f: f32| {
+            let f = f.clamp(0.0, 1.0);
+            f * f * (3.0 - 2.0 * f)
+        };
+        let iso_until = ISO_UNTIL
+            .min(self.max_distance * 0.5)
+            .max(MIN_DISTANCE * 2.0);
+        let near = ISO_TILT
+            + (STREET_TILT - ISO_TILT) * (1.0 - smooth((distance / MIN_DISTANCE).ln() / 0.7));
+        if distance <= iso_until {
+            return near;
+        }
+        let span = (self.max_distance / iso_until).ln().max(1e-6);
+        let f = smooth((distance / iso_until).ln() / span);
+        ISO_TILT * (1.0 - f)
     }
 
     /// Unit tangent the camera faces, at the target.
@@ -264,7 +321,7 @@ impl OrbitCamera {
 
     /// The whole planet in view: the largest distance, straight down.
     pub fn frame_globe(&mut self) {
-        self.distance = self.max_distance;
+        self.distance = self.distance_cap();
     }
 
     /// Near and far clip distances that keep depth precision at every zoom.
@@ -417,6 +474,50 @@ mod tests {
         camera.drag_surface(to, from);
         assert!(dot(camera.dir, from) > 0.99999);
         assert!(dot(camera.forward_tangent(), heading) > 0.99999);
+    }
+
+    #[test]
+    fn view_range_caps_the_eye_distance() {
+        let mut c = camera(100.0);
+        c.set_view_range(60_000);
+        let cap = c.distance_cap();
+        assert!(cap < c.max_distance && cap >= MIN_DISTANCE);
+        assert!(c.half_width_at(cap) <= 60.0 + 1e-3);
+        c.zoom(-50.0);
+        assert!((c.distance - cap).abs() < 1e-3);
+        // A larger range lifts the limit at once.
+        c.set_view_range(160_000);
+        let wider = c.distance_cap();
+        assert!(wider > cap);
+        c.zoom(-50.0);
+        assert!((c.distance - wider).abs() < 1e-3);
+        // Lowering clamps the eye back.
+        c.set_view_range(60_000);
+        assert!(c.distance <= cap + 1e-3);
+    }
+
+    #[test]
+    fn zero_view_range_keeps_the_globe_cap() {
+        let mut c = camera(100.0);
+        c.set_view_range(0);
+        assert_eq!(c.distance_cap(), c.max_distance);
+        c.zoom(-50.0);
+        assert_eq!(c.distance, 3.0 * R);
+    }
+
+    #[test]
+    fn tilt_is_constant_over_the_low_zoom_range() {
+        let mut c = camera(100.0);
+        for d in [20.0_f32, 48.0, 90.0, 125.0] {
+            c.distance = d;
+            assert!((c.tilt() - ISO_TILT).abs() < 1e-5, "tilt at {d}");
+        }
+        c.distance = MIN_DISTANCE;
+        assert!((c.tilt() - STREET_TILT).abs() < 1e-5);
+        c.distance = c.max_distance;
+        assert!(c.tilt().abs() < 1e-5);
+        c.distance = 250.0;
+        assert!(c.tilt() > 0.0 && c.tilt() < ISO_TILT);
     }
 
     #[test]

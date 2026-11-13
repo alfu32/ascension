@@ -117,6 +117,27 @@ pub fn default_factions(rules: &Rules, players: u32) -> Vec<DefId> {
         .collect()
 }
 
+/// Puts every non-neutral player into the age with this ordinal, when one is given.
+fn set_age_by_ordinal(
+    rules: &Rules,
+    players: &mut [Player],
+    ordinal: Option<i64>,
+) -> Result<(), SetupError> {
+    let Some(ordinal) = ordinal else {
+        return Ok(());
+    };
+    let age = rules
+        .ages
+        .values()
+        .find(|a| a.ordinal == ordinal)
+        .ok_or_else(|| SetupError::Setup(format!("no age with ordinal {ordinal}")))?
+        .id;
+    for player in players.iter_mut().filter(|p| p.id != NEUTRAL) {
+        player.age = age;
+    }
+    Ok(())
+}
+
 /// The players of a match: neutral player 0 and one per faction, each on its own team.
 fn make_players(rules: &Rules, factions: &[DefId]) -> Result<Vec<Player>, SetupError> {
     let first_age = start_age(rules).ok_or(SetupError::NoFaction)?;
@@ -152,11 +173,23 @@ fn make_players(rules: &Rules, factions: &[DefId]) -> Result<Vec<Player>, SetupE
 
 /// Builds the world: one player per map start with the given faction, each with a city and
 /// builders, and the map's nodes owned by the neutral player 0. Every player is on its own team.
+#[cfg(test)]
 pub fn build_match(
     rules: &Arc<Rules>,
     map: &GeneratedMap,
     factions: &[DefId],
     seed: u64,
+) -> Result<Match, SetupError> {
+    build_match_in_age(rules, map, factions, seed, None)
+}
+
+/// [`build_match`] with every player starting in the age of the given ordinal (testing).
+pub fn build_match_in_age(
+    rules: &Arc<Rules>,
+    map: &GeneratedMap,
+    factions: &[DefId],
+    seed: u64,
+    age_ordinal: Option<i64>,
 ) -> Result<Match, SetupError> {
     let city = city_type(rules).ok_or(SetupError::NoCity)?;
     let builder = builder_type(rules).ok_or(SetupError::NoBuilder)?;
@@ -164,7 +197,8 @@ pub fn build_match(
     if factions.is_empty() || factions.len() != map.starts.len() {
         return Err(SetupError::NoFaction);
     }
-    let players = make_players(rules, factions)?;
+    let mut players = make_players(rules, factions)?;
+    set_age_by_ordinal(rules, &mut players, age_ordinal)?;
     let mut world = World::new(Arc::clone(rules), map.grid.clone(), seed, players)?;
 
     let mut starts = Vec::new();
@@ -197,11 +231,23 @@ pub fn build_match(
 /// [`build_match`]. A start too close to a face edge for the city footprint moves inward the
 /// least that keeps the footprint on one face; builders are placed with `World::offset`, so a
 /// ring that crosses a face edge continues on the next face.
+#[cfg(test)]
 pub fn build_sphere_match(
     rules: &Arc<Rules>,
     planet: &SpherePlanet,
     factions: &[DefId],
     seed: u64,
+) -> Result<Match, SetupError> {
+    build_sphere_match_in_age(rules, planet, factions, seed, None)
+}
+
+/// [`build_sphere_match`] with every player starting in the age of the given ordinal (testing).
+pub fn build_sphere_match_in_age(
+    rules: &Arc<Rules>,
+    planet: &SpherePlanet,
+    factions: &[DefId],
+    seed: u64,
+    age_ordinal: Option<i64>,
 ) -> Result<Match, SetupError> {
     let city = city_type(rules).ok_or(SetupError::NoCity)?;
     let builder = builder_type(rules).ok_or(SetupError::NoBuilder)?;
@@ -209,7 +255,8 @@ pub fn build_sphere_match(
     if factions.is_empty() || factions.len() != planet.starts.len() {
         return Err(SetupError::NoFaction);
     }
-    let players = make_players(rules, factions)?;
+    let mut players = make_players(rules, factions)?;
+    set_age_by_ordinal(rules, &mut players, age_ordinal)?;
     let mut world = World::from_sphere(
         Arc::clone(rules),
         planet.surface,

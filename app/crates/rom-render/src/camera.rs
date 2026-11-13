@@ -1,5 +1,8 @@
 //! Strategy-view camera and the input rules that move it.
 
+/// Ground half-width seen per unit of eye distance looking straight down.
+const HALF_WIDTH_PER_DISTANCE: f32 = 0.6;
+
 /// Half the width of the proof map in tiles; the default bounds of a camera.
 const DEFAULT_HALF_EXTENT: f32 = 128.0;
 /// Pointer distance from the canvas edge, in physical pixels, that starts edge panning.
@@ -83,6 +86,15 @@ impl Camera {
         self.yaw = (self.yaw + yaw).rem_euclid(std::f32::consts::TAU);
         self.pitch += pitch;
         self.clamp();
+    }
+
+    /// Brings the distance down so that the ground half-width seen at the current pitch stays
+    /// within `half_width` tiles (`None`: no limit beyond [`Camera::MAX_DISTANCE`]).
+    pub fn limit_half_width(&mut self, half_width: Option<f32>) {
+        if let Some(width) = half_width {
+            let reach = HALF_WIDTH_PER_DISTANCE / self.pitch.sin().max(0.2);
+            self.distance = self.distance.min((width / reach).max(Self::MIN_DISTANCE));
+        }
     }
 
     /// This camera with distance, pitch and target brought inside their limits.

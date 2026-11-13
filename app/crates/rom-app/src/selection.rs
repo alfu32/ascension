@@ -36,6 +36,44 @@ const STANCE_BEHAVIORS: [&str; 4] = ["aggressive", "defensive", "stand_ground", 
 /// A named palette page and its (slot, product) entries.
 type PageRows = (String, Vec<(usize, DefId)>);
 
+/// Whether a technology is a cell of the research grid: a track level or an age advance.
+fn is_grid_tech(rules: &Rules, def: DefId) -> bool {
+    rules.techs.get(&def).is_some_and(|t| {
+        matches!(
+            t.kind,
+            rom_rules::TechKind::Track | rom_rules::TechKind::Age
+        )
+    })
+}
+
+/// The research page holding the next age advance of a player in `age`: the page a Library
+/// opens on. The last page when every age advance is done or none is on a page.
+fn library_default_page(rules: &Rules, age: DefId, pages: &[PageRows]) -> usize {
+    let Some(current) = rules.ages.get(&age).map(|a| a.ordinal) else {
+        return 0;
+    };
+    let advances_to_next = |def: DefId| {
+        rules
+            .techs
+            .get(&def)
+            .is_some_and(|t| t.kind == rom_rules::TechKind::Age)
+            && rules.tech_effects.get(&def).into_iter().flatten().any(|e| {
+                e.effect == rom_rules::TechEffectKind::SetAge
+                    && e.target_def_id
+                        .and_then(|id| rules.ages.get(&id))
+                        .is_some_and(|a| a.ordinal == current + 1)
+            })
+    };
+    let grid_pages = pages
+        .iter()
+        .filter(|(_, entries)| entries.iter().any(|(_, d)| is_grid_tech(rules, *d)))
+        .count();
+    pages
+        .iter()
+        .position(|(_, entries)| entries.iter().any(|(_, d)| advances_to_next(*d)))
+        .unwrap_or(grid_pages.saturating_sub(1))
+}
+
 /// What a palette button does when pressed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Action {
@@ -103,7 +141,8 @@ pub struct Controller {
     groups: [Vec<EntityId>; 10],
     last_group: Option<(usize, u64)>,
     tab: PaletteTab,
-    page: usize,
+    /// The palette page the player turned to; `None` shows the default page of the tab.
+    page: Option<usize>,
     data_tab: usize,
     pending_research: BTreeMap<DefId, u64>,
     attack_move: bool,
@@ -306,7 +345,7 @@ impl Controller {
         ids.dedup();
         self.selection = ids;
         self.foreign = None;
-        self.page = 0;
+        self.page = None;
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -828,18 +867,18 @@ impl Controller {
                     && palette.tabs[index]
                 {
                     self.tab = tab;
-                    self.page = 0;
+                    self.page = None;
                 }
             }
             HudRegionKind::PaletteArrow if button == PointerButton::Left => {
                 if let Some((palette, _)) = self.palette(world)
                     && palette.pages > 1
                 {
-                    self.page = if index == 0 {
+                    self.page = Some(if index == 0 {
                         (palette.page + palette.pages - 1) % palette.pages
                     } else {
                         (palette.page + 1) % palette.pages
-                    };
+                    });
                 }
             }
             HudRegionKind::CommandSlot if button == PointerButton::Left => {
@@ -896,6 +935,14 @@ impl Controller {
             let Some(type_id) = type_id else {
                 return Vec::new();
             };
+            // A producer whose research includes track or age rows shows them as a grid.
+            let grid = mode == ProductionMode::Research
+                && rules
+                    .production
+                    .get(&type_id)
+                    .into_iter()
+                    .flatten()
+                    .any(|r| r.mode == mode && is_grid_tech(rules, r.product_def_id));
             let mut by_page: BTreeMap<String, Vec<&rom_rules::Production>> = BTreeMap::new();
             for row in rules.production.get(&type_id).into_iter().flatten() {
                 if row.mode != mode {
@@ -910,10 +957,13 @@ impl Controller {
                 {
                     continue;
                 }
-                if mode == ProductionMode::Research && !crate::hud::next_research(world, def) {
+                if mode == ProductionMode::Research
+                    && !(grid && is_grid_tech(rules, def))
+                    && !crate::hud::next_research(world, def)
+                {
                     continue;
                 }
-                let page = if mode == ProductionMode::Research {
+                let page = if mode == ProductionMode::Research && !grid {
                     String::new()
                 } else {
                     row.ui_page.clone()
@@ -923,7 +973,7 @@ impl Controller {
             let mut pages = Vec::new();
             for (name, mut rows) in by_page {
                 rows.sort_by_key(|r| (r.ui_row, r.ui_col, r.product_def_id));
-                if mode == ProductionMode::Research {
+                if mode == ProductionMode::Research && !grid {
                     rows.sort_by_key(|r| {
                         let tech = &rules.techs[&r.product_def_id];
                         let priority = match tech.kind {
@@ -997,6 +1047,17 @@ impl Controller {
                     ));
                 }
             }
+            if grid {
+                // Grid pages come first, from the lowest level to the highest.
+                pages.sort_by_key(|(name, entries): &PageRows| {
+                    let level = entries
+                        .iter()
+                        .filter(|(_, d)| is_grid_tech(rules, *d))
+                        .map(|(_, d)| rules.techs[d].level)
+                        .min();
+                    (level.is_none(), level, name.clone())
+                });
+            }
             pages
         };
         let build_pages = rows(builder, ProductionMode::Construct);
@@ -1030,11 +1091,13 @@ impl Controller {
             ..HudPalette::default()
         };
         let mut actions: Vec<(usize, Action)> = Vec::new();
+        let research_default = library_default_page(rules, player.age, &research_pages);
         let production = |pages: &[PageRows],
-                          make: fn(DefId) -> Action|
+                          make: fn(DefId) -> Action,
+                          default: usize|
          -> (usize, usize, String, Vec<(usize, Action)>) {
             let count = pages.len().max(1);
-            let page = self.page.min(count - 1);
+            let page = self.page.unwrap_or(default).min(count - 1);
             let (name, entries) = pages.get(page).cloned().unwrap_or_default();
             (
                 count,
@@ -1045,12 +1108,12 @@ impl Controller {
         };
         match tab {
             PaletteTab::Build | PaletteTab::Train | PaletteTab::Research => {
-                let (pages, make): (&[PageRows], fn(DefId) -> Action) = match tab {
-                    PaletteTab::Build => (&build_pages, Action::Construct),
-                    PaletteTab::Train => (&train_pages, Action::Train),
-                    _ => (&research_pages, Action::Research),
+                let (pages, make, default): (&[PageRows], fn(DefId) -> Action, usize) = match tab {
+                    PaletteTab::Build => (&build_pages, Action::Construct, 0),
+                    PaletteTab::Train => (&train_pages, Action::Train, 0),
+                    _ => (&research_pages, Action::Research, research_default),
                 };
-                let (count, page, name, entries) = production(pages, make);
+                let (count, page, name, entries) = production(pages, make, default);
                 palette.pages = count;
                 palette.page = page;
                 palette.page_name = name;

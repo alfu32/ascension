@@ -135,7 +135,8 @@ CREATE TABLE age (
   id        INTEGER PRIMARY KEY REFERENCES def(id),
   ordinal   INTEGER NOT NULL UNIQUE,   -- 0 = first age
   era       TEXT NOT NULL CHECK (era IN ('history','near_future','stellar','galactic')),
-  map_scale TEXT NOT NULL REFERENCES map_scale(key)   -- tier this age gives its owner
+  map_scale TEXT NOT NULL REFERENCES map_scale(key),  -- tier this age gives its owner
+  view_range INTEGER NOT NULL DEFAULT 0 CHECK (view_range >= 0)  -- largest ground half-width the camera may show, milli-tiles; 0 = whole globe
 ) STRICT;
 
 -- ── A4. Factions (nations → races) ──────────────────────────────────────────

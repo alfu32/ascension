@@ -18,7 +18,9 @@ use rom_sim::BodyId;
 use crate::args::Options;
 use crate::bench;
 use crate::demo::{DemoDriver, add_stress_units};
-use crate::match_setup::{Match, build_match, build_sphere_match, build_universe_match};
+use crate::match_setup::{
+    Match, build_match_in_age, build_sphere_match_in_age, build_universe_match,
+};
 use crate::screenshot;
 use crate::script::{Script, ScriptContext, ScriptSetup};
 use crate::sim_thread::{SimLink, SimThread, UniverseHost};
@@ -279,11 +281,12 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
         match options.sphere {
             Some(n) => {
                 let content = terrain::generate_sphere_content(options, n)?;
-                let game = build_sphere_match(
+                let game = build_sphere_match_in_age(
                     &content.rules,
                     &content.planet,
                     &content.factions,
                     options.seed,
+                    options.age,
                 )
                 .map_err(|error| format!("setting up the match: {error}"))?;
                 // Starts and nodes are drawn as entities (and only where the player may see them),
@@ -313,16 +316,20 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
                 let mut scene = terrain::to_scene(&content.map);
                 terrain::apply_terrain_colours(&mut scene.feature_colors, &content.rules);
                 bridge.publish_terrain(Arc::new(scene));
-                build_match(
+                build_match_in_age(
                     &content.rules,
                     &content.map,
                     &content.factions,
                     options.seed,
+                    options.age,
                 )
                 .map_err(|error| format!("setting up the match: {error}"))?
             }
         }
     };
+    if options.zoom_out {
+        bridge.publish_zoom_out();
+    }
     if !options.universe
         && let Some(path) = &options.script
     {

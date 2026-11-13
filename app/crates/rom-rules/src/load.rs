@@ -199,6 +199,7 @@ fn load_age(conn: &Connection) -> Result<Vec<Age>, RulesError> {
             ordinal: row.get("ordinal")?,
             era: enum_value(row, "era", "age", &identity)?,
             map_scale: row.get("map_scale")?,
+            view_range: row.get("view_range")?,
         })
     })
 }

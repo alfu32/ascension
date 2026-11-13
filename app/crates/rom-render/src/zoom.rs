@@ -321,6 +321,8 @@ pub struct ZoomCamera {
     home_dir: [f32; 3],
     l: f32,
     cap: Level,
+    /// Largest planet-camera distance the age's view range allows, when it limits the globe.
+    globe_limit: Option<f32>,
     goal: Option<f32>,
     system_pan: [f32; 3],
     map_pan: [f32; 3],
@@ -362,6 +364,7 @@ impl ZoomCamera {
             home_dir: home.map_or([0.0, 0.0, 1.0], |h| h.dir),
             l: scale.l_cap(Level::Globe),
             cap,
+            globe_limit: None,
             goal: None,
             system_pan: [0.0; 3],
             map_pan: [0.0; 3],
@@ -418,9 +421,21 @@ impl ZoomCamera {
         self.goal = self.goal.map(|g| g.min(self.l_cap()));
     }
 
+    /// Limits the planet camera to eye distance `distance` (tiles), from the age's view range;
+    /// `None` leaves the globe cap. Only the globe level is limited: space levels keep their caps.
+    pub fn set_globe_limit(&mut self, distance: Option<f32>) {
+        self.globe_limit = distance;
+        self.l = self.l.min(self.l_cap());
+        self.goal = self.goal.map(|g| g.min(self.l_cap()));
+    }
+
     /// Largest `l` the cap allows.
     pub fn l_cap(&self) -> f32 {
-        self.scale.l_cap(self.cap)
+        let cap = self.scale.l_cap(self.cap);
+        match (self.cap, self.globe_limit) {
+            (Level::Surface | Level::Globe, Some(d)) => cap.min(d.max(MIN_DISTANCE).ln()),
+            _ => cap,
+        }
     }
 
     /// Smallest `l`: a planet without a generated surface cannot be entered.
