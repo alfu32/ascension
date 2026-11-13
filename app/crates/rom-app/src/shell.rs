@@ -232,6 +232,7 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
             },
         );
         let mut scene = terrain::to_planet_scene(planet);
+        terrain::apply_terrain_colours(&mut scene.feature_colors, &content.rules);
         scene.starts.clear();
         scene.nodes.clear();
         bridge.publish_planet(
@@ -261,6 +262,7 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
                 // Starts and nodes are drawn as entities (and only where the player may see them),
                 // not as scene markers; the camera starts at the first player's city.
                 let mut scene = terrain::to_planet_scene(&content.planet);
+                terrain::apply_terrain_colours(&mut scene.feature_colors, &content.rules);
                 scene.starts.clear();
                 scene.nodes.clear();
                 bridge.publish_planet(
@@ -279,7 +281,9 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
             }
             None => {
                 let content = terrain::generate_content(options)?;
-                bridge.publish_terrain(Arc::new(terrain::to_scene(&content.map)));
+                let mut scene = terrain::to_scene(&content.map);
+                terrain::apply_terrain_colours(&mut scene.feature_colors, &content.rules);
+                bridge.publish_terrain(Arc::new(scene));
                 build_match(
                     &content.rules,
                     &content.map,

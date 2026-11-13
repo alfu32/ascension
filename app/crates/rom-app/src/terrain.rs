@@ -200,6 +200,40 @@ fn feature_color(id: u16) -> [u8; 3] {
     [channel(r), channel(g), channel(b)]
 }
 
+/// The colour each feature terrain declares through its material (`"base_colour":"#rrggbb"` in
+/// the material's parameters), keyed like [`TileKind::Feature`]. Terrains without one keep the
+/// colour derived from their id.
+pub fn terrain_colours(rules: &Rules) -> BTreeMap<u16, [u8; 3]> {
+    rules
+        .terrains
+        .values()
+        .filter_map(|terrain| {
+            let material = rules.materials.get(&terrain.material_id?)?;
+            let colour = base_colour(&material.params)?;
+            Some((u16::try_from(terrain.id.0).ok()?, colour))
+        })
+        .collect()
+}
+
+/// Reads `"base_colour":"#rrggbb"` from a material's parameter text.
+fn base_colour(params: &str) -> Option<[u8; 3]> {
+    let start = params.find("\"base_colour\"")?;
+    let hash = params[start..].find('#')? + start + 1;
+    let hex = params.get(hash..hash + 6)?;
+    let channel = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok();
+    Some([channel(0)?, channel(2)?, channel(4)?])
+}
+
+/// Replaces derived feature colours with the colours the rules declare.
+pub fn apply_terrain_colours(colours: &mut BTreeMap<u16, [u8; 3]>, rules: &Rules) {
+    let declared = terrain_colours(rules);
+    for (id, colour) in colours.iter_mut() {
+        if let Some(found) = declared.get(id) {
+            *colour = *found;
+        }
+    }
+}
+
 /// Converts a generated map: tile kinds from the base terrains, other terrains as features,
 /// starts and nodes from milli-tiles to tiles.
 pub fn to_scene(map: &GeneratedMap) -> TerrainScene {
@@ -322,6 +356,24 @@ mod tests {
         assert_eq!(
             scene,
             to_planet_scene(&generate_sphere_content(&options, 24).unwrap().planet)
+        );
+    }
+
+    #[test]
+    fn feature_terrains_take_their_material_colour() {
+        let rules = load_rules().expect("rules");
+        let colours = terrain_colours(&rules);
+        let forest = rules.id_of("ter.forest").expect("forest");
+        let mountain = rules.id_of("ter.mountain").expect("mountain");
+        assert_eq!(colours[&(forest.0 as u16)], [0x2d, 0x5a, 0x27]);
+        assert_eq!(colours[&(mountain.0 as u16)], [0x8a, 0x81, 0x78]);
+        let mut scene_colours = BTreeMap::from([(forest.0 as u16, [1, 2, 3]), (9999, [4, 5, 6])]);
+        apply_terrain_colours(&mut scene_colours, &rules);
+        assert_eq!(scene_colours[&(forest.0 as u16)], [0x2d, 0x5a, 0x27]);
+        assert_eq!(
+            scene_colours[&9999],
+            [4, 5, 6],
+            "terrains without a material keep theirs"
         );
     }
 }

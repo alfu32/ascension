@@ -542,4 +542,19 @@ INSERT INTO map_style_feature(map_style_id,feature_def_id,region_kind,pattern,ch
  SELECT s.id, d.id, 'resource_body', v.p, v.w, v.c0, v.c1
  FROM map_style s, v JOIN def d ON d.key=v.k ORDER BY s.id, d.id;
 
+
+-- ── terrain materials ───────────────────────────────────────────────────────
+-- Base colour of each feature terrain for the renderer, until procedural
+-- materials replace it. params: {"base_colour":"#rrggbb"}.
+INSERT INTO def(kind,key,name) VALUES
+ ('material','mat.forest','Forest canopy'), ('material','mat.mountain','Bare rock'),
+ ('material','mat.nebula','Nebula');
+WITH v(k,prog,col) AS (VALUES ('mat.forest','foliage','#2d5a27'), ('mat.mountain','rock','#8a8178'),
+  ('mat.nebula','gas','#4a3a6a'))
+INSERT INTO material(id,program,params)
+ SELECT d.id, v.prog, '{"base_colour":"' || v.col || '"}' FROM v JOIN def d ON d.key=v.k;
+WITH v(t,m) AS (VALUES ('ter.forest','mat.forest'), ('ter.mountain','mat.mountain'), ('ter.nebula','mat.nebula'))
+UPDATE terrain SET material_id = (SELECT m.id FROM v JOIN def m ON m.key=v.m JOIN def t ON t.key=v.t WHERE t.id=terrain.id)
+ WHERE id IN (SELECT t.id FROM v JOIN def t ON t.key=v.t);
+
 COMMIT;
