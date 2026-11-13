@@ -4,6 +4,7 @@ use crate::{
 };
 use rom_rules::{DefId, Rules, VictoryRule, build_rules_db};
 use std::{collections::BTreeMap, sync::Arc};
+const PINNED_GEOMETRY: &str = "UPDATE et_territory SET border_radius=24000, economic_radius=20000 WHERE is_city=1; UPDATE game_constant SET value=24000 WHERE key='city.spacing';";
 
 const P1: PlayerId = PlayerId(1);
 const P2: PlayerId = PlayerId(2);
@@ -15,6 +16,8 @@ fn rules(sql: &str) -> Arc<Rules> {
         include_str!("../../../db/seed.sql"),
     )
     .unwrap();
+    // These tests assert the geometry of the original tuning; pin it here.
+    db.execute_batch(PINNED_GEOMETRY).unwrap();
     db.execute_batch(sql).unwrap();
     Arc::new(Rules::load(&db).unwrap())
 }
