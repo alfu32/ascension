@@ -36,6 +36,7 @@ impl World {
     /// Returns population occupied by units, including unfinished units.
     pub fn population_used(&self, player: PlayerId) -> i64 {
         self.entities()
+            .chain(self.space.transits.values().map(|t| &t.entity))
             .filter(|e| e.owner == player)
             .map(|e| &self.rules.entity_types[&e.type_id])
             .filter(|et| et.class == EntityClass::Unit)
@@ -73,6 +74,7 @@ impl World {
 
     pub(crate) fn all_orders(&self) -> impl Iterator<Item = &Order> {
         self.entities()
+            .chain(self.space.transits.values().map(|t| &t.entity))
             .flat_map(|e| e.orders.iter())
             .chain(self.pending.iter().map(|(o, _)| o))
     }
@@ -80,6 +82,7 @@ impl World {
     fn count_subjects(&self, player: Option<PlayerId>, matches: impl Fn(DefId) -> bool) -> i64 {
         let owned = self
             .entities()
+            .chain(self.space.transits.values().map(|t| &t.entity))
             .filter(|e| player.is_none_or(|p| p == e.owner) && matches(e.type_id))
             .count();
         let queued = self

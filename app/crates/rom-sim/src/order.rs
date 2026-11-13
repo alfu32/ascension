@@ -23,7 +23,7 @@ pub struct Command {
     pub subject: Option<DefId>,
     /// Optional entity target.
     pub target_entity: Option<EntityId>,
-    /// Optional milli-tile point target or construction placement.
+    /// Optional point or placement; travel uses only `body`, the destination star id.
     pub target_pos: Option<Pos>,
     /// Append when true; replace existing orders when false.
     pub queue: bool,
@@ -61,7 +61,7 @@ pub struct Order {
     pub subject: Option<DefId>,
     /// Optional entity target.
     pub target_entity: Option<EntityId>,
-    /// Optional point target.
+    /// Optional point; travel uses only `body`, the destination star id.
     pub target_pos: Option<Pos>,
     /// Current lifecycle state.
     pub status: OrderStatus,

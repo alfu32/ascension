@@ -182,34 +182,10 @@ impl World {
         }
         hash.u64(self.entities().count() as u64);
         for entity in self.entities() {
-            hash.u32(entity.id.0);
-            hash.u32(entity.type_id.0);
-            hash.u32(entity.owner.0);
-            hash.pos(entity.pos);
-            hash.bytes(&entity.facing.to_le_bytes());
-            hash.bytes(&entity.hp.to_le_bytes());
-            hash.bytes(&entity.max_hp.to_le_bytes());
-            hash.bytes(&entity.los.to_le_bytes());
-            hash.u32(entity.stance.0);
-            hash.u64(entity.cooldowns.len() as u64);
-            for (weapon, ready) in &entity.cooldowns {
-                hash.u32(*weapon);
-                hash.u64(*ready);
-            }
-            hash.bytes(&entity.energy.to_le_bytes());
-            hash.bytes(&entity.energy_remainder.to_le_bytes());
-            hash.bytes(&entity.heal_remainder.to_le_bytes());
-            hash.optional(entity.killer, |h, id| h.u32(id.0));
-            hash.optional(entity.build_progress, StateHash::u32);
-            hash.bytes(&entity.move_remainder.to_le_bytes());
-            hash.bytes(&entity.gather_slots.to_le_bytes());
-            hash.optional(entity.work_site, |h, id| h.u32(id.0));
-            hash.optional(entity.city_id, |h, id| h.u32(id.0));
-            hash.u64(entity.idle_ticks);
-            hash.u64(entity.orders.len() as u64);
-            for order in &entity.orders {
-                hash.u64(order.id.0);
-            }
+            hash.entity(entity);
+        }
+        if !self.universe.systems.is_empty() {
+            hash.space(self);
         }
         let mut orders: Vec<_> = self.entities().flat_map(|e| e.orders.iter()).collect();
         orders.sort_unstable_by_key(|order| order.id);
@@ -291,6 +267,70 @@ impl World {
 }
 
 impl StateHash {
+    fn entity(&mut self, entity: &crate::Entity) {
+        self.u32(entity.id.0);
+        self.u32(entity.type_id.0);
+        self.u32(entity.owner.0);
+        self.pos(entity.pos);
+        self.bytes(&entity.facing.to_le_bytes());
+        self.bytes(&entity.hp.to_le_bytes());
+        self.bytes(&entity.max_hp.to_le_bytes());
+        self.bytes(&entity.los.to_le_bytes());
+        self.u32(entity.stance.0);
+        self.u64(entity.cooldowns.len() as u64);
+        for (weapon, ready) in &entity.cooldowns {
+            self.u32(*weapon);
+            self.u64(*ready);
+        }
+        self.bytes(&entity.energy.to_le_bytes());
+        self.bytes(&entity.energy_remainder.to_le_bytes());
+        self.bytes(&entity.heal_remainder.to_le_bytes());
+        self.optional(entity.killer, |h, id| h.u32(id.0));
+        self.optional(entity.build_progress, StateHash::u32);
+        self.bytes(&entity.move_remainder.to_le_bytes());
+        self.bytes(&entity.gather_slots.to_le_bytes());
+        self.optional(entity.work_site, |h, id| h.u32(id.0));
+        self.optional(entity.city_id, |h, id| h.u32(id.0));
+        self.u64(entity.idle_ticks);
+        self.u64(entity.orders.len() as u64);
+        for order in &entity.orders {
+            self.u64(order.id.0);
+        }
+    }
+
+    fn space(&mut self, world: &World) {
+        let space = &world.space;
+        self.u64(space.positions.len() as u64);
+        for (body, pos) in &space.positions {
+            self.u32(body.0);
+            self.pos(*pos);
+        }
+        self.u64(space.markers.len() as u64);
+        for (body, marker) in &space.markers {
+            self.u32(body.0);
+            self.u32(marker.0);
+        }
+        self.u64(space.claims.len() as u64);
+        for (body, player) in &space.claims {
+            self.u32(body.0);
+            self.u32(player.0);
+        }
+        self.u64(space.transits.len() as u64);
+        for (id, transit) in &space.transits {
+            self.u32(id.0);
+            self.entity(&transit.entity);
+            self.u64(transit.entity.orders.len() as u64);
+            for order in &transit.entity.orders {
+                self.order(order);
+            }
+            self.u32(transit.origin);
+            self.u32(transit.destination);
+            self.u64(transit.departed);
+            self.u64(transit.arrives);
+        }
+        self.u64(space.transits_done);
+    }
+
     /// Star systems, bodies and routes.
     fn universe(&mut self, world: &World) {
         let universe = &world.universe;

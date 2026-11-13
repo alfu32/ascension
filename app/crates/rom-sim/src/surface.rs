@@ -7,7 +7,7 @@ use crate::{
 };
 use rom_rules::{DefId, Rules};
 
-/// A habitable body's surface (or the single flat map) and everything kept per surface.
+/// A planet, system space or single flat map and everything kept per surface.
 #[derive(Debug)]
 pub struct Surface {
     pub(crate) map: MapGrid,

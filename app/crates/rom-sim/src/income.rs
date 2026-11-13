@@ -56,6 +56,16 @@ impl World {
             return terms;
         };
         let et = &self.rules.entity_types[&entity.type_id];
+        if let Some(body) = self
+            .space
+            .markers
+            .iter()
+            .find_map(|(body, marker)| (*marker == id).then_some(*body))
+            && let Some(player) = self.space.claims.get(&body)
+            && let Some(node) = &et.node
+        {
+            terms.push(((*player, node.resource_id), node.income));
+        }
         if entity.build_progress.is_none()
             && let Some(site) = &et.gather_site
             && site.self_income != 0

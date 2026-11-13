@@ -84,7 +84,7 @@ pub struct UniverseSetup {
     pub planets: BTreeMap<BodyId, PlanetSurface>,
 }
 
-/// Stored universe facts, kept for later tasks (orbit, system space, travel).
+/// Stored universe facts, shared by planetary surfaces and system space.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct UniverseData {
     pub systems: Vec<SystemInfo>,
@@ -95,27 +95,36 @@ pub(crate) struct UniverseData {
 
 impl World {
     /// Builds a world holding every planet in `setup.planets`, each with its own
-    /// surface, and the universe's systems, bodies and routes. `homes` gives each player
-    /// its home body, which must have a surface. Nodes are spawned for the neutral
-    /// player 0 in body order; nothing is revealed (see `reveal_terrain`).
+    /// surface, a flat plane for every system, and neutral markers for non-star bodies.
+    /// `homes` gives each player's generated home planet. Neutral player 0 is added if
+    /// absent; terrain starts unexplored (see `reveal_terrain`).
     pub fn from_universe(
         rules: Arc<Rules>,
         setup: UniverseSetup,
         seed: u64,
-        players: Vec<Player>,
+        mut players: Vec<Player>,
         homes: BTreeMap<PlayerId, BodyId>,
     ) -> Result<Self, SimError> {
         let UniverseSetup {
-            systems,
+            mut systems,
             mut bodies,
-            routes,
+            mut routes,
             planets,
         } = setup;
         bodies.sort_by_key(|b| b.id);
-        if planets.is_empty() {
-            return Err(SimError::InvalidUniverse("no planet surface"));
+        systems.sort_by_key(|s| s.id);
+        routes.sort();
+        if planets.is_empty() && systems.is_empty() {
+            return Err(SimError::InvalidUniverse("no surface"));
         }
-        if bodies.windows(2).any(|w| w[0].id == w[1].id)
+        if systems.windows(2).any(|w| w[0].id == w[1].id)
+            || routes
+                .iter()
+                .any(|r| r.length <= 0 || r.system_a >= r.system_b)
+            || routes
+                .windows(2)
+                .any(|w| (w[0].system_a, w[0].system_b) == (w[1].system_a, w[1].system_b))
+            || bodies.windows(2).any(|w| w[0].id == w[1].id)
             || bodies
                 .iter()
                 .any(|b| !systems.iter().any(|s| s.id == b.system))
@@ -126,6 +135,14 @@ impl World {
             })
         {
             return Err(SimError::InvalidUniverse("unknown or repeated ids"));
+        }
+        if !players.iter().any(|p| p.id == PlayerId(0)) {
+            let mut neutral = players.first().ok_or(SimError::InvalidPlayer)?.clone();
+            neutral.id = PlayerId(0);
+            neutral.team = 0;
+            neutral.resources.clear();
+            neutral.techs.clear();
+            players.push(neutral);
         }
         let mut world = Self::empty(rules, seed, players)?;
         world.universe = UniverseData {
@@ -148,6 +165,7 @@ impl World {
             }
         }
         world.homes = homes;
+        world.build_space()?;
         for (body, planet) in &planets {
             world.spawn_nodes_on(*body, &planet.nodes)?;
         }
@@ -359,6 +377,10 @@ mod tests {
                 body(1, BodyKind::Star),
                 body(2, BodyKind::Habitable),
                 body(3, BodyKind::Habitable),
+                BodyInfo {
+                    system: 2,
+                    ..body(4, BodyKind::Star)
+                },
             ],
             routes: vec![RouteInfo {
                 system_a: 1,
@@ -432,13 +454,13 @@ mod tests {
     #[test]
     fn universe_setup_is_checked() {
         let w = world();
-        assert_eq!(w.surfaces().len(), 2);
+        assert_eq!(w.surfaces().len(), 4);
         assert_eq!(w.habitable_count(), 2);
         assert!(w.ungenerated_bodies().is_empty());
         assert_eq!(w.body(BodyId(1)).unwrap().kind, BodyKind::Star);
         assert_eq!(w.systems().len(), 2);
         assert_eq!(w.routes().len(), 1);
         assert_eq!(w.surface(BodyId(3)).unwrap().tiles(), 6 * 64);
-        assert!(w.surface(BodyId(1)).is_none());
+        assert!(w.surface(BodyId(1)).is_some());
     }
 }
