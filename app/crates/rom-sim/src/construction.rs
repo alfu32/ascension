@@ -59,13 +59,21 @@ impl World {
         self.spawn(type_id, owner, pos)
     }
 
-    pub(crate) fn check_placement(
+    /// Whether `player` may place a building of type `subject` centred near `pos`: map bounds,
+    /// terrain, overlap with buildings and queued sites, and every placement rule. Returns the
+    /// snapped centre. This is the same check `construct` runs at submit, without side effects,
+    /// so interfaces can preview a placement.
+    pub fn check_placement(
         &self,
         player: PlayerId,
         subject: DefId,
         pos: Pos,
     ) -> Result<Pos, SimError> {
-        let et = &self.rules.entity_types[&subject];
+        let et = self
+            .rules
+            .entity_types
+            .get(&subject)
+            .ok_or(SimError::UnknownType(subject))?;
         let pos = self.snap_placement(subject, pos)?;
         let bounds = footprint(et, pos);
         for (x, y) in crate::geometry::footprint_tiles(bounds) {

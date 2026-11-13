@@ -160,7 +160,7 @@ pub fn build_match(
             x: snap(start.x, city.footprint_w),
             y: snap(start.y, city.footprint_h),
         };
-        let city_entity = world.spawn(city_id, owner, city_pos)?;
+        let city_entity = world.place_for_setup(city_id, owner, city_pos)?;
         let reach = (city.footprint_w.max(city.footprint_h) * 500 + 1500) as f64;
         let mut builders = Vec::new();
         for n in 0..BUILDERS_PER_PLAYER {

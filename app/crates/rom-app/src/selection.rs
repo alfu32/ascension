@@ -134,60 +134,10 @@ fn stance_icon(behavior: &str) -> &'static str {
     }
 }
 
-/// Whether `pos` can hold a footprint of `def`, judged from public state: map bounds, terrain,
-/// other buildings and queued construction. The simulation has the final say when the order is
-/// submitted, so a stricter rule only shows up as a rejection message.
+/// Whether player one may place a building of type `def` centred near `centre`. Delegates to
+/// the simulation's own check, so the preview always agrees with `construct` at submit.
 pub fn placement_check(world: &World, def: DefId, centre: Pos) -> Result<(), SimError> {
-    let rules = world.rules();
-    let et = rules.entity_type(def).ok_or(SimError::UnknownType(def))?;
-    let bounds = |et: &EntityType, pos: Pos| {
-        let (x, y) = (i64::from(pos.x), i64::from(pos.y));
-        [
-            x - et.footprint_w * 500,
-            y - et.footprint_h * 500,
-            x + et.footprint_w * 500,
-            y + et.footprint_h * 500,
-        ]
-    };
-    let overlaps =
-        |a: [i64; 4], b: [i64; 4]| a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
-    let area = bounds(et, centre);
-    let map = world.map();
-    if area[0] < 0
-        || area[1] < 0
-        || area[2] > i64::from(map.width) * 1000
-        || area[3] > i64::from(map.height) * 1000
-    {
-        return Err(SimError::OutsideMap);
-    }
-    for y in area[1] / 1000..area[3] / 1000 {
-        for x in area[0] / 1000..area[2] / 1000 {
-            let buildable = map
-                .terrain_at(x as i32, y as i32)
-                .is_some_and(|t| rules.terrains[&t].buildable);
-            if !buildable {
-                return Err(SimError::UnbuildableTerrain);
-            }
-        }
-    }
-    for entity in world.entities() {
-        let other = &rules.entity_types[&entity.type_id];
-        let blocked =
-            other.class == EntityClass::Building && overlaps(area, bounds(other, entity.pos));
-        let reserved = entity.orders().iter().any(|o| {
-            o.kind == "construct"
-                && o.target_entity.is_none()
-                && o.subject.zip(o.target_pos).is_some_and(|(subject, at)| {
-                    rules
-                        .entity_type(subject)
-                        .is_some_and(|s| overlaps(area, bounds(s, at)))
-                })
-        });
-        if blocked || reserved {
-            return Err(SimError::PlacementOverlap);
-        }
-    }
-    Ok(())
+    world.check_placement(PLAYER, def, centre).map(|_| ())
 }
 
 impl Controller {

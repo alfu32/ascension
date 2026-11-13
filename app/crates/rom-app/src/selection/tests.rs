@@ -306,9 +306,10 @@ fn right_click_enemy_attacks_and_ground_moves() {
     let mut fx = fixture();
     let t = fx.armed_other_than_builder();
     let a = fx.spawn(t, 1, 10, 10);
-    let foe = fx.spawn(t, 2, 40, 40);
+    // Within the unit's line of sight: hidden enemies cannot be targeted.
+    let foe = fx.spawn(t, 2, 12, 12);
     fx.click(a, false);
-    fx.rclick(Some(foe), (40.5, 40.5), false);
+    fx.rclick(Some(foe), (12.5, 12.5), false);
     fx.step(1);
     assert_eq!(fx.kinds(a)[0], "attack");
     assert_eq!(fx.hud_snapshot().markers[0].kind, MarkerKind::Attack);
@@ -596,20 +597,33 @@ fn cancel_from_queue_refunds() {
 fn placement_check_reports_valid_and_invalid() {
     let mut fx = fixture();
     let bt = fx.mover();
-    let building = fx
+    let is_city = |id: &DefId| {
+        fx.rules.entity_types[id]
+            .territory
+            .as_ref()
+            .is_some_and(|t| t.is_city)
+    };
+    let constructs: Vec<DefId> = fx
         .rules
         .production
         .get(&bt)
         .unwrap()
         .iter()
-        .find(|r| r.mode == ProductionMode::Construct)
-        .unwrap()
-        .product_def_id;
+        .filter(|r| r.mode == ProductionMode::Construct)
+        .map(|r| r.product_def_id)
+        .collect();
+    let city_type = *constructs.iter().find(|id| is_city(id)).unwrap();
+    // A building that is not a city, so the player's city limit does not apply.
+    let building = *constructs.iter().find(|id| !is_city(id)).unwrap();
     let et = fx.rules.entity_types[&building].clone();
-    let city = fx.spawn(building, 1, 20, 20);
+    let city = fx
+        .world
+        .place_for_setup(city_type, PLAYER, at(20, 20))
+        .expect("town");
+    // Inside the city's economic radius and territory, clear of the city's footprint.
     let free = Pos {
-        x: snap(40_000, et.footprint_w),
-        y: snap(40_000, et.footprint_h),
+        x: snap(30_000, et.footprint_w),
+        y: snap(20_000, et.footprint_h),
     };
     assert_eq!(placement_check(&fx.world, building, free), Ok(()));
     assert_eq!(
@@ -640,13 +654,15 @@ fn placement_check_reports_valid_and_invalid() {
     );
     // The controller publishes the answer for the hovered tile and places on click.
     fx.click(builder, false);
+    let faction = fx.world.players().find(|p| p.id == PLAYER).unwrap().faction;
+    let name = fx.rules.display_name(building, faction).to_string();
     let slot = fx
         .hud_snapshot()
         .palette
         .unwrap()
         .buttons
         .iter()
-        .find(|b| b.enabled)
+        .find(|b| b.enabled && b.name == name)
         .unwrap()
         .slot;
     fx.hud(HudRegionKind::CommandSlot, slot, PointerButton::Left, false);
@@ -661,7 +677,8 @@ fn placement_check_reports_valid_and_invalid() {
     fx.ctl.handle(
         &mut fx.world,
         PickEvent::Hover {
-            world_point: (50.0, 10.0),
+            // Inside the city's radius and territory, clear of the city and the queued site.
+            world_point: (20.5, 30.5),
         },
     );
     let preview = fx.hud_snapshot().placement.expect("preview");
