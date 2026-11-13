@@ -1,6 +1,6 @@
 //! The `rom mapgen` subcommand.
 
-use std::{fs, path::PathBuf};
+use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use rom_geo::{SPHERE_SCALE, Tile};
 use rom_mapgen::{
@@ -96,7 +96,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
         for problem in &fairness {
             eprintln!("unfair: {problem}");
         }
-        let pixels = sphere_colours(&map);
+        let pixels = sphere_colours(&map, &rules);
         if let Some(path) = ppm {
             fs::write(path, sphere_ppm(&map, &pixels, ppm_height))?;
         }
@@ -226,12 +226,33 @@ fn terrain_colour(t: DefId, height: u8, b: BaseTerrains) -> [u8; 3] {
     }
 }
 
-pub(crate) fn sphere_colours(map: &SpherePlanet) -> Vec<[u8; 3]> {
+fn material_colour(params: &str) -> Option<[u8; 3]> {
+    let (_, value) = params.split_once("\"base_colour\"")?;
+    let (_, value) = value.split_once(':')?;
+    let hex = value.trim_start().strip_prefix("\"#")?.get(..6)?.as_bytes();
+    let channel = |at| u8::from_str_radix(std::str::from_utf8(&hex[at..at + 2]).ok()?, 16).ok();
+    Some([channel(0)?, channel(2)?, channel(4)?])
+}
+
+pub(crate) fn sphere_colours(map: &SpherePlanet, rules: &Rules) -> Vec<[u8; 3]> {
+    let materials: BTreeMap<_, _> = rules
+        .terrains
+        .values()
+        .filter_map(|t| {
+            let material = rules.materials.get(&t.material_id?)?;
+            Some((t.id, material_colour(&material.params)?))
+        })
+        .collect();
     let mut pixels: Vec<_> = map
         .terrain
         .iter()
         .zip(&map.height)
-        .map(|(&t, &h)| terrain_colour(t, h, map.base))
+        .map(|(&t, &h)| {
+            materials
+                .get(&t)
+                .copied()
+                .unwrap_or_else(|| terrain_colour(t, h, map.base))
+        })
         .collect();
     for &(_, p) in &map.nodes {
         pixels[map.surface.index(p.tile())] = [255, 220, 0];
@@ -277,7 +298,7 @@ pub(crate) fn first_style_planet(
 fn projection_direction(x: u32, y: u32, height: u32) -> [i32; 3] {
     let longitude =
         ((f64::from(x) + 0.5) / f64::from(2 * height) * 2.0 - 1.0) * std::f64::consts::PI;
-    let latitude = ((f64::from(y) + 0.5) / f64::from(height) - 0.5) * std::f64::consts::PI;
+    let latitude = (0.5 - (f64::from(y) + 0.5) / f64::from(height)) * std::f64::consts::PI;
     let (slon, clon) = longitude.sin_cos();
     let (slat, clat) = latitude.sin_cos();
     [slon * clat, slat, clon * clat].map(|v| (v * f64::from(SPHERE_SCALE)).round() as i32)
@@ -355,6 +376,14 @@ mod tests {
         .unwrap();
         map.starts.clear();
         map.nodes.clear();
+        let ice = rules.id_of("ter.ice").unwrap();
+        let colours = sphere_colours(&map, &rules);
+        assert!(map.terrain.contains(&ice));
+        for (i, &terrain) in map.terrain.iter().enumerate() {
+            if terrain == ice {
+                assert_eq!(colours[i], [0xe8, 0xee, 0xf2]);
+            }
+        }
         let surface = CubeSurface { n: 32 };
         let pixels: Vec<_> = (0..surface.len())
             .map(|i| [surface.tile(i).face, 0, 0])
@@ -369,8 +398,8 @@ mod tests {
         assert_eq!(face_at(h + h / 2, h / 2), 1);
         assert_eq!(face_at(h / 2, h / 2), 3);
         assert_eq!(face_at(0, h / 2), 2);
-        assert_eq!(face_at(h, 0), 4);
-        assert_eq!(face_at(h, h - 1), 5);
+        assert_eq!(face_at(h, 0), 5);
+        assert_eq!(face_at(h, h - 1), 4);
 
         let image = net_ppm(&map, &pixels);
         let header = "P6\n128 96\n255\n";

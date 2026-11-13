@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 pub const SPHERE_SCALE: i32 = 1 << 20;
 const Q: i64 = 1 << 30;
 const TABLE_SIZE: usize = 4096;
-// (normal, local right, local down), with world +Y pointing down.
+// (normal, local right, local down); +Y is planetary north, local down is net-relative.
 const AXES: [[[i64; 3]; 3]; 6] = [
     [[0, 0, 1], [1, 0, 0], [0, 1, 0]],
     [[1, 0, 0], [0, 0, -1], [0, 1, 0]],
@@ -293,6 +293,39 @@ fn inverse_tan(ratio: i64) -> i64 {
     let hi = t.partition_point(|&v| v < a).clamp(1, TABLE_SIZE);
     let fractional = (a - t[hi - 1]) * (Q / TABLE_SIZE as i64) / (t[hi] - t[hi - 1]);
     (((hi - 1) as i64 * Q / TABLE_SIZE as i64) + fractional) * ratio.signum()
+}
+
+// First-quadrant atan2 in milli-degrees, using the existing Q30 inverse tan.
+fn quadrant_mdeg(y: i64, x: i64) -> i32 {
+    if y == 0 {
+        return 0;
+    }
+    if y <= x {
+        (inverse_tan(y * Q / x) * 45_000 / Q) as i32
+    } else {
+        90_000 - (inverse_tan(x * Q / y) * 45_000 / Q) as i32
+    }
+}
+
+/// Integer asin(point.y / 2^20) in milli-degrees, north = +Y, via atan2 and integer sqrt.
+/// Error < 0.081°, including one coordinate unit of y quantisation (< 0.080° at poles).
+pub fn latitude_mdeg(point: [i32; 3]) -> i32 {
+    let y = i64::from(point[1]).clamp(-i64::from(SPHERE_SCALE), i64::from(SPHERE_SCALE));
+    let horizontal = ((i64::from(SPHERE_SCALE).pow(2) - y * y) as u64).isqrt() as i64;
+    quadrant_mdeg(y.abs(), horizontal) * y.signum() as i32
+}
+
+/// Longitude in −180,000..180,000 milli-degrees; zero passes through face 0 (+Z),
+/// increasing toward +X (face 1). Error < 0.002°; at either pole returns zero.
+pub fn longitude_mdeg(point: [i32; 3]) -> i32 {
+    let [x, _, z] = point.map(i64::from);
+    if x == 0 && z == 0 {
+        return 0;
+    }
+    let angle = quadrant_mdeg(x.abs(), z.abs());
+    let angle = if z < 0 { 180_000 - angle } else { angle };
+    let angle = if x < 0 { -angle } else { angle };
+    if angle == 180_000 { -180_000 } else { angle }
 }
 
 #[cfg(test)]

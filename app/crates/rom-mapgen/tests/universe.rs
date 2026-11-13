@@ -132,7 +132,10 @@ fn same_race_players_share_the_home_planet() {
     for (p, &(body, start)) in u.starts.iter().enumerate() {
         let race = r.race_of(r.id_of(FOUR[p]).unwrap());
         assert_eq!(u.bodies[body as usize - 1].home_race, Some(race));
-        assert!(u.planets[&body].starts.contains(&start));
+        let planet = &u.planets[&body];
+        assert!(planet.starts.contains(&start));
+        assert!(rom_geo::latitude_mdeg(planet.surface.sphere_point(start)).abs() <= 60_000);
+        assert!(planet.terrain.contains(&r.id_of("ter.ice").unwrap()));
     }
     assert_eq!(u.planets[&u.starts[0].0].starts.len(), 2);
 }
@@ -287,6 +290,7 @@ fn habitable_planets_are_within_size_bounds() {
     let planet = u.expand(&small, neutral.id).unwrap();
     assert_eq!(planet.surface.n, neutral.n.unwrap());
     assert!(planet.starts.is_empty());
+    assert!(planet.terrain.contains(&small.id_of("ter.ice").unwrap()));
     assert!(u.expand(&small, 1).is_err(), "a star has no surface");
 }
 

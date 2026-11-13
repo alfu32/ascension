@@ -559,6 +559,9 @@ CREATE TABLE map_style (
   planets   INTEGER NOT NULL DEFAULT 1,  -- flat map: planetary terrains (≥ 1 home terrain)
   fluid_pct INTEGER NOT NULL DEFAULT 30, -- sea share of a planet surface
   space_pct INTEGER NOT NULL DEFAULT 60, -- flat map: share of the whole map that is open space
+  polar_cap_pct INTEGER NOT NULL DEFAULT 20, -- poleward latitude share, 0..=50
+  start_latitude_max_mdeg INTEGER NOT NULL DEFAULT 60000, -- absolute latitude, 0..=90000
+  polar_terrain_id INTEGER REFERENCES terrain(id), -- required when caps are enabled
   params    TEXT NOT NULL DEFAULT '{}', -- JSON: generator knobs
   neutral_systems_min INTEGER NOT NULL DEFAULT 2,           -- systems without a home race
   neutral_systems_max INTEGER NOT NULL DEFAULT 4,

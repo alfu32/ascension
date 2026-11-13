@@ -234,8 +234,18 @@ while the match runs.
 
 ### 9. Planet terrain coverage
 
+Sphere styles have `polar_cap_pct INTEGER NOT NULL DEFAULT 20` (0–50, share
+of each hemisphere's latitude), `start_latitude_max_mdeg INTEGER NOT NULL
+DEFAULT 60000` (0–90,000), and `polar_terrain_id REFERENCES terrain(id)`.
+A style with nonzero caps must reference unbuildable, non-sight-blocking
+ground terrain. Seed styles reference `ter.ice`: layer ground, not buildable,
+no sight blocking, material `mat.ice` with `base_colour` `#e8eef2`. Movement
+rows copy the plain's ground classes at 50 % speed; ships have no row.
+Ice replaces sea as well as land above the noisy cap boundary. Flat maps
+ignore all three knobs. See `world-model.md`, “Planet surface”.
+
 For a planet terrain feature with `coverage_pct > 0`, the sphere's target tile
-count is `land_tiles × coverage_pct / 100`, counting all land before features
+count is `land_tiles × coverage_pct / 100`, counting only non-ice land before features
 are placed (including protected start tiles). With `coverage_pct = 0`, it is
 `avg(clumps_min, clumps_max) × avg(size_min, size_max) × players × tiles / 65,536`,
 with the player factor replaced by 1 for rows other than `per_player`;

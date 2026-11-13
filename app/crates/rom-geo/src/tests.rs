@@ -194,3 +194,96 @@ fn tan_table_error_is_within_bound() {
     }
     eprintln!("tan maximum sampled Q30 error: {worst} / {Q}");
 }
+
+// Independent Q56 sine oracle; integer Taylor series through degree 25.
+fn reference_sin_mdeg(angle: i32) -> i64 {
+    let q = 1_i128 << 56;
+    let x = i128::from(angle) * 226_375_608_064_910_089 / 180_000;
+    let xx = x * x / q;
+    let (mut sin, mut term) = (x, x);
+    for k in 1..=12 {
+        term = -term * xx / (q * (2 * k) * (2 * k + 1));
+        sin += term;
+    }
+    (sin * i128::from(SPHERE_SCALE) / q) as i64
+}
+
+#[test]
+fn latitude_of_axis_points_and_equator() {
+    assert_eq!(latitude_mdeg([0, SPHERE_SCALE, 0]), 90_000);
+    assert_eq!(latitude_mdeg([0, -SPHERE_SCALE, 0]), -90_000);
+    for p in [
+        [SPHERE_SCALE, 0, 0],
+        [-SPHERE_SCALE, 0, 0],
+        [0, 0, SPHERE_SCALE],
+        [0, 0, -SPHERE_SCALE],
+    ] {
+        assert_eq!(latitude_mdeg(p), 0);
+    }
+}
+
+#[test]
+fn latitude_error_is_within_bound() {
+    let mut worst = 0;
+    for angle in 0..=90_000 {
+        let y = reference_sin_mdeg(angle) as i32;
+        let actual = latitude_mdeg([0, y, 0]);
+        worst = worst.max((actual - angle).abs());
+        assert!(
+            (actual - angle).abs() <= 81,
+            "latitude={angle}, actual={actual}"
+        );
+        assert_eq!(latitude_mdeg([0, -y, 0]), -actual);
+    }
+    eprintln!("latitude maximum sampled error: {worst} milli-degrees");
+}
+
+#[test]
+fn longitude_round_trip_and_prime_meridian() {
+    let s = CubeSurface { n: 64 };
+    let centre = |face| {
+        s.sphere_point(SurfacePos {
+            face,
+            x: 32_000,
+            y: 32_000,
+        })
+    };
+    assert_eq!(longitude_mdeg(centre(0)), 0);
+    assert_eq!(longitude_mdeg(centre(1)), 90_000);
+    assert_eq!(longitude_mdeg(centre(2)), -180_000);
+    assert_eq!(longitude_mdeg(centre(3)), -90_000);
+    assert_eq!(longitude_mdeg([0, SPHERE_SCALE, 0]), 0);
+    assert_eq!(longitude_mdeg([0, -SPHERE_SCALE, 0]), 0);
+    for angle in (-180_000..180_000).step_by(37) {
+        let point = [
+            reference_sin_mdeg(angle) as i32,
+            0,
+            reference_sin_mdeg(90_000 - angle.abs()) as i32,
+        ];
+        let actual = longitude_mdeg(point);
+        let error = (actual - angle).abs();
+        assert!(
+            error.min(360_000 - error) <= 2,
+            "longitude={angle}, actual={actual}"
+        );
+    }
+    for face in 0..4 {
+        for x in 0..s.n {
+            let tile = Tile {
+                face,
+                x,
+                y: s.n / 2,
+            };
+            let angle = longitude_mdeg(s.sphere_point(tile));
+            assert_eq!(
+                s.tile_at_point([
+                    reference_sin_mdeg(angle) as i32,
+                    0,
+                    reference_sin_mdeg(90_000 - angle.abs()) as i32,
+                ])
+                .x,
+                tile.x
+            );
+        }
+    }
+}

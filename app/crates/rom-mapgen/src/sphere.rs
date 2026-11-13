@@ -1,6 +1,6 @@
 //! One seamless planet, sampled and populated before play.
 
-use rom_geo::{CubeSurface, SPHERE_SCALE, SurfacePos, Tile};
+use rom_geo::{CubeSurface, SPHERE_SCALE, SurfacePos, Tile, latitude_mdeg};
 use rom_rules::{DefId, FeaturePattern, Layer, MapStyleFeature, RegionKind, Rules};
 use rom_sim::SimRng;
 
@@ -187,8 +187,9 @@ fn starts(
     let surface = map.surface;
     let terrain = &map.terrain;
     let land = map.base.land;
+    let style = &rules.map_styles[&map.style];
     let sums = land_sums(surface, terrain, |t| {
-        rules.terrains[&t].layer == Layer::Ground
+        rules.terrains[&t].layer == Layer::Ground && Some(t) != style.polar_terrain_id
     });
     let buildable = land_sums(surface, terrain, |t| {
         let t = &rules.terrains[&t];
@@ -196,7 +197,9 @@ fn starts(
     });
     let land_tiles = terrain
         .iter()
-        .filter(|t| rules.terrains[t].layer == Layer::Ground)
+        .filter(|&&t| {
+            rules.terrains[&t].layer == Layer::Ground && Some(t) != style.polar_terrain_id
+        })
         .count();
     let guarantee_tiles: usize = rules
         .map_style_features
@@ -229,7 +232,7 @@ fn starts(
     .len() as u32;
     let mut candidates = Vec::new();
     for (i, &t) in terrain.iter().enumerate() {
-        if t != land {
+        if t != land || i64::from(latitude_mdeg(points[i]).abs()) > style.start_latitude_max_mdeg {
             continue;
         }
         let tile = surface.tile(i);
@@ -302,7 +305,7 @@ fn starts(
     Ok(best.into_iter().map(|i| surface.tile(i).into()).collect())
 }
 
-// A positive coverage_pct budgets a share of all land before feature placement.
+// A positive coverage_pct budgets non-ice land before feature placement.
 // Otherwise preserve the flat 256 × 256 rule, retaining half-integer averages:
 // avg(clumps) × avg(size) × players (only for per_player) × tiles / 65,536.
 fn coverage(row: &MapStyleFeature, tiles: usize, land_tiles: usize, players: usize) -> usize {
@@ -659,6 +662,25 @@ pub fn expand_planet(rules: &Rules, request: &SphereRequest) -> Result<SpherePla
         .map_styles
         .get(&request.style)
         .ok_or(MapGenError::UnknownStyle(request.style))?;
+    if !(0..=50).contains(&style.polar_cap_pct)
+        || !(0..=90_000).contains(&style.start_latitude_max_mdeg)
+    {
+        return Err(MapGenError::InvalidRequest(
+            "invalid polar cap or start latitude range",
+        ));
+    }
+    if style.polar_cap_pct > 0
+        && !style.polar_terrain_id.is_some_and(|id| {
+            rules
+                .terrains
+                .get(&id)
+                .is_some_and(|t| t.layer == Layer::Ground && !t.buildable && !t.blocks_los)
+        })
+    {
+        return Err(MapGenError::InvalidRequest(
+            "caps require unbuildable, non-sight-blocking ground terrain",
+        ));
+    }
     if !(16..=512).contains(&request.n) {
         return Err(MapGenError::InvalidRequest("sphere size must be 16..=512"));
     }
@@ -706,7 +728,7 @@ pub fn expand_planet(rules: &Rules, request: &SphereRequest) -> Result<SpherePla
     } else {
         (level - sorted[0]) / 3
     };
-    let terrain: Vec<_> = values
+    let mut terrain: Vec<_> = values
         .iter()
         .map(|&h| {
             if h >= level {
@@ -718,6 +740,24 @@ pub fn expand_planet(rules: &Rules, request: &SphereRequest) -> Result<SpherePla
             }
         })
         .collect();
+    if style.polar_cap_pct > 0 {
+        let ice = style.polar_terrain_id.unwrap();
+        let boundary = 90_000 * (100 - style.polar_cap_pct) / 100;
+        for (i, &point) in points.iter().enumerate() {
+            // Independent low-frequency octave: no RNG draws or face seams.
+            let edge = noise3(request.seed, point, 2, 7) * 6_000 / 65_535 - 3_000;
+            if i64::from(latitude_mdeg(point).abs()) >= boundary + edge {
+                terrain[i] = ice;
+            }
+        }
+    }
+    let mut land: Vec<_> = values
+        .iter()
+        .zip(&terrain)
+        .filter_map(|(&h, &t)| (t == base.land).then_some(h))
+        .collect();
+    land.sort_unstable();
+    let mid_land = (!land.is_empty()).then(|| (land[land.len() / 5], land[land.len() * 4 / 5]));
     let low = sorted[0];
     let span = (sorted[sorted.len() - 1] - low).max(1);
     let height = values
@@ -770,8 +810,6 @@ pub fn expand_planet(rules: &Rules, request: &SphereRequest) -> Result<SpherePla
                 / 11
         })
         .collect();
-    let land = &sorted[sea_count..];
-    let mid_land = (!land.is_empty()).then(|| (land[land.len() / 5], land[land.len() * 4 / 5]));
     // Allocate high ground before other terrains, then populate sites on the
     // remaining valid land. Preserve style-row order within each pass.
     let mut terrains = Vec::new();
@@ -796,7 +834,9 @@ pub fn expand_planet(rules: &Rules, request: &SphereRequest) -> Result<SpherePla
     for &start in &populator.map.starts {
         for i in disc(surface, start, START_CLEAR_RADIUS) {
             populator.protected[i] = true;
-            if rules.terrains[&populator.map.terrain[i]].layer == Layer::Ground {
+            if rules.terrains[&populator.map.terrain[i]].layer == Layer::Ground
+                && Some(populator.map.terrain[i]) != style.polar_terrain_id
+            {
                 populator.map.terrain[i] = base.land;
             }
         }
