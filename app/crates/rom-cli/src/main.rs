@@ -1,6 +1,7 @@
 mod battle_cmd;
 mod mapgen_cmd;
 mod territory_cmd;
+mod universe_cmd;
 
 use std::{env, path::PathBuf, process::ExitCode, sync::Arc};
 
@@ -18,14 +19,17 @@ fn main() -> ExitCode {
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = env::args().skip(1);
-    let command = args
-        .next()
-        .ok_or("usage: rom <build-rules|check-rules|run|battle|mapgen|territory> [options]")?;
+    let command = args.next().ok_or(
+        "usage: rom <build-rules|check-rules|run|battle|mapgen|territory|universe> [options]",
+    )?;
     if command == "battle" {
         return battle_cmd::run(args);
     }
     if command == "mapgen" {
         return mapgen_cmd::run(args);
+    }
+    if command == "universe" {
+        return universe_cmd::run(args);
     }
     if command == "territory" {
         return territory_cmd::run(args);
@@ -62,7 +66,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     if command != "build-rules" {
         return Err(
-            "usage: rom <build-rules|check-rules|run|battle|mapgen|territory> [options]".into(),
+            "usage: rom <build-rules|check-rules|run|battle|mapgen|territory|universe> [options]"
+                .into(),
         );
     }
 

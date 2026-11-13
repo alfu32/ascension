@@ -78,15 +78,22 @@ CREATE TABLE def_tag (
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX def_tag_by_tag ON def_tag(tag_id);
 
--- ── A2. World model: layers, tiers, terrain ─────────────────────────────────
--- ONE map holds everything from the first tick: planetary terrains (land and
--- sea, where cities stand and ground battles happen) set in open space, with
--- small resource planets scattered between them.
+-- ── A2. World model: layers, tiers, terrain, body kinds ─────────────────────
+-- The universe is a star map of star systems joined by routes; each system has
+-- a star, habitable planets (cube-sphere surfaces where cities stand and ground
+-- battles happen) and resource bodies (small objects claimed by presence).
+-- See app/docs/world-model.md.
 -- A layer is a movement medium. Sea and space follow the same rules (ports,
--- vessels, transports, trade lanes) but are different layers, because both
--- exist on the same map at once.
+-- vessels, transports, trade lanes) but are different layers.
 CREATE TABLE layer (
   key  TEXT PRIMARY KEY,               -- ground | fluid | subfluid | air | orbit | space
+  note TEXT NOT NULL DEFAULT ''
+) STRICT, WITHOUT ROWID;
+
+-- What a body in a star system is: its star, a habitable planet (full surface)
+-- or a resource body (no surface play; owned while a starship stays beside it).
+CREATE TABLE body_kind (
+  key  TEXT PRIMARY KEY,               -- star | habitable | resource
   note TEXT NOT NULL DEFAULT ''
 ) STRICT, WITHOUT ROWID;
 
@@ -312,7 +319,7 @@ CREATE TABLE et_node (
   amount         INTEGER,              -- NULL = infinite
   claim_mode     TEXT NOT NULL DEFAULT 'none' CHECK (claim_mode IN ('none','trader','presence')),
                                        -- trader: a merchant sits on it (rare resources)
-                                       -- presence: owned by whoever keeps a unit with claim_tag in range (resource planets)
+                                       -- presence: owned by whoever keeps a unit with claim_tag in range (resource bodies)
   claim_tag_id   INTEGER REFERENCES tag(id),
   claim_radius   INTEGER NOT NULL DEFAULT 0,
   income         INTEGER NOT NULL DEFAULT 0   -- per income period to the claimant
@@ -544,12 +551,26 @@ CREATE TABLE entity_visual (           -- most specific row wins (faction, then 
 CREATE INDEX entity_visual_by_type ON entity_visual(entity_type_id);
 
 -- ── A12. Map styles and match options ───────────────────────────────────────
+-- A style is a recipe for a whole universe (and, for tests and skirmishes, a flat map).
+-- Universe knobs: one home system per race present, plus neutral systems; every
+-- `_min/_max` pair must satisfy min ≤ max (checked by the rules loader).
 CREATE TABLE map_style (
   id        INTEGER PRIMARY KEY REFERENCES def(id),
-  planets   INTEGER NOT NULL DEFAULT 1,  -- planetary terrains on the map (≥ 1 home terrain)
-  fluid_pct INTEGER NOT NULL DEFAULT 30, -- sea share inside a planetary terrain
-  space_pct INTEGER NOT NULL DEFAULT 60, -- share of the whole map that is open space
-  params    TEXT NOT NULL DEFAULT '{}'  -- JSON: generator knobs
+  planets   INTEGER NOT NULL DEFAULT 1,  -- flat map: planetary terrains (≥ 1 home terrain)
+  fluid_pct INTEGER NOT NULL DEFAULT 30, -- sea share of a planet surface
+  space_pct INTEGER NOT NULL DEFAULT 60, -- flat map: share of the whole map that is open space
+  params    TEXT NOT NULL DEFAULT '{}', -- JSON: generator knobs
+  neutral_systems_min INTEGER NOT NULL DEFAULT 2,           -- systems without a home race
+  neutral_systems_max INTEGER NOT NULL DEFAULT 4,
+  habitable_per_system_min INTEGER NOT NULL DEFAULT 1,      -- habitable planets per system (≥ 1)
+  habitable_per_system_max INTEGER NOT NULL DEFAULT 3,
+  resource_bodies_per_system_min INTEGER NOT NULL DEFAULT 3, -- moons, asteroids, small planets
+  resource_bodies_per_system_max INTEGER NOT NULL DEFAULT 8,
+  planet_n_min    INTEGER NOT NULL DEFAULT 128, -- cube face size N of a habitable planet, 64..=512
+  planet_n_median INTEGER NOT NULL DEFAULT 192, -- home planets use the median, for fairness
+  planet_n_max    INTEGER NOT NULL DEFAULT 256,
+  route_extra_pct INTEGER NOT NULL DEFAULT 30,   -- extra routes beyond a spanning tree, % of its edges
+  star_map_radius INTEGER NOT NULL DEFAULT 1000  -- star map disc radius, abstract units
 ) STRICT;
 
 -- What the generator scatters: forests, mountains, deposits, rare resources, ruins.
@@ -557,7 +578,11 @@ CREATE TABLE map_style_feature (
   id           INTEGER PRIMARY KEY,
   map_style_id INTEGER NOT NULL REFERENCES map_style(id),
   feature_def_id INTEGER NOT NULL REFERENCES def(id),  -- terrain or node/pickup entity_type
-  region_kind  TEXT NOT NULL DEFAULT 'planet' CHECK (region_kind IN ('planet','space')),
+  region_kind  TEXT NOT NULL DEFAULT 'planet' CHECK (region_kind IN ('planet','space','resource_body')),
+                                       -- planet: on a planet surface; space: flat map only;
+                                       -- resource_body: what a resource body yields (a node with
+                                       -- claim_mode 'presence'), weighted by chance_pct;
+                                       -- per_player rows: clumps_min such bodies in every home system
   pattern      TEXT NOT NULL CHECK (pattern IN ('per_player','scattered','centre','edge','contested')),
   chance_pct   INTEGER NOT NULL DEFAULT 100,
   clumps_min   INTEGER NOT NULL DEFAULT 1,
@@ -671,23 +696,49 @@ CREATE TABLE match_setting (
   value      TEXT NOT NULL
 ) STRICT, WITHOUT ROWID;
 
--- The whole map — planets and space — is generated before the first tick.
+-- The whole map is generated before the first tick (flat-map arrays; per-body
+-- surface grids come with the universe simulation, world-model step 4b).
 CREATE TABLE map_grid (
-  grid TEXT PRIMARY KEY CHECK (grid IN ('terrain','height','territory','variant','region')),
+  grid TEXT PRIMARY KEY CHECK (grid IN ('terrain','height','territory','variant')),
   cell_bytes INTEGER NOT NULL,         -- 1 or 2
   data BLOB NOT NULL                   -- width*height*cell_bytes, row-major
 ) STRICT, WITHOUT ROWID;
 
--- Named areas of the map. The 'region' grid stores a region id per tile.
--- Borders, city limits and "first colony" rules are evaluated per region.
-CREATE TABLE map_region (
-  id        INTEGER PRIMARY KEY,
-  kind      TEXT NOT NULL CHECK (kind IN ('planet','space')),
-  tier      TEXT NOT NULL REFERENCES map_scale(key),  -- tier a player needs to see / enter it
-  name      TEXT NOT NULL,
-  x INTEGER NOT NULL, y INTEGER NOT NULL, w INTEGER NOT NULL, h INTEGER NOT NULL,  -- bounding box, tiles
-  home_faction_id INTEGER REFERENCES faction(id)  -- race whose players start here; NULL = not a home world
+-- The universe (world-model.md): star systems on a star map, the bodies in
+-- each system, and the routes between systems. Generated before the first tick.
+CREATE TABLE star_system (
+  id   INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  x    INTEGER NOT NULL,                -- star map position, abstract units (centre 0,0;
+  y    INTEGER NOT NULL                 -- within map_style.star_map_radius); display only
 ) STRICT;
+
+-- A star, habitable planet or resource body. The star sits at the system's
+-- centre (orbit_radius 0); every other body has its own orbit.
+CREATE TABLE body (
+  id               INTEGER PRIMARY KEY,
+  system_id        INTEGER NOT NULL REFERENCES star_system(id),
+  kind             TEXT NOT NULL REFERENCES body_kind(key),
+  name             TEXT NOT NULL,
+  orbit_radius     INTEGER NOT NULL CHECK (orbit_radius >= 0),  -- system units from the star
+  orbit_angle_mdeg INTEGER NOT NULL CHECK (orbit_angle_mdeg BETWEEN 0 AND 359999),
+  n                INTEGER CHECK (n BETWEEN 16 AND 512),         -- habitable only: cube face size N
+  home_race_id     INTEGER REFERENCES faction(id),               -- habitable only: race whose players start here
+  node_entity_type_id INTEGER REFERENCES et_node(entity_type_id), -- resource only: what it yields
+  CHECK ((kind = 'habitable') = (n IS NOT NULL)),
+  CHECK (home_race_id IS NULL OR kind = 'habitable'),
+  CHECK ((kind = 'resource') = (node_entity_type_id IS NOT NULL))
+) STRICT;
+CREATE INDEX body_by_system ON body(system_id);
+
+-- A lane between two systems; travel time follows from the length.
+CREATE TABLE route (
+  system_a INTEGER NOT NULL REFERENCES star_system(id),
+  system_b INTEGER NOT NULL REFERENCES star_system(id),
+  length   INTEGER NOT NULL CHECK (length > 0),  -- star map units, integer distance
+  PRIMARY KEY (system_a, system_b),
+  CHECK (system_a < system_b)
+) STRICT, WITHOUT ROWID;
 
 CREATE TABLE player (
   id         INTEGER PRIMARY KEY,      -- 0 = nature / neutral
@@ -760,7 +811,10 @@ CREATE TABLE entity (
   id             INTEGER PRIMARY KEY,
   entity_type_id INTEGER NOT NULL REFERENCES entity_type(id),
   owner_id       INTEGER NOT NULL REFERENCES player(id),
-  region_id      INTEGER REFERENCES map_region(id),
+  -- Location: on the surface of a habitable body at (face, x, y); NULL body_id =
+  -- the flat map. Orbit, system-space and transit locations come in world-model step 4b.
+  body_id        INTEGER REFERENCES body(id),
+  face           INTEGER NOT NULL DEFAULT 0 CHECK (face BETWEEN 0 AND 5),  -- cube face; 0 on a flat map
   x              INTEGER NOT NULL,     -- milli-tiles
   y              INTEGER NOT NULL,
   z              INTEGER NOT NULL DEFAULT 0,
@@ -785,7 +839,7 @@ CREATE TABLE entity (
   created_tick   INTEGER NOT NULL DEFAULT 0
 ) STRICT;
 CREATE INDEX entity_owner     ON entity(owner_id, entity_type_id);
-CREATE INDEX entity_region    ON entity(region_id);
+CREATE INDEX entity_body      ON entity(body_id) WHERE body_id IS NOT NULL;
 CREATE INDEX entity_container ON entity(container_id) WHERE container_id IS NOT NULL;
 CREATE INDEX entity_city      ON entity(city_id) WHERE city_id IS NOT NULL;
 

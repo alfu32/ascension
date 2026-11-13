@@ -645,13 +645,46 @@ pub enum RegionKind {
     Planet,
     /// SQL value `space`.
     Space,
+    /// SQL value `resource_body`: what a star system's resource bodies yield.
+    ResourceBody,
 }
 impl crate::load::SqlEnum for RegionKind {
     fn parse(value: &str) -> Option<Self> {
         match value {
             "planet" => Some(Self::Planet),
             "space" => Some(Self::Space),
+            "resource_body" => Some(Self::ResourceBody),
             _ => None,
+        }
+    }
+}
+/// Closed rules vocabulary for BodyKind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum BodyKind {
+    /// SQL value `star`: the centre of a star system.
+    Star,
+    /// SQL value `habitable`: a planet with a full surface.
+    Habitable,
+    /// SQL value `resource`: a small body claimed by presence.
+    Resource,
+}
+impl crate::load::SqlEnum for BodyKind {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "star" => Some(Self::Star),
+            "habitable" => Some(Self::Habitable),
+            "resource" => Some(Self::Resource),
+            _ => None,
+        }
+    }
+}
+impl BodyKind {
+    /// The SQL key of this kind.
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Star => "star",
+            Self::Habitable => "habitable",
+            Self::Resource => "resource",
         }
     }
 }
@@ -873,6 +906,14 @@ pub struct DefTag {
 pub struct LayerInfo {
     /// The `key` column.
     pub key: Layer,
+    /// The `note` column.
+    pub note: String,
+}
+/// One `body_kind` row.
+#[derive(Debug, Clone)]
+pub struct BodyKindInfo {
+    /// The `key` column.
+    pub key: BodyKind,
     /// The `note` column.
     pub note: String,
 }
@@ -1609,6 +1650,28 @@ pub struct MapStyle {
     pub space_pct: i64,
     /// The `params` column.
     pub params: String,
+    /// Fewest systems without a home race.
+    pub neutral_systems_min: i64,
+    /// Most systems without a home race.
+    pub neutral_systems_max: i64,
+    /// Fewest habitable planets per system.
+    pub habitable_per_system_min: i64,
+    /// Most habitable planets per system.
+    pub habitable_per_system_max: i64,
+    /// Fewest resource bodies per system.
+    pub resource_bodies_per_system_min: i64,
+    /// Most resource bodies per system.
+    pub resource_bodies_per_system_max: i64,
+    /// Smallest cube face size of a habitable planet.
+    pub planet_n_min: i64,
+    /// Cube face size of every home planet.
+    pub planet_n_median: i64,
+    /// Largest cube face size of a habitable planet.
+    pub planet_n_max: i64,
+    /// Extra routes beyond a spanning tree, as a percentage of its edge count.
+    pub route_extra_pct: i64,
+    /// Radius of the star map disc, in abstract units.
+    pub star_map_radius: i64,
 }
 /// One `map_style_feature` row.
 #[derive(Debug, Clone)]
@@ -1776,6 +1839,8 @@ pub struct Rules {
     pub tags_by_def: BTreeMap<DefId, BTreeSet<u32>>,
     /// Loaded `layer` rows, keyed by primary key.
     pub layers: BTreeMap<Layer, LayerInfo>,
+    /// Loaded `body_kind` rows, keyed by primary key.
+    pub body_kinds: BTreeMap<BodyKind, BodyKindInfo>,
     /// Loaded `map_scale` rows, keyed by primary key.
     pub map_scales: BTreeMap<String, MapScale>,
     /// Loaded `movement_class` rows, keyed by primary key.

@@ -1,16 +1,21 @@
-//! Deterministic flat and cube-sphere map generation, with integer value
+//! Deterministic flat, cube-sphere and universe generation, with integer value
 //! noise, player starts and rule-driven features.
 
 mod sphere;
+mod universe;
 
-pub use sphere::{SpherePlanet, SphereRequest, generate_sphere};
+pub use sphere::{SpherePlanet, SphereRequest, expand_planet, generate_sphere};
+pub use universe::{
+    Body, FAIR_HOPS, FAIR_VALUE_PCT, HomeShare, Route, StarSystem, Universe, UniverseRequest,
+    generate_universe, plan_universe,
+};
 
 use rom_rules::{DefId, FeaturePattern, Layer, MapStyleFeature, Rules};
 use rom_sim::{MapGrid, Pos, SimRng, integer_sqrt};
 use std::collections::BTreeSet;
 use thiserror::Error;
 
-pub use rom_rules::RegionKind;
+pub use rom_rules::{BodyKind, RegionKind};
 
 /// Largest accepted side length in tiles.
 pub const MAX_SIDE: u32 = 4096;
@@ -142,6 +147,9 @@ pub enum MapGenError {
     /// The grid could not be built.
     #[error("invalid grid")]
     Grid,
+    /// No attempt produced a star map whose home systems have enough routes.
+    #[error("no valid star map layout for {0} systems")]
+    StarMap(u32),
 }
 
 fn mix64(mut z: u64) -> u64 {
@@ -600,6 +608,10 @@ impl Builder<'_> {
     }
 
     fn apply_feature(&mut self, row: &MapStyleFeature) -> Result<(), MapGenError> {
+        if row.region_kind == RegionKind::ResourceBody {
+            // Resource bodies belong to star systems; see `generate_universe`.
+            return Ok(());
+        }
         let is_node = self
             .rules
             .entity_types
@@ -608,9 +620,10 @@ impl Builder<'_> {
         if !is_node && !self.rules.terrains.contains_key(&row.feature_def_id) {
             return Err(MapGenError::UnsupportedFeature(row.feature_def_id));
         }
-        let base = match row.region_kind {
-            RegionKind::Planet => self.map.base.land,
-            RegionKind::Space => self.map.base.space,
+        let base = if row.region_kind == RegionKind::Planet {
+            self.map.base.land
+        } else {
+            self.map.base.space
         };
         if row.pattern == FeaturePattern::PerPlayer {
             for p in 0..self.start_tiles.len() {

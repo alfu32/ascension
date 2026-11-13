@@ -29,6 +29,9 @@ INSERT INTO game_constant(key,value,unit,note) VALUES
 INSERT INTO layer VALUES
  ('ground','solid surface'), ('fluid','sea'), ('subfluid','underwater'),
  ('air','atmosphere'), ('orbit','near orbit'), ('space','open space between planets');
+INSERT INTO body_kind VALUES
+ ('star','centre of a star system'), ('habitable','planet with a full surface'),
+ ('resource','moon, asteroid or small planet claimed by starship presence');
 
 INSERT INTO map_scale VALUES
  ('planetary','Planetary',0,60), ('interstellar','Interstellar',1,240);
@@ -435,6 +438,17 @@ INSERT INTO def(kind,key,name) VALUES ('map_style','map.one_world','One World'),
 INSERT INTO map_style(id,planets,fluid_pct,space_pct)
  SELECT id, CASE key WHEN 'map.one_world' THEN 1 ELSE 4 END, CASE key WHEN 'map.one_world' THEN 50 ELSE 35 END, CASE key WHEN 'map.one_world' THEN 55 ELSE 70 END
  FROM def WHERE kind='map_style';
+-- universe knobs; one world: a quick match, one home system per race and nothing else
+WITH v(k,n0,n1,h0,h1,r0,r1,p0,pm,p1,extra,radius) AS (VALUES
+  ('map.one_world',   0,0, 1,1, 3,5, 128,192,256, 30,1000),
+  ('map.many_worlds', 2,4, 1,3, 3,8, 128,192,256, 30,1000))
+UPDATE map_style SET
+  neutral_systems_min=v.n0, neutral_systems_max=v.n1,
+  habitable_per_system_min=v.h0, habitable_per_system_max=v.h1,
+  resource_bodies_per_system_min=v.r0, resource_bodies_per_system_max=v.r1,
+  planet_n_min=v.p0, planet_n_median=v.pm, planet_n_max=v.p1,
+  route_extra_pct=v.extra, star_map_radius=v.radius
+ FROM v JOIN def d ON d.key=v.k WHERE map_style.id=d.id;
 WITH v(k,rk,p,c0,c1,s0,s1,d0,d1) AS (VALUES
   ('ter.forest','planet','per_player',1,2,5,9,2,6), ('ter.mountain','planet','per_player',1,1,2,3,5,8),
   ('node.relics','planet','scattered',2,4,1,1,10,0),
@@ -500,5 +514,27 @@ INSERT INTO def(kind,key,name) VALUES ('victory','win.conquest','Conquest'), ('v
 INSERT INTO victory(id,rule,threshold,timer_ticks)
  SELECT id, substr(key,5), CASE key WHEN 'win.territory' THEN 70 ELSE 0 END, CASE key WHEN 'win.territory' THEN 6000 ELSE 0 END
  FROM def WHERE kind='victory';
+
+-- ── resource bodies of a star system ────────────────────────────────────────
+-- What a planet does not give plentifully. Owned by whoever keeps a starship
+-- beside the body; placed by the universe generator through map_style_feature.
+INSERT INTO def(kind,key,name) VALUES
+ ('entity_type','node.ore_asteroid','Ore Asteroid'), ('entity_type','node.tar_moon','Tar Moon'),
+ ('entity_type','node.crystal_asteroid','Crystal Asteroid');
+INSERT INTO entity_type(id,class,ui_group,hp,armor,los,pop_cost,footprint_w,footprint_h,build_ticks,first_age_id)
+ SELECT id, 'node', '', 1, 0, 0, 0, 2, 2, 0, (SELECT id FROM def WHERE key='age.starfaring')
+ FROM def WHERE key IN ('node.ore_asteroid','node.tar_moon','node.crystal_asteroid') ORDER BY id;
+WITH v(k,r,inc) AS (VALUES ('node.ore_asteroid','res.metal',40), ('node.tar_moon','res.oil',30),
+  ('node.crystal_asteroid','res.energy',30))
+INSERT INTO et_node(entity_type_id,resource_id,amount,claim_mode,claim_tag_id,claim_radius,income)
+ SELECT d.id, rd.id, NULL, 'presence', (SELECT id FROM tag WHERE key='starship'), 3000, v.inc
+ FROM v JOIN def d ON d.key=v.k JOIN def rd ON rd.key=v.r;
+-- chance_pct is each kind's weight; per_player rows put clumps_min of that kind in every home system
+WITH v(k,p,w,c0,c1) AS (VALUES
+  ('node.ore_asteroid','per_player',50,1,1), ('node.tar_moon','scattered',25,1,1),
+  ('node.crystal_asteroid','scattered',25,1,1))
+INSERT INTO map_style_feature(map_style_id,feature_def_id,region_kind,pattern,chance_pct,clumps_min,clumps_max)
+ SELECT s.id, d.id, 'resource_body', v.p, v.w, v.c0, v.c1
+ FROM map_style s, v JOIN def d ON d.key=v.k ORDER BY s.id, d.id;
 
 COMMIT;

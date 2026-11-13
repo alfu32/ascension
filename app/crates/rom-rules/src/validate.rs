@@ -2,7 +2,15 @@
 
 use std::{collections::BTreeMap, fmt};
 
-use crate::{DefId, DefKind, ProductionMode, Rules, StatScope, TechEffectKind};
+use crate::{
+    ClaimMode, DefId, DefKind, MapStyle, ProductionMode, RegionKind, Rules, StatScope,
+    TechEffectKind,
+};
+
+/// Cube face sizes a habitable planet may have.
+pub const PLANET_N_RANGE: std::ops::RangeInclusive<i64> = 64..=512;
+/// Largest accepted star map radius, so star map arithmetic stays far from overflow.
+pub const MAX_STAR_MAP_RADIUS: i64 = 1_000_000;
 
 /// A semantic rules error with the authoring keys needed to fix it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -149,7 +157,98 @@ impl Rules {
                 });
             }
         }
+        for style in self.map_styles.values() {
+            self.validate_universe_knobs(style, &mut problems);
+        }
         problems
+    }
+
+    fn validate_universe_knobs(&self, style: &MapStyle, problems: &mut Vec<Problem>) {
+        let name = self.label(style.id);
+        let mut report = |message: String| {
+            problems.push(Problem {
+                message: format!("map_style {name}: {message}"),
+            });
+        };
+        for (knob, min, max) in [
+            (
+                "neutral_systems",
+                style.neutral_systems_min,
+                style.neutral_systems_max,
+            ),
+            (
+                "habitable_per_system",
+                style.habitable_per_system_min,
+                style.habitable_per_system_max,
+            ),
+            (
+                "resource_bodies_per_system",
+                style.resource_bodies_per_system_min,
+                style.resource_bodies_per_system_max,
+            ),
+        ] {
+            if min < 0 || min > max {
+                report(format!(
+                    "{knob}_min {min} and {knob}_max {max} are not 0 <= min <= max"
+                ));
+            }
+        }
+        if style.habitable_per_system_min < 1 {
+            report("habitable_per_system_min must be at least 1 (home planets)".into());
+        }
+        let (lo, mid, hi) = (
+            style.planet_n_min,
+            style.planet_n_median,
+            style.planet_n_max,
+        );
+        if !(lo <= mid && mid <= hi) {
+            report(format!(
+                "planet_n_min {lo}, planet_n_median {mid}, planet_n_max {hi} are not in order"
+            ));
+        }
+        for (knob, value) in [
+            ("planet_n_min", lo),
+            ("planet_n_median", mid),
+            ("planet_n_max", hi),
+        ] {
+            if !PLANET_N_RANGE.contains(&value) {
+                report(format!("{knob} {value} is outside 64..=512"));
+            }
+        }
+        if style.route_extra_pct < 0 {
+            report(format!(
+                "route_extra_pct {} is negative",
+                style.route_extra_pct
+            ));
+        }
+        if !(1..=MAX_STAR_MAP_RADIUS).contains(&style.star_map_radius) {
+            report(format!(
+                "star_map_radius {} is outside 1..={MAX_STAR_MAP_RADIUS}",
+                style.star_map_radius
+            ));
+        }
+        let mut weight = 0;
+        for row in self.map_style_features.get(&style.id).into_iter().flatten() {
+            if row.region_kind != RegionKind::ResourceBody {
+                continue;
+            }
+            weight += row.chance_pct.max(0);
+            let presence = self
+                .entity_types
+                .get(&row.feature_def_id)
+                .and_then(|entity| entity.node.as_ref())
+                .is_some_and(|node| node.claim_mode == ClaimMode::Presence);
+            if !presence {
+                report(format!(
+                    "resource_body feature {} ({}) is not a node with claim_mode presence",
+                    row.id,
+                    self.label(row.feature_def_id)
+                ));
+            }
+        }
+        if style.resource_bodies_per_system_max > 0 && weight == 0 {
+            report("resource bodies are wanted but no resource_body feature has a chance".into());
+        }
     }
 
     fn kind(&self, id: DefId) -> Option<DefKind> {

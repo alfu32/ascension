@@ -148,6 +148,9 @@ fn starts(
     players: usize,
     rng: &mut SimRng,
 ) -> Result<Vec<SurfacePos>, MapGenError> {
+    if players == 0 {
+        return Ok(Vec::new());
+    }
     let sums = land_sums(surface, terrain, land);
     let required = disc(
         surface,
@@ -347,6 +350,15 @@ pub fn generate_sphere(
     rules: &Rules,
     request: &SphereRequest,
 ) -> Result<SpherePlanet, MapGenError> {
+    if request.player_factions.is_empty() {
+        return Err(MapGenError::InvalidRequest("players must be 1..=64"));
+    }
+    expand_planet(rules, request)
+}
+
+/// Like [`generate_sphere`], but also accepts a planet nobody starts on (no players):
+/// how a universe's habitable-planet recipes are expanded.
+pub fn expand_planet(rules: &Rules, request: &SphereRequest) -> Result<SpherePlanet, MapGenError> {
     let style = rules
         .map_styles
         .get(&request.style)
@@ -355,7 +367,7 @@ pub fn generate_sphere(
         return Err(MapGenError::InvalidRequest("sphere size must be 16..=512"));
     }
     let players = request.player_factions.len();
-    if !(1..=64).contains(&players) {
+    if players > 64 {
         return Err(MapGenError::InvalidRequest("players must be 1..=64"));
     }
     if request

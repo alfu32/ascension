@@ -1,6 +1,6 @@
 use rom_rules::{
-    ActiveSources, Condition, Context, DefId, Layer, ModifierOp, Owned, Rules, RulesError,
-    build_rules_db,
+    ActiveSources, ClaimMode, Condition, Context, DefId, Layer, ModifierOp, Owned, RegionKind,
+    Rules, RulesError, build_rules_db,
 };
 use rusqlite::Connection;
 
@@ -686,5 +686,108 @@ fn alias_on_a_faction_is_reported() {
         SELECT a.id,b.id,'X' FROM def a,def b WHERE a.key='nation.romans' AND b.key='race.avian';",
         "faction_alias",
         &["nation.romans"],
+    );
+}
+
+#[test]
+fn universe_knobs_load_and_validate() {
+    let rules = seed();
+    assert_eq!(rules.validate(), vec![]);
+    assert_eq!(rules.body_kinds.len(), 3);
+    let one = &rules.map_styles[&rules.id_of("map.one_world").unwrap()];
+    assert_eq!(
+        (one.neutral_systems_min, one.neutral_systems_max),
+        (0, 0),
+        "one world has no neutral systems"
+    );
+    assert_eq!(
+        (one.habitable_per_system_min, one.habitable_per_system_max),
+        (1, 1)
+    );
+    let many = &rules.map_styles[&rules.id_of("map.many_worlds").unwrap()];
+    assert_eq!((many.neutral_systems_min, many.neutral_systems_max), (2, 4));
+    assert_eq!(
+        (many.habitable_per_system_min, many.habitable_per_system_max),
+        (1, 3)
+    );
+    assert_eq!(
+        (
+            many.resource_bodies_per_system_min,
+            many.resource_bodies_per_system_max
+        ),
+        (3, 8)
+    );
+    assert_eq!(
+        (many.planet_n_min, many.planet_n_median, many.planet_n_max),
+        (128, 192, 256)
+    );
+    assert!(many.route_extra_pct > 0 && many.star_map_radius > 0);
+    for style in [one, many] {
+        let bodies: Vec<_> = rules.map_style_features[&style.id]
+            .iter()
+            .filter(|row| row.region_kind == RegionKind::ResourceBody)
+            .collect();
+        assert!(bodies.len() >= 3);
+        for row in bodies {
+            let node = rules.entity_types[&row.feature_def_id]
+                .node
+                .as_ref()
+                .unwrap();
+            assert_eq!(node.claim_mode, ClaimMode::Presence);
+            let tag = node.claim_tag_id.unwrap();
+            assert_eq!(rules.tags[&tag].key, "starship");
+        }
+    }
+}
+
+#[test]
+fn bad_knob_range_is_reported() {
+    assert_problem(
+        "UPDATE map_style SET neutral_systems_min=5, neutral_systems_max=2
+        WHERE id=(SELECT id FROM def WHERE key='map.many_worlds');",
+        "neutral_systems_min 5",
+        &["map.many_worlds"],
+    );
+    assert_problem(
+        "UPDATE map_style SET resource_bodies_per_system_min=9
+        WHERE id=(SELECT id FROM def WHERE key='map.one_world');",
+        "resource_bodies_per_system",
+        &["map.one_world"],
+    );
+    assert_problem(
+        "UPDATE map_style SET planet_n_median=100, planet_n_min=150
+        WHERE id=(SELECT id FROM def WHERE key='map.many_worlds');",
+        "not in order",
+        &["map.many_worlds"],
+    );
+    assert_problem(
+        "UPDATE map_style SET planet_n_max=600
+        WHERE id=(SELECT id FROM def WHERE key='map.many_worlds');",
+        "planet_n_max 600 is outside 64..=512",
+        &["map.many_worlds"],
+    );
+    assert_problem(
+        "UPDATE map_style SET planet_n_min=32
+        WHERE id=(SELECT id FROM def WHERE key='map.one_world');",
+        "planet_n_min 32 is outside",
+        &["map.one_world"],
+    );
+}
+
+#[test]
+fn resource_body_feature_must_target_a_presence_node() {
+    assert_problem(
+        "INSERT INTO map_style_feature(map_style_id,feature_def_id,region_kind,pattern)
+        SELECT s.id, n.id, 'resource_body', 'scattered' FROM def s, def n
+        WHERE s.key='map.many_worlds' AND n.key='node.relics';",
+        "is not a node with claim_mode presence",
+        &["map.many_worlds", "node.relics"],
+    );
+    assert_problem(
+        "INSERT INTO map_style_feature(map_style_id,feature_def_id,region_kind,pattern)
+        SELECT s.id, n.id, 'resource_body', 'scattered' FROM def s, def n
+        WHERE s.key='map.one_world' AND n.key='ter.forest';",
+        "is not a node with claim_mode presence",
+        &["map.one_world", "ter.forest"],
     );
 }

@@ -1,6 +1,6 @@
 # Game database
 
-Files: [`../db/schema.sql`](../db/schema.sql) (85 tables, 4 views) and
+Files: [`../db/schema.sql`](../db/schema.sql) (88 tables, 4 views) and
 [`../db/seed.sql`](../db/seed.sql) (a small placeholder dataset that exercises
 every part of the schema). Both load cleanly in SQLite ≥ 3.37:
 
@@ -151,40 +151,52 @@ Combat effectiveness uses a small `damage_class × armor_class` matrix instead
 of a full unit-by-unit table, so adding a unit never requires touching every
 other unit.
 
-### 6. One map: planets set in space
+### 6. The universe: star systems, bodies and routes
 
-> **Superseded on 2026-11-13** by `world-model.md` (round planets, star
-> systems, continuous zoom). The schema will follow in the universe-model
-> task; until then this section describes the current code.
+Decided on 2026-11-13; see `world-model.md`. Every planet is a cube sphere,
+planets belong to star systems, and systems are joined by routes.
 
-The whole map exists from the first tick. It contains:
+| Table | Half | Holds |
+| --- | --- | --- |
+| `body_kind` | rules | the vocabulary `star`, `habitable`, `resource` |
+| `map_style` (universe knobs) | rules | neutral systems, habitable planets and resource bodies per system (each a `_min`/`_max` pair), planet face size `planet_n_min/median/max` (64..=512), `route_extra_pct`, `star_map_radius` |
+| `map_style_feature` with `region_kind = 'resource_body'` | rules | what resource bodies yield: a `node` type with `claim_mode = 'presence'`; `chance_pct` weights the kinds, and a `per_player` row puts `clumps_min` bodies of its kind in every home system |
+| `star_system` | state | name and star-map position (integers, display only) |
+| `body` | state | the star (orbit radius 0), habitable planets (`n`, `home_race_id`) and resource bodies (`node_entity_type_id`), each on its own orbit (radius, angle in millidegrees) |
+| `route` | state | a lane between two systems (`system_a < system_b`) and its integer length |
+| `entity.body_id`, `entity.face` | state | an entity's location on a habitable body's surface at `(face, x, y)`; no body = the flat map. Orbit, system-space and transit locations come in world-model step 4b |
 
-- **Planetary terrains** — large areas of land and sea where cities stand and
-  ground battles happen. One is the shared home terrain; a map style may add
-  more to colonise.
-- **Open space** between them.
-- **Resource planets** — small `node` entities in space. `claim_mode =
-  'presence'`: whoever keeps a unit tagged `starship` within `claim_radius`
-  owns the node and receives its income. No building is needed.
+The generator (`rom-mapgen`, integers only) gives each race present one home
+system holding one home planet at the median size, shared by all of that
+race's players, plus neutral systems as the knobs say. Home systems sit as far
+apart as practical; other systems keep a minimum separation. Routes are a
+minimum spanning tree plus `route_extra_pct` more of the shortest
+non-crossing edges, and every home system has at least two routes when there
+are more than two systems. **Fairness:** every home system holds the same
+habitable planets and resource bodies, and the resource-body value within two
+routes (the summed `et_node.income`, not counting other races' home systems)
+of the poorest home system is at least 80 % of the richest one's.
+
+**Resource bodies** are small `node` entities: `claim_mode = 'presence'`, so
+whoever keeps a unit tagged `starship` within `claim_radius` owns the body and
+receives its income. No building is needed.
 
 `layer` is the movement medium: `ground`, `fluid` (sea), `subfluid`, `air`,
 `orbit`, `space`. Terrain belongs to a layer and a `movement_class` lists the
 terrain it can cross, so vehicles that fly, dive or reach orbit are just
-classes with more rows. Sea and space use the same rule set (port, vessels,
-transports, trade lanes, first colony at the landing edge) on different
-layers, which lets both exist on one map.
-
-`map_region` names each area and gives it a **tier**; the `region` grid maps
-tiles to regions. City limits and "first colony" rules are evaluated per
-region.
+classes with more rows.
 
 **Players reach space one by one.** Each age belongs to a tier
 (`age.map_scale`). A player's camera limit, visibility and reach are those of
-*their own* current age: before their space age they see and act only within
-the home terrain; on reaching it their view zooms out and space is revealed.
-Others stay confined until they get there, so the first arrival claims
-resource planets and colony sites unopposed. Nothing is regenerated and no
-state is converted — it is purely a per-player reveal.
+*their own* current age: before their space age they see and act only on
+their home planet; on reaching it their view zooms out to the system and the
+star map. Others stay confined until they get there, so the first arrival
+claims resource bodies and colony sites unopposed. Nothing is regenerated and
+no state is converted — it is purely a per-player reveal.
+
+A flat rectangular map remains for tests and skirmish maps: `map_style.planets`
+and `space_pct` and the `planet`/`space` feature rows drive it, and `map_grid`
+holds its arrays.
 
 ### 7. Ages, nations and races
 
@@ -208,12 +220,13 @@ Moving a step to another age is a one-row change in `prerequisite`.
 
 `map_style` + `map_style_feature` describe what the generator scatters.
 `map_style_feature.region_kind` says whether a feature belongs on a planet
-or in space. The result is stored once: whole-map arrays in `map_grid`, the
-regions in `map_region`, and every deposit, forest stand, rare resource and
-resource planet as an `entity` row of class `node`. The generator takes one
-faction per player and gives each race present its own home planet (adding
-planets when the style has fewer than there are races); `per_player` features
-are placed around each start, `scattered` planet features on every planet.
+surface, in a flat map's open space, or on a star system's resource bodies.
+The result is stored once: the universe in `star_system`, `body` and `route`;
+flat-map arrays in `map_grid`; and every deposit, forest stand, rare resource
+and resource body as an `entity` row of class `node`. The generator takes one
+faction per player and gives each race present its own home system and home
+planet; `per_player` features are placed around each start, `scattered`
+planet features on every planet.
 The rules loader resolves names through `Rules::display_name`
 (`faction_alias`, nearest ancestor first) and races through `Rules::race_of`. Meshes and materials
 flagged `baked` are produced before the first tick. Nothing is generated
@@ -253,9 +266,9 @@ does not exist, add the stat to `stat` and implement that one stat in code.
 
 ## Decided
 
-- One map holding planetary terrains, open space and resource planets;
-  each player's view widens when that player reaches the space age (section 6).
-- Resource planets are claimed by starship presence; planetary terrains host
+- A universe of star systems joined by routes; each player's view widens
+  when that player reaches the space age (section 6, `world-model.md`).
+- Resource bodies are claimed by starship presence; habitable planets host
   buildings and ground battles.
 - Identity ladder: historical nation → continental bloc → united humanity
   (section 7).

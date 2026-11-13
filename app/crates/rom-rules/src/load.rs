@@ -136,6 +136,15 @@ fn load_layer(conn: &Connection) -> Result<Vec<LayerInfo>, RulesError> {
         })
     })
 }
+fn load_body_kind(conn: &Connection) -> Result<Vec<BodyKindInfo>, RulesError> {
+    read(conn, "SELECT * FROM body_kind ORDER BY key", |row| {
+        let identity = format!("key={:?}", row.get::<_, String>("key")?);
+        Ok(BodyKindInfo {
+            key: enum_value(row, "key", "body_kind", &identity)?,
+            note: row.get("note")?,
+        })
+    })
+}
 fn load_map_scale(conn: &Connection) -> Result<Vec<MapScale>, RulesError> {
     read(conn, "SELECT * FROM map_scale ORDER BY key", |row| {
         Ok(MapScale {
@@ -838,6 +847,17 @@ fn load_map_style(conn: &Connection) -> Result<Vec<MapStyle>, RulesError> {
             fluid_pct: row.get("fluid_pct")?,
             space_pct: row.get("space_pct")?,
             params: row.get("params")?,
+            neutral_systems_min: row.get("neutral_systems_min")?,
+            neutral_systems_max: row.get("neutral_systems_max")?,
+            habitable_per_system_min: row.get("habitable_per_system_min")?,
+            habitable_per_system_max: row.get("habitable_per_system_max")?,
+            resource_bodies_per_system_min: row.get("resource_bodies_per_system_min")?,
+            resource_bodies_per_system_max: row.get("resource_bodies_per_system_max")?,
+            planet_n_min: row.get("planet_n_min")?,
+            planet_n_median: row.get("planet_n_median")?,
+            planet_n_max: row.get("planet_n_max")?,
+            route_extra_pct: row.get("route_extra_pct")?,
+            star_map_radius: row.get("star_map_radius")?,
         })
     })
 }
@@ -1010,6 +1030,10 @@ impl Rules {
             tags
         };
         rules.layers = load_layer(conn)?.into_iter().map(|r| (r.key, r)).collect();
+        rules.body_kinds = load_body_kind(conn)?
+            .into_iter()
+            .map(|r| (r.key, r))
+            .collect();
         rules.map_scales = load_map_scale(conn)?
             .into_iter()
             .map(|r| (r.key.clone(), r))

@@ -12,7 +12,7 @@ mod validate;
 
 pub use model::*;
 pub use modifiers::Context;
-pub use validate::Problem;
+pub use validate::{MAX_STAR_MAP_RADIUS, PLANET_N_RANGE, Problem};
 
 /// Errors encountered while decoding the typed rules model.
 #[derive(Debug, Error)]
