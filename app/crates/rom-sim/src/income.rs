@@ -236,6 +236,7 @@ impl World {
 mod tests {
     use crate::{Command, EntityId, MapGrid, Player, PlayerId, Pos, World};
     use rom_rules::{DefId, Rules, build_rules_db};
+    const PINNED_GEOMETRY: &str = "UPDATE et_territory SET border_radius=24000, economic_radius=20000 WHERE is_city=1; UPDATE game_constant SET value=24000 WHERE key='city.spacing';";
     use std::{
         collections::{BTreeMap, BTreeSet},
         sync::Arc,
@@ -311,6 +312,8 @@ mod tests {
             include_str!("../../../db/seed.sql"),
         )
         .unwrap();
+        // This test asserts the geometry of the original tuning; pin it here.
+        conn.execute_batch(PINNED_GEOMETRY).unwrap();
         conn.execute_batch(
             "INSERT INTO et_gather_site(entity_type_id,resource_id,self_income)
                SELECT s.id,r.id,13 FROM def s,def r WHERE s.key='bld.library' AND r.key='res.food';
@@ -320,6 +323,7 @@ mod tests {
              UPDATE tech SET research_ticks=50 WHERE id=(SELECT id FROM def WHERE key='tech.age.classical');",
         )
         .unwrap();
+        conn.execute_batch("DELETE FROM prerequisite WHERE def_id=(SELECT id FROM def WHERE key='tech.age.classical');").unwrap();
         let rules = Arc::new(Rules::load(&conn).unwrap());
         let id = |key: &str| rules.id_of(key).unwrap();
         let player = Player {

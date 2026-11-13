@@ -18,6 +18,7 @@ Status: in development. See the task ledger for what works today.
 | `app/docs/database.md` | explanation of the schema and how to add content |
 | `app/docs/implementation-plan.md` | crates, ground rules, phases and milestones |
 | `app/docs/world-model.md` | round planets, star systems, continuous zoom; scale and migration plan |
+| `app/docs/content.md` | technology tree, buildings and units: design and stat formulas |
 | `app/docs/hud.md` | in-match HUD design: style, layout rectangles, how it is produced |
 | `app/docs/tasks/STATUS.md` | task ledger: what is running, merged or blocked |
 

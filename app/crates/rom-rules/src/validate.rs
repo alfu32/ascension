@@ -160,7 +160,84 @@ impl Rules {
         for style in self.map_styles.values() {
             self.validate_universe_knobs(style, &mut problems);
         }
+        self.validate_reachability(&mut problems);
         problems
+    }
+
+    fn validate_reachability(&self, problems: &mut Vec<Problem>) {
+        let mut active = crate::ActiveSources::new();
+        let mut owned = crate::Owned::new();
+        if let Some(age) = self.ages.values().min_by_key(|a| (a.ordinal, a.id)) {
+            active.insert(age.id);
+        }
+        // Starting types are selected by capabilities, never authoring keys.
+        for predicate in [
+            (|e: &&crate::EntityType| e.territory.as_ref().is_some_and(|t| t.is_city))
+                as fn(&&crate::EntityType) -> bool,
+            |e: &&crate::EntityType| e.builder.is_some(),
+        ] {
+            if let Some(entity) =
+                self.entity_types.values().filter(predicate).find(|e| {
+                    e.upgrades_from_id.is_none() && self.is_unlocked(e.id, &active, &owned)
+                })
+            {
+                owned.insert(entity.id);
+            }
+        }
+        loop {
+            let before = active.len() + owned.len();
+            for row in self.production.values().flatten() {
+                if !owned.contains(&row.producer_type_id)
+                    || !self.is_unlocked(row.product_def_id, &active, &owned)
+                {
+                    continue;
+                }
+                if row.mode == ProductionMode::Research {
+                    active.insert(row.product_def_id);
+                } else {
+                    owned.insert(row.product_def_id);
+                }
+            }
+            for effect in self.tech_effects.values().flatten() {
+                if !active.contains(&effect.tech_id) {
+                    continue;
+                }
+                if let Some(target) = effect.target_def_id {
+                    match effect.effect {
+                        TechEffectKind::SetAge => {
+                            active.insert(target);
+                        }
+                        TechEffectKind::UpgradeType | TechEffectKind::Spawn
+                            if effect.from_def_id.is_none_or(|id| owned.contains(&id)) =>
+                        {
+                            owned.insert(target);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            if before == active.len() + owned.len() {
+                break;
+            }
+        }
+        for entity in self.entity_types.values() {
+            if matches!(
+                entity.class,
+                crate::EntityClass::Unit | crate::EntityClass::Building
+            ) && !owned.contains(&entity.id)
+            {
+                problems.push(Problem {
+                    message: format!("unreachable item {}", self.label(entity.id)),
+                });
+            }
+        }
+        for tech in self.techs.values() {
+            if !active.contains(&tech.id) {
+                problems.push(Problem {
+                    message: format!("unreachable item {}", self.label(tech.id)),
+                });
+            }
+        }
     }
 
     fn validate_universe_knobs(&self, style: &MapStyle, problems: &mut Vec<Problem>) {

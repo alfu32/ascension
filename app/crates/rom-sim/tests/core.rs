@@ -820,7 +820,17 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
                 OrderTarget::Def => command.subject = Some(et.id),
             }
             if kind.key == "harvest" {
-                command.target_entity = Some(farm);
+                let site = et.harvester.first().and_then(|h| {
+                    rules.entity_types.values().find(|site| {
+                        site.gather_site
+                            .as_ref()
+                            .is_some_and(|s| s.resource_id == h.resource_id && s.slots_base > 0)
+                    })
+                });
+                command.target_entity = Some(match site {
+                    Some(site) => world.spawn(site.id, OWNER, Pos::default()).unwrap(),
+                    None => farm,
+                });
             }
             if kind.key == "attack" {
                 command.target_entity = Some(enemy);

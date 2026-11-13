@@ -56,20 +56,24 @@ orbits the planet orb" — never that the sun or star orbits the planet.
    drawn just above the surface (and sea), each with its own subtle colour
    (equator and prime meridian slightly stronger), fading out at street-level
    zoom; on the minimap (sphere modes): the same lines on the equirectangular
-   image. A toggle key (`G`; Shift+G when the command palette occupies G) and an
-   option `--graticule off`. Default on.
+   image. A toggle key (`G`) and an option `--graticule off`. Default on.
 5. **System view:** planets in the system view are lit by the system's star
    (light from the star's position), so the day side faces the star; the
    globe's sun direction at the same tick must agree with it (the planet's
    rotation phase from step 1 is defined relative to the star direction).
-6. **Day/night sky.** Near the surface, show a blue daytime sky with a paler
-   horizon, a warm directional dawn/dusk glow, then navy and black at night.
-   Fade stars in after dusk. Blend smoothly into black space with altitude.
-   Drive all colours and fades from the same snapshot-tick lighting.
-7. **Atmosphere halo.** Draw a blue atmosphere just outside the planet limb
-   at globe zoom and around habitable planets in system view. Keep it bright
-   on the day side, faint at night, warm near the terminator and fading
-   outward; blend into it smoothly when leaving the surface sky.
+6. **Sky** (owner request, added while running): at street-to-mid zoom a sky
+   gradient behind the terrain — blue by day, a short warm dusk and dawn, dark
+   navy then black at night — with the star field fading in as the local sky
+   darkens; driven by the same sun direction. From globe zoom outward, space
+   stays black with stars,
+   blended smoothly with altitude. Same sky on the flat map. Tests:
+   `sky_is_blue_at_noon_and_black_at_midnight`, `stars_fade_in_after_dusk`,
+   `sky_blends_to_space_with_altitude`. Screenshots `sky-day.png` and `sky-night.png` at street level.
+7. **Atmosphere halo** (owner request): every habitable planet has a soft
+   bluish halo just outside its limb, brightest on the day side, dim on the
+   night side, in the globe view and (smaller) in the system view; same
+   atmosphere colour as the street-level sky; resource bodies have none. Test
+   `halo_is_brighter_on_the_day_side`; visible in `sun-globe.png` and `sun-system.png`.
 8. **Record** bench lines in `app/docs/performance.md` for street, mid and
    globe zoom with shadows on.
 
@@ -82,8 +86,6 @@ orbits the planet orb" — never that the sun or star orbits the planet.
 - `graticule_lines_lie_on_their_latitudes` (sampled vertices of each line within 0.1° of its latitude; prime meridian at longitude 0).
 - `minimap_graticule_rows_match_latitudes`.
 - `system_view_and_globe_agree_on_the_sun` (direction from planet to star equals the globe's sun direction at the same tick).
-- Sky colour, directional twilight glow, star fade, altitude blend and halo
-  intensity are pure functions covered by tests, without a window or GPU.
 
 ## Done when (from `app/`)
 

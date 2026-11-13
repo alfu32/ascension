@@ -143,6 +143,13 @@ impl World {
         {
             return Err(SimError::Locked);
         }
+        if mode == ProductionMode::Train
+            && self
+                .rules
+                .is_obsolete(subject, &player.active_sources(), &player.owned_types(self))
+        {
+            return Err(SimError::Obsolete);
+        }
         if let Some(et) = self.rules.entity_type(subject) {
             let owner = match et.limit_scope {
                 LimitScope::PerPlayer => Some(Some(command.player)),

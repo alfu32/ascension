@@ -34,8 +34,17 @@ it; nothing needed to continue lives only in a chat or a temporary folder.
 | 25 — the app on the universe world: ships, claims and travel on screen | `25-universe-app.md` | `task/25-universe-app` | Sonnet agent | merged in 0.0.31 | Interrupted by login errors twice, resumed. Gate re-run by the orchestrator on main (with 26 and 27): 520 tests; screenshots inspected (home in daylight, ships with a claim ring). Simulation API gaps listed: no way to set a player's age after construction, system-plane scale not exposed, no visibility query for transits. Not verified: live mouse in space, on-demand globe swap on screen. |
 | 26 — attrition, city capture, elimination and victory | `26-victory-capture.md` | `task/26-victory-capture` | Codex → Opus agent | merged in 0.0.31 | Opus fixed four defects in Codex's partial work (capturable unfinished sites, sites as capitals, per-tick scans). Gate re-run by the orchestrator: siege won by conquest after capture, identical on repeat and on the sphere; battle unchanged. |
 | 27 — polar ice caps and a start latitude band | `27-polar-caps.md` | `task/27-polar-caps` | Codex → Sonnet agent | merged in 0.0.31 | Sonnet fixed two test defects in Codex's work; production code unchanged. Ice ≈ 5 % of area above ~72°; starts within ±60°; latitude error < 0.081°. Flat maps unchanged. |
-| 28 — orbiting sun light, shadow mapping, latitude lines | `28-sun-shadows-graticule.md` | `task/28-sun-shadows-graticule` | Opus agent | running | worktree `../rise-of-man-worktrees/28-sun-shadows-graticule`; owner decision 2026-11-13: the sun's directional light orbits the planet orb by default, one orbit per 5 game minutes |
-| (next) simulation API gaps (rally, cancel one order, patrol, garrison); computer opponent; HUD for victory timers and diplomacy | — | — | — | planned | after 26 |
+| 28 — orbiting sun light, shadow mapping, latitude lines, sky, atmosphere halo | `28-sun-shadows-graticule.md` | `task/28-sun-shadows-graticule` | Opus agent | running (interrupted by the 5-hour limit 2026-11-13 ~15:40, resumes 18:40; uncommitted work in the worktree) | worktree `../rise-of-man-worktrees/28-sun-shadows-graticule` |
+| 29 — full content: technology tree, buildings, units (generated) | `29-content.md` | `task/29-content` | Codex (`gpt-6.1-sol`, high) | merged in 0.0.33 | 89 units, 35 buildings, 174 techs; playthrough reaches Galactic Empires at tick 52,719; validation reports nothing unreachable. Three test fixes outside Codex's scope applied by the orchestrator. |
+| 30 — palette states, research view, site outlines, city limit on screen, drag-pan | `30-palette-states.md` | `task/30-palette-states` | Sonnet agent → Codex (`gpt-6.1-sol`, high) | handed over, running | Sonnet stopped at the 5-hour limit after starting the badge glyph (wip 8cebf23). Codex continues; it cannot open a window, so the orchestrator runs the screenshots. |
+| (next) simulation API gaps (set age mid-match, rally, cancel one order, patrol); computer opponent; HUD for victory timers and diplomacy | — | — | — | planned | |
+
+**Integration checklist (open, 2026-11-13):** 29 and the border fix are
+published as `0.0.33` (nine simulation tests now pin the original city
+geometry they assert on). 28 (wip `ba986e6`, paused) and 30 (Codex, running) must both be merged
+on top, conflicts resolved (both touch `rom-render`), the full gate run once
+on the combined result, the screenshots of both cards inspected, then tagged
+and pushed together.
 
 States: `ready` → `running` → `review` → `merged`; or `blocked` (say why),
 `handed over` (say to whom and from which commit).

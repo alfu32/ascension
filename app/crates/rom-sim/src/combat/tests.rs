@@ -207,7 +207,7 @@ fn splash_hits_neighbours_but_not_friends() {
     attack(&mut w, a, b);
     w.step();
     assert_eq!(hp(&w, b), 31);
-    assert_eq!(hp(&w, neighbor), 107); // (9 − 2) × 50 / 100.
+    assert_eq!(hp(&w, neighbor), 97); // (9 − 2) × 50 / 100.
     assert_eq!(hp(&w, friend), 40);
     assert_eq!(hp(&w, far), 40);
 }
@@ -469,7 +469,7 @@ fn race_modifier_changes_max_hp_keeping_ratio() {
     assert_eq!(w.entity(a).unwrap().max_hp, 46);
     assert_eq!(hp(&w, a), 23);
     let b = spawn(&mut w, "unit.spearman", 1, at(12000, 10000));
-    assert_eq!(hp(&w, b), 126);
+    assert_eq!(hp(&w, b), 115);
 }
 
 #[test]

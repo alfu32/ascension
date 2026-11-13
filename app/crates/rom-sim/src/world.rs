@@ -499,6 +499,23 @@ impl World {
         } else {
             self.economy.sites.remove(&id);
         }
+        let slots = if self
+            .entity(id)
+            .expect("retyped entity")
+            .build_progress
+            .is_none()
+        {
+            self.gather_slots(new, pos)
+        } else {
+            0
+        };
+        if slots == 0 {
+            self.release_site_workers(id);
+        }
+        self.entities[id.0 as usize]
+            .as_mut()
+            .expect("retyped entity")
+            .gather_slots = slots;
         self.refresh_site(id);
         self.economy.dirty.insert(id);
         if self.is_building(old) {

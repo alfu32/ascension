@@ -313,10 +313,10 @@ fn travel_to_a_neighbour_takes_route_time() {
     w.step();
     let transit = w.transits().next().unwrap().clone();
     assert_eq!((transit.origin, transit.destination), (1, 2));
-    assert_eq!(transit.arrives - transit.departed, 10); // ceil(22 * 1 / 2.2)
+    assert_eq!(transit.arrives - transit.departed, 8); // ceil(22 * 1 / 3)
     assert_eq!(w.entity(a), None);
     assert_eq!(w.population_used(PlayerId(1)), 2);
-    run(&mut w, 9);
+    run(&mut w, 7);
     assert_eq!(w.transits().count(), 1);
     w.step();
     assert_eq!(w.transits().count(), 0);
@@ -368,7 +368,7 @@ fn travel_to_an_unconnected_system_is_rejected() {
 #[test]
 fn ships_in_transit_are_untargetable() {
     let mut w = world_with(
-        "INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks) SELECT d.id,0,9,c.id,10000,1 FROM def d, damage_class c WHERE d.key='unit.survey_ship' AND c.key='energy'; INSERT INTO et_weapon_target SELECT w.id,'space',100 FROM et_weapon w JOIN def d ON d.id=w.entity_type_id WHERE d.key='unit.survey_ship';",
+        "UPDATE et_weapon SET damage=9,range_max=10000,cooldown_ticks=1 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.survey_ship');",
         false,
     );
     let pos = w.system_edge(1, 2).unwrap();
