@@ -52,6 +52,8 @@ pub struct Options {
     pub hud_scale: Option<u32>,
     /// Show diagnostic frame and simulation counters.
     pub stats: bool,
+    /// Replay pick events from this file on the simulation thread (hidden option).
+    pub script: Option<PathBuf>,
     /// Print usage and exit.
     pub help: bool,
 }
@@ -78,6 +80,7 @@ impl Default for Options {
             no_hud: false,
             hud_scale: None,
             stats: false,
+            script: None,
             help: false,
         }
     }
@@ -145,6 +148,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                 );
             }
             "--start-markers" => options.start_markers = true,
+            "--script" => options.script = Some(PathBuf::from(value("--script")?)),
             "--speed" => {
                 let text = value("--speed")?;
                 options.speed_pct = text
@@ -306,6 +310,14 @@ mod tests {
         for value in ["0", "201", "bad"] {
             assert!(parse(args(&["--hud-scale", value])).is_err());
         }
+    }
+
+    #[test]
+    fn parses_the_hidden_script_option() {
+        let o = parse(args(&["--script", "demo.txt"])).unwrap();
+        assert_eq!(o.script, Some(PathBuf::from("demo.txt")));
+        assert!(parse(args(&["--script"])).is_err());
+        assert!(!USAGE.contains("--script"));
     }
 
     #[test]

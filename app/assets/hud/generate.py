@@ -499,6 +499,17 @@ def icons():
     I["cmd_repair"] = wrench()
     I["cmd_build"] = hammer(40)
     I["cmd_cancel"] = S("M12 12 L52 52", 8) + S("M52 12 L12 52", 8)
+    # Placeholder pictograms for command buttons and tiles: one per entity class and ui group.
+    I["pic_house"] = I["tab_build"]
+    I["pic_tower"] = tower()
+    I["pic_shield"] = shield()
+    I["pic_scroll"] = (
+        P("M16 8 H48 Q54 8 54 14 V48 Q54 56 46 56 H16Z")
+        + P("M16 8 Q8 8 8 16 Q8 24 16 24 H22 V50 Q22 56 16 56 Q10 56 10 50", "#c99a4c")
+        + S("M28 20 H46", 3, OUT) + S("M28 30 H46", 3, OUT) + S("M28 40 H40", 3, OUT)
+    )
+    I["pic_person"] = person(32, 18, 10, 16, 32, 58)
+    I["pic_wonder"] = P(star_path(32, 34, 28, 12)) + C(32, 34, 6, "#2a1a08", 1.5)
     I["event"] = P("M26 6 H38 L36 38 H28Z") + C(32, 52, 5)
     for name, art in I.items():
         write("icons", name, 64, 64, art, ICON_DEFS)

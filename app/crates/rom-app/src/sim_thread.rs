@@ -14,6 +14,8 @@ use rom_rules::{ActiveSources, EntityClass};
 use rom_sim::{Command, PlayerId, World};
 
 use crate::demo::DemoDriver;
+use crate::script::Script;
+use crate::selection::{Controller, PLAYER};
 
 /// Game ticks per second at 100 % speed (the simulation's fixed rate).
 pub const TICKS_PER_SECOND: u32 = 20;
@@ -154,6 +156,7 @@ impl SimThread {
     pub fn spawn(
         world: World,
         driver: Option<DemoDriver>,
+        script: Option<Script>,
         speed_pct: u32,
         bridge: RenderBridge,
     ) -> io::Result<Self> {
@@ -167,7 +170,7 @@ impl SimThread {
         let thread_link = link.clone();
         let thread = thread::Builder::new()
             .name("rom-sim".into())
-            .spawn(move || run(world, driver, &thread_link, &inbox, &bridge))?;
+            .spawn(move || run(world, driver, script, &thread_link, &inbox, &bridge))?;
         Ok(Self {
             link,
             thread: Some(thread),
@@ -199,6 +202,7 @@ impl Drop for SimThread {
 fn run(
     mut world: World,
     mut driver: Option<DemoDriver>,
+    mut script: Option<Script>,
     link: &SimLink,
     inbox: &Receiver<Command>,
     bridge: &RenderBridge,
@@ -208,7 +212,8 @@ fn run(
     let mut last = Instant::now();
     let mut window_start = last;
     let mut window_ticks = 0_u32;
-    publish(&world, link, bridge);
+    let mut controller = Controller::new();
+    publish(&world, &controller, link, bridge);
     while !link.stop.load(Ordering::Acquire) {
         let now = Instant::now();
         let current = link.speed.load(Ordering::Relaxed);
@@ -218,14 +223,37 @@ fn run(
         }
         let ticks = step.advance(now - last);
         last = now;
+        let picks = bridge.take_picks();
+        let interacted = !picks.is_empty();
+        for pick in picks {
+            controller.handle(&mut world, pick);
+        }
+        if let Some((x, y)) = controller.take_focus() {
+            bridge.focus_camera(x, y);
+        }
+        if interacted && ticks == 0 {
+            publish_hud(&world, &controller, bridge);
+        }
         for _ in 0..ticks {
+            if let Some(script) = script.as_mut() {
+                for pick in script.due(world.tick()) {
+                    controller.handle(&mut world, pick);
+                }
+            }
             if let Some(driver) = driver.as_mut() {
+                if controller.player_has_ordered() {
+                    driver.release(PLAYER);
+                }
                 let rejected = driver.drive(&mut world).len() as u64;
                 link.stats.rejected.fetch_add(rejected, Ordering::Relaxed);
             }
             world.step();
+            controller.after_step(&mut world);
+            if let Some((x, y)) = controller.take_focus() {
+                bridge.focus_camera(x, y);
+            }
             window_ticks += 1;
-            publish(&world, link, bridge);
+            publish(&world, &controller, link, bridge);
             while let Ok(command) = inbox.try_recv() {
                 if world.submit(command).is_err() {
                     link.stats.rejected.fetch_add(1, Ordering::Relaxed);
@@ -249,14 +277,20 @@ fn run(
     }
 }
 
-fn publish(world: &World, link: &SimLink, bridge: &RenderBridge) {
+fn publish(world: &World, controller: &Controller, link: &SimLink, bridge: &RenderBridge) {
     let snapshot = snapshot_of(world);
     link.stats.tick.store(snapshot.tick, Ordering::Relaxed);
     link.stats
         .entities
         .store(snapshot.entities.len() as u32, Ordering::Relaxed);
     bridge.publish_snapshot(Arc::new(snapshot));
-    bridge.publish_hud(Arc::new(crate::hud::snapshot_of(world)));
+    publish_hud(world, controller, bridge);
+}
+
+fn publish_hud(world: &World, controller: &Controller, bridge: &RenderBridge) {
+    let mut hud = crate::hud::snapshot_of(world);
+    controller.fill(world, &mut hud);
+    bridge.publish_hud(Arc::new(hud));
 }
 
 /// Copies the world's entities into plain render data, in id order.

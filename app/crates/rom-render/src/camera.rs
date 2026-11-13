@@ -101,6 +101,17 @@ impl Camera {
     }
 }
 
+/// Keyboard modifiers held during an event.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Modifiers {
+    /// Shift: add to the selection, queue orders.
+    pub shift: bool,
+    /// Control: store control groups, keep every unit type in a box.
+    pub ctrl: bool,
+    /// Alt.
+    pub alt: bool,
+}
+
 /// Mouse buttons the world view reacts to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PointerButton {
@@ -115,29 +126,30 @@ pub enum PointerButton {
 /// Keys the camera reacts to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Key {
-    /// Move the view forward (W, up arrow).
+    /// Move the view forward (up arrow).
     PanForward,
-    /// Move the view back (S, down arrow).
+    /// Move the view back (down arrow).
     PanBack,
-    /// Move the view left (A, left arrow).
+    /// Move the view left (left arrow).
     PanLeft,
-    /// Move the view right (D, right arrow).
+    /// Move the view right (right arrow).
     PanRight,
-    /// Go back to the camera the scene started with (R).
+    /// Go back to the camera the scene started with (End).
     ResetCamera,
     /// Frame the whole map (Home).
     FrameMap,
 }
 
 impl Key {
-    /// Maps a key name as the UI reports it ("w", "up", "r", …) to a camera key.
+    /// Maps a key name as the UI reports it ("up", "end", …) to a camera key. Letters belong to
+    /// the command palette, so only arrows, `end` and `home` move the camera.
     pub fn from_name(name: &str) -> Option<Self> {
         match name.to_ascii_lowercase().as_str() {
-            "w" | "up" => Some(Self::PanForward),
-            "s" | "down" => Some(Self::PanBack),
-            "a" | "left" => Some(Self::PanLeft),
-            "d" | "right" => Some(Self::PanRight),
-            "r" => Some(Self::ResetCamera),
+            "up" => Some(Self::PanForward),
+            "down" => Some(Self::PanBack),
+            "left" => Some(Self::PanLeft),
+            "right" => Some(Self::PanRight),
+            "end" => Some(Self::ResetCamera),
             "home" => Some(Self::FrameMap),
             _ => None,
         }
@@ -174,6 +186,8 @@ pub enum InputEvent {
         x: f32,
         /// Vertical position.
         y: f32,
+        /// Modifiers held.
+        mods: Modifiers,
     },
     /// A button was released.
     ButtonUp {
@@ -183,6 +197,8 @@ pub enum InputEvent {
         x: f32,
         /// Vertical position.
         y: f32,
+        /// Modifiers held.
+        mods: Modifiers,
     },
     /// Wheel movement in steps; positive zooms in.
     Wheel {
@@ -193,6 +209,15 @@ pub enum InputEvent {
     KeyDown(Key),
     /// A key went up.
     KeyUp(Key),
+    /// A letter or digit key for the command palette, control groups or attack-move.
+    Hotkey {
+        /// The character, lower case.
+        ch: char,
+        /// Modifiers held.
+        mods: Modifiers,
+    },
+    /// Escape was pressed.
+    Escape,
     /// Forget every held key and button (for example when the window loses focus).
     ReleaseAll,
 }
@@ -232,13 +257,13 @@ impl CameraController {
                 self.pointer = Some([x, y]);
             }
             InputEvent::PointerLeft => self.pointer = None,
-            InputEvent::ButtonDown { button, x, y } => {
+            InputEvent::ButtonDown { button, x, y, .. } => {
                 self.pointer = Some([x, y]);
                 if button == PointerButton::Middle {
                     self.rotating = true;
                 }
             }
-            InputEvent::ButtonUp { button, x, y } => {
+            InputEvent::ButtonUp { button, x, y, .. } => {
                 self.pointer = Some([x, y]);
                 if button == PointerButton::Middle {
                     self.rotating = false;
@@ -261,6 +286,7 @@ impl CameraController {
                     self.held[index] = false;
                 }
             }
+            InputEvent::Hotkey { .. } | InputEvent::Escape => {}
             InputEvent::ReleaseAll => {
                 self.held = [false; 4];
                 self.rotating = false;

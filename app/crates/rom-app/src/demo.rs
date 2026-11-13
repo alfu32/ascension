@@ -109,6 +109,13 @@ impl DemoDriver {
         }
     }
 
+    /// Stops driving `player`: its builders stop wandering and its build job is dropped,
+    /// because a person has taken over.
+    pub fn release(&mut self, player: PlayerId) {
+        self.wanderers.retain(|w| w.player != player);
+        self.jobs.retain(|job| job.start.player != player);
+    }
+
     /// Submits this tick's orders; returns every error `submit` answered with.
     pub fn drive(&mut self, world: &mut World) -> Vec<SimError> {
         let tick = world.tick();

@@ -3,6 +3,7 @@
 use std::io;
 use std::slice;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -14,10 +15,12 @@ use raylib::prelude::{
 
 use crate::camera::{Camera, CameraController, InputEvent};
 use crate::entities::{EntitySnapshot, EntityView, SnapshotPair};
-use crate::hud::HudSnapshot;
+use crate::hud::{HudOverlay, HudSnapshot};
 use crate::hud_gpu::{HudGpu, MinimapGpu};
 use crate::hud_layout::HudLayout;
+use crate::hud_layout::Rect;
 use crate::mailbox::{Frame, FrameMailbox, FramePixels};
+use crate::pick::{PickContext, PickController, PickEvent, canvas_view};
 use crate::pixels::rgba_to_bgra_flipped;
 use crate::scene::Scene;
 use crate::stats::{RenderStats, StatsWindow};
@@ -55,8 +58,10 @@ struct Shared {
     snapshots: Mutex<SnapshotPair>,
     hud: Mutex<Arc<HudSnapshot>>,
     hud_visible: AtomicBool,
-    pointer_over_hud: AtomicBool,
     hud_scale: AtomicU32,
+    pick_tx: Mutex<Sender<PickEvent>>,
+    pick_rx: Mutex<Receiver<PickEvent>>,
+    focus: Mutex<Option<[f32; 2]>>,
     start_markers: AtomicBool,
     snapshot_wanted: AtomicBool,
     snapshot: Mutex<Option<Arc<FramePixels>>>,
@@ -158,34 +163,20 @@ impl RenderBridge {
         self.shared.render_scale.load(Ordering::Relaxed)
     }
 
-    /// Queues an input event for the next frame.
+    /// Queues an input event for the next frame; the render thread decides what the HUD
+    /// consumes, what moves the camera and what becomes a pick event.
     pub fn push_input(&self, event: InputEvent) {
-        let position = match event {
-            InputEvent::PointerMoved { x, y }
-            | InputEvent::ButtonDown { x, y, .. }
-            | InputEvent::ButtonUp { x, y, .. } => Some((x, y)),
-            _ => None,
-        };
-        if let Some((x, y)) = position {
-            let size = self.layout();
-            let percent = self.shared.hud_scale.load(Ordering::Relaxed);
-            let layout = HudLayout::new(size.0, size.1, (percent > 0).then_some(percent));
-            self.shared.pointer_over_hud.store(
-                self.hud_visible() && layout.contains_hud(x, y),
-                Ordering::Relaxed,
-            );
-        }
-        let over = self.hud_visible() && self.shared.pointer_over_hud.load(Ordering::Relaxed);
-        let mut input = lock(&self.shared.input);
-        match event {
-            InputEvent::ButtonDown { .. } | InputEvent::Wheel { .. } if over => {}
-            InputEvent::PointerMoved { .. } if over => input.push(InputEvent::PointerLeft),
-            InputEvent::ButtonUp { .. } if over => {
-                input.push(event);
-                input.push(InputEvent::PointerLeft);
-            }
-            _ => input.push(event),
-        }
+        lock(&self.shared.input).push(event);
+    }
+
+    /// Takes the pick events the render thread produced since the last call, oldest first.
+    pub fn take_picks(&self) -> Vec<PickEvent> {
+        lock(&self.shared.pick_rx).try_iter().collect()
+    }
+
+    /// Asks the render thread to centre the camera on tile (`x`, `y`).
+    pub fn focus_camera(&self, x: f32, y: f32) {
+        *lock(&self.shared.focus) = Some([x, y]);
     }
 
     /// Takes the newest finished frame, if one arrived since the last call.
@@ -229,6 +220,7 @@ pub struct RenderWorker {
 impl RenderWorker {
     /// Spawns the render thread, which opens a hidden raylib window and renders continuously.
     pub fn start() -> io::Result<(Self, RenderBridge)> {
+        let (pick_tx, pick_rx) = channel();
         let shared = Arc::new(Shared {
             layout: Mutex::new((0, 0)),
             render_scale: AtomicU32::new(MAX_RENDER_SCALE),
@@ -241,8 +233,10 @@ impl RenderWorker {
             snapshots: Mutex::new(SnapshotPair::default()),
             hud: Mutex::new(Arc::new(HudSnapshot::default())),
             hud_visible: AtomicBool::new(true),
-            pointer_over_hud: AtomicBool::new(false),
             hud_scale: AtomicU32::new(0),
+            pick_tx: Mutex::new(pick_tx),
+            pick_rx: Mutex::new(pick_rx),
+            focus: Mutex::new(None),
             start_markers: AtomicBool::new(false),
             snapshot_wanted: AtomicBool::new(false),
             snapshot: Mutex::new(None),
@@ -312,6 +306,9 @@ fn render_loop(shared: &Shared) {
     let mut controller = CameraController::default();
     let mut stats = StatsWindow::default();
     let mut blended: Vec<EntityView> = Vec::new();
+    let mut picker = PickController::default();
+    let mut over_hud = false;
+    let mut map_size = (0_u32, 0_u32);
     let mut sequence = 0_u64;
     let started = Instant::now();
     let mut last_frame = started;
@@ -342,6 +339,7 @@ fn render_loop(shared: &Shared) {
             let (home, overview) = (home_camera(&terrain), overview_camera(&terrain));
             controller.set_scene_cameras(home, overview);
             camera = home;
+            map_size = (terrain.width, terrain.height);
             eprintln!(
                 "terrain-mesh tiles={}x{} meshes={meshes} build_ms={build_ms:.1} upload_ms={upload_ms:.1}",
                 terrain.width, terrain.height
@@ -355,11 +353,58 @@ fn render_loop(shared: &Shared) {
             }
             .limited();
         }
-        let events = std::mem::take(&mut *lock(&shared.input));
-        for event in events {
-            controller.apply(&mut camera, event);
+        if let Some([x, z]) = lock(&shared.focus).take() {
+            camera.target = [x, 0.0, z];
+            camera.pan(0.0, 0.0);
         }
         let layout = *lock(&shared.layout);
+        let hud_visible = shared.hud_visible.load(Ordering::Relaxed);
+        let percent = shared.hud_scale.load(Ordering::Relaxed);
+        let hud_snapshot = Arc::clone(&lock(&shared.hud));
+        let canvas = HudLayout::new(layout.0, layout.1, (percent > 0).then_some(percent));
+        let pair = lock(&shared.snapshots).clone();
+        pair.blend_at(frame_start, &mut blended);
+        let events = std::mem::take(&mut *lock(&shared.input));
+        {
+            let surface = scene.surface();
+            let ground = |x: f32, y: f32| surface.map_or(0.0, |s| s.height(x, y));
+            let now_ms = frame_start.duration_since(started).as_millis() as u64;
+            for event in events {
+                let ctx = PickContext {
+                    layout: canvas,
+                    view: canvas_view(&camera, &canvas, hud_visible),
+                    entities: &blended,
+                    ground: &ground,
+                    hud: &hud_snapshot,
+                    hud_visible,
+                    map_size,
+                    now_ms,
+                };
+                for pick in picker.handle(event, &ctx, &mut camera) {
+                    let _ = lock(&shared.pick_tx).send(pick);
+                }
+                let position = match event {
+                    InputEvent::PointerMoved { x, y }
+                    | InputEvent::ButtonDown { x, y, .. }
+                    | InputEvent::ButtonUp { x, y, .. } => Some((x, y)),
+                    _ => None,
+                };
+                if let Some((x, y)) = position {
+                    over_hud = hud_visible && canvas.contains_hud(x, y);
+                }
+                match event {
+                    InputEvent::ButtonDown { .. } | InputEvent::Wheel { .. } if over_hud => {}
+                    InputEvent::PointerMoved { .. } if over_hud => {
+                        controller.apply(&mut camera, InputEvent::PointerLeft);
+                    }
+                    InputEvent::ButtonUp { .. } if over_hud => {
+                        controller.apply(&mut camera, event);
+                        controller.apply(&mut camera, InputEvent::PointerLeft);
+                    }
+                    _ => controller.apply(&mut camera, event),
+                }
+            }
+        }
         controller.set_viewport(layout.0, layout.1);
         controller.advance(&mut camera, seconds);
 
@@ -388,15 +433,12 @@ fn render_loop(shared: &Shared) {
         };
         let elapsed = frame_start.duration_since(started).as_secs_f32();
         let boxes = shared.box_count.load(Ordering::Relaxed) as usize;
-        let pair = lock(&shared.snapshots).clone();
-        pair.blend_at(frame_start, &mut blended);
         scene.prepare_entities(
             &blended,
             camera.yaw,
             shared.start_markers.load(Ordering::Relaxed),
         );
-        let hud_visible = shared.hud_visible.load(Ordering::Relaxed);
-        let percent = shared.hud_scale.load(Ordering::Relaxed);
+        scene.prepare_overlays(&blended, &hud_snapshot, camera.yaw);
         // Scale explicit HUD pixels with the offscreen render target, just like automatic scale.
         let mut hud_layout = HudLayout::new(size.0, size.1, None);
         if percent > 0 {
@@ -419,12 +461,32 @@ fn render_loop(shared: &Shared) {
                 }
             }
             if let Some(hud) = &mut hud {
-                let snapshot = Arc::clone(&lock(&shared.hud));
+                let ratio = size.0 as f32 / layout.0.max(1) as f32;
+                let hud_overlay = {
+                    let surface = scene.surface();
+                    let ground = |x: f32, y: f32| surface.map_or(0.0, |s| s.height(x, y));
+                    let ctx = PickContext {
+                        layout: canvas,
+                        view: canvas_view(&camera, &canvas, hud_visible),
+                        entities: &blended,
+                        ground: &ground,
+                        hud: &hud_snapshot,
+                        hud_visible,
+                        map_size,
+                        now_ms: 0,
+                    };
+                    HudOverlay {
+                        hover: picker.hover(&ctx),
+                        drag_box: picker
+                            .drag_rect()
+                            .map(|r| Rect::new(r.x * ratio, r.y * ratio, r.w * ratio, r.h * ratio)),
+                    }
+                };
                 let mut drawing = rl.begin_texture_mode(&thread, texture);
                 if let Some(map) = &minimap {
                     map.draw(&mut drawing, &hud_layout, &blended, &camera);
                 }
-                hud.draw(&mut drawing, &hud_layout, &snapshot);
+                hud.draw(&mut drawing, &hud_layout, &hud_snapshot, &hud_overlay);
             }
         }
 

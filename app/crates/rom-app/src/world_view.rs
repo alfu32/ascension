@@ -13,7 +13,7 @@ use gpui::{
     Point, Render, RenderImage, ScrollDelta, ScrollWheelEvent, StatefulInteractiveElement, Styled,
     StyledImage, Timer, Window, canvas, div, img, px, rgb, rgba,
 };
-use rom_render::{Frame, InputEvent, Key, PointerButton, RenderBridge, RenderStats};
+use rom_render::{Frame, InputEvent, Key, Modifiers, PointerButton, RenderBridge, RenderStats};
 
 /// How often the mailbox is checked for a new frame. Half a 60 Hz frame: at 16 ms the poll
 /// drifted against the render clock and lost up to a fifth of the frames (docs/performance.md).
@@ -138,6 +138,7 @@ impl WorldView {
         button: MouseButton,
         position: Point<Pixels>,
         window: &Window,
+        modifiers: gpui::Modifiers,
         down: bool,
     ) {
         let button = match button {
@@ -147,10 +148,15 @@ impl WorldView {
             _ => return,
         };
         let (x, y) = self.canvas_point(position, window);
+        let mods = Modifiers {
+            shift: modifiers.shift,
+            ctrl: modifiers.control,
+            alt: modifiers.alt,
+        };
         self.bridge.push_input(if down {
-            InputEvent::ButtonDown { button, x, y }
+            InputEvent::ButtonDown { button, x, y, mods }
         } else {
-            InputEvent::ButtonUp { button, x, y }
+            InputEvent::ButtonUp { button, x, y, mods }
         });
     }
 
@@ -167,9 +173,22 @@ impl WorldView {
                 .sim
                 .set_speed(self.sim.speed().saturating_mul(2).min(1600)),
             "-" => self.sim.set_speed((self.sim.speed() / 2).max(6)),
+            "escape" => self.bridge.push_input(InputEvent::Escape),
             name => {
                 if let Some(key) = Key::from_name(name) {
                     self.bridge.push_input(InputEvent::KeyDown(key));
+                } else if let (Some(ch), None) = (name.chars().next(), name.chars().nth(1))
+                    && ch.is_ascii_alphanumeric()
+                {
+                    let modifiers = &event.keystroke.modifiers;
+                    self.bridge.push_input(InputEvent::Hotkey {
+                        ch: ch.to_ascii_lowercase(),
+                        mods: Modifiers {
+                            shift: modifiers.shift,
+                            ctrl: modifiers.control,
+                            alt: modifiers.alt,
+                        },
+                    });
                 }
             }
         }
@@ -240,37 +259,37 @@ impl Render for WorldView {
                 MouseButton::Left,
                 cx.listener(|view, event: &MouseDownEvent, window, _| {
                     window.focus(&view.focus);
-                    view.button_event(event.button, event.position, window, true);
+                    view.button_event(event.button, event.position, window, event.modifiers, true);
                 }),
             )
             .on_mouse_down(
                 MouseButton::Right,
                 cx.listener(|view, event: &MouseDownEvent, window, _| {
-                    view.button_event(event.button, event.position, window, true);
+                    view.button_event(event.button, event.position, window, event.modifiers, true);
                 }),
             )
             .on_mouse_down(
                 MouseButton::Middle,
                 cx.listener(|view, event: &MouseDownEvent, window, _| {
-                    view.button_event(event.button, event.position, window, true);
+                    view.button_event(event.button, event.position, window, event.modifiers, true);
                 }),
             )
             .on_mouse_up(
                 MouseButton::Left,
                 cx.listener(|view, event: &MouseUpEvent, window, _| {
-                    view.button_event(event.button, event.position, window, false);
+                    view.button_event(event.button, event.position, window, event.modifiers, false);
                 }),
             )
             .on_mouse_up(
                 MouseButton::Right,
                 cx.listener(|view, event: &MouseUpEvent, window, _| {
-                    view.button_event(event.button, event.position, window, false);
+                    view.button_event(event.button, event.position, window, event.modifiers, false);
                 }),
             )
             .on_mouse_up(
                 MouseButton::Middle,
                 cx.listener(|view, event: &MouseUpEvent, window, _| {
-                    view.button_event(event.button, event.position, window, false);
+                    view.button_event(event.button, event.position, window, event.modifiers, false);
                 }),
             )
             .on_scroll_wheel(cx.listener(|view, event: &ScrollWheelEvent, _, _| {

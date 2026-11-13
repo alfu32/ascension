@@ -1,5 +1,5 @@
 //! GPU resources owned exclusively by the render thread.
-use crate::hud::{HudPainter, HudSnapshot, HudTexture};
+use crate::hud::{HudOverlay, HudPainter, HudSnapshot, HudTexture};
 use crate::hud_layout::{HudLayout, Rect, Region, scale_needs_rebake};
 use crate::hud_minimap::{self, MapMark};
 use crate::{Camera, EntityView, TerrainScene};
@@ -64,8 +64,9 @@ impl HudGpu {
         d: &mut impl RaylibDraw,
         layout: &HudLayout,
         snapshot: &HudSnapshot,
+        overlay: &HudOverlay,
     ) {
-        for q in self.painter.compose(layout, snapshot) {
+        for q in self.painter.compose_with(layout, snapshot, overlay) {
             let colour = Color::new(q.colour[0], q.colour[1], q.colour[2], q.colour[3]);
             let texture = match q.texture {
                 HudTexture::Artwork => &self.artwork,

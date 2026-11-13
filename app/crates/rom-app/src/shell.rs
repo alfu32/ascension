@@ -17,6 +17,7 @@ use crate::bench;
 use crate::demo::{DemoDriver, add_stress_units};
 use crate::match_setup::build_match;
 use crate::screenshot;
+use crate::script::{Script, ScriptContext};
 use crate::sim_thread::{SimLink, SimThread};
 use crate::terrain;
 use crate::world_view::WorldView;
@@ -202,6 +203,28 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
     let driver = options
         .demo
         .then(|| DemoDriver::new(&game, options.seed, wanderers));
-    SimThread::spawn(game.world, driver, options.speed_pct, bridge.clone())
-        .map_err(|error| format!("could not start the simulation thread: {error}"))
+    let script = match &options.script {
+        Some(path) => {
+            let text = std::fs::read_to_string(path)
+                .map_err(|error| format!("reading {}: {error}", path.display()))?;
+            let start = game
+                .starts
+                .iter()
+                .find(|s| s.player == crate::selection::PLAYER)
+                .ok_or("the match has no start for player one")?;
+            Some(
+                Script::parse(&text, &ScriptContext::of(start))
+                    .map_err(|error| format!("{}: {error}", path.display()))?,
+            )
+        }
+        None => None,
+    };
+    SimThread::spawn(
+        game.world,
+        driver,
+        script,
+        options.speed_pct,
+        bridge.clone(),
+    )
+    .map_err(|error| format!("could not start the simulation thread: {error}"))
 }
