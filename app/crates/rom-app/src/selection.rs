@@ -12,7 +12,9 @@ use rom_render::{
     PointerButton, SurfacePos, slot_of_key,
 };
 use rom_rules::{DefId, EntityClass, EntityType, ProductionMode, Rules, StanceFamily};
-use rom_sim::{Command, Entity, EntityId, PlayerId, Pos, SimError, Topology, World};
+use rom_sim::{BodyId, Command, Entity, EntityId, PlayerId, Pos, SimError, Topology, World};
+
+use crate::space_view::SpaceFrame;
 
 /// The player this interface commands.
 pub const PLAYER: PlayerId = PlayerId(1);
@@ -43,6 +45,21 @@ enum Action {
     Stop,
     AttackMove,
     Stance(DefId),
+    Orbit,
+    Travel,
+}
+
+/// What the camera shows, as far as turning picks into orders needs it.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ViewCtx {
+    /// The body of the planet shown (body 0 in a world of one surface).
+    pub planet: BodyId,
+    /// The system the camera is anchored to.
+    pub system: Option<u32>,
+    /// Whether the camera is at the system or star-map level, where picks are in space.
+    pub in_space: bool,
+    /// The plane of that system.
+    pub frame: Option<SpaceFrame>,
 }
 
 #[derive(Clone, Debug)]
@@ -97,23 +114,20 @@ pub struct Controller {
     focus: Option<Pos>,
     ordered: bool,
     seen_next_id: u32,
-}
-
-/// The simulation position of a picked surface position (milli-tiles on a face).
-fn pos_of(surface: SurfacePos) -> Pos {
-    let clamp = |v: i64| v.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32;
-    Pos {
-        x: clamp(surface.x),
-        y: clamp(surface.y),
-        face: surface.face,
-        ..Pos::default()
-    }
+    view: ViewCtx,
 }
 
 /// Distance in milli-tiles between two positions; positions beyond reach (or on faces that do
 /// not touch) rank last.
 fn distance(world: &World, a: Pos, b: Pos) -> u64 {
     world.distance(a, b).unwrap_or(u64::MAX)
+}
+
+/// Whether an entity stands in the space of a system (on a star's plane).
+fn in_space(world: &World, entity: &Entity) -> bool {
+    world
+        .body(entity.pos.body)
+        .is_some_and(|b| b.kind == rom_rules::BodyKind::Star)
 }
 
 fn snap(coordinate: i32, size: i64) -> i32 {
@@ -149,6 +163,66 @@ impl Controller {
     /// An empty controller.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Tells the controller what the camera shows, so picks become positions on the right body.
+    pub fn set_view(&mut self, view: ViewCtx) {
+        self.view = view;
+    }
+
+    /// The simulation position of a picked surface position: milli-tiles on a face of the planet
+    /// shown, or, in space, orbit-radius units times 1000 from the star of the system shown.
+    fn pos_of(&self, surface: SurfacePos) -> Pos {
+        if self.view.in_space
+            && let Some(frame) = self.view.frame
+        {
+            return frame.pos_of(surface.x as f32 / 1000.0, surface.y as f32 / 1000.0);
+        }
+        let clamp = |v: i64| v.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32;
+        Pos {
+            x: clamp(surface.x),
+            y: clamp(surface.y),
+            face: surface.face,
+            body: self.view.planet,
+        }
+    }
+
+    /// Puts a line in the event line.
+    pub fn notify(&mut self, world: &World, text: impl Into<String>) {
+        self.say(world, text);
+    }
+
+    /// Player one's finished buildings that train units and are not cities.
+    pub fn select_producers(&mut self, world: &World) {
+        let rules = world.rules();
+        let ids: Vec<EntityId> = world
+            .entities()
+            .filter(|e| e.owner == PLAYER && e.build_progress.is_none())
+            .filter(|e| {
+                let et = &rules.entity_types[&e.type_id];
+                et.class == EntityClass::Building
+                    && et.territory.as_ref().is_none_or(|t| !t.is_city)
+                    && rules
+                        .production
+                        .get(&e.type_id)
+                        .into_iter()
+                        .flatten()
+                        .any(|r| r.mode == ProductionMode::Train)
+            })
+            .map(|e| e.id)
+            .collect();
+        self.set_selection(ids);
+    }
+
+    /// Player one's ships (movers standing in a system's space), ascending.
+    pub fn select_own_ships(&mut self, world: &World) {
+        let ships: Vec<EntityId> = world
+            .entities()
+            .filter(|e| e.owner == PLAYER && in_space(world, e))
+            .filter(|e| world.rules().entity_types[&e.type_id].movement.is_some())
+            .map(|e| e.id)
+            .collect();
+        self.set_selection(ships);
     }
 
     /// True once the player has issued any order; the demo then leaves player one alone.
@@ -253,7 +327,7 @@ impl Controller {
                 ..
             } => self.click(
                 world,
-                pos_of(surface),
+                self.pos_of(surface),
                 entity,
                 modifiers,
                 double,
@@ -268,14 +342,27 @@ impl Controller {
                 entity,
                 modifiers,
                 ..
-            } => self.right_click(world, pos_of(surface), entity, modifiers),
+            } => {
+                let target = self.pos_of(surface);
+                self.right_click(world, target, entity, modifiers);
+            }
+            PickEvent::SpaceRightClick {
+                surface,
+                entity,
+                body,
+                system,
+                modifiers,
+            } => self.space_right_click(world, surface, entity, body, system, modifiers),
             PickEvent::HudClick {
                 region,
                 index,
                 button,
                 modifiers,
             } => self.hud_click(world, region, index, button, modifiers),
-            PickEvent::Hover { surface, .. } => self.hover(world, pos_of(surface)),
+            PickEvent::Hover { surface, .. } => {
+                let at = self.pos_of(surface);
+                self.hover(world, at);
+            }
             PickEvent::Hotkey { ch, modifiers } => self.hotkey(world, ch, modifiers),
             PickEvent::Escape => {
                 self.placement = None;
@@ -384,6 +471,13 @@ impl Controller {
     }
 
     fn marker(&mut self, world: &World, pos: Pos, kind: MarkerKind) {
+        if self.view.in_space
+            || world
+                .body(pos.body)
+                .is_some_and(|b| b.kind == rom_rules::BodyKind::Star)
+        {
+            return;
+        }
         self.markers.push(Marker {
             pos,
             kind,
@@ -476,6 +570,141 @@ impl Controller {
         }
     }
 
+    /// Own ships selected, in space and able to move.
+    fn selected_ships(&self, world: &World) -> Vec<EntityId> {
+        let rules = world.rules();
+        self.own_selected(world)
+            .iter()
+            .filter(|e| in_space(world, e) && rules.entity_types[&e.type_id].movement.is_some())
+            .map(|e| e.id)
+            .collect()
+    }
+
+    fn order_orbit(
+        &mut self,
+        world: &mut World,
+        ship: EntityId,
+        body: BodyId,
+        queue: bool,
+    ) -> bool {
+        let Some(marker) = world.body_marker(body) else {
+            self.say(world, "That body cannot be orbited");
+            return false;
+        };
+        self.submit(world, ship, "orbit", None, Some(marker), None, queue)
+    }
+
+    fn order_travel(
+        &mut self,
+        world: &mut World,
+        ship: EntityId,
+        system: u32,
+        queue: bool,
+    ) -> bool {
+        let Some(at) = world
+            .space_of(system)
+            .and_then(|star| world.body_position(star))
+        else {
+            self.say(world, "That system cannot be reached");
+            return false;
+        };
+        self.submit(world, ship, "travel", None, None, Some(at), queue)
+    }
+
+    /// A right click in space: attack a ship, orbit a body, travel to a system or move.
+    fn space_right_click(
+        &mut self,
+        world: &mut World,
+        surface: SurfacePos,
+        entity: Option<u32>,
+        body: Option<u32>,
+        system: Option<u32>,
+        mods: Modifiers,
+    ) {
+        let ships = self.selected_ships(world);
+        let foe = entity
+            .map(EntityId)
+            .and_then(|id| world.entity(id))
+            .filter(|e| Self::is_enemy(world, e))
+            .map(|e| e.id);
+        let point = self
+            .view
+            .frame
+            .map(|f| f.pos_of(surface.x as f32 / 1000.0, surface.y as f32 / 1000.0));
+        for id in ships {
+            let armed = world
+                .entity(id)
+                .is_some_and(|e| !world.rules().entity_types[&e.type_id].weapons.is_empty());
+            if let (Some(foe), true) = (foe, armed) {
+                self.submit(world, id, "attack", None, Some(foe), None, mods.shift);
+            } else if let Some(body) = body {
+                self.order_orbit(world, id, BodyId(body), mods.shift);
+            } else if let Some(system) = system {
+                self.order_travel(world, id, system, mods.shift);
+            } else if let Some(at) = point {
+                self.submit(world, id, "move", None, None, Some(at), mods.shift);
+            }
+        }
+    }
+
+    /// The Orbit button: every selected ship holds the nearest body of its system.
+    fn orbit_nearest(&mut self, world: &mut World) {
+        for id in self.selected_ships(world) {
+            let Some(ship) = world.entity(id) else {
+                continue;
+            };
+            let system = world.body(ship.pos.body).map(|b| b.system);
+            let near = world
+                .bodies()
+                .iter()
+                .filter(|b| Some(b.system) == system && b.kind != rom_rules::BodyKind::Star)
+                .filter_map(|b| {
+                    let at = world.body_position(b.id)?;
+                    Some((world.distance(ship.pos, at)?, b.id))
+                })
+                .min();
+            if let Some((_, body)) = near {
+                self.order_orbit(world, id, body, false);
+            }
+        }
+    }
+
+    /// The Travel button: every selected ship goes to the system the camera is anchored to, or,
+    /// when that is its own, to the nearest system along a route.
+    fn travel_on(&mut self, world: &mut World) {
+        for id in self.selected_ships(world) {
+            let Some(ship) = world.entity(id) else {
+                continue;
+            };
+            let Some(here) = world.body(ship.pos.body).map(|b| b.system) else {
+                continue;
+            };
+            let target = self.view.system.filter(|s| *s != here).or_else(|| {
+                world
+                    .routes()
+                    .iter()
+                    .filter_map(|r| {
+                        let other = if r.system_a == here {
+                            r.system_b
+                        } else if r.system_b == here {
+                            r.system_a
+                        } else {
+                            return None;
+                        };
+                        Some((r.length, other))
+                    })
+                    .min()
+                    .map(|(_, other)| other)
+            });
+            match target {
+                Some(system) => {
+                    self.order_travel(world, id, system, false);
+                }
+                None => self.say(world, "No system to travel to"),
+            }
+        }
+    }
+
     fn hotkey(&mut self, world: &mut World, ch: char, mods: Modifiers) {
         if let Some(group) = ch.to_digit(10).map(|d| d as usize) {
             if mods.ctrl {
@@ -496,7 +725,12 @@ impl Controller {
             });
             self.last_group = Some((group, world.tick()));
             if twice {
-                self.focus = match world.topology() {
+                let topology = alive
+                    .first()
+                    .and_then(|id| world.entity(*id))
+                    .and_then(|e| world.surface(e.pos.body))
+                    .map_or_else(|| world.topology(), |s| s.topology());
+                self.focus = match topology {
                     Topology::Flat { .. } => {
                         let (mut x, mut y) = (0.0, 0.0);
                         for id in &alive {
@@ -737,6 +971,12 @@ impl Controller {
             }
             PaletteTab::Order => {
                 actions.push((0, Action::Stop));
+                if own.iter().any(|e| {
+                    in_space(world, e) && rules.entity_types[&e.type_id].movement.is_some()
+                }) {
+                    actions.push((2, Action::Orbit));
+                    actions.push((3, Action::Travel));
+                }
                 if armed_mover {
                     actions.push((1, Action::AttackMove));
                     let stances = rules.stances.values().filter(|s| {
@@ -823,6 +1063,14 @@ impl Controller {
                 button.name = "Stop".into();
                 button.icon = "icons/cmd_stop".into();
             }
+            Action::Orbit => {
+                button.name = "Orbit".into();
+                button.icon = "icons/cmd_guard".into();
+            }
+            Action::Travel => {
+                button.name = "Travel".into();
+                button.icon = "icons/cmd_attack_move".into();
+            }
             Action::AttackMove => {
                 button.name = "Attack-move".into();
                 button.icon = "icons/cmd_attack_move".into();
@@ -906,6 +1154,8 @@ impl Controller {
                 self.attack_move = false;
             }
             Action::AttackMove => self.attack_move = !self.attack_move,
+            Action::Orbit => self.orbit_nearest(world),
+            Action::Travel => self.travel_on(world),
             Action::Stance(stance) => {
                 let ids: Vec<EntityId> = self
                     .own_selected(world)
@@ -985,8 +1235,7 @@ impl Controller {
         let centre = Pos {
             x: snap(at.x, p.footprint.0),
             y: snap(at.y, p.footprint.1),
-            face: at.face,
-            ..Pos::default()
+            ..at
         };
         if p.centre != Some(centre) {
             p.centre = Some(centre);
@@ -1016,8 +1265,7 @@ impl Controller {
         let centre = Pos {
             x: snap(at.x, p.footprint.0),
             y: snap(at.y, p.footprint.1),
-            face: at.face,
-            ..Pos::default()
+            ..at
         };
         let rules = world.rules().clone();
         let mut builders: Vec<(u64, EntityId)> = self

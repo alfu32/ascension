@@ -871,3 +871,130 @@ fn placement_on_the_sphere_matches_check_placement() {
         );
     }
 }
+
+#[test]
+fn right_click_on_a_body_orders_orbit_and_on_a_system_orders_travel() {
+    let (content, mut game) = crate::match_setup::universe_game_for_tests();
+    let home = game.world.home_body(PLAYER).expect("home");
+    let system = game.world.body(home).unwrap().system;
+    let rules = game.world.rules().clone();
+    let ship_type = rules.id_of("unit.survey_ship").expect("ship");
+    let star = game.world.space_of(system).expect("star");
+    let mut at = game.world.body_position(star).expect("position");
+    at.x += 4000;
+    let ship = game.world.spawn(ship_type, PLAYER, at).expect("ship");
+    game.world.step();
+    let mut ctl = Controller::new();
+    ctl.set_view(ViewCtx {
+        planet: home,
+        system: Some(system),
+        in_space: true,
+        frame: crate::space_view::SpaceFrame::of(&game.world, system),
+    });
+    ctl.handle(
+        &mut game.world,
+        PickEvent::Click {
+            world_point: (0.0, 0.0),
+            surface: SurfacePos {
+                face: 0,
+                x: 0,
+                y: 0,
+            },
+            entity: Some(ship.0),
+            modifiers: Modifiers::default(),
+            double: false,
+            on_screen: Vec::new(),
+        },
+    );
+    assert_eq!(ctl.selection(), &[ship]);
+    let rock = game
+        .world
+        .bodies()
+        .iter()
+        .find(|b| b.system == system && b.kind == rom_rules::BodyKind::Resource)
+        .expect("a resource body")
+        .id;
+    let right = |body, system| PickEvent::SpaceRightClick {
+        surface: SurfacePos {
+            face: 0,
+            x: 0,
+            y: 0,
+        },
+        entity: None,
+        body,
+        system,
+        modifiers: Modifiers::default(),
+    };
+    ctl.handle(&mut game.world, right(Some(rock.0), None));
+    game.world.step();
+    let order = game
+        .world
+        .entity(ship)
+        .unwrap()
+        .orders()
+        .front()
+        .unwrap()
+        .clone();
+    assert_eq!(order.kind, "orbit");
+    assert_eq!(order.target_entity, game.world.body_marker(rock));
+    let neighbour = content
+        .universe
+        .routes
+        .iter()
+        .find_map(|r| {
+            (r.system_a == system)
+                .then_some(r.system_b)
+                .or((r.system_b == system).then_some(r.system_a))
+        })
+        .expect("a neighbouring system");
+    ctl.handle(&mut game.world, right(None, Some(neighbour)));
+    game.world.step();
+    let order = game
+        .world
+        .entity(ship)
+        .unwrap()
+        .orders()
+        .front()
+        .unwrap()
+        .clone();
+    assert_eq!(order.kind, "travel");
+    assert_eq!(
+        order.target_pos.unwrap().body,
+        game.world.space_of(neighbour).unwrap()
+    );
+    // On empty space the ship moves.
+    ctl.handle(
+        &mut game.world,
+        PickEvent::SpaceRightClick {
+            surface: SurfacePos {
+                face: 0,
+                x: 500_000,
+                y: 0,
+            },
+            entity: None,
+            body: None,
+            system: None,
+            modifiers: Modifiers::default(),
+        },
+    );
+    game.world.step();
+    assert_eq!(
+        game.world
+            .entity(ship)
+            .unwrap()
+            .orders()
+            .front()
+            .unwrap()
+            .kind,
+        "move"
+    );
+}
+
+fn pos_of(surface: SurfacePos) -> Pos {
+    Pos {
+        x: surface.x as i32,
+        y: surface.y as i32,
+        face: surface.face,
+        ..Pos::default()
+    }
+}

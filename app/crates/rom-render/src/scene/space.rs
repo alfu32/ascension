@@ -7,8 +7,10 @@ use raylib::consts::{BlendMode, MaterialMapIndex};
 use raylib::prelude::{Rectangle, Texture2D};
 
 use super::*;
+use crate::entities::{frame_box, owner_color};
 use crate::globe::PlanetScene;
 use crate::hud_minimap::planet_pixels;
+use crate::space::{SpaceSnapshot, annulus, claim_rings, ship_frame_pos, transit_point};
 use crate::universe::{
     BodyViewKind, UniverseScene, planet_colour, ring_points, rock_colour, uv_sphere,
 };
@@ -61,6 +63,22 @@ const STAR_GLOW: f32 = 2600.0;
 const GLOW_SIDE: u32 = 128;
 const ORBIT_RING: Color = Color::new(120, 140, 185, 120);
 const ROUTE_LINE: Color = Color::new(110, 140, 200, 110);
+
+/// What is in space and which ships are selected, kept for the next draw.
+#[derive(Default)]
+pub(super) struct SpaceState {
+    snapshot: Arc<SpaceSnapshot>,
+    selected: Vec<u32>,
+}
+
+/// A colour from owner palette values.
+fn owner_rgb(owner: u8) -> [u8; 3] {
+    owner_color(owner).map(|c| (c * 255.0).round() as u8)
+}
+
+fn lerp_colour(colour: [u8; 3], toward: f32) -> [f32; 3] {
+    colour.map(|c| (f32::from(c) / 255.0) * (1.0 - toward) + toward)
+}
 
 /// A name to draw next to a system on the star map, in pixels of the render target.
 #[derive(Clone, Debug, PartialEq)]
@@ -211,6 +229,16 @@ impl Scene {
         });
     }
 
+    /// Keeps what is in space and the selected entity ids for the next draw.
+    pub(crate) fn set_space_state(&mut self, snapshot: &Arc<SpaceSnapshot>, selected: &[u32]) {
+        if !Arc::ptr_eq(&self.space_state.snapshot, snapshot) {
+            self.space_state.snapshot = Arc::clone(snapshot);
+        }
+        if self.space_state.selected != selected {
+            self.space_state.selected = selected.to_vec();
+        }
+    }
+
     /// The names to draw over the last frame, in render-target pixels.
     pub(crate) fn space_labels(&self) -> &[SpaceLabel] {
         self.space.as_ref().map_or(&[], |s| &s.labels)
@@ -309,6 +337,7 @@ impl Scene {
         zoom: &ZoomCamera,
         orbit: &OrbitCamera,
     ) {
+        self.set_light(super::SHIP_LIGHT);
         let Some(space) = &mut self.space else {
             return;
         };
@@ -369,6 +398,110 @@ impl Scene {
                 space.shader.set_shader_value(tint_at, tint);
                 space.shader.set_shader_value(emissive_at, emissive);
                 world.draw_mesh(mesh, material.clone(), ball(placed.pos, placed.radius));
+            }
+            let system_id = universe.systems.get(zoom.system()).map(|s| s.id);
+            let state = &self.space_state;
+            if state.snapshot.system == system_id && system_id.is_some() {
+                let outermost = system_id.map_or(1.0, |id| universe.system_outermost(id));
+                let distance = zoom.scale().system_distance(zoom.l());
+                let unit = (distance * 0.016).max(24.0);
+                let rings = claim_rings(&universe, zoom.placed(), &state.snapshot.claims);
+                let thickness = (distance * 0.004).max(5.0);
+                let mut overlay = OverlayGeometry::default();
+                for ring in &rings {
+                    let [r, g, b] = ring.colour;
+                    overlay.tris.extend(annulus(
+                        [ring.centre[0], 0.4, ring.centre[2]],
+                        ring.radius,
+                        thickness,
+                        [r, g, b, 235],
+                        96,
+                    ));
+                }
+                let forward = unit_vector([
+                    view.target[0] - view.eye[0],
+                    view.target[1] - view.eye[1],
+                    view.target[2] - view.eye[2],
+                ]);
+                let right = unit_vector(cross3(forward, [0.0, 1.0, 0.0]));
+                let cam_up = cross3(right, forward);
+                let mut matrices: Vec<Matrix> = Vec::with_capacity(state.snapshot.ships.len() * 2);
+                for ship in &state.snapshot.ships {
+                    let at = ship_frame_pos(&universe, zoom.placed(), outermost, ship);
+                    let theta = ship.facing_deg.to_radians();
+                    let f = [theta.cos(), 0.0, theta.sin()];
+                    let side = [-theta.sin(), 0.0, theta.cos()];
+                    let colour = owner_color(ship.owner);
+                    let axes = [f, [0.0, 1.0, 0.0], side];
+                    let lift = [at[0], at[1] + unit * 0.4, at[2]];
+                    matrices.push(matrix_of(&frame_box(
+                        lift,
+                        axes,
+                        [unit * 3.2, unit * 0.7, unit * 1.1],
+                        colour,
+                    )));
+                    let cabin = [
+                        lift[0] + f[0] * unit * 0.5,
+                        lift[1] + unit * 0.6,
+                        lift[2] + f[2] * unit * 0.5,
+                    ];
+                    matrices.push(matrix_of(&frame_box(
+                        cabin,
+                        axes,
+                        [unit * 1.1, unit * 0.6, unit * 0.7],
+                        lerp_colour(owner_rgb(ship.owner), 0.45),
+                    )));
+                    let selected = state.selected.binary_search(&ship.id).is_ok();
+                    if selected {
+                        let ring = annulus(
+                            [at[0], 0.6, at[2]],
+                            unit * 2.4,
+                            (unit * 0.22).max(thickness * 0.7),
+                            [63, 208, 255, 255],
+                            28,
+                        );
+                        overlay.tris.extend(ring);
+                    }
+                    if selected || ship.hp_frac < 0.999 {
+                        let width = unit * 3.0;
+                        let base = [at[0], at[1] + unit * 2.2, at[2]];
+                        let corner = |along: f32, up: f32| {
+                            [
+                                base[0] + right[0] * along + cam_up[0] * up,
+                                base[1] + right[1] * along + cam_up[1] * up,
+                                base[2] + right[2] * along + cam_up[2] * up,
+                            ]
+                        };
+                        let h = unit * 0.32;
+                        let filled = -width / 2.0 + width * ship.hp_frac.clamp(0.0, 1.0);
+                        let quad = |from: f32, to: f32, colour: [u8; 4]| {
+                            [
+                                crate::overlay::Tri3 {
+                                    v: [corner(from, 0.0), corner(to, 0.0), corner(to, h)],
+                                    colour,
+                                },
+                                crate::overlay::Tri3 {
+                                    v: [corner(from, 0.0), corner(to, h), corner(from, h)],
+                                    colour,
+                                },
+                            ]
+                        };
+                        overlay
+                            .tris
+                            .extend(quad(-width / 2.0, width / 2.0, [30, 30, 30, 255]));
+                        overlay
+                            .tris
+                            .extend(quad(-width / 2.0, filled, [70, 230, 90, 255]));
+                    }
+                }
+                if !matrices.is_empty() {
+                    world.draw_mesh_instanced(
+                        &self.box_mesh,
+                        self.entity_material.clone(),
+                        &matrices,
+                    );
+                }
+                super::draw_overlay(&mut world, &overlay);
             }
             // The glow of the star: additive, without writing depth.
             if let Some(star) = zoom
@@ -444,6 +577,43 @@ impl Scene {
                     );
                 }
             }
+            let grow_now = zoom.scale().map_distance(zoom.l()) * 0.1;
+            for transit in &self.space_state.snapshot.transits {
+                if let (Some(a), Some(b)) = (
+                    universe.system_index(transit.from),
+                    universe.system_index(transit.to),
+                ) {
+                    let [r, g, b_] = owner_rgb(transit.owner);
+                    world.draw_line3D(
+                        vec3(space.map_positions[a]),
+                        vec3(space.map_positions[b]),
+                        Color::new(r, g, b_, 190),
+                    );
+                    let at = transit_point(
+                        space.map_positions[a],
+                        space.map_positions[b],
+                        transit.progress,
+                    );
+                    sprite(
+                        &mut world,
+                        camera,
+                        &space.glow,
+                        at,
+                        (grow_now * 0.55).max(1300.0),
+                        [r, g, b_],
+                        255,
+                    );
+                    sprite(
+                        &mut world,
+                        camera,
+                        &space.glow,
+                        at,
+                        (grow_now * 0.2).max(480.0),
+                        [255, 255, 255],
+                        255,
+                    );
+                }
+            }
             for (i, system) in universe.systems.iter().enumerate() {
                 let pos = space.map_positions[i];
                 let halo = space.tints[i].unwrap_or(system.star_colour);
@@ -491,6 +661,19 @@ impl Scene {
             });
         }
     }
+}
+
+fn cross3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+fn unit_vector(v: [f32; 3]) -> [f32; 3] {
+    let length = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-6);
+    v.map(|c| c / length)
 }
 
 /// An additive billboard of `size` units at `pos`; it does not write depth.

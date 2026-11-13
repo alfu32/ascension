@@ -1,0 +1,31 @@
+# Replayed by --script in --universe mode (task 25). Test-only setup lines first.
+0 grant-age age.starfaring
+0 grant res.food 5000
+0 grant res.timber 5000
+0 grant res.metal 5000
+0 grant res.wealth 5000
+0 grant res.oil 5000
+0 grant res.energy 5000
+# Run the match faster so the screenshot waits show the later steps.
+1 speed 800
+# Build a spaceport: builders, BUILD tab, military page, the second slot, place beside the city.
+4 box builders
+8 hud tab 0
+10 hud arrow 1
+12 hud slot 1
+14 hover @-12,0
+16 click @-12,0
+# Train two ships once it stands.
+1500 producers
+1502 hud tab 2
+1504 hud slot 0
+1506 hud slot 0
+# Send the ships to the nearest resource body, then to a neighbouring system.
+2800 ships
+2802 orbit rock1
+# Slow down for the voyage so a ship can be caught in transit.
+5000 speed 100
+5300 ships
+5302 travel system1
+5400 speed 800
+7400 speed 40

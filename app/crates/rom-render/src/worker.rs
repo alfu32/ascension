@@ -28,6 +28,7 @@ use crate::orbit::{
 use crate::pick::{PickContext, PickController, PickEvent, canvas_view, canvas_view_orbit};
 use crate::pixels::rgba_to_bgra_flipped;
 use crate::scene::Scene;
+use crate::space::{SpaceContext, SpacePicker, SpaceSnapshot, ship_frame_pos};
 use crate::stats::{RenderStats, StatsWindow};
 use crate::terrain::{TerrainScene, home_camera, overview_camera};
 use crate::universe::UniverseScene;
@@ -66,6 +67,31 @@ pub struct OrbitSettings {
     /// Where the camera starts looking when `view` is not given; `None` looks at the first
     /// start of the planet scene.
     pub home: Option<SurfacePos>,
+    /// The universe body this planet is. With a universe already published, a planet with a body
+    /// replaces the globe of the zoom camera in place (the camera keeps its place); without one,
+    /// the planet is the first one.
+    pub body: Option<u32>,
+}
+
+/// What the camera looks at, for the simulation thread to publish what it needs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ViewState {
+    /// The level shown.
+    pub level: Level,
+    /// The star system the view is anchored to.
+    pub system: Option<u32>,
+    /// The planet whose globe is loaded.
+    pub surface: Option<u32>,
+}
+
+impl Default for ViewState {
+    fn default() -> Self {
+        Self {
+            level: Level::Globe,
+            system: None,
+            surface: None,
+        }
+    }
 }
 
 /// How the zoom above the planet camera starts, for a published universe.
@@ -90,6 +116,9 @@ struct Shared {
     universe: Mutex<Option<(Arc<UniverseScene>, UniverseSettings)>>,
     zoom_cap: AtomicU8,
     zoom_all: AtomicBool,
+    space: Mutex<Arc<SpaceSnapshot>>,
+    view_state: Mutex<ViewState>,
+    surface_request: Mutex<Option<u32>>,
     terrain_ready: AtomicBool,
     box_count: AtomicU32,
     snapshots: Mutex<SnapshotPair>,
@@ -145,6 +174,34 @@ impl RenderBridge {
     /// Publish it before the home planet's [`PlanetScene`]; the zoom starts once both are there.
     pub fn publish_universe(&self, scene: Arc<UniverseScene>, settings: UniverseSettings) {
         *lock(&self.shared.universe) = Some((scene, settings));
+    }
+
+    /// A bridge with no render thread behind it, for tests of the other threads: everything
+    /// published stays in it, nothing is drawn and no window opens.
+    pub fn detached() -> Self {
+        Self {
+            shared: Arc::new(Shared::new()),
+        }
+    }
+
+    /// Hands over what is in space: ships, claims and transits (the newest replaces the last).
+    pub fn publish_space(&self, space: Arc<SpaceSnapshot>) {
+        *lock(&self.shared.space) = space;
+    }
+
+    /// What the camera looks at now.
+    pub fn view_state(&self) -> ViewState {
+        *lock(&self.shared.view_state)
+    }
+
+    /// The planet whose globe the camera asked for since the last call, once per request.
+    pub fn take_surface_request(&self) -> Option<u32> {
+        lock(&self.shared.surface_request).take()
+    }
+
+    /// Asks for the globe of a planet as the camera would (tests and scripts).
+    pub fn request_surface(&self, body: u32) {
+        *lock(&self.shared.surface_request) = Some(body);
     }
 
     /// Sets the farthest level the zoom may reach (the player's age decides it).
@@ -293,36 +350,7 @@ pub struct RenderWorker {
 impl RenderWorker {
     /// Spawns the render thread, which opens a hidden raylib window and renders continuously.
     pub fn start() -> io::Result<(Self, RenderBridge)> {
-        let (pick_tx, pick_rx) = channel();
-        let shared = Arc::new(Shared {
-            layout: Mutex::new((0, 0)),
-            render_scale: AtomicU32::new(MAX_RENDER_SCALE),
-            camera: Mutex::new(None),
-            input: Mutex::new(Vec::new()),
-            mailbox: FrameMailbox::default(),
-            terrain: Mutex::new(None),
-            planet: Mutex::new(None),
-            universe: Mutex::new(None),
-            zoom_cap: AtomicU8::new(Level::Globe as u8),
-            zoom_all: AtomicBool::new(false),
-            terrain_ready: AtomicBool::new(false),
-            box_count: AtomicU32::new(0),
-            snapshots: Mutex::new(SnapshotPair::default()),
-            hud: Mutex::new(Arc::new(HudSnapshot::default())),
-            hud_visible: AtomicBool::new(true),
-            hud_scale: AtomicU32::new(0),
-            pick_tx: Mutex::new(pick_tx),
-            pick_rx: Mutex::new(pick_rx),
-            focus: Mutex::new(None),
-            focus_surface: Mutex::new(None),
-            vision: Mutex::new(None),
-            start_markers: AtomicBool::new(false),
-            snapshot_wanted: AtomicBool::new(false),
-            snapshot: Mutex::new(None),
-            stats: Mutex::new(RenderStats::default()),
-            stop: AtomicBool::new(false),
-            finished: (Mutex::new(false), Condvar::new()),
-        });
+        let shared = Arc::new(Shared::new());
         let worker_shared = Arc::clone(&shared);
         let thread = thread::Builder::new()
             .name("rom-render".into())
@@ -348,6 +376,44 @@ impl RenderWorker {
             && thread.join().is_err()
         {
             eprintln!("rom-render: render thread panicked");
+        }
+    }
+}
+
+impl Shared {
+    fn new() -> Self {
+        let (pick_tx, pick_rx) = channel();
+        Self {
+            layout: Mutex::new((0, 0)),
+            render_scale: AtomicU32::new(MAX_RENDER_SCALE),
+            camera: Mutex::new(None),
+            input: Mutex::new(Vec::new()),
+            mailbox: FrameMailbox::default(),
+            terrain: Mutex::new(None),
+            planet: Mutex::new(None),
+            universe: Mutex::new(None),
+            zoom_cap: AtomicU8::new(Level::Globe as u8),
+            zoom_all: AtomicBool::new(false),
+            space: Mutex::new(Arc::new(SpaceSnapshot::default())),
+            view_state: Mutex::new(ViewState::default()),
+            surface_request: Mutex::new(None),
+            terrain_ready: AtomicBool::new(false),
+            box_count: AtomicU32::new(0),
+            snapshots: Mutex::new(SnapshotPair::default()),
+            hud: Mutex::new(Arc::new(HudSnapshot::default())),
+            hud_visible: AtomicBool::new(true),
+            hud_scale: AtomicU32::new(0),
+            pick_tx: Mutex::new(pick_tx),
+            pick_rx: Mutex::new(pick_rx),
+            focus: Mutex::new(None),
+            focus_surface: Mutex::new(None),
+            vision: Mutex::new(None),
+            start_markers: AtomicBool::new(false),
+            snapshot_wanted: AtomicBool::new(false),
+            snapshot: Mutex::new(None),
+            stats: Mutex::new(RenderStats::default()),
+            stop: AtomicBool::new(false),
+            finished: (Mutex::new(false), Condvar::new()),
         }
     }
 }
@@ -390,6 +456,8 @@ fn render_loop(shared: &Shared) {
     let mut home_dir = [0.0, 0.0, 1.0];
     let mut pending_universe: Option<(Arc<UniverseScene>, UniverseSettings)> = None;
     let mut zoom: Option<ZoomCamera> = None;
+    let mut surface_requested: Option<u32> = None;
+    let mut space_picker = SpacePicker::default();
     let mut shades: Vec<[f32; 3]> = Vec::new();
     let mut stats = StatsWindow::default();
     let mut blended: Vec<EntityView> = Vec::new();
@@ -411,17 +479,25 @@ fn render_loop(shared: &Shared) {
 
         let published_planet = lock(&shared.planet).take();
         if let Some((planet, settings)) = published_planet {
+            // A planet with a body, published while the zoom camera exists, is another globe for
+            // the same camera.
+            let swap = settings.body.is_some() && zoom.is_some();
             orbit = None;
             globe = None;
-            zoom = None;
+            if !swap {
+                zoom = None;
+            }
             planet_scene = None;
             minimap = None;
             if planet.is_valid() {
                 let started_at = Instant::now();
                 let built_globe = Arc::new(Globe::new(&planet));
                 let geometry_ms = millis(started_at.elapsed());
+                let sun = settings.home.map_or(crate::scene::SUN_DIRECTION, |s| {
+                    crate::scene::sun_for(built_globe.dir_of(s))
+                });
                 let (meshes, build_ms, upload_ms) =
-                    scene.set_planet(&thread, &planet, &built_globe);
+                    scene.set_planet(&thread, &planet, &built_globe, sun);
                 minimap = match MinimapGpu::load_planet(&mut rl, &thread, &planet, &built_globe) {
                     Ok(map) => Some(map),
                     Err(error) => {
@@ -461,6 +537,19 @@ fn render_loop(shared: &Shared) {
                     build_ms + geometry_ms
                 );
                 globe = Some(built_globe);
+                if let (true, Some(zoom_camera), Some(orbit_camera), Some(body)) =
+                    (swap, zoom.as_mut(), orbit.as_mut(), settings.body)
+                {
+                    zoom_camera.surface_ready(body, radius, max, home_dir, orbit_camera);
+                    scene.set_universe(
+                        &mut rl,
+                        &thread,
+                        &zoom_camera.scene_arc(),
+                        Some(body),
+                        planet_scene.as_deref(),
+                    );
+                }
+                surface_requested = None;
             } else {
                 eprintln!("rom-render: ignoring a planet scene with inconsistent tile data");
             }
@@ -557,6 +646,7 @@ fn render_loop(shared: &Shared) {
         let percent = shared.hud_scale.load(Ordering::Relaxed);
         let hud_snapshot = Arc::clone(&lock(&shared.hud));
         let canvas = HudLayout::new(layout.0, layout.1, (percent > 0).then_some(percent));
+        let space_snapshot = Arc::clone(&lock(&shared.space));
         let pair = lock(&shared.snapshots).clone();
         pair.blend_at_on(frame_start, globe.as_deref(), &mut blended);
         let events = std::mem::take(&mut *lock(&shared.input));
@@ -565,10 +655,28 @@ fn render_loop(shared: &Shared) {
             let ground = |x: f32, y: f32| surface.map_or(0.0, |s| s.height(x, y));
             let now_ms = frame_start.duration_since(started).as_millis() as u64;
             for event in events {
-                if let (Some(zoom), Some(orbit)) = (zoom.as_mut(), orbit.as_mut())
-                    && zoom_event(zoom, orbit, event, over_hud, now_ms, &canvas, hud_visible)
-                {
-                    continue;
+                if let (Some(zoom), Some(orbit)) = (zoom.as_mut(), orbit.as_mut()) {
+                    let mut space_events = Vec::new();
+                    let consumed = zoom_event(
+                        &mut ZoomInput {
+                            zoom,
+                            orbit,
+                            picker: &mut space_picker,
+                            space: &space_snapshot,
+                            out: &mut space_events,
+                        },
+                        event,
+                        over_hud,
+                        now_ms,
+                        &canvas,
+                        hud_visible,
+                    );
+                    for pick in space_events {
+                        let _ = lock(&shared.pick_tx).send(pick);
+                    }
+                    if consumed {
+                        continue;
+                    }
                 }
                 let ctx = PickContext {
                     layout: canvas,
@@ -646,6 +754,25 @@ fn render_loop(shared: &Shared) {
             (None, _) => controller.advance(&mut camera, seconds),
         }
 
+        if let Some(zoom) = &zoom {
+            *lock(&shared.view_state) = ViewState {
+                level: zoom.level(),
+                system: zoom.system_id(),
+                surface: zoom
+                    .surface_body()
+                    .and_then(|i| zoom.scene().bodies.get(i))
+                    .map(|b| b.id),
+            };
+            match zoom.want_surface() {
+                Some(body) if surface_requested != Some(body) => {
+                    surface_requested = Some(body);
+                    *lock(&shared.surface_request) = Some(body);
+                }
+                None => surface_requested = None,
+                _ => {}
+            }
+        }
+
         if layout.0 == 0 || layout.1 == 0 {
             thread::sleep(IDLE_WAIT);
             continue;
@@ -688,6 +815,7 @@ fn render_loop(shared: &Shared) {
         } else {
             0.0
         };
+        scene.set_space_state(&space_snapshot, &hud_snapshot.selected);
         match (&orbit, &zoom) {
             (Some(orbit), Some(zoom)) if scene.has_space() => {
                 scene.draw_zoomed(&mut rl, &thread, texture, zoom, orbit);
@@ -725,6 +853,7 @@ fn render_loop(shared: &Shared) {
                         hover: picker.hover(&ctx),
                         drag_box: picker
                             .drag_rect()
+                            .or_else(|| space_picker.drag_rect())
                             .map(|r| Rect::new(r.x * ratio, r.y * ratio, r.w * ratio, r.h * ratio)),
                     }
                 };
@@ -806,18 +935,37 @@ fn current_cap(shared: &Shared) -> Level {
         .unwrap_or(Level::Globe)
 }
 
+/// What `zoom_event` works on: the zoom camera, the planet camera, the space picker, the ships
+/// it picks among and where the pick events go.
+struct ZoomInput<'a> {
+    zoom: &'a mut ZoomCamera,
+    orbit: &'a mut OrbitCamera,
+    picker: &'a mut SpacePicker,
+    space: &'a SpaceSnapshot,
+    out: &'a mut Vec<PickEvent>,
+}
+
 /// What the zoom camera does with an input event; true when it consumed the event. The wheel
 /// zooms through every level, `Home` flies to the home globe, and above the planet range the
-/// pan keys move across the frame and a double click flies to the body or system under it.
+/// pan keys move across the frame, a double click flies to the body or system under it, and the
+/// other clicks pick ships, bodies and systems for the simulation thread.
 fn zoom_event(
-    zoom: &mut ZoomCamera,
-    orbit: &mut OrbitCamera,
+    input: &mut ZoomInput,
     event: InputEvent,
     over_hud: bool,
     now_ms: u64,
     canvas: &HudLayout,
     hud_visible: bool,
 ) -> bool {
+    let ZoomInput {
+        zoom,
+        orbit,
+        picker,
+        space,
+        out,
+    } = input;
+    let in_space = zoom.level() >= Level::System;
+    let on_world = |x: f32, y: f32| in_space && !(hud_visible && canvas.contains_hud(x, y));
     match event {
         InputEvent::Wheel { steps } if !over_hud => {
             zoom.wheel(steps);
@@ -843,6 +991,13 @@ fn zoom_event(
         }
         InputEvent::ReleaseAll => {
             (0..4).for_each(|index| zoom.hold(index, false));
+            picker.cancel();
+            false
+        }
+        InputEvent::PointerMoved { .. } if in_space => {
+            let ships = ship_points(zoom, space);
+            let ctx = space_context(zoom, orbit, canvas, hud_visible, &ships);
+            out.extend(picker.handle(event, &ctx.context(), now_ms));
             false
         }
         InputEvent::ButtonDown {
@@ -850,18 +1005,31 @@ fn zoom_event(
             x,
             y,
             ..
-        } if zoom.level() >= Level::System && !(hud_visible && canvas.contains_hud(x, y)) => {
-            let centre_y = if hud_visible {
-                ndc_centre_y(canvas.world_area(), canvas.height)
-            } else {
-                0.0
-            };
+        } if on_world(x, y) => {
             let size = (canvas.width, canvas.height);
+            let centre_y = centre_of(canvas, hud_visible);
             let view = match zoom.level() {
                 Level::System => zoom.system_view(orbit).view(size, centre_y),
                 _ => zoom.map_view().view(size, centre_y),
             };
-            zoom.press(now_ms, (x, y), &view, orbit);
+            if zoom.press(now_ms, (x, y), &view, orbit) {
+                picker.cancel();
+            } else {
+                let ships = ship_points(zoom, space);
+                let ctx = space_context(zoom, orbit, canvas, hud_visible, &ships);
+                out.extend(picker.handle(event, &ctx.context(), now_ms));
+            }
+            true
+        }
+        InputEvent::ButtonDown {
+            button: PointerButton::Right,
+            x,
+            y,
+            ..
+        } if on_world(x, y) => {
+            let ships = ship_points(zoom, space);
+            let ctx = space_context(zoom, orbit, canvas, hud_visible, &ships);
+            out.extend(picker.handle(event, &ctx.context(), now_ms));
             true
         }
         InputEvent::ButtonUp {
@@ -869,8 +1037,93 @@ fn zoom_event(
             x,
             y,
             ..
-        } => zoom.level() >= Level::System && !(hud_visible && canvas.contains_hud(x, y)),
+        } => {
+            if !on_world(x, y) {
+                return false;
+            }
+            let ships = ship_points(zoom, space);
+            let ctx = space_context(zoom, orbit, canvas, hud_visible, &ships);
+            out.extend(picker.handle(event, &ctx.context(), now_ms));
+            true
+        }
         _ => false,
+    }
+}
+
+fn centre_of(canvas: &HudLayout, hud_visible: bool) -> f32 {
+    if hud_visible {
+        ndc_centre_y(canvas.world_area(), canvas.height)
+    } else {
+        0.0
+    }
+}
+
+/// The ships of the anchored system with their places in the system frame.
+fn ship_points(zoom: &ZoomCamera, space: &SpaceSnapshot) -> Vec<(u32, [f32; 3])> {
+    let scene = zoom.scene();
+    if space.system != zoom.system_id() {
+        return Vec::new();
+    }
+    let outermost = zoom.system_id().map_or(1.0, |s| scene.system_outermost(s));
+    space
+        .ships
+        .iter()
+        .map(|ship| {
+            (
+                ship.id,
+                ship_frame_pos(scene, zoom.placed(), outermost, ship),
+            )
+        })
+        .collect()
+}
+
+/// The pieces of a [`SpaceContext`] that own their data.
+struct OwnedSpaceContext<'a> {
+    view: crate::pick::View,
+    star_map: bool,
+    ships: &'a [(u32, [f32; 3])],
+    markers: Vec<(crate::zoom::Target, (f32, f32, f32))>,
+    scene: &'a crate::universe::UniverseScene,
+    outermost: f32,
+}
+
+impl OwnedSpaceContext<'_> {
+    fn context(&self) -> SpaceContext<'_> {
+        SpaceContext {
+            view: self.view,
+            star_map: self.star_map,
+            ships: self.ships,
+            markers: &self.markers,
+            scene: self.scene,
+            outermost: self.outermost,
+        }
+    }
+}
+
+fn space_context<'a>(
+    zoom: &'a ZoomCamera,
+    orbit: &OrbitCamera,
+    canvas: &HudLayout,
+    hud_visible: bool,
+    ships: &'a [(u32, [f32; 3])],
+) -> OwnedSpaceContext<'a> {
+    let size = (canvas.width, canvas.height);
+    let centre_y = centre_of(canvas, hud_visible);
+    let star_map = zoom.level() >= Level::StarMap;
+    let view = if star_map {
+        zoom.map_view().view(size, centre_y)
+    } else {
+        zoom.system_view(orbit).view(size, centre_y)
+    };
+    OwnedSpaceContext {
+        markers: zoom.markers(&view),
+        view,
+        star_map,
+        ships,
+        scene: zoom.scene(),
+        outermost: zoom
+            .system_id()
+            .map_or(1.0, |s| zoom.scene().system_outermost(s)),
     }
 }
 

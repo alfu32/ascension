@@ -29,12 +29,45 @@ use crate::vision::{ChunkSpec, shade_chunk};
 mod space;
 pub(crate) use space::SpaceLabel;
 
+/// The direction sunlight travels on a planet so that the point `home` (a unit vector from the
+/// planet's centre) is in daylight: the light comes from above it, a little from the east and
+/// the north, so the ground at home is lit and its relief still casts a shade.
+pub(crate) fn sun_for(home: [f32; 3]) -> [f32; 3] {
+    let length = (home[0] * home[0] + home[1] * home[1] + home[2] * home[2]).sqrt();
+    if length < 1e-6 {
+        return SUN_DIRECTION;
+    }
+    let n = home.map(|c| c / length);
+    let cross = |a: [f32; 3], b: [f32; 3]| {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    };
+    let unit = |v: [f32; 3]| {
+        let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-6);
+        v.map(|c| c / l)
+    };
+    // East is around the polar axis; at a pole any tangent will do.
+    let east = if n[0].hypot(n[2]) < 1e-3 {
+        [1.0, 0.0, 0.0]
+    } else {
+        unit(cross([0.0, 1.0, 0.0], n))
+    };
+    let north = cross(n, east);
+    let to_sun = unit([0, 1, 2].map(|i| n[i] * 0.82 + east[i] * 0.42 + north[i] * 0.3));
+    to_sun.map(|c| -c)
+}
+
 /// Width of the ground in tiles.
 const GROUND_TILES: f32 = 256.0;
 /// Direction the sunlight travels (normalised in the shaders).
 const LIGHT_DIRECTION: [f32; 3] = [-0.45, -1.0, -0.3];
 /// Direction the sunlight travels on a sphere planet: fixed in planet space.
-const SUN_DIRECTION: [f32; 3] = [-0.5, -0.3, -0.8];
+pub(crate) const SUN_DIRECTION: [f32; 3] = [-0.5, -0.3, -0.8];
+/// Direction the star's light travels where ships are drawn in a system: from above the plane.
+const SHIP_LIGHT: [f32; 3] = [-0.35, -1.0, -0.45];
 /// Largest factor the start pillars and node boxes grow by when the camera is far away.
 const MARKER_GROWTH: f32 = 2.5;
 /// Camera distance up to which markers keep their size.
@@ -302,8 +335,12 @@ pub(crate) struct Scene {
     _shaders: [Shader; 6],
     sea_globe_shader: Shader,
     sea_globe_material: WeakMaterial,
+    /// Direction the sunlight travels in planet space.
+    sun: [f32; 3],
     globe: Option<GlobeGpu>,
     space: Option<space::SpaceGpu>,
+    /// What is in space, and which ships are selected, for the next draw.
+    space_state: space::SpaceState,
     entity_transforms: Vec<Matrix>,
     instances: Vec<[f32; 16]>,
     draw_markers: bool,
@@ -505,8 +542,10 @@ impl Scene {
             ],
             sea_globe_shader,
             sea_globe_material,
+            sun: SUN_DIRECTION,
             globe: None,
             space: None,
+            space_state: space::SpaceState::default(),
             entity_transforms: Vec::new(),
             instances: Vec::new(),
             draw_markers: false,
@@ -731,13 +770,15 @@ impl Scene {
         )
     }
 
-    /// Sets the direction of the light in the terrain and entity shaders.
+    /// Sets the direction of the light in the terrain, entity and sea shaders.
     fn set_light(&mut self, direction: [f32; 3]) {
         for index in [2, 5] {
             let shader = &mut self._shaders[index];
             let location = shader.get_shader_location("lightDirection");
             shader.set_shader_value(location, direction);
         }
+        let location = self.sea_globe_shader.get_shader_location("lightDirection");
+        self.sea_globe_shader.set_shader_value(location, direction);
     }
 
     /// Uploads the chunk meshes of `globe`, replacing any earlier terrain or planet.
@@ -748,13 +789,15 @@ impl Scene {
         thread: &RaylibThread,
         planet: &Arc<PlanetScene>,
         globe: &Arc<Globe>,
+        sun: [f32; 3],
     ) -> (usize, f32, f32) {
         self.terrain = None;
         self.globe = None;
         self.space = None;
         self.last_shades.clear();
         self.shade_queue.clear();
-        self.set_light(SUN_DIRECTION);
+        self.sun = sun;
+        self.set_light(sun);
         let started = Instant::now();
         let land = globe.land_chunks_with_specs();
         let sea = globe.sea_chunks_with_specs();
@@ -796,6 +839,8 @@ impl Scene {
         target: &mut RenderTexture2D,
         orbit: &OrbitCamera,
     ) {
+        let sun = self.sun;
+        self.set_light(sun);
         let Some(gpu) = &mut self.globe else {
             return;
         };
@@ -1099,6 +1144,30 @@ fn shift_projection(centre_y: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sun_lights_the_home_start() {
+        let normals = [
+            [0.0, 0.0, 1.0],
+            [0.0, 1.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [-1.0, 0.0, 0.0],
+            [0.3, -0.5, -0.8],
+            [-0.7, 0.2, 0.69],
+        ];
+        for normal in normals {
+            let length = normal.iter().map(|c| c * c).sum::<f32>().sqrt();
+            let n = normal.map(|c| c / length);
+            let sun = sun_for(n);
+            // `sun` is the direction the light travels; the ground faces the sun when the light
+            // comes against its normal.
+            let toward: f32 = (0..3).map(|i| -sun[i] * n[i]).sum();
+            assert!(toward > 0.5, "{n:?} gets {toward}");
+            let norm: f32 = sun.iter().map(|c| c * c).sum::<f32>().sqrt();
+            assert!((norm - 1.0).abs() < 1e-4);
+        }
+        assert_eq!(sun_for([0.0; 3]), SUN_DIRECTION);
+    }
 
     #[test]
     fn movers_are_deterministic_and_on_the_map() {
