@@ -27,6 +27,8 @@ use std::{
 /// Aggregate order counts and per-player combat totals.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Stats {
+    /// Paid trade arrivals, excluding the initial walk to the home city.
+    pub trade_trips: u64,
     /// Enemy cities captured during the match.
     pub cities_captured: u64,
     /// Successfully completed orders, including stop.
@@ -198,6 +200,9 @@ impl World {
             ("economy.income_period_ticks", 1, i64::MAX),
             ("player.commerce_cap.base", 0, i64::MAX),
             ("citizen.auto_work_delay_ticks", 0, i64::MAX),
+            ("player.caravan_limit.base", 0, i64::MAX),
+            ("trade.route_unit", 1, i64::MAX),
+            ("trade.min_route", 1, i64::MAX),
             ("city.spacing", 0, i64::MAX),
             ("player.city_limit.base", 0, i64::MAX),
         ] {
@@ -457,6 +462,7 @@ impl World {
             gather_slots,
             work_site: None,
             city_id: None,
+            container_id: None,
             idle_ticks: 0,
             orders: VecDeque::new(),
         }));
@@ -517,6 +523,7 @@ impl World {
             .expect("retyped entity")
             .gather_slots = slots;
         self.refresh_site(id);
+        self.refresh_trade_income(id);
         self.economy.dirty.insert(id);
         if self.is_building(old) {
             self.index_building(id, pos, false);
@@ -543,6 +550,13 @@ impl World {
 
     /// Removes an entity and cancels both its live and pending orders.
     pub fn despawn(&mut self, id: EntityId) -> Result<(), SimError> {
+        let (pos, type_id) = self
+            .entity(id)
+            .map(|e| (e.pos, e.type_id))
+            .ok_or(SimError::UnknownExecutor(id))?;
+        if self.may_hold_nodes(type_id) {
+            self.drop_nodes(id, pos);
+        }
         let entity = self
             .entities
             .get_mut(id.0 as usize)
@@ -562,6 +576,9 @@ impl World {
         self.economy.dirty.remove(&id);
         self.economy.sites.remove(&id);
         self.refresh_income(id);
+        if let Some(container) = entity.container_id {
+            self.refresh_income(container);
+        }
         if let Some(site) = entity.work_site
             && let Some(set) = self.economy.occupants.get_mut(&site)
         {
@@ -662,6 +679,14 @@ impl World {
         if command.kind == "harvest" {
             self.validate_harvest(&command)?;
         }
+        if command.kind == "carry" {
+            self.validate_carry(&command)?;
+        }
+        let route = if command.kind == "trade" {
+            Some(self.validate_trade(&command)?)
+        } else {
+            None
+        };
         self.validate_combat_order(&command)?;
         let payment = self.validate_economy_order(&mut command)?;
         let next = self
@@ -707,6 +732,7 @@ impl World {
                 automatic: false,
                 home: None,
                 movement: None,
+                route: route.map(Box::new),
                 payment,
                 total_ticks,
                 build_remainder: 0,
@@ -753,6 +779,9 @@ impl World {
             let Some(old) = self.entity(id).map(|e| e.pos) else {
                 continue;
             };
+            if self.entity(id).is_some_and(|e| e.container_id.is_some()) {
+                continue;
+            }
             self.advance_executor(id);
             self.heal_idle(id);
             let new = self.entity(id).expect("executor persists").pos;

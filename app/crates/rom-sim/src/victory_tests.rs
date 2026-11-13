@@ -581,6 +581,7 @@ fn neutralisation_cancels_production_and_assimilation_pauses_queued_work() {
         automatic: false,
         home: None,
         movement: None,
+        route: None,
         payment: Vec::new(),
         total_ticks: Some(1),
         build_remainder: 0,

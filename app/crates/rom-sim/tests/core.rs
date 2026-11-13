@@ -778,7 +778,8 @@ fn unsupported_kinds_fail_when_activated() {
 
 #[test]
 fn every_vocabulary_kind_validates_its_component_and_target() {
-    let rules = rules();
+    let rules =
+        rules_with("UPDATE game_constant SET value=1000 WHERE key='player.caravan_limit.base';");
     let mut world = world_with(rules.clone(), "ter.plain");
     let farm = world
         .spawn(rules.id_of("bld.farm").unwrap(), OWNER, Pos::default())
@@ -800,6 +801,16 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
             Pos::default(),
         )
         .unwrap();
+    let carry_node = world
+        .spawn(
+            rules.id_of("node.relics").unwrap(),
+            OWNER,
+            Pos::flat(1500, 1500),
+        )
+        .unwrap();
+    let city = rules.id_of("bld.city").unwrap();
+    world.spawn(city, OWNER, Pos::flat(4500, 4500)).unwrap();
+    let partner = world.spawn(city, OWNER, Pos::flat(28500, 4500)).unwrap();
     for kind in rules
         .order_kinds
         .values()
@@ -832,6 +843,12 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
                     None => farm,
                 });
             }
+            if kind.key == "carry" {
+                command.target_entity = Some(carry_node);
+            }
+            if kind.key == "trade" {
+                command.target_entity = Some(partner);
+            }
             if kind.key == "attack" {
                 command.target_entity = Some(enemy);
             }
@@ -853,6 +870,16 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
                 Err(SimError::MissingComponent(needs)) => {
                     assert_eq!(needs, kind.needs);
                     rejected = true;
+                }
+                Err(SimError::CannotCarry) => {
+                    assert_eq!(kind.key, "carry");
+                    let tag = rules.entity_types[&rules.id_of("node.relics").unwrap()]
+                        .node
+                        .as_ref()
+                        .unwrap()
+                        .claim_tag_id
+                        .unwrap();
+                    assert!(!rules.has_tag(et.id, tag));
                 }
                 Err(SimError::CannotEnterSpace) => {
                     assert!(matches!(kind.key.as_str(), "orbit" | "travel"));

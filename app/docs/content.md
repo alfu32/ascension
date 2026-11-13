@@ -82,11 +82,24 @@ Unified Theory.
 | --- | --- | --- | --- |
 | Food | 0 | Farm (one worker each, at most 5 per city) | Citizen |
 | Timber | 0 | Woodcutter's Camp (slots from nearby forest) | Citizen |
-| Wealth | 0 | Market (merchants on rare resources; caravans later) | Merchant |
+| Wealth | 0 | Temple (relics carried by priests), Market (merchants and caravans on trade routes) | Priest, Merchant, Caravan |
 | Metal | 1 | Mine (slots from nearby mountains) | Citizen |
 | Knowledge | 1 | University (7 scholar slots, one per city) | Scholar |
 | Oil | 5 | Oil Well (on oil deposits) | Citizen |
 | Energy | 9 | Fusion Plant (no workers; fixed income) | — |
+
+Priests carry one relic at a time to the nearest completed own temple with room
+(up to five relics). Each kept relic produces 20 wealth per income period,
+subject to wealth income modifiers and the commerce cap. Lost carriers and
+destroyed temples drop their relics; captured temples keep them for their new owner.
+Merchants and caravans travel between completed own or allied cities at least
+20 tiles apart, paying wealth on each arrival in proportion to route length
+(per 10 tiles: merchants 3, caravans 6/9/12/15). Deliveries use income modifiers
+and bypass the commerce cap; allied partners receive the same delivery.
+Caravans unlock with Coinage and the Classical Age; their Market upgrades are
+Freight Wagons (age 4), Lorries (age 6) and Cargo Drones (age 8). Two traders may
+run routes initially, with one extra slot per Commerce level.
+
 
 From the Automation age, research at each gather site converts it into an
 automated version (`upgrade_type`) that produces its income without workers

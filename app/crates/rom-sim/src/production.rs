@@ -31,7 +31,9 @@ impl World {
             .orders
             .pop_front()
         {
-            order.status = OrderStatus::Active;
+            if order.kind != "carry" {
+                order.status = OrderStatus::Active;
+            }
             match order.kind.as_str() {
                 "train" | "research" => {
                     self.entities[id.0 as usize]
@@ -52,7 +54,7 @@ impl World {
                     order.status = OrderStatus::Failed("unsupported".into());
                 }
                 "move" | "construct" | "repair" | "harvest" | "attack" | "attack_move" | "heal"
-                | "orbit" | "travel" => {
+                | "orbit" | "travel" | "carry" | "trade" => {
                     if worked {
                         self.entities[id.0 as usize]
                             .as_mut()
@@ -62,7 +64,11 @@ impl World {
                         break;
                     }
                     worked = true;
-                    if order.kind == "orbit" {
+                    if order.kind == "carry" {
+                        self.advance_carry(id, &mut order);
+                    } else if order.kind == "trade" {
+                        self.advance_trade(id, &mut order);
+                    } else if order.kind == "orbit" {
                         self.advance_orbit(id, &mut order);
                     } else if order.kind == "travel" {
                         self.advance_travel(id, &mut order);

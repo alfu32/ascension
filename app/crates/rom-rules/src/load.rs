@@ -369,6 +369,7 @@ fn load_entity_type(conn: &Connection) -> Result<Vec<EntityType>, RulesError> {
             node: None,
             healer: None,
             trader: None,
+            keeper: None,
             container: None,
             producer: None,
             territory: None,
@@ -534,6 +535,18 @@ fn load_et_trader(conn: &Connection) -> Result<Vec<Trader>, RulesError> {
                 claims_nodes: boolean(row, "claims_nodes", "et_trader", &identity)?,
                 route_resource_id: row.get::<_, Option<u32>>("route_resource_id")?.map(DefId),
                 route_income: row.get("route_income")?,
+            })
+        },
+    )
+}
+fn load_et_keeper(conn: &Connection) -> Result<Vec<Keeper>, RulesError> {
+    read(
+        conn,
+        "SELECT * FROM et_keeper ORDER BY entity_type_id",
+        |row| {
+            Ok(Keeper {
+                entity_type_id: DefId(row.get("entity_type_id")?),
+                capacity: row.get("capacity")?,
             })
         },
     )
@@ -1163,6 +1176,10 @@ impl Rules {
         for row in load_et_trader(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_trader")?;
             entity.trader = Some(row);
+        }
+        for row in load_et_keeper(conn)? {
+            let entity = entity_mut(&mut rules, row.entity_type_id, "et_keeper")?;
+            entity.keeper = Some(row);
         }
         for row in load_et_container(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_container")?;

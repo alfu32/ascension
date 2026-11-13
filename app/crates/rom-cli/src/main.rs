@@ -4,6 +4,7 @@ mod playthrough_cmd;
 mod siege_cmd;
 mod territory_cmd;
 mod universe_cmd;
+mod wealth_cmd;
 
 use std::{env, path::PathBuf, process::ExitCode, sync::Arc};
 
@@ -22,8 +23,11 @@ fn main() -> ExitCode {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = env::args().skip(1);
     let command = args.next().ok_or(
-        "usage: rom <build-rules|check-rules|run|battle|siege|mapgen|territory|universe|playthrough> [options]",
+        "usage: rom <build-rules|check-rules|run|battle|siege|mapgen|territory|universe|playthrough|wealth> [options]",
     )?;
+    if command == "wealth" {
+        return wealth_cmd::run(args);
+    }
     if command == "playthrough" {
         return playthrough_cmd::run(args);
     }
@@ -74,7 +78,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     if command != "build-rules" {
         return Err(
-            "usage: rom <build-rules|check-rules|run|battle|siege|mapgen|territory|universe|playthrough> [options]"
+            "usage: rom <build-rules|check-rules|run|battle|siege|mapgen|territory|universe|playthrough|wealth> [options]"
                 .into(),
         );
     }

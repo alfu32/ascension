@@ -123,6 +123,33 @@ impl Rules {
             }
         }
         for entity in self.entity_types.values() {
+            if entity
+                .node
+                .as_ref()
+                .is_some_and(|n| n.claim_mode == ClaimMode::Carry && n.claim_tag_id.is_none())
+            {
+                problems.push(Problem {
+                    message: format!("carry node {} requires claim_tag_id", self.label(entity.id)),
+                });
+            }
+            if entity.keeper.as_ref().is_some_and(|k| k.capacity < 1) {
+                problems.push(Problem {
+                    message: format!("keeper {} capacity must be positive", self.label(entity.id)),
+                });
+            }
+            if entity.trader.as_ref().is_some_and(|t| {
+                t.runs_routes
+                    && (t.route_resource_id.is_none()
+                        || t.route_income < 0
+                        || entity.movement.is_none())
+            }) {
+                problems.push(Problem {
+                    message: format!(
+                        "route trader {} needs movement, resource and nonnegative income",
+                        self.label(entity.id)
+                    ),
+                });
+            }
             for weapon in &entity.weapons {
                 if weapon.targets.is_empty() {
                     problems.push(Problem {

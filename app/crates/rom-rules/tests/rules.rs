@@ -155,12 +155,15 @@ fn religion_pct_on_city_hp() {
 }
 
 #[test]
-fn relics_speed_research() {
+fn relics_are_wealth_nodes_instead_of_rare_research_bonuses() {
     let rules = seed();
-    assert_eq!(
-        rules.player_stat("research_time", 1000, &sources(&rules, &["rare.relics"])),
-        670
-    );
+    assert!(rules.id_of("rare.relics").is_none());
+    let node = rules.entity_types[&rules.id_of("node.relics").unwrap()]
+        .node
+        .as_ref()
+        .unwrap();
+    assert_eq!(node.resource_id, rules.id_of("res.wealth").unwrap());
+    assert_eq!(node.income, 20);
 }
 
 #[test]
@@ -1001,7 +1004,7 @@ fn every_line_has_one_first_step_and_continuous_ages() {
     {
         lines.entry(&unit.ui_group).or_default().push(unit);
     }
-    assert_eq!(lines.len(), 19);
+    assert_eq!(lines.len(), 20);
     for (line, steps) in lines {
         let roots: Vec<_> = steps
             .iter()
@@ -1027,4 +1030,35 @@ fn every_line_has_one_first_step_and_continuous_ages() {
         }
         assert_eq!(visited.len(), steps.len(), "disconnected {line}");
     }
+}
+
+#[test]
+fn loads_keeper_and_carry_mode() {
+    let r = seed();
+    let temple = &r.entity_types[&r.id_of("bld.temple").unwrap()];
+    assert_eq!(temple.keeper.as_ref().unwrap().capacity, 5);
+    let node = r.entity_types[&r.id_of("node.relics").unwrap()]
+        .node
+        .as_ref()
+        .unwrap();
+    assert_eq!(node.claim_mode, ClaimMode::Carry);
+    assert!(node.claim_tag_id.is_some());
+}
+
+#[test]
+fn rejects_carry_without_tag_and_nonpositive_keeper() {
+    let conn = seed_db();
+    conn.execute_batch("UPDATE et_node SET claim_tag_id=NULL WHERE claim_mode='carry'; UPDATE et_keeper SET capacity=0;").unwrap();
+    let r = Rules::load(&conn).unwrap();
+    let problems = r.validate();
+    assert!(
+        problems
+            .iter()
+            .any(|p| p.to_string().contains("requires claim_tag_id"))
+    );
+    assert!(
+        problems
+            .iter()
+            .any(|p| p.to_string().contains("capacity must be positive"))
+    );
 }

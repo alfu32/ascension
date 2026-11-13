@@ -789,6 +789,132 @@ impl Playthrough {
     }
 }
 
+impl World {
+    /// Two cities thirty tiles apart, two carried nodes, a keeper and two route traders.
+    pub fn wealth_scenario(rules: Arc<Rules>, seed: u64, sphere: bool) -> Result<Self, SimError> {
+        use rom_rules::{ClaimMode, EntityClass, ProductionMode};
+        let find = |predicate: &dyn Fn(&rom_rules::EntityType) -> bool, label| {
+            rules
+                .entity_types
+                .values()
+                .find(|e| predicate(e))
+                .map(|e| e.id)
+                .ok_or(SimError::ScenarioUnavailable(label))
+        };
+        let node = find(
+            &|e| {
+                e.node
+                    .as_ref()
+                    .is_some_and(|n| n.claim_mode == ClaimMode::Carry)
+            },
+            "carry node",
+        )?;
+        let tag = rules.entity_types[&node]
+            .node
+            .as_ref()
+            .and_then(|n| n.claim_tag_id)
+            .ok_or(SimError::ScenarioUnavailable("claim tag"))?;
+        let priest = find(
+            &|e| e.class == EntityClass::Unit && e.movement.is_some() && rules.has_tag(e.id, tag),
+            "carrier",
+        )?;
+        let keeper = find(&|e| e.keeper.is_some(), "keeper")?;
+        let city = find(&|e| e.territory.as_ref().is_some_and(|t| t.is_city), "city")?;
+        let mut traders: Vec<_> = rules
+            .entity_types
+            .values()
+            .filter(|e| {
+                e.trader.as_ref().is_some_and(|t| t.runs_routes) && e.upgrades_from_id.is_none()
+            })
+            .collect();
+        traders.sort_by_key(|e| (e.trader.as_ref().expect("trader").route_income, e.id));
+        let traders = traders
+            .into_iter()
+            .take(2)
+            .map(|e| e.id)
+            .collect::<Vec<_>>();
+        if traders.len() != 2 {
+            return Err(SimError::ScenarioUnavailable("two traders"));
+        }
+        let market = find(
+            &|e| {
+                e.class == EntityClass::Building
+                    && rules.production.get(&e.id).is_some_and(|rows| {
+                        rows.iter().any(|p| {
+                            p.mode == ProductionMode::Train && traders.contains(&p.product_def_id)
+                        })
+                    })
+            },
+            "trader producer",
+        )?;
+        let terrain = rules
+            .terrains
+            .values()
+            .find(|t| t.layer == rom_rules::Layer::Ground && t.buildable && !t.blocks_los)
+            .ok_or(SimError::ScenarioUnavailable("ground terrain"))?
+            .id;
+        let players = scenario_players(&rules, 1)?;
+        let mut w = if sphere {
+            Self::from_sphere(
+                rules,
+                CubeSurface { n: 128 },
+                vec![terrain; 6 * 128 * 128],
+                &[],
+                seed,
+                players,
+            )?
+        } else {
+            Self::new(
+                rules,
+                MapGrid::new(96, 96, vec![terrain; 96 * 96])?,
+                seed,
+                players,
+            )?
+        }
+        .with_match_options(crate::MatchOptions {
+            victories: Default::default(),
+            ..Default::default()
+        })?;
+        let p = PlayerId(1);
+        let home_pos = if sphere {
+            Pos::flat(110_500, 64_500)
+        } else {
+            Pos::flat(16_500, 32_500)
+        };
+        w.spawn(city, p, home_pos)?;
+        let target = w.spawn(city, p, w.offset(home_pos, 30_000, 0))?;
+        w.spawn(keeper, p, w.offset(home_pos, 0, -8000))?;
+        w.spawn(market, p, w.offset(home_pos, 0, 8000))?;
+        for n in 0..2 {
+            let pos = w.offset(home_pos, -7000 - n * 3000, -3000);
+            let relic = w.spawn(node, p, pos)?;
+            let carrier = w.spawn(priest, p, w.offset(pos, 0, 1000))?;
+            w.submit(Command {
+                player: p,
+                executor: carrier,
+                kind: "carry".into(),
+                subject: None,
+                target_entity: Some(relic),
+                target_pos: None,
+                queue: false,
+            })?;
+        }
+        for (n, trader) in traders.into_iter().enumerate() {
+            let executor = w.spawn(trader, p, w.offset(home_pos, -5000, n as i64 * 2000))?;
+            w.submit(Command {
+                player: p,
+                executor,
+                kind: "trade".into(),
+                subject: None,
+                target_entity: Some(target),
+                target_pos: None,
+                queue: false,
+            })?;
+        }
+        Ok(w)
+    }
+}
+
 #[cfg(test)]
 mod content_tests {
     use super::*;

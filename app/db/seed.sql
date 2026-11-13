@@ -24,6 +24,9 @@ INSERT INTO game_constant(key,value,unit,note) VALUES
  ('citizen.auto_work_delay_ticks',200,'ticks','idle workers look for work after this'),
  ('city.spacing',20000,'milli-tiles','minimum distance between cities; below a city border radius so a second city fits inside the first one''s borders'),
  ('city.assimilate_ticks',2400,'ticks','captured city becomes yours after this'),
+ ('player.caravan_limit.base',2,'traders','before caravan_limit modifiers'),
+ ('trade.route_unit',10000,'milli-tiles','route income length unit'),
+ ('trade.min_route',20000,'milli-tiles','minimum route length; same as city.spacing'),
  ('player.pop_cap.base',50,'pop','before modifiers (stat pop_cap)'),
  ('player.city_limit.base',1,'cities','before modifiers (stat city_limit)'),
  ('player.commerce_cap.base',70,'per period','before modifiers (stat commerce_cap)'),
@@ -47,7 +50,7 @@ INSERT INTO tag(key,category) VALUES
  ('biological','body'), ('mechanical','body'),
  ('civilian','role'), ('military','role'), ('infantry','role'), ('mounted','role'), ('vehicle','role'),
  ('siege','role'), ('ship','role'), ('aircraft','role'), ('drone','role'), ('starship','role'),
- ('healer','role'), ('city','structure'), ('temple','structure'), ('wonder','structure'),
+ ('clergy','role'), ('healer','role'), ('city','structure'), ('temple','structure'), ('wonder','structure'),
  ('production','structure'), ('gather','structure');
 
 INSERT INTO stat(key,scope,note) VALUES
@@ -84,6 +87,7 @@ INSERT INTO order_kind(key,needs,target,note) VALUES
  ('construct','builder','def','subject = building type, target point = site'),
  ('repair','builder','entity',''), ('harvest','harvester','entity','target = gather site'),
  ('heal','healer','entity',''), ('trade','trader','entity','target = city'),
+ ('carry','movement','entity','target = carry node; brought to the nearest own keeper'),
  ('claim','trader','entity','target = rare resource node'),
  ('enter','movement','entity','garrison / board'), ('unload','container','entity_or_point',''),
  ('train','producer','def',''), ('research','producer','def',''), ('morph','','def','upgrade in place'),
@@ -109,15 +113,18 @@ INSERT INTO age(id,ordinal,era,map_scale)
 INSERT INTO def(kind,key,name) VALUES
  ('resource','res.food','Food'), ('resource','res.timber','Timber'), ('resource','res.metal','Metal'),
  ('resource','res.wealth','Wealth'), ('resource','res.knowledge','Knowledge'), ('resource','res.oil','Oil'),
- ('resource','res.energy','Energy'), ('resource','rare.relics','Relics'), ('resource','rare.horses','Horses');
+ ('resource','res.energy','Energy');
+-- Preserve existing catalogue ids after retiring one rare resource.
+INSERT INTO def(id,kind,key,name)
+ SELECT MAX(id)+2,'resource','rare.horses','Horses' FROM def;
 WITH v(k,kind,ab,cap,tr,age) AS (VALUES
   ('res.food','base','F',1,1,NULL), ('res.timber','base','T',1,1,NULL), ('res.metal','base','M',1,1,'age.classical'),
   ('res.wealth','base','W',1,0,NULL), ('res.knowledge','base','K',0,0,'age.classical'), ('res.oil','base','O',1,1,'age.industrial'),
-  ('res.energy','base','E',1,1,'age.fusion'), ('rare.relics','rare','Re',0,0,NULL), ('rare.horses','rare','Ho',0,0,NULL)
+  ('res.energy','base','E',1,1,'age.fusion'), ('rare.horses','rare','Ho',0,0,NULL)
  )
 INSERT INTO resource(id,kind,abbrev,rate_capped,tradeable,first_age_id)
  SELECT d.id, v.kind, v.ab, v.cap, v.tr, (SELECT id FROM def WHERE key=v.age) FROM v JOIN def d ON d.key=v.k;
-WITH v(r,b,n) AS (VALUES ('rare.relics','res.knowledge',20), ('rare.horses','res.food',10),
+WITH v(r,b,n) AS (VALUES ('rare.horses','res.food',10),
   ('rare.horses','res.metal',10))
 INSERT INTO resource_yield
  SELECT r.id, b.id, v.n FROM v JOIN def r ON r.key=v.r JOIN def b ON b.key=v.b;
@@ -207,7 +214,7 @@ INSERT INTO def(kind,key,name) VALUES
 INSERT INTO entity_type(id,class,footprint_w,footprint_h)
  SELECT id,'node',2,2 FROM def WHERE key IN ('node.relics','node.ore_planet');
 INSERT INTO et_node(entity_type_id,resource_id,claim_mode,claim_tag_id,claim_radius,income) VALUES
- ((SELECT id FROM def WHERE key='node.relics'),(SELECT id FROM def WHERE key='rare.relics'),'trader',NULL,0,0),
+ ((SELECT id FROM def WHERE key='node.relics'),(SELECT id FROM def WHERE key='res.wealth'),'carry',(SELECT id FROM tag WHERE key='clergy'),0,20),
  ((SELECT id FROM def WHERE key='node.ore_planet'),(SELECT id FROM def WHERE key='res.metal'),'presence',(SELECT id FROM tag WHERE key='starship'),3000,40);
 
 -- Race traits (placeholders): the same roster, tilted by a few modifiers.
@@ -219,9 +226,6 @@ INSERT INTO modifier(source_def_id,target_tag_id,stat_key,op,value)
    UNION ALL SELECT 'race.avian','biological','los','pct',25
    UNION ALL SELECT 'race.avian','biological','hp','pct',-10) v
  JOIN def d ON d.key=v.k JOIN tag t ON t.key=v.t;
--- Rare resource bonus: holding Relics makes research faster.
-INSERT INTO modifier(source_def_id,stat_key,op,value)
- SELECT id,'research_time','pct',-33 FROM def WHERE key='rare.relics';
 
 -- ── abilities, formations, stances ──────────────────────────────────────────
 INSERT INTO def(kind,key,name) VALUES ('ability','abl.convert','Convert');
@@ -519,6 +523,10 @@ INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.space_cruiser','Space
 INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.battleship','Battleships');
 INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.scholar','Scholars');
 INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.merchant','Merchants');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.caravan','Caravans');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.freight_wagon','Freight Wagons');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.lorry','Lorries');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.cargo_drone','Cargo Drones');
 INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.priest','Priests');
 INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.city'),'building','economic',1200,3,(SELECT id FROM armor_class WHERE key='structure'),12000,7,7,150,'per_type','none',0,(SELECT id FROM def WHERE key='age.ancient'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.city'),(SELECT id FROM tag WHERE key='building'));
@@ -627,6 +635,7 @@ INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHER
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.temple'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.temple'),(SELECT id FROM tag WHERE key='temple'));
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) VALUES ((SELECT id FROM def WHERE key='bld.temple'),0,2000,0,0);
+INSERT INTO et_keeper(entity_type_id,capacity) VALUES ((SELECT id FROM def WHERE key='bld.temple'),5);
 INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.smelter'),'building','economic',1200,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,200,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.medieval'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.smelter'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.smelter'),(SELECT id FROM tag WHERE key='mechanical'));
@@ -779,6 +788,7 @@ INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.bastion'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.bastion'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO et_producer(entity_type_id,queue_limit,parallel,has_rally) SELECT (SELECT id FROM def WHERE key='bld.bastion'),queue_limit,parallel,has_rally FROM et_producer WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.tower');
+INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE key='bld.bastion'),capacity FROM et_keeper WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.tower');
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.bastion'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.tower');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id,layer,distance) SELECT (SELECT id FROM def WHERE key='bld.bastion'),rule,ref_def_id,layer,distance FROM placement_rule WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.tower');
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income) SELECT (SELECT id FROM def WHERE key='bld.bastion'),resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income FROM et_gather_site WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.tower');
@@ -795,6 +805,7 @@ INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.bunker'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.bunker'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO et_producer(entity_type_id,queue_limit,parallel,has_rally) SELECT (SELECT id FROM def WHERE key='bld.bunker'),queue_limit,parallel,has_rally FROM et_producer WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bastion');
+INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE key='bld.bunker'),capacity FROM et_keeper WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bastion');
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.bunker'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bastion');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id,layer,distance) SELECT (SELECT id FROM def WHERE key='bld.bunker'),rule,ref_def_id,layer,distance FROM placement_rule WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bastion');
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income) SELECT (SELECT id FROM def WHERE key='bld.bunker'),resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income FROM et_gather_site WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bastion');
@@ -811,6 +822,7 @@ INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.defence_turret'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.defence_turret'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO et_producer(entity_type_id,queue_limit,parallel,has_rally) SELECT (SELECT id FROM def WHERE key='bld.defence_turret'),queue_limit,parallel,has_rally FROM et_producer WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bunker');
+INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE key='bld.defence_turret'),capacity FROM et_keeper WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bunker');
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.defence_turret'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bunker');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id,layer,distance) SELECT (SELECT id FROM def WHERE key='bld.defence_turret'),rule,ref_def_id,layer,distance FROM placement_rule WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bunker');
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income) SELECT (SELECT id FROM def WHERE key='bld.defence_turret'),resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income FROM et_gather_site WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bunker');
@@ -829,6 +841,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.st
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.star_fort'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.star_fort'),(SELECT id FROM tag WHERE key='fort'));
 INSERT INTO et_producer(entity_type_id,queue_limit,parallel,has_rally) SELECT (SELECT id FROM def WHERE key='bld.star_fort'),queue_limit,parallel,has_rally FROM et_producer WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fort');
+INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE key='bld.star_fort'),capacity FROM et_keeper WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fort');
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.star_fort'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fort');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id,layer,distance) SELECT (SELECT id FROM def WHERE key='bld.star_fort'),rule,ref_def_id,layer,distance FROM placement_rule WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fort');
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income) SELECT (SELECT id FROM def WHERE key='bld.star_fort'),resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income FROM et_gather_site WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fort');
@@ -846,6 +859,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.fo
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.fortress'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.fortress'),(SELECT id FROM tag WHERE key='fort'));
 INSERT INTO et_producer(entity_type_id,queue_limit,parallel,has_rally) SELECT (SELECT id FROM def WHERE key='bld.fortress'),queue_limit,parallel,has_rally FROM et_producer WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.star_fort');
+INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE key='bld.fortress'),capacity FROM et_keeper WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.star_fort');
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.fortress'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.star_fort');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id,layer,distance) SELECT (SELECT id FROM def WHERE key='bld.fortress'),rule,ref_def_id,layer,distance FROM placement_rule WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.star_fort');
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income) SELECT (SELECT id FROM def WHERE key='bld.fortress'),resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income FROM et_gather_site WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.star_fort');
@@ -863,6 +877,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.ci
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.citadel'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.citadel'),(SELECT id FROM tag WHERE key='fort'));
 INSERT INTO et_producer(entity_type_id,queue_limit,parallel,has_rally) SELECT (SELECT id FROM def WHERE key='bld.citadel'),queue_limit,parallel,has_rally FROM et_producer WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fortress');
+INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE key='bld.citadel'),capacity FROM et_keeper WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fortress');
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.citadel'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fortress');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id,layer,distance) SELECT (SELECT id FROM def WHERE key='bld.citadel'),rule,ref_def_id,layer,distance FROM placement_rule WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fortress');
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income) SELECT (SELECT id FROM def WHERE key='bld.citadel'),resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income FROM et_gather_site WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fortress');
@@ -2128,13 +2143,66 @@ INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,b
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.merchant'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.merchant'),(SELECT id FROM tag WHERE key='civilian'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.merchant'),(SELECT id FROM movement_class WHERE key='foot'),1500);
-INSERT INTO et_trader(entity_type_id,claims_nodes) VALUES ((SELECT id FROM def WHERE key='unit.merchant'),1);
+INSERT INTO et_trader(entity_type_id,runs_routes,claims_nodes,route_resource_id,route_income) VALUES ((SELECT id FROM def WHERE key='unit.merchant'),1,0,(SELECT id FROM def WHERE key='res.wealth'),3);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.market'),(SELECT id FROM def WHERE key='unit.merchant'),'train','units',0,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.merchant'),(SELECT id FROM def WHERE key='res.wealth'),40,1);
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.caravan'),'unit','caravan',90,0,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,175,'per_type',NULL,(SELECT id FROM def WHERE key='age.classical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.caravan'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.caravan'),(SELECT id FROM tag WHERE key='civilian'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.caravan'),(SELECT id FROM movement_class WHERE key='wheeled'),1300);
+INSERT INTO et_trader(entity_type_id,runs_routes,claims_nodes,route_resource_id,route_income) VALUES ((SELECT id FROM def WHERE key='unit.caravan'),1,0,(SELECT id FROM def WHERE key='res.wealth'),6);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.market'),(SELECT id FROM def WHERE key='unit.caravan'),'train','units',1,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.caravan'),(SELECT id FROM def WHERE key='res.food'),46,1);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.caravan'),(SELECT id FROM def WHERE key='res.timber'),69,1);
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.freight_wagon'),'unit','caravan',130,2,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,250,'per_type',(SELECT id FROM def WHERE key='unit.caravan'),(SELECT id FROM def WHERE key='age.enlightenment'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.freight_wagon'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.freight_wagon'),(SELECT id FROM tag WHERE key='civilian'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.freight_wagon'),(SELECT id FROM movement_class WHERE key='wheeled'),1600);
+INSERT INTO et_trader(entity_type_id,runs_routes,claims_nodes,route_resource_id,route_income) VALUES ((SELECT id FROM def WHERE key='unit.freight_wagon'),1,0,(SELECT id FROM def WHERE key='res.wealth'),9);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.market'),(SELECT id FROM def WHERE key='unit.freight_wagon'),'train','units',2,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.freight_wagon'),(SELECT id FROM def WHERE key='res.food'),64,1);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.freight_wagon'),(SELECT id FROM def WHERE key='res.timber'),96,1);
+INSERT INTO def(kind,key,name) VALUES ('tech','tech.up.freight_wagon','Upgrade to Freight Wagons');
+INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.up.freight_wagon'),'unit_upgrade','',0,500);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.freight_wagon'),(SELECT id FROM def WHERE key='res.food'),128,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.freight_wagon'),(SELECT id FROM def WHERE key='res.timber'),192,0);
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.freight_wagon'),'upgrade_type',(SELECT id FROM def WHERE key='unit.caravan'),(SELECT id FROM def WHERE key='unit.freight_wagon'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.lorry'),'unit','caravan',170,3,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,300,'per_type',(SELECT id FROM def WHERE key='unit.freight_wagon'),(SELECT id FROM def WHERE key='age.modern'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.lorry'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.lorry'),(SELECT id FROM tag WHERE key='civilian'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.lorry'),(SELECT id FROM movement_class WHERE key='wheeled'),1900);
+INSERT INTO et_trader(entity_type_id,runs_routes,claims_nodes,route_resource_id,route_income) VALUES ((SELECT id FROM def WHERE key='unit.lorry'),1,0,(SELECT id FROM def WHERE key='res.wealth'),12);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.market'),(SELECT id FROM def WHERE key='unit.lorry'),'train','units',3,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.lorry'),(SELECT id FROM def WHERE key='res.food'),76,1);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.lorry'),(SELECT id FROM def WHERE key='res.metal'),114,2);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.lorry'),(SELECT id FROM def WHERE key='res.oil'),38,1);
+INSERT INTO def(kind,key,name) VALUES ('tech','tech.up.lorry','Upgrade to Lorries');
+INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.up.lorry'),'unit_upgrade','',0,600);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.lorry'),(SELECT id FROM def WHERE key='res.food'),152,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.lorry'),(SELECT id FROM def WHERE key='res.metal'),228,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.lorry'),(SELECT id FROM def WHERE key='res.oil'),76,0);
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.lorry'),'upgrade_type',(SELECT id FROM def WHERE key='unit.freight_wagon'),(SELECT id FROM def WHERE key='unit.lorry'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),'unit','caravan',210,4,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,350,'per_type',(SELECT id FROM def WHERE key='unit.lorry'),(SELECT id FROM def WHERE key='age.automation'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),(SELECT id FROM tag WHERE key='civilian'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),(SELECT id FROM tag WHERE key='drone'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),(SELECT id FROM movement_class WHERE key='wheeled'),2200);
+INSERT INTO et_trader(entity_type_id,runs_routes,claims_nodes,route_resource_id,route_income) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),1,0,(SELECT id FROM def WHERE key='res.wealth'),15);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.market'),(SELECT id FROM def WHERE key='unit.cargo_drone'),'train','units',4,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),(SELECT id FROM def WHERE key='res.food'),88,1);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),(SELECT id FROM def WHERE key='res.metal'),132,2);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),(SELECT id FROM def WHERE key='res.oil'),44,1);
+INSERT INTO def(kind,key,name) VALUES ('tech','tech.up.cargo_drone','Upgrade to Cargo Drones');
+INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.up.cargo_drone'),'unit_upgrade','',0,700);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.cargo_drone'),(SELECT id FROM def WHERE key='res.food'),176,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.cargo_drone'),(SELECT id FROM def WHERE key='res.metal'),264,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.cargo_drone'),(SELECT id FROM def WHERE key='res.oil'),88,0);
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.cargo_drone'),'upgrade_type',(SELECT id FROM def WHERE key='unit.lorry'),(SELECT id FROM def WHERE key='unit.cargo_drone'));
 INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.priest'),'unit','priest',35,0,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,175,'per_type',NULL,(SELECT id FROM def WHERE key='age.classical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.priest'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.priest'),(SELECT id FROM tag WHERE key='civilian'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.priest'),(SELECT id FROM movement_class WHERE key='foot'),1100);
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.priest'),(SELECT id FROM tag WHERE key='clergy'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.priest'),(SELECT id FROM tag WHERE key='healer'));
 INSERT INTO et_healer(entity_type_id,target_tag_id,hp_per_second,range,energy_per_hp,can_convert) VALUES ((SELECT id FROM def WHERE key='unit.priest'),(SELECT id FROM tag WHERE key='biological'),4,5000,0,1);
 INSERT INTO et_energy(entity_type_id,max,regen_per_second) VALUES ((SELECT id FROM def WHERE key='unit.priest'),100,2);
@@ -2646,6 +2714,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.au
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_farm'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_farm'),(SELECT id FROM tag WHERE key='gather'));
 INSERT INTO et_producer(entity_type_id,queue_limit,parallel,has_rally) SELECT (SELECT id FROM def WHERE key='bld.auto_farm'),queue_limit,parallel,has_rally FROM et_producer WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.farm');
+INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE key='bld.auto_farm'),capacity FROM et_keeper WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.farm');
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.auto_farm'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.farm');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id,layer,distance) SELECT (SELECT id FROM def WHERE key='bld.auto_farm'),rule,ref_def_id,layer,distance FROM placement_rule WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.farm');
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income) SELECT (SELECT id FROM def WHERE key='bld.auto_farm'),resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income FROM et_gather_site WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.farm');
@@ -2662,6 +2731,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.au
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),(SELECT id FROM tag WHERE key='gather'));
 INSERT INTO et_producer(entity_type_id,queue_limit,parallel,has_rally) SELECT (SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),queue_limit,parallel,has_rally FROM et_producer WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.woodcutter_camp');
+INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),capacity FROM et_keeper WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.woodcutter_camp');
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.woodcutter_camp');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id,layer,distance) SELECT (SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),rule,ref_def_id,layer,distance FROM placement_rule WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.woodcutter_camp');
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income) SELECT (SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income FROM et_gather_site WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.woodcutter_camp');
@@ -2678,6 +2748,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.au
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_mine'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_mine'),(SELECT id FROM tag WHERE key='gather'));
 INSERT INTO et_producer(entity_type_id,queue_limit,parallel,has_rally) SELECT (SELECT id FROM def WHERE key='bld.auto_mine'),queue_limit,parallel,has_rally FROM et_producer WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.mine');
+INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE key='bld.auto_mine'),capacity FROM et_keeper WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.mine');
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.auto_mine'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.mine');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id,layer,distance) SELECT (SELECT id FROM def WHERE key='bld.auto_mine'),rule,ref_def_id,layer,distance FROM placement_rule WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.mine');
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income) SELECT (SELECT id FROM def WHERE key='bld.auto_mine'),resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income FROM et_gather_site WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.mine');
@@ -2694,6 +2765,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.au
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_oil_well'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_oil_well'),(SELECT id FROM tag WHERE key='gather'));
 INSERT INTO et_producer(entity_type_id,queue_limit,parallel,has_rally) SELECT (SELECT id FROM def WHERE key='bld.auto_oil_well'),queue_limit,parallel,has_rally FROM et_producer WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.oil_well');
+INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE key='bld.auto_oil_well'),capacity FROM et_keeper WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.oil_well');
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.auto_oil_well'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.oil_well');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id,layer,distance) SELECT (SELECT id FROM def WHERE key='bld.auto_oil_well'),rule,ref_def_id,layer,distance FROM placement_rule WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.oil_well');
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income) SELECT (SELECT id FROM def WHERE key='bld.auto_oil_well'),resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income FROM et_gather_site WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.oil_well');
@@ -2710,6 +2782,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.au
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_university'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_university'),(SELECT id FROM tag WHERE key='gather'));
 INSERT INTO et_producer(entity_type_id,queue_limit,parallel,has_rally) SELECT (SELECT id FROM def WHERE key='bld.auto_university'),queue_limit,parallel,has_rally FROM et_producer WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.university');
+INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE key='bld.auto_university'),capacity FROM et_keeper WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.university');
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.auto_university'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.university');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id,layer,distance) SELECT (SELECT id FROM def WHERE key='bld.auto_university'),rule,ref_def_id,layer,distance FROM placement_rule WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.university');
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income) SELECT (SELECT id FROM def WHERE key='bld.auto_university'),resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income FROM et_gather_site WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.university');
@@ -2783,6 +2856,7 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.stable'),(SELECT id FROM def WHERE key='tech.up.lancer'),'research','research',0,1);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.siege_workshop'),(SELECT id FROM def WHERE key='tech.up.cannon'),'research','research',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='tech.up.frigate'),'research','research',2,0);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.market'),(SELECT id FROM def WHERE key='tech.up.freight_wagon'),'research','research',0,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.5'),'research','research_2',0,1);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.civic.5'),'research','research_2',1,1);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.commerce.5'),'research','research_2',2,1);
@@ -2818,6 +2892,7 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.factory'),(SELECT id FROM def WHERE key='tech.up.howitzer'),'research','research',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='tech.up.destroyer'),'research','research',4,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM def WHERE key='tech.up.fighter'),'research','research',0,0);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.market'),(SELECT id FROM def WHERE key='tech.up.lorry'),'research','research',1,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.7'),'research','research_3',0,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.civic.7'),'research','research_3',1,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.commerce.7'),'research','research_3',2,0);
@@ -2851,6 +2926,7 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM def WHERE key='tech.up.drone_fighter'),'research','research',3,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM def WHERE key='tech.up.drone_bomber'),'research','research',4,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.city'),(SELECT id FROM def WHERE key='tech.up.worker_drone'),'research','research',0,0);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.market'),(SELECT id FROM def WHERE key='tech.up.cargo_drone'),'research','research',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.9'),'research','research_3',0,2);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.civic.9'),'research','research_3',1,2);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.commerce.9'),'research','research_3',2,2);
@@ -3269,6 +3345,22 @@ INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FR
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='tech.up.worker_drone'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.scholar'),(SELECT id FROM def WHERE key='age.classical'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.merchant'),(SELECT id FROM def WHERE key='age.ancient'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.caravan'),(SELECT id FROM def WHERE key='tech.commerce.2'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.caravan'),(SELECT id FROM def WHERE key='age.classical'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.freight_wagon'),(SELECT id FROM def WHERE key='tech.commerce.2'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.freight_wagon'),(SELECT id FROM def WHERE key='age.enlightenment'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.up.freight_wagon'),(SELECT id FROM def WHERE key='age.enlightenment'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.freight_wagon'),(SELECT id FROM def WHERE key='tech.up.freight_wagon'),1);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.lorry'),(SELECT id FROM def WHERE key='tech.commerce.2'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.lorry'),(SELECT id FROM def WHERE key='age.modern'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.up.lorry'),(SELECT id FROM def WHERE key='age.modern'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.up.lorry'),(SELECT id FROM def WHERE key='tech.up.freight_wagon'),1);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.lorry'),(SELECT id FROM def WHERE key='tech.up.lorry'),1);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),(SELECT id FROM def WHERE key='tech.commerce.2'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),(SELECT id FROM def WHERE key='age.automation'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.up.cargo_drone'),(SELECT id FROM def WHERE key='age.automation'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.up.cargo_drone'),(SELECT id FROM def WHERE key='tech.up.lorry'),1);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),(SELECT id FROM def WHERE key='tech.up.cargo_drone'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.priest'),(SELECT id FROM def WHERE key='age.classical'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.military.1'),(SELECT id FROM def WHERE key='age.ancient'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.military.2'),(SELECT id FROM def WHERE key='age.classical'),0);
