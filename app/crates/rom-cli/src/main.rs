@@ -1,5 +1,6 @@
 mod battle_cmd;
 mod mapgen_cmd;
+mod playthrough_cmd;
 mod siege_cmd;
 mod territory_cmd;
 mod universe_cmd;
@@ -21,8 +22,11 @@ fn main() -> ExitCode {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = env::args().skip(1);
     let command = args.next().ok_or(
-        "usage: rom <build-rules|check-rules|run|battle|siege|mapgen|territory|universe> [options]",
+        "usage: rom <build-rules|check-rules|run|battle|siege|mapgen|territory|universe|playthrough> [options]",
     )?;
+    if command == "playthrough" {
+        return playthrough_cmd::run(args);
+    }
     if command == "siege" {
         return siege_cmd::run(args);
     }
@@ -70,7 +74,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     if command != "build-rules" {
         return Err(
-            "usage: rom <build-rules|check-rules|run|battle|siege|mapgen|territory|universe> [options]"
+            "usage: rom <build-rules|check-rules|run|battle|siege|mapgen|territory|universe|playthrough> [options]"
                 .into(),
         );
     }

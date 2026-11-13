@@ -14,6 +14,13 @@ fn rules(sql: &str) -> Arc<Rules> {
         "UPDATE et_territory SET economic_radius=90000, border_radius=90000 WHERE is_city=1;",
     )
     .unwrap();
+    // These mechanics tests use fixed queue durations and shared ramp counters.
+    // The generated progression is exercised without these overrides in scenario.rs.
+    conn.execute_batch("UPDATE entity_type SET build_ticks=100 WHERE id=(SELECT id FROM def WHERE key='unit.citizen');
+        UPDATE entity_type SET ramp_mode='per_group',ramp_group='barracks' WHERE id IN (SELECT id FROM def WHERE key IN ('unit.spearman','unit.medic'));
+        UPDATE cost SET ramp=2 WHERE def_id=(SELECT id FROM def WHERE key='unit.spearman') AND resource_id=(SELECT id FROM def WHERE key='res.food');
+        DELETE FROM prerequisite WHERE def_id IN (SELECT id FROM def WHERE key IN ('tech.age.classical','tech.age.abundance'));
+        DELETE FROM prerequisite WHERE def_id IN (SELECT id FROM def WHERE key IN ('bld.temple','bld.barracks')) AND requires_def_id IN (SELECT id FROM tech WHERE kind='track');").unwrap();
     conn.execute_batch(sql).unwrap();
     Arc::new(Rules::load(&conn).unwrap())
 }
@@ -805,7 +812,7 @@ fn training_chooses_another_side_when_producer_touches_map_edge() {
 fn completed_entity_prerequisites_exclude_sites() {
     let mut w = setup(
         rules(
-            "INSERT INTO prerequisite(def_id,requires_def_id) SELECT d.id,r.id FROM def d,def r WHERE d.key='unit.citizen' AND r.key='bld.library';",
+            "INSERT INTO prerequisite(def_id,requires_def_id,alt_group) SELECT d.id,r.id,1 FROM def d,def r WHERE d.key='unit.citizen' AND r.key='bld.library';",
         ),
         &[],
     );

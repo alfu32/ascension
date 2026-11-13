@@ -266,7 +266,7 @@ mod tests {
                 Pos::flat(20000, 20000),
             )
             .unwrap();
-        let tech = rules.id_of("tech.age.classical").unwrap();
+        let tech = rules.id_of("tech.military.1").unwrap();
         assert!(snapshot_of(&world).research.is_empty());
         world
             .submit(command(library, "research", Some(tech), None))

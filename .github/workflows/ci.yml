@@ -23,6 +23,7 @@ jobs:
             libfontconfig1-dev libfreetype6-dev libx11-dev libxcursor-dev libxrandr-dev \
             libxinerama-dev libxi-dev libgl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-dev \
             libwayland-dev libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev
+      - run: python3 db/content/generate.py --check
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked

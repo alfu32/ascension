@@ -71,9 +71,20 @@ impl World {
             return Ok(());
         }
         let city = self.city_covering(player, pos);
+        // Limits belong to the whole building line, including automated sites.
+        let root = |mut id| {
+            for _ in 0..self.rules.entity_types.len() {
+                let Some(previous) = self.rules.entity_types[&id].upgrades_from_id else {
+                    break;
+                };
+                id = previous;
+            }
+            id
+        };
+        let subject_root = root(subject);
         let standing = self
             .entities()
-            .filter(|e| e.owner == player && e.type_id == subject && e.city_id == city)
+            .filter(|e| e.owner == player && root(e.type_id) == subject_root && e.city_id == city)
             .count();
         let queued = self
             .all_orders()
@@ -81,7 +92,7 @@ impl World {
                 o.player == player
                     && o.kind == "construct"
                     && o.target_entity.is_none()
-                    && o.subject == Some(subject)
+                    && o.subject.is_some_and(|id| root(id) == subject_root)
                     && self.city_covering(player, o.target_pos.expect("placement")) == city
             })
             .count();
