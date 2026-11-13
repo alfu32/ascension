@@ -19,8 +19,12 @@ The current state of every task is in `app/docs/tasks/STATUS.md`.
 - The HUD mock-ups and icon sheets in `app/docs/img/` are look-and-feel
   references only. The layout and chrome are approved; the HUD is authored
   as vector artwork and rasterised by the game (`app/docs/hud.md`). No fantasy subjects.
-- One map holds planetary terrains, open space and resource planets from the
-  first tick. Each player's view widens when that player reaches the space age.
+- **World model (2026-11-13): round planets and star systems** —
+  `app/docs/world-model.md`. Planets are cube-sphere surfaces of integer tiles
+  (circumference ≈ 150 buildings, 50 % land); star systems hold habitable
+  planets and resource bodies; the camera zooms continuously from surface to
+  star map once a player reaches the space age, and is bound to the home
+  planet before that. Each race's home planet is in its own system.
 - Resource planets are claimed by keeping a starship beside them; planetary
   terrains host buildings and ground battles.
 - Identity ladder: historical nation (ages 0–7) → continental bloc (8–9) →

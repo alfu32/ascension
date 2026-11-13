@@ -45,6 +45,11 @@ Ramping *time* should still apply so that massing one unit type slows down.
 
 ## Reaching space (decided)
 
+> **Superseded on 2026-11-13** by `app/docs/world-model.md`: planets are
+> spheres, each race's home planet is in its own star system, and the camera
+> zooms out from the planet to the system and star map. The two kinds of
+> world below still apply (habitable planets and resource bodies).
+
 Space is on the map from the start; players simply cannot see or reach it
 yet. Each player's view zooms out when *that player* reaches age 10, so
 players arrive one by one and the first finds everything unclaimed.

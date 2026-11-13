@@ -22,6 +22,7 @@ it; nothing needed to continue lives only in a chat or a temporary folder.
 | 13 — races: per-race names, one home world per race, match setup | `13-races.md` | `task/13-races` | Sonnet agent | merged in 0.0.17 | Gate re-run by the orchestrator: fmt, clippy, 284 tests; mapgen with four factions gives three home planets, fair, identical hash on repeat; screenshot inspected (`app/docs/img/races-homes.png`). Note: in the app `--players N` without `--factions` cycles through races. |
 | 14 — national borders, placement rules, fog of war | `14-territory.md` | `task/14-territory` | Opus agent | running | worktree `../rise-of-man-worktrees/14-territory` |
 | 15 — selection, orders and the live command palette | `15-selection-orders.md` | `task/15-selection-orders` | Sonnet agent | running | worktree `../rise-of-man-worktrees/15-selection-orders` |
+| (next) world model migration, steps 1–5 | — | — | — | planned | `app/docs/world-model.md` "Migration plan"; step 1 (topology) starts after task 14 merges |
 
 States: `ready` → `running` → `review` → `merged`; or `blocked` (say why),
 `handed over` (say to whom and from which commit).

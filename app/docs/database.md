@@ -153,6 +153,10 @@ other unit.
 
 ### 6. One map: planets set in space
 
+> **Superseded on 2026-11-13** by `world-model.md` (round planets, star
+> systems, continuous zoom). The schema will follow in the universe-model
+> task; until then this section describes the current code.
+
 The whole map exists from the first tick. It contains:
 
 - **Planetary terrains** — large areas of land and sea where cities stand and

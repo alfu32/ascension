@@ -17,6 +17,7 @@ Status: in development. See the task ledger for what works today.
 | `app/db/seed.sql` | small placeholder dataset that exercises the schema |
 | `app/docs/database.md` | explanation of the schema and how to add content |
 | `app/docs/implementation-plan.md` | crates, ground rules, phases and milestones |
+| `app/docs/world-model.md` | round planets, star systems, continuous zoom; scale and migration plan |
 | `app/docs/hud.md` | in-match HUD design: style, layout rectangles, how it is produced |
 | `app/docs/tasks/STATUS.md` | task ledger: what is running, merged or blocked |
 
