@@ -12,6 +12,8 @@ use crate::{
     pathing::{PathStats, Pathing},
     rng::SimRng,
     spatial::SpatialGrid,
+    territory::Territory,
+    vision::Vision,
 };
 use rom_rules::{DefId, Rules};
 use std::{
@@ -66,6 +68,8 @@ pub struct World {
     pub(crate) seen: Vec<Pos>,
     /// Attackers that spent themselves this tick; emptied when hits land.
     pub(crate) spent: Vec<EntityId>,
+    pub(crate) territory: Territory,
+    pub(crate) vision: Vision,
     spatial: SpatialGrid,
 }
 
@@ -111,6 +115,8 @@ impl World {
             ("economy.income_period_ticks", 1, i64::MAX),
             ("player.commerce_cap.base", 0, i64::MAX),
             ("citizen.auto_work_delay_ticks", 0, i64::MAX),
+            ("city.spacing", 0, i64::MAX),
+            ("player.city_limit.base", 0, i64::MAX),
         ] {
             if rules
                 .constant(key)
@@ -140,7 +146,8 @@ impl World {
         }
         let pathing = Pathing::new(&rules, &map);
         let avoid = Avoidance::new(&rules, map.width, map.height);
-        Ok(Self {
+        let territory = Territory::new(&rules, &map);
+        let mut world = Self {
             hits: Vec::new(),
             shots: Vec::new(),
             tick: 0,
@@ -159,8 +166,15 @@ impl World {
             next_order_id: 1,
             stats: Stats::default(),
             income_remainders: BTreeMap::new(),
+            territory,
+            vision: Vision::default(),
             spatial: SpatialGrid::default(),
-        })
+        };
+        let ids: Vec<PlayerId> = world.players.keys().copied().collect();
+        for id in ids {
+            world.ensure_vision(id);
+        }
+        Ok(world)
     }
 
     /// Returns the number of completed simulation ticks.
@@ -218,12 +232,23 @@ impl World {
         self.pathing.stats
     }
 
-    /// Spawns a checked entity with its type's full hit points.
+    /// Spawns a checked, complete entity with its type's full hit points.
     pub fn spawn(
         &mut self,
         type_id: DefId,
         owner: PlayerId,
         pos: Pos,
+    ) -> Result<EntityId, SimError> {
+        self.spawn_entity(type_id, owner, pos, false)
+    }
+
+    /// Spawns a complete entity, or an unfinished building site when `site` is true.
+    pub(crate) fn spawn_entity(
+        &mut self,
+        type_id: DefId,
+        owner: PlayerId,
+        pos: Pos,
+        site: bool,
     ) -> Result<EntityId, SimError> {
         let hp = self
             .rules
@@ -260,10 +285,11 @@ impl World {
             energy_remainder: 0,
             heal_remainder: 0,
             killer: None,
-            build_progress: None,
+            build_progress: site.then_some(0),
             move_remainder: 0,
             gather_slots,
             work_site: None,
+            city_id: None,
             idle_ticks: 0,
             orders: VecDeque::new(),
         }));
@@ -278,6 +304,11 @@ impl World {
         }
         self.refresh_income(id);
         self.economy.dirty.insert(id);
+        self.assign_city(id);
+        self.refresh_territory(id);
+        if self.is_building(type_id) {
+            self.index_building(id, pos, true);
+        }
         Ok(id)
     }
 
@@ -297,12 +328,25 @@ impl World {
         }
         self.refresh_site(id);
         self.economy.dirty.insert(id);
+        if self.is_building(old) {
+            self.index_building(id, pos, false);
+        }
+        if self.is_building(new) {
+            self.index_building(id, pos, true);
+        }
+        if self.is_city_type(old) && !self.is_city_type(new) {
+            self.release_city(id);
+        }
+        self.refresh_territory(id);
     }
 
     /// Moves an entity between spatial cells after its position changed.
     pub(crate) fn relocate(&mut self, id: EntityId, from: Pos, to: Pos) {
         self.spatial.relocate(id, from, to);
         self.avoid.pos[id.0 as usize] = to;
+        if crate::geometry::tile_of(from) != crate::geometry::tile_of(to) {
+            self.refresh_viewer(id);
+        }
     }
 
     /// Removes an entity and cancels both its live and pending orders.
@@ -329,6 +373,14 @@ impl World {
             }
         }
         self.release_site_workers(id);
+        self.refresh_viewer(id);
+        self.refresh_territory(id);
+        if self.is_city_type(entity.type_id) {
+            self.release_city(id);
+        }
+        if self.is_building(entity.type_id) {
+            self.index_building(id, entity.pos, false);
+        }
         self.stats.orders_cancelled += entity.orders.len() as u64;
         self.pending.retain(|(order, _)| {
             if order.executor == id {
@@ -487,6 +539,7 @@ impl World {
         self.fire_shots();
         self.land_projectiles();
         self.remove_dead();
+        self.remember_touched();
         self.pay_income();
         self.pathing.end_tick();
         self.tick = self.tick.checked_add(1).expect("simulation tick exhausted");

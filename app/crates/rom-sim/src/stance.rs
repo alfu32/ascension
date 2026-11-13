@@ -116,6 +116,7 @@ impl World {
         .filter_map(|target| {
             let t = self.entity(target).expect("candidate");
             if t.hp <= 0
+                || !self.sees_entity(e.owner, t)
                 || (t.owner == PlayerId(0) && self.players[&t.owner].team == 0)
                 || !self.enemies(e.owner, t.owner)
                 || self.target_distance(e.pos, target) > range

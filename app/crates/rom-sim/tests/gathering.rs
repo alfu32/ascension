@@ -12,6 +12,12 @@ fn rules(sql: &str) -> Arc<Rules> {
         include_str!("../../../db/seed.sql"),
     )
     .unwrap();
+    // Cities reach across the whole 64×64 test map, so placement rules hold anywhere
+    // once a town stands.
+    conn.execute_batch(
+        "UPDATE et_territory SET economic_radius=90000, border_radius=90000 WHERE is_city=1;",
+    )
+    .unwrap();
     conn.execute_batch(sql).unwrap();
     Arc::new(Rules::load(&conn).unwrap())
 }
@@ -54,6 +60,11 @@ fn id(w: &World, key: &str) -> DefId {
 }
 fn spawn(w: &mut World, key: &str, pos: Pos) -> EntityId {
     w.spawn(id(w, key), OWNER, pos).unwrap()
+}
+/// Places the owner's starting town through match setup, in a corner away from the tests.
+fn town(w: &mut World) {
+    w.place_for_setup(id(w, "bld.city"), OWNER, at(56_500, 56_500))
+        .unwrap();
 }
 fn ticks(w: &mut World, count: u64) {
     for _ in 0..count {
@@ -143,6 +154,7 @@ fn slots_scale_with_nearby_node_terrain_and_respect_max() {
         (vec![(13, 10), (10, 13), (7, 10), (10, 7)], 6),
     ] {
         let mut w = setup(catalogue.clone(), &forest);
+        town(&mut w);
         let worker = spawn(&mut w, "unit.citizen", at(7500, 10_500));
         w.submit(construct(&w, worker, "bld.library", at(10_500, 10_500)))
             .unwrap();
@@ -502,6 +514,7 @@ fn missing_income_stat_preserves_raw_and_incomplete_self_income_does_not_pay() {
         ),
         &[],
     );
+    town(&mut w);
     let worker = spawn(&mut w, "unit.citizen", at(7000, 10_000));
     w.submit(construct(&w, worker, "bld.library", at(10_000, 10_000)))
         .unwrap();

@@ -148,6 +148,12 @@ impl World {
             }) {
                 return Err(SimError::LimitReached);
             }
+            if mode == ProductionMode::Construct
+                && self.is_city_type(subject)
+                && self.city_count(command.player) >= self.city_limit(command.player)
+            {
+                return Err(SimError::CityLimit);
+            }
         }
         if mode != ProductionMode::Construct {
             let producer = self.rules.entity_types[&executor.type_id]
@@ -167,7 +173,9 @@ impl World {
         }
         if mode == ProductionMode::Construct {
             let pos = command.target_pos.ok_or(SimError::WrongTargetShape)?;
-            command.target_pos = Some(self.check_placement(subject, pos)?);
+            let pos = self.check_placement(command.player, subject, pos)?;
+            self.check_city_limit(command.player, subject, pos)?;
+            command.target_pos = Some(pos);
         }
         let price = self.price(command.player, subject);
         if price.iter().any(|(resource, amount)| {

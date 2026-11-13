@@ -64,16 +64,20 @@ impl World {
             e.hp = (i128::from(e.hp) * i128::from(maximum) / i128::from(e.max_hp.max(1))) as i64;
             e.max_hp = maximum;
         }
+        self.refresh_viewer(id);
+        self.refresh_territory(id);
     }
 
     pub(crate) fn validate_combat_order(&self, command: &Command) -> Result<(), SimError> {
-        if command.kind == "attack"
-            && command
+        if command.kind == "attack" {
+            let target = command
                 .target_entity
                 .and_then(|id| self.entity(id))
-                .is_none_or(|target| !self.enemies(command.player, target.owner))
-        {
-            return Err(SimError::InvalidAttackTarget);
+                .filter(|target| self.enemies(command.player, target.owner))
+                .ok_or(SimError::InvalidAttackTarget)?;
+            if !self.sees_entity(command.player, target) {
+                return Err(SimError::TargetHidden);
+            }
         }
         if command.kind == "heal"
             && command

@@ -8,6 +8,12 @@ const SEED: &str = include_str!("../../../db/seed.sql");
 
 fn rules(sql: &str) -> Arc<Rules> {
     let conn = build_rules_db(SCHEMA, SEED).unwrap();
+    // Cities reach across the whole 64×64 test map, so placement rules hold anywhere
+    // once a town stands.
+    conn.execute_batch(
+        "UPDATE et_territory SET economic_radius=90000, border_radius=90000 WHERE is_city=1;",
+    )
+    .unwrap();
     conn.execute_batch(sql).unwrap();
     Arc::new(Rules::load(&conn).unwrap())
 }
@@ -50,6 +56,12 @@ fn at(x: i32, y: i32) -> Pos {
 }
 fn spawn(world: &mut World, key: &str, pos: Pos) -> EntityId {
     world.spawn(id(world, key), OWNER, pos).unwrap()
+}
+/// Places a starting town for `owner` through match setup, in a corner away from the tests.
+fn town(world: &mut World, owner: PlayerId, pos: Pos) -> EntityId {
+    world
+        .place_for_setup(id(world, "bld.city"), owner, pos)
+        .unwrap()
 }
 fn player(world: &World) -> &Player {
     world.players().next().unwrap()
@@ -214,6 +226,7 @@ fn insufficient_resources_rejected_and_nothing_deducted() {
     let mut w = World::new(w.rules().clone(), w.map().clone(), 7, vec![p]).unwrap();
     let citizen2 = spawn(&mut w, "unit.citizen", at(0, 0));
     assert_eq!(citizen, citizen2);
+    town(&mut w, OWNER, at(56_500, 56_500));
     let hash = w.hash();
     assert_eq!(
         w.submit(construction(&w, citizen2, "bld.farm", at(10_000, 10_000))),
@@ -324,6 +337,7 @@ fn stop_refunds_queued_training() {
 #[test]
 fn construct_creates_site_then_completes() {
     let mut w = world();
+    town(&mut w, OWNER, at(56_500, 56_500));
     let worker = spawn(&mut w, "unit.citizen", at(0, 10_000));
     let food = balance(&w, "res.food");
     w.submit(construction(&w, worker, "bld.farm", at(10_100, 10_100)))
@@ -354,6 +368,7 @@ fn construct_creates_site_then_completes() {
 
 fn build_farm(helping: bool) -> u64 {
     let mut w = world();
+    town(&mut w, OWNER, at(56_500, 56_500));
     let worker = spawn(&mut w, "unit.citizen", at(7000, 10_000));
     let other = spawn(&mut w, "unit.citizen", at(7000, 10_000));
     w.submit(construction(&w, worker, "bld.farm", at(10_000, 10_000)))
@@ -376,6 +391,7 @@ fn two_builders_finish_sooner_than_one() {
 #[test]
 fn construct_rejects_overlap() {
     let mut w = world();
+    town(&mut w, OWNER, at(56_500, 56_500));
     let worker = spawn(&mut w, "unit.citizen", at(0, 0));
     let other = spawn(&mut w, "unit.citizen", at(0, 0));
     w.submit(construction(&w, worker, "bld.farm", at(10_000, 10_000)))
@@ -471,6 +487,7 @@ fn locked_item_rejected() {
 #[test]
 fn research_sets_age() {
     let mut w = world();
+    town(&mut w, OWNER, at(56_500, 56_500));
     let worker = spawn(&mut w, "unit.citizen", at(7000, 10_000));
     w.submit(construction(&w, worker, "bld.library", at(10_000, 10_000)))
         .unwrap();
@@ -661,6 +678,8 @@ fn per_match_limits_count_other_players_and_construction_sites_once() {
     let mut other = p.clone();
     other.id = PlayerId(2);
     let mut w = World::new(catalogue, initial.map().clone(), 7, vec![p, other]).unwrap();
+    town(&mut w, OWNER, at(56_500, 56_500));
+    town(&mut w, PlayerId(2), at(56_500, 30_500));
     let worker = spawn(&mut w, "unit.citizen", at(0, 0));
     let other_worker = w
         .spawn(id(&w, "unit.citizen"), PlayerId(2), at(0, 0))
@@ -680,6 +699,7 @@ fn per_match_limits_count_other_players_and_construction_sites_once() {
 #[test]
 fn construction_fractional_work_and_cancelled_sites_can_be_resumed() {
     let mut w = setup(rules("UPDATE et_builder SET build_pct=50;"), &[]);
+    town(&mut w, OWNER, at(56_500, 56_500));
     let worker = spawn(&mut w, "unit.citizen", at(7000, 10_000));
     let timber = balance(&w, "res.timber");
     w.submit(construction(&w, worker, "bld.farm", at(10_000, 10_000)))
@@ -707,6 +727,7 @@ fn construction_fractional_work_and_cancelled_sites_can_be_resumed() {
 #[test]
 fn destroyed_sites_fail_builders_and_helpers() {
     let mut w = world();
+    town(&mut w, OWNER, at(56_500, 56_500));
     let worker = spawn(&mut w, "unit.citizen", at(7000, 10_000));
     let other = spawn(&mut w, "unit.citizen", at(7000, 10_000));
     w.submit(construction(&w, worker, "bld.farm", at(10_000, 10_000)))
@@ -807,6 +828,7 @@ fn build_reach_is_measured_to_each_footprint_edge() {
         at(10_000, 13_500),
     ] {
         let mut w = world();
+        town(&mut w, OWNER, at(56_500, 56_500));
         let worker = spawn(&mut w, "unit.citizen", pos);
         w.submit(construction(&w, worker, "bld.farm", at(10_000, 10_000)))
             .unwrap();

@@ -1,6 +1,6 @@
 //! Tile-aligned placement and cooperative construction work.
 
-use crate::{EntityId, Order, OrderStatus, Pos, SimError, World};
+use crate::{EntityId, Order, OrderStatus, PlayerId, Pos, SimError, World};
 use rom_rules::{DefId, EntityClass, EntityType};
 
 pub(crate) fn footprint(et: &EntityType, pos: Pos) -> [i64; 4] {
@@ -19,8 +19,12 @@ fn overlaps(a: [i64; 4], b: [i64; 4]) -> bool {
 }
 
 impl World {
-    pub(crate) fn check_placement(&self, subject: DefId, pos: Pos) -> Result<Pos, SimError> {
+    /// Puts a footprint on whole tiles nearest to `pos`; other entities keep their point.
+    pub(crate) fn snap_placement(&self, subject: DefId, pos: Pos) -> Result<Pos, SimError> {
         let et = &self.rules.entity_types[&subject];
+        if et.class != EntityClass::Building {
+            return Ok(pos);
+        }
         // Snap footprint edges to tile boundaries, including odd-sized footprints.
         let snap = |coordinate: i32, size: i64| {
             ((i64::from(coordinate) - size * 500 + 500).div_euclid(1000) * 1000 + size * 500) as i32
@@ -37,15 +41,37 @@ impl World {
         {
             return Err(SimError::OutsideMap);
         }
-        for y in bounds[1] / 1000..bounds[3] / 1000 {
-            for x in bounds[0] / 1000..bounds[2] / 1000 {
-                let terrain = self
-                    .map
-                    .terrain_at(x as i32, y as i32)
-                    .expect("checked bounds");
-                if !self.rules.terrains[&terrain].buildable {
-                    return Err(SimError::UnbuildableTerrain);
-                }
+        Ok(pos)
+    }
+
+    /// Places a complete entity for match setup, exempt from every placement rule;
+    /// buildings are snapped to whole tiles and must fit on the map.
+    pub fn place_for_setup(
+        &mut self,
+        type_id: DefId,
+        owner: PlayerId,
+        pos: Pos,
+    ) -> Result<EntityId, SimError> {
+        if self.rules.entity_type(type_id).is_none() {
+            return Err(SimError::UnknownType(type_id));
+        }
+        let pos = self.snap_placement(type_id, pos)?;
+        self.spawn(type_id, owner, pos)
+    }
+
+    pub(crate) fn check_placement(
+        &self,
+        player: PlayerId,
+        subject: DefId,
+        pos: Pos,
+    ) -> Result<Pos, SimError> {
+        let et = &self.rules.entity_types[&subject];
+        let pos = self.snap_placement(subject, pos)?;
+        let bounds = footprint(et, pos);
+        for (x, y) in crate::geometry::footprint_tiles(bounds) {
+            let terrain = self.map.terrain_at(x, y).expect("checked bounds");
+            if !self.rules.terrains[&terrain].buildable {
+                return Err(SimError::UnbuildableTerrain);
             }
         }
         if self.entities().any(|e| {
@@ -66,29 +92,25 @@ impl World {
         {
             return Err(SimError::PlacementOverlap);
         }
-        self.check_territory_and_placement_rules(subject, pos)?;
+        self.check_placement_rules(player, subject, pos, bounds)?;
         Ok(pos)
-    }
-
-    fn check_territory_and_placement_rules(
-        &self,
-        _subject: DefId,
-        _pos: Pos,
-    ) -> Result<(), SimError> {
-        Ok(())
     }
 
     pub(crate) fn create_site(&mut self, order: &mut Order) {
         let subject = order.subject.expect("construction subject");
         let id = self
-            .spawn(subject, order.player, order.target_pos.expect("placement"))
+            .spawn_entity(
+                subject,
+                order.player,
+                order.target_pos.expect("placement"),
+                true,
+            )
             .expect("accepted site fits map and entity id capacity");
         let pct = self
             .rules
             .constant("build.site_start_hp_pct")
             .expect("validated site hp constant");
         let site = self.entities[id.0 as usize].as_mut().expect("new site");
-        site.build_progress = Some(0);
         site.gather_slots = 0;
         site.hp = (i128::from(site.hp) * i128::from(pct) / 100) as i64;
         order.target_entity = Some(id);
@@ -170,6 +192,7 @@ impl World {
                 .gather_slots = slots;
             self.refresh_site(site_id);
             self.economy.dirty.insert(site_id);
+            self.refresh_territory(site_id);
         }
     }
 }

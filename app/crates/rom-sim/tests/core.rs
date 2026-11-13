@@ -597,6 +597,17 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
 #[test]
 fn subjects_and_construction_placement_are_accepted() {
     let mut world = world();
+    let city = world.rules().id_of("bld.city").unwrap();
+    world
+        .place_for_setup(
+            city,
+            OWNER,
+            Pos {
+                x: 20_500,
+                y: 20_500,
+            },
+        )
+        .unwrap();
     let id = citizen(&mut world, Pos::default());
     let mut command = untargeted(id, "construct", false);
     command.subject = world.rules().id_of("bld.farm");
@@ -610,7 +621,7 @@ fn subjects_and_construction_placement_are_accepted() {
     world.submit(command).unwrap();
     world.step();
     assert_eq!(world.stats().orders_unsupported, 0);
-    assert_eq!(world.entities().count(), 2);
+    assert_eq!(world.entities().count(), 3);
 }
 
 #[test]
