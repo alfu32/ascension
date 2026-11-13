@@ -39,9 +39,9 @@ it; nothing needed to continue lives only in a chat or a temporary folder.
 | 30 — palette states, research view, site outlines, city limit on screen, drag-pan | `30-palette-states.md` | `task/30-palette-states` | Sonnet agent → Codex (`gpt-6.1-sol`, high) | handed over, running | Sonnet stopped at the 5-hour limit after starting the badge glyph (wip 8cebf23). Codex continues; it cannot open a window, so the orchestrator runs the screenshots. |
 | (next) simulation API gaps (set age mid-match, rally, cancel one order, patrol); computer opponent; HUD for victory timers and diplomacy | — | — | — | planned | |
 
-**Integration checklist (open, 2026-11-13):** 29 is merged into `main` locally
-(with the border fix) and waits for its gate run before `0.0.33` is tagged and
-pushed. 28 (wip `ba986e6`, paused) and 30 (Codex, running) must both be merged
+**Integration checklist (open, 2026-11-13):** 29 and the border fix are
+published as `0.0.33` (nine simulation tests now pin the original city
+geometry they assert on). 28 (wip `ba986e6`, paused) and 30 (Codex, running) must both be merged
 on top, conflicts resolved (both touch `rom-render`), the full gate run once
 on the combined result, the screenshots of both cards inspected, then tagged
 and pushed together.
