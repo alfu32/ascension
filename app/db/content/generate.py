@@ -68,6 +68,7 @@ RESEARCH = [
     ('lumber_mill', 'income.timber', 'carpentry:1:10|architecture:3:15|engineering:5:20'),
     ('smelter', 'income.metal', 'metallurgy:2:10|steel:4:15|alloys:6:20'),
     ('refinery', 'income.oil', 'cracking:5:15|petrochemistry:7:25'),
+    ('fusion_plant', 'income.energy', 'plasma_containment:9:15|superconducting_grid:10:15|stellar_collectors:11:20'),
     ('university', 'income.knowledge', 'literacy:2:20|printing:3:20|scientific_method:4:20|research_institutes:6:20|supercomputers:8:20'),
     ('temple', '', 'religion:1:0|theology:3:0|philosophy:5:0'),
     ('tower', 'attrition_dealt', 'militia_training:1:25|allegiance:2:25|patriotism:5:25|nationalism:7:25'),
@@ -126,7 +127,7 @@ def generate():
         definition('tech', key, name)
         row('tech', id=Ref(key), kind=kind, track=track, level=level, research_ticks=ticks)
         need(key, 'age.' + AGES[age])
-        produce('bld.' + building, key, 'research', 'research')
+        research.append((building, age, len(research), key))
         cost(key, prices)
     def weapon(key, damage, dc, reach, layers, cooldown=30):
         row('et_weapon', entity_type_id=Ref(key), damage=damage, damage_class_id=Ref(dc, 'damage_class'),
@@ -144,6 +145,8 @@ def generate():
         row('tech_effect', tech_id=Ref(key), effect='upgrade_type', from_def_id=Ref(old), target_def_id=Ref(new))
         upgrades[new] = key
     upgrades = {}
+    # Research palettes list techs by the age they need, then in authoring order.
+    research = []
     # Oil is traversable land, but ordinary buildings explicitly require plain terrain.
     definition('terrain', 'ter.oil', 'Oil Deposit')
     row('terrain', id=Ref('ter.oil'), layer='ground', buildable=1, blocks_los=0)
@@ -390,6 +393,8 @@ def generate():
     for key, age, ticks in [('continental_union', 8, 3000), ('unification', 10, 4000)]:
         tech('tech.' + key, key.replace('_', ' ').title(), age, 'library', ticks, {'knowledge': 1000}, 'project')
     row('tech_effect', tech_id=Ref('tech.unification'), effect='change_faction', target_def_id=Ref('race.human'))
+    for building, _, _, key in sorted(research, key=lambda r: (r[1], r[2])):
+        produce('bld.' + building, key, 'research', 'research')
     # Upgraded producers retain their whole palette, including subsequent upgrades.
     for base, steps in building_variants:
         for key, _ in steps:
