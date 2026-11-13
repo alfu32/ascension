@@ -1,4 +1,5 @@
-//! Bounds-checked row-major terrain storage.
+//! Bounds-checked row-major terrain storage. A cube sphere stores its six faces as
+//! one strip, `n` wide and `6n` tall, in the surface's dense tile order.
 
 use crate::{Pos, SimError};
 use rom_rules::DefId;
@@ -48,8 +49,12 @@ impl MapGrid {
             .copied()
     }
 
-    /// Returns terrain under a milli-tile position, respecting negative bounds.
+    /// Returns terrain under a milli-tile position on a flat map, respecting negative
+    /// bounds; None for other faces. Sphere worlds use `World::terrain_at`.
     pub fn terrain_at_pos(&self, pos: Pos) -> Option<DefId> {
+        if pos.face != 0 {
+            return None;
+        }
         self.terrain_at(pos.x.div_euclid(1000), pos.y.div_euclid(1000))
     }
 }

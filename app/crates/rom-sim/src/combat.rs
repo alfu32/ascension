@@ -107,7 +107,7 @@ impl World {
             Layer::Air
         } else {
             let pos = self.seen_pos(id);
-            self.rules.terrains[&self.map.terrain_at_pos(pos).expect("entity on map")].layer
+            self.rules.terrains[&self.terrain_at(pos).expect("entity on map")].layer
         }
     }
 
@@ -117,14 +117,15 @@ impl World {
         let e = self.entity(target).expect("target");
         let et = &self.rules.entity_types[&e.type_id];
         let pos = self.seen_pos(target);
+        // Out of reach across a sphere counts as infinitely far.
         if et.class == EntityClass::Building {
-            let b = footprint(et, pos);
-            from.distance(Pos {
-                x: i64::from(from.x).clamp(b[0], b[2]) as i32,
-                y: i64::from(from.y).clamp(b[1], b[3]) as i32,
-            })
+            self.geo
+                .closest_in_bounds(pos.face, footprint(et, pos), from)
+                .map_or(u64::MAX, |(_, squared)| crate::integer_sqrt(squared))
         } else {
-            from.distance(pos).saturating_sub(et.radius.max(0) as u64)
+            self.geo
+                .distance(from, pos)
+                .map_or(u64::MAX, |d| d.saturating_sub(et.radius.max(0) as u64))
         }
     }
 
@@ -180,7 +181,7 @@ impl World {
         let target_id = target.id;
         let target_pos = self.seen_pos(target_id);
         if let Some(home) = order.home
-            && target_pos.distance(home) > 6000
+            && self.geo.distance(target_pos, home).is_none_or(|d| d > 6000)
         {
             order.kind = "move".into();
             order.target_entity = None;
@@ -217,19 +218,21 @@ impl World {
                 let bounds = (et.class == EntityClass::Building).then(|| footprint(et, target_pos));
                 let goal = if let Some(b) = bounds {
                     let p = self.entity(id).expect("attacker").pos;
-                    Pos {
-                        x: i64::from(p.x).clamp(b[0], b[2]) as i32,
-                        y: i64::from(p.y).clamp(b[1], b[3]) as i32,
-                    }
+                    self.geo
+                        .closest_in_bounds(target_pos.face, b, p)
+                        .map_or(target_pos, |(closest, _)| closest)
                 } else {
                     target_pos
                 };
                 if order.movement.as_ref().is_some_and(|m| {
-                    m.request.is_none() && (m.goal.distance(goal) > 1000 || m.target().is_none())
+                    m.request.is_none()
+                        && (self.geo.distance(m.goal, goal).is_none_or(|d| d > 1000)
+                            || m.target().is_none())
                 }) {
                     order.movement = None;
                 }
-                self.walk(id, order, goal, bounds.map(TileRect::covering), false);
+                let exempt = bounds.map(|b| TileRect::covering(target_pos.face, b));
+                self.walk(id, order, goal, exempt, false);
                 walked = true;
                 distance = self.target_distance(self.entity(id).expect("attacker").pos, target_id);
                 if distance > range {
@@ -295,8 +298,10 @@ impl World {
         let mut shots = std::mem::take(&mut self.shots);
         shots.sort_by_key(|s| {
             (
+                s.origin.face,
                 s.origin.x,
                 s.origin.y,
+                s.target_pos.face,
                 s.target_pos.x,
                 s.target_pos.y,
                 s.hit.source_type,
@@ -381,8 +386,12 @@ impl World {
             .partition(|hit| hit.land_tick <= self.tick);
         self.hits = remaining;
         landing.sort_by_cached_key(|hit| {
-            let origin = self.entity(hit.attacker).map(|e| (e.pos.x, e.pos.y));
-            let target = self.entity(hit.target).map(|e| (e.pos.x, e.pos.y));
+            let origin = self
+                .entity(hit.attacker)
+                .map(|e| (e.pos.face, e.pos.x, e.pos.y));
+            let target = self
+                .entity(hit.target)
+                .map(|e| (e.pos.face, e.pos.x, e.pos.y));
             (origin, target, hit.source_type, hit.weapon_id, hit.damage)
         });
         for hit in &landing {

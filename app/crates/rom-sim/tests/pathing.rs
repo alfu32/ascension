@@ -60,7 +60,7 @@ fn as_str(rows: &[String]) -> Vec<&str> {
 }
 
 fn at(x: i32, y: i32) -> Pos {
-    Pos { x, y }
+    Pos::flat(x, y)
 }
 
 fn tile(x: i32, y: i32) -> Pos {

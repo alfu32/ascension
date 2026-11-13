@@ -2,9 +2,10 @@
 
 use crate::{
     EntityId, Order, OrderStatus, Pos, World,
-    math::{facing, mul_div},
+    geometry::turn_facing,
+    math::{facing_of, mul_div},
     order::MoveState,
-    pathing::{Found, TileRect, ceil_distance, centre, tile_of},
+    pathing::{Found, TileRect},
 };
 
 /// Consecutive repaths without reaching a waypoint before the walk gives up.
@@ -46,14 +47,17 @@ impl World {
             let own = if spread {
                 let index = self.pathing.join_spread(goal);
                 let (dx, dy) = self.pathing.spread_offset(index);
-                let candidate = Pos {
-                    x: (i64::from(goal.x) + dx).clamp(i64::from(i32::MIN), i64::from(i32::MAX))
-                        as i32,
-                    y: (i64::from(goal.y) + dy).clamp(i64::from(i32::MIN), i64::from(i32::MAX))
-                        as i32,
+                // Off-surface goals keep their point; the offset never leaves a flat map's
+                // coordinate range and crosses edges on a sphere.
+                let candidate = if self.geo.contains(goal) || self.geo.is_flat() {
+                    self.geo.offset(goal, dx, dy).0
+                } else {
+                    goal
                 };
-                let (tx, ty) = tile_of(candidate);
-                if self.pathing.passable(motion.class, tx, ty, None) {
+                if self
+                    .pathing
+                    .passable(motion.class, self.geo.tile_of(candidate), None)
+                {
                     candidate
                 } else {
                     goal
@@ -72,7 +76,10 @@ impl World {
                 repaths: 0,
             };
             if self.pathing.line_clear(motion.class, pos, own, exempt) {
-                state.distance = ceil_distance(pos, own);
+                state.distance = self
+                    .geo
+                    .ceil_distance(pos, own)
+                    .expect("clear lines are in reach");
             } else {
                 // Group members search for the shared goal; each ends at its own point.
                 state.request = Some(
@@ -98,39 +105,36 @@ impl World {
             (Ok(b), Ok(d)) => (i128::from(b / d), i128::from(b % d)),
             _ => (budget / denominator, budget % denominator),
         };
+        let geo = &self.geo;
         loop {
             let target = state.target().expect("walk underway");
             let traveled = (i128::from(state.traveled) + step).min(i128::from(state.distance));
             let used = traveled - i128::from(state.traveled);
             let traveled = traveled as u64;
+            // The segment in its origin's frame; None if a push carried it out of reach.
+            let segment = geo.vector(state.origin, target);
             // Interpolate cumulative travel from the segment start: direction rounding
             // cannot accumulate drift or strand slow diagonal movement at (0, 0).
-            let next = if traveled == state.distance {
-                target
-            } else {
-                let coordinate = |from: i32, to: i32| {
-                    (i64::from(from)
-                        + mul_div(
-                            i64::from(to) - i64::from(from),
-                            traveled as i64,
-                            state.distance as i64,
-                        )) as i32
-                };
-                Pos {
-                    x: coordinate(state.origin.x, target.x),
-                    y: coordinate(state.origin.y, target.y),
+            let next = match segment {
+                _ if traveled == state.distance => Some(target),
+                None => None,
+                Some((dx, dy)) => {
+                    let part = |d: i64| mul_div(d, traveled as i64, state.distance as i64);
+                    Some(geo.offset(state.origin, part(dx), part(dy)).0)
                 }
             };
             // Rounding can tilt a short step across a corner the planned segment misses;
             // such a step is fine while the segment itself is still clear.
-            let (nx, ny) = tile_of(next);
-            let clear = self
-                .pathing
-                .line_clear(motion.class, entity.pos, next, exempt)
-                || (self.pathing.passable(motion.class, nx, ny, exempt)
-                    && self
+            let clear = next.is_some_and(|next| {
+                self.pathing
+                    .line_clear(motion.class, entity.pos, next, exempt)
+                    || (self
                         .pathing
-                        .line_clear(motion.class, state.origin, target, exempt));
+                        .passable(motion.class, geo.tile_of(next), exempt)
+                        && self
+                            .pathing
+                            .line_clear(motion.class, state.origin, target, exempt))
+            });
             if !clear {
                 if state.repaths >= MAX_REPATHS {
                     order.status = OrderStatus::Failed("no_path".into());
@@ -154,9 +158,17 @@ impl World {
                 };
                 return Walk::Underway;
             }
-            // Facing is constant along a segment; set it when the segment starts.
-            if state.traveled == 0 && state.origin != target {
-                entity.facing = facing(state.origin, target);
+            let next = next.expect("clear steps exist");
+            // Facing is constant along a segment in its origin's frame; set it when the
+            // segment starts, and turn it with the frame whenever a face edge is crossed.
+            if state.traveled == 0
+                && state.origin != target
+                && let Some((dx, dy)) = segment
+            {
+                entity.facing = facing_of(dx, dy);
+            }
+            if next.face != entity.pos.face {
+                entity.facing = turn_facing(entity.facing, geo.turns(entity.pos.face, next.face));
             }
             state.traveled = traveled;
             entity.pos = next;
@@ -172,7 +184,9 @@ impl World {
             step -= used;
             state.origin = next;
             state.traveled = 0;
-            state.distance = ceil_distance(next, following);
+            // Smoothed waypoints are always within reach; a missing one ends the segment
+            // at once, and the next tick finds the line blocked and searches again.
+            state.distance = geo.ceil_distance(next, following).unwrap_or(0);
             if step == 0 {
                 break;
             }
@@ -182,28 +196,46 @@ impl World {
     }
 
     /// Walks toward the closest point of a footprint; true once within build reach.
-    pub(crate) fn approach(&mut self, id: EntityId, order: &mut Order, bounds: [i64; 4]) -> bool {
+    /// `bounds` lie on `face`.
+    pub(crate) fn approach(
+        &mut self,
+        id: EntityId,
+        order: &mut Order,
+        face: u8,
+        bounds: [i64; 4],
+    ) -> bool {
         let reach = self.rules.constant("build.reach").expect("validated reach") as u128;
-        let closest = |pos: Pos| Pos {
-            x: i64::from(pos.x).clamp(bounds[0], bounds[2]) as i32,
-            y: i64::from(pos.y).clamp(bounds[1], bounds[3]) as i32,
+        // The footprint's nearest point, or its centre while it is out of reach.
+        let closest = |world: &World, pos: Pos| {
+            world
+                .geo
+                .closest_in_bounds(face, bounds, pos)
+                .unwrap_or_else(|| {
+                    let centre = Pos {
+                        x: ((bounds[0] + bounds[2]) / 2) as i32,
+                        y: ((bounds[1] + bounds[3]) / 2) as i32,
+                        face,
+                    };
+                    (centre, u128::MAX)
+                })
         };
         let pos = self.entity(id).expect("walker").pos;
-        if pos.distance_squared_wide(closest(pos)) <= reach * reach {
+        let (goal, squared) = closest(self, pos);
+        if squared <= reach * reach {
             return true;
         }
         let walk = self.walk(
             id,
             order,
-            closest(pos),
-            Some(TileRect::covering(bounds)),
+            goal,
+            Some(TileRect::covering(face, bounds)),
             false,
         );
         if walk == Walk::Failed {
             return false;
         }
         let pos = self.entity(id).expect("walker").pos;
-        let near = pos.distance_squared_wide(closest(pos)) <= reach * reach;
+        let near = closest(self, pos).1 <= reach * reach;
         if !near && walk == Walk::Arrived {
             // Start a fresh walk next tick; it fails if no step gets closer.
             order.movement = None;
@@ -268,15 +300,15 @@ impl World {
                 None
             } else {
                 let mut points = Vec::new();
-                if tile_of(pos) != start {
-                    points.push(centre(start));
+                if self.geo.tile_of(pos) != start {
+                    points.push(self.geo.tile_centre(start));
                 }
-                points.extend(found.tiles[1..].iter().map(|t| centre(*t)));
+                points.extend(found.tiles[1..].iter().map(|t| self.geo.tile_centre(*t)));
                 let last = points.last().copied().unwrap_or(pos);
                 if self.pathing.line_clear(class, last, own, None) {
                     points.push(own);
                 } else if points.is_empty() {
-                    points.push(centre(end));
+                    points.push(self.geo.tile_centre(end));
                 }
                 Some(self.pathing.smooth(class, pos, &points))
             };
@@ -298,7 +330,10 @@ impl World {
             state.origin = pos;
             state.traveled = 0;
             state.index = 0;
-            state.distance = ceil_distance(pos, waypoints.first().copied().unwrap_or(state.goal));
+            state.distance = self
+                .geo
+                .ceil_distance(pos, waypoints.first().copied().unwrap_or(state.goal))
+                .unwrap_or(0);
             state.waypoints = waypoints;
         }
     }

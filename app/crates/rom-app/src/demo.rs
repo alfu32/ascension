@@ -168,6 +168,7 @@ impl DemoDriver {
             let candidate = Pos {
                 x: anchor.x + (angle.cos() * distance) as i32,
                 y: anchor.y + (angle.sin() * distance) as i32,
+                face: 0,
             };
             if let Some(terrain) = world.map().terrain_at_pos(candidate)
                 && world.rules().terrains[&terrain].buildable
@@ -235,6 +236,7 @@ impl DemoDriver {
                 let target = Pos {
                     x: start.city_pos.x + (angle.cos() * distance) as i32,
                     y: start.city_pos.y + (angle.sin() * distance) as i32,
+                    face: 0,
                 };
                 let command = Command {
                     player: start.player,
@@ -279,6 +281,7 @@ pub fn add_stress_units(game: &mut Match, count: u32, seed: u64) -> Vec<(EntityI
             let at = Pos {
                 x: (rng.below(u64::from(width)) * 1000 + 500) as i32,
                 y: (rng.below(u64::from(height)) * 1000 + 500) as i32,
+                face: 0,
             };
             if let Some(terrain) = game.world.map().terrain_at_pos(at)
                 && game.world.rules().terrains[&terrain].buildable

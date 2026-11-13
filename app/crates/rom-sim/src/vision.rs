@@ -1,6 +1,6 @@
 //! Per-player fog of war with exact viewer counts and remembered buildings.
 
-use crate::geometry;
+use crate::geometry::Tile;
 use crate::{Entity, EntityId, PlayerId, Pos, World};
 use rom_rules::{DefId, EntityClass};
 use std::collections::{BTreeMap, BTreeSet};
@@ -68,20 +68,31 @@ fn bit(bits: &[u64], index: usize) -> bool {
 }
 
 impl World {
-    /// Returns whether any member of the player's team sees the tile now.
+    /// Returns whether any member of the player's team sees a tile of face 0 now.
     pub fn is_visible(&self, player: PlayerId, tile_x: i32, tile_y: i32) -> bool {
-        self.tile_index((tile_x, tile_y))
+        self.is_visible_on(player, 0, tile_x, tile_y)
+    }
+
+    /// Returns whether any member of the player's team sees a tile on a face now.
+    pub fn is_visible_on(&self, player: PlayerId, face: u8, tile_x: i32, tile_y: i32) -> bool {
+        self.tile_index(Tile::new(face, tile_x, tile_y))
             .is_some_and(|index| self.visible_index(player, index))
     }
 
-    /// Returns whether the player or a team member has ever seen the tile.
+    /// Returns whether the player or a team member has ever seen a tile of face 0.
     pub fn is_explored(&self, player: PlayerId, tile_x: i32, tile_y: i32) -> bool {
-        self.tile_index((tile_x, tile_y)).is_some_and(|index| {
-            self.vision
-                .players
-                .get(&player)
-                .is_some_and(|v| bit(&v.explored, index))
-        })
+        self.is_explored_on(player, 0, tile_x, tile_y)
+    }
+
+    /// Returns whether the player or a team member has ever seen a tile on a face.
+    pub fn is_explored_on(&self, player: PlayerId, face: u8, tile_x: i32, tile_y: i32) -> bool {
+        self.tile_index(Tile::new(face, tile_x, tile_y))
+            .is_some_and(|index| {
+                self.vision
+                    .players
+                    .get(&player)
+                    .is_some_and(|v| bit(&v.explored, index))
+            })
     }
 
     /// Lists own and allied entities, other entities on visible tiles, and remembered
@@ -200,7 +211,7 @@ impl World {
             .get_mut(&viewer.owner)
             .expect("ensured vision")
             .count;
-        for run in geometry::disc_runs(&self.map, centre, viewer.los) {
+        for run in self.geo.disc(centre, viewer.los) {
             let first = *run.start();
             let slice = &mut counts[run];
             if add {
@@ -335,7 +346,10 @@ impl World {
             };
             let centre = self.index_centre(centre);
             for (index, count) in tiles.iter_mut().enumerate() {
-                if geometry::within(self.index_centre(index), centre, e.los.max(0)) {
+                if self
+                    .geo
+                    .within(self.index_centre(index), centre, e.los.max(0))
+                {
                     *count += 1;
                 }
             }

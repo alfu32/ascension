@@ -1,6 +1,6 @@
 //! National borders from territory emitters, and city membership of buildings.
 
-use crate::geometry::{self, Tile};
+use crate::geometry::{Geometry, Tile};
 use crate::{EntityId, PlayerId, Pos, World};
 use rom_rules::{EntityClass, Layer};
 use std::cmp::Reverse;
@@ -50,11 +50,11 @@ impl Territory {
 /// Strength of an emitter at a tile, ordered so the greatest wins.
 type Rank = (i64, Reverse<u64>, Reverse<EntityId>);
 
-fn rank(id: EntityId, emitter: &Emitter, centre: Pos) -> Option<Rank> {
-    if !geometry::within(emitter.pos, centre, emitter.radius) {
+fn rank(geo: &Geometry, id: EntityId, emitter: &Emitter, centre: Pos) -> Option<Rank> {
+    if !geo.within(emitter.pos, centre, emitter.radius) {
         return None;
     }
-    let distance = geometry::distance(emitter.pos, centre) as i64;
+    let distance = geo.distance(emitter.pos, centre).expect("within reach") as i64;
     Some((
         emitter.radius - distance,
         Reverse(emitter.completed),
@@ -63,9 +63,16 @@ fn rank(id: EntityId, emitter: &Emitter, centre: Pos) -> Option<Rank> {
 }
 
 impl World {
-    /// Returns the player owning a tile, or None for unowned, space and off-map tiles.
+    /// Returns the player owning a tile of face 0 (all of a flat map), or None for
+    /// unowned, space and off-map tiles.
     pub fn territory_owner(&self, tile_x: i32, tile_y: i32) -> Option<PlayerId> {
-        let index = self.tile_index((tile_x, tile_y))?;
+        self.territory_owner_on(0, tile_x, tile_y)
+    }
+
+    /// Returns the player owning a tile on a face, or None for unowned, space and
+    /// off-surface tiles.
+    pub fn territory_owner_on(&self, face: u8, tile_x: i32, tile_y: i32) -> Option<PlayerId> {
+        let index = self.tile_index(Tile::new(face, tile_x, tile_y))?;
         let winner = self.territory.winner[index];
         (winner != 0).then(|| self.territory.emitters[&EntityId(winner)].owner)
     }
@@ -81,15 +88,15 @@ impl World {
     }
 
     pub(crate) fn tile_index(&self, tile: Tile) -> Option<usize> {
-        geometry::index_of(&self.map, tile)
+        self.geo.index_of(tile)
     }
 
     pub(crate) fn pos_index(&self, pos: Pos) -> Option<usize> {
-        self.tile_index(geometry::tile_of(pos))
+        self.geo.pos_index(pos)
     }
 
     pub(crate) fn index_centre(&self, index: usize) -> Pos {
-        geometry::tile_centre(geometry::tile_at(&self.map, index))
+        self.geo.index_centre(index)
     }
 
     pub(crate) fn is_city_type(&self, type_id: rom_rules::DefId) -> bool {
@@ -144,7 +151,8 @@ impl World {
 
     /// Tiles an emitter reaches, excluding space.
     fn emitter_tiles(&self, emitter: &Emitter) -> Vec<usize> {
-        geometry::disc_runs(&self.map, emitter.pos, emitter.radius)
+        self.geo
+            .disc(emitter.pos, emitter.radius)
             .flatten()
             .filter(|index| !self.territory.space[*index])
             .collect()
@@ -176,12 +184,13 @@ impl World {
         self.territory.emitters.insert(id, emitter);
         for index in self.emitter_tiles(&emitter) {
             let centre = self.index_centre(index);
-            let Some(new) = rank(id, &emitter, centre) else {
+            let Some(new) = rank(&self.geo, id, &emitter, centre) else {
                 continue;
             };
             let current = self.territory.winner[index];
             let better = current == 0
                 || rank(
+                    &self.geo,
                     EntityId(current),
                     &self.territory.emitters[&EntityId(current)],
                     centre,
@@ -202,7 +211,7 @@ impl World {
                 .max(0)
                 .saturating_add(other.radius.max(0))
                 .saturating_add(2000);
-            geometry::within(other.pos, emitter.pos, span)
+            self.geo.may_be_within(other.pos, emitter.pos, span)
         };
         let candidates: Vec<(EntityId, Emitter)> = self
             .territory
@@ -218,7 +227,7 @@ impl World {
             let centre = self.index_centre(index);
             let best = candidates
                 .iter()
-                .filter_map(|(other, e)| rank(*other, e, centre).map(|r| (r, *other)))
+                .filter_map(|(other, e)| rank(&self.geo, *other, e, centre).map(|r| (r, *other)))
                 .max()
                 .map_or(0, |(_, other)| other.0);
             self.set_winner(index, best);
@@ -238,7 +247,7 @@ impl World {
                 self.territory
                     .emitters
                     .iter()
-                    .filter_map(|(id, e)| rank(*id, e, centre).map(|r| (r, *id)))
+                    .filter_map(|(id, e)| rank(&self.geo, *id, e, centre).map(|r| (r, *id)))
                     .max()
                     .map_or(0, |(_, id)| id.0)
             })
@@ -258,8 +267,8 @@ impl World {
                     .economic_radius;
                 (city.owner == player
                     && city.build_progress.is_none()
-                    && geometry::within(city.pos, pos, radius))
-                .then(|| (geometry::distance_squared(city.pos, pos), *id))
+                    && self.geo.within(city.pos, pos, radius))
+                .then(|| (self.geo.rank_distance(city.pos, pos), *id))
             })
             .min()
             .map(|(_, id)| id)

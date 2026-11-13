@@ -4930,6 +4930,7 @@ version = "0.0.22"
 name = "rom-sim"
 version = "0.0.22"
 dependencies = [
+ "rom-geo",
  "rom-rules",
  "thiserror 2.0.21",
 ]

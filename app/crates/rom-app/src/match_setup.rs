@@ -159,6 +159,7 @@ pub fn build_match(
         let city_pos = Pos {
             x: snap(start.x, city.footprint_w),
             y: snap(start.y, city.footprint_h),
+            face: 0,
         };
         let city_entity = world.place_for_setup(city_id, owner, city_pos)?;
         let reach = (city.footprint_w.max(city.footprint_h) * 500 + 1500) as f64;
@@ -194,6 +195,7 @@ fn ring_position(world: &World, centre: Pos, angle: f64, reach: f64) -> Pos {
         let at = Pos {
             x: centre.x + (cos * distance) as i32,
             y: centre.y + (sin * distance) as i32,
+            face: 0,
         };
         if let Some(terrain) = world.map().terrain_at_pos(at)
             && world.rules().terrains[&terrain].buildable

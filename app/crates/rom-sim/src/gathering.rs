@@ -12,26 +12,13 @@ impl World {
         };
         let mut nodes = 0_i128;
         if let Some(terrain) = site.needs_node_terrain_id {
-            let radius = site.node_radius.max(0);
-            let min_x = ((i64::from(pos.x) - radius) / 1000).max(0);
-            let max_x =
-                (i64::from(pos.x).saturating_add(radius) / 1000).min(i64::from(self.map.width) - 1);
-            let min_y = ((i64::from(pos.y) - radius) / 1000).max(0);
-            let max_y = (i64::from(pos.y).saturating_add(radius) / 1000)
-                .min(i64::from(self.map.height) - 1);
-            for y in min_y..=max_y {
-                for x in min_x..=max_x {
-                    let center = Pos {
-                        x: (x * 1000 + 500) as i32,
-                        y: (y * 1000 + 500) as i32,
-                    };
-                    if self.map.terrain_at(x as i32, y as i32) == Some(terrain)
-                        && pos.distance_squared_wide(center) <= (radius as u128).pow(2)
-                    {
-                        nodes += 1;
-                    }
-                }
-            }
+            // Node tiles whose centres lie within the radius, across face edges on a sphere.
+            nodes = self
+                .geo
+                .disc(pos, site.node_radius.max(0))
+                .flatten()
+                .filter(|index| self.map.terrain[*index] == terrain)
+                .count() as i128;
         }
         (i128::from(site.slots_base) + i128::from(site.slots_per_node) * nodes)
             .min(i128::from(site.slots_max)) as i64
@@ -69,9 +56,12 @@ impl World {
         if self.entity(worker).expect("worker").work_site == Some(site_id) {
             return;
         }
-        let bounds = footprint(&self.rules.entity_types[&site.type_id], site.pos);
+        let (face, bounds) = (
+            site.pos.face,
+            footprint(&self.rules.entity_types[&site.type_id], site.pos),
+        );
         order.progress_ticks = order.progress_ticks.saturating_add(1);
-        if !self.approach(worker, order, bounds) {
+        if !self.approach(worker, order, face, bounds) {
             return;
         }
         let occupied = self
@@ -216,7 +206,7 @@ impl World {
                 })
                 .map(|site| {
                     (
-                        worker.pos.distance_squared_wide(site.pos),
+                        self.geo.rank_distance(worker.pos, site.pos),
                         site.id,
                         site.gather_slots,
                     )

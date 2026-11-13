@@ -1,7 +1,7 @@
 //! Placement rules, city spacing, the player city limit and per-city limits.
 
 use crate::construction::footprint;
-use crate::geometry::{self, footprint_tiles};
+use crate::geometry;
 use crate::{EntityId, PlayerId, Pos, SimError, World};
 use rom_rules::{DefId, LimitScope, PlacementKind};
 
@@ -100,8 +100,13 @@ impl World {
         let is_city = self.is_city_type(subject);
         // A player without a city may found one outside any border.
         let first_city = is_city && self.city_count(player) == 0;
-        let within = |other: Pos, distance: i64| geometry::within(pos, other, distance);
-        let closer = |other: Pos, distance: i64| geometry::closer_than(pos, other, distance);
+        let geo = &self.geo;
+        let within = |other: Pos, distance: i64| geo.within(pos, other, distance);
+        let closer = |other: Pos, distance: i64| geo.closer_than(pos, other, distance);
+        let footprint_terrain = || {
+            geo.footprint_tiles(pos.face, bounds)
+                .map(|t| geo.index_of(t).map(|index| self.map.terrain[index]))
+        };
         if is_city {
             let spacing = self
                 .rules
@@ -118,20 +123,19 @@ impl World {
             let pass = match rule.rule {
                 PlacementKind::InOwnTerritory => {
                     first_city
-                        || footprint_tiles(bounds)
-                            .all(|(x, y)| self.territory_owner(x, y) == Some(player))
+                        || geo
+                            .footprint_tiles(pos.face, bounds)
+                            .all(|t| self.territory_owner_on(t.face, t.x, t.y) == Some(player))
                 }
                 PlacementKind::InCityRadius => {
                     first_city || self.city_covering(player, pos).is_some()
                 }
-                PlacementKind::OnTerrain => footprint_tiles(bounds)
-                    .all(|(x, y)| self.map.terrain_at(x, y) == rule.ref_def_id),
-                PlacementKind::AdjacentTerrain => {
-                    geometry::footprint_surroundings(bounds, rule.distance).any(|(x, y)| {
-                        rule.ref_def_id
-                            .is_some_and(|t| self.map.terrain_at(x, y) == Some(t))
-                    })
+                PlacementKind::OnTerrain => {
+                    footprint_terrain().all(|terrain| terrain == rule.ref_def_id)
                 }
+                PlacementKind::AdjacentTerrain => geo
+                    .footprint_surroundings(pos.face, bounds, rule.distance)
+                    .any(|index| rule.ref_def_id == Some(self.map.terrain[index])),
                 PlacementKind::NearType => self.entities().any(|e| {
                     e.owner == player
                         && Some(e.type_id) == rule.ref_def_id
@@ -150,14 +154,13 @@ impl World {
                 PlacementKind::OnNode => self.entities().any(|e| {
                     Some(e.type_id) == rule.ref_def_id
                         && geometry::footprint_contains(
+                            e.pos.face,
                             footprint(&self.rules.entity_types[&e.type_id], e.pos),
                             pos,
                         )
                 }),
-                PlacementKind::OnLayer => footprint_tiles(bounds).all(|(x, y)| {
-                    self.map
-                        .terrain_at(x, y)
-                        .is_some_and(|t| Some(self.rules.terrains[&t].layer) == rule.layer)
+                PlacementKind::OnLayer => footprint_terrain().all(|terrain| {
+                    terrain.is_some_and(|t| Some(self.rules.terrains[&t].layer) == rule.layer)
                 }),
             };
             if !pass {

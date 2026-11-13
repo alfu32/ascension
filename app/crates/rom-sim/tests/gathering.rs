@@ -53,7 +53,7 @@ fn world() -> World {
     setup(rules(""), &[])
 }
 fn at(x: i32, y: i32) -> Pos {
-    Pos { x, y }
+    Pos::flat(x, y)
 }
 fn id(w: &World, key: &str) -> DefId {
     w.rules().id_of(key).unwrap()

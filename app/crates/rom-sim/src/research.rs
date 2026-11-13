@@ -131,6 +131,7 @@ mod tests {
                     Pos {
                         x: 10_000,
                         y: 10_000,
+                        face: 0,
                     },
                 )
                 .unwrap();

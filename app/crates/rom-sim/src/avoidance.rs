@@ -1,6 +1,10 @@
 //! Pairwise separation of overlapping ground units, one small push per tick.
 
-use crate::{EntityId, Pos, World, integer_sqrt, pathing::ceil_distance};
+use crate::{
+    EntityId, Pos, World,
+    geometry::{Geometry, rotate, turn_facing},
+    integer_sqrt,
+};
 use rom_rules::Rules;
 
 /// Largest push applied to one unit in one tick, in milli-tiles per axis.
@@ -59,8 +63,14 @@ struct Slot {
 /// Cached motion per entity, the units to check next tick, and per-tick scratch space.
 #[derive(Debug, Default)]
 pub(crate) struct Avoidance {
-    width: i32,
-    height: i32,
+    geo: Option<Geometry>,
+    /// Snapshot cells are `1 << shift` tiles square: single tiles on a flat map, 4×4 on
+    /// a sphere, whose surface is large and sparsely occupied.
+    shift: u32,
+    /// Snapshot cells per face row and column, and faces.
+    cols: usize,
+    rows: usize,
+    faces: usize,
     /// Indexed by entity id.
     pub motion: Vec<Option<Motion>>,
     /// Mirror of each entity's position, indexed by id, kept by `World::relocate`.
@@ -70,16 +80,22 @@ pub(crate) struct Avoidance {
     pub awake: Vec<EntityId>,
     /// Scratch membership flags for the awake list; all false between ticks.
     flags: Vec<bool>,
-    /// Scratch snapshot: slots grouped by tile in row-major order, ids ascending within a tile.
+    /// Scratch snapshot: slots grouped by cell in dense order, ids ascending within a cell.
     starts: Vec<u32>,
     slots: Vec<Slot>,
 }
 
 impl Avoidance {
-    pub fn new(rules: &Rules, width: u32, height: u32) -> Self {
+    pub fn new(rules: &Rules, geo: Geometry) -> Self {
+        let shift = if geo.is_flat() { 0 } else { 2 };
+        let (width, height) = geo.face_size();
+        let cells = |tiles: i32| (tiles as usize).div_ceil(1 << shift);
         Self {
-            width: width as i32,
-            height: height as i32,
+            shift,
+            cols: cells(width),
+            rows: cells(height),
+            faces: geo.tiles() / (width as usize * height as usize),
+            geo: Some(geo),
             motion: vec![None],
             pos: vec![Pos::default()],
             max_radius: rules
@@ -96,10 +112,22 @@ impl Avoidance {
         }
     }
 
+    fn geo(&self) -> &Geometry {
+        self.geo.as_ref().expect("avoidance geometry")
+    }
+
     fn cell(&self, pos: Pos) -> usize {
-        let x = pos.x.div_euclid(1000).clamp(0, self.width - 1);
-        let y = pos.y.div_euclid(1000).clamp(0, self.height - 1);
-        y as usize * self.width as usize + x as usize
+        let geo = self.geo();
+        let tile = geo.clamp_tile(geo.tile_of(pos));
+        self.cell_at(
+            tile.face,
+            tile.x as usize >> self.shift,
+            tile.y as usize >> self.shift,
+        )
+    }
+
+    fn cell_at(&self, face: u8, col: usize, row: usize) -> usize {
+        (usize::from(face) * self.rows + row) * self.cols + col
     }
 
     fn ground(&self, id: EntityId) -> Option<Motion> {
@@ -129,22 +157,40 @@ impl Avoidance {
     }
 }
 
-/// The push `b` receives from `a` (and `a` the opposite), if their circles overlap.
-fn separation(a: EntityId, pa: Pos, radius: i64, b: &Slot, starts: &[Pos]) -> Option<(i64, i64)> {
+/// The push `b` receives from `a` (and `a` the opposite), if their circles overlap,
+/// in `a`'s frame.
+fn separation(
+    geo: &Geometry,
+    a: EntityId,
+    pa: Pos,
+    radius: i64,
+    b: &Slot,
+    starts: &[Pos],
+) -> Option<(i64, i64)> {
     let sum = radius + b.radius;
-    let squared = pa.distance_squared_wide(b.pos);
+    let (bx, by) = geo.delta(pa, b.pos)?;
+    let squared = (i128::from(bx) * i128::from(bx) + i128::from(by) * i128::from(by)) as u128;
     if squared >= (sum as u128) * (sum as u128) {
         return None;
     }
     let origin = starts.get(a.0 as usize).copied().unwrap_or(pa);
     let other_origin = starts.get(b.id.0 as usize).copied().unwrap_or(b.pos);
-    let (dx, dy, distance) = if squared == 0 && origin != other_origin {
+    // The approach direction, measured from where `a` started, in `a`'s frame now.
+    let approach = (origin != other_origin)
+        .then(|| geo.delta(origin, other_origin))
+        .flatten()
+        .filter(|_| origin.face == pa.face);
+    let (dx, dy, distance) = if squared == 0
+        && let Some((ox, oy)) = approach
+    {
         // Units that meet at exactly the same point retain their approach direction.
         // Using ids here makes a crossing change direction when armies spawn in reverse.
         (
-            i64::from(other_origin.x) - i64::from(origin.x),
-            i64::from(other_origin.y) - i64::from(origin.y),
-            origin.distance(other_origin) as i64,
+            ox,
+            oy,
+            integer_sqrt(
+                (i128::from(ox) * i128::from(ox) + i128::from(oy) * i128::from(oy)) as u128,
+            ) as i64,
         )
     } else if squared == 0 {
         // Coincident centres separate along a direction derived from both ids.
@@ -153,11 +199,7 @@ fn separation(a: EntityId, pa: Pos, radius: i64, b: &Slot, starts: &[Pos]) -> Op
         let sign = if a < b.id { 1 } else { -1 };
         (x * sign, y * sign, 1000)
     } else {
-        (
-            i64::from(b.pos.x) - i64::from(pa.x),
-            i64::from(b.pos.y) - i64::from(pa.y),
-            integer_sqrt(squared) as i64,
-        )
+        (bx, by, integer_sqrt(squared) as i64)
     };
     let overlap = if squared == 0 { sum } else { sum - distance };
     let push = ((overlap + 1) / 2).clamp(1, MAX_PUSH);
@@ -176,7 +218,7 @@ impl World {
     /// Groups every ground unit by tile with a counting sort.
     fn snapshot_units(&mut self) {
         let avoid = &mut self.avoid;
-        let cells = avoid.width as usize * avoid.height as usize;
+        let cells = avoid.faces * avoid.rows * avoid.cols;
         avoid.starts.clear();
         avoid.starts.resize(cells + 1, 0);
         let mut count = 0;
@@ -259,40 +301,52 @@ impl World {
             };
             let pa = avoid.pos[a.0 as usize];
             let reach = motion.radius + avoid.max_radius;
-            let x0 = (i64::from(pa.x) - reach).div_euclid(1000).max(0) as i32;
-            let x1 = ((i64::from(pa.x) + reach).div_euclid(1000) as i32).min(avoid.width - 1);
-            let y0 = (i64::from(pa.y) - reach).div_euclid(1000).max(0) as i32;
-            let y1 = ((i64::from(pa.y) + reach).div_euclid(1000) as i32).min(avoid.height - 1);
-            for y in y0..=y1 {
-                // Tiles x0..=x1 of one row are contiguous in the snapshot.
-                let row = y as usize * avoid.width as usize;
-                let (from, to) = (
-                    avoid.starts[row + x0 as usize] as usize,
-                    avoid.starts[row + x1 as usize + 1] as usize,
-                );
-                for slot in &avoid.slots[from..to] {
-                    if slot.id == a || (slot.id < a && flags[slot.id.0 as usize]) {
-                        continue;
-                    }
-                    if let Some((x, y)) = separation(a, pa, motion.radius, slot, &self.seen) {
-                        // Zero-range weapons must reach the target's edge. Allow the
-                        // pursuing pair to close rather than pushing them apart forever.
-                        let closing = |attacker, target| {
-                            self.entity(attacker).is_some_and(|e| {
-                                e.orders.front().is_some_and(|o| {
-                                    matches!(o.kind.as_str(), "attack" | "attack_move")
-                                        && o.target_entity == Some(target)
-                                }) && self.rules.entity_types[&e.type_id]
-                                    .weapons
-                                    .iter()
-                                    .any(|w| w.range_max == 0)
-                            })
-                        };
-                        if closing(a, slot.id) || closing(slot.id, a) {
+            let geo = avoid.geo();
+            let (width, height) = geo.face_size();
+            for view in geo.views(pa, geo.clamp_radius(reach)).into_iter().flatten() {
+                let x0 = (view.x - reach).div_euclid(1000).max(0) as i32;
+                let x1 = ((view.x + reach).div_euclid(1000).min(i64::from(width - 1))) as i32;
+                let y0 = (view.y - reach).div_euclid(1000).max(0) as i32;
+                let y1 = ((view.y + reach).div_euclid(1000).min(i64::from(height - 1))) as i32;
+                if x0 > x1 || y0 > y1 {
+                    continue;
+                }
+                let shift = avoid.shift;
+                let (c0, c1) = (x0 as usize >> shift, x1 as usize >> shift);
+                for y in (y0 as usize >> shift)..=(y1 as usize >> shift) {
+                    // Cells c0..=c1 of one row are contiguous in the snapshot.
+                    let (from, to) = (
+                        avoid.starts[avoid.cell_at(view.face, c0, y)] as usize,
+                        avoid.starts[avoid.cell_at(view.face, c1, y) + 1] as usize,
+                    );
+                    for slot in &avoid.slots[from..to] {
+                        if slot.id == a || (slot.id < a && flags[slot.id.0 as usize]) {
                             continue;
                         }
-                        pushes.push((slot.id, x, y));
-                        pushes.push((a, -x, -y));
+                        if let Some((x, y)) =
+                            separation(geo, a, pa, motion.radius, slot, &self.seen)
+                        {
+                            // Zero-range weapons must reach the target's edge. Allow the
+                            // pursuing pair to close rather than pushing them apart forever.
+                            let closing = |attacker, target| {
+                                self.entity(attacker).is_some_and(|e| {
+                                    e.orders.front().is_some_and(|o| {
+                                        matches!(o.kind.as_str(), "attack" | "attack_move")
+                                            && o.target_entity == Some(target)
+                                    }) && self.rules.entity_types[&e.type_id]
+                                        .weapons
+                                        .iter()
+                                        .any(|w| w.range_max == 0)
+                                })
+                            };
+                            if closing(a, slot.id) || closing(slot.id, a) {
+                                continue;
+                            }
+                            // The other unit's push turns into its own face's frame.
+                            let (bx, by) = rotate((x, y), geo.turns(pa.face, slot.pos.face));
+                            pushes.push((slot.id, bx, by));
+                            pushes.push((a, -x, -y));
+                        }
                     }
                 }
             }
@@ -330,25 +384,24 @@ impl World {
         let target = [(x, y), (x, 0), (0, y)]
             .into_iter()
             .filter(|(x, y)| *x != 0 || *y != 0)
-            .map(|(x, y)| Pos {
-                x: (i64::from(from.x) + x) as i32,
-                y: (i64::from(from.y) + y) as i32,
-            })
-            .find(|to| self.pathing.line_clear(motion.class, from, *to, None));
-        let Some(to) = target else {
+            .map(|(x, y)| self.geo.offset(from, x, y))
+            .find(|(to, _)| self.pathing.line_clear(motion.class, from, *to, None));
+        let Some((to, turns)) = target else {
             return false;
         };
         let entity = self.entities[id.0 as usize].as_mut().expect("pushed unit");
         entity.pos = to;
+        entity.facing = turn_facing(entity.facing, turns);
         // A walking unit continues from where it was pushed to.
         if let Some(state) = entity.orders.front_mut().and_then(|o| o.movement.as_mut())
             && state.request.is_none()
             && state.traveled < state.distance
             && let Some(target) = state.target()
+            && let Some(distance) = self.geo.ceil_distance(to, target)
         {
             state.origin = to;
             state.traveled = 0;
-            state.distance = ceil_distance(to, target);
+            state.distance = distance;
         }
         self.relocate(id, from, to);
         true

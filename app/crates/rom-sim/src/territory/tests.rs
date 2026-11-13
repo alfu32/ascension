@@ -42,7 +42,7 @@ fn id(w: &World, key: &str) -> DefId {
 }
 
 fn at(x: i32, y: i32) -> Pos {
-    Pos { x, y }
+    Pos::flat(x, y)
 }
 
 fn place(w: &mut World, key: &str, owner: PlayerId, pos: Pos) -> EntityId {

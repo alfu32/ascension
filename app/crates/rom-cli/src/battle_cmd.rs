@@ -6,7 +6,7 @@ use std::{path::PathBuf, sync::Arc};
 
 pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::error::Error>> {
     let (mut db, mut seed, mut ticks, mut per_side) = (None, None, None, None);
-    let mut swap = false;
+    let (mut swap, mut sphere) = (false, None);
     while let Some(flag) = args.next() {
         if flag == "--swap" {
             swap = true;
@@ -20,6 +20,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
             "--seed" => seed = Some(value.parse::<u64>()?),
             "--ticks" => ticks = Some(value.parse::<u64>()?),
             "--per-side" => per_side = Some(value.parse::<u32>()?),
+            "--sphere" => sphere = Some(value.parse::<u32>()?),
             _ => return Err(format!("unknown argument: {flag}").into()),
         }
     }
@@ -28,12 +29,25 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
     )?;
     let rules = Arc::new(Rules::load(&conn)?);
-    let mut world = World::battle_scenario_swapped(
-        rules,
+    let (seed, per_side) = (
         seed.ok_or("missing --seed")?,
         per_side.ok_or("missing --per-side")?,
-        swap,
-    )?;
+    );
+    // On a sphere the two lines face each other across a face edge.
+    let mut world = match sphere {
+        Some(n) => {
+            let planet = crate::mapgen_cmd::first_style_planet(&rules, seed, n, 2)?;
+            World::sphere_battle_scenario(
+                rules,
+                planet.surface,
+                planet.terrain,
+                seed,
+                per_side,
+                swap,
+            )?
+        }
+        None => World::battle_scenario_swapped(rules, seed, per_side, swap)?,
+    };
     for _ in 0..ticks.ok_or("missing --ticks")? {
         world.step();
     }
