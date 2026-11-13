@@ -1157,6 +1157,7 @@ mod tests {
             feature_colors: Default::default(),
             starts: vec![],
             nodes: vec![],
+            sun: Default::default(),
         });
         let layout = layout();
         let hud = HudSnapshot::default();

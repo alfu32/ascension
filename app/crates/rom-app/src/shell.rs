@@ -67,6 +67,7 @@ pub fn run(options: &Options) -> ExitCode {
         });
     }
     bridge.publish_box_count(options.boxes);
+    bridge.publish_graticule(options.graticule);
     bridge.publish_start_markers(options.start_markers);
     let shutdown = worker.shutdown_handle();
     let exit_code = Arc::new(AtomicU8::new(0));
@@ -232,11 +233,21 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
             &setup,
         )
         .map_err(|error| format!("setting up the match: {error}"))?;
-        host = Some(UniverseHost::new(
-            universe.clone(),
-            BodyId(home_body),
-            home_system,
-        ));
+        let sun = terrain::sun_settings(&content.rules, options);
+        let mut universe_host = UniverseHost::new(universe.clone(), BodyId(home_body), home_system);
+        universe_host.sun = sun;
+        for start in &game.starts {
+            let at = start.city_pos;
+            universe_host.remember_home_start(
+                at.body,
+                SurfacePos {
+                    face: at.face,
+                    x: i64::from(at.x),
+                    y: i64::from(at.y),
+                },
+            );
+        }
+        host = Some(universe_host);
         bridge.publish_zoom_all(options.zoom_all);
         bridge.publish_universe(
             Arc::new(universe_view::to_universe_scene(universe, &bodies)),
@@ -247,6 +258,7 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
         );
         let mut scene = terrain::to_planet_scene(planet);
         terrain::apply_terrain_colours(&mut scene.feature_colors, &content.rules);
+        scene.sun = sun;
         scene.starts.clear();
         scene.nodes.clear();
         bridge.publish_planet(
@@ -278,6 +290,7 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
                 // not as scene markers; the camera starts at the first player's city.
                 let mut scene = terrain::to_planet_scene(&content.planet);
                 terrain::apply_terrain_colours(&mut scene.feature_colors, &content.rules);
+                scene.sun = terrain::sun_settings(&content.rules, options);
                 scene.starts.clear();
                 scene.nodes.clear();
                 bridge.publish_planet(

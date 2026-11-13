@@ -6,7 +6,8 @@ use std::path::PathBuf;
 pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <file.png>] \
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] \
 [--map-size <width>x<height>] [--sphere <n>] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
-[--universe] [--zoom-all] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-hud] [--hud-scale <percent>] [--stats]";
+[--universe] [--zoom-all] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-hud] [--hud-scale <percent>] [--stats] \
+[--sun <orbit|fixed|night>] [--graticule <on|off>]";
 
 /// Default canvas size in pixels when `--size` is not given.
 pub const DEFAULT_SIZE: (u32, u32) = (1280, 800);
@@ -64,6 +65,13 @@ pub struct Options {
     pub zoom_all: bool,
     /// Start in this level over the home planet.
     pub view: Option<rom_render::Level>,
+    /// Keep the light that represents the sun fixed over the first view instead of letting it
+    /// orbit the planet orb.
+    pub sun_fixed: bool,
+    /// With `sun_fixed`, put the light on the far side, so the first view is at midnight.
+    pub sun_midnight: bool,
+    /// Draw the latitude and longitude lines of a sphere planet.
+    pub graticule: bool,
     /// Print usage and exit.
     pub help: bool,
 }
@@ -96,6 +104,9 @@ impl Default for Options {
             universe: false,
             zoom_all: false,
             view: None,
+            sun_fixed: false,
+            sun_midnight: false,
+            graticule: true,
             help: false,
         }
     }
@@ -171,6 +182,24 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                     return Err(invalid());
                 }
                 options.view = Some(rom_render::Level::from_name(level).ok_or_else(invalid)?);
+            }
+            "--sun" => {
+                let text = value("--sun")?;
+                (options.sun_fixed, options.sun_midnight) = match text.to_ascii_lowercase().as_str()
+                {
+                    "orbit" => (false, false),
+                    "fixed" => (true, false),
+                    "night" => (true, true),
+                    _ => return Err(format!("--sun expects orbit, fixed or night, got {text:?}")),
+                };
+            }
+            "--graticule" => {
+                let text = value("--graticule")?;
+                options.graticule = match text.to_ascii_lowercase().as_str() {
+                    "on" => true,
+                    "off" => false,
+                    _ => return Err(format!("--graticule expects on or off, got {text:?}")),
+                };
             }
             "--no-hud" => options.no_hud = true,
             "--stats" => options.stats = true,
@@ -339,6 +368,23 @@ mod tests {
         assert_eq!(o.view, Some(rom_render::Level::StarMap));
         assert!(parse(args(&["--view", "moon"])).is_err());
         assert!(parse(args(&["--view", "globe,away"])).is_err());
+    }
+
+    #[test]
+    fn parses_sun_and_graticule_options() {
+        let defaults = parse(args(&[])).unwrap();
+        assert!(!defaults.sun_fixed && defaults.graticule);
+        let o = parse(args(&["--sun", "fixed", "--graticule", "off"])).unwrap();
+        assert!(o.sun_fixed && !o.graticule);
+        assert!(!o.sun_midnight);
+        let o = parse(args(&["--sun", "orbit", "--graticule", "on"])).unwrap();
+        assert!(!o.sun_fixed && o.graticule);
+        let o = parse(args(&["--sun", "night"])).unwrap();
+        assert!(o.sun_fixed && o.sun_midnight);
+        for bad in [["--sun", "still"], ["--graticule", "maybe"]] {
+            assert!(parse(args(&bad)).is_err(), "{bad:?}");
+        }
+        assert!(USAGE.contains("--sun") && USAGE.contains("--graticule"));
     }
 
     #[test]

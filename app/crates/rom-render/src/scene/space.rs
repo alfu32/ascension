@@ -34,7 +34,9 @@ void main() {
 "#;
 
 // The star sits at the origin of the system frame and lights every body from there.
-const BODY_FS: &str = r#"#version 330
+fn body_fs() -> String {
+    format!(
+        r#"#version 330
 in vec3 fragNormal;
 in vec3 fragWorld;
 in vec2 fragUv;
@@ -42,15 +44,19 @@ uniform sampler2D texture0;
 uniform vec3 tint;
 uniform float emissive;
 out vec4 finalColor;
-void main() {
+{}
+void main() {{
     vec3 base = texture(texture0, fragUv).rgb * tint;
     vec3 normal = normalize(fragNormal);
     vec3 toStar = normalize(-fragWorld);
-    float diffuse = max(dot(normal, toStar), 0.0);
-    vec3 lit = base * (0.12 + 1.05 * diffuse);
+    float height = dot(normal, toStar);
+    vec3 lit = base * terrainFactor(height, height, 1.0);
     finalColor = vec4(mix(lit, base * 1.3, emissive), 1.0);
+}}
+"#,
+        sun::glsl_lighting()
+    )
 }
-"#;
 
 /// Rings, planets and sprites are drawn in this many segments per orbit.
 const RING_SEGMENTS: u32 = 128;
@@ -117,7 +123,7 @@ pub(super) struct SpaceGpu {
 }
 
 /// Uploads a unit sphere with normals and texture coordinates.
-fn upload_sphere(thread: &RaylibThread, rings: u32, slices: u32) -> Mesh {
+pub(super) fn upload_sphere(thread: &RaylibThread, rings: u32, slices: u32) -> Mesh {
     let sphere = uv_sphere(rings, slices);
     let positions: Vec<Vector3> = sphere
         .positions
@@ -153,15 +159,22 @@ fn glow_pixels() -> Vec<u8> {
     pixels
 }
 
-fn ball(pos: [f32; 3], radius: f32) -> Matrix {
+/// A sphere of `radius` at `pos`, with the planet frame's three unit axes.
+fn ball(pos: [f32; 3], radius: f32, axes: [[f32; 3]; 3]) -> Matrix {
+    let [x, y, z] = axes.map(|axis| axis.map(|c| c * radius));
     Matrix {
-        m0: radius,
-        m5: radius,
-        m10: radius,
+        m0: x[0],
+        m1: x[1],
+        m2: x[2],
+        m4: y[0],
+        m5: y[1],
+        m6: y[2],
+        m8: z[0],
+        m9: z[1],
+        m10: z[2],
         m12: pos[0],
         m13: pos[1],
         m14: pos[2],
-        m15: 1.0,
         ..Matrix::identity()
     }
 }
@@ -185,7 +198,7 @@ impl Scene {
         home_body: Option<u32>,
         planet: Option<&PlanetScene>,
     ) {
-        let mut shader = rl.load_shader_from_memory(thread, Some(BODY_VS), Some(BODY_FS));
+        let mut shader = rl.load_shader_from_memory(thread, Some(BODY_VS), Some(&body_fs()));
         let mut material = rl.load_material_default(thread);
         material.set_shader(&shader);
         let mut lod_material = rl.load_material_default(thread);
@@ -337,7 +350,12 @@ impl Scene {
         zoom: &ZoomCamera,
         orbit: &OrbitCamera,
     ) {
-        self.set_light(super::SHIP_LIGHT);
+        self.set_lighting(
+            crate::sun::unit_or(super::SHIP_LIGHT.map(|c| -c)),
+            false,
+            None,
+        );
+        self.set_star_fade(1.0);
         let Some(space) = &mut self.space else {
             return;
         };
@@ -395,9 +413,30 @@ impl Scene {
                 } else {
                     (&space.sphere, &space.material, colour3(colour))
                 };
+                // The loaded planet turns with the day, so its day side faces the star at the
+                // tick the globe shows.
+                let mut axes = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+                if Some(placed.body) == zoom.surface_body() {
+                    axes = axes.map(|axis| zoom.planet_to_system(axis));
+                }
                 space.shader.set_shader_value(tint_at, tint);
                 space.shader.set_shader_value(emissive_at, emissive);
-                world.draw_mesh(mesh, material.clone(), ball(placed.pos, placed.radius));
+                world.draw_mesh(
+                    mesh,
+                    material.clone(),
+                    ball(placed.pos, placed.radius, axes),
+                );
+            }
+            // Every habitable planet wears an atmosphere halo, lit from the star at the origin.
+            for placed in zoom.placed() {
+                if universe.bodies[placed.body].kind == BodyViewKind::Habitable {
+                    let toward = unit_vector(placed.pos.map(|c| -c));
+                    let thickness = super::sky::SYSTEM_HALO_THICKNESS;
+                    self.sky
+                        .set_halo(placed.pos, placed.radius, thickness, view.eye, toward, 1.0);
+                    self.sky
+                        .draw_halo(&mut world, placed.pos, placed.radius, thickness);
+                }
             }
             let system_id = universe.systems.get(zoom.system()).map(|s| s.id);
             let state = &self.space_state;
@@ -539,6 +578,7 @@ impl Scene {
         target: &mut RenderTexture2D,
         zoom: &ZoomCamera,
     ) {
+        self.set_star_fade(1.0);
         let Some(space) = &mut self.space else {
             return;
         };

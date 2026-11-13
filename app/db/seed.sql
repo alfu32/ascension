@@ -29,7 +29,9 @@ INSERT INTO game_constant(key,value,unit,note) VALUES
  ('player.commerce_cap.base',70,'per period','before modifiers (stat commerce_cap)'),
  ('build.site_start_hp_pct',10,'%','hit points of a building site when placed'),
  ('build.reach',1500,'milli-tiles','how close a builder must be to the footprint to work'),
- ('path.nodes_per_tick',20000,'nodes','path-search nodes expanded per tick across all searches');
+ ('path.nodes_per_tick',20000,'nodes','path-search nodes expanded per tick across all searches'),
+ ('world.day_ticks',6000,'ticks','one orbit of the light that represents the sun around the planet orb (5 game minutes); presentation only'),
+ ('world.axial_tilt_mdeg',0,'milli-degrees','latitude the light stays over; 0 means no seasons');
 
 INSERT INTO layer VALUES
  ('ground','solid surface'), ('fluid','sea'), ('subfluid','underwater'),
