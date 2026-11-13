@@ -35,6 +35,7 @@ Crates (create only what your task needs):
 | --- | --- | --- |
 | `rom-rules` | load and validate the rules database into plain structs | sim, graphics |
 | `rom-sim` | deterministic simulation: state, tick, orders | graphics, files, clocks, threads |
+| `rom-geo` | pure geometry; depends on nothing | everything |
 | `rom-mapgen` | map generation from seed and map style | graphics |
 | `rom-ai` | computer players: read state, emit orders | graphics |
 | `rom-save` | save and load a match | graphics |

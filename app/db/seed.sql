@@ -433,7 +433,7 @@ INSERT INTO stance(id,family,behavior)
 -- ── map style, options, victory ─────────────────────────────────────────────
 INSERT INTO def(kind,key,name) VALUES ('map_style','map.one_world','One World'), ('map_style','map.many_worlds','Many Worlds');
 INSERT INTO map_style(id,planets,fluid_pct,space_pct)
- SELECT id, CASE key WHEN 'map.one_world' THEN 1 ELSE 4 END, 35, CASE key WHEN 'map.one_world' THEN 55 ELSE 70 END
+ SELECT id, CASE key WHEN 'map.one_world' THEN 1 ELSE 4 END, CASE key WHEN 'map.one_world' THEN 50 ELSE 35 END, CASE key WHEN 'map.one_world' THEN 55 ELSE 70 END
  FROM def WHERE kind='map_style';
 WITH v(k,rk,p,c0,c1,s0,s1,d0,d1) AS (VALUES
   ('ter.forest','planet','per_player',1,2,5,9,2,6), ('ter.mountain','planet','per_player',1,1,2,3,5,8),

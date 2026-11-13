@@ -1,5 +1,9 @@
-//! Deterministic map generation: planets set in open space, integer value
-//! noise, player starts and style features. Integers only.
+//! Deterministic flat and cube-sphere map generation, with integer value
+//! noise, player starts and rule-driven features.
+
+mod sphere;
+
+pub use sphere::{SpherePlanet, SphereRequest, generate_sphere};
 
 use rom_rules::{DefId, FeaturePattern, Layer, MapStyleFeature, Rules};
 use rom_sim::{MapGrid, Pos, SimRng, integer_sqrt};
