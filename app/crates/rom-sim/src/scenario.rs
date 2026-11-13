@@ -313,3 +313,84 @@ impl World {
         Ok(world)
     }
 }
+
+impl World {
+    /// Two cities and forty armed infantry attacking the second capital, on a flat
+    /// 96×96 map or a uniform cube sphere. Types are selected by their components.
+    pub fn siege_scenario(
+        rules: Arc<Rules>,
+        seed: u64,
+        sphere: Option<CubeSurface>,
+    ) -> Result<Self, SimError> {
+        let infantry = rules
+            .entity_types
+            .values()
+            .find(|e| {
+                e.class == rom_rules::EntityClass::Unit
+                    && !e.weapons.is_empty()
+                    && e.movement.is_some()
+                    && e.builder.is_none()
+                    && e.harvester.is_empty()
+            })
+            .ok_or(SimError::ScenarioUnavailable("armed infantry"))?;
+        let unit = infantry.id;
+        let class = infantry
+            .movement
+            .as_ref()
+            .expect("infantry movement")
+            .movement_class_id;
+        let ground = rules
+            .movement_class_terrain
+            .get(&class)
+            .into_iter()
+            .flatten()
+            .filter(|r| {
+                r.speed_pct > 0 && rules.terrains[&r.terrain_id].layer == rom_rules::Layer::Ground
+            })
+            .map(|r| r.terrain_id)
+            .min()
+            .ok_or(SimError::ScenarioUnavailable("infantry terrain"))?;
+        let players = scenario_players(&rules, 2)?;
+        let mut world = if let Some(surface) = sphere {
+            if !(96..=4096).contains(&surface.n) {
+                return Err(SimError::ScenarioUnavailable(
+                    "siege sphere of at least 96 tiles",
+                ));
+            }
+            Self::from_sphere(
+                rules,
+                surface,
+                vec![ground; surface.len()],
+                &[],
+                seed,
+                players,
+            )?
+        } else {
+            Self::new(
+                rules,
+                MapGrid::new(96, 96, vec![ground; 96 * 96])?,
+                seed,
+                players,
+            )?
+        };
+        let city = world
+            .city_type(PlayerId(1))
+            .ok_or(SimError::ScenarioUnavailable("city"))?;
+        world.place_for_setup(city, PlayerId(1), Pos::flat(20_500, 20_500))?;
+        let target = world.place_for_setup(city, PlayerId(2), Pos::flat(68_500, 68_500))?;
+        for n in 0..40 {
+            let pos = Pos::flat(64_000 - n % 5 * 800, 67_000 + n / 5 * 600);
+            let id = world.spawn(unit, PlayerId(1), pos)?;
+            world.submit(Command {
+                player: PlayerId(1),
+                executor: id,
+                kind: "attack".into(),
+                subject: None,
+                target_entity: Some(target),
+                target_pos: None,
+                queue: false,
+            })?;
+        }
+        Ok(world)
+    }
+}

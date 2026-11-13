@@ -1,6 +1,8 @@
 //! Deterministic game simulation.
 
+mod attrition;
 mod avoidance;
+mod capture;
 mod combat;
 mod construction;
 mod economy;
@@ -28,6 +30,7 @@ mod stance;
 mod surface;
 mod territory;
 mod universe;
+mod victory;
 mod vision;
 mod world;
 
@@ -43,6 +46,7 @@ pub use rng::SimRng;
 pub use space::Transit;
 pub use surface::Surface;
 pub use universe::{BodyId, BodyInfo, PlanetSurface, RouteInfo, SystemInfo, UniverseSetup};
+pub use victory::{Elimination, MatchOptions, Outcome, PlayerStatus};
 pub use vision::{RememberedBuilding, Sighting};
 pub use world::{Stats, World};
 
@@ -52,6 +56,15 @@ use thiserror::Error;
 /// Invalid setup or input, rejected without changing simulation state.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum SimError {
+    /// The match has ended or the issuing player has been defeated.
+    #[error("player cannot issue orders after defeat or victory")]
+    OrdersClosed,
+    /// Match options reference unsupported or missing rules.
+    #[error("invalid match options")]
+    InvalidOptions,
+    /// The executor is neutralised or assimilating.
+    #[error("executor is neutralised or assimilating")]
+    InactiveExecutor,
     /// Combat requires an existing enemy target.
     #[error("invalid attack target")]
     InvalidAttackTarget,
@@ -200,3 +213,6 @@ pub enum SimError {
     #[error("no eligible {0} for movement scenario")]
     ScenarioUnavailable(&'static str),
 }
+
+#[cfg(test)]
+mod victory_tests;

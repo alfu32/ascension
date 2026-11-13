@@ -142,7 +142,8 @@ impl World {
     /// Hashes complete mutable state in little-endian field order with FNV-1a 64.
     pub fn hash(&self) -> u64 {
         let mut hash = StateHash(0xcbf29ce484222325);
-        hash.bytes(b"rom-sim-state-9");
+        hash.bytes(b"rom-sim-state-10");
+        hash.match_state(self);
         hash.u64(self.tick);
         hash.u64(self.rng.state());
         hash.u32(self.next_entity_id);
@@ -198,6 +199,7 @@ impl World {
             hash.order(order);
             hash.bytes(&[u8::from(*append)]);
         }
+        hash.u64(self.stats.cities_captured);
         hash.u64(self.stats.orders_done);
         hash.u64(self.stats.orders_failed);
         hash.u64(self.stats.orders_cancelled);
@@ -267,6 +269,67 @@ impl World {
 }
 
 impl StateHash {
+    fn match_state(&mut self, world: &World) {
+        let v = &world.victory;
+        self.bytes(&[match v.options.elimination {
+            crate::Elimination::Conquest => 0,
+            crate::Elimination::Capital => 1,
+            crate::Elimination::SuddenDeath => 2,
+        }]);
+        self.u64(v.options.victories.len() as u64);
+        for rule in &v.options.victories {
+            self.u32(*rule as u32);
+        }
+        self.u64(v.statuses.len() as u64);
+        for (player, status) in &v.statuses {
+            self.u32(player.0);
+            self.bytes(&[match status {
+                crate::PlayerStatus::Playing => 0,
+                crate::PlayerStatus::Defeated => 1,
+                crate::PlayerStatus::Won => 2,
+            }]);
+        }
+        self.u64(v.ownable_tiles);
+        self.u64(v.land_owned.len() as u64);
+        for (player, tiles) in &v.land_owned {
+            self.u32(player.0);
+            self.u64(*tiles);
+        }
+        self.u64(v.timers.len() as u64);
+        for ((id, team), end) in &v.timers {
+            self.u32(id.0);
+            self.u32(*team);
+            self.u64(*end);
+        }
+        match &v.outcome {
+            crate::Outcome::Playing => self.bytes(&[0]),
+            crate::Outcome::Won { team, rule, tick } => {
+                self.bytes(&[1]);
+                self.u32(*team);
+                self.u32(*rule as u32);
+                self.u64(*tick);
+            }
+        }
+        let c = &world.capture;
+        for set in [&c.neutralised, &c.assimilating] {
+            self.u64(set.len() as u64);
+            for id in set {
+                self.u32(id.0);
+            }
+        }
+        self.u64(c.capitals.len() as u64);
+        for (player, city) in &c.capitals {
+            self.u32(player.0);
+            self.u32(city.0);
+        }
+        self.u64(c.holds.len() as u64);
+        for (player, (team, start)) in &c.holds {
+            self.u32(player.0);
+            self.u32(*team);
+            self.u64(*start);
+        }
+    }
+
     fn entity(&mut self, entity: &crate::Entity) {
         self.u32(entity.id.0);
         self.u32(entity.type_id.0);
@@ -285,6 +348,9 @@ impl StateHash {
         self.bytes(&entity.energy.to_le_bytes());
         self.bytes(&entity.energy_remainder.to_le_bytes());
         self.bytes(&entity.heal_remainder.to_le_bytes());
+        self.bytes(&entity.attrition_remainder.to_le_bytes());
+        self.bytes(&[u8::from(entity.neutralised)]);
+        self.optional(entity.assimilation_until, Self::u64);
         self.optional(entity.killer, |h, id| h.u32(id.0));
         self.optional(entity.build_progress, StateHash::u32);
         self.bytes(&entity.move_remainder.to_le_bytes());

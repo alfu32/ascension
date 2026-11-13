@@ -233,6 +233,12 @@ impl World {
             return Err(SimError::UnknownBody(body));
         }
         let surface = Surface::new(&self.rules, body, map, topology)?;
+        self.victory.ownable_tiles += surface
+            .map
+            .terrain
+            .iter()
+            .filter(|terrain| self.rules.terrains[terrain].layer == rom_rules::Layer::Ground)
+            .count() as u64;
         let at = self.surfaces.partition_point(|s| s.body() < body);
         self.surfaces.insert(at, surface);
         let size = self

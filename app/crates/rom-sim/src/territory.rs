@@ -138,10 +138,15 @@ impl World {
     fn desired_emitter(&self, id: EntityId) -> Option<(Pos, i64, PlayerId)> {
         let e = self.entity(id)?;
         let territory = self.rules.entity_types[&e.type_id].territory.as_ref()?;
-        if territory.border_radius <= 0 || e.build_progress.is_some() {
+        if territory.border_radius <= 0 || e.build_progress.is_some() || e.neutralised {
             return None;
         }
         let radius = self.effective_stat(id, "border_radius", territory.border_radius);
+        let radius = if e.assimilation_until.is_some() {
+            radius / 2
+        } else {
+            radius
+        };
         Some((e.pos, radius, e.owner))
     }
 
@@ -192,6 +197,22 @@ impl World {
         let old = self.surfaces[slot].territory.winner[index];
         if old == winner {
             return;
+        }
+        let terrain = self.surfaces[slot].map.terrain[index];
+        if self.rules.terrains[&terrain].layer == Layer::Ground {
+            let land = &mut self.victory.land_owned;
+            if old != 0 {
+                let player = self.territory.emitters[&EntityId(old)].owner;
+                let count = land.get_mut(&player).expect("owned land count");
+                *count -= 1;
+                if *count == 0 {
+                    land.remove(&player);
+                }
+            }
+            if winner != 0 {
+                let player = self.territory.emitters[&EntityId(winner)].owner;
+                *land.entry(player).or_default() += 1;
+            }
         }
         // Both emitters are in the table here: removal drops its emitter last.
         let owned = &mut self.territory.owned;
@@ -311,6 +332,7 @@ impl World {
                     .economic_radius;
                 (city.owner == player
                     && city.build_progress.is_none()
+                    && !city.neutralised
                     && city.pos.body == pos.body
                     && self.geo(pos.body).within(city.pos, pos, radius))
                 .then(|| (self.geo(pos.body).rank_distance(city.pos, pos), *id))

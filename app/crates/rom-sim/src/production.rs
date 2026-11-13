@@ -5,11 +5,10 @@ use std::collections::VecDeque;
 
 impl World {
     pub(crate) fn advance_executor(&mut self, id: EntityId) {
-        if self.entities[id.0 as usize]
-            .as_ref()
-            .expect("executor")
-            .orders
-            .is_empty()
+        let e = self.entity(id).expect("executor");
+        if e.orders.is_empty()
+            || e.neutralised
+            || self.player_status(e.owner) == Some(crate::PlayerStatus::Defeated)
         {
             return;
         }
@@ -99,7 +98,7 @@ impl World {
 
     fn advance_producer(&mut self, id: EntityId) {
         let executor = self.entity(id).expect("executor");
-        if executor.build_progress.is_some() {
+        if executor.build_progress.is_some() || executor.assimilation_until.is_some() {
             return;
         }
         let parallel = self.rules.entity_types[&executor.type_id]
