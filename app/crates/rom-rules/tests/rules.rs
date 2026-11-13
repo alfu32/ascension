@@ -723,6 +723,13 @@ fn universe_knobs_load_and_validate() {
     );
     assert!(many.route_extra_pct > 0 && many.star_map_radius > 0);
     for style in [one, many] {
+        for (key, pct) in [("ter.forest", 24), ("ter.mountain", 7)] {
+            let row = rules.map_style_features[&style.id]
+                .iter()
+                .find(|row| row.feature_def_id == rules.id_of(key).unwrap())
+                .unwrap();
+            assert_eq!(row.coverage_pct, pct);
+        }
         let bodies: Vec<_> = rules.map_style_features[&style.id]
             .iter()
             .filter(|row| row.region_kind == RegionKind::ResourceBody)
@@ -771,6 +778,26 @@ fn bad_knob_range_is_reported() {
         WHERE id=(SELECT id FROM def WHERE key='map.one_world');",
         "planet_n_min 32 is outside",
         &["map.one_world"],
+    );
+}
+
+#[test]
+fn coverage_pct_on_an_entity_feature_is_reported() {
+    assert_problem(
+        "UPDATE map_style_feature SET coverage_pct=24
+        WHERE feature_def_id=(SELECT id FROM def WHERE key='node.relics');",
+        "has coverage_pct set but is not a planet terrain feature",
+        &["map.one_world", "node.relics"],
+    );
+}
+
+#[test]
+fn coverage_pct_on_a_space_feature_is_reported() {
+    assert_problem(
+        "UPDATE map_style_feature SET coverage_pct=24
+        WHERE feature_def_id=(SELECT id FROM def WHERE key='ter.nebula');",
+        "has coverage_pct set but is not a planet terrain feature",
+        &["map.one_world", "ter.nebula"],
     );
 }
 

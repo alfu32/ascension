@@ -585,6 +585,9 @@ CREATE TABLE map_style_feature (
                                        -- per_player rows: clumps_min such bodies in every home system
   pattern      TEXT NOT NULL CHECK (pattern IN ('per_player','scattered','centre','edge','contested')),
   chance_pct   INTEGER NOT NULL DEFAULT 100,
+  coverage_pct INTEGER NOT NULL DEFAULT 0 CHECK (coverage_pct BETWEEN 0 AND 100),
+                                       -- sphere planet terrain: share of land tiles covered;
+                                       -- 0: derive from clumps and sizes; ignored on flat maps
   clumps_min   INTEGER NOT NULL DEFAULT 1,
   clumps_max   INTEGER NOT NULL DEFAULT 1,
   size_min     INTEGER NOT NULL DEFAULT 1,

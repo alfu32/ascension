@@ -1688,6 +1688,8 @@ pub struct MapStyleFeature {
     pub pattern: FeaturePattern,
     /// The `chance_pct` column.
     pub chance_pct: i64,
+    /// Sphere planet terrain's share of land tiles; zero derives from clumps and sizes.
+    pub coverage_pct: i64,
     /// The `clumps_min` column.
     pub clumps_min: i64,
     /// The `clumps_max` column.
