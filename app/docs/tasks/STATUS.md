@@ -35,7 +35,9 @@ it; nothing needed to continue lives only in a chat or a temporary folder.
 | 26 — attrition, city capture, elimination and victory | `26-victory-capture.md` | `task/26-victory-capture` | Codex → Opus agent | merged in 0.0.31 | Opus fixed four defects in Codex's partial work (capturable unfinished sites, sites as capitals, per-tick scans). Gate re-run by the orchestrator: siege won by conquest after capture, identical on repeat and on the sphere; battle unchanged. |
 | 27 — polar ice caps and a start latitude band | `27-polar-caps.md` | `task/27-polar-caps` | Codex → Sonnet agent | merged in 0.0.31 | Sonnet fixed two test defects in Codex's work; production code unchanged. Ice ≈ 5 % of area above ~72°; starts within ±60°; latitude error < 0.081°. Flat maps unchanged. |
 | 28 — orbiting sun light, shadow mapping, latitude lines | `28-sun-shadows-graticule.md` | `task/28-sun-shadows-graticule` | Opus agent | running | worktree `../rise-of-man-worktrees/28-sun-shadows-graticule`; owner decision 2026-11-13: the sun's directional light orbits the planet orb by default, one orbit per 5 game minutes |
-| (next) simulation API gaps (rally, cancel one order, patrol, garrison); computer opponent; HUD for victory timers and diplomacy | — | — | — | planned | after 26 |
+| 29 — full content: technology tree, buildings, units (generated) | `29-content.md` | `task/29-content` | Codex (`gpt-6.1-sol`, high) | running | design in `app/docs/content.md`; worktree `../rise-of-man-worktrees/29-content`; orchestrator commits |
+| (next, after 28 and 29) palette for the full tree (next level per track, hide obsolete, greyed with reasons); drag-to-pan with the mouse | — | — | — | planned | owner report 2026-11-13: stuck at Classical, no military buildings |
+| (next) simulation API gaps (set age mid-match, rally, cancel one order, patrol); computer opponent; HUD for victory timers and diplomacy | — | — | — | planned | |
 
 States: `ready` → `running` → `review` → `merged`; or `blocked` (say why),
 `handed over` (say to whom and from which commit).
