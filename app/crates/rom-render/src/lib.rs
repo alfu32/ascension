@@ -27,18 +27,21 @@ mod pixels;
 mod scene;
 mod stats;
 mod terrain;
+pub mod vision;
 mod worker;
 
 pub use camera::{Camera, CameraController, InputEvent, Key, Modifiers, PointerButton};
 pub use entities::{
-    EntitySnapshot, EntityView, OWNER_COLORS, SnapshotPair, Surface, build_instances, owner_color,
+    EntitySnapshot, EntityView, FlatGround, Footing, GroundFrame, OWNER_COLORS, SnapshotPair,
+    Surface, build_instances, build_instances_on, interpolate_on, owner_color,
 };
-pub use globe::{Globe, PlanetScene, SurfaceHit, planet_radius, to_render};
+pub use globe::{ChunkSpec, Globe, PlanetScene, SurfaceHit, planet_radius, to_render};
 pub use image;
 pub use mailbox::{Frame, FrameMailbox, FramePixels};
 pub use orbit::{
     HOME_DISTANCE, MIN_DISTANCE, OrbitCamera, OrbitController, dir_from_lon_lat, lon_lat_of,
 };
+pub use overlay::{OverlayGeometry, build_overlays, build_overlays_on};
 pub use pixels::rgba_to_bgra_flipped;
 pub use rom_geo::SurfacePos;
 pub use stats::RenderStats;
@@ -46,6 +49,7 @@ pub use terrain::{
     CHUNK_TILES, ChunkMesh, Shape, Star, TerrainScene, TileKind, build_sea_chunks,
     build_terrain_chunks, home_camera, overview_camera, star_field, star_triangles,
 };
+pub use vision::{EXPLORED, UNEXPLORED, VISIBLE, VisionMap};
 pub use worker::{
     MAX_RENDER_SCALE, MIN_RENDER_SCALE, OrbitSettings, RenderBridge, RenderWorker, ShutdownHandle,
     scaled_size,

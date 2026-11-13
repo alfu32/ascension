@@ -28,12 +28,16 @@ use crate::pixels::rgba_to_bgra_flipped;
 use crate::scene::Scene;
 use crate::stats::{RenderStats, StatsWindow};
 use crate::terrain::{TerrainScene, home_camera, overview_camera};
+use crate::vision::VisionMap;
+use rom_geo::SurfacePos;
 
 /// Smallest internal render scale, in percent of the canvas size.
 pub const MIN_RENDER_SCALE: u32 = 50;
 /// Largest internal render scale, in percent of the canvas size.
 pub const MAX_RENDER_SCALE: u32 = 100;
 
+/// Most chunk meshes recoloured per frame after a vision update.
+const SHADE_CHUNKS_PER_FRAME: usize = 24;
 const FRAME_INTERVAL: Duration = Duration::from_nanos(16_666_667);
 const IDLE_WAIT: Duration = Duration::from_millis(16);
 
@@ -55,6 +59,9 @@ pub struct OrbitSettings {
     /// First view as longitude, latitude, distance and heading (degrees, tiles); `None` looks at
     /// the first player start.
     pub view: Option<[f32; 4]>,
+    /// Where the camera starts looking when `view` is not given; `None` looks at the first
+    /// start of the planet scene.
+    pub home: Option<SurfacePos>,
 }
 
 /// State shared between the render thread and its bridges.
@@ -76,6 +83,8 @@ struct Shared {
     pick_tx: Mutex<Sender<PickEvent>>,
     pick_rx: Mutex<Receiver<PickEvent>>,
     focus: Mutex<Option<[f32; 2]>>,
+    focus_surface: Mutex<Option<SurfacePos>>,
+    vision: Mutex<Option<Arc<VisionMap>>>,
     start_markers: AtomicBool,
     snapshot_wanted: AtomicBool,
     snapshot: Mutex<Option<Arc<FramePixels>>>,
@@ -200,6 +209,17 @@ impl RenderBridge {
         *lock(&self.shared.focus) = Some([x, y]);
     }
 
+    /// Asks the render thread to centre the orbit camera on a surface position of a sphere planet.
+    pub fn focus_surface(&self, at: SurfacePos) {
+        *lock(&self.shared.focus_surface) = Some(at);
+    }
+
+    /// Hands the render thread the newest visibility and territory map; it darkens unexplored
+    /// and out-of-view tiles and tints the borders. Replaces any map not yet taken.
+    pub fn publish_vision(&self, vision: Arc<VisionMap>) {
+        *lock(&self.shared.vision) = Some(vision);
+    }
+
     /// Takes the newest finished frame, if one arrived since the last call.
     ///
     /// The frame is rendered at the internal scale; the UI stretches it to the canvas.
@@ -259,6 +279,8 @@ impl RenderWorker {
             pick_tx: Mutex::new(pick_tx),
             pick_rx: Mutex::new(pick_rx),
             focus: Mutex::new(None),
+            focus_surface: Mutex::new(None),
+            vision: Mutex::new(None),
             start_markers: AtomicBool::new(false),
             snapshot_wanted: AtomicBool::new(false),
             snapshot: Mutex::new(None),
@@ -329,6 +351,7 @@ fn render_loop(shared: &Shared) {
     let mut orbit: Option<OrbitCamera> = None;
     let mut orbit_controller = OrbitController::default();
     let mut globe: Option<Arc<Globe>> = None;
+    let mut shades: Vec<[f32; 3]> = Vec::new();
     let mut stats = StatsWindow::default();
     let mut blended: Vec<EntityView> = Vec::new();
     let mut picker = PickController::default();
@@ -369,10 +392,13 @@ fn render_loop(shared: &Shared) {
                 let max = settings
                     .max_distance
                     .unwrap_or_else(|| OrbitCamera::default_max_distance(radius));
-                let (lon, lat) = planet
-                    .starts
-                    .first()
-                    .map_or((0.0, 0.0), |&s| lon_lat_of(built_globe.dir_of(s)));
+                let (lon, lat) = settings
+                    .home
+                    .or_else(|| planet.starts.first().copied())
+                    .map_or((0.0, 0.0), |s| {
+                        // A home position carries milli-tiles of its face.
+                        lon_lat_of(built_globe.dir_of(s))
+                    });
                 let home = OrbitCamera::at(
                     lon.to_degrees(),
                     lat.to_degrees(),
@@ -423,6 +449,16 @@ fn render_loop(shared: &Shared) {
             );
             shared.terrain_ready.store(true, Ordering::Release);
         }
+        if let Some(vision) = lock(&shared.vision).take()
+            && vision.is_valid()
+        {
+            vision.tile_shades(&mut shades);
+            scene.apply_shades(&shades);
+            if let Some(map) = &mut minimap {
+                map.apply_shades(&shades);
+            }
+        }
+        scene.run_shade_queue(SHADE_CHUNKS_PER_FRAME);
         if let Some(published) = lock(&shared.camera).take()
             && orbit.is_none()
         {
@@ -438,13 +474,18 @@ fn render_loop(shared: &Shared) {
             camera.target = [x, 0.0, z];
             camera.pan(0.0, 0.0);
         }
+        if let Some(at) = lock(&shared.focus_surface).take()
+            && let (Some(orbit), Some(globe)) = (orbit.as_mut(), globe.as_deref())
+        {
+            orbit.look_at(globe.dir_of(at));
+        }
         let layout = *lock(&shared.layout);
         let hud_visible = shared.hud_visible.load(Ordering::Relaxed);
         let percent = shared.hud_scale.load(Ordering::Relaxed);
         let hud_snapshot = Arc::clone(&lock(&shared.hud));
         let canvas = HudLayout::new(layout.0, layout.1, (percent > 0).then_some(percent));
         let pair = lock(&shared.snapshots).clone();
-        pair.blend_at(frame_start, &mut blended);
+        pair.blend_at_on(frame_start, globe.as_deref(), &mut blended);
         let events = std::mem::take(&mut *lock(&shared.input));
         {
             let surface = scene.surface();
@@ -547,8 +588,9 @@ fn render_loop(shared: &Shared) {
             &blended,
             camera.yaw,
             shared.start_markers.load(Ordering::Relaxed),
+            orbit.as_ref(),
         );
-        scene.prepare_overlays(&blended, &hud_snapshot, camera.yaw);
+        scene.prepare_overlays(&blended, &hud_snapshot, camera.yaw, orbit.as_ref());
         // Scale explicit HUD pixels with the offscreen render target, just like automatic scale.
         let mut hud_layout = HudLayout::new(size.0, size.1, None);
         if percent > 0 {

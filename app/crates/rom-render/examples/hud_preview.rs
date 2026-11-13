@@ -76,6 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             id: i + 1,
             kind: 1,
             owner: if i < 8 { 1 } else { 2 },
+            face: 0,
             x: 32.0 + (i % 4) as f32 * 3.0,
             y: 30.0 + (i / 4) as f32 * 9.0,
             facing_deg: 0.0,

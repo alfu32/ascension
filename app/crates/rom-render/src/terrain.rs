@@ -6,6 +6,7 @@
 use std::collections::BTreeMap;
 
 use crate::camera::Camera;
+use crate::vision::ChunkSpec;
 
 /// Largest chunk side in tiles; 65 × 65 vertices stay far below the 16-bit index limit.
 pub const CHUNK_TILES: u32 = 64;
@@ -259,7 +260,7 @@ fn covered(kind: TileKind, cover: Cover) -> bool {
     }
 }
 
-fn build_chunks(scene: &TerrainScene, shape: &Shape, cover: Cover) -> Vec<ChunkMesh> {
+fn build_chunks(scene: &TerrainScene, shape: &Shape, cover: Cover) -> Vec<(ChunkMesh, ChunkSpec)> {
     let mut chunks = Vec::new();
     for (x0, y0, w, h) in chunk_origins(scene) {
         let mut indices = Vec::new();
@@ -312,18 +313,49 @@ fn build_chunks(scene: &TerrainScene, shape: &Shape, cover: Cover) -> Vec<ChunkM
                 }
             }
         }
-        chunks.push(mesh);
+        chunks.push((
+            mesh,
+            ChunkSpec {
+                face: 0,
+                x0,
+                y0,
+                w,
+                h,
+            },
+        ));
     }
     chunks
 }
 
 /// Terrain meshes, at most 64 × 64 tiles each; chunks without non-space tiles are left out.
 pub fn build_terrain_chunks(scene: &TerrainScene, shape: &Shape) -> Vec<ChunkMesh> {
+    build_terrain_chunks_with_specs(scene, shape)
+        .into_iter()
+        .map(|(mesh, _)| mesh)
+        .collect()
+}
+
+/// [`build_terrain_chunks`] with the tile window each mesh covers.
+pub fn build_terrain_chunks_with_specs(
+    scene: &TerrainScene,
+    shape: &Shape,
+) -> Vec<(ChunkMesh, ChunkSpec)> {
     build_chunks(scene, shape, Cover::Terrain)
 }
 
 /// Flat sea-level meshes over the water tiles, tinted and made opaque by depth.
 pub fn build_sea_chunks(scene: &TerrainScene, shape: &Shape) -> Vec<ChunkMesh> {
+    build_sea_chunks_with_specs(scene, shape)
+        .into_iter()
+        .map(|(mesh, _)| mesh)
+        .collect()
+}
+
+/// [`build_sea_chunks`] with the tile window each mesh covers.
+pub fn build_sea_chunks_with_specs(
+    scene: &TerrainScene,
+    shape: &Shape,
+) -> Vec<(ChunkMesh, ChunkSpec)> {
     build_chunks(scene, shape, Cover::Water)
 }
 

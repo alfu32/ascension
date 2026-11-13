@@ -185,6 +185,16 @@ impl OrbitCamera {
         )
     }
 
+    /// Unit vector to the right of the view.
+    pub fn right(&self) -> [f32; 3] {
+        let (f, u) = (self.forward(), self.view_up());
+        normalize([
+            f[1] * u[2] - f[2] * u[1],
+            f[2] * u[0] - f[0] * u[2],
+            f[0] * u[1] - f[1] * u[0],
+        ])
+    }
+
     /// Zooms in for positive `steps`, out for negative ones.
     pub fn zoom(&mut self, steps: f32) {
         self.distance *= ZOOM_STEP.powf(steps);

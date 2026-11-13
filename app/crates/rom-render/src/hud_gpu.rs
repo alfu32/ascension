@@ -2,8 +2,11 @@
 use crate::hud::{HudOverlay, HudPainter, HudSnapshot, HudTexture};
 use crate::hud_layout::{HudLayout, Rect, Region, scale_needs_rebake};
 use crate::hud_minimap::{self, MapMark};
+use crate::vision::shade_pixels;
 use crate::{Camera, EntityView, Globe, OrbitCamera, PlanetScene, TerrainScene};
 use raylib::prelude::*;
+use rom_geo::SurfacePos;
+use std::sync::Arc;
 
 pub(crate) struct HudGpu {
     painter: HudPainter,
@@ -91,7 +94,15 @@ impl HudGpu {
 pub(crate) struct MinimapGpu {
     texture: Texture2D,
     size: (u32, u32),
-    /// Start directions on a sphere planet, whose minimap is equirectangular.
+    /// Unshaded pixels, RGBA.
+    base: Vec<u8>,
+    /// The tile each pixel shows, for fog shading.
+    tiles: Vec<u32>,
+    /// Scratch for shaded pixels.
+    shaded: Vec<u8>,
+    /// The planet of a sphere minimap, which is equirectangular.
+    globe: Option<Arc<Globe>>,
+    /// Start directions on a sphere planet, shown until entities arrive.
     starts: Vec<[f32; 3]>,
 }
 impl MinimapGpu {
@@ -104,6 +115,10 @@ impl MinimapGpu {
         Ok(Self {
             texture: upload(rl, thread, w, h, &rgba)?,
             size: (terrain.width, terrain.height),
+            tiles: hud_minimap::terrain_pixel_tiles(terrain),
+            base: rgba,
+            shaded: Vec::new(),
+            globe: None,
             starts: Vec::new(),
         })
     }
@@ -112,14 +127,28 @@ impl MinimapGpu {
         rl: &mut RaylibHandle,
         thread: &RaylibThread,
         planet: &PlanetScene,
-        globe: &Globe,
+        globe: &Arc<Globe>,
     ) -> Result<Self, String> {
         let (w, h, rgba) = hud_minimap::planet_pixels(planet);
         Ok(Self {
             texture: upload(rl, thread, w, h, &rgba)?,
             size: (w, h),
+            tiles: hud_minimap::planet_pixel_tiles(planet.n),
+            base: rgba,
+            shaded: Vec::new(),
+            globe: Some(Arc::clone(globe)),
             starts: planet.starts.iter().map(|&s| globe.dir_of(s)).collect(),
         })
+    }
+    /// Darkens the picture by the tile shades (see [`crate::vision::VisionMap::tile_shades`]).
+    pub(crate) fn apply_shades(&mut self, shades: &[[f32; 3]]) {
+        if self.tiles.iter().any(|&t| t as usize >= shades.len()) {
+            return;
+        }
+        shade_pixels(&self.base, &self.tiles, shades, &mut self.shaded);
+        if let Err(error) = self.texture.update_texture(&self.shaded) {
+            eprintln!("rom-render: minimap shading: {error}");
+        }
     }
     pub(crate) fn draw(
         &self,
@@ -151,9 +180,40 @@ impl MinimapGpu {
             area.w.floor() as i32,
             area.h.floor() as i32,
         );
-        let marks = match orbit {
-            Some(orbit) => hud_minimap::globe_marks(orbit, &self.starts, layout, area),
-            None => hud_minimap::marks(entities, camera, layout, self.size, area),
+        let marks = match (orbit, &self.globe) {
+            (Some(orbit), Some(globe)) => {
+                let dots: Vec<_> = if entities.is_empty() {
+                    self.starts
+                        .iter()
+                        .enumerate()
+                        .map(|(i, &dir)| {
+                            let rgb = crate::owner_color((i % 8) as u8 + 1)
+                                .map(|c| (c * 255.0).round() as u8);
+                            (dir, [rgb[0], rgb[1], rgb[2], 255], 4.0)
+                        })
+                        .collect()
+                } else {
+                    entities
+                        .iter()
+                        .map(|e| {
+                            let dir = globe.dir_of(SurfacePos {
+                                face: e.face,
+                                x: (e.x * 1000.0).round() as i64,
+                                y: (e.y * 1000.0).round() as i64,
+                            });
+                            let rgb =
+                                crate::owner_color(e.owner).map(|c| (c * 255.0).round() as u8);
+                            (
+                                dir,
+                                [rgb[0], rgb[1], rgb[2], 255],
+                                if e.building { 4.0 } else { 2.0 },
+                            )
+                        })
+                        .collect()
+                };
+                hud_minimap::globe_marks(orbit, &dots, layout, area)
+            }
+            _ => hud_minimap::marks(entities, camera, layout, self.size, area),
         };
         for mark in marks {
             match mark {

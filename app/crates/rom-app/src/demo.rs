@@ -5,7 +5,7 @@
 //! 12 tiles of where they started. There is no other logic.
 
 use rom_rules::{EntityClass, ProductionMode};
-use rom_sim::{Command, EntityId, PlayerId, Pos, SimError, World};
+use rom_sim::{Command, EntityId, PlayerId, Pos, SimError, Topology, World};
 
 use crate::match_setup::{Match, PlayerStart};
 
@@ -165,12 +165,12 @@ impl DemoDriver {
         for _ in 0..8 {
             let angle = self.rng.unit() * std::f64::consts::TAU;
             let distance = self.rng.unit().sqrt() * WANDER_RADIUS;
-            let candidate = Pos {
-                x: anchor.x + (angle.cos() * distance) as i32,
-                y: anchor.y + (angle.sin() * distance) as i32,
-                face: 0,
-            };
-            if let Some(terrain) = world.map().terrain_at_pos(candidate)
+            let candidate = world.offset(
+                anchor,
+                (angle.cos() * distance) as i64,
+                (angle.sin() * distance) as i64,
+            );
+            if let Some(terrain) = world.terrain_at(candidate)
                 && world.rules().terrains[&terrain].buildable
             {
                 target = candidate;
@@ -233,11 +233,11 @@ impl DemoDriver {
             let distance = (city_half + site_half + 1.0 + f64::from(ring) * 1.5) * 1000.0;
             for step in 0..12 {
                 let angle = f64::from(step) * std::f64::consts::TAU / 12.0 + 0.5;
-                let target = Pos {
-                    x: start.city_pos.x + (angle.cos() * distance) as i32,
-                    y: start.city_pos.y + (angle.sin() * distance) as i32,
-                    face: 0,
-                };
+                let target = world.offset(
+                    start.city_pos,
+                    (angle.cos() * distance) as i64,
+                    (angle.sin() * distance) as i64,
+                );
                 let command = Command {
                     player: start.player,
                     executor: builder_id,
@@ -270,6 +270,10 @@ impl DemoDriver {
 pub fn add_stress_units(game: &mut Match, count: u32, seed: u64) -> Vec<(EntityId, PlayerId, Pos)> {
     let mut rng = DemoRng::new(seed ^ 0x5742_5355_4e49_5453);
     let (width, height) = (game.world.map().width, game.world.map().height);
+    let side = match game.world.topology() {
+        Topology::Flat { .. } => u64::from(height),
+        Topology::Cube(surface) => u64::from(surface.n),
+    };
     let owners: Vec<PlayerId> = game.starts.iter().map(|s| s.player).collect();
     let mut spawned = Vec::new();
     if owners.is_empty() {
@@ -278,12 +282,14 @@ pub fn add_stress_units(game: &mut Match, count: u32, seed: u64) -> Vec<(EntityI
     for n in 0..count as usize {
         let mut position = None;
         for _ in 0..64 {
+            // Rows of the dense grid: a sphere's faces follow one another, `side` rows each.
+            let (column, row) = (rng.below(u64::from(width)), rng.below(u64::from(height)));
             let at = Pos {
-                x: (rng.below(u64::from(width)) * 1000 + 500) as i32,
-                y: (rng.below(u64::from(height)) * 1000 + 500) as i32,
-                face: 0,
+                x: (column * 1000 + 500) as i32,
+                y: ((row % side) * 1000 + 500) as i32,
+                face: (row / side) as u8,
             };
-            if let Some(terrain) = game.world.map().terrain_at_pos(at)
+            if let Some(terrain) = game.world.terrain_at(at)
                 && game.world.rules().terrains[&terrain].buildable
             {
                 position = Some(at);
