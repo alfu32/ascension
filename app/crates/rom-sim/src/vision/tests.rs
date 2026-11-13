@@ -247,3 +247,26 @@ fn remembered_building_persists_in_fog_until_seen_again() {
     assert!(memory(&w).is_empty());
     assert!(w.remembered_buildings(P1).next().is_none());
 }
+
+#[test]
+fn reveal_terrain_explores_every_tile_but_shows_no_enemy() {
+    // 37 × 37 tiles: the tile count is not a multiple of 64, so the last word is partial.
+    let mut w = world("", 37);
+    let foe = spawn(&mut w, "unit.spearman", P2, at(30_500, 30_500));
+    w.reveal_terrain(P1);
+    for y in 0..37 {
+        for x in 0..37 {
+            assert!(w.is_explored(P1, x, y));
+            assert!(!w.is_visible(P1, x, y));
+        }
+    }
+    assert!(!w.is_explored(P2, 0, 0));
+    assert!(
+        w.visible_entities(P1)
+            .iter()
+            .all(|s| !matches!(s, Sighting::Live(e) if e.id == foe))
+    );
+    let hash = w.hash();
+    w.reveal_terrain(P1);
+    assert_eq!(w.hash(), hash, "revealing twice changes nothing");
+}

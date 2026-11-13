@@ -241,6 +241,11 @@ pub fn build_sphere_match(
             city_pos,
         )?);
     }
+    // The world model: before the space age each player knows the terrain of its home planet.
+    // Units and buildings stay hidden until they are seen.
+    for &player in &starts_players(&world) {
+        world.reveal_terrain(player);
+    }
     Ok(Match {
         world,
         starts,
@@ -305,6 +310,15 @@ fn ring_position(world: &World, centre: Pos, angle: f64, reach: f64) -> Pos {
         }
     }
     centre
+}
+
+/// Every non-neutral player of the world, in id order.
+fn starts_players(world: &World) -> Vec<PlayerId> {
+    world
+        .players()
+        .map(|p| p.id)
+        .filter(|id| *id != NEUTRAL)
+        .collect()
 }
 
 #[cfg(test)]
@@ -477,6 +491,11 @@ mod tests {
         let city = city_type(rules).expect("a city type");
         let side = 128 * 1000;
         assert_eq!(setup.starts.len(), 4);
+        // Every player knows the home planet's terrain from the start.
+        for start in &setup.starts {
+            assert!(world.is_explored_on(start.player, 3, 0, 0));
+            assert!(world.is_explored_on(start.player, 5, 10, 10));
+        }
         for start in &setup.starts {
             let entity = world.entity(start.city).expect("city");
             assert_eq!(entity.pos, start.city_pos);

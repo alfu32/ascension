@@ -656,7 +656,9 @@ mod tests {
         assert_eq!(map.state[at], VISIBLE);
         assert_eq!(u32::from(map.owner[at]), PLAYER.0);
         assert!(map.border.iter().any(|b| *b), "borders are marked");
-        // Far from every player the tiles are dark.
-        assert!(map.state.iter().filter(|s| **s == UNEXPLORED).count() > map.state.len() / 2);
+        // The home planet's terrain is known from the start, so nothing is unexplored; most
+        // tiles are out of view.
+        assert_eq!(map.state.iter().filter(|s| **s == UNEXPLORED).count(), 0);
+        assert!(map.state.iter().filter(|s| **s == EXPLORED).count() > map.state.len() / 2);
     }
 }

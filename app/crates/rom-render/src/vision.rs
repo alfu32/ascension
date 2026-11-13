@@ -12,13 +12,13 @@ pub const EXPLORED: u8 = 1;
 pub const VISIBLE: u8 = 2;
 
 /// Brightness of an unexplored tile.
-const UNEXPLORED_LIGHT: f32 = 0.16;
+const UNEXPLORED_LIGHT: f32 = 0.32;
 /// Brightness of an explored tile that is not in view.
-const EXPLORED_LIGHT: f32 = 0.62;
+const EXPLORED_LIGHT: f32 = 0.72;
 /// How strongly a border tile takes its owner's colour.
 const BORDER_TINT: f32 = 0.8;
 /// How strongly the inside of a territory takes its owner's colour.
-const TERRITORY_TINT: f32 = 0.25;
+const TERRITORY_TINT: f32 = 0.35;
 
 /// Visibility and borders of every tile, in the simulation's dense order: row `y` of `width`
 /// tiles, where a sphere of `n` tiles per face edge is `n` wide and `6 n` high (face after face).

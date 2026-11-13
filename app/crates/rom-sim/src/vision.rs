@@ -158,6 +158,23 @@ impl World {
         })
     }
 
+    /// Marks every tile of the map explored for `player`: its terrain is known, while units and
+    /// buildings stay hidden until seen. The world model gives each player the terrain of the
+    /// home planet from the start.
+    pub fn reveal_terrain(&mut self, player: PlayerId) {
+        self.ensure_vision(player);
+        let tiles = self.map.terrain.len();
+        if let Some(vision) = self.vision.players.get_mut(&player) {
+            vision.explored.fill(u64::MAX);
+            let spare = vision.explored.len() * 64 - tiles;
+            if spare > 0
+                && let Some(last) = vision.explored.last_mut()
+            {
+                *last >>= spare;
+            }
+        }
+    }
+
     pub(crate) fn ensure_vision(&mut self, player: PlayerId) {
         let tiles = self.map.terrain.len();
         self.vision
