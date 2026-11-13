@@ -33,6 +33,8 @@ it; nothing needed to continue lives only in a chat or a temporary folder.
 | 24 — space: system space, presence claims, travel between systems (step 4b, part 2) | `24-space-travel.md` | `task/24-space-travel` | Codex (`gpt-6.1-sol`, high) | merged in 0.0.30 | Gate re-run by the orchestrator on main: 467 tests; space scenario identical on repeat (claims=6, transits_done=4, ~9.5 s for 6,000 ticks); sphere benchmark unchanged. Seed conflict with the terrain materials resolved by the orchestrator (both kept). Travel target = `target_pos.body` (destination star body). Not yet in the app: ships, markers, claims and transits are not drawn or orderable. |
 | 25 — the app on the universe world: ships, claims and travel on screen | `25-universe-app.md` | `task/25-universe-app` | Sonnet agent | running | worktree `../rise-of-man-worktrees/25-universe-app` |
 | 26 — attrition, city capture, elimination and victory | `26-victory-capture.md` | `task/26-victory-capture` | Codex (`gpt-6.1-sol`, high) | running | worktree `../rise-of-man-worktrees/26-victory-capture`; orchestrator commits |
+| 27 — polar ice caps and a start latitude band | `27-polar-caps.md` | `task/27-polar-caps` | Codex (`gpt-6.1-sol`, high) | running | worktree `../rise-of-man-worktrees/27-polar-caps`; orchestrator commits |
+| (next, after 25) shadow mapping on globe and flat map; graticule lines (equator, prime meridian, tropics, polar circles) on minimap and globe; optional revolving sun with day length | — | — | — | planned | owner request 2026-11-13 |
 | (next) simulation API gaps (rally, cancel one order, patrol, garrison); computer opponent; HUD for victory timers and diplomacy | — | — | — | planned | after 26 |
 
 States: `ready` → `running` → `review` → `merged`; or `blocked` (say why),
