@@ -159,4 +159,5 @@ presentation, with no gameplay effect for now. The planet's axis has no tilt by
 default (`world.axial_tilt_mdeg = 0`), so there are no seasons yet.
 
 The sky follows the light: blue by day, a short dusk and dawn, starry at
-night; from orbit, space is black with stars.
+night; from orbit, space is black with stars, and every habitable planet
+shows an atmosphere halo around its limb, brightest on the day side.
