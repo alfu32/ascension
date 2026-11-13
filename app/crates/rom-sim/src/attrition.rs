@@ -23,17 +23,8 @@ impl World {
             .rules
             .constant("combat.attrition_floor_hp")
             .expect("floor");
-        let supply: Vec<_> = self
-            .entities()
-            .filter_map(|e| {
-                let spec = self.rules.entity_types[&e.type_id].supply.as_ref()?;
-                (e.hp > 0 && e.build_progress.is_none() && !e.neutralised).then_some((
-                    e.owner,
-                    e.pos,
-                    spec.radius,
-                ))
-            })
-            .collect();
+        // Own supply circles, gathered once per tick and only when a unit needs them.
+        let mut supply: Option<Vec<(PlayerId, crate::Pos, i64)>> = None;
         let phase = (self.tick % STRIDE) as usize;
         let start = if phase == 0 { STRIDE as usize } else { phase };
         for index in (start..self.entities.len()).step_by(STRIDE as usize) {
@@ -51,8 +42,11 @@ impl World {
             let Some(enemy) = owner.filter(|p| self.enemies(e.owner, *p)) else {
                 continue;
             };
+            let supply = supply.get_or_insert_with(|| self.supply_circles());
             if supply.iter().any(|(player, at, radius)| {
-                *player == e.owner && self.geo(e.pos.body).within(e.pos, *at, *radius)
+                *player == e.owner
+                    && at.body == e.pos.body
+                    && self.geo(e.pos.body).within(e.pos, *at, *radius)
             }) {
                 continue;
             }
@@ -92,6 +86,19 @@ impl World {
                 e.killer = Some(enemy);
             }
         }
+    }
+
+    fn supply_circles(&self) -> Vec<(PlayerId, crate::Pos, i64)> {
+        self.entities()
+            .filter_map(|e| {
+                let spec = self.rules.entity_types[&e.type_id].supply.as_ref()?;
+                (e.hp > 0 && e.build_progress.is_none() && !e.neutralised).then_some((
+                    e.owner,
+                    e.pos,
+                    spec.radius,
+                ))
+            })
+            .collect()
     }
 
     pub(crate) fn check_orders_open(&self, player: PlayerId) -> Result<(), crate::SimError> {

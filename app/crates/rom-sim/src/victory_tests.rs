@@ -714,3 +714,18 @@ fn hash_covers_capture_attrition_options_statuses_and_victory() {
         }
     });
 }
+
+#[test]
+fn unfinished_city_site_dies_and_is_not_a_capital() {
+    let mut w = world("");
+    let city_type = id(&w, "bld.city");
+    let site = w
+        .spawn_entity(city_type, P2, Pos::flat(50_500, 50_500), true)
+        .unwrap();
+    assert_eq!(w.capital(P2), None);
+    w.entities[site.0 as usize].as_mut().unwrap().hp = 0;
+    w.remove_dead();
+    assert!(w.entity(site).is_none());
+    let city = city(&mut w, P2);
+    assert_eq!(w.capital(P2), Some(city));
+}

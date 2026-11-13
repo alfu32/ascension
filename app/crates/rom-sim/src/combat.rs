@@ -417,15 +417,19 @@ impl World {
         let dead: Vec<_> = self
             .entities()
             .filter(|e| e.hp <= 0)
-            .map(|e| (e.id, e.owner, e.type_id, e.killer))
+            .map(|e| {
+                (
+                    e.id,
+                    e.owner,
+                    e.type_id,
+                    e.killer,
+                    e.build_progress.is_none(),
+                )
+            })
             .collect();
-        for (id, owner, type_id, killer) in dead {
-            if self.rules.entity_types[&type_id].class == EntityClass::Building
-                && self.rules.entity_types[&type_id]
-                    .territory
-                    .as_ref()
-                    .is_some_and(|t| t.capturable)
-            {
+        for (id, owner, type_id, killer, complete) in dead {
+            // A complete capturable building is disabled instead; an unfinished site dies.
+            if complete && self.is_capturable(type_id) {
                 self.neutralise(id);
                 continue;
             }

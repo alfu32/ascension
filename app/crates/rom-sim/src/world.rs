@@ -460,9 +460,7 @@ impl World {
             idle_ticks: 0,
             orders: VecDeque::new(),
         }));
-        if self.is_city_type(type_id) {
-            self.capture.capitals.entry(owner).or_insert(id);
-        }
+        self.note_capital(id);
         self.refresh_entity_stats(id);
         self.next_entity_id = next;
         let surface = &mut self.surfaces[slot];

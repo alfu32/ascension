@@ -45,6 +45,11 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
         .map(|p| p.id.0.to_string())
         .collect::<Vec<_>>()
         .join(",");
+    let eliminated = if eliminated.is_empty() {
+        "none".to_owned()
+    } else {
+        eliminated
+    };
     println!(
         "siege tick={} outcome={} captured={} eliminated={} hash={:016x}",
         world.tick(),

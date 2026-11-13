@@ -246,7 +246,10 @@ fn combat_range_and_acquisition_work_across_an_edge() {
     assert!(w.stats().kills.values().sum::<u64>() >= 1);
 
     // A city's ranged weapon reaches nine tiles across the edge but not eleven and a half.
-    let mut w = plain_sphere(n);
+    // Attrition inside the city's border is switched off so only weapon hits count.
+    let no_attrition =
+        rules_with("UPDATE game_constant SET value=0 WHERE key='combat.attrition_per_period';");
+    let mut w = sphere_on(no_attrition, n, |_| "ter.plain");
     let city = w
         .place_for_setup(id(&w, "bld.city"), P1, at(0, l - 3500, 16_500))
         .unwrap();

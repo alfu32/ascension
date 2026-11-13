@@ -249,6 +249,7 @@ impl World {
             self.refresh_site(site_id);
             self.economy.dirty.insert(site_id);
             self.refresh_territory(site_id);
+            self.note_capital(site_id);
         }
     }
 }

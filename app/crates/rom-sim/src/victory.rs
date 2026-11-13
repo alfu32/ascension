@@ -203,6 +203,20 @@ impl World {
 
     fn eliminate_players(&mut self) {
         let mut defeated = Vec::new();
+        // Players that still own a city or a unit anywhere, ships in transit included.
+        let forces: BTreeSet<PlayerId> =
+            if self.victory.options.elimination == Elimination::Conquest {
+                self.entities()
+                    .chain(self.transits().map(|t| &t.entity))
+                    .filter(|e| {
+                        self.is_city_type(e.type_id)
+                            || self.rules.entity_types[&e.type_id].class == EntityClass::Unit
+                    })
+                    .map(|e| e.owner)
+                    .collect()
+            } else {
+                BTreeSet::new()
+            };
         for player in self.players.values() {
             if player.id == PlayerId(0)
                 || self.player_status(player.id) != Some(PlayerStatus::Playing)
@@ -210,15 +224,7 @@ impl World {
                 continue;
             }
             if self.victory.options.elimination == Elimination::Conquest {
-                let has_force = self
-                    .entities()
-                    .chain(self.transits().map(|t| &t.entity))
-                    .any(|e| {
-                        e.owner == player.id
-                            && (self.is_city_type(e.type_id)
-                                || self.rules.entity_types[&e.type_id].class == EntityClass::Unit)
-                    });
-                if !has_force {
+                if !forces.contains(&player.id) {
                     defeated.push((player.id, None));
                 }
                 continue;

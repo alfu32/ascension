@@ -27,6 +27,20 @@ impl World {
         self.capture.holds.get(&player).copied()
     }
 
+    /// Whether a building type is disabled at zero hit points rather than destroyed.
+    pub(crate) fn is_capturable(&self, type_id: rom_rules::DefId) -> bool {
+        let et = &self.rules.entity_types[&type_id];
+        et.class == EntityClass::Building && et.territory.as_ref().is_some_and(|t| t.capturable)
+    }
+
+    /// Records a complete city as its owner's capital when the owner has none yet.
+    pub(crate) fn note_capital(&mut self, id: EntityId) {
+        let Some(e) = self.entity(id) else { return };
+        if e.build_progress.is_none() && self.is_city_type(e.type_id) {
+            self.capture.capitals.entry(e.owner).or_insert(id);
+        }
+    }
+
     pub(crate) fn neutralise(&mut self, id: EntityId) {
         let e = self.entities[id.0 as usize]
             .as_mut()
