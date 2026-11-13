@@ -317,8 +317,9 @@ CREATE TABLE et_node (
   entity_type_id INTEGER PRIMARY KEY REFERENCES entity_type(id),
   resource_id    INTEGER NOT NULL REFERENCES resource(id),
   amount         INTEGER,              -- NULL = infinite
-  claim_mode     TEXT NOT NULL DEFAULT 'none' CHECK (claim_mode IN ('none','trader','presence')),
+  claim_mode     TEXT NOT NULL DEFAULT 'none' CHECK (claim_mode IN ('none','trader','presence','carry')),
                                        -- trader: a merchant sits on it (rare resources)
+                                       -- carry: a tagged unit brings it to an et_keeper
                                        -- presence: owned by whoever keeps a unit with claim_tag in range (resource bodies)
   claim_tag_id   INTEGER REFERENCES tag(id),
   claim_radius   INTEGER NOT NULL DEFAULT 0,
@@ -340,7 +341,12 @@ CREATE TABLE et_trader (               -- "trades for gold, claims rare resource
   runs_routes    INTEGER NOT NULL DEFAULT 0,  -- caravan: city ↔ city route
   claims_nodes   INTEGER NOT NULL DEFAULT 0,  -- merchant: sits on a claimable node
   route_resource_id INTEGER REFERENCES resource(id),
-  route_income   INTEGER NOT NULL DEFAULT 0   -- per income period, scaled by route length
+  route_income   INTEGER NOT NULL DEFAULT 0   -- per arrival per trade.route_unit of route length
+) STRICT;
+
+CREATE TABLE et_keeper (               -- keeps carried nodes (temple ← relics)
+  entity_type_id INTEGER PRIMARY KEY REFERENCES entity_type(id),
+  capacity       INTEGER NOT NULL       -- nodes kept at once
 ) STRICT;
 
 CREATE TABLE et_container (            -- garrison, transport, carrier, hangar

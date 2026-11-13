@@ -1,6 +1,6 @@
 # Game database
 
-Files: [`../db/schema.sql`](../db/schema.sql) (88 tables, 4 views) and
+Files: [`../db/schema.sql`](../db/schema.sql) (89 tables, 4 views) and
 [`../db/seed.sql`](../db/seed.sql) (the full generated content catalogue and hand-written
 world rules). Both load cleanly in SQLite ≥ 3.37:
 
@@ -47,7 +47,8 @@ def ─┬─ age            ordinal, era, map scale
      │   node, pickup, ├─ et_builder       builds, repairs
      │   wildlife)     ├─ et_harvester     harvests         (works at an et_gather_site)
      │                 ├─ et_healer        heals            (priest, medic, repair drone)
-     │                 ├─ et_trader        trades, claims rare resources
+     │                 ├─ et_trader        runs city-to-city delivery routes
+     │                 ├─ et_keeper        keeps carried nodes
      │                 ├─ et_container     garrison / transport / carrier
      │                 ├─ et_producer      takes train + research orders
      │                 ├─ et_territory     city, borders
@@ -92,7 +93,8 @@ build time). What an entity can *do* is the set of `et_*` rows it owns:
 | builds, repairs | `et_builder` |
 | harvests | `et_harvester` + the building's `et_gather_site` |
 | heals | `et_healer` (target tag *biological* → priest/medic, *mechanical* → repair drone) |
-| trades for gold, claims rare resources | `et_trader` |
+| runs wealth delivery routes | `et_trader` |
+| keeps carried nodes | `et_keeper` |
 | takes production and research orders | `et_producer` |
 | is a resource | `et_node` |
 
@@ -139,7 +141,7 @@ Examples in the seed:
 | --- | --- |
 | Age of Abundance: everything is free, build times stay | source `tech.age.abundance`, stat `cost.all`, `mul 0` |
 | Religion makes temples push borders | source `tech.religion`, tag `temple`, stat `border_radius`, `add 2000` |
-| Holding Relics speeds research | source `rare.relics`, stat `research_time`, `pct -33` |
+| Commerce adds a route slot | source `tech.commerce.1`, stat `caravan_limit`, `add 1` |
 
 `stat` is a registry: a modifier naming an unknown stat fails the foreign key,
 which catches typos in data.
@@ -337,3 +339,23 @@ a faction name in one of the reference games, so it is avoided.
 3. Map size cost: a map that includes space is much larger than a planet-only
    map. Pathfinding and fog grids for the space part can be coarser; to be
    measured.
+
+## Carried nodes and trade routes
+
+`et_node.claim_mode` also accepts `carry`: only a unit with the node's
+`claim_tag_id` may collect it. The `carry` movement order targets that node
+and delivers it to the nearest own completed `et_keeper`. `et_keeper` has an
+entity-type primary/foreign key and a positive `capacity` measured in nodes.
+`entity.container_id` records custody by a unit or keeper; contained nodes
+leave spatial indexes. Keepers contribute each node's `resource_id`/`income`
+to their owner's ordinary, modified and capped periodic income. The new role
+tag `clergy` authorizes priests. Relics now yield wealth; the obsolete rare
+resource, its resource-yield rows and research modifier have been removed.
+
+`et_trader.route_income` is a delivery amount per `trade.route_unit` of the
+accepted city-centre distance, paid at arrivals rather than per income period.
+`trade.route_unit` is 10000 milli-tiles; `trade.min_route` is 20000 (the value
+of `city.spacing`). `player.caravan_limit.base` is 2; `caravan_limit` modifiers
+add route slots. Pending route orders reserve slots. Orders retain the home,
+target, accepted length, delivery resource/amount and current leg in memory;
+the existing `trade_route` table is unchanged (save support is a later task).

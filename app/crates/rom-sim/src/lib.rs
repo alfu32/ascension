@@ -32,6 +32,7 @@ mod territory;
 mod universe;
 mod victory;
 mod vision;
+mod wealth;
 mod world;
 
 pub use entity::{Entity, EntityId, Player, PlayerId};
@@ -49,6 +50,7 @@ pub use surface::Surface;
 pub use universe::{BodyId, BodyInfo, PlanetSurface, RouteInfo, SystemInfo, UniverseSetup};
 pub use victory::{Elimination, MatchOptions, Outcome, PlayerStatus};
 pub use vision::{RememberedBuilding, Sighting};
+pub use wealth::TradeRoute;
 pub use world::{Stats, World};
 
 use rom_rules::DefId;
@@ -57,6 +59,27 @@ use thiserror::Error;
 /// Invalid setup or input, rejected without changing simulation state.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum SimError {
+    /// Carry requires a free carry-mode node or the executor's current cargo.
+    #[error("invalid carry target")]
+    InvalidCarryTarget,
+    /// The executor lacks the node's required role tag.
+    #[error("executor lacks the node claim tag")]
+    CannotCarry,
+    /// Each carrier can hold only one node.
+    #[error("carrier already holds a node")]
+    CarrierFull,
+    /// There is no completed own city on this surface.
+    #[error("no home city")]
+    NoHomeCity,
+    /// A route must connect distinct cities at the configured minimum distance.
+    #[error("trade route is too short")]
+    RouteTooShort,
+    /// Routes require an own or allied completed city and a route-capable trader.
+    #[error("not a trade partner")]
+    NotATradePartner,
+    /// All the player's route slots are occupied or reserved.
+    #[error("caravan limit reached")]
+    CaravanLimit,
     /// The match has ended or the issuing player has been defeated.
     #[error("player cannot issue orders after defeat or victory")]
     OrdersClosed,

@@ -96,6 +96,8 @@ pub struct Entity {
     pub gather_slots: i64,
     /// Gather site whose slot this worker currently occupies.
     pub work_site: Option<EntityId>,
+    /// Carrier or keeper containing this node; contained nodes are absent from the map.
+    pub container_id: Option<EntityId>,
     /// City whose economy this building belongs to, chosen when it was placed.
     pub city_id: Option<EntityId>,
     /// Consecutive idle ticks since the last work search or accepted command.

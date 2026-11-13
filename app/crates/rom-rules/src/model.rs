@@ -238,6 +238,8 @@ pub enum ClaimMode {
     Trader,
     /// SQL value `presence`.
     Presence,
+    /// SQL value `carry`.
+    Carry,
 }
 impl crate::load::SqlEnum for ClaimMode {
     fn parse(value: &str) -> Option<Self> {
@@ -245,6 +247,7 @@ impl crate::load::SqlEnum for ClaimMode {
             "none" => Some(Self::None),
             "trader" => Some(Self::Trader),
             "presence" => Some(Self::Presence),
+            "carry" => Some(Self::Carry),
             _ => None,
         }
     }
@@ -1152,6 +1155,8 @@ pub struct EntityType {
     pub healer: Option<Healer>,
     /// Attached `et_trader` rows.
     pub trader: Option<Trader>,
+    /// Attached `et_keeper` row.
+    pub keeper: Option<Keeper>,
     /// Attached `et_container` rows.
     pub container: Option<Container>,
     /// Attached `et_producer` rows.
@@ -1324,6 +1329,14 @@ pub struct Trader {
     pub route_resource_id: Option<DefId>,
     /// The `route_income` column.
     pub route_income: i64,
+}
+/// One `et_keeper` row.
+#[derive(Debug, Clone)]
+pub struct Keeper {
+    /// The `entity_type_id` column.
+    pub entity_type_id: DefId,
+    /// Maximum carried nodes kept at once.
+    pub capacity: i64,
 }
 /// One `et_container` row.
 #[derive(Debug, Clone)]

@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Current income per configured income period, before and after modifiers and cap.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Income {
-    /// Worker output plus complete sites' unattended output.
+    /// Worker output, complete sites' unattended output, and kept-node income.
     pub raw: i64,
     /// Rate after player modifiers and the resource's commerce cap.
     pub effective: i64,
@@ -68,6 +68,13 @@ impl World {
             && let Some(node) = &et.node
         {
             terms.push(((*player, node.resource_id), node.income));
+        }
+        if entity.build_progress.is_none() && et.keeper.is_some() {
+            for node in self.kept_nodes(id) {
+                if let Some(node) = &self.rules.entity_types[&node.type_id].node {
+                    terms.push(((entity.owner, node.resource_id), node.income));
+                }
+            }
         }
         if entity.build_progress.is_none()
             && let Some(site) = &et.gather_site
@@ -247,6 +254,14 @@ mod tests {
         let mut rates: BTreeMap<(PlayerId, DefId), i128> = BTreeMap::new();
         for entity in w.entities() {
             let et = &w.rules.entity_types[&entity.type_id];
+            if let Some(keeper) = entity.container_id.and_then(|id| w.entity(id))
+                && w.rules.entity_types[&keeper.type_id].keeper.is_some()
+                && keeper.build_progress.is_none()
+                && let Some(node) = &et.node
+            {
+                *rates.entry((keeper.owner, node.resource_id)).or_default() +=
+                    i128::from(node.income);
+            }
             if entity.build_progress.is_none()
                 && let Some(site) = &et.gather_site
             {
@@ -367,10 +382,24 @@ mod tests {
         let library = w
             .spawn(id("bld.library"), PlayerId(1), at(50_000, 50_000))
             .unwrap();
+        let temple = w
+            .spawn(id("bld.temple"), PlayerId(1), at(50_000, 42_000))
+            .unwrap();
+        let relic = w
+            .spawn(id("node.relics"), PlayerId(1), at(48_000, 38_000))
+            .unwrap();
+        let priest = w
+            .spawn(id("unit.priest"), PlayerId(1), at(47_000, 38_000))
+            .unwrap();
+        let mut carry = order(priest, "carry", None, None);
+        carry.target_entity = Some(relic);
+        w.submit(carry).unwrap();
+        let mut kept = false;
         let mut most_workers = 0;
         for tick in 0..1500 {
             w.step();
             check(&w);
+            kept |= w.kept_nodes(temple).next().is_some();
             most_workers = most_workers.max(w.economy.occupants.values().map(BTreeSet::len).sum());
             if tick == 400 {
                 let farm = w
@@ -397,6 +426,7 @@ mod tests {
                 let _ = w.submit(stop);
             }
         }
+        assert!(kept);
         assert!(most_workers >= 3);
         assert!(w.entities().any(|e| e.type_id == id("unit.spearman")));
         assert!(w.economy.rates.values().any(|rate| *rate == 13));

@@ -61,6 +61,7 @@ LINES = [
     ('civilian', 'city', 'citizen:Citizens:0|worker_drone:Worker Drones:8'),
     ('scholar', 'university', 'scholar:Scholars:1'),
     ('merchant', 'market', 'merchant:Merchants:0'),
+    ('caravan', 'market', 'caravan:Caravans:1|freight_wagon:Freight Wagons:4|lorry:Lorries:6|cargo_drone:Cargo Drones:8'),
     ('priest', 'temple', 'priest:Priests:1'),
 ]
 RESEARCH = [
@@ -202,6 +203,8 @@ def generate():
                 economic_radius=16000 if key == 'city' else 0, capturable=int(key == 'city'))
         if key in ('city', 'tower', 'fort'):
             weapon(full, 8 + age * 2, 'pierce' if age < 3 else 'explosive', 10000, ['ground'])
+        if key == 'temple':
+            row('et_keeper', entity_type_id=Ref(full), capacity=5)
         if key == 'city':
             row('et_container', entity_type_id=Ref(full), capacity=10, heals=1, adds_firepower=1)
         if key in SITES:
@@ -217,6 +220,7 @@ def generate():
     def copy_components(old, new):
         for table, cols in {
             'et_producer': 'queue_limit,parallel,has_rally',
+            'et_keeper': 'capacity',
             'et_territory': 'is_city,border_radius,economic_radius,capturable',
             'placement_rule': 'rule,ref_def_id,layer,distance',
             'et_gather_site': 'resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income',
@@ -247,8 +251,8 @@ def generate():
             building = producer.split(',')[-1 if age >= 5 else 0]
             mounted = line in ('light_mounted', 'heavy_mounted')
             aircraft = line in ('fighter', 'bomber')
-            support = line in ('civilian', 'scholar', 'merchant', 'priest', 'medic', 'repair', 'supply')
-            mechanical = (mounted and age >= 5) or line in ('siege', 'anti_air', 'repair', 'supply', 'warship', 'starship') or aircraft or 'drone' in key or 'robot' in key
+            support = line in ('civilian', 'scholar', 'merchant', 'caravan', 'priest', 'medic', 'repair', 'supply')
+            mechanical = (mounted and age >= 5) or line in ('caravan', 'siege', 'anti_air', 'repair', 'supply', 'warship', 'starship') or aircraft or 'drone' in key or 'robot' in key
             hp, attack, reach, speed, dc, ac, prices = 70, 7, 5000, 1200, 'pierce', 'flesh', {'food': 30, 'timber': 30}
             if line == 'infantry':
                 hp, attack, reach, speed = 100, 9, 0 if age <= 2 else 5000, 1250
@@ -277,6 +281,10 @@ def generate():
             elif line == 'starship':
                 hp, attack, reach, speed, dc, ac = 400, 30, 8000, 3000, 'energy', 'shield'
                 prices = {'metal': 200, 'energy': 100}
+            elif line == 'caravan':
+                step_index = [1, 4, 6, 8].index(age)
+                hp, attack, reach, speed, ac = 90 + 40 * step_index, 0, 0, 1300 + 300 * step_index, 'vehicle'
+                prices = {'food': 40, 'timber': 60} if age < 6 else {'food': 40, 'metal': 60, 'oil': 20}
             elif support:
                 hp, attack, reach, speed = {'civilian': 40, 'scholar': 50, 'merchant': 50, 'priest': 35, 'medic': 60, 'repair': 45, 'supply': 120}[line], 2 if line == 'civilian' else 0, 0, {'priest': 1100, 'medic': 1400, 'repair': 2600, 'merchant': 1500}.get(line, 1300)
                 prices = {'food': 20} if line == 'civilian' else {'wealth': 40}
@@ -289,7 +297,7 @@ def generate():
                 armor_class_id=Ref(ac, 'armor_class'), los=2000 if line == 'civilian' else 5000 if line == 'infantry' else 9000 if line in ('scout', 'starship') else 6000,
                 pop_cost=2 if line == 'starship' else 1, build_ticks=ticks, ramp_mode='per_type', upgrades_from_id=Ref(old) if old else None,
                 first_age_id=Ref('age.' + AGES[age]))
-            tag(full, 'mechanical' if mechanical else 'biological', 'civilian' if line in ('civilian', 'scholar', 'merchant', 'priest') else 'military')
+            tag(full, 'mechanical' if mechanical else 'biological', 'civilian' if line in ('civilian', 'scholar', 'merchant', 'caravan', 'priest') else 'military')
             role = 'vehicle' if mounted and age >= 5 else 'mounted' if mounted else 'aircraft' if aircraft else 'ship' if line == 'warship' else 'starship' if line == 'starship' else 'siege' if line == 'siege' else 'infantry' if not support else None
             if role:
                 tag(full, role)
@@ -306,8 +314,13 @@ def generate():
                     row('et_harvester', entity_type_id=Ref(full), resource_id=Ref('res.' + resource), amount=10)
             if line == 'scholar':
                 row('et_harvester', entity_type_id=Ref(full), resource_id=Ref('res.knowledge'), amount=10)
-            if line == 'merchant':
-                row('et_trader', entity_type_id=Ref(full), claims_nodes=1)
+            if line in ('merchant', 'caravan'):
+                row('et_trader', entity_type_id=Ref(full), runs_routes=1, claims_nodes=0,
+                    route_resource_id=Ref('res.wealth'), route_income=3 if line == 'merchant' else 6 + 3 * step_index)
+            if line == 'caravan':
+                need(full, 'tech.commerce.2')
+            if line == 'priest':
+                tag(full, 'clergy')
             if line in ('priest', 'medic', 'repair'):
                 tag(full, 'healer')
                 row('et_healer', entity_type_id=Ref(full), target_tag_id=Ref('mechanical' if line == 'repair' else 'biological', 'tag'),

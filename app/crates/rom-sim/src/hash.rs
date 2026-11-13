@@ -70,6 +70,15 @@ impl StateHash {
             self.u32(resource.0);
             self.bytes(&amount.to_le_bytes());
         }
+        self.optional(order.route.as_ref(), |h, route| {
+            h.u32(route.info.trader.0);
+            h.u32(route.info.home.0);
+            h.u32(route.info.target.0);
+            h.u64(route.info.length);
+            h.bytes(&route.info.per_trip_income.to_le_bytes());
+            h.u32(route.resource.0);
+            h.bytes(&[u8::from(route.to_target), u8::from(route.started)]);
+        });
         self.optional(order.movement.as_ref(), |h, movement| {
             h.pos(movement.origin);
             h.u64(movement.distance);
@@ -142,7 +151,7 @@ impl World {
     /// Hashes complete mutable state in little-endian field order with FNV-1a 64.
     pub fn hash(&self) -> u64 {
         let mut hash = StateHash(0xcbf29ce484222325);
-        hash.bytes(b"rom-sim-state-10");
+        hash.bytes(b"rom-sim-state-11");
         hash.match_state(self);
         hash.u64(self.tick);
         hash.u64(self.rng.state());
@@ -199,6 +208,7 @@ impl World {
             hash.order(order);
             hash.bytes(&[u8::from(*append)]);
         }
+        hash.u64(self.stats.trade_trips);
         hash.u64(self.stats.cities_captured);
         hash.u64(self.stats.orders_done);
         hash.u64(self.stats.orders_failed);
@@ -356,6 +366,7 @@ impl StateHash {
         self.bytes(&entity.move_remainder.to_le_bytes());
         self.bytes(&entity.gather_slots.to_le_bytes());
         self.optional(entity.work_site, |h, id| h.u32(id.0));
+        self.optional(entity.container_id, |h, id| h.u32(id.0));
         self.optional(entity.city_id, |h, id| h.u32(id.0));
         self.u64(entity.idle_ticks);
         self.u64(entity.orders.len() as u64);

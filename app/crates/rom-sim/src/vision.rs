@@ -217,8 +217,11 @@ impl World {
                 .is_some_and(|(a, b)| a.team == b.team)
     }
 
-    /// Whether a player sees an entity: always for own and allied ones.
+    /// Whether a player sees a surface entity; contained nodes are hidden.
     pub(crate) fn sees_entity(&self, player: PlayerId, e: &Entity) -> bool {
+        if e.container_id.is_some() {
+            return false;
+        }
         self.allied(player, e.owner) || {
             let slot = self.slot(e.pos.body);
             self.surfaces[slot]
@@ -279,6 +282,9 @@ impl World {
     /// The viewer an entity should be now.
     fn desired_viewer(&self, id: EntityId) -> Option<Viewer> {
         let e = self.entity(id)?;
+        if e.container_id.is_some() {
+            return None;
+        }
         Some(Viewer {
             body: e.pos.body,
             tile: self.geo(e.pos.body).pos_index(e.pos)? as u32,

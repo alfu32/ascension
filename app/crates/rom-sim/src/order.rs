@@ -79,6 +79,7 @@ pub struct Order {
     pub automatic: bool,
     /// Original position for a defensive pursuit or return.
     pub home: Option<Pos>,
+    pub(crate) route: Option<Box<crate::wealth::RouteState>>,
     pub(crate) movement: Option<MoveState>,
 }
 
