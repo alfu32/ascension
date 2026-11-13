@@ -476,14 +476,6 @@ fn same_request_same_map_with_factions() {
 
 #[test]
 fn flat_generation_is_unchanged() {
-    // Recorded on main d70efc0 before changing sphere generation (Task 23).
-    let r = rules();
-    let m = make(&r, "map.one_world", 1, 4, 256);
-    assert_eq!(m.hash(), 0x234dcc28b4a98b6f);
-}
-
-#[test]
-fn flat_generation_is_unchanged() {
     let mut r = rules();
     // Captured from main (06184bc), before polar data and generation changes.
     let expected = 0x234d_cc28_b4a9_8b6f;

@@ -154,8 +154,9 @@ fn features_and_nodes_on_valid_tiles_outside_start_radius() {
     let rules = rules();
     let m = make(&rules, 23, 128, 8);
     let mut feature_tiles = 0;
+    let ice = rules.map_styles[&m.style].polar_terrain_id;
     for (i, &t) in m.terrain.iter().enumerate() {
-        if [m.base.land, m.base.shallow, m.base.deep].contains(&t) {
+        if [m.base.land, m.base.shallow, m.base.deep].contains(&t) || Some(t) == ice {
             continue;
         }
         feature_tiles += 1;
