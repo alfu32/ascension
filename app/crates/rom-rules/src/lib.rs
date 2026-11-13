@@ -164,6 +164,13 @@ impl Rules {
         false
     }
 
+    /// Whether an immediate successor in this upgrade line is unlocked.
+    pub fn is_obsolete(&self, def: DefId, active: &ActiveSources, owned: &Owned) -> bool {
+        self.entity_types.values().any(|next| {
+            next.upgrades_from_id == Some(def) && self.is_unlocked(next.id, active, owned)
+        })
+    }
+
     /// Tests every prerequisite OR-group using active techs/ages and owned entity types.
     pub fn is_unlocked(&self, def: DefId, active: &ActiveSources, owned: &Owned) -> bool {
         let mut groups = std::collections::BTreeMap::new();

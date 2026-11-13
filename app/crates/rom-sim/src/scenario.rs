@@ -394,3 +394,741 @@ impl World {
         Ok(world)
     }
 }
+
+/// Order-driven content audit on a map generated before the first tick.
+#[derive(Debug)]
+pub struct Playthrough {
+    world: World,
+    constructed: std::collections::BTreeSet<DefId>,
+    trained: std::collections::BTreeSet<DefId>,
+    placement_attempts: BTreeMap<DefId, (usize, usize)>,
+    ages: Vec<(DefId, u64)>,
+}
+
+impl Playthrough {
+    /// Starts with a city, a builder, neutral map nodes and one million of each base resource.
+    pub fn new(
+        rules: Arc<Rules>,
+        map: MapGrid,
+        start: Pos,
+        nodes: &[(DefId, Pos)],
+        seed: u64,
+    ) -> Result<Self, SimError> {
+        let age = rules
+            .ages
+            .values()
+            .min_by_key(|a| (a.ordinal, a.id))
+            .ok_or(SimError::ScenarioUnavailable("starting age"))?
+            .id;
+        let faction = rules
+            .playable_start_factions(age)
+            .into_iter()
+            .next()
+            .ok_or(SimError::ScenarioUnavailable("starting faction"))?;
+        let neutral = rules
+            .factions
+            .values()
+            .find(|f| f.kind == rom_rules::FactionKind::Npc)
+            .ok_or(SimError::ScenarioUnavailable("neutral faction"))?
+            .id;
+        let resources = rules
+            .resources
+            .values()
+            .filter(|r| r.kind == rom_rules::ResourceKind::Base)
+            .map(|r| (r.id, 1_000_000))
+            .collect();
+        let players = vec![
+            Player {
+                id: PlayerId(0),
+                team: 0,
+                faction: neutral,
+                age,
+                resources: BTreeMap::new(),
+                techs: BTreeMap::new(),
+            },
+            Player {
+                id: PlayerId(1),
+                team: 1,
+                faction,
+                age,
+                resources,
+                techs: BTreeMap::new(),
+            },
+        ];
+        let builder = rules
+            .entity_types
+            .values()
+            .find(|e| e.builder.is_some() && e.upgrades_from_id.is_none())
+            .ok_or(SimError::ScenarioUnavailable("builder type"))?
+            .id;
+        let mut world =
+            World::new(rules, map, seed, players)?.with_match_options(crate::MatchOptions {
+                victories: Default::default(),
+                ..crate::MatchOptions::default()
+            })?;
+        let city = world
+            .city_type(PlayerId(1))
+            .ok_or(SimError::ScenarioUnavailable("city type"))?;
+        let city_pos = world
+            .find_city_site(PlayerId(1), start.body, start)
+            .ok_or(SimError::ScenarioUnavailable("starting city site"))?;
+        world.place_for_setup(city, PlayerId(1), city_pos)?;
+        world.spawn(builder, PlayerId(1), world.offset(city_pos, 5000, 0))?;
+        for (type_id, pos) in nodes {
+            world.spawn(*type_id, PlayerId(0), *pos)?;
+        }
+        Ok(Self {
+            world,
+            constructed: [city].into_iter().collect(),
+            trained: Default::default(),
+            placement_attempts: BTreeMap::new(),
+            ages: vec![(age, 0)],
+        })
+    }
+
+    /// Immutable state for progress, statistics and the deterministic state hash.
+    pub fn world(&self) -> &World {
+        &self.world
+    }
+
+    /// Stable hash of the match and the bot's production history and placement cache.
+    pub fn hash(&self) -> u64 {
+        let mut hash = self.world.hash();
+        let mut add = |value: u64| {
+            for byte in value.to_le_bytes() {
+                hash = (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3);
+            }
+        };
+        for set in [&self.constructed, &self.trained] {
+            add(set.len() as u64);
+            for id in set {
+                add(u64::from(id.0));
+            }
+        }
+        add(self.placement_attempts.len() as u64);
+        for (id, (entities, techs)) in &self.placement_attempts {
+            add(u64::from(id.0));
+            add(*entities as u64);
+            add(*techs as u64);
+        }
+        add(self.ages.len() as u64);
+        for (id, tick) in &self.ages {
+            add(u64::from(id.0));
+            add(*tick);
+        }
+        hash
+    }
+
+    /// Ages reached, in order, including the starting age at tick zero.
+    pub fn ages(&self) -> &[(DefId, u64)] {
+        &self.ages
+    }
+
+    /// Whether every available production item has been exercised and completed.
+    pub fn is_complete(&self) -> bool {
+        use rom_rules::ProductionMode;
+        let player = &self.world.players[&PlayerId(1)];
+        self.world.rules.production.values().flatten().all(|row| {
+            if !self
+                .world
+                .rules
+                .is_available(row.product_def_id, player.faction)
+            {
+                return true;
+            }
+            match row.mode {
+                ProductionMode::Construct => self.constructed.contains(&row.product_def_id),
+                ProductionMode::Train => self.trained.contains(&row.product_def_id),
+                ProductionMode::Research => player.techs.contains_key(&row.product_def_id),
+                ProductionMode::Morph => true,
+            }
+        }) && !self
+            .world
+            .all_orders()
+            .any(|o| matches!(o.kind.as_str(), "construct" | "train" | "research"))
+    }
+
+    /// Advances one tick, issuing only ordinary construct, research and train orders.
+    pub fn step(&mut self) {
+        self.plan();
+        self.world.step();
+        let age = self.world.players[&PlayerId(1)].age;
+        if self
+            .ages
+            .last()
+            .is_none_or(|(previous, _)| *previous != age)
+        {
+            self.ages.push((age, self.world.tick()));
+        }
+    }
+
+    fn plan(&mut self) {
+        use rom_rules::{ProductionMode, TechKind};
+        let player = PlayerId(1);
+        let rules = self.world.rules.clone();
+        self.constructed.extend(
+            self.world
+                .entities()
+                .filter(|e| {
+                    e.owner == player
+                        && e.build_progress.is_none()
+                        && rules.entity_types[&e.type_id].class == rom_rules::EntityClass::Building
+                })
+                .map(|e| e.type_id),
+        );
+        let owner = &self.world.players[&player];
+        let active = owner.active_sources();
+        let owned = owner.owned_types(&self.world);
+        let faction = owner.faction;
+        let researched: std::collections::BTreeSet<_> = owner.techs.keys().copied().collect();
+        let queued: std::collections::BTreeSet<_> = self
+            .world
+            .all_orders()
+            .filter(|o| o.player == player)
+            .filter_map(|o| o.subject)
+            .collect();
+        let executors: Vec<_> = self
+            .world
+            .entities()
+            .filter(|e| {
+                e.owner == player
+                    && e.build_progress.is_none()
+                    && e.orders.iter().all(|o| o.kind == "harvest")
+            })
+            .map(|e| (e.id, e.type_id))
+            .collect();
+        let signature = (
+            self.world
+                .entities()
+                .filter(|e| e.build_progress.is_none())
+                .count(),
+            researched.len(),
+        );
+        for (executor, type_id) in executors {
+            let products = rules
+                .production
+                .get(&type_id)
+                .map_or(&[][..], Vec::as_slice);
+            let mut choices: Vec<_> = products
+                .iter()
+                .filter(|p| {
+                    !queued.contains(&p.product_def_id)
+                        && rules.is_available(p.product_def_id, faction)
+                        && rules.is_unlocked(p.product_def_id, &active, &owned)
+                })
+                .collect();
+            // Train each step before researching its successor. Library ages come
+            // first, then the lowest unresearched level of each track, then projects.
+            choices.sort_by_key(|p| {
+                let tech = rules.techs.get(&p.product_def_id);
+                (
+                    match p.mode {
+                        ProductionMode::Train => 0,
+                        ProductionMode::Research
+                            if tech.is_some_and(|t| t.kind == TechKind::Age) =>
+                        {
+                            1
+                        }
+                        ProductionMode::Research
+                            if tech.is_some_and(|t| t.kind == TechKind::Track) =>
+                        {
+                            2
+                        }
+                        ProductionMode::Research => 3,
+                        _ => 4,
+                    },
+                    tech.map_or(0, |t| t.level),
+                    p.product_def_id,
+                )
+            });
+            for p in choices {
+                let subject = p.product_def_id;
+                let mut pos = None;
+                match p.mode {
+                    ProductionMode::Construct => {
+                        let city = self.world.is_city_type(subject);
+                        if !city
+                            && (self.constructed.contains(&subject) || owned.contains(&subject))
+                        {
+                            continue;
+                        }
+                        if city && self.world.city_count(player) >= self.world.city_limit(player) {
+                            continue;
+                        }
+                        if self.placement_attempts.get(&subject) == Some(&signature) {
+                            continue;
+                        }
+                        pos = self.building_site(subject);
+                        if pos.is_none() {
+                            self.placement_attempts.insert(subject, signature);
+                            continue;
+                        }
+                    }
+                    ProductionMode::Train => {
+                        if self.trained.contains(&subject)
+                            || rules.is_obsolete(subject, &active, &owned)
+                        {
+                            continue;
+                        }
+                    }
+                    ProductionMode::Research => {
+                        if researched.contains(&subject) {
+                            continue;
+                        }
+                        let tech = &rules.techs[&subject];
+                        if tech.kind == TechKind::Track
+                            && rules.techs.values().any(|earlier| {
+                                earlier.kind == TechKind::Track
+                                    && earlier.track == tech.track
+                                    && earlier.level < tech.level
+                                    && !researched.contains(&earlier.id)
+                            })
+                        {
+                            continue;
+                        }
+                    }
+                    ProductionMode::Morph => continue,
+                }
+                let kind = match p.mode {
+                    ProductionMode::Construct => "construct",
+                    ProductionMode::Train => "train",
+                    ProductionMode::Research => "research",
+                    ProductionMode::Morph => unreachable!(),
+                };
+                if self
+                    .world
+                    .submit(Command {
+                        player,
+                        executor,
+                        kind: kind.into(),
+                        subject: Some(subject),
+                        target_entity: None,
+                        target_pos: pos,
+                        queue: false,
+                    })
+                    .is_ok()
+                {
+                    match p.mode {
+                        ProductionMode::Construct => {
+                            self.constructed.insert(subject);
+                        }
+                        ProductionMode::Train => {
+                            self.trained.insert(subject);
+                        }
+                        _ => {}
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    fn building_site(&self, subject: DefId) -> Option<Pos> {
+        let player = PlayerId(1);
+        // Square rings give a stable outward spiral around each city. Both the
+        // placement preview and the per-city limit must pass before submission.
+        for city in self.world.cities(player) {
+            let centre = self.world.entity(city)?.pos;
+            for radius in 0_i32..=64 {
+                let ring: Vec<_> = if radius == 0 {
+                    vec![(0, 0)]
+                } else {
+                    (-radius..radius)
+                        .flat_map(|n| [(n, -radius), (radius, n), (-n, radius), (-radius, -n)])
+                        .collect()
+                };
+                for (dx, dy) in ring {
+                    let pos = self
+                        .world
+                        .offset(centre, i64::from(dx) * 1000, i64::from(dy) * 1000);
+                    if self.world.territory_owner(pos.x / 1000, pos.y / 1000) != Some(player) {
+                        continue;
+                    }
+                    if self.world.rules.entity_types[&subject]
+                        .placement_rules
+                        .iter()
+                        .any(|rule| {
+                            rule.rule == rom_rules::PlacementKind::OnTerrain
+                                && self.world.terrain_at(pos) != rule.ref_def_id
+                        })
+                    {
+                        continue;
+                    }
+                    let candidate = crate::construction::footprint(
+                        &self.world.rules.entity_types[&subject],
+                        pos,
+                    );
+                    // Leave a tile-wide lane between footprints so completed
+                    // buildings cannot enclose a builder or block later sites.
+                    let blocked = self
+                        .world
+                        .entities()
+                        .filter(|e| self.world.is_building(e.type_id))
+                        .any(|e| {
+                            let other = crate::construction::footprint(
+                                &self.world.rules.entity_types[&e.type_id],
+                                e.pos,
+                            );
+                            candidate[0] - 1000 < other[2]
+                                && other[0] < candidate[2] + 1000
+                                && candidate[1] - 1000 < other[3]
+                                && other[1] < candidate[3] + 1000
+                        });
+                    if blocked {
+                        continue;
+                    }
+                    if let Ok(pos) = self.world.check_placement(player, subject, pos)
+                        && self.world.check_city_limit(player, subject, pos).is_ok()
+                    {
+                        return Some(pos);
+                    }
+                }
+            }
+        }
+        None
+    }
+}
+
+#[cfg(test)]
+mod content_tests {
+    use super::*;
+    use rom_rules::build_rules_db;
+
+    fn rules() -> Arc<Rules> {
+        let db = build_rules_db(
+            include_str!("../../../db/schema.sql"),
+            include_str!("../../../db/seed.sql"),
+        )
+        .unwrap();
+        Arc::new(Rules::load(&db).unwrap())
+    }
+
+    fn audit() -> Playthrough {
+        audit_at_pace(1)
+    }
+
+    fn audit_at_pace(pace: i64) -> Playthrough {
+        let mut catalogue = (*rules()).clone();
+        // Accelerate durations and travel in the debug progression tests; costs,
+        // prerequisites, effects and the complete generated roster stay intact.
+        for tech in catalogue.techs.values_mut() {
+            tech.research_ticks = (tech.research_ticks / pace).max(1);
+        }
+        for entity in catalogue.entity_types.values_mut() {
+            entity.build_ticks = (entity.build_ticks / pace).max(1);
+            if let Some(movement) = &mut entity.movement {
+                movement.speed *= pace;
+            }
+        }
+        let r = Arc::new(catalogue);
+        // Uniform land with a shore and deposits: the CLI separately audits the
+        // generated one-world map, while these tests isolate content progression.
+        let mut terrain = vec![r.id_of("ter.plain").unwrap(); 128 * 128];
+        for y in 0..128 {
+            for x in 0..128 {
+                let key = if x < 12 {
+                    Some("ter.coast")
+                } else if (20..24).contains(&x) && (20..24).contains(&y) {
+                    Some("ter.oil")
+                } else if (50..54).contains(&x) && (20..24).contains(&y) {
+                    Some("ter.forest")
+                } else if (20..24).contains(&x) && (50..54).contains(&y) {
+                    Some("ter.mountain")
+                } else {
+                    None
+                };
+                if let Some(key) = key {
+                    terrain[y * 128 + x] = r.id_of(key).unwrap();
+                }
+            }
+        }
+        Playthrough::new(
+            r,
+            MapGrid::new(128, 128, terrain).unwrap(),
+            Pos::flat(32_500, 32_500),
+            &[],
+            1,
+        )
+        .unwrap()
+    }
+
+    fn reach(audit: &mut Playthrough, ordinal: i64) {
+        while audit.world.rules.ages[&audit.world.players[&PlayerId(1)].age].ordinal < ordinal
+            && audit.world.tick() < 100_000
+        {
+            audit.step();
+        }
+        assert_eq!(
+            audit.world.rules.ages[&audit.world.players[&PlayerId(1)].age].ordinal,
+            ordinal
+        );
+    }
+
+    #[test]
+    fn playthrough_reaches_industrial() {
+        let mut audit = audit_at_pace(100);
+        reach(&mut audit, 5);
+        assert!(audit.world.tick() < 30_000);
+        assert_eq!(audit.world.stats.orders_unsupported, 0);
+    }
+
+    #[test]
+    #[ignore = "full fourteen-age content audit; also run by the release CLI gate"]
+    fn playthrough_reaches_galactic() {
+        let mut audit = audit();
+        reach(&mut audit, 13);
+        assert!(audit.world.tick() < 400_000);
+    }
+
+    #[test]
+    fn playthrough_is_deterministic() {
+        let mut first = audit_at_pace(100);
+        let mut second = audit_at_pace(100);
+        for _ in 0..120 {
+            first.step();
+            second.step();
+        }
+        assert!(first.ages.len() > 1);
+        assert_eq!(first.world.hash(), second.world.hash());
+        assert_eq!(first.hash(), second.hash());
+        assert_eq!(first.ages, second.ages);
+        assert_eq!(first.constructed, second.constructed);
+        assert_eq!(first.trained, second.trained);
+    }
+
+    #[test]
+    fn barracks_needs_military_1() {
+        let mut a = audit();
+        let r = a.world.rules.clone();
+        let b = r.id_of("bld.barracks").unwrap();
+        let builder = a
+            .world
+            .entities()
+            .find(|e| r.entity_types[&e.type_id].builder.is_some())
+            .unwrap()
+            .id;
+        let pos = a.building_site(b).unwrap();
+        let order = Command {
+            player: PlayerId(1),
+            executor: builder,
+            kind: "construct".into(),
+            subject: Some(b),
+            target_entity: None,
+            target_pos: Some(pos),
+            queue: true,
+        };
+        let before = a.world.hash();
+        assert_eq!(a.world.submit(order.clone()), Err(SimError::Locked));
+        assert_eq!(a.world.hash(), before);
+        a.world
+            .players
+            .get_mut(&PlayerId(1))
+            .unwrap()
+            .techs
+            .insert(r.id_of("tech.military.1").unwrap(), 1);
+        a.world.submit(order).unwrap();
+    }
+
+    #[test]
+    fn classical_needs_two_level_one_tracks() {
+        let mut a = audit();
+        let r = a.world.rules.clone();
+        let library = a
+            .world
+            .spawn(
+                r.id_of("bld.library").unwrap(),
+                PlayerId(1),
+                Pos::flat(60_000, 60_000),
+            )
+            .unwrap();
+        let order = Command {
+            player: PlayerId(1),
+            executor: library,
+            kind: "research".into(),
+            subject: r.id_of("tech.age.classical"),
+            target_entity: None,
+            target_pos: None,
+            queue: true,
+        };
+        assert_eq!(a.world.submit(order.clone()), Err(SimError::Locked));
+        a.world
+            .players
+            .get_mut(&PlayerId(1))
+            .unwrap()
+            .techs
+            .insert(r.id_of("tech.military.1").unwrap(), 1);
+        assert_eq!(a.world.submit(order.clone()), Err(SimError::Locked));
+        a.world
+            .players
+            .get_mut(&PlayerId(1))
+            .unwrap()
+            .techs
+            .insert(r.id_of("tech.commerce.1").unwrap(), 1);
+        a.world.submit(order).unwrap();
+    }
+
+    #[test]
+    fn automation_releases_workers_and_replaces_their_income() {
+        let run = || {
+            let mut a = audit();
+            let r = a.world.rules.clone();
+            a.world.players.get_mut(&PlayerId(1)).unwrap().age = r.id_of("age.automation").unwrap();
+            let farm = a
+                .world
+                .place_for_setup(
+                    r.id_of("bld.farm").unwrap(),
+                    PlayerId(1),
+                    Pos::flat(60_000, 60_000),
+                )
+                .unwrap();
+            let worker = a
+                .world
+                .spawn(
+                    r.id_of("unit.citizen").unwrap(),
+                    PlayerId(1),
+                    Pos::flat(57_500, 60_000),
+                )
+                .unwrap();
+            a.world
+                .submit(Command {
+                    player: PlayerId(1),
+                    executor: worker,
+                    kind: "harvest".into(),
+                    subject: None,
+                    target_entity: Some(farm),
+                    target_pos: None,
+                    queue: false,
+                })
+                .unwrap();
+            a.world.step();
+            assert_eq!(a.world.entity(worker).unwrap().work_site, Some(farm));
+            a.world
+                .submit(Command {
+                    player: PlayerId(1),
+                    executor: farm,
+                    kind: "research".into(),
+                    subject: r.id_of("tech.up.auto_farm"),
+                    target_entity: None,
+                    target_pos: None,
+                    queue: true,
+                })
+                .unwrap();
+            for _ in 0..700 {
+                a.world.step();
+            }
+            assert_eq!(
+                a.world.entity(farm).unwrap().type_id,
+                r.id_of("bld.auto_farm").unwrap()
+            );
+            assert_eq!(a.world.entity(farm).unwrap().gather_slots, 0);
+            assert_eq!(a.world.entity(worker).unwrap().work_site, None);
+            // Upgraded farms still count toward the original per-city limit.
+            let city_pos = a.world.entity(a.world.cities(PlayerId(1))[0]).unwrap().pos;
+            for n in 0..5 {
+                a.world
+                    .place_for_setup(
+                        r.id_of("bld.auto_farm").unwrap(),
+                        PlayerId(1),
+                        a.world.offset(city_pos, 8000, n * 1000),
+                    )
+                    .unwrap();
+            }
+            assert_eq!(
+                a.world
+                    .check_city_limit(PlayerId(1), r.id_of("bld.farm").unwrap(), city_pos),
+                Err(SimError::LimitReached)
+            );
+            assert_eq!(
+                a.world
+                    .income(PlayerId(1), r.id_of("res.food").unwrap())
+                    .raw,
+                60
+            );
+            a.world.hash()
+        };
+        assert_eq!(run(), run());
+    }
+
+    #[test]
+    fn training_an_obsolete_type_is_rejected() {
+        let mut a = audit();
+        let r = a.world.rules.clone();
+        let owner = a.world.players.get_mut(&PlayerId(1)).unwrap();
+        owner.age = r.id_of("age.classical").unwrap();
+        owner.techs.insert(r.id_of("tech.up.hoplite").unwrap(), 1);
+        owner.resources.clear(); // Obsolete must be checked before the price.
+        let b = a
+            .world
+            .spawn(
+                r.id_of("bld.barracks").unwrap(),
+                PlayerId(1),
+                Pos::flat(60_000, 60_000),
+            )
+            .unwrap();
+        let before = a.world.hash();
+        assert_eq!(
+            a.world.submit(Command {
+                player: PlayerId(1),
+                executor: b,
+                kind: "train".into(),
+                subject: r.id_of("unit.spearman"),
+                target_entity: None,
+                target_pos: None,
+                queue: true
+            }),
+            Err(SimError::Obsolete)
+        );
+        assert_eq!(before, a.world.hash());
+    }
+
+    #[test]
+    fn upgrade_tech_converts_existing_units_and_obsoletes_the_old_step() {
+        let run = || {
+            let mut a = audit();
+            let r = a.world.rules.clone();
+            a.world.players.get_mut(&PlayerId(1)).unwrap().age = r.id_of("age.classical").unwrap();
+            let b = a
+                .world
+                .spawn(
+                    r.id_of("bld.barracks").unwrap(),
+                    PlayerId(1),
+                    Pos::flat(60_000, 60_000),
+                )
+                .unwrap();
+            let unit = a
+                .world
+                .spawn(
+                    r.id_of("unit.spearman").unwrap(),
+                    PlayerId(1),
+                    Pos::flat(60_000, 65_000),
+                )
+                .unwrap();
+            let old_max = a.world.entity(unit).unwrap().max_hp;
+            a.world.entities[unit.0 as usize].as_mut().unwrap().hp = old_max / 2;
+            a.world
+                .submit(Command {
+                    player: PlayerId(1),
+                    executor: b,
+                    kind: "research".into(),
+                    subject: r.id_of("tech.up.hoplite"),
+                    target_entity: None,
+                    target_pos: None,
+                    queue: true,
+                })
+                .unwrap();
+            for _ in 0..400 {
+                a.world.step();
+            }
+            let e = a.world.entity(unit).unwrap();
+            assert_eq!(e.type_id, r.id_of("unit.hoplite").unwrap());
+            assert_eq!(e.hp, e.max_hp / 2);
+            assert!(r.is_obsolete(
+                r.id_of("unit.spearman").unwrap(),
+                &a.world.players[&PlayerId(1)].active_sources(),
+                &a.world.owned_types(PlayerId(1))
+            ));
+            a.world.hash()
+        };
+        assert_eq!(run(), run());
+    }
+}

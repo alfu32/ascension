@@ -477,8 +477,8 @@ fn same_request_same_map_with_factions() {
 #[test]
 fn flat_generation_is_unchanged() {
     let mut r = rules();
-    // Captured from main (06184bc), before polar data and generation changes.
-    let expected = 0x234d_cc28_b4a9_8b6f;
+    // Includes generated content and oil deposits; polar knobs still do not affect flat maps.
+    let expected = 0x1f501b11aab202d7;
     assert_eq!(make(&r, "map.one_world", 1, 4, 256).hash(), expected);
     let style = r.id_of("map.one_world").unwrap();
     let knobs = r.map_styles.get_mut(&style).unwrap();

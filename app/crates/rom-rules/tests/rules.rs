@@ -52,7 +52,7 @@ fn loads_seed() {
         .unwrap();
     assert!(citizen.movement.is_some());
     assert!(citizen.builder.is_some());
-    assert_eq!(citizen.harvester.len(), 1);
+    assert_eq!(citizen.harvester.len(), 4);
     let temple = rules.id_of("bld.temple").unwrap();
     assert!(rules.entity_type(temple).unwrap().producer.is_some());
     assert_eq!(rules.key(temple), "bld.temple");
@@ -353,11 +353,11 @@ fn extreme_integer_values_do_not_wrap() {
 }
 
 #[test]
-fn priest_needs_religion() {
+fn priest_needs_classical_age() {
     let rules = seed();
     let priest = rules.id_of("unit.priest").unwrap();
     assert!(!rules.is_unlocked(priest, &ActiveSources::new(), &Owned::new()));
-    assert!(rules.is_unlocked(priest, &sources(&rules, &["tech.religion"]), &Owned::new()));
+    assert!(rules.is_unlocked(priest, &sources(&rules, &["age.classical"]), &Owned::new()));
 }
 
 #[test]
@@ -370,7 +370,11 @@ fn age_requirement_met_by_later_age() {
         ("age.medieval", true),
     ] {
         assert_eq!(
-            rules.is_unlocked(temple, &sources(&rules, &[age]), &Owned::new()),
+            rules.is_unlocked(
+                temple,
+                &sources(&rules, &[age, "tech.civic.1"]),
+                &Owned::new()
+            ),
             expected
         );
     }
@@ -433,7 +437,8 @@ fn assert_problem(extra: &str, invariant: &str, keys: &[&str]) {
 fn prerequisite_cycle_is_reported() {
     assert_problem(
         "INSERT INTO prerequisite SELECT a.id,b.id,0 FROM def a,def b
-        WHERE (a.key='tech.religion' AND b.key='unit.priest');",
+        WHERE (a.key='tech.religion' AND b.key='unit.priest');
+        INSERT INTO prerequisite SELECT a.id,b.id,1 FROM def a,def b WHERE a.key='unit.priest' AND b.key='tech.religion';",
         "prerequisite cycle",
         &["tech.religion", "unit.priest"],
     );
@@ -444,7 +449,8 @@ fn prerequisite_cycles_of_any_length_and_upgrade_loops_are_reported() {
     assert_problem(
         "INSERT INTO prerequisite SELECT a.id,b.id,0 FROM def a,def b WHERE
         (a.key='tech.religion' AND b.key='bld.temple') OR
-        (a.key='age.classical' AND b.key='unit.priest');",
+        (a.key='age.classical' AND b.key='unit.priest');
+        INSERT INTO prerequisite SELECT a.id,b.id,1 FROM def a,def b WHERE a.key='unit.priest' AND b.key='tech.religion';",
         "prerequisite cycle",
         &[
             "tech.religion",
@@ -902,5 +908,123 @@ fn bad_polar_cap_pct_is_reported() {
             &format!("polar_cap_pct {value} is outside 0..=50"),
             &["map.one_world"],
         );
+    }
+}
+
+#[test]
+fn generated_seed_validates_with_no_problems() {
+    assert_eq!(seed().validate(), vec![]);
+}
+
+#[test]
+fn every_age_has_an_advance_tech() {
+    use rom_rules::{TechEffectKind, TechKind};
+    let r = seed();
+    for age in r.ages.values().filter(|a| a.ordinal > 0) {
+        let advances: Vec<_> = r
+            .tech_effects
+            .values()
+            .flatten()
+            .filter(|e| e.effect == TechEffectKind::SetAge && e.target_def_id == Some(age.id))
+            .collect();
+        assert_eq!(advances.len(), 1, "{}", r.key(age.id));
+        assert_eq!(r.techs[&advances[0].tech_id].kind, TechKind::Age);
+    }
+}
+
+#[test]
+fn age_advance_needs_two_tracks() {
+    let r = seed();
+    for age in r.ages.values().filter(|a| a.ordinal > 0) {
+        let advance = r
+            .techs
+            .values()
+            .find(|t| t.kind == rom_rules::TechKind::Age && t.level == age.ordinal)
+            .unwrap();
+        let previous = r
+            .ages
+            .values()
+            .find(|a| a.ordinal == age.ordinal - 1)
+            .unwrap()
+            .id;
+        let tracks: Vec<_> = r
+            .techs
+            .values()
+            .filter(|t| t.kind == rom_rules::TechKind::Track && t.level == age.ordinal)
+            .collect();
+        for left in &tracks {
+            let one = ActiveSources::from([previous, left.id]);
+            assert!(!r.is_unlocked(advance.id, &one, &Owned::new()));
+            for right in &tracks {
+                let valid = matches!(left.track.as_str(), "military" | "civic")
+                    != matches!(right.track.as_str(), "military" | "civic");
+                assert_eq!(
+                    r.is_unlocked(
+                        advance.id,
+                        &ActiveSources::from([previous, left.id, right.id]),
+                        &Owned::new()
+                    ),
+                    valid
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn obsolete_when_successor_unlocked() {
+    let r = seed();
+    let old = r.id_of("unit.spearman").unwrap();
+    let mut active = sources(&r, &["age.classical"]);
+    assert!(!r.is_obsolete(old, &active, &Owned::new()));
+    active.insert(r.id_of("tech.up.hoplite").unwrap());
+    assert!(r.is_obsolete(old, &active, &Owned::new()));
+}
+
+#[test]
+fn unreachable_item_is_reported() {
+    assert_problem("INSERT INTO def(kind,key,name) VALUES ('tech','tech.unreachable','Unreachable');
+        INSERT INTO tech(id,kind,research_ticks) VALUES(last_insert_rowid(),'upgrade',1);
+        INSERT INTO production SELECT p.id,t.id,'research','',0,0 FROM def p,def t WHERE p.key='bld.library' AND t.key='tech.unreachable';
+        INSERT INTO prerequisite SELECT t.id,r.id,0 FROM def t,def r WHERE t.key='tech.unreachable' AND r.key='res.food';",
+        "unreachable item", &["tech.unreachable"]);
+}
+
+#[test]
+fn every_line_has_one_first_step_and_continuous_ages() {
+    let r = seed();
+    let mut lines: std::collections::BTreeMap<&str, Vec<_>> = Default::default();
+    for unit in r
+        .entity_types
+        .values()
+        .filter(|e| e.class == rom_rules::EntityClass::Unit)
+    {
+        lines.entry(&unit.ui_group).or_default().push(unit);
+    }
+    assert_eq!(lines.len(), 19);
+    for (line, steps) in lines {
+        let roots: Vec<_> = steps
+            .iter()
+            .filter(|u| u.upgrades_from_id.is_none())
+            .collect();
+        assert_eq!(roots.len(), 1, "{line}");
+        let mut current = roots[0].id;
+        let mut visited = std::collections::BTreeSet::from([current]);
+        loop {
+            let next: Vec<_> = steps
+                .iter()
+                .filter(|u| u.upgrades_from_id == Some(current))
+                .collect();
+            assert!(next.len() <= 1, "branched {line}");
+            let Some(next) = next.first() else {
+                break;
+            };
+            let old_age = r.ages[&r.entity_types[&current].first_age_id.unwrap()].ordinal;
+            let new_age = r.ages[&next.first_age_id.unwrap()].ordinal;
+            assert!(new_age >= old_age, "{line}");
+            assert!(visited.insert(next.id));
+            current = next.id;
+        }
+        assert_eq!(visited.len(), steps.len(), "disconnected {line}");
     }
 }

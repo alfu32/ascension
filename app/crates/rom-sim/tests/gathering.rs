@@ -293,13 +293,13 @@ fn commerce_cap_limits_capped_resources_only() {
 
 #[test]
 fn income_modifier_applies() {
-    let mut w = setup(rules("INSERT INTO def(kind,key,name) VALUES ('tech','tech.agriculture','Agriculture');
-        INSERT INTO tech(id,kind,research_ticks) SELECT id,'upgrade',1 FROM def WHERE key='tech.agriculture';
-        INSERT INTO production(producer_type_id,product_def_id,mode) SELECT p.id,t.id,'research' FROM def p,def t WHERE p.key='bld.library' AND t.key='tech.agriculture';
-        INSERT INTO modifier(source_def_id,stat_key,op,value) SELECT id,'income.food','pct',50 FROM def WHERE key='tech.agriculture';"), &[]);
+    let mut w = setup(rules("INSERT INTO def(kind,key,name) VALUES ('tech','tech.test_income','Agriculture');
+        INSERT INTO tech(id,kind,research_ticks) SELECT id,'upgrade',1 FROM def WHERE key='tech.test_income';
+        INSERT INTO production(producer_type_id,product_def_id,mode) SELECT p.id,t.id,'research' FROM def p,def t WHERE p.key='bld.library' AND t.key='tech.test_income';
+        INSERT INTO modifier(source_def_id,stat_key,op,value) SELECT id,'income.food','pct',50 FROM def WHERE key='tech.test_income';"), &[]);
     working(&mut w);
     let library = spawn(&mut w, "bld.library", at(30_000, 10_000));
-    w.submit(research(&w, library, "tech.agriculture")).unwrap();
+    w.submit(research(&w, library, "tech.test_income")).unwrap();
     w.step();
     let before = balance(&w, "res.food");
     let period = constant(&w, "economy.income_period_ticks");
@@ -432,6 +432,14 @@ fn bootstrap_to_classical_age_using_only_orders() {
             .find(|e| e.type_id == id(&w, "bld.library"))
             .unwrap()
             .id;
+        // The generated age advance needs two Library tracks. Grant their
+        // starting budget, then obtain both prerequisites through normal orders.
+        w.grant(OWNER, id(&w, "res.food"), 400).unwrap();
+        w.grant(OWNER, id(&w, "res.timber"), 400).unwrap();
+        for track in ["tech.military.1", "tech.commerce.1"] {
+            w.submit(research(&w, library, track)).unwrap();
+            ticks(&mut w, 400);
+        }
         w.submit(research(&w, library, "tech.age.classical"))
             .unwrap();
         ticks(&mut w, 600);
@@ -508,7 +516,9 @@ fn income_remainders_are_independent_per_player_and_resource() {
 fn missing_income_stat_preserves_raw_and_incomplete_self_income_does_not_pay() {
     let mut w = setup(
         rules(
-            "DELETE FROM stat WHERE key='income.food';
+            "DELETE FROM modifier WHERE stat_key='income.food';
+        DELETE FROM stat WHERE key='income.food';
+        UPDATE entity_type SET build_ticks=400 WHERE id=(SELECT id FROM def WHERE key='bld.library');
         INSERT INTO et_gather_site(entity_type_id,resource_id,self_income,slots_base,slots_max)
         SELECT s.id,r.id,600,0,0 FROM def s,def r WHERE s.key='bld.library' AND r.key='res.food';",
         ),

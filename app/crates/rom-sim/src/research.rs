@@ -119,6 +119,7 @@ mod tests {
             SELECT t.id,'upgrade_type',f.id,x.id FROM def t,def f,def x
             WHERE t.key='tech.age.classical' AND f.key='unit.citizen' AND x.key='unit.spearman';
             UPDATE tech SET research_ticks=1 WHERE id=(SELECT id FROM def WHERE key='tech.age.classical');").unwrap();
+        conn.execute_batch("DELETE FROM prerequisite WHERE def_id=(SELECT id FROM def WHERE key='tech.age.classical');").unwrap();
         let rules = Arc::new(Rules::load(&conn).unwrap());
         let run = || {
             let mut w = World::movement_scenario(rules.clone(), 7, 0).unwrap();
@@ -157,7 +158,7 @@ mod tests {
             w.step();
             let upgraded = w.entity(unit).unwrap();
             assert_eq!(upgraded.type_id, spear);
-            assert_eq!(upgraded.hp, 27); // 10/40 of 110, rounded down.
+            assert_eq!(upgraded.hp, 25); // 10/40 of 100.
             assert_eq!(upgraded.id, unit);
             assert_eq!(w.entity(foreign).unwrap().type_id, citizen);
             assert!(w.entity(EntityId(999)).is_none());

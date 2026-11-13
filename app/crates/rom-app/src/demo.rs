@@ -250,7 +250,8 @@ impl DemoDriver {
                 match world.submit(command) {
                     Ok(_) => return true,
                     Err(
-                        error @ (SimError::PlacementOverlap
+                        error @ (SimError::NotOnTerrain
+                        | SimError::PlacementOverlap
                         | SimError::UnbuildableTerrain
                         | SimError::OutsideMap),
                     ) => errors.push(error),
@@ -334,7 +335,8 @@ mod tests {
             assert!(
                 matches!(
                     error,
-                    SimError::PlacementOverlap
+                    SimError::NotOnTerrain
+                        | SimError::PlacementOverlap
                         | SimError::UnbuildableTerrain
                         | SimError::OutsideMap
                         | SimError::InsufficientResources

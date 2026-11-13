@@ -24,7 +24,7 @@ fn world_on(rules: Arc<Rules>, terrain: impl Fn(i32, i32) -> &'static str) -> Wo
             faction: rules.id_of("nation.romans").unwrap(),
             age: rules.id_of("age.ancient").unwrap(),
             resources: rules.resources.keys().map(|r| (*r, 100_000)).collect(),
-            techs: BTreeMap::new(),
+            techs: [(rules.id_of("tech.military.1").unwrap(), 1)].into(),
         })
         .collect();
     let tiles = (0..64 * 64)
@@ -498,7 +498,10 @@ fn each_placement_rule_kind_is_enforced() {
         let sql = if case.sql.is_empty() {
             String::new()
         } else {
-            format!("{wide}{}", case.sql)
+            format!(
+                "{wide}DELETE FROM placement_rule WHERE rule='on_terrain' AND entity_type_id=(SELECT id FROM def WHERE key='bld.barracks');{}",
+                case.sql
+            )
         };
         let mut w = world_on(rules(&sql), |x, y| {
             if (5..=12).contains(&x) && (5..=12).contains(&y) {

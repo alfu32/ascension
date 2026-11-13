@@ -1,8 +1,8 @@
 # Game database
 
 Files: [`../db/schema.sql`](../db/schema.sql) (88 tables, 4 views) and
-[`../db/seed.sql`](../db/seed.sql) (a small placeholder dataset that exercises
-every part of the schema). Both load cleanly in SQLite ≥ 3.37:
+[`../db/seed.sql`](../db/seed.sql) (the full generated content catalogue and hand-written
+world rules). Both load cleanly in SQLite ≥ 3.37:
 
 ```sh
 sqlite3 game.db < app/db/schema.sql && sqlite3 game.db < app/db/seed.sql
@@ -271,6 +271,17 @@ mistakes). A computer player acts only by adding rows to `order`, like a
 human. Its memory is saved in `player_ai_state`. See
 `research/05-computer-opponents.md`.
 
+## Content generator
+
+`db/content/generate.py` holds the roster, technology tracks and integer stat
+formulas specified in `content.md`. Run `python3 db/content/generate.py` from
+`app/` after editing those tables. It replaces only the marked generated block
+in `db/seed.sql`; the game continues to load that seed directly. Run
+`python3 db/content/generate.py --check` to detect stale generated SQL without
+writing anything; CI runs the same check. The generator needs only Python 3's
+standard library. Hand-written relationships to generated definitions follow
+the block so their references resolve during loading.
+
 ## Adding content (checklist for implementers)
 
 **A new unit**
@@ -293,7 +304,7 @@ does not exist, add the stat to `stat` and implement that one stat in code.
 - **User settings** (graphics, sound, hotkeys, profiles) — per-user config
   file, not game rules. See `research/04-hud-and-screens.md`.
 - **Scenario scripting / triggers** — later.
-- **Balanced content** — the seed has placeholder numbers and ~13 entity types.
+- **Final balance** — generated stats are first-pass values for playtesting.
 
 ## Decided
 

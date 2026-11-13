@@ -320,6 +320,7 @@ mod tests {
              UPDATE tech SET research_ticks=50 WHERE id=(SELECT id FROM def WHERE key='tech.age.classical');",
         )
         .unwrap();
+        conn.execute_batch("DELETE FROM prerequisite WHERE def_id=(SELECT id FROM def WHERE key='tech.age.classical');").unwrap();
         let rules = Arc::new(Rules::load(&conn).unwrap());
         let id = |key: &str| rules.id_of(key).unwrap();
         let player = Player {

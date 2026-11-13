@@ -43,6 +43,7 @@ pub use order::{Command, Order, OrderId, OrderKindKey, OrderStatus};
 pub use pathing::PathStats;
 pub use placement::CITY_SITE_RADIUS;
 pub use rng::SimRng;
+pub use scenario::Playthrough;
 pub use space::Transit;
 pub use surface::Surface;
 pub use universe::{BodyId, BodyInfo, PlanetSurface, RouteInfo, SystemInfo, UniverseSetup};
@@ -125,6 +126,9 @@ pub enum SimError {
     /// Subject prerequisites are unmet.
     #[error("subject is locked")]
     Locked,
+    /// A successor in the subject's upgrade line is already unlocked.
+    #[error("entity type is obsolete")]
+    Obsolete,
     /// An entity limit has been reached.
     #[error("entity limit reached")]
     LimitReached,
