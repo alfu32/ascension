@@ -60,7 +60,7 @@ The content is too large to type by hand row by row. It is **generated**:
 | Track | Effect per level (modifier rows on the track tech) | Also unlocks |
 | --- | --- | --- |
 | Military | `pop_cap` +25 | military buildings (section 4) |
-| Civic | `city_limit` +1; city `border_radius` +5 % | Temple, Fort |
+| Civic | `city_limit` +1; city `border_radius` and `economic_radius` ×1.06 (`mul` 106; levels compound, 13 levels ≈ ×2.13) | Temple, Fort |
 | Commerce | `commerce_cap` +40; `caravan_limit` +1 | Market, Dock |
 | Science | `research_time` −4 %; the first level reveals the University | University, enhancers |
 
@@ -143,6 +143,17 @@ per-city limits). Page = command-palette page.
 | Vehicle Plant | military | 5 | Military 5 | replaces the Stable's line (armour) |
 | Airfield | military | 5 | Military 6 | aircraft |
 | Spaceport | military | 10 | — | starships |
+
+City growth. Each Civic level multiplies the city's `border_radius` and
+`economic_radius` stats by 1.06 (the `mul` operation compounds). Buildings also
+widen a city: its economic radius is the stat value plus
+`city.radius_per_building` (400 milli-tiles) for every completed own building
+(not cities, not sites) whose centre lies inside the radius before this bonus,
+capped at `city.radius_from_buildings_max` (8000). It is recomputed when a
+building completes, is destroyed or captured, and when a modifier changes. The
+national border is not changed by buildings. Military buildings and the
+spaceport use `in_own_territory`, so they may stand outside every city's
+economic radius; civil buildings use `in_city_radius`.
 
 Building upgrades along the ages (research at the building, `upgrade_type`):
 Tower → Bastion (4) → Bunker (6) → Defence Turret (8); Fort → Star Fort (4) →

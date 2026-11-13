@@ -23,6 +23,8 @@ INSERT INTO game_constant(key,value,unit,note) VALUES
  ('unit.respond_range',12000,'milli-tiles','aggressive stance acquisition'),
  ('citizen.auto_work_delay_ticks',200,'ticks','idle workers look for work after this'),
  ('city.spacing',20000,'milli-tiles','minimum distance between cities; below a city border radius so a second city fits inside the first one''s borders'),
+ ('city.radius_per_building',400,'milli-tiles','economic radius a city gains per completed own building inside it'),
+ ('city.radius_from_buildings_max',8000,'milli-tiles','cap on the economic radius gained from buildings'),
  ('city.assimilate_ticks',2400,'ticks','captured city becomes yours after this'),
  ('player.caravan_limit.base',2,'traders','before caravan_limit modifiers'),
  ('trade.route_unit',10000,'milli-tiles','route income length unit'),
@@ -58,7 +60,7 @@ INSERT INTO stat(key,scope,note) VALUES
  ('speed','entity',''), ('los','entity',''), ('heal_rate','entity',''), ('build_time','entity','train/construct ticks'),
  ('cost.all','entity','every resource of the cost'), ('cost.food','entity',''), ('cost.timber','entity',''),
  ('cost.metal','entity',''), ('cost.wealth','entity',''), ('cost.knowledge','entity',''),
- ('border_radius','entity',''), ('garrison_capacity','entity',''), ('attrition_taken','entity',''),
+ ('border_radius','entity',''), ('economic_radius','entity','city only: radius where civil buildings may stand'), ('garrison_capacity','entity',''), ('attrition_taken','entity',''),
  ('pop_cap','player',''), ('city_limit','player',''), ('commerce_cap','player','max income per resource'),
  ('caravan_limit','player',''), ('income.food','player',''), ('income.timber','player',''),
  ('income.metal','player',''), ('income.wealth','player',''), ('income.knowledge','player',''),
@@ -2278,79 +2280,92 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.1'),(SELECT id FROM def WHERE key='res.food'),200,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.1'),(SELECT id FROM def WHERE key='res.timber'),200,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.civic.1'),'city_limit','add',1);
-INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.1'),'border_radius','pct',5,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.1'),'border_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.1'),'economic_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.civic.2','City State');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.civic.2'),'track','civic',2,500);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.2'),(SELECT id FROM def WHERE key='res.food'),300,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.2'),(SELECT id FROM def WHERE key='res.knowledge'),300,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.civic.2'),'city_limit','add',1);
-INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.2'),'border_radius','pct',5,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.2'),'border_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.2'),'economic_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.civic.3','Kingdom');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.civic.3'),'track','civic',3,600);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.3'),(SELECT id FROM def WHERE key='res.food'),400,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.3'),(SELECT id FROM def WHERE key='res.knowledge'),400,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.civic.3'),'city_limit','add',1);
-INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.3'),'border_radius','pct',5,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.3'),'border_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.3'),'economic_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.civic.4','Charter');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.civic.4'),'track','civic',4,700);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.4'),(SELECT id FROM def WHERE key='res.food'),500,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.4'),(SELECT id FROM def WHERE key='res.knowledge'),500,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.civic.4'),'city_limit','add',1);
-INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.4'),'border_radius','pct',5,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.4'),'border_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.4'),'economic_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.civic.5','Constitution');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.civic.5'),'track','civic',5,800);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.5'),(SELECT id FROM def WHERE key='res.food'),600,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.5'),(SELECT id FROM def WHERE key='res.knowledge'),600,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.civic.5'),'city_limit','add',1);
-INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.5'),'border_radius','pct',5,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.5'),'border_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.5'),'economic_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.civic.6','Nation State');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.civic.6'),'track','civic',6,900);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.6'),(SELECT id FROM def WHERE key='res.food'),700,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.6'),(SELECT id FROM def WHERE key='res.knowledge'),700,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.civic.6'),'city_limit','add',1);
-INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.6'),'border_radius','pct',5,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.6'),'border_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.6'),'economic_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.civic.7','Federation');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.civic.7'),'track','civic',7,1000);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.7'),(SELECT id FROM def WHERE key='res.food'),800,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.7'),(SELECT id FROM def WHERE key='res.knowledge'),800,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.civic.7'),'city_limit','add',1);
-INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.7'),'border_radius','pct',5,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.7'),'border_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.7'),'economic_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.civic.8','Information Society');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.civic.8'),'track','civic',8,1100);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.8'),(SELECT id FROM def WHERE key='res.food'),900,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.8'),(SELECT id FROM def WHERE key='res.knowledge'),900,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.civic.8'),'city_limit','add',1);
-INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.8'),'border_radius','pct',5,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.8'),'border_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.8'),'economic_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.civic.9','Planned Society');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.civic.9'),'track','civic',9,1200);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.9'),(SELECT id FROM def WHERE key='res.food'),1000,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.9'),(SELECT id FROM def WHERE key='res.knowledge'),1000,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.civic.9'),'city_limit','add',1);
-INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.9'),'border_radius','pct',5,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.9'),'border_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.9'),'economic_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.civic.10','Continental Union');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.civic.10'),'track','civic',10,1300);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.10'),(SELECT id FROM def WHERE key='res.food'),1100,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.10'),(SELECT id FROM def WHERE key='res.knowledge'),1100,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.civic.10'),'city_limit','add',1);
-INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.10'),'border_radius','pct',5,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.10'),'border_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.10'),'economic_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.civic.11','Interplanetary Law');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.civic.11'),'track','civic',11,1400);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.11'),(SELECT id FROM def WHERE key='res.food'),1200,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.11'),(SELECT id FROM def WHERE key='res.knowledge'),1200,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.civic.11'),'city_limit','add',1);
-INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.11'),'border_radius','pct',5,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.11'),'border_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.11'),'economic_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.civic.12','Commonwealth');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.civic.12'),'track','civic',12,1500);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.12'),(SELECT id FROM def WHERE key='res.food'),1300,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.12'),(SELECT id FROM def WHERE key='res.knowledge'),1300,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.civic.12'),'city_limit','add',1);
-INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.12'),'border_radius','pct',5,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.12'),'border_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.12'),'economic_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.civic.13','Galactic Charter');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.civic.13'),'track','civic',13,1600);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.13'),(SELECT id FROM def WHERE key='res.food'),1400,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.civic.13'),(SELECT id FROM def WHERE key='res.knowledge'),1400,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.civic.13'),'city_limit','add',1);
-INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.13'),'border_radius','pct',5,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.13'),'border_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.civic.13'),'economic_radius','mul',106,(SELECT id FROM tag WHERE key='city'));
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.commerce.1','Barter');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.commerce.1'),'track','commerce',1,400);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.commerce.1'),(SELECT id FROM def WHERE key='res.food'),200,0);

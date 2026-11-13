@@ -1,7 +1,7 @@
 use crate::{Command, EntityId, MapGrid, Player, PlayerId, Pos, SimError, SimRng, World};
 use rom_rules::{DefId, Rules, build_rules_db};
 use std::{collections::BTreeMap, sync::Arc};
-const PINNED_GEOMETRY: &str = "UPDATE et_territory SET border_radius=24000, economic_radius=20000 WHERE is_city=1; UPDATE game_constant SET value=24000 WHERE key='city.spacing';";
+const PINNED_GEOMETRY: &str = "UPDATE et_territory SET border_radius=24000, economic_radius=20000 WHERE is_city=1; UPDATE game_constant SET value=24000 WHERE key='city.spacing'; UPDATE game_constant SET value=0 WHERE key IN ('city.radius_per_building','city.radius_from_buildings_max');";
 
 const P1: PlayerId = PlayerId(1);
 const P2: PlayerId = PlayerId(2);
@@ -574,4 +574,145 @@ fn hash_covers_borders_cities_and_fog() {
             .or_default()
             .insert(EntityId(1));
     });
+}
+
+/// A city's economic radius recounted from the entities alone.
+fn recount(w: &World, city: EntityId) -> i64 {
+    let c = w.entity(city).unwrap();
+    let base = w.base_economic_radius(city);
+    let per = w.rules.constant("city.radius_per_building").unwrap();
+    let max = w.rules.constant("city.radius_from_buildings_max").unwrap();
+    let count = w
+        .entities()
+        .filter(|e| {
+            e.owner == c.owner
+                && w.rules.entity_types[&e.type_id].class == rom_rules::EntityClass::Building
+                && !w.is_city_type(e.type_id)
+                && e.build_progress.is_none()
+                && !e.neutralised
+                && w.geo(c.pos.body).within(c.pos, e.pos, base)
+        })
+        .count() as i64;
+    base + max.min(per * count)
+}
+
+#[test]
+fn civic_levels_compound_border_and_city_radius() {
+    let mut w = world_on(
+        {
+            // The original geometry, without the building bonus.
+            let db = build_rules_db(
+                include_str!("../../../../db/schema.sql"),
+                include_str!("../../../../db/seed.sql"),
+            )
+            .unwrap();
+            db.execute_batch(
+                "UPDATE game_constant SET value=0 WHERE key='city.radius_per_building';",
+            )
+            .unwrap();
+            Arc::new(Rules::load(&db).unwrap())
+        },
+        |_, _| "ter.plain",
+    );
+    let city = place(&mut w, "bld.city", P1, at(20_500, 30_500));
+    assert_eq!(w.city_economic_radius(city), 16_000);
+    assert_eq!(w.territory.emitters[&city].radius, 40_000);
+    let (mut border, mut economic) = (40_000_i64, 16_000_i64);
+    for level in 1..=3 {
+        w.complete_research(P1, id(&w, &format!("tech.civic.{level}")));
+        border = border * 106 / 100;
+        economic = economic * 106 / 100;
+        assert_eq!(w.territory.emitters[&city].radius, border, "level {level}");
+        assert_eq!(w.city_economic_radius(city), economic, "level {level}");
+    }
+    // Compounding beats the old additive 5 % per level.
+    assert!(border > 40_000 + 3 * 2_000);
+    assert!(economic > 16_000 + 3 * 800);
+    check(&w);
+}
+
+#[test]
+fn buildings_widen_the_city_radius_up_to_the_cap() {
+    let mut w = world(
+        "UPDATE game_constant SET value=3000 WHERE key='city.radius_per_building'; UPDATE game_constant SET value=8000 WHERE key='city.radius_from_buildings_max';",
+    );
+    let city = place(&mut w, "bld.city", P1, at(20_500, 30_500));
+    let border = w.territory.emitters[&city].radius;
+    assert_eq!(w.city_economic_radius(city), 20_000);
+    place(&mut w, "bld.farm", P1, at(24_000, 30_500));
+    assert_eq!(w.city_economic_radius(city), 23_000);
+    place(&mut w, "bld.granary", P1, at(24_000, 34_500));
+    assert_eq!(w.city_economic_radius(city), 26_000);
+    // Outside the radius as it was before the bonus (20000 from the city): not counted.
+    place(&mut w, "bld.barracks", P1, at(42_000, 30_500));
+    assert_eq!(w.city_economic_radius(city), 26_000);
+    // A site does not count; another player's building does not count.
+    site(&mut w, "bld.farm", P1, at(28_000, 30_500));
+    place(&mut w, "bld.farm", P2, at(24_000, 26_500));
+    assert_eq!(w.city_economic_radius(city), 26_000);
+    place(&mut w, "bld.farm", P1, at(28_000, 34_500));
+    assert_eq!(w.city_economic_radius(city), 28_000);
+    place(&mut w, "bld.farm", P1, at(28_000, 26_500));
+    assert_eq!(w.city_economic_radius(city), 28_000, "capped at +8000");
+    assert_eq!(w.city_economic_radius(city), recount(&w, city));
+    // The national border is untouched by buildings (barracks emits none).
+    assert_eq!(w.territory.emitters[&city].radius, border);
+    check(&w);
+}
+
+#[test]
+fn destroyed_building_shrinks_the_city_radius() {
+    let mut w = world(
+        "UPDATE game_constant SET value=1000 WHERE key='city.radius_per_building'; UPDATE game_constant SET value=8000 WHERE key='city.radius_from_buildings_max';",
+    );
+    let city = place(&mut w, "bld.city", P1, at(20_500, 30_500));
+    let a = place(&mut w, "bld.farm", P1, at(24_000, 30_500));
+    let b = place(&mut w, "bld.granary", P1, at(24_000, 34_500));
+    assert_eq!(w.city_economic_radius(city), 22_000);
+    w.despawn(a).unwrap();
+    assert_eq!(w.city_economic_radius(city), 21_000);
+    assert_eq!(w.city_economic_radius(city), recount(&w, city));
+    w.despawn(b).unwrap();
+    assert_eq!(w.city_economic_radius(city), 20_000);
+    assert_eq!(w.city_economic_radius(city), recount(&w, city));
+}
+
+#[test]
+fn military_and_spaceport_placeable_outside_city_radius() {
+    let mut w = world("UPDATE et_territory SET economic_radius=12000 WHERE is_city=1;");
+    let city = place(&mut w, "bld.city", P1, at(20_500, 30_500));
+    let outside = at(36_000, 30_000);
+    assert!(!w.geo(outside.body).within(
+        w.entity(city).unwrap().pos,
+        outside,
+        w.city_economic_radius(city)
+    ));
+    assert_eq!(w.territory_owner(36, 30), Some(P1));
+    assert_eq!(
+        construct(&mut w, P1, "bld.farm", outside),
+        Err(SimError::NotInCityRadius)
+    );
+    construct(&mut w, P1, "bld.barracks", outside).unwrap();
+    let mut w = world("UPDATE et_territory SET economic_radius=12000 WHERE is_city=1;");
+    place(&mut w, "bld.city", P1, at(20_500, 30_500));
+    // The spaceport is gated by age, not by the city radius.
+    let result = w.check_placement(P1, id(&w, "bld.spaceport"), outside);
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn territory_scenario_is_deterministic() {
+    fn run() -> u64 {
+        let mut w = world("UPDATE et_territory SET economic_radius=12000 WHERE is_city=1;");
+        place(&mut w, "bld.city", P1, at(20_500, 30_500));
+        place(&mut w, "bld.farm", P1, at(24_000, 30_500));
+        place(&mut w, "bld.granary", P1, at(24_000, 34_500));
+        w.complete_research(P1, id(&w, "tech.civic.1"));
+        construct(&mut w, P1, "bld.barracks", at(36_000, 30_000)).unwrap();
+        for _ in 0..200 {
+            w.step();
+        }
+        w.hash()
+    }
+    assert_eq!(run(), run());
 }

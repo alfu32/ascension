@@ -183,11 +183,7 @@ impl World {
         let neutralised: Vec<_> = self.capture.neutralised.iter().copied().collect();
         for id in neutralised {
             let city = self.entity(id).expect("neutralised city");
-            let radius = self.rules.entity_types[&city.type_id]
-                .territory
-                .as_ref()
-                .expect("territory")
-                .economic_radius;
+            let radius = self.city_economic_radius(id);
             let mut presence: BTreeMap<u32, BTreeMap<PlayerId, i128>> = BTreeMap::new();
             for unit in
                 self.entities_in_radius(city.pos, radius.clamp(0, i64::from(u32::MAX)) as u32)
