@@ -139,7 +139,7 @@ impl World {
     /// Hashes complete mutable state in little-endian field order with FNV-1a 64.
     pub fn hash(&self) -> u64 {
         let mut hash = StateHash(0xcbf29ce484222325);
-        hash.bytes(b"rom-sim-state-6");
+        hash.bytes(b"rom-sim-state-7");
         hash.u64(self.tick);
         hash.u64(self.rng.state());
         hash.u32(self.next_entity_id);
@@ -197,6 +197,7 @@ impl World {
             hash.bytes(&entity.move_remainder.to_le_bytes());
             hash.bytes(&entity.gather_slots.to_le_bytes());
             hash.optional(entity.work_site, |h, id| h.u32(id.0));
+            hash.optional(entity.city_id, |h, id| h.u32(id.0));
             hash.u64(entity.idle_ticks);
             hash.u64(entity.orders.len() as u64);
             for order in &entity.orders {
@@ -278,7 +279,76 @@ impl World {
                 hash.u32(id.0);
             }
         }
+        hash.places(self);
         hash.0
+    }
+}
+
+impl StateHash {
+    /// Borders, cities and every player's fog of war.
+    fn places(&mut self, world: &World) {
+        let territory = &world.territory;
+        self.u64(territory.winner.len() as u64);
+        for winner in &territory.winner {
+            self.u32(*winner);
+        }
+        self.u64(territory.emitters.len() as u64);
+        for (id, e) in &territory.emitters {
+            self.u32(id.0);
+            self.pos(e.pos);
+            self.bytes(&e.radius.to_le_bytes());
+            self.u32(e.owner.0);
+            self.u64(e.completed);
+        }
+        self.u64(territory.owned.len() as u64);
+        for (player, tiles) in &territory.owned {
+            self.u32(player.0);
+            self.u64(*tiles);
+        }
+        self.u64(territory.cities.len() as u64);
+        for id in &territory.cities {
+            self.u32(id.0);
+        }
+        let vision = &world.vision;
+        self.u64(vision.players.len() as u64);
+        for (player, v) in &vision.players {
+            self.u32(player.0);
+            self.u64(v.count.len() as u64);
+            for count in &v.count {
+                self.u32(*count);
+            }
+            for bits in &v.explored {
+                self.u64(*bits);
+            }
+            self.u64(v.memory.len() as u64);
+            for ((tile, _), b) in &v.memory {
+                self.u32(*tile);
+                self.u32(b.id.0);
+                self.u32(b.type_id.0);
+                self.u32(b.owner.0);
+                self.pos(b.pos);
+            }
+        }
+        self.u64(vision.viewers.len() as u64);
+        for viewer in &vision.viewers {
+            self.optional(viewer.as_ref(), |h, v| {
+                h.u32(v.tile);
+                h.bytes(&v.los.to_le_bytes());
+                h.u32(v.owner.0);
+            });
+        }
+        self.u64(vision.touched.len() as u64);
+        for tile in &vision.touched {
+            self.u32(*tile);
+        }
+        self.u64(vision.buildings.len() as u64);
+        for (tile, ids) in &vision.buildings {
+            self.u32(*tile);
+            self.u64(ids.len() as u64);
+            for id in ids {
+                self.u32(id.0);
+            }
+        }
     }
 }
 

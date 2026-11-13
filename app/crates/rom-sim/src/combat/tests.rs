@@ -135,7 +135,8 @@ fn ranged_building_attacks_enemy_in_range_only() {
     let mut w = world("");
     let city = spawn(&mut w, "bld.city", 1, at(20000, 20000));
     let near = spawn(&mut w, "unit.citizen", 2, at(30000, 20000));
-    let far = spawn(&mut w, "unit.citizen", 2, at(33000, 20000));
+    // Out of range but still inside the city's line of sight.
+    let far = spawn(&mut w, "unit.citizen", 2, at(32000, 20000));
     attack(&mut w, city, far);
     ticks(&mut w, 50);
     assert_eq!(hp(&w, far), 40);
@@ -251,7 +252,7 @@ fn death_despawns_at_end_of_tick_and_mutual_kills_happen() {
 
 #[test]
 fn kill_frees_gather_slot_and_ends_orders_targeting_it() {
-    let mut w = world("UPDATE et_weapon SET range_max=10000;");
+    let mut w = world("UPDATE et_weapon SET range_max=10000; UPDATE entity_type SET los=10000;");
     let farm = spawn(&mut w, "bld.farm", 2, at(20000, 20000));
     let worker = spawn(&mut w, "unit.citizen", 2, at(17000, 20000));
     let waiting = spawn(&mut w, "unit.citizen", 2, at(11000, 20000));
@@ -306,7 +307,7 @@ fn attack_rejected_on_friend_or_same_team() {
 fn aggressive_acquires_and_chases() {
     let mut w = world("");
     let a = spawn(&mut w, "unit.spearman", 1, at(10000, 10000));
-    let b = spawn(&mut w, "unit.citizen", 2, at(20000, 10000));
+    let b = spawn(&mut w, "unit.citizen", 2, at(14000, 10000));
     stance(&mut w, a, "aggressive");
     ticks(&mut w, 10);
     assert_eq!(w.entity(a).unwrap().orders()[0].target_entity, Some(b));
@@ -384,7 +385,7 @@ fn attack_move_fights_then_continues() {
 
 #[test]
 fn idle_unit_retaliates_when_hit() {
-    let mut w = world("UPDATE et_weapon SET range_max=20000;");
+    let mut w = world("UPDATE et_weapon SET range_max=20000; UPDATE entity_type SET los=20000;");
     let a = spawn(&mut w, "unit.spearman", 1, at(10000, 10000));
     let b = spawn(&mut w, "unit.spearman", 2, at(25000, 10000));
     stance(&mut w, b, "aggressive");
@@ -585,7 +586,7 @@ fn raze_prefers_buildings_and_stance_change_cancels_automatic_orders() {
     let mut w = world("");
     let a = spawn(&mut w, "unit.spearman", 1, at(10000, 10000));
     spawn(&mut w, "unit.citizen", 2, at(12000, 10000));
-    let farm = spawn(&mut w, "bld.farm", 2, at(16000, 10000));
+    let farm = spawn(&mut w, "bld.farm", 2, at(14500, 10000));
     stance(&mut w, a, "raze");
     ticks(&mut w, 2);
     assert_eq!(w.entity(a).unwrap().orders()[0].target_entity, Some(farm));

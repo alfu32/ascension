@@ -1,5 +1,6 @@
 mod battle_cmd;
 mod mapgen_cmd;
+mod territory_cmd;
 
 use std::{env, path::PathBuf, process::ExitCode, sync::Arc};
 
@@ -19,12 +20,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = env::args().skip(1);
     let command = args
         .next()
-        .ok_or("usage: rom <build-rules|check-rules|run|battle|mapgen> [options]")?;
+        .ok_or("usage: rom <build-rules|check-rules|run|battle|mapgen|territory> [options]")?;
     if command == "battle" {
         return battle_cmd::run(args);
     }
     if command == "mapgen" {
         return mapgen_cmd::run(args);
+    }
+    if command == "territory" {
+        return territory_cmd::run(args);
     }
     if command == "run" {
         return run_simulation(args);
@@ -57,7 +61,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     if command != "build-rules" {
-        return Err("usage: rom <build-rules|check-rules|run|battle|mapgen> [options]".into());
+        return Err(
+            "usage: rom <build-rules|check-rules|run|battle|mapgen|territory> [options]".into(),
+        );
     }
 
     let mut schema = None;

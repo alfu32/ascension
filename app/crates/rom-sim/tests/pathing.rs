@@ -298,6 +298,8 @@ fn new_building_on_the_path_triggers_repath() {
 fn builder_walks_around_obstacles_to_its_site() {
     let rows = rows_where(30, |x, y| x == 10 && y < 25);
     let mut w = world_on(rules(), &as_str(&rows));
+    let town = w.rules().id_of("bld.city").unwrap();
+    w.place_for_setup(town, OWNER, at(26_500, 20_500)).unwrap();
     let builder = spawn(&mut w, "unit.citizen", tile(5, 5));
     let mut c = command(builder, "construct");
     c.subject = w.rules().id_of("bld.farm");

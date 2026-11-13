@@ -327,6 +327,8 @@ mod tests {
             target_pos: pos,
             queue: false,
         };
+        w.place_for_setup(id("bld.city"), PlayerId(1), at(20_500, 34_500))
+            .unwrap();
         let workers: Vec<_> = (0..8)
             .map(|n| {
                 w.spawn(id("unit.citizen"), PlayerId(1), at(5000 + n * 3000, 30_000))

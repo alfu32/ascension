@@ -130,11 +130,9 @@ fn feature_colour(id: DefId) -> [u8; 3] {
     ]
 }
 
-fn ppm_bytes(map: &GeneratedMap) -> Vec<u8> {
-    let (w, h) = (map.grid.width as usize, map.grid.height as usize);
-    let mut out = format!("P6\n{w} {h}\n255\n").into_bytes();
-    let mut pixels: Vec<[u8; 3]> = map
-        .grid
+/// One colour per tile from the terrain and its height.
+pub(crate) fn terrain_pixels(map: &GeneratedMap) -> Vec<[u8; 3]> {
+    map.grid
         .terrain
         .iter()
         .zip(&map.height)
@@ -153,7 +151,21 @@ fn ppm_bytes(map: &GeneratedMap) -> Vec<u8> {
                 feature_colour(*t)
             }
         })
-        .collect();
+        .collect()
+}
+
+/// A binary PPM image of the given pixels.
+pub(crate) fn ppm(width: usize, height: usize, pixels: &[[u8; 3]]) -> Vec<u8> {
+    let mut out = format!("P6\n{width} {height}\n255\n").into_bytes();
+    for p in pixels {
+        out.extend_from_slice(p);
+    }
+    out
+}
+
+fn ppm_bytes(map: &GeneratedMap) -> Vec<u8> {
+    let (w, h) = (map.grid.width as usize, map.grid.height as usize);
+    let mut pixels = terrain_pixels(map);
     let mut mark = |x: i32, y: i32, colour: [u8; 3]| {
         let (tx, ty) = (x / 1000, y / 1000);
         pixels[ty as usize * w + tx as usize] = colour;
@@ -164,8 +176,5 @@ fn ppm_bytes(map: &GeneratedMap) -> Vec<u8> {
     for s in &map.starts {
         mark(s.x, s.y, [255, 255, 255]);
     }
-    for p in pixels {
-        out.extend_from_slice(&p);
-    }
-    out
+    ppm(w, h, &pixels)
 }

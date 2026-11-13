@@ -6,6 +6,7 @@ mod construction;
 mod economy;
 mod entity;
 mod gathering;
+mod geometry;
 mod hash;
 mod healing;
 mod income;
@@ -14,12 +15,15 @@ mod math;
 mod movement;
 mod order;
 mod pathing;
+mod placement;
 mod production;
 mod research;
 mod rng;
 mod scenario;
 mod spatial;
 mod stance;
+mod territory;
+mod vision;
 mod world;
 
 pub use entity::{Entity, EntityId, Player, PlayerId};
@@ -29,6 +33,7 @@ pub use math::{Pos, integer_sqrt};
 pub use order::{Command, Order, OrderId, OrderKindKey, OrderStatus};
 pub use pathing::PathStats;
 pub use rng::SimRng;
+pub use vision::{RememberedBuilding, Sighting};
 pub use world::{Stats, World};
 
 use rom_rules::DefId;
@@ -127,6 +132,42 @@ pub enum SimError {
     /// Harvesting requires a complete, friendly site with a compatible resource.
     #[error("invalid harvest target")]
     InvalidHarvestTarget,
+    /// The attack target is not visible to the attacking player.
+    #[error("attack target is hidden")]
+    TargetHidden,
+    /// The player's cities already reach the city limit.
+    #[error("city limit reached")]
+    CityLimit,
+    /// Another city stands closer than the minimum city spacing.
+    #[error("too close to another city")]
+    CitiesTooClose,
+    /// Placement rule `in_own_territory`: a footprint tile is outside own borders.
+    #[error("placement must be inside own territory")]
+    NotInOwnTerritory,
+    /// Placement rule `in_city_radius`: no own city's economic radius covers the centre.
+    #[error("placement must be inside a city's economic radius")]
+    NotInCityRadius,
+    /// Placement rule `on_terrain`: a footprint tile is not the required terrain.
+    #[error("placement must be on the required terrain")]
+    NotOnTerrain,
+    /// Placement rule `adjacent_terrain`: no tile touching the footprint is the terrain.
+    #[error("placement must touch the required terrain")]
+    NotAdjacentTerrain,
+    /// Placement rule `near_type`: no own entity of the type is near enough.
+    #[error("placement must be near the required type")]
+    NotNearType,
+    /// Placement rule `min_distance_type`: an entity of the type is too close.
+    #[error("placement is too close to an entity of the excluded type")]
+    TooCloseToType,
+    /// Placement rule `min_distance_enemy_city`: an enemy city is too close.
+    #[error("placement is too close to an enemy city")]
+    TooCloseToEnemyCity,
+    /// Placement rule `on_node`: the centre is not on a node of the type.
+    #[error("placement must be on the required node")]
+    NotOnNode,
+    /// Placement rule `on_layer`: a footprint tile is on another layer.
+    #[error("placement must be on the required layer")]
+    NotOnLayer,
     /// The catalogue cannot supply the requested headless scenario.
     #[error("no eligible {0} for movement scenario")]
     ScenarioUnavailable(&'static str),
