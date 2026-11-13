@@ -473,3 +473,11 @@ fn same_request_same_map_with_factions() {
     assert_eq!(a, b);
     assert_eq!(a.hash(), b.hash());
 }
+
+#[test]
+fn flat_generation_is_unchanged() {
+    // Recorded on main d70efc0 before changing sphere generation (Task 23).
+    let r = rules();
+    let m = make(&r, "map.one_world", 1, 4, 256);
+    assert_eq!(m.hash(), 0x234dcc28b4a98b6f);
+}

@@ -459,6 +459,11 @@ INSERT INTO map_style_feature(map_style_id,feature_def_id,region_kind,pattern,cl
  SELECT (SELECT id FROM def WHERE key='map.many_worlds'), feature_def_id, region_kind, pattern, clumps_min, clumps_max, size_min, size_max, start_min_dist, start_max_dist
  FROM map_style_feature WHERE map_style_id=(SELECT id FROM def WHERE key='map.one_world') ORDER BY id;
 
+WITH v(k,pct) AS (VALUES ('ter.forest',24), ('ter.mountain',7))
+UPDATE map_style_feature SET coverage_pct=v.pct
+ FROM v JOIN def d ON d.key=v.k
+ WHERE map_style_feature.feature_def_id=d.id AND region_kind='planet';
+
 INSERT INTO match_option VALUES
  ('start_age','Start Age','age.ancient'), ('end_age','End Age','age.galactic'),
  ('pop_limit','Population Limit','200'), ('game_speed','Game Speed (%)','100'),

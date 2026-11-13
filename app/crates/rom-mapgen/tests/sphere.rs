@@ -1,5 +1,5 @@
 use rom_geo::{CubeSurface, SPHERE_SCALE, SurfacePos};
-use rom_mapgen::{SpherePlanet, SphereRequest, generate_sphere};
+use rom_mapgen::{SpherePlanet, SphereRequest, expand_planet, generate_sphere};
 use rom_rules::{FeaturePattern, Layer, RegionKind, Rules, build_rules_db};
 
 fn rules() -> Rules {
@@ -39,12 +39,14 @@ fn local_distance2(surface: CubeSurface, a: SurfacePos, b: SurfacePos) -> Option
 }
 
 #[test]
-fn same_sphere_request_same_planet() {
+fn sphere_generation_is_deterministic() {
     let rules = rules();
-    let a = make(&rules, 7, 64, 4);
-    let b = make(&rules, 7, 64, 4);
-    assert_eq!(a, b);
-    assert_eq!(a.hash(), b.hash());
+    for n in [64, 128] {
+        let a = make(&rules, 7, n, 4);
+        let b = make(&rules, 7, n, 4);
+        assert_eq!(a, b);
+        assert_eq!(a.hash(), b.hash());
+    }
 }
 
 #[test]
@@ -136,8 +138,7 @@ fn starts_on_land_and_far_apart_on_sphere() {
                         panic!("start too close to corner");
                     }
                     let t = m.surface.step(s, dx * 1000, dy * 1000).tile();
-                    // Features may occupy the land after start selection, as in
-                    // flat maps; no sea can occur anywhere in the five-tile disc.
+                    // The original five-tile land requirement still excludes sea.
                     assert_eq!(
                         rules.terrains[&m.terrain[m.surface.index(t)]].layer,
                         Layer::Ground
@@ -166,7 +167,7 @@ fn features_and_nodes_on_valid_tiles_outside_start_radius() {
         for &s in &m.starts {
             assert!(
                 local_distance2(m.surface, s, m.surface.tile(i).into())
-                    .is_none_or(|d| d > 9_000_000)
+                    .is_none_or(|d| d > 36_000_000)
             );
         }
     }
@@ -176,35 +177,8 @@ fn features_and_nodes_on_valid_tiles_outside_start_radius() {
         assert_eq!(m.terrain[m.surface.index(p.tile())], m.base.land);
         assert!(m.nodes[i + 1..].iter().all(|&(_, q)| p.tile() != q.tile()));
         for &s in &m.starts {
-            assert!(local_distance2(m.surface, s, p).is_none_or(|d| d > 9_000_000));
+            assert!(local_distance2(m.surface, s, p).is_none_or(|d| d > 36_000_000));
         }
-    }
-    for row in &rules.map_style_features[&m.style] {
-        if row.region_kind == RegionKind::Planet
-            && row.pattern == FeaturePattern::PerPlayer
-            && rules.terrains.contains_key(&row.feature_def_id)
-        {
-            for &s in &m.starts {
-                assert!(m.terrain.iter().enumerate().any(|(i, &t)| {
-                    t == row.feature_def_id
-                        && local_distance2(m.surface, s, m.surface.tile(i).into())
-                            .is_some_and(|d| d <= (row.start_max_dist * 1000).pow(2))
-                }));
-            }
-        }
-    }
-}
-
-#[test]
-fn fairness_passes_for_30_seeds_n_128() {
-    let rules = rules();
-    for seed in 0..30 {
-        let m = make(&rules, seed, 128, 4);
-        assert!(
-            m.fairness(&rules).is_empty(),
-            "seed {seed}: {:?}",
-            m.fairness(&rules)
-        );
     }
 }
 
@@ -217,4 +191,251 @@ fn invalid_sphere_requests_are_errors() {
     let mut req = request(&rules, 1, 128, 1);
     req.player_factions[0] = rom_rules::DefId(u32::MAX);
     assert!(generate_sphere(&rules, &req).is_err());
+}
+
+fn terrain_rows<'a>(rules: &'a Rules, map: &SpherePlanet) -> Vec<&'a rom_rules::MapStyleFeature> {
+    rules.map_style_features[&map.style]
+        .iter()
+        .filter(|r| {
+            r.region_kind == RegionKind::Planet && rules.terrains.contains_key(&r.feature_def_id)
+        })
+        .collect()
+}
+
+fn scaled_range(map: &SpherePlanet, row: &rom_rules::MapStyleFeature) -> (i64, i64) {
+    let radius = |d: i64| {
+        ((d * d * map.surface.len() as i64 / 65_536) as u64)
+            .isqrt()
+            .min(40) as i64
+    };
+    (radius(row.start_min_dist), radius(row.start_max_dist))
+}
+
+#[test]
+fn terrain_coverage_matches_scaled_target() {
+    let rules = rules();
+    for n in [128, 192] {
+        let m = make(&rules, 1, n, 4);
+        let land = m
+            .terrain
+            .iter()
+            .filter(|t| rules.terrains[t].layer == Layer::Ground)
+            .count() as i64;
+        for row in terrain_rows(&rules, &m) {
+            assert!(row.coverage_pct > 0);
+            let target = land * row.coverage_pct / 100;
+            let actual = m
+                .terrain
+                .iter()
+                .filter(|&&t| t == row.feature_def_id)
+                .count() as i64;
+            println!(
+                "n={n} {} coverage={actual} target={target} land={land} tiles={}",
+                rules.key(row.feature_def_id),
+                m.surface.len()
+            );
+            assert!(
+                (actual - target).abs() * 100 <= target * 10,
+                "n={n} {:?}: {actual} vs {target}",
+                row.feature_def_id
+            );
+        }
+    }
+}
+
+#[test]
+fn zero_coverage_pct_preserves_scaled_target() {
+    let mut rules = rules();
+    let style = rules.id_of("map.one_world").unwrap();
+    for row in rules.map_style_features.get_mut(&style).unwrap() {
+        row.coverage_pct = 0;
+    }
+    let m = make(&rules, 1, 128, 4);
+    for row in terrain_rows(&rules, &m) {
+        let players = if row.pattern == FeaturePattern::PerPlayer {
+            m.starts.len()
+        } else {
+            1
+        };
+        let target = (row.clumps_min + row.clumps_max)
+            * (row.size_min + row.size_max)
+            * players as i64
+            * m.surface.len() as i64
+            / (4 * 65_536);
+        let actual = m
+            .terrain
+            .iter()
+            .filter(|&&t| t == row.feature_def_id)
+            .count() as i64;
+        assert_eq!(actual, target);
+    }
+}
+
+#[test]
+fn mountains_sit_on_high_ground() {
+    let rules = rules();
+    for seed in [1, 7, 23] {
+        let m = make(&rules, seed, 192, 4);
+        let mountain = rules.id_of("ter.mountain").unwrap();
+        let mut land: Vec<_> = m
+            .terrain
+            .iter()
+            .zip(&m.height)
+            .filter(|(t, _)| rules.terrains[t].layer == Layer::Ground)
+            .map(|(_, &h)| h)
+            .collect();
+        land.sort_unstable();
+        let heights: Vec<_> = m
+            .terrain
+            .iter()
+            .zip(&m.height)
+            .filter(|(t, _)| **t == mountain)
+            .map(|(_, &h)| u64::from(h))
+            .collect();
+        let sum: u64 = heights.iter().sum();
+        let p80 = land[land.len() * 80 / 100];
+        println!(
+            "seed={seed} mountain mean={}/{} land p80={p80}",
+            sum,
+            heights.len()
+        );
+        assert!(sum > u64::from(p80) * heights.len() as u64);
+    }
+}
+
+fn forest_regions(map: &SpherePlanet, forest: rom_rules::DefId) -> Vec<usize> {
+    let mut seen = vec![false; map.surface.len()];
+    let mut sizes = Vec::new();
+    for i in 0..map.surface.len() {
+        if seen[i] || map.terrain[i] != forest {
+            continue;
+        }
+        seen[i] = true;
+        let mut region = vec![i];
+        let mut at = 0;
+        while at < region.len() {
+            let tile = map.surface.tile(region[at]);
+            at += 1;
+            for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                let j = map
+                    .surface
+                    .index(map.surface.neighbor(tile, dx, dy).unwrap());
+                if !seen[j] && map.terrain[j] == forest {
+                    seen[j] = true;
+                    region.push(j);
+                }
+            }
+        }
+        sizes.push(region.len());
+    }
+    sizes
+}
+
+#[test]
+fn forests_form_regions() {
+    let rules = rules();
+    for n in [128, 192] {
+        for seed in [1, 7, 23] {
+            let m = make(&rules, seed, n, 4);
+            let sizes = forest_regions(&m, rules.id_of("ter.forest").unwrap());
+            let total: usize = sizes.iter().sum();
+            let largest = *sizes.iter().max().unwrap();
+            let singles = sizes.iter().filter(|&&s| s == 1).count();
+            println!("n={n} seed={seed} forest={total} largest={largest} singles={singles}");
+            assert!(largest * 100 >= total * 15);
+            assert!(singles * 100 < total * 5);
+        }
+    }
+}
+
+#[test]
+fn every_start_has_each_per_player_terrain_in_range() {
+    let rules = rules();
+    for seed in 0..30 {
+        let m = make(&rules, seed, 128, 4);
+        let painted = expand_planet(&rules, &request(&rules, seed, 128, 0)).unwrap();
+        for &start in &m.starts {
+            let mut total = 0;
+            let mut buildable = 0;
+            for dy in -12_i64..=12 {
+                for dx in -12_i64..=12 {
+                    if dx * dx + dy * dy > 144 {
+                        continue;
+                    }
+                    let n = i64::from(m.surface.n) * 1000;
+                    if !(0..n).contains(&(start.x + dx * 1000))
+                        && !(0..n).contains(&(start.y + dy * 1000))
+                    {
+                        continue;
+                    }
+                    let tile = m.surface.step(start, dx * 1000, dy * 1000).tile();
+                    let terrain = &rules.terrains[&painted.terrain[m.surface.index(tile)]];
+                    total += 1;
+                    buildable += usize::from(terrain.layer == Layer::Ground && terrain.buildable);
+                    if dx * dx + dy * dy <= 36 && terrain.layer == Layer::Ground {
+                        assert_eq!(m.terrain[m.surface.index(tile)], m.base.land);
+                    }
+                }
+            }
+            assert!(
+                buildable * 100 >= total * 70,
+                "seed {seed}: {buildable}/{total}"
+            );
+        }
+        assert!(
+            m.fairness(&rules).is_empty(),
+            "seed {seed}: {:?}",
+            m.fairness(&rules)
+        );
+        for row in terrain_rows(&rules, &m)
+            .into_iter()
+            .filter(|r| r.pattern == FeaturePattern::PerPlayer)
+        {
+            let (min, max) = scaled_range(&m, row);
+            for &start in &m.starts {
+                assert!(
+                    m.terrain.iter().enumerate().any(|(i, &t)| {
+                        t == row.feature_def_id
+                            && local_distance2(m.surface, start, m.surface.tile(i).into())
+                                .is_some_and(|d| {
+                                    (min * 1000).pow(2) <= d && d <= (max * 1000).pow(2)
+                                })
+                    }),
+                    "seed={seed} start={start:?} terrain={:?}",
+                    row.feature_def_id
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn node_count_scales_with_planet_area() {
+    let mut rules = rules();
+    let style = rules.id_of("map.one_world").unwrap();
+    // Fix the roll so this checks area scaling independently of random counts.
+    for row in rules.map_style_features.get_mut(&style).unwrap() {
+        if row.region_kind == RegionKind::Planet && row.pattern == FeaturePattern::Scattered {
+            row.clumps_min = 3;
+            row.clumps_max = 3;
+        }
+    }
+    for n in [64, 128, 192] {
+        let m = make(&rules, 1, n, 4);
+        assert_eq!(m.nodes.len(), 3.max(3 * m.surface.len() / 65_536));
+    }
+}
+
+#[test]
+fn nodes_are_spaced() {
+    let rules = rules();
+    for seed in [1, 7, 23] {
+        let m = make(&rules, seed, 192, 4);
+        for (i, &(_, a)) in m.nodes.iter().enumerate() {
+            for &(_, b) in &m.nodes[i + 1..] {
+                assert!(local_distance2(m.surface, a, b).is_none_or(|d| d >= 144_000_000));
+                assert!(local_distance2(m.surface, b, a).is_none_or(|d| d >= 144_000_000));
+            }
+        }
+    }
 }

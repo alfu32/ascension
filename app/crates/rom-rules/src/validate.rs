@@ -229,6 +229,16 @@ impl Rules {
         }
         let mut weight = 0;
         for row in self.map_style_features.get(&style.id).into_iter().flatten() {
+            if row.coverage_pct != 0
+                && (row.region_kind != RegionKind::Planet
+                    || !self.terrains.contains_key(&row.feature_def_id))
+            {
+                report(format!(
+                    "feature {} ({}) has coverage_pct set but is not a planet terrain feature",
+                    row.id,
+                    self.label(row.feature_def_id)
+                ));
+            }
             if row.region_kind != RegionKind::ResourceBody {
                 continue;
             }

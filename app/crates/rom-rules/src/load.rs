@@ -871,6 +871,7 @@ fn load_map_style_feature(conn: &Connection) -> Result<Vec<MapStyleFeature>, Rul
             region_kind: enum_value(row, "region_kind", "map_style_feature", &identity)?,
             pattern: enum_value(row, "pattern", "map_style_feature", &identity)?,
             chance_pct: row.get("chance_pct")?,
+            coverage_pct: row.get("coverage_pct")?,
             clumps_min: row.get("clumps_min")?,
             clumps_max: row.get("clumps_max")?,
             size_min: row.get("size_min")?,

@@ -232,7 +232,28 @@ The rules loader resolves names through `Rules::display_name`
 flagged `baked` are produced before the first tick. Nothing is generated
 while the match runs.
 
-### 9. Computer opponents are data too
+### 9. Planet terrain coverage
+
+For a planet terrain feature with `coverage_pct > 0`, the sphere's target tile
+count is `land_tiles × coverage_pct / 100`, counting all land before features
+are placed (including protected start tiles). With `coverage_pct = 0`, it is
+`avg(clumps_min, clumps_max) × avg(size_min, size_max) × players × tiles / 65,536`,
+with the player factor replaced by 1 for rows other than `per_player`;
+integer arithmetic retains half-integer averages until the final division.
+The last unbuildable, sight-blocking ground terrain in style-row order follows
+highest elevation, while other land terrains follow an independent seamless
+3D moisture field, preferring the middle 60% of land elevations. Every start's
+3-tile disc stays clear. Missing per-player terrain is grown in the distance
+annulus scaled by `sqrt(tiles / 65,536)` (each radius capped at 40 tiles),
+with a minimum outer radius of 4 on small worlds to clear the protected disc,
+exchanging low-ranked global tiles to preserve coverage; on very small planets
+start guarantees can exceed the budget. Scattered sites scale a rolled flat
+count by the same area ratio, never below that flat count, and stay at least
+12 tiles apart on valid land. The loader reports nonzero `coverage_pct` on
+entity features or features outside `region_kind = 'planet'`. Flat generation
+ignores `coverage_pct` and retains its original rules.
+
+### 10. Computer opponents are data too
 
 `ai_profile` + `ai_profile_weight` (personality), `ai_opening_step` (opening
 list) and `ai_difficulty` (thinking speed, order budget, reaction time,
