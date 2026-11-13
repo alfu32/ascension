@@ -193,6 +193,40 @@ impl View {
         }
     }
 
+    /// The view of a camera at `eye` looking at `target` with the given `up`, onto a canvas of
+    /// `size` pixels; see [`View::new`].
+    pub fn looking(
+        eye: [f32; 3],
+        target: [f32; 3],
+        up: [f32; 3],
+        size: (f32, f32),
+        centre_y: f32,
+    ) -> Self {
+        let forward = unit(sub(target, eye));
+        let right = unit(cross(forward, up));
+        let up = cross(right, forward);
+        Self {
+            eye,
+            forward,
+            right,
+            up,
+            tan: (FOV_DEGREES.to_radians() / 2.0).tan(),
+            aspect: size.0 / size.1.max(1.0),
+            centre_y,
+            size,
+        }
+    }
+
+    /// Canvas size in pixels.
+    pub fn size(&self) -> (f32, f32) {
+        self.size
+    }
+
+    /// Tangent of half the vertical field of view.
+    pub fn tan(&self) -> f32 {
+        self.tan
+    }
+
     /// Eye position in world space.
     pub fn eye(&self) -> [f32; 3] {
         self.eye

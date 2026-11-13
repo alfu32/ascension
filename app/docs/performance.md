@@ -249,3 +249,19 @@ chunk culling the same scene showed 49–59 fps, the extra GPU time going to the
 the planet, which the culling now skips. The whole frame is dominated by waiting for the GPU
 in the read-back, as in the flat scene. Screenshots: `docs/img/globe-street.png`,
 `globe-mid.png`, `globe-full.png`.
+
+## Continuous zoom (task 22)
+
+`--universe --seed 1 --zoom-all`, 1280x800, 10 s, with the `--view` named below. The
+machine was busy with other tasks' builds and runs; the unchanged `--sphere 192 --demo`
+bench measured in the same session is listed for comparison. The frame time is dominated
+by the read-back in every row (11-15 ms), not by drawing.
+
+| view | bench line |
+| --- | --- |
+| globe | `bench size=1280x800 scale=100 frames=521 fps=52.1 frame_ms_avg=13.31 frame_ms_max=42.65 readback_ms_avg=11.38 readback_ms_max=31.99` |
+| system | `bench size=1280x800 scale=100 frames=466 fps=46.6 frame_ms_avg=17.32 frame_ms_max=70.81 readback_ms_avg=14.52 readback_ms_max=42.25` |
+| star map | `bench size=1280x800 scale=100 frames=453 fps=45.3 frame_ms_avg=18.39 frame_ms_max=60.01 readback_ms_avg=15.54 readback_ms_max=37.50` |
+| `--sphere 192 --demo` (reference) | `bench size=1280x800 scale=100 frames=532 fps=53.2 frame_ms_avg=12.18 frame_ms_max=45.41 readback_ms_avg=10.64 readback_ms_max=30.76` |
+
+Screenshots: `docs/img/zoom-globe.png`, `zoom-system.png`, `zoom-starmap.png`, `zoom-capped.png`.

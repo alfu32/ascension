@@ -6,7 +6,7 @@ use std::path::PathBuf;
 pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <file.png>] \
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] \
 [--map-size <width>x<height>] [--sphere <n>] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
-[--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-hud] [--hud-scale <percent>] [--stats]";
+[--universe] [--zoom-all] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-hud] [--hud-scale <percent>] [--stats]";
 
 /// Default canvas size in pixels when `--size` is not given.
 pub const DEFAULT_SIZE: (u32, u32) = (1280, 800);
@@ -58,6 +58,12 @@ pub struct Options {
     pub stats: bool,
     /// Replay pick events from this file on the simulation thread (hidden option).
     pub script: Option<PathBuf>,
+    /// Generate a universe and zoom from the home globe out to the star map.
+    pub universe: bool,
+    /// Lift the zoom cap by age (testing).
+    pub zoom_all: bool,
+    /// Start in this level over the home planet.
+    pub view: Option<rom_render::Level>,
     /// Print usage and exit.
     pub help: bool,
 }
@@ -87,6 +93,9 @@ impl Default for Options {
             hud_scale: None,
             stats: false,
             script: None,
+            universe: false,
+            zoom_all: false,
+            view: None,
             help: false,
         }
     }
@@ -152,6 +161,17 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             "--camera" => options.camera = Some(parse_camera(&value("--camera")?)?),
             "--boxes" => options.boxes = number("--boxes", &value("--boxes")?)?,
             "--demo" => options.demo = true,
+            "--universe" => options.universe = true,
+            "--zoom-all" => options.zoom_all = true,
+            "--view" => {
+                let text = value("--view")?;
+                let invalid = || format!("--view expects <level>[,home], got {text:?}");
+                let (level, target) = text.split_once(',').unwrap_or((&text, "home"));
+                if !target.eq_ignore_ascii_case("home") {
+                    return Err(invalid());
+                }
+                options.view = Some(rom_render::Level::from_name(level).ok_or_else(invalid)?);
+            }
             "--no-hud" => options.no_hud = true,
             "--stats" => options.stats = true,
             "--hud-scale" => {
@@ -308,6 +328,17 @@ mod tests {
             assert!(parse(args(&bad)).is_err(), "{bad:?}");
         }
         assert!(parse(args(&["--orbit", "0,95,12,0"])).is_err());
+    }
+
+    #[test]
+    fn parses_universe_options() {
+        let o = parse(args(&["--universe", "--zoom-all", "--view", "system,home"])).unwrap();
+        assert!(o.universe && o.zoom_all);
+        assert_eq!(o.view, Some(rom_render::Level::System));
+        let o = parse(args(&["--view", "starmap"])).unwrap();
+        assert_eq!(o.view, Some(rom_render::Level::StarMap));
+        assert!(parse(args(&["--view", "moon"])).is_err());
+        assert!(parse(args(&["--view", "globe,away"])).is_err());
     }
 
     #[test]

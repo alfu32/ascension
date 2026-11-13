@@ -2,7 +2,10 @@
 use crate::hud::{HudOverlay, HudPainter, HudSnapshot, HudTexture};
 use crate::hud_layout::{HudLayout, Rect, Region, scale_needs_rebake};
 use crate::hud_minimap::{self, MapMark};
+use crate::hud_text::{Align, TextSize, TextStyle};
+use crate::scene::SpaceLabel;
 use crate::vision::shade_pixels;
+use crate::zoom::{Level, ZoomCamera};
 use crate::{Camera, EntityView, Globe, OrbitCamera, PlanetScene, TerrainScene};
 use raylib::prelude::*;
 use rom_geo::SurfacePos;
@@ -58,6 +61,76 @@ impl HudGpu {
             artwork,
             glyphs,
         })
+    }
+    /// Draws the names of the star map in the HUD font, dropping those that would overlap.
+    pub(crate) fn draw_labels(
+        &mut self,
+        d: &mut impl RaylibDraw,
+        layout: &HudLayout,
+        labels: &[SpaceLabel],
+        alpha: f32,
+    ) {
+        if labels.is_empty() || alpha <= 0.01 {
+            return;
+        }
+        let world = layout.world_area();
+        let labels: Vec<SpaceLabel> = labels
+            .iter()
+            .filter(|l| l.y > world.y && l.y < world.bottom() && l.x > 0.0)
+            .cloned()
+            .collect();
+        let labels = &labels[..];
+        let atlas = &self.painter.glyphs;
+        let ratio = layout.scale / atlas.scale;
+        let height = atlas.line_height(TextSize::Small) as f32 * ratio;
+        let boxes: Vec<_> = labels
+            .iter()
+            .map(|l| {
+                let width = atlas.measure(&l.text, TextSize::Small) as f32 * ratio;
+                (l.x, l.y - height, width, height, l.priority)
+            })
+            .collect();
+        let mut quads = Vec::new();
+        for index in hud_minimap::declutter(&boxes) {
+            let label = &labels[index];
+            let shade = [0, 0, 0, (200.0 * alpha) as u8];
+            let colour = [
+                label.colour[0],
+                label.colour[1],
+                label.colour[2],
+                (f32::from(label.colour[3]) * alpha) as u8,
+            ];
+            for (dx, dy, tint) in [(1, 1, shade), (0, 0, colour)] {
+                let style = TextStyle {
+                    size: TextSize::Small,
+                    align: Align::Left,
+                    colour: tint,
+                };
+                atlas.draw(
+                    &label.text,
+                    style,
+                    label.x.round() as i32 + dx,
+                    label.y.round() as i32 + dy,
+                    &mut quads,
+                );
+            }
+        }
+        for q in quads {
+            let (x, y, w, h) = q.src;
+            d.draw_texture_pro(
+                &self.glyphs,
+                Rectangle::new(x as f32, y as f32, w as f32, h as f32),
+                Rectangle::new(
+                    q.dst.0 as f32,
+                    q.dst.1 as f32,
+                    w as f32 * ratio,
+                    h as f32 * ratio,
+                ),
+                Vector2::zero(),
+                0.0,
+                Color::new(q.colour[0], q.colour[1], q.colour[2], q.colour[3]),
+            );
+        }
     }
     pub(crate) fn needs_rebake(&self, scale: f32) -> bool {
         scale_needs_rebake(self.painter.artwork.scale, scale)
@@ -215,18 +288,86 @@ impl MinimapGpu {
             }
             _ => hud_minimap::marks(entities, camera, layout, self.size, area),
         };
-        for mark in marks {
-            match mark {
-                MapMark::Dot(r, c) => {
-                    clip.draw_rectangle_rec(rectangle(r), Color::new(c[0], c[1], c[2], c[3]))
-                }
-                MapMark::Line(a, b) => clip.draw_line_ex(
-                    Vector2::new(a.0, a.1),
-                    Vector2::new(b.0, b.1),
-                    layout.scale.max(1.0),
-                    Color::WHITE,
-                ),
+        draw_marks(&mut clip, layout, marks);
+    }
+}
+
+fn draw_marks(d: &mut impl RaylibDraw, layout: &HudLayout, marks: Vec<MapMark>) {
+    for mark in marks {
+        match mark {
+            MapMark::Dot(r, c) => {
+                d.draw_rectangle_rec(rectangle(r), Color::new(c[0], c[1], c[2], c[3]))
             }
+            MapMark::Line(a, b) => d.draw_line_ex(
+                Vector2::new(a.0, a.1),
+                Vector2::new(b.0, b.1),
+                layout.scale.max(1.0),
+                Color::WHITE,
+            ),
+            MapMark::Ring(centre, radius, c) => d.draw_circle_lines(
+                centre.0.round() as i32,
+                centre.1.round() as i32,
+                radius,
+                Color::new(c[0], c[1], c[2], c[3]),
+            ),
+            MapMark::Segment(a, b, c) => d.draw_line_ex(
+                Vector2::new(a.0, a.1),
+                Vector2::new(b.0, b.1),
+                1.0,
+                Color::new(c[0], c[1], c[2], c[3]),
+            ),
         }
+    }
+}
+
+/// The minimap above the planet range: the system diagram or the star map.
+pub(crate) fn draw_space_minimap(
+    d: &mut impl RaylibDraw,
+    layout: &HudLayout,
+    zoom: &ZoomCamera,
+    orbit: &OrbitCamera,
+) {
+    let view = layout.rect(Region::MinimapView);
+    d.draw_rectangle_rec(rectangle(view), Color::new(4, 6, 12, 255));
+    let mut clip = d.begin_scissor_mode(
+        view.x.ceil() as i32,
+        view.y.ceil() as i32,
+        view.w.floor() as i32,
+        view.h.floor() as i32,
+    );
+    draw_marks(
+        &mut clip,
+        layout,
+        hud_minimap::space_marks(zoom, orbit, layout, view),
+    );
+}
+
+/// Four pips next to the minimap, one per level: the current one lit, the others dim, and the
+/// levels beyond the zoom cap hollow.
+pub(crate) fn draw_level_pips(
+    d: &mut impl RaylibDraw,
+    layout: &HudLayout,
+    level: Level,
+    cap: Level,
+) {
+    let view = layout.rect(Region::MinimapView);
+    let side = 11.0 * layout.scale;
+    let gap = 7.0 * layout.scale;
+    let x = view.right() + 12.0 * layout.scale;
+    let total = 4.0 * side + 3.0 * gap;
+    let top = view.y + (view.h - total) / 2.0;
+    for (i, pip) in Level::ALL.into_iter().enumerate() {
+        // The farthest level on top, the closest at the bottom.
+        let y = top + (3 - i) as f32 * (side + gap);
+        let rect = Rectangle::new(x, y, side, side);
+        let beyond = pip > cap.max(Level::Globe);
+        if pip == level {
+            d.draw_rectangle_rec(rect, Color::new(240, 200, 90, 255));
+        } else if beyond {
+            d.draw_rectangle_lines_ex(rect, 1.0, Color::new(110, 110, 120, 160));
+        } else {
+            d.draw_rectangle_rec(rect, Color::new(90, 100, 120, 220));
+        }
+        d.draw_rectangle_lines_ex(rect, 1.0, Color::new(10, 12, 18, 255));
     }
 }

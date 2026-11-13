@@ -4,7 +4,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use rom_mapgen::{
-    BaseTerrains, GeneratedMap, MapRequest, SpherePlanet, SphereRequest, generate, generate_sphere,
+    BaseTerrains, GeneratedMap, MapRequest, SpherePlanet, SphereRequest, Universe, UniverseRequest,
+    generate, generate_sphere, generate_universe,
 };
 use rom_render::{PlanetScene, TerrainScene, TileKind};
 use rom_rules::{DefId, Rules, build_rules_db};
@@ -111,6 +112,35 @@ pub fn generate_sphere_content(options: &Options, n: u32) -> Result<SphereConten
     Ok(SphereContent {
         rules: Arc::new(rules),
         planet,
+        factions,
+    })
+}
+
+/// The rules and the universe the options ask for.
+pub struct UniverseContent {
+    /// The loaded rules.
+    pub rules: Arc<Rules>,
+    /// The generated universe.
+    pub universe: Universe,
+    /// The faction of each player, in player order.
+    pub factions: Vec<DefId>,
+}
+
+/// Generates the universe for the options' style, seed and factions.
+pub fn generate_universe_content(options: &Options) -> Result<UniverseContent, String> {
+    let (rules, style, factions) = resolve(options)?;
+    let universe = generate_universe(
+        &rules,
+        &UniverseRequest {
+            style,
+            seed: options.seed,
+            player_factions: factions.clone(),
+        },
+    )
+    .map_err(|error| format!("generating the universe: {error}"))?;
+    Ok(UniverseContent {
+        rules: Arc::new(rules),
+        universe,
         factions,
     })
 }

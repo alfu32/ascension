@@ -26,6 +26,9 @@ use crate::terrain::{
 };
 use crate::vision::{ChunkSpec, shade_chunk};
 
+mod space;
+pub(crate) use space::SpaceLabel;
+
 /// Width of the ground in tiles.
 const GROUND_TILES: f32 = 256.0;
 /// Direction the sunlight travels (normalised in the shaders).
@@ -300,6 +303,7 @@ pub(crate) struct Scene {
     sea_globe_shader: Shader,
     sea_globe_material: WeakMaterial,
     globe: Option<GlobeGpu>,
+    space: Option<space::SpaceGpu>,
     entity_transforms: Vec<Matrix>,
     instances: Vec<[f32; 16]>,
     draw_markers: bool,
@@ -502,6 +506,7 @@ impl Scene {
             sea_globe_shader,
             sea_globe_material,
             globe: None,
+            space: None,
             entity_transforms: Vec::new(),
             instances: Vec::new(),
             draw_markers: false,
@@ -673,6 +678,7 @@ impl Scene {
     ) -> (usize, f32, f32) {
         self.terrain = None;
         self.globe = None;
+        self.space = None;
         self.last_shades.clear();
         self.shade_queue.clear();
         self.set_light(LIGHT_DIRECTION);
@@ -745,6 +751,7 @@ impl Scene {
     ) -> (usize, f32, f32) {
         self.terrain = None;
         self.globe = None;
+        self.space = None;
         self.last_shades.clear();
         self.shade_queue.clear();
         self.set_light(SUN_DIRECTION);

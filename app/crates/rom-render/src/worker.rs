@@ -2,7 +2,7 @@
 
 use std::io;
 use std::slice;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
@@ -13,22 +13,26 @@ use raylib::prelude::{
     RaylibRenderTexture2D, RaylibTexture2D, RaylibTextureModeExt, RenderTexture2D, TraceLogLevel,
 };
 
-use crate::camera::{Camera, CameraController, InputEvent};
+use crate::camera::{Camera, CameraController, InputEvent, Key, PointerButton};
 use crate::entities::{EntitySnapshot, EntityView, SnapshotPair};
 use crate::globe::{Globe, PlanetScene};
 use crate::hud::{HudOverlay, HudSnapshot};
-use crate::hud_gpu::{HudGpu, MinimapGpu};
+use crate::hud_gpu::{HudGpu, MinimapGpu, draw_level_pips, draw_space_minimap};
 use crate::hud_layout::HudLayout;
 use crate::hud_layout::Rect;
-use crate::hud_minimap::GLOBE_MINIMAP_SIZE;
+use crate::hud_minimap::{GLOBE_MINIMAP_SIZE, ndc_centre_y};
 use crate::mailbox::{Frame, FrameMailbox, FramePixels};
-use crate::orbit::{HOME_DISTANCE, OrbitCamera, OrbitController, lon_lat_of};
+use crate::orbit::{
+    HOME_DISTANCE, OrbitCamera, OrbitController, dir_from_lon_lat, lon_lat_of, pan_index,
+};
 use crate::pick::{PickContext, PickController, PickEvent, canvas_view, canvas_view_orbit};
 use crate::pixels::rgba_to_bgra_flipped;
 use crate::scene::Scene;
 use crate::stats::{RenderStats, StatsWindow};
 use crate::terrain::{TerrainScene, home_camera, overview_camera};
+use crate::universe::UniverseScene;
 use crate::vision::VisionMap;
+use crate::zoom::{Home, Level, ZoomCamera, ZoomScale};
 use rom_geo::SurfacePos;
 
 /// Smallest internal render scale, in percent of the canvas size.
@@ -64,6 +68,15 @@ pub struct OrbitSettings {
     pub home: Option<SurfacePos>,
 }
 
+/// How the zoom above the planet camera starts, for a published universe.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct UniverseSettings {
+    /// Id of the home system and of the home planet, the one drawn as a globe.
+    pub home: Option<(u32, u32)>,
+    /// A level to start in, over the home planet (`--view`).
+    pub view: Option<Level>,
+}
+
 /// State shared between the render thread and its bridges.
 #[derive(Debug)]
 struct Shared {
@@ -74,6 +87,9 @@ struct Shared {
     mailbox: FrameMailbox,
     terrain: Mutex<Option<Arc<TerrainScene>>>,
     planet: Mutex<Option<(Arc<PlanetScene>, OrbitSettings)>>,
+    universe: Mutex<Option<(Arc<UniverseScene>, UniverseSettings)>>,
+    zoom_cap: AtomicU8,
+    zoom_all: AtomicBool,
     terrain_ready: AtomicBool,
     box_count: AtomicU32,
     snapshots: Mutex<SnapshotPair>,
@@ -123,6 +139,22 @@ impl RenderBridge {
     pub fn publish_planet(&self, scene: Arc<PlanetScene>, settings: OrbitSettings) {
         self.shared.terrain_ready.store(false, Ordering::Release);
         *lock(&self.shared.planet) = Some((scene, settings));
+    }
+
+    /// Hands the render thread the universe to zoom out into: the star map and the systems.
+    /// Publish it before the home planet's [`PlanetScene`]; the zoom starts once both are there.
+    pub fn publish_universe(&self, scene: Arc<UniverseScene>, settings: UniverseSettings) {
+        *lock(&self.shared.universe) = Some((scene, settings));
+    }
+
+    /// Sets the farthest level the zoom may reach (the player's age decides it).
+    pub fn publish_zoom_cap(&self, level: Level) {
+        self.shared.zoom_cap.store(level as u8, Ordering::Relaxed);
+    }
+
+    /// Lifts the zoom cap for testing (`--zoom-all`).
+    pub fn publish_zoom_all(&self, all: bool) {
+        self.shared.zoom_all.store(all, Ordering::Relaxed);
     }
 
     /// True once the render thread has built the meshes of the last published terrain or planet.
@@ -270,6 +302,9 @@ impl RenderWorker {
             mailbox: FrameMailbox::default(),
             terrain: Mutex::new(None),
             planet: Mutex::new(None),
+            universe: Mutex::new(None),
+            zoom_cap: AtomicU8::new(Level::Globe as u8),
+            zoom_all: AtomicBool::new(false),
             terrain_ready: AtomicBool::new(false),
             box_count: AtomicU32::new(0),
             snapshots: Mutex::new(SnapshotPair::default()),
@@ -351,6 +386,10 @@ fn render_loop(shared: &Shared) {
     let mut orbit: Option<OrbitCamera> = None;
     let mut orbit_controller = OrbitController::default();
     let mut globe: Option<Arc<Globe>> = None;
+    let mut planet_scene: Option<Arc<PlanetScene>> = None;
+    let mut home_dir = [0.0, 0.0, 1.0];
+    let mut pending_universe: Option<(Arc<UniverseScene>, UniverseSettings)> = None;
+    let mut zoom: Option<ZoomCamera> = None;
     let mut shades: Vec<[f32; 3]> = Vec::new();
     let mut stats = StatsWindow::default();
     let mut blended: Vec<EntityView> = Vec::new();
@@ -374,6 +413,8 @@ fn render_loop(shared: &Shared) {
         if let Some((planet, settings)) = published_planet {
             orbit = None;
             globe = None;
+            zoom = None;
+            planet_scene = None;
             minimap = None;
             if planet.is_valid() {
                 let started_at = Instant::now();
@@ -411,6 +452,8 @@ fn render_loop(shared: &Shared) {
                     OrbitCamera::at(lon, lat, distance, heading, radius, max)
                 }));
                 orbit_controller.set_home(home);
+                home_dir = dir_from_lon_lat(lon, lat);
+                planet_scene = Some(Arc::clone(&planet));
                 map_size = GLOBE_MINIMAP_SIZE;
                 eprintln!(
                     "planet-mesh n={} meshes={meshes} build_ms={:.1} upload_ms={upload_ms:.1}",
@@ -423,10 +466,37 @@ fn render_loop(shared: &Shared) {
             }
             shared.terrain_ready.store(true, Ordering::Release);
         }
+        if let Some(published) = lock(&shared.universe).take() {
+            pending_universe = Some(published);
+        }
+        if let (Some(_), Some(globe), Some(orbit)) = (&pending_universe, &globe, &mut orbit)
+            && let Some((universe, settings)) = pending_universe.take()
+        {
+            let scale = ZoomScale::new(globe.radius(), orbit.max_distance);
+            scene.set_universe(
+                &mut rl,
+                &thread,
+                &universe,
+                settings.home.map(|(_, body)| body),
+                planet_scene.as_deref(),
+            );
+            let home = settings.home.map(|(system, body)| Home {
+                system,
+                body,
+                dir: home_dir,
+            });
+            let mut camera = ZoomCamera::new(universe, scale, home, Level::Globe);
+            camera.set_cap(current_cap(shared));
+            if let Some(level) = settings.view {
+                camera.set_view(level, orbit);
+            }
+            zoom = Some(camera);
+        }
         let published_terrain = lock(&shared.terrain).take();
         if let Some(terrain) = published_terrain {
             orbit = None;
             globe = None;
+            zoom = None;
             let (meshes, build_ms, upload_ms) = scene.set_terrain(&thread, &terrain);
             minimap = if terrain.is_valid() {
                 match MinimapGpu::load(&mut rl, &thread, &terrain) {
@@ -479,6 +549,9 @@ fn render_loop(shared: &Shared) {
         {
             orbit.look_at(globe.dir_of(at));
         }
+        if let Some(zoom) = zoom.as_mut() {
+            zoom.set_cap(current_cap(shared));
+        }
         let layout = *lock(&shared.layout);
         let hud_visible = shared.hud_visible.load(Ordering::Relaxed);
         let percent = shared.hud_scale.load(Ordering::Relaxed);
@@ -492,6 +565,11 @@ fn render_loop(shared: &Shared) {
             let ground = |x: f32, y: f32| surface.map_or(0.0, |s| s.height(x, y));
             let now_ms = frame_start.duration_since(started).as_millis() as u64;
             for event in events {
+                if let (Some(zoom), Some(orbit)) = (zoom.as_mut(), orbit.as_mut())
+                    && zoom_event(zoom, orbit, event, over_hud, now_ms, &canvas, hud_visible)
+                {
+                    continue;
+                }
                 let ctx = PickContext {
                     layout: canvas,
                     view: current_view(&camera, orbit.as_ref(), &canvas, hud_visible),
@@ -554,9 +632,18 @@ fn render_loop(shared: &Shared) {
         }
         controller.set_viewport(layout.0, layout.1);
         orbit_controller.set_viewport(layout.0, layout.1);
-        match orbit.as_mut() {
-            Some(orbit) => orbit_controller.advance(orbit, seconds),
-            None => controller.advance(&mut camera, seconds),
+        match (orbit.as_mut(), zoom.as_mut()) {
+            (Some(orbit), Some(zoom)) => {
+                // A camera reset by the planet controller moves the log-distance with it.
+                zoom.adopt_orbit(orbit);
+                zoom.advance(seconds);
+                zoom.sync_orbit(orbit);
+                if zoom.pans_planet() {
+                    orbit_controller.advance(orbit, seconds);
+                }
+            }
+            (Some(orbit), None) => orbit_controller.advance(orbit, seconds),
+            (None, _) => controller.advance(&mut camera, seconds),
         }
 
         if layout.0 == 0 || layout.1 == 0 {
@@ -601,9 +688,12 @@ fn render_loop(shared: &Shared) {
         } else {
             0.0
         };
-        match &orbit {
-            Some(orbit) => scene.draw_globe(&mut rl, &thread, texture, orbit),
-            None => scene.draw(&mut rl, &thread, texture, &camera, elapsed, boxes),
+        match (&orbit, &zoom) {
+            (Some(orbit), Some(zoom)) if scene.has_space() => {
+                scene.draw_zoomed(&mut rl, &thread, texture, zoom, orbit);
+            }
+            (Some(orbit), _) => scene.draw_globe(&mut rl, &thread, texture, orbit),
+            (None, _) => scene.draw(&mut rl, &thread, texture, &camera, elapsed, boxes),
         }
         if hud_visible {
             if hud
@@ -639,10 +729,28 @@ fn render_loop(shared: &Shared) {
                     }
                 };
                 let mut drawing = rl.begin_texture_mode(&thread, texture);
-                if let Some(map) = &minimap {
-                    map.draw(&mut drawing, &hud_layout, &blended, &camera, orbit.as_ref());
+                let space_level = zoom
+                    .as_ref()
+                    .map(ZoomCamera::level)
+                    .filter(|level| *level >= Level::System);
+                match (&zoom, &orbit, space_level) {
+                    (Some(zoom), Some(orbit), Some(_)) => {
+                        draw_space_minimap(&mut drawing, &hud_layout, zoom, orbit);
+                    }
+                    _ => {
+                        if let Some(map) = &minimap {
+                            map.draw(&mut drawing, &hud_layout, &blended, &camera, orbit.as_ref());
+                        }
+                    }
+                }
+                if let Some(zoom) = &zoom {
+                    let alpha = zoom.weights().map;
+                    hud.draw_labels(&mut drawing, &hud_layout, scene.space_labels(), alpha);
                 }
                 hud.draw(&mut drawing, &hud_layout, &hud_snapshot, &hud_overlay);
+                if let Some(zoom) = &zoom {
+                    draw_level_pips(&mut drawing, &hud_layout, zoom.level(), zoom.cap());
+                }
             }
         }
 
@@ -685,6 +793,85 @@ fn render_loop(shared: &Shared) {
     drop(minimap);
     drop(target);
     drop(scene);
+}
+
+/// The farthest level the zoom may reach now.
+fn current_cap(shared: &Shared) -> Level {
+    if shared.zoom_all.load(Ordering::Relaxed) {
+        return Level::StarMap;
+    }
+    Level::ALL
+        .get(usize::from(shared.zoom_cap.load(Ordering::Relaxed)))
+        .copied()
+        .unwrap_or(Level::Globe)
+}
+
+/// What the zoom camera does with an input event; true when it consumed the event. The wheel
+/// zooms through every level, `Home` flies to the home globe, and above the planet range the
+/// pan keys move across the frame and a double click flies to the body or system under it.
+fn zoom_event(
+    zoom: &mut ZoomCamera,
+    orbit: &mut OrbitCamera,
+    event: InputEvent,
+    over_hud: bool,
+    now_ms: u64,
+    canvas: &HudLayout,
+    hud_visible: bool,
+) -> bool {
+    match event {
+        InputEvent::Wheel { steps } if !over_hud => {
+            zoom.wheel(steps);
+            zoom.sync_orbit(orbit);
+            true
+        }
+        InputEvent::KeyDown(Key::FrameMap) => {
+            zoom.fly_home(orbit);
+            true
+        }
+        InputEvent::KeyDown(key) => match pan_index(key) {
+            Some(index) if !zoom.pans_planet() => {
+                zoom.hold(index, true);
+                true
+            }
+            _ => false,
+        },
+        InputEvent::KeyUp(key) => {
+            if let Some(index) = pan_index(key) {
+                zoom.hold(index, false);
+            }
+            false
+        }
+        InputEvent::ReleaseAll => {
+            (0..4).for_each(|index| zoom.hold(index, false));
+            false
+        }
+        InputEvent::ButtonDown {
+            button: PointerButton::Left,
+            x,
+            y,
+            ..
+        } if zoom.level() >= Level::System && !(hud_visible && canvas.contains_hud(x, y)) => {
+            let centre_y = if hud_visible {
+                ndc_centre_y(canvas.world_area(), canvas.height)
+            } else {
+                0.0
+            };
+            let size = (canvas.width, canvas.height);
+            let view = match zoom.level() {
+                Level::System => zoom.system_view(orbit).view(size, centre_y),
+                _ => zoom.map_view().view(size, centre_y),
+            };
+            zoom.press(now_ms, (x, y), &view, orbit);
+            true
+        }
+        InputEvent::ButtonUp {
+            button: PointerButton::Left,
+            x,
+            y,
+            ..
+        } => zoom.level() >= Level::System && !(hud_visible && canvas.contains_hud(x, y)),
+        _ => false,
+    }
 }
 
 /// The canvas view of whichever camera is active.
