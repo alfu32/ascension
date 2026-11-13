@@ -4881,6 +4881,7 @@ dependencies = [
 name = "rom-cli"
 version = "0.0.19"
 dependencies = [
+ "rom-geo",
  "rom-mapgen",
  "rom-rules",
  "rom-sim",
@@ -4888,9 +4889,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rom-geo"
+version = "0.0.19"
+
+[[package]]
 name = "rom-mapgen"
 version = "0.0.19"
 dependencies = [
+ "rom-geo",
  "rom-rules",
  "rom-sim",
  "rusqlite",

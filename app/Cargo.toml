@@ -3,6 +3,7 @@ members = [
     "crates/rom-rules",
     "crates/rom-sim",
     "crates/rom-mapgen",
+    "crates/rom-geo",
     "crates/rom-ai",
     "crates/rom-save",
     "crates/rom-render",

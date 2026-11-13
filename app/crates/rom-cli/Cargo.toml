@@ -10,6 +10,7 @@ name = "rom"
 path = "src/main.rs"
 
 [dependencies]
+rom-geo = { path = "../rom-geo" }
 rom-rules.workspace = true
 rom-sim = { path = "../rom-sim" }
 rom-mapgen = { path = "../rom-mapgen" }
