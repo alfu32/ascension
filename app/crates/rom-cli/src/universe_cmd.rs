@@ -1,13 +1,25 @@
 //! The `rom universe` subcommand.
 
-use std::{fs, path::PathBuf};
+use std::{collections::BTreeMap, fs, path::PathBuf, sync::Arc};
 
 use rom_mapgen::{BodyKind, Universe, UniverseRequest, generate_universe};
 use rom_rules::{DefId, Rules};
+use rom_sim::{
+    BodyId, BodyInfo, Command, EntityId, PlanetSurface, Player, PlayerId, Pos, RouteInfo, SimRng,
+    SystemInfo, UniverseSetup, World,
+};
 
 use crate::mapgen_cmd::ppm;
 
-const USAGE: &str = "usage: rom universe --db <rules.db> --style <key> --seed <n> --factions <key,key,...> [--ppm <file>]";
+const USAGE: &str = "usage: rom universe --db <rules.db> --style <key> --seed <n> --factions <key,key,...> [--ppm <file>] [--simulate <ticks>]";
+/// Builders placed around each starting city.
+const BUILDERS: usize = 3;
+/// Ticks between rounds of random move orders for idle units.
+const MOVE_PERIOD: u64 = 200;
+/// Largest displacement of a random move along each local axis, in milli-tiles.
+const MOVE_SPAN: i64 = 24_000;
+/// Mixed into the seed so the move orders have their own random stream.
+const MOVE_STREAM: u64 = 0x6d6f_7665_7321_2121;
 /// Side of the star map image in pixels.
 const SIDE: i64 = 1024;
 /// Pixels from the image centre to the star map rim.
@@ -33,6 +45,7 @@ const RACE_COLOURS: [[u8; 3]; 6] = [
 /// Runs the subcommand with the arguments after `universe`.
 pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::error::Error>> {
     let (mut db, mut style, mut seed, mut factions, mut ppm_path) = (None, None, None, None, None);
+    let mut simulate = None;
     while let Some(flag) = args.next() {
         let value = args
             .next()
@@ -43,6 +56,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
             "--seed" => seed = Some(value.parse::<u64>()?),
             "--factions" => factions = Some(value),
             "--ppm" => ppm_path = Some(PathBuf::from(value)),
+            "--simulate" => simulate = Some(value.parse::<u64>()?),
             _ => return Err(format!("unknown argument: {flag}").into()),
         }
     }
@@ -73,7 +87,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
         &UniverseRequest {
             style: style_id,
             seed,
-            player_factions,
+            player_factions: player_factions.clone(),
         },
     )?;
     println!("{}", summary(&rules, &universe));
@@ -84,7 +98,212 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
         let radius = rules.map_styles[&style_id].star_map_radius;
         fs::write(path, star_map_ppm(&universe, radius))?;
     }
+    if let Some(ticks) = simulate {
+        let world = simulate_universe(Arc::new(rules), &universe, &player_factions, seed, ticks)?;
+        println!("{}", world_line(&world));
+    }
     Ok(())
+}
+
+/// The universe as plain data for the simulation, with the generated (home) planets.
+pub fn universe_setup(universe: &Universe) -> UniverseSetup {
+    UniverseSetup {
+        systems: universe
+            .systems
+            .iter()
+            .map(|s| SystemInfo {
+                id: s.id,
+                name: s.name.clone(),
+                x: s.x,
+                y: s.y,
+            })
+            .collect(),
+        bodies: universe
+            .bodies
+            .iter()
+            .map(|b| BodyInfo {
+                id: BodyId(b.id),
+                system: b.system_id,
+                kind: b.kind,
+                name: b.name.clone(),
+                orbit_radius: b.orbit_radius,
+                orbit_angle_mdeg: b.orbit_angle_mdeg,
+                n: b.n,
+                home_race: b.home_race,
+                node_type: b.node_entity_type,
+            })
+            .collect(),
+        routes: universe
+            .routes
+            .iter()
+            .map(|r| RouteInfo {
+                system_a: r.system_a,
+                system_b: r.system_b,
+                length: r.length,
+            })
+            .collect(),
+        planets: universe
+            .planets
+            .iter()
+            .map(|(body, planet)| {
+                (
+                    BodyId(*body),
+                    PlanetSurface {
+                        surface: planet.surface,
+                        terrain: planet.terrain.clone(),
+                        nodes: planet.nodes.clone(),
+                    },
+                )
+            })
+            .collect(),
+    }
+}
+
+/// Neutral player 0 and one player per faction, each on its own team, in the faction's
+/// first age (or the earliest age).
+fn players(rules: &Rules, factions: &[DefId]) -> Result<Vec<Player>, Box<dyn std::error::Error>> {
+    let earliest = rules
+        .ages
+        .values()
+        .min_by_key(|a| (a.ordinal, a.id))
+        .ok_or("the rules have no age")?
+        .id;
+    let player = |id: u32, faction: DefId| Player {
+        id: PlayerId(id),
+        team: id,
+        faction,
+        age: rules
+            .factions
+            .get(&faction)
+            .and_then(|f| f.first_age_id)
+            .filter(|age| rules.ages.contains_key(age))
+            .unwrap_or(earliest),
+        resources: BTreeMap::new(),
+        techs: BTreeMap::new(),
+    };
+    let first = *factions.first().ok_or("no factions")?;
+    Ok(std::iter::once(player(0, first))
+        .chain(
+            factions
+                .iter()
+                .enumerate()
+                .map(|(i, f)| player(i as u32 + 1, *f)),
+        )
+        .collect())
+}
+
+/// Builds the world from the universe's home planets, reveals each player's home planet,
+/// places each player's starting city with `find_city_site` and builders around it, and
+/// runs `ticks` ticks in which idle units are sent to random points on their planet.
+pub fn simulate_universe(
+    rules: Arc<Rules>,
+    universe: &Universe,
+    factions: &[DefId],
+    seed: u64,
+    ticks: u64,
+) -> Result<World, Box<dyn std::error::Error>> {
+    let builder = rules
+        .entity_types
+        .values()
+        .find(|et| et.builder.is_some() && et.movement.is_some())
+        .ok_or("the rules have no builder")?
+        .id;
+    let homes: BTreeMap<PlayerId, BodyId> = universe
+        .starts
+        .iter()
+        .enumerate()
+        .map(|(i, (body, _))| (PlayerId(i as u32 + 1), BodyId(*body)))
+        .collect();
+    let mut world = World::from_universe(
+        Arc::clone(&rules),
+        universe_setup(universe),
+        seed,
+        players(&rules, factions)?,
+        homes,
+    )?;
+    let mut units = Vec::new();
+    for (i, (body, start)) in universe.starts.iter().enumerate() {
+        let (player, body) = (PlayerId(i as u32 + 1), BodyId(*body));
+        world.reveal_terrain(player, body);
+        let mut near = World::pos_of(*start)?;
+        near.body = body;
+        let city = world.city_type(player).ok_or("no city type")?;
+        let site = world
+            .find_city_site(player, body, near)
+            .ok_or("no room for a starting city")?;
+        world.place_for_setup(city, player, site)?;
+        let et = &rules.entity_types[&city];
+        let reach = et.footprint_w.max(et.footprint_h) * 500 + 1500;
+        for n in 0..BUILDERS {
+            let at = ring_position(&world, site, n, reach);
+            units.push(world.spawn(builder, player, at)?);
+        }
+    }
+    let mut rng = SimRng::new(seed ^ MOVE_STREAM);
+    for tick in 0..ticks {
+        if tick % MOVE_PERIOD == 0 {
+            send_idle(&mut world, &units, &mut rng);
+        }
+        world.step();
+    }
+    Ok(world)
+}
+
+/// The `n`-th of `BUILDERS` points on a ring around `centre`, moved outwards until the
+/// ground is buildable; the centre when none is.
+fn ring_position(world: &World, centre: Pos, n: usize, reach: i64) -> Pos {
+    const DIRECTIONS: [(i64, i64); 3] = [(1000, 0), (-500, 866), (-500, -866)];
+    let (dx, dy) = DIRECTIONS[n % DIRECTIONS.len()];
+    (0..6)
+        .map(|step| {
+            let distance = reach + step * 700;
+            world.offset(centre, dx * distance / 1000, dy * distance / 1000)
+        })
+        .find(|at| {
+            world
+                .terrain_at(*at)
+                .is_some_and(|t| world.rules().terrains[&t].buildable)
+        })
+        .unwrap_or(centre)
+}
+
+/// Sends every idle unit of `units` to a random point near it on its own planet.
+fn send_idle(world: &mut World, units: &[EntityId], rng: &mut SimRng) {
+    for id in units {
+        let Some(unit) = world.entity(*id) else {
+            continue;
+        };
+        if !unit.orders().is_empty() {
+            continue;
+        }
+        let (owner, pos) = (unit.owner, unit.pos);
+        let span = 2 * MOVE_SPAN as u32 + 1;
+        let dx = i64::from(rng.range(0, span)) - MOVE_SPAN;
+        let dy = i64::from(rng.range(0, span)) - MOVE_SPAN;
+        let target = world.offset(pos, dx, dy);
+        // A refused order (an unreachable point) just leaves the unit idle.
+        let _ = world.submit(Command {
+            player: owner,
+            executor: *id,
+            kind: "move".into(),
+            subject: None,
+            target_entity: None,
+            target_pos: Some(target),
+            queue: false,
+        });
+    }
+}
+
+/// The line printed after a simulation.
+pub fn world_line(world: &World) -> String {
+    format!(
+        "world bodies={}/{} entities={} tick={} hash={:016x}",
+        world.surfaces().len(),
+        world.habitable_count(),
+        world.entities().count(),
+        world.tick(),
+        world.hash()
+    )
 }
 
 /// The one-line summary printed by the command.
@@ -214,4 +433,49 @@ fn star_map_ppm(universe: &Universe, radius: i64) -> Vec<u8> {
         }
     }
     ppm(SIDE as usize, SIDE as usize, &canvas.pixels)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn run(ticks: u64) -> String {
+        let conn = rom_rules::build_rules_db(
+            include_str!("../../../db/schema.sql"),
+            include_str!("../../../db/seed.sql"),
+        )
+        .unwrap();
+        let rules = Rules::load(&conn).unwrap();
+        let factions: Vec<DefId> = ["nation.romans", "nation.ashscale"]
+            .iter()
+            .map(|key| rules.id_of(key).unwrap())
+            .collect();
+        let request = UniverseRequest {
+            style: rules.id_of("map.many_worlds").unwrap(),
+            seed: 3,
+            player_factions: factions.clone(),
+        };
+        let universe = generate_universe(&rules, &request).unwrap();
+        let world = simulate_universe(Arc::new(rules), &universe, &factions, 3, ticks).unwrap();
+        // Every home planet has a surface, and each player's start is on its home planet.
+        assert_eq!(world.surfaces().len(), universe.planets.len());
+        for player in [PlayerId(1), PlayerId(2)] {
+            let home = world.home_body(player).unwrap();
+            assert!(
+                world
+                    .entities()
+                    .filter(|e| e.owner == player)
+                    .all(|e| e.pos.body == home)
+            );
+            assert!(world.visibility_tiles(player, home).iter().all(|t| *t > 0));
+        }
+        world_line(&world)
+    }
+
+    #[test]
+    fn universe_world_same_seed_same_hash() {
+        let first = run(600);
+        assert!(first.contains("tick=600"), "{first}");
+        assert_eq!(first, run(600));
+    }
 }

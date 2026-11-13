@@ -192,6 +192,7 @@ mod tests {
                         x: 2000 + n * 6000,
                         y: 50000,
                         face: 0,
+                        ..Pos::default()
                     },
                 )
                 .unwrap();
@@ -203,6 +204,7 @@ mod tests {
                         x: 2000 + n * 6000,
                         y: 52000,
                         face: 0,
+                        ..Pos::default()
                     },
                 )
                 .unwrap();

@@ -116,6 +116,7 @@ fn run_sphere(
             x: inside(start.x, w),
             y: inside(start.y, h),
             face: start.face,
+            ..Pos::default()
         };
         world.place_for_setup(setup.city, PlayerId(index as u32 + 1), at)?;
     }
@@ -182,7 +183,7 @@ fn report(world: &World, players: usize) {
     let owned: Vec<String> = (1..=players as u32)
         .map(|n| {
             world
-                .territory_tiles()
+                .owned_tile_counts()
                 .get(&PlayerId(n))
                 .copied()
                 .unwrap_or(0)

@@ -59,7 +59,7 @@ impl World {
                     world.rng.range(0, 128_000) as i32,
                     world.rng.range(0, 128_000) as i32,
                 );
-                if world.pathing.speed_pct(class, pos) > 0 {
+                if world.surfaces[0].pathing.speed_pct(class, pos) > 0 {
                     break pos;
                 }
             };
@@ -208,8 +208,13 @@ impl World {
         let (type_id, class, _) = mover(&rules, false)?;
         let players = scenario_players(&rules, 1)?;
         let mut world = Self::from_sphere(rules, surface, terrain, &[], seed, players)?;
-        let geo = world.geo.clone();
-        if (0..geo.tiles()).all(|i| world.pathing.speed_pct(class, geo.index_centre(i)) == 0) {
+        let geo = world.surfaces[0].geo.clone();
+        if (0..geo.tiles()).all(|i| {
+            world.surfaces[0]
+                .pathing
+                .speed_pct(class, geo.index_centre(i))
+                == 0
+        }) {
             return Err(SimError::ScenarioUnavailable("passable terrain"));
         }
         let side = surface.n * 1000;
@@ -220,8 +225,9 @@ impl World {
                     face: world.rng.range(0, 6) as u8,
                     x: world.rng.range(0, side) as i32,
                     y: world.rng.range(0, side) as i32,
+                    ..Pos::default()
                 };
-                if world.pathing.speed_pct(class, pos) > 0 {
+                if world.surfaces[0].pathing.speed_pct(class, pos) > 0 {
                     break pos;
                 }
             };
@@ -269,6 +275,7 @@ impl World {
             face: BATTLE_FACE,
             x: (side / 2) as i32,
             y: 0,
+            ..Pos::default()
         };
         for index in geo.disc(middle, BATTLEFIELD_RADIUS).flatten() {
             terrain[index] = ground;
@@ -282,6 +289,7 @@ impl World {
                 face: BATTLE_FACE,
                 x: along as i32,
                 y: LINE_DEPTH as i32,
+                ..Pos::default()
             };
             (near, geo.offset(near, 0, -2 * LINE_DEPTH).0)
         };

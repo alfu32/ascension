@@ -41,6 +41,7 @@ fn at(x: i32, y: i32) -> Pos {
         x: x * 1000 + 500,
         y: y * 1000 + 500,
         face: 0,
+        ..Pos::default()
     }
 }
 
@@ -630,6 +631,7 @@ fn placement_check_reports_valid_and_invalid() {
         x: snap(30_000, et.footprint_w),
         y: snap(20_000, et.footprint_h),
         face: 0,
+        ..Pos::default()
     };
     assert_eq!(placement_check(&fx.world, building, free), Ok(()));
     assert_eq!(
@@ -832,12 +834,14 @@ fn placement_on_the_sphere_matches_check_placement() {
             x: 10_500,
             y: 10_500,
             face: (city.face + 3) % 6,
+            ..Pos::default()
         },
         // Right at a face edge, where the footprint may cross it.
         Pos {
             x: 63_900,
             y: 30_500,
             face: city.face,
+            ..Pos::default()
         },
     ];
     for (n, spot) in spots.into_iter().enumerate() {
@@ -856,6 +860,7 @@ fn placement_on_the_sphere_matches_check_placement() {
             x: snap(spot.x, footprint.0),
             y: snap(spot.y, footprint.1),
             face: spot.face,
+            ..Pos::default()
         };
         assert_eq!(preview.face, spot.face, "spot {n}");
         assert_eq!((preview.x, preview.y), (snapped.x, snapped.y), "spot {n}");

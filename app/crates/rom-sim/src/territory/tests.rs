@@ -81,7 +81,7 @@ fn owner(w: &World, x: i32, y: i32) -> Option<PlayerId> {
 /// The incremental grid and tile counts equal a full recomputation.
 fn check(w: &World) {
     let full = w.full_territory();
-    assert_eq!(w.territory.winner, full, "tick {}", w.tick);
+    assert_eq!(w.surfaces[0].territory.winner, full, "tick {}", w.tick);
     let mut owned: BTreeMap<PlayerId, u64> = BTreeMap::new();
     for winner in full.iter().filter(|w| **w != 0) {
         *owned
@@ -110,7 +110,7 @@ fn border_grows_from_a_completed_city_only() {
     w.step();
     let city = w.cities(P1)[0];
     assert!(w.entity(city).unwrap().build_progress.is_some());
-    assert!(w.territory_tiles().is_empty());
+    assert!(w.owned_tile_counts().is_empty());
     assert_eq!(owner(&w, 20, 30), None);
     for _ in 0..2000 {
         if w.entity(city).unwrap().build_progress.is_none() {
@@ -123,7 +123,7 @@ fn border_grows_from_a_completed_city_only() {
     // The border radius is 24 tiles: (44, 30) is exactly on it, (45, 30) beyond.
     assert_eq!(owner(&w, 44, 30), Some(P1));
     assert_eq!(owner(&w, 45, 30), None);
-    assert!(w.territory_tiles()[&P1] > 1500);
+    assert!(w.owned_tile_counts()[&P1] > 1500);
     check(&w);
 }
 
@@ -132,7 +132,7 @@ fn site_does_not_emit_border() {
     let mut w = world("");
     let city = site(&mut w, "bld.city", P1, at(20_500, 30_500));
     site(&mut w, "bld.temple", P1, at(40_000, 30_000));
-    assert!(w.territory_tiles().is_empty());
+    assert!(w.owned_tile_counts().is_empty());
     assert!(w.territory.emitters.is_empty());
     complete(&mut w, city);
     assert_eq!(owner(&w, 20, 30), Some(P1));
@@ -168,12 +168,12 @@ fn contested_tile_goes_to_stronger_emitter_and_ties_to_earlier() {
 fn religion_extends_temple_border_on_the_grid() {
     let mut w = world("");
     place(&mut w, "bld.temple", P1, at(30_000, 30_000));
-    let before = w.territory_tiles()[&P1];
+    let before = w.owned_tile_counts()[&P1];
     // (32, 30) has its centre about 2.5 tiles from the temple: outside 2000, inside 4000.
     assert_eq!(owner(&w, 32, 30), None);
     w.complete_research(P1, id(&w, "tech.religion"));
     assert_eq!(owner(&w, 32, 30), Some(P1));
-    assert!(w.territory_tiles()[&P1] > before);
+    assert!(w.owned_tile_counts()[&P1] > before);
     assert_eq!(w.territory.emitters.values().next().unwrap().radius, 4000);
     check(&w);
 }
@@ -186,20 +186,20 @@ fn destroying_an_emitter_shrinks_the_border() {
     place(&mut w, "bld.city", P2, at(50_500, 30_500));
     assert_eq!(owner(&w, 2, 30), Some(P1));
     assert_eq!(owner(&w, 20, 30), Some(P1));
-    let before = w.territory_tiles()[&P1];
+    let before = w.owned_tile_counts()[&P1];
     w.despawn(west).unwrap();
     assert_eq!(owner(&w, 2, 30), None);
     // Still within the other own city's reach.
     assert_eq!(owner(&w, 20, 30), Some(P1));
-    assert!(w.territory_tiles()[&P1] < before);
+    assert!(w.owned_tile_counts()[&P1] < before);
     check(&w);
     let east = w.cities(P2)[0];
     let middle = w.cities(P1)[0];
     w.despawn(middle).unwrap();
     assert_eq!(owner(&w, 30, 30), Some(P2));
-    assert!(!w.territory_tiles().contains_key(&P1));
+    assert!(!w.owned_tile_counts().contains_key(&P1));
     w.despawn(east).unwrap();
-    assert!(w.territory_tiles().is_empty());
+    assert!(w.owned_tile_counts().is_empty());
     check(&w);
 }
 
@@ -355,7 +355,7 @@ fn cities_too_close_rejected() {
 #[test]
 fn first_city_may_be_placed_without_territory() {
     let mut w = world("");
-    assert!(w.territory_tiles().is_empty());
+    assert!(w.owned_tile_counts().is_empty());
     construct(&mut w, P1, "bld.city", at(40_500, 30_500)).unwrap();
     // A second one is no longer the first: the limit applies.
     assert_eq!(
@@ -537,7 +537,7 @@ fn hash_covers_borders_cities_and_fog() {
         change(w);
         assert_ne!(w.hash(), before);
     }
-    changes(&mut w, |w| w.territory.winner[0] = city.0);
+    changes(&mut w, |w| w.surfaces[0].territory.winner[0] = city.0);
     changes(&mut w, |w| {
         w.territory.emitters.get_mut(&city).unwrap().completed += 1
     });
@@ -549,18 +549,23 @@ fn hash_covers_borders_cities_and_fog() {
         w.entities[farm.0 as usize].as_mut().unwrap().city_id = None
     });
     changes(&mut w, |w| {
-        w.vision.players.get_mut(&P1).unwrap().count[0] += 1
+        w.surfaces[0].vision.players.get_mut(&P1).unwrap().count[0] += 1
     });
     changes(&mut w, |w| {
-        w.vision.players.get_mut(&P2).unwrap().explored[0] ^= 1
+        w.surfaces[0].vision.players.get_mut(&P2).unwrap().explored[0] ^= 1
     });
     changes(&mut w, |w| {
-        let memory = &mut w.vision.players.get_mut(&P1).unwrap().memory;
+        let memory = &mut w.surfaces[0].vision.players.get_mut(&P1).unwrap().memory;
         memory.values_mut().next().unwrap().pos.x += 1;
     });
     changes(&mut w, |w| w.vision.viewers[1].as_mut().unwrap().los += 1);
-    changes(&mut w, |w| w.vision.touched.push(3));
+    changes(&mut w, |w| w.surfaces[0].vision.touched.push(3));
     changes(&mut w, |w| {
-        w.vision.buildings.entry(5).or_default().insert(EntityId(1));
+        w.surfaces[0]
+            .vision
+            .buildings
+            .entry(5)
+            .or_default()
+            .insert(EntityId(1));
     });
 }

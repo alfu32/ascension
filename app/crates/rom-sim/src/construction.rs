@@ -22,6 +22,10 @@ impl World {
     /// Puts a footprint on whole tiles nearest to `pos`; other entities keep their point.
     pub(crate) fn snap_placement(&self, subject: DefId, pos: Pos) -> Result<Pos, SimError> {
         let et = &self.rules.entity_types[&subject];
+        let geo = &self
+            .surface(pos.body)
+            .ok_or(SimError::UnknownBody(pos.body))?
+            .geo;
         if et.class != EntityClass::Building {
             return Ok(pos);
         }
@@ -33,10 +37,10 @@ impl World {
         let pos = Pos {
             x: snap(pos.x, et.footprint_w),
             y: snap(pos.y, et.footprint_h),
-            face: pos.face,
+            ..pos
         };
-        let fits = self.geo.footprint_fits(footprint(et, pos));
-        if self.geo.is_flat() {
+        let fits = geo.footprint_fits(footprint(et, pos));
+        if geo.is_flat() {
             return if fits {
                 Ok(pos)
             } else {
@@ -45,20 +49,21 @@ impl World {
         }
         // On a sphere a requested point must be on the surface, and the footprint
         // snapped around it must lie within that point's face.
-        if !self.geo.contains(requested) {
+        if !geo.contains(requested) {
             return Err(SimError::OutsideMap);
         }
         if !fits {
             return Err(SimError::CrossesFaceEdge);
         }
-        if !self.geo.contains(pos) {
+        if !geo.contains(pos) {
             return Err(SimError::OutsideMap);
         }
         Ok(pos)
     }
 
     /// Places a complete entity for match setup, exempt from every placement rule;
-    /// buildings are snapped to whole tiles and must fit on the map.
+    /// buildings are snapped to whole tiles and must fit on the surface of the position's
+    /// body.
     pub fn place_for_setup(
         &mut self,
         type_id: DefId,
@@ -82,6 +87,18 @@ impl World {
         subject: DefId,
         pos: Pos,
     ) -> Result<Pos, SimError> {
+        self.placement(player, subject, pos, false)
+    }
+
+    /// `check_placement`, optionally leaving out the territory rules (`in_own_territory`,
+    /// `in_city_radius`).
+    pub(crate) fn placement(
+        &self,
+        player: PlayerId,
+        subject: DefId,
+        pos: Pos,
+        ignore_territory: bool,
+    ) -> Result<Pos, SimError> {
         let et = self
             .rules
             .entity_types
@@ -89,9 +106,10 @@ impl World {
             .ok_or(SimError::UnknownType(subject))?;
         let pos = self.snap_placement(subject, pos)?;
         let bounds = footprint(et, pos);
-        for tile in self.geo.footprint_tiles(pos.face, bounds) {
-            let index = self.geo.index_of(tile).expect("checked bounds");
-            if !self.rules.terrains[&self.map.terrain[index]].buildable {
+        let surface = self.surf(pos.body);
+        for tile in surface.geo.footprint_tiles(pos.face, bounds) {
+            let index = surface.geo.index_of(tile).expect("checked bounds");
+            if !self.rules.terrains[&surface.map.terrain[index]].buildable {
                 return Err(SimError::UnbuildableTerrain);
             }
         }
@@ -100,6 +118,7 @@ impl World {
             let other = &self.rules.entity_types[&e.type_id];
             other.class == EntityClass::Building
                 && e.pos.face == pos.face
+                && e.pos.body == pos.body
                 && overlaps(bounds, footprint(other, e.pos))
         }) || self
             .all_orders()
@@ -107,6 +126,7 @@ impl World {
             .any(|o| {
                 let at = o.target_pos.expect("placement");
                 at.face == pos.face
+                    && at.body == pos.body
                     && overlaps(
                         bounds,
                         footprint(
@@ -118,7 +138,7 @@ impl World {
         {
             return Err(SimError::PlacementOverlap);
         }
-        self.check_placement_rules(player, subject, pos, bounds)?;
+        self.check_placement_rules(player, subject, pos, bounds, ignore_territory)?;
         Ok(pos)
     }
 
@@ -168,7 +188,7 @@ impl World {
             .clamp(0, i64::from(u32::MAX)) as u32;
         order.total_ticks = Some(u64::from(total));
         let bounds = footprint(&self.rules.entity_types[&site.type_id], site.pos);
-        if !self.approach(builder, order, site.pos.face, bounds) {
+        if !self.approach(builder, order, site.pos, bounds) {
             return;
         }
         let et = &self.rules.entity_types[&self.entity(builder).expect("builder").type_id];

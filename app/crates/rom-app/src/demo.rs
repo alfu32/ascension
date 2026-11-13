@@ -288,6 +288,7 @@ pub fn add_stress_units(game: &mut Match, count: u32, seed: u64) -> Vec<(EntityI
                 x: (column * 1000 + 500) as i32,
                 y: ((row % side) * 1000 + 500) as i32,
                 face: (row / side) as u8,
+                ..Pos::default()
             };
             if let Some(terrain) = game.world.terrain_at(at)
                 && game.world.rules().terrains[&terrain].buildable

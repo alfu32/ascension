@@ -41,6 +41,7 @@ fn random_pos(rng: &mut SimRng, n: u32) -> Pos {
         face: rng.range(0, 6) as u8,
         x: rng.range(0, n * 1000) as i32,
         y: rng.range(0, n * 1000) as i32,
+        ..Pos::default()
     }
 }
 
@@ -52,6 +53,7 @@ fn near_corner(rng: &mut SimRng, w: &World, n: u32) -> Pos {
         face: 0,
         x: corner.0 as i32,
         y: corner.1 as i32,
+        ..Pos::default()
     };
     let dx = i64::from(rng.range(0, 8001)) - 4000;
     let dy = i64::from(rng.range(0, 8001)) - 4000;
@@ -83,7 +85,7 @@ fn spatial_query_across_an_edge_matches_brute_force() {
         let found = w.entities_in_radius(centre, radius);
         let brute: Vec<EntityId> = w
             .entities()
-            .filter(|e| w.geo.within(e.pos, centre, i64::from(radius)))
+            .filter(|e| w.surfaces[0].geo.within(e.pos, centre, i64::from(radius)))
             .map(|e| e.id)
             .collect();
         assert_eq!(found, brute, "{centre:?} {radius}");
@@ -96,9 +98,14 @@ fn spatial_query_across_an_edge_matches_brute_force() {
 }
 
 fn check_territory(w: &World) {
-    assert_eq!(w.territory.winner, w.full_territory(), "tick {}", w.tick);
+    assert_eq!(
+        w.surfaces[0].territory.winner,
+        w.full_territory(),
+        "tick {}",
+        w.tick
+    );
     let mut owned: BTreeMap<PlayerId, u64> = BTreeMap::new();
-    for winner in &w.territory.winner {
+    for winner in &w.surfaces[0].territory.winner {
         if *winner != 0 {
             *owned
                 .entry(w.territory.emitters[&EntityId(*winner)].owner)
@@ -126,6 +133,7 @@ fn territory_disc_across_an_edge_matches_brute_force() {
                 face: 0,
                 x: l - 3500,
                 y: 3500,
+                ..Pos::default()
             },
         ),
         (
@@ -135,6 +143,7 @@ fn territory_disc_across_an_edge_matches_brute_force() {
                 face: 1,
                 x: 3500,
                 y: 16_500,
+                ..Pos::default()
             },
         ),
         (
@@ -144,6 +153,7 @@ fn territory_disc_across_an_edge_matches_brute_force() {
                 face: 4,
                 x: l - 2000,
                 y: l - 2000,
+                ..Pos::default()
             },
         ),
         (
@@ -153,6 +163,7 @@ fn territory_disc_across_an_edge_matches_brute_force() {
                 face: 5,
                 x: 16_500,
                 y: l - 3500,
+                ..Pos::default()
             },
         ),
         (
@@ -162,6 +173,7 @@ fn territory_disc_across_an_edge_matches_brute_force() {
                 face: 3,
                 x: 2000,
                 y: 2000,
+                ..Pos::default()
             },
         ),
         (
@@ -171,6 +183,7 @@ fn territory_disc_across_an_edge_matches_brute_force() {
                 face: 2,
                 x: 3500,
                 y: l - 3500,
+                ..Pos::default()
             },
         ),
     ] {
@@ -178,21 +191,29 @@ fn territory_disc_across_an_edge_matches_brute_force() {
         check_territory(&w);
     }
     // Every face but none of the far side of a disc is owned.
-    let faces: std::collections::BTreeSet<u8> = (0..w.territory.winner.len())
-        .filter(|i| w.territory.winner[*i] != 0)
-        .map(|i| w.geo.tile_at(i).face)
+    let faces: std::collections::BTreeSet<u8> = (0..w.surfaces[0].territory.winner.len())
+        .filter(|i| w.surfaces[0].territory.winner[*i] != 0)
+        .map(|i| w.surfaces[0].geo.tile_at(i).face)
         .collect();
     assert_eq!(faces.len(), 6);
     // The first city's own disc, tile by tile, against the unfolded distance.
     let first = w.entity(emitters[0]).unwrap().pos;
     let radius = w.territory.emitters[&emitters[0]].radius;
-    let mut disc: Vec<usize> = w.geo.disc(first, radius).flatten().collect();
+    let mut disc: Vec<usize> = w.surfaces[0].geo.disc(first, radius).flatten().collect();
     disc.sort_unstable();
-    let brute: Vec<usize> = (0..w.geo.tiles())
-        .filter(|i| w.geo.within(first, w.geo.index_centre(*i), radius))
+    let brute: Vec<usize> = (0..w.surfaces[0].geo.tiles())
+        .filter(|i| {
+            w.surfaces[0]
+                .geo
+                .within(first, w.surfaces[0].geo.index_centre(*i), radius)
+        })
         .collect();
     assert_eq!(disc, brute);
-    assert!(brute.iter().any(|i| w.geo.tile_at(*i).face != 0));
+    assert!(
+        brute
+            .iter()
+            .any(|i| w.surfaces[0].geo.tile_at(*i).face != 0)
+    );
     // Removing emitters hands their tiles to the next best across edges.
     for id in emitters.into_iter().step_by(2) {
         w.despawn(id).unwrap();
@@ -202,14 +223,14 @@ fn territory_disc_across_an_edge_matches_brute_force() {
 
 fn check_vision(w: &World) {
     let full = w.full_counts();
-    for (player, vision) in &w.vision.players {
+    for (player, vision) in &w.surfaces[0].vision.players {
         let expected = full
             .get(player)
             .cloned()
-            .unwrap_or_else(|| vec![0; w.map.terrain.len()]);
+            .unwrap_or_else(|| vec![0; w.surfaces[0].map.terrain.len()]);
         assert_eq!(vision.count, expected, "player {player:?} tick {}", w.tick);
-        for index in 0..w.map.terrain.len() {
-            if w.visible_index(*player, index) {
+        for index in 0..w.surfaces[0].map.terrain.len() {
+            if w.visible_index(*player, 0, index) {
                 assert!(vision.explored[index / 64] & (1 << (index % 64)) != 0);
             }
         }

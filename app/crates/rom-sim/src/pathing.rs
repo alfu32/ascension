@@ -123,8 +123,6 @@ pub(crate) struct Pathing {
     pub search: Option<Search>,
     pub next_request: u64,
     pub budget: u64,
-    /// Simulation ticks per second, the movement denominator.
-    pub tick_rate: i64,
     /// Lattice spacing for spreading a group around a shared goal.
     pub spacing: i64,
     pub stats: PathStats,
@@ -220,7 +218,6 @@ impl Pathing {
             budget: rules
                 .constant("path.nodes_per_tick")
                 .map_or(DEFAULT_NODES_PER_TICK, |v| v.max(1) as u64),
-            tick_rate: rules.constant("sim.ticks_per_second").unwrap_or(1).max(1),
             spacing: radius.saturating_mul(2).saturating_add(100),
             stats: PathStats::default(),
             g: vec![0; tiles],

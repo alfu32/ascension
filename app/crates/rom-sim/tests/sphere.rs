@@ -62,7 +62,12 @@ fn flat_plain(side: u32) -> World {
 }
 
 fn at(face: u8, x: i32, y: i32) -> Pos {
-    Pos { x, y, face }
+    Pos {
+        x,
+        y,
+        face,
+        ..Pos::default()
+    }
 }
 
 fn id(w: &World, key: &str) -> DefId {

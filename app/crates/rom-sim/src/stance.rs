@@ -135,13 +135,14 @@ impl World {
                 _ => false,
             };
             let pos = self.seen_pos(target);
-            let (dx, dy) = self.geo.vector(e.pos, pos)?;
+            let geo = self.geo(e.pos.body);
+            let (dx, dy) = geo.vector(e.pos, pos)?;
             // Geometry survives renumbering. The unsigned horizontal displacement
             // also gives reflected lines the same choice between neighbours.
             let rank = crate::rng::tie_rank(self.tick, dx.unsigned_abs() as u32, dy as i32 as u32);
             Some((
                 !preferred,
-                self.geo.rank_distance(e.pos, pos),
+                geo.rank_distance(e.pos, pos),
                 rank,
                 pos.face,
                 pos.y,

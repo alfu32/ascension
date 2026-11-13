@@ -6,7 +6,7 @@
 //! edge (as `rom_geo::CubeSurface::unfold` does); vectors and distances exist only
 //! within half a face width, and callers treat a missing vector as out of range.
 
-use crate::{Pos, integer_sqrt};
+use crate::{BodyId, Pos, integer_sqrt};
 use rom_geo::{CubeSurface, SurfacePos};
 use std::ops::RangeInclusive;
 
@@ -82,10 +82,14 @@ pub(crate) fn turn_facing(facing: u16, turns: u8) -> u16 {
     ((u32::from(facing) + 90 * u32::from(turns % 4)) % 360) as u16
 }
 
-/// Topology plus the tables derived from it once.
+/// Topology plus the tables derived from it once, for the surface of one body.
+/// Every question about two positions answers "out of reach" when they lie on
+/// different bodies, and positions on other bodies are off this surface.
 #[derive(Debug, Clone)]
 pub(crate) struct Geometry {
     pub topology: Topology,
+    /// The body this surface belongs to.
+    pub body: BodyId,
     /// Tiles per face row and column (flat: the map's width and height).
     width: i32,
     height: i32,
@@ -98,10 +102,16 @@ pub(crate) struct Geometry {
 }
 
 impl Geometry {
-    /// Derives the edge frames from `rom_geo`'s unfolding; the cube needs n >= 4.
+    /// Derives the edge frames from `rom_geo`'s unfolding for body 0; the cube needs n >= 4.
     pub fn new(topology: Topology) -> Option<Self> {
+        Self::on_body(topology, BodyId(0))
+    }
+
+    /// As `new`, for the surface of `body`.
+    pub fn on_body(topology: Topology, body: BodyId) -> Option<Self> {
         let mut geometry = Self {
             topology,
+            body,
             width: 0,
             height: 0,
             side: 0,
@@ -172,6 +182,7 @@ impl Geometry {
             x: tile.x * 1000 + 500,
             y: tile.y * 1000 + 500,
             face: tile.face,
+            body: self.body,
         }
     }
 
@@ -190,8 +201,11 @@ impl Geometry {
             + tile.x as usize
     }
 
-    /// The storage index of the tile under a position.
+    /// The storage index of the tile under a position; None on another body.
     pub fn pos_index(&self, pos: Pos) -> Option<usize> {
+        if pos.body != self.body {
+            return None;
+        }
         self.index_of(self.tile_of(pos))
     }
 
@@ -252,15 +266,21 @@ impl Geometry {
     }
 
     /// The local vector from `a` to `b` in `a`'s frame with no reach limit; None when
-    /// the faces are neither equal nor adjacent.
+    /// the faces are neither equal nor adjacent, or the bodies differ.
     pub fn delta(&self, a: Pos, b: Pos) -> Option<(i64, i64)> {
+        if a.body != b.body {
+            return None;
+        }
         let p = self.onto_plane(a.face, b.face, (i64::from(b.x), i64::from(b.y)))?;
         Some((p.0 - i64::from(a.x), p.1 - i64::from(a.y)))
     }
 
     /// The local vector from `a` to `b` in `a`'s frame. On the cube it is the unfolded
-    /// vector and None beyond half a face width.
+    /// vector and None beyond half a face width; None between bodies.
     pub fn vector(&self, a: Pos, b: Pos) -> Option<(i64, i64)> {
+        if a.body != b.body {
+            return None;
+        }
         if self.is_flat() {
             return Some((
                 i64::from(b.x) - i64::from(a.x),
@@ -272,8 +292,11 @@ impl Geometry {
         (v.0 * v.0 + v.1 * v.1 <= limit * limit).then_some(v)
     }
 
-    /// Squared distance in milli-tiles squared; None when out of reach.
+    /// Squared distance in milli-tiles squared; None when out of reach or on other bodies.
     pub fn distance_squared(&self, a: Pos, b: Pos) -> Option<u128> {
+        if a.body != b.body {
+            return None;
+        }
         if self.is_flat() {
             return Some(a.distance_squared_wide(b));
         }
@@ -315,9 +338,10 @@ impl Geometry {
     }
 
     /// A conservative `within` for pre-filters: on the cube, radii beyond the reach
-    /// limit cannot be measured and always pass.
+    /// limit cannot be measured and always pass. Other bodies never pass.
     pub fn may_be_within(&self, a: Pos, b: Pos, radius: i64) -> bool {
-        self.reach_limit().is_some_and(|limit| radius > limit) || self.within(a, b, radius)
+        a.body == b.body
+            && (self.reach_limit().is_some_and(|limit| radius > limit) || self.within(a, b, radius))
     }
 
     /// Steps a position by a local vector, crossing face edges with rotation; returns the
@@ -330,7 +354,7 @@ impl Geometry {
                 Pos {
                     x: clamp(i64::from(pos.x) + dx),
                     y: clamp(i64::from(pos.y) + dy),
-                    face: pos.face,
+                    ..pos
                 },
                 0,
             );
@@ -350,6 +374,7 @@ impl Geometry {
                         x: tx as i32,
                         y: ty as i32,
                         face,
+                        body: pos.body,
                     },
                     turns,
                 );
@@ -395,6 +420,7 @@ impl Geometry {
                 x: x as i32,
                 y: y as i32,
                 face,
+                body: pos.body,
             },
             turns,
         )
@@ -551,9 +577,13 @@ impl Geometry {
         .filter_map(move |t| self.plane_index(face, t.x, t.y))
     }
 
-    /// The point of footprint bounds on `face` closest to `pos`, and its squared distance
-    /// from `pos`; None when `pos` is out of reach of the footprint's face.
+    /// The point of footprint bounds on `face` of this surface closest to `pos`, and its
+    /// squared distance from `pos`; None when `pos` is out of reach of the footprint's face
+    /// or on another body.
     pub fn closest_in_bounds(&self, face: u8, bounds: [i64; 4], pos: Pos) -> Option<(Pos, u128)> {
+        if pos.body != self.body {
+            return None;
+        }
         let (px, py) = self.onto_plane(face, pos.face, (i64::from(pos.x), i64::from(pos.y)))?;
         let (cx, cy) = (
             px.clamp(bounds[0], bounds[2]),
@@ -576,6 +606,7 @@ impl Geometry {
                 x: cx.clamp(low, high) as i32,
                 y: cy.clamp(low, high) as i32,
                 face,
+                body: self.body,
             },
             squared,
         ))
@@ -657,9 +688,10 @@ fn disc_runs(
     })
 }
 
-/// Whether a position lies inside footprint bounds on a face, edges included.
-pub(crate) fn footprint_contains(face: u8, bounds: [i64; 4], pos: Pos) -> bool {
-    pos.face == face
+/// Whether a position lies inside footprint bounds on a face of a body, edges included.
+pub(crate) fn footprint_contains(body: BodyId, face: u8, bounds: [i64; 4], pos: Pos) -> bool {
+    pos.body == body
+        && pos.face == face
         && (bounds[0]..=bounds[2]).contains(&i64::from(pos.x))
         && (bounds[1]..=bounds[3]).contains(&i64::from(pos.y))
 }

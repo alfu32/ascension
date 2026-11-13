@@ -50,7 +50,18 @@ fn lines(rules: Arc<Rules>, seed: u64, sizes: [u32; 2], reverse: bool) -> World 
         let owner = PlayerId(side as u32 + 1);
         for row in 0..sizes[side] {
             let y = (1000 + u64::from(row) * 94000 / u64::from(sizes[side])) as i32;
-            let executor = w.spawn(type_id, owner, Pos { x, y, face: 0 }).unwrap();
+            let executor = w
+                .spawn(
+                    type_id,
+                    owner,
+                    Pos {
+                        x,
+                        y,
+                        face: 0,
+                        ..Pos::default()
+                    },
+                )
+                .unwrap();
             w.submit(Command {
                 player: owner,
                 executor,
@@ -61,6 +72,7 @@ fn lines(rules: Arc<Rules>, seed: u64, sizes: [u32; 2], reverse: bool) -> World 
                     x: target,
                     y,
                     face: 0,
+                    ..Pos::default()
                 }),
                 queue: false,
             })

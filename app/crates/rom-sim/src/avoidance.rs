@@ -4,6 +4,7 @@ use crate::{
     EntityId, Pos, World,
     geometry::{Geometry, rotate, turn_facing},
     integer_sqrt,
+    surface::Surface,
 };
 use rom_rules::Rules;
 
@@ -60,10 +61,9 @@ struct Slot {
     radius: i64,
 }
 
-/// Cached motion per entity, the units to check next tick, and per-tick scratch space.
-#[derive(Debug, Default)]
-pub(crate) struct Avoidance {
-    geo: Option<Geometry>,
+/// One surface's snapshot cells.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Cells {
     /// Snapshot cells are `1 << shift` tiles square: single tiles on a flat map, 4×4 on
     /// a sphere, whose surface is large and sparsely occupied.
     shift: u32,
@@ -71,6 +71,42 @@ pub(crate) struct Avoidance {
     cols: usize,
     rows: usize,
     faces: usize,
+}
+
+impl Cells {
+    pub fn new(geo: &Geometry) -> Self {
+        let shift = if geo.is_flat() { 0 } else { 2 };
+        let (width, height) = geo.face_size();
+        let cells = |tiles: i32| (tiles as usize).div_ceil(1 << shift);
+        Self {
+            shift,
+            cols: cells(width),
+            rows: cells(height),
+            faces: geo.tiles() / (width as usize * height as usize),
+        }
+    }
+
+    fn count(&self) -> usize {
+        self.faces * self.rows * self.cols
+    }
+
+    fn of(&self, geo: &Geometry, pos: Pos) -> usize {
+        let tile = geo.clamp_tile(geo.tile_of(pos));
+        self.at(
+            tile.face,
+            tile.x as usize >> self.shift,
+            tile.y as usize >> self.shift,
+        )
+    }
+
+    fn at(&self, face: u8, col: usize, row: usize) -> usize {
+        (usize::from(face) * self.rows + row) * self.cols + col
+    }
+}
+
+/// Cached motion per entity, the units to check next tick, and per-tick scratch space.
+#[derive(Debug, Default)]
+pub(crate) struct Avoidance {
     /// Indexed by entity id.
     pub motion: Vec<Option<Motion>>,
     /// Mirror of each entity's position, indexed by id, kept by `World::relocate`.
@@ -83,19 +119,14 @@ pub(crate) struct Avoidance {
     /// Scratch snapshot: slots grouped by cell in dense order, ids ascending within a cell.
     starts: Vec<u32>,
     slots: Vec<Slot>,
+    /// Scratch: each surface's first cell in this tick's snapshot; `usize::MAX` for
+    /// surfaces without awake units, whose units are left out.
+    bases: Vec<usize>,
 }
 
 impl Avoidance {
-    pub fn new(rules: &Rules, geo: Geometry) -> Self {
-        let shift = if geo.is_flat() { 0 } else { 2 };
-        let (width, height) = geo.face_size();
-        let cells = |tiles: i32| (tiles as usize).div_ceil(1 << shift);
+    pub fn new(rules: &Rules) -> Self {
         Self {
-            shift,
-            cols: cells(width),
-            rows: cells(height),
-            faces: geo.tiles() / (width as usize * height as usize),
-            geo: Some(geo),
             motion: vec![None],
             pos: vec![Pos::default()],
             max_radius: rules
@@ -109,25 +140,8 @@ impl Avoidance {
             flags: Vec::new(),
             starts: Vec::new(),
             slots: Vec::new(),
+            bases: Vec::new(),
         }
-    }
-
-    fn geo(&self) -> &Geometry {
-        self.geo.as_ref().expect("avoidance geometry")
-    }
-
-    fn cell(&self, pos: Pos) -> usize {
-        let geo = self.geo();
-        let tile = geo.clamp_tile(geo.tile_of(pos));
-        self.cell_at(
-            tile.face,
-            tile.x as usize >> self.shift,
-            tile.y as usize >> self.shift,
-        )
-    }
-
-    fn cell_at(&self, face: u8, col: usize, row: usize) -> usize {
-        (usize::from(face) * self.rows + row) * self.cols + col
     }
 
     fn ground(&self, id: EntityId) -> Option<Motion> {
@@ -214,17 +228,45 @@ fn separation(
     Some((x, y))
 }
 
+/// A unit's snapshot cell, or None when its surface is not in this tick's snapshot.
+fn snapshot_cell(surfaces: &[Surface], slots: &[u32], bases: &[usize], pos: Pos) -> Option<usize> {
+    let slot = slots[pos.body.0 as usize] as usize;
+    let base = bases[slot];
+    (base != usize::MAX).then(|| {
+        let surface = &surfaces[slot];
+        base + surface.cells.of(&surface.geo, pos)
+    })
+}
+
 impl World {
-    /// Groups every ground unit by tile with a counting sort.
-    fn snapshot_units(&mut self) {
-        let avoid = &mut self.avoid;
-        let cells = avoid.faces * avoid.rows * avoid.cols;
+    /// Groups the ground units of every surface with awake units by tile with a
+    /// counting sort; surfaces without awake units cost nothing.
+    fn snapshot_units(&mut self, awake: &[EntityId]) {
+        let World {
+            avoid,
+            surfaces,
+            slots,
+            ..
+        } = self;
+        avoid.bases.clear();
+        avoid.bases.resize(surfaces.len(), usize::MAX);
+        for id in awake {
+            avoid.bases[slots[avoid.pos[id.0 as usize].body.0 as usize] as usize] = 0;
+        }
+        let mut cells = 0;
+        for (base, surface) in avoid.bases.iter_mut().zip(surfaces.iter()) {
+            if *base != usize::MAX {
+                *base = cells;
+                cells += surface.cells.count();
+            }
+        }
         avoid.starts.clear();
         avoid.starts.resize(cells + 1, 0);
         let mut count = 0;
         for (motion, pos) in avoid.motion.iter().zip(&avoid.pos) {
-            if motion.is_some_and(|m| m.ground()) {
-                let cell = avoid.cell(*pos);
+            if motion.is_some_and(|m| m.ground())
+                && let Some(cell) = snapshot_cell(surfaces, slots, &avoid.bases, *pos)
+            {
                 avoid.starts[cell + 1] += 1;
                 count += 1;
             }
@@ -241,8 +283,9 @@ impl World {
         avoid.slots.resize(count, placeholder);
         let mut next = avoid.starts.clone();
         for (index, (motion, pos)) in avoid.motion.iter().zip(&avoid.pos).enumerate() {
-            if let Some(motion) = motion.filter(Motion::ground) {
-                let cell = avoid.cell(*pos);
+            if let Some(motion) = motion.filter(Motion::ground)
+                && let Some(cell) = snapshot_cell(surfaces, slots, &avoid.bases, *pos)
+            {
                 avoid.slots[next[cell] as usize] = Slot {
                     id: EntityId(index as u32),
                     pos: *pos,
@@ -287,7 +330,7 @@ impl World {
         if awake.is_empty() {
             return;
         }
-        self.snapshot_units();
+        self.snapshot_units(&awake);
         let mut flags = std::mem::take(&mut self.avoid.flags);
         flags.resize(self.entities.len(), false);
         for id in &awake {
@@ -301,7 +344,9 @@ impl World {
             };
             let pa = avoid.pos[a.0 as usize];
             let reach = motion.radius + avoid.max_radius;
-            let geo = avoid.geo();
+            let slot = self.slots[pa.body.0 as usize] as usize;
+            let (base, surface) = (avoid.bases[slot], &self.surfaces[slot]);
+            let (geo, cells) = (&surface.geo, &surface.cells);
             let (width, height) = geo.face_size();
             for view in geo.views(pa, geo.clamp_radius(reach)).into_iter().flatten() {
                 let x0 = (view.x - reach).div_euclid(1000).max(0) as i32;
@@ -311,13 +356,13 @@ impl World {
                 if x0 > x1 || y0 > y1 {
                     continue;
                 }
-                let shift = avoid.shift;
+                let shift = cells.shift;
                 let (c0, c1) = (x0 as usize >> shift, x1 as usize >> shift);
                 for y in (y0 as usize >> shift)..=(y1 as usize >> shift) {
                     // Cells c0..=c1 of one row are contiguous in the snapshot.
                     let (from, to) = (
-                        avoid.starts[avoid.cell_at(view.face, c0, y)] as usize,
-                        avoid.starts[avoid.cell_at(view.face, c1, y) + 1] as usize,
+                        avoid.starts[base + cells.at(view.face, c0, y)] as usize,
+                        avoid.starts[base + cells.at(view.face, c1, y) + 1] as usize,
                     );
                     for slot in &avoid.slots[from..to] {
                         if slot.id == a || (slot.id < a && flags[slot.id.0 as usize]) {
@@ -381,11 +426,13 @@ impl World {
     fn push_unit(&mut self, id: EntityId, x: i64, y: i64) -> bool {
         let motion = self.avoid.ground(id).expect("ground unit");
         let from = self.entity(id).expect("pushed unit").pos;
+        let slot = self.slot(from.body);
+        let surface = &self.surfaces[slot];
         let target = [(x, y), (x, 0), (0, y)]
             .into_iter()
             .filter(|(x, y)| *x != 0 || *y != 0)
-            .map(|(x, y)| self.geo.offset(from, x, y))
-            .find(|(to, _)| self.pathing.line_clear(motion.class, from, *to, None));
+            .map(|(x, y)| surface.geo.offset(from, x, y))
+            .find(|(to, _)| surface.pathing.line_clear(motion.class, from, *to, None));
         let Some((to, turns)) = target else {
             return false;
         };
@@ -397,7 +444,7 @@ impl World {
             && state.request.is_none()
             && state.traveled < state.distance
             && let Some(target) = state.target()
-            && let Some(distance) = self.geo.ceil_distance(to, target)
+            && let Some(distance) = surface.geo.ceil_distance(to, target)
         {
             state.origin = to;
             state.traveled = 0;

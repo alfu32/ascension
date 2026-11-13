@@ -1,7 +1,7 @@
 //! Walking: the straight-line fast path, path requests, delivery, and waypoint following.
 
 use crate::{
-    EntityId, Order, OrderStatus, Pos, World,
+    BodyId, EntityId, Order, OrderStatus, Pos, World,
     geometry::turn_facing,
     math::{facing_of, mul_div},
     order::MoveState,
@@ -38,26 +38,27 @@ impl World {
             return Walk::Failed;
         };
         let pos = self.entity(id).expect("walker").pos;
-        let pct = self.pathing.speed_pct(motion.class, pos);
-        if pct == 0 {
+        let slot = self.slot(pos.body);
+        let surface = &mut self.surfaces[slot];
+        let (geo, pathing) = (&surface.geo, &mut surface.pathing);
+        let pct = pathing.speed_pct(motion.class, pos);
+        // No path leads to another body.
+        if pct == 0 || goal.body != pos.body {
             order.status = OrderStatus::Failed("no_path".into());
             return Walk::Failed;
         }
         if order.movement.is_none() {
             let own = if spread {
-                let index = self.pathing.join_spread(goal);
-                let (dx, dy) = self.pathing.spread_offset(index);
+                let index = pathing.join_spread(goal);
+                let (dx, dy) = pathing.spread_offset(index);
                 // Off-surface goals keep their point; the offset never leaves a flat map's
                 // coordinate range and crosses edges on a sphere.
-                let candidate = if self.geo.contains(goal) || self.geo.is_flat() {
-                    self.geo.offset(goal, dx, dy).0
+                let candidate = if geo.contains(goal) || geo.is_flat() {
+                    geo.offset(goal, dx, dy).0
                 } else {
                     goal
                 };
-                if self
-                    .pathing
-                    .passable(motion.class, self.geo.tile_of(candidate), None)
-                {
+                if pathing.passable(motion.class, geo.tile_of(candidate), None) {
                     candidate
                 } else {
                     goal
@@ -75,17 +76,13 @@ impl World {
                 request: None,
                 repaths: 0,
             };
-            if self.pathing.line_clear(motion.class, pos, own, exempt) {
-                state.distance = self
-                    .geo
+            if pathing.line_clear(motion.class, pos, own, exempt) {
+                state.distance = geo
                     .ceil_distance(pos, own)
                     .expect("clear lines are in reach");
             } else {
                 // Group members search for the shared goal; each ends at its own point.
-                state.request = Some(
-                    self.pathing
-                        .request((id, order.id), motion.class, pos, goal),
-                );
+                state.request = Some(pathing.request((id, order.id), motion.class, pos, goal));
             }
             order.movement = Some(state);
         }
@@ -97,15 +94,16 @@ impl World {
             return Walk::Arrived;
         }
         let speed = self.effective_stat(id, "speed", motion.speed).max(0);
-        let denominator = i128::from(self.pathing.tick_rate) * 100;
+        let denominator = i128::from(self.tick_rate) * 100;
         let entity = self.entities[id.0 as usize].as_mut().expect("walker");
+        let surface = &mut self.surfaces[slot];
+        let (geo, pathing) = (&surface.geo, &mut surface.pathing);
         let budget = i128::from(speed) * i128::from(pct) + entity.move_remainder;
         // Wide division is slow; take the 64-bit path whenever the budget fits.
         let (mut step, remainder) = match (i64::try_from(budget), i64::try_from(denominator)) {
             (Ok(b), Ok(d)) => (i128::from(b / d), i128::from(b % d)),
             _ => (budget / denominator, budget % denominator),
         };
-        let geo = &self.geo;
         loop {
             let target = state.target().expect("walk underway");
             let traveled = (i128::from(state.traveled) + step).min(i128::from(state.distance));
@@ -126,14 +124,9 @@ impl World {
             // Rounding can tilt a short step across a corner the planned segment misses;
             // such a step is fine while the segment itself is still clear.
             let clear = next.is_some_and(|next| {
-                self.pathing
-                    .line_clear(motion.class, entity.pos, next, exempt)
-                    || (self
-                        .pathing
-                        .passable(motion.class, geo.tile_of(next), exempt)
-                        && self
-                            .pathing
-                            .line_clear(motion.class, state.origin, target, exempt))
+                pathing.line_clear(motion.class, entity.pos, next, exempt)
+                    || (pathing.passable(motion.class, geo.tile_of(next), exempt)
+                        && pathing.line_clear(motion.class, state.origin, target, exempt))
             });
             if !clear {
                 if state.repaths >= MAX_REPATHS {
@@ -142,10 +135,8 @@ impl World {
                 }
                 let repaths = state.repaths + 1;
                 let own = state.goal;
-                let request = self
-                    .pathing
-                    .request((id, order.id), motion.class, entity.pos, own);
-                self.pathing.stats.repaths += 1;
+                let request = pathing.request((id, order.id), motion.class, entity.pos, own);
+                pathing.stats.repaths += 1;
                 *state = MoveState {
                     origin: entity.pos,
                     distance: 0,
@@ -196,25 +187,27 @@ impl World {
     }
 
     /// Walks toward the closest point of a footprint; true once within build reach.
-    /// `bounds` lie on `face`.
+    /// `bounds` lie on the face and body of `at`.
     pub(crate) fn approach(
         &mut self,
         id: EntityId,
         order: &mut Order,
-        face: u8,
+        at: Pos,
         bounds: [i64; 4],
     ) -> bool {
+        let (face, body): (u8, BodyId) = (at.face, at.body);
         let reach = self.rules.constant("build.reach").expect("validated reach") as u128;
         // The footprint's nearest point, or its centre while it is out of reach.
         let closest = |world: &World, pos: Pos| {
             world
-                .geo
+                .geo(body)
                 .closest_in_bounds(face, bounds, pos)
                 .unwrap_or_else(|| {
                     let centre = Pos {
                         x: ((bounds[0] + bounds[2]) / 2) as i32,
                         y: ((bounds[1] + bounds[3]) / 2) as i32,
                         face,
+                        body,
                     };
                     (centre, u128::MAX)
                 })
@@ -254,32 +247,48 @@ impl World {
             })
     }
 
-    /// Runs queued searches in order within the tick's node budget, delivering finished paths.
+    /// Runs each surface's queued searches in order within that surface's node budget per
+    /// tick, delivering finished paths; a surface with nothing queued costs nothing.
     pub(crate) fn run_path_searches(&mut self) {
-        let mut budget = self.pathing.budget;
+        for slot in 0..self.surfaces.len() {
+            if self.surfaces[slot].pathing.search.is_none()
+                && self.surfaces[slot].pathing.queue.is_empty()
+            {
+                continue;
+            }
+            self.run_surface_searches(slot);
+        }
+    }
+
+    fn run_surface_searches(&mut self, slot: usize) {
+        let mut budget = self.surfaces[slot].pathing.budget;
         while budget > 0 {
-            if self.pathing.search.is_none() {
-                let Some(front) = self.pathing.queue.front() else {
+            if self.surfaces[slot].pathing.search.is_none() {
+                let Some(front) = self.surfaces[slot].pathing.queue.front() else {
                     break;
                 };
                 let id = front.id;
                 if !front.waiters.iter().any(|w| self.waiter_valid(*w, id)) {
-                    self.pathing.queue.pop_front();
+                    self.surfaces[slot].pathing.queue.pop_front();
                     continue;
                 }
-                self.pathing.begin();
+                self.surfaces[slot].pathing.begin();
             }
-            let (used, found) = self.pathing.advance(budget);
+            let (used, found) = self.surfaces[slot].pathing.advance(budget);
             budget -= used;
             let Some(found) = found else {
                 break;
             };
-            let request = self.pathing.queue.pop_front().expect("finished request");
-            self.deliver(&request, &found);
+            let request = self.surfaces[slot]
+                .pathing
+                .queue
+                .pop_front()
+                .expect("finished request");
+            self.deliver(slot, &request, &found);
         }
     }
 
-    fn deliver(&mut self, request: &crate::pathing::PathRequest, found: &Found) {
+    fn deliver(&mut self, slot: usize, request: &crate::pathing::PathRequest, found: &Found) {
         let start = request.start;
         let end = *found.tiles.last().expect("path has a start");
         for waiter in &request.waiters {
@@ -296,21 +305,23 @@ impl World {
                 .as_ref()
                 .expect("waiting walk")
                 .goal;
+            let surface = &self.surfaces[slot];
+            let (geo, pathing) = (&surface.geo, &surface.pathing);
             let waypoints = if end == start && !found.reached {
                 None
             } else {
                 let mut points = Vec::new();
-                if self.geo.tile_of(pos) != start {
-                    points.push(self.geo.tile_centre(start));
+                if geo.tile_of(pos) != start {
+                    points.push(geo.tile_centre(start));
                 }
-                points.extend(found.tiles[1..].iter().map(|t| self.geo.tile_centre(*t)));
+                points.extend(found.tiles[1..].iter().map(|t| geo.tile_centre(*t)));
                 let last = points.last().copied().unwrap_or(pos);
-                if self.pathing.line_clear(class, last, own, None) {
+                if pathing.line_clear(class, last, own, None) {
                     points.push(own);
                 } else if points.is_empty() {
-                    points.push(self.geo.tile_centre(end));
+                    points.push(geo.tile_centre(end));
                 }
-                Some(self.pathing.smooth(class, pos, &points))
+                Some(pathing.smooth(class, pos, &points))
             };
             let entity = self.entities[waiter.0.0 as usize]
                 .as_mut()
@@ -330,7 +341,7 @@ impl World {
             state.origin = pos;
             state.traveled = 0;
             state.index = 0;
-            state.distance = self
+            state.distance = self.surfaces[slot]
                 .geo
                 .ceil_distance(pos, waypoints.first().copied().unwrap_or(state.goal))
                 .unwrap_or(0);

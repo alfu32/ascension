@@ -132,6 +132,7 @@ mod tests {
                         x: 10_000,
                         y: 10_000,
                         face: 0,
+                        ..Pos::default()
                     },
                 )
                 .unwrap();
