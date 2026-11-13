@@ -566,4 +566,17 @@ INSERT INTO def(kind,key,name) VALUES ('entity_type','node.planet_marker','Plane
 INSERT INTO entity_type(id,class,hp,los,pop_cost,footprint_w,footprint_h,build_ticks)
  SELECT id,'node',1,0,0,1,1,0 FROM def WHERE key='node.planet_marker';
 
+-- Append polar definitions so existing definition ids and flat-map hashes stay stable.
+INSERT INTO def(kind,key,name) VALUES ('terrain','ter.ice','Ice'), ('material','mat.ice','Ice');
+INSERT INTO material(id,program,params)
+ SELECT id,'ice','{"base_colour":"#e8eef2"}' FROM def WHERE key='mat.ice';
+INSERT INTO terrain(id,layer,buildable,blocks_los,material_id)
+ SELECT id,'ground',0,0,(SELECT id FROM def WHERE key='mat.ice') FROM def WHERE key='ter.ice';
+INSERT INTO movement_class_terrain(movement_class_id,terrain_id,speed_pct)
+ SELECT m.movement_class_id, ice.id, 50 FROM movement_class_terrain m
+ JOIN def plain ON plain.id=m.terrain_id AND plain.key='ter.plain'
+ JOIN def ice ON ice.key='ter.ice' ORDER BY m.movement_class_id;
+UPDATE map_style SET polar_cap_pct=20, start_latitude_max_mdeg=60000,
+ polar_terrain_id=(SELECT id FROM def WHERE key='ter.ice');
+
 COMMIT;

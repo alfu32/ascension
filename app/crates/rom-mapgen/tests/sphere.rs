@@ -1,4 +1,4 @@
-use rom_geo::{CubeSurface, SPHERE_SCALE, SurfacePos};
+use rom_geo::{CubeSurface, SPHERE_SCALE, SurfacePos, latitude_mdeg};
 use rom_mapgen::{SpherePlanet, SphereRequest, expand_planet, generate_sphere};
 use rom_rules::{FeaturePattern, Layer, RegionKind, Rules, build_rules_db};
 
@@ -219,7 +219,10 @@ fn terrain_coverage_matches_scaled_target() {
         let land = m
             .terrain
             .iter()
-            .filter(|t| rules.terrains[t].layer == Layer::Ground)
+            .filter(|&&t| {
+                rules.terrains[&t].layer == Layer::Ground
+                    && Some(t) != rules.map_styles[&m.style].polar_terrain_id
+            })
             .count() as i64;
         for row in terrain_rows(&rules, &m) {
             assert!(row.coverage_pct > 0);
@@ -436,6 +439,174 @@ fn nodes_are_spaced() {
                 assert!(local_distance2(m.surface, a, b).is_none_or(|d| d >= 144_000_000));
                 assert!(local_distance2(m.surface, b, a).is_none_or(|d| d >= 144_000_000));
             }
+        }
+    }
+}
+
+#[test]
+fn caps_cover_the_poles_and_nothing_near_the_equator() {
+    let r = rules();
+    let ice = r.id_of("ter.ice").unwrap();
+    for seed in [1, 7, 23] {
+        let map = make(&r, seed, 128, 4);
+        for (i, &t) in map.terrain.iter().enumerate() {
+            let lat = latitude_mdeg(map.surface.sphere_point(map.surface.tile(i))).abs();
+            if lat >= 75_000 {
+                assert_eq!(t, ice, "seed {seed}, latitude {lat}");
+            }
+            if lat < 69_000 {
+                assert_ne!(t, ice, "seed {seed}, latitude {lat}");
+            }
+        }
+    }
+}
+
+#[test]
+fn cap_share_is_close_to_target() {
+    let r = rules();
+    let ice = r.id_of("ter.ice").unwrap();
+    // Equal-angle cube tiles have unequal spherical areas. Count the nominal
+    // poleward-of-72° tiles as the discrete target on the same topology.
+    for seed in [1, 7, 23] {
+        let map = make(&r, seed, 192, 4);
+        let target = (0..map.surface.len())
+            .filter(|&i| {
+                latitude_mdeg(map.surface.sphere_point(map.surface.tile(i))).abs() >= 72_000
+            })
+            .count();
+        let actual = map.terrain.iter().filter(|&&t| t == ice).count();
+        println!(
+            "seed={seed} start latitudes={:?}",
+            map.starts
+                .iter()
+                .map(|&p| latitude_mdeg(map.surface.sphere_point(p)))
+                .collect::<Vec<_>>()
+        );
+        println!(
+            "seed={seed} ice={actual}/{} nominal={target}",
+            map.surface.len()
+        );
+        assert!(actual.abs_diff(target) * 100 <= target * 15);
+        // Equal-angle Jacobian: (c²+a²)(c²+b²)/(c*radius³), c dominant.
+        // This also checks the actual spherical area against 1-sin(72°).
+        let (mut all_area, mut ice_area) = (0_i128, 0_i128);
+        for (i, &t) in map.terrain.iter().enumerate() {
+            let mut p = map
+                .surface
+                .sphere_point(map.surface.tile(i))
+                .map(|v| i128::from(v).abs());
+            p.sort_unstable();
+            let [a, b, c] = p;
+            let area = (c * c + a * a) * (c * c + b * b) * 1_000_000
+                / (c * i128::from(SPHERE_SCALE).pow(3));
+            all_area += area;
+            if t == ice {
+                ice_area += area;
+            }
+        }
+        let expected = all_area * 48_943 / 1_000_000;
+        println!(
+            "seed={seed} spherical ice area={} basis points (target 489)",
+            ice_area * 10_000 / all_area
+        );
+        assert!(ice_area.abs_diff(expected) * 100 <= expected as u128 * 15);
+    }
+}
+
+#[test]
+fn starts_lie_within_the_latitude_band() {
+    let mut r = rules();
+    let style = r.id_of("map.one_world").unwrap();
+    for seed in 0..30 {
+        for players in [2, 4, 8] {
+            let map = make(&r, seed, 128, players);
+            assert_eq!(map.starts.len(), players);
+            for &start in &map.starts {
+                assert!(latitude_mdeg(map.surface.sphere_point(start)).abs() <= 60_000);
+            }
+            assert!(
+                map.fairness(&r).is_empty(),
+                "seed={seed} players={players}: {:?}",
+                map.fairness(&r)
+            );
+        }
+    }
+    // The generator obeys the style's value, including a tighter custom band.
+    r.map_styles
+        .get_mut(&style)
+        .unwrap()
+        .start_latitude_max_mdeg = 30_000;
+    let map = make(&r, 1, 128, 4);
+    assert!(
+        map.starts
+            .iter()
+            .all(|&p| latitude_mdeg(map.surface.sphere_point(p)).abs() <= 30_000)
+    );
+}
+
+#[test]
+fn no_biome_or_node_on_ice() {
+    let mut r = rules();
+    let style = r.id_of("map.one_world").unwrap();
+    let ice = r.map_styles[&style].polar_terrain_id.unwrap();
+    for seed in [1, 7, 23] {
+        let map = make(&r, seed, 128, 4);
+        // Remove every feature and start: cap tiles must survive all population.
+        let features = r.map_style_features.remove(&style).unwrap();
+        let bare = expand_planet(&r, &request(&r, seed, 128, 0)).unwrap();
+        r.map_style_features.insert(style, features);
+        for (i, &t) in bare.terrain.iter().enumerate() {
+            if t == ice {
+                assert_eq!(map.terrain[i], ice);
+                assert!(
+                    !map.nodes
+                        .iter()
+                        .any(|&(_, p)| map.surface.index(p.tile()) == i)
+                );
+            }
+        }
+        // Both previously wet and dry tiles freeze.
+        r.map_styles.get_mut(&style).unwrap().polar_cap_pct = 0;
+        let thawed = expand_planet(&r, &request(&r, seed, 128, 0)).unwrap();
+        r.map_styles.get_mut(&style).unwrap().polar_cap_pct = 20;
+        for layer in [Layer::Ground, Layer::Fluid] {
+            assert!(
+                bare.terrain
+                    .iter()
+                    .zip(&thawed.terrain)
+                    .any(|(&a, b)| a == ice && r.terrains[b].layer == layer)
+            );
+        }
+    }
+}
+
+#[test]
+fn zero_cap_pct_makes_no_ice() {
+    let mut r = rules();
+    let style = r.id_of("map.one_world").unwrap();
+    r.map_styles.get_mut(&style).unwrap().polar_cap_pct = 0;
+    for seed in [1, 7, 23] {
+        let map = make(&r, seed, 64, 4);
+        assert!(!map.terrain.contains(&r.id_of("ter.ice").unwrap()));
+    }
+}
+
+#[test]
+fn cap_terrain_is_selected_by_reference() {
+    let mut r = rules();
+    let style = r.id_of("map.one_world").unwrap();
+    let alternate = r.id_of("ter.mountain").unwrap();
+    r.terrains.get_mut(&alternate).unwrap().blocks_los = false;
+    r.map_style_features
+        .get_mut(&style)
+        .unwrap()
+        .retain(|row| row.feature_def_id != alternate);
+    r.map_styles.get_mut(&style).unwrap().polar_terrain_id = Some(alternate);
+    let map = make(&r, 1, 128, 4);
+    assert!(!map.terrain.contains(&r.id_of("ter.ice").unwrap()));
+    for i in 0..map.surface.len() {
+        if latitude_mdeg(map.surface.sphere_point(map.surface.tile(i))).abs() >= 75_000 {
+            assert_eq!(map.terrain[i], alternate);
         }
     }
 }

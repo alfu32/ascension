@@ -55,6 +55,24 @@ The simulation keeps working on **integer tiles**. A planet surface is a
   near cube corners appear slightly smaller on screen than tiles at face
   centres (about 1.3 ×); gameplay does not see this.
 
+The planet's axis is the `rom-geo` sphere y axis: north is +y, south is
+−y. Latitude is zero at the equator; the prime meridian passes through the
+centre of face 0 (+z), with positive longitude toward +x (face 1).
+Each polar cap covers the poleward 20 % of **latitude** in its hemisphere,
+so its default boundary is |latitude| ≥ 72°, perturbed by seamless,
+low-frequency 3D integer noise within ±3°. Ice replaces both land and sea,
+is not buildable, and does not block sight. Ground movement classes that
+cross plain cross ice at 50 % speed; ships cannot cross it.
+
+`map_style.polar_cap_pct` controls that latitude share (0–50; zero disables
+caps); `polar_terrain_id` selects the cap terrain by reference. Caps are
+applied after sea level and before biomes and starts. Biome coverage counts
+only non-ice land, and biomes, resource nodes and start clearings never
+replace ice. Player starts must lie within ±60° of the equator by default,
+controlled by `start_latitude_max_mdeg` (0–90,000). Existing start spacing
+and local fairness rules still apply. All terrain and deposits are generated
+before play.
+
 A flat rectangular map remains available as a topology for tests, small
 skirmish maps and the existing scenarios.
 

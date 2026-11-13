@@ -123,7 +123,7 @@ fn run_sphere(
     world.step();
     report(&world, planet.starts.len());
     if let Some(path) = out {
-        let mut pixels = sphere_colours(&planet);
+        let mut pixels = sphere_colours(&planet, world.rules());
         for (index, pixel) in pixels.iter_mut().enumerate() {
             let tile = planet.surface.tile(index);
             let owner = world.territory_owner_on(tile.face, tile.x as i32, tile.y as i32);

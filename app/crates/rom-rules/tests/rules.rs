@@ -818,3 +818,89 @@ fn resource_body_feature_must_target_a_presence_node() {
         &["map.one_world", "ter.forest"],
     );
 }
+
+#[test]
+fn polar_and_start_latitude_knobs_load_and_validate() {
+    let r = seed();
+    let ice = r.id_of("ter.ice").unwrap();
+    assert!(r.validate().is_empty());
+    for style in r.map_styles.values() {
+        assert_eq!(style.polar_cap_pct, 20);
+        assert_eq!(style.start_latitude_max_mdeg, 60_000);
+        assert_eq!(style.polar_terrain_id, Some(ice));
+    }
+    let t = &r.terrains[&ice];
+    assert_eq!(t.layer, Layer::Ground);
+    assert!(!t.buildable && !t.blocks_los);
+    assert_eq!(
+        r.materials[&t.material_id.unwrap()].params,
+        "{\"base_colour\":\"#e8eef2\"}"
+    );
+    let plain = r.id_of("ter.plain").unwrap();
+    for class in r.movement_classes.values() {
+        let rows = &r.movement_class_terrain;
+        let crosses_plain = rows
+            .get(&class.id)
+            .into_iter()
+            .flatten()
+            .any(|row| row.terrain_id == plain);
+        let speed = rows
+            .get(&class.id)
+            .into_iter()
+            .flatten()
+            .find(|row| row.terrain_id == ice)
+            .map(|row| row.speed_pct);
+        assert_eq!(speed, crosses_plain.then_some(50), "{}", class.key);
+    }
+    let db = seed_db();
+    for (cap, latitude) in [(0, 0), (50, 90_000), (13, 42_000)] {
+        db.execute(
+            "UPDATE map_style SET polar_cap_pct=?1, start_latitude_max_mdeg=?2",
+            [cap, latitude],
+        )
+        .unwrap();
+        let r = Rules::load(&db).unwrap();
+        assert!(r.validate().is_empty());
+        for style in r.map_styles.values() {
+            assert_eq!(
+                (style.polar_cap_pct, style.start_latitude_max_mdeg),
+                (cap, latitude)
+            );
+        }
+    }
+    db.execute_batch("UPDATE map_style SET polar_cap_pct=0, polar_terrain_id=NULL;")
+        .unwrap();
+    assert!(Rules::load(&db).unwrap().validate().is_empty());
+    for value in [-1, 90_001] {
+        assert_problem(
+            &format!("UPDATE map_style SET start_latitude_max_mdeg={value};"),
+            "start_latitude_max_mdeg",
+            &["map.one_world"],
+        );
+    }
+    assert_problem(
+        "UPDATE map_style SET polar_terrain_id=NULL;",
+        "polar_terrain_id is required",
+        &["map.one_world"],
+    );
+    for key in ["ter.plain", "ter.forest", "ter.deep"] {
+        assert_problem(
+            &format!(
+                "UPDATE map_style SET polar_terrain_id=(SELECT id FROM def WHERE key='{key}');"
+            ),
+            "polar_terrain_id must reference",
+            &["map.one_world"],
+        );
+    }
+}
+
+#[test]
+fn bad_polar_cap_pct_is_reported() {
+    for value in [-1, 51] {
+        assert_problem(
+            &format!("UPDATE map_style SET polar_cap_pct={value};"),
+            &format!("polar_cap_pct {value} is outside 0..=50"),
+            &["map.one_world"],
+        );
+    }
+}

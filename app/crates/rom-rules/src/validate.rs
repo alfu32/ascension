@@ -170,6 +170,29 @@ impl Rules {
                 message: format!("map_style {name}: {message}"),
             });
         };
+        if !(0..=50).contains(&style.polar_cap_pct) {
+            report(format!(
+                "polar_cap_pct {} is outside 0..=50",
+                style.polar_cap_pct
+            ));
+        }
+        if !(0..=90_000).contains(&style.start_latitude_max_mdeg) {
+            report(format!(
+                "start_latitude_max_mdeg {} is outside 0..=90000",
+                style.start_latitude_max_mdeg
+            ));
+        }
+        if let Some(id) = style.polar_terrain_id {
+            if !self
+                .terrains
+                .get(&id)
+                .is_some_and(|t| t.layer == crate::Layer::Ground && !t.buildable && !t.blocks_los)
+            {
+                report("polar_terrain_id must reference unbuildable, non-sight-blocking ground terrain".into());
+            }
+        } else if style.polar_cap_pct > 0 {
+            report("polar_terrain_id is required when polar_cap_pct is nonzero".into());
+        }
         for (knob, min, max) in [
             (
                 "neutral_systems",

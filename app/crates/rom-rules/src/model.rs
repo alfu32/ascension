@@ -1648,6 +1648,12 @@ pub struct MapStyle {
     pub fluid_pct: i64,
     /// The `space_pct` column.
     pub space_pct: i64,
+    /// Poleward share of each hemisphere's latitude, 0..=50; zero disables caps.
+    pub polar_cap_pct: i64,
+    /// Maximum absolute player start latitude in milli-degrees, 0..=90,000.
+    pub start_latitude_max_mdeg: i64,
+    /// Terrain covering land and sea inside polar caps; required for nonzero caps.
+    pub polar_terrain_id: Option<DefId>,
     /// The `params` column.
     pub params: String,
     /// Fewest systems without a home race.
