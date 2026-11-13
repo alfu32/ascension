@@ -1,7 +1,7 @@
 //! Owned simulation state and the fixed tick pipeline.
 
 use crate::{
-    SimError,
+    BodyId, SimError,
     avoidance::{Avoidance, Motion},
     construction::footprint,
     entity::{Entity, EntityId, Player, PlayerId},
@@ -10,10 +10,11 @@ use crate::{
     map::MapGrid,
     math::Pos,
     order::{Command, Order, OrderId, OrderStatus, has_component, target_matches},
-    pathing::{PathStats, Pathing},
+    pathing::PathStats,
     rng::SimRng,
-    spatial::SpatialGrid,
+    surface::Surface,
     territory::Territory,
+    universe::UniverseData,
     vision::Vision,
 };
 use rom_geo::{CubeSurface, SurfacePos};
@@ -54,9 +55,16 @@ pub struct World {
     pub(crate) tick: u64,
     pub(crate) rng: SimRng,
     pub(crate) rules: Arc<Rules>,
-    pub(crate) map: MapGrid,
-    /// The surface's shape; every spatial question goes through it.
-    pub(crate) geo: Geometry,
+    /// Every generated surface, in body order; each entity stands on exactly one.
+    pub(crate) surfaces: Vec<Surface>,
+    /// Index into `surfaces` by body id; `u32::MAX` where a body has no surface.
+    pub(crate) slots: Vec<u32>,
+    /// Star systems, bodies and routes; empty for a world built from one map.
+    pub(crate) universe: UniverseData,
+    /// Each player's home body.
+    pub(crate) homes: BTreeMap<PlayerId, BodyId>,
+    /// Simulation ticks per second.
+    pub(crate) tick_rate: i64,
     pub(crate) players: BTreeMap<PlayerId, Player>,
     pub(crate) entities: Vec<Option<Entity>>,
     pub(crate) pending: Vec<(Order, bool)>,
@@ -64,7 +72,6 @@ pub struct World {
     pub(crate) next_order_id: u64,
     pub(crate) stats: Stats,
     pub(crate) income_remainders: BTreeMap<(PlayerId, DefId), i64>,
-    pub(crate) pathing: Pathing,
     pub(crate) avoid: Avoidance,
     pub(crate) economy: EconomyIndex,
     /// Positions by entity id as they stood when the order phase began; empty
@@ -74,7 +81,6 @@ pub struct World {
     pub(crate) spent: Vec<EntityId>,
     pub(crate) territory: Territory,
     pub(crate) vision: Vision,
-    spatial: SpatialGrid,
 }
 
 impl World {
@@ -112,7 +118,8 @@ impl World {
         Ok(world)
     }
 
-    /// Spawns map nodes (a type and a tile position each) for the neutral player 0.
+    /// Spawns map nodes (a type and a tile position each) on body 0 for the neutral
+    /// player 0.
     pub fn spawn_nodes(
         &mut self,
         nodes: &[(DefId, SurfacePos)],
@@ -123,15 +130,17 @@ impl World {
             .collect()
     }
 
-    /// A simulation position for a `rom_geo` surface position.
+    /// A simulation position on body 0 for a `rom_geo` surface position.
     pub fn pos_of(at: SurfacePos) -> Result<Pos, SimError> {
         Ok(Pos {
             x: i32::try_from(at.x).map_err(|_| SimError::OutsideMap)?,
             y: i32::try_from(at.y).map_err(|_| SimError::OutsideMap)?,
             face: at.face,
+            body: BodyId(0),
         })
     }
 
+    /// A one-surface world: the map is body 0 and every player's home.
     fn with_topology(
         rules: Arc<Rules>,
         map: MapGrid,
@@ -139,16 +148,18 @@ impl World {
         seed: u64,
         players: Vec<Player>,
     ) -> Result<Self, SimError> {
-        map.validate()?;
-        let geo = Geometry::new(topology).ok_or(SimError::InvalidMap)?;
-        if geo.tiles() != map.terrain.len() {
-            return Err(SimError::InvalidMap);
-        }
-        for terrain in &map.terrain {
-            if !rules.terrains.contains_key(terrain) {
-                return Err(SimError::UnknownTerrain(*terrain));
-            }
-        }
+        let mut world = Self::empty(rules, seed, players)?;
+        world.insert_map(BodyId(0), map, topology)?;
+        world.homes = world.players.keys().map(|id| (*id, BodyId(0))).collect();
+        Ok(world)
+    }
+
+    /// Checks the rules and players and builds a world without surfaces.
+    pub(crate) fn empty(
+        rules: Arc<Rules>,
+        seed: u64,
+        players: Vec<Player>,
+    ) -> Result<Self, SimError> {
         if rules
             .constant("sim.ticks_per_second")
             .is_none_or(|v| v <= 0)
@@ -206,18 +217,19 @@ impl World {
                 return Err(SimError::InvalidPlayer);
             }
         }
-        let pathing = Pathing::new(&rules, &map, geo.clone());
-        let avoid = Avoidance::new(&rules, geo.clone());
-        let territory = Territory::new(&rules, &map);
-        let mut world = Self {
+        let avoid = Avoidance::new(&rules);
+        let tick_rate = rules.constant("sim.ticks_per_second").unwrap_or(1).max(1);
+        Ok(Self {
             hits: Vec::new(),
             shots: Vec::new(),
             tick: 0,
             rng: SimRng::new(seed),
             rules,
-            map,
-            geo,
-            pathing,
+            surfaces: Vec::new(),
+            slots: Vec::new(),
+            universe: UniverseData::default(),
+            homes: BTreeMap::new(),
+            tick_rate,
             avoid,
             economy: EconomyIndex::default(),
             seen: Vec::new(),
@@ -229,15 +241,36 @@ impl World {
             next_order_id: 1,
             stats: Stats::default(),
             income_remainders: BTreeMap::new(),
-            territory,
+            territory: Territory::default(),
             vision: Vision::default(),
-            spatial: SpatialGrid::default(),
-        };
-        let ids: Vec<PlayerId> = world.players.keys().copied().collect();
-        for id in ids {
-            world.ensure_vision(id);
+        })
+    }
+
+    /// The index of a body's surface, if it has one.
+    #[inline]
+    pub(crate) fn slot_of(&self, body: BodyId) -> Option<usize> {
+        match self.slots.get(body.0 as usize) {
+            Some(&slot) if slot != u32::MAX => Some(slot as usize),
+            _ => None,
         }
-        Ok(world)
+    }
+
+    /// The index of the surface of a body that entities stand on.
+    #[inline]
+    pub(crate) fn slot(&self, body: BodyId) -> usize {
+        self.slot_of(body).expect("body has a surface")
+    }
+
+    /// The surface of a body that entities stand on.
+    #[inline]
+    pub(crate) fn surf(&self, body: BodyId) -> &Surface {
+        &self.surfaces[self.slot(body)]
+    }
+
+    /// The geometry of a body that entities stand on.
+    #[inline]
+    pub(crate) fn geo(&self, body: BodyId) -> &Geometry {
+        &self.surf(body).geo
     }
 
     /// Returns the number of completed simulation ticks.
@@ -250,30 +283,53 @@ impl World {
         &self.rules
     }
 
-    /// Returns the terrain storage; a sphere's faces are stacked as one strip.
+    /// Returns the first surface's terrain storage (the only one of a one-surface
+    /// world); a sphere's faces are stacked as one strip.
     pub fn map(&self) -> &MapGrid {
-        &self.map
+        &self.surfaces[0].map
     }
 
-    /// Returns the surface's shape.
+    /// Returns the first surface's shape (the only one of a one-surface world).
     pub fn topology(&self) -> Topology {
-        self.geo.topology
+        self.surfaces[0].geo.topology
     }
 
-    /// Returns the terrain under a position, or None off the surface.
+    /// Returns the terrain under a position on its body, or None off every surface.
     pub fn terrain_at(&self, pos: Pos) -> Option<DefId> {
-        self.geo.pos_index(pos).map(|index| self.map.terrain[index])
+        let surface = self.surface(pos.body)?;
+        surface
+            .geo
+            .pos_index(pos)
+            .map(|index| surface.map.terrain[index])
+    }
+
+    /// Returns the terrain of a tile on a face of a body, or None off its surface.
+    pub fn terrain_on_body(
+        &self,
+        body: BodyId,
+        face: u8,
+        tile_x: i32,
+        tile_y: i32,
+    ) -> Option<DefId> {
+        let surface = self.surface(body)?;
+        surface
+            .geo
+            .index_of(crate::geometry::Tile::new(face, tile_x, tile_y))
+            .map(|index| surface.map.terrain[index])
     }
 
     /// Distance between two positions in milli-tiles, measured across face edges on a
-    /// sphere; None there when they are farther apart than half a face.
+    /// sphere; None there when they are farther apart than half a face, and always None
+    /// between different bodies.
     pub fn distance(&self, a: Pos, b: Pos) -> Option<u64> {
-        self.geo.distance(a, b)
+        self.surface(a.body)?.geo.distance(a, b)
     }
 
-    /// Steps a position by a local vector in milli-tiles, crossing face edges.
+    /// Steps a position by a local vector in milli-tiles, crossing face edges; a position
+    /// on a body without a surface is returned unchanged.
     pub fn offset(&self, pos: Pos, dx: i64, dy: i64) -> Pos {
-        self.geo.offset(pos, dx, dy).0
+        self.surface(pos.body)
+            .map_or(pos, |surface| surface.geo.offset(pos, dx, dy).0)
     }
 
     /// Iterates players in ascending id order.
@@ -311,9 +367,15 @@ impl World {
         &self.stats
     }
 
-    /// Returns path-search counters.
+    /// Returns path-search counters summed over every surface.
     pub fn path_stats(&self) -> PathStats {
-        self.pathing.stats
+        self.surfaces
+            .iter()
+            .fold(PathStats::default(), |sum, s| PathStats {
+                searches: sum.searches + s.pathing.stats.searches,
+                nodes: sum.nodes + s.pathing.stats.nodes,
+                repaths: sum.repaths + s.pathing.stats.repaths,
+            })
     }
 
     /// Spawns a checked, complete entity with its type's full hit points.
@@ -342,9 +404,12 @@ impl World {
         if !self.players.contains_key(&owner) {
             return Err(SimError::UnknownPlayer(owner));
         }
-        if !self.geo.contains(pos) {
+        let Some(slot) = self
+            .slot_of(pos.body)
+            .filter(|slot| self.surfaces[*slot].geo.contains(pos))
+        else {
             return Err(SimError::OutsideMap);
-        }
+        };
         let next = self
             .next_entity_id
             .checked_add(1)
@@ -379,9 +444,12 @@ impl World {
         }));
         self.refresh_entity_stats(id);
         self.next_entity_id = next;
-        self.spatial.insert(id, pos);
+        let surface = &mut self.surfaces[slot];
+        surface.spatial.insert(id, pos);
         let et = &self.rules.entity_types[&type_id];
-        self.pathing.occupy(et, pos.face, footprint(et, pos), true);
+        surface
+            .pathing
+            .occupy(et, pos.face, footprint(et, pos), true);
         self.avoid.set(id, Motion::of(&self.rules, type_id), pos);
         if et.gather_site.is_some() {
             self.economy.sites.insert(id);
@@ -400,12 +468,12 @@ impl World {
     pub(crate) fn retyped(&mut self, id: EntityId, old: DefId) {
         let entity = self.entity(id).expect("retyped entity");
         let (pos, new) = (entity.pos, entity.type_id);
+        let slot = self.slot(pos.body);
+        let pathing = &mut self.surfaces[slot].pathing;
         let before = &self.rules.entity_types[&old];
-        self.pathing
-            .occupy(before, pos.face, footprint(before, pos), false);
+        pathing.occupy(before, pos.face, footprint(before, pos), false);
         let after = &self.rules.entity_types[&new];
-        self.pathing
-            .occupy(after, pos.face, footprint(after, pos), true);
+        pathing.occupy(after, pos.face, footprint(after, pos), true);
         self.avoid.set(id, Motion::of(&self.rules, new), pos);
         if after.gather_site.is_some() {
             self.economy.sites.insert(id);
@@ -426,11 +494,13 @@ impl World {
         self.refresh_territory(id);
     }
 
-    /// Moves an entity between spatial cells after its position changed.
+    /// Moves an entity between spatial cells of its surface after its position changed.
     pub(crate) fn relocate(&mut self, id: EntityId, from: Pos, to: Pos) {
-        self.spatial.relocate(id, from, to);
+        let slot = self.slot(to.body);
+        let surface = &mut self.surfaces[slot];
+        surface.spatial.relocate(id, from, to);
         self.avoid.pos[id.0 as usize] = to;
-        if self.geo.tile_of(from) != self.geo.tile_of(to) {
+        if surface.geo.tile_of(from) != surface.geo.tile_of(to) {
             self.refresh_viewer(id);
         }
     }
@@ -442,9 +512,12 @@ impl World {
             .get_mut(id.0 as usize)
             .and_then(Option::take)
             .ok_or(SimError::UnknownExecutor(id))?;
-        self.spatial.remove(id, entity.pos);
+        let slot = self.slot(entity.pos.body);
+        let surface = &mut self.surfaces[slot];
+        surface.spatial.remove(id, entity.pos);
         let et = &self.rules.entity_types[&entity.type_id];
-        self.pathing
+        surface
+            .pathing
             .occupy(et, entity.pos.face, footprint(et, entity.pos), false);
         self.avoid.set(id, None, entity.pos);
         self.economy.idle.remove(&id);
@@ -480,16 +553,21 @@ impl World {
         Ok(())
     }
 
-    /// Returns exact radius matches in ascending id order, including the boundary; on a
-    /// sphere the radius is measured across face edges and limited to half a face.
+    /// Returns exact radius matches on the centre's body in ascending id order, including
+    /// the boundary; on a sphere the radius is measured across face edges and limited to
+    /// half a face.
     pub fn entities_in_radius(&self, center: Pos, radius: u32) -> Vec<EntityId> {
-        let radius = self.geo.clamp_radius(i64::from(radius)) as u32;
-        let mut ids: Vec<_> = self
+        let Some(surface) = self.surface(center.body) else {
+            return Vec::new();
+        };
+        let geo = &surface.geo;
+        let radius = geo.clamp_radius(i64::from(radius)) as u32;
+        let mut ids: Vec<_> = surface
             .spatial
-            .candidates(&self.geo, center, radius)
+            .candidates(geo, center, radius)
             .filter(|id| {
                 self.entity(*id)
-                    .is_some_and(|e| self.geo.within(e.pos, center, i64::from(radius)))
+                    .is_some_and(|e| geo.within(e.pos, center, i64::from(radius)))
             })
             .collect();
         ids.sort_unstable();
@@ -519,12 +597,19 @@ impl World {
         if !target_matches(&command, kind.target) {
             return Err(SimError::WrongTargetShape);
         }
-        // A flat map clamps far goals onto itself; a sphere has no outside to clamp from.
-        if !self.geo.is_flat()
-            && command
-                .target_pos
-                .is_some_and(|pos| !self.geo.contains(pos))
+        // Nothing reaches another body yet: no travel between surfaces.
+        let body = entity.pos.body;
+        if command.target_pos.is_some_and(|pos| pos.body != body)
+            || command
+                .target_entity
+                .and_then(|id| self.entity(id))
+                .is_some_and(|target| target.pos.body != body)
         {
+            return Err(SimError::OtherBody);
+        }
+        // A flat map clamps far goals onto itself; a sphere has no outside to clamp from.
+        let geo = self.geo(body);
+        if !geo.is_flat() && command.target_pos.is_some_and(|pos| !geo.contains(pos)) {
             return Err(SimError::OutsideMap);
         }
         if command.kind == "harvest" {
@@ -637,7 +722,9 @@ impl World {
         self.remove_dead();
         self.remember_touched();
         self.pay_income();
-        self.pathing.end_tick();
+        for surface in &mut self.surfaces {
+            surface.pathing.end_tick();
+        }
         self.tick = self.tick.checked_add(1).expect("simulation tick exhausted");
     }
 }

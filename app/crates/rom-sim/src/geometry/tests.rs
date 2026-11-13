@@ -22,6 +22,7 @@ fn random_pos(rng: &mut SimRng, n: u32) -> Pos {
         face: rng.range(0, 6) as u8,
         x: rng.range(0, n * 1000) as i32,
         y: rng.range(0, n * 1000) as i32,
+        ..Pos::default()
     }
 }
 
@@ -98,6 +99,7 @@ fn offsets_round_a_corner_onto_the_third_face() {
         face: 0,
         x: 15_500,
         y: 600,
+        ..Pos::default()
     };
     let (end, _) = geo.offset(start, 1000, -1000);
     assert_ne!(end.face, 0);

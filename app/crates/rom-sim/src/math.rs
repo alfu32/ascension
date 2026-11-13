@@ -1,7 +1,10 @@
 //! Integer geometry in milli-tiles.
 
-/// A position in milli-tiles on one face of the surface; positive y faces 90 degrees.
-/// A flat map has only face 0; on a cube sphere x and y are local to the face.
+use crate::BodyId;
+
+/// A position in milli-tiles on one face of one body's surface; positive y faces 90
+/// degrees. A flat map has only face 0; on a cube sphere x and y are local to the face.
+/// Positions on different bodies are never in reach of each other.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Pos {
     /// Horizontal position in milli-tiles.
@@ -10,21 +13,34 @@ pub struct Pos {
     pub y: i32,
     /// Face of the surface, 0..6 on a cube sphere and always 0 on a flat map.
     pub face: u8,
+    /// The body whose surface this is; 0 for the single surface of a one-surface world.
+    pub body: BodyId,
 }
 
 impl Pos {
-    /// A position on face 0, the only face of a flat map.
+    /// A position on face 0 of body 0: the only face of a flat map.
     pub const fn flat(x: i32, y: i32) -> Self {
-        Self { x, y, face: 0 }
+        Self {
+            x,
+            y,
+            face: 0,
+            body: BodyId(0),
+        }
+    }
+
+    /// A position on a face of a body.
+    pub const fn on(body: BodyId, face: u8, x: i32, y: i32) -> Self {
+        Self { x, y, face, body }
     }
 
     /// Planar squared distance on one face, saturating only beyond the range of i64.
-    /// It ignores faces; `World::distance` measures across a sphere's face edges.
+    /// It ignores faces and bodies; `World::distance` measures across a sphere's face
+    /// edges and treats other bodies as out of reach.
     pub fn distance_squared(self, other: Self) -> i64 {
         self.distance_squared_wide(other).min(i64::MAX as u128) as i64
     }
 
-    /// Planar Euclidean distance rounded down to whole milli-tiles; ignores faces.
+    /// Planar Euclidean distance rounded down to whole milli-tiles; ignores faces and bodies.
     pub fn distance(self, other: Self) -> u64 {
         integer_sqrt(self.distance_squared_wide(other))
     }
@@ -91,16 +107,8 @@ mod tests {
             assert!(root * root <= n);
             assert!((root + 1).checked_mul(root + 1).is_none_or(|v| v > n));
         }
-        let a = Pos {
-            x: i32::MIN,
-            y: i32::MIN,
-            face: 0,
-        };
-        let b = Pos {
-            x: i32::MAX,
-            y: i32::MAX,
-            face: 0,
-        };
+        let a = Pos::flat(i32::MIN, i32::MIN);
+        let b = Pos::flat(i32::MAX, i32::MAX);
         assert_eq!(a.distance_squared(b), i64::MAX);
         assert_eq!(a.distance(b), 6_074_000_998);
     }

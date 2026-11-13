@@ -13,11 +13,12 @@ impl World {
         let mut nodes = 0_i128;
         if let Some(terrain) = site.needs_node_terrain_id {
             // Node tiles whose centres lie within the radius, across face edges on a sphere.
-            nodes = self
+            let surface = self.surf(pos.body);
+            nodes = surface
                 .geo
                 .disc(pos, site.node_radius.max(0))
                 .flatten()
-                .filter(|index| self.map.terrain[*index] == terrain)
+                .filter(|index| surface.map.terrain[*index] == terrain)
                 .count() as i128;
         }
         (i128::from(site.slots_base) + i128::from(site.slots_per_node) * nodes)
@@ -56,12 +57,12 @@ impl World {
         if self.entity(worker).expect("worker").work_site == Some(site_id) {
             return;
         }
-        let (face, bounds) = (
-            site.pos.face,
+        let (at, bounds) = (
+            site.pos,
             footprint(&self.rules.entity_types[&site.type_id], site.pos),
         );
         order.progress_ticks = order.progress_ticks.saturating_add(1);
-        if !self.approach(worker, order, face, bounds) {
+        if !self.approach(worker, order, at, bounds) {
             return;
         }
         let occupied = self
@@ -195,6 +196,7 @@ impl World {
                 .filter_map(|site| self.entity(*site))
                 .filter(|site| {
                     site.owner == worker.owner
+                        && site.pos.body == worker.pos.body
                         && site.build_progress.is_none()
                         && site.gather_slots > 0
                         && self.rules.entity_types[&site.type_id]
@@ -206,7 +208,8 @@ impl World {
                 })
                 .map(|site| {
                     (
-                        self.geo.rank_distance(worker.pos, site.pos),
+                        self.geo(worker.pos.body)
+                            .rank_distance(worker.pos, site.pos),
                         site.id,
                         site.gather_slots,
                     )

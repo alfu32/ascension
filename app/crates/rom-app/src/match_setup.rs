@@ -165,6 +165,7 @@ pub fn build_match(
             x: snap(start.x, city.footprint_w),
             y: snap(start.y, city.footprint_h),
             face: 0,
+            ..Pos::default()
         };
         starts.push(place_start(
             &mut world,
@@ -221,6 +222,7 @@ pub fn build_sphere_match(
             x: inward(start.x + dx * 1000, city.footprint_w),
             y: inward(start.y + dy * 1000, city.footprint_h),
             face: start.face,
+            ..Pos::default()
         };
         let city_pos = (0..=12_i64)
             .flat_map(|r| {
@@ -244,7 +246,8 @@ pub fn build_sphere_match(
     // The world model: before the space age each player knows the terrain of its home planet.
     // Units and buildings stay hidden until they are seen.
     for &player in &starts_players(&world) {
-        world.reveal_terrain(player);
+        let home = world.home_body(player).unwrap_or_default();
+        world.reveal_terrain(player, home);
     }
     Ok(Match {
         world,
@@ -263,6 +266,7 @@ fn footprint_buildable(world: &World, et: &EntityType, pos: Pos) -> bool {
                 x: (tx * 1000 + 500) as i32,
                 y: (ty * 1000 + 500) as i32,
                 face: pos.face,
+                ..Pos::default()
             };
             world
                 .terrain_at(at)
@@ -510,6 +514,7 @@ mod tests {
                         x: (tx * 1000 + 500) as i32,
                         y: (ty * 1000 + 500) as i32,
                         face: start.city_pos.face,
+                        ..Pos::default()
                     };
                     let terrain = world.terrain_at(at).expect("on the planet");
                     assert!(

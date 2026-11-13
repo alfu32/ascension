@@ -117,14 +117,13 @@ impl World {
         let e = self.entity(target).expect("target");
         let et = &self.rules.entity_types[&e.type_id];
         let pos = self.seen_pos(target);
-        // Out of reach across a sphere counts as infinitely far.
+        // Out of reach across a sphere or on another body counts as infinitely far.
+        let geo = self.geo(pos.body);
         if et.class == EntityClass::Building {
-            self.geo
-                .closest_in_bounds(pos.face, footprint(et, pos), from)
+            geo.closest_in_bounds(pos.face, footprint(et, pos), from)
                 .map_or(u64::MAX, |(_, squared)| crate::integer_sqrt(squared))
         } else {
-            self.geo
-                .distance(from, pos)
+            geo.distance(from, pos)
                 .map_or(u64::MAX, |d| d.saturating_sub(et.radius.max(0) as u64))
         }
     }
@@ -181,7 +180,10 @@ impl World {
         let target_id = target.id;
         let target_pos = self.seen_pos(target_id);
         if let Some(home) = order.home
-            && self.geo.distance(target_pos, home).is_none_or(|d| d > 6000)
+            && self
+                .geo(home.body)
+                .distance(target_pos, home)
+                .is_none_or(|d| d > 6000)
         {
             order.kind = "move".into();
             order.target_entity = None;
@@ -218,7 +220,7 @@ impl World {
                 let bounds = (et.class == EntityClass::Building).then(|| footprint(et, target_pos));
                 let goal = if let Some(b) = bounds {
                     let p = self.entity(id).expect("attacker").pos;
-                    self.geo
+                    self.geo(target_pos.body)
                         .closest_in_bounds(target_pos.face, b, p)
                         .map_or(target_pos, |(closest, _)| closest)
                 } else {
@@ -226,7 +228,10 @@ impl World {
                 };
                 if order.movement.as_ref().is_some_and(|m| {
                     m.request.is_none()
-                        && (self.geo.distance(m.goal, goal).is_none_or(|d| d > 1000)
+                        && (self
+                            .geo(goal.body)
+                            .distance(m.goal, goal)
+                            .is_none_or(|d| d > 1000)
                             || m.target().is_none())
                 }) {
                     order.movement = None;
@@ -267,8 +272,7 @@ impl World {
                 self.spent.push(id);
             }
             let travel = if weapon.projectile_speed > 0 {
-                (u128::from(distance) * self.pathing.tick_rate as u128
-                    / weapon.projectile_speed as u128)
+                (u128::from(distance) * self.tick_rate as u128 / weapon.projectile_speed as u128)
                     .max(1) as u64
             } else {
                 0
@@ -298,6 +302,7 @@ impl World {
         let mut shots = std::mem::take(&mut self.shots);
         shots.sort_by_key(|s| {
             (
+                s.origin.body,
                 s.origin.face,
                 s.origin.x,
                 s.origin.y,
@@ -388,10 +393,10 @@ impl World {
         landing.sort_by_cached_key(|hit| {
             let origin = self
                 .entity(hit.attacker)
-                .map(|e| (e.pos.face, e.pos.x, e.pos.y));
+                .map(|e| (e.pos.body, e.pos.face, e.pos.x, e.pos.y));
             let target = self
                 .entity(hit.target)
-                .map(|e| (e.pos.face, e.pos.x, e.pos.y));
+                .map(|e| (e.pos.body, e.pos.face, e.pos.x, e.pos.y));
             (origin, target, hit.source_type, hit.weapon_id, hit.damage)
         });
         for hit in &landing {

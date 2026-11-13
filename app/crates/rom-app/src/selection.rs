@@ -106,6 +106,7 @@ fn pos_of(surface: SurfacePos) -> Pos {
         x: clamp(surface.x),
         y: clamp(surface.y),
         face: surface.face,
+        ..Pos::default()
     }
 }
 
@@ -985,6 +986,7 @@ impl Controller {
             x: snap(at.x, p.footprint.0),
             y: snap(at.y, p.footprint.1),
             face: at.face,
+            ..Pos::default()
         };
         if p.centre != Some(centre) {
             p.centre = Some(centre);
@@ -1015,6 +1017,7 @@ impl Controller {
             x: snap(at.x, p.footprint.0),
             y: snap(at.y, p.footprint.1),
             face: at.face,
+            ..Pos::default()
         };
         let rules = world.rules().clone();
         let mut builders: Vec<(u64, EntityId)> = self

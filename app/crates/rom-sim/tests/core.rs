@@ -128,6 +128,7 @@ fn hash_changes_when_any_entity_moves() {
                     x: 1000,
                     y: 0,
                     face: 0,
+                    ..Pos::default()
                 },
                 false,
             ))
@@ -138,6 +139,7 @@ fn hash_changes_when_any_entity_moves() {
                 x: 0,
                 y: 1000,
                 face: 0,
+                ..Pos::default()
             },
             false,
         ))
@@ -154,11 +156,13 @@ fn assert_arrival(mut world: World, distance: i32, ticks: u64) {
         x: 500,
         y: 500,
         face: 0,
+        ..Pos::default()
     };
     let target = Pos {
         x: origin.x + distance,
         y: origin.y,
         face: 0,
+        ..Pos::default()
     };
     let id = citizen(&mut world, origin);
     world.submit(move_command(id, target, false)).unwrap();
@@ -219,12 +223,14 @@ fn slow_diagonal_motion_accumulates_without_stalling_or_drifting() {
             x: 100,
             y: 100,
             face: 0,
+            ..Pos::default()
         },
     );
     let target = Pos {
         x: 107,
         y: 107,
         face: 0,
+        ..Pos::default()
     };
     world.submit(move_command(id, target, false)).unwrap();
     for _ in 0..9 {
@@ -251,6 +257,7 @@ fn terrain_speed_uses_the_tile_stood_on_each_tick() {
             x: 935,
             y: 0,
             face: 0,
+            ..Pos::default()
         },
     );
     world
@@ -260,6 +267,7 @@ fn terrain_speed_uses_the_tile_stood_on_each_tick() {
                 x: 1500,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
             false,
         ))
@@ -282,6 +290,7 @@ fn impassable_terrain_fails_the_order() {
         x: 990,
         y: 0,
         face: 0,
+        ..Pos::default()
     };
     let id = citizen(&mut world, pos);
     world
@@ -291,6 +300,7 @@ fn impassable_terrain_fails_the_order() {
                 x: 1500,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
             false,
         ))
@@ -313,6 +323,7 @@ fn leaving_the_map_fails_the_order() {
                 x: -100,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
         ),
         (
@@ -321,6 +332,7 @@ fn leaving_the_map_fails_the_order() {
                 x: 0,
                 y: -100,
                 face: 0,
+                ..Pos::default()
             },
         ),
         (
@@ -328,11 +340,13 @@ fn leaving_the_map_fails_the_order() {
                 x: 31_990,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
             Pos {
                 x: 32_100,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
         ),
         (
@@ -340,11 +354,13 @@ fn leaving_the_map_fails_the_order() {
                 x: 0,
                 y: 31_990,
                 face: 0,
+                ..Pos::default()
             },
             Pos {
                 x: 0,
                 y: 32_100,
                 face: 0,
+                ..Pos::default()
             },
         ),
     ] {
@@ -368,6 +384,7 @@ fn arrival_checks_destination_terrain_before_snapping() {
         x: 990,
         y: 0,
         face: 0,
+        ..Pos::default()
     };
     let id = citizen(&mut world, pos);
     world
@@ -377,6 +394,7 @@ fn arrival_checks_destination_terrain_before_snapping() {
                 x: 1000,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
             false,
         ))
@@ -397,6 +415,7 @@ fn commands_apply_next_tick_in_submission_order() {
                 x: 1000,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
             false,
         ))
@@ -408,6 +427,7 @@ fn commands_apply_next_tick_in_submission_order() {
                 x: 0,
                 y: 1000,
                 face: 0,
+                ..Pos::default()
             },
             false,
         ))
@@ -423,7 +443,8 @@ fn commands_apply_next_tick_in_submission_order() {
         Pos {
             x: 0,
             y: 65,
-            face: 0
+            face: 0,
+            ..Pos::default()
         }
     );
     assert_eq!(entity.orders().len(), 1);
@@ -445,6 +466,7 @@ fn queue_flag_appends_and_replace_clears() {
                 x: 1000,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
             false,
         ))
@@ -456,6 +478,7 @@ fn queue_flag_appends_and_replace_clears() {
                 x: 2000,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
             true,
         ))
@@ -482,6 +505,7 @@ fn queue_flag_appends_and_replace_clears() {
                 x: 65,
                 y: 1000,
                 face: 0,
+                ..Pos::default()
             },
             false,
         ))
@@ -496,7 +520,8 @@ fn queue_flag_appends_and_replace_clears() {
         Pos {
             x: 65,
             y: 65,
-            face: 0
+            face: 0,
+            ..Pos::default()
         }
     );
     assert_eq!(world.stats().orders_cancelled, 2);
@@ -513,6 +538,7 @@ fn finishing_an_order_activates_the_next_without_a_second_movement_step() {
                 x: 65,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
             false,
         ))
@@ -524,6 +550,7 @@ fn finishing_an_order_activates_the_next_without_a_second_movement_step() {
                 x: 130,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
             true,
         ))
@@ -550,6 +577,7 @@ fn stop_clears_the_queue() {
                 x: 1000,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
             false,
         ))
@@ -561,6 +589,7 @@ fn stop_clears_the_queue() {
                 x: 2000,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
             true,
         ))
@@ -587,6 +616,7 @@ fn queued_stop_clears_orders_behind_it_when_it_becomes_active() {
                 x: 130,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
             false,
         ))
@@ -599,6 +629,7 @@ fn queued_stop_clears_orders_behind_it_when_it_becomes_active() {
                 x: 1000,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
             true,
         ))
@@ -701,6 +732,7 @@ fn component_validation_follows_the_rules_requirement() {
                 x: 1000,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
             false,
         ))
@@ -721,6 +753,7 @@ fn unsupported_kinds_fail_when_activated() {
                 x: 130,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
             false,
         ))
@@ -831,6 +864,7 @@ fn subjects_and_construction_placement_are_accepted() {
                 x: 20_500,
                 y: 20_500,
                 face: 0,
+                ..Pos::default()
             },
         )
         .unwrap();
@@ -841,6 +875,7 @@ fn subjects_and_construction_placement_are_accepted() {
         x: 10_000,
         y: 10_000,
         face: 0,
+        ..Pos::default()
     });
     world
         .grant(OWNER, world.rules().id_of("res.timber").unwrap(), 50)
@@ -893,6 +928,7 @@ fn assert_queries_match(world: &World, rng: &mut SimRng) {
             x: rng.range(0, 40_000) as i32 - 4000,
             y: rng.range(0, 40_000) as i32 - 4000,
             face: 0,
+            ..Pos::default()
         };
         let radius = rng.range(0, 20_000);
         let expected: Vec<_> = world
@@ -913,12 +949,14 @@ fn spatial_query_matches_brute_force() {
             x: rng.range(0, 32_000) as i32,
             y: rng.range(0, 32_000) as i32,
             face: 0,
+            ..Pos::default()
         };
         let id = citizen(&mut world, pos);
         let target = Pos {
             x: rng.range(0, 32_000) as i32,
             y: rng.range(0, 32_000) as i32,
             face: 0,
+            ..Pos::default()
         };
         world.submit(move_command(id, target, false)).unwrap();
     }
@@ -942,6 +980,7 @@ fn spatial_query_includes_exact_boundary_and_extreme_queries() {
             x: 4000,
             y: 3000,
             face: 0,
+            ..Pos::default()
         },
     );
     citizen(
@@ -950,6 +989,7 @@ fn spatial_query_includes_exact_boundary_and_extreme_queries() {
             x: 4000,
             y: 3001,
             face: 0,
+            ..Pos::default()
         },
     );
     assert_eq!(world.entities_in_radius(Pos::default(), 5000), vec![a]);
@@ -958,7 +998,8 @@ fn spatial_query_includes_exact_boundary_and_extreme_queries() {
             Pos {
                 x: 4000,
                 y: 3000,
-                face: 0
+                face: 0,
+                ..Pos::default()
             },
             0
         ),
@@ -970,7 +1011,8 @@ fn spatial_query_includes_exact_boundary_and_extreme_queries() {
                 Pos {
                     x: i32::MIN,
                     y: i32::MIN,
-                    face: 0
+                    face: 0,
+                    ..Pos::default()
                 },
                 1
             )
@@ -982,7 +1024,8 @@ fn spatial_query_includes_exact_boundary_and_extreme_queries() {
                 Pos {
                     x: i32::MIN,
                     y: i32::MIN,
-                    face: 0
+                    face: 0,
+                    ..Pos::default()
                 },
                 u32::MAX
             )
@@ -1002,6 +1045,7 @@ fn despawn_removes_from_spatial_grid() {
                 x: 1000,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
             false,
         ))
@@ -1026,6 +1070,7 @@ fn despawn_cancels_live_and_pending_orders() {
                 x: 1000,
                 y: 0,
                 face: 0,
+                ..Pos::default()
             },
             false,
         ))
@@ -1056,7 +1101,8 @@ fn map_bounds_and_invalid_spawns_are_checked_without_consuming_ids() {
             Pos {
                 x: -1,
                 y: 0,
-                face: 0
+                face: 0,
+                ..Pos::default()
             }
         ),
         Err(SimError::OutsideMap)

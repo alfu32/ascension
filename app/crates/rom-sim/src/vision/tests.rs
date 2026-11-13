@@ -77,14 +77,14 @@ fn walk_to(w: &mut World, unit: EntityId, pos: Pos) {
 /// Viewer counts equal a full recount, and every visible tile is explored.
 fn check(w: &World) {
     let full = w.full_counts();
-    for (player, vision) in &w.vision.players {
+    for (player, vision) in &w.surfaces[0].vision.players {
         let expected = full
             .get(player)
             .cloned()
-            .unwrap_or_else(|| vec![0; w.map.terrain.len()]);
+            .unwrap_or_else(|| vec![0; w.surfaces[0].map.terrain.len()]);
         assert_eq!(vision.count, expected, "player {player:?} tick {}", w.tick);
-        for index in 0..w.map.terrain.len() {
-            if w.visible_index(*player, index) {
+        for index in 0..w.surfaces[0].map.terrain.len() {
+            if w.visible_index(*player, 0, index) {
                 assert!(bit(&vision.explored, index));
             }
         }
@@ -253,7 +253,7 @@ fn reveal_terrain_explores_every_tile_but_shows_no_enemy() {
     // 37 × 37 tiles: the tile count is not a multiple of 64, so the last word is partial.
     let mut w = world("", 37);
     let foe = spawn(&mut w, "unit.spearman", P2, at(30_500, 30_500));
-    w.reveal_terrain(P1);
+    w.reveal_terrain(P1, crate::BodyId(0));
     for y in 0..37 {
         for x in 0..37 {
             assert!(w.is_explored(P1, x, y));
@@ -267,6 +267,6 @@ fn reveal_terrain_explores_every_tile_but_shows_no_enemy() {
             .all(|s| !matches!(s, Sighting::Live(e) if e.id == foe))
     );
     let hash = w.hash();
-    w.reveal_terrain(P1);
+    w.reveal_terrain(P1, crate::BodyId(0));
     assert_eq!(w.hash(), hash, "revealing twice changes nothing");
 }

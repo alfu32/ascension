@@ -1,6 +1,6 @@
 //! Stable field-by-field FNV-1a state serialization.
 
-use crate::{Order, OrderStatus, Pos, Topology, World, geometry::Tile, pathing::Pathing};
+use crate::{Order, OrderStatus, Pos, Surface, Topology, World, geometry::Tile, pathing::Pathing};
 use std::cmp::Reverse;
 
 struct StateHash(u64);
@@ -27,6 +27,7 @@ impl StateHash {
         self.bytes(&pos.x.to_le_bytes());
         self.bytes(&pos.y.to_le_bytes());
         self.bytes(&[pos.face]);
+        self.u32(pos.body.0);
     }
 
     fn optional<T>(&mut self, value: Option<T>, encode: impl FnOnce(&mut Self, T)) {
@@ -141,27 +142,20 @@ impl World {
     /// Hashes complete mutable state in little-endian field order with FNV-1a 64.
     pub fn hash(&self) -> u64 {
         let mut hash = StateHash(0xcbf29ce484222325);
-        hash.bytes(b"rom-sim-state-8");
+        hash.bytes(b"rom-sim-state-9");
         hash.u64(self.tick);
         hash.u64(self.rng.state());
         hash.u32(self.next_entity_id);
         hash.u64(self.next_order_id);
-        match self.geo.topology {
-            Topology::Flat { width, height } => {
-                hash.bytes(&[0]);
-                hash.u32(width);
-                hash.u32(height);
-            }
-            Topology::Cube(surface) => {
-                hash.bytes(&[1]);
-                hash.u32(surface.n);
-            }
+        hash.universe(self);
+        hash.u64(self.surfaces.len() as u64);
+        for surface in &self.surfaces {
+            hash.surface(surface);
         }
-        hash.u32(self.map.width);
-        hash.u32(self.map.height);
-        hash.u64(self.map.terrain.len() as u64);
-        for terrain in &self.map.terrain {
-            hash.u32(terrain.0);
+        hash.u64(self.homes.len() as u64);
+        for (player, body) in &self.homes {
+            hash.u32(player.0);
+            hash.u32(body.0);
         }
         hash.u64(self.players.len() as u64);
         for player in self.players.values() {
@@ -275,7 +269,6 @@ impl World {
             hash.u32(hit.target.0);
             hash.bytes(&hit.damage.to_le_bytes());
         }
-        hash.pathing(&self.pathing);
         hash.u64(self.avoid.awake.len() as u64);
         for id in &self.avoid.awake {
             hash.u32(id.0);
@@ -298,31 +291,62 @@ impl World {
 }
 
 impl StateHash {
-    /// Borders, cities and every player's fog of war.
-    fn places(&mut self, world: &World) {
-        let territory = &world.territory;
-        self.u64(territory.winner.len() as u64);
-        for winner in &territory.winner {
+    /// Star systems, bodies and routes.
+    fn universe(&mut self, world: &World) {
+        let universe = &world.universe;
+        self.u64(universe.systems.len() as u64);
+        for s in &universe.systems {
+            self.u32(s.id);
+            self.text(&s.name);
+            self.bytes(&s.x.to_le_bytes());
+            self.bytes(&s.y.to_le_bytes());
+        }
+        self.u64(universe.bodies.len() as u64);
+        for b in &universe.bodies {
+            self.u32(b.id.0);
+            self.u32(b.system);
+            self.text(b.kind.key());
+            self.text(&b.name);
+            self.bytes(&b.orbit_radius.to_le_bytes());
+            self.bytes(&b.orbit_angle_mdeg.to_le_bytes());
+            self.optional(b.n, Self::u32);
+            self.optional(b.home_race, |h, d| h.u32(d.0));
+            self.optional(b.node_type, |h, d| h.u32(d.0));
+        }
+        self.u64(universe.routes.len() as u64);
+        for r in &universe.routes {
+            self.u32(r.system_a);
+            self.u32(r.system_b);
+            self.bytes(&r.length.to_le_bytes());
+        }
+    }
+
+    /// One surface: shape, terrain, path state, border grid and every player's fog there.
+    fn surface(&mut self, surface: &Surface) {
+        self.u32(surface.body().0);
+        match surface.geo.topology {
+            Topology::Flat { width, height } => {
+                self.bytes(&[0]);
+                self.u32(width);
+                self.u32(height);
+            }
+            Topology::Cube(cube) => {
+                self.bytes(&[1]);
+                self.u32(cube.n);
+            }
+        }
+        self.u32(surface.map.width);
+        self.u32(surface.map.height);
+        self.u64(surface.map.terrain.len() as u64);
+        for terrain in &surface.map.terrain {
+            self.u32(terrain.0);
+        }
+        self.pathing(&surface.pathing);
+        self.u64(surface.territory.winner.len() as u64);
+        for winner in &surface.territory.winner {
             self.u32(*winner);
         }
-        self.u64(territory.emitters.len() as u64);
-        for (id, e) in &territory.emitters {
-            self.u32(id.0);
-            self.pos(e.pos);
-            self.bytes(&e.radius.to_le_bytes());
-            self.u32(e.owner.0);
-            self.u64(e.completed);
-        }
-        self.u64(territory.owned.len() as u64);
-        for (player, tiles) in &territory.owned {
-            self.u32(player.0);
-            self.u64(*tiles);
-        }
-        self.u64(territory.cities.len() as u64);
-        for id in &territory.cities {
-            self.u32(id.0);
-        }
-        let vision = &world.vision;
+        let vision = &surface.vision;
         self.u64(vision.players.len() as u64);
         for (player, v) in &vision.players {
             self.u32(player.0);
@@ -342,14 +366,6 @@ impl StateHash {
                 self.pos(b.pos);
             }
         }
-        self.u64(vision.viewers.len() as u64);
-        for viewer in &vision.viewers {
-            self.optional(viewer.as_ref(), |h, v| {
-                h.u32(v.tile);
-                h.bytes(&v.los.to_le_bytes());
-                h.u32(v.owner.0);
-            });
-        }
         self.u64(vision.touched.len() as u64);
         for tile in &vision.touched {
             self.u32(*tile);
@@ -361,6 +377,38 @@ impl StateHash {
             for id in ids {
                 self.u32(id.0);
             }
+        }
+    }
+
+    /// Emitters, cities and what every entity reveals.
+    fn places(&mut self, world: &World) {
+        let territory = &world.territory;
+        self.u64(territory.emitters.len() as u64);
+        for (id, e) in &territory.emitters {
+            self.u32(id.0);
+            self.pos(e.pos);
+            self.bytes(&e.radius.to_le_bytes());
+            self.u32(e.owner.0);
+            self.u64(e.completed);
+        }
+        self.u64(territory.owned.len() as u64);
+        for (player, tiles) in &territory.owned {
+            self.u32(player.0);
+            self.u64(*tiles);
+        }
+        self.u64(territory.cities.len() as u64);
+        for id in &territory.cities {
+            self.u32(id.0);
+        }
+        let vision = &world.vision;
+        self.u64(vision.viewers.len() as u64);
+        for viewer in &vision.viewers {
+            self.optional(viewer.as_ref(), |h, v| {
+                h.u32(v.body.0);
+                h.u32(v.tile);
+                h.bytes(&v.los.to_le_bytes());
+                h.u32(v.owner.0);
+            });
         }
     }
 }
@@ -520,41 +568,41 @@ mod tests {
         let mut world =
             World::obstacle_scenario(Arc::new(Rules::load(&conn).unwrap()), 7, 40, 30).unwrap();
         world.step();
-        assert!(world.pathing.search.is_some());
+        assert!(world.surfaces[0].pathing.search.is_some());
         changes(&mut world, |w| {
-            w.pathing.search.as_mut().unwrap().expanded += 1
+            w.surfaces[0].pathing.search.as_mut().unwrap().expanded += 1
         });
         changes(&mut world, |w| {
-            w.pathing.search.as_mut().unwrap().best.1 += 1
+            w.surfaces[0].pathing.search.as_mut().unwrap().best.1 += 1
         });
         changes(&mut world, |w| {
-            w.pathing.search.as_mut().unwrap().target += 1
+            w.surfaces[0].pathing.search.as_mut().unwrap().target += 1
         });
         changes(&mut world, |w| {
-            let search = w.pathing.search.as_mut().unwrap();
+            let search = w.surfaces[0].pathing.search.as_mut().unwrap();
             let entry = search.open.pop().unwrap();
             search
                 .open
                 .push(Reverse((entry.0.0 + 1, entry.0.1, entry.0.2)));
         });
         changes(&mut world, |w| {
-            let index = w
+            let index = w.surfaces[0]
                 .pathing
                 .stamp
                 .iter()
-                .position(|s| *s == w.pathing.generation)
+                .position(|s| *s == w.surfaces[0].pathing.generation)
                 .unwrap();
-            w.pathing.g[index] += 1;
+            w.surfaces[0].pathing.g[index] += 1;
         });
-        changes(&mut world, |w| w.pathing.queue[0].goal.x += 1);
+        changes(&mut world, |w| w.surfaces[0].pathing.queue[0].goal.x += 1);
         changes(&mut world, |w| {
-            w.pathing.queue[0].waiters.pop();
+            w.surfaces[0].pathing.queue[0].waiters.pop();
         });
-        changes(&mut world, |w| w.pathing.next_request += 1);
-        changes(&mut world, |w| w.pathing.occupancy[5] += 1);
-        changes(&mut world, |w| w.pathing.stats.repaths += 1);
-        changes(&mut world, |w| w.pathing.stats.nodes += 1);
-        changes(&mut world, |w| w.pathing.stats.searches += 1);
+        changes(&mut world, |w| w.surfaces[0].pathing.next_request += 1);
+        changes(&mut world, |w| w.surfaces[0].pathing.occupancy[5] += 1);
+        changes(&mut world, |w| w.surfaces[0].pathing.stats.repaths += 1);
+        changes(&mut world, |w| w.surfaces[0].pathing.stats.nodes += 1);
+        changes(&mut world, |w| w.surfaces[0].pathing.stats.searches += 1);
         let walker = world
             .entities()
             .find(|e| {
@@ -603,7 +651,7 @@ mod tests {
         });
         changes(&mut world, |w| w.next_entity_id += 1);
         changes(&mut world, |w| w.next_order_id += 1);
-        changes(&mut world, |w| w.map.terrain[0].0 += 1);
+        changes(&mut world, |w| w.surfaces[0].map.terrain[0].0 += 1);
         let player = *world.players.keys().next().unwrap();
         changes(&mut world, |w| {
             w.players.get_mut(&player).unwrap().team += 1

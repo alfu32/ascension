@@ -163,17 +163,18 @@ impl World {
         let (across, down) = (et.footprint_w * 500 + 1, et.footprint_h * 500 + 1);
         // Just outside the footprint's right, left, bottom or top edge; on a sphere
         // the first of these always exists, across a face edge if need be.
+        let geo = self.geo(entity.pos.body);
         let pos = [(across, 0), (-across, 0), (0, down), (0, -down)]
             .into_iter()
-            .map(|(dx, dy)| self.geo.offset(entity.pos, dx, dy).0)
-            .find(|p| self.geo.contains(*p))
+            .map(|(dx, dy)| geo.offset(entity.pos, dx, dy).0)
+            .find(|p| geo.contains(*p))
             .unwrap_or_else(|| {
-                let (width, height) = self.geo.face_size();
+                let (width, height) = geo.face_size();
                 let clamp = |v: i64, size: i32| v.clamp(0, i64::from(size) * 1000 - 1) as i32;
                 Pos {
                     x: clamp(i64::from(entity.pos.x) + across, width),
                     y: clamp(i64::from(entity.pos.y), height),
-                    face: entity.pos.face,
+                    ..entity.pos
                 }
             });
         order.status = match self.spawn(subject, order.player, pos) {

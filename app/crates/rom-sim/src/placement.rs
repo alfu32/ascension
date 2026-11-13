@@ -2,7 +2,10 @@
 
 use crate::construction::footprint;
 use crate::geometry;
-use crate::{EntityId, PlayerId, Pos, SimError, World};
+use crate::{BodyId, EntityId, PlayerId, Pos, SimError, World};
+
+/// How far `World::find_city_site` searches from its starting point, in milli-tiles.
+pub const CITY_SITE_RADIUS: i64 = 16_000;
 use rom_rules::{DefId, LimitScope, PlacementKind};
 
 /// Something standing or about to stand on the map: owner, type and position.
@@ -95,17 +98,19 @@ impl World {
         subject: DefId,
         pos: Pos,
         bounds: [i64; 4],
+        ignore_territory: bool,
     ) -> Result<(), SimError> {
         let et = &self.rules.entity_types[&subject];
         let is_city = self.is_city_type(subject);
         // A player without a city may found one outside any border.
-        let first_city = is_city && self.city_count(player) == 0;
-        let geo = &self.geo;
+        let first_city = ignore_territory || (is_city && self.city_count(player) == 0);
+        let surface = self.surf(pos.body);
+        let geo = &surface.geo;
         let within = |other: Pos, distance: i64| geo.within(pos, other, distance);
         let closer = |other: Pos, distance: i64| geo.closer_than(pos, other, distance);
         let footprint_terrain = || {
             geo.footprint_tiles(pos.face, bounds)
-                .map(|t| geo.index_of(t).map(|index| self.map.terrain[index]))
+                .map(|t| geo.index_of(t).map(|index| surface.map.terrain[index]))
         };
         if is_city {
             let spacing = self
@@ -123,9 +128,9 @@ impl World {
             let pass = match rule.rule {
                 PlacementKind::InOwnTerritory => {
                     first_city
-                        || geo
-                            .footprint_tiles(pos.face, bounds)
-                            .all(|t| self.territory_owner_on(t.face, t.x, t.y) == Some(player))
+                        || geo.footprint_tiles(pos.face, bounds).all(|t| {
+                            self.territory_owner_on_body(pos.body, t.face, t.x, t.y) == Some(player)
+                        })
                 }
                 PlacementKind::InCityRadius => {
                     first_city || self.city_covering(player, pos).is_some()
@@ -135,7 +140,7 @@ impl World {
                 }
                 PlacementKind::AdjacentTerrain => geo
                     .footprint_surroundings(pos.face, bounds, rule.distance)
-                    .any(|index| rule.ref_def_id == Some(self.map.terrain[index])),
+                    .any(|index| rule.ref_def_id == Some(surface.map.terrain[index])),
                 PlacementKind::NearType => self.entities().any(|e| {
                     e.owner == player
                         && Some(e.type_id) == rule.ref_def_id
@@ -154,6 +159,7 @@ impl World {
                 PlacementKind::OnNode => self.entities().any(|e| {
                     Some(e.type_id) == rule.ref_def_id
                         && geometry::footprint_contains(
+                            e.pos.body,
                             e.pos.face,
                             footprint(&self.rules.entity_types[&e.type_id], e.pos),
                             pos,
@@ -178,6 +184,45 @@ impl World {
             }
         }
         Ok(())
+    }
+
+    /// The player's city type: the first city type in id order available to its faction.
+    pub fn city_type(&self, player: PlayerId) -> Option<DefId> {
+        let faction = self.players.get(&player)?.faction;
+        self.rules
+            .entity_types
+            .values()
+            .find(|et| {
+                et.territory.as_ref().is_some_and(|t| t.is_city)
+                    && self.rules.is_available(et.id, faction)
+            })
+            .map(|et| et.id)
+    }
+
+    /// The nearest centre to `near` on `body`, within `CITY_SITE_RADIUS`, where the
+    /// player's city type (see `city_type`) passes every placement check except the
+    /// territory rules: surface bounds, terrain, overlap, city spacing and the type's
+    /// other placement rules. Ties go to the lower tile index.
+    pub fn find_city_site(&self, player: PlayerId, body: BodyId, near: Pos) -> Option<Pos> {
+        let city = self.city_type(player)?;
+        let surface = self.surface(body)?;
+        let near = Pos { body, ..near };
+        let geo = &surface.geo;
+        let mut candidates: Vec<(u128, usize, Pos)> = geo
+            .disc(near, CITY_SITE_RADIUS)
+            .flatten()
+            .filter_map(|index| {
+                let snapped = self.snap_placement(city, geo.index_centre(index)).ok()?;
+                let distance = geo.distance_squared(near, snapped)?;
+                Some((distance, index, snapped))
+            })
+            .collect();
+        candidates.sort_unstable_by_key(|(distance, index, _)| (*distance, *index));
+        candidates.dedup_by_key(|(_, _, pos)| *pos);
+        candidates
+            .into_iter()
+            .filter(|(distance, _, _)| *distance <= (CITY_SITE_RADIUS as u128).pow(2))
+            .find_map(|(_, _, pos)| self.placement(player, city, pos, true).ok())
     }
 
     /// Ids of the cities a player has, complete or not, in id order.

@@ -4,7 +4,7 @@ use crate::{EntityId, Order, OrderStatus, World};
 
 impl World {
     pub(crate) fn regenerate_energy(&mut self) {
-        let rate = self.pathing.tick_rate;
+        let rate = self.tick_rate;
         for entity in self.entities.iter_mut().flatten() {
             let Some(energy) = &self.rules.entity_types[&entity.type_id].energy else {
                 continue;
@@ -40,9 +40,10 @@ impl World {
             && !self.enemies(h.owner, t.owner)
             && t.hp > 0
             && self.rules.has_tag(t.type_id, spec.target_tag_id)
+            && h.pos.body == t.pos.body
             && (!range
                 || self
-                    .geo
+                    .geo(h.pos.body)
                     .distance(h.pos, t.pos)
                     .is_some_and(|d| d <= spec.range.max(0) as u64))
     }
@@ -74,10 +75,10 @@ impl World {
             return;
         }
         let accumulated = i128::from(h.heal_remainder) + i128::from(rate);
-        let amount = (accumulated / i128::from(self.pathing.tick_rate))
+        let amount = (accumulated / i128::from(self.tick_rate))
             .min(i128::from(missing.min(affordable))) as i64;
         let h = self.entities[healer.0 as usize].as_mut().expect("healer");
-        h.heal_remainder = (accumulated % i128::from(self.pathing.tick_rate)) as i64;
+        h.heal_remainder = (accumulated % i128::from(self.tick_rate)) as i64;
         if energy_per_hp > 0 {
             h.energy -= amount * energy_per_hp;
         }

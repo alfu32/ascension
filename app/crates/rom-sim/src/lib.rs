@@ -24,7 +24,9 @@ mod spatial;
 #[cfg(test)]
 mod sphere_tests;
 mod stance;
+mod surface;
 mod territory;
+mod universe;
 mod vision;
 mod world;
 
@@ -35,7 +37,10 @@ pub use map::MapGrid;
 pub use math::{Pos, integer_sqrt};
 pub use order::{Command, Order, OrderId, OrderKindKey, OrderStatus};
 pub use pathing::PathStats;
+pub use placement::CITY_SITE_RADIUS;
 pub use rng::SimRng;
+pub use surface::Surface;
+pub use universe::{BodyId, BodyInfo, PlanetSurface, RouteInfo, SystemInfo, UniverseSetup};
 pub use vision::{RememberedBuilding, Sighting};
 pub use world::{Stats, World};
 
@@ -174,6 +179,15 @@ pub enum SimError {
     /// Placement rule `on_layer`: a footprint tile is on another layer.
     #[error("placement must be on the required layer")]
     NotOnLayer,
+    /// The order's target is on another body; nothing travels between bodies yet.
+    #[error("target is on another body")]
+    OtherBody,
+    /// The body is unknown, has no surface, or cannot take the requested surface.
+    #[error("unknown body {0:?}")]
+    UnknownBody(BodyId),
+    /// The universe data is inconsistent.
+    #[error("invalid universe: {0}")]
+    InvalidUniverse(&'static str),
     /// The catalogue cannot supply the requested headless scenario.
     #[error("no eligible {0} for movement scenario")]
     ScenarioUnavailable(&'static str),

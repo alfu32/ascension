@@ -317,7 +317,12 @@ mod tests {
         };
         let map = MapGrid::new(64, 64, vec![id("ter.plain"); 64 * 64]).unwrap();
         let mut w = World::new(rules.clone(), map, 7, vec![player]).unwrap();
-        let at = |x, y| Pos { x, y, face: 0 };
+        let at = |x, y| Pos {
+            x,
+            y,
+            face: 0,
+            ..Pos::default()
+        };
         let order = |executor, kind: &str, subject: Option<DefId>, pos: Option<Pos>| Command {
             player: PlayerId(1),
             executor,
