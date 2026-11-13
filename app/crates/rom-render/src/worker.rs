@@ -698,10 +698,20 @@ fn render_loop(shared: &Shared) {
                     | InputEvent::ButtonUp { x, y, .. } => Some((x, y)),
                     _ => None,
                 };
+                let mut at_edge = false;
                 if let Some((x, y)) = position {
                     over_hud = hud_visible && canvas.contains_hud(x, y);
+                    at_edge = canvas.at_edge(x, y);
                 }
                 match event {
+                    // The outermost pixels pan the camera even where the HUD covers the edge.
+                    InputEvent::PointerMoved { .. } if over_hud && at_edge => steer(
+                        event,
+                        &mut orbit,
+                        &mut orbit_controller,
+                        &mut camera,
+                        &mut controller,
+                    ),
                     InputEvent::ButtonDown { .. } | InputEvent::Wheel { .. } if over_hud => {}
                     InputEvent::PointerMoved { .. } if over_hud => {
                         steer(

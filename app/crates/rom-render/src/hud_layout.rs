@@ -304,6 +304,13 @@ impl HudLayout {
         )
     }
 
+    /// True within the outermost pixels of the frame, where the pointer pans the camera even over
+    /// the HUD: the top bar and bottom panels cover the top and bottom edges.
+    pub fn at_edge(&self, x: f32, y: f32) -> bool {
+        const EDGE: f32 = 8.0;
+        x <= EDGE || y <= EDGE || x >= self.width - EDGE || y >= self.height - EDGE
+    }
+
     /// True for an inert HUD surface that consumes pointer input.
     pub fn contains_hud(&self, x: f32, y: f32) -> bool {
         y < TOP_BAR_HEIGHT * self.scale
@@ -531,5 +538,16 @@ mod tests {
         let layout = HudLayout::new(1672, 941, None);
         let area = layout.world_area();
         assert_eq!((area.y, area.bottom()), (130.0, 672.0));
+    }
+
+    #[test]
+    fn edge_band_covers_all_four_sides_and_not_the_centre() {
+        let layout = HudLayout::new(1280, 720, None);
+        assert!(layout.at_edge(2.0, 360.0) && layout.at_edge(1278.0, 360.0));
+        assert!(layout.at_edge(640.0, 2.0) && layout.at_edge(640.0, 718.0));
+        assert!(!layout.at_edge(640.0, 360.0));
+        // The top bar and the bottom panels are HUD, but their outermost pixels are an edge.
+        assert!(layout.contains_hud(640.0, 2.0) && layout.at_edge(640.0, 2.0));
+        assert!(layout.contains_hud(100.0, 718.0) && layout.at_edge(100.0, 718.0));
     }
 }
