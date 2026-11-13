@@ -109,6 +109,8 @@ pub fn render(
                     put(a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t, [255; 4]);
                 }
             }
+            // Only the space minimap uses these.
+            MapMark::Ring(..) | MapMark::Segment(..) => {}
         }
     }
     let quads = painter.compose(layout, snapshot).to_vec();

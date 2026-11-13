@@ -302,6 +302,9 @@ fn publish(
         .entities
         .store(snapshot.entities.len() as u32, Ordering::Relaxed);
     bridge.publish_snapshot(Arc::new(snapshot));
+    if let Some(player) = world.players().find(|p| p.id == crate::selection::PLAYER) {
+        bridge.publish_zoom_cap(crate::universe_view::max_level(world.rules(), player.age));
+    }
     if world.tick().is_multiple_of(VISION_INTERVAL) {
         bridge.publish_vision(Arc::new(fog.build(world)));
     }

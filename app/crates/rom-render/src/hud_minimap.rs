@@ -163,6 +163,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn declutter_keeps_the_highest_priority_of_overlapping_labels() {
+        let boxes = [
+            (0.0, 0.0, 50.0, 10.0, 2.0),
+            (10.0, 2.0, 50.0, 10.0, 1.0),
+            (0.0, 30.0, 50.0, 10.0, 3.0),
+        ];
+        assert_eq!(declutter(&boxes), vec![1, 2]);
+        assert!(declutter(&[]).is_empty());
+    }
+
+    #[test]
     fn minimap_colours_follow_tile_kinds() {
         let features = BTreeMap::from([(7_u16, [200, 10, 10])]);
         let land = tile_colour(TileKind::Land, 128, &features);
@@ -261,6 +272,10 @@ pub enum MapMark {
     Dot(Rect, [u8; 4]),
     /// Camera footprint edge.
     Line((f32, f32), (f32, f32)),
+    /// A circle outline: centre, radius and colour.
+    Ring((f32, f32), f32, [u8; 4]),
+    /// A coloured line segment.
+    Segment((f32, f32), (f32, f32), [u8; 4]),
 }
 
 /// Current entity dots and ground-plane camera outline; consumers clip to `area`.
@@ -365,4 +380,125 @@ pub fn globe_marks(
     marks.push(MapMark::Line((x - arm, y), (x + arm, y)));
     marks.push(MapMark::Line((x, y - arm), (x, y + arm)));
     marks
+}
+
+/// Marks of the minimap above the planet range: a small diagram of the system (orbits, bodies,
+/// where the camera looks) or the star map (systems, routes, the part in view). Drawn into
+/// `area`, which is fitted to a square.
+pub fn space_marks(
+    zoom: &crate::zoom::ZoomCamera,
+    orbit: &crate::orbit::OrbitCamera,
+    layout: &crate::hud_layout::HudLayout,
+    area: Rect,
+) -> Vec<MapMark> {
+    use crate::universe::{BodyViewKind, MAP_RADIUS, SYSTEM_RADIUS};
+    use crate::zoom::Level;
+    let side = area.w.min(area.h);
+    let (cx, cy) = area.centre();
+    let half = side / 2.0 * 0.92;
+    let dot = |x: f32, y: f32, size: f32, colour: [u8; 4]| {
+        let size = size * layout.scale;
+        MapMark::Dot(
+            Rect::new(x - size / 2.0, y - size / 2.0, size, size),
+            colour,
+        )
+    };
+    let mut marks = Vec::new();
+    let scene = zoom.scene();
+    if zoom.level() == Level::System {
+        let scale = half / SYSTEM_RADIUS;
+        for placed in zoom.placed() {
+            let body = &scene.bodies[placed.body];
+            let (x, y) = (cx + placed.pos[0] * scale, cy + placed.pos[2] * scale);
+            match body.kind {
+                BodyViewKind::Star => marks.push(dot(x, y, 6.0, [255, 230, 150, 255])),
+                BodyViewKind::Habitable => {
+                    marks.push(MapMark::Ring(
+                        (cx, cy),
+                        placed.orbit * scale,
+                        [90, 110, 150, 255],
+                    ));
+                    let rgb = body
+                        .home_race_colour
+                        .unwrap_or(crate::universe::planet_colour(body.id));
+                    marks.push(dot(x, y, 5.0, [rgb[0], rgb[1], rgb[2], 255]));
+                }
+                BodyViewKind::Resource => {
+                    marks.push(MapMark::Ring(
+                        (cx, cy),
+                        placed.orbit * scale,
+                        [60, 72, 100, 255],
+                    ));
+                    marks.push(dot(x, y, 3.0, [170, 160, 140, 255]));
+                }
+            }
+        }
+        let target = zoom.system_target(orbit);
+        let (x, y) = (cx + target[0] * scale, cy + target[2] * scale);
+        let arm = 6.0 * layout.scale;
+        marks.push(MapMark::Line((x - arm, y), (x + arm, y)));
+        marks.push(MapMark::Line((x, y - arm), (x, y + arm)));
+    } else {
+        let scale = half / MAP_RADIUS;
+        let positions = scene.place_systems();
+        for &(a, b) in &scene.routes {
+            if let (Some(a), Some(b)) = (scene.system_index(a), scene.system_index(b)) {
+                marks.push(MapMark::Segment(
+                    (cx + positions[a][0] * scale, cy + positions[a][2] * scale),
+                    (cx + positions[b][0] * scale, cy + positions[b][2] * scale),
+                    [70, 90, 130, 255],
+                ));
+            }
+        }
+        for (i, system) in scene.systems.iter().enumerate() {
+            let tint = scene
+                .bodies
+                .iter()
+                .find(|b| b.system == system.id && b.home_race_colour.is_some())
+                .and_then(|b| b.home_race_colour);
+            let rgb = tint.unwrap_or(system.star_colour);
+            let size = if tint.is_some() { 5.0 } else { 3.0 };
+            marks.push(dot(
+                cx + positions[i][0] * scale,
+                cy + positions[i][2] * scale,
+                size,
+                [rgb[0], rgb[1], rgb[2], 255],
+            ));
+        }
+        let target = zoom.map_target();
+        let half_height =
+            zoom.scale().map_distance(zoom.l()) * (FOV_DEGREES.to_radians() / 2.0).tan();
+        let half_width = half_height * layout.width / layout.height.max(1.0);
+        let (x, y) = (cx + target[0] * scale, cy + target[2] * scale);
+        let (w, h) = (half_width * scale, half_height * scale);
+        let corners = [
+            (x - w, y - h),
+            (x + w, y - h),
+            (x + w, y + h),
+            (x - w, y + h),
+        ];
+        for i in 0..4 {
+            marks.push(MapMark::Line(corners[i], corners[(i + 1) % 4]));
+        }
+    }
+    marks
+}
+
+/// Which labels fit: greedy by priority, a label that would overlap one already kept is dropped.
+/// Each box is `(x, y, width, height)`; returns the indices kept, in priority order.
+pub fn declutter(boxes: &[(f32, f32, f32, f32, f32)]) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..boxes.len()).collect();
+    order.sort_by(|&a, &b| boxes[a].4.total_cmp(&boxes[b].4));
+    let mut kept: Vec<usize> = Vec::new();
+    for i in order {
+        let (x, y, w, h, _) = boxes[i];
+        let clear = kept.iter().all(|&k| {
+            let (kx, ky, kw, kh, _) = boxes[k];
+            x + w + 2.0 <= kx || kx + kw + 2.0 <= x || y + h + 2.0 <= ky || ky + kh + 2.0 <= y
+        });
+        if clear {
+            kept.push(i);
+        }
+    }
+    kept
 }

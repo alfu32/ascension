@@ -11,6 +11,7 @@ mod selection;
 mod shell;
 mod sim_thread;
 mod terrain;
+mod universe_view;
 mod world_view;
 
 use std::process::ExitCode;

@@ -10,7 +10,9 @@ use gpui::{
     WindowDecorations, WindowOptions, point, px, size,
 };
 use gpui_component::Root;
-use rom_render::{Camera, OrbitSettings, RenderBridge, RenderWorker, ShutdownHandle, SurfacePos};
+use rom_render::{
+    Camera, OrbitSettings, RenderBridge, RenderWorker, ShutdownHandle, SurfacePos, UniverseSettings,
+};
 
 use crate::args::Options;
 use crate::bench;
@@ -20,6 +22,7 @@ use crate::screenshot;
 use crate::script::{Script, ScriptContext};
 use crate::sim_thread::{SimLink, SimThread};
 use crate::terrain;
+use crate::universe_view;
 use crate::world_view::WorldView;
 
 /// Opens the window and runs until it is closed (or the benchmark finishes).
@@ -51,6 +54,7 @@ pub fn run(options: &Options) -> ExitCode {
     };
     let sim_link = sim.as_ref().map_or_else(SimLink::idle, SimThread::link);
     if options.sphere.is_none()
+        && !options.universe
         && let Some([x, y, distance, yaw, pitch]) = options.camera
     {
         bridge.publish_camera(Camera {
@@ -195,45 +199,95 @@ fn world_view(
 /// Generates the map or planet, publishes its terrain, builds the match and starts the
 /// simulation thread.
 fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThread, String> {
-    let mut game = match options.sphere {
-        Some(n) => {
-            let content = terrain::generate_sphere_content(options, n)?;
-            let game = build_sphere_match(
-                &content.rules,
-                &content.planet,
-                &content.factions,
-                options.seed,
-            )
+    let mut game = if options.universe {
+        let content = terrain::generate_universe_content(options)?;
+        let universe = &content.universe;
+        let bodies: Vec<u32> = universe.starts.iter().map(|s| s.0).collect();
+        let home_body = *bodies.first().ok_or("the universe has no start")?;
+        let home_system = universe
+            .bodies
+            .iter()
+            .find(|b| b.id == home_body)
+            .map(|b| b.system_id)
+            .ok_or("the home planet is not in the universe")?;
+        let planet = universe
+            .planets
+            .get(&home_body)
+            .ok_or("the home planet was not generated")?;
+        // The simulation has one surface: the home planet, with the players living there.
+        let local: Vec<_> = bodies
+            .iter()
+            .zip(&content.factions)
+            .filter(|(body, _)| **body == home_body)
+            .map(|(_, faction)| *faction)
+            .collect();
+        let game = build_sphere_match(&content.rules, planet, &local, options.seed)
             .map_err(|error| format!("setting up the match: {error}"))?;
-            // Starts and nodes are drawn as entities (and only where the player may see them),
-            // not as scene markers; the camera starts at the first player's city.
-            let mut scene = terrain::to_planet_scene(&content.planet);
-            scene.starts.clear();
-            scene.nodes.clear();
-            bridge.publish_planet(
-                Arc::new(scene),
-                OrbitSettings {
-                    max_distance: None,
-                    view: options.orbit,
-                    home: game.starts.first().map(|s| SurfacePos {
-                        face: s.city_pos.face,
-                        x: i64::from(s.city_pos.x),
-                        y: i64::from(s.city_pos.y),
-                    }),
-                },
-            );
-            game
-        }
-        None => {
-            let content = terrain::generate_content(options)?;
-            bridge.publish_terrain(Arc::new(terrain::to_scene(&content.map)));
-            build_match(
-                &content.rules,
-                &content.map,
-                &content.factions,
-                options.seed,
-            )
-            .map_err(|error| format!("setting up the match: {error}"))?
+        bridge.publish_zoom_all(options.zoom_all);
+        bridge.publish_universe(
+            Arc::new(universe_view::to_universe_scene(universe, &bodies)),
+            UniverseSettings {
+                home: Some((home_system, home_body)),
+                view: options.view,
+            },
+        );
+        let mut scene = terrain::to_planet_scene(planet);
+        scene.starts.clear();
+        scene.nodes.clear();
+        bridge.publish_planet(
+            Arc::new(scene),
+            OrbitSettings {
+                max_distance: None,
+                view: options.orbit,
+                home: game.starts.first().map(|s| SurfacePos {
+                    face: s.city_pos.face,
+                    x: i64::from(s.city_pos.x),
+                    y: i64::from(s.city_pos.y),
+                }),
+            },
+        );
+        game
+    } else {
+        match options.sphere {
+            Some(n) => {
+                let content = terrain::generate_sphere_content(options, n)?;
+                let game = build_sphere_match(
+                    &content.rules,
+                    &content.planet,
+                    &content.factions,
+                    options.seed,
+                )
+                .map_err(|error| format!("setting up the match: {error}"))?;
+                // Starts and nodes are drawn as entities (and only where the player may see them),
+                // not as scene markers; the camera starts at the first player's city.
+                let mut scene = terrain::to_planet_scene(&content.planet);
+                scene.starts.clear();
+                scene.nodes.clear();
+                bridge.publish_planet(
+                    Arc::new(scene),
+                    OrbitSettings {
+                        max_distance: None,
+                        view: options.orbit,
+                        home: game.starts.first().map(|s| SurfacePos {
+                            face: s.city_pos.face,
+                            x: i64::from(s.city_pos.x),
+                            y: i64::from(s.city_pos.y),
+                        }),
+                    },
+                );
+                game
+            }
+            None => {
+                let content = terrain::generate_content(options)?;
+                bridge.publish_terrain(Arc::new(terrain::to_scene(&content.map)));
+                build_match(
+                    &content.rules,
+                    &content.map,
+                    &content.factions,
+                    options.seed,
+                )
+                .map_err(|error| format!("setting up the match: {error}"))?
+            }
         }
     };
     let wanderers = add_stress_units(&mut game, options.stress_units, options.seed);

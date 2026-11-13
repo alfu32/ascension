@@ -27,8 +27,10 @@ mod pixels;
 mod scene;
 mod stats;
 mod terrain;
+pub mod universe;
 pub mod vision;
 mod worker;
+pub mod zoom;
 
 pub use camera::{Camera, CameraController, InputEvent, Key, Modifiers, PointerButton};
 pub use entities::{
@@ -52,8 +54,9 @@ pub use terrain::{
 pub use vision::{EXPLORED, UNEXPLORED, VISIBLE, VisionMap};
 pub use worker::{
     MAX_RENDER_SCALE, MIN_RENDER_SCALE, OrbitSettings, RenderBridge, RenderWorker, ShutdownHandle,
-    scaled_size,
+    UniverseSettings, scaled_size,
 };
+pub use zoom::Level;
 
 pub use hud::{HudResearch, HudResource, HudSelection, HudSnapshot};
 pub use hud_model::{

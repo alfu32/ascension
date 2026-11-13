@@ -365,7 +365,7 @@ impl OrbitController {
     }
 }
 
-fn pan_index(key: Key) -> Option<usize> {
+pub(crate) fn pan_index(key: Key) -> Option<usize> {
     match key {
         Key::PanForward => Some(0),
         Key::PanBack => Some(1),
