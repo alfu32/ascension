@@ -36,6 +36,8 @@ pub struct PlanetScene {
     pub starts: Vec<SurfacePos>,
     /// Resource nodes.
     pub nodes: Vec<SurfacePos>,
+    /// How the light that represents the sun moves over this planet.
+    pub sun: crate::sun::SunSettings,
 }
 
 impl PlanetScene {
@@ -753,6 +755,7 @@ mod tests {
                 x: 5,
                 y: 1,
             })],
+            sun: Default::default(),
         }
     }
 
@@ -766,6 +769,7 @@ mod tests {
             feature_colors: BTreeMap::new(),
             starts: Vec::new(),
             nodes: Vec::new(),
+            sun: Default::default(),
         }
     }
 

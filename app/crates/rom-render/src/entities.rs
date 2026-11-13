@@ -835,6 +835,7 @@ mod tests {
             feature_colors: Default::default(),
             starts: Vec::new(),
             nodes: Vec::new(),
+            sun: Default::default(),
         }
     }
 

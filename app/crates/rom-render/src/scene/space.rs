@@ -117,7 +117,7 @@ pub(super) struct SpaceGpu {
 }
 
 /// Uploads a unit sphere with normals and texture coordinates.
-fn upload_sphere(thread: &RaylibThread, rings: u32, slices: u32) -> Mesh {
+pub(super) fn upload_sphere(thread: &RaylibThread, rings: u32, slices: u32) -> Mesh {
     let sphere = uv_sphere(rings, slices);
     let positions: Vec<Vector3> = sphere
         .positions
@@ -153,11 +153,15 @@ fn glow_pixels() -> Vec<u8> {
     pixels
 }
 
-fn ball(pos: [f32; 3], radius: f32) -> Matrix {
+/// A sphere of `radius` at `pos`, turned by `spin` radians about +y (see [`crate::sun::rotate_y`]).
+fn ball(pos: [f32; 3], radius: f32, spin: f32) -> Matrix {
+    let (sin, cos) = spin.sin_cos();
     Matrix {
-        m0: radius,
+        m0: radius * cos,
+        m2: -radius * sin,
         m5: radius,
-        m10: radius,
+        m8: radius * sin,
+        m10: radius * cos,
         m12: pos[0],
         m13: pos[1],
         m14: pos[2],
@@ -337,7 +341,12 @@ impl Scene {
         zoom: &ZoomCamera,
         orbit: &OrbitCamera,
     ) {
-        self.set_light(super::SHIP_LIGHT);
+        self.set_lighting(
+            crate::sun::unit_or(super::SHIP_LIGHT.map(|c| -c)),
+            false,
+            None,
+        );
+        self.set_star_fade(1.0);
         let Some(space) = &mut self.space else {
             return;
         };
@@ -395,9 +404,31 @@ impl Scene {
                 } else {
                     (&space.sphere, &space.material, colour3(colour))
                 };
+                // The loaded planet turns with the day, so its day side faces the star at the
+                // tick the globe shows.
+                let spin = if Some(placed.body) == zoom.surface_body() {
+                    zoom.spin()
+                } else {
+                    0.0
+                };
                 space.shader.set_shader_value(tint_at, tint);
                 space.shader.set_shader_value(emissive_at, emissive);
-                world.draw_mesh(mesh, material.clone(), ball(placed.pos, placed.radius));
+                world.draw_mesh(
+                    mesh,
+                    material.clone(),
+                    ball(placed.pos, placed.radius, spin),
+                );
+            }
+            // Every habitable planet wears an atmosphere halo, lit from the star at the origin.
+            for placed in zoom.placed() {
+                if universe.bodies[placed.body].kind == BodyViewKind::Habitable {
+                    let toward = unit_vector(placed.pos.map(|c| -c));
+                    let thickness = super::sky::SYSTEM_HALO_THICKNESS;
+                    self.sky
+                        .set_halo(placed.pos, placed.radius, thickness, view.eye, toward, 1.0);
+                    self.sky
+                        .draw_halo(&mut world, placed.pos, placed.radius, thickness);
+                }
             }
             let system_id = universe.systems.get(zoom.system()).map(|s| s.id);
             let state = &self.space_state;
@@ -539,6 +570,7 @@ impl Scene {
         target: &mut RenderTexture2D,
         zoom: &ZoomCamera,
     ) {
+        self.set_star_fade(1.0);
         let Some(space) = &mut self.space else {
             return;
         };

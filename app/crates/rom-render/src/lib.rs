@@ -11,6 +11,7 @@
 mod camera;
 mod entities;
 mod globe;
+pub mod graticule;
 pub mod hud;
 pub mod hud_atlas;
 mod hud_gpu;
@@ -25,8 +26,11 @@ mod overlay;
 pub mod pick;
 mod pixels;
 mod scene;
+pub mod shadow;
+pub mod sky;
 pub mod space;
 mod stats;
+pub mod sun;
 mod terrain;
 pub mod universe;
 pub mod vision;
@@ -49,6 +53,7 @@ pub use pixels::rgba_to_bgra_flipped;
 pub use rom_geo::SurfacePos;
 pub use space::{ClaimView, ShipView, SpaceSnapshot, TransitView};
 pub use stats::RenderStats;
+pub use sun::{SunClock, SunSettings};
 pub use terrain::{
     CHUNK_TILES, ChunkMesh, Shape, Star, TerrainScene, TileKind, build_sea_chunks,
     build_terrain_chunks, home_camera, overview_camera, star_field, star_triangles,

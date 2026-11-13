@@ -8,8 +8,8 @@ use std::time::Instant;
 
 use raylib::prelude::{
     Camera3D, Color, Matrix, Mesh, RaylibDraw, RaylibDraw3D, RaylibHandle, RaylibMaterial,
-    RaylibMesh, RaylibMode3DExt, RaylibShader, RaylibTextureModeExt, RaylibThread, RenderTexture2D,
-    Shader, Vector2, Vector3, WeakMaterial,
+    RaylibMesh, RaylibMode3DExt, RaylibShader, RaylibTextureMode, RaylibTextureModeExt,
+    RaylibThread, RenderTexture2D, Shader, Vector2, Vector3, WeakMaterial,
 };
 
 use std::sync::Arc;
@@ -17,55 +17,26 @@ use std::sync::Arc;
 use crate::camera::Camera;
 use crate::entities::{EntityView, Surface, build_instances, build_instances_on};
 use crate::globe::{ChunkBounds, CullView, Globe, PlanetScene};
+use crate::graticule::{GraticuleLine, graticule_fade, graticule_on};
 use crate::hud::HudSnapshot;
 use crate::orbit::OrbitCamera;
 use crate::overlay::{OverlayGeometry, build_overlays, build_overlays_on};
+use crate::sun;
 use crate::terrain::{
     ChunkMesh, RELIEF, STAR_COUNT, TerrainScene, build_sea_chunks_with_specs,
     build_terrain_chunks_with_specs, ground_height, star_field, star_triangles,
 };
 use crate::vision::{ChunkSpec, shade_chunk};
 
+mod shadow;
+mod sky;
 mod space;
 pub(crate) use space::SpaceLabel;
-
-/// The direction sunlight travels on a planet so that the point `home` (a unit vector from the
-/// planet's centre) is in daylight: the light comes from above it, a little from the east and
-/// the north, so the ground at home is lit and its relief still casts a shade.
-pub(crate) fn sun_for(home: [f32; 3]) -> [f32; 3] {
-    let length = (home[0] * home[0] + home[1] * home[1] + home[2] * home[2]).sqrt();
-    if length < 1e-6 {
-        return SUN_DIRECTION;
-    }
-    let n = home.map(|c| c / length);
-    let cross = |a: [f32; 3], b: [f32; 3]| {
-        [
-            a[1] * b[2] - a[2] * b[1],
-            a[2] * b[0] - a[0] * b[2],
-            a[0] * b[1] - a[1] * b[0],
-        ]
-    };
-    let unit = |v: [f32; 3]| {
-        let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-6);
-        v.map(|c| c / l)
-    };
-    // East is around the polar axis; at a pole any tangent will do.
-    let east = if n[0].hypot(n[2]) < 1e-3 {
-        [1.0, 0.0, 0.0]
-    } else {
-        unit(cross([0.0, 1.0, 0.0], n))
-    };
-    let north = cross(n, east);
-    let to_sun = unit([0, 1, 2].map(|i| n[i] * 0.82 + east[i] * 0.42 + north[i] * 0.3));
-    to_sun.map(|c| -c)
-}
 
 /// Width of the ground in tiles.
 const GROUND_TILES: f32 = 256.0;
 /// Direction the sunlight travels (normalised in the shaders).
 const LIGHT_DIRECTION: [f32; 3] = [-0.45, -1.0, -0.3];
-/// Direction the sunlight travels on a sphere planet: fixed in planet space.
-pub(crate) const SUN_DIRECTION: [f32; 3] = [-0.5, -0.3, -0.8];
 /// Direction the star's light travels where ships are drawn in a system: from above the plane.
 const SHIP_LIGHT: [f32; 3] = [-0.35, -1.0, -0.45];
 /// Largest factor the start pillars and node boxes grow by when the camera is far away.
@@ -92,25 +63,34 @@ in vec3 vertexPosition;
 in vec3 vertexNormal;
 in vec4 vertexColor;
 uniform mat4 mvp;
+uniform mat4 matModel;
 out vec3 fragNormal;
 out vec4 fragColor;
+out vec3 fragWorld;
 void main() {
     fragNormal = vertexNormal;
     fragColor = vertexColor;
+    fragWorld = (matModel * vec4(vertexPosition, 1.0)).xyz;
     gl_Position = mvp * vec4(vertexPosition, 1.0);
 }
 "#;
 
-const TERRAIN_FS: &str = r#"#version 330
+/// Terrain lit by the sun: day and night on a sphere, shadows from the shadow map.
+fn terrain_fs() -> String {
+    format!(
+        r#"#version 330
 in vec3 fragNormal;
 in vec4 fragColor;
-uniform vec3 lightDirection;
+in vec3 fragWorld;
 out vec4 finalColor;
-void main() {
-    float diffuse = max(dot(normalize(fragNormal), -normalize(lightDirection)), 0.0);
-    finalColor = vec4(fragColor.rgb * (0.32 + 0.78 * diffuse), 1.0);
+{}
+void main() {{
+    finalColor = vec4(fragColor.rgb * terrainLight(fragWorld, normalize(fragNormal)), 1.0);
+}}
+"#,
+        sun::glsl_lighting()
+    )
 }
-"#;
 
 const COLOR_VS: &str = r#"#version 330
 in vec3 vertexPosition;
@@ -157,22 +137,30 @@ void main() {
 }
 "#;
 
-const SEA_GLOBE_FS: &str = r#"#version 330
+/// The sea sphere: lit from its radial normal, a soft highlight by day, the night floor by night.
+fn sea_globe_fs() -> String {
+    format!(
+        r#"#version 330
 in vec4 fragColor;
 in vec3 fragPosition;
-uniform vec3 lightDirection;
 uniform vec3 viewPosition;
 out vec4 finalColor;
-void main() {
+{}
+void main() {{
     vec3 normal = normalize(fragPosition);
-    vec3 toLight = -normalize(lightDirection);
-    float diffuse = max(dot(normal, toLight), 0.0);
+    float diffuse = max(dot(normal, toSun), 0.0);
+    float lit = diffuse > 0.0 ? visibility(fragPosition, normal) : 1.0;
+    float day = daylight(fragPosition);
     vec3 toEye = normalize(viewPosition - fragPosition);
-    float glint = pow(max(dot(normal, normalize(toLight + toEye)), 0.0), 64.0) * diffuse;
-    vec3 color = fragColor.rgb * (0.32 + 0.78 * diffuse) + vec3(0.30, 0.34, 0.38) * glint;
+    float glint = pow(max(dot(normal, normalize(toSun + toEye)), 0.0), 64.0) * diffuse * lit * day;
+    vec3 light = mix(NIGHT_AMBIENT, vec3(DAY_AMBIENT + DIRECT * diffuse * lit), day);
+    vec3 color = fragColor.rgb * light + vec3(0.30, 0.34, 0.38) * glint;
     finalColor = vec4(color, min(fragColor.a + glint * 0.4, 1.0));
+}}
+"#,
+        sun::glsl_lighting()
+    )
 }
-"#;
 
 const BOX_VS: &str = r#"#version 330
 in vec3 vertexPosition;
@@ -208,6 +196,7 @@ in vec3 vertexNormal;
 in mat4 instanceTransform;
 uniform mat4 mvp;
 out vec3 fragNormal;
+out vec3 fragWorld;
 flat out vec3 fragTint;
 void main() {
     mat4 transform = instanceTransform;
@@ -216,18 +205,62 @@ void main() {
     transform[1][3] = 0.0;
     transform[2][3] = 0.0;
     fragNormal = mat3(transform) * vertexNormal;
+    fragWorld = (transform * vec4(vertexPosition, 1.0)).xyz;
     gl_Position = mvp * transform * vec4(vertexPosition, 1.0);
 }
 "#;
 
-const ENTITY_FS: &str = r#"#version 330
+/// Entities: lit by the sun by day with shadows; at night an overhead fill keeps their owner
+/// colours as readable as by day.
+fn entity_fs() -> String {
+    format!(
+        r#"#version 330
 in vec3 fragNormal;
+in vec3 fragWorld;
 flat in vec3 fragTint;
-uniform vec3 lightDirection;
+out vec4 finalColor;
+{}
+void main() {{
+    vec3 normal = normalize(fragNormal);
+    float diffuse = max(dot(normal, toSun), 0.0);
+    float lit = diffuse > 0.0 ? visibility(fragWorld, normal) : 1.0;
+    float day = 0.38 + 0.72 * diffuse * lit;
+    vec3 up = planet == 1 ? normalize(fragWorld) : vec3(0.0, 1.0, 0.0);
+    float night = 0.55 + 0.45 * max(dot(normal, up), 0.0);
+    finalColor = vec4(fragTint * mix(night, day, daylight(fragWorld)), 1.0);
+}}
+"#,
+        sun::glsl_lighting()
+    )
+}
+
+// The shadow pass: depth from the light, packed into RGB (24 bits) of an ordinary render target.
+const DEPTH_VS: &str = r#"#version 330
+in vec3 vertexPosition;
+uniform mat4 mvp;
+void main() {
+    gl_Position = mvp * vec4(vertexPosition, 1.0);
+}
+"#;
+
+const DEPTH_INSTANCED_VS: &str = r#"#version 330
+in vec3 vertexPosition;
+in mat4 instanceTransform;
+uniform mat4 mvp;
+void main() {
+    mat4 transform = instanceTransform;
+    transform[0][3] = 0.0;
+    transform[1][3] = 0.0;
+    transform[2][3] = 0.0;
+    gl_Position = mvp * transform * vec4(vertexPosition, 1.0);
+}
+"#;
+
+const DEPTH_FS: &str = r#"#version 330
 out vec4 finalColor;
 void main() {
-    float diffuse = max(dot(normalize(fragNormal), -normalize(lightDirection)), 0.0);
-    finalColor = vec4(fragTint * (0.38 + 0.72 * diffuse), 1.0);
+    float depth = floor(min(gl_FragCoord.z, 0.99999994) * 16777215.0);
+    finalColor = vec4(floor(depth / 65536.0), mod(floor(depth / 256.0), 256.0), mod(depth, 256.0), 255.0) / 255.0;
 }
 "#;
 
@@ -335,8 +368,16 @@ pub(crate) struct Scene {
     _shaders: [Shader; 6],
     sea_globe_shader: Shader,
     sea_globe_material: WeakMaterial,
-    /// Direction the sunlight travels in planet space.
+    /// Direction the light that represents the sun travels, in planet space.
     sun: [f32; 3],
+    /// The sky dome and the atmosphere halo.
+    sky: sky::SkyGpu,
+    /// The shadow map and its passes, made on first use.
+    shadow: Option<shadow::ShadowGpu>,
+    /// Latitude and longitude lines of the planet, laid on its surface.
+    graticule: Vec<GraticuleLine>,
+    /// Whether the graticule is drawn.
+    pub(crate) show_graticule: bool,
     globe: Option<GlobeGpu>,
     space: Option<space::SpaceGpu>,
     /// What is in space, and which ships are selected, for the next draw.
@@ -395,6 +436,8 @@ impl ShadedMesh {
 /// Meshes and markers of the published terrain.
 struct TerrainGpu {
     land: Vec<ShadedMesh>,
+    /// Bounding spheres of the land meshes, for the shadow pass.
+    land_bounds: Vec<ChunkBounds>,
     sea: Vec<ShadedMesh>,
     /// Player pillars: centre, size and colour.
     pillars: Vec<(Vector3, Vector3, Color)>,
@@ -477,24 +520,18 @@ impl Scene {
         let mut box_shader = rl.load_shader_from_memory(thread, Some(BOX_VS), Some(BOX_FS));
         let mut ground_shader =
             rl.load_shader_from_memory(thread, Some(GROUND_VS), Some(GROUND_FS));
-        let mut terrain_shader =
-            rl.load_shader_from_memory(thread, Some(TERRAIN_VS), Some(TERRAIN_FS));
-        let mut entity_shader =
-            rl.load_shader_from_memory(thread, Some(ENTITY_VS), Some(ENTITY_FS));
+        let terrain_shader =
+            rl.load_shader_from_memory(thread, Some(TERRAIN_VS), Some(&terrain_fs()));
+        let entity_shader = rl.load_shader_from_memory(thread, Some(ENTITY_VS), Some(&entity_fs()));
         let sea_shader = rl.load_shader_from_memory(thread, Some(COLOR_VS), Some(COLOR_FS));
-        let star_shader = rl.load_shader_from_memory(thread, Some(STAR_VS), Some(COLOR_FS));
-        let mut sea_globe_shader =
-            rl.load_shader_from_memory(thread, Some(SEA_GLOBE_VS), Some(SEA_GLOBE_FS));
-        let location = sea_globe_shader.get_shader_location("lightDirection");
-        sea_globe_shader.set_shader_value(location, SUN_DIRECTION);
+        let mut star_shader = rl.load_shader_from_memory(thread, Some(STAR_VS), Some(sky::STAR_FS));
+        let location = star_shader.get_shader_location("fade");
+        star_shader.set_shader_value(location, 1.0_f32);
+        let sea_globe_shader =
+            rl.load_shader_from_memory(thread, Some(SEA_GLOBE_VS), Some(&sea_globe_fs()));
         let mut sea_globe_material = rl.load_material_default(thread);
         sea_globe_material.set_shader(&sea_globe_shader);
-        for shader in [
-            &mut box_shader,
-            &mut ground_shader,
-            &mut terrain_shader,
-            &mut entity_shader,
-        ] {
+        for shader in [&mut box_shader, &mut ground_shader] {
             let location = shader.get_shader_location("lightDirection");
             shader.set_shader_value(location, LIGHT_DIRECTION);
         }
@@ -542,7 +579,11 @@ impl Scene {
             ],
             sea_globe_shader,
             sea_globe_material,
-            sun: SUN_DIRECTION,
+            sun: LIGHT_DIRECTION,
+            sky: sky::SkyGpu::load(rl, thread),
+            shadow: None,
+            graticule: Vec::new(),
+            show_graticule: true,
             globe: None,
             space: None,
             space_state: space::SpaceState::default(),
@@ -720,7 +761,11 @@ impl Scene {
         self.space = None;
         self.last_shades.clear();
         self.shade_queue.clear();
-        self.set_light(LIGHT_DIRECTION);
+        self.graticule.clear();
+        self.sun = LIGHT_DIRECTION;
+        if let Some(shadow) = &mut self.shadow {
+            shadow.invalidate();
+        }
         if !scene.is_valid() {
             eprintln!("rom-render: ignoring a terrain scene with inconsistent tile data");
             return (0, 0.0, 0.0);
@@ -737,7 +782,15 @@ impl Scene {
                 .filter_map(|(c, spec)| Some(ShadedMesh::new(upload(thread, c)?, *spec, c)))
                 .collect()
         };
-        let land_meshes = shaded(&land);
+        let (land_meshes, land_bounds): (Vec<ShadedMesh>, Vec<ChunkBounds>) = land
+            .iter()
+            .filter_map(|(c, spec)| {
+                Some((
+                    ShadedMesh::new(upload(thread, c)?, *spec, c),
+                    ChunkBounds::of(c),
+                ))
+            })
+            .unzip();
         let sea_meshes = shaded(&sea);
         let uploaded = Instant::now();
         let count = land_meshes.len() + sea_meshes.len();
@@ -757,6 +810,7 @@ impl Scene {
             .collect();
         self.terrain = Some(TerrainGpu {
             land: land_meshes,
+            land_bounds,
             sea: sea_meshes,
             pillars,
             surface,
@@ -770,15 +824,40 @@ impl Scene {
         )
     }
 
-    /// Sets the direction of the light in the terrain, entity and sea shaders.
-    fn set_light(&mut self, direction: [f32; 3]) {
-        for index in [2, 5] {
-            let shader = &mut self._shaders[index];
-            let location = shader.get_shader_location("lightDirection");
-            shader.set_shader_value(location, direction);
+    /// Sets the light in the terrain, entity and sea shaders: the direction toward it, whether
+    /// the scene is a sphere planet (with a night side) and the shadow map, if one is in use.
+    fn set_lighting(
+        &mut self,
+        toward: [f32; 3],
+        planet: bool,
+        shadow: Option<shadow::ShadowUniforms>,
+    ) {
+        let [_, _, terrain, _, _, entity] = &mut self._shaders;
+        let shaders = [terrain, entity, &mut self.sea_globe_shader];
+        for shader in shaders {
+            let at = |shader: &Shader, name: &str| shader.get_shader_location(name);
+            let location = at(shader, "toSun");
+            shader.set_shader_value(location, toward);
+            let location = at(shader, "planet");
+            shader.set_shader_value(location, i32::from(planet));
+            let location = at(shader, "shadows");
+            shader.set_shader_value(location, i32::from(shadow.is_some()));
+            let location = at(shader, "shadowMap");
+            shader.set_shader_value(location, shadow::SHADOW_SLOT);
+            if let Some(uniforms) = &shadow {
+                let location = at(shader, "lightVP");
+                shader.set_shader_value_matrix(location, uniforms.light_vp);
+                let location = at(shader, "depthBias");
+                shader.set_shader_value(location, uniforms.depth_bias);
+                let location = at(shader, "normalBias");
+                shader.set_shader_value(location, uniforms.normal_bias);
+            }
         }
-        let location = self.sea_globe_shader.get_shader_location("lightDirection");
-        self.sea_globe_shader.set_shader_value(location, direction);
+    }
+
+    /// Sets the direction the light that represents the sun travels, in planet space.
+    pub(crate) fn set_sun(&mut self, light: [f32; 3]) {
+        self.sun = light;
     }
 
     /// Uploads the chunk meshes of `globe`, replacing any earlier terrain or planet.
@@ -797,8 +876,11 @@ impl Scene {
         self.last_shades.clear();
         self.shade_queue.clear();
         self.sun = sun;
-        self.set_light(sun);
+        if let Some(shadow) = &mut self.shadow {
+            shadow.invalidate();
+        }
         let started = Instant::now();
+        self.graticule = graticule_on(globe, GRATICULE_LIFT);
         let land = globe.land_chunks_with_specs();
         let sea = globe.sea_chunks_with_specs();
         let built = Instant::now();
@@ -839,8 +921,6 @@ impl Scene {
         target: &mut RenderTexture2D,
         orbit: &OrbitCamera,
     ) {
-        let sun = self.sun;
-        self.set_light(sun);
         let Some(gpu) = &mut self.globe else {
             return;
         };
@@ -851,6 +931,31 @@ impl Scene {
         gpu.markers.clear();
         gpu.markers.extend(instances.iter().map(matrix_of));
         self.instances = instances;
+        let size = (target.texture.width as f32, target.texture.height as f32);
+        let shadow = self.globe_shadow_pass(rl, thread, orbit, size);
+        let toward = sun::unit_or(self.sun.map(|c| -c));
+        self.set_lighting(toward, true, shadow);
+        let shadow_texture = shadow.and(self.shadow.as_ref()).map(|s| s.texture_id());
+        // Near the ground the sky of the point looked at; from higher up, black space.
+        let altitude = orbit.altitude();
+        let sun_height = (0..3).map(|i| orbit.dir[i] * toward[i]).sum::<f32>();
+        let backdrop = crate::sky::backdrop(sun_height, altitude, orbit.radius);
+        let below = orbit.radius / (orbit.radius + altitude.max(0.0));
+        let dip = (1.0 - below * below).max(0.0).sqrt();
+        self.sky.set_sky(&backdrop, orbit.dir, toward, dip);
+        self.set_star_fade(backdrop.stars);
+        let halo = crate::sky::space_share(altitude, orbit.radius);
+        self.sky.set_halo(
+            [0.0; 3],
+            orbit.radius,
+            sky::HALO_THICKNESS,
+            orbit.position(),
+            toward,
+            halo,
+        );
+        let Some(gpu) = &self.globe else {
+            return;
+        };
 
         let eye = orbit.position();
         let target_point = orbit.target();
@@ -864,17 +969,16 @@ impl Scene {
         let aspect = target.texture.width as f32 / target.texture.height.max(1) as f32;
         let mut drawing = rl.begin_texture_mode(thread, target);
         drawing.clear_background(SPACE);
-        if let Some(stars) = &self.star_mesh {
-            let forward = vector([
-                target_point[0] - eye[0],
-                target_point[1] - eye[1],
-                target_point[2] - eye[2],
-            ]);
-            let sky = Camera3D::perspective(Vector3::new(0.0, 0.0, 0.0), forward, vector(up), 45.0);
-            let mut backdrop = drawing.begin_mode3D(sky);
-            shift_projection(self.projection_centre_y);
-            backdrop.draw_mesh(stars, self.star_material.clone(), Matrix::identity());
-        }
+        sky::draw_backdrop(
+            &mut drawing,
+            [0, 1, 2].map(|i| target_point[i] - eye[i]),
+            up,
+            self.projection_centre_y,
+            &backdrop,
+            &self.sky,
+            self.star_mesh.as_ref(),
+            &self.star_material,
+        );
         let radius = orbit.radius;
         // Loose enough for the projection centre moved up above the HUD bars.
         let cull = CullView::of_orbit(orbit, aspect, 45.0, 1.5);
@@ -883,6 +987,7 @@ impl Scene {
         {
             let mut world = drawing.begin_mode3D(view);
             shift_projection(self.projection_centre_y);
+            shadow::bind_shadow_map(shadow_texture);
             for (shaded, bounds) in &gpu.land {
                 if bounds.may_be_seen(radius, &cull) {
                     world.draw_mesh(
@@ -915,7 +1020,20 @@ impl Scene {
                     );
                 }
             }
+            if halo > 0.01 {
+                self.sky
+                    .draw_halo(&mut world, [0.0; 3], radius, sky::HALO_THICKNESS);
+            }
+            if self.show_graticule {
+                draw_graticule(
+                    &mut world,
+                    &self.graticule,
+                    eye,
+                    graticule_fade(orbit.distance),
+                );
+            }
             draw_overlay(&mut world, &self.overlay);
+            shadow::bind_shadow_map(None);
         }
         set_clip_planes(DEFAULT_NEAR, DEFAULT_FAR);
     }
@@ -965,6 +1083,14 @@ impl Scene {
             transform.m14 += offset[1];
             transform
         }));
+        let size = (target.texture.width as f32, target.texture.height as f32);
+        let shadow = if self.terrain.is_some() {
+            self.flat_shadow_pass(rl, thread, camera, size)
+        } else {
+            None
+        };
+        self.set_lighting(sun::unit_or(LIGHT_DIRECTION.map(|c| -c)), false, shadow);
+        let shadow_texture = shadow.and(self.shadow.as_ref()).map(|s| s.texture_id());
         let eye = camera.position();
         let view = Camera3D::perspective(
             Vector3::new(eye[0], eye[1], eye[2]),
@@ -972,28 +1098,30 @@ impl Scene {
             Vector3::new(0.0, 1.0, 0.0),
             45.0,
         );
+        // The same sky as on a planet, under the flat map's fixed light.
+        let toward = sun::unit_or(LIGHT_DIRECTION.map(|c| -c));
+        let backdrop = crate::sky::local_sky(toward[1]);
+        self.sky.set_sky(&backdrop, [0.0, 1.0, 0.0], toward, 0.0);
+        self.set_star_fade(backdrop.stars);
         let mut drawing = rl.begin_texture_mode(thread, target);
         drawing.clear_background(if self.terrain.is_some() { SPACE } else { SKY });
-        if let (Some(_), Some(stars)) = (&self.terrain, &self.star_mesh) {
-            // A camera at the origin with the same orientation: the stars turn with the view
-            // but never move when the camera pans.
-            let forward = Vector3::new(
-                camera.target[0] - eye[0],
-                camera.target[1] - eye[1],
-                camera.target[2] - eye[2],
+        if self.terrain.is_some() {
+            // A camera at the origin with the same orientation: the sky and the stars turn with
+            // the view but never move when the camera pans.
+            sky::draw_backdrop(
+                &mut drawing,
+                [0, 1, 2].map(|i| camera.target[i] - eye[i]),
+                [0.0, 1.0, 0.0],
+                self.projection_centre_y,
+                &backdrop,
+                &self.sky,
+                self.star_mesh.as_ref(),
+                &self.star_material,
             );
-            let sky = Camera3D::perspective(
-                Vector3::new(0.0, 0.0, 0.0),
-                forward,
-                Vector3::new(0.0, 1.0, 0.0),
-                45.0,
-            );
-            let mut backdrop = drawing.begin_mode3D(sky);
-            shift_projection(self.projection_centre_y);
-            backdrop.draw_mesh(stars, self.star_material.clone(), Matrix::identity());
         }
         let mut world = drawing.begin_mode3D(view);
         shift_projection(self.projection_centre_y);
+        shadow::bind_shadow_map(shadow_texture);
         match &self.terrain {
             Some(terrain) => {
                 for shaded in &terrain.land {
@@ -1026,6 +1154,7 @@ impl Scene {
                     world.draw_mesh(&shaded.mesh, self.sea_material.clone(), Matrix::identity());
                 }
                 draw_overlay(&mut world, &self.overlay);
+                shadow::bind_shadow_map(None);
             }
             None => {
                 world.draw_mesh(
@@ -1121,6 +1250,40 @@ fn draw_overlay(world: &mut impl RaylibDraw3D, overlay: &OverlayGeometry) {
     }
 }
 
+/// Height of the graticule above the ground, in tiles.
+const GRATICULE_LIFT: f32 = 0.25;
+
+/// Draws the latitude and longitude lines on the side of the planet facing `eye`, their colours
+/// scaled by `fade`.
+fn draw_graticule(
+    world: &mut impl RaylibDraw3D,
+    lines: &[GraticuleLine],
+    eye: [f32; 3],
+    fade: f32,
+) {
+    if fade <= 0.0 {
+        return;
+    }
+    // A point on the planet faces the eye when the eye lies above its horizon plane.
+    let faces = |p: [f32; 3]| {
+        let along = p[0] * eye[0] + p[1] * eye[1] + p[2] * eye[2];
+        along > 0.97 * (p[0] * p[0] + p[1] * p[1] + p[2] * p[2])
+    };
+    for line in lines {
+        let [r, g, b, a] = line.kind.colour();
+        let colour = Color::new(r, g, b, (f32::from(a) * fade).round() as u8);
+        for pair in line.points.windows(2) {
+            if faces(pair[0]) || faces(pair[1]) {
+                world.draw_line3D(
+                    Vector3::new(pair[0][0], pair[0][1], pair[0][2]),
+                    Vector3::new(pair[1][0], pair[1][1], pair[1][2]),
+                    colour,
+                );
+            }
+        }
+    }
+}
+
 /// raylib's default clip planes, restored after a sphere frame.
 const DEFAULT_NEAR: f64 = 0.05;
 const DEFAULT_FAR: f64 = 4000.0;
@@ -1146,7 +1309,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn sun_lights_the_home_start() {
+    fn fixed_sun_lights_the_home_start() {
         let normals = [
             [0.0, 0.0, 1.0],
             [0.0, 1.0, 0.0],
@@ -1158,15 +1321,12 @@ mod tests {
         for normal in normals {
             let length = normal.iter().map(|c| c * c).sum::<f32>().sqrt();
             let n = normal.map(|c| c / length);
-            let sun = sun_for(n);
-            // `sun` is the direction the light travels; the ground faces the sun when the light
-            // comes against its normal.
-            let toward: f32 = (0..3).map(|i| -sun[i] * n[i]).sum();
-            assert!(toward > 0.5, "{n:?} gets {toward}");
-            let norm: f32 = sun.iter().map(|c| c * c).sum::<f32>().sqrt();
+            let toward = sun::fixed_toward(n);
+            let facing: f32 = (0..3).map(|i| toward[i] * n[i]).sum();
+            assert!(facing > 0.5, "{n:?} gets {facing}");
+            let norm: f32 = toward.iter().map(|c| c * c).sum::<f32>().sqrt();
             assert!((norm - 1.0).abs() < 1e-4);
         }
-        assert_eq!(sun_for([0.0; 3]), SUN_DIRECTION);
     }
 
     #[test]

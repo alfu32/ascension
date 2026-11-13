@@ -32,6 +32,8 @@ pub struct UniverseHost {
     /// The system of that planet.
     pub home_system: u32,
     scenes: BTreeMap<BodyId, Arc<rom_render::PlanetScene>>,
+    /// How the light that represents the sun moves over every planet shown.
+    pub sun: rom_render::SunSettings,
 }
 
 impl UniverseHost {
@@ -42,6 +44,7 @@ impl UniverseHost {
             viewed: home,
             home_system,
             scenes: BTreeMap::new(),
+            sun: rom_render::SunSettings::default(),
         }
     }
 
@@ -70,6 +73,7 @@ impl UniverseHost {
             }
             let mut scene = crate::terrain::to_planet_scene(&planet);
             crate::terrain::apply_terrain_colours(&mut scene.feature_colors, &rules);
+            scene.sun = self.sun;
             scene.starts.clear();
             scene.nodes.clear();
             self.scenes.insert(body, Arc::new(scene));

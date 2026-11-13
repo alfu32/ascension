@@ -230,6 +230,7 @@ impl MinimapGpu {
         entities: &[EntityView],
         camera: &Camera,
         orbit: Option<&OrbitCamera>,
+        graticule: bool,
     ) {
         let view = layout.rect(Region::MinimapView);
         d.draw_rectangle_rec(rectangle(view), Color::new(4, 6, 12, 255));
@@ -253,6 +254,17 @@ impl MinimapGpu {
             area.w.floor() as i32,
             area.h.floor() as i32,
         );
+        if graticule && self.globe.is_some() {
+            for (kind, a, b) in crate::graticule::minimap_graticule(area) {
+                let [r, g, b_, alpha] = kind.colour();
+                clip.draw_line_ex(
+                    Vector2::new(a.0, a.1),
+                    Vector2::new(b.0, b.1),
+                    layout.scale.max(1.0),
+                    Color::new(r, g, b_, alpha),
+                );
+            }
+        }
         let marks = match (orbit, &self.globe) {
             (Some(orbit), Some(globe)) => {
                 let dots: Vec<_> = if entities.is_empty() {

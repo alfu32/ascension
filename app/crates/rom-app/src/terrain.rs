@@ -7,7 +7,7 @@ use rom_mapgen::{
     BaseTerrains, GeneratedMap, MapRequest, SpherePlanet, SphereRequest, Universe, UniverseRequest,
     generate, generate_sphere, generate_universe,
 };
-use rom_render::{PlanetScene, TerrainScene, TileKind};
+use rom_render::{PlanetScene, SunSettings, TerrainScene, TileKind};
 use rom_rules::{DefId, Rules, build_rules_db};
 
 use crate::args::Options;
@@ -257,6 +257,26 @@ pub fn to_scene(map: &GeneratedMap) -> TerrainScene {
     }
 }
 
+/// How the light that represents the sun moves, from the rules' `world.day_ticks` and
+/// `world.axial_tilt_mdeg` and the `--sun` option: fixed over the first view, or fixed with that
+/// view at midnight.
+pub fn sun_settings(rules: &Rules, options: &Options) -> SunSettings {
+    let defaults = SunSettings::default();
+    SunSettings {
+        day_ticks: rules
+            .constant("world.day_ticks")
+            .and_then(|v| u64::try_from(v).ok())
+            .filter(|&v| v > 0)
+            .unwrap_or(defaults.day_ticks),
+        axial_tilt_mdeg: rules
+            .constant("world.axial_tilt_mdeg")
+            .and_then(|v| i32::try_from(v).ok())
+            .map_or(defaults.axial_tilt_mdeg, |v| v.clamp(-90_000, 90_000)),
+        fixed: options.sun_fixed,
+        midnight: options.sun_midnight,
+    }
+}
+
 /// Converts a generated sphere planet: tile kinds from the base terrains, other terrains as
 /// features, starts and nodes as surface positions.
 pub fn to_planet_scene(planet: &SpherePlanet) -> PlanetScene {
@@ -273,12 +293,27 @@ pub fn to_planet_scene(planet: &SpherePlanet) -> PlanetScene {
         feature_colors,
         starts: planet.starts.clone(),
         nodes: planet.nodes.iter().map(|&(_, p)| p).collect(),
+        sun: SunSettings::default(),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sun_settings_come_from_the_rules() {
+        let rules = load_rules().expect("rules");
+        let orbiting = sun_settings(&rules, &Options::default());
+        assert_eq!(orbiting.day_ticks, 6_000);
+        assert_eq!(orbiting.axial_tilt_mdeg, 0);
+        assert!(!orbiting.fixed);
+        let fixed = Options {
+            sun_fixed: true,
+            ..Options::default()
+        };
+        assert!(sun_settings(&rules, &fixed).fixed);
+    }
 
     #[test]
     fn generated_map_converts_to_terrain_scene() {

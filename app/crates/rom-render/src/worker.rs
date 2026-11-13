@@ -30,6 +30,7 @@ use crate::pixels::rgba_to_bgra_flipped;
 use crate::scene::Scene;
 use crate::space::{SpaceContext, SpacePicker, SpaceSnapshot, ship_frame_pos};
 use crate::stats::{RenderStats, StatsWindow};
+use crate::sun::SunClock;
 use crate::terrain::{TerrainScene, home_camera, overview_camera};
 use crate::universe::UniverseScene;
 use crate::vision::VisionMap;
@@ -131,6 +132,7 @@ struct Shared {
     focus_surface: Mutex<Option<SurfacePos>>,
     vision: Mutex<Option<Arc<VisionMap>>>,
     start_markers: AtomicBool,
+    graticule: AtomicBool,
     snapshot_wanted: AtomicBool,
     snapshot: Mutex<Option<Arc<FramePixels>>>,
     stats: Mutex<RenderStats>,
@@ -251,6 +253,17 @@ impl RenderBridge {
     /// Shows or hides the player-start pillars (hidden by default).
     pub fn publish_start_markers(&self, visible: bool) {
         self.shared.start_markers.store(visible, Ordering::Relaxed);
+    }
+
+    /// Shows or hides the latitude and longitude lines of a sphere planet (shown by default; the
+    /// `G` key toggles them when the command palette leaves it free).
+    pub fn publish_graticule(&self, visible: bool) {
+        self.shared.graticule.store(visible, Ordering::Relaxed);
+    }
+
+    /// Whether the latitude and longitude lines are shown.
+    pub fn graticule(&self) -> bool {
+        self.shared.graticule.load(Ordering::Relaxed)
     }
 
     /// Asks for a copy of the next finished frame; fetch it with [`Self::take_snapshot`].
@@ -409,6 +422,7 @@ impl Shared {
             focus_surface: Mutex::new(None),
             vision: Mutex::new(None),
             start_markers: AtomicBool::new(false),
+            graticule: AtomicBool::new(true),
             snapshot_wanted: AtomicBool::new(false),
             snapshot: Mutex::new(None),
             stats: Mutex::new(RenderStats::default()),
@@ -454,6 +468,7 @@ fn render_loop(shared: &Shared) {
     let mut globe: Option<Arc<Globe>> = None;
     let mut planet_scene: Option<Arc<PlanetScene>> = None;
     let mut home_dir = [0.0, 0.0, 1.0];
+    let mut sun_clock: Option<SunClock> = None;
     let mut pending_universe: Option<(Arc<UniverseScene>, UniverseSettings)> = None;
     let mut zoom: Option<ZoomCamera> = None;
     let mut surface_requested: Option<u32> = None;
@@ -493,11 +508,11 @@ fn render_loop(shared: &Shared) {
                 let started_at = Instant::now();
                 let built_globe = Arc::new(Globe::new(&planet));
                 let geometry_ms = millis(started_at.elapsed());
-                let sun = settings.home.map_or(crate::scene::SUN_DIRECTION, |s| {
-                    crate::scene::sun_for(built_globe.dir_of(s))
-                });
+                let clock = SunClock::new(planet.sun, settings.home.map(|s| built_globe.dir_of(s)));
+                let tick = lock(&shared.snapshots).latest_tick().unwrap_or(0);
                 let (meshes, build_ms, upload_ms) =
-                    scene.set_planet(&thread, &planet, &built_globe, sun);
+                    scene.set_planet(&thread, &planet, &built_globe, clock.light(tick));
+                sun_clock = Some(clock);
                 minimap = match MinimapGpu::load_planet(&mut rl, &thread, &planet, &built_globe) {
                     Ok(map) => Some(map),
                     Err(error) => {
@@ -527,6 +542,8 @@ fn render_loop(shared: &Shared) {
                 orbit = Some(settings.view.map_or(home, |[lon, lat, distance, heading]| {
                     OrbitCamera::at(lon, lat, distance, heading, radius, max)
                 }));
+                // A fixed light stands over the first view, as the home start was before.
+                sun_clock = sun_clock.map(|clock| clock.fixed_over(orbit.as_ref().map(|o| o.dir)));
                 orbit_controller.set_home(home);
                 home_dir = dir_from_lon_lat(lon, lat);
                 planet_scene = Some(Arc::clone(&planet));
@@ -586,6 +603,7 @@ fn render_loop(shared: &Shared) {
             orbit = None;
             globe = None;
             zoom = None;
+            sun_clock = None;
             let (meshes, build_ms, upload_ms) = scene.set_terrain(&thread, &terrain);
             minimap = if terrain.is_valid() {
                 match MinimapGpu::load(&mut rl, &thread, &terrain) {
@@ -649,12 +667,25 @@ fn render_loop(shared: &Shared) {
         let space_snapshot = Arc::clone(&lock(&shared.space));
         let pair = lock(&shared.snapshots).clone();
         pair.blend_at_on(frame_start, globe.as_deref(), &mut blended);
+        if let Some(clock) = &sun_clock {
+            // Simulation time drives the light, so it follows game speed and pause.
+            let tick = pair.latest_tick().unwrap_or(0);
+            scene.set_sun(clock.light(tick));
+            if let Some(zoom) = zoom.as_mut() {
+                zoom.follow_sun(clock.toward(tick));
+            }
+        }
         let events = std::mem::take(&mut *lock(&shared.input));
         {
             let surface = scene.surface();
             let ground = |x: f32, y: f32| surface.map_or(0.0, |s| s.height(x, y));
             let now_ms = frame_start.duration_since(started).as_millis() as u64;
             for event in events {
+                if graticule_key(event, &hud_snapshot) {
+                    let shown = shared.graticule.load(Ordering::Relaxed);
+                    shared.graticule.store(!shown, Ordering::Relaxed);
+                    continue;
+                }
                 if let (Some(zoom), Some(orbit)) = (zoom.as_mut(), orbit.as_mut()) {
                     let mut space_events = Vec::new();
                     let consumed = zoom_event(
@@ -816,6 +847,8 @@ fn render_loop(shared: &Shared) {
             0.0
         };
         scene.set_space_state(&space_snapshot, &hud_snapshot.selected);
+        let graticule = shared.graticule.load(Ordering::Relaxed);
+        scene.show_graticule = graticule;
         match (&orbit, &zoom) {
             (Some(orbit), Some(zoom)) if scene.has_space() => {
                 scene.draw_zoomed(&mut rl, &thread, texture, zoom, orbit);
@@ -868,7 +901,14 @@ fn render_loop(shared: &Shared) {
                     }
                     _ => {
                         if let Some(map) = &minimap {
-                            map.draw(&mut drawing, &hud_layout, &blended, &camera, orbit.as_ref());
+                            map.draw(
+                                &mut drawing,
+                                &hud_layout,
+                                &blended,
+                                &camera,
+                                orbit.as_ref(),
+                                graticule,
+                            );
                         }
                     }
                 }
@@ -922,6 +962,21 @@ fn render_loop(shared: &Shared) {
     drop(minimap);
     drop(target);
     drop(scene);
+}
+
+/// Whether `event` is the graticule key: `G` without Ctrl or Alt while the command palette has
+/// no button on that key.
+fn graticule_key(event: InputEvent, hud: &HudSnapshot) -> bool {
+    let InputEvent::Hotkey { ch, mods } = event else {
+        return false;
+    };
+    if !ch.eq_ignore_ascii_case(&'g') || mods.ctrl || mods.alt {
+        return false;
+    }
+    let slot = crate::hud_model::slot_of_key(ch);
+    !hud.palette
+        .as_ref()
+        .is_some_and(|p| p.buttons.iter().any(|b| Some(b.slot) == slot))
 }
 
 /// The farthest level the zoom may reach now.
