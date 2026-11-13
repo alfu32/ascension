@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use rom_mapgen::GeneratedMap;
+use rom_mapgen::{GeneratedMap, SpherePlanet};
 use rom_rules::{DefId, EntityType, ResourceKind, Rules};
 use rom_sim::{EntityId, Player, PlayerId, Pos, World};
 
@@ -109,21 +109,9 @@ pub fn default_factions(rules: &Rules, players: u32) -> Vec<DefId> {
         .collect()
 }
 
-/// Builds the world: one player per map start with the given faction, each with a city and
-/// builders, and the map's nodes owned by the neutral player 0. Every player is on its own team.
-pub fn build_match(
-    rules: &Arc<Rules>,
-    map: &GeneratedMap,
-    factions: &[DefId],
-    seed: u64,
-) -> Result<Match, SetupError> {
-    let city = city_type(rules).ok_or(SetupError::NoCity)?;
-    let builder = builder_type(rules).ok_or(SetupError::NoBuilder)?;
-    let (city_id, builder_id) = (city.id, builder.id);
+/// The players of a match: neutral player 0 and one per faction, each on its own team.
+fn make_players(rules: &Rules, factions: &[DefId]) -> Result<Vec<Player>, SetupError> {
     let first_age = start_age(rules).ok_or(SetupError::NoFaction)?;
-    if factions.is_empty() || factions.len() != map.starts.len() {
-        return Err(SetupError::NoFaction);
-    }
     let resources: BTreeMap<DefId, i64> = rules
         .resources
         .values()
@@ -147,34 +135,44 @@ pub fn build_match(
         },
         techs: BTreeMap::new(),
     };
-    let mut players = vec![player(0, factions[0])];
+    let mut players = vec![player(0, *factions.first().ok_or(SetupError::NoFaction)?)];
     for (index, faction) in factions.iter().enumerate() {
         players.push(player(index as u32 + 1, *faction));
     }
+    Ok(players)
+}
+
+/// Builds the world: one player per map start with the given faction, each with a city and
+/// builders, and the map's nodes owned by the neutral player 0. Every player is on its own team.
+pub fn build_match(
+    rules: &Arc<Rules>,
+    map: &GeneratedMap,
+    factions: &[DefId],
+    seed: u64,
+) -> Result<Match, SetupError> {
+    let city = city_type(rules).ok_or(SetupError::NoCity)?;
+    let builder = builder_type(rules).ok_or(SetupError::NoBuilder)?;
+    let builder_id = builder.id;
+    if factions.is_empty() || factions.len() != map.starts.len() {
+        return Err(SetupError::NoFaction);
+    }
+    let players = make_players(rules, factions)?;
     let mut world = World::new(Arc::clone(rules), map.grid.clone(), seed, players)?;
 
     let mut starts = Vec::new();
     for (index, start) in map.starts.iter().enumerate() {
-        let owner = PlayerId(index as u32 + 1);
         let city_pos = Pos {
             x: snap(start.x, city.footprint_w),
             y: snap(start.y, city.footprint_h),
             face: 0,
         };
-        let city_entity = world.place_for_setup(city_id, owner, city_pos)?;
-        let reach = (city.footprint_w.max(city.footprint_h) * 500 + 1500) as f64;
-        let mut builders = Vec::new();
-        for n in 0..BUILDERS_PER_PLAYER {
-            let angle = n as f64 * std::f64::consts::TAU / BUILDERS_PER_PLAYER as f64 + 0.3;
-            let at = ring_position(&world, city_pos, angle, reach);
-            builders.push(world.spawn(builder_id, owner, at)?);
-        }
-        starts.push(PlayerStart {
-            player: owner,
-            city: city_entity,
+        starts.push(place_start(
+            &mut world,
+            PlayerId(index as u32 + 1),
+            city,
+            builder_id,
             city_pos,
-            builders,
-        });
+        )?);
     }
     for node in &map.nodes {
         world.spawn(node.entity_type, NEUTRAL, node.pos)?;
@@ -186,18 +184,121 @@ pub fn build_match(
     })
 }
 
+/// Builds the world on a cube-sphere planet: terrain and nodes from the planet, players as in
+/// [`build_match`]. A start too close to a face edge for the city footprint moves inward the
+/// least that keeps the footprint on one face; builders are placed with `World::offset`, so a
+/// ring that crosses a face edge continues on the next face.
+pub fn build_sphere_match(
+    rules: &Arc<Rules>,
+    planet: &SpherePlanet,
+    factions: &[DefId],
+    seed: u64,
+) -> Result<Match, SetupError> {
+    let city = city_type(rules).ok_or(SetupError::NoCity)?;
+    let builder = builder_type(rules).ok_or(SetupError::NoBuilder)?;
+    let builder_id = builder.id;
+    if factions.is_empty() || factions.len() != planet.starts.len() {
+        return Err(SetupError::NoFaction);
+    }
+    let players = make_players(rules, factions)?;
+    let mut world = World::from_sphere(
+        Arc::clone(rules),
+        planet.surface,
+        planet.terrain.clone(),
+        &planet.nodes,
+        seed,
+        players,
+    )?;
+    let side = i64::from(planet.surface.n) * 1000;
+    let inward = |coordinate: i64, size: i64| -> i32 {
+        let snapped = i64::from(snap(coordinate.clamp(0, i64::from(i32::MAX)) as i32, size));
+        snapped.clamp(size * 500, side - size * 500) as i32
+    };
+    let mut starts = Vec::new();
+    for (index, start) in planet.starts.iter().enumerate() {
+        // The nearest spot to the start whose whole footprint is buildable ground.
+        let spot = |dx: i64, dy: i64| Pos {
+            x: inward(start.x + dx * 1000, city.footprint_w),
+            y: inward(start.y + dy * 1000, city.footprint_h),
+            face: start.face,
+        };
+        let city_pos = (0..=12_i64)
+            .flat_map(|r| {
+                (-r..=r).flat_map(move |dx| {
+                    (-r..=r)
+                        .filter(move |dy| dx.abs().max(dy.abs()) == r)
+                        .map(move |dy| (dx, dy))
+                })
+            })
+            .map(|(dx, dy)| spot(dx, dy))
+            .find(|pos| footprint_buildable(&world, city, *pos))
+            .unwrap_or_else(|| spot(0, 0));
+        starts.push(place_start(
+            &mut world,
+            PlayerId(index as u32 + 1),
+            city,
+            builder_id,
+            city_pos,
+        )?);
+    }
+    Ok(Match {
+        world,
+        starts,
+        builder_type: builder_id,
+    })
+}
+
+/// Whether every tile under a building of type `et` centred at `pos` is buildable.
+fn footprint_buildable(world: &World, et: &EntityType, pos: Pos) -> bool {
+    let (hw, hh) = (et.footprint_w * 500, et.footprint_h * 500);
+    let (x, y) = (i64::from(pos.x), i64::from(pos.y));
+    ((x - hw).div_euclid(1000)..(x + hw).div_euclid(1000)).all(|tx| {
+        ((y - hh).div_euclid(1000)..(y + hh).div_euclid(1000)).all(|ty| {
+            let at = Pos {
+                x: (tx * 1000 + 500) as i32,
+                y: (ty * 1000 + 500) as i32,
+                face: pos.face,
+            };
+            world
+                .terrain_at(at)
+                .is_some_and(|t| world.rules().terrains[&t].buildable)
+        })
+    })
+}
+
+/// Places a player's city at `city_pos` and the builders on a ring around it.
+fn place_start(
+    world: &mut World,
+    owner: PlayerId,
+    city: &EntityType,
+    builder_id: DefId,
+    city_pos: Pos,
+) -> Result<PlayerStart, SetupError> {
+    let city_entity = world.place_for_setup(city.id, owner, city_pos)?;
+    let reach = (city.footprint_w.max(city.footprint_h) * 500 + 1500) as f64;
+    let mut builders = Vec::new();
+    for n in 0..BUILDERS_PER_PLAYER {
+        let angle = n as f64 * std::f64::consts::TAU / BUILDERS_PER_PLAYER as f64 + 0.3;
+        let at = ring_position(world, city_pos, angle, reach);
+        builders.push(world.spawn(builder_id, owner, at)?);
+    }
+    Ok(PlayerStart {
+        player: owner,
+        city: city_entity,
+        city_pos,
+        builders,
+    })
+}
+
 /// A point on the ring around `centre` at `angle`; moves outwards until the ground is buildable
-/// (a stand-in for "dry land") and stays on the map.
+/// (a stand-in for "dry land") and stays on the map. On a sphere the ring continues across
+/// face edges.
 fn ring_position(world: &World, centre: Pos, angle: f64, reach: f64) -> Pos {
     let (sin, cos) = angle.sin_cos();
     for step in 0..6 {
         let distance = reach + f64::from(step) * 700.0;
-        let at = Pos {
-            x: centre.x + (cos * distance) as i32,
-            y: centre.y + (sin * distance) as i32,
-            face: 0,
-        };
-        if let Some(terrain) = world.map().terrain_at_pos(at)
+        let at = world.offset(centre, (cos * distance) as i64, (sin * distance) as i64);
+        if let Some(terrain) = world.terrain_at(at)
             && world.rules().terrains[&terrain].buildable
         {
             return at;
@@ -359,5 +460,64 @@ mod tests {
             .map(|i| content.map.start_region(i).unwrap())
             .collect();
         assert_eq!(homes.len(), 3);
+    }
+
+    #[test]
+    fn sphere_setup_places_city_and_builders_on_valid_tiles() {
+        let options = Options {
+            players: 4,
+            sphere: Some(128),
+            ..Options::default()
+        };
+        let content = crate::terrain::generate_sphere_content(&options, 128).expect("planet");
+        let setup = build_sphere_match(&content.rules, &content.planet, &content.factions, 1)
+            .expect("match");
+        let world = &setup.world;
+        let rules = &content.rules;
+        let city = city_type(rules).expect("a city type");
+        let side = 128 * 1000;
+        assert_eq!(setup.starts.len(), 4);
+        for start in &setup.starts {
+            let entity = world.entity(start.city).expect("city");
+            assert_eq!(entity.pos, start.city_pos);
+            assert!(start.city_pos.face < 6);
+            // The footprint lies on one face and every tile under it is buildable.
+            let (hw, hh) = (city.footprint_w * 500, city.footprint_h * 500);
+            let (x, y) = (i64::from(start.city_pos.x), i64::from(start.city_pos.y));
+            assert!(x - hw >= 0 && x + hw <= side && y - hh >= 0 && y + hh <= side);
+            for tx in (x - hw) / 1000..(x + hw) / 1000 {
+                for ty in (y - hh) / 1000..(y + hh) / 1000 {
+                    let at = Pos {
+                        x: (tx * 1000 + 500) as i32,
+                        y: (ty * 1000 + 500) as i32,
+                        face: start.city_pos.face,
+                    };
+                    let terrain = world.terrain_at(at).expect("on the planet");
+                    assert!(
+                        rules.terrains[&terrain].buildable,
+                        "player {:?} tile {tx},{ty} city {:?} start {:?} terrain {}",
+                        start.player,
+                        start.city_pos,
+                        content.planet.starts[start.player.0 as usize - 1],
+                        rules.def(terrain).name
+                    );
+                }
+            }
+            assert_eq!(start.builders.len(), BUILDERS_PER_PLAYER);
+            for id in &start.builders {
+                let builder = world.entity(*id).expect("builder");
+                assert_eq!(builder.owner, start.player);
+                let terrain = world.terrain_at(builder.pos).expect("on the planet");
+                assert!(rules.terrains[&terrain].buildable);
+                let distance = world.distance(builder.pos, start.city_pos).expect("near");
+                assert!(
+                    (1_000..12_000).contains(&distance),
+                    "builder {distance} away"
+                );
+            }
+        }
+        // Nodes were placed by the planet, owned by the neutral player.
+        let nodes = world.entities().filter(|e| e.owner == NEUTRAL).count();
+        assert_eq!(nodes, content.planet.nodes.len());
     }
 }

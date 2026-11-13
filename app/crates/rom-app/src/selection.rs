@@ -9,10 +9,10 @@ use std::collections::BTreeMap;
 use rom_render::{
     HudButton, HudCard, HudMarker, HudPalette, HudPlacement, HudQueue, HudQueueItem, HudRegionKind,
     HudSelection, HudSnapshot, HudTile, MarkerKind, Modifiers, PaletteTab, PickEvent,
-    PointerButton, slot_of_key,
+    PointerButton, SurfacePos, slot_of_key,
 };
 use rom_rules::{DefId, EntityClass, EntityType, ProductionMode, Rules, StanceFamily};
-use rom_sim::{Command, Entity, EntityId, PlayerId, Pos, SimError, World};
+use rom_sim::{Command, Entity, EntityId, PlayerId, Pos, SimError, Topology, World};
 
 /// The player this interface commands.
 pub const PLAYER: PlayerId = PlayerId(1);
@@ -94,26 +94,29 @@ pub struct Controller {
     helpers: Vec<Helpers>,
     requeue: Vec<Requeue>,
     message: Option<(String, u64)>,
-    focus: Option<(f32, f32)>,
+    focus: Option<Pos>,
     ordered: bool,
     seen_next_id: u32,
 }
 
-fn pos_of(point: (f32, f32)) -> Pos {
+/// The simulation position of a picked surface position (milli-tiles on a face).
+fn pos_of(surface: SurfacePos) -> Pos {
+    let clamp = |v: i64| v.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32;
     Pos {
-        x: (point.0 * 1000.0).round() as i32,
-        y: (point.1 * 1000.0).round() as i32,
-        face: 0,
+        x: clamp(surface.x),
+        y: clamp(surface.y),
+        face: surface.face,
     }
+}
+
+/// Distance in milli-tiles between two positions; positions beyond reach (or on faces that do
+/// not touch) rank last.
+fn distance(world: &World, a: Pos, b: Pos) -> u64 {
+    world.distance(a, b).unwrap_or(u64::MAX)
 }
 
 fn snap(coordinate: i32, size: i64) -> i32 {
     ((i64::from(coordinate) - size * 500 + 500).div_euclid(1000) * 1000 + size * 500) as i32
-}
-
-fn distance_squared(a: Pos, b: Pos) -> i64 {
-    let (dx, dy) = (i64::from(a.x - b.x), i64::from(a.y - b.y));
-    dx * dx + dy * dy
 }
 
 fn icon_of(et: &EntityType) -> &'static str {
@@ -152,9 +155,17 @@ impl Controller {
         self.ordered
     }
 
-    /// A camera focus request (tiles) made since the last call.
-    pub fn take_focus(&mut self) -> Option<(f32, f32)> {
+    /// A camera focus request made since the last call.
+    pub fn take_focus_pos(&mut self) -> Option<Pos> {
         self.focus.take()
+    }
+
+    /// The focus request in tiles of its face.
+    #[cfg(test)]
+    pub fn take_focus(&mut self) -> Option<(f32, f32)> {
+        self.focus
+            .take()
+            .map(|p| (p.x as f32 / 1000.0, p.y as f32 / 1000.0))
     }
 
     /// Selected entity ids, ascending.
@@ -233,30 +244,37 @@ impl Controller {
     pub fn handle(&mut self, world: &mut World, event: PickEvent) {
         match event {
             PickEvent::Click {
-                world_point,
+                surface,
                 entity,
                 modifiers,
                 double,
                 on_screen,
                 ..
-            } => self.click(world, world_point, entity, modifiers, double, &on_screen),
+            } => self.click(
+                world,
+                pos_of(surface),
+                entity,
+                modifiers,
+                double,
+                &on_screen,
+            ),
             PickEvent::BoxSelect {
                 entities,
                 modifiers,
             } => self.box_select(world, &entities, modifiers),
             PickEvent::RightClick {
-                world_point,
+                surface,
                 entity,
                 modifiers,
                 ..
-            } => self.right_click(world, world_point, entity, modifiers),
+            } => self.right_click(world, pos_of(surface), entity, modifiers),
             PickEvent::HudClick {
                 region,
                 index,
                 button,
                 modifiers,
             } => self.hud_click(world, region, index, button, modifiers),
-            PickEvent::Hover { world_point, .. } => self.hover(world, world_point),
+            PickEvent::Hover { surface, .. } => self.hover(world, pos_of(surface)),
             PickEvent::Hotkey { ch, modifiers } => self.hotkey(world, ch, modifiers),
             PickEvent::Escape => {
                 self.placement = None;
@@ -268,18 +286,18 @@ impl Controller {
     fn click(
         &mut self,
         world: &mut World,
-        point: (f32, f32),
+        at: Pos,
         entity: Option<u32>,
         mods: Modifiers,
         double: bool,
         on_screen: &[u32],
     ) {
         if self.placement.is_some() {
-            self.place(world, point, mods.shift);
+            self.place(world, at, mods.shift);
             return;
         }
         if self.attack_move {
-            let target = pos_of(point);
+            let target = at;
             let ids: Vec<EntityId> = self.own_selected(world).iter().map(|e| e.id).collect();
             for id in ids {
                 self.submit(
@@ -375,7 +393,7 @@ impl Controller {
     fn right_click(
         &mut self,
         world: &mut World,
-        point: (f32, f32),
+        target: Pos,
         entity: Option<u32>,
         mods: Modifiers,
     ) {
@@ -383,7 +401,6 @@ impl Controller {
             return;
         }
         let rules = world.rules().clone();
-        let target = pos_of(point);
         enum Kind {
             Ground,
             Enemy(EntityId),
@@ -478,14 +495,27 @@ impl Controller {
             });
             self.last_group = Some((group, world.tick()));
             if twice {
-                let (mut x, mut y) = (0.0, 0.0);
-                for id in &alive {
-                    if let Some(e) = world.entity(*id) {
-                        x += e.pos.x as f32 / 1000.0;
-                        y += e.pos.y as f32 / 1000.0;
+                self.focus = match world.topology() {
+                    Topology::Flat { .. } => {
+                        let (mut x, mut y) = (0.0, 0.0);
+                        for id in &alive {
+                            if let Some(e) = world.entity(*id) {
+                                x += e.pos.x as f32 / 1000.0;
+                                y += e.pos.y as f32 / 1000.0;
+                            }
+                        }
+                        let count = alive.len() as f32;
+                        Some(Pos::flat(
+                            (x / count * 1000.0).round() as i32,
+                            (y / count * 1000.0).round() as i32,
+                        ))
                     }
-                }
-                self.focus = Some((x / alive.len() as f32, y / alive.len() as f32));
+                    // Face coordinates do not average across faces: centre on the first member.
+                    Topology::Cube(_) => alive
+                        .first()
+                        .and_then(|id| world.entity(*id))
+                        .map(|e| e.pos),
+                };
             }
             self.set_selection(alive);
             return;
@@ -947,15 +977,14 @@ impl Controller {
 
     // ----- placement -----------------------------------------------------------------------
 
-    fn hover(&mut self, world: &World, point: (f32, f32)) {
+    fn hover(&mut self, world: &World, at: Pos) {
         let Some(p) = &mut self.placement else {
             return;
         };
-        let at = pos_of(point);
         let centre = Pos {
             x: snap(at.x, p.footprint.0),
             y: snap(at.y, p.footprint.1),
-            face: 0,
+            face: at.face,
         };
         if p.centre != Some(centre) {
             p.centre = Some(centre);
@@ -978,18 +1007,17 @@ impl Controller {
         }
     }
 
-    fn place(&mut self, world: &mut World, point: (f32, f32), shift: bool) {
+    fn place(&mut self, world: &mut World, at: Pos, shift: bool) {
         let Some(p) = self.placement.clone() else {
             return;
         };
-        let at = pos_of(point);
         let centre = Pos {
             x: snap(at.x, p.footprint.0),
             y: snap(at.y, p.footprint.1),
-            face: 0,
+            face: at.face,
         };
         let rules = world.rules().clone();
-        let mut builders: Vec<(i64, EntityId)> = self
+        let mut builders: Vec<(u64, EntityId)> = self
             .own_selected(world)
             .iter()
             .filter(|e| e.build_progress.is_none())
@@ -1001,7 +1029,7 @@ impl Controller {
                     .flatten()
                     .any(|row| row.mode == ProductionMode::Construct && row.product_def_id == p.def)
             })
-            .map(|e| (distance_squared(e.pos, centre), e.id))
+            .map(|e| (distance(world, e.pos, centre), e.id))
             .collect();
         builders.sort();
         let Some(&(_, first)) = builders.first() else {
@@ -1123,8 +1151,8 @@ impl Controller {
                 .iter()
                 .filter_map(|(producer, rally)| {
                     let p = world.entity(*producer)?;
-                    let d = distance_squared(p.pos, at);
-                    (d <= RALLY_REACH * RALLY_REACH).then_some((d, *rally))
+                    let d = distance(world, p.pos, at);
+                    (d <= RALLY_REACH as u64).then_some((d, *rally))
                 })
                 .min_by_key(|(d, _)| *d);
             if let Some((_, rally)) = nearest {
@@ -1251,6 +1279,7 @@ impl Controller {
             .markers
             .iter()
             .map(|m| HudMarker {
+                face: m.pos.face,
                 x: m.pos.x,
                 y: m.pos.y,
                 kind: m.kind,
@@ -1260,6 +1289,7 @@ impl Controller {
         for (producer, at) in &self.rally {
             if self.selection.contains(producer) {
                 hud.markers.push(HudMarker {
+                    face: at.face,
                     x: at.x,
                     y: at.y,
                     kind: MarkerKind::Rally,
@@ -1269,6 +1299,7 @@ impl Controller {
         }
         hud.placement = self.placement.as_ref().and_then(|p| {
             p.centre.map(|c| HudPlacement {
+                face: c.face,
                 width: p.footprint.0.clamp(1, 255) as u8,
                 height: p.footprint.1.clamp(1, 255) as u8,
                 x: c.x,

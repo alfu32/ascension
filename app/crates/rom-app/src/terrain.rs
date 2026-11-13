@@ -84,19 +84,35 @@ pub fn generate_content(options: &Options) -> Result<Content, String> {
     })
 }
 
-/// Generates a sphere planet of `n` tiles per face edge for the options' style, seed and factions.
-pub fn generate_planet(options: &Options, n: u32) -> Result<SpherePlanet, String> {
+/// The rules and the sphere planet the options ask for.
+pub struct SphereContent {
+    /// The loaded rules.
+    pub rules: Arc<Rules>,
+    /// The generated planet.
+    pub planet: SpherePlanet,
+    /// The faction of each player, in player order.
+    pub factions: Vec<DefId>,
+}
+
+/// Generates a sphere planet of `n` tiles per face edge for the options' style, seed and factions,
+/// with the rules and factions it was made for.
+pub fn generate_sphere_content(options: &Options, n: u32) -> Result<SphereContent, String> {
     let (rules, style, factions) = resolve(options)?;
-    generate_sphere(
+    let planet = generate_sphere(
         &rules,
         &SphereRequest {
             style,
             seed: options.seed,
             n,
-            player_factions: factions,
+            player_factions: factions.clone(),
         },
     )
-    .map_err(|error| format!("generating the planet: {error}"))
+    .map_err(|error| format!("generating the planet: {error}"))?;
+    Ok(SphereContent {
+        rules: Arc::new(rules),
+        planet,
+        factions,
+    })
 }
 
 /// The tile kind of a terrain definition; other terrains are features with a colour of their own.
@@ -231,7 +247,9 @@ mod tests {
             players: 2,
             ..Options::default()
         };
-        let planet = generate_planet(&options, 24).expect("planet");
+        let planet = generate_sphere_content(&options, 24)
+            .expect("planet")
+            .planet;
         let scene = to_planet_scene(&planet);
         assert!(scene.is_valid());
         assert_eq!(scene.n, 24);
@@ -254,7 +272,7 @@ mod tests {
         // The same options give the same planet.
         assert_eq!(
             scene,
-            to_planet_scene(&generate_planet(&options, 24).unwrap())
+            to_planet_scene(&generate_sphere_content(&options, 24).unwrap().planet)
         );
     }
 }

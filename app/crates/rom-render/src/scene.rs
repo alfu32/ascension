@@ -15,15 +15,16 @@ use raylib::prelude::{
 use std::sync::Arc;
 
 use crate::camera::Camera;
-use crate::entities::{EntityView, Surface, build_instances};
+use crate::entities::{EntityView, Surface, build_instances, build_instances_on};
 use crate::globe::{ChunkBounds, CullView, Globe, PlanetScene};
 use crate::hud::HudSnapshot;
 use crate::orbit::OrbitCamera;
-use crate::overlay::{OverlayGeometry, build_overlays};
+use crate::overlay::{OverlayGeometry, build_overlays, build_overlays_on};
 use crate::terrain::{
-    ChunkMesh, RELIEF, STAR_COUNT, TerrainScene, build_sea_chunks, build_terrain_chunks,
-    ground_height, star_field, star_triangles,
+    ChunkMesh, RELIEF, STAR_COUNT, TerrainScene, build_sea_chunks_with_specs,
+    build_terrain_chunks_with_specs, ground_height, star_field, star_triangles,
 };
+use crate::vision::{ChunkSpec, shade_chunk};
 
 /// Width of the ground in tiles.
 const GROUND_TILES: f32 = 256.0;
@@ -305,24 +306,69 @@ pub(crate) struct Scene {
     movers: Vec<Mover>,
     transforms: Vec<Matrix>,
     overlay: OverlayGeometry,
+    /// Tile shades the meshes were last coloured with.
+    last_shades: Vec<[f32; 3]>,
+    /// Chunk meshes (land, then sea) waiting to be recoloured.
+    shade_queue: Vec<usize>,
+}
+
+/// A chunk mesh whose vertex colours follow the player's fog of war and borders.
+struct ShadedMesh {
+    mesh: Mesh,
+    spec: ChunkSpec,
+    /// Unshaded vertex colours.
+    base: Vec<[u8; 4]>,
+    /// Colours currently on the GPU.
+    current: Vec<[u8; 4]>,
+}
+
+impl ShadedMesh {
+    fn new(mesh: Mesh, spec: ChunkSpec, chunk: &ChunkMesh) -> Self {
+        Self {
+            mesh,
+            spec,
+            base: chunk.colors.clone(),
+            current: chunk.colors.clone(),
+        }
+    }
+
+    /// Shades the colours by `shades` and uploads them when they changed.
+    fn apply(
+        &mut self,
+        shades: &[[f32; 3]],
+        adjoining: crate::vision::Adjoining,
+        scratch: &mut Vec<[u8; 4]>,
+    ) {
+        shade_chunk(&self.base, self.spec, shades, adjoining, scratch);
+        if *scratch != self.current {
+            // SAFETY: the mesh is uploaded, buffer 3 holds one RGBA byte quadruple per vertex and
+            // `scratch` has exactly that many.
+            unsafe {
+                self.mesh.update_buffer::<u8>(3, scratch.as_flattened(), 0);
+            }
+            std::mem::swap(&mut self.current, scratch);
+        }
+    }
 }
 
 /// Meshes and markers of the published terrain.
 struct TerrainGpu {
-    land: Vec<Mesh>,
-    sea: Vec<Mesh>,
+    land: Vec<ShadedMesh>,
+    sea: Vec<ShadedMesh>,
     /// Player pillars: centre, size and colour.
     pillars: Vec<(Vector3, Vector3, Color)>,
     /// Surface sampler for entities.
     surface: Surface,
     /// Map centre in tiles, where the stress-test boxes are centred.
     centre: [f32; 2],
+    /// Map size in tiles.
+    size: (u32, u32),
 }
 
 /// Meshes and markers of a published sphere planet.
 struct GlobeGpu {
-    land: Vec<(Mesh, ChunkBounds)>,
-    sea: Vec<(Mesh, ChunkBounds)>,
+    land: Vec<(ShadedMesh, ChunkBounds)>,
+    sea: Vec<(ShadedMesh, ChunkBounds)>,
     planet: Arc<PlanetScene>,
     globe: Arc<Globe>,
     markers: Vec<Matrix>,
@@ -462,6 +508,8 @@ impl Scene {
             transforms: Vec::new(),
             movers: Vec::new(),
             overlay: OverlayGeometry::default(),
+            last_shades: Vec::new(),
+            shade_queue: Vec::new(),
         }
     }
 
@@ -476,7 +524,12 @@ impl Scene {
         views: &[EntityView],
         hud: &HudSnapshot,
         camera_yaw: f32,
+        orbit: Option<&OrbitCamera>,
     ) {
+        if let (Some(gpu), Some(orbit)) = (&self.globe, orbit) {
+            build_overlays_on(views, &*gpu.globe, orbit.right(), hud, &mut self.overlay);
+            return;
+        }
         match &self.terrain {
             Some(terrain) => {
                 let surface = &terrain.surface;
@@ -495,6 +548,121 @@ impl Scene {
         }
     }
 
+    /// Takes new tile `shades` of a vision map (fog of war and borders) and queues the chunks
+    /// near tiles whose shade changed for recolouring; [`Self::run_shade_queue`] does the work a
+    /// few chunks per frame so no frame pays for a whole update.
+    pub(crate) fn apply_shades(&mut self, shades: &[[f32; 3]]) {
+        let changed: Vec<bool> = if self.last_shades.len() == shades.len() {
+            shades
+                .iter()
+                .zip(&self.last_shades)
+                .map(|(a, b)| a != b)
+                .collect()
+        } else {
+            vec![true; shades.len()]
+        };
+        let mut queue = std::mem::take(&mut self.shade_queue);
+        if let Some(gpu) = &self.globe {
+            let n = gpu.planet.n;
+            if shades.len() != 6 * (n as usize) * (n as usize) {
+                self.shade_queue = queue;
+                return;
+            }
+            let globe = Arc::clone(&gpu.globe);
+            let adjoining = |face: u8, vx: u32, vy: u32| globe.corner_tiles(face, vx, vy);
+            let meshes = gpu.land.iter().chain(gpu.sea.iter());
+            for (index, (mesh, _)) in meshes.enumerate() {
+                if !queue.contains(&index)
+                    && chunk_touches_change(mesh.spec, n, &changed, Some(&adjoining))
+                {
+                    queue.push(index);
+                }
+            }
+        } else if let Some(terrain) = &self.terrain {
+            let (width, height) = terrain.size;
+            if shades.len() != width as usize * height as usize {
+                self.shade_queue = queue;
+                return;
+            }
+            let meshes = terrain.land.iter().chain(terrain.sea.iter());
+            for (index, mesh) in meshes.enumerate() {
+                if !queue.contains(&index)
+                    && flat_chunk_touches_change(mesh.spec, width, height, &changed)
+                {
+                    queue.push(index);
+                }
+            }
+        } else {
+            self.shade_queue = queue;
+            return;
+        }
+        self.shade_queue = queue;
+        self.last_shades.clear();
+        self.last_shades.extend_from_slice(shades);
+    }
+
+    /// Recolours up to `budget` queued chunks with the newest shades.
+    pub(crate) fn run_shade_queue(&mut self, budget: usize) {
+        if self.shade_queue.is_empty() {
+            return;
+        }
+        let take = budget.min(self.shade_queue.len());
+        let batch: Vec<usize> = self.shade_queue.drain(..take).collect();
+        let shades = std::mem::take(&mut self.last_shades);
+        let mut scratch = Vec::new();
+        if let Some(gpu) = &mut self.globe {
+            let n = gpu.planet.n as usize;
+            let globe = Arc::clone(&gpu.globe);
+            let side = n as u32;
+            let adjoining = |face: u8, vx: u32, vy: u32| {
+                if (1..side).contains(&vx) && (1..side).contains(&vy) {
+                    // Inside a face the four tiles around the corner are plain neighbours.
+                    let first = (usize::from(face) * n + (vy as usize - 1)) * n + (vx as usize - 1);
+                    ([first, first + 1, first + n, first + n + 1], 4)
+                } else {
+                    globe.corner_tiles(face, vx, vy)
+                }
+            };
+            let lands = gpu.land.len();
+            for index in batch {
+                let mesh = if index < lands {
+                    gpu.land.get_mut(index)
+                } else {
+                    gpu.sea.get_mut(index - lands)
+                };
+                if let Some((mesh, _)) = mesh {
+                    mesh.apply(&shades, &adjoining, &mut scratch);
+                }
+            }
+        } else if let Some(terrain) = &mut self.terrain {
+            let (width, height) = (i64::from(terrain.size.0), i64::from(terrain.size.1));
+            let adjoining = |_: u8, vx: u32, vy: u32| {
+                let mut out = [0; 4];
+                let mut count = 0;
+                for (dx, dy) in [(-1, -1), (0, -1), (-1, 0), (0, 0)] {
+                    let (x, y) = (i64::from(vx) + dx, i64::from(vy) + dy);
+                    if (0..width).contains(&x) && (0..height).contains(&y) {
+                        out[count] = (y * width + x) as usize;
+                        count += 1;
+                    }
+                }
+                (out, count)
+            };
+            let lands = terrain.land.len();
+            for index in batch {
+                let mesh = if index < lands {
+                    terrain.land.get_mut(index)
+                } else {
+                    terrain.sea.get_mut(index - lands)
+                };
+                if let Some(mesh) = mesh {
+                    mesh.apply(&shades, &adjoining, &mut scratch);
+                }
+            }
+        }
+        self.last_shades = shades;
+    }
+
     /// Builds and uploads the meshes of `scene`, replacing any earlier terrain.
     ///
     /// Returns the number of meshes, the mesh build time and the upload time in milliseconds.
@@ -505,6 +673,8 @@ impl Scene {
     ) -> (usize, f32, f32) {
         self.terrain = None;
         self.globe = None;
+        self.last_shades.clear();
+        self.shade_queue.clear();
         self.set_light(LIGHT_DIRECTION);
         if !scene.is_valid() {
             eprintln!("rom-render: ignoring a terrain scene with inconsistent tile data");
@@ -513,11 +683,17 @@ impl Scene {
         let started = Instant::now();
         let surface = Surface::new(Arc::clone(scene));
         let shape = surface.shape();
-        let land = build_terrain_chunks(scene, shape);
-        let sea = build_sea_chunks(scene, shape);
+        let land = build_terrain_chunks_with_specs(scene, shape);
+        let sea = build_sea_chunks_with_specs(scene, shape);
         let built = Instant::now();
-        let land_meshes: Vec<Mesh> = land.iter().filter_map(|c| upload(thread, c)).collect();
-        let sea_meshes: Vec<Mesh> = sea.iter().filter_map(|c| upload(thread, c)).collect();
+        let shaded = |chunks: &[(ChunkMesh, ChunkSpec)]| -> Vec<ShadedMesh> {
+            chunks
+                .iter()
+                .filter_map(|(c, spec)| Some(ShadedMesh::new(upload(thread, c)?, *spec, c)))
+                .collect()
+        };
+        let land_meshes = shaded(&land);
+        let sea_meshes = shaded(&sea);
         let uploaded = Instant::now();
         let count = land_meshes.len() + sea_meshes.len();
 
@@ -540,6 +716,7 @@ impl Scene {
             pillars,
             surface,
             centre: [scene.width as f32 / 2.0, scene.height as f32 / 2.0],
+            size: (scene.width, scene.height),
         });
         (
             count,
@@ -568,15 +745,22 @@ impl Scene {
     ) -> (usize, f32, f32) {
         self.terrain = None;
         self.globe = None;
+        self.last_shades.clear();
+        self.shade_queue.clear();
         self.set_light(SUN_DIRECTION);
         let started = Instant::now();
-        let land = globe.land_chunks();
-        let sea = globe.sea_chunks();
+        let land = globe.land_chunks_with_specs();
+        let sea = globe.sea_chunks_with_specs();
         let built = Instant::now();
-        let upload_all = |chunks: &[ChunkMesh]| -> Vec<(Mesh, ChunkBounds)> {
+        let upload_all = |chunks: &[(ChunkMesh, ChunkSpec)]| -> Vec<(ShadedMesh, ChunkBounds)> {
             chunks
                 .iter()
-                .filter_map(|c| Some((upload(thread, c)?, ChunkBounds::of(c))))
+                .filter_map(|(c, spec)| {
+                    Some((
+                        ShadedMesh::new(upload(thread, c)?, *spec, c),
+                        ChunkBounds::of(c),
+                    ))
+                })
                 .collect()
         };
         let land = upload_all(&land);
@@ -647,9 +831,13 @@ impl Scene {
         {
             let mut world = drawing.begin_mode3D(view);
             shift_projection(self.projection_centre_y);
-            for (mesh, bounds) in &gpu.land {
+            for (shaded, bounds) in &gpu.land {
                 if bounds.may_be_seen(radius, &cull) {
-                    world.draw_mesh(mesh, self.terrain_material.clone(), Matrix::identity());
+                    world.draw_mesh(
+                        &shaded.mesh,
+                        self.terrain_material.clone(),
+                        Matrix::identity(),
+                    );
                 }
             }
             if !gpu.markers.is_empty() {
@@ -659,11 +847,23 @@ impl Scene {
                     &gpu.markers,
                 );
             }
-            for (mesh, bounds) in &gpu.sea {
+            if !self.entity_transforms.is_empty() {
+                world.draw_mesh_instanced(
+                    &self.box_mesh,
+                    self.entity_material.clone(),
+                    &self.entity_transforms,
+                );
+            }
+            for (shaded, bounds) in &gpu.sea {
                 if bounds.may_be_seen(radius, &cull) {
-                    world.draw_mesh(mesh, self.sea_globe_material.clone(), Matrix::identity());
+                    world.draw_mesh(
+                        &shaded.mesh,
+                        self.sea_globe_material.clone(),
+                        Matrix::identity(),
+                    );
                 }
             }
+            draw_overlay(&mut world, &self.overlay);
         }
         set_clip_planes(DEFAULT_NEAR, DEFAULT_FAR);
     }
@@ -674,14 +874,19 @@ impl Scene {
         views: &[EntityView],
         camera_yaw: f32,
         start_markers: bool,
+        orbit: Option<&OrbitCamera>,
     ) {
         self.draw_markers = start_markers;
         self.entity_transforms.clear();
-        let Some(terrain) = &self.terrain else {
-            return;
-        };
         let mut instances = std::mem::take(&mut self.instances);
-        build_instances(views, &terrain.surface, camera_yaw, &mut instances);
+        if let (Some(gpu), Some(orbit)) = (&self.globe, orbit) {
+            build_instances_on(views, &*gpu.globe, orbit.right(), &mut instances);
+        } else if let Some(terrain) = &self.terrain {
+            build_instances(views, &terrain.surface, camera_yaw, &mut instances);
+        } else {
+            self.instances = instances;
+            return;
+        }
         self.entity_transforms
             .extend(instances.iter().map(matrix_of));
         self.instances = instances;
@@ -739,8 +944,12 @@ impl Scene {
         shift_projection(self.projection_centre_y);
         match &self.terrain {
             Some(terrain) => {
-                for mesh in &terrain.land {
-                    world.draw_mesh(mesh, self.terrain_material.clone(), Matrix::identity());
+                for shaded in &terrain.land {
+                    world.draw_mesh(
+                        &shaded.mesh,
+                        self.terrain_material.clone(),
+                        Matrix::identity(),
+                    );
                 }
                 if self.draw_markers {
                     for (centre, size, color) in &terrain.pillars {
@@ -761,29 +970,10 @@ impl Scene {
                         &self.transforms,
                     );
                 }
-                for mesh in &terrain.sea {
-                    world.draw_mesh(mesh, self.sea_material.clone(), Matrix::identity());
+                for shaded in &terrain.sea {
+                    world.draw_mesh(&shaded.mesh, self.sea_material.clone(), Matrix::identity());
                 }
-                for tri in &self.overlay.tris {
-                    let colour =
-                        Color::new(tri.colour[0], tri.colour[1], tri.colour[2], tri.colour[3]);
-                    let [a, b, c] = tri.v.map(|p| Vector3::new(p[0], p[1], p[2]));
-                    world.draw_triangle3D(a, b, c, colour);
-                    world.draw_triangle3D(a, c, b, colour);
-                }
-                for line in &self.overlay.lines {
-                    let colour = Color::new(
-                        line.colour[0],
-                        line.colour[1],
-                        line.colour[2],
-                        line.colour[3],
-                    );
-                    world.draw_line3D(
-                        Vector3::new(line.a[0], line.a[1], line.a[2]),
-                        Vector3::new(line.b[0], line.b[1], line.b[2]),
-                        colour,
-                    );
-                }
+                draw_overlay(&mut world, &self.overlay);
             }
             None => {
                 world.draw_mesh(
@@ -800,6 +990,82 @@ impl Scene {
                 }
             }
         }
+    }
+}
+
+/// Whether a tile near the chunk's vertices changed shade: the tiles of its window and, on a
+/// sphere, the tiles across a face edge that touch its edge vertices.
+fn chunk_touches_change(
+    spec: ChunkSpec,
+    n: u32,
+    changed: &[bool],
+    adjoining: Option<crate::vision::Adjoining>,
+) -> bool {
+    let face_base = usize::from(spec.face) * (n as usize) * (n as usize);
+    let (x_lo, x_hi) = (spec.x0.saturating_sub(1), (spec.x0 + spec.w).min(n - 1));
+    let (y_lo, y_hi) = (spec.y0.saturating_sub(1), (spec.y0 + spec.h).min(n - 1));
+    for y in y_lo..=y_hi {
+        let row = face_base + y as usize * n as usize;
+        if changed[row + x_lo as usize..=row + x_hi as usize]
+            .iter()
+            .any(|c| *c)
+        {
+            return true;
+        }
+    }
+    let Some(adjoining) = adjoining else {
+        return false;
+    };
+    let on_edge = |v: u32| v == 0 || v == n;
+    for j in 0..=spec.h {
+        for i in 0..=spec.w {
+            let (vx, vy) = (spec.x0 + i, spec.y0 + j);
+            if on_edge(vx) || on_edge(vy) {
+                let (tiles, count) = adjoining(spec.face, vx, vy);
+                if tiles[..count].iter().any(|&t| changed[t]) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// The flat-map form of [`chunk_touches_change`].
+fn flat_chunk_touches_change(spec: ChunkSpec, width: u32, height: u32, changed: &[bool]) -> bool {
+    let (x_lo, x_hi) = (spec.x0.saturating_sub(1), (spec.x0 + spec.w).min(width - 1));
+    let (y_lo, y_hi) = (
+        spec.y0.saturating_sub(1),
+        (spec.y0 + spec.h).min(height - 1),
+    );
+    (y_lo..=y_hi).any(|y| {
+        let row = y as usize * width as usize;
+        changed[row + x_lo as usize..=row + x_hi as usize]
+            .iter()
+            .any(|c| *c)
+    })
+}
+
+/// Draws the overlay triangles and lines of one frame.
+fn draw_overlay(world: &mut impl RaylibDraw3D, overlay: &OverlayGeometry) {
+    for tri in &overlay.tris {
+        let colour = Color::new(tri.colour[0], tri.colour[1], tri.colour[2], tri.colour[3]);
+        let [a, b, c] = tri.v.map(|p| Vector3::new(p[0], p[1], p[2]));
+        world.draw_triangle3D(a, b, c, colour);
+        world.draw_triangle3D(a, c, b, colour);
+    }
+    for line in &overlay.lines {
+        let colour = Color::new(
+            line.colour[0],
+            line.colour[1],
+            line.colour[2],
+            line.colour[3],
+        );
+        world.draw_line3D(
+            Vector3::new(line.a[0], line.a[1], line.a[2]),
+            Vector3::new(line.b[0], line.b[1], line.b[2]),
+            colour,
+        );
     }
 }
 

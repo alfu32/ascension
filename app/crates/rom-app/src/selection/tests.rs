@@ -1,5 +1,5 @@
 use super::*;
-use rom_render::{PickEvent, flat_surface};
+use rom_render::{PickEvent, SurfacePos, flat_surface};
 use rom_rules::Rules;
 use rom_sim::{MapGrid, Player};
 use std::collections::BTreeMap;
@@ -715,4 +715,154 @@ fn dead_entities_leave_selection() {
     assert_eq!(ids(&fx), vec![b.0]);
     assert_eq!(fx.hud_snapshot().selected, vec![b.0]);
     fx.select(&[]);
+}
+
+/// A 64-tile planet with two players set up as in a real sphere match.
+fn sphere_fixture() -> (Controller, crate::match_setup::Match) {
+    let options = crate::args::Options {
+        players: 2,
+        sphere: Some(64),
+        ..crate::args::Options::default()
+    };
+    let content = crate::terrain::generate_sphere_content(&options, 64).expect("planet");
+    let game = crate::match_setup::build_sphere_match(
+        &content.rules,
+        &content.planet,
+        &content.factions,
+        1,
+    )
+    .expect("match");
+    (Controller::new(), game)
+}
+
+fn surface_of(pos: Pos) -> SurfacePos {
+    SurfacePos {
+        face: pos.face,
+        x: i64::from(pos.x),
+        y: i64::from(pos.y),
+    }
+}
+
+#[test]
+fn orders_on_the_sphere_use_the_picked_face() {
+    let (mut ctl, mut game) = sphere_fixture();
+    let world = &mut game.world;
+    let start = game.starts.iter().find(|s| s.player == PLAYER).unwrap();
+    let builder = start.builders[0];
+    ctl.handle(
+        world,
+        PickEvent::BoxSelect {
+            entities: vec![builder.0],
+            modifiers: Modifiers::default(),
+        },
+    );
+    assert_eq!(ctl.selection(), &[builder]);
+    let other = SurfacePos {
+        face: (start.city_pos.face + 1) % 6,
+        x: 20_500,
+        y: 33_500,
+    };
+    ctl.handle(
+        world,
+        PickEvent::RightClick {
+            world_point: (20.5, 33.5),
+            surface: other,
+            entity: None,
+            modifiers: Modifiers::default(),
+        },
+    );
+    world.step();
+    let order = world
+        .entity(builder)
+        .unwrap()
+        .orders()
+        .back()
+        .expect("a move order");
+    assert_eq!(order.kind, "move");
+    assert_eq!(order.target_pos, Some(pos_of(other)));
+    assert_eq!(order.target_pos.unwrap().face, other.face);
+}
+
+#[test]
+fn placement_on_the_sphere_matches_check_placement() {
+    let (mut ctl, mut game) = sphere_fixture();
+    let world = &mut game.world;
+    let rules = world.rules().clone();
+    let start = game.starts.iter().find(|s| s.player == PLAYER).unwrap();
+    let builder = start.builders[0];
+    ctl.handle(
+        world,
+        PickEvent::BoxSelect {
+            entities: vec![builder.0],
+            modifiers: Modifiers::default(),
+        },
+    );
+    // The first enabled construct button that is not a city.
+    let hud = {
+        let mut hud = HudSnapshot::default();
+        ctl.fill(world, &mut hud);
+        hud
+    };
+    let slot = hud
+        .palette
+        .as_ref()
+        .and_then(|p| p.buttons.iter().find(|b| b.enabled))
+        .expect("an enabled button")
+        .slot;
+    ctl.handle(
+        world,
+        PickEvent::HudClick {
+            region: HudRegionKind::CommandSlot,
+            index: slot,
+            button: PointerButton::Left,
+            modifiers: Modifiers::default(),
+        },
+    );
+    let def = ctl.placement.as_ref().expect("placement mode").def;
+    let footprint = {
+        let et = &rules.entity_types[&def];
+        (et.footprint_w, et.footprint_h)
+    };
+    let city = start.city_pos;
+    let spots = [
+        // Beside the city on its face, on the city itself, and on a far face.
+        world.offset(city, 5_000, 0),
+        city,
+        Pos {
+            x: 10_500,
+            y: 10_500,
+            face: (city.face + 3) % 6,
+        },
+        // Right at a face edge, where the footprint may cross it.
+        Pos {
+            x: 63_900,
+            y: 30_500,
+            face: city.face,
+        },
+    ];
+    for (n, spot) in spots.into_iter().enumerate() {
+        ctl.placement.as_mut().unwrap().checked = None;
+        ctl.handle(
+            world,
+            PickEvent::Hover {
+                world_point: (spot.x as f32 / 1000.0, spot.y as f32 / 1000.0),
+                surface: surface_of(spot),
+            },
+        );
+        let mut hud = HudSnapshot::default();
+        ctl.fill(world, &mut hud);
+        let preview = hud.placement.expect("preview");
+        let snapped = Pos {
+            x: snap(spot.x, footprint.0),
+            y: snap(spot.y, footprint.1),
+            face: spot.face,
+        };
+        assert_eq!(preview.face, spot.face, "spot {n}");
+        assert_eq!((preview.x, preview.y), (snapped.x, snapped.y), "spot {n}");
+        assert_eq!(
+            preview.valid,
+            Some(world.check_placement(PLAYER, def, snapped).is_ok()),
+            "spot {n}"
+        );
+    }
 }

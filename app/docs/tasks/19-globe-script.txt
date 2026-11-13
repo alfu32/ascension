@@ -1,0 +1,7 @@
+# Replayed by --script on a sphere (see 15-demo-script.txt for the flat map). Box-select the
+# five builders, open BUILD, enter placement for the second building (the first is a city,
+# which cannot stand beside the starting one) and hover a valid spot north of the city.
+4  box builders
+8  hud tab 0
+10 hud slot 1
+14 hover @0,-9

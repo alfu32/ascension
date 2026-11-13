@@ -172,6 +172,8 @@ pub enum MarkerKind {
 /// A short-lived marker on the ground.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HudMarker {
+    /// Face of a sphere planet (0 on a flat map).
+    pub face: u8,
     /// East position in milli-tiles.
     pub x: i32,
     /// South position in milli-tiles.
@@ -185,6 +187,8 @@ pub struct HudMarker {
 /// The building footprint being placed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HudPlacement {
+    /// Face of a sphere planet (0 on a flat map).
+    pub face: u8,
     /// Footprint width in tiles.
     pub width: u8,
     /// Footprint height in tiles.

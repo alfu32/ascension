@@ -9,9 +9,11 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use rom_render::{EntitySnapshot, EntityView, RenderBridge};
+use rom_render::{
+    EXPLORED, EntitySnapshot, EntityView, RenderBridge, SurfacePos, UNEXPLORED, VISIBLE, VisionMap,
+};
 use rom_rules::{ActiveSources, EntityClass};
-use rom_sim::{Command, PlayerId, World};
+use rom_sim::{Command, Entity, PlayerId, Sighting, Topology, World};
 
 use crate::demo::DemoDriver;
 use crate::script::Script;
@@ -223,7 +225,8 @@ fn run(
     let mut window_start = last;
     let mut window_ticks = 0_u32;
     let mut controller = Controller::new();
-    publish(&world, &controller, link, bridge);
+    let mut fog = FogPublisher::default();
+    publish(&world, &controller, link, bridge, &mut fog);
     while !link.stop.load(Ordering::Acquire) {
         let now = Instant::now();
         let current = link.speed.load(Ordering::Relaxed);
@@ -238,9 +241,7 @@ fn run(
         for pick in picks {
             controller.handle(&mut world, pick);
         }
-        if let Some((x, y)) = controller.take_focus() {
-            bridge.focus_camera(x, y);
-        }
+        focus_camera(&world, &mut controller, bridge);
         if interacted && ticks == 0 {
             publish_hud(&world, &controller, bridge);
         }
@@ -259,11 +260,9 @@ fn run(
             }
             world.step();
             controller.after_step(&mut world);
-            if let Some((x, y)) = controller.take_focus() {
-                bridge.focus_camera(x, y);
-            }
+            focus_camera(&world, &mut controller, bridge);
             window_ticks += 1;
-            publish(&world, &controller, link, bridge);
+            publish(&world, &controller, link, bridge, &mut fog);
             while let Ok(command) = inbox.try_recv() {
                 if world.submit(command).is_err() {
                     link.stats.rejected.fetch_add(1, Ordering::Relaxed);
@@ -287,14 +286,41 @@ fn run(
     }
 }
 
-fn publish(world: &World, controller: &Controller, link: &SimLink, bridge: &RenderBridge) {
+/// Ticks between two visibility maps sent to the render thread.
+const VISION_INTERVAL: u64 = 5;
+
+fn publish(
+    world: &World,
+    controller: &Controller,
+    link: &SimLink,
+    bridge: &RenderBridge,
+    fog: &mut FogPublisher,
+) {
     let snapshot = snapshot_of(world);
     link.stats.tick.store(snapshot.tick, Ordering::Relaxed);
     link.stats
         .entities
         .store(snapshot.entities.len() as u32, Ordering::Relaxed);
     bridge.publish_snapshot(Arc::new(snapshot));
+    if world.tick().is_multiple_of(VISION_INTERVAL) {
+        bridge.publish_vision(Arc::new(fog.build(world)));
+    }
     publish_hud(world, controller, bridge);
+}
+
+/// Sends a focus request of the controller to the camera, on the flat map or the globe.
+fn focus_camera(world: &World, controller: &mut Controller, bridge: &RenderBridge) {
+    let Some(at) = controller.take_focus_pos() else {
+        return;
+    };
+    match world.topology() {
+        Topology::Flat { .. } => bridge.focus_camera(at.x as f32 / 1000.0, at.y as f32 / 1000.0),
+        Topology::Cube(_) => bridge.focus_surface(SurfacePos {
+            face: at.face,
+            x: i64::from(at.x),
+            y: i64::from(at.y),
+        }),
+    }
 }
 
 fn publish_hud(world: &World, controller: &Controller, bridge: &RenderBridge) {
@@ -303,44 +329,184 @@ fn publish_hud(world: &World, controller: &Controller, bridge: &RenderBridge) {
     bridge.publish_hud(Arc::new(hud));
 }
 
-/// Copies the world's entities into plain render data, in id order.
+/// What the render thread may draw for the player: own and allied entities, everything on tiles
+/// in view, the buildings remembered in the fog and resource nodes on explored ground, in id
+/// order. Enemy units outside the player's vision are not in it.
 pub fn snapshot_of(world: &World) -> EntitySnapshot {
     let rules = world.rules();
     let mut sources: BTreeMap<PlayerId, ActiveSources> = BTreeMap::new();
-    let entities = world
-        .entities()
-        .filter_map(|entity| {
-            let et = rules.entity_type(entity.type_id)?;
-            let under_construction = entity.build_progress.map(|done| {
-                let sources = sources.entry(entity.owner).or_insert_with(|| {
-                    world
-                        .players()
-                        .find(|p| p.id == entity.owner)
-                        .map(|p| p.active_sources())
-                        .unwrap_or_default()
-                });
-                let total = rules.build_ticks(entity.type_id, sources).max(1) as f32;
-                (done as f32 / total).clamp(0.0, 1.0)
+    let clamp_u8 = |value: i64| u8::try_from(value.clamp(0, 255)).unwrap_or(u8::MAX);
+    let sightings = world.visible_entities(PLAYER);
+    let mut views: Vec<EntityView> = Vec::with_capacity(sightings.len());
+    let mut remembered = false;
+    let mut live = sightings.iter().filter_map(|s| match s {
+        Sighting::Live(e) => Some(*e),
+        Sighting::Remembered(_) => None,
+    });
+    let mut next_live = live.next();
+    for entity in world.entities() {
+        let seen = match next_live {
+            Some(e) if e.id == entity.id => {
+                next_live = live.next();
+                true
+            }
+            _ => false,
+        };
+        let known_ground = || {
+            entity.owner == PlayerId(0)
+                && world.is_explored_on(
+                    PLAYER,
+                    entity.pos.face,
+                    entity.pos.x.div_euclid(1000),
+                    entity.pos.y.div_euclid(1000),
+                )
+        };
+        if !(seen || known_ground()) {
+            continue;
+        }
+        let Some(et) = rules.entity_type(entity.type_id) else {
+            continue;
+        };
+        let under_construction = entity.build_progress.map(|done| {
+            let sources = sources.entry(entity.owner).or_insert_with(|| {
+                world
+                    .players()
+                    .find(|p| p.id == entity.owner)
+                    .map(|p| p.active_sources())
+                    .unwrap_or_default()
             });
-            let clamp_u8 = |value: i64| u8::try_from(value.clamp(0, 255)).unwrap_or(u8::MAX);
-            Some(EntityView {
-                id: entity.id.0,
-                kind: u16::try_from(entity.type_id.0).unwrap_or(u16::MAX),
-                owner: u8::try_from(entity.owner.0).unwrap_or(u8::MAX),
-                x: entity.pos.x as f32 / 1000.0,
-                y: entity.pos.y as f32 / 1000.0,
-                facing_deg: f32::from(entity.facing),
-                hp_frac: (entity.hp as f32 / et.hp.max(1) as f32).clamp(0.0, 1.0),
-                building: et.class == EntityClass::Building,
+            let total = rules.build_ticks(entity.type_id, sources).max(1) as f32;
+            (done as f32 / total).clamp(0.0, 1.0)
+        });
+        views.push(view_of(entity, et, under_construction, &clamp_u8));
+    }
+    for sighting in &sightings {
+        if let Sighting::Remembered(building) = sighting {
+            let Some(et) = rules.entity_type(building.type_id) else {
+                continue;
+            };
+            remembered = true;
+            views.push(EntityView {
+                id: building.id.0,
+                kind: u16::try_from(building.type_id.0).unwrap_or(u16::MAX),
+                owner: u8::try_from(building.owner.0).unwrap_or(u8::MAX),
+                face: building.pos.face,
+                x: building.pos.x as f32 / 1000.0,
+                y: building.pos.y as f32 / 1000.0,
+                facing_deg: 0.0,
+                hp_frac: 1.0,
+                building: true,
                 footprint: (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h)),
                 radius: et.radius as f32 / 1000.0,
-                under_construction,
-            })
-        })
-        .collect();
+                under_construction: None,
+            });
+        }
+    }
+    if remembered {
+        views.sort_by_key(|view| view.id);
+        views.dedup_by_key(|view| view.id);
+    }
     EntitySnapshot {
         tick: world.tick(),
-        entities,
+        entities: views,
+    }
+}
+
+fn view_of(
+    entity: &Entity,
+    et: &rom_rules::EntityType,
+    under_construction: Option<f32>,
+    clamp_u8: &dyn Fn(i64) -> u8,
+) -> EntityView {
+    EntityView {
+        id: entity.id.0,
+        kind: u16::try_from(entity.type_id.0).unwrap_or(u16::MAX),
+        owner: u8::try_from(entity.owner.0).unwrap_or(u8::MAX),
+        face: entity.pos.face,
+        x: entity.pos.x as f32 / 1000.0,
+        y: entity.pos.y as f32 / 1000.0,
+        facing_deg: f32::from(entity.facing),
+        hp_frac: (entity.hp as f32 / et.hp.max(1) as f32).clamp(0.0, 1.0),
+        building: et.class == EntityClass::Building,
+        footprint: (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h)),
+        radius: et.radius as f32 / 1000.0,
+        under_construction,
+    }
+}
+
+/// Builds the visibility and territory map of the player; remembers which tiles were explored so
+/// that only unexplored tiles need the exploration check again.
+#[derive(Debug, Default)]
+pub struct FogPublisher {
+    explored: Vec<bool>,
+}
+
+impl FogPublisher {
+    /// The map as the world stands now.
+    pub fn build(&mut self, world: &World) -> VisionMap {
+        let (width, height, side, cube) = match world.topology() {
+            Topology::Flat { width, height } => (width, height, height, None),
+            Topology::Cube(surface) => (surface.n, surface.n * 6, surface.n, Some(surface)),
+        };
+        let tiles = width as usize * height as usize;
+        if self.explored.len() != tiles {
+            self.explored = vec![false; tiles];
+        }
+        let mut state = vec![UNEXPLORED; tiles];
+        let mut owner = vec![0_u8; tiles];
+        for index in 0..tiles {
+            let (x, row) = (
+                (index % width as usize) as i32,
+                (index / width as usize) as u32,
+            );
+            let (face, y) = ((row / side) as u8, (row % side) as i32);
+            if !self.explored[index] && world.is_explored_on(PLAYER, face, x, y) {
+                self.explored[index] = true;
+            }
+            if !self.explored[index] {
+                continue;
+            }
+            state[index] = if world.is_visible_on(PLAYER, face, x, y) {
+                VISIBLE
+            } else {
+                EXPLORED
+            };
+            owner[index] = world
+                .territory_owner_on(face, x, y)
+                .map_or(0, |p| u8::try_from(p.0).unwrap_or(u8::MAX));
+        }
+        let mut border = vec![false; tiles];
+        let w = width as usize;
+        for index in 0..tiles {
+            let mine = owner[index];
+            let (x, row) = (index % w, index / w);
+            let (fx, fy) = (x, row % side as usize);
+            let inside = |dx: i32, dy: i32| -> Option<usize> {
+                let (nx, ny) = (fx as i32 + dx, fy as i32 + dy);
+                if (0..side as i32).contains(&nx) && (0..side as i32).contains(&ny) {
+                    return Some(index.wrapping_add_signed(dx as isize + dy as isize * w as isize));
+                }
+                let surface = cube?;
+                let tile = SurfacePos {
+                    face: (row / side as usize) as u8,
+                    x: x as i64 * 1000 + 500,
+                    y: fy as i64 * 1000 + 500,
+                }
+                .tile();
+                let across = surface.neighbor(tile, dx, dy)?;
+                Some(surface.index(across))
+            };
+            border[index] = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+                .into_iter()
+                .any(|(dx, dy)| inside(dx, dy).is_some_and(|other| owner[other] != mine));
+        }
+        VisionMap {
+            width,
+            height,
+            state,
+            owner,
+            border,
+        }
     }
 }
 
@@ -350,6 +516,7 @@ mod tests {
     use crate::args::Options;
     use crate::match_setup::build_match;
     use crate::terrain::generate_content;
+    use rom_sim::EntityId;
 
     #[test]
     fn fixed_step_accumulator_caps_backlog() {
@@ -378,9 +545,9 @@ mod tests {
         let world = &game.world;
         let snapshot = snapshot_of(world);
         assert_eq!(snapshot.tick, world.tick());
-        assert_eq!(snapshot.entities.len(), world.entities().count());
         assert!(snapshot.entities.windows(2).all(|w| w[0].id < w[1].id));
-        for (view, entity) in snapshot.entities.iter().zip(world.entities()) {
+        for view in &snapshot.entities {
+            let entity = world.entity(EntityId(view.id)).expect("a live entity");
             let et = &content.rules.entity_types[&entity.type_id];
             assert_eq!(view.id, entity.id.0);
             assert_eq!(u32::from(view.owner), entity.owner.0);
@@ -394,5 +561,102 @@ mod tests {
             assert_eq!(view.footprint.0 as i64, et.footprint_w.clamp(0, 255));
         }
         assert!(snapshot.entities.iter().any(|v| v.building && v.owner == 1));
+    }
+
+    /// A two-player sphere match with player two's units far from player one's.
+    fn sphere_game() -> crate::match_setup::Match {
+        let options = Options {
+            players: 2,
+            sphere: Some(64),
+            ..Options::default()
+        };
+        let content = crate::terrain::generate_sphere_content(&options, 64).expect("planet");
+        crate::match_setup::build_sphere_match(
+            &content.rules,
+            &content.planet,
+            &content.factions,
+            1,
+        )
+        .expect("match")
+    }
+
+    #[test]
+    fn snapshot_hides_enemies_outside_vision() {
+        let mut game = sphere_game();
+        game.world.step();
+        let snapshot = snapshot_of(&game.world);
+        let ids: Vec<u32> = snapshot.entities.iter().map(|v| v.id).collect();
+        let own = game.starts.iter().find(|s| s.player == PLAYER).unwrap();
+        let enemy = game.starts.iter().find(|s| s.player != PLAYER).unwrap();
+        // Own city and builders are drawn; the enemy's are far away and not in view.
+        assert!(ids.contains(&own.city.0));
+        assert!(own.builders.iter().all(|b| ids.contains(&b.0)));
+        assert!(!ids.contains(&enemy.city.0));
+        assert!(enemy.builders.iter().all(|b| !ids.contains(&b.0)));
+        assert!(
+            game.world.distance(own.city_pos, enemy.city_pos).is_none()
+                || game.world.distance(own.city_pos, enemy.city_pos).unwrap() > 20_000
+        );
+        // Nothing the player cannot see is in the snapshot, whoever owns it.
+        for view in &snapshot.entities {
+            let entity = game.world.entity(EntityId(view.id)).unwrap();
+            let in_view = game.world.is_visible_on(
+                PLAYER,
+                entity.pos.face,
+                entity.pos.x / 1000,
+                entity.pos.y / 1000,
+            );
+            let explored = game.world.is_explored_on(
+                PLAYER,
+                entity.pos.face,
+                entity.pos.x / 1000,
+                entity.pos.y / 1000,
+            );
+            assert!(
+                entity.owner == PLAYER || in_view || (entity.owner == PlayerId(0) && explored),
+                "entity {} leaks",
+                view.id
+            );
+        }
+        // The faces travel with the entities.
+        let city_view = snapshot
+            .entities
+            .iter()
+            .find(|v| v.id == own.city.0)
+            .unwrap();
+        assert_eq!(city_view.face, own.city_pos.face);
+    }
+
+    #[test]
+    fn vision_map_matches_the_world() {
+        let mut game = sphere_game();
+        game.world.step();
+        let map = FogPublisher::default().build(&game.world);
+        assert!(map.is_valid());
+        assert_eq!((map.width, map.height), (64, 6 * 64));
+        let own = game.starts.iter().find(|s| s.player == PLAYER).unwrap();
+        let mut visible = 0;
+        for index in (0..map.state.len()).step_by(7) {
+            let (x, row) = ((index % 64) as i32, (index / 64) as i32);
+            let (face, y) = ((row / 64) as u8, row % 64);
+            let expected = if game.world.is_visible_on(PLAYER, face, x, y) {
+                VISIBLE
+            } else if game.world.is_explored_on(PLAYER, face, x, y) {
+                EXPLORED
+            } else {
+                UNEXPLORED
+            };
+            assert_eq!(map.state[index], expected, "tile {face}/{x}/{y}");
+            visible += usize::from(expected == VISIBLE);
+        }
+        assert!(visible > 0, "the city sees its surroundings");
+        // The city's own tile is visible and inside player one's borders.
+        let (cx, cy) = (own.city_pos.x / 1000, own.city_pos.y / 1000);
+        let at = (usize::from(own.city_pos.face) * 64 + cy as usize) * 64 + cx as usize;
+        assert_eq!(map.state[at], VISIBLE);
+        assert_eq!(u32::from(map.owner[at]), PLAYER.0);
+        assert!(map.border.iter().any(|b| *b), "borders are marked");
+        // Far from every player the tiles are dark.
+        assert!(map.state.iter().filter(|s| **s == UNEXPLORED).count() > map.state.len() / 2);
     }
 }

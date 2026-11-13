@@ -11,10 +11,11 @@
 //! ```
 //!
 //! Entities are `city`, `builder1`..`builderN`, `builders` (in `box`) or `#id`; points are
-//! `@dx,dy` (tiles from the city centre) or `x,y` (tiles). Other commands: `rclick`,
+//! `@dx,dy` (tiles from the city centre, across face edges on a sphere) or `x,y` (tiles on the
+//! city's face). Other commands: `rclick`,
 //! `key <char> [ctrl] [shift]`, `escape`; `hud` takes `tab`, `arrow`, `slot`, `queue`, `tile`.
 
-use rom_render::{HudRegionKind, Modifiers, PickEvent, PointerButton, flat_surface};
+use rom_render::{HudRegionKind, Modifiers, PickEvent, PointerButton, SurfacePos};
 
 use crate::match_setup::PlayerStart;
 
@@ -25,6 +26,8 @@ pub struct ScriptContext {
     pub city: u32,
     /// The city centre in tiles.
     pub city_pos: (f32, f32),
+    /// The face the city stands on (0 on a flat map).
+    pub city_face: u8,
     /// The starting builders' entity ids.
     pub builders: Vec<u32>,
 }
@@ -38,6 +41,7 @@ impl ScriptContext {
                 start.city_pos.x as f32 / 1000.0,
                 start.city_pos.y as f32 / 1000.0,
             ),
+            city_face: start.city_pos.face,
             builders: start.builders.iter().map(|b| b.0).collect(),
         }
     }
@@ -52,14 +56,18 @@ pub struct Script {
 
 impl Script {
     /// Parses a script; an error names the line.
-    pub fn parse(text: &str, context: &ScriptContext) -> Result<Self, String> {
+    pub fn parse(
+        text: &str,
+        context: &ScriptContext,
+        offset: &dyn Fn(i64, i64) -> SurfacePos,
+    ) -> Result<Self, String> {
         let mut events = Vec::new();
         for (number, line) in text.lines().enumerate() {
             let line = line.split('#').next().unwrap_or("").trim();
             if line.is_empty() {
                 continue;
             }
-            let event = parse_line(line, context)
+            let event = parse_line(line, context, offset)
                 .map_err(|error| format!("line {}: {error}", number + 1))?;
             events.push(event);
         }
@@ -100,7 +108,11 @@ fn entity(word: &str, context: &ScriptContext) -> Result<u32, String> {
         .ok_or_else(|| format!("expected an entity (city, builderN, #id), got {word:?}"))
 }
 
-fn point(word: &str, context: &ScriptContext) -> Result<(f32, f32), String> {
+fn point(
+    word: &str,
+    context: &ScriptContext,
+    offset: &dyn Fn(i64, i64) -> SurfacePos,
+) -> Result<((f32, f32), SurfacePos), String> {
     let (relative, rest) = match word.strip_prefix('@') {
         Some(rest) => (true, rest),
         None => (false, word),
@@ -113,14 +125,27 @@ fn point(word: &str, context: &ScriptContext) -> Result<(f32, f32), String> {
             .map_err(|_| format!("bad number {t:?} in {word:?}"))
     };
     let (x, y) = (parse(x)?, parse(y)?);
-    Ok(if relative {
-        (context.city_pos.0 + x, context.city_pos.1 + y)
+    if relative {
+        let surface = offset((x * 1000.0).round() as i64, (y * 1000.0).round() as i64);
+        Ok((
+            (surface.x as f32 / 1000.0, surface.y as f32 / 1000.0),
+            surface,
+        ))
     } else {
-        (x, y)
-    })
+        let surface = SurfacePos {
+            face: context.city_face,
+            x: (x * 1000.0).round() as i64,
+            y: (y * 1000.0).round() as i64,
+        };
+        Ok(((x, y), surface))
+    }
 }
 
-fn parse_line(line: &str, context: &ScriptContext) -> Result<(u64, PickEvent), String> {
+fn parse_line(
+    line: &str,
+    context: &ScriptContext,
+    offset: &dyn Fn(i64, i64) -> SurfacePos,
+) -> Result<(u64, PickEvent), String> {
     let mut words = line.split_whitespace();
     let tick: u64 = words
         .next()
@@ -164,14 +189,24 @@ fn parse_line(line: &str, context: &ScriptContext) -> Result<(u64, PickEvent), S
         }
         "click" | "rclick" => {
             let target = arg(0)?;
-            let (world_point, entity) = match entity(target, context) {
-                Ok(id) => (context.city_pos, Some(id)),
-                Err(_) => (point(target, context)?, None),
+            let ((world_point, surface), entity) = match entity(target, context) {
+                Ok(id) => (
+                    (
+                        context.city_pos,
+                        SurfacePos {
+                            face: context.city_face,
+                            x: (context.city_pos.0 * 1000.0).round() as i64,
+                            y: (context.city_pos.1 * 1000.0).round() as i64,
+                        },
+                    ),
+                    Some(id),
+                ),
+                Err(_) => (point(target, context, offset)?, None),
             };
             if command == "click" {
                 PickEvent::Click {
                     world_point,
-                    surface: flat_surface(world_point),
+                    surface,
                     entity,
                     modifiers,
                     double,
@@ -180,7 +215,7 @@ fn parse_line(line: &str, context: &ScriptContext) -> Result<(u64, PickEvent), S
             } else {
                 PickEvent::RightClick {
                     world_point,
-                    surface: flat_surface(world_point),
+                    surface,
                     entity,
                     modifiers,
                 }
@@ -206,10 +241,10 @@ fn parse_line(line: &str, context: &ScriptContext) -> Result<(u64, PickEvent), S
             }
         }
         "hover" => {
-            let world_point = point(arg(0)?, context)?;
+            let (world_point, surface) = point(arg(0)?, context, offset)?;
             PickEvent::Hover {
                 world_point,
-                surface: flat_surface(world_point),
+                surface,
             }
         }
         "key" => {
@@ -236,7 +271,17 @@ mod tests {
         ScriptContext {
             city: 1,
             city_pos: (100.0, 50.0),
+            city_face: 0,
             builders: vec![2, 3, 4],
+        }
+    }
+
+    /// A flat map: offsets from the city at (100, 50) tiles.
+    fn offset(dx: i64, dy: i64) -> SurfacePos {
+        SurfacePos {
+            face: 0,
+            x: 100_000 + dx,
+            y: 50_000 + dy,
         }
     }
 
@@ -251,7 +296,7 @@ mod tests {
             10 key Q ctrl
             11 escape
         ";
-        let mut script = Script::parse(text, &context()).expect("script");
+        let mut script = Script::parse(text, &context(), &offset).expect("script");
         assert!(script.due(4).is_empty());
         assert_eq!(
             script.due(5),
@@ -286,7 +331,11 @@ mod tests {
             later[4],
             PickEvent::Hover {
                 world_point: (108.0, 48.0),
-                surface: flat_surface((108.0, 48.0)),
+                surface: SurfacePos {
+                    face: 0,
+                    x: 108_000,
+                    y: 48_000,
+                },
             }
         );
         assert!(script.due(1000).is_empty());
@@ -294,9 +343,9 @@ mod tests {
 
     #[test]
     fn errors_name_the_line() {
-        let error = Script::parse("1 escape\n2 frobnicate", &context()).unwrap_err();
+        let error = Script::parse("1 escape\n2 frobnicate", &context(), &offset).unwrap_err();
         assert!(error.starts_with("line 2:"), "{error}");
-        assert!(Script::parse("x escape", &context()).is_err());
-        assert!(Script::parse("3 click builder9", &context()).is_err());
+        assert!(Script::parse("x escape", &context(), &offset).is_err());
+        assert!(Script::parse("3 click builder9", &context(), &offset).is_err());
     }
 }

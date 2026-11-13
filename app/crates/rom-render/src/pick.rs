@@ -8,7 +8,7 @@
 use rom_geo::SurfacePos;
 
 use crate::camera::{Camera, InputEvent, Modifiers, PointerButton};
-use crate::entities::{EntityView, box_corners, pick_box};
+use crate::entities::{EntityView, box_corners, box_corners_axes, pick_box, pick_frame};
 use crate::globe::{Globe, SurfaceHit};
 use crate::hud::HudSnapshot;
 use crate::hud_layout::{HudLayout, Rect, Region};
@@ -448,7 +448,24 @@ pub fn hud_target(
 
 impl PickContext<'_> {
     fn centre_of(&self, view: &EntityView) -> [f32; 3] {
-        pick_box(view, self.ground).0
+        match self.globe {
+            Some(globe) => pick_frame(view, globe).0,
+            None => pick_box(view, self.ground).0,
+        }
+    }
+
+    /// The eight corners of the box that stands for `view`, and its centre.
+    fn box_of(&self, view: &EntityView) -> ([f32; 3], [[f32; 3]; 8]) {
+        match self.globe {
+            Some(globe) => {
+                let (centre, axes, size) = pick_frame(view, globe);
+                (centre, box_corners_axes(centre, axes, size))
+            }
+            None => {
+                let (centre, size, yaw) = pick_box(view, self.ground);
+                (centre, box_corners(centre, size, yaw))
+            }
+        }
     }
 
     /// The entity under canvas pixel (`x`, `y`): the one nearest to the camera whose projected
@@ -456,8 +473,7 @@ impl PickContext<'_> {
     pub fn entity_at(&self, x: f32, y: f32) -> Option<u32> {
         let mut best: Option<(f32, u32)> = None;
         for entity in self.entities {
-            let (centre, size, yaw) = pick_box(entity, self.ground);
-            let corners = box_corners(centre, size, yaw);
+            let (centre, corners) = self.box_of(entity);
             let projected: Vec<_> = corners
                 .iter()
                 .filter_map(|c| self.view.project(*c))
@@ -472,6 +488,9 @@ impl PickContext<'_> {
             let Some((_, _, depth)) = self.view.project(centre) else {
                 continue;
             };
+            if self.hidden_by_planet(centre) {
+                continue;
+            }
             if best.is_none_or(|(nearest, _)| depth < nearest) {
                 best = Some((depth, entity.id));
             }
@@ -479,14 +498,30 @@ impl PickContext<'_> {
         best.map(|(_, id)| id)
     }
 
+    /// True when the planet's own surface lies between the eye and `point` (an entity on the far
+    /// side of the globe).
+    fn hidden_by_planet(&self, point: [f32; 3]) -> bool {
+        let Some(globe) = self.globe else {
+            return false;
+        };
+        let eye = self.view.eye();
+        let to = sub(point, eye);
+        let length = dot(to, to).sqrt().max(1e-6);
+        let ray = to.map(|c| c / length);
+        globe
+            .raycast(eye, ray)
+            .is_some_and(|hit| dot(sub(hit.point, eye), ray) < length - 0.5)
+    }
+
     /// Entities whose projected centres lie inside the pixel rectangle, in id order.
     pub fn entities_in_rect(&self, rect: Rect) -> Vec<u32> {
         self.entities
             .iter()
             .filter(|entity| {
+                let centre = self.centre_of(entity);
                 self.view
-                    .project(self.centre_of(entity))
-                    .is_some_and(|(x, y, _)| rect.contains(x, y))
+                    .project(centre)
+                    .is_some_and(|(x, y, _)| rect.contains(x, y) && !self.hidden_by_planet(centre))
             })
             .map(|entity| entity.id)
             .collect()
@@ -515,11 +550,23 @@ impl PickContext<'_> {
         y: f32,
         entity: Option<u32>,
     ) -> Option<((f32, f32), SurfacePos)> {
-        self.ground_hit(x, y).or_else(|| {
-            entity
-                .and_then(|id| self.entity_position(id))
-                .map(|point| (point, flat_surface(point)))
-        })
+        self.ground_hit(x, y)
+            .or_else(|| entity.and_then(|id| self.entity_surface(id)))
+    }
+
+    /// The position of an entity as a point and a surface position.
+    fn entity_surface(&self, id: u32) -> Option<((f32, f32), SurfacePos)> {
+        let index = self.entities.binary_search_by_key(&id, |e| e.id).ok()?;
+        let e = &self.entities[index];
+        let point = (e.x, e.y);
+        Some((
+            point,
+            SurfacePos {
+                face: e.face,
+                x: (e.x * 1000.0).round() as i64,
+                y: (e.y * 1000.0).round() as i64,
+            },
+        ))
     }
 
     fn entity_position(&self, id: u32) -> Option<(f32, f32)> {
@@ -757,6 +804,31 @@ impl PickController {
                         None => camera.zoom(steps),
                     }
                 }
+                2 if ctx.globe.is_some() => {
+                    let globe = ctx.globe.expect("checked");
+                    let mut sum = ([0.0_f32; 3], 0);
+                    for id in &ctx.hud.selected {
+                        if let Some(e) = ctx
+                            .entities
+                            .binary_search_by_key(id, |e| e.id)
+                            .ok()
+                            .map(|i| &ctx.entities[i])
+                        {
+                            let dir = globe.dir_of(SurfacePos {
+                                face: e.face,
+                                x: (e.x * 1000.0).round() as i64,
+                                y: (e.y * 1000.0).round() as i64,
+                            });
+                            sum = (
+                                [sum.0[0] + dir[0], sum.0[1] + dir[1], sum.0[2] + dir[2]],
+                                sum.1 + 1,
+                            );
+                        }
+                    }
+                    if let (Some(orbit), true) = (orbit, sum.1 > 0) {
+                        orbit.look_at(sum.0);
+                    }
+                }
                 2 => {
                     let mut sum = (0.0, 0.0, 0);
                     for id in &ctx.hud.selected {
@@ -879,6 +951,7 @@ mod tests {
             id,
             kind: 1,
             owner: 1,
+            face: 0,
             x,
             y,
             facing_deg: 0.0,

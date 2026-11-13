@@ -57,6 +57,23 @@ pub fn terrain_pixels(scene: &TerrainScene) -> (u32, u32, Vec<u8>) {
     (width, height, pixels)
 }
 
+/// The tile each pixel of [`terrain_pixels`] samples, as a row-major tile index.
+pub fn terrain_pixel_tiles(scene: &TerrainScene) -> Vec<u32> {
+    let step = scene
+        .width
+        .max(scene.height)
+        .div_ceil(MAX_MINIMAP_SIDE)
+        .max(1);
+    let (width, height) = ((scene.width / step).max(1), (scene.height / step).max(1));
+    let mut tiles = Vec::with_capacity(width as usize * height as usize);
+    for y in 0..height {
+        for x in 0..width {
+            tiles.push(((y * step) as usize * scene.width as usize + (x * step) as usize) as u32);
+        }
+    }
+    tiles
+}
+
 /// The largest rectangle with the map's aspect ratio that fits in `view`, centred in it.
 pub fn fit_map(map_width: u32, map_height: u32, view: Rect) -> Rect {
     let (mw, mh) = (map_width.max(1) as f32, map_height.max(1) as f32);
@@ -280,27 +297,37 @@ pub fn marks(
 /// Size of the sphere minimap image: equirectangular, twice as wide as high.
 pub const GLOBE_MINIMAP_SIZE: (u32, u32) = (512, 256);
 
-/// The planet as an equirectangular RGBA image of [`GLOBE_MINIMAP_SIZE`]: longitude runs left to
-/// right, latitude from the north pole at the top.
-pub fn planet_pixels(planet: &crate::globe::PlanetScene) -> (u32, u32, Vec<u8>) {
+/// The dense tile index each pixel of [`planet_pixels`] shows.
+pub fn planet_pixel_tiles(n: u32) -> Vec<u32> {
     let (width, height) = GLOBE_MINIMAP_SIZE;
-    let surface = rom_geo::CubeSurface { n: planet.n };
+    let surface = rom_geo::CubeSurface { n };
     let scale = rom_geo::SPHERE_SCALE as f32;
-    let mut pixels = Vec::with_capacity(width as usize * height as usize * 4);
+    let mut tiles = Vec::with_capacity(width as usize * height as usize);
     for y in 0..height {
         let lat = (0.5 - (y as f32 + 0.5) / height as f32) * std::f32::consts::PI;
         for x in 0..width {
             let lon = ((x as f32 + 0.5) / width as f32 - 0.5) * std::f32::consts::TAU;
             let dir = crate::orbit::dir_from_lon_lat(lon, lat);
             let point = crate::globe::to_render(dir).map(|c| (c * scale).round() as i32);
-            let index = surface.index(surface.tile_at_point(point));
-            let colour = tile_colour(
-                planet.kinds[index],
-                planet.heights[index],
-                &planet.feature_colors,
-            );
-            pixels.extend_from_slice(&[colour[0], colour[1], colour[2], 255]);
+            tiles.push(surface.index(surface.tile_at_point(point)) as u32);
         }
+    }
+    tiles
+}
+
+/// The planet as an equirectangular RGBA image of [`GLOBE_MINIMAP_SIZE`]: longitude runs left to
+/// right, latitude from the north pole at the top.
+pub fn planet_pixels(planet: &crate::globe::PlanetScene) -> (u32, u32, Vec<u8>) {
+    let (width, height) = GLOBE_MINIMAP_SIZE;
+    let mut pixels = Vec::with_capacity(width as usize * height as usize * 4);
+    for index in planet_pixel_tiles(planet.n) {
+        let index = index as usize;
+        let colour = tile_colour(
+            planet.kinds[index],
+            planet.heights[index],
+            &planet.feature_colors,
+        );
+        pixels.extend_from_slice(&[colour[0], colour[1], colour[2], 255]);
     }
     (width, height, pixels)
 }
@@ -314,21 +341,23 @@ pub fn dir_to_minimap(dir: [f32; 3], area: Rect) -> (f32, f32) {
     )
 }
 
-/// Start dots and a cross at the camera direction, in minimap screen coordinates.
+/// A dot on the sphere minimap: direction, colour and side in design pixels.
+pub type GlobeDot = ([f32; 3], [u8; 4], f32);
+
+/// Entity dots and a cross at the camera direction, in minimap screen coordinates.
 pub fn globe_marks(
     orbit: &crate::orbit::OrbitCamera,
-    starts: &[[f32; 3]],
+    dots: &[GlobeDot],
     layout: &crate::hud_layout::HudLayout,
     area: Rect,
 ) -> Vec<MapMark> {
-    let mut marks = Vec::with_capacity(starts.len() + 2);
-    for (i, &dir) in starts.iter().enumerate() {
+    let mut marks = Vec::with_capacity(dots.len() + 2);
+    for &(dir, colour, side) in dots {
         let (x, y) = dir_to_minimap(dir, area);
-        let side = 4.0 * layout.scale;
-        let rgb = crate::owner_color((i % 8) as u8 + 1).map(|c| (c * 255.0).round() as u8);
+        let side = side * layout.scale;
         marks.push(MapMark::Dot(
             Rect::new(x - side / 2.0, y - side / 2.0, side, side),
-            [rgb[0], rgb[1], rgb[2], 255],
+            colour,
         ));
     }
     let (x, y) = dir_to_minimap(orbit.dir, area);

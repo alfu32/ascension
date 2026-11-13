@@ -10,6 +10,9 @@ use std::f32::consts::TAU;
 
 use rom_geo::{CubeSurface, SPHERE_SCALE, SurfacePos, Tile};
 
+pub use crate::vision::ChunkSpec;
+
+use crate::entities::{Footing, GroundFrame};
 use crate::terrain::{ChunkMesh, FLOOR_DEEP, RELIEF, Shape, TileKind, byte, cross, mix, normalize};
 
 /// Largest chunk side in tiles on a globe: small enough that chunks behind the horizon or
@@ -423,6 +426,83 @@ impl Globe {
         }
     }
 
+    /// The surface position of face-local tile coordinates (`x`, `y`) in tiles, clamped onto the face.
+    fn clamp_pos(&self, face: u8, x: f32, y: f32) -> SurfacePos {
+        let limit = i64::from(self.surface.n) * 1000 - 1;
+        SurfacePos {
+            face,
+            x: ((x * 1000.0).round() as i64).clamp(0, limit),
+            y: ((y * 1000.0).round() as i64).clamp(0, limit),
+        }
+    }
+
+    /// Height above sea level at face-local tile coordinates, never below zero: the corner
+    /// heights interpolated over the tile's two triangles, split as in the meshes.
+    pub fn surface_height(&self, face: u8, x: f32, y: f32) -> f32 {
+        let n = self.surface.n;
+        let top = n as f32 - 1e-3;
+        let (x, y) = (x.clamp(0.0, top), y.clamp(0.0, top));
+        let (tx, ty) = (x.floor(), y.floor());
+        let (u, v) = (x - tx, y - ty);
+        let (vx, vy) = (tx as u32, ty as u32);
+        let h00 = self.vertex_height(face, vx, vy);
+        let h10 = self.vertex_height(face, vx + 1, vy);
+        let h01 = self.vertex_height(face, vx, vy + 1);
+        let h11 = self.vertex_height(face, vx + 1, vy + 1);
+        let height = if u + v <= 1.0 {
+            h00 + u * (h10 - h00) + v * (h01 - h00)
+        } else {
+            h11 + (1.0 - u) * (h01 - h11) + (1.0 - v) * (h10 - h11)
+        };
+        height.max(0.0)
+    }
+
+    /// The point `lift` tiles above the ground at face-local tile coordinates.
+    pub fn world_point(&self, face: u8, x: f32, y: f32, lift: f32) -> [f32; 3] {
+        let dir = self.dir_of(self.clamp_pos(face, x, y));
+        along(dir, self.radius + self.surface_height(face, x, y) + lift)
+    }
+
+    /// The local frame on the ground at face-local tile coordinates: `up` is the radial
+    /// direction, `ex` and `ey` follow the face's x and y axes (so `ex × up = ey`).
+    pub fn ground_frame(&self, face: u8, x: f32, y: f32) -> GroundFrame {
+        let pos = self.clamp_pos(face, x, y);
+        let up = self.dir_of(pos);
+        let limit = i64::from(self.surface.n) * 1000 - 1;
+        // The east axis follows a one-tile step along the face's x (backwards at the far edge).
+        let ahead = pos.x + 1000 <= limit;
+        let other = self.dir_of(SurfacePos {
+            x: if ahead { pos.x + 1000 } else { pos.x - 1000 },
+            ..pos
+        });
+        let tangent = |v: [f32; 3]| normalize(sub(v, along(up, dot(v, up))));
+        let ex = tangent(if ahead {
+            sub(other, up)
+        } else {
+            sub(up, other)
+        });
+        let ey = cross(ex, up);
+        GroundFrame {
+            origin: along(up, self.radius + self.surface_height(face, x, y)),
+            ex,
+            up,
+            ey,
+        }
+    }
+
+    /// Moves a surface position by a local vector in milli-tiles across at most one face edge;
+    /// at a corner the part that would cross a second edge is dropped.
+    pub fn step_on(&self, from: SurfacePos, dx: i64, dy: i64) -> SurfacePos {
+        let limit = i64::from(self.surface.n) * 1000;
+        let outside = |v: i64| !(0..limit).contains(&v);
+        let dx = if outside(from.x + dx) && outside(from.y + dy) {
+            (from.x + dx).clamp(0, limit - 1) - from.x
+        } else {
+            dx
+        };
+        self.surface.step(from, dx, dy)
+    }
+
     /// Where the ray from `eye` along the unit vector `ray` first meets the displaced surface:
     /// the ray is intersected with the sphere around the highest ground, marched until it is
     /// below the ground, then refined by bisection. `None` when it misses the planet.
@@ -479,15 +559,36 @@ impl Globe {
 
     /// Land meshes, at most 64 × 64 tiles each, on every face.
     pub fn land_chunks(&self) -> Vec<ChunkMesh> {
-        self.chunks(Cover::Land)
+        self.land_chunks_with_specs()
+            .into_iter()
+            .map(|(mesh, _)| mesh)
+            .collect()
     }
 
     /// Sea meshes at sea level over the water tiles, tinted and made opaque by depth.
     pub fn sea_chunks(&self) -> Vec<ChunkMesh> {
+        self.sea_chunks_with_specs()
+            .into_iter()
+            .map(|(mesh, _)| mesh)
+            .collect()
+    }
+
+    /// [`Self::land_chunks`] with the tile window each mesh covers.
+    pub fn land_chunks_with_specs(&self) -> Vec<(ChunkMesh, ChunkSpec)> {
+        self.chunks(Cover::Land)
+    }
+
+    /// [`Self::sea_chunks`] with the tile window each mesh covers.
+    pub fn sea_chunks_with_specs(&self) -> Vec<(ChunkMesh, ChunkSpec)> {
         self.chunks(Cover::Water)
     }
 
-    fn chunks(&self, cover: Cover) -> Vec<ChunkMesh> {
+    /// The tile indices touching the corner (`vx`, `vy`) of `face`, looking across face edges.
+    pub fn corner_tiles(&self, face: u8, vx: u32, vy: u32) -> ([usize; 4], usize) {
+        self.adjoining(face, vx, vy)
+    }
+
+    fn chunks(&self, cover: Cover) -> Vec<(ChunkMesh, ChunkSpec)> {
         let n = self.surface.n;
         let mut chunks = Vec::new();
         for face in 0..6_u8 {
@@ -495,7 +596,7 @@ impl Globe {
                 for x0 in (0..n).step_by(GLOBE_CHUNK_TILES as usize) {
                     let (w, h) = (GLOBE_CHUNK_TILES.min(n - x0), GLOBE_CHUNK_TILES.min(n - y0));
                     if let Some(mesh) = self.chunk(face, x0, y0, w, h, cover) {
-                        chunks.push(mesh);
+                        chunks.push((mesh, ChunkSpec { face, x0, y0, w, h }));
                     }
                 }
             }
@@ -596,6 +697,26 @@ impl Globe {
         for &node in &planet.nodes {
             push(node, [0.8, 0.8, 0.8], crate::entities::NODE_COLOR);
         }
+    }
+}
+
+impl Footing for Globe {
+    fn height_at(&self, face: u8, x: f32, y: f32) -> f32 {
+        self.surface_height(face, x, y)
+    }
+
+    fn frame(&self, face: u8, x: f32, y: f32) -> GroundFrame {
+        self.ground_frame(face, x, y)
+    }
+
+    fn point(&self, face: u8, x: f32, y: f32, delta: (f32, f32), lift: f32) -> [f32; 3] {
+        let from = self.clamp_pos(face, x, y);
+        let to = self.step_on(
+            from,
+            (delta.0 * 1000.0).round() as i64,
+            (delta.1 * 1000.0).round() as i64,
+        );
+        self.world_point(to.face, to.x as f32 / 1000.0, to.y as f32 / 1000.0, lift)
     }
 }
 

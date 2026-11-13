@@ -8,6 +8,9 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use rom_geo::SurfacePos;
+
+use crate::globe::Globe;
 use crate::terrain::{Shape, TerrainScene, vertex_height};
 
 /// Number of owner colours; owner 0 (neutral) is grey.
@@ -30,7 +33,9 @@ pub struct EntityView {
     pub kind: u16,
     /// Owner; 0 is neutral.
     pub owner: u8,
-    /// Position in tiles (east).
+    /// Face of a sphere planet; 0 on a flat map.
+    pub face: u8,
+    /// Position in tiles (east), local to the face.
     pub x: f32,
     /// Position in tiles (south).
     pub y: f32,
@@ -111,16 +116,27 @@ impl SnapshotPair {
 
     /// The entities blended by the wall-clock time `now` (see [`Self::blend`]).
     pub fn blend_at(&self, now: Instant, out: &mut Vec<EntityView>) {
+        self.blend_at_on(now, None, out);
+    }
+
+    /// Like [`Self::blend_at`], on the sphere `globe` when there is one.
+    pub fn blend_at_on(&self, now: Instant, globe: Option<&Globe>, out: &mut Vec<EntityView>) {
         let elapsed = self
             .arrived
             .map_or(Duration::ZERO, |at| now.saturating_duration_since(at));
-        self.blend(elapsed, out);
+        self.blend_on(elapsed, globe, out);
     }
 
     /// Fills `out` with the newest entities, positions and facing moved from the older snapshot
     /// by `elapsed` of one interval (clamped to 0..=1). Entities absent from the older snapshot
     /// stay where they are.
     pub fn blend(&self, elapsed: Duration, out: &mut Vec<EntityView>) {
+        self.blend_on(elapsed, None, out);
+    }
+
+    /// Like [`Self::blend`]; with a `globe`, an entity that changed face between the snapshots is
+    /// moved along the sphere instead of across the faces' unrelated coordinates.
+    pub fn blend_on(&self, elapsed: Duration, globe: Option<&Globe>, out: &mut Vec<EntityView>) {
         out.clear();
         let Some(latest) = &self.latest else {
             return;
@@ -135,7 +151,10 @@ impl SnapshotPair {
                 .entities
                 .binary_search_by_key(&view.id, |old| old.id)
             {
-                Ok(index) => interpolate(&previous.entities[index], view, alpha),
+                Ok(index) => match globe {
+                    Some(globe) => interpolate_on(globe, &previous.entities[index], view, alpha),
+                    None => interpolate(&previous.entities[index], view, alpha),
+                },
                 Err(_) => *view,
             }
         }));
@@ -148,6 +167,45 @@ pub fn interpolate(from: &EntityView, to: &EntityView, alpha: f32) -> EntityView
         x: from.x + (to.x - from.x) * alpha,
         y: from.y + (to.y - from.y) * alpha,
         facing_deg: lerp_angle(from.facing_deg, to.facing_deg, alpha),
+        ..*to
+    }
+}
+
+/// [`interpolate`] on a sphere. Within a face the positions blend in face coordinates; across
+/// a face edge the move follows the unfolded vector from one face to the next and the
+/// facing blends as a heading on the surface, so nothing jumps where the coordinates do.
+pub fn interpolate_on(globe: &Globe, from: &EntityView, to: &EntityView, alpha: f32) -> EntityView {
+    if from.face == to.face {
+        return interpolate(from, to, alpha);
+    }
+    let milli = |v: &EntityView| SurfacePos {
+        face: v.face,
+        x: (v.x * 1000.0).round() as i64,
+        y: (v.y * 1000.0).round() as i64,
+    };
+    let (a, b) = (milli(from), milli(to));
+    let Some((dx, dy)) = globe.surface().unfold(a, b) else {
+        return *to;
+    };
+    let at = globe.step_on(
+        a,
+        (dx as f32 * alpha).round() as i64,
+        (dy as f32 * alpha).round() as i64,
+    );
+    let (x, y) = (at.x as f32 / 1000.0, at.y as f32 / 1000.0);
+    let heading = |v: &EntityView| heading_of(&globe.ground_frame(v.face, v.x, v.y), v.facing_deg);
+    let (hf, ht) = (heading(from), heading(to));
+    let blended: [f32; 3] = std::array::from_fn(|i| hf[i] + (ht[i] - hf[i]) * alpha);
+    let frame = globe.ground_frame(at.face, x, y);
+    let facing = dot3(blended, frame.ey)
+        .atan2(dot3(blended, frame.ex))
+        .to_degrees()
+        .rem_euclid(360.0);
+    EntityView {
+        face: at.face,
+        x,
+        y,
+        facing_deg: facing,
         ..*to
     }
 }
@@ -234,29 +292,143 @@ fn scaled(color: [f32; 3], factor: f32) -> [f32; 3] {
     [color[0] * factor, color[1] * factor, color[2] * factor]
 }
 
-/// Column-major 4×4 matrix of a box with its horizontal axes turned by `yaw_deg` around the
-/// vertical axis (the box's x axis points along (cos, sin) in the x/y tile plane), `size` along
-/// its axes, its centre at `centre` (x, up, y) and `color` stored in the unused cells.
-pub fn box_instance(centre: [f32; 3], size: [f32; 3], yaw_deg: f32, color: [f32; 3]) -> [f32; 16] {
-    let (sin, cos) = yaw_deg.to_radians().sin_cos();
+/// Column-major 4×4 matrix of a box whose axes are the unit vectors `ax`, `ay` and `az`,
+/// scaled by `size`, centred at `centre`, with `color` stored in the cells affine transforms
+/// leave unused.
+pub fn frame_box(
+    centre: [f32; 3],
+    axes: [[f32; 3]; 3],
+    size: [f32; 3],
+    color: [f32; 3],
+) -> [f32; 16] {
+    let [ax, ay, az] = axes;
     [
-        cos * size[0],
-        0.0,
-        sin * size[0],
+        ax[0] * size[0],
+        ax[1] * size[0],
+        ax[2] * size[0],
         color[0],
-        0.0,
-        size[1],
-        0.0,
+        ay[0] * size[1],
+        ay[1] * size[1],
+        ay[2] * size[1],
         color[1],
-        -sin * size[2],
-        0.0,
-        cos * size[2],
+        az[0] * size[2],
+        az[1] * size[2],
+        az[2] * size[2],
         color[2],
         centre[0],
         centre[1],
         centre[2],
         1.0,
     ]
+}
+
+/// A point on the ground with its local axes: `ex` east, `up` away from the ground, `ey` south.
+/// `ex × up = ey`; on a flat map they are the world axes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GroundFrame {
+    /// The point on the ground (including its height).
+    pub origin: [f32; 3],
+    /// East along the face's x axis.
+    pub ex: [f32; 3],
+    /// Away from the ground.
+    pub up: [f32; 3],
+    /// South along the face's y axis.
+    pub ey: [f32; 3],
+}
+
+impl GroundFrame {
+    /// `origin + ex a + up b + ey c` for `[a, b, c]` in tiles.
+    pub fn at(&self, [a, b, c]: [f32; 3]) -> [f32; 3] {
+        std::array::from_fn(|i| self.origin[i] + self.ex[i] * a + self.up[i] * b + self.ey[i] * c)
+    }
+}
+
+/// The surface entities stand on: a flat map or a sphere planet. Positions are face-local
+/// tiles (face 0 and map tiles on a flat map).
+pub trait Footing {
+    /// Height above sea level in tiles at (`x`, `y`), never below zero.
+    fn height_at(&self, face: u8, x: f32, y: f32) -> f32;
+    /// The frame standing on the ground at (`x`, `y`).
+    fn frame(&self, face: u8, x: f32, y: f32) -> GroundFrame;
+    /// The point `lift` above the ground at (`x` + `dx`, `y` + `dy`), the offset taken along
+    /// the surface (it may cross a face edge on a sphere).
+    fn point(&self, face: u8, x: f32, y: f32, delta: (f32, f32), lift: f32) -> [f32; 3];
+}
+
+impl Footing for Surface {
+    fn height_at(&self, _face: u8, x: f32, y: f32) -> f32 {
+        self.height(x, y)
+    }
+
+    fn frame(&self, _face: u8, x: f32, y: f32) -> GroundFrame {
+        GroundFrame {
+            origin: [x, self.height(x, y), y],
+            ex: [1.0, 0.0, 0.0],
+            up: [0.0, 1.0, 0.0],
+            ey: [0.0, 0.0, 1.0],
+        }
+    }
+
+    fn point(&self, _face: u8, x: f32, y: f32, delta: (f32, f32), lift: f32) -> [f32; 3] {
+        let (px, py) = (x + delta.0, y + delta.1);
+        [px, self.height(px, py) + lift, py]
+    }
+}
+
+/// A flat ground given by a height function, for overlays and picking.
+pub struct FlatGround<'a>(pub &'a dyn Fn(f32, f32) -> f32);
+
+impl Footing for FlatGround<'_> {
+    fn height_at(&self, _face: u8, x: f32, y: f32) -> f32 {
+        (self.0)(x, y)
+    }
+
+    fn frame(&self, _face: u8, x: f32, y: f32) -> GroundFrame {
+        GroundFrame {
+            origin: [x, (self.0)(x, y), y],
+            ex: [1.0, 0.0, 0.0],
+            up: [0.0, 1.0, 0.0],
+            ey: [0.0, 0.0, 1.0],
+        }
+    }
+
+    fn point(&self, _face: u8, x: f32, y: f32, delta: (f32, f32), lift: f32) -> [f32; 3] {
+        let (px, py) = (x + delta.0, y + delta.1);
+        [px, (self.0)(px, py) + lift, py]
+    }
+}
+
+fn dot3(a: [f32; 3], b: [f32; 3]) -> f32 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+fn cross3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+/// `right` made perpendicular to `up` and of unit length (unchanged when already so).
+pub(crate) fn side_of(right: [f32; 3], up: [f32; 3]) -> [f32; 3] {
+    let d = dot3(right, up);
+    let v = [
+        right[0] - up[0] * d,
+        right[1] - up[1] * d,
+        right[2] - up[2] * d,
+    ];
+    let length = dot3(v, v).sqrt();
+    if length < 1e-6 {
+        return [1.0, 0.0, 0.0];
+    }
+    v.map(|c| c / length)
+}
+
+/// The heading of an entity facing `facing_deg` (clockwise from the face's x axis).
+pub(crate) fn heading_of(frame: &GroundFrame, facing_deg: f32) -> [f32; 3] {
+    let (sin, cos) = facing_deg.to_radians().sin_cos();
+    std::array::from_fn(|i| frame.ex[i] * cos + frame.ey[i] * sin)
 }
 
 /// Height of a building body in tiles; it varies with the entity type and the footprint.
@@ -303,41 +475,76 @@ pub fn pick_box(view: &EntityView, ground: &dyn Fn(f32, f32) -> f32) -> ([f32; 3
     }
 }
 
+/// [`pick_box`] on any ground: the centre, the box axes and the size.
+pub fn pick_frame(view: &EntityView, ground: &dyn Footing) -> ([f32; 3], [[f32; 3]; 3], [f32; 3]) {
+    let frame = ground.frame(view.face, view.x, view.y);
+    let (offset, size, yaw) = {
+        let (centre, size, yaw) = pick_box(view, &|_, _| 0.0);
+        ([0.0, centre[1], 0.0], size, yaw)
+    };
+    let forward = heading_of(&frame, yaw);
+    let axes = [forward, frame.up, cross3(forward, frame.up)];
+    (frame.at(offset), axes, size)
+}
+
 /// The eight corners of a box from [`pick_box`].
 pub fn box_corners(centre: [f32; 3], size: [f32; 3], yaw_deg: f32) -> [[f32; 3]; 8] {
     let (sin, cos) = yaw_deg.to_radians().sin_cos();
-    let (ax, az) = ([cos, 0.0, sin], [-sin, 0.0, cos]);
+    box_corners_axes(
+        centre,
+        [[cos, 0.0, sin], [0.0, 1.0, 0.0], [-sin, 0.0, cos]],
+        size,
+    )
+}
+
+/// The eight corners of the box with `axes` and `size` around `centre`.
+pub fn box_corners_axes(centre: [f32; 3], axes: [[f32; 3]; 3], size: [f32; 3]) -> [[f32; 3]; 8] {
     let mut corners = [[0.0; 3]; 8];
     for (i, corner) in corners.iter_mut().enumerate() {
         let sx = if i & 1 == 0 { -0.5 } else { 0.5 } * size[0];
         let sy = if i & 2 == 0 { -0.5 } else { 0.5 } * size[1];
         let sz = if i & 4 == 0 { -0.5 } else { 0.5 } * size[2];
-        *corner = [
-            centre[0] + ax[0] * sx + az[0] * sz,
-            centre[1] + sy,
-            centre[2] + ax[2] * sx + az[2] * sz,
-        ];
+        *corner = std::array::from_fn(|k| {
+            centre[k] + axes[0][k] * sx + axes[1][k] * sy + axes[2][k] * sz
+        });
     }
     corners
 }
 
-/// Appends the instances that draw `views`; `camera_yaw` (radians) turns health bars to the camera.
+/// Appends the instances that draw `views` on a flat map; `camera_yaw` (radians) turns health
+/// bars to the camera.
 pub fn build_instances(
     views: &[EntityView],
     surface: &Surface,
     camera_yaw: f32,
     out: &mut Vec<[f32; 16]>,
 ) {
+    build_instances_on(
+        views,
+        surface,
+        [camera_yaw.cos(), 0.0, -camera_yaw.sin()],
+        out,
+    );
+}
+
+/// Appends the instances that draw `views` standing on `ground`; `right` is the camera's right
+/// vector, which turns health bars to the viewer.
+pub fn build_instances_on(
+    views: &[EntityView],
+    ground: &dyn Footing,
+    right: [f32; 3],
+    out: &mut Vec<[f32; 16]>,
+) {
     out.clear();
-    let (right_x, right_z) = (camera_yaw.cos(), -camera_yaw.sin());
-    let bar_yaw_deg = right_z.atan2(right_x).to_degrees();
     for view in views {
+        let frame = ground.frame(view.face, view.x, view.y);
+        let base = ground.height_at(view.face, view.x, view.y);
         let top = if view.building {
-            push_building(view, surface, out)
+            push_building(view, ground, &frame, base, out)
         } else if view.owner == 0 {
-            push_node(view, surface, out)
+            push_node(view, &frame, out)
         } else {
-            push_unit(view, surface, out)
+            push_unit(view, &frame, out)
         };
         if view.hp_frac < 1.0 {
             let width = if view.building {
@@ -345,22 +552,19 @@ pub fn build_instances(
             } else {
                 (view.radius * 4.0).max(0.8)
             };
-            let height = top + 0.4;
+            let side = side_of(right, frame.up);
+            let axes = [side, frame.up, cross3(side, frame.up)];
             let frac = view.hp_frac.clamp(0.0, 1.0);
-            let centre = [view.x, height, view.y];
-            out.push(box_instance(
+            let centre = frame.at([0.0, top + 0.4, 0.0]);
+            out.push(frame_box(
                 centre,
+                axes,
                 [width + 0.08, 0.14, 0.06],
-                bar_yaw_deg,
                 [0.08, 0.08, 0.08],
             ));
             if frac > 0.0 {
                 let shift = -(width - width * frac) / 2.0;
-                let fill_centre = [
-                    centre[0] + right_x * shift,
-                    height,
-                    centre[2] + right_z * shift,
-                ];
+                let fill_centre: [f32; 3] = std::array::from_fn(|i| centre[i] + side[i] * shift);
                 let color = if frac > 0.5 {
                     [0.25, 0.85, 0.3]
                 } else if frac > 0.25 {
@@ -368,10 +572,10 @@ pub fn build_instances(
                 } else {
                     [0.9, 0.2, 0.15]
                 };
-                out.push(box_instance(
+                out.push(frame_box(
                     fill_centre,
+                    axes,
                     [width * frac, 0.1, 0.1],
-                    bar_yaw_deg,
                     color,
                 ));
             }
@@ -379,35 +583,41 @@ pub fn build_instances(
     }
 }
 
-/// Pushes a unit body and facing wedge; returns the height of the unit's top above the sea.
-fn push_unit(view: &EntityView, surface: &Surface, out: &mut Vec<[f32; 16]>) -> f32 {
-    let ground = surface.height(view.x, view.y);
+/// Pushes a unit body and facing wedge; returns the height of the unit's top above the ground.
+fn push_unit(view: &EntityView, frame: &GroundFrame, out: &mut Vec<[f32; 16]>) -> f32 {
     let color = owner_color(view.owner);
     let width = unit_width(view);
     let height = unit_height(view);
-    out.push(box_instance(
-        [view.x, ground + height / 2.0, view.y],
+    let forward = heading_of(frame, view.facing_deg);
+    let axes = [forward, frame.up, cross3(forward, frame.up)];
+    out.push(frame_box(
+        frame.at([0.0, height / 2.0, 0.0]),
+        axes,
         [width, height, width],
-        view.facing_deg,
         color,
     ));
-    let (sin, cos) = view.facing_deg.to_radians().sin_cos();
     let reach = width * 0.5;
-    out.push(box_instance(
-        [
-            view.x + cos * reach,
-            ground + height * 0.62,
-            view.y + sin * reach,
-        ],
+    let mut wedge = frame.at([0.0, height * 0.62, 0.0]);
+    for (c, f) in wedge.iter_mut().zip(forward) {
+        *c += f * reach;
+    }
+    out.push(frame_box(
+        wedge,
+        axes,
         [width * 0.55, height * 0.26, width * 0.4],
-        view.facing_deg,
         scaled(color, 0.45),
     ));
-    ground + height
+    height
 }
 
-/// Pushes a building body and roof; returns the height of its roof above the sea.
-fn push_building(view: &EntityView, surface: &Surface, out: &mut Vec<[f32; 16]>) -> f32 {
+/// Pushes a building body and roof; returns the height of its roof above the ground.
+fn push_building(
+    view: &EntityView,
+    ground: &dyn Footing,
+    frame: &GroundFrame,
+    base: f32,
+    out: &mut Vec<[f32; 16]>,
+) -> f32 {
     let (w, h) = (
         f32::from(view.footprint.0.max(1)),
         f32::from(view.footprint.1.max(1)),
@@ -421,21 +631,22 @@ fn push_building(view: &EntityView, surface: &Surface, out: &mut Vec<[f32; 16]>)
         (half_w, half_h),
         (0.0, 0.0),
     ] {
-        let ground = surface.height(view.x + dx * 0.98, view.y + dy * 0.98);
-        low = low.min(ground);
-        high = high.max(ground);
+        let at = ground.height_at(view.face, view.x + dx * 0.98, view.y + dy * 0.98);
+        low = low.min(at);
+        high = high.max(at);
     }
     let progress = view.under_construction.map_or(1.0, |p| p.clamp(0.0, 1.0));
     let body = building_height(view) * progress.max(0.12);
     let color = owner_color(view.owner);
     let roof_thickness = 0.18;
+    let axes = [frame.ex, frame.up, frame.ey];
     // The base reaches down to the lowest corner so slopes do not leave gaps.
-    let bottom = low - 0.05;
-    let top = high + body;
-    out.push(box_instance(
-        [view.x, (bottom + top) / 2.0, view.y],
+    let bottom = low - 0.05 - base;
+    let top = high - base + body;
+    out.push(frame_box(
+        frame.at([0.0, (bottom + top) / 2.0, 0.0]),
+        axes,
         [w * 0.94, top - bottom, h * 0.94],
-        0.0,
         scaled(
             color,
             if view.under_construction.is_some() {
@@ -445,38 +656,40 @@ fn push_building(view: &EntityView, surface: &Surface, out: &mut Vec<[f32; 16]>)
             },
         ),
     ));
-    out.push(box_instance(
-        [view.x, top + roof_thickness / 2.0, view.y],
+    out.push(frame_box(
+        frame.at([0.0, top + roof_thickness / 2.0, 0.0]),
+        axes,
         [w, roof_thickness, h],
-        0.0,
         color,
     ));
     top + roof_thickness
 }
 
-/// Pushes a node marker; returns the height of its top above the sea.
-fn push_node(view: &EntityView, surface: &Surface, out: &mut Vec<[f32; 16]>) -> f32 {
-    let ground = surface.height(view.x, view.y);
+/// Pushes a node marker; returns the height of its top above the ground.
+fn push_node(view: &EntityView, frame: &GroundFrame, out: &mut Vec<[f32; 16]>) -> f32 {
     let size = 0.7;
-    out.push(box_instance(
-        [view.x, ground + size / 2.0, view.y],
+    let forward = heading_of(frame, view.facing_deg);
+    out.push(frame_box(
+        frame.at([0.0, size / 2.0, 0.0]),
+        [forward, frame.up, cross3(forward, frame.up)],
         [size, size, size],
-        view.facing_deg,
         NODE_COLOR,
     ));
-    ground + size
+    size
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::terrain::TileKind;
+    use rom_geo::SurfacePos;
 
     fn view(id: u32, x: f32, y: f32, facing: f32) -> EntityView {
         EntityView {
             id,
             kind: 1,
             owner: 1,
+            face: 0,
             x,
             y,
             facing_deg: facing,
@@ -610,5 +823,149 @@ mod tests {
         damaged.hp_frac = 0.5;
         build_instances(&[damaged], &surface, 0.0, &mut out);
         assert_eq!(out.len(), healthy + 2);
+    }
+
+    /// A planet with hills, for placing entities on the sphere.
+    fn hilly_planet(n: u32) -> crate::globe::PlanetScene {
+        let tiles = 6 * (n * n) as usize;
+        crate::globe::PlanetScene {
+            n,
+            kinds: vec![TileKind::Land; tiles],
+            heights: (0..tiles).map(|i| 90 + (i * 29 % 90) as u8).collect(),
+            feature_colors: Default::default(),
+            starts: Vec::new(),
+            nodes: Vec::new(),
+        }
+    }
+
+    fn norm(v: [f32; 3]) -> f32 {
+        dot3(v, v).sqrt()
+    }
+
+    #[test]
+    fn entity_on_the_globe_sits_on_the_surface_at_its_tile() {
+        let n = 48;
+        let globe = Globe::new(&hilly_planet(n));
+        for (face, tx, ty) in [
+            (0, 10, 20),
+            (1, 3, 40),
+            (2, 47, 0),
+            (3, 24, 24),
+            (4, 5, 5),
+            (5, 30, 12),
+        ] {
+            let mut unit = view(7, tx as f32 + 0.5, ty as f32 + 0.5, 30.0);
+            unit.face = face;
+            let mut out = Vec::new();
+            build_instances_on(&[unit], &globe, [1.0, 0.0, 0.0], &mut out);
+            let body = out[0];
+            let (width, height) = (unit_width(&unit), unit_height(&unit));
+            // The body's up axis is the local up, and its foot rests on the ground of the tile.
+            let up = [body[4] / height, body[5] / height, body[6] / height];
+            let centre = [body[12], body[13], body[14]];
+            let foot: [f32; 3] = std::array::from_fn(|i| centre[i] - up[i] * height / 2.0);
+            let ground = globe.radius() + globe.surface_height(face, unit.x, unit.y);
+            assert!(
+                (norm(foot) - ground).abs() < 1e-3,
+                "face {face}: {} vs {ground}",
+                norm(foot)
+            );
+            let dir = globe.dir_of(SurfacePos {
+                face,
+                x: i64::from(tx) * 1000 + 500,
+                y: i64::from(ty) * 1000 + 500,
+            });
+            let foot_dir = foot.map(|c| c / norm(foot));
+            assert!(dot3(foot_dir, dir) > 0.999_99, "face {face}");
+            assert!(dot3(up, dir) > 0.999_99);
+            assert!((norm([body[0], body[1], body[2]]) - width).abs() < 1e-4);
+            // The tile found under the foot is the entity's tile.
+            let tile = globe.tile_of(foot);
+            assert_eq!((tile.face, tile.x, tile.y), (face, tx, ty));
+        }
+    }
+
+    #[test]
+    fn ground_frames_are_right_handed_and_follow_the_face_axes() {
+        let globe = Globe::new(&hilly_planet(32));
+        for (face, x, y) in [
+            (0, 16.5, 16.5),
+            (1, 3.2, 28.9),
+            (4, 30.1, 2.4),
+            (5, 0.2, 0.3),
+        ] {
+            let f = globe.ground_frame(face, x, y);
+            assert!((norm(f.ex) - 1.0).abs() < 1e-4 && (norm(f.ey) - 1.0).abs() < 1e-4);
+            assert!(dot3(f.ex, f.up).abs() < 1e-4 && dot3(f.ey, f.up).abs() < 1e-4);
+            let right_handed = cross3(f.ex, f.up);
+            assert!(dot3(right_handed, f.ey) > 0.999, "face {face}");
+            // Moving east on the face moves along ex.
+            let there = globe.world_point(face, (x + 0.2).min(31.9), y, 0.0);
+            let here = globe.world_point(face, x, y, 0.0);
+            let step: [f32; 3] = std::array::from_fn(|i| there[i] - here[i]);
+            assert!(dot3(step, f.ex) > 0.0);
+        }
+    }
+
+    #[test]
+    fn interpolation_across_a_face_edge_has_no_jump() {
+        let n = 32;
+        let globe = Globe::new(&hilly_planet(n));
+        // A unit walking east over the right edge of face 0, 0.9 tiles in all.
+        let from_pos = SurfacePos {
+            face: 0,
+            x: 31_400,
+            y: 9_000,
+        };
+        let to_pos = globe.surface().step(from_pos, 900, 0);
+        assert_ne!(to_pos.face, 0);
+        let heading_from = heading_of(&globe.ground_frame(0, 31.4, 9.0), 0.0);
+        let frame_to = globe.ground_frame(
+            to_pos.face,
+            to_pos.x as f32 / 1000.0,
+            to_pos.y as f32 / 1000.0,
+        );
+        let facing_to = dot3(heading_from, frame_to.ey)
+            .atan2(dot3(heading_from, frame_to.ex))
+            .to_degrees()
+            .rem_euclid(360.0);
+        let mut a = view(1, 31.4, 9.0, 0.0);
+        a.face = 0;
+        let mut b = view(
+            1,
+            to_pos.x as f32 / 1000.0,
+            to_pos.y as f32 / 1000.0,
+            facing_to,
+        );
+        b.face = to_pos.face;
+        let steps = 30;
+        let mut last: Option<([f32; 3], [f32; 3])> = None;
+        let mut faces = std::collections::BTreeSet::new();
+        let mut travelled = 0.0;
+        for i in 0..=steps {
+            let at = interpolate_on(&globe, &a, &b, i as f32 / steps as f32);
+            faces.insert(at.face);
+            let frame = globe.ground_frame(at.face, at.x, at.y);
+            let heading = heading_of(&frame, at.facing_deg);
+            if let Some((point, last_heading)) = last {
+                let jump: [f32; 3] = std::array::from_fn(|k| frame.origin[k] - point[k]);
+                travelled += norm(jump);
+                // 0.9 tiles over 30 steps is 0.03 per step; nothing may be far beyond that.
+                assert!(norm(jump) < 0.06, "jump {} at step {i}", norm(jump));
+                assert!(
+                    dot3(heading, last_heading) > 0.99,
+                    "heading jump at step {i}"
+                );
+            }
+            last = Some((frame.origin, heading));
+        }
+        assert_eq!(faces.len(), 2, "the walk crosses the edge");
+        // Hills add to the path length, never shorten it.
+        assert!(travelled > 0.85, "travelled {travelled}");
+        // The ends are the snapshots themselves.
+        let start = interpolate_on(&globe, &a, &b, 0.0);
+        let end = interpolate_on(&globe, &a, &b, 1.0);
+        assert_eq!((start.face, end.face), (0, to_pos.face));
+        assert!((end.x - b.x).abs() < 0.01 && (end.y - b.y).abs() < 0.01);
     }
 }

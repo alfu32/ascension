@@ -10,12 +10,12 @@ use gpui::{
     WindowDecorations, WindowOptions, point, px, size,
 };
 use gpui_component::Root;
-use rom_render::{Camera, OrbitSettings, RenderBridge, RenderWorker, ShutdownHandle};
+use rom_render::{Camera, OrbitSettings, RenderBridge, RenderWorker, ShutdownHandle, SurfacePos};
 
 use crate::args::Options;
 use crate::bench;
 use crate::demo::{DemoDriver, add_stress_units};
-use crate::match_setup::build_match;
+use crate::match_setup::{Match, build_match, build_sphere_match};
 use crate::screenshot;
 use crate::script::{Script, ScriptContext};
 use crate::sim_thread::{SimLink, SimThread};
@@ -41,13 +41,8 @@ pub fn run(options: &Options) -> ExitCode {
     };
     bridge.publish_render_scale(options.scale);
     bridge.publish_hud_options(!options.no_hud, options.hud_scale);
-    // A sphere planet is only drawn for now: the simulation is not started on it yet.
-    let started = match options.sphere {
-        Some(n) => start_sphere(options, n, &bridge).map(|()| None),
-        None => start_simulation(options, &bridge).map(Some),
-    };
-    let mut sim = match started {
-        Ok(sim) => sim,
+    let mut sim = match start_simulation(options, &bridge) {
+        Ok(sim) => Some(sim),
         Err(error) => {
             eprintln!("rise-of-man: {error}");
             worker.stop();
@@ -197,54 +192,56 @@ fn world_view(
     cx.new(|cx| WorldView::new(bridge, sim, stats, window, cx))
 }
 
-/// Generates a sphere planet and publishes it with the orbit camera settings.
-fn start_sphere(options: &Options, n: u32, bridge: &RenderBridge) -> Result<(), String> {
-    if options.demo || options.script.is_some() || options.stress_units > 0 {
-        return Err(
-            "--sphere does not run the simulation yet; drop --demo, --script and --stress-units"
-                .into(),
-        );
-    }
-    let planet = terrain::generate_planet(options, n)?;
-    bridge.publish_planet(
-        Arc::new(terrain::to_planet_scene(&planet)),
-        OrbitSettings {
-            max_distance: None,
-            view: options.orbit,
-        },
-    );
-    Ok(())
-}
-
-/// Generates the map, publishes its terrain, builds the match and starts the simulation thread.
+/// Generates the map or planet, publishes its terrain, builds the match and starts the
+/// simulation thread.
 fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThread, String> {
-    let content = terrain::generate_content(options)?;
-    bridge.publish_terrain(Arc::new(terrain::to_scene(&content.map)));
-    let mut game = build_match(
-        &content.rules,
-        &content.map,
-        &content.factions,
-        options.seed,
-    )
-    .map_err(|error| format!("setting up the match: {error}"))?;
+    let mut game = match options.sphere {
+        Some(n) => {
+            let content = terrain::generate_sphere_content(options, n)?;
+            let game = build_sphere_match(
+                &content.rules,
+                &content.planet,
+                &content.factions,
+                options.seed,
+            )
+            .map_err(|error| format!("setting up the match: {error}"))?;
+            // Starts and nodes are drawn as entities (and only where the player may see them),
+            // not as scene markers; the camera starts at the first player's city.
+            let mut scene = terrain::to_planet_scene(&content.planet);
+            scene.starts.clear();
+            scene.nodes.clear();
+            bridge.publish_planet(
+                Arc::new(scene),
+                OrbitSettings {
+                    max_distance: None,
+                    view: options.orbit,
+                    home: game.starts.first().map(|s| SurfacePos {
+                        face: s.city_pos.face,
+                        x: i64::from(s.city_pos.x),
+                        y: i64::from(s.city_pos.y),
+                    }),
+                },
+            );
+            game
+        }
+        None => {
+            let content = terrain::generate_content(options)?;
+            bridge.publish_terrain(Arc::new(terrain::to_scene(&content.map)));
+            build_match(
+                &content.rules,
+                &content.map,
+                &content.factions,
+                options.seed,
+            )
+            .map_err(|error| format!("setting up the match: {error}"))?
+        }
+    };
     let wanderers = add_stress_units(&mut game, options.stress_units, options.seed);
     let driver = options
         .demo
         .then(|| DemoDriver::new(&game, options.seed, wanderers));
     let script = match &options.script {
-        Some(path) => {
-            let text = std::fs::read_to_string(path)
-                .map_err(|error| format!("reading {}: {error}", path.display()))?;
-            let start = game
-                .starts
-                .iter()
-                .find(|s| s.player == crate::selection::PLAYER)
-                .ok_or("the match has no start for player one")?;
-            Some(
-                Script::parse(&text, &ScriptContext::of(start))
-                    .map_err(|error| format!("{}: {error}", path.display()))?,
-            )
-        }
+        Some(path) => Some(read_script(path, &game)?),
         None => None,
     };
     SimThread::spawn(
@@ -255,4 +252,25 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
         bridge.clone(),
     )
     .map_err(|error| format!("could not start the simulation thread: {error}"))
+}
+
+/// Parses a `--script` file against player one's start.
+fn read_script(path: &std::path::Path, game: &Match) -> Result<Script, String> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|error| format!("reading {}: {error}", path.display()))?;
+    let start = game
+        .starts
+        .iter()
+        .find(|s| s.player == crate::selection::PLAYER)
+        .ok_or("the match has no start for player one")?;
+    let offset = |dx: i64, dy: i64| {
+        let at = game.world.offset(start.city_pos, dx, dy);
+        SurfacePos {
+            face: at.face,
+            x: i64::from(at.x),
+            y: i64::from(at.y),
+        }
+    };
+    Script::parse(&text, &ScriptContext::of(start), &offset)
+        .map_err(|error| format!("{}: {error}", path.display()))
 }
