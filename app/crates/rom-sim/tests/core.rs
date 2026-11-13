@@ -806,6 +806,7 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
         .filter(|kind| !matches!(kind.key.as_str(), "train" | "research" | "construct"))
     {
         let mut accepted = false;
+        let mut needs_space = false;
         let mut rejected = false;
         for et in rules.entity_types.values() {
             let id = world.spawn(et.id, OWNER, Pos::default()).unwrap();
@@ -843,10 +844,18 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
                     assert_eq!(needs, kind.needs);
                     rejected = true;
                 }
+                Err(SimError::CannotEnterSpace) => {
+                    assert!(matches!(kind.key.as_str(), "orbit" | "travel"));
+                    needs_space = true;
+                }
                 other => panic!("unexpected result for {}: {other:?}", kind.key),
             }
         }
-        assert!(accepted, "seed has no executor for {}", kind.key);
+        assert!(
+            accepted || needs_space,
+            "seed has no executor for {}",
+            kind.key
+        );
         assert_eq!(rejected, !kind.needs.is_empty(), "{}", kind.key);
     }
     world.step();

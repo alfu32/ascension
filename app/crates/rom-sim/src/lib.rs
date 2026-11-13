@@ -20,6 +20,7 @@ mod production;
 mod research;
 mod rng;
 mod scenario;
+mod space;
 mod spatial;
 #[cfg(test)]
 mod sphere_tests;
@@ -39,6 +40,7 @@ pub use order::{Command, Order, OrderId, OrderKindKey, OrderStatus};
 pub use pathing::PathStats;
 pub use placement::CITY_SITE_RADIUS;
 pub use rng::SimRng;
+pub use space::Transit;
 pub use surface::Surface;
 pub use universe::{BodyId, BodyInfo, PlanetSurface, RouteInfo, SystemInfo, UniverseSetup};
 pub use vision::{RememberedBuilding, Sighting};
@@ -179,7 +181,7 @@ pub enum SimError {
     /// Placement rule `on_layer`: a footprint tile is on another layer.
     #[error("placement must be on the required layer")]
     NotOnLayer,
-    /// The order's target is on another body; nothing travels between bodies yet.
+    /// A local order's target is on another body's surface.
     #[error("target is on another body")]
     OtherBody,
     /// The body is unknown, has no surface, or cannot take the requested surface.
@@ -188,6 +190,12 @@ pub enum SimError {
     /// The universe data is inconsistent.
     #[error("invalid universe: {0}")]
     InvalidUniverse(&'static str),
+    /// The unit cannot occupy system space or its owner has not reached space.
+    #[error("entity cannot enter system space")]
+    CannotEnterSpace,
+    /// No route connects the current system to the travel destination.
+    #[error("invalid or unreachable system destination")]
+    InvalidTravelTarget,
     /// The catalogue cannot supply the requested headless scenario.
     #[error("no eligible {0} for movement scenario")]
     ScenarioUnavailable(&'static str),

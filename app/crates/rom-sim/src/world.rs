@@ -55,12 +55,14 @@ pub struct World {
     pub(crate) tick: u64,
     pub(crate) rng: SimRng,
     pub(crate) rules: Arc<Rules>,
-    /// Every generated surface, in body order; each entity stands on exactly one.
+    /// Every generated surface, in body order; transit ships stand on none.
     pub(crate) surfaces: Vec<Surface>,
     /// Index into `surfaces` by body id; `u32::MAX` where a body has no surface.
     pub(crate) slots: Vec<u32>,
     /// Star systems, bodies and routes; empty for a world built from one map.
     pub(crate) universe: UniverseData,
+    /// System positions, markers, claims and ships between surfaces.
+    pub(crate) space: crate::space::Space,
     /// Each player's home body.
     pub(crate) homes: BTreeMap<PlayerId, BodyId>,
     /// Simulation ticks per second.
@@ -229,6 +231,7 @@ impl World {
             slots: Vec::new(),
             universe: UniverseData::default(),
             homes: BTreeMap::new(),
+            space: crate::space::Space::default(),
             tick_rate,
             avoid,
             economy: EconomyIndex::default(),
@@ -410,6 +413,7 @@ impl World {
         else {
             return Err(SimError::OutsideMap);
         };
+        self.check_space_placement(type_id, owner, pos)?;
         let next = self
             .next_entity_id
             .checked_add(1)
@@ -597,19 +601,24 @@ impl World {
         if !target_matches(&command, kind.target) {
             return Err(SimError::WrongTargetShape);
         }
-        // Nothing reaches another body yet: no travel between surfaces.
+        self.validate_space_order(&command)?;
+        // Travel is the only order allowed to name a different surface.
         let body = entity.pos.body;
-        if command.target_pos.is_some_and(|pos| pos.body != body)
-            || command
-                .target_entity
-                .and_then(|id| self.entity(id))
-                .is_some_and(|target| target.pos.body != body)
+        if command.kind != "travel"
+            && (command.target_pos.is_some_and(|pos| pos.body != body)
+                || command
+                    .target_entity
+                    .and_then(|id| self.entity(id))
+                    .is_some_and(|target| target.pos.body != body))
         {
             return Err(SimError::OtherBody);
         }
         // A flat map clamps far goals onto itself; a sphere has no outside to clamp from.
         let geo = self.geo(body);
-        if !geo.is_flat() && command.target_pos.is_some_and(|pos| !geo.contains(pos)) {
+        if command.kind != "travel"
+            && !geo.is_flat()
+            && command.target_pos.is_some_and(|pos| !geo.contains(pos))
+        {
             return Err(SimError::OutsideMap);
         }
         if command.kind == "harvest" {
@@ -716,15 +725,18 @@ impl World {
         }
         self.run_path_searches();
         self.separate_units(&moved);
+        self.depart_ships();
         self.seen.clear();
         self.fire_shots();
         self.land_projectiles();
         self.remove_dead();
         self.remember_touched();
+        self.update_claims();
         self.pay_income();
         for surface in &mut self.surfaces {
             surface.pathing.end_tick();
         }
         self.tick = self.tick.checked_add(1).expect("simulation tick exhausted");
+        self.arrive_transits();
     }
 }

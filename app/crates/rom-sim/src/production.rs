@@ -52,7 +52,8 @@ impl World {
                 "move" if order.target_pos.is_none() => {
                     order.status = OrderStatus::Failed("unsupported".into());
                 }
-                "move" | "construct" | "repair" | "harvest" | "attack" | "attack_move" | "heal" => {
+                "move" | "construct" | "repair" | "harvest" | "attack" | "attack_move" | "heal"
+                | "orbit" | "travel" => {
                     if worked {
                         self.entities[id.0 as usize]
                             .as_mut()
@@ -62,7 +63,11 @@ impl World {
                         break;
                     }
                     worked = true;
-                    if order.kind == "attack" || order.kind == "attack_move" {
+                    if order.kind == "orbit" {
+                        self.advance_orbit(id, &mut order);
+                    } else if order.kind == "travel" {
+                        self.advance_travel(id, &mut order);
+                    } else if order.kind == "attack" || order.kind == "attack_move" {
                         self.advance_combat(id, &mut order);
                     } else if order.kind == "heal" {
                         self.advance_heal(id, &mut order);
@@ -177,9 +182,20 @@ impl World {
                     ..entity.pos
                 }
             });
+        let pos = if self.systems().is_empty() || self.can_stand(subject, entity.pos) {
+            pos
+        } else if let Some(space_pos) = self.body_position(entity.pos.body)
+            && self.can_stand(subject, space_pos)
+        {
+            self.offset(space_pos, 1000, 0)
+        } else {
+            order.status = OrderStatus::Blocked("no_spawn_space".into());
+            return;
+        };
         order.status = match self.spawn(subject, order.player, pos) {
             Ok(_) => OrderStatus::Done,
-            Err(_) => OrderStatus::Failed("id_exhausted".into()),
+            Err(crate::SimError::CannotEnterSpace) => OrderStatus::Blocked("space_age".into()),
+            Err(_) => OrderStatus::Failed("spawn_failed".into()),
         };
     }
 

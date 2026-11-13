@@ -7,6 +7,8 @@ INSERT INTO schema_meta VALUES ('schema_version','1'), ('rules_version','0.0.1-s
 
 INSERT INTO game_constant(key,value,unit,note) VALUES
  ('sim.ticks_per_second',20,'ticks','fixed simulation step; never changes with game speed'),
+ ('space.orbit_reach',6000,'milli-tiles','orbit holding radius'),
+ ('space.route_ticks_per_unit',1,'ticks','route time per unit at one tile per second'),
  ('sim.speed_pct.min',25,'%','slowest selectable game speed'),
  ('sim.speed_pct.max',400,'%','fastest selectable game speed'),
  ('economy.income_period_ticks',600,'ticks','gather rates are "per 30 s"'),
@@ -70,6 +72,8 @@ INSERT INTO movement_class(key,flies) VALUES
 
 INSERT INTO order_kind(key,needs,target,note) VALUES
  ('stop','','none',''), ('move','movement','entity_or_point','entity target = follow'),
+ ('orbit','movement','entity_or_point','body marker or holding point'),
+ ('travel','movement','point','target point body = destination system star body; coordinates ignored'),
  ('attack','weapon','entity',''), ('attack_move','weapon','point',''), ('patrol','movement','point',''),
  ('guard','weapon','entity',''), ('explore','movement','none','auto explore'),
  ('construct','builder','def','subject = building type, target point = site'),
@@ -536,5 +540,10 @@ WITH v(k,p,w,c0,c1) AS (VALUES
 INSERT INTO map_style_feature(map_style_id,feature_def_id,region_kind,pattern,chance_pct,clumps_min,clumps_max)
  SELECT s.id, d.id, 'resource_body', v.p, v.w, v.c0, v.c1
  FROM map_style s, v JOIN def d ON d.key=v.k ORDER BY s.id, d.id;
+
+-- A habitable body marker has no resource component.
+INSERT INTO def(kind,key,name) VALUES ('entity_type','node.planet_marker','Planet Marker');
+INSERT INTO entity_type(id,class,hp,los,pop_cost,footprint_w,footprint_h,build_ticks)
+ SELECT id,'node',1,0,0,1,1,0 FROM def WHERE key='node.planet_marker';
 
 COMMIT;

@@ -312,7 +312,7 @@ fn adding_a_surface_mid_match_is_deterministic() {
     let (a, b) = (grown_world(), grown_world());
     assert_eq!(a.hash(), b.hash());
     assert_eq!(a.tick(), 600);
-    assert_eq!(a.surfaces().len(), 2);
+    assert_eq!(a.surfaces().len(), 3);
     assert!(a.stats().orders_done > 0);
     // Adding the same body twice, or a body that is not habitable, is refused.
     let mut a = a;
@@ -328,7 +328,7 @@ fn adding_a_surface_mid_match_is_deterministic() {
     // Surfaces stay in body order whatever order they arrive in.
     a.add_surface(B3, &planet(&rules, 3, N)).unwrap();
     let bodies: Vec<BodyId> = a.surfaces().iter().map(|s| s.body()).collect();
-    assert_eq!(bodies, vec![B2, B3, B4]);
+    assert_eq!(bodies, vec![BodyId(1), B2, B3, B4]);
     let before = a.hash();
     a.step();
     assert_ne!(a.hash(), before);
