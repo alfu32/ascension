@@ -32,6 +32,9 @@ The current state of every task is in `app/docs/tasks/STATUS.md`.
 - A player picks a race before the match and keeps it. Races start on
   separate home worlds with equivalent technology and meet only in space.
 - The game ends at age 13. Travel between galaxies is parked.
+- The directional light that represents the sun orbits the planet orb by
+  default (day and night for everyone); night stays playable. Presentation
+  only for now. Say it this way: the star does not orbit the planet.
 - Simulation fixed at 20 ticks per game second; game speed is a user setting.
 - SQLite is the authoring and save format; the tick loop never runs SQL.
 - In-match HUD is drawn by raylib; all other screens are GPUI.

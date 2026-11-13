@@ -147,3 +147,13 @@ in parallel on top of whichever topology is current.
 | Contents of a system | 1–3 habitable planets, 3–8 resource bodies |
 | Planet sizes | home planets at the median; others vary within the range |
 | Before the space age | the whole home planet can be seen from orbit; nothing else |
+
+## Day and night (decided 2026-11-13)
+
+The directional light that represents the sun orbits the planet orb by
+default: one full orbit every `world.day_ticks` (5 game minutes by default
+for now; the owner will tune it after playing), so every player gets day and
+night in turn. Night is darker but stays playable. The sun direction is a
+function of simulation time only, identical for every player; it is
+presentation, with no gameplay effect for now. The planet's axis has no tilt by
+default (`world.axial_tilt_mdeg = 0`), so there are no seasons yet.
