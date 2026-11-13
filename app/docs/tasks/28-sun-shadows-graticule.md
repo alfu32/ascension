@@ -61,7 +61,15 @@ orbits the planet orb" — never that the sun or star orbits the planet.
    (light from the star's position), so the day side faces the star; the
    globe's sun direction at the same tick must agree with it (the planet's
    rotation phase from step 1 is defined relative to the star direction).
-6. **Record** bench lines in `app/docs/performance.md` for street, mid and
+6. **Sky** (owner request, added while running): at street-to-mid zoom a sky
+   gradient behind the terrain — blue by day, a short warm dusk and dawn, dark
+   navy then black at night — with the star field fading in as the local sky
+   darkens; driven by the same sun direction. From globe zoom outward, space
+   stays black with stars (optional thin atmosphere rim on the day-side limb),
+   blended smoothly with altitude. Same sky on the flat map. Tests:
+   `sky_is_blue_at_noon_and_black_at_midnight`, `stars_fade_in_after_dusk`,
+   `sky_blends_to_space_with_altitude`. Screenshots `sky-day.png` and `sky-night.png` at street level.
+7. **Record** bench lines in `app/docs/performance.md` for street, mid and
    globe zoom with shadows on.
 
 ## Tests to add (no window, no GPU)
