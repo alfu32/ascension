@@ -123,18 +123,13 @@ impl UniverseScene {
                 .enumerate()
                 .filter(move |(_, b)| b.system == system)
         };
-        let outermost = members()
-            .map(|(_, b)| b.orbit_radius.max(0))
-            .max()
-            .unwrap_or(0)
-            .max(1) as f32;
+        let outermost = self.system_outermost(system);
         members()
             .map(|(index, b)| {
                 let (orbit, pos) = if b.kind == BodyViewKind::Star {
                     (0.0, [0.0; 3])
                 } else {
-                    let orbit = STAR_CLEAR
-                        + (SYSTEM_RADIUS - STAR_CLEAR) * (b.orbit_radius.max(0) as f32 / outermost);
+                    let orbit = orbit_to_frame(b.orbit_radius.max(0) as f32, outermost);
                     // `orbit_angle` is in millidegrees.
                     let angle = (b.orbit_angle as f32 / 1000.0).to_radians().rem_euclid(TAU);
                     (orbit, [orbit * angle.cos(), 0.0, orbit * angle.sin()])
@@ -147,6 +142,17 @@ impl UniverseScene {
                 }
             })
             .collect()
+    }
+
+    /// The largest orbit radius of `system` (at least 1), the scale of its frame layout.
+    pub fn system_outermost(&self, system: u32) -> f32 {
+        self.bodies
+            .iter()
+            .filter(|b| b.system == system)
+            .map(|b| b.orbit_radius.max(0))
+            .max()
+            .unwrap_or(0)
+            .max(1) as f32
     }
 
     /// Star-map positions of the systems, indexed like [`Self::systems`], scaled so the farthest
@@ -168,6 +174,17 @@ impl UniverseScene {
             .map(|s| [s.x as f32 * scale, 0.0, s.y as f32 * scale])
             .collect()
     }
+}
+
+/// The distance from the star in the system frame of an orbit of radius `orbit` (the same units
+/// as [`BodyView::orbit_radius`]) in a system whose outermost orbit is `outermost`.
+pub fn orbit_to_frame(orbit: f32, outermost: f32) -> f32 {
+    STAR_CLEAR + (SYSTEM_RADIUS - STAR_CLEAR) * (orbit / outermost.max(1.0))
+}
+
+/// The inverse of [`orbit_to_frame`]; points inside the clear zone of the star map to 0.
+pub fn frame_to_orbit(frame: f32, outermost: f32) -> f32 {
+    ((frame - STAR_CLEAR) / (SYSTEM_RADIUS - STAR_CLEAR)).max(0.0) * outermost.max(1.0)
 }
 
 /// Drawn radius of a body in system units.

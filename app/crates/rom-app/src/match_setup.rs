@@ -6,9 +6,14 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use rom_mapgen::{GeneratedMap, SpherePlanet};
+use rom_mapgen::{GeneratedMap, SpherePlanet, Universe};
 use rom_rules::{DefId, EntityType, ResourceKind, Rules};
-use rom_sim::{EntityId, Player, PlayerId, Pos, World};
+use rom_sim::{
+    BodyId, BodyInfo, EntityId, PlanetSurface, Player, PlayerId, Pos, RouteInfo, SystemInfo,
+    UniverseSetup, World,
+};
+
+use crate::script::ScriptSetup;
 
 /// Builders each player starts with.
 pub const BUILDERS_PER_PLAYER: usize = 5;
@@ -53,6 +58,9 @@ pub enum SetupError {
     /// The rules contain no faction or age to start from.
     #[error("the rules define no faction or age")]
     NoFaction,
+    /// A setup request that the rules or the universe cannot satisfy.
+    #[error("{0}")]
+    Setup(String),
     /// The simulation rejected the setup.
     #[error("simulation setup failed: {0}")]
     Sim(#[from] rom_sim::SimError),
@@ -256,6 +264,126 @@ pub fn build_sphere_match(
     })
 }
 
+/// The generated universe as plain data for the simulation, with its generated (home) planets.
+pub fn universe_setup(universe: &Universe) -> UniverseSetup {
+    UniverseSetup {
+        systems: universe
+            .systems
+            .iter()
+            .map(|s| SystemInfo {
+                id: s.id,
+                name: s.name.clone(),
+                x: s.x,
+                y: s.y,
+            })
+            .collect(),
+        bodies: universe
+            .bodies
+            .iter()
+            .map(|b| BodyInfo {
+                id: BodyId(b.id),
+                system: b.system_id,
+                kind: b.kind,
+                name: b.name.clone(),
+                orbit_radius: b.orbit_radius,
+                orbit_angle_mdeg: b.orbit_angle_mdeg,
+                n: b.n,
+                home_race: b.home_race,
+                node_type: b.node_entity_type,
+            })
+            .collect(),
+        routes: universe
+            .routes
+            .iter()
+            .map(|r| RouteInfo {
+                system_a: r.system_a,
+                system_b: r.system_b,
+                length: r.length,
+            })
+            .collect(),
+        planets: universe
+            .planets
+            .iter()
+            .map(|(body, planet)| (BodyId(*body), planet_surface(planet)))
+            .collect(),
+    }
+}
+
+/// A generated planet as the simulation takes it.
+pub fn planet_surface(planet: &SpherePlanet) -> PlanetSurface {
+    PlanetSurface {
+        surface: planet.surface,
+        terrain: planet.terrain.clone(),
+        nodes: planet.nodes.clone(),
+    }
+}
+
+/// Builds one world for the whole universe: every home planet is a surface, each player starts
+/// on the home planet of its race with a city (placed by the simulation's site search) and
+/// builders, and the other habitable planets are added later with `World::add_surface`.
+/// `setup` holds the test-only age and resources a script asked for.
+pub fn build_universe_match(
+    rules: &Arc<Rules>,
+    universe: &Universe,
+    factions: &[DefId],
+    seed: u64,
+    setup: &ScriptSetup,
+) -> Result<Match, SetupError> {
+    let builder = builder_type(rules).ok_or(SetupError::NoBuilder)?;
+    let builder_id = builder.id;
+    if factions.is_empty() || factions.len() != universe.starts.len() {
+        return Err(SetupError::NoFaction);
+    }
+    let mut players = make_players(rules, factions)?;
+    if let Some(key) = &setup.age {
+        let age = rules
+            .id_of(key)
+            .filter(|id| rules.ages.contains_key(id))
+            .ok_or_else(|| SetupError::Setup(format!("unknown age {key:?}")))?;
+        for player in players.iter_mut().filter(|p| p.id != NEUTRAL) {
+            player.age = age;
+        }
+    }
+    let homes: BTreeMap<PlayerId, BodyId> = universe
+        .starts
+        .iter()
+        .enumerate()
+        .map(|(i, (body, _))| (PlayerId(i as u32 + 1), BodyId(*body)))
+        .collect();
+    let mut world = World::from_universe(
+        Arc::clone(rules),
+        universe_setup(universe),
+        seed,
+        players,
+        homes,
+    )?;
+    for (key, amount) in &setup.grants {
+        let resource = rules
+            .id_of(key)
+            .filter(|id| rules.resources.contains_key(id))
+            .ok_or_else(|| SetupError::Setup(format!("unknown resource {key:?}")))?;
+        world.grant(PlayerId(1), resource, *amount)?;
+    }
+    let mut starts = Vec::new();
+    for (index, (body, start)) in universe.starts.iter().enumerate() {
+        let (player, body) = (PlayerId(index as u32 + 1), BodyId(*body));
+        world.reveal_terrain(player, body);
+        let mut near = World::pos_of(*start)?;
+        near.body = body;
+        let city_id = world.city_type(player).ok_or(SetupError::NoCity)?;
+        let site = world
+            .find_city_site(player, body, near)
+            .ok_or_else(|| SetupError::Setup("no room for a starting city".into()))?;
+        let city = rules.entity_types[&city_id].clone();
+        starts.push(place_start(&mut world, player, &city, builder_id, site)?);
+    }
+    Ok(Match {
+        world,
+        starts,
+        builder_type: builder_id,
+    })
+}
+
 /// Whether every tile under a building of type `et` centred at `pos` is buildable.
 fn footprint_buildable(world: &World, et: &EntityType, pos: Pos) -> bool {
     let (hw, hh) = (et.footprint_w * 500, et.footprint_h * 500);
@@ -323,6 +451,30 @@ fn starts_players(world: &World) -> Vec<PlayerId> {
         .map(|p| p.id)
         .filter(|id| *id != NEUTRAL)
         .collect()
+}
+
+/// A one-seed universe world in the space age with stock for player one, for tests.
+#[cfg(test)]
+pub(crate) fn universe_game_for_tests() -> (crate::terrain::UniverseContent, Match) {
+    let options = crate::args::Options {
+        universe: true,
+        seed: 1,
+        ..crate::args::Options::default()
+    };
+    let content = crate::terrain::generate_universe_content(&options).expect("universe");
+    let setup = ScriptSetup {
+        age: Some("age.starfaring".into()),
+        grants: vec![("res.metal".into(), 5000), ("res.energy".into(), 5000)],
+    };
+    let game = build_universe_match(
+        &content.rules,
+        &content.universe,
+        &content.factions,
+        1,
+        &setup,
+    )
+    .expect("match");
+    (content, game)
 }
 
 #[cfg(test)]
@@ -478,6 +630,43 @@ mod tests {
             .map(|i| content.map.start_region(i).unwrap())
             .collect();
         assert_eq!(homes.len(), 3);
+    }
+
+    #[test]
+    fn universe_world_puts_each_race_on_its_home_planet() {
+        let options = Options {
+            universe: true,
+            seed: 1,
+            ..Options::default()
+        };
+        let content = crate::terrain::generate_universe_content(&options).expect("universe");
+        let game = build_universe_match(
+            &content.rules,
+            &content.universe,
+            &content.factions,
+            1,
+            &ScriptSetup::default(),
+        )
+        .expect("match");
+        let world = &game.world;
+        assert_eq!(game.starts.len(), content.factions.len());
+        let mut surfaces = 0;
+        for (start, faction) in game.starts.iter().zip(&content.factions) {
+            let race = content.rules.race_of(*faction);
+            let city = world.entity(start.city).expect("city");
+            let home = world.body(city.pos.body).expect("a body");
+            assert_eq!(home.home_race, Some(race), "player {:?}", start.player);
+            assert_eq!(world.home_body(start.player), Some(home.id));
+            assert!(world.surface(home.id).is_some());
+            assert_eq!(start.builders.len(), BUILDERS_PER_PLAYER);
+            for b in &start.builders {
+                assert_eq!(world.entity(*b).unwrap().pos.body, home.id);
+            }
+            surfaces += 1;
+        }
+        assert!(surfaces > 1);
+        // Other habitable planets are not generated yet.
+        assert!(!world.ungenerated_bodies().is_empty());
     }
 
     #[test]

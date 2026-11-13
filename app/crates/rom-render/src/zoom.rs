@@ -313,6 +313,10 @@ pub struct ZoomCamera {
     /// The planet the view is anchored to (an index into the scene's bodies).
     body: Option<usize>,
     home_body: Option<usize>,
+    /// The planet whose globe is loaded: the only one that can be entered.
+    surface_body: Option<usize>,
+    /// A planet whose globe the camera waits for.
+    want_surface: Option<u32>,
     home_dir: [f32; 3],
     l: f32,
     cap: Level,
@@ -350,6 +354,8 @@ impl ZoomCamera {
             placed,
             body: home_body,
             home_body,
+            surface_body: home_body,
+            want_surface: None,
             home_dir: home.map_or([0.0, 0.0, 1.0], |h| h.dir),
             l: scale.l_cap(Level::Globe),
             cap,
@@ -373,6 +379,11 @@ impl ZoomCamera {
     /// The universe being shown.
     pub fn scene(&self) -> &UniverseScene {
         &self.scene
+    }
+
+    /// The universe being shown, shared.
+    pub fn scene_arc(&self) -> Arc<UniverseScene> {
+        Arc::clone(&self.scene)
     }
 
     /// The log-distance of the camera.
@@ -410,7 +421,7 @@ impl ZoomCamera {
 
     /// Smallest `l`: a planet without a generated surface cannot be entered.
     pub fn l_min(&self) -> f32 {
-        if self.anchored_at_home() {
+        if self.anchored_at_surface() {
             self.scale.l_min()
         } else {
             self.scale.l_globe_system + FADE_HALF
@@ -437,9 +448,62 @@ impl ZoomCamera {
         self.body
     }
 
-    /// Whether the anchored planet is the home planet, which has a generated surface.
-    pub fn anchored_at_home(&self) -> bool {
-        self.body.is_some() && self.body == self.home_body
+    /// Whether the anchored planet is the one whose globe is loaded, which can be entered.
+    pub fn anchored_at_surface(&self) -> bool {
+        self.body.is_some() && self.body == self.surface_body
+    }
+
+    /// The planet whose globe is loaded, as an index into the scene's bodies.
+    pub fn surface_body(&self) -> Option<usize> {
+        self.surface_body
+    }
+
+    /// The id of a planet whose globe the camera asked for and has not got yet.
+    pub fn want_surface(&self) -> Option<u32> {
+        self.want_surface
+    }
+
+    /// The id of the system the view is anchored to.
+    pub fn system_id(&self) -> Option<u32> {
+        self.scene.systems.get(self.system).map(|s| s.id)
+    }
+
+    /// The globe of planet `body` is loaded: `globe_radius` tiles and the planet camera's
+    /// farthest distance `max_distance` describe it, `dir` is where the planet camera looks.
+    /// The log-distance scale is rebuilt for the planet's size; a camera anchored on the planet
+    /// flies in to it.
+    pub fn surface_ready(
+        &mut self,
+        body: u32,
+        globe_radius: f32,
+        max_distance: f32,
+        dir: [f32; 3],
+        orbit: &mut OrbitCamera,
+    ) {
+        let Some(index) = self.scene.body_index(body) else {
+            return;
+        };
+        let drawn = crate::universe::body_radius(&self.scene.bodies[index]);
+        let anchored = self.body == Some(index);
+        self.scale = ZoomScale::new(
+            globe_radius * HOME_PLANET_RADIUS / drawn.max(1.0),
+            max_distance,
+        );
+        self.surface_body = Some(index);
+        if self.want_surface == Some(body) {
+            self.want_surface = None;
+        }
+        orbit.look_at(dir);
+        self.l = self.l.clamp(self.l_min(), self.l_cap());
+        if anchored {
+            let target = if Some(index) == self.home_body {
+                (2.0 * globe_radius).max(MIN_DISTANCE).ln()
+            } else {
+                max_distance.max(MIN_DISTANCE).ln() - 0.2
+            };
+            self.l = self.scale.l_globe_system + FADE_HALF;
+            self.fly_to(target);
+        }
     }
 
     /// Zooms in for positive `steps`, out for negative ones, within the limits.
@@ -500,7 +564,7 @@ impl ZoomCamera {
             .body
             .and_then(|b| self.placed.iter().find(|p| p.body == b))
             .map_or([0.0; 3], |p| p.pos);
-        let base = if self.anchored_at_home() {
+        let base = if self.anchored_at_surface() {
             globe_to_system(&self.scale, anchor, orbit.target())
         } else {
             anchor
@@ -633,10 +697,15 @@ impl ZoomCamera {
             Target::Body(index) => {
                 let body = &self.scene.bodies[index];
                 let star = body.kind == BodyViewKind::Star;
+                let habitable = body.kind == BodyViewKind::Habitable;
+                let id = body.id;
                 self.anchor_to((!star).then_some(index), orbit);
-                if !star && Some(index) == self.home_body {
+                if !star && Some(index) == self.surface_body {
                     self.fly_to(self.scale.globe_max.max(MIN_DISTANCE).ln() - 0.2);
                 } else {
+                    if habitable {
+                        self.want_surface = Some(id);
+                    }
                     self.fly_to(self.scale.l_globe_system + FADE_HALF);
                 }
             }
@@ -657,8 +726,14 @@ impl ZoomCamera {
             self.anchor_system(system);
         }
         self.anchor_to(Some(home_body), orbit);
-        orbit.look_at(self.home_dir);
-        self.fly_to((2.0 * self.scale.planet_radius).max(MIN_DISTANCE).ln());
+        if self.surface_body == Some(home_body) {
+            orbit.look_at(self.home_dir);
+            self.fly_to((2.0 * self.scale.planet_radius).max(MIN_DISTANCE).ln());
+        } else {
+            // The home globe is not loaded: ask for it and fly in once it is.
+            self.want_surface = Some(self.scene.bodies[home_body].id);
+            self.fly_to(self.scale.l_globe_system + FADE_HALF);
+        }
     }
 
     /// Places the camera for a reproducible view (`--view`): `level` over the home planet.
@@ -921,7 +996,7 @@ mod tests {
             zoom.advance(0.05);
         }
         assert_eq!(zoom.level(), Level::System);
-        assert!(!zoom.anchored_at_home());
+        assert!(!zoom.anchored_at_surface());
         // The nearest marker wins and the pick radius has a floor.
         assert_eq!(
             nearest_marker(&[(10.0, 10.0, 1.0), (14.0, 10.0, 1.0)], (13.0, 10.0)),
@@ -957,7 +1032,7 @@ mod tests {
         zoom.sync_orbit(&mut orbit);
         assert_eq!(zoom.level(), Level::Globe);
         assert_eq!(zoom.system(), 0);
-        assert!(zoom.anchored_at_home());
+        assert!(zoom.anchored_at_surface());
         assert!((orbit.distance - 2.0 * R).abs() < 1.0);
     }
 

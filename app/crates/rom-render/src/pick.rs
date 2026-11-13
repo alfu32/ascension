@@ -92,6 +92,21 @@ pub enum PickEvent {
         /// Modifiers held.
         modifiers: Modifiers,
     },
+    /// A right click in system space or on the star map. At the system level `surface` is the
+    /// point of the system plane in orbit-radius units times 1000 east and south of the star;
+    /// `body` names the body under the cursor, `system` the system on the star map.
+    SpaceRightClick {
+        /// The point under the cursor, see above.
+        surface: SurfacePos,
+        /// The ship under the cursor.
+        entity: Option<u32>,
+        /// The planet or resource body under the cursor (never a star).
+        body: Option<u32>,
+        /// The star system under the cursor, on the star map.
+        system: Option<u32>,
+        /// Modifiers held.
+        modifiers: Modifiers,
+    },
     /// A press on a HUD element.
     HudClick {
         /// The kind of element.

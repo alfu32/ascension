@@ -14,6 +14,13 @@
 //! `@dx,dy` (tiles from the city centre, across face edges on a sphere) or `x,y` (tiles on the
 //! city's face). Other commands: `rclick`,
 //! `key <char> [ctrl] [shift]`, `escape`; `hud` takes `tab`, `arrow`, `slot`, `queue`, `tile`.
+//!
+//! Space commands: `ships` selects every ship of player one, `producers` its finished
+//! training buildings (not cities), `orbit <rockN|=body>` and
+//! `travel <systemN|=system>` order the selected ships (`rockN` is the N-th nearest resource body
+//! of the home system, `systemN` the N-th nearest neighbouring system), `speed <percent>` sets
+//! the game speed. Two test-only lines take effect before the match starts, whatever their tick:
+//! `grant-age <age key>` and `grant <resource key> <amount>` for player one.
 
 use rom_render::{HudRegionKind, Modifiers, PickEvent, PointerButton, SurfacePos};
 
@@ -30,6 +37,66 @@ pub struct ScriptContext {
     pub city_face: u8,
     /// The starting builders' entity ids.
     pub builders: Vec<u32>,
+    /// Resource bodies of the home system, nearest to the home planet first (universe worlds).
+    pub rocks: Vec<u32>,
+    /// Systems joined to the home system by a route, shortest route first (universe worlds).
+    pub systems: Vec<u32>,
+}
+
+/// What a script does to the match before it starts (test only).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ScriptSetup {
+    /// The age every player starts in, by key.
+    pub age: Option<String>,
+    /// Resources granted to player one: key and amount.
+    pub grants: Vec<(String, i64)>,
+}
+
+impl ScriptSetup {
+    /// Reads the `grant-age` and `grant` lines of a script.
+    pub fn scan(text: &str) -> Result<Self, String> {
+        let mut setup = Self::default();
+        for (number, line) in text.lines().enumerate() {
+            let line = line.split('#').next().unwrap_or("").trim();
+            let words: Vec<&str> = line.split_whitespace().collect();
+            let at = || format!("line {}", number + 1);
+            match words.get(1).copied() {
+                Some("grant-age") => {
+                    setup.age = Some(
+                        words
+                            .get(2)
+                            .ok_or_else(|| format!("{}: grant-age needs an age key", at()))?
+                            .to_string(),
+                    );
+                }
+                Some("grant") => {
+                    let (Some(key), Some(amount)) = (words.get(2), words.get(3)) else {
+                        return Err(format!(
+                            "{}: grant needs a resource key and an amount",
+                            at()
+                        ));
+                    };
+                    let amount = amount
+                        .parse()
+                        .map_err(|_| format!("{}: bad amount {amount:?}", at()))?;
+                    setup.grants.push(((*key).to_owned(), amount));
+                }
+                _ => {}
+            }
+        }
+        Ok(setup)
+    }
+}
+
+/// A script step that is not a pick.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScriptAction {
+    /// Select all of player one's ships.
+    SelectShips,
+    /// Select player one's finished buildings that train units other than from a city.
+    SelectProducers,
+    /// Set the game speed in percent.
+    Speed(u32),
 }
 
 impl ScriptContext {
@@ -43,6 +110,8 @@ impl ScriptContext {
             ),
             city_face: start.city_pos.face,
             builders: start.builders.iter().map(|b| b.0).collect(),
+            rocks: Vec::new(),
+            systems: Vec::new(),
         }
     }
 }
@@ -52,6 +121,8 @@ impl ScriptContext {
 pub struct Script {
     events: Vec<(u64, PickEvent)>,
     next: usize,
+    actions: Vec<(u64, ScriptAction)>,
+    next_action: usize,
 }
 
 impl Script {
@@ -62,17 +133,60 @@ impl Script {
         offset: &dyn Fn(i64, i64) -> SurfacePos,
     ) -> Result<Self, String> {
         let mut events = Vec::new();
+        let mut actions = Vec::new();
         for (number, line) in text.lines().enumerate() {
             let line = line.split('#').next().unwrap_or("").trim();
             if line.is_empty() {
                 continue;
+            }
+            let words: Vec<&str> = line.split_whitespace().collect();
+            let tick = words.first().and_then(|t| t.parse::<u64>().ok());
+            match (tick, words.get(1).copied()) {
+                (Some(_), Some("grant-age" | "grant")) => continue,
+                (Some(tick), Some("ships")) => {
+                    actions.push((tick, ScriptAction::SelectShips));
+                    continue;
+                }
+                (Some(tick), Some("producers")) => {
+                    actions.push((tick, ScriptAction::SelectProducers));
+                    continue;
+                }
+                (Some(tick), Some("speed")) => {
+                    let percent = words
+                        .get(2)
+                        .and_then(|p| p.parse::<u32>().ok())
+                        .filter(|p| (1..=10_000).contains(p))
+                        .ok_or_else(|| format!("line {}: speed takes 1 to 10000", number + 1))?;
+                    actions.push((tick, ScriptAction::Speed(percent)));
+                    continue;
+                }
+                _ => {}
             }
             let event = parse_line(line, context, offset)
                 .map_err(|error| format!("line {}: {error}", number + 1))?;
             events.push(event);
         }
         events.sort_by_key(|(tick, _)| *tick);
-        Ok(Self { events, next: 0 })
+        actions.sort_by_key(|(tick, _)| *tick);
+        Ok(Self {
+            events,
+            next: 0,
+            actions,
+            next_action: 0,
+        })
+    }
+
+    /// Non-pick steps whose tick has come, each returned once.
+    pub fn due_actions(&mut self, tick: u64) -> Vec<ScriptAction> {
+        let mut out = Vec::new();
+        while let Some((at, action)) = self.actions.get(self.next_action) {
+            if *at > tick {
+                break;
+            }
+            out.push(*action);
+            self.next_action += 1;
+        }
+        out
     }
 
     /// Events whose tick has come, each returned once.
@@ -258,6 +372,33 @@ fn parse_line(
             }
         }
         "escape" => PickEvent::Escape,
+        "orbit" | "travel" => {
+            let word = arg(0)?;
+            let (prefix, list) = if command == "orbit" {
+                ("rock", &context.rocks)
+            } else {
+                ("system", &context.systems)
+            };
+            let id = match word.strip_prefix('=') {
+                Some(n) => n.parse().ok(),
+                None => word
+                    .strip_prefix(prefix)
+                    .and_then(|n| n.parse::<usize>().ok())
+                    .and_then(|n| list.get(n.wrapping_sub(1)).copied()),
+            }
+            .ok_or_else(|| format!("{command} needs {prefix}N or =id, got {word:?}"))?;
+            PickEvent::SpaceRightClick {
+                surface: SurfacePos {
+                    face: 0,
+                    x: 0,
+                    y: 0,
+                },
+                entity: None,
+                body: (command == "orbit").then_some(id),
+                system: (command == "travel").then_some(id),
+                modifiers,
+            }
+        }
         other => return Err(format!("unknown command {other:?}")),
     };
     Ok((tick, event))
@@ -273,6 +414,8 @@ mod tests {
             city_pos: (100.0, 50.0),
             city_face: 0,
             builders: vec![2, 3, 4],
+            rocks: vec![40, 41],
+            systems: vec![7],
         }
     }
 
@@ -339,6 +482,50 @@ mod tests {
             }
         );
         assert!(script.due(1000).is_empty());
+    }
+
+    #[test]
+    fn space_commands_and_setup_lines() {
+        let text = "
+            0 grant-age age.starfaring
+            0 grant res.metal 900
+            5 ships
+            6 speed 400
+            7 orbit rock2
+            8 travel system1
+            9 orbit =12
+        ";
+        let setup = ScriptSetup::scan(text).unwrap();
+        assert_eq!(setup.age.as_deref(), Some("age.starfaring"));
+        assert_eq!(setup.grants, vec![("res.metal".to_owned(), 900)]);
+        let mut script = Script::parse(text, &context(), &offset).unwrap();
+        assert_eq!(
+            script.due_actions(100),
+            vec![ScriptAction::SelectShips, ScriptAction::Speed(400)]
+        );
+        let events = script.due(100);
+        assert!(matches!(
+            events[0],
+            PickEvent::SpaceRightClick {
+                body: Some(41),
+                system: None,
+                ..
+            }
+        ));
+        assert!(matches!(
+            events[1],
+            PickEvent::SpaceRightClick {
+                body: None,
+                system: Some(7),
+                ..
+            }
+        ));
+        assert!(matches!(
+            events[2],
+            PickEvent::SpaceRightClick { body: Some(12), .. }
+        ));
+        assert!(Script::parse("1 orbit rock9", &context(), &offset).is_err());
+        assert!(ScriptSetup::scan("1 grant res.food").is_err());
     }
 
     #[test]

@@ -13,14 +13,15 @@ use gpui_component::Root;
 use rom_render::{
     Camera, OrbitSettings, RenderBridge, RenderWorker, ShutdownHandle, SurfacePos, UniverseSettings,
 };
+use rom_sim::BodyId;
 
 use crate::args::Options;
 use crate::bench;
 use crate::demo::{DemoDriver, add_stress_units};
-use crate::match_setup::{Match, build_match, build_sphere_match};
+use crate::match_setup::{Match, build_match, build_sphere_match, build_universe_match};
 use crate::screenshot;
-use crate::script::{Script, ScriptContext};
-use crate::sim_thread::{SimLink, SimThread};
+use crate::script::{Script, ScriptContext, ScriptSetup};
+use crate::sim_thread::{SimLink, SimThread, UniverseHost};
 use crate::terrain;
 use crate::universe_view;
 use crate::world_view::WorldView;
@@ -199,7 +200,16 @@ fn world_view(
 /// Generates the map or planet, publishes its terrain, builds the match and starts the
 /// simulation thread.
 fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThread, String> {
+    let mut host = None;
     let mut game = if options.universe {
+        let setup = match &options.script {
+            Some(path) => {
+                let text = std::fs::read_to_string(path)
+                    .map_err(|error| format!("reading {}: {error}", path.display()))?;
+                ScriptSetup::scan(&text).map_err(|e| format!("{}: {e}", path.display()))?
+            }
+            None => ScriptSetup::default(),
+        };
         let content = terrain::generate_universe_content(options)?;
         let universe = &content.universe;
         let bodies: Vec<u32> = universe.starts.iter().map(|s| s.0).collect();
@@ -214,15 +224,19 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
             .planets
             .get(&home_body)
             .ok_or("the home planet was not generated")?;
-        // The simulation has one surface: the home planet, with the players living there.
-        let local: Vec<_> = bodies
-            .iter()
-            .zip(&content.factions)
-            .filter(|(body, _)| **body == home_body)
-            .map(|(_, faction)| *faction)
-            .collect();
-        let game = build_sphere_match(&content.rules, planet, &local, options.seed)
-            .map_err(|error| format!("setting up the match: {error}"))?;
+        let game = build_universe_match(
+            &content.rules,
+            universe,
+            &content.factions,
+            options.seed,
+            &setup,
+        )
+        .map_err(|error| format!("setting up the match: {error}"))?;
+        host = Some(UniverseHost::new(
+            universe.clone(),
+            BodyId(home_body),
+            home_system,
+        ));
         bridge.publish_zoom_all(options.zoom_all);
         bridge.publish_universe(
             Arc::new(universe_view::to_universe_scene(universe, &bodies)),
@@ -245,6 +259,7 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
                     x: i64::from(s.city_pos.x),
                     y: i64::from(s.city_pos.y),
                 }),
+                body: None,
             },
         );
         game
@@ -275,6 +290,7 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
                             x: i64::from(s.city_pos.x),
                             y: i64::from(s.city_pos.y),
                         }),
+                        body: None,
                     },
                 );
                 game
@@ -308,6 +324,7 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
         script,
         options.speed_pct,
         bridge.clone(),
+        host,
     )
     .map_err(|error| format!("could not start the simulation thread: {error}"))
 }
@@ -329,6 +346,30 @@ fn read_script(path: &std::path::Path, game: &Match) -> Result<Script, String> {
             y: i64::from(at.y),
         }
     };
-    Script::parse(&text, &ScriptContext::of(start), &offset)
-        .map_err(|error| format!("{}: {error}", path.display()))
+    let mut context = ScriptContext::of(start);
+    let world = &game.world;
+    if let Some(home) = world.body(start.city_pos.body)
+        && let Some(at) = world.body_position(home.id)
+    {
+        let mut rocks: Vec<(u64, u32)> = world
+            .bodies()
+            .iter()
+            .filter(|b| b.system == home.system && b.kind == rom_rules::BodyKind::Resource)
+            .filter_map(|b| Some((at.distance(world.body_position(b.id)?), b.id.0)))
+            .collect();
+        rocks.sort_unstable();
+        context.rocks = rocks.into_iter().map(|(_, id)| id).collect();
+        let mut neighbours: Vec<(i32, u32)> = world
+            .routes()
+            .iter()
+            .filter_map(|r| match home.system {
+                s if s == r.system_a => Some((r.length, r.system_b)),
+                s if s == r.system_b => Some((r.length, r.system_a)),
+                _ => None,
+            })
+            .collect();
+        neighbours.sort_unstable();
+        context.systems = neighbours.into_iter().map(|(_, id)| id).collect();
+    }
+    Script::parse(&text, &context, &offset).map_err(|error| format!("{}: {error}", path.display()))
 }
