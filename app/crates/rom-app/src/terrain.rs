@@ -126,9 +126,28 @@ pub struct UniverseContent {
     pub factions: Vec<DefId>,
 }
 
+/// The map style a universe match uses when none is given: the one that allows the most neutral
+/// star systems (ties: lowest id), so the star map has somewhere to expand to. Chosen by data.
+fn universe_default_style(rules: &Rules) -> Option<DefId> {
+    rules
+        .map_styles
+        .values()
+        .max_by(|a, b| {
+            a.neutral_systems_max
+                .cmp(&b.neutral_systems_max)
+                .then(b.id.cmp(&a.id))
+        })
+        .map(|style| style.id)
+}
+
 /// Generates the universe for the options' style, seed and factions.
 pub fn generate_universe_content(options: &Options) -> Result<UniverseContent, String> {
-    let (rules, style, factions) = resolve(options)?;
+    let (rules, mut style, factions) = resolve(options)?;
+    if options.style.is_none()
+        && let Some(roomiest) = universe_default_style(&rules)
+    {
+        style = roomiest;
+    }
     let universe = generate_universe(
         &rules,
         &UniverseRequest {
