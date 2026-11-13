@@ -7,9 +7,9 @@
 use std::collections::BTreeMap;
 
 use rom_render::{
-    HudButton, HudCard, HudMarker, HudPalette, HudPlacement, HudQueue, HudQueueItem, HudRegionKind,
-    HudSelection, HudSnapshot, HudTile, MarkerKind, Modifiers, PaletteTab, PickEvent,
-    PointerButton, SurfacePos, slot_of_key,
+    ButtonState, HudButton, HudCard, HudCityRadius, HudMarker, HudPalette, HudPlacement, HudQueue,
+    HudQueueItem, HudRegionKind, HudSelection, HudSnapshot, HudTile, MarkerKind, Modifiers,
+    PaletteTab, PickEvent, PointerButton, SurfacePos, slot_of_key,
 };
 use rom_rules::{DefId, EntityClass, EntityType, ProductionMode, Rules, StanceFamily};
 use rom_sim::{BodyId, Command, Entity, EntityId, PlayerId, Pos, SimError, Topology, World};
@@ -104,6 +104,8 @@ pub struct Controller {
     last_group: Option<(usize, u64)>,
     tab: PaletteTab,
     page: usize,
+    data_tab: usize,
+    pending_research: BTreeMap<DefId, u64>,
     attack_move: bool,
     placement: Option<Placement>,
     rally: BTreeMap<EntityId, Pos>,
@@ -214,6 +216,32 @@ impl Controller {
         self.set_selection(ids);
     }
 
+    /// Finished producers offering track research, in entity id order.
+    pub fn select_researchers(&mut self, world: &World) {
+        let rules = world.rules();
+        self.set_selection(
+            world
+                .entities()
+                .filter(|e| e.owner == PLAYER && e.build_progress.is_none())
+                .filter(|e| {
+                    rules
+                        .production
+                        .get(&e.type_id)
+                        .into_iter()
+                        .flatten()
+                        .any(|r| {
+                            r.mode == ProductionMode::Research
+                                && rules
+                                    .techs
+                                    .get(&r.product_def_id)
+                                    .is_some_and(|t| t.kind == rom_rules::TechKind::Track)
+                        })
+                })
+                .map(|e| e.id)
+                .collect(),
+        );
+    }
+
     /// Player one's ships (movers standing in a system's space), ascending.
     pub fn select_own_ships(&mut self, world: &World) {
         let ships: Vec<EntityId> = world
@@ -303,11 +331,16 @@ impl Controller {
         };
         match world.submit(command) {
             Ok(_) => {
+                if kind == "research"
+                    && let Some(def) = subject
+                {
+                    self.pending_research.insert(def, world.tick());
+                }
                 self.ordered = true;
                 true
             }
             Err(error) => {
-                self.say(world, error.to_string());
+                self.say(world, rejection_message(world, &error, subject));
                 false
             }
         }
@@ -786,6 +819,9 @@ impl Controller {
         mods: Modifiers,
     ) {
         match region {
+            HudRegionKind::DataTab if button == PointerButton::Left => {
+                self.data_tab = index.min(4);
+            }
             HudRegionKind::PaletteTab if button == PointerButton::Left => {
                 if let (Some(tab), Some((palette, _))) =
                     (PaletteTab::from_index(index), self.palette(world))
@@ -862,13 +898,64 @@ impl Controller {
             };
             let mut by_page: BTreeMap<String, Vec<&rom_rules::Production>> = BTreeMap::new();
             for row in rules.production.get(&type_id).into_iter().flatten() {
-                if row.mode == mode && rules.is_available(row.product_def_id, player.faction) {
-                    by_page.entry(row.ui_page.clone()).or_default().push(row);
+                if row.mode != mode {
+                    continue;
                 }
+                let def = row.product_def_id;
+                if mode == ProductionMode::Train
+                    && (!rules.is_available(def, player.faction)
+                        || rules.is_obsolete(def, &sources, &owned)
+                        || (!rules.is_unlocked(def, &sources, &owned)
+                            && rules.entity_types[&def].upgrades_from_id.is_some()))
+                {
+                    continue;
+                }
+                if mode == ProductionMode::Research && !crate::hud::next_research(world, def) {
+                    continue;
+                }
+                let page = if mode == ProductionMode::Research {
+                    String::new()
+                } else {
+                    row.ui_page.clone()
+                };
+                by_page.entry(page).or_default().push(row);
             }
             let mut pages = Vec::new();
             for (name, mut rows) in by_page {
                 rows.sort_by_key(|r| (r.ui_row, r.ui_col, r.product_def_id));
+                if mode == ProductionMode::Research {
+                    rows.sort_by_key(|r| {
+                        let tech = &rules.techs[&r.product_def_id];
+                        let priority = match tech.kind {
+                            rom_rules::TechKind::Track => 0,
+                            rom_rules::TechKind::Age => 1,
+                            _ => 2,
+                        };
+                        (
+                            priority,
+                            &tech.track,
+                            tech.level,
+                            r.ui_row,
+                            r.ui_col,
+                            r.product_def_id,
+                        )
+                    });
+                    for (n, chunk) in rows.chunks(15).enumerate() {
+                        pages.push((
+                            if n == 0 {
+                                String::new()
+                            } else {
+                                format!("Research {}", n + 1)
+                            },
+                            chunk
+                                .iter()
+                                .enumerate()
+                                .map(|(slot, row)| (slot, row.product_def_id))
+                                .collect(),
+                        ));
+                    }
+                    continue;
+                }
                 let mut slots: Vec<Vec<Option<DefId>>> = Vec::new();
                 let mut spill: Vec<DefId> = Vec::new();
                 let mut first: Vec<Option<DefId>> = vec![None; 15];
@@ -1002,12 +1089,11 @@ impl Controller {
         for (slot, action) in &actions {
             palette
                 .buttons
-                .push(self.button(world, rules, *slot, *action, &own, &sources, &owned));
+                .push(self.button(world, rules, *slot, *action, &own));
         }
         Some((palette, actions))
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn button(
         &self,
         world: &World,
@@ -1015,8 +1101,6 @@ impl Controller {
         slot: usize,
         action: Action,
         own: &[&Entity],
-        sources: &rom_rules::ActiveSources,
-        owned: &rom_rules::Owned,
     ) -> HudButton {
         let player = world
             .players()
@@ -1028,8 +1112,7 @@ impl Controller {
             icon: String::new(),
             name: String::new(),
             price: String::new(),
-            enabled: true,
-            reason: String::new(),
+            state: ButtonState::Ready,
             armed: false,
         };
         match action {
@@ -1046,17 +1129,13 @@ impl Controller {
                     .map(|(resource, amount)| format!("{amount} {}", rules.def(*resource).name))
                     .collect::<Vec<_>>()
                     .join(", ");
-                if !rules.is_unlocked(def, sources, owned) {
-                    button.enabled = false;
-                    button.reason =
-                        format!("Requires {}", unmet(rules, def, sources, owned, faction));
-                } else if let Some((resource, amount)) = price.iter().find(|(resource, amount)| {
-                    player.resources.get(resource).copied().unwrap_or(0) < *amount
-                }) {
-                    button.enabled = false;
-                    button.reason =
-                        format!("Not enough {} (need {amount})", rules.def(*resource).name);
-                }
+                button.state = crate::hud::button_state(
+                    world,
+                    def,
+                    self.pending_research
+                        .get(&def)
+                        .is_some_and(|tick| *tick == world.tick()),
+                );
                 button.armed = matches!(&self.placement, Some(p) if matches!(action, Action::Construct(d) if d == p.def));
             }
             Action::Stop => {
@@ -1100,9 +1179,9 @@ impl Controller {
             return;
         };
         if let Some(button) = palette.buttons.iter().find(|b| b.slot == slot)
-            && !button.enabled
+            && !button.state.enabled()
         {
-            let reason = button.reason.clone();
+            let reason = button.state.reason();
             self.say(world, reason);
             return;
         }
@@ -1335,6 +1414,7 @@ impl Controller {
         }
         self.rally.retain(|id, _| world.entity(*id).is_some());
         let tick = world.tick();
+        self.pending_research.retain(|_, at| *at == tick);
         self.markers
             .retain(|m| tick.saturating_sub(m.tick) <= MARKER_TICKS);
         let due: Vec<Requeue> = {
@@ -1417,6 +1497,14 @@ impl Controller {
     /// Adds the selection, palette, queue and overlay data to a HUD snapshot.
     pub fn fill(&self, world: &World, hud: &mut HudSnapshot) {
         let rules = world.rules();
+        hud.data_tab = self.data_tab;
+        let pending: Vec<_> = self
+            .pending_research
+            .iter()
+            .filter(|(_, tick)| **tick == world.tick())
+            .map(|(id, _)| *id)
+            .collect();
+        hud.overview = crate::hud::research_overview(world, &pending);
         let faction = world
             .players()
             .find(|p| p.id == PLAYER)
@@ -1555,9 +1643,61 @@ impl Controller {
                 height: p.footprint.1.clamp(1, 255) as u8,
                 x: c.x,
                 y: c.y,
+                kind: u16::try_from(p.def.0).unwrap_or(u16::MAX),
+                owner: PLAYER.0 as u8,
                 valid: p.valid,
             })
         });
+        let city_selected = own.iter().any(|e| {
+            rules.entity_types[&e.type_id]
+                .territory
+                .as_ref()
+                .is_some_and(|t| t.is_city)
+        });
+        let placing_city = self.placement.as_ref().is_some_and(|p| {
+            rules.entity_types[&p.def]
+                .territory
+                .as_ref()
+                .is_some_and(|t| t.is_city)
+        });
+        let needs_radius = self.placement.as_ref().is_some_and(|p| {
+            rules.entity_types[&p.def]
+                .placement_rules
+                .iter()
+                .any(|r| r.rule == rom_rules::PlacementKind::InCityRadius)
+        });
+        hud.city_radii = world
+            .entities()
+            .filter(|e| e.pos.body == self.view.planet)
+            .filter_map(|e| {
+                let territory = rules.entity_types[&e.type_id].territory.as_ref()?;
+                if !territory.is_city {
+                    return None;
+                }
+                let economic = if (city_selected || needs_radius)
+                    && e.owner == PLAYER
+                    && e.build_progress.is_none()
+                    && !e.neutralised
+                {
+                    territory.economic_radius
+                } else {
+                    0
+                };
+                let spacing = if placing_city {
+                    rules.constant("city.spacing").unwrap_or(0)
+                } else {
+                    0
+                };
+                (economic > 0 || spacing > 0).then_some(HudCityRadius {
+                    face: e.pos.face,
+                    x: e.pos.x,
+                    y: e.pos.y,
+                    economic,
+                    spacing,
+                    minimap: city_selected && economic > 0,
+                })
+            })
+            .collect();
         if let Some((text, at)) = &self.message
             && tick.saturating_sub(*at) <= MESSAGE_TICKS
         {
@@ -1566,41 +1706,63 @@ impl Controller {
     }
 }
 
-/// Display names of the prerequisites of `def` that are not met yet.
-fn unmet(
-    rules: &Rules,
-    def: DefId,
-    sources: &rom_rules::ActiveSources,
-    owned: &rom_rules::Owned,
-    faction: DefId,
-) -> String {
-    let names: Vec<&str> = rules
-        .prerequisites
-        .get(&def)
-        .into_iter()
-        .flatten()
-        .filter(|row| {
-            let id = row.requires_def_id;
-            let met = if let Some(age) = rules.ages.get(&id) {
-                sources.iter().any(|s| {
-                    rules
-                        .ages
-                        .get(s)
-                        .is_some_and(|later| later.ordinal >= age.ordinal)
-                })
-            } else if rules.techs.contains_key(&id) {
-                sources.contains(&id)
-            } else {
-                owned.contains(&id)
+/// Translate rejected placement and research orders into the rule the player can fix.
+fn rejection_message(world: &World, error: &SimError, subject: Option<DefId>) -> String {
+    match error {
+        SimError::CitiesTooClose => format!(
+            "Too close to another city ({} tiles)",
+            world.rules().constant("city.spacing").unwrap_or(0) / 1000
+        ),
+        SimError::NotInOwnTerritory => "Outside your borders".into(),
+        SimError::NotInCityRadius => "Outside a city's economic radius".into(),
+        SimError::CityLimit => "City limit reached".into(),
+        SimError::Locked => subject.map_or("Needs a prerequisite".into(), |id| {
+            format!("Needs {}", crate::hud::unmet(world, id))
+        }),
+        SimError::Unavailable => "Unavailable to your faction".into(),
+        SimError::AlreadyResearched => "Already researched".into(),
+        SimError::ResearchQueued => "Research already queued".into(),
+        SimError::ExclusiveResearch => "Another research choice excludes this technology".into(),
+        SimError::PlacementOverlap => "Another building occupies this footprint".into(),
+        SimError::UnbuildableTerrain => "Cannot build on this terrain".into(),
+        SimError::OutsideMap | SimError::CrossesFaceEdge => {
+            "Footprint extends beyond the buildable surface".into()
+        }
+        SimError::NotOnTerrain
+        | SimError::NotAdjacentTerrain
+        | SimError::NotNearType
+        | SimError::TooCloseToType
+        | SimError::TooCloseToEnemyCity
+        | SimError::NotOnNode
+        | SimError::NotOnLayer => {
+            let rules = world.rules();
+            let kind = match error {
+                SimError::NotOnTerrain => rom_rules::PlacementKind::OnTerrain,
+                SimError::NotAdjacentTerrain => rom_rules::PlacementKind::AdjacentTerrain,
+                SimError::NotNearType => rom_rules::PlacementKind::NearType,
+                SimError::TooCloseToType => rom_rules::PlacementKind::MinDistanceType,
+                SimError::TooCloseToEnemyCity => rom_rules::PlacementKind::MinDistanceEnemyCity,
+                SimError::NotOnNode => rom_rules::PlacementKind::OnNode,
+                _ => rom_rules::PlacementKind::OnLayer,
             };
-            !met
-        })
-        .map(|row| rules.display_name(row.requires_def_id, faction))
-        .collect();
-    if names.is_empty() {
-        "a prerequisite".to_owned()
-    } else {
-        names.join(", ")
+            let rule = subject
+                .and_then(|id| rules.entity_types.get(&id))
+                .and_then(|t| t.placement_rules.iter().find(|r| r.rule == kind));
+            let target = rule
+                .and_then(|r| r.ref_def_id)
+                .map(|id| rules.def(id).name.as_str())
+                .unwrap_or("the required terrain or layer");
+            match kind {
+                rom_rules::PlacementKind::AdjacentTerrain => format!("Must touch {target}"),
+                rom_rules::PlacementKind::NearType => format!("Must be near {target}"),
+                rom_rules::PlacementKind::MinDistanceType => format!("Too close to {target}"),
+                rom_rules::PlacementKind::MinDistanceEnemyCity => {
+                    "Too close to an enemy city".into()
+                }
+                _ => format!("Must be on {target}"),
+            }
+        }
+        _ => error.to_string(),
     }
 }
 

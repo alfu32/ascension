@@ -14,6 +14,7 @@ use std::sync::Arc;
 pub(crate) struct HudGpu {
     painter: HudPainter,
     artwork: Texture2D,
+    greyscale: Texture2D,
     glyphs: Texture2D,
 }
 
@@ -54,11 +55,13 @@ impl HudGpu {
         let painter = HudPainter::bake(scale).map_err(|e| e.to_string())?;
         let a = &painter.artwork;
         let artwork = upload(rl, thread, a.width, a.height, &a.rgba)?;
+        let greyscale = upload(rl, thread, a.width, a.height, &painter.greyscale)?;
         let g = &painter.glyphs;
         let glyphs = upload(rl, thread, g.width, g.height, &g.rgba)?;
         Ok(Self {
             painter,
             artwork,
+            greyscale,
             glyphs,
         })
     }
@@ -146,6 +149,7 @@ impl HudGpu {
             let colour = Color::new(q.colour[0], q.colour[1], q.colour[2], q.colour[3]);
             let texture = match q.texture {
                 HudTexture::Artwork => &self.artwork,
+                HudTexture::Greyscale => &self.greyscale,
                 HudTexture::Glyphs => &self.glyphs,
                 HudTexture::Solid => {
                     d.draw_rectangle_rec(rectangle(q.dest), colour);
@@ -230,6 +234,7 @@ impl MinimapGpu {
         entities: &[EntityView],
         camera: &Camera,
         orbit: Option<&OrbitCamera>,
+        cities: &[crate::hud::HudCityRadius],
     ) {
         let view = layout.rect(Region::MinimapView);
         d.draw_rectangle_rec(rectangle(view), Color::new(4, 6, 12, 255));
@@ -289,6 +294,11 @@ impl MinimapGpu {
             _ => hud_minimap::marks(entities, camera, layout, self.size, area),
         };
         draw_marks(&mut clip, layout, marks);
+        draw_marks(
+            &mut clip,
+            layout,
+            hud_minimap::city_radius_marks(cities, self.size, area, self.globe.as_deref()),
+        );
     }
 }
 

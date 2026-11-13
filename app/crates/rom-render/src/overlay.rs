@@ -5,7 +5,7 @@
 //! the curvature.
 
 use crate::entities::{
-    EntityView, FlatGround, Footing, owner_color, pick_frame, side_of, unit_width,
+    EntityView, FlatGround, Footing, building_height, owner_color, pick_frame, side_of, unit_width,
 };
 use crate::hud::{HudSnapshot, MarkerKind};
 
@@ -103,6 +103,78 @@ impl OverlayGeometry {
         self.ground_loop(o, &points, colour);
     }
 
+    fn dashed_ring(&mut self, o: Origin, radius: f32, colour: [u8; 4]) {
+        let count = ((radius * std::f32::consts::TAU * 2.0).ceil() as usize).max(64);
+        for i in (0..count).step_by(2) {
+            let a = i as f32 / count as f32 * std::f32::consts::TAU;
+            let b = (i + 1) as f32 / count as f32 * std::f32::consts::TAU;
+            self.line(
+                o.at(radius * a.cos(), radius * a.sin(), LIFT),
+                o.at(radius * b.cos(), radius * b.sin(), LIFT),
+                colour,
+            );
+        }
+    }
+
+    fn building_ghost(&mut self, o: Origin, view: &EntityView, contour: [u8; 4], dashed: bool) {
+        let w = f32::from(view.footprint.0.max(1)) / 2.0;
+        let h = f32::from(view.footprint.1.max(1)) / 2.0;
+        let height = building_height(view);
+        let mut tint = rgba(owner_color(view.owner));
+        tint[3] = 48;
+        let corners = [(-w, -h), (w, -h), (w, h), (-w, h)];
+        for edge in 0..4 {
+            let (a, b) = (corners[edge], corners[(edge + 1) % 4]);
+            let length = (b.0 - a.0).hypot(b.1 - a.1);
+            let steps = (length * 4.0).ceil().max(1.0) as usize;
+            let normal = (-(b.1 - a.1) / length * 0.055, (b.0 - a.0) / length * 0.055);
+            for i in 0..steps {
+                let point = |t: f32| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+                let (a, b) = (
+                    point(i as f32 / steps as f32),
+                    point((i + 1) as f32 / steps as f32),
+                );
+                self.quad(
+                    [
+                        o.at(a.0, a.1, LIFT),
+                        o.at(b.0, b.1, LIFT),
+                        o.at(b.0, b.1, height),
+                        o.at(a.0, a.1, height),
+                    ],
+                    tint,
+                );
+                if !dashed || i % 2 == 0 {
+                    self.quad(
+                        [
+                            o.at(a.0 - normal.0, a.1 - normal.1, LIFT + 0.04),
+                            o.at(b.0 - normal.0, b.1 - normal.1, LIFT + 0.04),
+                            o.at(b.0 + normal.0, b.1 + normal.1, LIFT + 0.04),
+                            o.at(a.0 + normal.0, a.1 + normal.1, LIFT + 0.04),
+                        ],
+                        contour,
+                    );
+                }
+                self.line(o.at(a.0, a.1, height), o.at(b.0, b.1, height), tint);
+            }
+            self.line(o.at(a.0, a.1, LIFT), o.at(a.0, a.1, height), tint);
+        }
+        // Tile-sized roof panels follow the same ground samples as the footprint.
+        for y in 0..view.footprint.1.max(1) {
+            for x in 0..view.footprint.0.max(1) {
+                let (x, y) = (-w + f32::from(x), -h + f32::from(y));
+                self.quad(
+                    [
+                        o.at(x, y, height),
+                        o.at(x + 1.0, y, height),
+                        o.at(x + 1.0, y + 1.0, height),
+                        o.at(x, y + 1.0, height),
+                    ],
+                    tint,
+                );
+            }
+        }
+    }
+
     /// A rectangle outline on the ground, sampled every tile so it follows slopes and curvature.
     fn rect_outline(&mut self, o: Origin, min: (f32, f32), max: (f32, f32), colour: [u8; 4]) {
         let mut points = Vec::new();
@@ -163,6 +235,32 @@ pub fn build_overlays_on(
 ) {
     out.lines.clear();
     out.tris.clear();
+    for city in &hud.city_radii {
+        let origin = Origin {
+            ground,
+            face: city.face,
+            x: city.x as f32 / 1000.0,
+            y: city.y as f32 / 1000.0,
+        };
+        if city.economic > 0 {
+            out.dashed_ring(origin, city.economic as f32 / 1000.0, [235, 235, 235, 210]);
+        }
+        if city.spacing > 0 {
+            out.dashed_ring(origin, city.spacing as f32 / 1000.0, RED);
+        }
+    }
+    for view in views
+        .iter()
+        .filter(|v| v.building && v.under_construction == Some(0.0))
+    {
+        let origin = Origin {
+            ground,
+            face: view.face,
+            x: view.x,
+            y: view.y,
+        };
+        out.building_ghost(origin, view, rgba(owner_color(view.owner)), true);
+    }
     for id in &hud.selected {
         let Ok(index) = views.binary_search_by_key(id, |v| v.id) else {
             continue;
@@ -301,6 +399,21 @@ pub fn build_overlays_on(
                 );
             }
         }
+        let view = EntityView {
+            id: 0,
+            kind: p.kind,
+            owner: p.owner,
+            face: p.face,
+            x: cx,
+            y: cy,
+            facing_deg: 0.0,
+            hp_frac: 1.0,
+            building: true,
+            footprint: (p.width, p.height),
+            radius: 0.0,
+            under_construction: None,
+        };
+        out.building_ghost(origin, &view, line, false);
         out.rect_outline(origin, min, max, line);
         out.rect_outline(
             origin,
@@ -334,6 +447,128 @@ mod tests {
     }
 
     #[test]
+    fn contour_and_ghost_follow_the_footprint() {
+        let mut hud = HudSnapshot {
+            placement: Some(HudPlacement {
+                face: 0,
+                x: 20_000,
+                y: 30_000,
+                width: 4,
+                height: 2,
+                kind: 3,
+                owner: 1,
+                valid: Some(true),
+            }),
+            ..HudSnapshot::default()
+        };
+        let slope = |x: f32, y: f32| x * 0.02 + y * 0.01;
+        let mut out = OverlayGeometry::default();
+        build_overlays(&[], &slope, &hud, 0.0, &mut out);
+        let ghost: Vec<_> = out.tris.iter().filter(|t| t.colour[3] == 48).collect();
+        assert!(!ghost.is_empty());
+        let vertices: Vec<_> = ghost.iter().flat_map(|t| t.v).collect();
+        assert!(
+            vertices
+                .iter()
+                .all(|p| (18.0..=22.0).contains(&p[0]) && (29.0..=31.0).contains(&p[2]))
+        );
+        let top = 1.0 + 3.0 * 0.4 + 0.15 * 4.0;
+        for p in &vertices {
+            let lift = p[1] - slope(p[0], p[2]);
+            assert!((lift - LIFT).abs() < 1e-4 || (lift - top).abs() < 1e-4);
+        }
+        assert!(out.tris.iter().any(|t| t.colour == GREEN));
+        // At zero construction work, sites get the same full-height ghost and dashed contour.
+        let site = EntityView {
+            building: true,
+            footprint: (4, 2),
+            kind: 3,
+            x: 20.0,
+            y: 30.0,
+            under_construction: Some(0.0),
+            ..unit(7)
+        };
+        hud.placement = None;
+        build_overlays(std::slice::from_ref(&site), &slope, &hud, 0.0, &mut out);
+        assert!(out.tris.iter().any(|t| t.colour[3] == 48));
+        let site = EntityView {
+            under_construction: Some(0.1),
+            ..site
+        };
+        build_overlays(&[site], &slope, &hud, 0.0, &mut out);
+        assert!(out.tris.is_empty());
+    }
+
+    #[test]
+    fn city_radius_circle_has_the_right_radius() {
+        let hud = HudSnapshot {
+            city_radii: vec![crate::HudCityRadius {
+                face: 0,
+                x: 20_000,
+                y: 30_000,
+                economic: 16_000,
+                spacing: 20_000,
+                minimap: true,
+            }],
+            ..HudSnapshot::default()
+        };
+        let mut out = OverlayGeometry::default();
+        build_overlays(&[], &|_, _| 0.0, &hud, 0.0, &mut out);
+        assert!(out.lines.len() > 100);
+        for line in &out.lines {
+            let radius = if line.colour == RED { 20.0 } else { 16.0 };
+            for p in [line.a, line.b] {
+                assert!(((p[0] - 20.0).hypot(p[2] - 30.0) - radius).abs() < 1e-4);
+                assert_eq!(p[1], LIFT);
+            }
+        }
+    }
+
+    #[test]
+    fn ghost_and_city_circles_conform_to_the_globe() {
+        let n = 64;
+        let globe = crate::Globe::new(&crate::PlanetScene {
+            n,
+            kinds: vec![crate::TileKind::Land; 6 * (n * n) as usize],
+            heights: vec![0; 6 * (n * n) as usize],
+            feature_colors: Default::default(),
+            starts: vec![],
+            nodes: vec![],
+        });
+        let hud = HudSnapshot {
+            placement: Some(HudPlacement {
+                face: 2,
+                x: 32_000,
+                y: 32_000,
+                width: 7,
+                height: 7,
+                kind: 1,
+                owner: 1,
+                valid: Some(true),
+            }),
+            city_radii: vec![crate::HudCityRadius {
+                face: 2,
+                x: 32_000,
+                y: 32_000,
+                economic: 16_000,
+                spacing: 0,
+                minimap: false,
+            }],
+            ..HudSnapshot::default()
+        };
+        let mut out = OverlayGeometry::default();
+        build_overlays_on(&[], &globe, [1.0, 0.0, 0.0], &hud, &mut out);
+        let radius = crate::globe::planet_radius(n);
+        for line in &out.lines {
+            for p in [line.a, line.b] {
+                let length = p.iter().map(|v| v * v).sum::<f32>().sqrt();
+                assert!(length >= radius - 0.001 && length < radius + 4.0);
+            }
+        }
+        assert!(out.tris.iter().any(|t| t.colour[3] == 48));
+    }
+
+    #[test]
     fn selected_unit_gets_a_ring_and_a_health_bar() {
         let hud = HudSnapshot {
             selected: vec![1],
@@ -359,6 +594,8 @@ mod tests {
                 height: 2,
                 x: 20_500,
                 y: 30_000,
+                kind: 1,
+                owner: 1,
                 valid: Some(true),
             }),
             ..HudSnapshot::default()
@@ -366,7 +603,7 @@ mod tests {
         let mut out = OverlayGeometry::default();
         build_overlays(&[], &|_, _| 0.0, &hud, 0.0, &mut out);
         // 6 tiles, 2 triangles each.
-        assert_eq!(out.tris.len(), 12);
+        assert!(out.tris.len() > 12);
         let green = out.tris[0].colour;
         assert!(green[1] > green[0]);
         hud.placement.as_mut().unwrap().valid = Some(false);

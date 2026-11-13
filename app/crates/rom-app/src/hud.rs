@@ -1,8 +1,213 @@
 //! Convert player one's world state to plain interface data, without graphics calls.
 use crate::sim_thread::TICKS_PER_SECOND;
-use rom_render::{HudResearch, HudResource, HudSnapshot};
-use rom_rules::ResourceKind;
+use rom_render::{
+    ButtonState, HudResearch, HudResource, HudSnapshot, ResearchCell, ResearchOverview,
+    ResearchTrack,
+};
+use rom_rules::{DefId, ResourceKind, Rules, TechEffectKind, TechKind};
 use rom_sim::{OrderStatus, PlayerId, World};
+
+/// Resource artwork is presentation metadata keyed by the database abbreviation.
+pub(crate) fn resource_icon(rules: &Rules, id: DefId) -> String {
+    RESOURCE_ICONS
+        .iter()
+        .find(|(abbr, _)| *abbr == rules.resources[&id].abbrev)
+        .map_or("icons/help".into(), |(_, name)| format!("icons/res_{name}"))
+}
+
+/// Public entity queues omit submissions awaiting their first tick; the controller
+/// supplies those locally until the queue becomes visible.
+pub(crate) fn button_state(world: &World, def: DefId, pending: bool) -> ButtonState {
+    let rules = world.rules();
+    let player = world
+        .players()
+        .find(|p| p.id == PlayerId(1))
+        .expect("player");
+    if rules.techs.get(&def).is_some_and(|t| !t.repeatable)
+        && player.techs.get(&def).is_some_and(|n| *n > 0)
+    {
+        return ButtonState::Done;
+    }
+    if let Some(order) = world
+        .entities()
+        .filter(|e| e.owner == player.id)
+        .flat_map(|e| e.orders())
+        .find(|o| o.kind == "research" && o.subject == Some(def))
+    {
+        return ButtonState::InProgress {
+            pct: (u128::from(order.progress_ticks) * 100
+                / u128::from(order.total_ticks.unwrap_or(1).max(1)))
+            .min(100) as u32,
+        };
+    }
+    if pending {
+        return ButtonState::InProgress { pct: 0 };
+    }
+    if !rules.is_available(def, player.faction) {
+        return ButtonState::Locked {
+            reason: "Unavailable to your faction".into(),
+        };
+    }
+    if !rules.is_unlocked(def, &player.active_sources(), &world.owned_types(player.id)) {
+        return ButtonState::Locked {
+            reason: format!("Needs {}", unmet(world, def)),
+        };
+    }
+    let missing: Vec<_> = world
+        .price(player.id, def)
+        .into_iter()
+        .filter_map(|(r, amount)| {
+            let short = amount - player.resources.get(&r).copied().unwrap_or(0);
+            if short > 0 {
+                Some((resource_icon(rules, r), short))
+            } else {
+                None
+            }
+        })
+        .collect();
+    if missing.is_empty() {
+        ButtonState::Ready
+    } else {
+        ButtonState::Unaffordable { missing }
+    }
+}
+
+/// First unmet OR-group, excluding alternatives of groups that are already met.
+pub(crate) fn unmet(world: &World, def: DefId) -> String {
+    let rules = world.rules();
+    let player = world
+        .players()
+        .find(|p| p.id == PlayerId(1))
+        .expect("player");
+    let active = player.active_sources();
+    let owned = world.owned_types(player.id);
+    let mut groups = std::collections::BTreeMap::<_, Vec<_>>::new();
+    for row in rules.prerequisites.get(&def).into_iter().flatten() {
+        groups
+            .entry(row.alt_group)
+            .or_default()
+            .push(row.requires_def_id);
+    }
+    let met = |id: &DefId| {
+        if let Some(age) = rules.ages.get(id) {
+            rules.ages[&player.age].ordinal >= age.ordinal
+        } else if rules.techs.contains_key(id) {
+            active.contains(id)
+        } else {
+            owned.contains(id)
+        }
+    };
+    groups
+        .values()
+        .find(|ids| !ids.iter().any(met))
+        .map_or("a prerequisite".into(), |ids| {
+            ids.iter()
+                .map(|id| rules.display_name(*id, player.faction))
+                .collect::<Vec<_>>()
+                .join(" or ")
+        })
+}
+
+/// Whether a producer should show this technology as the next step in its track or age.
+pub(crate) fn next_research(world: &World, def: DefId) -> bool {
+    let rules = world.rules();
+    let player = world
+        .players()
+        .find(|p| p.id == PlayerId(1))
+        .expect("player");
+    let tech = &rules.techs[&def];
+    let done = |id: &DefId| player.techs.get(id).is_some_and(|n| *n > 0);
+    if !tech.repeatable && done(&def) {
+        return false;
+    }
+    match tech.kind {
+        TechKind::Track => !rules.techs.values().any(|t| {
+            t.track == tech.track
+                && t.kind == TechKind::Track
+                && t.level < tech.level
+                && !done(&t.id)
+        }),
+        TechKind::Age => rules.tech_effects.get(&def).into_iter().flatten().any(|e| {
+            e.effect == TechEffectKind::SetAge
+                && e.target_def_id.is_some_and(|id| {
+                    rules.ages[&id].ordinal == rules.ages[&player.age].ordinal + 1
+                })
+        }),
+        _ => true,
+    }
+}
+
+/// Completed levels, queued research and the next step of each track and age.
+pub(crate) fn research_overview(world: &World, pending: &[DefId]) -> ResearchOverview {
+    let rules = world.rules();
+    let player = world
+        .players()
+        .find(|p| p.id == PlayerId(1))
+        .expect("player");
+    let done = |id: &DefId| player.techs.get(id).is_some_and(|n| *n > 0);
+    let queued: std::collections::BTreeSet<_> = world
+        .entities()
+        .filter(|e| e.owner == player.id)
+        .flat_map(|e| e.orders())
+        .filter(|o| o.kind == "research")
+        .filter_map(|o| o.subject)
+        .chain(pending.iter().copied())
+        .collect();
+    let mut tracks = std::collections::BTreeMap::<_, Vec<_>>::new();
+    for tech in rules.techs.values().filter(|t| t.kind == TechKind::Track) {
+        tracks.entry(&tech.track).or_default().push(tech);
+    }
+    let tracks = tracks
+        .into_iter()
+        .map(|(label, mut techs)| {
+            techs.sort_by_key(|t| (t.level, t.id));
+            let next = techs.iter().find(|t| !done(&t.id)).map(|t| t.id);
+            ResearchTrack {
+                label: label.to_uppercase(),
+                levels: techs
+                    .iter()
+                    .map(|t| {
+                        if done(&t.id) {
+                            ResearchCell::Done
+                        } else if queued.contains(&t.id) {
+                            ResearchCell::InProgress
+                        } else if Some(t.id) == next {
+                            ResearchCell::Next
+                        } else {
+                            ResearchCell::Locked
+                        }
+                    })
+                    .collect(),
+            }
+        })
+        .collect();
+    let current_age = rules.ages[&player.age].ordinal;
+    let mut ages: Vec<_> = rules.ages.values().collect();
+    ages.sort_by_key(|a| (a.ordinal, a.id));
+    ResearchOverview {
+        tracks,
+        ages: ages
+            .iter()
+            .map(|a| {
+                if a.ordinal <= current_age {
+                    return ResearchCell::Done;
+                }
+                let in_progress = queued.iter().any(|id| {
+                    rules.tech_effects.get(id).into_iter().flatten().any(|e| {
+                        e.effect == TechEffectKind::SetAge && e.target_def_id == Some(a.id)
+                    })
+                });
+                if in_progress {
+                    ResearchCell::InProgress
+                } else if a.ordinal == current_age + 1 {
+                    ResearchCell::Next
+                } else {
+                    ResearchCell::Locked
+                }
+            })
+            .collect(),
+    }
+}
 
 // Presentation metadata only, keyed by the database resource abbreviation.
 const RESOURCE_ICONS: &[(&str, &str)] = &[
@@ -34,10 +239,7 @@ pub fn snapshot_of(world: &World) -> HudSnapshot {
         .filter(|r| r.kind == ResourceKind::Base)
         .map(|r| {
             let income = world.income(player.id, r.id);
-            let icon = RESOURCE_ICONS
-                .iter()
-                .find(|(abbr, _)| *abbr == r.abbrev)
-                .map_or("icons/help".into(), |(_, name)| format!("icons/res_{name}"));
+            let icon = resource_icon(rules, r.id);
             HudResource {
                 icon,
                 label: rules.def(r.id).name.clone(),

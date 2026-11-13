@@ -1,7 +1,10 @@
 //! Writes a CPU-only preview of the complete match HUD.
 use rom_render::hud::HudPainter;
 use rom_render::hud_layout::HudLayout;
-use rom_render::{Camera, HudResearch, HudResource, HudSnapshot, TerrainScene, TileKind};
+use rom_render::{
+    ButtonState, Camera, HudButton, HudPalette, HudResearch, HudResource, HudSnapshot, PaletteTab,
+    ResearchCell, ResearchOverview, ResearchTrack, TerrainScene, TileKind,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().skip(1).collect();
@@ -46,7 +49,73 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 progress_pct,
             })
             .collect(),
-        events: vec!["Event: New research available.".into()],
+        events: vec!["CPU sample: READY / UNAFFORDABLE / LOCKED / DONE / IN PROGRESS".into()],
+        help: "Q Ready   W Unaffordable   E Locked   R Done   T In progress".into(),
+        data_tab: 4,
+        palette: Some(HudPalette {
+            tab: PaletteTab::Research,
+            tabs: [true; 4],
+            pages: 1,
+            buttons: [
+                ("Ready", ButtonState::Ready),
+                (
+                    "Unaffordable",
+                    ButtonState::Unaffordable {
+                        missing: vec![("icons/res_timber".into(), 160)],
+                    },
+                ),
+                (
+                    "Locked",
+                    ButtonState::Locked {
+                        reason: "Needs Classical Age".into(),
+                    },
+                ),
+                ("Done", ButtonState::Done),
+                ("In progress", ButtonState::InProgress { pct: 43 }),
+            ]
+            .into_iter()
+            .enumerate()
+            .map(|(slot, (name, state))| HudButton {
+                slot,
+                icon: "icons/pic_scroll".into(),
+                name: name.into(),
+                price: "200 Food, 200 Timber".into(),
+                state,
+                armed: false,
+            })
+            .collect(),
+            ..HudPalette::default()
+        }),
+        overview: ResearchOverview {
+            tracks: ["CIVIC", "COMMERCE", "MILITARY", "SCIENCE"]
+                .into_iter()
+                .enumerate()
+                .map(|(row, label)| ResearchTrack {
+                    label: label.into(),
+                    levels: (0..13)
+                        .map(|col| {
+                            if col < row + 1 {
+                                ResearchCell::Done
+                            } else if col == row + 1 && row == 2 {
+                                ResearchCell::InProgress
+                            } else if col == row + 1 {
+                                ResearchCell::Next
+                            } else {
+                                ResearchCell::Locked
+                            }
+                        })
+                        .collect(),
+                })
+                .collect(),
+            ages: (0..14)
+                .map(|i| match i {
+                    0 => ResearchCell::Done,
+                    1 => ResearchCell::InProgress,
+                    2 => ResearchCell::Next,
+                    _ => ResearchCell::Locked,
+                })
+                .collect(),
+        },
         ..HudSnapshot::default()
     };
     let terrain = TerrainScene {

@@ -31,8 +31,9 @@ pub struct HudResearch {
 }
 
 pub use crate::hud_model::{
-    HudButton, HudCard, HudMarker, HudPalette, HudPlacement, HudQueue, HudQueueItem, HudSelection,
-    HudTile, MarkerKind, PaletteTab, SLOT_KEYS,
+    ButtonState, HudButton, HudCard, HudCityRadius, HudMarker, HudPalette, HudPlacement, HudQueue,
+    HudQueueItem, HudSelection, HudTile, MarkerKind, PaletteTab, ResearchCell, ResearchOverview,
+    ResearchTrack, SLOT_KEYS,
 };
 use crate::pick::HudTarget;
 
@@ -67,6 +68,12 @@ pub struct HudSnapshot {
     pub selected: Vec<u32>,
     /// Order and rally markers on the ground.
     pub markers: Vec<HudMarker>,
+    /// Selected data tab (0..4; 4 is research).
+    pub data_tab: usize,
+    /// Research tracks and age pips.
+    pub overview: ResearchOverview,
+    /// City circles on the current surface.
+    pub city_radii: Vec<HudCityRadius>,
     /// The building footprint being placed.
     pub placement: Option<HudPlacement>,
 }
@@ -89,6 +96,9 @@ impl Default for HudSnapshot {
             selected: Vec::new(),
             markers: Vec::new(),
             placement: None,
+            data_tab: 0,
+            overview: ResearchOverview::default(),
+            city_radii: Vec::new(),
         }
     }
 }
@@ -105,6 +115,8 @@ const AMBER: [u8; 4] = [240, 176, 48, 255];
 pub enum HudTexture {
     /// SVG artwork atlas.
     Artwork,
+    /// Desaturated artwork atlas.
+    Greyscale,
     /// Font atlas.
     Glyphs,
     /// Single white pixel, tinted by the quad colour.
@@ -137,6 +149,8 @@ pub struct HudOverlay {
 pub struct HudPainter {
     /// Baked vector artwork.
     pub artwork: AtlasImage,
+    /// Desaturated artwork, baked once per scale.
+    pub greyscale: Vec<u8>,
     /// Baked glyphs.
     pub glyphs: GlyphAtlas,
     quads: Vec<HudQuad>,
@@ -146,8 +160,11 @@ pub struct HudPainter {
 impl HudPainter {
     /// Bakes the embedded artwork and text at one scale, without a graphics context.
     pub fn bake(scale: f32) -> Result<Self, AtlasError> {
+        let artwork = hud_atlas::bake(scale)?;
+        let greyscale = hud_atlas::greyscale(&artwork.rgba);
         Ok(Self {
-            artwork: hud_atlas::bake(scale)?,
+            artwork,
+            greyscale,
             glyphs: GlyphAtlas::bake(scale),
             quads: Vec::new(),
             scale,
@@ -285,11 +302,11 @@ impl HudPainter {
                 .and_then(|p| p.buttons.iter().find(|b| b.slot == index))
                 .map_or_else(Default::default, |b| {
                     let mut line = b.price.clone();
-                    if !b.reason.is_empty() {
+                    if !b.state.reason().is_empty() {
                         if !line.is_empty() {
                             line.push_str("   ");
                         }
-                        line.push_str(&b.reason);
+                        line.push_str(&b.state.reason());
                     }
                     (b.name.clone(), line)
                 }),
@@ -442,6 +459,10 @@ impl HudPainter {
         for b in &palette.buttons {
             let r = l.command_slot(b.slot % 5, b.slot / 5);
             let icon = 34.0 * s;
+            let start = self.quads.len();
+            if matches!(b.state, ButtonState::Locked { .. }) {
+                self.art("chrome/tile", r);
+            }
             self.art(
                 &b.icon,
                 Rect::new(
@@ -451,16 +472,32 @@ impl HudPainter {
                     icon,
                 ),
             );
+            if matches!(b.state, ButtonState::Locked { .. }) {
+                for quad in &mut self.quads[start..] {
+                    quad.texture = HudTexture::Greyscale;
+                    quad.colour = [195, 195, 195, 255];
+                }
+            }
             self.text(
                 &SLOT_KEYS[b.slot.min(14)].to_string(),
                 Rect::new(r.x + 5.0 * s, r.y + 3.0 * s, 22.0 * s, 12.0 * s),
                 TextSize::Small,
                 Align::Left,
-                if b.enabled { WHITE } else { MUTED },
+                if b.state.enabled() { WHITE } else { MUTED },
             );
             let inner = Rect::new(r.x + 3.0 * s, r.y + 3.0 * s, r.w - 6.0 * s, r.h - 6.0 * s);
-            if !b.enabled {
-                self.solid(inner, [6, 9, 14, 165]);
+            match b.state {
+                ButtonState::Unaffordable { .. } => self.solid(inner, [6, 9, 14, 165]),
+                ButtonState::Done => self.art(
+                    "icons/badge_done",
+                    Rect::new(r.right() - 22.0 * s, r.y + 2.0 * s, 20.0 * s, 20.0 * s),
+                ),
+                ButtonState::InProgress { pct } => self.bar(
+                    Rect::new(inner.x, inner.bottom() - 4.0 * s, inner.w, 3.0 * s),
+                    pct.min(100) as f32 / 100.0,
+                    CYAN,
+                ),
+                _ => {}
             }
             if b.armed {
                 self.frame(r, 2.0 * s, CYAN);
@@ -470,7 +507,7 @@ impl HudPainter {
                     index: b.slot,
                 })
             {
-                self.frame(r, 1.5 * s, if b.enabled { GOLD } else { MUTED });
+                self.frame(r, 1.5 * s, if b.state.enabled() { GOLD } else { MUTED });
             }
         }
     }
@@ -677,6 +714,42 @@ impl HudPainter {
                     }
                 }
             }
+        }
+    }
+
+    fn research_overview(&mut self, l: &HudLayout, overview: &ResearchOverview) {
+        use Group::BottomRight as R;
+        let cell = |this: &mut Self, rect: Rect, state: ResearchCell| {
+            let colour = match state {
+                ResearchCell::Done => GOLD,
+                ResearchCell::InProgress => CYAN,
+                ResearchCell::Next => WHITE,
+                ResearchCell::Locked => [72, 80, 90, 255],
+            };
+            if state == ResearchCell::Next {
+                this.frame(rect, l.scale.max(1.0), colour);
+            } else {
+                this.solid(rect, colour);
+            }
+        };
+        for (row, track) in overview.tracks.iter().enumerate() {
+            let y = 702.0 + row as f32 * 35.0;
+            self.caption(l, R, &track.label, Rect::new(1492.0, y, 150.0, 16.0), WHITE);
+            for (col, state) in track.levels.iter().enumerate() {
+                cell(
+                    self,
+                    l.map(R, Rect::new(1493.0 + col as f32 * 11.0, y + 19.0, 8.0, 8.0)),
+                    *state,
+                );
+            }
+        }
+        self.caption(l, R, "AGES", Rect::new(1492.0, 849.0, 150.0, 16.0), WHITE);
+        for (col, state) in overview.ages.iter().enumerate() {
+            cell(
+                self,
+                l.map(R, Rect::new(1493.0 + col as f32 * 10.0, 872.0, 7.0, 7.0)),
+                *state,
+            );
         }
     }
 
@@ -923,14 +996,17 @@ impl HudPainter {
         self.selection_block(l, h, overlay);
         self.art(
             "chrome/tab_active",
-            l.map(R, Rect::new(1350.0, 695.0, 132.0, 38.0)),
+            l.map(
+                R,
+                Rect::new(1350.0, 695.0 + h.data_tab.min(4) as f32 * 42.0, 132.0, 38.0),
+            ),
         );
         for (i, (icon, label)) in [
             ("political", "POLITICAL"),
             ("military", "MILITARY"),
             ("economy", "ECONOMY"),
             ("diplomacy", "DIPLOMACY"),
-            ("wonders", "WONDERS"),
+            ("research", "RESEARCH"),
         ]
         .into_iter()
         .enumerate()
@@ -941,6 +1017,9 @@ impl HudPainter {
                 l.map(R, Rect::new(1359.0, y + 7.0, 24.0, 24.0)),
             );
             self.caption(l, R, label, Rect::new(1392.0, y + 10.0, 85.0, 16.0), GOLD);
+        }
+        if h.data_tab == 4 {
+            self.research_overview(l, &h.overview);
         }
         if let Some(drag) = overlay.drag_box {
             self.solid(drag, [63, 208, 255, 36]);

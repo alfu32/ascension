@@ -441,6 +441,21 @@ fn rasterise(
     })
 }
 
+/// Converts straight RGBA pixels to greyscale with Rec. 709 luminance, preserving alpha.
+pub fn greyscale(pixels: &[u8]) -> Vec<u8> {
+    pixels
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|p| {
+            let y =
+                ((2126 * u32::from(p[0]) + 7152 * u32::from(p[1]) + 722 * u32::from(p[2]) + 5000)
+                    / 10000) as u8;
+            [y, y, y, p[3]]
+        })
+        .collect()
+}
+
 /// Rasterises every embedded SVG at `scale` (HUD pixels per design pixel) into one atlas.
 pub fn bake(scale: f32) -> Result<AtlasImage, AtlasError> {
     bake_sources(SOURCES, scale)
@@ -507,6 +522,32 @@ fn bake_sources(sources: &[(&'static str, &str)], scale: f32) -> Result<AtlasIma
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn greyscale_keeps_luminance() {
+        let pixels = [
+            255, 0, 0, 255, 0, 255, 0, 173, 0, 0, 255, 0, 128, 128, 128, 99,
+        ];
+        let grey = greyscale(&pixels);
+        assert_eq!(
+            grey,
+            [
+                54, 54, 54, 255, 182, 182, 182, 173, 18, 18, 18, 0, 128, 128, 128, 99
+            ]
+        );
+        for (src, dst) in pixels
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(grey.as_chunks::<4>().0.iter())
+        {
+            let luma = 0.2126 * f32::from(src[0])
+                + 0.7152 * f32::from(src[1])
+                + 0.0722 * f32::from(src[2]);
+            assert!((f32::from(dst[0]) - luma).abs() <= 0.5);
+            assert_eq!(dst[3], src[3]);
+        }
+    }
 
     #[test]
     fn every_listed_svg_parses_and_rasterises() {

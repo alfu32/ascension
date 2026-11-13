@@ -310,6 +310,14 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
             }
         }
     };
+    if !options.universe
+        && let Some(path) = &options.script
+    {
+        let text = std::fs::read_to_string(path)
+            .map_err(|error| format!("reading {}: {error}", path.display()))?;
+        let setup = ScriptSetup::scan(&text)?;
+        setup.apply_grants(&mut game.world)?;
+    }
     let wanderers = add_stress_units(&mut game, options.stress_units, options.seed);
     let driver = options
         .demo

@@ -229,6 +229,22 @@ impl OrbitCamera {
         self.clamp();
     }
 
+    /// Carries the whole view along the great circle from one cursor hit to another.
+    pub fn drag_surface(&mut self, from: [f32; 3], to: [f32; 3]) {
+        let (from, to) = (normalize(from), normalize(to));
+        let axis = cross(from, to);
+        if dot(axis, axis) < 1e-12 {
+            return;
+        }
+        let axis = normalize(axis);
+        let angle = dot(from, to).clamp(-1.0, 1.0).acos();
+        let carried = rotate_about(self.forward_tangent(), axis, angle);
+        self.dir = normalize(rotate_about(self.dir, axis, angle));
+        let (north, east) = tangent_frame(self.dir);
+        self.heading = dot(carried, east).atan2(dot(carried, north));
+        self.clamp();
+    }
+
     /// Looks at another point of the surface, keeping zoom and heading.
     pub fn look_at(&mut self, dir: [f32; 3]) {
         let forward_tangent = self.forward_tangent();
@@ -295,10 +311,10 @@ impl OrbitController {
                 self.pointer = Some([x, y]);
             }
             InputEvent::PointerLeft => self.pointer = None,
-            InputEvent::ButtonDown { button, x, y, .. } => {
+            InputEvent::ButtonDown { button, x, y, mods } => {
                 self.pointer = Some([x, y]);
                 if button == PointerButton::Middle {
-                    self.rotating = true;
+                    self.rotating = mods.shift;
                 }
             }
             InputEvent::ButtonUp { button, x, y, .. } => {
@@ -387,6 +403,20 @@ mod tests {
 
     fn length(v: [f32; 3]) -> f32 {
         dot(v, v).sqrt()
+    }
+
+    #[test]
+    fn surface_drag_carries_heading_along_the_great_circle() {
+        let mut camera = camera(30.0);
+        let from = camera.dir;
+        let to = normalize(add(from, scale(camera.right_tangent(), 0.2)));
+        let heading = camera.forward_tangent();
+        camera.drag_surface(from, to);
+        assert!(dot(camera.dir, to) > 0.99999);
+        assert!(dot(camera.forward_tangent(), camera.dir).abs() < 1e-5);
+        camera.drag_surface(to, from);
+        assert!(dot(camera.dir, from) > 0.99999);
+        assert!(dot(camera.forward_tangent(), heading) > 0.99999);
     }
 
     #[test]

@@ -1,0 +1,18 @@
+# Research Civic level 1 through orders so a second city is permitted.
+# Keep the city and a builder selected while previewing the next city.
+0 grant res.food 10000
+0 grant res.timber 10000
+0 speed 10000
+1 box builders
+2 hud tab 0
+3 hud slot 3
+4 click @10,0
+250 researchers
+251 hud tab 3
+252 hud slot 0
+700 click city
+701 click builder1 shift
+702 hud tab 0
+703 hud slot 0
+704 hover @27,0
+705 speed 1
