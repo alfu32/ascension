@@ -348,7 +348,8 @@ def generate():
                 modifier(key, 'pop_cap', 25, 'add')
             elif track == 'civic':
                 modifier(key, 'city_limit', 1, 'add')
-                modifier(key, 'border_radius', 5, target='city')
+                modifier(key, 'border_radius', 106, 'mul', 'city')
+                modifier(key, 'economic_radius', 106, 'mul', 'city')
             elif track == 'commerce':
                 modifier(key, 'commerce_cap', 40, 'add')
                 modifier(key, 'caravan_limit', 1, 'add')

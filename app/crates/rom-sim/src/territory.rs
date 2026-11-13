@@ -26,6 +26,10 @@ pub(crate) struct Territory {
     pub owned: BTreeMap<PlayerId, u64>,
     /// City entities (complete and sites), by id.
     pub cities: BTreeSet<EntityId>,
+    /// Current economic radius of every city in `cities`, in milli-tiles.
+    pub radii: BTreeMap<EntityId, i64>,
+    /// Completed, active non-city buildings that widen cities: owner and position.
+    pub widening: BTreeMap<EntityId, (PlayerId, Pos)>,
 }
 
 /// One surface's incrementally maintained border grid.
@@ -150,16 +154,84 @@ impl World {
         Some((e.pos, radius, e.owner))
     }
 
-    /// Brings an entity's emitter, city index entry and the border grid up to date.
+    /// The economic radius of a city in milli-tiles: the stat plus the building bonus.
+    pub fn city_economic_radius(&self, id: EntityId) -> i64 {
+        self.territory.radii.get(&id).copied().unwrap_or_else(|| {
+            self.entity(id)
+                .and_then(|e| self.rules.entity_types[&e.type_id].territory.as_ref())
+                .map_or(0, |t| t.economic_radius)
+        })
+    }
+
+    /// A city's economic radius from the stat engine alone.
+    fn base_economic_radius(&self, id: EntityId) -> i64 {
+        let e = self.entity(id).expect("city");
+        let base = self.rules.entity_types[&e.type_id]
+            .territory
+            .as_ref()
+            .map_or(0, |t| t.economic_radius);
+        self.effective_stat(id, "economic_radius", base).max(0)
+    }
+
+    /// Recomputes every city's economic radius from the widening buildings.
+    fn recompute_city_radii(&mut self) {
+        let per = self.rules.constant("city.radius_per_building").unwrap_or(0);
+        let max = self
+            .rules
+            .constant("city.radius_from_buildings_max")
+            .unwrap_or(0);
+        let radii: BTreeMap<EntityId, i64> = self
+            .territory
+            .cities
+            .iter()
+            .map(|&city| {
+                let base = self.base_economic_radius(city);
+                let e = self.entity(city).expect("city");
+                let geo = self.geo(e.pos.body);
+                let count = self
+                    .territory
+                    .widening
+                    .values()
+                    .filter(|(owner, pos)| {
+                        *owner == e.owner && pos.body == e.pos.body && geo.within(e.pos, *pos, base)
+                    })
+                    .count() as i64;
+                (city, base + max.min(per.saturating_mul(count)).max(0))
+            })
+            .collect();
+        self.territory.radii = radii;
+    }
+
+    /// Brings an entity's emitter, city index entry, economic radius and the border grid
+    /// up to date.
     pub(crate) fn refresh_territory(&mut self, id: EntityId) {
-        if self
+        let is_city = self
             .entity(id)
-            .is_some_and(|e| self.is_city_type(e.type_id))
-        {
+            .is_some_and(|e| self.is_city_type(e.type_id));
+        if is_city {
             self.territory.cities.insert(id);
         } else {
             self.territory.cities.remove(&id);
+            self.territory.radii.remove(&id);
         }
+        let widening = self.entity(id).and_then(|e| {
+            let counts = self.rules.entity_types[&e.type_id].class == EntityClass::Building
+                && !is_city
+                && e.build_progress.is_none()
+                && !e.neutralised;
+            counts.then_some((e.owner, e.pos))
+        });
+        let changed = match widening {
+            Some(value) => self.territory.widening.insert(id, value) != Some(value),
+            None => self.territory.widening.remove(&id).is_some(),
+        };
+        self.refresh_emitter(id);
+        if changed || is_city || self.territory.radii.len() != self.territory.cities.len() {
+            self.recompute_city_radii();
+        }
+    }
+
+    fn refresh_emitter(&mut self, id: EntityId) {
         let desired = self.desired_emitter(id);
         let old = self.territory.emitters.get(&id).copied();
         if old.map(|o| (o.pos, o.radius, o.owner)) == desired {
@@ -326,10 +398,7 @@ impl World {
             .iter()
             .filter_map(|id| {
                 let city = self.entity(*id)?;
-                let radius = self.rules.entity_types[&city.type_id]
-                    .territory
-                    .as_ref()?
-                    .economic_radius;
+                let radius = self.city_economic_radius(*id);
                 (city.owner == player
                     && city.build_progress.is_none()
                     && !city.neutralised

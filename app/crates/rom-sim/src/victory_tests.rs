@@ -4,7 +4,7 @@ use crate::{
 };
 use rom_rules::{DefId, Rules, VictoryRule, build_rules_db};
 use std::{collections::BTreeMap, sync::Arc};
-const PINNED_GEOMETRY: &str = "UPDATE et_territory SET border_radius=24000, economic_radius=20000 WHERE is_city=1; UPDATE game_constant SET value=24000 WHERE key='city.spacing';";
+const PINNED_GEOMETRY: &str = "UPDATE et_territory SET border_radius=24000, economic_radius=20000 WHERE is_city=1; UPDATE game_constant SET value=24000 WHERE key='city.spacing'; UPDATE game_constant SET value=0 WHERE key IN ('city.radius_per_building','city.radius_from_buildings_max');";
 
 const P1: PlayerId = PlayerId(1);
 const P2: PlayerId = PlayerId(2);
