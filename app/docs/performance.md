@@ -215,3 +215,37 @@ The HUD uses one artwork atlas texture, one glyph atlas texture, and a terrain
 minimap texture uploaded once per terrain. Each frame adds textured quads,
 entity dots and the camera footprint. Atlas/glyph baking happens at startup
 and after scale changes beyond 10%, outside steady-state frame costs.
+
+## Sphere planet (task 18)
+
+`--sphere 192` draws a generated planet of 6 × 192² = 221,184 tiles on a globe of radius
+122 tiles: 216 land chunks and 156 sea chunks (at most 32 × 32 tiles each, 372 meshes in
+all), about 440,000 land triangles. Chunks wholly beyond the horizon or outside the view
+pyramid are not drawn (`ChunkBounds::may_be_seen`). The simulation is not started in sphere
+mode, so the numbers are rendering only (HUD on, 1280×800, scale 100, 10 s, seed 1).
+
+```sh
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --size 1280x800 --bench 10 --orbit 0,10,12,30   # street
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --size 1280x800 --bench 10 --orbit 0,10,90,0    # mid
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --size 1280x800 --bench 10 --orbit 0,10,330,0   # globe
+```
+
+| View | Bench line |
+| --- | --- |
+| street (distance 12) | `bench size=1280x800 scale=100 frames=585 fps=58.5 frame_ms_avg=8.82 frame_ms_max=18.62 readback_ms_avg=8.47 readback_ms_max=18.25` |
+| mid (distance 90) | `bench size=1280x800 scale=100 frames=572 fps=57.2 frame_ms_avg=10.90 frame_ms_max=15.34 readback_ms_avg=10.43 readback_ms_max=14.99` |
+| globe (distance 330) | `bench size=1280x800 scale=100 frames=557 fps=55.7 frame_ms_avg=9.92 frame_ms_max=15.97 readback_ms_avg=9.30 readback_ms_max=15.44` |
+
+Mesh build and upload, printed once at start-up as `planet-mesh n=192 meshes=372
+build_ms=… upload_ms=…`: about 110–125 ms to build the globe geometry (vertex directions,
+heights, colours and normals for 223,000 corners) and the chunk meshes, and 30–45 ms to
+upload them (five runs: build 109–126 ms, upload 29–43 ms). Nothing is built after
+start-up.
+
+The render thread keeps 60 frames per second in every view; the "shown" rate is what GPUI
+presents and varies by a few frames per second between runs, more while other builds run on
+the machine (this task's runs shared the machine with another task's compiler). Before
+chunk culling the same scene showed 49–59 fps, the extra GPU time going to the far side of
+the planet, which the culling now skips. The whole frame is dominated by waiting for the GPU
+in the read-back, as in the flat scene. Screenshots: `docs/img/globe-street.png`,
+`globe-mid.png`, `globe-full.png`.

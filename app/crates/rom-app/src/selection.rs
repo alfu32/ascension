@@ -237,6 +237,7 @@ impl Controller {
                 modifiers,
                 double,
                 on_screen,
+                ..
             } => self.click(world, world_point, entity, modifiers, double, &on_screen),
             PickEvent::BoxSelect {
                 entities,
@@ -246,6 +247,7 @@ impl Controller {
                 world_point,
                 entity,
                 modifiers,
+                ..
             } => self.right_click(world, world_point, entity, modifiers),
             PickEvent::HudClick {
                 region,
@@ -253,7 +255,7 @@ impl Controller {
                 button,
                 modifiers,
             } => self.hud_click(world, region, index, button, modifiers),
-            PickEvent::Hover { world_point } => self.hover(world, world_point),
+            PickEvent::Hover { world_point, .. } => self.hover(world, world_point),
             PickEvent::Hotkey { ch, modifiers } => self.hotkey(world, ch, modifiers),
             PickEvent::Escape => {
                 self.placement = None;

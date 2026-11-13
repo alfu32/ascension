@@ -12,9 +12,9 @@ pub const CHUNK_TILES: u32 = 64;
 /// Height of the highest land above sea level, in tiles.
 pub const RELIEF: f32 = 5.0;
 /// Depth of the sea floor next to the coast, in tiles.
-const FLOOR_NEAR: f32 = 0.15;
+pub(crate) const FLOOR_NEAR: f32 = 0.15;
 /// Depth of the deepest sea floor, in tiles.
-const FLOOR_DEEP: f32 = 3.0;
+pub(crate) const FLOOR_DEEP: f32 = 3.0;
 /// Radius of the sphere the stars sit on.
 pub const STAR_RADIUS: f32 = 100.0;
 /// Number of stars in the backdrop.
@@ -75,7 +75,7 @@ pub struct Shape {
     pub color: Vec<[f32; 3]>,
 }
 
-fn mix(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
+pub(crate) fn mix(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
     let t = t.clamp(0.0, 1.0);
     [
         a[0] + (b[0] - a[0]) * t,
@@ -98,10 +98,19 @@ fn land_color(t: f32) -> [f32; 3] {
 impl Shape {
     /// Computes elevation and colour for every tile.
     pub fn new(scene: &TerrainScene) -> Self {
+        Self::from_tiles(&scene.kinds, &scene.heights, &scene.feature_colors)
+    }
+
+    /// Computes elevation and colour from per-tile kinds and heights in any tile order.
+    pub fn from_tiles(
+        kinds: &[TileKind],
+        heights: &[u8],
+        feature_colors: &BTreeMap<u16, [u8; 3]>,
+    ) -> Self {
         let (mut land_min, mut land_max) = (u8::MAX, 0_u8);
         let (mut water_min, mut water_max) = (u8::MAX, 0_u8);
         let (mut has_land, mut has_water) = (false, false);
-        for (kind, &h) in scene.kinds.iter().zip(&scene.heights) {
+        for (kind, &h) in kinds.iter().zip(heights) {
             match kind {
                 TileKind::Land | TileKind::Feature(_) => {
                     has_land = true;
@@ -126,10 +135,10 @@ impl Shape {
         let land_span = (top - base).max(1.0);
         let water_span = f32::from(water_max.saturating_sub(water_min)).max(1.0);
 
-        let tiles = scene.kinds.len();
+        let tiles = kinds.len();
         let mut elevation = vec![0.0; tiles];
         let mut color = vec![[0.0; 3]; tiles];
-        for (i, (kind, &h)) in scene.kinds.iter().zip(&scene.heights).enumerate() {
+        for (i, (kind, &h)) in kinds.iter().zip(heights).enumerate() {
             let h = f32::from(h);
             match kind {
                 TileKind::Land | TileKind::Feature(_) => {
@@ -138,11 +147,7 @@ impl Shape {
                     let ground = land_color(t);
                     color[i] = match kind {
                         TileKind::Feature(id) => {
-                            let tint = scene
-                                .feature_colors
-                                .get(id)
-                                .copied()
-                                .unwrap_or([200, 0, 200]);
+                            let tint = feature_colors.get(id).copied().unwrap_or([200, 0, 200]);
                             mix(ground, tint.map(|c| f32::from(c) / 255.0), 0.65)
                         }
                         _ => ground,
@@ -221,7 +226,7 @@ pub struct ChunkMesh {
     pub indices: Vec<u16>,
 }
 
-fn byte(value: f32) -> u8 {
+pub(crate) fn byte(value: f32) -> u8 {
     (value.clamp(0.0, 1.0) * 255.0 + 0.5) as u8
 }
 
@@ -426,7 +431,7 @@ pub fn star_triangles(stars: &[Star]) -> (Vec<[f32; 3]>, Vec<[u8; 4]>) {
     (positions, colors)
 }
 
-fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+pub(crate) fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
     [
         a[1] * b[2] - a[2] * b[1],
         a[2] * b[0] - a[0] * b[2],
@@ -434,7 +439,7 @@ fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
     ]
 }
 
-fn normalize(v: [f32; 3]) -> [f32; 3] {
+pub(crate) fn normalize(v: [f32; 3]) -> [f32; 3] {
     let length = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-9);
     [v[0] / length, v[1] / length, v[2] / length]
 }

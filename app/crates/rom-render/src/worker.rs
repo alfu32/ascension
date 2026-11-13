@@ -15,12 +15,15 @@ use raylib::prelude::{
 
 use crate::camera::{Camera, CameraController, InputEvent};
 use crate::entities::{EntitySnapshot, EntityView, SnapshotPair};
+use crate::globe::{Globe, PlanetScene};
 use crate::hud::{HudOverlay, HudSnapshot};
 use crate::hud_gpu::{HudGpu, MinimapGpu};
 use crate::hud_layout::HudLayout;
 use crate::hud_layout::Rect;
+use crate::hud_minimap::GLOBE_MINIMAP_SIZE;
 use crate::mailbox::{Frame, FrameMailbox, FramePixels};
-use crate::pick::{PickContext, PickController, PickEvent, canvas_view};
+use crate::orbit::{HOME_DISTANCE, OrbitCamera, OrbitController, lon_lat_of};
+use crate::pick::{PickContext, PickController, PickEvent, canvas_view, canvas_view_orbit};
 use crate::pixels::rgba_to_bgra_flipped;
 use crate::scene::Scene;
 use crate::stats::{RenderStats, StatsWindow};
@@ -44,6 +47,16 @@ pub fn scaled_size(layout: (u32, u32), percent: u32) -> (u32, u32) {
     (scale(layout.0), scale(layout.1))
 }
 
+/// How the orbit camera of a sphere planet starts.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct OrbitSettings {
+    /// Largest camera distance in tiles; `None` means three planet radii.
+    pub max_distance: Option<f32>,
+    /// First view as longitude, latitude, distance and heading (degrees, tiles); `None` looks at
+    /// the first player start.
+    pub view: Option<[f32; 4]>,
+}
+
 /// State shared between the render thread and its bridges.
 #[derive(Debug)]
 struct Shared {
@@ -53,6 +66,7 @@ struct Shared {
     input: Mutex<Vec<InputEvent>>,
     mailbox: FrameMailbox,
     terrain: Mutex<Option<Arc<TerrainScene>>>,
+    planet: Mutex<Option<(Arc<PlanetScene>, OrbitSettings)>>,
     terrain_ready: AtomicBool,
     box_count: AtomicU32,
     snapshots: Mutex<SnapshotPair>,
@@ -95,7 +109,14 @@ impl RenderBridge {
         *lock(&self.shared.terrain) = Some(scene);
     }
 
-    /// True once the render thread has built the meshes of the last published terrain.
+    /// Hands the render thread a sphere planet to mesh and draw with an orbit camera, replacing
+    /// any earlier terrain or planet.
+    pub fn publish_planet(&self, scene: Arc<PlanetScene>, settings: OrbitSettings) {
+        self.shared.terrain_ready.store(false, Ordering::Release);
+        *lock(&self.shared.planet) = Some((scene, settings));
+    }
+
+    /// True once the render thread has built the meshes of the last published terrain or planet.
     pub fn terrain_ready(&self) -> bool {
         self.shared.terrain_ready.load(Ordering::Acquire)
     }
@@ -228,6 +249,7 @@ impl RenderWorker {
             input: Mutex::new(Vec::new()),
             mailbox: FrameMailbox::default(),
             terrain: Mutex::new(None),
+            planet: Mutex::new(None),
             terrain_ready: AtomicBool::new(false),
             box_count: AtomicU32::new(0),
             snapshots: Mutex::new(SnapshotPair::default()),
@@ -304,6 +326,9 @@ fn render_loop(shared: &Shared) {
     let mut target: Option<(RenderTexture2D, (u32, u32))> = None;
     let mut camera = Camera::default();
     let mut controller = CameraController::default();
+    let mut orbit: Option<OrbitCamera> = None;
+    let mut orbit_controller = OrbitController::default();
+    let mut globe: Option<Arc<Globe>> = None;
     let mut stats = StatsWindow::default();
     let mut blended: Vec<EntityView> = Vec::new();
     let mut picker = PickController::default();
@@ -322,8 +347,60 @@ fn render_loop(shared: &Shared) {
             .min(0.1);
         last_frame = frame_start;
 
+        let published_planet = lock(&shared.planet).take();
+        if let Some((planet, settings)) = published_planet {
+            orbit = None;
+            globe = None;
+            minimap = None;
+            if planet.is_valid() {
+                let started_at = Instant::now();
+                let built_globe = Arc::new(Globe::new(&planet));
+                let geometry_ms = millis(started_at.elapsed());
+                let (meshes, build_ms, upload_ms) =
+                    scene.set_planet(&thread, &planet, &built_globe);
+                minimap = match MinimapGpu::load_planet(&mut rl, &thread, &planet, &built_globe) {
+                    Ok(map) => Some(map),
+                    Err(error) => {
+                        eprintln!("rom-render: minimap: {error}");
+                        None
+                    }
+                };
+                let radius = built_globe.radius();
+                let max = settings
+                    .max_distance
+                    .unwrap_or_else(|| OrbitCamera::default_max_distance(radius));
+                let (lon, lat) = planet
+                    .starts
+                    .first()
+                    .map_or((0.0, 0.0), |&s| lon_lat_of(built_globe.dir_of(s)));
+                let home = OrbitCamera::at(
+                    lon.to_degrees(),
+                    lat.to_degrees(),
+                    HOME_DISTANCE,
+                    0.0,
+                    radius,
+                    max,
+                );
+                orbit = Some(settings.view.map_or(home, |[lon, lat, distance, heading]| {
+                    OrbitCamera::at(lon, lat, distance, heading, radius, max)
+                }));
+                orbit_controller.set_home(home);
+                map_size = GLOBE_MINIMAP_SIZE;
+                eprintln!(
+                    "planet-mesh n={} meshes={meshes} build_ms={:.1} upload_ms={upload_ms:.1}",
+                    planet.n,
+                    build_ms + geometry_ms
+                );
+                globe = Some(built_globe);
+            } else {
+                eprintln!("rom-render: ignoring a planet scene with inconsistent tile data");
+            }
+            shared.terrain_ready.store(true, Ordering::Release);
+        }
         let published_terrain = lock(&shared.terrain).take();
         if let Some(terrain) = published_terrain {
+            orbit = None;
+            globe = None;
             let (meshes, build_ms, upload_ms) = scene.set_terrain(&thread, &terrain);
             minimap = if terrain.is_valid() {
                 match MinimapGpu::load(&mut rl, &thread, &terrain) {
@@ -346,14 +423,18 @@ fn render_loop(shared: &Shared) {
             );
             shared.terrain_ready.store(true, Ordering::Release);
         }
-        if let Some(published) = lock(&shared.camera).take() {
+        if let Some(published) = lock(&shared.camera).take()
+            && orbit.is_none()
+        {
             camera = Camera {
                 bounds: camera.bounds,
                 ..published
             }
             .limited();
         }
-        if let Some([x, z]) = lock(&shared.focus).take() {
+        if let Some([x, z]) = lock(&shared.focus).take()
+            && orbit.is_none()
+        {
             camera.target = [x, 0.0, z];
             camera.pan(0.0, 0.0);
         }
@@ -372,15 +453,16 @@ fn render_loop(shared: &Shared) {
             for event in events {
                 let ctx = PickContext {
                     layout: canvas,
-                    view: canvas_view(&camera, &canvas, hud_visible),
+                    view: current_view(&camera, orbit.as_ref(), &canvas, hud_visible),
                     entities: &blended,
                     ground: &ground,
+                    globe: globe.as_deref(),
                     hud: &hud_snapshot,
                     hud_visible,
                     map_size,
                     now_ms,
                 };
-                for pick in picker.handle(event, &ctx, &mut camera) {
+                for pick in picker.handle_with_orbit(event, &ctx, &mut camera, orbit.as_mut()) {
                     let _ = lock(&shared.pick_tx).send(pick);
                 }
                 let position = match event {
@@ -395,18 +477,46 @@ fn render_loop(shared: &Shared) {
                 match event {
                     InputEvent::ButtonDown { .. } | InputEvent::Wheel { .. } if over_hud => {}
                     InputEvent::PointerMoved { .. } if over_hud => {
-                        controller.apply(&mut camera, InputEvent::PointerLeft);
+                        steer(
+                            InputEvent::PointerLeft,
+                            &mut orbit,
+                            &mut orbit_controller,
+                            &mut camera,
+                            &mut controller,
+                        );
                     }
                     InputEvent::ButtonUp { .. } if over_hud => {
-                        controller.apply(&mut camera, event);
-                        controller.apply(&mut camera, InputEvent::PointerLeft);
+                        steer(
+                            event,
+                            &mut orbit,
+                            &mut orbit_controller,
+                            &mut camera,
+                            &mut controller,
+                        );
+                        steer(
+                            InputEvent::PointerLeft,
+                            &mut orbit,
+                            &mut orbit_controller,
+                            &mut camera,
+                            &mut controller,
+                        );
                     }
-                    _ => controller.apply(&mut camera, event),
+                    _ => steer(
+                        event,
+                        &mut orbit,
+                        &mut orbit_controller,
+                        &mut camera,
+                        &mut controller,
+                    ),
                 }
             }
         }
         controller.set_viewport(layout.0, layout.1);
-        controller.advance(&mut camera, seconds);
+        orbit_controller.set_viewport(layout.0, layout.1);
+        match orbit.as_mut() {
+            Some(orbit) => orbit_controller.advance(orbit, seconds),
+            None => controller.advance(&mut camera, seconds),
+        }
 
         if layout.0 == 0 || layout.1 == 0 {
             thread::sleep(IDLE_WAIT);
@@ -449,7 +559,10 @@ fn render_loop(shared: &Shared) {
         } else {
             0.0
         };
-        scene.draw(&mut rl, &thread, texture, &camera, elapsed, boxes);
+        match &orbit {
+            Some(orbit) => scene.draw_globe(&mut rl, &thread, texture, orbit),
+            None => scene.draw(&mut rl, &thread, texture, &camera, elapsed, boxes),
+        }
         if hud_visible {
             if hud
                 .as_ref()
@@ -467,9 +580,10 @@ fn render_loop(shared: &Shared) {
                     let ground = |x: f32, y: f32| surface.map_or(0.0, |s| s.height(x, y));
                     let ctx = PickContext {
                         layout: canvas,
-                        view: canvas_view(&camera, &canvas, hud_visible),
+                        view: current_view(&camera, orbit.as_ref(), &canvas, hud_visible),
                         entities: &blended,
                         ground: &ground,
+                        globe: globe.as_deref(),
                         hud: &hud_snapshot,
                         hud_visible,
                         map_size,
@@ -484,7 +598,7 @@ fn render_loop(shared: &Shared) {
                 };
                 let mut drawing = rl.begin_texture_mode(&thread, texture);
                 if let Some(map) = &minimap {
-                    map.draw(&mut drawing, &hud_layout, &blended, &camera);
+                    map.draw(&mut drawing, &hud_layout, &blended, &camera, orbit.as_ref());
                 }
                 hud.draw(&mut drawing, &hud_layout, &hud_snapshot, &hud_overlay);
             }
@@ -529,6 +643,33 @@ fn render_loop(shared: &Shared) {
     drop(minimap);
     drop(target);
     drop(scene);
+}
+
+/// The canvas view of whichever camera is active.
+fn current_view(
+    camera: &Camera,
+    orbit: Option<&OrbitCamera>,
+    layout: &HudLayout,
+    hud_visible: bool,
+) -> crate::pick::View {
+    match orbit {
+        Some(orbit) => canvas_view_orbit(orbit, layout, hud_visible),
+        None => canvas_view(camera, layout, hud_visible),
+    }
+}
+
+/// Sends an input event to the camera controller that is active.
+fn steer(
+    event: InputEvent,
+    orbit: &mut Option<OrbitCamera>,
+    orbit_controller: &mut OrbitController,
+    camera: &mut Camera,
+    controller: &mut CameraController,
+) {
+    match orbit {
+        Some(orbit) => orbit_controller.apply(orbit, event),
+        None => controller.apply(camera, event),
+    }
 }
 
 /// Reads the render target back and converts it to top-down BGRA.

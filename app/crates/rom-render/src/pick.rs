@@ -5,11 +5,15 @@
 //! owns the camera and the interpolated entity positions, so it alone picks; the events go to
 //! the simulation thread, which owns the selection. Positions in events are tiles (east, south).
 
+use rom_geo::SurfacePos;
+
 use crate::camera::{Camera, InputEvent, Modifiers, PointerButton};
 use crate::entities::{EntityView, box_corners, pick_box};
+use crate::globe::{Globe, SurfaceHit};
 use crate::hud::HudSnapshot;
 use crate::hud_layout::{HudLayout, Rect, Region};
 use crate::hud_minimap::{FOV_DEGREES, fit_map, ndc_centre_y};
+use crate::orbit::{OrbitCamera, dir_from_lon_lat};
 
 /// Pointer travel, in canvas pixels, after which a press becomes a box drag.
 pub const DRAG_PIXELS: f32 = 6.0;
@@ -59,6 +63,8 @@ pub enum PickEvent {
     Click {
         /// Ground point under the cursor, or the entity's position when the ray missed.
         world_point: (f32, f32),
+        /// The same point as a surface position (face 0 on the flat map).
+        surface: SurfacePos,
         /// The entity under the cursor, nearest to the camera.
         entity: Option<u32>,
         /// Modifiers held.
@@ -79,6 +85,8 @@ pub enum PickEvent {
     RightClick {
         /// Ground point under the cursor, or the entity's position when the ray missed.
         world_point: (f32, f32),
+        /// The same point as a surface position (face 0 on the flat map).
+        surface: SurfacePos,
         /// The entity under the cursor, nearest to the camera.
         entity: Option<u32>,
         /// Modifiers held.
@@ -99,6 +107,8 @@ pub enum PickEvent {
     Hover {
         /// Ground point under the cursor.
         world_point: (f32, f32),
+        /// The same point as a surface position (face 0 on the flat map).
+        surface: SurfacePos,
     },
     /// A letter or digit key.
     Hotkey {
@@ -165,6 +175,29 @@ impl View {
         }
     }
 
+    /// The view of an orbit camera onto a canvas of `size` pixels; see [`View::new`].
+    pub fn from_orbit(orbit: &OrbitCamera, size: (f32, f32), centre_y: f32) -> Self {
+        let eye = orbit.position();
+        let forward = orbit.forward();
+        let right = unit(cross(forward, orbit.view_up()));
+        let up = cross(right, forward);
+        Self {
+            eye,
+            forward,
+            right,
+            up,
+            tan: (FOV_DEGREES.to_radians() / 2.0).tan(),
+            aspect: size.0 / size.1.max(1.0),
+            centre_y,
+            size,
+        }
+    }
+
+    /// Eye position in world space.
+    pub fn eye(&self) -> [f32; 3] {
+        self.eye
+    }
+
     /// Unit direction of the ray through canvas pixel (`px`, `py`).
     pub fn ray(&self, px: f32, py: f32) -> [f32; 3] {
         let nx = 2.0 * px / self.size.0.max(1.0) - 1.0;
@@ -194,12 +227,23 @@ impl View {
         ))
     }
 
-    /// THE camera-ray to terrain-point computation: the only place that intersects a ray with
-    /// the terrain. Click picks, placement hover and every other ground lookup go through it
-    /// (via [`PickContext::ground_point`]), so replacing it is enough when planets become
-    /// spheres. Entity hit tests and box selection use projected entity positions instead.
-    ///
-    /// Where the ray through pixel (`px`, `py`) meets the surface `ground` (height in tiles at
+    /// THE camera-ray to ground computation: the only place that intersects a ray with the
+    /// ground. Click picks, placement hover and every other ground lookup go through it (via
+    /// [`PickContext::ground_hit`]). On the flat map it marches the ray against the height
+    /// function ([`View::terrain_point`]) and returns face 0 with the point's x/y; on a sphere
+    /// it intersects the displaced surface and returns the face and position under the hit.
+    /// Entity hit tests and box selection use projected entity positions instead.
+    pub fn surface_point(&self, px: f32, py: f32, ground: Ground) -> Option<SurfaceHit> {
+        match ground {
+            Ground::Flat(height) => self.terrain_point(px, py, height).map(|point| SurfaceHit {
+                point,
+                pos: flat_surface((point[0], point[2])),
+            }),
+            Ground::Globe(globe) => globe.raycast(self.eye, self.ray(px, py)),
+        }
+    }
+
+    /// Flat-map ray cast. Where the ray through pixel (`px`, `py`) meets the surface `ground` (height in tiles at
     /// east, south): marched in growing steps, then refined by bisection. Returns
     /// `[east, up, south]`, or `None` when it points at the sky or leaves the range.
     pub fn terrain_point(
@@ -245,6 +289,24 @@ impl View {
         let mut point = at((near + far) / 2.0);
         point[1] = ground(point[0], point[2]);
         Some(point)
+    }
+}
+
+/// The ground a ray is cast against.
+#[derive(Clone, Copy)]
+pub enum Ground<'a> {
+    /// A flat map: terrain height in tiles at (east, south).
+    Flat(&'a dyn Fn(f32, f32) -> f32),
+    /// A sphere planet.
+    Globe(&'a Globe),
+}
+
+/// The surface position of a flat-map point in tiles: face 0 and the point in milli-tiles.
+pub fn flat_surface(point: (f32, f32)) -> SurfacePos {
+    SurfacePos {
+        face: 0,
+        x: (point.0 * 1000.0).round() as i64,
+        y: (point.1 * 1000.0).round() as i64,
     }
 }
 
@@ -318,6 +380,8 @@ pub struct PickContext<'a> {
     pub entities: &'a [EntityView],
     /// Terrain height in tiles at (east, south).
     pub ground: &'a dyn Fn(f32, f32) -> f32,
+    /// The sphere planet, when the match is on one; rays are cast against it instead of `ground`.
+    pub globe: Option<&'a Globe>,
     /// Latest interface snapshot.
     pub hud: &'a HudSnapshot,
     /// Whether the HUD is drawn (and so consumes presses).
@@ -428,11 +492,34 @@ impl PickContext<'_> {
             .collect()
     }
 
-    /// The ground point under a pixel, in tiles.
-    pub fn ground_point(&self, x: f32, y: f32) -> Option<(f32, f32)> {
-        self.view
-            .terrain_point(x, y, self.ground)
-            .map(|p| (p[0], p[2]))
+    /// The ground under a pixel: the point in tiles (face-local milli-tiles / 1000 on a sphere)
+    /// and the surface position.
+    pub fn ground_hit(&self, x: f32, y: f32) -> Option<((f32, f32), SurfacePos)> {
+        let ground = match self.globe {
+            Some(globe) => Ground::Globe(globe),
+            None => Ground::Flat(self.ground),
+        };
+        self.view.surface_point(x, y, ground).map(|hit| {
+            let point = match self.globe {
+                Some(_) => (hit.pos.x as f32 / 1000.0, hit.pos.y as f32 / 1000.0),
+                None => (hit.point[0], hit.point[2]),
+            };
+            (point, hit.pos)
+        })
+    }
+
+    /// The ground under a pixel, or the position of `entity` when the ray missed.
+    fn ground_or_entity(
+        &self,
+        x: f32,
+        y: f32,
+        entity: Option<u32>,
+    ) -> Option<((f32, f32), SurfacePos)> {
+        self.ground_hit(x, y).or_else(|| {
+            entity
+                .and_then(|id| self.entity_position(id))
+                .map(|point| (point, flat_surface(point)))
+        })
     }
 
     fn entity_position(&self, id: u32) -> Option<(f32, f32)> {
@@ -490,6 +577,18 @@ impl PickController {
         ctx: &PickContext,
         camera: &mut Camera,
     ) -> Vec<PickEvent> {
+        self.handle_with_orbit(event, ctx, camera, None)
+    }
+
+    /// Like [`Self::handle`], with the orbit camera of a sphere planet: minimap clicks and
+    /// zoom buttons then move it instead of the flat camera.
+    pub fn handle_with_orbit(
+        &mut self,
+        event: InputEvent,
+        ctx: &PickContext,
+        camera: &mut Camera,
+        orbit: Option<&mut OrbitCamera>,
+    ) -> Vec<PickEvent> {
         let mut out = Vec::new();
         match event {
             InputEvent::PointerMoved { x, y } => {
@@ -504,7 +603,7 @@ impl PickController {
             InputEvent::PointerLeft => self.pointer = None,
             InputEvent::ButtonDown { button, x, y, mods } => {
                 self.pointer = Some((x, y));
-                self.button_down(button, (x, y), mods, ctx, camera, &mut out);
+                self.button_down(button, (x, y), mods, ctx, camera, orbit, &mut out);
             }
             InputEvent::ButtonUp {
                 button: PointerButton::Left,
@@ -532,13 +631,16 @@ impl PickController {
         if ctx.hud.placement.is_none() || self.over_hud(ctx, x, y) {
             return;
         }
-        if let Some(point) = ctx.ground_point(x, y)
+        if let Some((point, surface)) = ctx.ground_hit(x, y)
             && self
                 .last_hover
                 .is_none_or(|last| (last.0 - point.0).hypot(last.1 - point.1) >= HOVER_STEP)
         {
             self.last_hover = Some(point);
-            out.push(PickEvent::Hover { world_point: point });
+            out.push(PickEvent::Hover {
+                world_point: point,
+                surface,
+            });
         }
     }
 
@@ -546,6 +648,7 @@ impl PickController {
         ctx.hud_visible && ctx.layout.contains_hud(x, y)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn button_down(
         &mut self,
         button: PointerButton,
@@ -553,6 +656,7 @@ impl PickController {
         mods: Modifiers,
         ctx: &PickContext,
         camera: &mut Camera,
+        orbit: Option<&mut OrbitCamera>,
         out: &mut Vec<PickEvent>,
     ) {
         if self.over_hud(ctx, x, y) {
@@ -560,7 +664,7 @@ impl PickController {
             let Some(target) = hud_target(&ctx.layout, ctx.hud, ctx.map_size, x, y) else {
                 return;
             };
-            self.hud_press(button, target, (x, y), mods, ctx, camera, out);
+            self.hud_press(button, target, (x, y), mods, ctx, camera, orbit, out);
             return;
         }
         match button {
@@ -574,12 +678,10 @@ impl PickController {
             }
             PointerButton::Right => {
                 let entity = ctx.entity_at(x, y);
-                let point = ctx
-                    .ground_point(x, y)
-                    .or_else(|| entity.and_then(|id| ctx.entity_position(id)));
-                if let Some(world_point) = point {
+                if let Some((world_point, surface)) = ctx.ground_or_entity(x, y, entity) {
                     out.push(PickEvent::RightClick {
                         world_point,
+                        surface,
                         entity,
                         modifiers: mods,
                     });
@@ -598,6 +700,7 @@ impl PickController {
         mods: Modifiers,
         ctx: &PickContext,
         camera: &mut Camera,
+        orbit: Option<&mut OrbitCamera>,
         out: &mut Vec<PickEvent>,
     ) {
         match (target.region, button) {
@@ -607,9 +710,30 @@ impl PickController {
                     ctx.map_size.1,
                     ctx.layout.rect(Region::MinimapView),
                 );
+                let fraction = ((x - area.x) / area.w, (y - area.y) / area.h);
+                if let Some(globe) = ctx.globe {
+                    // The sphere minimap is an equirectangular image.
+                    let lon = (fraction.0.clamp(0.0, 1.0) - 0.5) * std::f32::consts::TAU;
+                    let lat = (0.5 - fraction.1.clamp(0.0, 1.0)) * std::f32::consts::PI;
+                    let dir = dir_from_lon_lat(lon, lat);
+                    match (button, orbit) {
+                        (PointerButton::Left, Some(orbit)) => orbit.look_at(dir),
+                        (PointerButton::Right, _) => {
+                            let surface = globe.pos_of(dir);
+                            out.push(PickEvent::RightClick {
+                                world_point: (surface.x as f32 / 1000.0, surface.y as f32 / 1000.0),
+                                surface,
+                                entity: None,
+                                modifiers: mods,
+                            });
+                        }
+                        _ => {}
+                    }
+                    return;
+                }
                 let tile = (
-                    (x - area.x) / area.w * ctx.map_size.0 as f32,
-                    (y - area.y) / area.h * ctx.map_size.1 as f32,
+                    fraction.0 * ctx.map_size.0 as f32,
+                    fraction.1 * ctx.map_size.1 as f32,
                 );
                 match button {
                     PointerButton::Left => {
@@ -618,6 +742,7 @@ impl PickController {
                     }
                     PointerButton::Right => out.push(PickEvent::RightClick {
                         world_point: tile,
+                        surface: flat_surface(tile),
                         entity: None,
                         modifiers: mods,
                     }),
@@ -625,8 +750,13 @@ impl PickController {
                 }
             }
             (HudRegionKind::MinimapButton, PointerButton::Left) => match target.index {
-                0 => camera.zoom(2.0),
-                1 => camera.zoom(-2.0),
+                0 | 1 => {
+                    let steps = if target.index == 0 { 2.0 } else { -2.0 };
+                    match orbit {
+                        Some(orbit) => orbit.zoom(steps),
+                        None => camera.zoom(steps),
+                    }
+                }
                 2 => {
                     let mut sum = (0.0, 0.0, 0);
                     for id in &ctx.hud.selected {
@@ -679,10 +809,7 @@ impl PickController {
             return;
         }
         let entity = ctx.entity_at(x, y);
-        let point = ctx
-            .ground_point(x, y)
-            .or_else(|| entity.and_then(|id| ctx.entity_position(id)));
-        let Some(world_point) = point else {
+        let Some((world_point, surface)) = ctx.ground_or_entity(x, y, entity) else {
             return;
         };
         let double = self.last_click.is_some_and(|(at, lx, ly)| {
@@ -702,12 +829,23 @@ impl PickController {
         };
         out.push(PickEvent::Click {
             world_point,
+            surface,
             entity,
             modifiers: mods,
             double,
             on_screen,
         });
     }
+}
+
+/// The canvas-space view of an orbit camera; see [`canvas_view`].
+pub fn canvas_view_orbit(orbit: &OrbitCamera, layout: &HudLayout, hud_visible: bool) -> View {
+    let centre_y = if hud_visible {
+        ndc_centre_y(layout.world_area(), layout.height)
+    } else {
+        0.0
+    };
+    View::from_orbit(orbit, (layout.width, layout.height), centre_y)
 }
 
 /// The canvas-space view for a frame: camera, canvas size and whether a HUD shifts the centre.
@@ -767,6 +905,7 @@ mod tests {
             view: canvas_view(cam, &layout, true),
             entities,
             ground: FLAT,
+            globe: None,
             hud,
             hud_visible: true,
             map_size: (200, 200),

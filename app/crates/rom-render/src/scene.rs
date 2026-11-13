@@ -16,17 +16,25 @@ use std::sync::Arc;
 
 use crate::camera::Camera;
 use crate::entities::{EntityView, Surface, build_instances};
+use crate::globe::{ChunkBounds, CullView, Globe, PlanetScene};
 use crate::hud::HudSnapshot;
+use crate::orbit::OrbitCamera;
 use crate::overlay::{OverlayGeometry, build_overlays};
 use crate::terrain::{
-    ChunkMesh, STAR_COUNT, TerrainScene, build_sea_chunks, build_terrain_chunks, ground_height,
-    star_field, star_triangles,
+    ChunkMesh, RELIEF, STAR_COUNT, TerrainScene, build_sea_chunks, build_terrain_chunks,
+    ground_height, star_field, star_triangles,
 };
 
 /// Width of the ground in tiles.
 const GROUND_TILES: f32 = 256.0;
 /// Direction the sunlight travels (normalised in the shaders).
 const LIGHT_DIRECTION: [f32; 3] = [-0.45, -1.0, -0.3];
+/// Direction the sunlight travels on a sphere planet: fixed in planet space.
+const SUN_DIRECTION: [f32; 3] = [-0.5, -0.3, -0.8];
+/// Largest factor the start pillars and node boxes grow by when the camera is far away.
+const MARKER_GROWTH: f32 = 2.5;
+/// Camera distance up to which markers keep their size.
+const MARKER_NEAR: f32 = 60.0;
 const SKY: Color = Color::new(146, 178, 204, 255);
 const SPACE: Color = Color::new(1, 2, 5, 255);
 /// Height of a player-start pillar, in tiles.
@@ -95,6 +103,37 @@ out vec4 fragColor;
 void main() {
     fragColor = vertexColor;
     gl_Position = (mvp * vec4(vertexPosition, 1.0)).xyww;
+}
+"#;
+
+// The sea sphere is lit from its own radial normal and gets a soft highlight.
+const SEA_GLOBE_VS: &str = r#"#version 330
+in vec3 vertexPosition;
+in vec4 vertexColor;
+uniform mat4 mvp;
+out vec4 fragColor;
+out vec3 fragPosition;
+void main() {
+    fragColor = vertexColor;
+    fragPosition = vertexPosition;
+    gl_Position = mvp * vec4(vertexPosition, 1.0);
+}
+"#;
+
+const SEA_GLOBE_FS: &str = r#"#version 330
+in vec4 fragColor;
+in vec3 fragPosition;
+uniform vec3 lightDirection;
+uniform vec3 viewPosition;
+out vec4 finalColor;
+void main() {
+    vec3 normal = normalize(fragPosition);
+    vec3 toLight = -normalize(lightDirection);
+    float diffuse = max(dot(normal, toLight), 0.0);
+    vec3 toEye = normalize(viewPosition - fragPosition);
+    float glint = pow(max(dot(normal, normalize(toLight + toEye)), 0.0), 64.0) * diffuse;
+    vec3 color = fragColor.rgb * (0.32 + 0.78 * diffuse) + vec3(0.30, 0.34, 0.38) * glint;
+    finalColor = vec4(color, min(fragColor.a + glint * 0.4, 1.0));
 }
 "#;
 
@@ -257,6 +296,9 @@ pub(crate) struct Scene {
     /// Kept alive for the materials above, which point at them.
     entity_material: WeakMaterial,
     _shaders: [Shader; 6],
+    sea_globe_shader: Shader,
+    sea_globe_material: WeakMaterial,
+    globe: Option<GlobeGpu>,
     entity_transforms: Vec<Matrix>,
     instances: Vec<[f32; 16]>,
     draw_markers: bool,
@@ -275,6 +317,15 @@ struct TerrainGpu {
     surface: Surface,
     /// Map centre in tiles, where the stress-test boxes are centred.
     centre: [f32; 2],
+}
+
+/// Meshes and markers of a published sphere planet.
+struct GlobeGpu {
+    land: Vec<(Mesh, ChunkBounds)>,
+    sea: Vec<(Mesh, ChunkBounds)>,
+    planet: Arc<PlanetScene>,
+    globe: Arc<Globe>,
+    markers: Vec<Matrix>,
 }
 
 /// A column-major array as a raylib matrix.
@@ -345,6 +396,12 @@ impl Scene {
             rl.load_shader_from_memory(thread, Some(ENTITY_VS), Some(ENTITY_FS));
         let sea_shader = rl.load_shader_from_memory(thread, Some(COLOR_VS), Some(COLOR_FS));
         let star_shader = rl.load_shader_from_memory(thread, Some(STAR_VS), Some(COLOR_FS));
+        let mut sea_globe_shader =
+            rl.load_shader_from_memory(thread, Some(SEA_GLOBE_VS), Some(SEA_GLOBE_FS));
+        let location = sea_globe_shader.get_shader_location("lightDirection");
+        sea_globe_shader.set_shader_value(location, SUN_DIRECTION);
+        let mut sea_globe_material = rl.load_material_default(thread);
+        sea_globe_material.set_shader(&sea_globe_shader);
         for shader in [
             &mut box_shader,
             &mut ground_shader,
@@ -396,6 +453,9 @@ impl Scene {
                 star_shader,
                 entity_shader,
             ],
+            sea_globe_shader,
+            sea_globe_material,
+            globe: None,
             entity_transforms: Vec::new(),
             instances: Vec::new(),
             draw_markers: false,
@@ -444,6 +504,8 @@ impl Scene {
         scene: &Arc<TerrainScene>,
     ) -> (usize, f32, f32) {
         self.terrain = None;
+        self.globe = None;
+        self.set_light(LIGHT_DIRECTION);
         if !scene.is_valid() {
             eprintln!("rom-render: ignoring a terrain scene with inconsistent tile data");
             return (0, 0.0, 0.0);
@@ -484,6 +546,126 @@ impl Scene {
             (built - started).as_secs_f32() * 1_000.0,
             (uploaded - built).as_secs_f32() * 1_000.0,
         )
+    }
+
+    /// Sets the direction of the light in the terrain and entity shaders.
+    fn set_light(&mut self, direction: [f32; 3]) {
+        for index in [2, 5] {
+            let shader = &mut self._shaders[index];
+            let location = shader.get_shader_location("lightDirection");
+            shader.set_shader_value(location, direction);
+        }
+    }
+
+    /// Uploads the chunk meshes of `globe`, replacing any earlier terrain or planet.
+    ///
+    /// Returns the number of meshes and the upload time in milliseconds.
+    pub(crate) fn set_planet(
+        &mut self,
+        thread: &RaylibThread,
+        planet: &Arc<PlanetScene>,
+        globe: &Arc<Globe>,
+    ) -> (usize, f32, f32) {
+        self.terrain = None;
+        self.globe = None;
+        self.set_light(SUN_DIRECTION);
+        let started = Instant::now();
+        let land = globe.land_chunks();
+        let sea = globe.sea_chunks();
+        let built = Instant::now();
+        let upload_all = |chunks: &[ChunkMesh]| -> Vec<(Mesh, ChunkBounds)> {
+            chunks
+                .iter()
+                .filter_map(|c| Some((upload(thread, c)?, ChunkBounds::of(c))))
+                .collect()
+        };
+        let land = upload_all(&land);
+        let sea = upload_all(&sea);
+        let uploaded = Instant::now();
+        let count = land.len() + sea.len();
+        self.globe = Some(GlobeGpu {
+            land,
+            sea,
+            planet: Arc::clone(planet),
+            globe: Arc::clone(globe),
+            markers: Vec::new(),
+        });
+        (
+            count,
+            (built - started).as_secs_f32() * 1_000.0,
+            (uploaded - built).as_secs_f32() * 1_000.0,
+        )
+    }
+
+    /// Draws the sphere planet seen by `orbit` into `target`.
+    pub(crate) fn draw_globe(
+        &mut self,
+        rl: &mut RaylibHandle,
+        thread: &RaylibThread,
+        target: &mut RenderTexture2D,
+        orbit: &OrbitCamera,
+    ) {
+        let Some(gpu) = &mut self.globe else {
+            return;
+        };
+        let growth = (orbit.distance / MARKER_NEAR).clamp(1.0, MARKER_GROWTH);
+        let mut instances = std::mem::take(&mut self.instances);
+        gpu.globe
+            .marker_instances(&gpu.planet, growth, &mut instances);
+        gpu.markers.clear();
+        gpu.markers.extend(instances.iter().map(matrix_of));
+        self.instances = instances;
+
+        let eye = orbit.position();
+        let target_point = orbit.target();
+        let up = orbit.view_up();
+        let vector = |v: [f32; 3]| Vector3::new(v[0], v[1], v[2]);
+        let view = Camera3D::perspective(vector(eye), vector(target_point), vector(up), 45.0);
+        self.sea_globe_shader.set_shader_value(
+            self.sea_globe_shader.get_shader_location("viewPosition"),
+            eye,
+        );
+        let aspect = target.texture.width as f32 / target.texture.height.max(1) as f32;
+        let mut drawing = rl.begin_texture_mode(thread, target);
+        drawing.clear_background(SPACE);
+        if let Some(stars) = &self.star_mesh {
+            let forward = vector([
+                target_point[0] - eye[0],
+                target_point[1] - eye[1],
+                target_point[2] - eye[2],
+            ]);
+            let sky = Camera3D::perspective(Vector3::new(0.0, 0.0, 0.0), forward, vector(up), 45.0);
+            let mut backdrop = drawing.begin_mode3D(sky);
+            shift_projection(self.projection_centre_y);
+            backdrop.draw_mesh(stars, self.star_material.clone(), Matrix::identity());
+        }
+        let radius = orbit.radius;
+        // Loose enough for the projection centre moved up above the HUD bars.
+        let cull = CullView::of_orbit(orbit, aspect, 45.0, 1.5);
+        let (near, far) = orbit.clip_planes(RELIEF);
+        set_clip_planes(f64::from(near), f64::from(far));
+        {
+            let mut world = drawing.begin_mode3D(view);
+            shift_projection(self.projection_centre_y);
+            for (mesh, bounds) in &gpu.land {
+                if bounds.may_be_seen(radius, &cull) {
+                    world.draw_mesh(mesh, self.terrain_material.clone(), Matrix::identity());
+                }
+            }
+            if !gpu.markers.is_empty() {
+                world.draw_mesh_instanced(
+                    &self.box_mesh,
+                    self.entity_material.clone(),
+                    &gpu.markers,
+                );
+            }
+            for (mesh, bounds) in &gpu.sea {
+                if bounds.may_be_seen(radius, &cull) {
+                    world.draw_mesh(mesh, self.sea_globe_material.clone(), Matrix::identity());
+                }
+            }
+        }
+        set_clip_planes(DEFAULT_NEAR, DEFAULT_FAR);
     }
 
     /// Turns `views` into instance transforms for the next draw; without a terrain nothing is drawn.
@@ -619,6 +801,16 @@ impl Scene {
             }
         }
     }
+}
+
+/// raylib's default clip planes, restored after a sphere frame.
+const DEFAULT_NEAR: f64 = 0.05;
+const DEFAULT_FAR: f64 = 4000.0;
+
+/// Sets the near and far clip planes used by the next 3D mode.
+fn set_clip_planes(near: f64, far: f64) {
+    // SAFETY: the render thread has an active GL context; this only stores two numbers.
+    unsafe { raylib::ffi::rlSetClipPlanes(near, far) }
 }
 
 /// Moves the perspective vanishing point to the centre of the unobscured world band.

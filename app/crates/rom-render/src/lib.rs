@@ -4,11 +4,13 @@
 //! Other threads talk to it only through the cloneable [`RenderBridge`]: they
 //! publish the layout, render scale, camera and input, and take the newest
 //! [`Frame`] from a one-slot mailbox. The terrain is described by a plain
-//! [`TerrainScene`], published once and meshed on the render thread. Entities arrive as plain
+//! [`TerrainScene`], published once and meshed on the render thread; a sphere planet is described by
+//! a [`PlanetScene`], drawn as a globe with an [`OrbitCamera`]. Entities arrive as plain
 //! [`EntitySnapshot`]s; the render thread keeps the last two and interpolates between them.
 
 mod camera;
 mod entities;
+mod globe;
 pub mod hud;
 pub mod hud_atlas;
 mod hud_gpu;
@@ -18,6 +20,7 @@ pub mod hud_model;
 pub mod hud_preview;
 pub mod hud_text;
 mod mailbox;
+mod orbit;
 mod overlay;
 pub mod pick;
 mod pixels;
@@ -30,16 +33,22 @@ pub use camera::{Camera, CameraController, InputEvent, Key, Modifiers, PointerBu
 pub use entities::{
     EntitySnapshot, EntityView, OWNER_COLORS, SnapshotPair, Surface, build_instances, owner_color,
 };
+pub use globe::{Globe, PlanetScene, SurfaceHit, planet_radius, to_render};
 pub use image;
 pub use mailbox::{Frame, FrameMailbox, FramePixels};
+pub use orbit::{
+    HOME_DISTANCE, MIN_DISTANCE, OrbitCamera, OrbitController, dir_from_lon_lat, lon_lat_of,
+};
 pub use pixels::rgba_to_bgra_flipped;
+pub use rom_geo::SurfacePos;
 pub use stats::RenderStats;
 pub use terrain::{
     CHUNK_TILES, ChunkMesh, Shape, Star, TerrainScene, TileKind, build_sea_chunks,
     build_terrain_chunks, home_camera, overview_camera, star_field, star_triangles,
 };
 pub use worker::{
-    MAX_RENDER_SCALE, MIN_RENDER_SCALE, RenderBridge, RenderWorker, ShutdownHandle, scaled_size,
+    MAX_RENDER_SCALE, MIN_RENDER_SCALE, OrbitSettings, RenderBridge, RenderWorker, ShutdownHandle,
+    scaled_size,
 };
 
 pub use hud::{HudResearch, HudResource, HudSelection, HudSnapshot};
@@ -47,4 +56,6 @@ pub use hud_model::{
     HudButton, HudCard, HudMarker, HudPalette, HudPlacement, HudQueue, HudQueueItem, HudTile,
     MarkerKind, PaletteTab, SLOT_KEYS, slot_of_key,
 };
-pub use pick::{HudRegionKind, HudTarget, PickContext, PickController, PickEvent, View};
+pub use pick::{
+    Ground, HudRegionKind, HudTarget, PickContext, PickController, PickEvent, View, flat_surface,
+};

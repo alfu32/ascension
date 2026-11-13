@@ -1,5 +1,5 @@
 use super::*;
-use rom_render::PickEvent;
+use rom_render::{PickEvent, flat_surface};
 use rom_rules::Rules;
 use rom_sim::{MapGrid, Player};
 use std::collections::BTreeMap;
@@ -87,6 +87,7 @@ impl Fx {
             &mut self.world,
             PickEvent::Click {
                 world_point: (0.0, 0.0),
+                surface: flat_surface((0.0, 0.0)),
                 entity: Some(id.0),
                 modifiers: Modifiers {
                     shift,
@@ -102,6 +103,7 @@ impl Fx {
             &mut self.world,
             PickEvent::Click {
                 world_point: (1.0, 1.0),
+                surface: flat_surface((1.0, 1.0)),
                 entity: None,
                 modifiers: Modifiers::default(),
                 double: false,
@@ -135,6 +137,7 @@ impl Fx {
             &mut self.world,
             PickEvent::RightClick {
                 world_point: point,
+                surface: flat_surface(point),
                 entity: entity.map(|e| e.0),
                 modifiers: Modifiers {
                     shift,
@@ -212,6 +215,7 @@ fn click_and_shift_click_selection() {
         &mut fx.world,
         PickEvent::Click {
             world_point: (0.0, 0.0),
+            surface: flat_surface((0.0, 0.0)),
             entity: Some(c.0),
             modifiers: Modifiers::default(),
             double: true,
@@ -679,6 +683,7 @@ fn placement_check_reports_valid_and_invalid() {
         PickEvent::Hover {
             // Inside the city's radius and territory, clear of the city and the queued site.
             world_point: (20.5, 30.5),
+            surface: flat_surface((20.5, 30.5)),
         },
     );
     let preview = fx.hud_snapshot().placement.expect("preview");
@@ -688,6 +693,7 @@ fn placement_check_reports_valid_and_invalid() {
         &mut fx.world,
         PickEvent::Hover {
             world_point: (20.5, 20.5),
+            surface: flat_surface((20.5, 20.5)),
         },
     );
     assert_eq!(fx.hud_snapshot().placement.unwrap().valid, Some(false));

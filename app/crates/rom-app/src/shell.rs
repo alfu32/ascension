@@ -10,7 +10,7 @@ use gpui::{
     WindowDecorations, WindowOptions, point, px, size,
 };
 use gpui_component::Root;
-use rom_render::{Camera, RenderBridge, RenderWorker, ShutdownHandle};
+use rom_render::{Camera, OrbitSettings, RenderBridge, RenderWorker, ShutdownHandle};
 
 use crate::args::Options;
 use crate::bench;
@@ -41,7 +41,12 @@ pub fn run(options: &Options) -> ExitCode {
     };
     bridge.publish_render_scale(options.scale);
     bridge.publish_hud_options(!options.no_hud, options.hud_scale);
-    let mut sim = match start_simulation(options, &bridge) {
+    // A sphere planet is only drawn for now: the simulation is not started on it yet.
+    let started = match options.sphere {
+        Some(n) => start_sphere(options, n, &bridge).map(|()| None),
+        None => start_simulation(options, &bridge).map(Some),
+    };
+    let mut sim = match started {
         Ok(sim) => sim,
         Err(error) => {
             eprintln!("rise-of-man: {error}");
@@ -49,8 +54,10 @@ pub fn run(options: &Options) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let sim_link = sim.link();
-    if let Some([x, y, distance, yaw, pitch]) = options.camera {
+    let sim_link = sim.as_ref().map_or_else(SimLink::idle, SimThread::link);
+    if options.sphere.is_none()
+        && let Some([x, y, distance, yaw, pitch]) = options.camera
+    {
         bridge.publish_camera(Camera {
             target: [x, 0.0, y],
             distance,
@@ -153,7 +160,9 @@ pub fn run(options: &Options) -> ExitCode {
         }
         cx.activate(true);
     });
-    sim.stop();
+    if let Some(sim) = &mut sim {
+        sim.stop();
+    }
     worker.stop();
     ExitCode::from(exit_code.load(Ordering::Relaxed))
 }
@@ -186,6 +195,25 @@ fn world_view(
     }
     let (bridge, sim) = (bridge.clone(), sim.clone());
     cx.new(|cx| WorldView::new(bridge, sim, stats, window, cx))
+}
+
+/// Generates a sphere planet and publishes it with the orbit camera settings.
+fn start_sphere(options: &Options, n: u32, bridge: &RenderBridge) -> Result<(), String> {
+    if options.demo || options.script.is_some() || options.stress_units > 0 {
+        return Err(
+            "--sphere does not run the simulation yet; drop --demo, --script and --stress-units"
+                .into(),
+        );
+    }
+    let planet = terrain::generate_planet(options, n)?;
+    bridge.publish_planet(
+        Arc::new(terrain::to_planet_scene(&planet)),
+        OrbitSettings {
+            max_distance: None,
+            view: options.orbit,
+        },
+    );
+    Ok(())
 }
 
 /// Generates the map, publishes its terrain, builds the match and starts the simulation thread.

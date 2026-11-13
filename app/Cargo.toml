@@ -24,6 +24,7 @@ rom-rules = { path = "crates/rom-rules" }
 rusqlite = { version = "=0.42.0", features = ["bundled", "backup"] }
 thiserror = "2"
 rom-render = { path = "crates/rom-render" }
+rom-geo = { path = "crates/rom-geo" }
 gpui = { version = "=0.2.2", default-features = false, features = ["font-kit", "x11"] }
 gpui-component = { version = "=0.5.1", default-features = false }
 raylib = "=6.0.0"

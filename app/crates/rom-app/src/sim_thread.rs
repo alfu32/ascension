@@ -110,6 +110,16 @@ pub struct SimLink {
 }
 
 impl SimLink {
+    /// A link with no simulation behind it: counters stay zero and commands are dropped.
+    pub fn idle() -> Self {
+        Self {
+            commands: channel().0,
+            stats: Arc::new(SimStats::default()),
+            speed: Arc::new(AtomicU32::new(100)),
+            stop: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
     /// Queues a command for the world; the thread submits it after the next tick.
     // The UI has no input that issues orders yet (out of scope for this task); this is its way in.
     #[allow(dead_code)]

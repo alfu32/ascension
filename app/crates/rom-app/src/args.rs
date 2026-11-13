@@ -5,7 +5,7 @@ use std::path::PathBuf;
 /// Usage text printed for `--help` and after argument errors.
 pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <file.png>] \
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] \
-[--map-size <width>x<height>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
+[--map-size <width>x<height>] [--sphere <n>] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
 [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-hud] [--hud-scale <percent>] [--stats]";
 
 /// Default canvas size in pixels when `--size` is not given.
@@ -32,6 +32,10 @@ pub struct Options {
     pub factions: Option<Vec<String>>,
     /// Map size in tiles.
     pub map_size: (u32, u32),
+    /// Draw a sphere planet with this many tiles along a cube face edge (16..=512).
+    pub sphere: Option<u32>,
+    /// Orbit camera placement on a sphere: longitude, latitude, distance and heading.
+    pub orbit: Option<[f32; 4]>,
     /// Camera placement: target x and y in tiles, distance, yaw and pitch in degrees.
     pub camera: Option<[f32; 5]>,
     /// Number of moving stress-test boxes.
@@ -70,6 +74,8 @@ impl Default for Options {
             players: 4,
             factions: None,
             map_size: (256, 256),
+            sphere: None,
+            orbit: None,
             camera: None,
             boxes: 0,
             demo: false,
@@ -133,6 +139,16 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                 options.factions = Some(keys);
             }
             "--map-size" => options.map_size = parse_map_size(&value("--map-size")?)?,
+            "--sphere" => {
+                let text = value("--sphere")?;
+                options.sphere = Some(
+                    text.parse::<u32>()
+                        .ok()
+                        .filter(|n| (16..=512).contains(n))
+                        .ok_or_else(|| format!("--sphere expects 16 to 512, got {text:?}"))?,
+                );
+            }
+            "--orbit" => options.orbit = Some(parse_orbit(&value("--orbit")?)?),
             "--camera" => options.camera = Some(parse_camera(&value("--camera")?)?),
             "--boxes" => options.boxes = number("--boxes", &value("--boxes")?)?,
             "--demo" => options.demo = true,
@@ -202,6 +218,20 @@ fn parse_camera(text: &str) -> Result<[f32; 5], String> {
     parts.try_into().map_err(|_| invalid())
 }
 
+fn parse_orbit(text: &str) -> Result<[f32; 4], String> {
+    let invalid = || format!("--orbit expects lon_deg,lat_deg,distance,heading_deg, got {text:?}");
+    let parts: Vec<f32> = text
+        .split(',')
+        .map(|part| part.trim().parse::<f32>().ok().filter(|v| v.is_finite()))
+        .collect::<Option<_>>()
+        .ok_or_else(invalid)?;
+    let [lon, lat, distance, heading]: [f32; 4] = parts.try_into().map_err(|_| invalid())?;
+    if !(-90.0..=90.0).contains(&lat) || distance <= 0.0 {
+        return Err(invalid());
+    }
+    Ok([lon, lat, distance, heading])
+}
+
 fn parse_size(text: &str) -> Result<(u32, u32), String> {
     let invalid = || format!("--size expects <width>x<height>, got {text:?}");
     let (width, height) = text.split_once(['x', 'X']).ok_or_else(invalid)?;
@@ -266,6 +296,18 @@ mod tests {
         assert!(parse(args(&["--camera", "1,2,3"])).is_err());
         assert!(parse(args(&["--map-size", "0x5"])).is_err());
         assert!(parse(args(&["--players", "0"])).is_err());
+    }
+
+    #[test]
+    fn parses_sphere_and_orbit_options() {
+        let o = parse(args(&["--sphere", "192", "--orbit", "0,10,12,30"])).unwrap();
+        assert_eq!(o.sphere, Some(192));
+        assert_eq!(o.orbit, Some([0.0, 10.0, 12.0, 30.0]));
+        assert_eq!(parse(args(&[])).unwrap().sphere, None);
+        for bad in [["--sphere", "8"], ["--sphere", "x"], ["--orbit", "1,2,3"]] {
+            assert!(parse(args(&bad)).is_err(), "{bad:?}");
+        }
+        assert!(parse(args(&["--orbit", "0,95,12,0"])).is_err());
     }
 
     #[test]

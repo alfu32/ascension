@@ -14,7 +14,7 @@
 //! `@dx,dy` (tiles from the city centre) or `x,y` (tiles). Other commands: `rclick`,
 //! `key <char> [ctrl] [shift]`, `escape`; `hud` takes `tab`, `arrow`, `slot`, `queue`, `tile`.
 
-use rom_render::{HudRegionKind, Modifiers, PickEvent, PointerButton};
+use rom_render::{HudRegionKind, Modifiers, PickEvent, PointerButton, flat_surface};
 
 use crate::match_setup::PlayerStart;
 
@@ -171,6 +171,7 @@ fn parse_line(line: &str, context: &ScriptContext) -> Result<(u64, PickEvent), S
             if command == "click" {
                 PickEvent::Click {
                     world_point,
+                    surface: flat_surface(world_point),
                     entity,
                     modifiers,
                     double,
@@ -179,6 +180,7 @@ fn parse_line(line: &str, context: &ScriptContext) -> Result<(u64, PickEvent), S
             } else {
                 PickEvent::RightClick {
                     world_point,
+                    surface: flat_surface(world_point),
                     entity,
                     modifiers,
                 }
@@ -203,9 +205,13 @@ fn parse_line(line: &str, context: &ScriptContext) -> Result<(u64, PickEvent), S
                 modifiers,
             }
         }
-        "hover" => PickEvent::Hover {
-            world_point: point(arg(0)?, context)?,
-        },
+        "hover" => {
+            let world_point = point(arg(0)?, context)?;
+            PickEvent::Hover {
+                world_point,
+                surface: flat_surface(world_point),
+            }
+        }
         "key" => {
             let mut chars = arg(0)?.chars();
             match (chars.next(), chars.next()) {
@@ -279,7 +285,8 @@ mod tests {
         assert_eq!(
             later[4],
             PickEvent::Hover {
-                world_point: (108.0, 48.0)
+                world_point: (108.0, 48.0),
+                surface: flat_surface((108.0, 48.0)),
             }
         );
         assert!(script.due(1000).is_empty());

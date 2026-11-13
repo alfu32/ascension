@@ -2,7 +2,7 @@
 use crate::hud::{HudOverlay, HudPainter, HudSnapshot, HudTexture};
 use crate::hud_layout::{HudLayout, Rect, Region, scale_needs_rebake};
 use crate::hud_minimap::{self, MapMark};
-use crate::{Camera, EntityView, TerrainScene};
+use crate::{Camera, EntityView, Globe, OrbitCamera, PlanetScene, TerrainScene};
 use raylib::prelude::*;
 
 pub(crate) struct HudGpu {
@@ -91,6 +91,8 @@ impl HudGpu {
 pub(crate) struct MinimapGpu {
     texture: Texture2D,
     size: (u32, u32),
+    /// Start directions on a sphere planet, whose minimap is equirectangular.
+    starts: Vec<[f32; 3]>,
 }
 impl MinimapGpu {
     pub(crate) fn load(
@@ -102,6 +104,21 @@ impl MinimapGpu {
         Ok(Self {
             texture: upload(rl, thread, w, h, &rgba)?,
             size: (terrain.width, terrain.height),
+            starts: Vec::new(),
+        })
+    }
+    /// The equirectangular minimap of a sphere planet.
+    pub(crate) fn load_planet(
+        rl: &mut RaylibHandle,
+        thread: &RaylibThread,
+        planet: &PlanetScene,
+        globe: &Globe,
+    ) -> Result<Self, String> {
+        let (w, h, rgba) = hud_minimap::planet_pixels(planet);
+        Ok(Self {
+            texture: upload(rl, thread, w, h, &rgba)?,
+            size: (w, h),
+            starts: planet.starts.iter().map(|&s| globe.dir_of(s)).collect(),
         })
     }
     pub(crate) fn draw(
@@ -110,6 +127,7 @@ impl MinimapGpu {
         layout: &HudLayout,
         entities: &[EntityView],
         camera: &Camera,
+        orbit: Option<&OrbitCamera>,
     ) {
         let view = layout.rect(Region::MinimapView);
         d.draw_rectangle_rec(rectangle(view), Color::new(4, 6, 12, 255));
@@ -133,7 +151,11 @@ impl MinimapGpu {
             area.w.floor() as i32,
             area.h.floor() as i32,
         );
-        for mark in hud_minimap::marks(entities, camera, layout, self.size, area) {
+        let marks = match orbit {
+            Some(orbit) => hud_minimap::globe_marks(orbit, &self.starts, layout, area),
+            None => hud_minimap::marks(entities, camera, layout, self.size, area),
+        };
+        for mark in marks {
             match mark {
                 MapMark::Dot(r, c) => {
                     clip.draw_rectangle_rec(rectangle(r), Color::new(c[0], c[1], c[2], c[3]))
