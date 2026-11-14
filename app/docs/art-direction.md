@@ -77,6 +77,13 @@ tool or raise both arms at work, and breathe when idle; beasts trot, wheels
 turn, oars sweep and hulls ride the water. Each unit is at its own point of the
 cycle, so a group does not move in step. Motion is presentation only.
 
+Task 40 adds firearms: a musket, arquebus or crossbow is raised to the shoulder,
+aimed, fired and lowered, a pistol levelled at arm's length; at the shot a flash
+grows out of the muzzle for a moment and a cannon's barrel kicks back on its
+bed. A trebuchet's arm swings up and over while its counterweight drops,
+hanging free, and the sling whips round. Sailing ships heel to the wind and bob
+under way, with no oars.
+
 ## Budgets
 
 | Model | Near | Far |

@@ -835,6 +835,8 @@ mod tests {
             AttackStyle::Throw,
             AttackStyle::Draw,
             AttackStyle::Whirl,
+            AttackStyle::Fire,
+            AttackStyle::Pistol,
         ] {
             let rig = figure(FigureStyle { attack, ..style() });
             for activity in Activity::ALL {
@@ -902,6 +904,116 @@ mod tests {
         let grip = &pose[4];
         let up = [grip[0][1], grip[1][1], grip[2][1]];
         assert!(up[2] > 0.9, "{up:?}");
+    }
+
+    /// The weapon's own up axis (model frame) at `u` of the attack of a figure attacking so.
+    fn weapon_up(attack: AttackStyle, u: f32) -> [f32; 3] {
+        let rig = figure(FigureStyle {
+            attack,
+            hold: [deg(14.0), 0.0],
+            ..style()
+        });
+        let grip = &rig.pose(Activity::Attack, u)[4];
+        [grip[0][1], grip[1][1], grip[2][1]]
+    }
+
+    #[test]
+    fn a_firearm_is_raised_aimed_fired_and_lowered() {
+        for attack in [AttackStyle::Fire, AttackStyle::Pistol] {
+            // Carried upright, levelled forward while aimed, the muzzle jumping up at the shot.
+            let carried = weapon_up(attack, 0.0);
+            assert!(carried[1] > 0.99, "{attack:?} {carried:?}");
+            let aimed = weapon_up(attack, 0.4);
+            assert!(aimed[2] > 0.99, "{attack:?} {aimed:?}");
+            let kick = weapon_up(attack, FIRE_AT + 0.05);
+            assert!(kick[1] > 0.2 && kick[2] > 0.9, "{attack:?} {kick:?}");
+            let lowered = weapon_up(attack, 0.95);
+            assert!(lowered[1] > 0.99, "{attack:?} {lowered:?}");
+        }
+    }
+
+    /// A rig with one joint of `motion` at `pivot`.
+    fn single(motion: Motion, pivot: [f32; 3]) -> Rig {
+        let mut rig = Rig::default();
+        rig.add(Joint {
+            parent: 0,
+            pivot,
+            frame: ROT_IDENTITY,
+            scale: 1.0,
+            motion,
+        })
+        .unwrap();
+        rig
+    }
+
+    #[test]
+    fn a_flash_shows_only_as_the_shot_goes_off() {
+        let pivot = [0.3, 1.0, 0.2];
+        let rig = single(Motion::Flash, pivot);
+        let reach = |activity: Activity, u: f32| {
+            let pose = rig.pose(activity, u);
+            // Where a point a tile from the pivot is carried: the flash's size.
+            let p = apply(&pose[1], [pivot[0], pivot[1] + 1.0, pivot[2]]);
+            assert!(
+                close(apply(&pose[1], pivot), pivot),
+                "the flash grows from its pivot"
+            );
+            p[1] - pivot[1]
+        };
+        assert!((reach(Activity::Attack, FIRE_AT + 0.04) - 1.0).abs() < 1e-3);
+        for u in [0.0, 0.3, FIRE_AT - 0.01, FIRE_AT + 0.12, 0.9] {
+            assert!(reach(Activity::Attack, u) < 0.01, "{u}");
+        }
+        for activity in [Activity::Idle, Activity::Move, Activity::Work] {
+            for s in 0..POSE_SAMPLES {
+                assert!(reach(activity, s as f32 / POSE_SAMPLES as f32) < 0.01);
+            }
+        }
+        // At least one keyframe of the attack shows it at full size.
+        let shown = (0..POSE_SAMPLES)
+            .filter(|s| reach(Activity::Attack, *s as f32 / POSE_SAMPLES as f32) > 0.9)
+            .count();
+        assert!((1..=3).contains(&shown), "{shown}");
+    }
+
+    #[test]
+    fn a_barrel_recoils_along_its_length_and_runs_out_again() {
+        // A barrel lying along +z (its own y): it kicks back towards −z.
+        let mut rig = Rig::default();
+        rig.add(Joint {
+            parent: 0,
+            pivot: [0.0, 0.7, -0.4],
+            frame: [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]],
+            scale: 1.0,
+            motion: Motion::Recoil(0.14),
+        })
+        .unwrap();
+        let at = |activity: Activity, u: f32| apply(&rig.pose(activity, u)[1], [0.0, 0.7, 0.5]);
+        let kicked = at(Activity::Attack, FIRE_AT + 0.03);
+        assert!(close(kicked, [0.0, 0.7, 0.36]), "{kicked:?}");
+        for u in [0.0, 0.3, FIRE_AT, 0.95] {
+            assert!(close(at(Activity::Attack, u), [0.0, 0.7, 0.5]), "{u}");
+        }
+        assert!(close(at(Activity::Move, FIRE_AT + 0.03), [0.0, 0.7, 0.5]));
+    }
+
+    #[test]
+    fn a_sailing_hull_heels_only_under_way() {
+        let rig = single(Motion::Float(deg(8.0)), [0.0; 3]);
+        // The mean lean about the hull's length (x) over a cycle.
+        let mean_heel = |activity: Activity| {
+            (0..POSE_SAMPLES)
+                .map(|s| {
+                    let pose = rig.pose(activity, s as f32 / POSE_SAMPLES as f32);
+                    // The hull's up axis tips towards +z by the heel.
+                    pose[1][2][1].atan2(pose[1][1][1])
+                })
+                .sum::<f32>()
+                / POSE_SAMPLES as f32
+        };
+        assert!((mean_heel(Activity::Move) - deg(8.0)).abs() < deg(0.5));
+        assert!(mean_heel(Activity::Idle).abs() < deg(0.5));
+        assert!(mean_heel(Activity::Attack).abs() < deg(0.5));
     }
 
     #[test]

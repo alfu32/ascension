@@ -2248,6 +2248,14 @@ mod tests {
             [-0.25, -0.4, -0.02],
             [0.25, 0.4, 0.0695],
         );
+        // A heater: five corners, the bottom one a point.
+        check(
+            Shape::Shield,
+            &[("h", 0.8), ("point", 0.5)],
+            3 + 3 + 10 + 6,
+            [-0.25, -0.4, -0.02],
+            [0.25, 0.4, 0.0695],
+        );
         // Four segments of stave, four sides each, and the string.
         let bow = bake_model(&ModelSpec {
             parts: vec![part(Shape::Bow, &[])],
@@ -2264,6 +2272,20 @@ mod tests {
             [-0.82, 0.0, -0.035],
             [0.82, 1.14, 0.15],
         );
+        // A lateen: the lower cells close to a point at the foot of the yard's −x end, so they
+        // are triangles (two a side) under two quads (four a side); then the yard.
+        let lateen = bake_model(&ModelSpec {
+            parts: vec![part(Shape::Sail, &[("lateen", 1.0)])],
+        });
+        assert_eq!(lateen.near.triangles(), 2 * (2 + 4) + 12);
+        assert_eq!(lateen.far.triangles(), 2);
+        let foot: Vec<_> = lateen
+            .near
+            .positions
+            .iter()
+            .filter(|p| p[1] < 1e-4)
+            .collect();
+        assert!(!foot.is_empty() && foot.iter().all(|p| (p[0] + 0.7).abs() < 1e-4));
         // Two oars a side, each a shaft and a blade.
         let oars = bake_model(&ModelSpec {
             parts: vec![part(Shape::OarBank, &[("count", 2.0)])],
@@ -2299,6 +2321,23 @@ mod tests {
         assert_eq!(joints(Shape::Hull, &[("float", 1.0)]), 2);
         assert_eq!(joints(Shape::Box, &[("strike", 30.0)]), 2);
         assert_eq!(joints(Shape::Box, &[]), 1);
+        // A gun barrel recoils and its flash shows, each on a joint of its own.
+        assert_eq!(joints(Shape::Cylinder, &[("recoil", 0.1)]), 2);
+        assert_eq!(joints(Shape::Cone, &[("flash", 1.0)]), 2);
+        assert_eq!(
+            joints(
+                Shape::Box,
+                &[("strike", 30.0), ("recoil", 0.1), ("flash", 1.0)]
+            ),
+            4
+        );
+        // A sailing hull heels under way; the heel is part of its float.
+        let hull = bake_model(&ModelSpec {
+            parts: vec![part(Shape::Hull, &[("float", 1.0), ("heel", 8.0)])],
+        });
+        assert!(
+            matches!(hull.rig.joints[1].motion, Motion::Float(h) if (h - 8_f32.to_radians()).abs() < 1e-6)
+        );
     }
 
     #[test]

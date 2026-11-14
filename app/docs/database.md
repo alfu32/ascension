@@ -325,8 +325,12 @@ part leans about its base centre, `roll` tipping its top towards +x, then
 `pitch` is the slope, only `roll` leans), `repeat` with `dx`, `dz` (copies,
 each moved by that much), `far` (0 leaves it out of the far version), `strike`
 (degrees the part swings forward about its base, along its own x axis, when its
-unit attacks: a catapult's arm) and `tint` (`#rrggbb`, multiplies the material
-colours). A part with both leans at 0 bakes
+unit attacks: a catapult's arm; a part attached to it with the opposite `strike`
+keeps hanging, as a trebuchet's counterweight does), `recoil` (tiles the part
+kicks back along its own −y when its unit fires: a gun barrel lying along its
+aim), `flash` (1: the part, and what is attached to it, shows only for a moment
+as its unit fires: a muzzle flash) and `tint` (`#rrggbb`, multiplies the
+material colours). A part with both leans at 0 bakes
 exactly as it did before leaning existed (task 38). The shapes and their own
 knobs:
 
@@ -345,21 +349,23 @@ knobs:
 | `banner` | `h`, `fw`, `fh`, `pole`, `notch`; colour `pole_colour` (the cloth is the part) |
 | `awning` | `w`, `d`, `h`, `rise`, `posts`; colour `post_colour` |
 | `arch` | `w`, `h`, `t` (a wall along x), `span` (width of the round-headed opening in its middle), `spring` (height where the head begins), `segments` |
-| `hull` | `w` (length along x), `d` (beam), `h` (depth amidships), `sheer` (rise of both pointed ends), `segments`, `float` (1: rides the water, carrying the parts attached to it); an open boat, planked inside and out |
-| `figure` | `h` (1 tile), `build`, `robe` (1: a long robe to the ground), `seat` (1: sits astride, hips on its origin + 0.4 `h`); motion `attack` (0 overhead strike, 1 thrust, 2 overhand throw, 3 draw a bow held in the left hand, 4 whirl a sling), `work` (0 swing a tool, 1 raise both arms), `hold_right`, `hold_left` (degrees an arm is carried forward, still, keeping what it holds upright; 0 swings), `stride` (degrees of leg swing, default 28), `pace` (seconds per step cycle, default 1); colours `skin`, `hair`, `legs` (the tunic is the part) |
+| `hull` | `w` (length along x), `d` (beam), `h` (depth amidships), `sheer` (rise of both pointed ends), `segments`, `float` (1: rides the water, carrying the parts attached to it), `heel` (degrees a floating hull leans while under way: a sailing ship); an open boat, planked inside and out |
+| `figure` | `h` (1 tile), `build`, `robe` (1: a long robe to the ground), `seat` (1: sits astride, hips on its origin + 0.4 `h`); motion `attack` (0 overhead strike, 1 thrust, 2 overhand throw, 3 draw a bow held in the left hand, 4 whirl a sling, 5 raise a firearm or crossbow to the shoulder, aim, fire and lower it, 6 level a pistol, fire and lower it), `work` (0 swing a tool, 1 raise both arms), `hold_right`, `hold_left` (degrees an arm is carried forward, still, keeping what it holds upright; 0 swings), `stride` (degrees of leg swing, default 28), `pace` (seconds per step cycle, default 1); colours `skin`, `hair`, `legs` (the tunic is the part) |
 | `quadruped` | `h` (size, 1: a horse with its back 0.82 up), `l`, `w` (body length and width), `stride`, `pace` (gait); colours `mane`, `hoof` (the hide is the part); faces +z |
 | `wheel` | `w` (diameter), `t` (thickness), `spokes` (bars across the faces), `segments`; upright on the ground, axle along x; turns as its unit moves |
 | `oar_bank` | `w` (length of the bank along x), `count` (oars a side), `beam` (distance between the oarlocks across z), `length`, `drop` (degrees down to the water); each oar sweeps as its unit moves |
-| `sail` | `w`, `h`, `billow` (belly towards +z); colour `yard_colour`; the cloth is the part |
-| `shield` | `w` (diameter, or width with `h`), `h` (0: round), `t`, `boss`, `segments`; colour `rim`; centred on its origin, facing +z |
+| `sail` | `w`, `h`, `billow` (belly towards +z), `lateen` (1: a triangle, its foot closing to the yard's −x end; lean the part to slant the yard); colour `yard_colour`; the cloth is the part |
+| `shield` | `w` (diameter, or width with `h`), `h` (0: round), `t`, `boss`, `segments`, `point` (with `h`: the share of the height over which the sides close to a point at the bottom, a heater or kite shield); colour `rim`; centred on its origin, facing +z |
 | `bow` | `h`, `bend` (towards +z), `w` (stave thickness); colour `string`; held at its middle (the origin) |
 | `include` | `mesh` (key of another composed mesh), `scale`; its parts without a material take the include's |
 
 Composed models move (task 39), as presentation only. Baking records the
 joints of the moving shapes: a figure's body, legs and arms (and one joint per
 hand for what it holds), a quadruped's body, legs, neck and tail, each wheel and
-oar, a floating hull and every part with `strike`; parts attached to a part or
-socket move with its joint. Each unit's snapshot carries what it is doing —
+oar, a floating hull and every part with `strike`, `recoil` or `flash`; parts
+attached to a part or socket move with its joint. A shot goes off at the same
+point of the attack cycle for the shooter's arm, the barrel's recoil and the
+flash (`FIRE_AT` in `rig.rs`), so they stay in step. Each unit's snapshot carries what it is doing —
 idle, move, attack or work, read from the simulation's public state (see
 `activity_of` in `rom-app`'s `sim_thread.rs`) — and the GPU poses the model from
 keyframes baked before play, the render clock and a phase per entity. Shadows

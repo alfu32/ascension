@@ -907,6 +907,57 @@ mod tests {
     }
 
     #[test]
+    fn medieval_and_gunpowder_models_are_complete() {
+        let (rules, book) = book();
+        let ordinal = |key: &str| {
+            rules
+                .id_of(key)
+                .and_then(|a| rules.ages.get(&a))
+                .map(|a| a.ordinal)
+                .unwrap()
+        };
+        let (medieval, gunpowder) = (ordinal("age.medieval"), ordinal("age.gunpowder"));
+        let medieval_id = rules.id_of("age.medieval").unwrap();
+        let (mut first_looks, mut restyled) = (0, 0);
+        for (&id, et) in &rules.entity_types {
+            let Some(first) = et.first_age_id else {
+                continue;
+            };
+            let Some(age) = rules.ages.get(&first).map(|a| a.ordinal) else {
+                continue;
+            };
+            let has = |age_id| {
+                book.entries
+                    .iter()
+                    .any(|e| e.entity == id && e.faction.is_none() && e.age == Some(age_id))
+            };
+            let key = rules.key(id);
+            match et.class {
+                // Every building of the medieval age has its first look; every earlier one
+                // changes look when its owner reaches the medieval age.
+                EntityClass::Building if age == medieval => {
+                    assert!(has(first), "{key} has no composed look for its first age");
+                    first_looks += 1;
+                }
+                EntityClass::Building if age < medieval => {
+                    assert!(has(medieval_id), "{key} has no medieval look");
+                    restyled += 1;
+                }
+                // Every unit of the medieval and gunpowder ages has its first look.
+                EntityClass::Unit if age == medieval || age == gunpowder => {
+                    assert!(has(first), "{key} has no composed look for its first age");
+                    first_looks += 1;
+                }
+                _ => {}
+            }
+        }
+        assert!(
+            first_looks >= 15 && restyled >= 15,
+            "{first_looks} {restyled}"
+        );
+    }
+
+    #[test]
     fn approved_models_are_unchanged() {
         let (_, book) = book();
         let changed = changed_models(&book, &approved(APPROVED));
