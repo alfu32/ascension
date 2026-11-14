@@ -4989,9 +4989,9 @@ WITH v(m,name,shape,mat,team,attach,params) AS (VALUES
   ('mesh.musketeer_gunpowder','crown','cylinder','mat.felt',0,'head','{"y":-0.07,"w":0.21,"h":0.14,"taper":0.15,"segments":6}'),
   ('mesh.musketeer_gunpowder','plume','box','mat.canvas',0,'head','{"x":0.1,"y":-0.06,"z":-0.02,"w":0.06,"d":0.22,"h":0.07,"roll":-55,"far":0}'),
   ('mesh.musketeer_gunpowder','stock','box','mat.timber',0,'right_hand','{"y":-0.3,"w":0.05,"d":0.08,"h":0.44,"far":0}'),
-  ('mesh.musketeer_gunpowder','barrel','cylinder','mat.iron',0,'stock','{"y":0.36,"w":0.035,"h":0.9,"segments":5}'),
-  ('mesh.musketeer_gunpowder','spark','cone','mat.flash',0,'barrel','{"y":0.9,"w":0.08,"h":0.08,"segments":3,"flash":1,"far":0}'),
-  ('mesh.musketeer_gunpowder','flash','cone','mat.flash',0,'spark','{"y":0.36,"w":0.34,"h":0.36,"segments":6,"pitch":180,"far":0}'),
+  ('mesh.musketeer_gunpowder','barrel','cylinder','mat.iron',0,'stock','{"y":0.36,"w":0.035,"h":0.62,"segments":5}'),
+  ('mesh.musketeer_gunpowder','spark','cone','mat.flash',0,'barrel','{"y":0.62,"w":0.08,"h":0.08,"segments":3,"flash":1,"far":0}'),
+  ('mesh.musketeer_gunpowder','flash','cone','mat.flash',0,'spark','{"y":0.26,"w":0.24,"h":0.26,"segments":6,"pitch":180,"far":0}'),
   -- the arquebusier: a combed steel morion, a breastplate, a lighter firearm with a flash
   ('mesh.arquebusier_gunpowder','body','figure','mat.cloth',1,'','{"attack":5,"hold_right":10,"build":0.95,"legs":"#6a5444"}'),
   ('mesh.arquebusier_gunpowder','breastplate','box','mat.steel',0,'body','{"y":0.5,"w":0.32,"d":0.22,"h":0.25,"taper":0.1,"far":0}'),
@@ -5001,7 +5001,7 @@ WITH v(m,name,shape,mat,team,attach,params) AS (VALUES
   ('mesh.arquebusier_gunpowder','stock','box','mat.timber',0,'right_hand','{"y":-0.25,"w":0.045,"d":0.07,"h":0.36,"far":0}'),
   ('mesh.arquebusier_gunpowder','barrel','cylinder','mat.iron',0,'stock','{"y":0.3,"w":0.03,"h":0.62,"segments":5}'),
   ('mesh.arquebusier_gunpowder','spark','cone','mat.flash',0,'barrel','{"y":0.62,"w":0.08,"h":0.08,"segments":3,"flash":1,"far":0}'),
-  ('mesh.arquebusier_gunpowder','flash','cone','mat.flash',0,'spark','{"y":0.32,"w":0.32,"h":0.32,"segments":6,"pitch":180,"far":0}'),
+  ('mesh.arquebusier_gunpowder','flash','cone','mat.flash',0,'spark','{"y":0.24,"w":0.22,"h":0.24,"segments":6,"pitch":180,"far":0}'),
   -- the hussar: a rider in a fur cap with tall wings on his back and a sabre, on a light
   -- horse under a saddle cloth of the owner's colour
   ('mesh.hussar_gunpowder','beast','quadruped','mat.hide',0,'','{"pace":0.55,"stride":34,"tint":"#8a6448"}'),
