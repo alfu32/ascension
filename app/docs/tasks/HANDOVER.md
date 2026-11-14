@@ -60,9 +60,17 @@ When a round is approved: lock it (above), mark the page rows approved if the
 owner approved in chat, commit and push. "Needs work" items become a revision
 card.
 
+## Running now
+
+- **Task 42 — launcher window** (`42-launcher.md`), Codex, started 2026-11-14
+  in `../rise-of-man-worktrees/42-launcher`; result in
+  `../rise-of-man-worktrees/logs/42-result.md`. Review the diff and the
+  launcher screenshot, run the gate, commit in the worktree, merge, bump the
+  version, tag and push.
+
 ## Next cards (agreed direction, not yet written)
 
-1. **Task 42 — renderer: oil and glow.** Oil deposits (`ter.oil`) still read
+1. **Task 43 — renderer: oil and glow.** Oil deposits (`ter.oil`) still read
    as dull dark ground and are drawn before the industrial age (task 41 made
    them unknown and unplaceable before that age in the simulation and app;
    the renderer must hide them per player and show them when the age is
@@ -70,7 +78,7 @@ card.
    colour that stands out on the globe and minimap. Add an emissive material
    program for furnace glow and muzzle flashes (task 40 uses lit colours).
    Opus, `rom-render` + seed.
-2. **Task 43 — early-modern looks:** gunpowder/enlightenment look of every
+2. **Task 44 — early-modern looks:** gunpowder/enlightenment look of every
    building (plaster, tile, brick, sash windows), `bld.bastion` and
    `bld.star_fort`, enlightenment units (fusilier, light infantry, ranger,
    dragoon, lancer, cannon, frigate, freight wagon). Same pattern as card 40.
