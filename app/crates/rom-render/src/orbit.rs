@@ -14,7 +14,7 @@ pub const MIN_DISTANCE: f32 = 8.0;
 pub const STREET_TILT: f32 = 1.22;
 /// Angle from straight down over the low zoom range, in radians (60 degrees: an isometric view).
 pub const ISO_TILT: f32 = 1.047;
-/// Distance up to which the tilt stays [`ISO_TILT`], in tiles: about where age 4's view range ends.
+/// Distance up to which the tilt stays [`ISO_TILT`], in tiles: where the Information Age's view range ends.
 pub const ISO_UNTIL: f32 = 130.0;
 /// Ground half-width seen straight down per unit of eye distance (vertical field of view and aspect).
 const HALF_WIDTH_PER_DISTANCE: f32 = 0.6;
@@ -112,10 +112,10 @@ impl OrbitCamera {
         self.clamp();
     }
 
-    /// Ground half-width in tiles the view shows at `distance`, allowing for the tilt there.
+    /// Ground half-width in tiles the view shows across the screen at the point looked at, from
+    /// `distance` (the tilt does not change it; the far edge of a tilted view is the horizon).
     pub fn half_width_at(&self, distance: f32) -> f32 {
-        let tilt = self.tilt_at(distance).min(1.2);
-        distance * HALF_WIDTH_PER_DISTANCE / tilt.cos()
+        distance * HALF_WIDTH_PER_DISTANCE
     }
 
     /// The largest eye distance now allowed: `max_distance`, or less when the view range of the
@@ -124,18 +124,7 @@ impl OrbitCamera {
         if self.view_limit <= 0.0 {
             return self.max_distance;
         }
-        let mut best = MIN_DISTANCE;
-        let steps = 200;
-        let span = (self.max_distance / MIN_DISTANCE).ln();
-        for i in 0..=steps {
-            let d = MIN_DISTANCE * (span * i as f32 / steps as f32).exp();
-            if self.half_width_at(d) <= self.view_limit {
-                best = d;
-            } else if d > ISO_UNTIL {
-                break;
-            }
-        }
-        best.min(self.max_distance)
+        (self.view_limit / HALF_WIDTH_PER_DISTANCE).clamp(MIN_DISTANCE, self.max_distance)
     }
 
     /// The default largest distance for a planet: three radii.

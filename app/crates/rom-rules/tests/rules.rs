@@ -1061,9 +1061,9 @@ fn rejects_carry_without_tag_and_nonpositive_keeper() {
 fn age_view_range_loads() {
     let rules = seed();
     let range = |key: &str| rules.ages[&rules.id_of(key).unwrap()].view_range;
-    assert_eq!(range("age.ancient"), 60_000);
-    assert_eq!(range("age.information"), 320_000);
-    assert_eq!(range("age.automation"), 450_000);
+    assert_eq!(range("age.ancient"), 30_000);
+    assert_eq!(range("age.information"), 78_000);
+    assert_eq!(range("age.automation"), 110_000);
     assert_eq!(range("age.fusion"), 0);
     assert_eq!(range("age.galactic"), 0);
     // The range widens with every age until the whole globe is allowed.

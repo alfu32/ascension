@@ -197,8 +197,11 @@ claims resource bodies and colony sites unopposed. Nothing is regenerated and
 no state is converted — it is purely a per-player reveal.
 
 `age.view_range` (milli-tiles) is the largest ground half-width the camera may
-show in that age while the view is still bound to the home planet: 60 tiles in
-the first age, widening each age, `0` (the whole globe) from the Fusion Age on.
+show in that age while the view is still bound to the home planet, measured
+across the screen at the point looked at (0.6 × the eye distance, whatever the
+tilt): 30 tiles in the first age (the home city and its border), 78 in the
+Information Age (about a third of a 192-tile planet's face), `0` (the whole
+globe) from the Fusion Age on.
 
 A flat rectangular map remains for tests and skirmish maps: `map_style.planets`
 and `space_pct` and the `planet`/`space` feature rows drive it, and `map_grid`

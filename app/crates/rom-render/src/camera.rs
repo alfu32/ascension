@@ -88,12 +88,12 @@ impl Camera {
         self.clamp();
     }
 
-    /// Brings the distance down so that the ground half-width seen at the current pitch stays
-    /// within `half_width` tiles (`None`: no limit beyond [`Camera::MAX_DISTANCE`]).
+    /// Brings the distance down so that the ground half-width seen across the screen at the
+    /// target stays within `half_width` tiles (`None`: no limit beyond [`Camera::MAX_DISTANCE`]).
     pub fn limit_half_width(&mut self, half_width: Option<f32>) {
         if let Some(width) = half_width {
-            let reach = HALF_WIDTH_PER_DISTANCE / self.pitch.sin().max(0.2);
-            self.distance = self.distance.min((width / reach).max(Self::MIN_DISTANCE));
+            let limit = (width / HALF_WIDTH_PER_DISTANCE).max(Self::MIN_DISTANCE);
+            self.distance = self.distance.min(limit);
         }
     }
 
