@@ -47,6 +47,70 @@ pushed, tree clean). Read `CLAUDE.md` (it imports `AGENTS.md`), then
    `approved_models_are_unchanged` then guards them. Never change a locked
    model without the owner's say.
 
+## Recipe: building the models of the next age (the game assets)
+
+Models are data, not files: every building and unit look is rows in
+`app/db/seed.sql` that the part kit in `rom-render` bakes before play. To
+model a new age (next: gunpowder/enlightenment buildings, enlightenment
+units — card "early-modern looks"; then industrial … galactic):
+
+1. **Write the card** by copying `app/docs/tasks/40-medieval-models.md` and
+   changing the age, the list and the signature table. Every card names: the
+   era's materials and shapes (`docs/art-direction.md`, "Ages"), the new first
+   looks, the restyles of every earlier building (`@<age>` looks so towns
+   change as their owner advances), the units with a one-line silhouette each,
+   any new motion, budgets, review screenshots, and "approved models
+   unchanged". One card per era; tell the implementer to commit after each
+   step (usage limits interrupt long runs).
+2. **Find what needs a model:**
+   ```sh
+   sqlite3 /tmp/rom.db "select a.key, e.class, group_concat(d.key,' ') from entity_type e
+     join def d on d.id=e.id join def a on a.id=e.first_age_id
+     where a.key='age.<age>' group by e.class"
+   ```
+   plus every building of earlier ages for the restyles.
+3. **Write the rows** (append a section at the end of `seed.sql`, before
+   `COMMIT;`, in the same shape as the existing ones):
+   - `def` rows (kind `mesh`, key `mesh.<thing>_<age>`) and `mesh` rows with
+     `generator = 'composed'`;
+   - `mesh_part` rows through a `WITH v(m,name,shape,mat,team,attach,params)`
+     block: one named part per row, `team = 1` for team colour, `attach` to a
+     part or socket for anything that moves with it;
+   - shared sub-assemblies (`mesh.house_*`, `mesh.silo`, `mesh.horse`,
+     `mesh.trebuchet_frame` …) placed with `shape = 'include'`;
+   - new `material` rows when the era needs a new surface (programs are listed
+     in `rom-render/src/looks.rs`);
+   - `entity_visual(entity_type_id, age_id, mesh_id, material_id)` rows: the
+     most specific row (faction, then age) wins; an age row applies from that
+     age until a later one.
+   Shapes, knobs, sockets and motion knobs (`strike`, `recoil`, `flash`, hull
+   `float`/`heel`, figure `attack`/`work` styles) are documented in
+   `docs/database.md` §10a. Add a kit shape in `rom-render/src/kit.rs` only
+   when no combination of existing shapes works (with bounds and triangle
+   tests). Task 40's agent generated its rows with a scratch Python script
+   that is not in the repository; the SQL is the source.
+4. **Rules every model keeps:** footprint covered 85–95 %; budgets (buildings
+   ≤ 1,500 near / ≤ 300 far, figures ≤ 300 / 80, mounted, siege, wagons and
+   ships ≤ 800 / 160) — tests assert them; team colour 15–25 % except foot
+   figures (full tunic, owner-approved); one signature element per building
+   kept across its ages; units told apart by silhouette at the game camera.
+5. **Look at it while building:** `--gallery <age>`, `--gallery <entity key>`
+   (all looks of one building side by side), `--model <id>` (`--parts`,
+   `--pose move|attack|work`, `--anim-time <s>` to catch a moment),
+   `--gallery-view close`, `--team 2` (blue shows team colour better than red
+   next to terracotta). Open every PNG and fix what looks wrong: proportions
+   (task 40's musket was 1.5× the figure until review), floating parts,
+   look-alikes.
+6. **Gate and tests:** coverage test (every entity of the age has a look),
+   budgets, `approved_models_are_unchanged`, then the full gate on `main`.
+7. **Review round:** screenshots at 1600×900 named
+   `<id with @→_>[-parts|-ages|-move|-attack|-work]`, converted to JPEG, a new
+   round in `app/docs/art/review-page/build.py` (round number by age, overview
+   captions), publish to the review page, tell the owner.
+8. **After the owner approves:** lock the fingerprints in
+   `app/docs/art/approved.toml` and mark the page rows; "needs work" becomes a
+   revision card.
+
 ## Review status
 
 | Round | Content | Status |
