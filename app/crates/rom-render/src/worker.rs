@@ -1,5 +1,6 @@
 //! The render thread and the bridge other threads use to talk to it.
 
+use std::cell::Cell;
 use std::io;
 use std::slice;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
@@ -28,6 +29,7 @@ use crate::orbit::{
 };
 use crate::pick::{PickContext, PickController, PickEvent, canvas_view, canvas_view_orbit};
 use crate::pixels::rgba_to_bgra_flipped;
+use crate::readback::{AsyncReadback, ReadyFrame};
 use crate::scene::{BakeReport, Scene};
 use crate::space::{SpaceContext, SpacePicker, SpaceSnapshot, ship_frame_pos};
 use crate::stats::{RenderStats, StatsWindow};
@@ -498,6 +500,15 @@ fn render_loop(shared: &Shared) {
         .hidden()
         .build();
     let mut scene = Scene::load(&mut rl, &thread);
+    let mut readback = match AsyncReadback::new(Instant::now()) {
+        Ok(readback) => Some(readback),
+        Err(missing) => {
+            eprintln!(
+                "rom-render: asynchronous read-back unavailable (missing {missing}); reading frames back synchronously"
+            );
+            None
+        }
+    };
     let mut hud: Option<HudGpu> = None;
     let mut minimap: Option<MinimapGpu> = None;
     let mut target: Option<(RenderTexture2D, (u32, u32))> = None;
@@ -915,6 +926,8 @@ fn render_loop(shared: &Shared) {
         let Some((texture, size)) = target.as_mut() else {
             continue;
         };
+        // A snapshot asked for before this frame is drawn is answered by this frame or a later one.
+        let snapshot_due = shared.snapshot_wanted.swap(false, Ordering::AcqRel);
         let elapsed = frame_start.duration_since(started).as_secs_f32();
         let boxes = shared.box_count.load(Ordering::Relaxed) as usize;
         scene.prepare_entities(
@@ -1015,23 +1028,54 @@ fn render_loop(shared: &Shared) {
         }
 
         let readback_start = Instant::now();
-        let Some(pixels) = read_back(texture) else {
-            eprintln!("rom-render: could not read back the render target");
-            thread::sleep(IDLE_WAIT);
-            continue;
+        let snapshot_taken = Cell::new(false);
+        let take_snapshot = || {
+            snapshot_taken.set(true);
+            snapshot_due
         };
-        let finished_at = Instant::now();
-        sequence += 1;
-        let pixels = Arc::new(pixels);
-        if shared.snapshot_wanted.swap(false, Ordering::AcqRel) {
-            *lock(&shared.snapshot) = Some(Arc::clone(&pixels));
+        let ready = match readback.as_mut() {
+            Some(gpu) => match gpu.frame(texture, *size, readback_start, take_snapshot) {
+                Ok(ready) => ready,
+                Err(error) => {
+                    eprintln!("rom-render: {error}; reading frames back synchronously from now on");
+                    readback = None;
+                    None
+                }
+            },
+            None => {
+                let Some(pixels) = read_back(texture) else {
+                    eprintln!("rom-render: could not read back the render target");
+                    if snapshot_due {
+                        shared.snapshot_wanted.store(true, Ordering::Release);
+                    }
+                    thread::sleep(IDLE_WAIT);
+                    continue;
+                };
+                Some(ReadyFrame {
+                    pixels,
+                    snapshot: take_snapshot(),
+                })
+            }
+        };
+        if snapshot_due && !snapshot_taken.get() {
+            // No read was issued for this frame; leave the request for the next one.
+            shared.snapshot_wanted.store(true, Ordering::Release);
         }
-        shared.mailbox.publish(Frame {
-            pixels,
-            width: size.0,
-            height: size.1,
-            sequence,
-        });
+        let finished_at = Instant::now();
+        if let Some(ReadyFrame { pixels, snapshot }) = ready {
+            sequence += 1;
+            let (width, height) = pixels.dimensions();
+            let pixels = Arc::new(pixels);
+            if snapshot {
+                *lock(&shared.snapshot) = Some(Arc::clone(&pixels));
+            }
+            shared.mailbox.publish(Frame {
+                pixels,
+                width,
+                height,
+                sequence,
+            });
+        }
         stats.record(
             finished_at,
             millis(finished_at - frame_start),
@@ -1049,6 +1093,7 @@ fn render_loop(shared: &Shared) {
         }
     }
     // Free GPU objects while the GL context still exists; `rl` closes it when dropped last.
+    drop(readback);
     drop(hud);
     drop(minimap);
     drop(target);
@@ -1302,7 +1347,7 @@ fn steer(
     }
 }
 
-/// Reads the render target back and converts it to top-down BGRA.
+/// Reads the render target back synchronously and converts it to top-down BGRA (fallback path).
 fn read_back(target: &RenderTexture2D) -> Option<FramePixels> {
     let image = target.texture().load_image().ok()?;
     if image.format() != PixelFormat::PIXELFORMAT_UNCOMPRESSED_R8G8B8A8 {

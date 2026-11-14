@@ -12,17 +12,17 @@ pub struct RenderStats {
     pub frames_rendered: u64,
     /// Frames finished during the last second.
     pub frames_last_second: u32,
-    /// Average time from frame start to mailbox hand-off, in milliseconds.
+    /// Average time from frame start to the end of its read-back work, in milliseconds.
     pub frame_ms_avg: f32,
     /// Worst frame time in the last second, in milliseconds.
     pub frame_ms_max: f32,
-    /// Average read-back plus pixel conversion time, in milliseconds.
+    /// Average read-back work per frame (issue, fence polls, map and row copy), in milliseconds.
     pub readback_ms_avg: f32,
-    /// Worst read-back plus pixel conversion time in the last second, in milliseconds.
+    /// Worst read-back work in the last second, in milliseconds.
     pub readback_ms_max: f32,
     /// Sum of all frame times since start, for averages over longer spans.
     pub frame_ms_total: f64,
-    /// Sum of all read-back plus conversion times since start.
+    /// Sum of all read-back work times since start.
     pub readback_ms_total: f64,
     /// Size of the render target of the newest frame.
     pub render_width: u32,
