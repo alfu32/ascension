@@ -99,9 +99,12 @@ card.
   limit; their uncommitted work survives in the worktree — resume the same
   agent with `SendMessage` after the reset. Tell them to commit after each
   coherent step.
-- Codex cannot open windows or commit: the orchestrator takes the
-  screenshots and commits after review (`../rise-of-man-worktrees/logs/` has
-  prompts and results).
+- Codex can open windows and take its own screenshots (the owner gave it full
+  permissions). Card 41 wrongly told it not to, so the orchestrator took them;
+  do not repeat that — give Codex the same screenshot and bench commands as a
+  Claude agent. Committing from a worktree is still done by the orchestrator
+  (`CLAUDE.md`, Codex CLI). Prompts and results are in
+  `../rise-of-man-worktrees/logs/`.
 - A full `cargo test --workspace` takes 12–30 minutes on this machine; run it
   once per merge on `main`. Always look at screenshots yourself before
   merging art (task 40's musket was 1.5× the figure's height until review).
