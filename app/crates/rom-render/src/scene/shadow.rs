@@ -37,7 +37,9 @@ pub(super) struct ShadowUniforms {
 #[derive(Clone, Debug, PartialEq)]
 struct Drawn {
     fit: LightFit,
-    casters: [Vec<[f32; 12]>; 2],
+    casters: [Vec<[f32; 12]>; 3],
+    /// Whether the baked feature objects were drawn (they are static, so a flag suffices).
+    features: bool,
 }
 
 /// The shadow target, the depth materials and the last map drawn.
@@ -118,6 +120,16 @@ fn caster_geometry(transforms: &[Matrix]) -> Vec<[f32; 12]> {
             ]
         })
         .collect()
+}
+
+/// Geometry of this frame's crop instances, which move with the buildings they stand on.
+fn crop_casters(features: Option<&super::materials::FeatureGpu>) -> Vec<[f32; 12]> {
+    features.map_or_else(Vec::new, |f| {
+        f.crops
+            .iter()
+            .flat_map(|list| caster_geometry(list))
+            .collect()
+    })
 }
 
 /// Bounding sphere of a transformed unit cube; tint cells do not affect the geometry.
@@ -210,6 +222,7 @@ impl Scene {
         }
         let toward = sun::unit_or(self.sun.map(|c| -c));
         let view = View::from_orbit(orbit, size, self.projection_centre_y);
+        let eye = orbit.position();
         let footprint = globe_footprint(orbit, &view);
         let lit = |p: &[f32; 3]| dot3(sun::unit_or(*p), toward) > -sun::TERMINATOR;
         if !footprint.iter().any(lit) {
@@ -218,20 +231,28 @@ impl Scene {
         self.ensure_shadow(rl, thread);
         let gpu = self.globe.as_ref()?;
         let shadow = self.shadow.as_mut()?;
+        let features = self.features.as_ref().filter(|_| self.detail > 0.01);
+        let crops = crop_casters(features);
         let fit = LightFit::around(&footprint, shadow.steady(toward), CASTER_HEIGHT)?.with_casters(
-            gpu.land.iter().map(|(_, b)| (b.centre, b.radius)).chain(
-                gpu.markers
-                    .iter()
-                    .chain(&self.entity_casters)
-                    .map(caster_bounds),
-            ),
+            gpu.land
+                .iter()
+                .map(|(_, b)| (b.centre, b.radius))
+                .chain(
+                    gpu.markers
+                        .iter()
+                        .chain(&self.entity_casters)
+                        .map(caster_bounds),
+                )
+                .chain(features.into_iter().flat_map(|f| f.bounds())),
         );
         let wanted = Drawn {
             fit,
             casters: [
                 caster_geometry(&self.entity_casters),
                 caster_geometry(&gpu.markers),
+                crops,
             ],
+            features: features.is_some(),
         };
         if let Some(uniforms) = shadow.reuse(&wanted) {
             return Some(uniforms);
@@ -257,6 +278,15 @@ impl Scene {
                     );
                 }
             }
+            if let Some(features) = features {
+                features.draw_casters(
+                    &mut pass,
+                    &shadow.depth_instanced,
+                    eye,
+                    &|centre, radius| fit.may_touch(centre, radius),
+                    &mut self.caster_scratch,
+                );
+            }
             end_casters();
         }
         set_clip_planes(DEFAULT_NEAR, DEFAULT_FAR);
@@ -277,10 +307,13 @@ impl Scene {
         let toward = sun::unit_or(LIGHT_DIRECTION.map(|c| -c));
         let map_size = self.terrain.as_ref()?.size;
         let view = View::new(camera, size, self.projection_centre_y);
+        let eye = camera.position();
         let footprint = flat_footprint(camera, &view, map_size);
         self.ensure_shadow(rl, thread);
         let terrain = self.terrain.as_ref()?;
         let shadow = self.shadow.as_mut()?;
+        let features = self.features.as_ref().filter(|_| self.detail > 0.01);
+        let crops = crop_casters(features);
         let fit = LightFit::around(&footprint, toward, CASTER_HEIGHT)?.with_casters(
             terrain
                 .land_bounds
@@ -291,14 +324,17 @@ impl Scene {
                         .iter()
                         .chain(&self.transforms)
                         .map(caster_bounds),
-                ),
+                )
+                .chain(features.into_iter().flat_map(|f| f.bounds())),
         );
         let wanted = Drawn {
             fit,
             casters: [
                 caster_geometry(&self.entity_casters),
                 caster_geometry(&self.transforms),
+                crops,
             ],
+            features: features.is_some(),
         };
         if let Some(uniforms) = shadow.reuse(&wanted) {
             return Some(uniforms);
@@ -323,6 +359,15 @@ impl Scene {
                         transforms,
                     );
                 }
+            }
+            if let Some(features) = features {
+                features.draw_casters(
+                    &mut pass,
+                    &shadow.depth_instanced,
+                    eye,
+                    &|centre, radius| fit.may_touch(centre, radius),
+                    &mut self.caster_scratch,
+                );
             }
             end_casters();
         }

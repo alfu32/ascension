@@ -272,7 +272,38 @@ count by the same area ratio, never below that flat count, and stay at least
 entity features or features outside `region_kind = 'planet'`. Flat generation
 ignores `coverage_pct` and retains its original rules.
 
-### 10. Computer opponents are data too
+### 10. Terrain materials and baked feature objects
+
+Every ground and fluid terrain has a `material_id`. `material.program` picks a
+shader of the material library (`grass`, `sand`, `stone`, `snow`,
+`forest_floor`, `water`, and for objects `foliage`, `bark`, `crop`); the
+renderer draws it up close and blends to the map colour across a band of camera
+distances. `material.params` is a flat JSON object:
+
+| Param | Meaning |
+| --- | --- |
+| `colour`, `colour_alt` | the two tones of the near look (`#rrggbb`) |
+| `scale` | pattern size in tiles |
+| `base_colour` | map colour of a feature terrain (far out) |
+| `shore_material` | material of this terrain's tiles that touch water (beaches) |
+| `objects` | mesh standing on the terrain's tiles |
+| `edge_objects` | mesh on tiles at the terrain's edge (else `objects`) |
+| `object_material` | material of those meshes (else the terrain's own) |
+| `snow_material` | material of object parts above the mesh's `snow_line` |
+
+`mesh.generator` names a generator (`forest_centre`, `forest_edge`,
+`rock_massif`, `crop_rows`); its params (`variants`, `count`, `height`,
+`radius`, `trunk_height`, `trunk_colour`, `snow_line`, `blade_width`,
+`blades`) are in tiles. All are `baked = 1`: the variants are built from the
+map seed when the planet or map is published to the renderer, before the first
+tick, and the feature tiles get one instance each. A building type drawn as
+objects names its mesh and material in `entity_visual` (the farm's crop rows);
+the row without faction and age is the one drawn. Unknown programs and
+generators fall back to the map colour and the plain building box. The rows
+were appended after the generated content so existing definition ids did not
+move (task 34).
+
+### 11. Computer opponents are data too
 
 `ai_profile` + `ai_profile_weight` (personality), `ai_opening_step` (opening
 list) and `ai_difficulty` (thinking speed, order budget, reaction time,

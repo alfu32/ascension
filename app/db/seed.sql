@@ -3669,4 +3669,54 @@ WITH v(p,seq,a,k,n) AS (VALUES
 INSERT INTO ai_opening_step(profile_key,seq,action,subject_def_id,count)
  SELECT v.p, v.seq, v.a, d.id, v.n FROM v JOIN def d ON d.key=v.k;
 
+-- ── surface materials, feature objects and crop rows ────────────────────────
+-- Up close the renderer shades every land and sea terrain with its material's
+-- program; far out it shows the map colour. Material params (flat JSON):
+--   colour, colour_alt   two tones of the near look ("#rrggbb")
+--   scale                pattern size in tiles
+--   base_colour          map colour of a feature terrain
+--   shore_material       material of this terrain's tiles that touch water
+--   objects              mesh standing on the terrain's tiles
+--   edge_objects         mesh on tiles at the edge of the terrain (else `objects`)
+--   object_material      material of those meshes (else this one)
+--   snow_material        material of object parts above the mesh's snow_line
+-- Mesh params are generator inputs in tiles; all of them are baked before play.
+-- Defined after the generated content so existing definition ids stay stable.
+INSERT INTO def(kind,key,name) VALUES
+ ('material','mat.grass','Grass'), ('material','mat.sand','Sand'),
+ ('material','mat.shallows','Shallow water'), ('material','mat.deep_water','Deep water'),
+ ('material','mat.foliage','Foliage'), ('material','mat.tar_ground','Tar-stained ground'),
+ ('material','mat.crop','Crop'),
+ ('mesh','mesh.forest_centre','Forest canopy'), ('mesh','mesh.forest_edge','Forest edge'),
+ ('mesh','mesh.rock_massif','Rock massif'), ('mesh','mesh.crop_rows','Crop rows');
+WITH v(k,prog,params) AS (VALUES
+  ('mat.grass','grass','{"colour":"#4f7d2f","colour_alt":"#86a043","scale":0.9,"shore_material":"mat.sand"}'),
+  ('mat.sand','sand','{"colour":"#dcc996","colour_alt":"#b8a06a","scale":0.6}'),
+  ('mat.shallows','water','{"colour":"#3ea3b2","colour_alt":"#2a7e98","scale":1.0}'),
+  ('mat.deep_water','water','{"colour":"#14426f","colour_alt":"#0b2b55","scale":1.0}'),
+  ('mat.foliage','foliage','{"colour":"#2e6428","colour_alt":"#6f9636","scale":0.2}'),
+  ('mat.tar_ground','stone','{"base_colour":"#3b3631","colour":"#4a433b","colour_alt":"#25211e","scale":0.5}'),
+  ('mat.crop','crop','{"colour":"#6f9a34","colour_alt":"#c8b45c","scale":0.3}'))
+INSERT INTO material(id,program,params) SELECT d.id, v.prog, v.params FROM v JOIN def d ON d.key=v.k;
+WITH v(k,prog,params) AS (VALUES
+  ('mat.forest','forest_floor','{"base_colour":"#2d5a27","colour":"#3b4a24","colour_alt":"#62502e","scale":0.5,"objects":"mesh.forest_centre","edge_objects":"mesh.forest_edge","object_material":"mat.foliage"}'),
+  ('mat.mountain','stone','{"base_colour":"#8a8178","colour":"#a19b93","colour_alt":"#6e6861","scale":1.2,"objects":"mesh.rock_massif","snow_material":"mat.ice"}'),
+  ('mat.ice','snow','{"base_colour":"#e8eef2"}'))
+UPDATE material SET program=(SELECT prog FROM v JOIN def d ON d.key=v.k WHERE d.id=material.id),
+ params=(SELECT params FROM v JOIN def d ON d.key=v.k WHERE d.id=material.id)
+ WHERE id IN (SELECT d.id FROM v JOIN def d ON d.key=v.k);
+WITH v(t,m) AS (VALUES ('ter.plain','mat.grass'), ('ter.coast','mat.shallows'),
+  ('ter.deep','mat.deep_water'), ('ter.oil','mat.tar_ground'))
+UPDATE terrain SET material_id=(SELECT m.id FROM v JOIN def m ON m.key=v.m JOIN def t ON t.key=v.t WHERE t.id=terrain.id)
+ WHERE id IN (SELECT t.id FROM v JOIN def t ON t.key=v.t);
+WITH v(k,gen,params) AS (VALUES
+  ('mesh.forest_centre','forest_centre','{"variants":4,"count":3,"height":1.35,"radius":0.5}'),
+  ('mesh.forest_edge','forest_edge','{"variants":4,"count":3,"height":1.45,"radius":0.32,"trunk_height":0.62,"trunk_colour":"#5b4331"}'),
+  ('mesh.rock_massif','rock_massif','{"variants":4,"count":6,"height":4.6,"radius":2.6,"snow_line":6.4}'),
+  ('mesh.crop_rows','crop_rows','{"variants":3,"count":2,"height":0.6,"radius":0.5,"blade_width":0.16,"blades":7}'))
+INSERT INTO mesh(id,generator,params,baked) SELECT d.id, v.gen, v.params, 1 FROM v JOIN def d ON d.key=v.k;
+INSERT INTO entity_visual(entity_type_id,mesh_id,material_id)
+ SELECT (SELECT id FROM def WHERE key='bld.farm'), (SELECT id FROM def WHERE key='mesh.crop_rows'),
+ (SELECT id FROM def WHERE key='mat.crop');
+
 COMMIT;

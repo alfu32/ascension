@@ -7,10 +7,12 @@ use rom_mapgen::{
     BaseTerrains, GeneratedMap, MapRequest, SpherePlanet, SphereRequest, Universe, UniverseRequest,
     generate, generate_sphere, generate_universe,
 };
-use rom_render::{PlanetScene, SunSettings, TerrainScene, TileKind};
+use rom_render::{
+    PlanetScene, SunSettings, SurfacePos, TerrainScene, TileKind, lon_lat_of, to_render,
+};
 use rom_rules::{DefId, Rules, build_rules_db};
 
-use crate::args::Options;
+use crate::args::{LookAt, Options};
 use crate::match_setup::default_factions;
 
 const SCHEMA: &str = include_str!("../../../db/schema.sql");
@@ -295,6 +297,106 @@ pub fn to_planet_scene(planet: &SpherePlanet) -> PlanetScene {
         nodes: planet.nodes.iter().map(|&(_, p)| p).collect(),
         sun: SunSettings::default(),
     }
+}
+
+/// Tiles within which `--look-at`'s second terrain must lie.
+const LOOK_NEAR_TILES: f32 = 40.0;
+/// Tiles of the second terrain `--look-at` wants within that reach.
+const LOOK_NEAR_COUNT: usize = 8;
+/// Tiles around the looked-at tile within which its own terrain must form a stand.
+const LOOK_STAND_TILES: f32 = 6.0;
+/// Tiles of its own terrain the looked-at tile needs within that reach.
+const LOOK_STAND_COUNT: usize = 30;
+
+/// The orbit view (`[lon, lat, distance, heading]`, degrees and tiles) over the tile of terrain
+/// `look.terrain` nearest to `home` that lies at the edge of its terrain and, when `look.near`
+/// is given, within a few tiles of that terrain, which the camera then faces. `None` when the
+/// planet has no such tile or a key is unknown.
+pub fn look_at(
+    rules: &Rules,
+    planet: &SpherePlanet,
+    home: SurfacePos,
+    look: &LookAt,
+) -> Option<[f32; 4]> {
+    let surface = planet.surface;
+    let wanted = rules.id_of(&look.terrain)?;
+    let near = match &look.near {
+        Some(key) => Some(rules.id_of(key)?),
+        None => None,
+    };
+    let dir = |pos: SurfacePos| -> [f32; 3] {
+        let p = to_render(surface.sphere_point(pos).map(|c| c as f32));
+        let length = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt().max(1e-6);
+        p.map(|c| c / length)
+    };
+    let dot = |a: [f32; 3], b: [f32; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    let tile_dir = |i: usize| dir(SurfacePos::from(surface.tile(i)));
+    let home_dir = dir(home);
+    let edge = |i: usize| {
+        let tile = surface.tile(i);
+        (-1..=1).any(|dy| {
+            (-1..=1).any(|dx| {
+                surface
+                    .neighbor(tile, dx, dy)
+                    .is_some_and(|t| planet.terrain[surface.index(t)] != wanted)
+            })
+        })
+    };
+    let mut candidates: Vec<(f32, usize)> = (0..surface.len())
+        .filter(|&i| planet.terrain[i] == wanted && edge(i))
+        .map(|i| (-dot(tile_dir(i), home_dir), i))
+        .collect();
+    candidates.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+    let others: Vec<[f32; 3]> = near.map_or_else(Vec::new, |near| {
+        (0..surface.len())
+            .filter(|&i| planet.terrain[i] == near)
+            .map(tile_dir)
+            .collect()
+    });
+    let own: Vec<[f32; 3]> = (0..surface.len())
+        .filter(|&i| planet.terrain[i] == wanted)
+        .map(tile_dir)
+        .collect();
+    let radius = rom_render::planet_radius(surface.n);
+    let reach = (LOOK_NEAR_TILES / radius).cos();
+    let stand = (LOOK_STAND_TILES / radius).cos();
+    for (_, i) in candidates {
+        let at = tile_dir(i);
+        // The edge of a sizeable stand, not a lone tile.
+        if own.iter().filter(|o| dot(**o, at) >= stand).count() < LOOK_STAND_COUNT {
+            continue;
+        }
+        let facing = if near.is_some() {
+            // Enough of the other terrain close by, and its middle as the point to face.
+            let close: Vec<&[f32; 3]> = others.iter().filter(|o| dot(**o, at) >= reach).collect();
+            if close.len() < LOOK_NEAR_COUNT {
+                continue;
+            }
+            let sum = close
+                .iter()
+                .fold([0.0; 3], |s, o| [s[0] + o[0], s[1] + o[1], s[2] + o[2]]);
+            let other = sum.map(|c| c / close.len() as f32);
+            // Heading towards the other terrain in the north / east frame of the tile.
+            let up = [0.0, 1.0, 0.0];
+            let north = {
+                let n = [0, 1, 2].map(|k| up[k] - at[k] * at[1]);
+                let length = dot(n, n).sqrt().max(1e-6);
+                n.map(|c| c / length)
+            };
+            let east = [
+                north[1] * at[2] - north[2] * at[1],
+                north[2] * at[0] - north[0] * at[2],
+                north[0] * at[1] - north[1] * at[0],
+            ];
+            let toward = [0, 1, 2].map(|k| other[k] - at[k]);
+            dot(toward, east).atan2(dot(toward, north)).to_degrees()
+        } else {
+            0.0
+        };
+        let (lon, lat) = lon_lat_of(at);
+        return Some([lon.to_degrees(), lat.to_degrees(), look.distance, facing]);
+    }
+    None
 }
 
 #[cfg(test)]

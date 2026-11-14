@@ -4,6 +4,7 @@ mod args;
 mod bench;
 mod demo;
 mod hud;
+mod looks;
 mod match_setup;
 mod screenshot;
 mod script;

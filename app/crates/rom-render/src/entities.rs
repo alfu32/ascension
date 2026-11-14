@@ -535,19 +535,22 @@ pub fn build_instances_on(
     right: [f32; 3],
     out: &mut Vec<[f32; 16]>,
 ) {
-    instances_on(views, ground, right, out, None);
+    instances_on(views, ground, right, out, None, &|_| false);
 }
 
-/// Builds display instances and records which ones are bodies that cast shadows.
+/// Builds display instances and records which ones are bodies that cast shadows. Buildings
+/// whose type `drawn_as_objects` get only a ground plate and a marker post; their look is
+/// drawn by the feature objects (crop rows).
 pub(crate) fn build_instances_with_casters_on(
     views: &[EntityView],
     ground: &dyn Footing,
     right: [f32; 3],
     out: &mut Vec<[f32; 16]>,
     casters: &mut Vec<std::ops::Range<usize>>,
+    drawn_as_objects: &dyn Fn(u16) -> bool,
 ) {
     casters.clear();
-    instances_on(views, ground, right, out, Some(casters));
+    instances_on(views, ground, right, out, Some(casters), drawn_as_objects);
 }
 
 fn instances_on(
@@ -556,13 +559,16 @@ fn instances_on(
     right: [f32; 3],
     out: &mut Vec<[f32; 16]>,
     mut casters: Option<&mut Vec<std::ops::Range<usize>>>,
+    drawn_as_objects: &dyn Fn(u16) -> bool,
 ) {
     out.clear();
     for view in views {
         let frame = ground.frame(view.face, view.x, view.y);
         let base = ground.height_at(view.face, view.x, view.y);
         let body_start = out.len();
-        let top = if view.building {
+        let top = if view.building && drawn_as_objects(view.kind) {
+            push_plot(view, &frame, out)
+        } else if view.building {
             push_building(view, ground, &frame, base, out)
         } else if view.owner == 0 {
             push_node(view, &frame, out)
@@ -689,6 +695,33 @@ fn push_building(
         color,
     ));
     top + roof_thickness
+}
+
+/// Pushes the plate and corner post of a building drawn as objects (a field): the soil under
+/// its rows and its owner's colour; returns the height of the post.
+fn push_plot(view: &EntityView, frame: &GroundFrame, out: &mut Vec<[f32; 16]>) -> f32 {
+    const SOIL: [f32; 3] = [0.34, 0.25, 0.16];
+    const POST: f32 = 0.7;
+    let (w, h) = (
+        f32::from(view.footprint.0.max(1)),
+        f32::from(view.footprint.1.max(1)),
+    );
+    let axes = [frame.ex, frame.up, frame.ey];
+    let color = owner_color(view.owner);
+    let soil: [f32; 3] = std::array::from_fn(|i| SOIL[i] * 0.8 + color[i] * 0.08);
+    out.push(frame_box(
+        frame.at([0.0, -0.03, 0.0]),
+        axes,
+        [w * 0.98, 0.08, h * 0.98],
+        soil,
+    ));
+    out.push(frame_box(
+        frame.at([-w * 0.47, POST / 2.0, -h * 0.47]),
+        axes,
+        [0.12, POST, 0.12],
+        color,
+    ));
+    POST
 }
 
 /// Pushes a node marker; returns the height of its top above the ground.
@@ -820,7 +853,14 @@ mod tests {
         let mut display = Vec::new();
         let mut ranges = Vec::new();
         let mut bodies = |views: &[EntityView], right| {
-            build_instances_with_casters_on(views, &ground, right, &mut display, &mut ranges);
+            build_instances_with_casters_on(
+                views,
+                &ground,
+                right,
+                &mut display,
+                &mut ranges,
+                &|_| false,
+            );
             let casters: Vec<_> = ranges
                 .iter()
                 .flat_map(|r| display[r.clone()].iter().copied())

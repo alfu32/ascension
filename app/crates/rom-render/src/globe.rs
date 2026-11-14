@@ -287,6 +287,11 @@ impl Globe {
         globe
     }
 
+    /// Kind per tile, in cube-surface index order.
+    pub fn kinds(&self) -> &[TileKind] {
+        &self.kinds
+    }
+
     /// Tiles along each face edge.
     pub fn n(&self) -> u32 {
         self.surface.n

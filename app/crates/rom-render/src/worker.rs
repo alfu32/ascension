@@ -21,13 +21,14 @@ use crate::hud_gpu::{HudGpu, MinimapGpu, MinimapOverlays, draw_level_pips, draw_
 use crate::hud_layout::HudLayout;
 use crate::hud_layout::Rect;
 use crate::hud_minimap::{GLOBE_MINIMAP_SIZE, ndc_centre_y};
+use crate::looks::SceneLooks;
 use crate::mailbox::{Frame, FrameMailbox, FramePixels};
 use crate::orbit::{
     HOME_DISTANCE, OrbitCamera, OrbitController, dir_from_lon_lat, lon_lat_of, pan_index,
 };
 use crate::pick::{PickContext, PickController, PickEvent, canvas_view, canvas_view_orbit};
 use crate::pixels::rgba_to_bgra_flipped;
-use crate::scene::Scene;
+use crate::scene::{BakeReport, Scene};
 use crate::space::{SpaceContext, SpacePicker, SpaceSnapshot, ship_frame_pos};
 use crate::stats::{RenderStats, StatsWindow};
 use crate::sun::SunClock;
@@ -114,6 +115,7 @@ struct Shared {
     mailbox: FrameMailbox,
     terrain: Mutex<Option<Arc<TerrainScene>>>,
     planet: Mutex<Option<(Arc<PlanetScene>, OrbitSettings)>>,
+    looks: Mutex<Arc<SceneLooks>>,
     universe: Mutex<Option<(Arc<UniverseScene>, UniverseSettings)>>,
     zoom_cap: AtomicU8,
     /// Ground half-width in milli-tiles the camera may show; `u32::MAX` until published.
@@ -167,6 +169,12 @@ impl RenderBridge {
     pub fn publish_terrain(&self, scene: Arc<TerrainScene>) {
         self.shared.terrain_ready.store(false, Ordering::Release);
         *lock(&self.shared.terrain) = Some(scene);
+    }
+
+    /// Sets how terrains, feature objects and buildings look up close for the terrains and
+    /// planets published after it; their feature objects are baked when each one arrives.
+    pub fn publish_looks(&self, looks: Arc<SceneLooks>) {
+        *lock(&self.shared.looks) = looks;
     }
 
     /// Hands the render thread a sphere planet to mesh and draw with an orbit camera, replacing
@@ -419,6 +427,7 @@ impl Shared {
             mailbox: FrameMailbox::default(),
             terrain: Mutex::new(None),
             planet: Mutex::new(None),
+            looks: Mutex::new(Arc::new(SceneLooks::default())),
             universe: Mutex::new(None),
             zoom_cap: AtomicU8::new(Level::Globe as u8),
             view_range: AtomicU32::new(u32::MAX),
@@ -464,6 +473,20 @@ impl Drop for FinishedGuard<'_> {
         *lock(finished) = true;
         changed.notify_all();
     }
+}
+
+/// Prints what baking the feature objects of a planet (face size `n`) or map took.
+fn report_bake(n: u32, bake: &BakeReport) {
+    eprintln!(
+        "feature-bake n={n} materials={} meshes={} vertices={} instances={} chunks={} bake_ms={:.1} upload_ms={:.1}",
+        bake.slots,
+        bake.meshes,
+        bake.vertices,
+        bake.instances,
+        bake.chunks,
+        bake.bake_ms,
+        bake.upload_ms
+    );
 }
 
 fn render_loop(shared: &Shared) {
@@ -528,8 +551,10 @@ fn render_loop(shared: &Shared) {
                 let home_start = settings.home.or_else(|| planet.starts.first().copied());
                 let clock = SunClock::new(planet.sun, home_start.map(|s| built_globe.dir_of(s)));
                 let tick = lock(&shared.snapshots).latest_tick().unwrap_or(0);
-                let (meshes, build_ms, upload_ms) =
-                    scene.set_planet(&thread, &planet, &built_globe, clock.light(tick));
+                let looks = Arc::clone(&lock(&shared.looks));
+                let (meshes, build_ms, upload_ms, bake) =
+                    scene.set_planet(&thread, &planet, &built_globe, clock.light(tick), &looks);
+                report_bake(planet.n, &bake);
                 sun_clock = Some(clock);
                 minimap = match MinimapGpu::load_planet(&mut rl, &thread, &planet, &built_globe) {
                     Ok(map) => Some(map),
@@ -622,7 +647,9 @@ fn render_loop(shared: &Shared) {
             globe = None;
             zoom = None;
             sun_clock = None;
-            let (meshes, build_ms, upload_ms) = scene.set_terrain(&thread, &terrain);
+            let looks = Arc::clone(&lock(&shared.looks));
+            let (meshes, build_ms, upload_ms, bake) = scene.set_terrain(&thread, &terrain, &looks);
+            report_bake(terrain.width, &bake);
             minimap = if terrain.is_valid() {
                 match MinimapGpu::load(&mut rl, &thread, &terrain) {
                     Ok(map) => Some(map),
