@@ -60,23 +60,32 @@ When a round is approved: lock it (above), mark the page rows approved if the
 owner approved in chat, commit and push. "Needs work" items become a revision
 card.
 
-## Running now
+## In progress (nothing running)
 
-- **Task 42 — launcher window** (`42-launcher.md`), Codex, started 2026-11-14
-  in `../rise-of-man-worktrees/42-launcher`; result in
-  `../rise-of-man-worktrees/logs/42-result.md`. Review the diff and the
-  launcher screenshot, run the gate, commit in the worktree, merge, bump the
-  version, tag and push.
-  The card was sharpened after Codex started: the owner wants the launch
-  command formulated from the chosen options always visible, live, in both
-  the binary and the `cargo run` form, with Copy buttons (card item 4).
-  Check that in the launcher screenshot; if missing, run a short follow-up.
+- **Task 42 — launcher window** (`42-launcher.md`), Codex. **Interrupted
+  2026-11-14 by the Codex usage limit, which resets 2026-11-15 00:44.** Partial,
+  unbuilt, untested changes are uncommitted in `../rise-of-man-worktrees/42-launcher`
+  (`launcher/` module, `docs/launcher.md`, edits to `args.rs`, `main.rs`,
+  `Cargo.toml`, `Cargo.lock`, `AGENTS.md`); the last patch failed, so
+  `launcher/ui.rs` may be incomplete. Resume after the reset in the same
+  worktree, prompt = `../rise-of-man-worktrees/logs/42-prompt.md` plus
+  "continue from the changes already in the worktree; check what is done
+  first":
 
-- **Task 43 — space tiers, ships from the planet, fire from orbit**, Codex,
-  started 2026-11-14 in `../rise-of-man-worktrees/43-space-on-the-planet`
-  (in parallel with 42; both touch `rom-app`). Result in
-  `../rise-of-man-worktrees/logs/43-result.md`. Review, check its
-  screenshots, run the gate, commit in the worktree, merge after 42, release.
+  ```sh
+  cd /home/alfu64/Development/rise-of-man && W=../rise-of-man-worktrees/42-launcher L=../rise-of-man-worktrees/logs
+  codex exec -m gpt-6.1-sol -c model_reasoning_effort=high -C $W -s danger-full-access \
+    --add-dir $(pwd)/.git --color never -o $L/42-result.md - < $L/42-prompt.md
+  ```
+
+  Then review the diff and the launcher screenshot (the owner wants the
+  launch command formulated from the chosen options always visible, live, in
+  the binary and the `cargo run` form, with Copy buttons — card item 4), run
+  the gate, commit in the worktree, merge, bump the version, tag and push.
+- **Task 43** waits for task 42 to be merged (both touch `rom-app`); its
+  worktree `../rise-of-man-worktrees/43-space-on-the-planet` exists and is
+  clean. Use `../rise-of-man-worktrees/logs/43-prompt.md` but drop its
+  paragraph about running beside task 42.
 
 ## Next cards (agreed direction, not yet written)
 
