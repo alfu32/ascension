@@ -16,6 +16,11 @@ pub const MAX_JOINTS: usize = 32;
 pub const POSE_SAMPLES: usize = 24;
 /// Default cycle lengths in seconds: idle, move, attack, work.
 const DEFAULT_PERIODS: [f32; 4] = [3.2, 1.0, 1.2, 1.2];
+/// Point of the attack cycle at which a firearm or a gun fires: the muzzle flashes, a barrel
+/// recoils and the shooter's piece kicks.
+pub const FIRE_AT: f32 = 0.55;
+/// Scale of a muzzle flash while it is not shown (a point, so it draws nothing).
+const HIDDEN: f32 = 1e-3;
 
 /// What a unit is doing, as far as its motion shows it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -74,6 +79,11 @@ pub enum AttackStyle {
     Draw,
     /// A sling whirled overhead, then released.
     Whirl,
+    /// A long firearm or a crossbow: raised to the shoulder with both hands, aimed, fired,
+    /// lowered.
+    Fire,
+    /// A pistol: the right arm levels it, fires, lowers it.
+    Pistol,
 }
 
 /// How a figure works (`figure` knob `work`).
@@ -138,17 +148,25 @@ pub enum Motion {
     Wheel,
     /// An oar of the bank's side `+1` (+z) or `-1` (−z), sweeping while moving.
     Oar(f32),
-    /// A hull riding the water: bob, roll and pitch.
-    Float,
+    /// A hull riding the water: bob, roll and pitch; under way it heels this many radians
+    /// (a sailing ship leaning to the wind).
+    Float(f32),
     /// A part swinging forward about its x axis by this many radians when attacking.
     Strike(f32),
+    /// A gun barrel kicking back this far (model units) along its own −y when it fires.
+    Recoil(f32),
+    /// A muzzle flash: shown only for a moment when its unit fires.
+    Flash,
 }
 
 impl Motion {
-    /// Whether the joint moves its pivot (a bob or a breath); every other joint turns about a
-    /// pivot that stays where its parent carries it.
+    /// Whether the joint moves its pivot (a bob, a breath, a recoil); every other joint turns
+    /// about a pivot that stays where its parent carries it.
     pub fn moves_pivot(&self) -> bool {
-        matches!(self, Motion::Body(_) | Motion::Beast(_) | Motion::Float)
+        matches!(
+            self,
+            Motion::Body(_) | Motion::Beast(_) | Motion::Float(_) | Motion::Recoil(_)
+        )
     }
 }
 
@@ -447,7 +465,107 @@ fn attack_pose(style: &FigureStyle, u: f32, pose: &mut FigurePose) {
             pose.grips[0] = ROT_IDENTITY;
             pose.lean = track(u, 0.0, &[(0.62, -0.05), (0.74, 0.12)]);
         }
+        AttackStyle::Fire => {
+            // Up to the shoulder, aim, the kick of the shot, back down to the carry.
+            let r = track(
+                u,
+                hold[0],
+                &[
+                    (0.22, deg(72.0)),
+                    (FIRE_AT, deg(72.0)),
+                    (FIRE_AT + 0.05, deg(84.0)),
+                    (0.74, deg(72.0)),
+                    (0.9, hold[0]),
+                ],
+            );
+            let l = track(
+                u,
+                hold[1],
+                &[
+                    (0.22, deg(92.0)),
+                    (FIRE_AT, deg(92.0)),
+                    (FIRE_AT + 0.05, deg(100.0)),
+                    (0.74, deg(92.0)),
+                    (0.9, hold[1]),
+                ],
+            );
+            // The piece points forward while aimed, its muzzle jumping up as it fires.
+            let aim = track(
+                u,
+                0.0,
+                &[
+                    (0.22, deg(90.0)),
+                    (FIRE_AT, deg(90.0)),
+                    (FIRE_AT + 0.05, deg(74.0)),
+                    (0.74, deg(90.0)),
+                    (0.9, 0.0),
+                ],
+            );
+            // The left hand reaches in under the barrel.
+            let inward = track(
+                u,
+                0.0,
+                &[(0.22, deg(-32.0)), (0.74, deg(-32.0)), (0.9, 0.0)],
+            );
+            pose.arms[0] = swing(r);
+            pose.grips[0] = rx(r + aim);
+            pose.arms[1] = mul(&ry(inward), &swing(l));
+            pose.grips[1] = if hold[1] != 0.0 { rx(l) } else { ROT_IDENTITY };
+            pose.lean = track(
+                u,
+                0.0,
+                &[
+                    (0.22, 0.05),
+                    (FIRE_AT, 0.05),
+                    (FIRE_AT + 0.05, -0.05),
+                    (0.74, 0.04),
+                    (0.9, 0.0),
+                ],
+            );
+        }
+        AttackStyle::Pistol => {
+            let r = track(
+                u,
+                hold[0],
+                &[
+                    (0.25, deg(86.0)),
+                    (FIRE_AT, deg(86.0)),
+                    (FIRE_AT + 0.05, deg(104.0)),
+                    (0.74, deg(86.0)),
+                    (0.9, hold[0]),
+                ],
+            );
+            let aim = track(
+                u,
+                0.0,
+                &[
+                    (0.25, deg(90.0)),
+                    (FIRE_AT, deg(90.0)),
+                    (FIRE_AT + 0.05, deg(70.0)),
+                    (0.74, deg(90.0)),
+                    (0.9, 0.0),
+                ],
+            );
+            pose.arms[0] = swing(r);
+            pose.grips[0] = rx(r + aim);
+            pose.lean = track(u, 0.0, &[(FIRE_AT, 0.03), (FIRE_AT + 0.05, -0.04)]);
+        }
     }
+}
+
+/// Size of a muzzle flash at the point `u` of the attack cycle: a point, then full size for a
+/// moment just after [`FIRE_AT`].
+fn flash_scale(u: f32) -> f32 {
+    track(
+        u,
+        HIDDEN,
+        &[
+            (FIRE_AT, HIDDEN),
+            (FIRE_AT + 0.02, 1.0),
+            (FIRE_AT + 0.07, 1.0),
+            (FIRE_AT + 0.11, HIDDEN),
+        ],
+    )
 }
 
 /// Rotation and translation (joint frame, joint units) of a beast's joint.
@@ -516,8 +634,13 @@ fn local(motion: &Motion, activity: Activity, u: f32) -> (Rotation, [f32; 3]) {
             }
             _ => (rx(-side * deg(5.0)), [0.0; 3]),
         },
-        Motion::Float => {
-            let roll = deg(1.8) * (phase + 0.6).sin();
+        Motion::Float(heel) => {
+            let lean = if activity == Activity::Move {
+                *heel
+            } else {
+                0.0
+            };
+            let roll = lean + deg(1.8) * (phase + 0.6).sin();
             let pitch = deg(0.8) * (phase + 2.1).sin();
             (mul(&rx(roll), &rz(pitch)), [0.0, 0.02 * phase.sin(), 0.0])
         }
@@ -528,6 +651,25 @@ fn local(motion: &Motion, activity: Activity, u: f32) -> (Rotation, [f32; 3]) {
             }
             _ => (ROT_IDENTITY, [0.0; 3]),
         },
+        Motion::Recoil(distance) => match activity {
+            Activity::Attack => {
+                let back = track(
+                    u,
+                    0.0,
+                    &[(FIRE_AT, 0.0), (FIRE_AT + 0.03, -*distance), (0.92, 0.0)],
+                );
+                (ROT_IDENTITY, [0.0, back, 0.0])
+            }
+            _ => (ROT_IDENTITY, [0.0; 3]),
+        },
+        Motion::Flash => {
+            let s = if activity == Activity::Attack {
+                flash_scale(u)
+            } else {
+                HIDDEN
+            };
+            ([[s, 0.0, 0.0], [0.0, s, 0.0], [0.0, 0.0, s]], [0.0; 3])
+        }
     }
 }
 
@@ -693,6 +835,8 @@ mod tests {
             AttackStyle::Throw,
             AttackStyle::Draw,
             AttackStyle::Whirl,
+            AttackStyle::Fire,
+            AttackStyle::Pistol,
         ] {
             let rig = figure(FigureStyle { attack, ..style() });
             for activity in Activity::ALL {
@@ -760,6 +904,116 @@ mod tests {
         let grip = &pose[4];
         let up = [grip[0][1], grip[1][1], grip[2][1]];
         assert!(up[2] > 0.9, "{up:?}");
+    }
+
+    /// The weapon's own up axis (model frame) at `u` of the attack of a figure attacking so.
+    fn weapon_up(attack: AttackStyle, u: f32) -> [f32; 3] {
+        let rig = figure(FigureStyle {
+            attack,
+            hold: [deg(14.0), 0.0],
+            ..style()
+        });
+        let grip = &rig.pose(Activity::Attack, u)[4];
+        [grip[0][1], grip[1][1], grip[2][1]]
+    }
+
+    #[test]
+    fn a_firearm_is_raised_aimed_fired_and_lowered() {
+        for attack in [AttackStyle::Fire, AttackStyle::Pistol] {
+            // Carried upright, levelled forward while aimed, the muzzle jumping up at the shot.
+            let carried = weapon_up(attack, 0.0);
+            assert!(carried[1] > 0.99, "{attack:?} {carried:?}");
+            let aimed = weapon_up(attack, 0.4);
+            assert!(aimed[2] > 0.99, "{attack:?} {aimed:?}");
+            let kick = weapon_up(attack, FIRE_AT + 0.05);
+            assert!(kick[1] > 0.2 && kick[2] > 0.9, "{attack:?} {kick:?}");
+            let lowered = weapon_up(attack, 0.95);
+            assert!(lowered[1] > 0.99, "{attack:?} {lowered:?}");
+        }
+    }
+
+    /// A rig with one joint of `motion` at `pivot`.
+    fn single(motion: Motion, pivot: [f32; 3]) -> Rig {
+        let mut rig = Rig::default();
+        rig.add(Joint {
+            parent: 0,
+            pivot,
+            frame: ROT_IDENTITY,
+            scale: 1.0,
+            motion,
+        })
+        .unwrap();
+        rig
+    }
+
+    #[test]
+    fn a_flash_shows_only_as_the_shot_goes_off() {
+        let pivot = [0.3, 1.0, 0.2];
+        let rig = single(Motion::Flash, pivot);
+        let reach = |activity: Activity, u: f32| {
+            let pose = rig.pose(activity, u);
+            // Where a point a tile from the pivot is carried: the flash's size.
+            let p = apply(&pose[1], [pivot[0], pivot[1] + 1.0, pivot[2]]);
+            assert!(
+                close(apply(&pose[1], pivot), pivot),
+                "the flash grows from its pivot"
+            );
+            p[1] - pivot[1]
+        };
+        assert!((reach(Activity::Attack, FIRE_AT + 0.04) - 1.0).abs() < 1e-3);
+        for u in [0.0, 0.3, FIRE_AT - 0.01, FIRE_AT + 0.12, 0.9] {
+            assert!(reach(Activity::Attack, u) < 0.01, "{u}");
+        }
+        for activity in [Activity::Idle, Activity::Move, Activity::Work] {
+            for s in 0..POSE_SAMPLES {
+                assert!(reach(activity, s as f32 / POSE_SAMPLES as f32) < 0.01);
+            }
+        }
+        // At least one keyframe of the attack shows it at full size.
+        let shown = (0..POSE_SAMPLES)
+            .filter(|s| reach(Activity::Attack, *s as f32 / POSE_SAMPLES as f32) > 0.9)
+            .count();
+        assert!((1..=3).contains(&shown), "{shown}");
+    }
+
+    #[test]
+    fn a_barrel_recoils_along_its_length_and_runs_out_again() {
+        // A barrel lying along +z (its own y): it kicks back towards −z.
+        let mut rig = Rig::default();
+        rig.add(Joint {
+            parent: 0,
+            pivot: [0.0, 0.7, -0.4],
+            frame: [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]],
+            scale: 1.0,
+            motion: Motion::Recoil(0.14),
+        })
+        .unwrap();
+        let at = |activity: Activity, u: f32| apply(&rig.pose(activity, u)[1], [0.0, 0.7, 0.5]);
+        let kicked = at(Activity::Attack, FIRE_AT + 0.03);
+        assert!(close(kicked, [0.0, 0.7, 0.36]), "{kicked:?}");
+        for u in [0.0, 0.3, FIRE_AT, 0.95] {
+            assert!(close(at(Activity::Attack, u), [0.0, 0.7, 0.5]), "{u}");
+        }
+        assert!(close(at(Activity::Move, FIRE_AT + 0.03), [0.0, 0.7, 0.5]));
+    }
+
+    #[test]
+    fn a_sailing_hull_heels_only_under_way() {
+        let rig = single(Motion::Float(deg(8.0)), [0.0; 3]);
+        // The mean lean about the hull's length (x) over a cycle.
+        let mean_heel = |activity: Activity| {
+            (0..POSE_SAMPLES)
+                .map(|s| {
+                    let pose = rig.pose(activity, s as f32 / POSE_SAMPLES as f32);
+                    // The hull's up axis tips towards +z by the heel.
+                    pose[1][2][1].atan2(pose[1][1][1])
+                })
+                .sum::<f32>()
+                / POSE_SAMPLES as f32
+        };
+        assert!((mean_heel(Activity::Move) - deg(8.0)).abs() < deg(0.5));
+        assert!(mean_heel(Activity::Idle).abs() < deg(0.5));
+        assert!(mean_heel(Activity::Attack).abs() < deg(0.5));
     }
 
     #[test]
