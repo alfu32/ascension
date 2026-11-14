@@ -305,6 +305,8 @@ pub(crate) struct Scene {
     models: Option<models::ModelGpu>,
     /// Draw every model with its near mesh (the review gallery).
     models_near_only: bool,
+    /// Fixed motion time of the review gallery, in seconds.
+    anim_time: Option<f32>,
     /// Direction the light travels on a flat map.
     flat_light: [f32; 3],
     /// Extra lines drawn over the world (part outlines in the gallery).
@@ -559,6 +561,7 @@ impl Scene {
             model_material,
             models: None,
             models_near_only: false,
+            anim_time: None,
             flat_light: LIGHT_DIRECTION,
             extra_lines: Vec::new(),
             looks: Arc::new(SceneLooks::default()),
@@ -684,6 +687,9 @@ impl Scene {
     fn set_material_frame(&mut self, eye: [f32; 3], distance: f32) {
         self.detail = lod_weight(distance);
         let time = self.clock.elapsed().as_secs_f32() % 3_600.0;
+        if let Some(models) = &mut self.models {
+            models.time = self.anim_time.unwrap_or(time);
+        }
         let [_, _, terrain, _, _] = &mut self._shaders;
         for shader in [
             terrain,
@@ -878,6 +884,7 @@ impl Scene {
         self.models = models::ModelGpu::upload(thread, &looks.models);
         if let Some(models) = &mut self.models {
             models.near_only = self.models_near_only;
+            models.lockstep = self.anim_time.is_some();
         }
         BakeReport {
             bake_ms,
@@ -929,11 +936,18 @@ impl Scene {
 
     /// Sets the direction the light travels on a flat map (`None`: the usual fixed light), and
     /// whether every model is drawn with its near mesh.
-    pub(crate) fn set_review(&mut self, light: Option<[f32; 3]>, near_only: bool) {
+    pub(crate) fn set_review(
+        &mut self,
+        light: Option<[f32; 3]>,
+        near_only: bool,
+        anim_time: Option<f32>,
+    ) {
         self.flat_light = light.unwrap_or(LIGHT_DIRECTION);
         self.models_near_only = near_only;
+        self.anim_time = anim_time;
         if let Some(models) = &mut self.models {
             models.near_only = near_only;
+            models.lockstep = anim_time.is_some();
         }
     }
 

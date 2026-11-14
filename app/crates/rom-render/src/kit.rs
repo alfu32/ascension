@@ -6,6 +6,7 @@
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
 use crate::models::{ModelMesh, PartSpec, Shape, TEAM_BIT};
+use crate::rig::{Activity, AttackStyle, BeastStyle, FigureStyle, Joint, Motion, Rig, WorkStyle};
 
 /// Program id of faces drawn in their plain colour (openings, skin, hair).
 const PLAIN: u8 = 0;
@@ -192,6 +193,23 @@ pub struct Painter<'a> {
     pub place: Place,
     /// The look of the faces painted next.
     pub surface: Surface,
+    /// The joint the faces painted next move with; after a shape is painted, the joint its
+    /// attached parts follow.
+    pub joint: u8,
+    rig: Option<&'a mut Rig>,
+}
+
+/// A named point of a painted part other parts can attach to.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Socket {
+    /// The socket's name.
+    pub name: &'static str,
+    /// Its frame, in the part's frame.
+    pub place: Place,
+    /// The joint it moves with.
+    pub joint: u8,
+    /// The motion of what is held there (a hand), if it turns in the socket.
+    pub grip: Option<Motion>,
 }
 
 impl<'a> Painter<'a> {
@@ -201,6 +219,57 @@ impl<'a> Painter<'a> {
             mesh,
             place,
             surface,
+            joint: 0,
+            rig: None,
+        }
+    }
+
+    /// A painter that also records the joints of what it paints into `rig`, its faces moving
+    /// with `joint` until a shape says otherwise.
+    pub fn rigged(
+        mesh: &'a mut ModelMesh,
+        place: Place,
+        surface: Surface,
+        rig: &'a mut Rig,
+        joint: u8,
+    ) -> Self {
+        Self {
+            mesh,
+            place,
+            surface,
+            joint,
+            rig: Some(rig),
+        }
+    }
+
+    /// Adds a joint below the current one, turning about `pivot` (in the current place) in the
+    /// current place's axes; without a rig, or with the rig full, the current joint.
+    pub fn add_joint(&mut self, pivot: [f32; 3], motion: Motion) -> u8 {
+        let place = self.place;
+        let parent = self.joint;
+        let Some(rig) = self.rig.as_deref_mut() else {
+            return parent;
+        };
+        let scale = place.scale.max(1e-6);
+        let axes = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]].map(|e| {
+            let v = place.turn(e);
+            [v[0] / scale, v[1] / scale, v[2] / scale]
+        });
+        let frame = std::array::from_fn(|i| std::array::from_fn(|j| axes[j][i]));
+        rig.add(Joint {
+            parent,
+            pivot: place.apply(pivot),
+            frame,
+            scale,
+            motion,
+        })
+        .unwrap_or(parent)
+    }
+
+    /// Sets the cycle of `activity` (seconds) unless an earlier part has.
+    pub fn suggest_period(&mut self, activity: Activity, seconds: f32) {
+        if let Some(rig) = self.rig.as_deref_mut() {
+            rig.suggest_period(activity, seconds);
         }
     }
 
@@ -253,6 +322,7 @@ impl<'a> Painter<'a> {
             self.mesh.colors.push(colour);
             self.mesh.alts.push(alt);
             self.mesh.scales.push(s.scale);
+            self.mesh.joints.push(self.joint);
         }
         for i in 1..pts.len() as u16 - 1 {
             self.mesh
@@ -422,7 +492,9 @@ fn segments(k: &Knobs<'_>, default: usize, fine: bool, min: usize) -> usize {
 }
 
 /// Paints `part` with the painter's place and surface; returns its sockets in the part frame.
-pub fn paint(part: &PartSpec, p: &mut Painter<'_>, fine: bool) -> Vec<(&'static str, Place)> {
+/// Shapes that move record their joints first, the same in the near and far versions, and
+/// leave [`Painter::joint`] at the joint their attached parts follow.
+pub fn paint(part: &PartSpec, p: &mut Painter<'_>, fine: bool) -> Vec<Socket> {
     let k = Knobs(part);
     match part.shape {
         Shape::Box => block(&k, p, fine),
@@ -481,6 +553,12 @@ pub fn paint(part: &PartSpec, p: &mut Painter<'_>, fine: bool) -> Vec<(&'static 
         Shape::Arch => arch(&k, p, fine),
         Shape::Hull => hull(&k, p, fine),
         Shape::Figure => return figure(&k, p, fine),
+        Shape::Quadruped => return quadruped(&k, p, fine),
+        Shape::Wheel => wheel(&k, p, fine),
+        Shape::OarBank => oar_bank(&k, p, fine),
+        Shape::Sail => sail(&k, p, fine),
+        Shape::Shield => shield(&k, p, fine),
+        Shape::Bow => bow(&k, p, fine),
         Shape::Include => {}
     }
     Vec::new()
@@ -1128,9 +1206,13 @@ fn arch(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
 }
 
 /// `hull`: an open boat `w` long along x, `d` across and `h` deep amidships, its ends rising by
-/// `sheer` to a point; planked inside and out in the near version, outside only far out.
+/// `sheer` to a point; planked inside and out in the near version, outside only far out. With
+/// `float` it rides the water, carrying what is attached to it.
 fn hull(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
     let (w, d, h) = (k.size("w", 2.0), k.size("d", 0.7), k.size("h", 0.35));
+    if k.get("float", 0.0) > 0.5 {
+        p.joint = p.add_joint([0.0; 3], Motion::Float);
+    }
     let sheer = k.get("sheer", h * 0.6).max(0.0);
     let n = segments(k, 8, fine, 4).max(2);
     // Keel, chine and gunwale of one side at each station along the hull.
@@ -1165,16 +1247,73 @@ fn hull(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
     }
 }
 
+/// The motion knobs of a figure.
+fn figure_style(k: &Knobs<'_>, h: f32) -> FigureStyle {
+    let attack = match k.count("attack", 0, 4) {
+        1 => AttackStyle::Thrust,
+        2 => AttackStyle::Throw,
+        3 => AttackStyle::Draw,
+        4 => AttackStyle::Whirl,
+        _ => AttackStyle::Strike,
+    };
+    let work = match k.count("work", 0, 1) {
+        1 => WorkStyle::Raise,
+        _ => WorkStyle::Tool,
+    };
+    FigureStyle {
+        height: h,
+        attack,
+        work,
+        hold: [
+            k.get("hold_right", 0.0).clamp(-90.0, 120.0).to_radians(),
+            k.get("hold_left", 0.0).clamp(-90.0, 120.0).to_radians(),
+        ],
+        stride: k.get("stride", 28.0).clamp(0.0, 60.0).to_radians(),
+        seated: k.get("seat", 0.0) > 0.5,
+        robe: k.get("robe", 0.0) > 0.5,
+    }
+}
+
 /// `figure`: a standing person `h` tall facing +z, tunic in the part's surface, with sockets
-/// at the head, both hands and the back.
-fn figure(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) -> Vec<(&'static str, Place)> {
+/// at the head, both hands and the back. `robe` gives a long robe to the ground, `seat` sits
+/// astride a mount; `attack`, `work`, `hold_left`, `hold_right`, `stride` and `pace` shape its
+/// motion. Joints: the body (from the hips), both legs and both arms; what a hand holds turns
+/// in the hand.
+fn figure(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) -> Vec<Socket> {
     let h = k.size("h", 1.0);
     let b = k.size("build", 1.0);
+    let style = figure_style(k, h);
     let tunic = p.surface;
     let skin = Surface::plain(k.colour("skin", [0.78, 0.58, 0.42]));
     let hair = Surface::plain(k.colour("hair", [0.18, 0.12, 0.08]));
     let legs = Surface::plain(k.colour("legs", k.colour("skin", [0.78, 0.58, 0.42])));
     let belt = Surface::of(TIMBER, [0.32, 0.22, 0.12], 0.05);
+    let attack_period = match style.attack {
+        AttackStyle::Strike | AttackStyle::Thrust => 1.2,
+        AttackStyle::Throw | AttackStyle::Whirl => 1.6,
+        AttackStyle::Draw => 2.0,
+    };
+    p.suggest_period(Activity::Move, k.size("pace", 1.0));
+    p.suggest_period(Activity::Attack, attack_period);
+    p.suggest_period(Activity::Work, 1.3);
+    // Joints, right side first (the figure's right is its −x side).
+    let body = p.add_joint([0.0, 0.4 * h, 0.0], Motion::Body(style));
+    p.joint = body;
+    let leg = [0, 1].map(|side| {
+        let s = if side == 0 { -1.0 } else { 1.0 };
+        p.add_joint([s * 0.06 * b * h, 0.4 * h, 0.0], Motion::Leg(style, side))
+    });
+    let arm = [0, 1].map(|side| {
+        let s = if side == 0 { -1.0 } else { 1.0 };
+        p.add_joint([s * 0.205 * b * h, 0.72 * h, 0.0], Motion::Arm(style, side))
+    });
+    let side_of = |s: f32| usize::from(s > 0.0);
+    // A seated leg hangs from the hip, splayed to straddle the mount and bent forward.
+    let seat = |s: f32| Place {
+        at: [s * 0.06 * b, 0.4, 0.0],
+        tilt: tilt(-28.0, -s * 26.0),
+        ..Place::IDENTITY
+    };
     p.within(
         Place {
             scale: h,
@@ -1183,42 +1322,76 @@ fn figure(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) -> Vec<(&'static str, 
         None,
         |p| {
             if fine {
-                p.surface = legs;
                 for s in [-1.0, 1.0] {
-                    p.cuboid([s * 0.06 * b, 0.0, 0.0], [0.1 * b, 0.4, 0.12], 1.1, false);
+                    p.joint = leg[side_of(s)];
+                    if style.seated {
+                        p.surface = legs;
+                        p.within(seat(s), None, |p| {
+                            p.cuboid([0.0, -0.4, 0.0], [0.1 * b, 0.4, 0.12], 1.1, false);
+                            p.surface = hair;
+                            p.cuboid([0.0, -0.4, 0.025], [0.11 * b, 0.05, 0.17], 1.0, false);
+                        });
+                    } else if !style.robe {
+                        p.surface = legs;
+                        p.cuboid([s * 0.06 * b, 0.0, 0.0], [0.1 * b, 0.4, 0.12], 1.1, false);
+                    }
                 }
-                p.surface = hair;
-                for s in [-1.0, 1.0] {
-                    p.cuboid(
-                        [s * 0.06 * b, 0.0, 0.025],
-                        [0.11 * b, 0.05, 0.17],
-                        1.0,
-                        false,
-                    );
+                if !style.seated {
+                    p.surface = hair;
+                    for s in [-1.0, 1.0] {
+                        p.joint = leg[side_of(s)];
+                        let z = if style.robe { 0.07 } else { 0.025 };
+                        p.cuboid([s * 0.06 * b, 0.0, z], [0.11 * b, 0.05, 0.17], 1.0, false);
+                    }
                 }
+                p.joint = body;
                 p.surface = tunic;
-                p.cuboid([0.0, 0.3, 0.0], [0.36 * b, 0.22, 0.24], 0.82, false);
+                if style.robe {
+                    p.cuboid([0.0; 3], [0.42 * b, 0.56, 0.28], 0.72, false);
+                } else {
+                    p.cuboid([0.0, 0.3, 0.0], [0.36 * b, 0.22, 0.24], 0.82, false);
+                }
                 p.cuboid([0.0, 0.5, 0.0], [0.3 * b, 0.26, 0.2], 1.12, false);
                 p.surface = belt;
                 p.cuboid([0.0, 0.48, 0.0], [0.32 * b, 0.045, 0.215], 1.0, false);
                 for s in [-1.0, 1.0] {
                     let x = s * 0.205 * b;
+                    p.joint = arm[side_of(s)];
                     p.surface = tunic;
                     p.cuboid([x, 0.62, 0.0], [0.085 * b, 0.14, 0.1], 1.0, true);
                     p.surface = skin;
                     p.cuboid([x, 0.43, 0.01], [0.07 * b, 0.19, 0.08], 1.0, true);
                 }
+                p.joint = body;
                 p.cuboid([0.0, 0.76, 0.0], [0.07, 0.05, 0.07], 1.0, false);
                 p.sphere_band([0.0, 0.87, 0.0], 0.1, 0.11, (-FRAC_PI_2, FRAC_PI_2), 4, 8);
                 p.surface = hair;
                 p.sphere_band([0.0, 0.878, -0.015], 0.108, 0.108, (0.05, FRAC_PI_2), 2, 8);
             } else {
                 p.surface = legs;
-                p.cuboid([0.0; 3], [0.22 * b, 0.4, 0.12], 1.0, false);
-                p.surface = tunic;
-                p.cuboid([0.0, 0.3, 0.0], [0.34 * b, 0.46, 0.22], 1.0, false);
+                if style.seated {
+                    for s in [-1.0, 1.0] {
+                        p.joint = leg[side_of(s)];
+                        p.within(seat(s), None, |p| {
+                            p.cuboid([0.0, -0.4, 0.0], [0.1 * b, 0.4, 0.12], 1.0, false);
+                        });
+                    }
+                    p.joint = body;
+                    p.surface = tunic;
+                    p.cuboid([0.0, 0.3, 0.0], [0.34 * b, 0.46, 0.22], 1.0, false);
+                } else if style.robe {
+                    p.joint = body;
+                    p.surface = tunic;
+                    p.cuboid([0.0; 3], [0.4 * b, 0.76, 0.26], 0.75, false);
+                } else {
+                    p.joint = body;
+                    p.cuboid([0.0; 3], [0.22 * b, 0.4, 0.12], 1.0, false);
+                    p.surface = tunic;
+                    p.cuboid([0.0, 0.3, 0.0], [0.34 * b, 0.46, 0.22], 1.0, false);
+                }
                 p.surface = skin;
                 for s in [-1.0, 1.0] {
+                    p.joint = arm[side_of(s)];
                     p.cuboid(
                         [s * 0.205 * b, 0.43, 0.0],
                         [0.08 * b, 0.33, 0.09],
@@ -1226,19 +1399,416 @@ fn figure(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) -> Vec<(&'static str, 
                         false,
                     );
                 }
+                p.joint = body;
                 p.cuboid([0.0, 0.77, 0.0], [0.19, 0.2, 0.19], 1.0, false);
             }
         },
     );
     p.surface = tunic;
+    // Parts attached to the figure itself move with its body.
+    p.joint = body;
     let at = |x: f32, y: f32, z: f32| Place::at([x * h, y * h, z * h]);
+    let socket = |name, place, joint, grip| Socket {
+        name,
+        place,
+        joint,
+        grip,
+    };
     vec![
-        ("head", at(0.0, 0.98, 0.0)),
+        socket("head", at(0.0, 0.98, 0.0), body, None),
         // Facing +z with y up, the figure's right hand is on its −x side.
-        ("right_hand", at(-0.205 * b, 0.45, 0.03)),
-        ("left_hand", at(0.205 * b, 0.45, 0.03)),
-        ("back", at(0.0, 0.62, -0.13)),
+        socket(
+            "right_hand",
+            at(-0.205 * b, 0.45, 0.03),
+            arm[0],
+            Some(Motion::Grip(style, 0)),
+        ),
+        socket(
+            "left_hand",
+            at(0.205 * b, 0.45, 0.03),
+            arm[1],
+            Some(Motion::Grip(style, 1)),
+        ),
+        socket("back", at(0.0, 0.62, -0.13), body, None),
     ]
+}
+
+/// `quadruped`: a horse-like beast standing along z (its head to +z), `h` its size factor (1:
+/// a horse, its back 0.8 tiles up), `l` and `w` the length and width of its body; hide in the
+/// part's surface, colours `mane` and `hoof`. `pace` and `stride` shape its gait. Sockets:
+/// `rider` (the saddle), `back` (behind it, for loads), `head`, `chest`. Joints: the body, four
+/// legs, the neck with the head, the tail.
+fn quadruped(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) -> Vec<Socket> {
+    let s = k.size("h", 1.0);
+    let (l, w) = (k.size("l", 0.95), k.size("w", 0.3));
+    let style = BeastStyle {
+        height: s,
+        stride: k.get("stride", 30.0).clamp(0.0, 60.0).to_radians(),
+    };
+    p.suggest_period(Activity::Move, k.size("pace", 0.7));
+    let hide = p.surface;
+    let mane = Surface::plain(k.colour("mane", [0.24, 0.17, 0.12]));
+    let hoof = Surface::plain(k.colour("hoof", [0.16, 0.13, 0.11]));
+    let (leg_h, body_h) = (0.52, 0.3);
+    let (lx, lz) = (w / 2.0 - 0.055, l / 2.0 - 0.11);
+    let neck_at = [0.0, leg_h + body_h * 0.55, l / 2.0 - 0.1];
+    let tail_at = [0.0, leg_h + body_h * 0.92, -l / 2.0 + 0.02];
+    let scaled = |v: [f32; 3]| v.map(|c| c * s);
+    let body = p.add_joint(
+        scaled([0.0, leg_h + body_h / 2.0, 0.0]),
+        Motion::Beast(style),
+    );
+    p.joint = body;
+    // Legs: front right, front left, back right, back left.
+    let legs = [(true, 0_usize), (true, 1), (false, 0), (false, 1)].map(|(front, side)| {
+        let x = if side == 0 { -lx } else { lx };
+        let z = if front { lz } else { -lz };
+        let joint = p.add_joint(
+            scaled([x, leg_h + 0.04, z]),
+            Motion::BeastLeg(style, front, side),
+        );
+        (joint, x, z)
+    });
+    let neck = p.add_joint(scaled(neck_at), Motion::Neck);
+    let tail = p.add_joint(scaled(tail_at), Motion::Tail);
+    let neck_place = Place {
+        at: neck_at,
+        tilt: tilt(38.0, 0.0),
+        ..Place::IDENTITY
+    };
+    let head_place = Place {
+        at: [0.0, 0.44, 0.02],
+        tilt: tilt(80.0, 0.0),
+        ..Place::IDENTITY
+    };
+    p.within(
+        Place {
+            scale: s,
+            ..Place::IDENTITY
+        },
+        None,
+        |p| {
+            p.joint = body;
+            p.cuboid([0.0, leg_h, 0.0], [w, body_h, l], 0.9, true);
+            p.joint = neck;
+            p.within(neck_place, None, |p| {
+                p.cuboid([0.0; 3], [w * 0.5, 0.5, 0.22], 0.75, false);
+                p.within(head_place, None, |p| {
+                    p.cuboid([0.0, -0.06, 0.0], [w * 0.48, 0.38, 0.17], 0.7, true);
+                    if fine {
+                        // Ears stand up from the poll (the head's −z side).
+                        for e in [-1.0, 1.0] {
+                            p.within(
+                                Place {
+                                    at: [e * 0.04, 0.0, -0.07],
+                                    tilt: tilt(-90.0, 0.0),
+                                    ..Place::IDENTITY
+                                },
+                                None,
+                                |p| p.cone([0.0; 3], 0.025, 0.09, 4),
+                            );
+                        }
+                    }
+                });
+                if fine {
+                    p.surface = mane;
+                    p.cuboid([0.0, 0.04, -0.11], [0.04, 0.46, 0.05], 1.0, false);
+                }
+            });
+            p.surface = mane;
+            p.joint = tail;
+            p.within(
+                Place {
+                    at: tail_at,
+                    tilt: tilt(-150.0, 0.0),
+                    ..Place::IDENTITY
+                },
+                None,
+                |p| p.cuboid([0.0; 3], [0.07, 0.46, 0.08], 0.55, true),
+            );
+            p.surface = hide;
+            if fine {
+                for &(joint, x, z) in &legs {
+                    p.joint = joint;
+                    p.surface = hide;
+                    p.cuboid([x, 0.06, z], [0.075, leg_h, 0.09], 1.35, false);
+                    p.surface = hoof;
+                    p.cuboid([x, 0.0, z], [0.085, 0.07, 0.1], 0.95, false);
+                }
+            } else {
+                p.joint = body;
+                for z in [lz, -lz] {
+                    p.cuboid(
+                        [0.0, 0.0, z],
+                        [2.0 * lx + 0.08, leg_h + 0.04, 0.09],
+                        1.0,
+                        false,
+                    );
+                }
+            }
+        },
+    );
+    p.surface = hide;
+    p.joint = body;
+    let at = |v: [f32; 3]| Place::at(scaled(v));
+    let socket = |name, place, joint| Socket {
+        name,
+        place,
+        joint,
+        grip: None,
+    };
+    vec![
+        socket("rider", at([0.0, leg_h + body_h, 0.04]), body),
+        socket("back", at([0.0, leg_h + body_h, -0.24]), body),
+        socket("head", at([0.0, 1.1, l / 2.0 + 0.32]), neck),
+        socket("chest", at([0.0, leg_h + body_h / 2.0, l / 2.0]), body),
+    ]
+}
+
+/// `wheel`: an upright wheel of diameter `w` and thickness `t` on an axle along x, resting on
+/// the ground; `spokes` bars cross its outer faces. It turns as its unit moves.
+fn wheel(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
+    let r = k.size("w", 0.6) / 2.0;
+    let t = k.size("t", 0.08);
+    let spokes = k.count("spokes", 2, 6);
+    let n = segments(k, 10, fine, 5);
+    p.joint = p.add_joint([0.0, r, 0.0], Motion::Wheel);
+    let rim = |x: f32| -> Vec<[f32; 3]> {
+        (0..n)
+            .map(|i| {
+                let a = i as f32 / n as f32 * TAU;
+                [x, r + r * a.cos(), r * a.sin()]
+            })
+            .collect()
+    };
+    let (outer, inner) = (rim(t / 2.0), rim(-t / 2.0));
+    p.face(&outer, [1.0, 0.0, 0.0]);
+    p.face(&inner, [-1.0, 0.0, 0.0]);
+    for i in 0..n {
+        let j = (i + 1) % n;
+        let mid = (i as f32 + 0.5) / n as f32 * TAU;
+        p.face(
+            &[outer[i], outer[j], inner[j], inner[i]],
+            [0.0, mid.cos(), mid.sin()],
+        );
+    }
+    if fine {
+        let wheel = p.surface;
+        p.surface.colour = wheel.colour.map(|c| c * 0.62);
+        p.surface.alt = wheel.alt.map(|c| c * 0.62);
+        for i in 0..spokes {
+            let turn = 180.0 * i as f32 / spokes.max(1) as f32;
+            p.within(
+                Place {
+                    at: [0.0, r, 0.0],
+                    tilt: tilt(turn, 0.0),
+                    ..Place::IDENTITY
+                },
+                None,
+                |p| p.cuboid([0.0, -r * 0.88, 0.0], [t + 0.03, r * 1.76, 0.05], 1.0, true),
+            );
+        }
+        p.surface = wheel;
+    }
+}
+
+/// `oar_bank`: `count` oars a side along `w` (x), their locks `beam` apart across z, each
+/// `length` long and sloping `drop` degrees down into the water. Each oar sweeps on its own
+/// joint while its unit moves; far out each side is one plank.
+fn oar_bank(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
+    let w = k.size("w", 2.4);
+    let count = k.count("count", 6, 12).max(1);
+    let beam = k.size("beam", 0.8);
+    let length = k.size("length", 1.0);
+    let drop = k.get("drop", 25.0).clamp(0.0, 80.0);
+    p.suggest_period(Activity::Move, 2.2);
+    p.suggest_period(Activity::Attack, 1.6);
+    let base = p.joint;
+    for side in [1.0_f32, -1.0] {
+        let lean = side * (90.0 + drop);
+        if !fine {
+            p.joint = base;
+            p.within(
+                Place {
+                    at: [0.0, 0.0, side * beam / 2.0],
+                    tilt: tilt(lean, 0.0),
+                    ..Place::IDENTITY
+                },
+                None,
+                |p| p.cuboid([0.0; 3], [w, length * 0.85, 0.03], 1.0, true),
+            );
+        }
+        for i in 0..count {
+            let x = -w / 2.0 + w * (i as f32 + 0.5) / count as f32;
+            let lock = [x, 0.0, side * beam / 2.0];
+            let joint = {
+                p.joint = base;
+                p.add_joint(lock, Motion::Oar(side))
+            };
+            if fine {
+                p.joint = joint;
+                p.within(
+                    Place {
+                        at: lock,
+                        tilt: tilt(lean, 0.0),
+                        ..Place::IDENTITY
+                    },
+                    None,
+                    |p| {
+                        p.cuboid([0.0, -0.12, 0.0], [0.035, length, 0.035], 1.0, false);
+                        p.cuboid([0.0, length - 0.42, 0.0], [0.12, 0.3, 0.02], 1.0, true);
+                    },
+                );
+            }
+        }
+    }
+    p.joint = base;
+}
+
+/// `sail`: a square sail `w` wide and `h` high above its foot, bellied `billow` towards +z,
+/// hanging from a yard (colour `yard_colour`); the cloth is the part's surface.
+fn sail(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
+    let (w, h) = (k.size("w", 1.4), k.size("h", 1.1));
+    let billow = k.get("billow", 0.15);
+    let cells = if fine { 2 } else { 1 };
+    let point = |i: usize, j: usize, back: f32| {
+        let (u, v) = (i as f32 / cells as f32, j as f32 / cells as f32);
+        let x = (u - 0.5) * w;
+        let bulge = billow * (1.0 - (2.0 * u - 1.0).powi(2)) * (0.55 + 0.45 * (PI * v).sin());
+        [x, v * h, if fine { bulge } else { billow * 0.6 } - back]
+    };
+    for i in 0..cells {
+        for j in 0..cells {
+            let front = [
+                point(i, j, 0.0),
+                point(i + 1, j, 0.0),
+                point(i + 1, j + 1, 0.0),
+                point(i, j + 1, 0.0),
+            ];
+            p.face(&front, [0.0, 0.0, 1.0]);
+            let back = front.map(|v| [v[0], v[1], v[2] - 0.02]);
+            p.face(&back, [0.0, 0.0, -1.0]);
+        }
+    }
+    if fine {
+        let cloth = p.surface;
+        p.surface = Surface::of(TIMBER, k.colour("yard_colour", [0.42, 0.29, 0.17]), 0.08);
+        p.cuboid([0.0, h - 0.03, 0.0], [w + 0.24, 0.07, 0.07], 1.0, true);
+        p.surface = cloth;
+    }
+}
+
+/// `shield`: a round shield `w` across (or, with `h`, a rectangle `w` by `h`) and `t` thick,
+/// centred on its origin and facing +z; the face is the part's surface, the rim and `boss` are
+/// colour `rim`.
+fn shield(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
+    let w = k.size("w", 0.5);
+    let tall = k.get("h", 0.0);
+    let t = k.size("t", 0.04);
+    let boss = k.get("boss", w * 0.22).max(0.0);
+    let face = p.surface;
+    let rim = Surface::of(METAL, k.colour("rim", [0.72, 0.55, 0.3]), 0.2);
+    let outline: Vec<[f32; 2]> = if tall > 0.0 {
+        let (x, y) = (w / 2.0, tall / 2.0);
+        vec![[-x, -y], [x, -y], [x, y], [-x, y]]
+    } else {
+        let n = segments(k, 10, fine, 5);
+        (0..n)
+            .map(|i| {
+                let a = i as f32 / n as f32 * TAU;
+                [w / 2.0 * a.cos(), w / 2.0 * a.sin()]
+            })
+            .collect()
+    };
+    let at = |v: [f32; 2], z: f32| [v[0], v[1], z];
+    let front: Vec<[f32; 3]> = outline.iter().map(|v| at(*v, t / 2.0)).collect();
+    let back: Vec<[f32; 3]> = outline.iter().map(|v| at(*v, -t / 2.0)).collect();
+    p.face(&front, [0.0, 0.0, 1.0]);
+    p.surface = rim;
+    p.face(&back, [0.0, 0.0, -1.0]);
+    if fine {
+        let n = outline.len();
+        for i in 0..n {
+            let j = (i + 1) % n;
+            let out = [
+                outline[i][0] + outline[j][0],
+                outline[i][1] + outline[j][1],
+                0.0,
+            ];
+            p.face(&[front[i], back[i], back[j], front[j]], out);
+        }
+        if boss > 0.0 {
+            p.within(
+                Place {
+                    at: [0.0, 0.0, t / 2.0],
+                    tilt: tilt(90.0, 0.0),
+                    ..Place::IDENTITY
+                },
+                None,
+                |p| p.cone([0.0; 3], boss / 2.0, boss * 0.45, 6),
+            );
+        }
+    }
+    p.surface = face;
+}
+
+/// `bow`: a stave `h` long and `w` thick held at its middle (the origin), bent `bend` towards
+/// +z, its string straight between the tips (colour `string`).
+fn bow(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
+    let h = k.size("h", 0.8);
+    let bend = k.get("bend", 0.14);
+    let t = k.size("w", 0.035) / 2.0;
+    let n = if fine { 4 } else { 2 };
+    let arc: Vec<[f32; 2]> = (0..=n)
+        .map(|i| {
+            let y = -h / 2.0 + h * i as f32 / n as f32;
+            [y, bend * (1.0 - (2.0 * y / h).powi(2))]
+        })
+        .collect();
+    for pair in arc.windows(2) {
+        let ([y0, z0], [y1, z1]) = (pair[0], pair[1]);
+        // Across the stave in the y–z plane, towards +z.
+        let (dy, dz) = (y1 - y0, z1 - z0);
+        let len = dy.hypot(dz).max(1e-6);
+        let (ny, nz) = (-dz / len * t, dy / len * t);
+        let c = |y: f32, z: f32, x: f32, s: f32| [x, y + s * ny, z + s * nz];
+        for (sx, ss) in [(1.0_f32, 1.0_f32), (-1.0, -1.0)] {
+            // The faces towards ±z (belly and back) and towards ±x.
+            p.face(
+                &[
+                    c(y0, z0, -t, ss),
+                    c(y0, z0, t, ss),
+                    c(y1, z1, t, ss),
+                    c(y1, z1, -t, ss),
+                ],
+                [0.0, ss * ny, ss * nz],
+            );
+            p.face(
+                &[
+                    c(y0, z0, sx * t, -1.0),
+                    c(y0, z0, sx * t, 1.0),
+                    c(y1, z1, sx * t, 1.0),
+                    c(y1, z1, sx * t, -1.0),
+                ],
+                [sx, 0.0, 0.0],
+            );
+        }
+    }
+    if fine {
+        let stave = p.surface;
+        p.surface = Surface::plain(k.colour("string", [0.85, 0.82, 0.72]));
+        let s = 0.006;
+        let (lo, hi) = (-h / 2.0, h / 2.0);
+        p.face(
+            &[[-s, lo, 0.0], [s, lo, 0.0], [s, hi, 0.0], [-s, hi, 0.0]],
+            [0.0, 0.0, 1.0],
+        );
+        p.face(
+            &[[s, lo, 0.0], [-s, lo, 0.0], [-s, hi, 0.0], [s, hi, 0.0]],
+            [0.0, 0.0, -1.0],
+        );
+        p.surface = stave;
+    }
 }
 
 #[cfg(test)]
@@ -1627,6 +2197,105 @@ mod tests {
             parts: vec![part(Shape::Figure, &[("h", 1.4)])],
         });
         assert!((tall.bounds()[1][1] - 0.98 * 1.4).abs() < 0.01);
+    }
+
+    #[test]
+    fn unit_shapes_have_their_bounds_and_triangles() {
+        // A disc of ten sides (two faces and the tread) and two bars across it.
+        let s72 = 72_f32.to_radians().sin();
+        check(
+            Shape::Wheel,
+            &[],
+            2 * 8 + 2 * 10 + 2 * 12,
+            [-0.055, 0.0, -0.3 * s72],
+            [0.055, 0.6, 0.3 * s72],
+        );
+        // A round face, a back, the rim and a boss of six sides.
+        check(
+            Shape::Shield,
+            &[],
+            8 + 8 + 20 + 6,
+            [-0.25, -0.25 * s72, -0.02],
+            [0.25, 0.25 * s72, 0.02 + 0.11 * 0.45],
+        );
+        check(
+            Shape::Shield,
+            &[("h", 0.8)],
+            2 + 2 + 8 + 6,
+            [-0.25, -0.4, -0.02],
+            [0.25, 0.4, 0.0695],
+        );
+        // Four segments of stave, four sides each, and the string.
+        let bow = bake_model(&ModelSpec {
+            parts: vec![part(Shape::Bow, &[])],
+        });
+        assert_eq!(bow.near.triangles(), 4 * 4 * 2 + 4);
+        assert_eq!(bow.far.triangles(), 2 * 4 * 2);
+        let [lo, hi] = bow.bounds();
+        assert!(hi[2] > 0.14 && lo[2] > -0.02 && (hi[1] - 0.408).abs() < 0.01);
+        // Two by two cells, both sides, and the yard.
+        check(
+            Shape::Sail,
+            &[],
+            2 * 2 * 2 * 2 + 12,
+            [-0.82, 0.0, -0.035],
+            [0.82, 1.14, 0.15],
+        );
+        // Two oars a side, each a shaft and a blade.
+        let oars = bake_model(&ModelSpec {
+            parts: vec![part(Shape::OarBank, &[("count", 2.0)])],
+        });
+        assert_eq!(oars.near.triangles(), 2 * 2 * (10 + 12));
+        assert_eq!(oars.far.triangles(), 2 * 12);
+        assert_eq!(oars.rig.joints.len(), 1 + 4);
+        // Body, neck, head, ears, mane, tail and four legs with hooves.
+        check(
+            Shape::Quadruped,
+            &[],
+            12 + 10 + 12 + 8 + 10 + 12 + 4 * 20,
+            [-0.15, 0.0, -0.70405],
+            [0.15, 1.16212, 0.97213],
+        );
+    }
+
+    #[test]
+    fn moving_shapes_record_their_joints() {
+        let joints = |shape: Shape, knobs: &[(&str, f32)]| {
+            let baked = bake_model(&ModelSpec {
+                parts: vec![part(shape, knobs)],
+            });
+            assert!(baked.warnings.is_empty(), "{shape:?}: {:?}", baked.warnings);
+            baked.rig.joints.len()
+        };
+        // The model, the body, two legs and two arms.
+        assert_eq!(joints(Shape::Figure, &[]), 6);
+        // The model, the body, four legs, the neck and the tail.
+        assert_eq!(joints(Shape::Quadruped, &[]), 8);
+        assert_eq!(joints(Shape::Wheel, &[]), 2);
+        assert_eq!(joints(Shape::Hull, &[]), 1);
+        assert_eq!(joints(Shape::Hull, &[("float", 1.0)]), 2);
+        assert_eq!(joints(Shape::Box, &[("strike", 30.0)]), 2);
+        assert_eq!(joints(Shape::Box, &[]), 1);
+    }
+
+    #[test]
+    fn robed_and_seated_figures_keep_their_size() {
+        let robe = bake_model(&ModelSpec {
+            parts: vec![part(Shape::Figure, &[("robe", 1.0)])],
+        });
+        let [lo, hi] = robe.bounds();
+        assert!(lo[1].abs() < 1e-5 && (hi[1] - 0.986).abs() < 0.01);
+        assert!(robe.near.triangles() <= 300 && robe.far.triangles() <= 80);
+        // Seated legs splay out and forward from the hips; nothing reaches the ground.
+        let seated = bake_model(&ModelSpec {
+            parts: vec![part(Shape::Figure, &[("seat", 1.0)])],
+        });
+        let [lo, hi] = seated.bounds();
+        assert!(
+            lo[1] > 0.02 && hi[2] > 0.25 && hi[0] > 0.27,
+            "{lo:?} {hi:?}"
+        );
+        assert!(seated.near.triangles() <= 300 && seated.far.triangles() <= 80);
     }
 
     #[test]

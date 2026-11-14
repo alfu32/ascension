@@ -8,8 +8,9 @@ pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <f
 [--map-size <width>x<height>] [--sphere <n>] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
 [--universe] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-hud] [--hud-scale <percent>] [--stats] \
 [--sun <orbit|fixed|night>] [--graticule <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
-[--gallery <all|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
-[--model <model id>] [--parts] [--gallery-manifest <file.json>]";
+[--gallery <all|units|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
+[--model <model id>] [--parts] [--pose <idle|move|attack|work>] [--anim-time <seconds>] \
+[--gallery-manifest <file.json>]";
 
 /// Default canvas size in pixels when `--size` is not given.
 pub const DEFAULT_SIZE: (u32, u32) = (1280, 800);
@@ -93,6 +94,10 @@ pub struct Options {
     pub parts: bool,
     /// Write the model manifest to this JSON file and exit (no window).
     pub gallery_manifest: Option<PathBuf>,
+    /// What the gallery's units are doing.
+    pub pose: rom_render::Activity,
+    /// Seconds of motion the gallery shows, the same for every model; `None` lets it run.
+    pub anim_time: Option<f32>,
     /// Print usage and exit.
     pub help: bool,
 }
@@ -166,6 +171,8 @@ impl Default for Options {
             model: None,
             parts: false,
             gallery_manifest: None,
+            pose: rom_render::Activity::Idle,
+            anim_time: None,
             help: false,
         }
     }
@@ -322,6 +329,21 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             "--parts" => options.parts = true,
             "--gallery-manifest" => {
                 options.gallery_manifest = Some(PathBuf::from(value("--gallery-manifest")?));
+            }
+            "--pose" => {
+                let text = value("--pose")?;
+                options.pose = rom_render::Activity::from_name(&text).ok_or_else(|| {
+                    format!("--pose expects idle, move, attack or work, got {text:?}")
+                })?;
+            }
+            "--anim-time" => {
+                let text = value("--anim-time")?;
+                options.anim_time = Some(
+                    text.parse::<f32>()
+                        .ok()
+                        .filter(|t| t.is_finite() && *t >= 0.0)
+                        .ok_or_else(|| format!("--anim-time expects seconds, got {text:?}"))?,
+                );
             }
             "-h" | "--help" => options.help = true,
             other => return Err(format!("unknown argument {other:?}")),
@@ -606,6 +628,13 @@ mod tests {
         let options = parse(args(&["--model", "bld.city@ancient", "--parts"])).unwrap();
         assert_eq!(options.model.as_deref(), Some("bld.city@ancient"));
         assert!(options.parts);
+        assert_eq!(options.pose, rom_render::Activity::Idle);
+        assert_eq!(options.anim_time, None);
+        let options = parse(args(&["--pose", "attack", "--anim-time", "0.25"])).unwrap();
+        assert_eq!(options.pose, rom_render::Activity::Attack);
+        assert_eq!(options.anim_time, Some(0.25));
+        assert!(parse(args(&["--pose", "dance"])).is_err());
+        assert!(parse(args(&["--anim-time", "-1"])).is_err());
         assert!(parse(args(&["--team", "9"])).is_err());
         assert!(parse(args(&["--gallery-view", "under"])).is_err());
     }

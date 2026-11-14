@@ -1103,6 +1103,7 @@ mod tests {
             carry_node: false,
             under_construction: None,
             model: None,
+            activity: Default::default(),
         }
     }
 

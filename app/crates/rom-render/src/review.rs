@@ -37,6 +37,9 @@ pub struct Review {
     pub lines: Vec<Line3>,
     /// Views drawn side by side in two columns instead of the camera's single view.
     pub sheet: Vec<SheetView>,
+    /// Seconds of motion shown, the same for every model (no phase per entity); `None` runs
+    /// the render clock.
+    pub anim_time: Option<f32>,
 }
 
 /// The cell of view `index` of `count` on a canvas of `size` pixels: two columns, as many rows

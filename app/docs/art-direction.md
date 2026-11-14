@@ -65,6 +65,14 @@ when its owner advances.
 | Modern | modern, information | concrete, glass, flat roofs, antennas |
 | Future | automation and later | white composite, solar panels, domes, light strips |
 
+## Motion
+
+Units move (task 39): figures walk (legs and arms swing, the body bobs), strike,
+thrust, throw, draw a bow or whirl a sling as their `attack` knob says, swing a
+tool or raise both arms at work, and breathe when idle; beasts trot, wheels
+turn, oars sweep and hulls ride the water. Each unit is at its own point of the
+cycle, so a group does not move in step. Motion is presentation only.
+
 ## Budgets
 
 | Model | Near | Far |
@@ -84,10 +92,12 @@ not depend on the age). Every part has a name inside its model, so a part is
 `bld.temple@classical/roof`. Ids are printed under each model in the gallery
 and on the review page; use them in instructions.
 
-1. **Gallery in the game.** `--gallery <age|key|all>` lays the models out in
-   a grid on plain ground, labelled with their ids; `--model <id>` shows one
-   model from four angles; `--parts` labels each part. Both work with
-   `--screenshot`.
+1. **Gallery in the game.** `--gallery <age|key|units|all>` lays the models
+   out in a grid on plain ground, labelled with their ids (units turned
+   three-quarters to the camera); `--model <id>` shows one model from four
+   angles; `--parts` labels each part; `--pose <idle|move|attack|work>` sets
+   what the units do and `--anim-time <seconds>` stops the motion at that
+   moment of every cycle. All work with `--screenshot`.
 2. **Review page.** The orchestrator publishes a private page with every
    model: its pictures, part list, parameters and status (draft, needs work,
    approved). Comment per model there or in chat, using the ids.

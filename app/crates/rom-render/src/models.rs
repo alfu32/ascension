@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use crate::kit::{self, Painter, Place, Surface};
 use crate::looks::MaterialLook;
+use crate::rig::{Activity, Motion, Rig};
 
 /// Parts whose far mesh spans less than this (tiles) are left out of the far version.
 pub const FAR_MIN_EXTENT: f32 = 0.3;
@@ -64,22 +65,36 @@ pub enum Shape {
     Hull,
     /// A standing person about one tile tall, with sockets for what it carries.
     Figure,
+    /// A four-legged beast (a horse) with sockets for a rider and loads.
+    Quadruped,
+    /// A wheel on an axle along x, turning as its unit moves.
+    Wheel,
+    /// Oars along both sides of a ship, sweeping as it moves.
+    OarBank,
+    /// A square sail on a yard.
+    Sail,
+    /// A round or rectangular shield.
+    Shield,
+    /// A bow and its string.
+    Bow,
     /// Another composed mesh placed as a sub-assembly.
     Include,
 }
 
 /// Knobs every part understands: position, turn, lean (`roll` tips the top towards +x, then
 /// `pitch` towards +z, degrees, about the part's base centre; on a roof `pitch` is its slope),
-/// repeat (`repeat` copies, each moved by `dx`, `dz`), and `far` (0: left out of the far version).
+/// repeat (`repeat` copies, each moved by `dx`, `dz`), `far` (0: left out of the far version)
+/// and `strike` (degrees the part swings forward about its base, along its x axis, when its
+/// unit attacks).
 pub const COMMON_KNOBS: &[&str] = &[
-    "x", "y", "z", "yaw", "pitch", "roll", "repeat", "dx", "dz", "far",
+    "x", "y", "z", "yaw", "pitch", "roll", "repeat", "dx", "dz", "far", "strike",
 ];
 /// Colour knobs every part understands.
 pub const COMMON_COLOURS: &[&str] = &["tint"];
 
 impl Shape {
     /// Every shape, in a fixed order.
-    pub const ALL: [Shape; 19] = [
+    pub const ALL: [Shape; 25] = [
         Shape::Box,
         Shape::Plinth,
         Shape::GableRoof,
@@ -98,6 +113,12 @@ impl Shape {
         Shape::Arch,
         Shape::Hull,
         Shape::Figure,
+        Shape::Quadruped,
+        Shape::Wheel,
+        Shape::OarBank,
+        Shape::Sail,
+        Shape::Shield,
+        Shape::Bow,
         Shape::Include,
     ];
 
@@ -127,6 +148,12 @@ impl Shape {
             Shape::Arch => "arch",
             Shape::Hull => "hull",
             Shape::Figure => "figure",
+            Shape::Quadruped => "quadruped",
+            Shape::Wheel => "wheel",
+            Shape::OarBank => "oar_bank",
+            Shape::Sail => "sail",
+            Shape::Shield => "shield",
+            Shape::Bow => "bow",
             Shape::Include => "include",
         }
     }
@@ -183,8 +210,25 @@ impl Shape {
             Shape::Banner => &["h", "fw", "fh", "pole", "notch"],
             Shape::Awning => &["w", "d", "h", "rise", "posts"],
             Shape::Arch => &["w", "h", "t", "span", "spring", "segments"],
-            Shape::Hull => &["w", "d", "h", "sheer", "segments"],
-            Shape::Figure => &["h", "build"],
+            Shape::Hull => &["w", "d", "h", "sheer", "segments", "float"],
+            Shape::Figure => &[
+                "h",
+                "build",
+                "robe",
+                "seat",
+                "attack",
+                "work",
+                "hold_left",
+                "hold_right",
+                "stride",
+                "pace",
+            ],
+            Shape::Quadruped => &["h", "l", "w", "stride", "pace"],
+            Shape::Wheel => &["w", "t", "spokes", "segments"],
+            Shape::OarBank => &["w", "count", "beam", "length", "drop"],
+            Shape::Sail => &["w", "h", "billow"],
+            Shape::Shield => &["w", "h", "t", "boss", "segments"],
+            Shape::Bow => &["h", "bend", "w"],
             Shape::Include => &["scale"],
         }
     }
@@ -196,6 +240,10 @@ impl Shape {
             Shape::Banner => &["pole_colour"],
             Shape::Awning => &["post_colour"],
             Shape::Figure => &["skin", "hair", "legs"],
+            Shape::Quadruped => &["mane", "hoof"],
+            Shape::Sail => &["yard_colour"],
+            Shape::Shield => &["rim"],
+            Shape::Bow => &["string"],
             _ => &[],
         }
     }
@@ -212,6 +260,7 @@ impl Shape {
     pub fn sockets(self) -> &'static [&'static str] {
         match self {
             Shape::Figure => &["head", "right_hand", "left_hand", "back"],
+            Shape::Quadruped => &["rider", "back", "head", "chest"],
             _ => &[],
         }
     }
@@ -291,6 +340,9 @@ pub struct ModelMesh {
     pub alts: Vec<[u8; 4]>,
     /// Pattern size of the material, in tiles.
     pub scales: Vec<f32>,
+    /// The joint each vertex moves with (0: the model; see [`BakedModel::rig`]). Not part of
+    /// the fingerprint: motion is not geometry.
+    pub joints: Vec<u8>,
     /// Triangle list, counter-clockwise seen from outside.
     pub indices: Vec<u16>,
 }
@@ -312,6 +364,7 @@ impl ModelMesh {
         self.colors.truncate(vertices);
         self.alts.truncate(vertices);
         self.scales.truncate(vertices);
+        self.joints.truncate(vertices);
         self.indices.truncate(indices);
     }
 }
@@ -355,6 +408,8 @@ pub struct BakedModel {
     pub parts: Vec<PartInfo>,
     /// Problems met while baking (unknown attach targets), one line each.
     pub warnings: Vec<String>,
+    /// The joints the near and far versions move with.
+    pub rig: Rig,
 }
 
 impl BakedModel {
@@ -417,14 +472,25 @@ impl Fnv {
 /// Bakes `spec` into its near and far versions.
 pub fn bake_model(spec: &ModelSpec) -> BakedModel {
     let mut near = Bake::new(true);
-    near.emit(spec, Place::IDENTITY, "", 0);
+    near.emit(spec, Place::IDENTITY, "", 0, 0);
     let mut far = Bake::new(false);
-    far.emit(spec, Place::IDENTITY, "", 0);
+    far.emit(spec, Place::IDENTITY, "", 0, 0);
+    let mut warnings = near.warnings;
+    if far.rig != near.rig {
+        warnings.push("the far version's joints differ from the near version's".into());
+    }
+    if near.rig.overflowed() {
+        warnings.push(format!(
+            "more than {} joints; the rest do not move",
+            crate::rig::MAX_JOINTS
+        ));
+    }
     BakedModel {
         near: near.mesh,
         far: far.mesh,
         parts: near.parts,
-        warnings: near.warnings,
+        warnings,
+        rig: near.rig,
     }
 }
 
@@ -437,31 +503,36 @@ struct Bake {
     /// Whether placed parts are recorded (not for the second and later copies of an include).
     record: bool,
     warnings: Vec<String>,
+    rig: Rig,
 }
 
-/// Where parts can attach: placed parts by name and their sockets.
+/// Where parts can attach: placed parts by name and their sockets, each with its joint.
 #[derive(Default)]
 struct Anchors {
-    parts: BTreeMap<String, Place>,
-    sockets: Vec<(String, String, Place)>,
+    parts: BTreeMap<String, (Place, u8)>,
+    sockets: Vec<(String, kit::Socket)>,
+    /// The joint of what each hand holds, by attach name, once a part has taken it.
+    grips: BTreeMap<String, u8>,
 }
 
+/// A place parts can attach to: its frame, joint and the motion of what it holds.
+type Anchor = (Place, u8, Option<Motion>);
+
 impl Anchors {
-    fn find(&self, attach: &str) -> Option<Place> {
-        if let Some(place) = self.parts.get(attach) {
-            return Some(*place);
+    fn find(&self, attach: &str) -> Option<Anchor> {
+        if let Some((place, joint)) = self.parts.get(attach) {
+            return Some((*place, *joint, None));
         }
-        if let Some((part, socket)) = attach.split_once('.') {
-            return self
-                .sockets
+        let socket = |part: Option<&str>, name: &str| {
+            self.sockets
                 .iter()
-                .find(|(p, s, _)| p == part && s == socket)
-                .map(|(_, _, place)| *place);
+                .find(|(p, s)| part.is_none_or(|part| p == part) && s.name == name)
+                .map(|(_, s)| (s.place, s.joint, s.grip))
+        };
+        match attach.split_once('.') {
+            Some((part, name)) => socket(Some(part), name),
+            None => socket(None, attach),
         }
-        self.sockets
-            .iter()
-            .find(|(_, s, _)| s == attach)
-            .map(|(_, _, place)| *place)
     }
 }
 
@@ -473,17 +544,32 @@ impl Bake {
             parts: Vec::new(),
             record: true,
             warnings: Vec::new(),
+            rig: Rig::default(),
         }
     }
 
-    /// Bakes the parts of `spec` placed at `place`, their names prefixed with `prefix`.
-    fn emit(&mut self, spec: &ModelSpec, place: Place, prefix: &str, depth: usize) {
+    /// A joint below `parent` at the origin of `place`, in its axes.
+    fn joint(&mut self, parent: u8, place: &Place, motion: Motion) -> u8 {
+        let mut scratch = ModelMesh::default();
+        let mut painter = Painter::rigged(
+            &mut scratch,
+            *place,
+            Surface::plain([1.0; 3]),
+            &mut self.rig,
+            parent,
+        );
+        painter.add_joint([0.0; 3], motion)
+    }
+
+    /// Bakes the parts of `spec` placed at `place` and moving with `joint`, their names
+    /// prefixed with `prefix`.
+    fn emit(&mut self, spec: &ModelSpec, place: Place, prefix: &str, depth: usize, joint: u8) {
         let fine = self.fine;
         let mut anchors = Anchors::default();
         for part in &spec.parts {
             let path = format!("{prefix}{}", part.name);
-            let parent = if part.attach.is_empty() {
-                place
+            let (parent, mut parent_joint, grip) = if part.attach.is_empty() {
+                (place, joint, None)
             } else {
                 match anchors.find(&part.attach) {
                     Some(anchor) => anchor,
@@ -492,16 +578,26 @@ impl Bake {
                             "{path}: attaches to {:?}, which is not an earlier part or socket",
                             part.attach
                         ));
-                        place
+                        (place, joint, None)
                     }
                 }
             };
+            // What a hand holds turns in the hand: one joint per hand, shared by its parts.
+            if let Some(motion) = grip {
+                parent_joint = match anchors.grips.get(&part.attach) {
+                    Some(&held) => held,
+                    None => {
+                        let held = self.joint(parent_joint, &parent, motion);
+                        anchors.grips.insert(part.attach.clone(), held);
+                        held
+                    }
+                };
+            }
             let knob = |k: &str, default: f32| part.knobs.get(k).copied().unwrap_or(default);
-            let copies = if !fine && knob("far", 1.0) < 0.5 {
-                0
-            } else {
-                knob("repeat", 1.0).round().clamp(1.0, 64.0) as usize
-            };
+            let copies = knob("repeat", 1.0).round().clamp(1.0, 64.0) as usize;
+            // The far version leaves the part out but still records its joints, so both
+            // versions share one rig.
+            let skipped = !fine && knob("far", 1.0) < 0.5;
             let (dx, dz) = (knob("dx", 0.0), knob("dz", 0.0));
             // A roof's own `pitch` is its slope; such shapes lean by `roll` only.
             let lean_pitch = if part.shape.knobs().contains(&"pitch") {
@@ -509,6 +605,7 @@ impl Bake {
             } else {
                 knob("pitch", 0.0)
             };
+            let strike = knob("strike", 0.0);
             let start = (self.mesh.positions.len(), self.mesh.indices.len());
             let place_of = |copy: usize| {
                 parent.then(&Place {
@@ -526,18 +623,32 @@ impl Bake {
                     tilt: kit::tilt(lean_pitch, knob("roll", 0.0)),
                 })
             };
-            // Later parts attach to the first copy, even when the far version leaves the part out.
-            anchors.parts.insert(part.name.clone(), place_of(0));
+            let mut first_joint = parent_joint;
             for copy in 0..copies {
                 let at = place_of(copy);
+                let own = if strike != 0.0 {
+                    // A swinging part is a siege engine's arm: a slow cycle of loading.
+                    self.rig.suggest_period(Activity::Attack, 2.4);
+                    self.joint(parent_joint, &at, Motion::Strike(strike.to_radians()))
+                } else {
+                    parent_joint
+                };
                 let copy_start = (self.mesh.positions.len(), self.mesh.indices.len());
                 if part.shape == Shape::Include {
+                    if copy == 0 {
+                        first_joint = own;
+                    }
                     if let Some(inner) = &part.include
                         && depth < MAX_INCLUDE_DEPTH
                     {
                         let record = self.record;
-                        self.record = record && copy == 0;
-                        self.emit(inner, at, &format!("{path}/"), depth + 1);
+                        self.record = record && copy == 0 && !skipped;
+                        let kept = self.mesh.positions.len();
+                        let kept_indices = self.mesh.indices.len();
+                        self.emit(inner, at, &format!("{path}/"), depth + 1, own);
+                        if skipped {
+                            self.mesh.truncate(kept, kept_indices);
+                        }
                         self.record = record;
                     }
                     continue;
@@ -552,14 +663,31 @@ impl Bake {
                     team: part.team,
                     scale: part.material.scale,
                 };
-                let mesh = &mut self.mesh;
-                let mut painter = Painter::new(mesh, at, surface);
+                let mut scratch = ModelMesh::default();
+                let mesh = if skipped {
+                    &mut scratch
+                } else {
+                    &mut self.mesh
+                };
+                let mut painter = Painter::rigged(mesh, at, surface, &mut self.rig, own);
                 let sockets = kit::paint(part, &mut painter, fine);
-                for (name, local) in sockets {
-                    anchors
-                        .sockets
-                        .push((part.name.clone(), name.into(), at.then(&local)));
+                let main = painter.joint;
+                if copy == 0 {
+                    first_joint = main;
                 }
+                for socket in sockets {
+                    anchors.sockets.push((
+                        part.name.clone(),
+                        kit::Socket {
+                            place: at.then(&socket.place),
+                            ..socket
+                        },
+                    ));
+                }
+                if skipped {
+                    continue;
+                }
+                let mesh = &mut self.mesh;
                 shade_contact(mesh, copy_start.0);
                 if !fine {
                     let span = bounds_of(&mesh.positions[copy_start.0..]);
@@ -571,6 +699,10 @@ impl Bake {
                     }
                 }
             }
+            // Later parts attach to the first copy, even when the far version leaves the part out.
+            anchors
+                .parts
+                .insert(part.name.clone(), (place_of(0), first_joint));
             if part.shape != Shape::Include && self.record {
                 self.parts.push(PartInfo {
                     path,
@@ -713,6 +845,48 @@ mod tests {
         assert!(hand[0][0] > 1.6 && hand[1][0] < 2.0, "{hand:?}");
         assert!(hand[0][1] > 0.3, "{hand:?}");
         assert_eq!(baked.warnings.len(), 1);
+    }
+
+    #[test]
+    fn held_parts_turn_in_the_hand_and_stay_in_it() {
+        use crate::rig::{Activity, apply};
+        let figure = PartSpec::new("body", Shape::Figure, plain()).knob("attack", 1.0);
+        let mut tool = PartSpec::new("tool", Shape::Cylinder, plain())
+            .knob("y", -0.4)
+            .knob("w", 0.04)
+            .knob("h", 1.2);
+        tool.attach = "right_hand".into();
+        let mut tip = PartSpec::new("tip", Shape::Cone, plain())
+            .knob("y", 1.2)
+            .knob("w", 0.08)
+            .knob("h", 0.2);
+        tip.attach = "tool".into();
+        let mut far_tool = tool.clone();
+        far_tool.name = "spare".into();
+        far_tool.knobs.insert("far".into(), 0.0);
+        let baked = bake_model(&ModelSpec {
+            parts: vec![figure, tool, tip, far_tool],
+        });
+        assert!(baked.warnings.is_empty(), "{:?}", baked.warnings);
+        let rig = &baked.rig;
+        // The model, body, legs, arms and one grip shared by everything in the right hand.
+        assert_eq!(rig.joints.len(), 7);
+        let grip = rig.joints.len() - 1;
+        let arm = usize::from(rig.joints[grip].parent);
+        assert!(matches!(rig.joints[arm].motion, Motion::Arm(_, 0)));
+        let tool_vertices = baked.parts[1].triangles * 3;
+        let start = baked.near.indices.len()
+            - 3 * (baked.parts[1].triangles + baked.parts[2].triangles + baked.parts[3].triangles);
+        for &i in &baked.near.indices[start..start + tool_vertices] {
+            assert_eq!(usize::from(baked.near.joints[usize::from(i)]), grip);
+        }
+        // Thrusting, the hand carries the grip's pivot along: nothing leaves the hand.
+        for u in [0.0, 0.3, 0.56, 0.8] {
+            let pose = rig.pose(Activity::Attack, u);
+            let hand = rig.joints[grip].pivot;
+            let (by_grip, by_arm) = (apply(&pose[grip], hand), apply(&pose[arm], hand));
+            assert!((0..3).all(|k| (by_grip[k] - by_arm[k]).abs() < 1e-4), "{u}");
+        }
     }
 
     #[test]
