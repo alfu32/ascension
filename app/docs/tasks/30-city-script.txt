@@ -10,7 +10,7 @@
 4 click @10,0
 250 researchers
 251 hud tab 3
-252 hud slot 0
+252 hud slot 2
 700 click city
 701 click builder1 shift
 702 hud tab 0

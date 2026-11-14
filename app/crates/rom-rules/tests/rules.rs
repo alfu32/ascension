@@ -1056,3 +1056,23 @@ fn rejects_carry_without_tag_and_nonpositive_keeper() {
             .any(|p| p.to_string().contains("capacity must be positive"))
     );
 }
+
+#[test]
+fn age_view_range_loads() {
+    let rules = seed();
+    let range = |key: &str| rules.ages[&rules.id_of(key).unwrap()].view_range;
+    assert_eq!(range("age.ancient"), 60_000);
+    assert_eq!(range("age.information"), 320_000);
+    assert_eq!(range("age.automation"), 450_000);
+    assert_eq!(range("age.fusion"), 0);
+    assert_eq!(range("age.galactic"), 0);
+    // The range widens with every age until the whole globe is allowed.
+    let mut by_ordinal: Vec<_> = rules.ages.values().collect();
+    by_ordinal.sort_by_key(|a| a.ordinal);
+    let limited: Vec<i64> = by_ordinal
+        .iter()
+        .map(|a| a.view_range)
+        .take_while(|r| *r > 0)
+        .collect();
+    assert!(limited.windows(2).all(|w| w[0] < w[1]));
+}

@@ -214,10 +214,14 @@ colonisation; adding them later is data plus that mechanic.
 1. **Obsolete steps.** An entity type is obsolete for a player when a type
    whose `upgrades_from_id` is it is unlocked for that player. Training an
    obsolete type is rejected (`SimError::Obsolete`); the palette hides it.
-2. **Palette shows what can be done next.** Library: one button per track
-   (the lowest level not yet researched) plus the next age; researched
-   non-repeatable techs are hidden; locked items are shown greyed with the
-   missing prerequisite in the help line.
+2. **Palette shows what can be done next.** Library: the full research grid,
+   laid out by `production.ui_page`, `ui_row` and `ui_col` (a row per age: the
+   age advance, then Military, Civic, Commerce, Science; three ages per page).
+   Researched techs stay visible with the gold check badge; the age advance is
+   greyscale (locked) until its row is done; locked items show the missing
+   prerequisite in the help line. The Library opens on the page holding the
+   player's next age advance. Other producers show only the next step of what
+   they research, and hide researched non-repeatable techs.
 3. **Reachability check** (rules validation): starting from the Ancient age
    with a City and Citizens, every unit, building and tech is reachable by
    prerequisites and production. Unreachable items are reported.

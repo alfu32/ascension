@@ -111,6 +111,11 @@ INSERT INTO age(id,ordinal,era,map_scale)
         ELSE 'galactic' END,
    CASE WHEN sort<=9 THEN 'planetary' ELSE 'interstellar' END
  FROM def WHERE kind='age';
+WITH v(k,r) AS (VALUES ('age.ancient',60000), ('age.classical',80000), ('age.medieval',100000),
+  ('age.gunpowder',130000), ('age.enlightenment',160000), ('age.industrial',200000),
+  ('age.modern',250000), ('age.information',320000), ('age.automation',450000))
+UPDATE age SET view_range = (SELECT v.r FROM v JOIN def d ON d.key = v.k WHERE d.id = age.id)
+ WHERE id IN (SELECT d.id FROM v JOIN def d ON d.key = v.k);
 
 INSERT INTO def(kind,key,name) VALUES
  ('resource','res.food','Food'), ('resource','res.timber','Timber'), ('resource','res.metal','Metal'),

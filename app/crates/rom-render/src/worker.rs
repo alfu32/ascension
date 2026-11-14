@@ -116,6 +116,10 @@ struct Shared {
     planet: Mutex<Option<(Arc<PlanetScene>, OrbitSettings)>>,
     universe: Mutex<Option<(Arc<UniverseScene>, UniverseSettings)>>,
     zoom_cap: AtomicU8,
+    /// Ground half-width in milli-tiles the camera may show; `u32::MAX` until published.
+    view_range: AtomicU32,
+    /// Zoom out to the limit once, as soon as the view range is known.
+    zoom_out: AtomicBool,
     zoom_all: AtomicBool,
     space: Mutex<Arc<SpaceSnapshot>>,
     view_state: Mutex<ViewState>,
@@ -209,6 +213,17 @@ impl RenderBridge {
     /// Sets the farthest level the zoom may reach (the player's age decides it).
     pub fn publish_zoom_cap(&self, level: Level) {
         self.shared.zoom_cap.store(level as u8, Ordering::Relaxed);
+    }
+
+    /// Sets the largest ground half-width, in milli-tiles, the camera may show (the player's age
+    /// decides it); 0 allows the whole globe.
+    pub fn publish_view_range(&self, milli_tiles: u32) {
+        self.shared.view_range.store(milli_tiles, Ordering::Relaxed);
+    }
+
+    /// Asks the camera to zoom out to its limit once, when the view range is known.
+    pub fn publish_zoom_out(&self) {
+        self.shared.zoom_out.store(true, Ordering::Relaxed);
     }
 
     /// Lifts the zoom cap for testing (`--zoom-all`).
@@ -406,6 +421,8 @@ impl Shared {
             planet: Mutex::new(None),
             universe: Mutex::new(None),
             zoom_cap: AtomicU8::new(Level::Globe as u8),
+            view_range: AtomicU32::new(u32::MAX),
+            zoom_out: AtomicBool::new(false),
             zoom_all: AtomicBool::new(false),
             space: Mutex::new(Arc::new(SpaceSnapshot::default())),
             view_state: Mutex::new(ViewState::default()),
@@ -660,6 +677,31 @@ fn render_loop(shared: &Shared) {
         if let Some(zoom) = zoom.as_mut() {
             zoom.set_cap(current_cap(shared));
         }
+        let view_range = shared.view_range.load(Ordering::Relaxed);
+        if view_range != u32::MAX {
+            let all = shared.zoom_all.load(Ordering::Relaxed);
+            let range = if all { 0 } else { view_range };
+            let zoom_out = shared.zoom_out.swap(false, Ordering::Relaxed);
+            if let Some(orbit) = orbit.as_mut() {
+                orbit.set_view_range(range);
+                if let Some(zoom) = zoom.as_mut() {
+                    zoom.set_globe_limit((range > 0).then(|| orbit.distance_cap()));
+                    if zoom_out {
+                        zoom.set_l(f32::MAX);
+                    }
+                } else if zoom_out {
+                    orbit.frame_globe();
+                }
+            } else {
+                let half_width = (range > 0).then(|| range as f32 / 1000.0);
+                camera.limit_half_width(half_width);
+                if zoom_out {
+                    camera.distance = f32::MAX;
+                    camera.limit_half_width(half_width);
+                    camera = camera.limited();
+                }
+            }
+        }
         let layout = *lock(&shared.layout);
         let hud_visible = shared.hud_visible.load(Ordering::Relaxed);
         let percent = shared.hud_scale.load(Ordering::Relaxed);
@@ -672,6 +714,12 @@ fn render_loop(shared: &Shared) {
             // Simulation time drives the light, so it follows game speed and pause.
             let tick = pair.latest_tick().unwrap_or(0);
             scene.set_sun(clock.light(tick));
+            // The minimap shows the night side of the planet while the planet is in view.
+            if let Some(map) = &mut minimap
+                && zoom.as_ref().is_none_or(|z| z.level() <= Level::Globe)
+            {
+                map.set_light(clock.toward(tick));
+            }
             if let Some(zoom) = zoom.as_mut() {
                 zoom.follow_sun(clock.toward(tick));
             }

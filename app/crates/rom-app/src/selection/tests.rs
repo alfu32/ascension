@@ -490,7 +490,7 @@ fn locked_and_unaffordable_buttons_are_disabled_with_reason() {
     fx.click(b, false);
     let mut seen_locked = false;
     for page in 0..fx.hud_snapshot().palette.unwrap().pages {
-        fx.ctl.page = page;
+        fx.ctl.page = Some(page);
         for button in fx.hud_snapshot().palette.unwrap().buttons {
             if !button.state.enabled() && button.state.reason().starts_with("Needs") {
                 seen_locked = true;
@@ -1039,62 +1039,117 @@ fn button_states_follow_rules_and_stock() {
     let library = fx.spawn(fx.rules.id_of("bld.library").unwrap(), 1, 20, 20);
     fx.click(library, false);
     fx.ctl.tab = PaletteTab::Research;
-    fx.hud(HudRegionKind::CommandSlot, 0, PointerButton::Left, false);
+    // Civic level 1 is the third cell of the first row.
+    fx.hud(HudRegionKind::CommandSlot, 2, PointerButton::Left, false);
+    let civic_button = |fx: &Fx| {
+        let palette = fx.hud_snapshot().palette.unwrap();
+        palette.buttons.into_iter().find(|b| b.slot == 2).unwrap()
+    };
     // Submission is already reflected before the public queue exposes it.
-    assert_eq!(
-        fx.hud_snapshot().palette.unwrap().buttons[0].state,
-        ButtonState::InProgress { pct: 0 }
-    );
+    assert_eq!(civic_button(&fx).state, ButtonState::InProgress { pct: 0 });
     fx.step(5);
     assert!(matches!(crate::hud::button_state(&fx.world, civic, false),
         ButtonState::InProgress { pct } if pct > 0 && pct < 100));
-    assert!(
-        !fx.hud_snapshot().palette.unwrap().buttons[0]
-            .state
-            .enabled()
-    );
+    assert!(!civic_button(&fx).state.enabled());
 }
 
 #[test]
-fn library_shows_next_level_per_track_and_next_age() {
-    let mut fx = fixture_config(10_000, "age.ancient", &["tech.civic.1"]);
+fn library_shows_the_full_grid_with_done_badges() {
+    let mut fx = fixture_config(10_000, "age.ancient", &["tech.civic.1", "tech.military.1"]);
     let library = fx.spawn(fx.rules.id_of("bld.library").unwrap(), 1, 20, 20);
     fx.click(library, false);
     fx.ctl.tab = PaletteTab::Research;
     let (palette, actions) = fx.ctl.palette(&fx.world).unwrap();
-    let shown: Vec<_> = actions
-        .iter()
-        .filter_map(|(_, a)| {
-            if let Action::Research(d) = a {
-                Some(*d)
-            } else {
-                None
-            }
-        })
-        .collect();
-    let track_levels: Vec<_> = shown
-        .iter()
-        .filter_map(|id| {
-            let t = &fx.rules.techs[id];
-            (t.kind == rom_rules::TechKind::Track).then_some((t.track.as_str(), t.level))
-        })
-        .collect();
-    assert_eq!(
-        track_levels,
-        vec![
-            ("civic", 2),
-            ("commerce", 1),
-            ("military", 1),
-            ("science", 1)
-        ]
+    // Three age rows of five cells: the age advance, then Military, Civic, Commerce, Science.
+    assert_eq!(actions.len(), 15);
+    let at = |row: usize, col: usize| {
+        let Some((_, Action::Research(d))) = actions.iter().find(|(s, _)| *s == row * 5 + col)
+        else {
+            panic!("no cell at row {row}, column {col}");
+        };
+        *d
+    };
+    let key = |d: DefId| fx.rules.def(d).key.as_str().to_owned();
+    for row in 0..3 {
+        let level = row + 1;
+        assert_eq!(fx.rules.techs[&at(row, 0)].kind, rom_rules::TechKind::Age);
+        assert_eq!(fx.rules.techs[&at(row, 0)].level, level as i64);
+        for (col, track) in ["military", "civic", "commerce", "science"]
+            .iter()
+            .enumerate()
+        {
+            assert_eq!(key(at(row, col + 1)), format!("tech.{track}.{level}"));
+        }
+    }
+    let state = |slot: usize| {
+        &palette
+            .buttons
+            .iter()
+            .find(|b| b.slot == slot)
+            .unwrap()
+            .state
+    };
+    // Researched items stay visible with the done badge.
+    assert_eq!(state(1), &ButtonState::Done);
+    assert_eq!(state(2), &ButtonState::Done);
+    assert!(matches!(state(3), ButtonState::Ready));
+    // The age advance is locked until its row is done; later rows are locked too.
+    assert!(matches!(state(0), ButtonState::Locked { .. }));
+    assert!(matches!(state(5), ButtonState::Locked { .. }));
+    // With every track level of row one done, the age advance opens.
+    let mut fx = fixture_config(
+        10_000,
+        "age.ancient",
+        &[
+            "tech.military.1",
+            "tech.civic.1",
+            "tech.commerce.1",
+            "tech.science.1",
+        ],
     );
-    let ages: Vec<_> = shown
-        .iter()
-        .filter(|id| fx.rules.techs[id].kind == rom_rules::TechKind::Age)
-        .collect();
-    assert_eq!(ages, vec![&fx.rules.id_of("tech.age.classical").unwrap()]);
-    assert!(palette.buttons.iter().all(|b| b.state != ButtonState::Done));
-    assert_eq!(shown[4], fx.rules.id_of("tech.age.classical").unwrap());
+    let library = fx.spawn(fx.rules.id_of("bld.library").unwrap(), 1, 20, 20);
+    fx.click(library, false);
+    fx.ctl.tab = PaletteTab::Research;
+    let (palette, _) = fx.ctl.palette(&fx.world).unwrap();
+    assert!(matches!(
+        palette.buttons.iter().find(|b| b.slot == 0).unwrap().state,
+        ButtonState::Ready
+    ));
+}
+
+#[test]
+fn library_opens_on_the_current_age_page() {
+    let page_of = |age: &str| {
+        let mut fx = fixture_config(10_000, age, &[]);
+        let library = fx.spawn(fx.rules.id_of("bld.library").unwrap(), 1, 20, 20);
+        fx.click(library, false);
+        fx.ctl.tab = PaletteTab::Research;
+        let (palette, actions) = fx.ctl.palette(&fx.world).unwrap();
+        let next_age = actions.iter().find_map(|(slot, a)| match a {
+            Action::Research(d)
+                if *slot % 5 == 0 && fx.rules.techs[d].kind == rom_rules::TechKind::Age =>
+            {
+                Some(fx.rules.techs[d].level)
+            }
+            _ => None,
+        });
+        (palette.page, palette.pages, next_age)
+    };
+    // Ages 0-2 are working towards levels 1-3 on the first page, ages 3-5 towards 4-6 on the next.
+    assert_eq!(page_of("age.ancient").0, 0);
+    assert_eq!(page_of("age.medieval").0, 0);
+    let gunpowder = page_of("age.gunpowder");
+    assert_eq!(gunpowder.0, 1);
+    assert_eq!(gunpowder.2, Some(4));
+    assert!(gunpowder.1 > 2);
+    assert_eq!(page_of("age.information").0, 2);
+    // Arrows still turn pages, and a chosen page is kept.
+    let mut fx = fixture();
+    let library = fx.spawn(fx.rules.id_of("bld.library").unwrap(), 1, 20, 20);
+    fx.click(library, false);
+    fx.ctl.tab = PaletteTab::Research;
+    fx.hud(HudRegionKind::PaletteArrow, 1, PointerButton::Left, false);
+    assert_eq!(fx.ctl.palette(&fx.world).unwrap().0.page, 1);
 }
 
 #[test]
@@ -1184,7 +1239,7 @@ fn locked_buildings_are_shown_greyscale() {
     let mut locked = 0;
     let mut shown = 0;
     for page in 0..pages {
-        fx.ctl.page = page;
+        fx.ctl.page = Some(page);
         for button in fx.hud_snapshot().palette.unwrap().buttons {
             shown += 1;
             if let ButtonState::Locked { reason } = button.state {
@@ -1220,7 +1275,7 @@ fn research_overview_marks_done_next_and_locked() {
     let library = fx.spawn(fx.rules.id_of("bld.library").unwrap(), 1, 20, 20);
     fx.click(library, false);
     fx.ctl.tab = PaletteTab::Research;
-    fx.hud(HudRegionKind::CommandSlot, 1, PointerButton::Left, false);
+    fx.hud(HudRegionKind::CommandSlot, 3, PointerButton::Left, false);
     fx.hud(HudRegionKind::DataTab, 4, PointerButton::Left, false);
     let hud = fx.hud_snapshot();
     assert_eq!(hud.data_tab, 4);

@@ -979,6 +979,8 @@ pub struct Age {
     pub era: Era,
     /// The `map_scale` column.
     pub map_scale: String,
+    /// The `view_range` column: largest ground half-width of the camera in milli-tiles, 0 = globe.
+    pub view_range: i64,
 }
 /// One `faction` row.
 #[derive(Debug, Clone)]

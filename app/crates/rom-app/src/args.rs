@@ -6,7 +6,7 @@ use std::path::PathBuf;
 pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <file.png>] \
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] \
 [--map-size <width>x<height>] [--sphere <n>] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
-[--universe] [--zoom-all] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-hud] [--hud-scale <percent>] [--stats] \
+[--universe] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-hud] [--hud-scale <percent>] [--stats] \
 [--sun <orbit|fixed|night>] [--graticule <on|off>]";
 
 /// Default canvas size in pixels when `--size` is not given.
@@ -70,6 +70,10 @@ pub struct Options {
     pub sun_fixed: bool,
     /// With `sun_fixed`, put the light on the far side, so the first view is at midnight.
     pub sun_midnight: bool,
+    /// Zoom out to the farthest the player's age allows at the start.
+    pub zoom_out: bool,
+    /// Start every player in the age with this ordinal (testing).
+    pub age: Option<i64>,
     /// Draw the latitude and longitude lines of a sphere planet.
     pub graticule: bool,
     /// Print usage and exit.
@@ -106,6 +110,8 @@ impl Default for Options {
             view: None,
             sun_fixed: false,
             sun_midnight: false,
+            zoom_out: false,
+            age: None,
             graticule: true,
             help: false,
         }
@@ -174,6 +180,16 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             "--demo" => options.demo = true,
             "--universe" => options.universe = true,
             "--zoom-all" => options.zoom_all = true,
+            "--zoom-out" => options.zoom_out = true,
+            "--age" => {
+                let text = value("--age")?;
+                options.age = Some(
+                    text.parse::<i64>()
+                        .ok()
+                        .filter(|n| *n >= 0)
+                        .ok_or_else(|| format!("--age expects an age ordinal, got {text:?}"))?,
+                );
+            }
             "--view" => {
                 let text = value("--view")?;
                 let invalid = || format!("--view expects <level>[,home], got {text:?}");

@@ -163,6 +163,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn minimap_night_follows_the_light() {
+        let (width, height) = GLOBE_MINIMAP_SIZE;
+        let dirs = planet_pixel_dirs();
+        assert_eq!(dirs.len(), (width * height) as usize);
+        let base = vec![200u8; dirs.len() * 4];
+        let brightness_at = |pixels: &[u8], lon_deg: f32| {
+            let x = ((lon_deg / 360.0 + 0.5) * width as f32) as usize;
+            pixels[((height / 2) as usize * width as usize + x) * 4]
+        };
+        let mut out = Vec::new();
+        let noon_at_zero = crate::orbit::dir_from_lon_lat(0.0, 0.0);
+        night_pixels(&base, &dirs, noon_at_zero, &mut out);
+        assert_eq!(brightness_at(&out, 0.0), 200);
+        assert_eq!(brightness_at(&out, 180.0 - 1.0), 90);
+        // The light moves a quarter turn east: the bright side follows it.
+        let east = crate::orbit::dir_from_lon_lat(90f32.to_radians(), 0.0);
+        night_pixels(&base, &dirs, east, &mut out);
+        assert_eq!(brightness_at(&out, 90.0), 200);
+        assert_eq!(brightness_at(&out, -90.0), 90);
+        // On the terminator the brightness is half way between night and day.
+        assert!((140..=155).contains(&brightness_at(&out, 0.0)));
+        assert!(!light_moved(noon_at_zero, noon_at_zero));
+        assert!(light_moved(noon_at_zero, east));
+        let small = crate::orbit::dir_from_lon_lat(0.2f32.to_radians(), 0.0);
+        assert!(!light_moved(noon_at_zero, small));
+    }
+
+    #[test]
     fn declutter_keeps_the_highest_priority_of_overlapping_labels() {
         let boxes = [
             (0.0, 0.0, 50.0, 10.0, 2.0),
@@ -328,6 +356,55 @@ pub fn planet_pixel_tiles(n: u32) -> Vec<u32> {
         }
     }
     tiles
+}
+
+/// Brightness of the night side of the minimap, as a fraction of the day side.
+pub const NIGHT_BRIGHTNESS: f32 = 0.45;
+/// Sine of the sun's elevation over which the terminator fades, about four degrees.
+const TERMINATOR_WIDTH: f32 = 0.07;
+
+/// The unit direction each pixel of the equirectangular sphere minimap shows.
+pub fn planet_pixel_dirs() -> Vec<[f32; 3]> {
+    let (width, height) = GLOBE_MINIMAP_SIZE;
+    let mut dirs = Vec::with_capacity(width as usize * height as usize);
+    for y in 0..height {
+        let lat = (0.5 - (y as f32 + 0.5) / height as f32) * std::f32::consts::PI;
+        for x in 0..width {
+            let lon = ((x as f32 + 0.5) / width as f32 - 0.5) * std::f32::consts::TAU;
+            dirs.push(crate::orbit::dir_from_lon_lat(lon, lat));
+        }
+    }
+    dirs
+}
+
+/// Brightness factor of a surface point whose normal makes `cosine` with the direction to the
+/// light: 1 by day, [`NIGHT_BRIGHTNESS`] by night, smooth across the terminator.
+pub fn night_factor(cosine: f32) -> f32 {
+    let f = ((cosine + TERMINATOR_WIDTH) / (2.0 * TERMINATOR_WIDTH)).clamp(0.0, 1.0);
+    let smooth = f * f * (3.0 - 2.0 * f);
+    NIGHT_BRIGHTNESS + (1.0 - NIGHT_BRIGHTNESS) * smooth
+}
+
+/// Darkens the pixels of `src` (RGBA) whose direction faces away from the light `toward`.
+pub fn night_pixels(src: &[u8], dirs: &[[f32; 3]], toward: [f32; 3], out: &mut Vec<u8>) {
+    out.clear();
+    for (pixel, dir) in src.as_chunks::<4>().0.iter().zip(dirs) {
+        let cosine = dir[0] * toward[0] + dir[1] * toward[1] + dir[2] * toward[2];
+        let k = night_factor(cosine);
+        out.extend([
+            (f32::from(pixel[0]) * k).round() as u8,
+            (f32::from(pixel[1]) * k).round() as u8,
+            (f32::from(pixel[2]) * k).round() as u8,
+            pixel[3],
+        ]);
+    }
+}
+
+/// Whether the light moved far enough from `previous` to change a minimap pixel (about one
+/// pixel of longitude).
+pub fn light_moved(previous: [f32; 3], now: [f32; 3]) -> bool {
+    let cosine = previous[0] * now[0] + previous[1] * now[1] + previous[2] * now[2];
+    cosine < (std::f32::consts::TAU / GLOBE_MINIMAP_SIZE.0 as f32).cos()
 }
 
 /// Thin economic-radius circles, projected to either surface's minimap.
