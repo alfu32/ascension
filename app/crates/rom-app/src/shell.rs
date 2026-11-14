@@ -106,6 +106,7 @@ pub fn run(options: &Options) -> ExitCode {
                     window,
                     cx,
                 );
+                view.update(cx, |view, _| view.ignore_pointer());
                 if let Some(seconds) = options.bench_seconds {
                     let bench = bench::Bench {
                         seconds,

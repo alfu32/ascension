@@ -1355,10 +1355,20 @@ fn task_30_scripts_reach_the_capture_states_without_a_window() {
                 Some(Some(true)),
                 "{hud:?}"
             );
+            // The circle shows the grown radius: the stat plus the building bonus.
+            let grown: Vec<i64> = game
+                .world
+                .entities()
+                .filter(|e| e.owner == PLAYER)
+                .map(|e| game.world.city_economic_radius(e.id))
+                .filter(|&r| r > 16_000)
+                .collect();
             assert!(
                 hud.city_radii
                     .iter()
-                    .any(|c| c.economic == 16_000 && c.spacing == 20_000 && c.minimap)
+                    .any(|c| grown.contains(&c.economic) && c.spacing == 20_000 && c.minimap),
+                "{:?} vs {grown:?}",
+                hud.city_radii
             );
         } else {
             let palette = hud.palette.as_ref().expect("library selected");

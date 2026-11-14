@@ -1679,7 +1679,7 @@ impl Controller {
                     && e.build_progress.is_none()
                     && !e.neutralised
                 {
-                    territory.economic_radius
+                    world.city_economic_radius(e.id)
                 } else {
                     0
                 };

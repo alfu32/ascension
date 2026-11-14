@@ -36,9 +36,17 @@ pub struct WorldView {
     recent_presents: VecDeque<Instant>,
     /// Canvas origin in window coordinates (logical pixels), measured during layout.
     origin: Rc<Cell<Point<Pixels>>>,
+    /// Whether the real pointer reaches the renderer; off for screenshot and benchmark runs,
+    /// where a pointer resting at the window edge would pan the camera.
+    pointer_input: bool,
 }
 
 impl WorldView {
+    /// Stops forwarding pointer moves to the renderer (automated screenshot and benchmark runs).
+    pub fn ignore_pointer(&mut self) {
+        self.pointer_input = false;
+    }
+
     /// Creates the view and starts polling the frame mailbox.
     pub fn new(
         bridge: RenderBridge,
@@ -91,6 +99,7 @@ impl WorldView {
             presented_size: (0, 0),
             recent_presents: VecDeque::new(),
             origin: Rc::new(Cell::new(Point::default())),
+            pointer_input: true,
         }
     }
 
@@ -247,6 +256,9 @@ impl Render for WorldView {
             .overflow_hidden()
             .bg(rgb(0x1b2430))
             .on_mouse_move(cx.listener(|view, event: &MouseMoveEvent, window, _| {
+                if !view.pointer_input {
+                    return;
+                }
                 let (x, y) = view.canvas_point(event.position, window);
                 view.bridge.push_input(InputEvent::PointerMoved { x, y });
             }))
