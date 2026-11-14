@@ -535,10 +535,18 @@ mod tests {
     }
 
     #[test]
-    fn sample_models_keep_to_their_budgets() {
+    fn composed_models_keep_to_their_budgets() {
         let (rules, book) = book();
         for id in SAMPLE {
-            let entry = book.entries.iter().find(|e| e.id == id).unwrap();
+            assert!(book.entries.iter().any(|e| e.id == id), "{id} missing");
+        }
+        for entry in &book.entries {
+            let id = &entry.id;
+            assert!(
+                entry.baked.warnings.is_empty(),
+                "{id}: {:?}",
+                entry.baked.warnings
+            );
             let building = rules.entity_type(entry.entity).unwrap().class == EntityClass::Building;
             let (near, far) = if building { (1_500, 300) } else { (300, 80) };
             let baked = &entry.baked;
@@ -561,6 +569,150 @@ mod tests {
             } else {
                 assert!((0.9..=1.1).contains(&size[1]), "{id}: {} tall", size[1]);
             }
+        }
+    }
+
+    /// Faces lower than this (tiles) belong to the yard a building stands on.
+    const GROUND_PLATE: f32 = 0.15;
+    /// Pixel size of the team-colour count, in tiles.
+    const PIXEL: f32 = 0.02;
+
+    /// Share of what the gameplay camera sees of a model from the four sides (orthographic, with
+    /// depth, the yard left out) that wears the owner's colour.
+    fn team_share(mesh: &rom_render::ModelMesh) -> f32 {
+        let (s, c) = GAME_PITCH.to_radians().sin_cos();
+        let dot = |a: [f32; 3], b: [f32; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        let (mut team, mut seen) = (0_usize, 0_usize);
+        for (eye, right) in [
+            ([0.0, s, c], [1.0, 0.0, 0.0]),
+            ([c, s, 0.0], [0.0, 0.0, -1.0]),
+            ([0.0, s, -c], [-1.0, 0.0, 0.0]),
+            ([-c, s, 0.0], [0.0, 0.0, 1.0]),
+        ] {
+            let up = [
+                eye[1] * right[2] - eye[2] * right[1],
+                eye[2] * right[0] - eye[0] * right[2],
+                eye[0] * right[1] - eye[1] * right[0],
+            ];
+            let screen: Vec<[f32; 3]> = mesh
+                .positions
+                .iter()
+                .map(|p| [dot(*p, right) / PIXEL, dot(*p, up) / PIXEL, dot(*p, eye)])
+                .collect();
+            let lo = screen
+                .iter()
+                .fold([f32::MAX; 2], |m, p| [m[0].min(p[0]), m[1].min(p[1])]);
+            let hi = screen
+                .iter()
+                .fold([f32::MIN; 2], |m, p| [m[0].max(p[0]), m[1].max(p[1])]);
+            let (w, h) = ((hi[0] - lo[0]) as usize + 2, (hi[1] - lo[1]) as usize + 2);
+            // Nearest depth and what lies there: 0 nothing, 1 yard, 2 building, 3 team colour.
+            let mut depth = vec![f32::MIN; w * h];
+            let mut what = vec![0_u8; w * h];
+            for t in mesh.indices.chunks(3) {
+                let i = [t[0], t[1], t[2]].map(usize::from);
+                let [a, b, d] = i.map(|k| screen[k]);
+                let kind = if i.iter().all(|&k| mesh.positions[k][1] < GROUND_PLATE) {
+                    1
+                } else if mesh.colors[i[0]][3] & rom_render::models::TEAM_BIT != 0 {
+                    3
+                } else {
+                    2
+                };
+                let area = (b[0] - a[0]) * (d[1] - a[1]) - (d[0] - a[0]) * (b[1] - a[1]);
+                if area.abs() < 1e-9 {
+                    continue;
+                }
+                let x0 = (a[0].min(b[0]).min(d[0]) - lo[0]).floor().max(0.0) as usize;
+                let x1 = ((a[0].max(b[0]).max(d[0]) - lo[0]).ceil() as usize).min(w - 1);
+                let y0 = (a[1].min(b[1]).min(d[1]) - lo[1]).floor().max(0.0) as usize;
+                let y1 = ((a[1].max(b[1]).max(d[1]) - lo[1]).ceil() as usize).min(h - 1);
+                for y in y0..=y1 {
+                    for x in x0..=x1 {
+                        let (px, py) = (x as f32 + lo[0] + 0.5, y as f32 + lo[1] + 0.5);
+                        let edge = |p: [f32; 3], q: [f32; 3]| {
+                            ((q[0] - p[0]) * (py - p[1]) - (px - p[0]) * (q[1] - p[1])) / area
+                        };
+                        let (u, v, r) = (edge(b, d), edge(d, a), edge(a, b));
+                        if u < 0.0 || v < 0.0 || r < 0.0 {
+                            continue;
+                        }
+                        let z = u * a[2] + v * b[2] + r * d[2];
+                        if z > depth[y * w + x] {
+                            depth[y * w + x] = z;
+                            what[y * w + x] = kind;
+                        }
+                    }
+                }
+            }
+            seen += what.iter().filter(|&&k| k >= 2).count();
+            team += what.iter().filter(|&&k| k == 3).count();
+        }
+        team as f32 / seen.max(1) as f32
+    }
+
+    #[test]
+    fn new_buildings_wear_the_owners_colour() {
+        let (rules, book) = book();
+        let approved = approved(APPROVED);
+        let mut outside = Vec::new();
+        for entry in &book.entries {
+            let building = rules.entity_type(entry.entity).map(|t| t.class);
+            if building != Some(EntityClass::Building) || approved.contains_key(&entry.id) {
+                continue;
+            }
+            // About 15-25 % of what is seen (art-direction.md).
+            let share = team_share(&entry.baked.near);
+            if !(0.12..=0.30).contains(&share) {
+                outside.push(format!("{}: {:.0} %", entry.id, share * 100.0));
+            }
+        }
+        assert!(outside.is_empty(), "team colour share: {outside:?}");
+    }
+
+    #[test]
+    fn early_buildings_have_a_composed_look_from_their_first_age() {
+        let (rules, book) = book();
+        let classical = rules
+            .id_of("age.classical")
+            .and_then(|a| rules.ages.get(&a))
+            .map(|a| a.ordinal)
+            .unwrap();
+        let mut checked = 0;
+        for (&id, et) in &rules.entity_types {
+            let Some(first) = et.first_age_id else {
+                continue;
+            };
+            let early = rules
+                .ages
+                .get(&first)
+                .is_some_and(|a| a.ordinal <= classical);
+            if et.class != EntityClass::Building || !early {
+                continue;
+            }
+            let has = book
+                .entries
+                .iter()
+                .any(|e| e.entity == id && e.age == Some(first) && e.faction.is_none());
+            assert!(
+                has,
+                "{} has no composed look for its first age",
+                rules.key(id)
+            );
+            checked += 1;
+        }
+        assert!(checked >= 15, "{checked}");
+        // The ancient buildings change look in the classical age, as the city does.
+        for key in [
+            "bld.barracks",
+            "bld.library",
+            "bld.market",
+            "bld.tower",
+            "bld.dock",
+            "bld.woodcutter_camp",
+        ] {
+            let id = format!("{key}@classical");
+            assert!(book.entries.iter().any(|e| e.id == id), "{id} missing");
         }
     }
 

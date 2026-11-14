@@ -3,7 +3,7 @@
 //! Surface detail comes from the material programs, not from geometry: a shape emits only its
 //! silhouette, a few insets (openings, sills) and, for the far version, even less.
 
-use std::f32::consts::{FRAC_PI_2, TAU};
+use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
 use crate::models::{ModelMesh, PartSpec, Shape, TEAM_BIT};
 
@@ -13,7 +13,38 @@ const PLAIN: u8 = 0;
 const TIMBER: u8 = 12;
 const METAL: u8 = 15;
 
-/// Turn about y (radians, counter-clockwise seen from above), uniform scale, then a move.
+/// A rotation as the rows of a 3 by 3 matrix.
+pub type Rotation = [[f32; 3]; 3];
+
+fn mat_vec(m: &Rotation, v: [f32; 3]) -> [f32; 3] {
+    m.map(|row| dot(row, v))
+}
+
+fn mat_mul(a: &Rotation, b: &Rotation) -> Rotation {
+    std::array::from_fn(|i| std::array::from_fn(|j| (0..3).map(|k| a[i][k] * b[k][j]).sum()))
+}
+
+/// The turn by `yaw` radians about y as a matrix (the turn of [`Place::turn`]).
+fn yaw_matrix(yaw: f32) -> Rotation {
+    let (s, c) = yaw.sin_cos();
+    [[c, 0.0, s], [0.0, 1.0, 0.0], [-s, 0.0, c]]
+}
+
+/// A lean: roll tips the top towards +x, then pitch tips it towards +z (degrees); `None` when
+/// both are zero, so upright parts take exactly the path they took before leaning existed.
+pub fn tilt(pitch_deg: f32, roll_deg: f32) -> Option<Rotation> {
+    if pitch_deg == 0.0 && roll_deg == 0.0 {
+        return None;
+    }
+    let (sp, cp) = pitch_deg.to_radians().sin_cos();
+    let (sr, cr) = roll_deg.to_radians().sin_cos();
+    let pitch = [[1.0, 0.0, 0.0], [0.0, cp, -sp], [0.0, sp, cp]];
+    let roll = [[cr, sr, 0.0], [-sr, cr, 0.0], [0.0, 0.0, 1.0]];
+    Some(mat_mul(&pitch, &roll))
+}
+
+/// A lean (`tilt`), then a turn about y (radians, counter-clockwise seen from above), uniform
+/// scale, then a move.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Place {
     /// Turn about the vertical axis, in radians.
@@ -22,6 +53,8 @@ pub struct Place {
     pub scale: f32,
     /// Where the local origin lands.
     pub at: [f32; 3],
+    /// Rotation applied before the turn; `None` keeps the part upright.
+    pub tilt: Option<Rotation>,
 }
 
 impl Place {
@@ -30,6 +63,7 @@ impl Place {
         yaw: 0.0,
         scale: 1.0,
         at: [0.0; 3],
+        tilt: None,
     };
 
     /// A move by `at` with no turn.
@@ -50,6 +84,10 @@ impl Place {
 
     /// `v` turned (and scaled) as this place turns local directions.
     pub fn turn(&self, v: [f32; 3]) -> [f32; 3] {
+        let v = match &self.tilt {
+            Some(m) => mat_vec(m, v),
+            None => v,
+        };
         let (s, c) = self.yaw.sin_cos();
         [
             (v[0] * c + v[2] * s) * self.scale,
@@ -66,10 +104,23 @@ impl Place {
 
     /// `child` placed inside this place.
     pub fn then(&self, child: &Place) -> Place {
+        // Upright parents add turns; a leaning parent folds the child's turn into its lean.
+        let (yaw, tilt) = match &self.tilt {
+            None => (self.yaw + child.yaw, child.tilt),
+            Some(lean) => {
+                let inner = mat_mul(lean, &yaw_matrix(child.yaw));
+                let tilt = match &child.tilt {
+                    Some(c) => mat_mul(&inner, c),
+                    None => inner,
+                };
+                (self.yaw, Some(tilt))
+            }
+        };
         Place {
-            yaw: self.yaw + child.yaw,
+            yaw,
             scale: self.scale * child.scale,
             at: self.apply(child.at),
+            tilt,
         }
     }
 }
@@ -398,13 +449,19 @@ pub fn paint(part: &PartSpec, p: &mut Painter<'_>, fine: bool) -> Vec<(&'static 
         Shape::Cylinder => {
             let r = k.size("w", 1.0) / 2.0;
             let taper = k.get("taper", 0.0).clamp(0.0, 1.0);
-            p.cylinder(
-                [0.0; 3],
-                (r, r * (1.0 - taper)),
-                k.size("h", 1.0),
-                segments(&k, 10, fine, 4),
-                true,
-            );
+            let n = segments(&k, 10, fine, 4);
+            p.cylinder([0.0; 3], (r, r * (1.0 - taper)), k.size("h", 1.0), n, true);
+            // A leaning cylinder (a log, a wheel) shows its foot unless told otherwise.
+            let leaning = if p.place.tilt.is_some() { 1.0 } else { 0.0 };
+            if k.get("bottom", leaning) > 0.5 {
+                let ring: Vec<[f32; 3]> = (0..n)
+                    .map(|i| {
+                        let a = i as f32 / n as f32 * TAU;
+                        [r * a.cos(), 0.0, r * a.sin()]
+                    })
+                    .collect();
+                p.face(&ring, [0.0, -1.0, 0.0]);
+            }
         }
         Shape::Cone => {
             p.cone(
@@ -421,6 +478,8 @@ pub fn paint(part: &PartSpec, p: &mut Painter<'_>, fine: bool) -> Vec<(&'static 
         Shape::Palisade => palisade(&k, p, fine),
         Shape::Banner => banner(&k, p, fine),
         Shape::Awning => awning(&k, p),
+        Shape::Arch => arch(&k, p, fine),
+        Shape::Hull => hull(&k, p, fine),
         Shape::Figure => return figure(&k, p, fine),
         Shape::Include => {}
     }
@@ -993,6 +1052,119 @@ fn awning(k: &Knobs<'_>, p: &mut Painter<'_>) {
     p.surface = cloth;
 }
 
+/// `arch`: a wall `w` wide, `h` high and `t` thick along x, pierced in the middle by an opening
+/// `span` wide whose round head springs at `spring`.
+fn arch(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
+    let (w, h, t) = (k.size("w", 2.0), k.size("h", 2.0), k.size("t", 0.4));
+    let span = k.size("span", w * 0.5).min(w - 0.1).max(0.05);
+    let r = span / 2.0;
+    let spring = k
+        .get("spring", h * 0.45)
+        .clamp(0.0, (h - r - 0.05).max(0.0));
+    let n = segments(k, 8, fine, 3);
+    let (x, z) = (w / 2.0, t / 2.0);
+    let arc: Vec<[f32; 2]> = (0..=n)
+        .map(|i| {
+            let a = PI * (1.0 - i as f32 / n as f32);
+            [r * a.cos(), spring + r * a.sin()]
+        })
+        .collect();
+    for s in [1.0_f32, -1.0] {
+        let (zf, out) = (s * z, [0.0, 0.0, s]);
+        p.face(
+            &[[-x, 0.0, zf], [-r, 0.0, zf], [-r, h, zf], [-x, h, zf]],
+            out,
+        );
+        p.face(&[[r, 0.0, zf], [x, 0.0, zf], [x, h, zf], [r, h, zf]], out);
+        for pair in arc.windows(2) {
+            let (a, b) = (pair[0], pair[1]);
+            p.face(
+                &[
+                    [a[0], a[1], zf],
+                    [b[0], b[1], zf],
+                    [b[0], h, zf],
+                    [a[0], h, zf],
+                ],
+                out,
+            );
+        }
+        // The outer end and the jamb of the opening on this side of x.
+        p.face(
+            &[
+                [s * x, 0.0, -z],
+                [s * x, 0.0, z],
+                [s * x, h, z],
+                [s * x, h, -z],
+            ],
+            [s, 0.0, 0.0],
+        );
+        p.face(
+            &[
+                [s * r, 0.0, -z],
+                [s * r, 0.0, z],
+                [s * r, spring, z],
+                [s * r, spring, -z],
+            ],
+            [-s, 0.0, 0.0],
+        );
+    }
+    for (i, pair) in arc.windows(2).enumerate() {
+        let (a, b) = (pair[0], pair[1]);
+        let mid = PI * (1.0 - (i as f32 + 0.5) / n as f32);
+        p.face(
+            &[
+                [a[0], a[1], z],
+                [b[0], b[1], z],
+                [b[0], b[1], -z],
+                [a[0], a[1], -z],
+            ],
+            [-mid.cos(), -mid.sin(), 0.0],
+        );
+    }
+    p.face(
+        &[[-x, h, -z], [x, h, -z], [x, h, z], [-x, h, z]],
+        [0.0, 1.0, 0.0],
+    );
+}
+
+/// `hull`: an open boat `w` long along x, `d` across and `h` deep amidships, its ends rising by
+/// `sheer` to a point; planked inside and out in the near version, outside only far out.
+fn hull(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
+    let (w, d, h) = (k.size("w", 2.0), k.size("d", 0.7), k.size("h", 0.35));
+    let sheer = k.get("sheer", h * 0.6).max(0.0);
+    let n = segments(k, 8, fine, 4).max(2);
+    // Keel, chine and gunwale of one side at each station along the hull.
+    let station = |i: usize, s: f32| {
+        let u = -1.0 + 2.0 * i as f32 / n as f32;
+        let x = u * w / 2.0;
+        let beam = d / 2.0 * (1.0 - u * u).max(0.0).sqrt();
+        let top = h + sheer * u * u;
+        let keel = (h + sheer) * u.abs().powi(3);
+        let chine = keel + (top - keel) * 0.45;
+        [
+            [x, keel, 0.0],
+            [x, chine, s * beam * 0.82],
+            [x, top, s * beam],
+        ]
+    };
+    for s in [1.0_f32, -1.0] {
+        for i in 0..n {
+            let (a, b) = (station(i, s), station(i + 1, s));
+            for strake in 0..2 {
+                let quad = [a[strake], b[strake], b[strake + 1], a[strake + 1]];
+                let c = quad.iter().fold([0.0; 3], |m, q| {
+                    [m[0] + q[0] / 4.0, m[1] + q[1] / 4.0, m[2] + q[2] / 4.0]
+                });
+                let out = [c[0], c[1] - h * 0.7, c[2]];
+                p.face(&quad, out);
+                if fine {
+                    p.face(&quad, out.map(|v| -v));
+                }
+            }
+        }
+    }
+}
+
 /// `figure`: a standing person `h` tall facing +z, tunic in the part's surface, with sockets
 /// at the head, both hands and the back.
 fn figure(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) -> Vec<(&'static str, Place)> {
@@ -1293,6 +1465,151 @@ mod tests {
             [-1.0, 0.0, -0.5],
             [1.0, 1.44, 0.5],
         );
+    }
+
+    #[test]
+    fn arches_have_their_bounds_and_triangles() {
+        // Two piers and eight spandrels on each face, eight intrados panels, two ends, two
+        // jambs and the top.
+        check(
+            Shape::Arch,
+            &[
+                ("w", 3.0),
+                ("h", 2.5),
+                ("t", 0.5),
+                ("span", 1.2),
+                ("spring", 1.0),
+            ],
+            2 * (4 + 2 * 8) + 2 * 8 + 4 + 4 + 2,
+            [-1.5, 0.0, -0.25],
+            [1.5, 2.5, 0.25],
+        );
+        // The far version has half the segments; an arch springing from the ground has no jambs.
+        let far = bake_model(&ModelSpec {
+            parts: vec![part(Shape::Arch, &[("spring", 0.0), ("segments", 6.0)])],
+        });
+        assert_eq!(far.near.triangles(), 2 * (4 + 2 * 6) + 2 * 6 + 4 + 2);
+        assert_eq!(far.far.triangles(), 2 * (4 + 2 * 3) + 2 * 3 + 4 + 2);
+    }
+
+    #[test]
+    fn hulls_have_their_bounds_and_triangles() {
+        // Eight stations: two strakes a side, inside and out, the end panels triangles.
+        check(
+            Shape::Hull,
+            &[("w", 2.0), ("d", 0.6), ("h", 0.3), ("sheer", 0.2)],
+            2 * 2 * 2 * (8 * 2 - 2),
+            [-1.0, 0.0, -0.3],
+            [1.0, 0.5, 0.3],
+        );
+        let far = bake_model(&ModelSpec {
+            parts: vec![part(Shape::Hull, &[])],
+        });
+        assert_eq!(far.far.triangles(), 2 * 2 * (4 * 2 - 2));
+    }
+
+    #[test]
+    fn leaning_cylinders_close_their_foot() {
+        let log = |extra: &[(&str, f32)]| {
+            let knobs: Vec<(&str, f32)> = [("w", 0.3), ("h", 1.5), ("segments", 6.0)]
+                .iter()
+                .chain(extra)
+                .copied()
+                .collect();
+            bake_model(&ModelSpec {
+                parts: vec![part(Shape::Cylinder, &knobs)],
+            })
+            .near
+            .triangles()
+        };
+        assert_eq!(log(&[]), 12 + 4);
+        assert_eq!(log(&[("roll", 90.0)]), 12 + 4 + 4);
+        assert_eq!(log(&[("roll", 90.0), ("bottom", 0.0)]), 12 + 4);
+        assert_eq!(log(&[("bottom", 1.0)]), 12 + 4 + 4);
+    }
+
+    #[test]
+    fn pitch_and_roll_lean_a_part_about_its_base() {
+        // A post two tiles long rolled flat lies along +x; pitched flat it lies along +z.
+        let post = [("w", 0.4), ("h", 2.0), ("segments", 4.0)];
+        let lying = |extra: &[(&str, f32)]| {
+            let knobs: Vec<(&str, f32)> = post.iter().chain(extra).copied().collect();
+            bake_model(&ModelSpec {
+                parts: vec![part(Shape::Cylinder, &knobs)],
+            })
+        };
+        let [lo, hi] = lying(&[("roll", 90.0), ("y", 0.2)]).bounds();
+        assert!(
+            close(lo, [0.0, 0.0, -0.2]) && close(hi, [2.0, 0.4, 0.2]),
+            "{lo:?} {hi:?}"
+        );
+        let [lo, hi] = lying(&[("pitch", 90.0), ("y", 0.2)]).bounds();
+        assert!(
+            close(lo, [-0.2, 0.0, 0.0]) && close(hi, [0.2, 0.4, 2.0]),
+            "{lo:?} {hi:?}"
+        );
+        // A lean of 30 degrees towards the front, then a quarter turn: the top ends up east.
+        let [lo, hi] = lying(&[("pitch", 30.0), ("yaw", 90.0)]).bounds();
+        let (s, c) = 30_f32.to_radians().sin_cos();
+        assert!((hi[0] - (2.0 * s + 0.2 * c)).abs() < 1e-3, "{hi:?}");
+        assert!(
+            (hi[1] - (2.0 * c + 0.2 * s)).abs() < 1e-3 && lo[1] < 0.0,
+            "{lo:?} {hi:?}"
+        );
+        // Leaning keeps every normal unit length and adds only the closed foot.
+        let leaning = lying(&[("pitch", 25.0), ("roll", -40.0)]);
+        assert_eq!(
+            leaning.near.triangles(),
+            lying(&[("bottom", 1.0)]).near.triangles()
+        );
+        assert!(
+            leaning
+                .near
+                .normals
+                .iter()
+                .all(|n| (dot(*n, *n) - 1.0).abs() < 1e-4)
+        );
+    }
+
+    #[test]
+    fn zero_lean_bakes_exactly_the_upright_part() {
+        let knobs = [
+            ("w", 1.3),
+            ("d", 0.9),
+            ("h", 1.1),
+            ("gable", 30.0),
+            ("yaw", 37.0),
+        ];
+        let upright = bake_model(&ModelSpec {
+            parts: vec![part(Shape::Box, &knobs)],
+        });
+        let zeroed: Vec<(&str, f32)> = knobs
+            .iter()
+            .copied()
+            .chain([("pitch", 0.0), ("roll", 0.0)])
+            .collect();
+        let zero = bake_model(&ModelSpec {
+            parts: vec![part(Shape::Box, &zeroed)],
+        });
+        assert_eq!(upright, zero);
+        assert_eq!(tilt(0.0, 0.0), None);
+    }
+
+    #[test]
+    fn leaning_parents_carry_their_lean_to_children() {
+        // A child turned a quarter inside a parent rolled flat: same as one combined matrix.
+        let parent = Place {
+            tilt: tilt(0.0, 90.0),
+            ..Place::at([1.0, 0.0, 0.0])
+        };
+        let child = Place::turned([0.0, 1.0, 0.0], FRAC_PI_2);
+        let p = parent.then(&child).apply([0.0, 1.0, 1.0]);
+        let direct = parent.apply(child.apply([0.0, 1.0, 1.0]));
+        assert!(close(p, direct), "{p:?} {direct:?}");
+        // Upright places still add their turns.
+        let upright = Place::turned([0.0; 3], 0.3).then(&Place::turned([0.0; 3], 0.4));
+        assert_eq!(upright.tilt, None);
+        assert!((upright.yaw - 0.7).abs() < 1e-6);
     }
 
     #[test]

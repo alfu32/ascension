@@ -58,21 +58,28 @@ pub enum Shape {
     Banner,
     /// A sloping cloth sheet on posts.
     Awning,
+    /// A wall pierced by a round-headed opening: a gateway or one bay of an arcade.
+    Arch,
+    /// An open boat's hull along x, pointed at both ends.
+    Hull,
     /// A standing person about one tile tall, with sockets for what it carries.
     Figure,
     /// Another composed mesh placed as a sub-assembly.
     Include,
 }
 
-/// Knobs every part understands: position, turn, repeat (`repeat` copies, each moved by `dx`,
-/// `dz`), and `far` (0: left out of the far version).
-pub const COMMON_KNOBS: &[&str] = &["x", "y", "z", "yaw", "repeat", "dx", "dz", "far"];
+/// Knobs every part understands: position, turn, lean (`roll` tips the top towards +x, then
+/// `pitch` towards +z, degrees, about the part's base centre; on a roof `pitch` is its slope),
+/// repeat (`repeat` copies, each moved by `dx`, `dz`), and `far` (0: left out of the far version).
+pub const COMMON_KNOBS: &[&str] = &[
+    "x", "y", "z", "yaw", "pitch", "roll", "repeat", "dx", "dz", "far",
+];
 /// Colour knobs every part understands.
 pub const COMMON_COLOURS: &[&str] = &["tint"];
 
 impl Shape {
     /// Every shape, in a fixed order.
-    pub const ALL: [Shape; 17] = [
+    pub const ALL: [Shape; 19] = [
         Shape::Box,
         Shape::Plinth,
         Shape::GableRoof,
@@ -88,6 +95,8 @@ impl Shape {
         Shape::Palisade,
         Shape::Banner,
         Shape::Awning,
+        Shape::Arch,
+        Shape::Hull,
         Shape::Figure,
         Shape::Include,
     ];
@@ -115,6 +124,8 @@ impl Shape {
             Shape::Palisade => "palisade",
             Shape::Banner => "banner",
             Shape::Awning => "awning",
+            Shape::Arch => "arch",
+            Shape::Hull => "hull",
             Shape::Figure => "figure",
             Shape::Include => "include",
         }
@@ -145,7 +156,7 @@ impl Shape {
             Shape::HipRoof => &["w", "d", "pitch", "overhang", "t"],
             Shape::FlatRoof => &["w", "d", "t", "overhang", "parapet", "parapet_t"],
             Shape::Dome => &["w", "h", "segments"],
-            Shape::Cylinder => &["w", "h", "segments", "taper"],
+            Shape::Cylinder => &["w", "h", "segments", "taper", "bottom"],
             Shape::Cone => &["w", "h", "segments"],
             Shape::ColumnRow => &["count", "radius", "spacing", "h", "segments", "capital"],
             Shape::Wall => &[
@@ -171,6 +182,8 @@ impl Shape {
             Shape::Palisade => &["w", "d", "h", "t", "ring", "gap", "spacing"],
             Shape::Banner => &["h", "fw", "fh", "pole", "notch"],
             Shape::Awning => &["w", "d", "h", "rise", "posts"],
+            Shape::Arch => &["w", "h", "t", "span", "spring", "segments"],
+            Shape::Hull => &["w", "d", "h", "sheer", "segments"],
             Shape::Figure => &["h", "build"],
             Shape::Include => &["scale"],
         }
@@ -490,6 +503,12 @@ impl Bake {
                 knob("repeat", 1.0).round().clamp(1.0, 64.0) as usize
             };
             let (dx, dz) = (knob("dx", 0.0), knob("dz", 0.0));
+            // A roof's own `pitch` is its slope; such shapes lean by `roll` only.
+            let lean_pitch = if part.shape.knobs().contains(&"pitch") {
+                0.0
+            } else {
+                knob("pitch", 0.0)
+            };
             let start = (self.mesh.positions.len(), self.mesh.indices.len());
             let place_of = |copy: usize| {
                 parent.then(&Place {
@@ -504,6 +523,7 @@ impl Bake {
                         knob("y", 0.0),
                         knob("z", 0.0) + dz * copy as f32,
                     ],
+                    tilt: kit::tilt(lean_pitch, knob("roll", 0.0)),
                 })
             };
             // Later parts attach to the first copy, even when the far version leaves the part out.
@@ -720,6 +740,23 @@ mod tests {
         assert_eq!(a.fingerprint(), b.fingerprint());
         let moved = one(part.knob("x", 0.01));
         assert_ne!(a.fingerprint(), moved.fingerprint());
+    }
+
+    #[test]
+    fn a_roof_pitch_is_its_slope_not_a_lean() {
+        let roof = |knobs: &[(&str, f32)]| {
+            let mut part = PartSpec::new("roof", Shape::GableRoof, plain());
+            for (k, v) in knobs {
+                part = part.knob(k, *v);
+            }
+            one(part)
+        };
+        let steep = roof(&[("pitch", 50.0)]);
+        // Leaning by roll still works; the slope does not lean the part.
+        let [lo, hi] = steep.bounds();
+        assert!((lo[0] + hi[0]).abs() < 1e-4 && (lo[2] + hi[2]).abs() < 1e-4);
+        let rolled = roof(&[("pitch", 50.0), ("roll", 20.0)]);
+        assert_ne!(rolled.bounds(), steep.bounds());
     }
 
     #[test]
