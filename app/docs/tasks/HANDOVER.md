@@ -90,6 +90,21 @@ card.
 
 ## Known open items
 
+- **Zoom in universe matches before the fusion age (found 2026-11-14,
+  unfixed):** `--sphere 192 --age 8 --zoom-out` frames the same close view
+  as `--age 0`, while `--single-planet --sphere 192 --age 8 --zoom-out`
+  shows almost the whole globe (task 35 limits). In universe matches the
+  age's view range does not seem to widen the planet camera before view
+  range 0 (fusion). Suspects: the startup `zoom_out` flag consumed before the
+  universe `ZoomCamera` exists, or the globe limit not reaching the universe
+  camera (`rom-render/src/worker.rs` ~l.733, `rom-app/src/universe_view.rs`
+  `update_limits`). Check the mouse-wheel path too, not only `--zoom-out`.
+  The owner also asked why the game does not zoom out to the planet, system
+  and star map: by design the system and star map open at the fusion age
+  (`age.view_range` = 0 from ordinal 9); ages 0–8 allow 30–110 tiles.
+  Whether the whole home planet should be viewable earlier is the owner's
+  call (see the reply of 2026-11-14).
+
 - Frame rate not measured since 0.0.42 (55.2/59.0 fps then): every bench of
   0.0.43 ran beside the owner's own game window and test runs (10–11 fps for
   every build alike). Rerun `--single-planet --sphere 192 --demo --bench 10`
