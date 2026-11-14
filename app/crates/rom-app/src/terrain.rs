@@ -15,8 +15,8 @@ use rom_rules::{DefId, Rules, build_rules_db};
 use crate::args::{LookAt, Options};
 use crate::match_setup::default_factions;
 
-const SCHEMA: &str = include_str!("../../../db/schema.sql");
-const SEED: &str = include_str!("../../../db/seed.sql");
+pub(crate) const SCHEMA: &str = include_str!("../../../db/schema.sql");
+pub(crate) const SEED: &str = include_str!("../../../db/seed.sql");
 
 /// Builds the rules from the embedded schema and seed.
 pub fn load_rules() -> Result<Rules, String> {

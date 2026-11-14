@@ -30,6 +30,7 @@ use crate::orbit::{
 use crate::pick::{PickContext, PickController, PickEvent, canvas_view, canvas_view_orbit};
 use crate::pixels::rgba_to_bgra_flipped;
 use crate::readback::{AsyncReadback, ReadyFrame};
+use crate::review::{Review, sheet_cell};
 use crate::scene::{BakeReport, Scene};
 use crate::space::{SpaceContext, SpacePicker, SpaceSnapshot, ship_frame_pos};
 use crate::stats::{RenderStats, StatsWindow};
@@ -143,6 +144,7 @@ struct Shared {
     graticule: AtomicBool,
     snapshot_wanted: AtomicBool,
     snapshot: Mutex<Option<Arc<FramePixels>>>,
+    review: Mutex<Option<Arc<Review>>>,
     stats: Mutex<RenderStats>,
     stop: AtomicBool,
     finished: (Mutex<bool>, Condvar),
@@ -155,6 +157,11 @@ pub struct RenderBridge {
 }
 
 impl RenderBridge {
+    /// Publishes a review layout (the model gallery) for the flat scene.
+    pub fn publish_review(&self, review: Arc<Review>) {
+        *lock(&self.shared.review) = Some(review);
+    }
+
     /// Sets the canvas size in physical pixels.
     pub fn publish_layout(&self, width: u32, height: u32) {
         *lock(&self.shared.layout) = (width, height);
@@ -453,6 +460,7 @@ impl Shared {
             graticule: AtomicBool::new(true),
             snapshot_wanted: AtomicBool::new(false),
             snapshot: Mutex::new(None),
+            review: Mutex::new(None),
             stats: Mutex::new(RenderStats::default()),
             stop: AtomicBool::new(false),
             finished: (Mutex::new(false), Condvar::new()),
@@ -530,6 +538,8 @@ fn render_loop(shared: &Shared) {
     let mut picker = PickController::default();
     let mut over_hud = false;
     let mut map_size = (0_u32, 0_u32);
+    let mut review: Option<Arc<Review>> = None;
+    let mut sheet_target: Option<(RenderTexture2D, (u32, u32))> = None;
     let mut sequence = 0_u64;
     let started = Instant::now();
     let mut last_frame = started;
@@ -681,6 +691,11 @@ fn render_loop(shared: &Shared) {
                 terrain.width, terrain.height
             );
             shared.terrain_ready.store(true, Ordering::Release);
+        }
+        if let Some(published) = lock(&shared.review).take() {
+            scene.set_review(published.light, published.near_only);
+            scene.extra_lines = published.lines.clone();
+            review = Some(published);
         }
         if let Some(vision) = lock(&shared.vision).take()
             && vision.is_valid()
@@ -955,7 +970,35 @@ fn render_loop(shared: &Shared) {
                 scene.draw_zoomed(&mut rl, &thread, texture, zoom, orbit);
             }
             (Some(orbit), _) => scene.draw_globe(&mut rl, &thread, texture, orbit),
-            (None, _) => scene.draw(&mut rl, &thread, texture, &camera, elapsed, boxes),
+            (None, _) => match review.as_deref().filter(|r| !r.sheet.is_empty()) {
+                Some(sheet) => draw_sheet(
+                    &mut rl,
+                    &thread,
+                    &mut scene,
+                    (texture, *size),
+                    sheet,
+                    &mut sheet_target,
+                    (elapsed, boxes),
+                ),
+                None => scene.draw(&mut rl, &thread, texture, &camera, elapsed, boxes),
+            },
+        }
+        if let Some(review) = review
+            .as_deref()
+            .filter(|r| !r.labels.is_empty() || !r.sheet.is_empty())
+            && orbit.is_none()
+        {
+            if hud.is_none() {
+                match HudGpu::load(&mut rl, &thread, hud_layout.scale) {
+                    Ok(baked) => hud = Some(baked),
+                    Err(error) => eprintln!("rom-render: HUD: {error}"),
+                }
+            }
+            if let Some(hud) = &mut hud {
+                let tags = review_tags(review, &camera, *size);
+                let mut drawing = rl.begin_texture_mode(&thread, texture);
+                hud.draw_tags(&mut drawing, &hud_layout, &tags);
+            }
         }
         if hud_visible {
             if hud
@@ -1098,6 +1141,103 @@ fn render_loop(shared: &Shared) {
     drop(minimap);
     drop(target);
     drop(scene);
+}
+
+/// Draws each view of a review sheet into its cell of `target`.
+fn draw_sheet(
+    rl: &mut raylib::RaylibHandle,
+    thread: &raylib::RaylibThread,
+    scene: &mut Scene,
+    (target, size): (&mut RenderTexture2D, (u32, u32)),
+    review: &Review,
+    cell_target: &mut Option<(RenderTexture2D, (u32, u32))>,
+    (elapsed, boxes): (f32, usize),
+) {
+    use raylib::prelude::{Color, RaylibDraw, Rectangle, Vector2};
+    let count = review.sheet.len();
+    {
+        let mut drawing = rl.begin_texture_mode(thread, target);
+        drawing.clear_background(Color::new(24, 26, 30, 255));
+    }
+    for (index, view) in review.sheet.iter().enumerate() {
+        let ((x, y), cell) = sheet_cell(index, count, size);
+        if cell_target.as_ref().is_none_or(|(_, s)| *s != cell) {
+            *cell_target = None;
+            match rl.load_render_texture(thread, cell.0, cell.1) {
+                Ok(texture) => *cell_target = Some((texture, cell)),
+                Err(error) => {
+                    eprintln!("rom-render: sheet cell: {error}");
+                    return;
+                }
+            }
+        }
+        let Some((cell_texture, _)) = cell_target.as_mut() else {
+            return;
+        };
+        scene.draw(rl, thread, cell_texture, &view.camera, elapsed, boxes);
+        let mut drawing = rl.begin_texture_mode(thread, target);
+        drawing.draw_texture_rec(
+            cell_texture.texture(),
+            Rectangle::new(0.0, 0.0, cell.0 as f32, -(cell.1 as f32)),
+            Vector2::new(x as f32, y as f32),
+            Color::WHITE,
+        );
+        // A thin frame between the views.
+        drawing.draw_rectangle_lines(
+            x as i32,
+            y as i32,
+            cell.0 as i32,
+            cell.1 as i32,
+            Color::new(24, 26, 30, 255),
+        );
+    }
+}
+
+/// The labels of a review, projected onto the canvas of `size` pixels: through `camera`, or
+/// through each view of its sheet into that view's cell, plus each view's title.
+fn review_tags(
+    review: &Review,
+    camera: &Camera,
+    size: (u32, u32),
+) -> Vec<crate::scene::SpaceLabel> {
+    let mut tags = Vec::new();
+    let mut project = |camera: &Camera, (x0, y0): (u32, u32), cell: (u32, u32)| {
+        let view = crate::pick::View::new(camera, (cell.0 as f32, cell.1 as f32), 0.0);
+        for label in &review.labels {
+            if let Some((x, y, _)) = view.project(label.at)
+                && (0.0..cell.0 as f32).contains(&x)
+                && (0.0..cell.1 as f32).contains(&y)
+            {
+                tags.push(crate::scene::SpaceLabel {
+                    text: label.text.clone(),
+                    x: x + x0 as f32,
+                    y: y + y0 as f32,
+                    colour: label.colour,
+                    priority: 0.0,
+                });
+            }
+        }
+    };
+    if review.sheet.is_empty() {
+        project(camera, (0, 0), size);
+        return tags;
+    }
+    let count = review.sheet.len();
+    for (index, view) in review.sheet.iter().enumerate() {
+        let (corner, cell) = sheet_cell(index, count, size);
+        project(&view.camera, corner, cell);
+    }
+    for (index, view) in review.sheet.iter().enumerate() {
+        let ((x, y), cell) = sheet_cell(index, count, size);
+        tags.push(crate::scene::SpaceLabel {
+            text: view.title.clone(),
+            x: (x + cell.0 / 2) as f32,
+            y: y as f32 + 26.0,
+            colour: [255, 244, 214, 255],
+            priority: 1.0,
+        });
+    }
+    tags
 }
 
 /// Whether `event` is the graticule key: `G` without Ctrl or Alt while the command palette has

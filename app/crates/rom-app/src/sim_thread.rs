@@ -318,10 +318,19 @@ fn run(
     let mut window_ticks = 0_u32;
     let mut controller = Controller::new();
     let mut fog = FogPublisher;
+    let models = crate::looks::ModelBook::new(world.rules());
     let mut notices = Notices::default();
     let mut frames: BTreeMap<u32, Option<SpaceFrame>> = BTreeMap::new();
     notices.update(&world);
-    publish(&world, &controller, link, bridge, &mut fog, host.as_ref());
+    publish(
+        &world,
+        &controller,
+        link,
+        bridge,
+        &mut fog,
+        host.as_ref(),
+        &models,
+    );
     while !link.stop.load(Ordering::Acquire) {
         let now = Instant::now();
         let current = link.speed.load(Ordering::Relaxed);
@@ -406,7 +415,15 @@ fn run(
             }
             focus_camera(&world, &mut controller, bridge);
             window_ticks += 1;
-            publish(&world, &controller, link, bridge, &mut fog, host.as_ref());
+            publish(
+                &world,
+                &controller,
+                link,
+                bridge,
+                &mut fog,
+                host.as_ref(),
+                &models,
+            );
             while let Ok(command) = inbox.try_recv() {
                 if world.submit(command).is_err() {
                     link.stats.rejected.fetch_add(1, Ordering::Relaxed);
@@ -440,10 +457,11 @@ fn publish(
     bridge: &RenderBridge,
     fog: &mut FogPublisher,
     host: Option<&UniverseHost>,
+    models: &crate::looks::ModelBook,
 ) {
     let sightings = world.visible_entities(PLAYER);
     let body = host.map_or_else(|| world.surfaces()[0].body(), |h| h.viewed);
-    let snapshot = snapshot_on(world, body, &sightings);
+    let snapshot = snapshot_on(world, body, &sightings, models);
     link.stats.tick.store(snapshot.tick, Ordering::Relaxed);
     link.stats
         .entities
@@ -496,12 +514,27 @@ pub fn snapshot_of(world: &World) -> EntitySnapshot {
         world,
         world.surfaces()[0].body(),
         &world.visible_entities(PLAYER),
+        &crate::looks::ModelBook::new(world.rules()),
     )
 }
 
-/// [`snapshot_of`] for the entities standing on one body, given what player one sees.
-pub fn snapshot_on(world: &World, body: BodyId, sightings: &[Sighting<'_>]) -> EntitySnapshot {
+/// [`snapshot_of`] for the entities standing on one body, given what player one sees; each
+/// entity carries the composed model of its owner's faction and age from `models`.
+pub fn snapshot_on(
+    world: &World,
+    body: BodyId,
+    sightings: &[Sighting<'_>],
+    models: &crate::looks::ModelBook,
+) -> EntitySnapshot {
     let rules = world.rules();
+    let looks: BTreeMap<PlayerId, (rom_rules::DefId, rom_rules::DefId)> = world
+        .players()
+        .map(|p| (p.id, (p.faction, p.age)))
+        .collect();
+    let model_of = |owner: PlayerId, kind: rom_rules::DefId| {
+        let (faction, age) = looks.get(&owner)?;
+        models.resolve(kind, *faction, *age)
+    };
     let mut sources: BTreeMap<PlayerId, ActiveSources> = BTreeMap::new();
     let clamp_u8 = |value: i64| u8::try_from(value.clamp(0, 255)).unwrap_or(u8::MAX);
     let mut held = BTreeMap::<rom_sim::EntityId, u8>::new();
@@ -563,6 +596,7 @@ pub fn snapshot_on(world: &World, body: BodyId, sightings: &[Sighting<'_>]) -> E
             (done as f32 / total).clamp(0.0, 1.0)
         });
         let mut view = view_of(entity, et, under_construction, &clamp_u8);
+        view.model = model_of(entity.owner, entity.type_id);
         let count = held.get(&entity.id).copied().unwrap_or(0);
         view.carrying = !view.building && count > 0;
         view.kept = if view.building { count } else { 0 };
@@ -594,6 +628,7 @@ pub fn snapshot_on(world: &World, body: BodyId, sightings: &[Sighting<'_>]) -> E
                 capacity: 0,
                 carry_node: false,
                 under_construction: None,
+                model: model_of(building.owner, building.type_id),
             });
         }
     }
@@ -633,6 +668,7 @@ fn view_of(
             .as_ref()
             .is_some_and(|n| n.claim_mode == rom_rules::ClaimMode::Carry),
         under_construction,
+        model: None,
     }
 }
 
@@ -759,6 +795,47 @@ mod tests {
             assert_eq!(view.footprint.0 as i64, et.footprint_w.clamp(0, 255));
         }
         assert!(snapshot.entities.iter().any(|v| v.building && v.owner == 1));
+    }
+
+    #[test]
+    fn entities_wear_the_model_of_their_owners_age() {
+        let content = generate_content(&Options {
+            players: 2,
+            map_size: (128, 128),
+            ..Options::default()
+        })
+        .expect("content");
+        let book = crate::looks::ModelBook::new(&content.rules);
+        let model_of = |age: Option<i64>, key: &str| {
+            let game = crate::match_setup::build_match_in_age(
+                &content.rules,
+                &content.map,
+                &content.factions,
+                1,
+                age,
+            )
+            .expect("match");
+            let world = &game.world;
+            let type_id = content.rules.id_of(key).unwrap();
+            let snapshot = snapshot_of(world);
+            let view = snapshot
+                .entities
+                .iter()
+                .find(|v| {
+                    world
+                        .entity(EntityId(v.id))
+                        .is_some_and(|e| e.type_id == type_id)
+                })
+                .unwrap_or_else(|| panic!("no {key}"));
+            let model = view.model.unwrap_or_else(|| panic!("{key} has no model"));
+            assert!(model.size[1] > 0.5);
+            book.entries[usize::from(model.index)].id.clone()
+        };
+        // A player who advances to the classical age sees the city change its look.
+        assert_eq!(model_of(None, "bld.city"), "bld.city@ancient");
+        assert_eq!(model_of(Some(1), "bld.city"), "bld.city@classical");
+        assert_eq!(model_of(Some(3), "bld.city"), "bld.city@classical");
+        assert_eq!(model_of(None, "unit.citizen"), "unit.citizen@any");
     }
 
     /// A two-player sphere match with player two's units far from player one's.
@@ -892,7 +969,12 @@ mod tests {
         game.world.step();
         let world = &game.world;
         let sightings = world.visible_entities(PLAYER);
-        let planet = snapshot_on(world, home, &sightings);
+        let planet = snapshot_on(
+            world,
+            home,
+            &sightings,
+            &crate::looks::ModelBook::new(world.rules()),
+        );
         let own = game.starts.iter().find(|s| s.player == PLAYER).unwrap();
         assert!(planet.entities.iter().any(|v| v.id == own.city.0));
         for view in &planet.entities {
@@ -913,7 +995,12 @@ mod tests {
                 && *b != home
         });
         if let Some(other) = other {
-            let snap = snapshot_on(world, other, &sightings);
+            let snap = snapshot_on(
+                world,
+                other,
+                &sightings,
+                &crate::looks::ModelBook::new(world.rules()),
+            );
             assert!(snap.entities.iter().all(|v| v.id != own.city.0));
         }
         let space = space_snapshot(world, home_system, &sightings);

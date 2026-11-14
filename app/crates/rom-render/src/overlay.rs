@@ -457,6 +457,7 @@ pub fn build_overlays_on(
             capacity: 0,
             carry_node: false,
             under_construction: None,
+            model: None,
         };
         out.building_ghost(origin, &view, line, false);
         out.rect_outline(origin, min, max, line);
@@ -492,6 +493,7 @@ mod tests {
             capacity: 0,
             carry_node: false,
             under_construction: None,
+            model: None,
         }
     }
 
@@ -611,6 +613,7 @@ mod tests {
             capacity: 0,
             carry_node: false,
             under_construction: Some(0.0),
+            model: None,
             ..unit(7)
         };
         hud.placement = None;
@@ -618,6 +621,7 @@ mod tests {
         assert!(out.tris.iter().any(|t| t.colour[3] == 48));
         let site = EntityView {
             under_construction: Some(0.1),
+            model: None,
             ..site
         };
         build_overlays(&[site], &slope, &hud, 0.0, &mut out);

@@ -186,6 +186,7 @@ mod tests {
                 ),
             ],
             buildings: BTreeMap::new(),
+            models: Vec::new(),
         };
         let slots = surface_slots(&surface, &looks);
         // The sea wears no land slot; row 1 touches the sea and is beach; the rest is grass.

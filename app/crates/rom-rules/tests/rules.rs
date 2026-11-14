@@ -1076,3 +1076,92 @@ fn age_view_range_loads() {
         .collect();
     assert!(limited.windows(2).all(|w| w[0] < w[1]));
 }
+
+const MESHES: &str = "
+    INSERT INTO def(id,kind,key,name) VALUES
+        (50,'mesh','mesh.a','A'), (51,'mesh','mesh.b','B'), (52,'mesh','mesh.c','C');
+    INSERT INTO mesh(id,generator) VALUES (50,'composed'),(51,'composed'),(52,'composed');
+";
+
+fn load_meshes(extra: &str) -> Result<Rules, RulesError> {
+    let conn = build_rules_db(SCHEMA, &format!("{TINY}\n{MESHES}\n{extra}")).unwrap();
+    Rules::load(&conn)
+}
+
+#[test]
+fn mesh_parts_load_by_mesh_in_id_order() {
+    let rules = load_meshes(
+        r#"INSERT INTO mesh_part(id,mesh_id,name,shape,team,params) VALUES
+            (3,50,'roof','gable_roof',1,'{"pitch":40}'),
+            (1,50,'body','box',0,'{"w":2}'),
+            (2,51,'house','include',0,'{"mesh":"mesh.a","x":1}');"#,
+    )
+    .unwrap();
+    let a = &rules.mesh_parts[&DefId(50)];
+    assert_eq!(
+        a.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(),
+        ["body", "roof"]
+    );
+    assert!(a[1].team && !a[0].team);
+    assert_eq!(a[0].include, None);
+    assert_eq!(rules.mesh_parts[&DefId(51)][0].include, Some(DefId(50)));
+}
+
+#[test]
+fn duplicate_part_names_are_rejected() {
+    // The schema forbids them; a database built without that constraint is still refused.
+    let conn = build_rules_db(SCHEMA, &format!("{TINY}\n{MESHES}")).unwrap();
+    conn.execute_batch(
+        r#"DROP TABLE mesh_part;
+           CREATE TABLE mesh_part (id INTEGER PRIMARY KEY, mesh_id INTEGER NOT NULL,
+             name TEXT NOT NULL, shape TEXT NOT NULL, material_id INTEGER,
+             team INTEGER NOT NULL DEFAULT 0, attach TEXT NOT NULL DEFAULT '',
+             params TEXT NOT NULL DEFAULT '{}');
+           INSERT INTO mesh_part(mesh_id,name,shape) VALUES (50,'wall','box'),(50,'wall','box');"#,
+    )
+    .unwrap();
+    assert!(matches!(
+        Rules::load(&conn),
+        Err(RulesError::DuplicatePart { name, .. }) if name == "wall"
+    ));
+    let duplicate = build_rules_db(
+        SCHEMA,
+        &format!(
+            "{TINY}\n{MESHES}\nINSERT INTO mesh_part(mesh_id,name,shape) VALUES (50,'w','box'),(50,'w','box');"
+        ),
+    );
+    assert!(duplicate.is_err());
+}
+
+#[test]
+fn include_cycles_are_rejected() {
+    let Err(error) = load_meshes(
+        r#"INSERT INTO mesh_part(mesh_id,name,shape,params) VALUES
+            (50,'b','include','{"mesh":"mesh.b"}'),
+            (51,'c','include','{"mesh":"mesh.c"}'),
+            (52,'a','include','{"mesh":"mesh.a"}');"#,
+    ) else {
+        panic!("a cycle loads");
+    };
+    assert!(
+        matches!(&error, RulesError::IncludeCycle(chain) if chain.contains("mesh.a -> mesh.b -> mesh.c -> mesh.a")),
+        "{error}"
+    );
+    let itself = load_meshes(
+        r#"INSERT INTO mesh_part(mesh_id,name,shape,params) VALUES (50,'me','include','{"mesh":"mesh.a"}');"#,
+    );
+    assert!(matches!(itself, Err(RulesError::IncludeCycle(_))));
+    // A shared sub-assembly included twice is not a cycle; an include naming nothing is refused.
+    assert!(load_meshes(
+        r#"INSERT INTO mesh_part(mesh_id,name,shape,params) VALUES
+            (50,'one','include','{"mesh":"mesh.c"}'), (50,'two','include','{"mesh":"mesh.c"}'),
+            (51,'three','include','{"mesh":"mesh.c"}'), (51,'four','include','{"mesh":"mesh.a"}');"#,
+    )
+    .is_ok());
+    assert!(matches!(
+        load_meshes(
+            r#"INSERT INTO mesh_part(mesh_id,name,shape,params) VALUES (50,'x','include','{"mesh":"mesh.none"}');"#
+        ),
+        Err(RulesError::InvalidValue { .. })
+    ));
+}

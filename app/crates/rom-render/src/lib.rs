@@ -21,14 +21,17 @@ pub mod hud_minimap;
 pub mod hud_model;
 pub mod hud_preview;
 pub mod hud_text;
+pub mod kit;
 pub mod looks;
 mod mailbox;
 mod materials;
+pub mod models;
 mod orbit;
 mod overlay;
 pub mod pick;
 mod pixels;
 mod readback;
+pub mod review;
 mod scene;
 pub mod shadow;
 pub mod sky;
@@ -43,8 +46,8 @@ pub mod zoom;
 
 pub use camera::{Camera, CameraController, InputEvent, Key, Modifiers, PointerButton};
 pub use entities::{
-    EntitySnapshot, EntityView, FlatGround, Footing, GroundFrame, OWNER_COLORS, SnapshotPair,
-    Surface, build_instances, build_instances_on, interpolate_on, owner_color,
+    EntitySnapshot, EntityView, FlatGround, Footing, GroundFrame, ModelRef, OWNER_COLORS,
+    SnapshotPair, Surface, build_instances, build_instances_on, interpolate_on, owner_color,
 };
 pub use globe::{ChunkSpec, Globe, PlanetScene, SurfaceHit, planet_radius, to_render};
 pub use image;
@@ -53,11 +56,15 @@ pub use looks::{
     SnowLook, TileLook, lod_weight,
 };
 pub use mailbox::{Frame, FrameMailbox, FramePixels};
+pub use models::{
+    BakedModel, ModelLook, ModelMesh, ModelSpec, PartInfo, PartSpec, Shape as PartShape, bake_model,
+};
 pub use orbit::{
     HOME_DISTANCE, MIN_DISTANCE, OrbitCamera, OrbitController, dir_from_lon_lat, lon_lat_of,
 };
-pub use overlay::{OverlayGeometry, build_overlays, build_overlays_on};
+pub use overlay::{Line3, OverlayGeometry, build_overlays, build_overlays_on};
 pub use pixels::rgba_to_bgra_flipped;
+pub use review::{Review, SheetView, WorldLabel};
 pub use rom_geo::SurfacePos;
 pub use space::{ClaimView, ShipView, SpaceSnapshot, TransitView};
 pub use stats::RenderStats;

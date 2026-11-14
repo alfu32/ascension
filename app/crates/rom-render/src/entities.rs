@@ -59,6 +59,18 @@ pub struct EntityView {
     pub carry_node: bool,
     /// Construction progress 0 to 1 for a site, `None` when complete.
     pub under_construction: Option<f32>,
+    /// The composed model it is drawn with; `None` keeps the plain boxes.
+    pub model: Option<ModelRef>,
+}
+
+/// A composed model an entity is drawn with.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ModelRef {
+    /// Index into [`crate::SceneLooks::models`].
+    pub index: u16,
+    /// Extent of the model in tiles, around its origin: across (x), height (y) and deep (z).
+    /// Picking, health bars and selection use it.
+    pub size: [f32; 3],
 }
 
 /// All entities at one simulation tick, ordered by id.
@@ -454,17 +466,26 @@ pub(crate) fn heading_of(frame: &GroundFrame, facing_deg: f32) -> [f32; 3] {
 
 /// Height of a building body in tiles; it varies with the entity type and the footprint.
 pub fn building_height(view: &EntityView) -> f32 {
+    if let Some(model) = view.model {
+        return model.size[1].max(0.2);
+    }
     let (w, h) = (f32::from(view.footprint.0), f32::from(view.footprint.1));
     1.0 + f32::from(view.kind % 4) * 0.4 + 0.15 * w.max(h)
 }
 
 /// Width of a unit body in tiles; drawn larger than the collision circle so it stays visible.
 pub fn unit_width(view: &EntityView) -> f32 {
+    if let Some(model) = view.model {
+        return model.size[0].max(model.size[2]).max(0.6);
+    }
     (view.radius * 2.0 * 1.6).max(0.6)
 }
 
 /// Height of a unit body in tiles.
 pub fn unit_height(view: &EntityView) -> f32 {
+    if let Some(model) = view.model {
+        return model.size[1].max(0.3);
+    }
     (unit_width(view) * 1.8).max(0.9)
 }
 
@@ -593,7 +614,9 @@ fn instances_on(
         let frame = ground.frame(view.face, view.x, view.y);
         let base = ground.height_at(view.face, view.x, view.y);
         let body_start = out.len();
-        let top = if view.building && drawn_as_objects(view.kind) {
+        let top = if let Some(model) = view.model {
+            push_model_base(view, &frame, model, out)
+        } else if view.building && drawn_as_objects(view.kind) {
             push_plot(view, &frame, out)
         } else if view.building {
             push_building(view, ground, &frame, base, out)
@@ -742,6 +765,32 @@ fn push_building(
     top + roof_thickness
 }
 
+/// Pushes what an entity drawn as a composed model needs besides the model: the foundation
+/// plate of a building site. Returns the height of the model's top above the ground (of the
+/// part raised so far on a site).
+fn push_model_base(
+    view: &EntityView,
+    frame: &GroundFrame,
+    model: ModelRef,
+    out: &mut Vec<[f32; 16]>,
+) -> f32 {
+    const FOUNDATION: [f32; 3] = [0.55, 0.52, 0.47];
+    let Some(progress) = view.under_construction else {
+        return model.size[1];
+    };
+    let (w, h) = (
+        f32::from(view.footprint.0.max(1)),
+        f32::from(view.footprint.1.max(1)),
+    );
+    out.push(frame_box(
+        frame.at([0.0, 0.0, 0.0]),
+        [frame.ex, frame.up, frame.ey],
+        [w * 0.94, 0.12, h * 0.94],
+        FOUNDATION,
+    ));
+    (model.size[1] * progress.clamp(0.0, 1.0)).max(0.12)
+}
+
 /// Pushes the plate and corner post of a building drawn as objects (a field): the soil under
 /// its rows and its owner's colour; returns the height of the post.
 fn push_plot(view: &EntityView, frame: &GroundFrame, out: &mut Vec<[f32; 16]>) -> f32 {
@@ -822,6 +871,7 @@ mod tests {
             capacity: 0,
             carry_node: false,
             under_construction: None,
+            model: None,
         }
     }
 

@@ -97,7 +97,7 @@ pub(super) fn set_noise_slot(shader: &mut Shader) {
 }
 
 /// Fills the insertion points of a shader template.
-fn expand(template: &str) -> String {
+pub(super) fn expand(template: &str) -> String {
     template
         .replace("/*LIGHTING*/", &sun::glsl_lighting())
         .replace("/*NOISE*/", NOISE)

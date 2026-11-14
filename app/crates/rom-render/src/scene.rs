@@ -32,6 +32,7 @@ use crate::terrain::{
 use crate::vision::{ChunkSpec, shade_chunk};
 
 mod materials;
+mod models;
 mod shadow;
 mod sky;
 mod space;
@@ -298,6 +299,16 @@ pub(crate) struct Scene {
     object_material: WeakMaterial,
     /// The uploaded feature objects of the current planet or map.
     features: Option<materials::FeatureGpu>,
+    /// Composed models of buildings and units.
+    model_shader: Shader,
+    model_material: WeakMaterial,
+    models: Option<models::ModelGpu>,
+    /// Draw every model with its near mesh (the review gallery).
+    models_near_only: bool,
+    /// Direction the light travels on a flat map.
+    flat_light: [f32; 3],
+    /// Extra lines drawn over the world (part outlines in the gallery).
+    pub(crate) extra_lines: Vec<crate::overlay::Line3>,
     /// How the current planet or map looks up close.
     looks: Arc<SceneLooks>,
     /// Share of the material look drawn this frame (1 up close, 0 far out).
@@ -506,6 +517,9 @@ impl Scene {
         }
         let mut object_material = rl.load_material_default(thread);
         object_material.set_shader(&object_shader);
+        let model_shader = models::load_model_shader(rl, thread);
+        let mut model_material = rl.load_material_default(thread);
+        model_material.set_shader(&model_shader);
         let mut star_material = rl.load_material_default(thread);
         star_material.set_shader(&star_shader);
         let (star_positions, star_colors) = star_triangles(&star_field(STAR_COUNT));
@@ -541,6 +555,12 @@ impl Scene {
             object_shader,
             object_material,
             features: None,
+            model_shader,
+            model_material,
+            models: None,
+            models_near_only: false,
+            flat_light: LIGHT_DIRECTION,
+            extra_lines: Vec::new(),
             looks: Arc::new(SceneLooks::default()),
             detail: 0.0,
             clock: Instant::now(),
@@ -665,7 +685,12 @@ impl Scene {
         self.detail = lod_weight(distance);
         let time = self.clock.elapsed().as_secs_f32() % 3_600.0;
         let [_, _, terrain, _, _] = &mut self._shaders;
-        for shader in [terrain, &mut self.sea_globe_shader, &mut self.object_shader] {
+        for shader in [
+            terrain,
+            &mut self.sea_globe_shader,
+            &mut self.object_shader,
+            &mut self.model_shader,
+        ] {
             materials::set_frame(shader, eye, self.detail, time);
         }
 
@@ -749,6 +774,7 @@ impl Scene {
         self.globe = None;
         self.space = None;
         self.features = None;
+        self.models = None;
         self.last_shades.clear();
         self.shade_queue.clear();
         self.graticule.clear();
@@ -849,6 +875,10 @@ impl Scene {
         materials::set_water(&mut self.sea_globe_shader, looks);
         let started = Instant::now();
         self.features = materials::FeatureGpu::upload(thread, baked);
+        self.models = models::ModelGpu::upload(thread, &looks.models);
+        if let Some(models) = &mut self.models {
+            models.near_only = self.models_near_only;
+        }
         BakeReport {
             bake_ms,
             upload_ms: started.elapsed().as_secs_f32() * 1_000.0,
@@ -874,6 +904,7 @@ impl Scene {
             entity,
             &mut self.sea_globe_shader,
             &mut self.object_shader,
+            &mut self.model_shader,
         ];
         for shader in shaders {
             let at = |shader: &Shader, name: &str| shader.get_shader_location(name);
@@ -893,6 +924,16 @@ impl Scene {
                 let location = at(shader, "normalBias");
                 shader.set_shader_value(location, uniforms.normal_bias);
             }
+        }
+    }
+
+    /// Sets the direction the light travels on a flat map (`None`: the usual fixed light), and
+    /// whether every model is drawn with its near mesh.
+    pub(crate) fn set_review(&mut self, light: Option<[f32; 3]>, near_only: bool) {
+        self.flat_light = light.unwrap_or(LIGHT_DIRECTION);
+        self.models_near_only = near_only;
+        if let Some(models) = &mut self.models {
+            models.near_only = near_only;
         }
     }
 
@@ -916,6 +957,7 @@ impl Scene {
         self.globe = None;
         self.space = None;
         self.features = None;
+        self.models = None;
         self.last_shades.clear();
         self.shade_queue.clear();
         self.sun = sun;
@@ -1080,6 +1122,10 @@ impl Scene {
                     &self.entity_transforms,
                 );
             }
+            if let Some(models) = &mut self.models {
+                models.prepare(eye);
+                models.draw(&mut world, &mut self.model_shader, &self.model_material);
+            }
             for (shaded, bounds) in &gpu.sea {
                 if bounds.may_be_seen(radius, &cull) {
                     world.draw_mesh(
@@ -1129,6 +1175,27 @@ impl Scene {
                 self.instances = instances;
                 return;
             };
+        // An entity whose model did not bake keeps its boxes.
+        let missing = |v: &EntityView| {
+            v.model
+                .is_some_and(|m| !self.models.as_ref().is_some_and(|g| g.has(m.index)))
+        };
+        let patched: Vec<EntityView>;
+        let views = if views.iter().any(missing) {
+            patched = views
+                .iter()
+                .map(|v| EntityView {
+                    model: v.model.filter(|_| !missing(v)),
+                    ..*v
+                })
+                .collect();
+            &patched[..]
+        } else {
+            views
+        };
+        if let Some(models) = &mut self.models {
+            models.place(views, ground);
+        }
         let looks = &self.looks;
         let objects = self.features.as_ref().map(|f| &f.buildings);
         let drawn_as_objects = |kind: u16| {
@@ -1205,7 +1272,7 @@ impl Scene {
         } else {
             None
         };
-        self.set_lighting(sun::unit_or(LIGHT_DIRECTION.map(|c| -c)), false, shadow);
+        self.set_lighting(sun::unit_or(self.flat_light.map(|c| -c)), false, shadow);
         let shadow_texture = shadow.and(self.shadow.as_ref()).map(|s| s.texture_id());
         let view = Camera3D::perspective(
             Vector3::new(eye[0], eye[1], eye[2]),
@@ -1214,7 +1281,7 @@ impl Scene {
             45.0,
         );
         // The same sky as on a planet, under the flat map's fixed light.
-        let toward = sun::unit_or(LIGHT_DIRECTION.map(|c| -c));
+        let toward = sun::unit_or(self.flat_light.map(|c| -c));
         let backdrop = crate::sky::local_sky(toward[1]);
         self.sky.set_sky(&backdrop, [0.0, 1.0, 0.0], toward, 0.0);
         self.set_star_fade(backdrop.stars);
@@ -1266,6 +1333,18 @@ impl Scene {
                         &self.box_mesh,
                         self.entity_material.clone(),
                         &self.entity_transforms,
+                    );
+                }
+                if let Some(models) = &mut self.models {
+                    models.prepare(eye);
+                    models.draw(&mut world, &mut self.model_shader, &self.model_material);
+                }
+                for line in &self.extra_lines {
+                    let c = line.colour;
+                    world.draw_line3D(
+                        Vector3::new(line.a[0], line.a[1], line.a[2]),
+                        Vector3::new(line.b[0], line.b[1], line.b[2]),
+                        Color::new(c[0], c[1], c[2], c[3]),
                     );
                 }
                 if !self.transforms.is_empty() {

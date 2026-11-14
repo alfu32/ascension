@@ -37,7 +37,7 @@ pub(super) struct ShadowUniforms {
 #[derive(Clone, Debug, PartialEq)]
 struct Drawn {
     fit: LightFit,
-    casters: [Vec<[f32; 12]>; 3],
+    casters: [Vec<[f32; 12]>; 4],
     /// Whether the baked feature objects were drawn (they are static, so a flag suffices).
     features: bool,
 }
@@ -243,7 +243,8 @@ impl Scene {
                         .chain(&self.entity_casters)
                         .map(caster_bounds),
                 )
-                .chain(features.into_iter().flat_map(|f| f.bounds())),
+                .chain(features.into_iter().flat_map(|f| f.bounds()))
+                .chain(self.models.iter().flat_map(|m| m.caster_bounds())),
         );
         let wanted = Drawn {
             fit,
@@ -251,6 +252,9 @@ impl Scene {
                 caster_geometry(&self.entity_casters),
                 caster_geometry(&gpu.markers),
                 crops,
+                self.models
+                    .as_ref()
+                    .map_or_else(Vec::new, |m| m.caster_geometry()),
             ],
             features: features.is_some(),
         };
@@ -287,6 +291,15 @@ impl Scene {
                     &mut self.caster_scratch,
                 );
             }
+            if let Some(models) = &self.models {
+                models.draw_casters(
+                    &mut pass,
+                    &shadow.depth_instanced,
+                    eye,
+                    &|centre, radius| fit.may_touch(centre, radius),
+                    &mut self.caster_scratch,
+                );
+            }
             end_casters();
         }
         set_clip_planes(DEFAULT_NEAR, DEFAULT_FAR);
@@ -304,7 +317,7 @@ impl Scene {
         camera: &Camera,
         size: (f32, f32),
     ) -> Option<ShadowUniforms> {
-        let toward = sun::unit_or(LIGHT_DIRECTION.map(|c| -c));
+        let toward = sun::unit_or(self.flat_light.map(|c| -c));
         let map_size = self.terrain.as_ref()?.size;
         let view = View::new(camera, size, self.projection_centre_y);
         let eye = camera.position();
@@ -325,7 +338,8 @@ impl Scene {
                         .chain(&self.transforms)
                         .map(caster_bounds),
                 )
-                .chain(features.into_iter().flat_map(|f| f.bounds())),
+                .chain(features.into_iter().flat_map(|f| f.bounds()))
+                .chain(self.models.iter().flat_map(|m| m.caster_bounds())),
         );
         let wanted = Drawn {
             fit,
@@ -333,6 +347,9 @@ impl Scene {
                 caster_geometry(&self.entity_casters),
                 caster_geometry(&self.transforms),
                 crops,
+                self.models
+                    .as_ref()
+                    .map_or_else(Vec::new, |m| m.caster_geometry()),
             ],
             features: features.is_some(),
         };
@@ -362,6 +379,15 @@ impl Scene {
             }
             if let Some(features) = features {
                 features.draw_casters(
+                    &mut pass,
+                    &shadow.depth_instanced,
+                    eye,
+                    &|centre, radius| fit.may_touch(centre, radius),
+                    &mut self.caster_scratch,
+                );
+            }
+            if let Some(models) = &self.models {
+                models.draw_casters(
                     &mut pass,
                     &shadow.depth_instanced,
                     eye,

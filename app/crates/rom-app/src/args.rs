@@ -7,7 +7,9 @@ pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <f
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] \
 [--map-size <width>x<height>] [--sphere <n>] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
 [--universe] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-hud] [--hud-scale <percent>] [--stats] \
-[--sun <orbit|fixed|night>] [--graticule <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]]";
+[--sun <orbit|fixed|night>] [--graticule <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
+[--gallery <all|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
+[--model <model id>] [--parts] [--gallery-manifest <file.json>]";
 
 /// Default canvas size in pixels when `--size` is not given.
 pub const DEFAULT_SIZE: (u32, u32) = (1280, 800);
@@ -79,8 +81,49 @@ pub struct Options {
     /// On a sphere, start the camera over the nearest edge tile of a terrain (optionally one
     /// near a second terrain, which the camera then faces), at this distance.
     pub look_at: Option<LookAt>,
+    /// Show the models this filter selects in a gallery instead of a match.
+    pub gallery: Option<String>,
+    /// Camera of the gallery.
+    pub gallery_view: GalleryView,
+    /// Owner whose colour the gallery's models wear (1 to 8).
+    pub team: u8,
+    /// Show one model from four sides instead of a match.
+    pub model: Option<String>,
+    /// With `--model`, label each part and outline it.
+    pub parts: bool,
+    /// Write the model manifest to this JSON file and exit (no window).
+    pub gallery_manifest: Option<PathBuf>,
     /// Print usage and exit.
     pub help: bool,
+}
+
+/// The camera of the model gallery.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum GalleryView {
+    /// The gameplay tilt.
+    #[default]
+    Game,
+    /// Low, from the south.
+    Front,
+    /// Low, from the east.
+    Side,
+    /// Straight down.
+    Top,
+    /// The gameplay tilt, closer.
+    Close,
+}
+
+impl GalleryView {
+    fn from_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "game" => Self::Game,
+            "front" => Self::Front,
+            "side" => Self::Side,
+            "top" => Self::Top,
+            "close" => Self::Close,
+            _ => return None,
+        })
+    }
 }
 
 impl Default for Options {
@@ -117,6 +160,12 @@ impl Default for Options {
             age: None,
             graticule: true,
             look_at: None,
+            gallery: None,
+            gallery_view: GalleryView::Game,
+            team: 1,
+            model: None,
+            parts: false,
+            gallery_manifest: None,
             help: false,
         }
     }
@@ -253,6 +302,26 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                     .ok()
                     .filter(|seconds| seconds.is_finite() && *seconds >= 0.0)
                     .ok_or_else(|| format!("--after expects seconds, got {text:?}"))?;
+            }
+            "--gallery" => options.gallery = Some(value("--gallery")?),
+            "--gallery-view" => {
+                let text = value("--gallery-view")?;
+                options.gallery_view = GalleryView::from_name(&text).ok_or_else(|| {
+                    format!("--gallery-view expects game, front, side, top or close, got {text:?}")
+                })?;
+            }
+            "--team" => {
+                let text = value("--team")?;
+                options.team = text
+                    .parse::<u8>()
+                    .ok()
+                    .filter(|t| (1..=8).contains(t))
+                    .ok_or_else(|| format!("--team expects 1 to 8, got {text:?}"))?;
+            }
+            "--model" => options.model = Some(value("--model")?),
+            "--parts" => options.parts = true,
+            "--gallery-manifest" => {
+                options.gallery_manifest = Some(PathBuf::from(value("--gallery-manifest")?));
             }
             "-h" | "--help" => options.help = true,
             other => return Err(format!("unknown argument {other:?}")),
@@ -515,6 +584,30 @@ mod tests {
         assert_eq!((look.near, look.distance), (None, rom_render::MIN_DISTANCE));
         assert!(parse(args(&["--look-at", "ter.forest,-3"])).is_err());
         assert!(parse(args(&["--look-at", "ter.forest+"])).is_err());
+    }
+
+    #[test]
+    fn parses_the_review_options() {
+        let options = parse(args(&[
+            "--gallery",
+            "ancient",
+            "--gallery-view",
+            "side",
+            "--team",
+            "3",
+            "--gallery-manifest",
+            "m.json",
+        ]))
+        .unwrap();
+        assert_eq!(options.gallery.as_deref(), Some("ancient"));
+        assert_eq!(options.gallery_view, GalleryView::Side);
+        assert_eq!(options.team, 3);
+        assert_eq!(options.gallery_manifest, Some(PathBuf::from("m.json")));
+        let options = parse(args(&["--model", "bld.city@ancient", "--parts"])).unwrap();
+        assert_eq!(options.model.as_deref(), Some("bld.city@ancient"));
+        assert!(options.parts);
+        assert!(parse(args(&["--team", "9"])).is_err());
+        assert!(parse(args(&["--gallery-view", "under"])).is_err());
     }
 
     #[test]

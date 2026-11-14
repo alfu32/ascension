@@ -3,6 +3,7 @@
 mod args;
 mod bench;
 mod demo;
+mod gallery;
 mod hud;
 mod looks;
 mod match_setup;
@@ -29,6 +30,18 @@ fn main() -> ExitCode {
     if options.help {
         println!("rise-of-man {}\n{}", env!("CARGO_PKG_VERSION"), args::USAGE);
         return ExitCode::SUCCESS;
+    }
+    if let Some(path) = &options.gallery_manifest {
+        return match gallery::write_manifest(path) {
+            Ok(count) => {
+                println!("gallery-manifest {} models={count}", path.display());
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("rise-of-man: {error}");
+                ExitCode::FAILURE
+            }
+        };
     }
     shell::run(&options)
 }
