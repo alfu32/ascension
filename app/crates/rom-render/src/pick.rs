@@ -120,13 +120,17 @@ pub enum PickEvent {
         /// Modifiers held.
         modifiers: Modifiers,
     },
-    /// The pointer moved over the world while a building is being placed.
+    /// The pointer moved over the world or left it for the HUD.
     Hover {
+        /// Entity under the pointer, if any.
+        entity: Option<u32>,
         /// Ground point under the cursor.
         world_point: (f32, f32),
         /// The same point as a surface position (face 0 on the flat map).
         surface: SurfacePos,
     },
+    /// The pointer left the world view.
+    HoverExit,
     /// A letter or digit key.
     Hotkey {
         /// The character, lower case.
@@ -806,7 +810,9 @@ impl PickController {
     }
 
     fn hover_event(&mut self, ctx: &PickContext, x: f32, y: f32, out: &mut Vec<PickEvent>) {
-        if ctx.hud.placement.is_none() || self.over_hud(ctx, x, y) {
+        if self.over_hud(ctx, x, y) {
+            self.last_hover = None;
+            out.push(PickEvent::HoverExit);
             return;
         }
         if let Some((point, surface)) = ctx.ground_hit(x, y)
@@ -816,6 +822,7 @@ impl PickController {
         {
             self.last_hover = Some(point);
             out.push(PickEvent::Hover {
+                entity: ctx.entity_at(x, y),
                 world_point: point,
                 surface,
             });
@@ -1090,6 +1097,10 @@ mod tests {
             building: false,
             footprint: (1, 1),
             radius: 0.3,
+            carrying: false,
+            kept: 0,
+            capacity: 0,
+            carry_node: false,
             under_construction: None,
         }
     }

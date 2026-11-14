@@ -701,6 +701,7 @@ fn placement_check_reports_valid_and_invalid() {
     fx.ctl.handle(
         &mut fx.world,
         PickEvent::Hover {
+            entity: None,
             // Inside the city's radius and territory, clear of the city and the queued site.
             world_point: (20.5, 30.5),
             surface: flat_surface((20.5, 30.5)),
@@ -712,6 +713,7 @@ fn placement_check_reports_valid_and_invalid() {
     fx.ctl.handle(
         &mut fx.world,
         PickEvent::Hover {
+            entity: None,
             world_point: (20.5, 20.5),
             surface: flat_surface((20.5, 20.5)),
         },
@@ -865,6 +867,7 @@ fn placement_on_the_sphere_matches_check_placement() {
         ctl.handle(
             world,
             PickEvent::Hover {
+                entity: None,
                 world_point: (spot.x as f32 / 1000.0, spot.y as f32 / 1000.0),
                 surface: surface_of(spot),
             },
@@ -1371,6 +1374,14 @@ fn task_30_scripts_reach_the_capture_states_without_a_window() {
                     ScriptAction::SelectResearchers => ctl.select_researchers(&game.world),
                     ScriptAction::SelectProducers => ctl.select_producers(&game.world),
                     ScriptAction::SelectShips => ctl.select_own_ships(&game.world),
+                    ScriptAction::EntityPick {
+                        target,
+                        right,
+                        shift,
+                    } => match crate::script::live_pick(&game.world, &target, right, shift) {
+                        Ok(pick) => ctl.handle(&mut game.world, pick),
+                        Err(error) => ctl.notify(&game.world, error),
+                    },
                     ScriptAction::Speed(_) => {}
                 }
             }
@@ -1482,4 +1493,369 @@ fn prerequisite_help_names_only_missing_tracks() {
         crate::hud::button_state(&fx.world, advance, false),
         ButtonState::Ready
     );
+}
+
+fn wealth_fixture_config(stock: i64, age: &str, techs: &[&str]) -> Fx {
+    let mut fx = fixture_config(stock, age, techs);
+    fx.world = fx
+        .world
+        .with_match_options(rom_sim::MatchOptions {
+            victories: Default::default(),
+            ..Default::default()
+        })
+        .unwrap();
+    fx
+}
+
+fn wealth_fixture() -> Fx {
+    wealth_fixture_config(10_000, "age.ancient", &[])
+}
+
+fn wealth_units(fx: &mut Fx) -> (EntityId, EntityId, EntityId) {
+    let relic_type = fx.find(|et| {
+        et.node
+            .as_ref()
+            .is_some_and(|n| n.claim_mode == rom_rules::ClaimMode::Carry)
+    });
+    let tag = fx.rules.entity_types[&relic_type]
+        .node
+        .as_ref()
+        .unwrap()
+        .claim_tag_id
+        .unwrap();
+    let priest_type = fx.find(|et| et.class == EntityClass::Unit && fx.rules.has_tag(et.id, tag));
+    let trader_type = fx.find(|et| et.trader.as_ref().is_some_and(|t| t.runs_routes));
+    let relic = fx.spawn(relic_type, 0, 12, 10);
+    let priest = fx.spawn(priest_type, 1, 10, 10);
+    let trader = fx.spawn(trader_type, 1, 15, 20);
+    (relic, priest, trader)
+}
+
+fn wealth_cities(fx: &mut Fx) -> (EntityId, EntityId) {
+    let city = fx.find(|et| et.territory.as_ref().is_some_and(|t| t.is_city));
+    (fx.spawn(city, 1, 20, 20), fx.spawn(city, 1, 50, 20))
+}
+
+#[test]
+fn right_click_relic_with_priest_issues_carry() {
+    let mut fx = wealth_fixture();
+    let (relic, priest, _) = wealth_units(&mut fx);
+    fx.click(priest, false);
+    fx.ctl.hovered = Some(relic);
+    assert_eq!(fx.hud_snapshot().help, "Carry to a temple");
+    fx.rclick(Some(relic), (12.5, 10.5), false);
+    fx.step(1);
+    let order = fx.world.entity(priest).unwrap().orders().front().unwrap();
+    assert_eq!(order.kind, "carry");
+    assert_eq!(order.target_entity, Some(relic));
+    assert_eq!(fx.hud_snapshot().markers[0].kind, MarkerKind::Move);
+    // A second carry order joins the existing order when Shift is held.
+    let relic_type = fx.world.entity(relic).unwrap().type_id;
+    let next = fx.spawn(relic_type, 0, 15, 10);
+    fx.rclick(Some(next), (15.5, 10.5), true);
+    fx.step(1);
+    assert_eq!(fx.world.entity(priest).unwrap().orders().len(), 2);
+}
+
+#[test]
+fn right_click_city_with_trader_issues_trade() {
+    let mut fx = wealth_fixture();
+    let (_, _, trader) = wealth_units(&mut fx);
+    let (home, target) = wealth_cities(&mut fx);
+    fx.click(trader, false);
+    assert_eq!(
+        crate::hud::wealth_card(&fx.world, fx.world.entity(trader).unwrap()),
+        ["No route"]
+    );
+    fx.ctl.hovered = Some(target);
+    assert_eq!(fx.hud_snapshot().help, "Trade route");
+    fx.rclick(Some(target), (50.5, 20.5), false);
+    fx.step(1);
+    let route = fx.world.trade_routes(PLAYER).next().unwrap();
+    assert_eq!((route.home, route.target), (home, target));
+    assert!(
+        fx.hud_snapshot()
+            .help
+            .contains(&format!("+{} per trip", route.per_trip_income))
+    );
+    let hud = fx.hud_snapshot();
+    assert_eq!(hud.trade_routes.len(), 1);
+    assert!(
+        hud.trade_routes[0].to_target,
+        "starts at home, heading to partner"
+    );
+    let HudSelection::Single(card) = hud.selection else {
+        panic!("trader card")
+    };
+    assert!(card.wealth[0].contains('→'));
+    assert_eq!(
+        card.wealth[1],
+        format!("+{} per trip", route.per_trip_income)
+    );
+    // The direction changes on arrival, with no dependency on path detours.
+    for _ in 0..1200 {
+        fx.step(1);
+        if !fx.hud_snapshot().trade_routes[0].to_target {
+            break;
+        }
+    }
+    assert!(!fx.hud_snapshot().trade_routes[0].to_target);
+    fx.world.despawn(target).unwrap();
+    fx.step(1);
+    assert_eq!(
+        fx.hud_snapshot().events.last().unwrap(),
+        "Trade route ended: city lost"
+    );
+    let at = fx.ctl.message.as_ref().unwrap().1;
+    fx.step(2);
+    assert_eq!(fx.ctl.message.as_ref().unwrap().1, at);
+}
+
+#[test]
+fn right_click_relic_with_soldier_moves() {
+    let mut fx = wealth_fixture();
+    let (relic, _, _) = wealth_units(&mut fx);
+    let soldier = fx.spawn(fx.armed_other_than_builder(), 1, 10, 10);
+    fx.click(soldier, false);
+    fx.rclick(Some(relic), (12.5, 10.5), false);
+    fx.step(1);
+    let order = fx.world.entity(soldier).unwrap().orders().front().unwrap();
+    assert_eq!(order.kind, "move");
+    assert_eq!(order.target_pos, Some(at(12, 10)));
+}
+
+#[test]
+fn wealth_rejections_name_the_rule() {
+    let fx = wealth_fixture_config(10_000, "age.classical", &["tech.commerce.1"]);
+    for (error, text) in [
+        (SimError::CannotCarry, "This unit cannot carry that"),
+        (SimError::CarrierFull, "Already carrying"),
+        (SimError::NoHomeCity, "No home city on this world"),
+        (
+            SimError::RouteTooShort,
+            "Too close for a trade route (20 tiles)",
+        ),
+        (SimError::NotATradePartner, "Not a trade partner"),
+        (SimError::CaravanLimit, "Trade route limit reached (3)"),
+    ] {
+        assert_eq!(rejection_message(&fx.world, &error, None), text);
+    }
+}
+
+#[test]
+fn keeper_panel_counts_kept_relics() {
+    let mut fx = wealth_fixture();
+    let (relic, priest, _) = wealth_units(&mut fx);
+    let keeper = fx.find(|et| et.keeper.is_some());
+    let temple = fx.spawn(keeper, 1, 16, 10);
+    fx.click(priest, false);
+    fx.rclick(Some(relic), (12.5, 10.5), false);
+    fx.step(400);
+    fx.click(temple, false);
+    assert_eq!(fx.world.kept_nodes(temple).count(), 1);
+    let HudSelection::Single(card) = fx.hud_snapshot().selection else {
+        panic!("keeper card")
+    };
+    assert_eq!(card.wealth, ["Relics 1 / 5", "+20 wealth per 30 s"]);
+    let snapshot = crate::sim_thread::snapshot_of(&fx.world);
+    let keeper = snapshot.entities.iter().find(|e| e.id == temple.0).unwrap();
+    assert_eq!((keeper.kept, keeper.capacity), (1, 5));
+    assert!(!snapshot.entities.iter().any(|e| e.id == relic.0));
+    assert_eq!(crate::hud::snapshot_of(&fx.world).wealth.relics, 1);
+}
+
+#[test]
+fn no_keeper_notice_appears_once_and_carried_node_is_hidden() {
+    let mut fx = wealth_fixture();
+    let (relic, priest, _) = wealth_units(&mut fx);
+    fx.click(priest, false);
+    fx.rclick(Some(relic), (12.5, 10.5), false);
+    fx.step(100);
+    assert_eq!(
+        fx.hud_snapshot().events.last().unwrap(),
+        "No temple with room for the relic"
+    );
+    let notified = fx.ctl.message.as_ref().unwrap().1;
+    let snapshot = crate::sim_thread::snapshot_of(&fx.world);
+    assert!(
+        snapshot
+            .entities
+            .iter()
+            .find(|e| e.id == priest.0)
+            .unwrap()
+            .carrying
+    );
+    assert!(!snapshot.entities.iter().any(|e| e.id == relic.0));
+    fx.step(1200);
+    assert_eq!(fx.ctl.message.as_ref().unwrap().1, notified);
+}
+
+#[test]
+fn economy_tab_sums_routes() {
+    let mut fx = wealth_fixture_config(10_000, "age.classical", &["tech.commerce.1"]);
+    let (_, _, trader) = wealth_units(&mut fx);
+    let (_, city) = wealth_cities(&mut fx);
+    let trader2 = fx.spawn(fx.world.entity(trader).unwrap().type_id, 1, 15, 23);
+    fx.select(&[trader, trader2]);
+    fx.rclick(Some(city), (50.5, 20.5), false);
+    fx.step(1);
+    fx.hud(HudRegionKind::DataTab, 2, PointerButton::Left, false);
+    let mut hud = crate::hud::snapshot_of(&fx.world);
+    fx.ctl.fill(&fx.world, &mut hud);
+    assert_eq!(hud.data_tab, 2);
+    assert_eq!(hud.wealth.routes, 2);
+    assert_eq!(hud.wealth.limit, 3);
+    assert_eq!(hud.wealth.per_trip, 18);
+}
+
+#[test]
+fn wealth_screenshot_script_reaches_capture_without_a_window() {
+    use crate::script::{Script, ScriptAction, ScriptContext, ScriptSetup};
+    let text = include_str!("../../../../docs/tasks/32-wealth-script.txt");
+    let content = crate::terrain::generate_content(&crate::args::Options::default()).unwrap();
+    let mut game =
+        crate::match_setup::build_match(&content.rules, &content.map, &content.factions, 1)
+            .unwrap();
+    ScriptSetup::scan(text)
+        .unwrap()
+        .apply_grants(&mut game.world)
+        .unwrap();
+    let context = ScriptContext::of(&game.starts[0]);
+    let city_pos = game.starts[0].city_pos;
+    let mut script = Script::parse(text, &context, &|dx, dy| {
+        let p = game.world.offset(city_pos, dx, dy);
+        SurfacePos {
+            face: p.face,
+            x: i64::from(p.x),
+            y: i64::from(p.y),
+        }
+    })
+    .unwrap();
+    let mut ctl = Controller::new();
+    let mut messages = Vec::new();
+    for _ in 0..8005 {
+        for action in script.due_actions(game.world.tick()) {
+            match action {
+                ScriptAction::SelectResearchers => ctl.select_researchers(&game.world),
+                ScriptAction::SelectProducers => ctl.select_producers(&game.world),
+                ScriptAction::SelectShips => ctl.select_own_ships(&game.world),
+                ScriptAction::EntityPick {
+                    target,
+                    right,
+                    shift,
+                } => {
+                    let pick = crate::script::live_pick(&game.world, &target, right, shift)
+                        .unwrap_or_else(|e| {
+                            panic!("tick {}: {e}; notices {messages:?}", game.world.tick())
+                        });
+                    ctl.handle(&mut game.world, pick);
+                }
+                ScriptAction::Speed(_) => {}
+            }
+        }
+        for pick in script.due(game.world.tick()) {
+            ctl.handle(&mut game.world, pick);
+        }
+        game.world.step();
+        ctl.after_step(&mut game.world);
+        if let Some(message) = &ctl.message
+            && messages.last() != Some(message)
+        {
+            messages.push(message.clone());
+        }
+    }
+    assert!(messages.is_empty(), "{messages:?}");
+    let mut hud = crate::hud::snapshot_of(&game.world);
+    ctl.fill(&game.world, &mut hud);
+    println!(
+        "wealth-script ticks={} cities={} relics_kept={} routes={} per_trip={}",
+        game.world.tick(),
+        hud.cities.0,
+        hud.wealth.relics,
+        hud.wealth.routes,
+        hud.wealth.per_trip
+    );
+    assert_eq!(hud.wealth.routes, 1);
+    assert_eq!(hud.cities.0, 2);
+    assert_eq!(hud.data_tab, 2);
+    assert_eq!(hud.trade_routes.len(), 1);
+    assert!(hud.trade_routes[0].length >= 25_000);
+    assert!(
+        game.world
+            .entities()
+            .any(|e| e.owner == PLAYER && game.world.kept_nodes(e.id).next().is_some())
+    );
+    let HudSelection::Single(card) = hud.selection else {
+        panic!("merchant selected")
+    };
+    assert!(card.wealth.iter().any(|s| s.starts_with("Route:")));
+}
+
+#[test]
+fn allied_trade_and_mixed_selection_keep_move_fallback() {
+    let mut fx = wealth_fixture();
+    let mut players: Vec<_> = fx.world.players().cloned().collect();
+    for player in &mut players {
+        if player.id == PlayerId(2) {
+            player.team = 1;
+        }
+    }
+    fx.world = World::new(fx.rules.clone(), fx.world.map().clone(), 1, players)
+        .unwrap()
+        .with_match_options(rom_sim::MatchOptions {
+            victories: Default::default(),
+            ..Default::default()
+        })
+        .unwrap();
+    let (relic, priest, trader) = wealth_units(&mut fx);
+    let (home, target) = wealth_cities(&mut fx);
+    fx.world.despawn(target).unwrap();
+    let allied = fx.spawn(fx.world.entity(home).unwrap().type_id, 2, 50, 20);
+    fx.select(&[priest, trader]);
+    fx.rclick(Some(allied), (50.5, 20.5), true);
+    fx.step(1);
+    assert_eq!(
+        fx.world
+            .entity(trader)
+            .unwrap()
+            .orders()
+            .front()
+            .unwrap()
+            .kind,
+        "trade"
+    );
+    assert_eq!(
+        fx.world
+            .entity(priest)
+            .unwrap()
+            .orders()
+            .front()
+            .unwrap()
+            .kind,
+        "move"
+    );
+    // Replacing trade with a carry-node click makes the trader move and the carrier carry.
+    fx.rclick(Some(relic), (12.5, 10.5), false);
+    fx.step(1);
+    assert_eq!(
+        fx.world
+            .entity(trader)
+            .unwrap()
+            .orders()
+            .front()
+            .unwrap()
+            .kind,
+        "move"
+    );
+    assert_eq!(
+        fx.world
+            .entity(priest)
+            .unwrap()
+            .orders()
+            .front()
+            .unwrap()
+            .kind,
+        "carry"
+    );
+    assert!(fx.hud_snapshot().events.is_empty());
 }

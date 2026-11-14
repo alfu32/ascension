@@ -1,0 +1,40 @@
+# Seed 1, flat map. Real research, construction, training and right-click orders.
+# @27,0 uses the valid city-limits site, 27 tiles from the starting city.
+0 grant res.food 100000
+0 grant res.timber 100000
+0 grant res.knowledge 100000
+0 speed 10000
+1 box builders
+2 hud tab 0
+3 hud slot 3
+4 click @10,0
+300 researchers
+301 hud tab 3
+302 hud slot 1
+303 hud slot 2
+304 hud slot 3
+305 hud slot 4
+2000 hud slot 0
+3000 box builders
+3001 hud tab 0
+3002 hud slot 9
+3003 click @0,-10
+3600 box builders
+3601 hud slot 4
+3602 click @-10,0
+4200 box builders
+4201 hud slot 0
+4202 click @27,0
+5000 click temple1
+5001 hud tab 2
+5002 hud slot 0
+5300 click market1
+5301 hud tab 2
+5302 hud slot 0
+5600 click carrier1
+5601 rclick relic1
+5602 click trader1
+5603 rclick city2
+8000 click trader1
+8001 hud data 2
+8002 speed 1

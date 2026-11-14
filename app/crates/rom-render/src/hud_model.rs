@@ -214,6 +214,8 @@ pub struct HudCard {
     pub garrison: Option<String>,
     /// Workers text, when the type is a gather site.
     pub workers: Option<String>,
+    /// Keeper or trader details, one short line per row.
+    pub wealth: Vec<String>,
     /// Construction percentage while unfinished.
     pub progress_pct: Option<u32>,
 }
@@ -293,4 +295,30 @@ pub struct HudPlacement {
     pub owner: u8,
     /// Whether the position is currently valid; `None` before the first answer.
     pub valid: Option<bool>,
+}
+
+/// Wealth totals for the economy data tab.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HudWealth {
+    /// Relics contained by own keepers.
+    pub relics: usize,
+    /// Accepted routes, including reserved slots.
+    pub routes: usize,
+    /// Effective player route limit.
+    pub limit: i64,
+    /// Total income per arrival over the routes.
+    pub per_trip: i64,
+}
+
+/// A selected trader's route on the currently viewed surface.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HudTradeRoute {
+    /// Home city centre.
+    pub home: crate::SurfacePos,
+    /// Partner city centre.
+    pub target: crate::SurfacePos,
+    /// Current destination, reconstructed from arrivals at city footprints.
+    pub to_target: bool,
+    /// Route length in milli-tiles, for ground sampling density.
+    pub length: u64,
 }

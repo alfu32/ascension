@@ -347,8 +347,12 @@ impl MinimapGpu {
                                 x: (e.x * 1000.0).round() as i64,
                                 y: (e.y * 1000.0).round() as i64,
                             });
-                            let rgb =
-                                crate::owner_color(e.owner).map(|c| (c * 255.0).round() as u8);
+                            let rgb = (if e.carry_node {
+                                crate::entities::NODE_COLOR
+                            } else {
+                                crate::owner_color(e.owner)
+                            })
+                            .map(|c| (c * 255.0).round() as u8);
                             (
                                 dir,
                                 [rgb[0], rgb[1], rgb[2], 255],

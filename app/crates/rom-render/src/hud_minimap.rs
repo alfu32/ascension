@@ -318,7 +318,12 @@ pub fn marks(
     for e in entities {
         let (x, y) = tile_to_minimap(e.x, e.y, map_size, area);
         let side = (if e.building { 4.0 } else { 2.0 }) * layout.scale;
-        let rgb = crate::owner_color(e.owner).map(|c| (c * 255.0).round() as u8);
+        let rgb = (if e.carry_node {
+            crate::entities::NODE_COLOR
+        } else {
+            crate::owner_color(e.owner)
+        })
+        .map(|c| (c * 255.0).round() as u8);
         marks.push(MapMark::Dot(
             Rect::new(x - side / 2.0, y - side / 2.0, side, side),
             [rgb[0], rgb[1], rgb[2], 255],

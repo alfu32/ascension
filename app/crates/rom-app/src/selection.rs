@@ -4,7 +4,7 @@
 //!
 //! Behaviour comes from components and production rows, never from definition keys.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use rom_render::{
     ButtonState, HudButton, HudCard, HudCityRadius, HudMarker, HudPalette, HudPlacement, HudQueue,
@@ -133,10 +133,22 @@ struct Requeue {
     commands: Vec<Command>,
 }
 
+/// Presentation-only memory: the simulation keeps route direction and terminal orders private.
+#[derive(Debug)]
+struct RouteView {
+    home: EntityId,
+    target: EntityId,
+    order: Option<rom_sim::OrderId>,
+    to_target: bool,
+}
+
 /// Selection, groups, palette state and placement of player one.
 #[derive(Debug, Default)]
 pub struct Controller {
     selection: Vec<EntityId>,
+    hovered: Option<EntityId>,
+    blocked_notices: BTreeSet<rom_sim::OrderId>,
+    routes: BTreeMap<EntityId, RouteView>,
     foreign: Option<EntityId>,
     groups: [Vec<EntityId>; 10],
     last_group: Option<(usize, u64)>,
@@ -169,6 +181,30 @@ fn in_space(world: &World, entity: &Entity) -> bool {
     world
         .body(entity.pos.body)
         .is_some_and(|b| b.kind == rom_rules::BodyKind::Star)
+}
+
+/// Reconstructs the arrival check from public city footprints; route direction is private.
+fn reached_city(world: &World, unit: Pos, city: &Entity) -> bool {
+    let et = &world.rules().entity_types[&city.type_id];
+    let pos = |p: Pos| SurfacePos {
+        face: p.face,
+        x: i64::from(p.x),
+        y: i64::from(p.y),
+    };
+    let delta = match world.surface(city.pos.body).map(|s| s.topology()) {
+        Some(Topology::Cube(surface)) => surface.unfold(pos(city.pos), pos(unit)),
+        Some(Topology::Flat { .. }) => Some((
+            i64::from(unit.x) - i64::from(city.pos.x),
+            i64::from(unit.y) - i64::from(city.pos.y),
+        )),
+        None => None,
+    };
+    let Some((x, y)) = delta else { return false };
+    let dx = (x.abs() - et.footprint_w * 500).max(0);
+    let dy = (y.abs() - et.footprint_h * 500).max(0);
+    let reach = world.rules().constant("build.reach").unwrap_or(0);
+    i128::from(dx) * i128::from(dx) + i128::from(dy) * i128::from(dy)
+        <= i128::from(reach) * i128::from(reach)
 }
 
 fn snap(coordinate: i32, size: i64) -> i32 {
@@ -431,10 +467,14 @@ impl Controller {
                 button,
                 modifiers,
             } => self.hud_click(world, region, index, button, modifiers),
-            PickEvent::Hover { surface, .. } => {
+            PickEvent::Hover {
+                surface, entity, ..
+            } => {
+                self.hovered = entity.map(EntityId);
                 let at = self.pos_of(surface);
                 self.hover(world, at);
             }
+            PickEvent::HoverExit => self.hovered = None,
             PickEvent::Hotkey { ch, modifiers } => self.hotkey(world, ch, modifiers),
             PickEvent::Escape => {
                 self.placement = None;
@@ -573,16 +613,31 @@ impl Controller {
             Enemy(EntityId),
             Site(EntityId),
             Gather(EntityId, DefId),
+            Carry(EntityId, u32),
+            Trade(EntityId),
         }
         let kind = entity
             .map(EntityId)
             .and_then(|id| world.entity(id))
             .map_or(Kind::Ground, |e| {
                 let et = &rules.entity_types[&e.type_id];
-                if Self::is_enemy(world, e) {
+                if let Some(node) = et
+                    .node
+                    .as_ref()
+                    .filter(|n| n.claim_mode == rom_rules::ClaimMode::Carry)
+                    && e.container_id.is_none()
+                    && let Some(tag) = node.claim_tag_id
+                {
+                    Kind::Carry(e.id, tag)
+                } else if Self::is_enemy(world, e) {
                     Kind::Enemy(e.id)
                 } else if e.owner == PLAYER && e.build_progress.is_some() {
                     Kind::Site(e.id)
+                } else if e.owner != PlayerId(0)
+                    && e.build_progress.is_none()
+                    && et.territory.as_ref().is_some_and(|t| t.is_city)
+                {
+                    Kind::Trade(e.id)
                 } else if let (PLAYER, Some(site)) = (e.owner, et.gather_site.as_ref()) {
                     Kind::Gather(e.id, site.resource_id)
                 } else {
@@ -600,6 +655,14 @@ impl Controller {
             let armed = !et.weapons.is_empty();
             let queue = mods.shift;
             match &kind {
+                Kind::Carry(node, tag)
+                    if et.class == EntityClass::Unit && rules.has_tag(et.id, *tag) =>
+                {
+                    issued |= self.submit(world, id, "carry", None, Some(*node), None, queue);
+                }
+                Kind::Trade(city) if et.trader.as_ref().is_some_and(|t| t.runs_routes) => {
+                    issued |= self.submit(world, id, "trade", None, Some(*city), None, queue);
+                }
                 Kind::Enemy(foe) if armed && can_move => {
                     issued |= self.submit(world, id, "attack", None, Some(*foe), None, queue);
                 }
@@ -1467,6 +1530,7 @@ impl Controller {
     /// Housekeeping after each simulation step: drop dead entities, send queued helpers and
     /// re-queued orders, follow rally points, refresh the placement check.
     pub fn after_step(&mut self, world: &mut World) {
+        self.update_wealth(world);
         let alive = |id: &EntityId| world.entity(*id).is_some();
         self.selection.retain(|id| alive(id));
         for group in &mut self.groups {
@@ -1555,12 +1619,141 @@ impl Controller {
         }
     }
 
+    fn update_wealth(&mut self, world: &World) {
+        let live: BTreeSet<_> = world
+            .entities()
+            .filter(|e| e.owner == PLAYER)
+            .flat_map(|e| e.orders())
+            .map(|o| o.id)
+            .collect();
+        self.blocked_notices.retain(|id| live.contains(id));
+        for order in world
+            .entities()
+            .filter(|e| e.owner == PLAYER)
+            .flat_map(|e| e.orders())
+        {
+            if matches!(&order.status, rom_sim::OrderStatus::Blocked(reason) if reason == "no keeper")
+                && self.blocked_notices.insert(order.id)
+            {
+                self.say(world, "No temple with room for the relic");
+            }
+        }
+        let mut next = BTreeMap::new();
+        for route in world.trade_routes(PLAYER) {
+            let Some((unit, home)) = world.entity(route.trader).zip(world.entity(route.home))
+            else {
+                continue;
+            };
+            let order = unit
+                .orders()
+                .iter()
+                .find(|o| o.kind == "trade")
+                .map(|o| o.id);
+            let previous = self
+                .routes
+                .get(&route.trader)
+                .filter(|r| r.home == route.home && r.target == route.target && r.order == order);
+            let mut to_target = previous.is_some_and(|r| r.to_target);
+            if unit
+                .orders()
+                .front()
+                .is_some_and(|o| Some(o.id) == order && o.kind == "trade")
+            {
+                let destination = if to_target {
+                    world.entity(route.target)
+                } else {
+                    Some(home)
+                };
+                if destination.is_some_and(|city| reached_city(world, unit.pos, city)) {
+                    to_target = !to_target;
+                }
+            }
+            next.insert(
+                route.trader,
+                RouteView {
+                    home: route.home,
+                    target: route.target,
+                    order,
+                    to_target,
+                },
+            );
+        }
+        for (trader, route) in &self.routes {
+            if next.get(trader).is_none_or(|r| r.order != route.order)
+                && world.entity(*trader).is_some_and(|e| e.owner == PLAYER)
+                && [route.home, route.target].iter().any(|id| {
+                    world.entity(*id).is_none_or(|e| {
+                        Self::is_enemy(world, e)
+                            || e.neutralised
+                            || e.assimilation_until.is_some()
+                            || e.build_progress.is_some()
+                            || e.hp <= 0
+                    })
+                })
+            {
+                self.message = Some(("Trade route ended: city lost".into(), world.tick()));
+            }
+        }
+        self.routes = next;
+    }
+
+    fn wealth_help(&self, world: &World) -> Option<String> {
+        let rules = world.rules();
+        let target = self.hovered.and_then(|id| world.entity(id))?;
+        let et = &rules.entity_types[&target.type_id];
+        let selected = self.own_selected(world);
+        if let Some(node) = et
+            .node
+            .as_ref()
+            .filter(|n| n.claim_mode == rom_rules::ClaimMode::Carry)
+            && target.container_id.is_none()
+            && selected.iter().any(|e| {
+                node.claim_tag_id
+                    .is_some_and(|tag| rules.has_tag(e.type_id, tag))
+            })
+        {
+            let keeper = rules.entity_types.values().find(|t| t.keeper.is_some())?;
+            let faction = world.players().find(|p| p.id == PLAYER)?.faction;
+            return Some(format!(
+                "Carry to a {}",
+                rules.display_name(keeper.id, faction).to_lowercase()
+            ));
+        }
+        if et.territory.as_ref().is_some_and(|t| t.is_city)
+            && target.build_progress.is_none()
+            && !Self::is_enemy(world, target)
+            && target.owner != PlayerId(0)
+            && selected.iter().any(|e| {
+                rules.entity_types[&e.type_id]
+                    .trader
+                    .as_ref()
+                    .is_some_and(|t| t.runs_routes)
+            })
+        {
+            let income: i64 = world
+                .trade_routes(PLAYER)
+                .filter(|r| {
+                    selected.iter().any(|e| e.id == r.trader)
+                        && (r.home == target.id || r.target == target.id)
+                })
+                .map(|r| r.per_trip_income)
+                .sum();
+            return Some(if income > 0 {
+                format!("Trade route: +{income} per trip")
+            } else {
+                "Trade route".into()
+            });
+        }
+        None
+    }
+
     // ----- snapshot ------------------------------------------------------------------------
 
     /// Adds the selection, palette, queue and overlay data to a HUD snapshot.
     pub fn fill(&self, world: &World, hud: &mut HudSnapshot) {
         let rules = world.rules();
         hud.data_tab = self.data_tab;
+        hud.help = self.wealth_help(world).unwrap_or_default();
         let pending: Vec<_> = self
             .pending_research
             .iter()
@@ -1608,6 +1801,7 @@ impl Controller {
                 }),
                 garrison: et.container.as_ref().map(|c| format!("max {}", c.capacity)),
                 workers,
+                wealth: crate::hud::wealth_card(world, e),
                 progress_pct: e.build_progress.map(|done| {
                     let sources = world
                         .players()
@@ -1676,6 +1870,27 @@ impl Controller {
             }
             _ => None,
         };
+        hud.trade_routes = world
+            .trade_routes(PLAYER)
+            .filter(|r| self.selection.contains(&r.trader))
+            .filter_map(|r| {
+                let (home, target) = world.entity(r.home).zip(world.entity(r.target))?;
+                if home.pos.body != self.view.planet || target.pos.body != self.view.planet {
+                    return None;
+                }
+                let pos = |p: Pos| SurfacePos {
+                    face: p.face,
+                    x: i64::from(p.x),
+                    y: i64::from(p.y),
+                };
+                Some(rom_render::HudTradeRoute {
+                    home: pos(home.pos),
+                    target: pos(target.pos),
+                    to_target: self.routes.get(&r.trader).is_some_and(|v| v.to_target),
+                    length: r.length,
+                })
+            })
+            .collect();
         let tick = world.tick();
         hud.markers = self
             .markers
@@ -1772,6 +1987,19 @@ impl Controller {
 /// Translate rejected placement and research orders into the rule the player can fix.
 fn rejection_message(world: &World, error: &SimError, subject: Option<DefId>) -> String {
     match error {
+        SimError::InvalidCarryTarget => "That relic is no longer available".into(),
+        SimError::CannotCarry => "This unit cannot carry that".into(),
+        SimError::CarrierFull => "Already carrying".into(),
+        SimError::NoHomeCity => "No home city on this world".into(),
+        SimError::RouteTooShort => format!(
+            "Too close for a trade route ({} tiles)",
+            world.rules().constant("trade.min_route").unwrap_or(0) / 1000
+        ),
+        SimError::NotATradePartner => "Not a trade partner".into(),
+        SimError::CaravanLimit => format!(
+            "Trade route limit reached ({})",
+            crate::hud::caravan_limit(world, PLAYER)
+        ),
         SimError::CitiesTooClose => format!(
             "Too close to another city ({} tiles)",
             world.rules().constant("city.spacing").unwrap_or(0) / 1000
