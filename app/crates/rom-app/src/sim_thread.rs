@@ -927,7 +927,9 @@ mod tests {
         // A player who advances to the classical age sees the city change its look.
         assert_eq!(model_of(None, "bld.city"), "bld.city@ancient");
         assert_eq!(model_of(Some(1), "bld.city"), "bld.city@classical");
-        assert_eq!(model_of(Some(3), "bld.city"), "bld.city@classical");
+        assert_eq!(model_of(Some(2), "bld.city"), "bld.city@medieval");
+        // The gunpowder age has no city look of its own yet: the medieval one stays.
+        assert_eq!(model_of(Some(3), "bld.city"), "bld.city@medieval");
         assert_eq!(model_of(None, "unit.citizen"), "unit.citizen@any");
     }
 
