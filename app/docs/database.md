@@ -188,20 +188,17 @@ receives its income. No building is needed.
 terrain it can cross, so vehicles that fly, dive or reach orbit are just
 classes with more rows.
 
-**Players reach space one by one.** Each age belongs to a tier
-(`age.map_scale`). A player's camera limit, visibility and reach are those of
-*their own* current age: before their space age they see and act only on
-their home planet; on reaching it their view zooms out to the system and the
-star map. Others stay confined until they get there, so the first arrival
-claims resource bodies and colony sites unopposed. Nothing is regenerated and
-no state is converted — it is purely a per-player reveal.
+**Players unlock the camera one by one.** Positive `age.view_range` keeps the
+camera on the home planet; zero unlocks continuous zoom to the system and
+star map (Fusion, ordinal 9, in the current seed). The limit follows the live
+player age, including research completed during a match. `age.map_scale`
+continues to describe gameplay tiers.
 
-`age.view_range` (milli-tiles) is the largest ground half-width the camera may
-show in that age while the view is still bound to the home planet, measured
-across the screen at the point looked at (0.6 × the eye distance, whatever the
-tilt): 30 tiles in the first age (the home city and its border), 78 in the
-Information Age (about a third of a 192-tile planet's face), `0` (the whole
-globe) from the Fusion Age on.
+`age.view_range` is the largest ground half-width in milli-tiles while the
+camera is bound to the home planet: 60,000 in the first age, 320,000 in the
+Information Age, 450,000 in Automation, and zero from Fusion on. These are
+the ground limits passed to the camera; task 41 supersedes the earlier
+separate whole-globe-only age.
 
 A flat rectangular map remains for tests and skirmish maps: `map_style.planets`
 and `space_pct` and the `planet`/`space` feature rows drive it, and `map_grid`
@@ -479,3 +476,28 @@ of `city.spacing`). `player.caravan_limit.base` is 2; `caravan_limit` modifiers
 add route slots. Pending route orders reserve slots. Orders retain the home,
 target, accepted length, delivery resource/amount and current leg in memory;
 the existing `trade_route` table is unchanged (save support is a later task).
+
+## Placement and resource discovery (task 41)
+
+Every building with an `in_city_radius` row also has an `in_own_territory`
+row, including automated variants copied by the content generator. The
+first checks the building centre against the city's economic radius using
+unfolded cube-face distance. The second checks every footprint tile against
+the owner's national border. Economic radius growth never grants territory.
+
+`resource.first_age_id` is a discovery gate. Terrain-to-resource associations
+come from existing `et_gather_site.resource_id`, `needs_node_terrain_id` and
+`on_terrain` placement rows. A terrain with several yields is known from the
+earliest of their discovery ages; any ungated yield makes it ordinary ground.
+Terrain with no gather yield stays known. This keeps plain land known when a
+late-age gather site also uses it. A required but undiscovered deposit makes
+placement preview return the discovery age; oil wells remain locked through
+their ordinary production prerequisites too.
+
+The app caches the current player's known tile identities by age and viewed
+body, marking undiscovered deposits as plain-land replacements. That cache
+is ready for a renderer tile-update interface; baked terrain and minimaps
+currently still show oil at every age. The existing land shader also lacks
+a glossy pool program: the `water` program is handled by the sea shader and
+falls back to a flat colour on land. No material-only substitution can
+produce the requested glossy black pools yet.

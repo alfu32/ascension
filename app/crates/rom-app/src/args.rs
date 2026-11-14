@@ -5,12 +5,12 @@ use std::path::PathBuf;
 /// Usage text printed for `--help` and after argument errors.
 pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <file.png>] \
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] \
-[--map-size <width>x<height>] [--sphere <n>] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
+[--map-size <width>x<height>] [--sphere <n>] [--single-planet] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
 [--universe] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-hud] [--hud-scale <percent>] [--stats] \
 [--sun <orbit|fixed|night>] [--graticule <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
 [--gallery <all|units|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
 [--model <model id>] [--parts] [--pose <idle|move|attack|work>] [--anim-time <seconds>] \
-[--gallery-manifest <file.json>]";
+[--gallery-manifest <file.json>]\n\n--sphere N builds a universe with home face size N (64..=512).\n--single-planet preserves an isolated sphere (16..=512; default 192).";
 
 /// Default canvas size in pixels when `--size` is not given.
 pub const DEFAULT_SIZE: (u32, u32) = (1280, 800);
@@ -36,8 +36,10 @@ pub struct Options {
     pub factions: Option<Vec<String>>,
     /// Map size in tiles.
     pub map_size: (u32, u32),
-    /// Draw a sphere planet with this many tiles along a cube face edge (16..=512).
+    /// Home planet face size in a universe (64..=512), or a single sphere (16..=512).
     pub sphere: Option<u32>,
+    /// Keep a single sphere for benchmarks, screenshots and surface tests.
+    pub single_planet: bool,
     /// Orbit camera placement on a sphere: longitude, latitude, distance and heading.
     pub orbit: Option<[f32; 4]>,
     /// Camera placement: target x and y in tiles, distance, yaw and pitch in degrees.
@@ -62,7 +64,7 @@ pub struct Options {
     pub stats: bool,
     /// Replay pick events from this file on the simulation thread (hidden option).
     pub script: Option<PathBuf>,
-    /// Generate a universe and zoom from the home globe out to the star map.
+    /// Generate a universe with the map style's default home size (also implied by `sphere`).
     pub universe: bool,
     /// Lift the zoom cap by age (testing).
     pub zoom_all: bool,
@@ -144,6 +146,7 @@ impl Default for Options {
             factions: None,
             map_size: (256, 256),
             sphere: None,
+            single_planet: false,
             orbit: None,
             camera: None,
             boxes: 0,
@@ -175,6 +178,13 @@ impl Default for Options {
             anim_time: None,
             help: false,
         }
+    }
+}
+
+impl Options {
+    /// Sphere games include the universe unless a single planet was explicitly requested.
+    pub fn uses_universe(&self) -> bool {
+        !self.single_planet && (self.universe || self.sphere.is_some())
     }
 }
 
@@ -239,6 +249,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             "--boxes" => options.boxes = number("--boxes", &value("--boxes")?)?,
             "--demo" => options.demo = true,
             "--universe" => options.universe = true,
+            "--single-planet" => options.single_planet = true,
             "--zoom-all" => options.zoom_all = true,
             "--zoom-out" => options.zoom_out = true,
             "--age" => {
@@ -348,6 +359,12 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             "-h" | "--help" => options.help = true,
             other => return Err(format!("unknown argument {other:?}")),
         }
+    }
+    if options.single_planet && options.universe {
+        return Err("--single-planet and --universe are mutually exclusive".into());
+    }
+    if options.uses_universe() && options.sphere.is_some_and(|n| n < 64) {
+        return Err("universe home planets require --sphere 64 to 512; use --single-planet for smaller spheres".into());
     }
     Ok(options)
 }
@@ -502,12 +519,29 @@ mod tests {
     fn parses_sphere_and_orbit_options() {
         let o = parse(args(&["--sphere", "192", "--orbit", "0,10,12,30"])).unwrap();
         assert_eq!(o.sphere, Some(192));
+        assert!(o.uses_universe());
         assert_eq!(o.orbit, Some([0.0, 10.0, 12.0, 30.0]));
         assert_eq!(parse(args(&[])).unwrap().sphere, None);
         for bad in [["--sphere", "8"], ["--sphere", "x"], ["--orbit", "1,2,3"]] {
             assert!(parse(args(&bad)).is_err(), "{bad:?}");
         }
         assert!(parse(args(&["--orbit", "0,95,12,0"])).is_err());
+    }
+
+    #[test]
+    fn single_planet_preserves_the_old_sphere_mode() {
+        let o = parse(args(&["--sphere", "24", "--single-planet"])).unwrap();
+        assert_eq!(o.sphere, Some(24));
+        assert!(!o.uses_universe());
+        assert!(!parse(args(&["--single-planet"])).unwrap().uses_universe());
+        assert!(parse(args(&["--sphere", "24"])).is_err());
+        assert!(parse(args(&["--universe", "--single-planet"])).is_err());
+        assert!(parse(args(&["--single-planet", "--universe"])).is_err());
+        assert!(
+            parse(args(&["--universe", "--sphere", "256"]))
+                .unwrap()
+                .uses_universe()
+        );
     }
 
     #[test]

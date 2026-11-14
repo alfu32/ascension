@@ -84,7 +84,7 @@ env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --universe --seed 1 --z
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --universe --seed 1 --zoom-all --view starmap --size 1280x720 --screenshot target/zoom-starmap.png
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --universe --seed 1 --size 1280x720 --view starmap --screenshot target/zoom-capped.png
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --universe --seed 1 --zoom-all --view system,home --size 1280x800 --bench 10
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --size 1280x800 --bench 10
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --demo --seed 1 --size 1280x800 --bench 10
 ```
 
 Look at the screenshots: the home globe; the home system with its star, orbit

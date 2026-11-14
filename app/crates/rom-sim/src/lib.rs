@@ -146,6 +146,9 @@ pub enum SimError {
     /// The subject is absent from the faction roster.
     #[error("subject is unavailable to this faction")]
     Unavailable,
+    /// A terrain resource required by this building has not been discovered yet.
+    #[error("resource deposit requires age {0:?}")]
+    ResourceAgeRequired(DefId),
     /// Subject prerequisites are unmet.
     #[error("subject is locked")]
     Locked,

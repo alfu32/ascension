@@ -68,7 +68,8 @@ pub fn run(options: &Options) -> ExitCode {
     };
     let sim_link = sim.as_ref().map_or_else(SimLink::idle, SimThread::link);
     if options.sphere.is_none()
-        && !options.universe
+        && !options.single_planet
+        && !options.uses_universe()
         && let Some([x, y, distance, yaw, pitch]) = options.camera
     {
         bridge.publish_camera(Camera {
@@ -216,7 +217,7 @@ fn world_view(
 /// simulation thread.
 fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThread, String> {
     let mut host = None;
-    let mut game = if options.universe {
+    let mut game = if options.uses_universe() {
         let setup = match &options.script {
             Some(path) => {
                 let text = std::fs::read_to_string(path)
@@ -244,6 +245,7 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
             universe,
             &content.factions,
             options.seed,
+            options.age,
             &setup,
         )
         .map_err(|error| format!("setting up the match: {error}"))?;
@@ -262,6 +264,7 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
             );
         }
         host = Some(universe_host);
+        crate::sim_thread::publish_camera_limits(&game.world, bridge);
         bridge.publish_zoom_all(options.zoom_all);
         bridge.publish_universe(
             Arc::new(universe_view::to_universe_scene(universe, &bodies)),
@@ -284,7 +287,13 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
             Arc::new(scene),
             OrbitSettings {
                 max_distance: None,
-                view: options.orbit,
+                view: match (&options.look_at, planet.starts.first().copied()) {
+                    (Some(look), Some(home)) => Some(
+                        terrain::look_at(&content.rules, planet, home, look)
+                            .ok_or_else(|| format!("--look-at: no tile matches {look:?}"))?,
+                    ),
+                    _ => options.orbit,
+                },
                 home: game.starts.first().map(|s| SurfacePos {
                     face: s.city_pos.face,
                     x: i64::from(s.city_pos.x),
@@ -295,7 +304,7 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
         );
         game
     } else {
-        match options.sphere {
+        match options.sphere.or(options.single_planet.then_some(192)) {
             Some(n) => {
                 let content = terrain::generate_sphere_content(options, n)?;
                 let game = build_sphere_match_in_age(
@@ -362,10 +371,7 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
             }
         }
     };
-    if options.zoom_out {
-        bridge.publish_zoom_out();
-    }
-    if !options.universe
+    if !options.uses_universe()
         && let Some(path) = &options.script
     {
         let text = std::fs::read_to_string(path)
@@ -386,6 +392,10 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
     let waiting = std::time::Instant::now();
     while !bridge.terrain_ready() && waiting.elapsed() < TERRAIN_WAIT {
         std::thread::sleep(Duration::from_millis(5));
+    }
+    // A one-shot zoom request must reach the prepared camera, not the empty startup view.
+    if options.zoom_out {
+        bridge.publish_zoom_out();
     }
     SimThread::spawn(
         game.world,

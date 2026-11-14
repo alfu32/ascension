@@ -160,8 +160,8 @@ env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --gallery all --size 16
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --model bld.city@ancient --size 1600x900 --screenshot target/model-city.png --after 3
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --model bld.barracks@ancient --parts --size 1600x900 --screenshot target/model-barracks-parts.png --after 3
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --gallery-manifest target/models.json
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --size 1280x800 --screenshot target/models-home.png --after 3
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --size 1280x800 --bench 10   # twice, with uptime
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --seed 1 --size 1280x800 --screenshot target/models-home.png --after 3
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --demo --seed 1 --size 1280x800 --bench 10   # twice, with uptime
 ```
 
 Look at every screenshot. The models must look like the brief describes, not

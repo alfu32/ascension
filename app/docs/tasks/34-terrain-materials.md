@@ -90,10 +90,10 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 sqlite3 /tmp/rom.db < db/schema.sql && sqlite3 /tmp/rom.db < db/seed.sql   (fresh file; lint views empty)
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --size 1280x800 --after 20 --screenshot target/materials-street.png
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --size 1280x800 --orbit <over a forest and a mountain, close> --no-hud --after 2 --screenshot target/forest-mountain.png
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --size 1280x800 --orbit 0,10,330,0 --no-hud --after 1 --screenshot target/materials-globe.png
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --size 1280x800 --bench 10
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --demo --seed 1 --size 1280x800 --after 20 --screenshot target/materials-street.png
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --seed 1 --size 1280x800 --orbit <over a forest and a mountain, close> --no-hud --after 2 --screenshot target/forest-mountain.png
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --seed 1 --size 1280x800 --orbit 0,10,330,0 --no-hud --after 1 --screenshot target/materials-globe.png
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --demo --seed 1 --size 1280x800 --bench 10
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --demo --seed 1 --size 1280x800 --bench 10
 ```
 

@@ -680,27 +680,43 @@ fn per_match_limits_count_other_players_and_construction_sites_once() {
     let catalogue = rules(
         "UPDATE entity_type SET limit_scope='per_match',limit_count=2 WHERE id=(SELECT id FROM def WHERE key='bld.farm');",
     );
-    let initial = setup(catalogue.clone(), &[]);
-    let p = player(&initial).clone();
-    let mut other = p.clone();
-    other.id = PlayerId(2);
-    let mut w = World::new(catalogue, initial.map().clone(), 7, vec![p, other]).unwrap();
-    town(&mut w, OWNER, at(56_500, 56_500));
-    town(&mut w, PlayerId(2), at(56_500, 30_500));
-    let worker = spawn(&mut w, "unit.citizen", at(0, 0));
-    let other_worker = w
-        .spawn(id(&w, "unit.citizen"), PlayerId(2), at(0, 0))
-        .unwrap();
-    w.submit(construction(&w, worker, "bld.farm", at(10_000, 10_000)))
-        .unwrap();
-    w.step();
-    let mut order = construction(&w, other_worker, "bld.farm", at(20_000, 10_000));
-    order.player = PlayerId(2);
-    w.submit(order).unwrap();
-    assert_eq!(
-        w.submit(construction(&w, worker, "bld.farm", at(30_000, 10_000))),
-        Err(SimError::LimitReached)
-    );
+    let run = || {
+        let initial = setup(catalogue.clone(), &[]);
+        let p = player(&initial).clone();
+        let mut other = p.clone();
+        other.id = PlayerId(2);
+        let mut w =
+            World::new(catalogue.clone(), initial.map().clone(), 7, vec![p, other]).unwrap();
+        town(&mut w, OWNER, at(56_500, 56_500));
+        town(&mut w, PlayerId(2), at(56_500, 30_500));
+        let worker = spawn(&mut w, "unit.citizen", at(0, 0));
+        let other_worker = w
+            .spawn(id(&w, "unit.citizen"), PlayerId(2), at(0, 0))
+            .unwrap();
+        // The southern city owns the lower half; the northern city owns the upper half.
+        // Economic coverage overlaps, but each player's farms must use their own tiles.
+        for (owner, pos) in [
+            (OWNER, at(10_000, 54_000)),
+            (PlayerId(2), at(20_000, 10_000)),
+        ] {
+            assert_eq!(
+                w.territory_owner_on_body(pos.body, pos.face, pos.x / 1000, pos.y / 1000),
+                Some(owner)
+            );
+        }
+        w.submit(construction(&w, worker, "bld.farm", at(10_000, 54_000)))
+            .unwrap();
+        w.step();
+        let mut order = construction(&w, other_worker, "bld.farm", at(20_000, 10_000));
+        order.player = PlayerId(2);
+        w.submit(order).unwrap();
+        assert_eq!(
+            w.submit(construction(&w, worker, "bld.farm", at(30_000, 54_000))),
+            Err(SimError::LimitReached)
+        );
+        w.hash()
+    };
+    assert_eq!(run(), run());
 }
 
 #[test]

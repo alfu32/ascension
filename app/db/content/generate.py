@@ -193,6 +193,8 @@ def generate():
         row('et_producer', entity_type_id=Ref(full))
         rule = 'in_city_radius' if page == 'economic' and key != 'city' else 'in_own_territory'
         row('placement_rule', entity_type_id=Ref(full), rule=rule)
+        if rule == 'in_city_radius':
+            row('placement_rule', entity_type_id=Ref(full), rule='in_own_territory')
         row('placement_rule', entity_type_id=Ref(full), rule='on_terrain', ref_def_id=Ref('ter.oil' if key == 'oil_well' else 'ter.plain'))
         if key == 'dock':
             row('placement_rule', entity_type_id=Ref(full), rule='adjacent_terrain', ref_def_id=Ref('ter.coast'), distance=2000)

@@ -374,6 +374,7 @@ pub fn build_universe_match(
     universe: &Universe,
     factions: &[DefId],
     seed: u64,
+    age_ordinal: Option<i64>,
     setup: &ScriptSetup,
 ) -> Result<Match, SetupError> {
     let builder = builder_type(rules).ok_or(SetupError::NoBuilder)?;
@@ -391,6 +392,7 @@ pub fn build_universe_match(
             player.age = age;
         }
     }
+    set_age_by_ordinal(rules, &mut players, age_ordinal)?;
     let homes: BTreeMap<PlayerId, BodyId> = universe
         .starts
         .iter()
@@ -518,6 +520,7 @@ pub(crate) fn universe_game_for_tests() -> (crate::terrain::UniverseContent, Mat
         &content.universe,
         &content.factions,
         1,
+        None,
         &setup,
     )
     .expect("match");
@@ -692,6 +695,7 @@ mod tests {
             &content.universe,
             &content.factions,
             1,
+            None,
             &ScriptSetup::default(),
         )
         .expect("match");
@@ -721,6 +725,7 @@ mod tests {
         let options = Options {
             players: 4,
             sphere: Some(128),
+            single_planet: true,
             ..Options::default()
         };
         let content = crate::terrain::generate_sphere_content(&options, 128).expect("planet");
