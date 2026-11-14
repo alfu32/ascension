@@ -71,9 +71,9 @@ wait for the GPU, not the drawing commands.
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --size 1280x800 --bench 10
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --demo --seed 1 --size 1280x800 --bench 10
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --demo --seed 1 --size 1280x800 --bench 10
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --size 1280x800 --screenshot target/readback-home.png --after 3
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --seed 1 --size 1280x800 --screenshot target/readback-home.png --after 3
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --seed 1 --size 1672x941 --script docs/tasks/35-library-script.txt --screenshot target/readback-library.png --after 12
 ```
 

@@ -742,6 +742,7 @@ fn sphere_fixture() -> (Controller, crate::match_setup::Match) {
     let options = crate::args::Options {
         players: 2,
         sphere: Some(64),
+        single_planet: true,
         ..crate::args::Options::default()
     };
     let content = crate::terrain::generate_sphere_content(&options, 64).expect("planet");
@@ -1858,4 +1859,32 @@ fn allied_trade_and_mixed_selection_keep_move_fallback() {
         "carry"
     );
     assert!(fx.hud_snapshot().events.is_empty());
+}
+
+#[test]
+fn undiscovered_deposit_preview_names_the_required_age() {
+    let mut fx = fixture();
+    let well = fx.rules.id_of("bld.oil_well").unwrap();
+    let age = fx.rules.id_of("age.industrial").unwrap();
+    assert_eq!(
+        placement_check(&fx.world, well, at(24, 24)),
+        Err(SimError::ResourceAgeRequired(age))
+    );
+    fx.ctl.placement = Some(Placement {
+        def: well,
+        footprint: (2, 2),
+        centre: Some(at(24, 24)),
+        valid: None,
+        dirty: true,
+        checked: None,
+        checked_age: None,
+    });
+    fx.ctl.refresh_placement(&fx.world);
+    assert_eq!(fx.ctl.placement.as_ref().unwrap().valid, Some(false));
+    let mut hud = crate::hud::snapshot_of(&fx.world);
+    fx.ctl.fill(&fx.world, &mut hud);
+    assert_eq!(
+        hud.help,
+        format!("Deposit revealed in {}", fx.rules.def(age).name)
+    );
 }

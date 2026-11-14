@@ -144,11 +144,20 @@ fn universe_default_style(rules: &Rules) -> Option<DefId> {
 
 /// Generates the universe for the options' style, seed and factions.
 pub fn generate_universe_content(options: &Options) -> Result<UniverseContent, String> {
-    let (rules, mut style, factions) = resolve(options)?;
+    let (mut rules, mut style, factions) = resolve(options)?;
     if options.style.is_none()
         && let Some(roomiest) = universe_default_style(&rules)
     {
         style = roomiest;
+    }
+    if let Some(n) = options.sphere {
+        if !(64..=512).contains(&n) {
+            return Err("universe home planet face size must be 64 to 512".into());
+        }
+        let recipe = rules.map_styles.get_mut(&style).expect("resolved style");
+        recipe.planet_n_median = i64::from(n);
+        recipe.planet_n_min = recipe.planet_n_min.min(i64::from(n));
+        recipe.planet_n_max = recipe.planet_n_max.max(i64::from(n));
     }
     let universe = generate_universe(
         &rules,
@@ -163,6 +172,34 @@ pub fn generate_universe_content(options: &Options) -> Result<UniverseContent, S
         rules: Arc::new(rules),
         universe,
         factions,
+    })
+}
+
+/// Terrain identities known to a player; `None` means display the surrounding plain land.
+/// The renderer still draws its baked terrain until it supports per-player tile updates.
+pub fn known_terrain(
+    world: &rom_sim::World,
+    player: rom_sim::PlayerId,
+    body: rom_sim::BodyId,
+) -> Vec<Option<DefId>> {
+    let known: BTreeMap<_, _> = world
+        .rules()
+        .terrains
+        .keys()
+        .map(|&terrain| {
+            (
+                terrain,
+                world.knows_terrain(player, terrain).then_some(terrain),
+            )
+        })
+        .collect();
+    world.surface(body).map_or_else(Vec::new, |surface| {
+        surface
+            .map()
+            .terrain
+            .iter()
+            .map(|terrain| known[terrain])
+            .collect()
     })
 }
 
@@ -360,12 +397,10 @@ pub fn look_at(
     let radius = rom_render::planet_radius(surface.n);
     let reach = (LOOK_NEAR_TILES / radius).cos();
     let stand = (LOOK_STAND_TILES / radius).cos();
+    let mut fallback = None;
     for (_, i) in candidates {
         let at = tile_dir(i);
-        // The edge of a sizeable stand, not a lone tile.
-        if own.iter().filter(|o| dot(**o, at) >= stand).count() < LOOK_STAND_COUNT {
-            continue;
-        }
+        let stand_count = own.iter().filter(|o| dot(**o, at) >= stand).count();
         let facing = if near.is_some() {
             // Enough of the other terrain close by, and its middle as the point to face.
             let close: Vec<&[f32; 3]> = others.iter().filter(|o| dot(**o, at) >= reach).collect();
@@ -394,9 +429,20 @@ pub fn look_at(
             0.0
         };
         let (lon, lat) = lon_lat_of(at);
-        return Some([lon.to_degrees(), lat.to_degrees(), look.distance, facing]);
+        let view = [lon.to_degrees(), lat.to_degrees(), look.distance, facing];
+        if stand_count >= LOOK_STAND_COUNT {
+            return Some(view);
+        }
+        // Sparse deposits can contain fewer tiles than a forest stand. Prefer the
+        // largest local clump; equal clumps keep the nearest-to-home candidate.
+        if fallback
+            .as_ref()
+            .is_none_or(|(count, _)| stand_count > *count)
+        {
+            fallback = Some((stand_count, view));
+        }
     }
-    None
+    fallback.map(|(_, view)| view)
 }
 
 #[cfg(test)]
@@ -463,6 +509,7 @@ mod tests {
     fn sphere_option_builds_a_planet_scene_from_the_generated_planet() {
         let options = Options {
             sphere: Some(24),
+            single_planet: true,
             seed: 5,
             players: 2,
             ..Options::default()
@@ -511,6 +558,36 @@ mod tests {
             scene_colours[&9999],
             [4, 5, 6],
             "terrains without a material keep theirs"
+        );
+    }
+}
+
+#[cfg(test)]
+mod deposit_tests {
+    use super::*;
+
+    #[test]
+    fn look_at_accepts_sparse_deposits() {
+        let options = Options {
+            players: 1,
+            sphere: Some(64),
+            single_planet: true,
+            ..Options::default()
+        };
+        let content = generate_sphere_content(&options, 64).unwrap();
+        let home = content.planet.starts[0];
+        assert!(
+            look_at(
+                &content.rules,
+                &content.planet,
+                home,
+                &LookAt {
+                    terrain: "ter.oil".into(),
+                    near: None,
+                    distance: 12.0,
+                }
+            )
+            .is_some()
         );
     }
 }

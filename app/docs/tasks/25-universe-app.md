@@ -80,7 +80,7 @@ env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --universe --seed 1 --s
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --universe --seed 1 --zoom-all --script docs/tasks/25-space-script.txt --view system,home --size 1280x720 --after 40 --screenshot target/u-ships.png
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --universe --seed 1 --zoom-all --script docs/tasks/25-space-script.txt --view starmap --size 1280x720 --after 90 --screenshot target/u-transit.png
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --universe --seed 1 --zoom-all --view system,home --size 1280x800 --bench 10
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --size 1280x800 --bench 10
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --demo --seed 1 --size 1280x800 --bench 10
 ```
 
 Write `docs/tasks/25-space-script.txt`: grant player one the space age and

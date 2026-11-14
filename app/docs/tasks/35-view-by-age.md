@@ -92,12 +92,12 @@ cargo test --workspace --locked
 The orchestrator then runs (write any script you need under `docs/tasks/35-*.txt`):
 
 ```
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --size 1280x800 --zoom-out --screenshot target/view-age0.png --after 2
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --size 1280x800 --age 7 --zoom-out --screenshot target/view-age7.png --after 2
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --size 1280x800 --age 9 --zoom-out --screenshot target/view-age9.png --after 2
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --size 1280x800 --screenshot target/view-home.png --after 2
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --seed 1 --size 1280x800 --zoom-out --screenshot target/view-age0.png --after 2
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --seed 1 --size 1280x800 --age 7 --zoom-out --screenshot target/view-age7.png --after 2
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --seed 1 --size 1280x800 --age 9 --zoom-out --screenshot target/view-age9.png --after 2
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --seed 1 --size 1280x800 --screenshot target/view-home.png --after 2
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --seed 1 --size 1672x941 --script docs/tasks/35-library-script.txt --screenshot target/library-grid.png --after 12
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --size 1280x800 --bench 10
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --demo --seed 1 --size 1280x800 --bench 10
 ```
 
 Add `--zoom-out` (zoom to the cap at start) and `--age <ordinal>` (start the

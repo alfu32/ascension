@@ -457,3 +457,227 @@ fn sphere_nodes_belong_to_the_neutral_player() {
         Some(SimError::UnknownPlayer(PlayerId(0)))
     );
 }
+
+#[test]
+fn economic_buildings_require_owned_territory_in_the_catalogue() {
+    use rom_rules::PlacementKind;
+    for et in rules().entity_types.values() {
+        if et
+            .placement_rules
+            .iter()
+            .any(|r| r.rule == PlacementKind::InCityRadius)
+        {
+            assert!(
+                et.placement_rules
+                    .iter()
+                    .any(|r| r.rule == PlacementKind::InOwnTerritory),
+                "{:?}",
+                et.id
+            );
+        }
+    }
+}
+
+#[test]
+fn oil_placement_obeys_radius_and_whole_footprint_borders_at_edges_and_corners() {
+    let catalogue = rules();
+    // A city touching the right edge, and the right/top corner. The second direction at
+    // the corner crosses a rotated face join; the oil well itself always fits one face.
+    for (city_at, directions) in [
+        (at(0, 252_500, 128_500), vec![(-1, 0), (1, 0)]),
+        (at(1, 252_500, 3_500), vec![(-1, 1), (1, 0), (0, -1)]),
+    ] {
+        for (dx, dy) in directions {
+            let straddle = if dx != 0 && dy != 0 {
+                28_000
+            } else if dx > 0 {
+                39_000
+            } else {
+                40_000
+            };
+            for (offset, economic, expected) in [
+                (8_000, 16_000, None),
+                (24_000, 16_000, Some(SimError::NotInCityRadius)),
+                // A widened economy may extend past the national border. It must still
+                // reject the well, even when its centre is inside the economic radius.
+                (48_000, 80_000, Some(SimError::NotInOwnTerritory)),
+                // Centre just inside the border, outer footprint tiles outside it.
+                (straddle, 60_000, Some(SimError::NotInOwnTerritory)),
+            ] {
+                let mut adjusted = (*catalogue).clone();
+                let city_type = adjusted.id_of("bld.city").unwrap();
+                adjusted
+                    .entity_types
+                    .get_mut(&city_type)
+                    .unwrap()
+                    .territory
+                    .as_mut()
+                    .unwrap()
+                    .economic_radius = economic;
+                let adjusted = Arc::new(adjusted);
+                let run = || {
+                    let surface = CubeSurface { n: 256 };
+                    let oil = adjusted.id_of("ter.oil").unwrap();
+                    let mut owner = player(&adjusted, 1);
+                    owner.age = adjusted.id_of("age.industrial").unwrap();
+                    let mut w = World::from_sphere(
+                        adjusted.clone(),
+                        surface,
+                        vec![oil; surface.len()],
+                        &[],
+                        41,
+                        vec![owner],
+                    )
+                    .unwrap();
+                    let city = w.place_for_setup(city_type, P1, city_at).unwrap();
+                    assert_eq!(w.entity(city).unwrap().pos, city_at);
+                    let builder = w.spawn(id(&w, "unit.citizen"), P1, city_at).unwrap();
+                    let well = id(&w, "bld.oil_well");
+                    let target = w.offset(city_at, dx * offset, dy * offset);
+                    let unfolded = surface.unfold(
+                        SurfacePos {
+                            face: city_at.face,
+                            x: i64::from(city_at.x),
+                            y: i64::from(city_at.y),
+                        },
+                        SurfacePos {
+                            face: target.face,
+                            x: i64::from(target.x),
+                            y: i64::from(target.y),
+                        },
+                    );
+                    // The city's distance metric agrees with the integer cube unfolding.
+                    let (ux, uy) = unfolded.unwrap();
+                    assert_eq!(
+                        w.distance(city_at, target),
+                        Some(rom_sim::integer_sqrt(
+                            (i128::from(ux).pow(2) + i128::from(uy).pow(2)) as u128
+                        ))
+                    );
+                    let snapped = Pos {
+                        x: (target.x + 500).div_euclid(1000) * 1000,
+                        y: (target.y + 500).div_euclid(1000) * 1000,
+                        ..target
+                    };
+                    if offset == straddle {
+                        assert!(
+                            w.distance(city_at, snapped).unwrap() <= 40_000,
+                            "the straddling well's centre must be inside the border: {snapped:?}"
+                        );
+                    }
+                    let all_owned = ((snapped.y / 1000 - 1)..(snapped.y / 1000 + 1)).all(|y| {
+                        ((snapped.x / 1000 - 1)..(snapped.x / 1000 + 1)).all(|x| {
+                            w.territory_owner_on_body(snapped.body, snapped.face, x, y) == Some(P1)
+                        })
+                    });
+                    assert_eq!(all_owned, expected != Some(SimError::NotInOwnTerritory));
+                    let before = w.hash();
+                    let preview = w.check_placement(P1, well, target);
+                    let result = w.submit(Command {
+                        player: P1,
+                        executor: builder,
+                        kind: "construct".into(),
+                        subject: Some(well),
+                        target_entity: None,
+                        target_pos: Some(target),
+                        queue: false,
+                    });
+                    if let Some(error) = &expected {
+                        assert_eq!(
+                            preview.as_ref().err(),
+                            Some(error),
+                            "{city_at:?} {target:?}"
+                        );
+                        assert_eq!(result.as_ref().err(), Some(error), "{city_at:?} {target:?}");
+                        assert_eq!(w.hash(), before, "rejected placement must not change state");
+                    } else {
+                        assert!(preview.is_ok(), "{preview:?} at {target:?}");
+                        result.unwrap();
+                        w.step();
+                        assert!(w.entities().any(|e| e.type_id == well));
+                    }
+                    w.hash()
+                };
+                assert_eq!(run(), run(), "{city_at:?} {dx},{dy} distance {offset}");
+            }
+        }
+    }
+}
+
+#[test]
+fn resource_discovery_tracks_each_players_age_and_research_without_restarting() {
+    let catalogue = rules_with("DELETE FROM prerequisite WHERE def_id=(SELECT id FROM def WHERE key='tech.age.industrial');
+        DELETE FROM cost WHERE def_id=(SELECT id FROM def WHERE key='tech.age.industrial');
+        UPDATE tech SET research_ticks=1 WHERE id=(SELECT id FROM def WHERE key='tech.age.industrial');");
+    let run = || {
+        let mut early = player(&catalogue, 1);
+        early.age = catalogue.id_of("age.ancient").unwrap();
+        let mut late = player(&catalogue, 2);
+        let industrial = catalogue.id_of("age.industrial").unwrap();
+        late.age = industrial;
+        let surface = CubeSurface { n: 32 };
+        let oil = catalogue.id_of("ter.oil").unwrap();
+        let mut w = World::from_sphere(
+            catalogue.clone(),
+            surface,
+            vec![oil; surface.len()],
+            &[],
+            41,
+            vec![early, late],
+        )
+        .unwrap();
+        let well = id(&w, "bld.oil_well");
+        let site = at(0, 23_000, 16_000);
+        w.place_for_setup(id(&w, "bld.city"), P1, at(0, 16_500, 16_500))
+            .unwrap();
+        let builder = w
+            .spawn(id(&w, "unit.citizen"), P1, at(0, 20_000, 16_000))
+            .unwrap();
+        let library = w
+            .place_for_setup(id(&w, "bld.library"), P1, at(0, 16_000, 24_000))
+            .unwrap();
+        assert_eq!(w.terrain_discovery_age(oil), Some(industrial));
+        assert!(!w.knows_terrain(P1, oil));
+        assert!(w.knows_terrain(P2, oil));
+        assert!(
+            w.knows_terrain(P1, id(&w, "ter.plain")),
+            "ordinary land stays known despite late-age gather sites"
+        );
+        assert!(w.knows_terrain(P1, id(&w, "ter.forest")));
+        assert_eq!(
+            w.check_placement(P1, well, site),
+            Err(SimError::ResourceAgeRequired(industrial))
+        );
+        let construct = Command {
+            player: P1,
+            executor: builder,
+            kind: "construct".into(),
+            subject: Some(well),
+            target_entity: None,
+            target_pos: Some(site),
+            queue: false,
+        };
+        assert_eq!(w.submit(construct.clone()), Err(SimError::Locked));
+        w.submit(Command {
+            player: P1,
+            executor: library,
+            kind: "research".into(),
+            subject: Some(id(&w, "tech.age.industrial")),
+            target_entity: None,
+            target_pos: None,
+            queue: false,
+        })
+        .unwrap();
+        for _ in 0..10 {
+            w.step();
+            if w.knows_terrain(P1, oil) {
+                break;
+            }
+        }
+        assert!(w.knows_terrain(P1, oil));
+        assert!(w.check_placement(P1, well, site).is_ok());
+        w.submit(construct).unwrap();
+        w.hash()
+    };
+    assert_eq!(run(), run());
+}

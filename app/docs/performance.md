@@ -218,16 +218,21 @@ and after scale changes beyond 10%, outside steady-state frame costs.
 
 ## Sphere planet (task 18)
 
-`--sphere 192` draws a generated planet of 6 × 192² = 221,184 tiles on a globe of radius
+The commands below use task 41's `--single-planet` flag to preserve the isolated
+sphere. When running a commit from before task 41, omit that flag: `--sphere`
+already selected an isolated planet there. Measurements retain the versions
+described in each section.
+
+`--single-planet --sphere 192` draws a generated planet of 6 × 192² = 221,184 tiles on a globe of radius
 122 tiles: 216 land chunks and 156 sea chunks (at most 32 × 32 tiles each, 372 meshes in
 all), about 440,000 land triangles. Chunks wholly beyond the horizon or outside the view
 pyramid are not drawn (`ChunkBounds::may_be_seen`). The simulation is not started in sphere
 mode, so the numbers are rendering only (HUD on, 1280×800, scale 100, 10 s, seed 1).
 
 ```sh
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --size 1280x800 --bench 10 --orbit 0,10,12,30   # street
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --size 1280x800 --bench 10 --orbit 0,10,90,0    # mid
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --size 1280x800 --bench 10 --orbit 0,10,330,0   # globe
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --seed 1 --size 1280x800 --bench 10 --orbit 0,10,12,30   # street
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --seed 1 --size 1280x800 --bench 10 --orbit 0,10,90,0    # mid
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --seed 1 --size 1280x800 --bench 10 --orbit 0,10,330,0   # globe
 ```
 
 | View | Bench line |
@@ -253,7 +258,7 @@ in the read-back, as in the flat scene. Screenshots: `docs/img/globe-street.png`
 ## Continuous zoom (task 22)
 
 `--universe --seed 1 --zoom-all`, 1280x800, 10 s, with the `--view` named below. The
-machine was busy with other tasks' builds and runs; the unchanged `--sphere 192 --demo`
+machine was busy with other tasks' builds and runs; the unchanged `--single-planet --sphere 192 --demo`
 bench measured in the same session is listed for comparison. The frame time is dominated
 by the read-back in every row (11-15 ms), not by drawing.
 
@@ -262,7 +267,7 @@ by the read-back in every row (11-15 ms), not by drawing.
 | globe | `bench size=1280x800 scale=100 frames=521 fps=52.1 frame_ms_avg=13.31 frame_ms_max=42.65 readback_ms_avg=11.38 readback_ms_max=31.99` |
 | system | `bench size=1280x800 scale=100 frames=466 fps=46.6 frame_ms_avg=17.32 frame_ms_max=70.81 readback_ms_avg=14.52 readback_ms_max=42.25` |
 | star map | `bench size=1280x800 scale=100 frames=453 fps=45.3 frame_ms_avg=18.39 frame_ms_max=60.01 readback_ms_avg=15.54 readback_ms_max=37.50` |
-| `--sphere 192 --demo` (reference) | `bench size=1280x800 scale=100 frames=532 fps=53.2 frame_ms_avg=12.18 frame_ms_max=45.41 readback_ms_avg=10.64 readback_ms_max=30.76` |
+| `--single-planet --sphere 192 --demo` (reference) | `bench size=1280x800 scale=100 frames=532 fps=53.2 frame_ms_avg=12.18 frame_ms_max=45.41 readback_ms_avg=10.64 readback_ms_max=30.76` |
 
 Screenshots: `docs/img/zoom-globe.png`, `zoom-system.png`, `zoom-starmap.png`, `zoom-capped.png`.
 
@@ -294,9 +299,9 @@ commands from `app/` (fixed daylight ensures the street and mid shadow passes
 are active even when the chosen camera is far from the home start):
 
 ```sh
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --sun fixed --size 1280x800 --orbit 0,10,12,30 --bench 10
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --sun fixed --size 1280x800 --orbit 0,10,90,0 --bench 10
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --sun fixed --size 1280x800 --orbit 0,10,330,0 --bench 10
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --demo --seed 1 --sun fixed --size 1280x800 --orbit 0,10,12,30 --bench 10
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --demo --seed 1 --sun fixed --size 1280x800 --orbit 0,10,90,0 --bench 10
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --demo --seed 1 --sun fixed --size 1280x800 --orbit 0,10,330,0 --bench 10
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --demo --seed 1 --size 1280x800 --bench 10
 ```
 
@@ -319,8 +324,8 @@ and fixed midnight. The globe and system captures in the task card exercise
 the atmosphere halo from outside:
 
 ```sh
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --sun fixed --size 1280x720 --orbit 0,10,8,0 --no-hud --after 1 --screenshot target/sky-day.png
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --sun night --size 1280x720 --orbit 0,10,8,0 --no-hud --after 1 --screenshot target/sky-night.png
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --seed 1 --sun fixed --size 1280x720 --orbit 0,10,8,0 --no-hud --after 1 --screenshot target/sky-day.png
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --seed 1 --sun night --size 1280x720 --orbit 0,10,8,0 --no-hud --after 1 --screenshot target/sky-night.png
 ```
 
 ## Terrain materials and baked feature objects (task 34)
@@ -349,10 +354,10 @@ benched alternately in the same session, is given for comparison.
 
 | Run | Bench line |
 | --- | --- |
-| `--sphere 192 --demo` (home view) | `bench size=1280x800 scale=100 frames=501 fps=50.1 frame_ms_avg=19.40 frame_ms_max=45.98 readback_ms_avg=17.08 readback_ms_max=28.17` |
-| `--sphere 192 --demo --look-at ter.forest,8` (closest zoom over a forest edge) | `bench size=1280x800 scale=100 frames=501 fps=50.1 frame_ms_avg=19.34 frame_ms_max=44.80 readback_ms_avg=16.90 readback_ms_max=25.98` |
+| `--single-planet --sphere 192 --demo` (home view) | `bench size=1280x800 scale=100 frames=501 fps=50.1 frame_ms_avg=19.40 frame_ms_max=45.98 readback_ms_avg=17.08 readback_ms_max=28.17` |
+| `--single-planet --sphere 192 --demo --look-at ter.forest,8` (closest zoom over a forest edge) | `bench size=1280x800 scale=100 frames=501 fps=50.1 frame_ms_avg=19.34 frame_ms_max=44.80 readback_ms_avg=16.90 readback_ms_max=25.98` |
 | `--demo` (flat) | `bench size=1280x800 scale=100 frames=566 fps=56.6 frame_ms_avg=13.82 frame_ms_max=26.81 readback_ms_avg=12.90 readback_ms_max=22.90` |
-| parent commit, `--sphere 192 --demo`, alternating runs | 53.0 / 52.0 fps, frame 16.7 / 15.8 ms (new build in between: 51.5 / 47.2 fps, 19.0 / 20.4 ms) |
+| parent commit, `--single-planet --sphere 192 --demo`, alternating runs | 53.0 / 52.0 fps, frame 16.7 / 15.8 ms (new build in between: 51.5 / 47.2 fps, 19.0 / 20.4 ms) |
 
 The material look costs about 3 ms of render-thread frame time at the home
 view (land shading about 2.5 ms, objects and their shadows about 1–1.5 ms, the
@@ -407,7 +412,7 @@ each run:
 | flat, after | `bench size=1280x800 scale=100 frames=589 fps=58.9 frame_ms_avg=2.97 frame_ms_max=10.79 readback_ms_avg=2.23 readback_ms_max=6.52` | 60.0 | 3.22 |
 
 Two further sphere runs of this build: 55.2 and 55.5 fps shown, 59.6 and 59.5
-rendered (load 3.1 and 3.0). Sphere is `--sphere 192 --demo`, flat is `--demo`.
+rendered (load 3.1 and 3.0). Sphere is `--single-planet --sphere 192 --demo`, flat is `--demo`.
 
 Read-back work fell from about 15 ms to about 2 ms on the sphere and from about
 13 ms to about 2 ms on the flat map, and the render thread now keeps 60 frames
@@ -420,7 +425,7 @@ GPU is now busy with the raylib frame while GPUI and the compositor draw, on an
 integrated GPU all three share. The flat map was not slower (54.0 and 58.9 shown
 against 54.6 and 54.9; 60.0 rendered against 58.4–59.0).
 
-Screenshots are unchanged in content: the top HUD bar of `--sphere 192 --seed 1`
+Screenshots are unchanged in content: the top HUD bar of `--single-planet --sphere 192 --seed 1`
 and of the task-35 library script is pixel-identical to the parent commit's
 capture, alpha is 255 everywhere, and the rest differs only by animated shading
 (372 and 13 pixels differ by more than 3 %).

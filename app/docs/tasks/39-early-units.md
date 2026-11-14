@@ -100,8 +100,8 @@ cargo test --workspace --locked --no-fail-fast
 python3 db/content/generate.py --check
 # database lint (AGENTS.md) prints nothing
 # the screenshots of section 4
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --size 1280x800 --screenshot target/units-demo.png --after 5
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --size 1280x800 --bench 10   # twice, with uptime; compare with main
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --demo --seed 1 --size 1280x800 --screenshot target/units-demo.png --after 5
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --demo --seed 1 --size 1280x800 --bench 10   # twice, with uptime; compare with main
 ```
 
 ## Rules that matter most

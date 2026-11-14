@@ -94,11 +94,11 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 cargo run -p rom-cli --locked -- build-rules --schema db/schema.sql --seed db/seed.sql --out target/rules.db
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --size 1280x720 --orbit 0,10,330,0 --no-hud --after 1 --screenshot target/sun-globe.png
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --speed 800 --size 1280x720 --orbit 0,10,330,0 --no-hud --after 90 --screenshot target/sun-later.png
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --size 1280x720 --after 20 --screenshot target/shadows-street.png
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --seed 1 --size 1280x720 --orbit 0,10,330,0 --no-hud --after 1 --screenshot target/sun-globe.png
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --seed 1 --speed 800 --size 1280x720 --orbit 0,10,330,0 --no-hud --after 90 --screenshot target/sun-later.png
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --demo --seed 1 --size 1280x720 --after 20 --screenshot target/shadows-street.png
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --universe --seed 1 --zoom-all --view system,home --size 1280x720 --screenshot target/sun-system.png
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --size 1280x800 --bench 10
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --demo --seed 1 --size 1280x800 --bench 10
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --demo --seed 1 --size 1280x800 --bench 10
 ```
 

@@ -12,6 +12,60 @@ use rom_rules::{DefId, LimitScope, PlacementKind};
 type Placed = (PlayerId, DefId, Pos);
 
 impl World {
+    /// The earliest resource discovery age of a terrain, derived from gather-site components.
+    /// Terrain with any ungated yield (or no yield) is ordinary, always-known ground.
+    pub fn terrain_discovery_age(&self, terrain: DefId) -> Option<DefId> {
+        let mut first = None;
+        for et in self.rules.entity_types.values() {
+            let Some(site) = &et.gather_site else {
+                continue;
+            };
+            if site.needs_node_terrain_id != Some(terrain)
+                && !et.placement_rules.iter().any(|rule| {
+                    rule.rule == PlacementKind::OnTerrain && rule.ref_def_id == Some(terrain)
+                })
+            {
+                continue;
+            }
+            let age = self.rules.resources[&site.resource_id].first_age_id?;
+            let ordinal = self.rules.ages[&age].ordinal;
+            if first.is_none_or(|(_, old)| ordinal < old) {
+                first = Some((age, ordinal));
+            }
+        }
+        first.map(|(age, _)| age)
+    }
+
+    /// Whether the player's current age reveals a terrain's resource deposit.
+    pub fn knows_terrain(&self, player: PlayerId, terrain: DefId) -> bool {
+        self.players.get(&player).is_some_and(|p| {
+            self.terrain_discovery_age(terrain)
+                .is_none_or(|age| self.rules.ages[&p.age].ordinal >= self.rules.ages[&age].ordinal)
+        })
+    }
+
+    /// The discovery age still needed by the terrain requirements of a building.
+    pub fn placement_discovery_age(&self, player: PlayerId, subject: DefId) -> Option<DefId> {
+        let et = self.rules.entity_types.get(&subject)?;
+        et.placement_rules
+            .iter()
+            .filter(|r| {
+                matches!(
+                    r.rule,
+                    PlacementKind::OnTerrain | PlacementKind::AdjacentTerrain
+                )
+            })
+            .filter_map(|r| r.ref_def_id)
+            .chain(
+                et.gather_site
+                    .as_ref()
+                    .and_then(|s| s.needs_node_terrain_id),
+            )
+            .filter(|terrain| !self.knows_terrain(player, *terrain))
+            .filter_map(|terrain| self.terrain_discovery_age(terrain))
+            .max_by_key(|age| (self.rules.ages[age].ordinal, *age))
+    }
+
     /// Entities, plus construction orders that have not created their site yet.
     fn placed_and_queued(&self) -> impl Iterator<Item = Placed> + '_ {
         self.entities().map(|e| (e.owner, e.type_id, e.pos)).chain(

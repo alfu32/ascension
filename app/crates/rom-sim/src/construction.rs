@@ -104,6 +104,9 @@ impl World {
             .entity_types
             .get(&subject)
             .ok_or(SimError::UnknownType(subject))?;
+        if let Some(age) = self.placement_discovery_age(player, subject) {
+            return Err(SimError::ResourceAgeRequired(age));
+        }
         let pos = self.snap_placement(subject, pos)?;
         let bounds = footprint(et, pos);
         let surface = self.surf(pos.body);

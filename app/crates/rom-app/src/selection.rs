@@ -108,6 +108,7 @@ struct Placement {
     valid: Option<bool>,
     dirty: bool,
     checked: Option<u64>,
+    checked_age: Option<DefId>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1322,6 +1323,7 @@ impl Controller {
                     valid: None,
                     dirty: false,
                     checked: None,
+                    checked_age: None,
                 });
                 self.attack_move = false;
             }
@@ -1453,13 +1455,17 @@ impl Controller {
         let Some(p) = &mut self.placement else {
             return;
         };
-        let due = p
-            .checked
-            .is_none_or(|at| world.tick() >= at + PLACEMENT_CHECK_TICKS);
-        if let (true, true, Some(centre)) = (p.dirty, due, p.centre) {
-            p.valid = Some(placement_check(world, p.def, centre).is_ok());
+        let age = world.players().find(|p| p.id == PLAYER).map(|p| p.age);
+        let age_changed = p.checked_age != age;
+        let due = age_changed
+            || p.checked
+                .is_none_or(|at| world.tick() >= at + PLACEMENT_CHECK_TICKS);
+        if let (true, true, Some(centre)) = (p.dirty || age_changed, due, p.centre) {
+            let result = placement_check(world, p.def, centre);
+            p.valid = Some(result.is_ok());
             p.dirty = false;
             p.checked = Some(world.tick());
+            p.checked_age = age;
         }
     }
 
@@ -1914,6 +1920,13 @@ impl Controller {
                 });
             }
         }
+        if let Some(age) = self
+            .placement
+            .as_ref()
+            .and_then(|p| world.placement_discovery_age(PLAYER, p.def))
+        {
+            hud.help = rejection_message(world, &SimError::ResourceAgeRequired(age), None);
+        }
         hud.placement = self.placement.as_ref().and_then(|p| {
             p.centre.map(|c| HudPlacement {
                 face: c.face,
@@ -2004,6 +2017,9 @@ fn rejection_message(world: &World, error: &SimError, subject: Option<DefId>) ->
             "Too close to another city ({} tiles)",
             world.rules().constant("city.spacing").unwrap_or(0) / 1000
         ),
+        SimError::ResourceAgeRequired(age) => {
+            format!("Deposit revealed in {}", world.rules().def(*age).name)
+        }
         SimError::NotInOwnTerritory => "Outside your borders".into(),
         SimError::NotInCityRadius => "Outside a city's economic radius".into(),
         SimError::CityLimit => "City limit reached".into(),

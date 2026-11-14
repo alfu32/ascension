@@ -452,6 +452,37 @@ fn run(
 struct Memory {
     fog: FogPublisher,
     motions: Motions,
+    terrain: Option<TerrainKnowledge>,
+}
+
+/// A per-player view of resource terrain, refreshed on age and planet changes.
+#[derive(Debug)]
+struct TerrainKnowledge {
+    body: BodyId,
+    age: rom_rules::DefId,
+    tiles: Vec<Option<rom_rules::DefId>>,
+}
+
+impl TerrainKnowledge {
+    fn refresh(memory: &mut Option<Self>, world: &World, body: BodyId) {
+        let Some(player) = world.players().find(|p| p.id == PLAYER) else {
+            return;
+        };
+        if memory.as_ref().is_some_and(|known| {
+            known.body == body
+                && known.age == player.age
+                && world
+                    .surface(body)
+                    .is_some_and(|s| s.tiles() == known.tiles.len())
+        }) {
+            return;
+        }
+        *memory = Some(Self {
+            body,
+            age: player.age,
+            tiles: crate::terrain::known_terrain(world, PLAYER, body),
+        });
+    }
 }
 
 /// Ticks between two visibility maps sent to the render thread.
@@ -468,6 +499,7 @@ fn publish(
 ) {
     let sightings = world.visible_entities(PLAYER);
     let body = host.map_or_else(|| world.surfaces()[0].body(), |h| h.viewed);
+    TerrainKnowledge::refresh(&mut memory.terrain, world, body);
     let snapshot = snapshot_on(world, body, &sightings, models, &mut memory.motions);
     link.stats.tick.store(snapshot.tick, Ordering::Relaxed);
     link.stats
@@ -478,14 +510,19 @@ fn publish(
         let system = bridge.view_state().system.unwrap_or(host.home_system);
         bridge.publish_space(Arc::new(space_snapshot(world, system, &sightings)));
     }
-    if let Some(player) = world.players().find(|p| p.id == crate::selection::PLAYER) {
-        bridge.publish_zoom_cap(crate::universe_view::max_level(world.rules(), player.age));
-        bridge.publish_view_range(crate::universe_view::view_range(world.rules(), player.age));
-    }
+    publish_camera_limits(world, bridge);
     if world.tick().is_multiple_of(VISION_INTERVAL) {
         bridge.publish_vision(Arc::new(memory.fog.build_on(world, body)));
     }
     publish_hud(world, controller, bridge);
+}
+
+/// Sends the current player's limits before camera setup and after every simulation update.
+pub(crate) fn publish_camera_limits(world: &World, bridge: &RenderBridge) {
+    if let Some(player) = world.players().find(|p| p.id == crate::selection::PLAYER) {
+        bridge.publish_zoom_cap(crate::universe_view::max_level(world.rules(), player.age));
+        bridge.publish_view_range(crate::universe_view::view_range(world.rules(), player.age));
+    }
 }
 
 /// Sends a focus request of the controller to the camera, on the flat map or the globe.
@@ -1036,6 +1073,7 @@ mod tests {
         let options = Options {
             players: 2,
             sphere: Some(64),
+            single_planet: true,
             ..Options::default()
         };
         let content = crate::terrain::generate_sphere_content(&options, 64).expect("planet");
@@ -1269,5 +1307,96 @@ mod tests {
         assert_eq!(link.report().surfaces, habitable_before + 1);
         assert!(before > 0);
         thread.stop();
+    }
+}
+
+#[cfg(test)]
+mod terrain_knowledge_tests {
+    use super::*;
+    use rom_rules::DefId;
+    use rom_sim::{MapGrid, Player};
+
+    #[test]
+    fn known_tiles_refresh_on_research_for_the_player_without_a_restart() {
+        let mut rules = crate::terrain::load_rules().unwrap();
+        let id = |key: &str| rules.id_of(key).unwrap();
+        let (plain, oil, age, tech, library, city) = (
+            id("ter.plain"),
+            id("ter.oil"),
+            id("age.industrial"),
+            id("tech.age.industrial"),
+            id("bld.library"),
+            id("bld.city"),
+        );
+        rules.prerequisites.remove(&tech);
+        rules.costs.remove(&tech);
+        rules.techs.get_mut(&tech).unwrap().research_ticks = 1;
+        let rules = Arc::new(rules);
+        let run = || {
+            let player = |n, age| Player {
+                id: PlayerId(n),
+                team: n,
+                faction: rules.id_of("nation.romans").unwrap(),
+                age,
+                resources: rules.resources.keys().map(|r| (*r, 10000)).collect(),
+                techs: BTreeMap::new(),
+            };
+            let mut tiles = vec![plain; 64 * 64];
+            tiles[24 * 64 + 24] = oil;
+            let mut world = World::new(
+                rules.clone(),
+                MapGrid::new(64, 64, tiles.clone()).unwrap(),
+                41,
+                vec![
+                    player(1, rules.id_of("age.ancient").unwrap()),
+                    player(2, age),
+                ],
+            )
+            .unwrap();
+            let centre = Pos::flat(16_500, 16_500);
+            world.place_for_setup(city, PLAYER, centre).unwrap();
+            let executor = world
+                .place_for_setup(library, PLAYER, Pos::flat(24_000, 16_000))
+                .unwrap();
+            let mut memory = None;
+            TerrainKnowledge::refresh(&mut memory, &world, BodyId(0));
+            assert_eq!(memory.as_ref().unwrap().tiles[24 * 64 + 24], None);
+            assert_eq!(memory.as_ref().unwrap().tiles[0], Some(plain));
+            assert_eq!(
+                crate::terrain::known_terrain(&world, PlayerId(2), BodyId(0)),
+                tiles
+                    .iter()
+                    .copied()
+                    .map(Some)
+                    .collect::<Vec<Option<DefId>>>()
+            );
+            world
+                .submit(Command {
+                    player: PLAYER,
+                    executor,
+                    kind: "research".into(),
+                    subject: Some(tech),
+                    target_entity: None,
+                    target_pos: None,
+                    queue: false,
+                })
+                .unwrap();
+            for _ in 0..10 {
+                world.step();
+                TerrainKnowledge::refresh(&mut memory, &world, BodyId(0));
+                if memory.as_ref().unwrap().age == age {
+                    break;
+                }
+            }
+            assert_eq!(memory.as_ref().unwrap().age, age);
+            assert_eq!(memory.as_ref().unwrap().tiles[24 * 64 + 24], Some(oil));
+            assert_eq!(
+                world.surface(BodyId(0)).unwrap().terrain(),
+                tiles,
+                "discovery changes player knowledge, never the generated deposit"
+            );
+            world.hash()
+        };
+        assert_eq!(run(), run());
     }
 }

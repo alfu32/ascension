@@ -69,10 +69,10 @@ Crates: `rom-app`, `rom-render`.
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --size 1672x941 --after 30 --screenshot target/globe-live.png
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --size 1672x941 --script docs/tasks/15-demo-script.txt --after 12 --screenshot target/globe-select.png
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --size 1280x720 --orbit 0,10,330,0 --demo --after 30 --screenshot target/globe-fog.png --no-hud
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --stress-units 3000 --seed 1 --size 1280x800 --bench 10
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --demo --seed 1 --size 1672x941 --after 30 --screenshot target/globe-live.png
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --seed 1 --size 1672x941 --script docs/tasks/15-demo-script.txt --after 12 --screenshot target/globe-select.png
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --seed 1 --size 1280x720 --orbit 0,10,330,0 --demo --after 30 --screenshot target/globe-fog.png --no-hud
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --demo --stress-units 3000 --seed 1 --size 1280x800 --bench 10
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --demo --seed 1 --size 1280x800 --bench 10
 ```
 

@@ -14,24 +14,12 @@ const STAR_COLOURS: [[u8; 3]; 5] = [
     [240, 240, 255],
 ];
 
-/// The first age, by ordinal, whose map scale is not the smallest one (the planetary scale is
-/// the one of lowest rank): the age in which the camera may leave the home planet.
-pub fn space_age_ordinal(rules: &Rules) -> Option<i64> {
-    let planetary = rules.map_scales.values().min_by_key(|s| s.rank)?;
-    rules
-        .ages
-        .values()
-        .filter(|age| age.map_scale != planetary.key)
-        .map(|age| age.ordinal)
-        .min()
-}
-
-/// The farthest level the camera may reach for a player in `age`: the globe before the space
-/// age, the star map from it.
+/// The farthest camera level in `age`: zero view range unlocks continuous space zoom.
 pub fn max_level(rules: &Rules, age: DefId) -> Level {
-    match (space_age_ordinal(rules), rules.ages.get(&age)) {
-        (Some(space), Some(age)) if age.ordinal >= space => Level::StarMap,
-        _ => Level::Globe,
+    if rules.ages.get(&age).is_some_and(|a| a.view_range == 0) {
+        Level::StarMap
+    } else {
+        Level::Globe
     }
 }
 
@@ -99,22 +87,14 @@ mod tests {
     use crate::terrain::{generate_universe_content, load_rules};
 
     #[test]
-    fn space_age_is_found_by_data() {
+    fn unlimited_view_is_found_by_data() {
         let rules = load_rules().expect("rules");
-        let space = space_age_ordinal(&rules).expect("a space age");
-        let planetary = rules.map_scales.values().min_by_key(|s| s.rank).unwrap();
         for age in rules.ages.values() {
-            assert!(
-                age.map_scale != planetary.key || age.ordinal < space,
-                "{age:?}"
-            );
             assert_eq!(
                 max_level(&rules, age.id) == Level::StarMap,
-                age.ordinal >= space
+                age.view_range == 0
             );
         }
-        let first = rules.ages.values().min_by_key(|a| a.ordinal).unwrap();
-        assert_eq!(max_level(&rules, first.id), Level::Globe);
         assert_eq!(max_level(&rules, DefId(u32::MAX)), Level::Globe);
     }
 
@@ -129,7 +109,7 @@ mod tests {
             assert_eq!(max_level(&rules, by_ordinal(n)), Level::Globe);
             last = range;
         }
-        // The whole globe is allowed from the age before space, and nothing is known of a stray id.
+        // Zero view range removes the planetary restriction; an unknown id has no ground limit.
         assert_eq!(view_range(&rules, by_ordinal(9)), 0);
         assert_eq!(view_range(&rules, DefId(u32::MAX)), 0);
     }
@@ -174,5 +154,219 @@ mod tests {
         // The same options give the same scene.
         let again = generate_universe_content(&options).unwrap();
         assert_eq!(scene, to_universe_scene(&again.universe, &bodies));
+    }
+}
+
+#[cfg(test)]
+mod match_tests {
+    use super::*;
+    use crate::args::parse;
+    use crate::match_setup::build_universe_match;
+    use crate::script::ScriptSetup;
+    use crate::terrain::generate_universe_content;
+    use rom_render::zoom::{Home, ZoomCamera, ZoomScale};
+    use rom_render::{OrbitCamera, planet_radius};
+    use rom_rules::{ProductionMode, TechEffectKind};
+    use rom_sim::{Command, PlayerId};
+    use std::sync::Arc;
+
+    fn content() -> crate::terrain::UniverseContent {
+        let options = parse(["--sphere", "64", "--players", "2"].map(str::to_owned)).unwrap();
+        assert!(options.uses_universe());
+        generate_universe_content(&options).unwrap()
+    }
+
+    fn camera(
+        content: &crate::terrain::UniverseContent,
+        world: &rom_sim::World,
+    ) -> (ZoomCamera, OrbitCamera) {
+        let home = world.home_body(PlayerId(1)).unwrap();
+        let body = world.body(home).unwrap();
+        let n = world.surface(home).unwrap().map().width;
+        let radius = planet_radius(n);
+        let orbit = OrbitCamera::new(radius, radius * 3.0);
+        let camera = ZoomCamera::new(
+            Arc::new(to_universe_scene(&content.universe, &[home.0])),
+            ZoomScale::new(radius, orbit.max_distance),
+            Some(Home {
+                system: body.system,
+                body: home.0,
+                dir: orbit.dir,
+            }),
+            Level::Globe,
+        );
+        (camera, orbit)
+    }
+
+    fn update_limits(world: &rom_sim::World, camera: &mut ZoomCamera, orbit: &mut OrbitCamera) {
+        // The same values publish_camera_limits sends, applied through the renderer's public
+        // window-free camera API in the same order as its worker.
+        let age = world.players().find(|p| p.id == PlayerId(1)).unwrap().age;
+        camera.set_cap(max_level(world.rules(), age));
+        let range = view_range(world.rules(), age);
+        orbit.set_view_range(range);
+        camera.set_globe_limit((range > 0).then(|| orbit.distance_cap()));
+    }
+
+    #[test]
+    fn universe_start_age_sets_every_player_and_camera_limit() {
+        let content = content();
+        assert!(
+            content
+                .universe
+                .bodies
+                .iter()
+                .filter(|b| b.home_race.is_some())
+                .all(|b| b.n == Some(64))
+        );
+        for ordinal in [0, 5, 9, 13] {
+            let game = build_universe_match(
+                &content.rules,
+                &content.universe,
+                &content.factions,
+                1,
+                Some(ordinal),
+                &ScriptSetup::default(),
+            )
+            .unwrap();
+            for player in game.world.players().filter(|p| p.id != PlayerId(0)) {
+                assert_eq!(content.rules.ages[&player.age].ordinal, ordinal);
+            }
+            let (mut camera, mut orbit) = camera(&content, &game.world);
+            update_limits(&game.world, &mut camera, &mut orbit);
+            camera.set_l(f32::MAX);
+            if ordinal < 9 {
+                assert!(camera.level() <= Level::Globe);
+                assert!((camera.l().exp() - orbit.distance_cap()).abs() < 0.01);
+            } else {
+                assert_eq!(camera.level(), Level::StarMap);
+                assert_eq!(camera.l(), camera.scale().l_end);
+                for level in [Level::Surface, Level::Globe, Level::System, Level::StarMap] {
+                    camera.set_view(level, &mut orbit);
+                    assert_eq!(camera.level(), level);
+                }
+                // Continuous log-distance zoom visits every level without changing cameras.
+                let mut levels = std::collections::BTreeSet::new();
+                camera.set_l(camera.scale().l_min());
+                for _ in 0..160 {
+                    camera.wheel(-1.0);
+                    levels.insert(camera.level());
+                }
+                assert!(Level::ALL.iter().all(|level| levels.contains(level)));
+            }
+        }
+        assert!(
+            build_universe_match(
+                &content.rules,
+                &content.universe,
+                &content.factions,
+                1,
+                Some(99),
+                &ScriptSetup::default()
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn research_widens_the_existing_universe_camera_immediately() {
+        let mut content = content();
+        let rules = Arc::make_mut(&mut content.rules);
+        let target_age = rules
+            .ages
+            .values()
+            .filter(|a| a.view_range == 0)
+            .min_by_key(|a| a.ordinal)
+            .unwrap()
+            .clone();
+        let tech = rules
+            .tech_effects
+            .iter()
+            .find(|(_, effects)| {
+                effects.iter().any(|e| {
+                    e.effect == TechEffectKind::SetAge && e.target_def_id == Some(target_age.id)
+                })
+            })
+            .unwrap()
+            .0
+            .to_owned();
+        // Isolate completion of the real age effect; the full technology tree is covered by playthrough.
+        rules.prerequisites.remove(&tech);
+        rules.costs.remove(&tech);
+        rules.techs.get_mut(&tech).unwrap().research_ticks = 1;
+        let producer = rules
+            .production
+            .iter()
+            .find(|(_, rows)| {
+                rows.iter()
+                    .any(|r| r.mode == ProductionMode::Research && r.product_def_id == tech)
+            })
+            .unwrap()
+            .0
+            .to_owned();
+        let run = || {
+            let mut game = build_universe_match(
+                &content.rules,
+                &content.universe,
+                &content.factions,
+                1,
+                Some(target_age.ordinal - 1),
+                &ScriptSetup::default(),
+            )
+            .unwrap();
+            let (mut camera, mut orbit) = camera(&content, &game.world);
+            update_limits(&game.world, &mut camera, &mut orbit);
+            camera.set_l(f32::MAX);
+            let before = camera.l();
+            assert!(camera.level() <= Level::Globe);
+            let at = game.world.offset(game.starts[0].city_pos, 10000, 0);
+            let executor = game
+                .world
+                .place_for_setup(producer, PlayerId(1), at)
+                .unwrap();
+            game.world
+                .submit(Command {
+                    player: PlayerId(1),
+                    executor,
+                    kind: "research".into(),
+                    subject: Some(tech),
+                    target_entity: None,
+                    target_pos: None,
+                    queue: false,
+                })
+                .unwrap();
+            for _ in 0..10 {
+                game.world.step();
+                if game
+                    .world
+                    .players()
+                    .find(|p| p.id == PlayerId(1))
+                    .unwrap()
+                    .age
+                    == target_age.id
+                {
+                    break;
+                }
+            }
+            assert_eq!(
+                game.world
+                    .players()
+                    .find(|p| p.id == PlayerId(1))
+                    .unwrap()
+                    .age,
+                target_age.id
+            );
+            update_limits(&game.world, &mut camera, &mut orbit);
+            assert_eq!(
+                camera.l(),
+                before,
+                "raising a limit must not jump the camera"
+            );
+            camera.set_l(f32::MAX);
+            assert_eq!(camera.level(), Level::StarMap);
+            assert!(camera.l() > before);
+            game.world.hash()
+        };
+        assert_eq!(run(), run());
     }
 }

@@ -6,10 +6,10 @@ set in open space" model (`database.md` section 6, `research/03-timeline.md`
 
 ## What the player experiences
 
-- Every planet is a **sphere**. Before the space age a player can only move
+- Every planet is a **sphere**. While their age has a positive `view_range`, the camera stays
   around their own planet: the camera orbits it, from street level up to a
   view of the whole globe, and no further.
-- After reaching the space age the camera zooms out **continuously**: from the
+- Once their age has `view_range = 0` the camera zooms out **continuously**: from the
   surface to the globe, to the star system (planets around their star), to
   the star map (systems as points of light). The player travels by zooming
   out, moving to another system or planet, and zooming in on it, where they
@@ -98,12 +98,16 @@ skirmish maps and the existing scenarios.
 
 ## Camera and visibility by age
 
-| Before the player's space age | From the space age |
+| Positive `age.view_range` | `age.view_range = 0` |
 | --- | --- |
 | camera bound to the home planet: orbit, zoom from surface to globe | zoom out continuously to system and star map; zoom in on any known planet |
 | nothing beyond the home planet is visible | other bodies become visible as they are explored (fog of war per level) |
 
-Players reach space one by one; the first to arrive finds the rest unclaimed.
+Task 41 makes zero view range the camera unlock (Fusion, ordinal 9, in the
+current seed). This supersedes task 35's separate globe-only age. Research
+completion updates the camera limit immediately; `age.map_scale` and entity
+capabilities continue to govern space gameplay. Players unlock the view one
+by one.
 
 ## Rendering notes
 
@@ -146,7 +150,7 @@ in parallel on top of whichever topology is current.
 | Match size | one home system per race present, plus 2–4 neutral systems |
 | Contents of a system | 1–3 habitable planets, 3–8 resource bodies |
 | Planet sizes | home planets at the median; others vary within the range |
-| Before the space age | the whole home planet can be seen from orbit; nothing else |
+| Positive view range | camera stays on the home planet within the age's ground limit |
 
 ## Day and night (decided 2026-11-13)
 
@@ -161,3 +165,21 @@ default (`world.axial_tilt_mdeg = 0`), so there are no seasons yet.
 The sky follows the light: blue by day, a short dusk and dawn, starry at
 night; from orbit, space is black with stars, and every habitable planet
 shows an atmosphere halo around its limb, brightest on the day side.
+
+## Running a match (task 41)
+
+`rom-app --sphere N` builds the same universe as `--universe`, with every
+home planet's face size set to N (64–512). Other planet sizes keep the map
+style's range, extended when needed to include N. `--age <ordinal>` starts
+every non-neutral player in that age in universe, single-sphere and flat
+matches; an explicit ordinal takes precedence over a script's `grant-age`.
+`--single-planet --sphere N` preserves the isolated sphere (16–512) for
+measurements and screenshots; `--single-planet` alone uses N = 192.
+No arguments still selects the existing flat test/skirmish setup.
+
+Resource terrain is discovered per player using `resource.first_age_id` and
+the gather site's terrain requirements. App knowledge updates on research;
+the simulation never changes the generated terrain. The current renderer
+has baked terrain, without a tile-identity update channel: oil remains drawn
+at every age pending that renderer work. See `tasks/41-verification.md` for
+the exact remaining rendering requirements.

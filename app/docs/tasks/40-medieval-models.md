@@ -89,7 +89,7 @@ cargo test --workspace --locked --no-fail-fast
 python3 db/content/generate.py --check
 # database lint (AGENTS.md) prints nothing
 # the screenshots of section 3
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --demo --seed 1 --size 1280x800 --bench 10   # twice, with uptime
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --demo --seed 1 --size 1280x800 --bench 10   # twice, with uptime
 ```
 
 Tests: every building and unit of the medieval age, and every unit of the

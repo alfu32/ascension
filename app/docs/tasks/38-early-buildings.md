@@ -101,7 +101,7 @@ python3 db/content/generate.py --check
 # database lint (AGENTS.md) prints nothing
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --gallery-manifest target/models.json
 # the screenshots of section 3
-env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --size 1280x800 --screenshot target/models-home.png --after 3
+env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --single-planet --sphere 192 --seed 1 --size 1280x800 --screenshot target/models-home.png --after 3
 ```
 
 ## Rules that matter most
