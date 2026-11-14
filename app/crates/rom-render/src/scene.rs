@@ -15,10 +15,13 @@ use raylib::prelude::{
 use std::sync::Arc;
 
 use crate::camera::Camera;
-use crate::entities::{EntityView, Surface, build_instances_with_casters_on};
+use crate::entities::{EntityView, Footing, Surface, build_instances_with_casters_on};
+use crate::features::{BakedFeatures, crop_instances};
 use crate::globe::{ChunkBounds, CullView, Globe, PlanetScene};
 use crate::graticule::{GraticuleLine, graticule_fade, graticule_on};
 use crate::hud::HudSnapshot;
+use crate::looks::{SceneLooks, lod_weight};
+use crate::materials::{SurfaceSlots, chunk_attributes, surface_slots};
 use crate::orbit::OrbitCamera;
 use crate::overlay::{OverlayGeometry, build_overlays, build_overlays_on};
 use crate::sun;
@@ -28,6 +31,7 @@ use crate::terrain::{
 };
 use crate::vision::{ChunkSpec, shade_chunk};
 
+mod materials;
 mod shadow;
 mod sky;
 mod space;
@@ -58,59 +62,6 @@ const PLAYER_COLORS: [Color; 8] = [
     Color::new(235, 235, 235, 255),
 ];
 
-const TERRAIN_VS: &str = r#"#version 330
-in vec3 vertexPosition;
-in vec3 vertexNormal;
-in vec4 vertexColor;
-uniform mat4 mvp;
-uniform mat4 matModel;
-out vec3 fragNormal;
-out vec4 fragColor;
-out vec3 fragWorld;
-void main() {
-    fragNormal = vertexNormal;
-    fragColor = vertexColor;
-    fragWorld = (matModel * vec4(vertexPosition, 1.0)).xyz;
-    gl_Position = mvp * vec4(vertexPosition, 1.0);
-}
-"#;
-
-/// Terrain lit by the sun: day and night on a sphere, shadows from the shadow map.
-fn terrain_fs() -> String {
-    format!(
-        r#"#version 330
-in vec3 fragNormal;
-in vec4 fragColor;
-in vec3 fragWorld;
-out vec4 finalColor;
-{}
-void main() {{
-    finalColor = vec4(fragColor.rgb * terrainLight(fragWorld, normalize(fragNormal)), 1.0);
-}}
-"#,
-        sun::glsl_lighting()
-    )
-}
-
-const COLOR_VS: &str = r#"#version 330
-in vec3 vertexPosition;
-in vec4 vertexColor;
-uniform mat4 mvp;
-out vec4 fragColor;
-void main() {
-    fragColor = vertexColor;
-    gl_Position = mvp * vec4(vertexPosition, 1.0);
-}
-"#;
-
-const COLOR_FS: &str = r#"#version 330
-in vec4 fragColor;
-out vec4 finalColor;
-void main() {
-    finalColor = fragColor;
-}
-"#;
-
 // Stars are pushed to the far plane (z = w) so terrain always draws over them.
 const STAR_VS: &str = r#"#version 330
 in vec3 vertexPosition;
@@ -122,47 +73,6 @@ void main() {
     gl_Position = (mvp * vec4(vertexPosition, 1.0)).xyww;
 }
 "#;
-
-// The sea sphere is lit from its own radial normal and gets a soft highlight.
-const SEA_GLOBE_VS: &str = r#"#version 330
-in vec3 vertexPosition;
-in vec4 vertexColor;
-uniform mat4 mvp;
-out vec4 fragColor;
-out vec3 fragPosition;
-void main() {
-    fragColor = vertexColor;
-    fragPosition = vertexPosition;
-    gl_Position = mvp * vec4(vertexPosition, 1.0);
-}
-"#;
-
-/// The sea sphere: lit from its radial normal, a soft highlight by day, the night floor by night.
-fn sea_globe_fs() -> String {
-    format!(
-        r#"#version 330
-in vec4 fragColor;
-in vec3 fragPosition;
-uniform vec3 viewPosition;
-out vec4 finalColor;
-{}
-void main() {{
-    vec3 normal = normalize(fragPosition);
-    float diffuse = max(dot(normal, toSun), 0.0);
-    float lit = diffuse > 0.0 ? visibility(fragPosition, normal) : 1.0;
-    float day = daylight(fragPosition);
-    vec3 toEye = normalize(viewPosition - fragPosition);
-    vec3 halfVector = toSun + toEye;
-    float halfCosine = dot(normal, halfVector / max(length(halfVector), 0.00001));
-    float glint = pow(max(halfCosine, 0.0), 64.0) * diffuse * lit * day;
-    vec3 light = mix(NIGHT_AMBIENT, vec3(DAY_AMBIENT + DIRECT * diffuse * lit), day);
-    vec3 color = fragColor.rgb * light + vec3(0.30, 0.34, 0.38) * glint;
-    finalColor = vec4(color, min(fragColor.a + glint * 0.4, 1.0));
-}}
-"#,
-        sun::glsl_lighting()
-    )
-}
 
 const BOX_VS: &str = r#"#version 330
 in vec3 vertexPosition;
@@ -288,6 +198,25 @@ void main() {
 }
 "#;
 
+/// What baking and uploading the feature objects of a planet or map took.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct BakeReport {
+    /// Milliseconds to bake the variant meshes and place the instances.
+    pub(crate) bake_ms: f32,
+    /// Milliseconds to upload the variant meshes.
+    pub(crate) upload_ms: f32,
+    /// Variant meshes.
+    pub(crate) meshes: usize,
+    /// Vertices in all variant meshes.
+    pub(crate) vertices: usize,
+    /// Placed instances.
+    pub(crate) instances: usize,
+    /// Object chunks.
+    pub(crate) chunks: usize,
+    /// Land material slots in use.
+    pub(crate) slots: usize,
+}
+
 /// Parameters of one box's circular path.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Mover {
@@ -352,7 +281,6 @@ pub(crate) struct Scene {
     star_mesh: Option<Mesh>,
     terrain: Option<TerrainGpu>,
     terrain_material: WeakMaterial,
-    sea_material: WeakMaterial,
     star_material: WeakMaterial,
     // raylib-rs hands out the default material only as a non-owning handle and frees it
     // only through an `unsafe` call, so the two small map tables are left to process exit.
@@ -361,9 +289,27 @@ pub(crate) struct Scene {
     ground_material: WeakMaterial,
     /// Kept alive for the materials above, which point at them.
     entity_material: WeakMaterial,
-    _shaders: [Shader; 6],
+    _shaders: [Shader; 5],
+    /// The sea, on a sphere and on a flat map.
     sea_globe_shader: Shader,
     sea_globe_material: WeakMaterial,
+    /// Baked feature objects and crop rows.
+    object_shader: Shader,
+    object_material: WeakMaterial,
+    /// The uploaded feature objects of the current planet or map.
+    features: Option<materials::FeatureGpu>,
+    /// How the current planet or map looks up close.
+    looks: Arc<SceneLooks>,
+    /// Share of the material look drawn this frame (1 up close, 0 far out).
+    detail: f32,
+    /// Start of the clock that drives wind and waves.
+    clock: Instant,
+    /// Scratch list for shadow casters.
+    caster_scratch: Vec<Matrix>,
+    /// The noise texture the material programs sample.
+    noise: Option<raylib::prelude::Texture2D>,
+    /// Scratch list for crop instances.
+    crop_scratch: Vec<(u16, [f32; 16])>,
     /// Direction the light that represents the sun travels, in planet space.
     sun: [f32; 3],
     /// The sky dome and the atmosphere halo.
@@ -519,15 +465,20 @@ impl Scene {
         let mut box_shader = rl.load_shader_from_memory(thread, Some(BOX_VS), Some(BOX_FS));
         let mut ground_shader =
             rl.load_shader_from_memory(thread, Some(GROUND_VS), Some(GROUND_FS));
-        let terrain_shader =
-            rl.load_shader_from_memory(thread, Some(TERRAIN_VS), Some(&terrain_fs()));
+        let terrain_shader = rl.load_shader_from_memory(
+            thread,
+            Some(materials::TERRAIN_VS),
+            Some(&materials::terrain_fs()),
+        );
         let entity_shader = rl.load_shader_from_memory(thread, Some(ENTITY_VS), Some(&entity_fs()));
-        let sea_shader = rl.load_shader_from_memory(thread, Some(COLOR_VS), Some(COLOR_FS));
         let mut star_shader = rl.load_shader_from_memory(thread, Some(STAR_VS), Some(sky::STAR_FS));
         let location = star_shader.get_shader_location("fade");
         star_shader.set_shader_value(location, 1.0_f32);
-        let sea_globe_shader =
-            rl.load_shader_from_memory(thread, Some(SEA_GLOBE_VS), Some(&sea_globe_fs()));
+        let sea_globe_shader = rl.load_shader_from_memory(
+            thread,
+            Some(materials::WATER_VS),
+            Some(&materials::water_fs()),
+        );
         let mut sea_globe_material = rl.load_material_default(thread);
         sea_globe_material.set_shader(&sea_globe_shader);
         for shader in [&mut box_shader, &mut ground_shader] {
@@ -542,8 +493,19 @@ impl Scene {
         terrain_material.set_shader(&terrain_shader);
         let mut entity_material = rl.load_material_default(thread);
         entity_material.set_shader(&entity_shader);
-        let mut sea_material = rl.load_material_default(thread);
-        sea_material.set_shader(&sea_shader);
+        let mut object_shader = materials::load_object_shader(rl, thread);
+        let noise = materials::load_noise(thread);
+        let mut terrain_shader = terrain_shader;
+        let mut sea_globe_shader = sea_globe_shader;
+        for shader in [
+            &mut terrain_shader,
+            &mut sea_globe_shader,
+            &mut object_shader,
+        ] {
+            materials::set_noise_slot(shader);
+        }
+        let mut object_material = rl.load_material_default(thread);
+        object_material.set_shader(&object_shader);
         let mut star_material = rl.load_material_default(thread);
         star_material.set_shader(&star_shader);
         let (star_positions, star_colors) = star_triangles(&star_field(STAR_COUNT));
@@ -563,7 +525,6 @@ impl Scene {
             star_mesh,
             terrain: None,
             terrain_material,
-            sea_material,
             star_material,
             box_material,
             ground_material,
@@ -572,12 +533,20 @@ impl Scene {
                 box_shader,
                 ground_shader,
                 terrain_shader,
-                sea_shader,
                 star_shader,
                 entity_shader,
             ],
             sea_globe_shader,
             sea_globe_material,
+            object_shader,
+            object_material,
+            features: None,
+            looks: Arc::new(SceneLooks::default()),
+            detail: 0.0,
+            clock: Instant::now(),
+            caster_scratch: Vec::new(),
+            noise,
+            crop_scratch: Vec::new(),
             sun: LIGHT_DIRECTION,
             sky: sky::SkyGpu::load(rl, thread),
             shadow: None,
@@ -683,8 +652,26 @@ impl Scene {
             return;
         }
         self.shade_queue = queue;
+        if let Some(features) = &mut self.features {
+            features.apply_shades(shades);
+        }
         self.last_shades.clear();
         self.last_shades.extend_from_slice(shades);
+    }
+
+    /// Sets the per-frame uniforms of the material shaders for an eye at `eye` and a camera
+    /// `distance` from its target.
+    fn set_material_frame(&mut self, eye: [f32; 3], distance: f32) {
+        self.detail = lod_weight(distance);
+        let time = self.clock.elapsed().as_secs_f32() % 3_600.0;
+        let [_, _, terrain, _, _] = &mut self._shaders;
+        for shader in [terrain, &mut self.sea_globe_shader, &mut self.object_shader] {
+            materials::set_frame(shader, eye, self.detail, time);
+        }
+
+        let location = self.object_shader.get_shader_location("planetRadius");
+        let radius = self.globe.as_ref().map_or(0.0, |g| g.globe.radius());
+        self.object_shader.set_shader_value(location, radius);
     }
 
     /// Recolours up to `budget` queued chunks with the newest shades.
@@ -756,10 +743,12 @@ impl Scene {
         &mut self,
         thread: &RaylibThread,
         scene: &Arc<TerrainScene>,
-    ) -> (usize, f32, f32) {
+        looks: &Arc<SceneLooks>,
+    ) -> (usize, f32, f32, BakeReport) {
         self.terrain = None;
         self.globe = None;
         self.space = None;
+        self.features = None;
         self.last_shades.clear();
         self.shade_queue.clear();
         self.graticule.clear();
@@ -769,13 +758,27 @@ impl Scene {
         }
         if !scene.is_valid() {
             eprintln!("rom-render: ignoring a terrain scene with inconsistent tile data");
-            return (0, 0.0, 0.0);
+            return (0, 0.0, 0.0, BakeReport::default());
         }
         let started = Instant::now();
         let surface = Surface::new(Arc::clone(scene));
         let shape = surface.shape();
         let land = build_terrain_chunks_with_specs(scene, shape);
         let sea = build_sea_chunks_with_specs(scene, shape);
+        let slots = surface_slots(&surface, looks);
+        let (width, height) = (i64::from(scene.width), i64::from(scene.height));
+        let adjoining = |_: u8, vx: u32, vy: u32| {
+            let mut out = [0; 4];
+            let mut count = 0;
+            for (dx, dy) in [(-1, -1), (0, -1), (-1, 0), (0, 0)] {
+                let (x, y) = (i64::from(vx) + dx, i64::from(vy) + dy);
+                if (0..width).contains(&x) && (0..height).contains(&y) {
+                    out[count] = (y * width + x) as usize;
+                    count += 1;
+                }
+            }
+            (out, count)
+        };
         let built = Instant::now();
         let shaded = |chunks: &[(ChunkMesh, ChunkSpec)]| -> Vec<ShadedMesh> {
             chunks
@@ -786,8 +789,9 @@ impl Scene {
         let (land_meshes, land_bounds): (Vec<ShadedMesh>, Vec<ChunkBounds>) = land
             .iter()
             .filter_map(|(c, spec)| {
+                let attributes = chunk_attributes(*spec, &slots.tile_slot, &adjoining, &c.colors);
                 Some((
-                    ShadedMesh::new(upload(thread, c)?, *spec, c),
+                    ShadedMesh::new(materials::upload_land(thread, c, &attributes)?, *spec, c),
                     ChunkBounds::of(c),
                 ))
             })
@@ -795,6 +799,8 @@ impl Scene {
         let sea_meshes = shaded(&sea);
         let uploaded = Instant::now();
         let count = land_meshes.len() + sea_meshes.len();
+        let baked = crate::features::bake_flat(&surface, looks);
+        let report = self.adopt_looks(thread, looks, &slots, &baked, uploaded);
 
         let pillars = scene
             .starts
@@ -822,7 +828,36 @@ impl Scene {
             count,
             (built - started).as_secs_f32() * 1_000.0,
             (uploaded - built).as_secs_f32() * 1_000.0,
+            report,
         )
+    }
+
+    /// Takes the looks of a new planet or map: material slots and water for the shaders, and
+    /// the baked feature objects (finished at `baked_from`) uploaded.
+    fn adopt_looks(
+        &mut self,
+        thread: &RaylibThread,
+        looks: &Arc<SceneLooks>,
+        slots: &SurfaceSlots,
+        baked: &BakedFeatures,
+        baked_from: Instant,
+    ) -> BakeReport {
+        let bake_ms = baked_from.elapsed().as_secs_f32() * 1_000.0;
+        self.looks = Arc::clone(looks);
+        let [_, _, terrain, _, _] = &mut self._shaders;
+        materials::set_slots(terrain, slots);
+        materials::set_water(&mut self.sea_globe_shader, looks);
+        let started = Instant::now();
+        self.features = materials::FeatureGpu::upload(thread, baked);
+        BakeReport {
+            bake_ms,
+            upload_ms: started.elapsed().as_secs_f32() * 1_000.0,
+            meshes: baked.meshes.len(),
+            vertices: baked.vertex_count(),
+            instances: baked.instance_count(),
+            chunks: baked.chunks.len(),
+            slots: slots.slots.len(),
+        }
     }
 
     /// Sets the light in the terrain, entity and sea shaders: the direction toward it, whether
@@ -833,8 +868,13 @@ impl Scene {
         planet: bool,
         shadow: Option<shadow::ShadowUniforms>,
     ) {
-        let [_, _, terrain, _, _, entity] = &mut self._shaders;
-        let shaders = [terrain, entity, &mut self.sea_globe_shader];
+        let [_, _, terrain, _, entity] = &mut self._shaders;
+        let shaders = [
+            terrain,
+            entity,
+            &mut self.sea_globe_shader,
+            &mut self.object_shader,
+        ];
         for shader in shaders {
             let at = |shader: &Shader, name: &str| shader.get_shader_location(name);
             let location = at(shader, "toSun");
@@ -870,10 +910,12 @@ impl Scene {
         planet: &Arc<PlanetScene>,
         globe: &Arc<Globe>,
         sun: [f32; 3],
-    ) -> (usize, f32, f32) {
+        looks: &Arc<SceneLooks>,
+    ) -> (usize, f32, f32, BakeReport) {
         self.terrain = None;
         self.globe = None;
         self.space = None;
+        self.features = None;
         self.last_shades.clear();
         self.shade_queue.clear();
         self.sun = sun;
@@ -884,22 +926,31 @@ impl Scene {
         self.graticule = graticule_on(globe, GRATICULE_LIFT);
         let land = globe.land_chunks_with_specs();
         let sea = globe.sea_chunks_with_specs();
+        let slots = surface_slots(&**globe, looks);
+        let adjoining = |face: u8, vx: u32, vy: u32| globe.corner_tiles(face, vx, vy);
         let built = Instant::now();
-        let upload_all = |chunks: &[(ChunkMesh, ChunkSpec)]| -> Vec<(ShadedMesh, ChunkBounds)> {
-            chunks
-                .iter()
-                .filter_map(|(c, spec)| {
-                    Some((
-                        ShadedMesh::new(upload(thread, c)?, *spec, c),
-                        ChunkBounds::of(c),
-                    ))
-                })
-                .collect()
-        };
-        let land = upload_all(&land);
-        let sea = upload_all(&sea);
+        let upload_all =
+            |chunks: &[(ChunkMesh, ChunkSpec)], land: bool| -> Vec<(ShadedMesh, ChunkBounds)> {
+                chunks
+                    .iter()
+                    .filter_map(|(c, spec)| {
+                        let mesh = if land {
+                            let attributes =
+                                chunk_attributes(*spec, &slots.tile_slot, &adjoining, &c.colors);
+                            materials::upload_land(thread, c, &attributes)?
+                        } else {
+                            upload(thread, c)?
+                        };
+                        Some((ShadedMesh::new(mesh, *spec, c), ChunkBounds::of(c)))
+                    })
+                    .collect()
+            };
+        let land = upload_all(&land, true);
+        let sea = upload_all(&sea, false);
         let uploaded = Instant::now();
         let count = land.len() + sea.len();
+        let baked = crate::features::bake_planet(globe, looks);
+        let report = self.adopt_looks(thread, looks, &slots, &baked, uploaded);
         self.globe = Some(GlobeGpu {
             land,
             sea,
@@ -911,6 +962,7 @@ impl Scene {
             count,
             (built - started).as_secs_f32() * 1_000.0,
             (uploaded - built).as_secs_f32() * 1_000.0,
+            report,
         )
     }
 
@@ -933,10 +985,27 @@ impl Scene {
         gpu.markers.extend(instances.iter().map(matrix_of));
         self.instances = instances;
         let size = (target.texture.width as f32, target.texture.height as f32);
+        self.set_material_frame(orbit.position(), orbit.distance);
         let shadow = self.globe_shadow_pass(rl, thread, orbit, size);
         let toward = sun::unit_or(self.sun.map(|c| -c));
         self.set_lighting(toward, true, shadow);
         let shadow_texture = shadow.and(self.shadow.as_ref()).map(|s| s.texture_id());
+        let aspect = target.texture.width as f32 / target.texture.height.max(1) as f32;
+        let cull = CullView::of_orbit(orbit, aspect, 45.0, 1.5);
+        if let Some(features) = &mut self.features {
+            let radius = orbit.radius;
+            features.prepare(orbit.position(), &|centre, size| {
+                let top = (centre[0] * centre[0] + centre[1] * centre[1] + centre[2] * centre[2])
+                    .sqrt()
+                    + size;
+                ChunkBounds {
+                    centre,
+                    radius: size,
+                    top,
+                }
+                .may_be_seen(radius, &cull)
+            });
+        }
         // Near the ground the sky of the point looked at; from higher up, black space.
         let altitude = orbit.altitude();
         let sun_height = (0..3).map(|i| orbit.dir[i] * toward[i]).sum::<f32>();
@@ -962,11 +1031,6 @@ impl Scene {
         let up = orbit.view_up();
         let vector = |v: [f32; 3]| Vector3::new(v[0], v[1], v[2]);
         let view = Camera3D::perspective(vector(eye), vector(target_point), vector(up), 45.0);
-        self.sea_globe_shader.set_shader_value(
-            self.sea_globe_shader.get_shader_location("viewPosition"),
-            eye,
-        );
-        let aspect = target.texture.width as f32 / target.texture.height.max(1) as f32;
         let mut drawing = rl.begin_texture_mode(thread, target);
         drawing.clear_background(SPACE);
         sky::draw_backdrop(
@@ -979,14 +1043,13 @@ impl Scene {
             &self.star_material,
         );
         let radius = orbit.radius;
-        // Loose enough for the projection centre moved up above the HUD bars.
-        let cull = CullView::of_orbit(orbit, aspect, 45.0, 1.5);
         let (near, far) = orbit.clip_planes(RELIEF);
         set_clip_planes(f64::from(near), f64::from(far));
         {
             let mut world = drawing.begin_mode3D(view);
             shift_projection(self.projection_centre_y);
             shadow::bind_shadow_map(shadow_texture);
+            materials::bind_noise(self.noise.as_ref().map(|t| t.id));
             for (shaded, bounds) in &gpu.land {
                 if bounds.may_be_seen(radius, &cull) {
                     world.draw_mesh(
@@ -996,6 +1059,13 @@ impl Scene {
                     );
                 }
             }
+            draw_features(
+                &mut world,
+                self.detail,
+                self.features.as_ref(),
+                &mut self.object_shader,
+                &self.object_material,
+            );
             if !gpu.markers.is_empty() {
                 world.draw_mesh_instanced(
                     &self.box_mesh,
@@ -1033,6 +1103,7 @@ impl Scene {
             }
             draw_overlay(&mut world, &self.overlay);
             shadow::bind_shadow_map(None);
+            materials::bind_noise(None);
         }
         set_clip_planes(DEFAULT_NEAR, DEFAULT_FAR);
     }
@@ -1049,25 +1120,49 @@ impl Scene {
         self.entity_transforms.clear();
         self.entity_casters.clear();
         let mut instances = std::mem::take(&mut self.instances);
-        if let (Some(gpu), Some(orbit)) = (&self.globe, orbit) {
-            build_instances_with_casters_on(
-                views,
-                &*gpu.globe,
-                orbit.right(),
-                &mut instances,
-                &mut self.caster_ranges,
-            );
-        } else if let Some(terrain) = &self.terrain {
-            build_instances_with_casters_on(
-                views,
-                &terrain.surface,
-                [camera_yaw.cos(), 0.0, -camera_yaw.sin()],
-                &mut instances,
-                &mut self.caster_ranges,
-            );
-        } else {
-            self.instances = instances;
-            return;
+        let (ground, right): (&dyn Footing, [f32; 3]) =
+            if let (Some(gpu), Some(orbit)) = (&self.globe, orbit) {
+                (&*gpu.globe, orbit.right())
+            } else if let Some(terrain) = &self.terrain {
+                (&terrain.surface, [camera_yaw.cos(), 0.0, -camera_yaw.sin()])
+            } else {
+                self.instances = instances;
+                return;
+            };
+        let looks = &self.looks;
+        let objects = self.features.as_ref().map(|f| &f.buildings);
+        let drawn_as_objects = |kind: u16| {
+            looks.building(kind).is_some() && objects.is_some_and(|b| b.contains_key(&kind))
+        };
+        build_instances_with_casters_on(
+            views,
+            ground,
+            right,
+            &mut instances,
+            &mut self.caster_ranges,
+            &drawn_as_objects,
+        );
+        if let Some(features) = &mut self.features {
+            for list in &mut features.crops {
+                list.clear();
+            }
+            let mut placed = std::mem::take(&mut self.crop_scratch);
+            for view in views.iter().filter(|v| v.building) {
+                let (Some(look), Some(variants)) = (
+                    looks.building(view.kind),
+                    features.buildings.get(&view.kind),
+                ) else {
+                    continue;
+                };
+                placed.clear();
+                crop_instances(view, ground, look, variants, &mut placed);
+                for (mesh, transform) in &placed {
+                    if let Some(list) = features.crops.get_mut(usize::from(*mesh)) {
+                        list.push(matrix_of(transform));
+                    }
+                }
+            }
+            self.crop_scratch = placed;
         }
         self.entity_transforms
             .extend(instances.iter().map(matrix_of));
@@ -1100,6 +1195,11 @@ impl Scene {
             transform
         }));
         let size = (target.texture.width as f32, target.texture.height as f32);
+        let eye = camera.position();
+        self.set_material_frame(eye, camera.distance);
+        if let Some(features) = &mut self.features {
+            features.prepare(eye, &|_, _| true);
+        }
         let shadow = if self.terrain.is_some() {
             self.flat_shadow_pass(rl, thread, camera, size)
         } else {
@@ -1107,7 +1207,6 @@ impl Scene {
         };
         self.set_lighting(sun::unit_or(LIGHT_DIRECTION.map(|c| -c)), false, shadow);
         let shadow_texture = shadow.and(self.shadow.as_ref()).map(|s| s.texture_id());
-        let eye = camera.position();
         let view = Camera3D::perspective(
             Vector3::new(eye[0], eye[1], eye[2]),
             Vector3::new(camera.target[0], camera.target[1], camera.target[2]),
@@ -1140,6 +1239,7 @@ impl Scene {
         let mut world = drawing.begin_mode3D(view);
         shift_projection(self.projection_centre_y);
         shadow::bind_shadow_map(shadow_texture);
+        materials::bind_noise(self.noise.as_ref().map(|t| t.id));
         match &self.terrain {
             Some(terrain) => {
                 for shaded in &terrain.land {
@@ -1149,6 +1249,13 @@ impl Scene {
                         Matrix::identity(),
                     );
                 }
+                draw_features(
+                    &mut world,
+                    self.detail,
+                    self.features.as_ref(),
+                    &mut self.object_shader,
+                    &self.object_material,
+                );
                 if self.draw_markers {
                     for (centre, size, color) in &terrain.pillars {
                         world.draw_cube_v(*centre, *size, *color);
@@ -1169,10 +1276,15 @@ impl Scene {
                     );
                 }
                 for shaded in &terrain.sea {
-                    world.draw_mesh(&shaded.mesh, self.sea_material.clone(), Matrix::identity());
+                    world.draw_mesh(
+                        &shaded.mesh,
+                        self.sea_globe_material.clone(),
+                        Matrix::identity(),
+                    );
                 }
                 draw_overlay(&mut world, &self.overlay);
                 shadow::bind_shadow_map(None);
+                materials::bind_noise(None);
             }
             None => {
                 world.draw_mesh(
@@ -1243,6 +1355,22 @@ fn flat_chunk_touches_change(spec: ChunkSpec, width: u32, height: u32, changed: 
             .iter()
             .any(|c| *c)
     })
+}
+
+/// Draws the feature objects and crops prepared for this frame, when `detail` shows them.
+fn draw_features(
+    world: &mut impl RaylibDraw3D,
+    detail: f32,
+    features: Option<&materials::FeatureGpu>,
+    shader: &mut Shader,
+    material: &WeakMaterial,
+) {
+    if detail <= 0.01 {
+        return;
+    }
+    if let Some(features) = features {
+        features.draw(world, shader, material);
+    }
 }
 
 /// Draws the overlay triangles and lines of one frame.

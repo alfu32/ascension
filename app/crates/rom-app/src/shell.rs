@@ -18,6 +18,7 @@ use rom_sim::BodyId;
 use crate::args::Options;
 use crate::bench;
 use crate::demo::{DemoDriver, add_stress_units};
+use crate::looks;
 use crate::match_setup::{Match, build_match, build_sphere_match, build_universe_match};
 use crate::screenshot;
 use crate::script::{Script, ScriptContext, ScriptSetup};
@@ -25,6 +26,10 @@ use crate::sim_thread::{SimLink, SimThread, UniverseHost};
 use crate::terrain;
 use crate::universe_view;
 use crate::world_view::WorldView;
+
+/// Longest wait for the render thread to mesh the terrain and bake its objects before the
+/// simulation starts anyway.
+const TERRAIN_WAIT: Duration = Duration::from_secs(30);
 
 /// Opens the window and runs until it is closed (or the benchmark finishes).
 pub fn run(options: &Options) -> ExitCode {
@@ -256,6 +261,11 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
                 view: options.view,
             },
         );
+        bridge.publish_looks(Arc::new(looks::scene_looks(
+            &content.rules,
+            options.seed,
+            planet.base,
+        )));
         let mut scene = terrain::to_planet_scene(planet);
         terrain::apply_terrain_colours(&mut scene.feature_colors, &content.rules);
         scene.sun = sun;
@@ -293,16 +303,29 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
                 scene.sun = terrain::sun_settings(&content.rules, options);
                 scene.starts.clear();
                 scene.nodes.clear();
+                let home = game.starts.first().map(|s| SurfacePos {
+                    face: s.city_pos.face,
+                    x: i64::from(s.city_pos.x),
+                    y: i64::from(s.city_pos.y),
+                });
+                let view = match (&options.look_at, home) {
+                    (Some(look), Some(home)) => Some(
+                        terrain::look_at(&content.rules, &content.planet, home, look)
+                            .ok_or_else(|| format!("--look-at: no tile matches {look:?}"))?,
+                    ),
+                    _ => options.orbit,
+                };
+                bridge.publish_looks(Arc::new(looks::scene_looks(
+                    &content.rules,
+                    options.seed,
+                    content.planet.base,
+                )));
                 bridge.publish_planet(
                     Arc::new(scene),
                     OrbitSettings {
                         max_distance: None,
-                        view: options.orbit,
-                        home: game.starts.first().map(|s| SurfacePos {
-                            face: s.city_pos.face,
-                            x: i64::from(s.city_pos.x),
-                            y: i64::from(s.city_pos.y),
-                        }),
+                        view,
+                        home,
                         body: None,
                     },
                 );
@@ -312,6 +335,11 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
                 let content = terrain::generate_content(options)?;
                 let mut scene = terrain::to_scene(&content.map);
                 terrain::apply_terrain_colours(&mut scene.feature_colors, &content.rules);
+                bridge.publish_looks(Arc::new(looks::scene_looks(
+                    &content.rules,
+                    options.seed,
+                    content.map.base,
+                )));
                 bridge.publish_terrain(Arc::new(scene));
                 build_match(
                     &content.rules,
@@ -339,6 +367,12 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
         Some(path) => Some(read_script(path, &game)?),
         None => None,
     };
+    // Feature objects are baked when the render thread takes the terrain: the match starts
+    // only after that, so nothing is generated while it runs.
+    let waiting = std::time::Instant::now();
+    while !bridge.terrain_ready() && waiting.elapsed() < TERRAIN_WAIT {
+        std::thread::sleep(Duration::from_millis(5));
+    }
     SimThread::spawn(
         game.world,
         driver,

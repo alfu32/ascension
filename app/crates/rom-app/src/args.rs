@@ -7,7 +7,7 @@ pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <f
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] \
 [--map-size <width>x<height>] [--sphere <n>] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
 [--universe] [--zoom-all] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-hud] [--hud-scale <percent>] [--stats] \
-[--sun <orbit|fixed|night>] [--graticule <on|off>]";
+[--sun <orbit|fixed|night>] [--graticule <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]]";
 
 /// Default canvas size in pixels when `--size` is not given.
 pub const DEFAULT_SIZE: (u32, u32) = (1280, 800);
@@ -72,6 +72,9 @@ pub struct Options {
     pub sun_midnight: bool,
     /// Draw the latitude and longitude lines of a sphere planet.
     pub graticule: bool,
+    /// On a sphere, start the camera over the nearest edge tile of a terrain (optionally one
+    /// near a second terrain, which the camera then faces), at this distance.
+    pub look_at: Option<LookAt>,
     /// Print usage and exit.
     pub help: bool,
 }
@@ -107,6 +110,7 @@ impl Default for Options {
             sun_fixed: false,
             sun_midnight: false,
             graticule: true,
+            look_at: None,
             help: false,
         }
     }
@@ -201,6 +205,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                     _ => return Err(format!("--graticule expects on or off, got {text:?}")),
                 };
             }
+            "--look-at" => options.look_at = Some(parse_look_at(&value("--look-at")?)?),
             "--no-hud" => options.no_hud = true,
             "--stats" => options.stats = true,
             "--hud-scale" => {
@@ -279,6 +284,45 @@ fn parse_orbit(text: &str) -> Result<[f32; 4], String> {
         return Err(invalid());
     }
     Ok([lon, lat, distance, heading])
+}
+
+/// Where `--look-at` puts the camera.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LookAt {
+    /// Key of the terrain looked at.
+    pub terrain: String,
+    /// Key of a terrain that must lie near it, in view.
+    pub near: Option<String>,
+    /// Camera distance in tiles.
+    pub distance: f32,
+}
+
+fn parse_look_at(text: &str) -> Result<LookAt, String> {
+    let invalid = || format!("--look-at expects <terrain>[+<terrain>][,<distance>], got {text:?}");
+    let (keys, distance) = match text.split_once(',') {
+        Some((keys, distance)) => (
+            keys,
+            distance
+                .trim()
+                .parse::<f32>()
+                .ok()
+                .filter(|d| d.is_finite() && *d > 0.0)
+                .ok_or_else(invalid)?,
+        ),
+        None => (text, rom_render::MIN_DISTANCE),
+    };
+    let (terrain, near) = match keys.split_once('+') {
+        Some((a, b)) => (a.trim(), Some(b.trim().to_owned())),
+        None => (keys.trim(), None),
+    };
+    if terrain.is_empty() || near.as_deref() == Some("") {
+        return Err(invalid());
+    }
+    Ok(LookAt {
+        terrain: terrain.to_owned(),
+        near,
+        distance,
+    })
 }
 
 fn parse_size(text: &str) -> Result<(u32, u32), String> {
@@ -437,6 +481,24 @@ mod tests {
         assert_eq!(o.script, Some(PathBuf::from("demo.txt")));
         assert!(parse(args(&["--script"])).is_err());
         assert!(!USAGE.contains("--script"));
+    }
+
+    #[test]
+    fn parses_the_look_at_option() {
+        let o = parse(args(&["--look-at", "ter.forest+ter.mountain,14"])).unwrap();
+        assert_eq!(
+            o.look_at,
+            Some(LookAt {
+                terrain: "ter.forest".into(),
+                near: Some("ter.mountain".into()),
+                distance: 14.0,
+            })
+        );
+        let o = parse(args(&["--look-at", "ter.forest"])).unwrap();
+        let look = o.look_at.unwrap();
+        assert_eq!((look.near, look.distance), (None, rom_render::MIN_DISTANCE));
+        assert!(parse(args(&["--look-at", "ter.forest,-3"])).is_err());
+        assert!(parse(args(&["--look-at", "ter.forest+"])).is_err());
     }
 
     #[test]

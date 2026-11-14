@@ -10,6 +10,7 @@
 
 mod camera;
 mod entities;
+pub mod features;
 mod globe;
 pub mod graticule;
 pub mod hud;
@@ -20,7 +21,9 @@ pub mod hud_minimap;
 pub mod hud_model;
 pub mod hud_preview;
 pub mod hud_text;
+pub mod looks;
 mod mailbox;
+mod materials;
 mod orbit;
 mod overlay;
 pub mod pick;
@@ -44,6 +47,10 @@ pub use entities::{
 };
 pub use globe::{ChunkSpec, Globe, PlanetScene, SurfaceHit, planet_radius, to_render};
 pub use image;
+pub use looks::{
+    Generator, MATERIAL_FAR, MATERIAL_NEAR, MaterialLook, ObjectLook, Program, SceneLooks,
+    SnowLook, TileLook, lod_weight,
+};
 pub use mailbox::{Frame, FrameMailbox, FramePixels};
 pub use orbit::{
     HOME_DISTANCE, MIN_DISTANCE, OrbitCamera, OrbitController, dir_from_lon_lat, lon_lat_of,
