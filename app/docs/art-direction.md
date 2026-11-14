@@ -14,8 +14,12 @@ for every faction** to start; regional families come later as data.
 - Soft contact shading: parts darken slightly where they meet the ground or
   another part (baked into the vertex colour), so models do not look pasted on.
 - Natural materials carry most of the surface. **Team colour** covers about
-  15–25 % of what is visible: roof trim or roof, banners and flags, unit tunics
-  and shield faces. Never the whole model.
+  15–25 % of what is visible on buildings, riders, robed figures, vehicles
+  and ships: roof trim or roof, banners and flags, sails, shield faces. Never
+  the whole model.
+- Foot figures wear a full team-coloured tunic (about 40–60 % of what is
+  visible), so armies read by colour from afar. Approved by the owner in
+  review round 3 (2026-11-14).
 
 ## Scale
 
