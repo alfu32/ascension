@@ -65,6 +65,53 @@ impl HudGpu {
             glyphs,
         })
     }
+    /// Draws review tags in the HUD font, centred on their points with a dark shadow; none is
+    /// dropped.
+    pub(crate) fn draw_tags(
+        &mut self,
+        d: &mut impl RaylibDraw,
+        layout: &HudLayout,
+        tags: &[SpaceLabel],
+    ) {
+        if tags.is_empty() {
+            return;
+        }
+        let atlas = &self.painter.glyphs;
+        let ratio = layout.scale / atlas.scale;
+        let mut quads = Vec::new();
+        for tag in tags {
+            for (dx, dy, tint) in [(1, 1, [0, 0, 0, 230]), (0, 0, tag.colour)] {
+                let style = TextStyle {
+                    size: TextSize::Small,
+                    align: Align::Centre,
+                    colour: tint,
+                };
+                atlas.draw(
+                    &tag.text,
+                    style,
+                    tag.x.round() as i32 + dx,
+                    tag.y.round() as i32 + dy,
+                    &mut quads,
+                );
+            }
+        }
+        for q in quads {
+            let (x, y, w, h) = q.src;
+            d.draw_texture_pro(
+                &self.glyphs,
+                Rectangle::new(x as f32, y as f32, w as f32, h as f32),
+                Rectangle::new(
+                    q.dst.0 as f32,
+                    q.dst.1 as f32,
+                    w as f32 * ratio,
+                    h as f32 * ratio,
+                ),
+                Vector2::zero(),
+                0.0,
+                Color::new(q.colour[0], q.colour[1], q.colour[2], q.colour[3]),
+            );
+        }
+    }
     /// Draws the names of the star map in the HUD font, dropping those that would overlap.
     pub(crate) fn draw_labels(
         &mut self,

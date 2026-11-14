@@ -840,6 +840,87 @@ fn load_mesh(conn: &Connection) -> Result<Vec<Mesh>, RulesError> {
         })
     })
 }
+fn load_mesh_part(conn: &Connection) -> Result<Vec<MeshPart>, RulesError> {
+    // An include names its mesh by key in the flat JSON parameters.
+    let sql = "SELECT p.*, d.id AS include_id FROM mesh_part p \
+               LEFT JOIN def d ON p.shape = 'include' AND d.kind = 'mesh' \
+               AND d.key = json_extract(CASE WHEN json_valid(p.params) THEN p.params ELSE '{}' END, '$.mesh') \
+               ORDER BY p.id";
+    read(conn, sql, |row| {
+        let identity = format!("id={:?}", row.get::<_, i64>("id")?);
+        Ok(MeshPart {
+            id: row.get("id")?,
+            mesh_id: DefId(row.get("mesh_id")?),
+            name: row.get("name")?,
+            shape: row.get("shape")?,
+            material_id: row.get::<_, Option<u32>>("material_id")?.map(DefId),
+            team: boolean(row, "team", "mesh_part", &identity)?,
+            attach: row.get("attach")?,
+            params: row.get("params")?,
+            include: row.get::<_, Option<u32>>("include_id")?.map(DefId),
+        })
+    })
+}
+/// Rejects two parts of one mesh with the same name, an include that names no mesh, and
+/// meshes that include themselves through any chain.
+fn check_mesh_parts(rules: &Rules) -> Result<(), RulesError> {
+    let key = |id: DefId| {
+        rules
+            .definitions
+            .get(id.0 as usize)
+            .and_then(Option::as_ref)
+            .map_or_else(|| format!("#{}", id.0), |d| d.key.clone())
+    };
+    for (&mesh, parts) in &rules.mesh_parts {
+        let mut names = std::collections::BTreeSet::new();
+        for part in parts {
+            if !names.insert(part.name.as_str()) {
+                return Err(RulesError::DuplicatePart {
+                    mesh: key(mesh),
+                    name: part.name.clone(),
+                });
+            }
+            if part.shape == "include" && part.include.is_none() {
+                return Err(RulesError::InvalidValue {
+                    table: "mesh_part".into(),
+                    row: format!("id={}", part.id),
+                    column: "params".into(),
+                    value: part.params.clone(),
+                    expected: "an include naming a mesh key in \"mesh\"",
+                });
+            }
+        }
+    }
+    // Depth-first walk of the include graph in id order; a mesh met again on the path is a cycle.
+    let mut done = std::collections::BTreeSet::new();
+    for &root in rules.mesh_parts.keys() {
+        let mut path: Vec<(DefId, usize)> = vec![(root, 0)];
+        while let Some(&mut (mesh, ref mut next)) = path.last_mut() {
+            let includes: Vec<DefId> = rules
+                .mesh_parts
+                .get(&mesh)
+                .map(|p| p.iter().filter_map(|part| part.include).collect())
+                .unwrap_or_default();
+            if done.contains(&mesh) || *next >= includes.len() {
+                done.insert(mesh);
+                path.pop();
+                continue;
+            }
+            let child = includes[*next];
+            *next += 1;
+            if let Some(start) = path.iter().position(|(m, _)| *m == child) {
+                let chain: Vec<String> = path[start..]
+                    .iter()
+                    .map(|(m, _)| key(*m))
+                    .chain(std::iter::once(key(child)))
+                    .collect();
+                return Err(RulesError::IncludeCycle(chain.join(" -> ")));
+            }
+            path.push((child, 0));
+        }
+    }
+    Ok(())
+}
 fn load_entity_visual(conn: &Connection) -> Result<Vec<EntityVisual>, RulesError> {
     read(conn, "SELECT * FROM entity_visual ORDER BY id", |row| {
         Ok(EntityVisual {
@@ -1138,6 +1219,8 @@ impl Rules {
             .map(|r| (r.id, r))
             .collect();
         rules.meshes = load_mesh(conn)?.into_iter().map(|r| (r.id, r)).collect();
+        rules.mesh_parts = group(load_mesh_part(conn)?, |r| r.mesh_id);
+        check_mesh_parts(&rules)?;
         rules.map_styles = load_map_style(conn)?
             .into_iter()
             .map(|r| (r.id, r))

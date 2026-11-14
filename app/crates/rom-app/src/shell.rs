@@ -52,8 +52,14 @@ pub fn run(options: &Options) -> ExitCode {
     };
     bridge.publish_render_scale(options.scale);
     bridge.publish_hud_options(!options.no_hud, options.hud_scale);
-    let mut sim = match start_simulation(options, &bridge) {
-        Ok(sim) => Some(sim),
+    let started = if options.gallery.is_some() || options.model.is_some() {
+        // The review screens show models on plain ground; no match runs.
+        crate::gallery::start(options, &bridge).map(|()| None)
+    } else {
+        start_simulation(options, &bridge).map(Some)
+    };
+    let mut sim = match started {
+        Ok(sim) => sim,
         Err(error) => {
             eprintln!("rise-of-man: {error}");
             worker.stop();

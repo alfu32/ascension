@@ -1,0 +1,6 @@
+# Approved models: model id = fingerprint of its baked near and far geometry, as printed by
+# `rise-of-man --gallery-manifest <file.json>` ("fingerprint"). The test
+# `approved_models_are_unchanged` (rom-app) fails, listing every changed id, when an approved
+# model's geometry changes. Add a line when the owner approves a model; change a fingerprint
+# only with the owner's say-so. See docs/art-direction.md, "How models are reviewed".
+[models]

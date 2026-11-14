@@ -32,6 +32,12 @@ pub enum RulesError {
     /// A component refers to an entity type absent from the database.
     #[error("{table} refers to missing entity type {id:?}")]
     MissingEntity { table: String, id: DefId },
+    /// Two parts of one composed mesh share a name.
+    #[error("mesh {mesh} has two parts named {name:?}")]
+    DuplicatePart { mesh: String, name: String },
+    /// Composed meshes include one another in a cycle (the chain of mesh keys).
+    #[error("mesh include cycle: {0}")]
+    IncludeCycle(String),
     /// A definition id requires a vector larger than the available capacity.
     #[error("cannot allocate definition index for {0:?}")]
     DefinitionCapacity(DefId),

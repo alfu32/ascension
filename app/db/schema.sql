@@ -546,6 +546,21 @@ CREATE TABLE mesh (                    -- procedural generator + parameters
   baked     INTEGER NOT NULL DEFAULT 1 -- generated once before the match, never per frame
 ) STRICT;
 
+-- A named part of a composed model (mesh.generator = 'composed'): one shape
+-- placed in the model's frame (x east, y up, z south; tiles; origin at the
+-- footprint centre on the ground).
+CREATE TABLE mesh_part (
+  id          INTEGER PRIMARY KEY,
+  mesh_id     INTEGER NOT NULL REFERENCES mesh(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,              -- reference name, unique in its mesh
+  shape       TEXT NOT NULL,              -- renderer shape: 'box','gable_roof', … or 'include'
+  material_id INTEGER REFERENCES material(id), -- NULL: the entity_visual's material
+  team        INTEGER NOT NULL DEFAULT 0 CHECK (team IN (0,1)), -- wears the owner's colour
+  attach      TEXT NOT NULL DEFAULT '',   -- part or socket it moves with ('' = the model)
+  params      TEXT NOT NULL DEFAULT '{}', -- flat JSON: position, size, rotation, shape knobs
+  UNIQUE (mesh_id, name)
+) STRICT;
+
 CREATE TABLE entity_visual (           -- most specific row wins (faction, then age)
   id             INTEGER PRIMARY KEY,
   entity_type_id INTEGER NOT NULL REFERENCES entity_type(id),

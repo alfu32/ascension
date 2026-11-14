@@ -1634,6 +1634,28 @@ pub struct Mesh {
     /// The `baked` column.
     pub baked: bool,
 }
+/// One `mesh_part` row: a named shape of a composed model.
+#[derive(Debug, Clone)]
+pub struct MeshPart {
+    /// The `id` column.
+    pub id: u32,
+    /// The `mesh_id` column.
+    pub mesh_id: DefId,
+    /// The `name` column.
+    pub name: String,
+    /// The `shape` column.
+    pub shape: String,
+    /// The `material_id` column.
+    pub material_id: Option<DefId>,
+    /// The `team` column.
+    pub team: bool,
+    /// The `attach` column.
+    pub attach: String,
+    /// The `params` column.
+    pub params: String,
+    /// The mesh an `include` part places (its `params.mesh` key), when it names one.
+    pub include: Option<DefId>,
+}
 /// One `entity_visual` row.
 #[derive(Debug, Clone)]
 pub struct EntityVisual {
@@ -1942,6 +1964,8 @@ pub struct Rules {
     pub materials: BTreeMap<DefId, Material>,
     /// Loaded `mesh` rows, keyed by primary key.
     pub meshes: BTreeMap<DefId, Mesh>,
+    /// Loaded `mesh_part` rows by mesh, in id order.
+    pub mesh_parts: BTreeMap<DefId, Vec<MeshPart>>,
     /// Loaded `map_style` rows, keyed by primary key.
     pub map_styles: BTreeMap<DefId, MapStyle>,
     /// Loaded `victory` rows, keyed by primary key.

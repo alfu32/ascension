@@ -3719,4 +3719,121 @@ INSERT INTO entity_visual(entity_type_id,mesh_id,material_id)
  SELECT (SELECT id FROM def WHERE key='bld.farm'), (SELECT id FROM def WHERE key='mesh.crop_rows'),
  (SELECT id FROM def WHERE key='mat.crop');
 
+-- ── composed models of buildings and units ──────────────────────────────────
+-- A composed mesh (generator 'composed') is a list of named parts in mesh_part;
+-- an entity_visual row gives it to an entity type from an age on (no age: any
+-- age). Shapes, knobs and material programs are listed in docs/database.md;
+-- positions and sizes are tiles in the model's frame (x east, y up, z south,
+-- origin on the ground at the footprint centre, the front facing south).
+-- The look and review loop are in docs/art-direction.md.
+INSERT INTO def(kind,key,name) VALUES
+ ('material','mat.mud_plaster','Mud plaster'), ('material','mat.mud_brick','Mud brick'),
+ ('material','mat.packed_earth','Packed earth'), ('material','mat.thatch','Thatch'),
+ ('material','mat.timber','Timber'), ('material','mat.cloth','Cloth'),
+ ('material','mat.fieldstone','Fieldstone'), ('material','mat.limestone','Limestone'),
+ ('material','mat.lime_plaster','Lime plaster'), ('material','mat.terracotta','Terracotta tiles'),
+ ('material','mat.bronze','Bronze'), ('material','mat.iron','Iron'),
+ ('mesh','mesh.house_ancient','Early house'), ('mesh','mesh.city_ancient','Early city'),
+ ('mesh','mesh.barracks_ancient','Early barracks'), ('mesh','mesh.library_ancient','Early library'),
+ ('mesh','mesh.house_classical','Classical house'), ('mesh','mesh.city_classical','Classical city'),
+ ('mesh','mesh.citizen','Citizen');
+WITH v(k,prog,params) AS (VALUES
+  ('mat.mud_plaster','plaster','{"colour":"#c4a27a","colour_alt":"#a3825c","scale":0.7}'),
+  ('mat.mud_brick','brick','{"colour":"#b58a5e","colour_alt":"#8c6b4c","scale":0.32}'),
+  ('mat.packed_earth','plaster','{"colour":"#b49b78","colour_alt":"#998262","scale":1.4}'),
+  ('mat.thatch','thatch','{"colour":"#c4a465","colour_alt":"#86693a","scale":0.22}'),
+  ('mat.timber','timber','{"colour":"#8a6240","colour_alt":"#5a3d26","scale":0.16}'),
+  ('mat.cloth','cloth','{"colour":"#e4dccb","colour_alt":"#b7ad99","scale":0.25}'),
+  ('mat.fieldstone','stone','{"colour":"#a39b8e","colour_alt":"#736d64","scale":0.35}'),
+  ('mat.limestone','brick','{"colour":"#e3dccb","colour_alt":"#bdb4a0","scale":0.62}'),
+  ('mat.lime_plaster','plaster','{"colour":"#ebe4d4","colour_alt":"#d0c6b0","scale":0.9}'),
+  ('mat.terracotta','roof_tile','{"colour":"#bf5f36","colour_alt":"#8a3b1f","scale":0.2}'),
+  ('mat.bronze','metal','{"colour":"#b98d4a","colour_alt":"#7d5a2a","scale":0.3}'),
+  ('mat.iron','metal','{"colour":"#8e9196","colour_alt":"#5d6066","scale":0.3}'))
+INSERT INTO material(id,program,params) SELECT d.id, v.prog, v.params FROM v JOIN def d ON d.key=v.k;
+INSERT INTO mesh(id,generator,params,baked)
+ SELECT id, 'composed', '{}', 1 FROM def WHERE kind='mesh' AND key IN
+  ('mesh.house_ancient','mesh.city_ancient','mesh.barracks_ancient','mesh.library_ancient',
+   'mesh.house_classical','mesh.city_classical','mesh.citizen');
+WITH v(m,name,shape,mat,team,attach,params) AS (VALUES
+  -- a mud-plastered house under a thatched gable, its ridge in the owner's colour
+  ('mesh.house_ancient','walls','box','mat.mud_plaster',0,'','{"w":1.3,"d":1.05,"h":0.95,"gable":42,"door":0.3,"door_h":0.6,"windows":1,"side_windows":1,"window_w":0.17,"window_h":0.19,"window_y":0.5}'),
+  ('mesh.house_ancient','roof','gable_roof','mat.thatch',0,'','{"y":0.95,"w":1.3,"d":1.05,"pitch":42,"overhang":0.17,"t":0.1}'),
+  ('mesh.house_ancient','ridge','box','mat.cloth',1,'','{"y":1.47,"w":1.62,"d":0.2,"h":0.1}'),
+  -- the early city: a hall on a stone base among houses, a porch and two banners
+  ('mesh.city_ancient','yard','plinth','mat.packed_earth',0,'','{"w":6.4,"d":6.4,"h":0.05,"steps":1}'),
+  ('mesh.city_ancient','hall_base','plinth','mat.fieldstone',0,'','{"z":-0.55,"w":3.5,"d":2.8,"h":0.36,"steps":2,"inset":0.14}'),
+  ('mesh.city_ancient','hall','box','mat.mud_brick',0,'','{"y":0.36,"z":-0.55,"w":2.8,"d":2.1,"h":1.75,"gable":40,"door":0.62,"door_h":1.05,"windows":4,"side_windows":2,"window_y":1.0,"window_w":0.2,"window_h":0.3}'),
+  ('mesh.city_ancient','hall_roof','gable_roof','mat.thatch',0,'','{"y":2.11,"z":-0.55,"w":2.8,"d":2.1,"pitch":40,"overhang":0.32,"t":0.13}'),
+  ('mesh.city_ancient','hall_ridge','box','mat.cloth',1,'','{"y":2.98,"z":-0.55,"w":3.5,"d":0.26,"h":0.12}'),
+  ('mesh.city_ancient','porch','awning','mat.cloth',1,'','{"z":0.95,"w":1.7,"d":0.8,"h":1.55,"rise":0.4}'),
+  ('mesh.city_ancient','banner','banner','mat.cloth',1,'','{"x":-1.25,"z":1.55,"h":3.3,"fw":0.62,"fh":1.15,"repeat":2,"dx":2.5}'),
+  ('mesh.city_ancient','house_sw','include',NULL,0,'','{"mesh":"mesh.house_ancient","x":-2.2,"z":2.2}'),
+  ('mesh.city_ancient','house_se','include',NULL,0,'','{"mesh":"mesh.house_ancient","x":2.2,"z":2.2}'),
+  ('mesh.city_ancient','house_w','include',NULL,0,'','{"mesh":"mesh.house_ancient","x":-2.45,"z":-1.0,"yaw":90}'),
+  ('mesh.city_ancient','house_e','include',NULL,0,'','{"mesh":"mesh.house_ancient","x":2.45,"z":-1.0,"yaw":-90}'),
+  ('mesh.city_ancient','house_n','include',NULL,0,'','{"mesh":"mesh.house_ancient","z":-2.6,"yaw":180,"scale":0.9}'),
+  ('mesh.city_ancient','well','cylinder','mat.fieldstone',0,'','{"z":2.55,"w":0.55,"h":0.32,"segments":8}'),
+  ('mesh.city_ancient','jars','cylinder','mat.mud_plaster',0,'','{"x":-0.95,"z":1.0,"w":0.2,"h":0.26,"segments":6,"taper":0.25,"repeat":3,"dz":0.26}'),
+  -- the early barracks: a palisaded yard, a gate with the owner's cloth, a hut and a tall banner
+  ('mesh.barracks_ancient','yard','plinth','mat.packed_earth',0,'','{"w":3.6,"d":3.6,"h":0.05,"steps":1}'),
+  ('mesh.barracks_ancient','palisade','palisade','mat.timber',0,'','{"w":3.6,"d":3.6,"h":1.2,"t":0.16,"ring":1,"gap":1.1,"spacing":0.24}'),
+  ('mesh.barracks_ancient','gate_posts','cylinder','mat.timber',0,'','{"x":-0.62,"z":1.72,"w":0.2,"h":1.75,"segments":6,"repeat":2,"dx":1.24}'),
+  ('mesh.barracks_ancient','gate_beam','box','mat.timber',0,'','{"y":1.55,"z":1.72,"w":1.6,"d":0.18,"h":0.15}'),
+  ('mesh.barracks_ancient','gate_cloth','box','mat.cloth',1,'','{"y":1.2,"z":1.84,"w":1.15,"d":0.04,"h":0.34}'),
+  ('mesh.barracks_ancient','hut','box','mat.mud_plaster',0,'','{"z":-0.85,"w":2.3,"d":1.25,"h":1.05,"gable":38,"door":0.38,"door_h":0.7,"windows":2,"window_y":0.55,"window_w":0.18,"window_h":0.2}'),
+  ('mesh.barracks_ancient','hut_roof','gable_roof','mat.thatch',0,'','{"y":1.05,"z":-0.85,"w":2.3,"d":1.25,"pitch":38,"overhang":0.18,"t":0.1}'),
+  ('mesh.barracks_ancient','banner','banner','mat.cloth',1,'','{"x":1.15,"z":0.95,"h":3.6,"fw":0.75,"fh":1.3,"notch":0.25}'),
+  ('mesh.barracks_ancient','rack','fence','mat.timber',0,'','{"x":-1.1,"z":0.75,"w":1.0,"h":0.55,"spacing":0.5,"rails":1}'),
+  ('mesh.barracks_ancient','spears','cylinder','mat.timber',0,'','{"x":-1.43,"z":0.7,"w":0.045,"h":1.45,"segments":4,"repeat":4,"dx":0.22}'),
+  ('mesh.barracks_ancient','dummy','cylinder','mat.timber',0,'','{"x":0.2,"z":0.6,"w":0.1,"h":1.1,"segments":5}'),
+  ('mesh.barracks_ancient','dummy_body','box','mat.thatch',0,'','{"x":0.2,"y":0.55,"z":0.6,"w":0.36,"d":0.26,"h":0.45,"taper":0.25}'),
+  -- the early library: a solid mud-brick block with few windows under a stacked roof
+  ('mesh.library_ancient','base','plinth','mat.fieldstone',0,'','{"w":3.6,"d":3.45,"h":0.42,"steps":2,"inset":0.16}'),
+  ('mesh.library_ancient','block','box','mat.mud_brick',0,'','{"y":0.42,"w":2.8,"d":2.5,"h":1.65,"door":0.55,"door_h":1.0,"windows":2,"side_windows":1,"window_y":1.12,"window_w":0.15,"window_h":0.24}'),
+  ('mesh.library_ancient','porch_posts','column_row','mat.timber',0,'','{"y":0.42,"z":1.52,"count":2,"radius":0.07,"spacing":1.0,"h":1.25,"segments":6,"capital":0}'),
+  ('mesh.library_ancient','porch_roof','box','mat.timber',0,'','{"y":1.67,"z":1.4,"w":1.4,"d":0.5,"h":0.1}'),
+  ('mesh.library_ancient','lower_roof','hip_roof','mat.thatch',0,'','{"y":2.07,"w":2.8,"d":2.5,"pitch":26,"overhang":0.3,"t":0.12}'),
+  ('mesh.library_ancient','upper_block','box','mat.mud_brick',0,'','{"y":2.35,"w":1.5,"d":1.2,"h":0.7,"windows":3,"side_windows":2,"window_y":0.36,"window_w":0.12,"window_h":0.16}'),
+  ('mesh.library_ancient','upper_roof','hip_roof','mat.thatch',1,'','{"y":3.05,"w":1.5,"d":1.2,"pitch":34,"overhang":0.22,"t":0.1}'),
+  ('mesh.library_ancient','finial','cone','mat.bronze',0,'','{"y":3.38,"w":0.18,"h":0.38,"segments":6}'),
+  -- a classical house: lime-plastered walls under a low terracotta roof
+  ('mesh.house_classical','walls','box','mat.lime_plaster',0,'','{"w":1.4,"d":1.1,"h":1.05,"gable":24,"door":0.3,"door_h":0.66,"windows":2,"side_windows":1,"window_w":0.16,"window_h":0.24,"window_y":0.55}'),
+  ('mesh.house_classical','roof','gable_roof','mat.terracotta',0,'','{"y":1.05,"w":1.4,"d":1.1,"pitch":24,"overhang":0.14,"t":0.08}'),
+  ('mesh.house_classical','ridge','box','mat.cloth',1,'','{"y":1.3,"w":1.65,"d":0.16,"h":0.08}'),
+  -- the classical city: a columned hall with a pediment on a stepped base among houses
+  ('mesh.city_classical','yard','plinth','mat.limestone',0,'','{"w":6.4,"d":6.4,"h":0.05,"steps":1}'),
+  ('mesh.city_classical','hall_base','plinth','mat.limestone',0,'','{"z":-0.5,"w":3.7,"d":2.9,"h":0.5,"steps":3,"inset":0.12}'),
+  ('mesh.city_classical','cella','box','mat.lime_plaster',0,'','{"y":0.5,"z":-0.65,"w":2.4,"d":1.6,"h":1.7,"door":0.62,"door_h":1.15}'),
+  ('mesh.city_classical','front_columns','column_row','mat.limestone',0,'','{"y":0.5,"z":0.62,"count":6,"radius":0.11,"spacing":0.6,"h":1.75,"segments":8}'),
+  ('mesh.city_classical','back_columns','column_row','mat.limestone',0,'','{"y":0.5,"z":-1.62,"count":6,"radius":0.11,"spacing":0.6,"h":1.75,"segments":8,"far":0}'),
+  ('mesh.city_classical','entablature','box','mat.limestone',0,'','{"y":2.25,"z":-0.5,"w":3.45,"d":2.6,"h":0.22}'),
+  ('mesh.city_classical','pediment','box','mat.limestone',0,'','{"y":2.45,"z":-0.5,"w":3.4,"d":2.55,"h":0.02,"gable":20}'),
+  ('mesh.city_classical','roof','gable_roof','mat.terracotta',0,'','{"y":2.47,"z":-0.5,"w":3.4,"d":2.55,"pitch":20,"overhang":0.14,"t":0.1}'),
+  ('mesh.city_classical','ridge','box','mat.cloth',1,'','{"y":2.96,"z":-0.5,"w":3.7,"d":0.22,"h":0.1}'),
+  ('mesh.city_classical','banner','banner','mat.cloth',1,'','{"x":-1.4,"z":1.55,"h":3.3,"fw":0.6,"fh":1.15,"repeat":2,"dx":2.8}'),
+  ('mesh.city_classical','house_sw','include',NULL,0,'','{"mesh":"mesh.house_classical","x":-2.2,"z":2.2}'),
+  ('mesh.city_classical','house_se','include',NULL,0,'','{"mesh":"mesh.house_classical","x":2.2,"z":2.2}'),
+  ('mesh.city_classical','house_w','include',NULL,0,'','{"mesh":"mesh.house_classical","x":-2.5,"z":-1.0,"yaw":90}'),
+  ('mesh.city_classical','house_e','include',NULL,0,'','{"mesh":"mesh.house_classical","x":2.5,"z":-1.0,"yaw":-90}'),
+  ('mesh.city_classical','house_n','include',NULL,0,'','{"mesh":"mesh.house_classical","z":-2.65,"yaw":180,"scale":0.9}'),
+  ('mesh.city_classical','fountain','cylinder','mat.limestone',0,'','{"z":2.5,"w":0.7,"h":0.25,"segments":8}'),
+  ('mesh.city_classical','statue','box','mat.bronze',0,'','{"z":2.5,"y":0.25,"w":0.16,"d":0.16,"h":0.55,"taper":0.3}'),
+  -- the citizen: a standing figure in a tunic of the owner's colour, holding a hoe
+  ('mesh.citizen','body','figure','mat.cloth',1,'','{"h":1.0}'),
+  ('mesh.citizen','hoe','cylinder','mat.timber',0,'right_hand','{"y":-0.4,"w":0.035,"h":0.8,"segments":4}'),
+  ('mesh.citizen','blade','box','mat.iron',0,'hoe','{"z":0.06,"w":0.06,"d":0.17,"h":0.08}'))
+INSERT INTO mesh_part(mesh_id,name,shape,material_id,team,attach,params)
+ SELECT m.id, v.name, v.shape, mt.id, v.team, v.attach, v.params
+ FROM v JOIN def m ON m.key=v.m LEFT JOIN def mt ON mt.key=v.mat;
+WITH v(e,a,m,mat) AS (VALUES
+  ('bld.city','age.ancient','mesh.city_ancient','mat.mud_plaster'),
+  ('bld.city','age.classical','mesh.city_classical','mat.limestone'),
+  ('bld.barracks','age.ancient','mesh.barracks_ancient','mat.mud_plaster'),
+  ('bld.library','age.ancient','mesh.library_ancient','mat.mud_brick'),
+  ('unit.citizen',NULL,'mesh.citizen','mat.cloth'))
+INSERT INTO entity_visual(entity_type_id,age_id,mesh_id,material_id)
+ SELECT e.id, a.id, m.id, mt.id FROM v JOIN def e ON e.key=v.e LEFT JOIN def a ON a.key=v.a
+ JOIN def m ON m.key=v.m JOIN def mt ON mt.key=v.mat;
+
 COMMIT;

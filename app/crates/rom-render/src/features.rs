@@ -1003,6 +1003,7 @@ mod tests {
                 ),
             ],
             buildings: BTreeMap::from([(42, crops)]),
+            models: Vec::new(),
         }
     }
 
@@ -1187,6 +1188,7 @@ mod tests {
             footprint,
             radius: 2.0,
             under_construction: None,
+            model: None,
             carrying: false,
             kept: 0,
             capacity: 0,

@@ -44,6 +44,20 @@ pub enum Program {
     Bark = 8,
     /// Wide-bladed crops in rows.
     Crop = 9,
+    /// Smooth wall plaster or mud render.
+    Plaster = 10,
+    /// Brick or ashlar courses in running bond.
+    Brick = 11,
+    /// Planks or logs with dark seams.
+    Timber = 12,
+    /// Rows of curved roof tiles.
+    RoofTile = 13,
+    /// Layered straw.
+    Thatch = 14,
+    /// Brushed metal.
+    Metal = 15,
+    /// Woven cloth with soft folds.
+    Cloth = 16,
 }
 
 impl Program {
@@ -59,6 +73,13 @@ impl Program {
             "foliage" => Self::Foliage,
             "bark" => Self::Bark,
             "crop" => Self::Crop,
+            "plaster" => Self::Plaster,
+            "brick" => Self::Brick,
+            "timber" => Self::Timber,
+            "roof_tile" => Self::RoofTile,
+            "thatch" => Self::Thatch,
+            "metal" => Self::Metal,
+            "cloth" => Self::Cloth,
             _ => return None,
         })
     }
@@ -182,6 +203,8 @@ pub struct SceneLooks {
     pub tiles: Vec<(TileKind, TileLook)>,
     /// Buildings drawn as objects instead of boxes, keyed like [`crate::EntityView::kind`].
     pub buildings: BTreeMap<u16, ObjectLook>,
+    /// Composed models, indexed by [`crate::ModelRef::index`].
+    pub models: Vec<crate::models::ModelLook>,
 }
 
 impl SceneLooks {
@@ -233,6 +256,13 @@ mod tests {
             ("foliage", Program::Foliage),
             ("bark", Program::Bark),
             ("crop", Program::Crop),
+            ("plaster", Program::Plaster),
+            ("brick", Program::Brick),
+            ("timber", Program::Timber),
+            ("roof_tile", Program::RoofTile),
+            ("thatch", Program::Thatch),
+            ("metal", Program::Metal),
+            ("cloth", Program::Cloth),
         ] {
             assert_eq!(Program::from_name(name), Some(program));
         }

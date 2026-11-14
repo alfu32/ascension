@@ -59,7 +59,7 @@ def ─┬─ age            ordinal, era, map scale
      ├─ tech           age | track | upgrade | unit_upgrade | government | project | evolution
      ├─ ability        active abilities
      ├─ formation, stance
-     ├─ material, mesh procedural look
+     ├─ material, mesh procedural look (mesh_part: parts of composed models)
      ├─ map_style      generator recipe
      └─ victory
 
@@ -303,6 +303,55 @@ generators fall back to the map colour and the plain building box. The rows
 were appended after the generated content so existing definition ids did not
 move (task 34).
 
+### 10a. Composed models of buildings and units (task 37)
+
+A mesh with `generator = 'composed'` is a model built from named parts: rows of
+`mesh_part` (added by task 37), each one shape of the renderer's part kit
+placed in the model's frame (x east, y up, z south, in tiles; origin on the
+ground at the footprint centre; the front faces south). `name` is unique in
+its mesh (the loader also refuses duplicates) and gives the part id
+`<model id>/<name>` used in reviews. `material_id` NULL takes the
+`entity_visual` row's material; `team = 1` makes the part's main surface wear
+the owner's colour; `attach` names an earlier part, or a socket (`head`,
+`right_hand`, `left_hand`, `back` of a `figure`, written `socket` or
+`part.socket`), whose frame the part moves with. `params` is flat JSON.
+
+Every part takes `x`, `y`, `z` (its base centre), `yaw` (degrees,
+counter-clockwise seen from above), `repeat` with `dx`, `dz` (copies, each moved
+by that much), `far` (0 leaves it out of the far version) and `tint`
+(`#rrggbb`, multiplies the material colours). The shapes and their own knobs:
+
+| Shape | Knobs |
+| --- | --- |
+| `box` | `w`, `d`, `h`, `taper`, `gable` (pitch of gable ends along x); openings `door`, `door_h`, `door_x`, `windows` (front and back), `side_windows`, `window_w`, `window_h`, `window_y`, `window_rows`, `row_gap`; colours `opening`, `door_colour` |
+| `plinth` | `w`, `d`, `h`, `steps`, `inset` |
+| `gable_roof`, `hip_roof` | `w`, `d` (of the block below), `pitch`, `overhang`, `t` |
+| `flat_roof` | `w`, `d`, `t`, `overhang`, `parapet`, `parapet_t` |
+| `dome`, `cylinder`, `cone` | `w` (diameter), `h`, `segments`; `cylinder` also `taper` |
+| `column_row` | `count`, `radius`, `spacing`, `h`, `segments`, `capital` |
+| `wall` | `w`, `h`, `t`, the openings of `box`; `ring` (four walls round `w` × `d`), `gap` (gate in the front) |
+| `crenellation` | `w`, `d`, `h`, `t`, `merlon`, `ring`, `gap` |
+| `fence` | `w`, `d`, `h`, `spacing`, `rails`, `ring`, `gap` |
+| `palisade` | `w`, `d`, `h`, `t`, `spacing`, `ring`, `gap` |
+| `banner` | `h`, `fw`, `fh`, `pole`, `notch`; colour `pole_colour` (the cloth is the part) |
+| `awning` | `w`, `d`, `h`, `rise`, `posts`; colour `post_colour` |
+| `figure` | `h` (1 tile), `build`; colours `skin`, `hair`, `legs` (the tunic is the part) |
+| `include` | `mesh` (key of another composed mesh), `scale`; its parts without a material take the include's |
+
+The loader refuses include cycles; the application reports an unknown shape
+or knob once on stderr and skips it. Object programs for parts are
+`plaster`, `brick` (also ashlar), `timber`, `roof_tile`, `thatch`, `metal`,
+`cloth`, plus `stone` and the plain colour; their `colour`, `colour_alt` and
+`scale` work as for terrain materials.
+
+`entity_visual` picks a model per entity type: the most specific row wins —
+a row of the owner's faction (or its nearest ancestor) before a row for every
+faction, then the latest `age_id` not after the owner's current age (no age:
+every age). The model id is `<entity key>@<age without "age.">` (`@any` with no
+age), with `+<faction key>` for a faction's own row. Budgets, style and the
+review loop (`--gallery`, `--model`, `--parts`, `--gallery-manifest`,
+`docs/art/approved.toml`) are in `docs/art-direction.md`.
+
 ### 11. Computer opponents are data too
 
 `ai_profile` + `ai_profile_weight` (personality), `ai_opening_step` (opening
@@ -335,6 +384,12 @@ the block so their references resolve during loading.
 **A new technology**: `def` + `tech`, `cost`, `prerequisite`, a `production`
 row with `mode='research'`, then `modifier` rows for numbers and `tech_effect`
 rows for unlocks.
+
+**A new building or unit model**: a `def` (`kind='mesh'`) and `mesh` row with
+`generator='composed'`, its `mesh_part` rows, and an `entity_visual` row
+(entity type, age from which it applies, mesh, default material). Check it
+with `--model <id> --parts` and keep it within the budgets of
+`docs/art-direction.md`.
 
 **A new bonus of any origin**: only `modifier` rows. If it needs a stat that
 does not exist, add the stat to `stat` and implement that one stat in code.
