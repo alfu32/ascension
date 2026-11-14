@@ -1,11 +1,14 @@
 //! The GPU side of composed models: the baked near and far meshes of every model, the model
-//! shader, and each frame's instances (owner colour in the spare matrix cells), drawn
-//! instanced per model with the near or far mesh by distance. Sites under construction are
-//! drawn one by one, cut off above their progress.
+//! shader, and each frame's instances (owner colour in the spare matrix cells, activity and
+//! phase in the last), drawn instanced per model with the near or far mesh by distance. Sites
+//! under construction are drawn one by one, cut off above their progress. Moving parts read
+//! their joint's transform from the pose texture, keyframes of every rigged model baked at
+//! upload; shadows keep the models at rest.
 
 use super::*;
 use crate::entities::{EntityView, Footing, heading_of};
 use crate::models::{ModelLook, ModelMesh, bake_model};
+use crate::rig::{Activity, POSE_SAMPLES, Rig};
 
 const MODEL_VS: &str = include_str!("../../../../assets/shaders/model.vs");
 const MODEL_FS: &str = include_str!("../../../../assets/shaders/model.fs");
@@ -16,6 +19,10 @@ const MODEL_NEAR_DISTANCE: f32 = 70.0;
 const MODEL_SHADOW_DISTANCE: f32 = 90.0;
 /// `reveal` of a finished model: nothing is cut off.
 const REVEAL_ALL: f32 = 1.0e9;
+/// Texture unit the pose texture is bound to while models are drawn.
+const POSE_SLOT: i32 = 3;
+/// Width of the pose texture in texels; rigs are packed in rows of this width.
+const POSE_WIDTH: usize = 1024;
 
 /// The model shader.
 pub(super) fn load_model_shader(rl: &mut RaylibHandle, thread: &RaylibThread) -> Shader {
@@ -24,11 +31,104 @@ pub(super) fn load_model_shader(rl: &mut RaylibHandle, thread: &RaylibThread) ->
     materials::set_noise_slot(&mut shader);
     let location = shader.get_shader_location("reveal");
     shader.set_shader_value(location, REVEAL_ALL);
+    let location = shader.get_shader_location("poseTexture");
+    shader.set_shader_value(location, POSE_SLOT);
+    let location = shader.get_shader_location("poseSamples");
+    shader.set_shader_value(location, POSE_SAMPLES as i32);
     shader
 }
 
+/// Where each rigged model's keyframes sit in the pose texture (`None` for a still model),
+/// and the texture's size: blocks `3 × joints` wide and `4 × POSE_SAMPLES` high, in rows.
+pub(super) fn pack_poses(rigs: &[&Rig]) -> (Vec<Option<[usize; 2]>>, [usize; 2]) {
+    let height = 4 * POSE_SAMPLES;
+    let (mut x, mut y) = (0, 0);
+    let mut origins = Vec::with_capacity(rigs.len());
+    for rig in rigs {
+        if !rig.is_animated() {
+            origins.push(None);
+            continue;
+        }
+        let width = 3 * rig.joints.len();
+        if x + width > POSE_WIDTH {
+            x = 0;
+            y += height;
+        }
+        origins.push(Some([x, y]));
+        x += width;
+    }
+    let size = if origins.iter().any(Option::is_some) {
+        [POSE_WIDTH, y + height]
+    } else {
+        [0, 0]
+    };
+    (origins, size)
+}
+
+/// Uploads the keyframes of `rigs` at `origins` into a float texture of `size`.
+fn upload_poses(
+    thread: &RaylibThread,
+    rigs: &[&Rig],
+    origins: &[Option<[usize; 2]>],
+    size: [usize; 2],
+) -> Option<raylib::prelude::Texture2D> {
+    use raylib::prelude::RaylibTexture2D;
+    if size[0] == 0 {
+        return None;
+    }
+    let mut texels = vec![[0.0_f32; 4]; size[0] * size[1]];
+    for (rig, origin) in rigs.iter().zip(origins) {
+        let Some([x0, y0]) = *origin else {
+            continue;
+        };
+        let width = 3 * rig.joints.len();
+        for (i, texel) in rig.keyframes().into_iter().enumerate() {
+            let (row, column) = (i / width, i % width);
+            texels[(y0 + row) * size[0] + x0 + column] = texel;
+        }
+    }
+    let image = raylib::ffi::Image {
+        data: texels.as_mut_ptr().cast(),
+        width: size[0] as i32,
+        height: size[1] as i32,
+        mipmaps: 1,
+        format: raylib::consts::PixelFormat::PIXELFORMAT_UNCOMPRESSED_R32G32B32A32 as i32,
+    };
+    // SAFETY: render thread with an active GL context; `image` points at `texels`, which holds
+    // exactly width × height RGBA float texels and outlives the call, and raylib only reads it.
+    // The texture it returns is owned by the wrapper, which unloads it on drop.
+    let texture =
+        unsafe { raylib::prelude::Texture2D::from_raw(raylib::ffi::LoadTextureFromImage(image)) };
+    if texture.id == 0 {
+        eprintln!("rom-render: could not upload the model poses");
+        return None;
+    }
+    texture.set_texture_filter(thread, raylib::consts::TextureFilter::TEXTURE_FILTER_POINT);
+    Some(texture)
+}
+
+/// Binds the pose texture to its unit for the draws that follow, or unbinds it.
+fn bind_poses(texture: Option<u32>) {
+    // SAFETY: the render thread has an active GL context; this only changes the texture bound to
+    // a unit that raylib's default materials leave unused.
+    unsafe {
+        raylib::ffi::rlActiveTextureSlot(POSE_SLOT);
+        match texture {
+            Some(id) => raylib::ffi::rlEnableTexture(id),
+            None => raylib::ffi::rlDisableTexture(),
+        }
+        raylib::ffi::rlActiveTextureSlot(0);
+    }
+}
+
+/// The phase (0..1) of an entity's motion: spread by its id so a group does not move as one.
+pub(super) fn phase_of(id: u32) -> f32 {
+    let mixed = id.wrapping_mul(0x9e37_79b9) >> 16;
+    (mixed & 0xffff) as f32 / 65_536.0
+}
+
 /// Uploads one model mesh: colour and program in the colours, second colour and contact
-/// shade in the tangents, pattern size in the first texture coordinates.
+/// shade in the tangents, pattern size and joint in the texture coordinates.
 fn upload_model(thread: &RaylibThread, mesh: &ModelMesh) -> Option<Mesh> {
     if mesh.indices.is_empty() {
         return None;
@@ -56,7 +156,12 @@ fn upload_model(thread: &RaylibThread, mesh: &ModelMesh) -> Option<Mesh> {
             raylib::prelude::Vector4::new(r, g, b, s)
         })
         .collect();
-    let texcoords: Vec<Vector2> = mesh.scales.iter().map(|s| Vector2::new(*s, 0.0)).collect();
+    let texcoords: Vec<Vector2> = mesh
+        .scales
+        .iter()
+        .enumerate()
+        .map(|(i, s)| Vector2::new(*s, f32::from(mesh.joints.get(i).copied().unwrap_or(0))))
+        .collect();
     let mut builder = Mesh::gen_mesh(&positions, &texcoords);
     builder.normals(&normals);
     builder.colors(&colors);
@@ -81,6 +186,10 @@ struct ModelMeshes {
     top: f32,
     /// Size factor of the model.
     scale: f32,
+    /// Texel of its keyframes in the pose texture, if it moves.
+    poses: Option<[usize; 2]>,
+    /// Cycle lengths of its activities, seconds.
+    periods: [f32; 4],
 }
 
 /// One placed model this frame.
@@ -102,6 +211,12 @@ pub(super) struct ModelGpu {
     casters: Vec<Vec<Matrix>>,
     /// Draw every model with its near mesh (the review gallery).
     pub(super) near_only: bool,
+    /// Keyframes of the moving models.
+    poses: Option<raylib::prelude::Texture2D>,
+    /// Seconds of motion shown this frame.
+    pub(super) time: f32,
+    /// Every entity at the same point of its cycle (the review gallery).
+    pub(super) lockstep: bool,
 }
 
 impl ModelGpu {
@@ -110,10 +225,15 @@ impl ModelGpu {
         if models.is_empty() {
             return None;
         }
+        let bakes: Vec<_> = models.iter().map(|look| bake_model(&look.spec)).collect();
+        let rigs: Vec<&Rig> = bakes.iter().map(|b| &b.rig).collect();
+        let (origins, size) = pack_poses(&rigs);
+        let poses = upload_poses(thread, &rigs, &origins, size);
         let meshes: Vec<Option<ModelMeshes>> = models
             .iter()
-            .map(|look| {
-                let baked = bake_model(&look.spec);
+            .zip(&bakes)
+            .zip(&origins)
+            .map(|((look, baked), origin)| {
                 for warning in &baked.warnings {
                     eprintln!("rom-render: model {}: {warning}", look.id);
                 }
@@ -129,6 +249,8 @@ impl ModelGpu {
                     reach,
                     top: baked.bounds()[1][1],
                     scale: look.scale.max(0.01),
+                    poses: origin.filter(|_| poses.is_some()),
+                    periods: Activity::ALL.map(|a| baked.rig.period(a)),
                 })
             })
             .collect();
@@ -140,6 +262,9 @@ impl ModelGpu {
             far_lists: vec![Vec::new(); count],
             casters: vec![Vec::new(); count],
             near_only: false,
+            poses,
+            time: 0.0,
+            lockstep: false,
         })
     }
 
@@ -182,7 +307,7 @@ impl ModelGpu {
             let s = meshes.scale;
             let owner = crate::entities::owner_color(view.owner);
             let o = frame.origin;
-            let transform = Matrix {
+            let mut transform = Matrix {
                 m0: x_axis[0] * s,
                 m1: x_axis[1] * s,
                 m2: x_axis[2] * s,
@@ -204,6 +329,13 @@ impl ModelGpu {
             if progress.is_none() {
                 self.casters[index].push(transform);
             }
+            // The last cell carries the activity and the phase; the shader puts the 1 back.
+            let phase = if self.lockstep {
+                0.0
+            } else {
+                phase_of(view.id)
+            };
+            transform.m15 = view.activity.index() as f32 + phase.min(0.999);
             self.placed.push(Placed {
                 model: index,
                 transform,
@@ -239,10 +371,24 @@ impl ModelGpu {
     ) {
         let reveal = shader.get_shader_location("reveal");
         shader.set_shader_value(reveal, REVEAL_ALL);
+        let origin = shader.get_shader_location("poseOrigin");
+        let periods = shader.get_shader_location("posePeriods");
+        let time = shader.get_shader_location("poseTime");
+        shader.set_shader_value(time, self.time);
+        bind_poses(self.poses.as_ref().map(|t| t.id));
+        let set_poses = |shader: &mut Shader, model: &ModelMeshes| {
+            let at = model.poses.map_or([-1, 0], |[x, y]| [x as i32, y as i32]);
+            shader.set_shader_value(origin, at);
+            shader.set_shader_value(periods, model.periods);
+        };
         for (index, model) in self.models.iter().enumerate() {
             let Some(model) = model else {
                 continue;
             };
+            if self.near_lists[index].is_empty() && self.far_lists[index].is_empty() {
+                continue;
+            }
+            set_poses(shader, model);
             if !self.near_lists[index].is_empty() {
                 world.draw_mesh_instanced(&model.near, material.clone(), &self.near_lists[index]);
             }
@@ -257,9 +403,11 @@ impl ModelGpu {
                 continue;
             };
             shader.set_shader_value(reveal, model.top * progress);
+            set_poses(shader, model);
             world.draw_mesh_instanced(&model.near, material.clone(), &[placed.transform]);
         }
         shader.set_shader_value(reveal, REVEAL_ALL);
+        bind_poses(None);
     }
 
     /// Bounding spheres of this frame's shadow casters.
@@ -314,5 +462,50 @@ impl ModelGpu {
                 pass.draw_mesh_instanced(&model.far, depth.clone(), scratch);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rig::{Joint, Motion};
+
+    fn rig(joints: usize) -> Rig {
+        let mut rig = Rig::default();
+        for _ in 1..joints {
+            rig.add(Joint {
+                parent: 0,
+                pivot: [0.0; 3],
+                frame: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                scale: 1.0,
+                motion: Motion::Wheel,
+            });
+        }
+        rig
+    }
+
+    #[test]
+    fn poses_pack_in_rows_and_still_models_take_none() {
+        let (still, wide) = (rig(1), rig(30));
+        let rigs: Vec<&Rig> = std::iter::once(&still)
+            .chain(std::iter::repeat_n(&wide, 13))
+            .collect();
+        let (origins, size) = pack_poses(&rigs);
+        assert_eq!(origins[0], None);
+        // Eleven blocks of 90 texels fit a row of 1024; the twelfth starts the next row.
+        assert_eq!(origins[1], Some([0, 0]));
+        assert_eq!(origins[11], Some([900, 0]));
+        assert_eq!(origins[12], Some([0, 4 * POSE_SAMPLES]));
+        assert_eq!(size, [POSE_WIDTH, 2 * 4 * POSE_SAMPLES]);
+        assert_eq!(pack_poses(&[&still]).1, [0, 0]);
+    }
+
+    #[test]
+    fn phases_spread_over_the_cycle() {
+        let phases: Vec<f32> = (1..200).map(phase_of).collect();
+        assert!(phases.iter().all(|p| (0.0..1.0).contains(p)));
+        let early = phases.iter().filter(|p| **p < 0.5).count();
+        assert!((60..140).contains(&early), "{early}");
+        assert!(phases.windows(2).all(|w| w[0] != w[1]));
     }
 }

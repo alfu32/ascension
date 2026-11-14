@@ -32,6 +32,7 @@ pub mod pick;
 mod pixels;
 mod readback;
 pub mod review;
+pub mod rig;
 mod scene;
 pub mod shadow;
 pub mod sky;
@@ -65,6 +66,7 @@ pub use orbit::{
 pub use overlay::{Line3, OverlayGeometry, build_overlays, build_overlays_on};
 pub use pixels::rgba_to_bgra_flipped;
 pub use review::{Review, SheetView, WorldLabel};
+pub use rig::Activity;
 pub use rom_geo::SurfacePos;
 pub use space::{ClaimView, ShipView, SpaceSnapshot, TransitView};
 pub use stats::RenderStats;

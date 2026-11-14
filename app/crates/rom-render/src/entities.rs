@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use rom_geo::SurfacePos;
 
 use crate::globe::Globe;
+use crate::rig::Activity;
 use crate::terrain::{Shape, TerrainScene, vertex_height};
 
 /// Number of owner colours; owner 0 (neutral) is grey.
@@ -61,6 +62,8 @@ pub struct EntityView {
     pub under_construction: Option<f32>,
     /// The composed model it is drawn with; `None` keeps the plain boxes.
     pub model: Option<ModelRef>,
+    /// What it is doing, for its motion.
+    pub activity: Activity,
 }
 
 /// A composed model an entity is drawn with.
@@ -872,6 +875,7 @@ mod tests {
             carry_node: false,
             under_construction: None,
             model: None,
+            activity: Default::default(),
         }
     }
 

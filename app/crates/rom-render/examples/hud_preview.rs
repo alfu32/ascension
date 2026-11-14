@@ -159,6 +159,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             carry_node: false,
             under_construction: None,
             model: None,
+            activity: Default::default(),
         })
         .collect::<Vec<_>>();
     let camera = Camera {

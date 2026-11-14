@@ -1189,6 +1189,7 @@ mod tests {
             radius: 2.0,
             under_construction: None,
             model: None,
+            activity: Default::default(),
             carrying: false,
             kept: 0,
             capacity: 0,

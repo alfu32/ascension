@@ -693,7 +693,7 @@ fn render_loop(shared: &Shared) {
             shared.terrain_ready.store(true, Ordering::Release);
         }
         if let Some(published) = lock(&shared.review).take() {
-            scene.set_review(published.light, published.near_only);
+            scene.set_review(published.light, published.near_only, published.anim_time);
             scene.extra_lines = published.lines.clone();
             review = Some(published);
         }

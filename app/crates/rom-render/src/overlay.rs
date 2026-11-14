@@ -458,6 +458,7 @@ pub fn build_overlays_on(
             carry_node: false,
             under_construction: None,
             model: None,
+            activity: Default::default(),
         };
         out.building_ghost(origin, &view, line, false);
         out.rect_outline(origin, min, max, line);
@@ -494,6 +495,7 @@ mod tests {
             carry_node: false,
             under_construction: None,
             model: None,
+            activity: Default::default(),
         }
     }
 
@@ -614,6 +616,7 @@ mod tests {
             carry_node: false,
             under_construction: Some(0.0),
             model: None,
+            activity: Default::default(),
             ..unit(7)
         };
         hud.placement = None;
@@ -622,6 +625,7 @@ mod tests {
         let site = EntityView {
             under_construction: Some(0.1),
             model: None,
+            activity: Default::default(),
             ..site
         };
         build_overlays(&[site], &slope, &hud, 0.0, &mut out);

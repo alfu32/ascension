@@ -11,11 +11,11 @@ use std::time::{Duration, Instant};
 
 use rom_mapgen::Universe;
 use rom_render::{
-    EXPLORED, EntitySnapshot, EntityView, Level, OrbitSettings, RenderBridge, SurfacePos,
+    Activity, EXPLORED, EntitySnapshot, EntityView, Level, OrbitSettings, RenderBridge, SurfacePos,
     UNEXPLORED, VISIBLE, VisionMap,
 };
 use rom_rules::{ActiveSources, EntityClass};
-use rom_sim::{BodyId, Command, Entity, PlayerId, Sighting, Topology, World};
+use rom_sim::{BodyId, Command, Entity, OrderStatus, PlayerId, Pos, Sighting, Topology, World};
 
 use crate::demo::DemoDriver;
 use crate::match_setup::planet_surface;
@@ -317,7 +317,7 @@ fn run(
     let mut window_start = last;
     let mut window_ticks = 0_u32;
     let mut controller = Controller::new();
-    let mut fog = FogPublisher;
+    let mut memory = Memory::default();
     let models = crate::looks::ModelBook::new(world.rules());
     let mut notices = Notices::default();
     let mut frames: BTreeMap<u32, Option<SpaceFrame>> = BTreeMap::new();
@@ -327,7 +327,7 @@ fn run(
         &controller,
         link,
         bridge,
-        &mut fog,
+        &mut memory,
         host.as_ref(),
         &models,
     );
@@ -420,7 +420,7 @@ fn run(
                 &controller,
                 link,
                 bridge,
-                &mut fog,
+                &mut memory,
                 host.as_ref(),
                 &models,
             );
@@ -447,6 +447,13 @@ fn run(
     }
 }
 
+/// What publishing keeps from one snapshot to the next.
+#[derive(Debug, Default)]
+struct Memory {
+    fog: FogPublisher,
+    motions: Motions,
+}
+
 /// Ticks between two visibility maps sent to the render thread.
 const VISION_INTERVAL: u64 = 5;
 
@@ -455,13 +462,13 @@ fn publish(
     controller: &Controller,
     link: &SimLink,
     bridge: &RenderBridge,
-    fog: &mut FogPublisher,
+    memory: &mut Memory,
     host: Option<&UniverseHost>,
     models: &crate::looks::ModelBook,
 ) {
     let sightings = world.visible_entities(PLAYER);
     let body = host.map_or_else(|| world.surfaces()[0].body(), |h| h.viewed);
-    let snapshot = snapshot_on(world, body, &sightings, models);
+    let snapshot = snapshot_on(world, body, &sightings, models, &mut memory.motions);
     link.stats.tick.store(snapshot.tick, Ordering::Relaxed);
     link.stats
         .entities
@@ -476,7 +483,7 @@ fn publish(
         bridge.publish_view_range(crate::universe_view::view_range(world.rules(), player.age));
     }
     if world.tick().is_multiple_of(VISION_INTERVAL) {
-        bridge.publish_vision(Arc::new(fog.build_on(world, body)));
+        bridge.publish_vision(Arc::new(memory.fog.build_on(world, body)));
     }
     publish_hud(world, controller, bridge);
 }
@@ -515,16 +522,95 @@ pub fn snapshot_of(world: &World) -> EntitySnapshot {
         world.surfaces()[0].body(),
         &world.visible_entities(PLAYER),
         &crate::looks::ModelBook::new(world.rules()),
+        &mut Motions::default(),
     )
 }
 
+/// Ticks after its last step during which a unit still counts as moving (a path search or a
+/// push can hold a walker for a tick or two).
+const MOVE_GRACE: u64 = 3;
+/// Shortest step between two snapshots, in milli-tiles, that counts as moving.
+const MIN_STEP: i64 = 10;
+/// Ticks without a sighting after which a unit's position is forgotten.
+const FORGET_AFTER: u64 = 200;
+
+/// Where each unit stood at its last snapshot and when it last moved. The simulation keeps its
+/// walking state to itself, so whether a unit walks is read from its positions.
+#[derive(Debug, Default)]
+pub struct Motions {
+    /// Position, tick it last moved, tick it was last seen; by entity id.
+    seen: BTreeMap<u32, (Pos, u64, u64)>,
+}
+
+impl Motions {
+    /// Records where `entity` stands at `tick`; whether it moved within [`MOVE_GRACE`] ticks.
+    pub fn moving(&mut self, entity: &Entity, tick: u64) -> bool {
+        let pos = entity.pos;
+        let entry = self.seen.entry(entity.id.0).or_insert((pos, 0, tick));
+        let (last, moved, _) = *entry;
+        let step = if last.body != pos.body || last.face != pos.face {
+            i64::MAX
+        } else {
+            (i64::from(pos.x) - i64::from(last.x)).abs()
+                + (i64::from(pos.y) - i64::from(last.y)).abs()
+        };
+        let moved = if step >= MIN_STEP && last != pos {
+            tick
+        } else {
+            moved
+        };
+        *entry = (pos, moved, tick);
+        moved > 0 && tick.saturating_sub(moved) <= MOVE_GRACE
+    }
+
+    /// Forgets units not seen for a while.
+    fn prune(&mut self, tick: u64) {
+        if tick.is_multiple_of(FORGET_AFTER) {
+            self.seen
+                .retain(|_, (_, _, seen)| tick.saturating_sub(*seen) < FORGET_AFTER);
+        }
+    }
+}
+
+/// What `entity` is doing, for its motion: moving (from `moving`), then fighting (a weapon
+/// fired within its reload), then working (in a gather slot, or an active order that needs a
+/// builder, harvester or healer), else idle.
+pub fn activity_of(world: &World, entity: &Entity, moving: bool) -> Activity {
+    if moving {
+        return Activity::Move;
+    }
+    if entity.cooldowns.values().any(|ready| *ready > world.tick()) {
+        return Activity::Attack;
+    }
+    if entity.work_site.is_some() {
+        return Activity::Work;
+    }
+    let working = entity.orders().front().is_some_and(|order| {
+        order.status == OrderStatus::Active
+            && world
+                .rules()
+                .order_kinds
+                .get(&order.kind)
+                .is_some_and(|kind| {
+                    matches!(kind.needs.as_str(), "builder" | "harvester" | "healer")
+                })
+    });
+    if working {
+        Activity::Work
+    } else {
+        Activity::Idle
+    }
+}
+
 /// [`snapshot_of`] for the entities standing on one body, given what player one sees; each
-/// entity carries the composed model of its owner's faction and age from `models`.
+/// entity carries the composed model of its owner's faction and age from `models`, and what it
+/// is doing (its moves remembered in `motions`).
 pub fn snapshot_on(
     world: &World,
     body: BodyId,
     sightings: &[Sighting<'_>],
     models: &crate::looks::ModelBook,
+    motions: &mut Motions,
 ) -> EntitySnapshot {
     let rules = world.rules();
     let looks: BTreeMap<PlayerId, (rom_rules::DefId, rom_rules::DefId)> = world
@@ -568,6 +654,7 @@ pub fn snapshot_on(
         if !on_body || entity.container_id.is_some() {
             continue;
         }
+        let moving = motions.moving(entity, world.tick());
         let known_ground = || {
             entity.owner == PlayerId(0)
                 && world.is_explored_on_body(
@@ -597,6 +684,9 @@ pub fn snapshot_on(
         });
         let mut view = view_of(entity, et, under_construction, &clamp_u8);
         view.model = model_of(entity.owner, entity.type_id);
+        if !view.building {
+            view.activity = activity_of(world, entity, moving);
+        }
         let count = held.get(&entity.id).copied().unwrap_or(0);
         view.carrying = !view.building && count > 0;
         view.kept = if view.building { count } else { 0 };
@@ -629,6 +719,7 @@ pub fn snapshot_on(
                 carry_node: false,
                 under_construction: None,
                 model: model_of(building.owner, building.type_id),
+                activity: Default::default(),
             });
         }
     }
@@ -636,6 +727,7 @@ pub fn snapshot_on(
         views.sort_by_key(|view| view.id);
         views.dedup_by_key(|view| view.id);
     }
+    motions.prune(world.tick());
     EntitySnapshot {
         tick: world.tick(),
         entities: views,
@@ -669,6 +761,7 @@ fn view_of(
             .is_some_and(|n| n.claim_mode == rom_rules::ClaimMode::Carry),
         under_construction,
         model: None,
+        activity: Default::default(),
     }
 }
 
@@ -838,6 +931,106 @@ mod tests {
         assert_eq!(model_of(None, "unit.citizen"), "unit.citizen@any");
     }
 
+    #[test]
+    fn units_show_what_they_are_doing() {
+        let content = generate_content(&Options {
+            players: 2,
+            map_size: (128, 128),
+            ..Options::default()
+        })
+        .expect("content");
+        let mut game =
+            build_match(&content.rules, &content.map, &content.factions, 1).expect("match");
+        let own = game.starts.iter().find(|s| s.player == PLAYER).unwrap();
+        let walker = own.builders[0];
+        let mut motions = Motions::default();
+        let activity = |world: &World, motions: &mut Motions, id: EntityId| {
+            snapshot_on(
+                world,
+                world.surfaces()[0].body(),
+                &world.visible_entities(PLAYER),
+                &crate::looks::ModelBook::new(world.rules()),
+                motions,
+            )
+            .entities
+            .iter()
+            .find(|v| v.id == id.0)
+            .map(|v| v.activity)
+        };
+        let world = &mut game.world;
+        assert_eq!(activity(world, &mut motions, walker), Some(Activity::Idle));
+        // Ordered to walk three tiles, it moves, then stands still once there.
+        let from = world.entity(walker).unwrap().pos;
+        let goal = world.offset(from, 3000, 0);
+        world
+            .submit(Command {
+                player: PLAYER,
+                executor: walker,
+                kind: "move".into(),
+                subject: None,
+                target_entity: None,
+                target_pos: Some(goal),
+                queue: false,
+            })
+            .expect("move");
+        let mut seen = Vec::new();
+        for _ in 0..200 {
+            world.step();
+            seen.push(activity(world, &mut motions, walker).unwrap());
+            if world.entity(walker).unwrap().orders().is_empty()
+                && seen.len() > 10
+                && seen[seen.len() - 1] == Activity::Idle
+            {
+                break;
+            }
+        }
+        assert!(
+            seen.iter().take(5).any(|a| *a == Activity::Move),
+            "{seen:?}"
+        );
+        assert_eq!(seen.last(), Some(&Activity::Idle), "{seen:?}");
+        let at = world.entity(walker).unwrap().pos;
+        assert!(world.distance(at, goal).unwrap() < 600, "{at:?} {goal:?}");
+        // A slinger shooting at an enemy in range attacks.
+        let slinger = content.rules.id_of("unit.slinger").unwrap();
+        let enemy = game
+            .starts
+            .iter()
+            .find(|s| s.player != PLAYER)
+            .unwrap()
+            .player;
+        let ground = |world: &World, pos: Pos| {
+            world
+                .terrain_at(pos)
+                .is_some_and(|t| content.rules.terrains[&t].layer == rom_rules::Layer::Ground)
+        };
+        let (near, far) = (-8..=8)
+            .flat_map(|dx| (-8..=8).map(move |dy| (dx * 1000, dy * 1000)))
+            .map(|(dx, dy)| (world.offset(at, dx, dy), world.offset(at, dx, dy + 2500)))
+            .find(|(a, b)| ground(world, *a) && ground(world, *b))
+            .expect("open ground");
+        let fighter = world.spawn(slinger, PLAYER, near).unwrap();
+        let foe = world.spawn(slinger, enemy, far).unwrap();
+        world
+            .submit(Command {
+                player: PLAYER,
+                executor: fighter,
+                kind: "attack".into(),
+                subject: None,
+                target_entity: Some(foe),
+                target_pos: None,
+                queue: false,
+            })
+            .expect("attack");
+        let mut fought = Vec::new();
+        for _ in 0..60 {
+            world.step();
+            fought.push(activity(world, &mut motions, fighter).unwrap());
+        }
+        assert!(fought.contains(&Activity::Attack), "{fought:?}");
+        assert!(world.entity(foe).is_none_or(|e| e.hp < e.max_hp));
+    }
+
     /// A two-player sphere match with player two's units far from player one's.
     fn sphere_game() -> crate::match_setup::Match {
         let options = Options {
@@ -974,6 +1167,7 @@ mod tests {
             home,
             &sightings,
             &crate::looks::ModelBook::new(world.rules()),
+            &mut Motions::default(),
         );
         let own = game.starts.iter().find(|s| s.player == PLAYER).unwrap();
         assert!(planet.entities.iter().any(|v| v.id == own.city.0));
@@ -1000,6 +1194,7 @@ mod tests {
                 other,
                 &sightings,
                 &crate::looks::ModelBook::new(world.rules()),
+                &mut Motions::default(),
             );
             assert!(snap.entities.iter().all(|v| v.id != own.city.0));
         }

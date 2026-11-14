@@ -4268,4 +4268,161 @@ INSERT INTO entity_visual(entity_type_id,age_id,mesh_id,material_id)
  SELECT e.id, a.id, m.id, mt.id FROM v JOIN def e ON e.key=v.e LEFT JOIN def a ON a.key=v.a
  JOIN def m ON m.key=v.m JOIN def mt ON mt.key=v.mat;
 
+-- ── units of the ancient and classical ages (task 39) ──────────────────────
+-- Figures, riders, a catapult and a trireme in the style of the approved
+-- citizen. Figures move by their knobs (`attack`, `work`, `hold_left`,
+-- `hold_right`, `stride`, `pace`, `robe`, `seat`); what a hand holds turns in the
+-- hand; beasts, wheels, oars, a floating hull and parts with `strike` move too.
+INSERT INTO def(kind,key,name) VALUES
+ ('material','mat.leather','Leather'),
+ ('mesh','mesh.spearman_ancient','Early spearman'), ('mesh','mesh.slinger_ancient','Early slinger'),
+ ('mesh','mesh.scout_ancient','Early scout'), ('mesh','mesh.merchant_ancient','Early merchant'),
+ ('mesh','mesh.hoplite_classical','Hoplite'), ('mesh','mesh.archer_classical','Classical archer'),
+ ('mesh','mesh.horseman_classical','Classical horseman'),
+ ('mesh','mesh.cataphract_classical','Cataphract'), ('mesh','mesh.catapult_classical','Catapult'),
+ ('mesh','mesh.trireme_classical','Trireme'), ('mesh','mesh.scholar_classical','Scholar'),
+ ('mesh','mesh.caravan_classical','Caravan'), ('mesh','mesh.priest_classical','Priest');
+WITH v(k,prog,params) AS (VALUES
+  ('mat.leather','plaster','{"colour":"#7a5434","colour_alt":"#5a3c24","scale":0.3}'))
+INSERT INTO material(id,program,params) SELECT d.id, v.prog, v.params FROM v JOIN def d ON d.key=v.k;
+INSERT INTO mesh(id,generator,params,baked)
+ SELECT id, 'composed', '{}', 1 FROM def WHERE kind='mesh' AND key IN
+  ('mesh.spearman_ancient','mesh.slinger_ancient','mesh.scout_ancient','mesh.merchant_ancient',
+   'mesh.hoplite_classical','mesh.archer_classical','mesh.horseman_classical',
+   'mesh.cataphract_classical','mesh.catapult_classical','mesh.trireme_classical',
+   'mesh.scholar_classical','mesh.caravan_classical','mesh.priest_classical');
+WITH v(m,name,shape,mat,team,attach,params) AS (VALUES
+  -- the early spearman: a leather cap, a long spear held upright, a small hide shield
+  ('mesh.spearman_ancient','body','figure','mat.cloth',1,'','{"attack":1,"hold_right":12,"hold_left":25}'),
+  ('mesh.spearman_ancient','cap','dome','mat.leather',0,'head','{"y":-0.11,"w":0.235,"h":0.12,"segments":8}'),
+  ('mesh.spearman_ancient','spear','cylinder','mat.timber',0,'right_hand','{"y":-0.45,"w":0.035,"h":1.75,"segments":4}'),
+  ('mesh.spearman_ancient','spear_tip','cone','mat.bronze',0,'spear','{"y":1.75,"w":0.07,"h":0.16,"segments":4}'),
+  ('mesh.spearman_ancient','shield','shield','mat.cloth',1,'left_hand','{"y":0.06,"z":0.07,"yaw":-15,"w":0.38,"t":0.03,"boss":0.08,"segments":8,"rim":"#5a3d26"}'),
+  -- the early slinger: a light undyed tunic, a kilt, sash and headband of the owner's colour,
+  -- the sling in the right hand, a bag of stones
+  ('mesh.slinger_ancient','body','figure','mat.cloth',0,'','{"attack":4,"build":0.95}'),
+  ('mesh.slinger_ancient','kilt','box','mat.cloth',1,'body','{"y":0.29,"w":0.36,"d":0.25,"h":0.23,"taper":0.18}'),
+  ('mesh.slinger_ancient','sash','box','mat.cloth',1,'body','{"x":-0.02,"y":0.44,"z":0.105,"w":0.05,"d":0.015,"h":0.36,"roll":-38}'),
+  ('mesh.slinger_ancient','headband','cylinder','mat.cloth',1,'head','{"y":-0.068,"w":0.208,"h":0.035,"segments":8}'),
+  ('mesh.slinger_ancient','sling','cylinder','mat.leather',0,'right_hand','{"y":-0.34,"w":0.016,"h":0.34,"segments":3}'),
+  ('mesh.slinger_ancient','pouch','box','mat.leather',0,'sling','{"w":0.07,"d":0.07,"h":0.05}'),
+  ('mesh.slinger_ancient','bag','box','mat.leather',0,'body','{"x":0.2,"y":0.3,"z":0.04,"w":0.09,"d":0.15,"h":0.15}'),
+  -- the early scout: a runner in a leather jerkin, a hooded cloak of the owner's colour, a short staff
+  ('mesh.scout_ancient','body','figure','mat.leather',0,'','{"pace":0.62,"stride":38,"build":0.92}'),
+  ('mesh.scout_ancient','cloak','box','mat.cloth',1,'back','{"y":-0.44,"z":-0.07,"w":0.46,"d":0.03,"h":0.58,"taper":0.38,"pitch":12}'),
+  ('mesh.scout_ancient','hood','dome','mat.cloth',1,'head','{"y":-0.12,"z":-0.02,"w":0.245,"h":0.14,"segments":8}'),
+  ('mesh.scout_ancient','staff','cylinder','mat.timber',0,'right_hand','{"y":-0.32,"w":0.035,"h":0.9,"segments":4}'),
+  -- the early merchant: a pack and a bedroll on the back, a walking stick, a straw hat
+  ('mesh.merchant_ancient','body','figure','mat.cloth',1,'','{"build":1.08,"pace":1.15,"stride":22,"hold_left":10}'),
+  ('mesh.merchant_ancient','pack','box','mat.thatch',0,'back','{"y":-0.2,"z":-0.09,"w":0.32,"d":0.22,"h":0.42}'),
+  ('mesh.merchant_ancient','bedroll','cylinder','mat.cloth',1,'pack','{"x":-0.2,"y":0.42,"w":0.13,"h":0.4,"roll":90,"segments":6,"far":0}'),
+  ('mesh.merchant_ancient','stick','cylinder','mat.timber',0,'left_hand','{"y":-0.45,"w":0.035,"h":1.15,"segments":4}'),
+  ('mesh.merchant_ancient','brim','cylinder','mat.thatch',0,'head','{"y":-0.07,"w":0.36,"h":0.02,"segments":10,"far":0}'),
+  ('mesh.merchant_ancient','crown','dome','mat.thatch',0,'head','{"y":-0.06,"w":0.2,"h":0.1,"segments":8}'),
+  -- the hoplite: a crested bronze helmet, a bronze cuirass, a large round shield, a spear
+  ('mesh.hoplite_classical','body','figure','mat.cloth',1,'','{"attack":1,"hold_left":35,"hold_right":12,"build":1.05}'),
+  ('mesh.hoplite_classical','cuirass','box','mat.bronze',0,'body','{"y":0.52,"w":0.34,"d":0.23,"h":0.24,"far":0}'),
+  ('mesh.hoplite_classical','helmet','dome','mat.bronze',0,'head','{"y":-0.15,"w":0.25,"h":0.18,"segments":8}'),
+  ('mesh.hoplite_classical','crest','box','mat.cloth',1,'head','{"y":-0.01,"z":-0.03,"w":0.04,"d":0.27,"h":0.11,"taper":0.15}'),
+  ('mesh.hoplite_classical','shield','shield','mat.cloth',1,'left_hand','{"y":0.06,"z":0.08,"w":0.62,"t":0.05,"boss":0.1,"segments":10}'),
+  ('mesh.hoplite_classical','spear','cylinder','mat.timber',0,'right_hand','{"y":-0.5,"w":0.035,"h":1.95,"segments":4}'),
+  ('mesh.hoplite_classical','spear_tip','cone','mat.iron',0,'spear','{"y":1.95,"w":0.07,"h":0.16,"segments":4}'),
+  -- the classical archer: a soft cap of the owner's colour, a bow in the left hand, a quiver
+  ('mesh.archer_classical','body','figure','mat.cloth',1,'','{"attack":3}'),
+  ('mesh.archer_classical','cap','dome','mat.leather',0,'head','{"y":-0.12,"z":-0.01,"w":0.245,"h":0.15,"segments":8}'),
+  ('mesh.archer_classical','cap_tip','cone','mat.leather',0,'head','{"y":0.0,"z":0.02,"w":0.09,"h":0.09,"pitch":55,"segments":4}'),
+  ('mesh.archer_classical','bow','bow','mat.timber',0,'left_hand','{"z":0.03,"h":0.88,"bend":0.15,"w":0.035}'),
+  ('mesh.archer_classical','quiver','cylinder','mat.leather',0,'back','{"x":0.06,"y":-0.3,"z":-0.03,"w":0.11,"h":0.46,"roll":-20,"segments":6}'),
+  ('mesh.archer_classical','fletching','box','mat.cloth',0,'quiver','{"y":0.46,"w":0.08,"d":0.08,"h":0.08,"tint":"#f4f0e6"}'),
+  -- the classical horseman: a rider with javelins on a horse under a blanket of the owner's colour
+  ('mesh.horseman_classical','beast','quadruped','mat.hide',0,'','{"pace":0.62}'),
+  ('mesh.horseman_classical','blanket','box','mat.cloth',1,'beast.rider','{"y":-0.08,"z":-0.02,"w":0.36,"d":0.44,"h":0.1}'),
+  ('mesh.horseman_classical','rider','figure','mat.cloth',1,'beast.rider','{"y":-0.4,"seat":1,"attack":2,"hold_left":20}'),
+  ('mesh.horseman_classical','cap','dome','mat.leather',0,'rider.head','{"y":-0.11,"w":0.235,"h":0.12,"segments":8}'),
+  ('mesh.horseman_classical','javelin','cylinder','mat.timber',0,'rider.right_hand','{"y":-0.35,"w":0.03,"h":1.15,"segments":4}'),
+  ('mesh.horseman_classical','javelin_tip','cone','mat.iron',0,'javelin','{"y":1.15,"w":0.06,"h":0.13,"segments":4}'),
+  -- the cataphract: an armoured rider with a lance on a horse in scale barding
+  ('mesh.cataphract_classical','beast','quadruped','mat.hide',0,'','{"pace":0.78,"stride":24,"tint":"#7a6a60"}'),
+  ('mesh.cataphract_classical','barding','box','mat.iron',0,'beast','{"y":0.47,"w":0.37,"d":1.0,"h":0.36,"taper":0.08}'),
+  ('mesh.cataphract_classical','trim','box','mat.cloth',1,'beast','{"y":0.43,"w":0.39,"d":1.02,"h":0.1,"far":0}'),
+  ('mesh.cataphract_classical','rider','figure','mat.cloth',1,'beast.rider','{"y":-0.37,"seat":1,"attack":1,"build":1.1,"hold_left":20}'),
+  ('mesh.cataphract_classical','armour','box','mat.iron',0,'rider','{"y":0.5,"w":0.37,"d":0.25,"h":0.27,"far":0}'),
+  ('mesh.cataphract_classical','helmet','dome','mat.iron',0,'rider.head','{"y":-0.15,"w":0.25,"h":0.18,"segments":8}'),
+  ('mesh.cataphract_classical','spike','cone','mat.iron',0,'rider.head','{"y":0.02,"w":0.05,"h":0.12,"segments":4}'),
+  ('mesh.cataphract_classical','lance','cylinder','mat.timber',0,'rider.right_hand','{"y":-0.6,"w":0.042,"h":2.1,"segments":4}'),
+  ('mesh.cataphract_classical','lance_tip','cone','mat.iron',0,'lance','{"y":2.1,"w":0.07,"h":0.18,"segments":4}'),
+  ('mesh.cataphract_classical','pennon','box','mat.cloth',1,'lance','{"y":1.72,"z":-0.12,"w":0.015,"d":0.22,"h":0.16,"far":0}'),
+  -- the catapult: a wheeled frame, posts and a padded crossbar, a throwing arm in a rope skein
+  ('mesh.catapult_classical','beams','box','mat.timber',0,'','{"x":-0.32,"y":0.2,"w":0.12,"d":1.5,"h":0.14,"repeat":2,"dx":0.64}'),
+  ('mesh.catapult_classical','ties','box','mat.timber',0,'','{"y":0.2,"z":-0.6,"w":0.76,"d":0.12,"h":0.12,"repeat":2,"dz":1.2,"far":0}'),
+  ('mesh.catapult_classical','wheels_w','wheel','mat.timber',0,'','{"x":-0.45,"z":-0.45,"w":0.5,"t":0.08,"spokes":2,"repeat":2,"dz":0.9}'),
+  ('mesh.catapult_classical','wheels_e','wheel','mat.timber',0,'','{"x":0.45,"z":-0.45,"w":0.5,"t":0.08,"spokes":2,"repeat":2,"dz":0.9}'),
+  ('mesh.catapult_classical','posts','box','mat.timber',0,'','{"x":-0.3,"y":0.34,"z":0.3,"w":0.1,"d":0.1,"h":0.95,"repeat":2,"dx":0.6}'),
+  ('mesh.catapult_classical','braces','box','mat.timber',0,'','{"x":-0.3,"y":0.34,"z":0.72,"w":0.08,"d":0.08,"h":0.85,"pitch":-28,"repeat":2,"dx":0.6,"far":0}'),
+  ('mesh.catapult_classical','crossbar','box','mat.timber',0,'','{"y":1.2,"z":0.3,"w":0.72,"d":0.12,"h":0.1}'),
+  ('mesh.catapult_classical','pad','box','mat.cloth',1,'','{"y":1.0,"z":0.22,"w":0.6,"d":0.06,"h":0.3}'),
+  ('mesh.catapult_classical','skein','cylinder','mat.leather',0,'','{"x":-0.32,"y":0.42,"z":-0.1,"w":0.18,"h":0.64,"roll":90,"segments":6}'),
+  ('mesh.catapult_classical','skein_cover','cylinder','mat.cloth',1,'','{"x":-0.2,"y":0.42,"z":-0.1,"w":0.2,"h":0.4,"roll":90,"segments":6,"far":0}'),
+  ('mesh.catapult_classical','arm','box','mat.timber',0,'','{"y":0.42,"z":-0.1,"w":0.09,"d":0.09,"h":0.92,"pitch":-72,"strike":66}'),
+  ('mesh.catapult_classical','cup','box','mat.leather',0,'arm','{"y":0.8,"z":0.05,"w":0.2,"d":0.1,"h":0.16}'),
+  ('mesh.catapult_classical','stone','dome','mat.fieldstone',0,'arm','{"y":0.88,"z":0.1,"w":0.14,"h":0.12,"segments":6}'),
+  ('mesh.catapult_classical','banner','banner','mat.cloth',1,'','{"x":0.36,"z":-0.66,"h":1.5,"fw":0.42,"fh":0.56}'),
+  -- the trireme: a long low hull riding the water, a bronze ram, two banks of oars, a sail of the owner's colour
+  ('mesh.trireme_classical','hull','hull','mat.timber',0,'','{"yaw":-90,"y":-0.08,"w":3.4,"d":0.72,"h":0.34,"sheer":0.3,"segments":10,"float":1,"tint":"#8c7a6c"}'),
+  ('mesh.trireme_classical','oars','oar_bank','mat.timber',0,'hull','{"y":0.28,"w":2.2,"count":6,"beam":0.74,"length":0.8,"drop":28}'),
+  ('mesh.trireme_classical','stripes','box','mat.cloth',1,'hull','{"y":0.24,"z":-0.37,"w":2.5,"d":0.05,"h":0.09,"repeat":2,"dz":0.74}'),
+  ('mesh.trireme_classical','deck','box','mat.sawn_timber',0,'hull','{"y":0.3,"w":2.6,"d":0.34,"h":0.05}'),
+  ('mesh.trireme_classical','ram','box','mat.timber',0,'hull','{"x":1.0,"y":0.07,"w":0.1,"d":0.1,"h":0.75,"roll":90}'),
+  ('mesh.trireme_classical','ram_tip','cone','mat.bronze',0,'hull','{"x":1.72,"y":0.07,"w":0.16,"h":0.3,"roll":90,"segments":4}'),
+  ('mesh.trireme_classical','sternpost','box','mat.timber',0,'hull','{"x":-1.66,"y":0.5,"w":0.07,"d":0.07,"h":0.42,"roll":-35}'),
+  ('mesh.trireme_classical','rudder_s','box','mat.timber',0,'hull','{"x":-1.3,"y":0.36,"z":0.34,"w":0.04,"d":0.04,"h":0.7,"pitch":140,"far":0}'),
+  ('mesh.trireme_classical','rudder_p','box','mat.timber',0,'hull','{"x":-1.3,"y":0.36,"z":-0.34,"w":0.04,"d":0.04,"h":0.7,"pitch":-140,"far":0}'),
+  ('mesh.trireme_classical','mast','cylinder','mat.timber',0,'hull','{"x":0.2,"y":0.25,"w":0.07,"h":1.85,"segments":5}'),
+  ('mesh.trireme_classical','sail','sail','mat.cloth',1,'mast','{"y":0.8,"w":1.35,"h":1.0,"billow":0.16,"yaw":90}'),
+  -- the scholar: a long robe with a stole of the owner's colour, white hair and beard, a scroll held in both hands
+  ('mesh.scholar_classical','body','figure','mat.cloth',0,'','{"robe":1,"hold_right":38,"hold_left":38,"stride":24,"pace":1.15,"hair":"#d6d0c4"}'),
+  ('mesh.scholar_classical','beard','box','mat.cloth',0,'head','{"y":-0.225,"z":0.08,"w":0.1,"d":0.04,"h":0.08,"tint":"#e2ddd2"}'),
+  ('mesh.scholar_classical','stole','box','mat.cloth',1,'body','{"x":-0.075,"y":0.3,"z":0.118,"w":0.08,"d":0.02,"h":0.46,"repeat":2,"dx":0.15,"far":0}'),
+  ('mesh.scholar_classical','hem','box','mat.cloth',1,'body','{"w":0.43,"d":0.29,"h":0.12}'),
+  ('mesh.scholar_classical','cap','dome','mat.cloth',1,'head','{"y":-0.09,"z":-0.01,"w":0.225,"h":0.1,"segments":8}'),
+  ('mesh.scholar_classical','scroll','cylinder','mat.cloth',0,'right_hand','{"y":0.02,"z":0.06,"w":0.06,"h":0.42,"roll":90,"segments":6,"tint":"#f6eccf"}'),
+  -- the caravan: a mule drawing a two-wheeled cart of goods, its driver walking beside it
+  ('mesh.caravan_classical','mule','quadruped','mat.hide',0,'','{"z":0.55,"h":0.82,"l":0.82,"w":0.27,"pace":0.95,"stride":24,"tint":"#b8a898"}'),
+  ('mesh.caravan_classical','shafts','box','mat.timber',0,'','{"x":-0.17,"y":0.42,"z":-0.15,"w":0.04,"d":0.04,"h":0.95,"pitch":84,"repeat":2,"dx":0.34}'),
+  ('mesh.caravan_classical','bed','box','mat.sawn_timber',0,'','{"y":0.38,"z":-0.55,"w":0.74,"d":0.95,"h":0.08}'),
+  ('mesh.caravan_classical','sides','box','mat.sawn_timber',0,'','{"x":-0.35,"y":0.46,"z":-0.55,"w":0.04,"d":0.95,"h":0.18,"repeat":2,"dx":0.7,"far":0}'),
+  ('mesh.caravan_classical','wheels','wheel','mat.timber',0,'','{"x":-0.42,"z":-0.55,"w":0.62,"t":0.07,"spokes":3,"repeat":2,"dx":0.84}'),
+  ('mesh.caravan_classical','bales','box','mat.cloth',1,'','{"x":-0.15,"y":0.46,"z":-0.7,"w":0.32,"d":0.42,"h":0.3}'),
+  ('mesh.caravan_classical','baskets','box','mat.thatch',0,'','{"x":0.17,"y":0.46,"z":-0.36,"w":0.28,"d":0.32,"h":0.22}'),
+  ('mesh.caravan_classical','jars','cylinder','mat.mud_plaster',0,'','{"x":0.15,"y":0.46,"z":-0.82,"w":0.16,"h":0.3,"taper":0.3,"segments":6,"far":0}'),
+  ('mesh.caravan_classical','driver','figure','mat.cloth',1,'','{"x":0.48,"z":0.7,"build":1.05,"far":0}'),
+  -- the priest: a white robe under a mantle of the owner's colour, a tall headdress, a staff
+  ('mesh.priest_classical','body','figure','mat.cloth',0,'','{"robe":1,"work":1,"hold_right":15,"tint":"#fffaf0"}'),
+  ('mesh.priest_classical','mantle','box','mat.cloth',1,'body','{"y":0.5,"w":0.38,"d":0.26,"h":0.27,"taper":0.3}'),
+  ('mesh.priest_classical','headdress','cylinder','mat.bronze',0,'head','{"y":-0.07,"w":0.2,"h":0.22,"segments":8}'),
+  ('mesh.priest_classical','staff','cylinder','mat.timber',0,'right_hand','{"y":-0.45,"w":0.04,"h":1.32,"segments":5}'),
+  ('mesh.priest_classical','orb','dome','mat.bronze',0,'staff','{"y":1.4,"w":0.17,"h":0.09,"segments":8}'),
+  ('mesh.priest_classical','orb_under','dome','mat.bronze',0,'staff','{"y":1.4,"w":0.17,"h":0.09,"segments":8,"pitch":180}'),
+  ('mesh.priest_classical','ribbons','box','mat.cloth',1,'staff','{"y":1.06,"z":0.03,"w":0.05,"d":0.02,"h":0.26}'))
+INSERT INTO mesh_part(mesh_id,name,shape,material_id,team,attach,params)
+ SELECT m.id, v.name, v.shape, mt.id, v.team, v.attach, v.params
+ FROM v JOIN def m ON m.key=v.m LEFT JOIN def mt ON mt.key=v.mat;
+WITH v(e,a,m,mat) AS (VALUES
+  ('unit.spearman','age.ancient','mesh.spearman_ancient','mat.cloth'),
+  ('unit.slinger','age.ancient','mesh.slinger_ancient','mat.cloth'),
+  ('unit.scout','age.ancient','mesh.scout_ancient','mat.cloth'),
+  ('unit.merchant','age.ancient','mesh.merchant_ancient','mat.cloth'),
+  ('unit.hoplite','age.classical','mesh.hoplite_classical','mat.cloth'),
+  ('unit.archer','age.classical','mesh.archer_classical','mat.cloth'),
+  ('unit.horseman','age.classical','mesh.horseman_classical','mat.cloth'),
+  ('unit.cataphract','age.classical','mesh.cataphract_classical','mat.cloth'),
+  ('unit.catapult','age.classical','mesh.catapult_classical','mat.timber'),
+  ('unit.trireme','age.classical','mesh.trireme_classical','mat.timber'),
+  ('unit.scholar','age.classical','mesh.scholar_classical','mat.cloth'),
+  ('unit.caravan','age.classical','mesh.caravan_classical','mat.timber'),
+  ('unit.priest','age.classical','mesh.priest_classical','mat.cloth'))
+INSERT INTO entity_visual(entity_type_id,age_id,mesh_id,material_id)
+ SELECT e.id, a.id, m.id, mt.id FROM v JOIN def e ON e.key=v.e LEFT JOIN def a ON a.key=v.a
+ JOIN def m ON m.key=v.m JOIN def mt ON mt.key=v.mat;
+
 COMMIT;

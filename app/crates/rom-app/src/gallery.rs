@@ -28,6 +28,8 @@ const HALF_FOV: f32 = 22.5;
 const GAP: f32 = 3.0;
 /// Most models in one gallery row.
 const ROW_LENGTH: usize = 4;
+/// Facing of units in a gallery, degrees clockwise from east (90 faces the camera).
+const GALLERY_FACING: f32 = 50.0;
 /// Colour of model labels.
 const LABEL: [u8; 4] = [255, 246, 220, 255];
 /// Colour of part labels and outlines.
@@ -35,12 +37,18 @@ const PART: [u8; 4] = [120, 230, 255, 255];
 /// The approved fingerprints.
 pub const APPROVED: &str = include_str!("../../../docs/art/approved.toml");
 
-/// The models `filter` selects, buildings first, then units, each by key and age: `all`, an
-/// age (`ancient`, with the models for any age), an entity key or a model id.
+/// The models `filter` selects, buildings first, then units, each by key and age: `all`,
+/// `units`, an age (`ancient`, with the models for any age), an entity key or a model id.
 pub fn select(book: &ModelBook, rules: &Rules, filter: &str) -> Result<Vec<usize>, String> {
     let age_key = format!("age.{filter}");
+    let unit = |e: &ModelEntry| {
+        rules
+            .entity_type(e.entity)
+            .is_some_and(|t| t.class == EntityClass::Unit)
+    };
     let wanted = |e: &ModelEntry| match filter {
         "all" => true,
+        "units" => unit(e),
         _ if e.id == filter => true,
         _ if rules.key(e.entity) == filter => true,
         _ if rules.id_of(&age_key).is_some() => e.age.is_none_or(|a| rules.key(a) == age_key),
@@ -97,8 +105,14 @@ fn footprint(rules: &Rules, entry: &ModelEntry) -> (f32, f32) {
 }
 
 /// Places the `chosen` models in rows (a new row when the class changes), on a flat map, owned
-/// by `team`.
-pub fn lay_out(book: &ModelBook, rules: &Rules, chosen: &[usize], team: u8) -> Layout {
+/// by `team`, units doing `pose`.
+pub fn lay_out(
+    book: &ModelBook,
+    rules: &Rules,
+    chosen: &[usize],
+    team: u8,
+    pose: rom_render::Activity,
+) -> Layout {
     let class = |i: usize| rules.entity_type(book.entries[i].entity).map(|t| t.class);
     let mut rows: Vec<Vec<usize>> = Vec::new();
     for &i in chosen {
@@ -161,6 +175,11 @@ pub fn lay_out(book: &ModelBook, rules: &Rules, chosen: &[usize], team: u8) -> L
                 index: u16::try_from(i).unwrap_or(u16::MAX),
                 size,
             }),
+            activity: if building {
+                rom_render::Activity::Idle
+            } else {
+                pose
+            },
         });
         labels.push(WorldLabel {
             at: [x, 0.0, z + size[2] / 2.0 + 0.9],
@@ -310,12 +329,20 @@ pub fn start(options: &Options, bridge: &rom_render::RenderBridge) -> Result<(),
         return Err(format!("--model expects a model id, got {filter:?}"));
     }
     let chosen = if single { vec![chosen[0]] } else { chosen };
-    let layout = lay_out(&book, &rules, &chosen, options.team);
+    let mut layout = lay_out(&book, &rules, &chosen, options.team, options.pose);
+    if !single {
+        // In a gallery units turn three-quarters towards the camera, so mounts, wagons and
+        // ships show their length.
+        for view in layout.views.iter_mut().filter(|v| !v.building) {
+            view.facing_deg = GALLERY_FACING;
+        }
+    }
     let aspect = options.size.0 as f32 / options.size.1.max(1) as f32;
     let mut review = Review {
         light: Some(MORNING_LIGHT),
         near_only: true,
         labels: layout.labels.clone(),
+        anim_time: options.anim_time,
         ..Review::default()
     };
     if single {
@@ -548,7 +575,14 @@ mod tests {
                 entry.baked.warnings
             );
             let building = rules.entity_type(entry.entity).unwrap().class == EntityClass::Building;
-            let (near, far) = if building { (1_500, 300) } else { (300, 80) };
+            let vehicle = is_vehicle(entry);
+            let (near, far) = if building {
+                (1_500, 300)
+            } else if vehicle {
+                (800, 160)
+            } else {
+                (300, 80)
+            };
             let baked = &entry.baked;
             assert!(
                 baked.near.triangles() <= near,
@@ -560,16 +594,172 @@ mod tests {
                 "{id}: {} far",
                 baked.far.triangles()
             );
-            // A building covers most of its footprint; a figure stands about one tile tall.
+            // A building covers most of its footprint; a figure stands about one tile tall, a
+            // rider about 1.4.
             let size = entry.size();
             if building {
                 let et = rules.entity_type(entry.entity).unwrap();
                 let cover = size[0].min(size[2]) / et.footprint_w.min(et.footprint_h) as f32;
                 assert!((0.8..=1.0).contains(&cover), "{id}: covers {cover}");
-            } else {
-                assert!((0.9..=1.1).contains(&size[1]), "{id}: {} tall", size[1]);
+            } else if let Some(top) = figure_top(entry) {
+                let tall = if mounted(entry) {
+                    1.25..=1.55
+                } else {
+                    0.9..=1.1
+                };
+                assert!(tall.contains(&top), "{id}: figure {top} tall");
             }
         }
+    }
+
+    /// Mounted units, siege engines, wagons and ships: models with a beast, a wheel or a hull.
+    fn is_vehicle(entry: &ModelEntry) -> bool {
+        entry.baked.parts.iter().any(|p| {
+            matches!(
+                p.shape,
+                PartShape::Quadruped | PartShape::Wheel | PartShape::Hull | PartShape::OarBank
+            )
+        })
+    }
+
+    /// Whether the model's first figure rides (stands above a beast).
+    fn mounted(entry: &ModelEntry) -> bool {
+        entry
+            .baked
+            .parts
+            .iter()
+            .find(|p| p.shape == PartShape::Figure)
+            .is_some_and(|p| p.bounds[0][1] > 0.2)
+    }
+
+    /// Height of the top of the model's first figure, scaled.
+    fn figure_top(entry: &ModelEntry) -> Option<f32> {
+        entry
+            .baked
+            .parts
+            .iter()
+            .find(|p| p.shape == PartShape::Figure)
+            .map(|p| p.bounds[1][1] * entry.look.scale)
+    }
+
+    #[test]
+    fn early_units_have_a_composed_look_from_their_first_age() {
+        let (rules, book) = book();
+        let classical = rules
+            .id_of("age.classical")
+            .and_then(|a| rules.ages.get(&a))
+            .map(|a| a.ordinal)
+            .unwrap();
+        let mut checked = 0;
+        for (&id, et) in &rules.entity_types {
+            let Some(first) = et.first_age_id else {
+                continue;
+            };
+            let early = rules
+                .ages
+                .get(&first)
+                .is_some_and(|a| a.ordinal <= classical);
+            if et.class != EntityClass::Unit || !early {
+                continue;
+            }
+            let has = book
+                .entries
+                .iter()
+                .any(|e| e.entity == id && e.faction.is_none() && e.age.is_none_or(|a| a == first));
+            assert!(
+                has,
+                "{} has no composed look for its first age",
+                rules.key(id)
+            );
+            checked += 1;
+        }
+        assert!(checked >= 14, "{checked}");
+    }
+
+    #[test]
+    fn every_unit_moves_and_its_parts_stay_attached() {
+        use rom_render::Activity;
+        use rom_render::rig::{POSE_SAMPLES, apply};
+        let (rules, book) = book();
+        for entry in &book.entries {
+            let id = &entry.id;
+            let rig = &entry.baked.rig;
+            let unit = rules.entity_type(entry.entity).unwrap().class == EntityClass::Unit;
+            assert_eq!(unit, rig.is_animated(), "{id}: units move, buildings stand");
+            // Every vertex names a joint of the rig, in both versions.
+            for mesh in [&entry.baked.near, &entry.baked.far] {
+                assert_eq!(mesh.joints.len(), mesh.positions.len(), "{id}");
+                assert!(
+                    mesh.joints
+                        .iter()
+                        .all(|j| usize::from(*j) < rig.joints.len()),
+                    "{id}"
+                );
+            }
+            for activity in Activity::ALL {
+                for sample in 0..POSE_SAMPLES {
+                    let pose = rig.pose(activity, sample as f32 / POSE_SAMPLES as f32);
+                    for (i, joint) in rig.joints.iter().enumerate().skip(1) {
+                        let parent = &pose[usize::from(joint.parent)];
+                        let (own, held) =
+                            (apply(&pose[i], joint.pivot), apply(parent, joint.pivot));
+                        let drift = (0..3).map(|k| (own[k] - held[k]).abs()).fold(0.0, f32::max);
+                        let allowed = if joint.motion.moves_pivot() {
+                            0.15
+                        } else {
+                            1e-4
+                        };
+                        assert!(
+                            drift <= allowed,
+                            "{id}: joint {i} drifts {drift} from its parent ({activity:?} {sample})"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn walking_figures_change_pose_through_the_cycle() {
+        use rom_render::Activity;
+        let (_, book) = book();
+        let entry = book
+            .entries
+            .iter()
+            .find(|e| e.id == "unit.spearman@ancient")
+            .unwrap();
+        let rig = &entry.baked.rig;
+        let feet: Vec<Vec<[f32; 3]>> = [0.0, 0.25, 0.5]
+            .iter()
+            .map(|u| {
+                let pose = rig.pose(Activity::Move, *u);
+                (0..rig.joints.len())
+                    .map(|j| rom_render::rig::apply(&pose[j], [0.0, 0.0, 0.0]))
+                    .collect()
+            })
+            .collect();
+        assert_ne!(feet[0], feet[1]);
+        assert_ne!(feet[1], feet[2]);
+        assert_ne!(feet[0], feet[2]);
+    }
+
+    #[test]
+    fn new_units_wear_the_owners_colour() {
+        let (rules, book) = book();
+        let approved = approved(APPROVED);
+        let mut outside = Vec::new();
+        for entry in &book.entries {
+            let unit = rules.entity_type(entry.entity).map(|t| t.class);
+            if unit != Some(EntityClass::Unit) || approved.contains_key(&entry.id) {
+                continue;
+            }
+            let share = team_share(&entry.baked.near);
+            // Figures wear tunics of the owner's colour, as the approved citizen does.
+            if !(0.12..=0.66).contains(&share) {
+                outside.push(format!("{}: {:.0} %", entry.id, share * 100.0));
+            }
+        }
+        assert!(outside.is_empty(), "team colour share: {outside:?}");
     }
 
     /// Faces lower than this (tiles) belong to the yard a building stands on.
@@ -762,16 +952,18 @@ mod tests {
         // Buildings first, the city's ages in order, units last.
         let position = |id: &str| all.iter().position(|x| x == id).unwrap();
         assert!(position("bld.city@ancient") < position("bld.city@classical"));
-        assert_eq!(all.last().map(String::as_str), Some("unit.citizen@any"));
+        assert!(all.last().is_some_and(|id| id.starts_with("unit.")));
         assert_eq!(ids("bld.city"), ["bld.city@ancient", "bld.city@classical"]);
         assert_eq!(ids("bld.library@ancient"), ["bld.library@ancient"]);
         let ancient = ids("ancient");
         assert!(ancient.contains(&"unit.citizen@any".to_owned()));
         assert!(!ancient.contains(&"bld.city@classical".to_owned()));
         assert!(select(&book, &rules, "bld.nothing").is_err());
+        let units = ids("units");
+        assert!(units.iter().all(|id| id.starts_with("unit.")) && units.len() >= 14);
         // The layout keeps every model on the map, labelled under it.
         let chosen = select(&book, &rules, "all").unwrap();
-        let layout = lay_out(&book, &rules, &chosen, 2);
+        let layout = lay_out(&book, &rules, &chosen, 2, rom_render::Activity::Idle);
         assert_eq!(layout.views.len(), chosen.len());
         assert!(layout.terrain.is_valid());
         for (view, label) in layout.views.iter().zip(&layout.labels) {
