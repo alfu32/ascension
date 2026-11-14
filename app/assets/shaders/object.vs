@@ -32,7 +32,13 @@ void main() {
     }
     vec4 world = transform * vec4(local, 1.0);
     fragWorld = world.xyz;
-    fragNormal = transpose(inverse(mat3(transform))) * vertexNormal;
+    // The instance axes are orthogonal (a turn and a scale per axis), so the inverse transpose
+    // is each axis divided by its squared length.
+    vec3 ax = transform[0].xyz;
+    vec3 ay = transform[1].xyz;
+    vec3 az = transform[2].xyz;
+    fragNormal = ax * (vertexNormal.x / dot(ax, ax)) + ay * (vertexNormal.y / dot(ay, ay))
+               + az * (vertexNormal.z / dot(az, az));
     fragColour = vertexColor.rgb;
     fragProgram = program;
     gl_Position = mvp * world;

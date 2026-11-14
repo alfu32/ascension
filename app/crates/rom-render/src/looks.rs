@@ -12,9 +12,9 @@ pub const MATERIAL_NEAR: f32 = 64.0;
 /// Camera distance in tiles from which only the map colours are drawn.
 pub const MATERIAL_FAR: f32 = 120.0;
 /// Distance from the eye in tiles up to which a fragment keeps its full material detail.
-pub const DETAIL_FRAGMENT_NEAR: f32 = 110.0;
+pub const DETAIL_FRAGMENT_NEAR: f32 = 70.0;
 /// Distance from the eye in tiles beyond which a fragment shows only its map colour.
-pub const DETAIL_FRAGMENT_FAR: f32 = 230.0;
+pub const DETAIL_FRAGMENT_FAR: f32 = 150.0;
 
 /// How much of the material look is drawn at camera distance `distance`: 1 inside
 /// [`MATERIAL_NEAR`], 0 beyond [`MATERIAL_FAR`], a smooth blend between.

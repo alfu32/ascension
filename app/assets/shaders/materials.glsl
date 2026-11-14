@@ -8,13 +8,13 @@ uniform float time;
 // the blades to show their lighter sides.
 vec4 grassMaterial(vec3 p, vec3 a, vec3 b, float s, float px) {
     vec3 q = p / s;
-    float patches = fbm(q * 0.6, 3, px / s * 0.6);
+    float patches = fbm(q * 0.6, 2, px / s * 0.6);
     vec3 colour = mix(a, b, smoothstep(0.3, 0.8, patches) * 0.75);
     float tuft = 7.0 / s;
     float fine = keep(tuft, px);
-    float blades = valueNoise(p * tuft) * 0.55 + valueNoise(p * tuft * 2.7 + 5.0) * 0.45;
+    float blades = fine > 0.0 ? valueNoise(p * tuft) : 0.5;
     float wind = sin(dot(p, vec3(0.57, 0.23, 0.79)) * 0.85 - time * 1.7 + patches * 5.0);
-    float gust = smoothstep(0.35, 1.0, wind) * (0.55 + 0.45 * valueNoise(p * 0.3 + time * 0.1));
+    float gust = smoothstep(0.35, 1.0, wind) * (0.55 + 0.45 * sin(dot(p, vec3(0.13, 0.37, 0.21)) + time * 0.4));
     colour *= 1.0 + fine * (blades - 0.5) * 0.55;
     colour = mix(colour, colour * 1.22 + vec3(0.035, 0.045, 0.0), gust * 0.6);
     return vec4(colour, fine * (blades - 0.5) * 0.035 + (patches - 0.5) * 0.04);
@@ -28,7 +28,7 @@ vec4 sandMaterial(vec3 p, vec3 a, vec3 b, float s, float px) {
     float frequency = 5.0 / s;
     float ripples = sin(dot(p, vec3(0.83, 0.12, 0.55)) * frequency * 6.2832 / 6.0 + warp);
     float wave = keep(frequency / 6.0, px);
-    float grain = valueNoise(p * 38.0 / s);
+    float grain = keep(38.0 / s, px) > 0.0 ? valueNoise(p * 38.0 / s) : 0.5;
     vec3 colour = mix(a, b, clamp(dunes * 0.9 + ripples * 0.08 * wave, 0.0, 1.0));
     colour *= 1.0 + (grain - 0.5) * 0.2 * keep(38.0 / s, px);
     return vec4(colour, ripples * 0.012 * wave + (dunes - 0.5) * 0.05);
@@ -38,8 +38,8 @@ vec4 sandMaterial(vec3 p, vec3 a, vec3 b, float s, float px) {
 vec4 stoneMaterial(vec3 p, vec3 a, vec3 b, float s, float px) {
     vec3 q = p / s;
     float body = fbm(q, 3, px / s);
-    float grain = valueNoise(q * 6.0);
     float fine = keep(6.0 / s, px);
+    float grain = fine > 0.0 ? valueNoise(q * 6.0) : 0.5;
     vec3 colour = mix(b, a, smoothstep(0.22, 0.78, body));
     colour *= 1.0 + (grain - 0.5) * 0.3 * fine;
     return vec4(colour, (body - 0.5) * 0.2 * s + (grain - 0.5) * 0.025 * fine);
@@ -57,7 +57,7 @@ vec4 snowMaterial(vec3 p, vec3 a, vec3 b, float s, float px) {
 // Forest floor: moss and leaf litter.
 vec4 forestFloorMaterial(vec3 p, vec3 a, vec3 b, float s, float px) {
     float moss = fbm(p / s * 0.8, 3, px / s * 0.8);
-    float litter = valueNoise(p * 12.0 / s);
+    float litter = keep(12.0 / s, px) > 0.0 ? valueNoise(p * 12.0 / s) : 0.5;
     vec3 colour = mix(a, b, smoothstep(0.4, 0.72, moss));
     colour *= 0.85 + (litter - 0.5) * 0.4 * keep(12.0 / s, px) + 0.15;
     return vec4(colour, (moss - 0.5) * 0.06);

@@ -322,3 +322,48 @@ the atmosphere halo from outside:
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --sun fixed --size 1280x720 --orbit 0,10,8,0 --no-hud --after 1 --screenshot target/sky-day.png
 env -u WAYLAND_DISPLAY cargo run --release -p rom-app -- --sphere 192 --seed 1 --sun night --size 1280x720 --orbit 0,10,8,0 --no-hud --after 1 --screenshot target/sky-night.png
 ```
+
+## Terrain materials and baked feature objects (task 34)
+
+Up close the land is shaded by the material library (`assets/shaders/`: grass,
+sand, stone, snow, forest floor; animated water on the sea), blended to the map
+colours between camera distances `MATERIAL_NEAR` = 64 and `MATERIAL_FAR` = 120
+tiles (`rom-render/src/looks.rs`); each fragment also falls back to its map
+colour between 70 and 150 tiles from the eye. Value noise is one fetch of a
+256² noise texture (red = value, green = the next z slice), and octaves finer
+than a pixel are skipped. Forests (canopy centre, edge trees with trunks),
+mountain massifs and farm crop rows are baked once when the planet or map
+reaches the render thread; the simulation starts only after that. Each feature
+tile gets at most one instance in 16 × 16-tile chunks; chunks beyond 130 tiles
+are skipped, instances beyond 36 tiles use coarse meshes, only chunks within
+70 tiles cast shadows (coarse meshes), and the objects fade out across the
+material band by a screen-door pattern.
+
+Bake, printed once as `feature-bake` (sphere n = 192, seed 1): 19 variant
+meshes, 2,960 vertices, 29,240 instances in 245 chunks, bake 39–200 ms
+(41 ms on a quieter machine), upload 3–17 ms — well under the 3 s budget.
+
+Benches (1280×800, scale 100, seed 1, 10 s). The machine was shared with other
+tasks' test runs (load average 5–13 throughout); the parent commit's binary,
+benched alternately in the same session, is given for comparison.
+
+| Run | Bench line |
+| --- | --- |
+| `--sphere 192 --demo` (home view) | `bench size=1280x800 scale=100 frames=501 fps=50.1 frame_ms_avg=19.40 frame_ms_max=45.98 readback_ms_avg=17.08 readback_ms_max=28.17` |
+| `--sphere 192 --demo --look-at ter.forest,8` (closest zoom over a forest edge) | `bench size=1280x800 scale=100 frames=501 fps=50.1 frame_ms_avg=19.34 frame_ms_max=44.80 readback_ms_avg=16.90 readback_ms_max=25.98` |
+| `--demo` (flat) | `bench size=1280x800 scale=100 frames=566 fps=56.6 frame_ms_avg=13.82 frame_ms_max=26.81 readback_ms_avg=12.90 readback_ms_max=22.90` |
+| parent commit, `--sphere 192 --demo`, alternating runs | 53.0 / 52.0 fps, frame 16.7 / 15.8 ms (new build in between: 51.5 / 47.2 fps, 19.0 / 20.4 ms) |
+
+The material look costs about 3 ms of render-thread frame time at the home
+view (land shading about 2.5 ms, objects and their shadows about 1–1.5 ms, the
+sea next to nothing). The 55 fps target was **not** reached on the sphere
+during these runs; the parent commit did not reach it either under the same
+load (49.5–53 fps). A quiet-machine measurement is still owed.
+
+`--look-at <terrain>[+<terrain>][,<distance>]` places the camera over the
+edge tile of a terrain stand nearest the home city, facing a second terrain
+within 40 tiles. Screenshots: `docs/img/materials-street.png`,
+`forest-mountain.png`, `forest-close.png`, `mountain-massif.png`,
+`farm-rows.png` (farm built by `docs/tasks/34-farm-script.txt`),
+`materials-blend.png`, `materials-globe.png`, `materials-globe-day.png`,
+`materials-flat.png`.

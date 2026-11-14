@@ -31,8 +31,9 @@ float fbm(vec3 p, int octaves, float footprint) {
     float amplitude = 0.5;
     float total = 0.0;
     for (int i = 0; i < 6; ++i) {
-        if (i >= octaves) break;
-        sum += amplitude * keep(1.0, footprint) * (valueNoise(p) - 0.5);
+        float kept = keep(1.0, footprint);
+        if (i >= octaves || kept <= 0.0) break;
+        sum += amplitude * kept * (valueNoise(p) - 0.5);
         total += amplitude;
         p = p * 2.03 + vec3(1.7, 9.2, 3.1);
         amplitude *= 0.5;
