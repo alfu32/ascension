@@ -28,6 +28,7 @@ mod orbit;
 mod overlay;
 pub mod pick;
 mod pixels;
+mod readback;
 mod scene;
 pub mod shadow;
 pub mod sky;

@@ -21,8 +21,8 @@ and prints one line on stdout (plus a `bench-detail` line on stderr).
 | --- | --- |
 | `size` | canvas size the window system actually gave, in physical pixels |
 | `frames`, `fps` | frames **shown** by GPUI during the measurement |
-| `frame_ms_avg` / `_max` | render thread, frame start → frame in the mailbox: draw calls, waiting for the GPU, read-back and conversion |
-| `readback_ms_avg` / `_max` | read-back (`LoadImageFromTexture`, which first waits for the GPU to finish the frame) plus RGBA→BGRA and row flip |
+| `frame_ms_avg` / `_max` | render thread, frame start → end of its read-back work: draw calls and read-back (since task 36 this no longer includes waiting for the GPU, see below) |
+| `readback_ms_avg` / `_max` | read-back work on the render thread. Since task 36: starting the asynchronous read, polling the fence, mapping an earlier frame's buffer and copying its rows. Before: `LoadImageFromTexture` (which first waited for the GPU to finish the frame) plus RGBA→BGRA and row flip |
 | `bench-detail rendered_fps` | frames the render thread produced (paced to 60 Hz) |
 
 Averages are over the whole measurement; maxima are the worst frame seen.
@@ -367,3 +367,60 @@ within 40 tiles. Screenshots: `docs/img/materials-street.png`,
 `farm-rows.png` (farm built by `docs/tasks/34-farm-script.txt`),
 `materials-blend.png`, `materials-globe.png`, `materials-globe-day.png`,
 `materials-flat.png`.
+
+## Asynchronous read-back (task 36)
+
+The render thread no longer waits for the GPU. After drawing a frame it sets the
+frame's alpha to opaque on the GPU (a colour-masked clear), starts
+`glReadPixels` in `GL_BGRA` into one of three pixel pack buffers and places a
+fence (`rom-render/src/readback.rs`). It then polls the fence of the oldest read
+in flight; once it has signalled, that buffer is mapped, its rows are copied
+top-down into the frame (whole-row copies, no per-pixel work) and the frame is
+published. Frames are published in order with one or two frames of latency. A
+read whose fence has not signalled is waited for only when no frame has been
+published for 100 ms. A canvas resize drops the reads in flight and resizes the
+buffers, so a frame is always published at the size it was drawn. A snapshot
+request is answered by the first frame drawn after it.
+
+The GL entry points (buffers, fences, `glReadPixels`, framebuffer binding) are
+loaded once on the render thread through raylib's own loader, `rlGetProcAddress`
+(which calls `glfwGetProcAddress`; `nm` on the built `libraylib.a` shows both
+exported, along with raylib's GLAD table). If the context is older than OpenGL
+3.3 or an entry point is missing, the render thread says so once on stderr and
+reads back synchronously as before. All buffers and fences are released on the
+render thread before the GL context closes.
+
+`readback_ms` now measures the read-back work on the render thread: issue, fence
+poll, map and row copy. Benches (1280×800, scale 100, seed 1, 10 s), the parent
+commit's binary and this one alternating in the same session, `uptime` after
+each run:
+
+| Run | Bench line | Rendered fps | Load (1 min) |
+| --- | --- | --- | --- |
+| sphere, before | `bench size=1280x800 scale=100 frames=539 fps=53.9 frame_ms_avg=17.23 frame_ms_max=48.55 readback_ms_avg=15.11 readback_ms_max=24.88` | 55.1 | 5.09 |
+| sphere, after | `bench size=1280x800 scale=100 frames=553 fps=55.3 frame_ms_avg=3.69 frame_ms_max=30.68 readback_ms_avg=1.30 readback_ms_max=5.49` | 59.4 | 4.70 |
+| sphere, before | `bench size=1280x800 scale=100 frames=510 fps=51.0 frame_ms_avg=17.76 frame_ms_max=48.79 readback_ms_avg=15.36 readback_ms_max=24.73` | 53.9 | 4.36 |
+| sphere, after | `bench size=1280x800 scale=100 frames=544 fps=54.4 frame_ms_avg=4.14 frame_ms_max=26.46 readback_ms_avg=2.11 readback_ms_max=4.61` | 59.9 | 3.97 |
+| flat, before | `bench size=1280x800 scale=100 frames=546 fps=54.6 frame_ms_avg=13.84 frame_ms_max=25.80 readback_ms_avg=13.01 readback_ms_max=22.79` | 59.0 | 3.99 |
+| flat, after | `bench size=1280x800 scale=100 frames=540 fps=54.0 frame_ms_avg=3.12 frame_ms_max=10.88 readback_ms_avg=2.30 readback_ms_max=5.62` | 60.0 | 3.61 |
+| flat, before | `bench size=1280x800 scale=100 frames=549 fps=54.9 frame_ms_avg=14.33 frame_ms_max=27.99 readback_ms_avg=13.43 readback_ms_max=23.64` | 58.4 | 3.44 |
+| flat, after | `bench size=1280x800 scale=100 frames=589 fps=58.9 frame_ms_avg=2.97 frame_ms_max=10.79 readback_ms_avg=2.23 readback_ms_max=6.52` | 60.0 | 3.22 |
+
+Two further sphere runs of this build: 55.2 and 55.5 fps shown, 59.6 and 59.5
+rendered (load 3.1 and 3.0). Sphere is `--sphere 192 --demo`, flat is `--demo`.
+
+Read-back work fell from about 15 ms to about 2 ms on the sphere and from about
+13 ms to about 2 ms on the flat map, and the render thread now keeps 60 frames
+per second in both (it was 54–55 on the sphere). The rate GPUI *shows* rose
+less: 54.4–55.5 on the sphere (target ≥ 55, met in three of four runs) against
+51.0–53.9 before. The remaining loss is on the presenting side, as in the
+earlier sections: the render thread publishes nearly every frame it draws (a
+temporary counter during development: 663 published of 665 drawn), and the
+GPU is now busy with the raylib frame while GPUI and the compositor draw, on an
+integrated GPU all three share. The flat map was not slower (54.0 and 58.9 shown
+against 54.6 and 54.9; 60.0 rendered against 58.4–59.0).
+
+Screenshots are unchanged in content: the top HUD bar of `--sphere 192 --seed 1`
+and of the task-35 library script is pixel-identical to the parent commit's
+capture, alpha is 255 everywhere, and the rest differs only by animated shading
+(372 and 13 pixels differ by more than 3 %).
