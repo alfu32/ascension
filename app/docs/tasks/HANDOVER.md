@@ -146,9 +146,11 @@ card.
   launch command formulated from the chosen options always visible, live, in
   the binary and the `cargo run` form, with Copy buttons — card item 4), run
   the gate, commit in the worktree, merge, bump the version, tag and push.
-- **Task 43** runs (Opus agent, started 2026-11-14 on the owner's request,
-  beside task 42) in `../rise-of-man-worktrees/43-space-on-the-planet`; it
-  stays off `args.rs`, `main.rs` and the launcher module. Merge after 42.
+- **Task 43** — Codex (owner's choice), scheduled to start 2026-11-15 00:48
+  beside task 42 in `../rise-of-man-worktrees/43-space-on-the-planet`, prompt
+  `../rise-of-man-worktrees/logs/43-prompt.md`; it stays off `args.rs`,
+  `main.rs` and the launcher module. If the timer did not fire (session
+  closed), run it like task 42 with that prompt. Merge after 42.
 
 ## Next cards (agreed direction, not yet written)
 
