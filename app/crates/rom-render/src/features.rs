@@ -1187,6 +1187,10 @@ mod tests {
             footprint,
             radius: 2.0,
             under_construction: None,
+            carrying: false,
+            kept: 0,
+            capacity: 0,
+            carry_node: false,
         }
     }
 
