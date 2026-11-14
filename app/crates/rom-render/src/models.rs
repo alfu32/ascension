@@ -83,11 +83,13 @@ pub enum Shape {
 
 /// Knobs every part understands: position, turn, lean (`roll` tips the top towards +x, then
 /// `pitch` towards +z, degrees, about the part's base centre; on a roof `pitch` is its slope),
-/// repeat (`repeat` copies, each moved by `dx`, `dz`), `far` (0: left out of the far version)
-/// and `strike` (degrees the part swings forward about its base, along its x axis, when its
-/// unit attacks).
+/// repeat (`repeat` copies, each moved by `dx`, `dz`), `far` (0: left out of the far version),
+/// `strike` (degrees the part swings forward about its base, along its x axis, when its unit
+/// attacks), `recoil` (tiles the part kicks back along its own −y when its unit fires: a gun
+/// barrel) and `flash` (1: the part shows only for a moment when its unit fires: a muzzle
+/// flash).
 pub const COMMON_KNOBS: &[&str] = &[
-    "x", "y", "z", "yaw", "pitch", "roll", "repeat", "dx", "dz", "far", "strike",
+    "x", "y", "z", "yaw", "pitch", "roll", "repeat", "dx", "dz", "far", "strike", "recoil", "flash",
 ];
 /// Colour knobs every part understands.
 pub const COMMON_COLOURS: &[&str] = &["tint"];
@@ -210,7 +212,7 @@ impl Shape {
             Shape::Banner => &["h", "fw", "fh", "pole", "notch"],
             Shape::Awning => &["w", "d", "h", "rise", "posts"],
             Shape::Arch => &["w", "h", "t", "span", "spring", "segments"],
-            Shape::Hull => &["w", "d", "h", "sheer", "segments", "float"],
+            Shape::Hull => &["w", "d", "h", "sheer", "segments", "float", "heel"],
             Shape::Figure => &[
                 "h",
                 "build",
@@ -226,8 +228,8 @@ impl Shape {
             Shape::Quadruped => &["h", "l", "w", "stride", "pace"],
             Shape::Wheel => &["w", "t", "spokes", "segments"],
             Shape::OarBank => &["w", "count", "beam", "length", "drop"],
-            Shape::Sail => &["w", "h", "billow"],
-            Shape::Shield => &["w", "h", "t", "boss", "segments"],
+            Shape::Sail => &["w", "h", "billow", "lateen"],
+            Shape::Shield => &["w", "h", "t", "boss", "segments", "point"],
             Shape::Bow => &["h", "bend", "w"],
             Shape::Include => &["scale"],
         }
@@ -606,6 +608,8 @@ impl Bake {
                 knob("pitch", 0.0)
             };
             let strike = knob("strike", 0.0);
+            let recoil = knob("recoil", 0.0);
+            let flash = knob("flash", 0.0) > 0.5;
             let start = (self.mesh.positions.len(), self.mesh.indices.len());
             let place_of = |copy: usize| {
                 parent.then(&Place {
@@ -626,13 +630,20 @@ impl Bake {
             let mut first_joint = parent_joint;
             for copy in 0..copies {
                 let at = place_of(copy);
-                let own = if strike != 0.0 {
+                let mut own = parent_joint;
+                if strike != 0.0 {
                     // A swinging part is a siege engine's arm: a slow cycle of loading.
                     self.rig.suggest_period(Activity::Attack, 2.4);
-                    self.joint(parent_joint, &at, Motion::Strike(strike.to_radians()))
-                } else {
-                    parent_joint
-                };
+                    own = self.joint(own, &at, Motion::Strike(strike.to_radians()));
+                }
+                if recoil != 0.0 {
+                    // A gun reloads slowly.
+                    self.rig.suggest_period(Activity::Attack, 3.0);
+                    own = self.joint(own, &at, Motion::Recoil(recoil));
+                }
+                if flash {
+                    own = self.joint(own, &at, Motion::Flash);
+                }
                 let copy_start = (self.mesh.positions.len(), self.mesh.indices.len());
                 if part.shape == Shape::Include {
                     if copy == 0 {

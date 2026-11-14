@@ -16,6 +16,11 @@ pub const MAX_JOINTS: usize = 32;
 pub const POSE_SAMPLES: usize = 24;
 /// Default cycle lengths in seconds: idle, move, attack, work.
 const DEFAULT_PERIODS: [f32; 4] = [3.2, 1.0, 1.2, 1.2];
+/// Point of the attack cycle at which a firearm or a gun fires: the muzzle flashes, a barrel
+/// recoils and the shooter's piece kicks.
+pub const FIRE_AT: f32 = 0.55;
+/// Scale of a muzzle flash while it is not shown (a point, so it draws nothing).
+const HIDDEN: f32 = 1e-3;
 
 /// What a unit is doing, as far as its motion shows it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -74,6 +79,11 @@ pub enum AttackStyle {
     Draw,
     /// A sling whirled overhead, then released.
     Whirl,
+    /// A long firearm or a crossbow: raised to the shoulder with both hands, aimed, fired,
+    /// lowered.
+    Fire,
+    /// A pistol: the right arm levels it, fires, lowers it.
+    Pistol,
 }
 
 /// How a figure works (`figure` knob `work`).
@@ -138,17 +148,25 @@ pub enum Motion {
     Wheel,
     /// An oar of the bank's side `+1` (+z) or `-1` (−z), sweeping while moving.
     Oar(f32),
-    /// A hull riding the water: bob, roll and pitch.
-    Float,
+    /// A hull riding the water: bob, roll and pitch; under way it heels this many radians
+    /// (a sailing ship leaning to the wind).
+    Float(f32),
     /// A part swinging forward about its x axis by this many radians when attacking.
     Strike(f32),
+    /// A gun barrel kicking back this far (model units) along its own −y when it fires.
+    Recoil(f32),
+    /// A muzzle flash: shown only for a moment when its unit fires.
+    Flash,
 }
 
 impl Motion {
-    /// Whether the joint moves its pivot (a bob or a breath); every other joint turns about a
-    /// pivot that stays where its parent carries it.
+    /// Whether the joint moves its pivot (a bob, a breath, a recoil); every other joint turns
+    /// about a pivot that stays where its parent carries it.
     pub fn moves_pivot(&self) -> bool {
-        matches!(self, Motion::Body(_) | Motion::Beast(_) | Motion::Float)
+        matches!(
+            self,
+            Motion::Body(_) | Motion::Beast(_) | Motion::Float(_) | Motion::Recoil(_)
+        )
     }
 }
 
@@ -447,7 +465,107 @@ fn attack_pose(style: &FigureStyle, u: f32, pose: &mut FigurePose) {
             pose.grips[0] = ROT_IDENTITY;
             pose.lean = track(u, 0.0, &[(0.62, -0.05), (0.74, 0.12)]);
         }
+        AttackStyle::Fire => {
+            // Up to the shoulder, aim, the kick of the shot, back down to the carry.
+            let r = track(
+                u,
+                hold[0],
+                &[
+                    (0.22, deg(72.0)),
+                    (FIRE_AT, deg(72.0)),
+                    (FIRE_AT + 0.05, deg(84.0)),
+                    (0.74, deg(72.0)),
+                    (0.9, hold[0]),
+                ],
+            );
+            let l = track(
+                u,
+                hold[1],
+                &[
+                    (0.22, deg(92.0)),
+                    (FIRE_AT, deg(92.0)),
+                    (FIRE_AT + 0.05, deg(100.0)),
+                    (0.74, deg(92.0)),
+                    (0.9, hold[1]),
+                ],
+            );
+            // The piece points forward while aimed, its muzzle jumping up as it fires.
+            let aim = track(
+                u,
+                0.0,
+                &[
+                    (0.22, deg(90.0)),
+                    (FIRE_AT, deg(90.0)),
+                    (FIRE_AT + 0.05, deg(74.0)),
+                    (0.74, deg(90.0)),
+                    (0.9, 0.0),
+                ],
+            );
+            // The left hand reaches in under the barrel.
+            let inward = track(
+                u,
+                0.0,
+                &[(0.22, deg(-32.0)), (0.74, deg(-32.0)), (0.9, 0.0)],
+            );
+            pose.arms[0] = swing(r);
+            pose.grips[0] = rx(r + aim);
+            pose.arms[1] = mul(&ry(inward), &swing(l));
+            pose.grips[1] = if hold[1] != 0.0 { rx(l) } else { ROT_IDENTITY };
+            pose.lean = track(
+                u,
+                0.0,
+                &[
+                    (0.22, 0.05),
+                    (FIRE_AT, 0.05),
+                    (FIRE_AT + 0.05, -0.05),
+                    (0.74, 0.04),
+                    (0.9, 0.0),
+                ],
+            );
+        }
+        AttackStyle::Pistol => {
+            let r = track(
+                u,
+                hold[0],
+                &[
+                    (0.25, deg(86.0)),
+                    (FIRE_AT, deg(86.0)),
+                    (FIRE_AT + 0.05, deg(104.0)),
+                    (0.74, deg(86.0)),
+                    (0.9, hold[0]),
+                ],
+            );
+            let aim = track(
+                u,
+                0.0,
+                &[
+                    (0.25, deg(90.0)),
+                    (FIRE_AT, deg(90.0)),
+                    (FIRE_AT + 0.05, deg(70.0)),
+                    (0.74, deg(90.0)),
+                    (0.9, 0.0),
+                ],
+            );
+            pose.arms[0] = swing(r);
+            pose.grips[0] = rx(r + aim);
+            pose.lean = track(u, 0.0, &[(FIRE_AT, 0.03), (FIRE_AT + 0.05, -0.04)]);
+        }
     }
+}
+
+/// Size of a muzzle flash at the point `u` of the attack cycle: a point, then full size for a
+/// moment just after [`FIRE_AT`].
+fn flash_scale(u: f32) -> f32 {
+    track(
+        u,
+        HIDDEN,
+        &[
+            (FIRE_AT, HIDDEN),
+            (FIRE_AT + 0.02, 1.0),
+            (FIRE_AT + 0.07, 1.0),
+            (FIRE_AT + 0.11, HIDDEN),
+        ],
+    )
 }
 
 /// Rotation and translation (joint frame, joint units) of a beast's joint.
@@ -516,8 +634,13 @@ fn local(motion: &Motion, activity: Activity, u: f32) -> (Rotation, [f32; 3]) {
             }
             _ => (rx(-side * deg(5.0)), [0.0; 3]),
         },
-        Motion::Float => {
-            let roll = deg(1.8) * (phase + 0.6).sin();
+        Motion::Float(heel) => {
+            let lean = if activity == Activity::Move {
+                *heel
+            } else {
+                0.0
+            };
+            let roll = lean + deg(1.8) * (phase + 0.6).sin();
             let pitch = deg(0.8) * (phase + 2.1).sin();
             (mul(&rx(roll), &rz(pitch)), [0.0, 0.02 * phase.sin(), 0.0])
         }
@@ -528,6 +651,25 @@ fn local(motion: &Motion, activity: Activity, u: f32) -> (Rotation, [f32; 3]) {
             }
             _ => (ROT_IDENTITY, [0.0; 3]),
         },
+        Motion::Recoil(distance) => match activity {
+            Activity::Attack => {
+                let back = track(
+                    u,
+                    0.0,
+                    &[(FIRE_AT, 0.0), (FIRE_AT + 0.03, -*distance), (0.92, 0.0)],
+                );
+                (ROT_IDENTITY, [0.0, back, 0.0])
+            }
+            _ => (ROT_IDENTITY, [0.0; 3]),
+        },
+        Motion::Flash => {
+            let s = if activity == Activity::Attack {
+                flash_scale(u)
+            } else {
+                HIDDEN
+            };
+            ([[s, 0.0, 0.0], [0.0, s, 0.0], [0.0, 0.0, s]], [0.0; 3])
+        }
     }
 }
 

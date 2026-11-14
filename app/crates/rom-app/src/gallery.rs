@@ -953,7 +953,14 @@ mod tests {
         let position = |id: &str| all.iter().position(|x| x == id).unwrap();
         assert!(position("bld.city@ancient") < position("bld.city@classical"));
         assert!(all.last().is_some_and(|id| id.starts_with("unit.")));
-        assert_eq!(ids("bld.city"), ["bld.city@ancient", "bld.city@classical"]);
+        assert_eq!(
+            ids("bld.city"),
+            [
+                "bld.city@ancient",
+                "bld.city@classical",
+                "bld.city@medieval"
+            ]
+        );
         assert_eq!(ids("bld.library@ancient"), ["bld.library@ancient"]);
         let ancient = ids("ancient");
         assert!(ancient.contains(&"unit.citizen@any".to_owned()));

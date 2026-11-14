@@ -1207,11 +1207,13 @@ fn arch(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
 
 /// `hull`: an open boat `w` long along x, `d` across and `h` deep amidships, its ends rising by
 /// `sheer` to a point; planked inside and out in the near version, outside only far out. With
-/// `float` it rides the water, carrying what is attached to it.
+/// `float` it rides the water, carrying what is attached to it, and leans `heel` degrees
+/// (towards −z) while under way.
 fn hull(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
     let (w, d, h) = (k.size("w", 2.0), k.size("d", 0.7), k.size("h", 0.35));
     if k.get("float", 0.0) > 0.5 {
-        p.joint = p.add_joint([0.0; 3], Motion::Float);
+        let heel = k.get("heel", 0.0).clamp(-30.0, 30.0).to_radians();
+        p.joint = p.add_joint([0.0; 3], Motion::Float(heel));
     }
     let sheer = k.get("sheer", h * 0.6).max(0.0);
     let n = segments(k, 8, fine, 4).max(2);
@@ -1249,11 +1251,13 @@ fn hull(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
 
 /// The motion knobs of a figure.
 fn figure_style(k: &Knobs<'_>, h: f32) -> FigureStyle {
-    let attack = match k.count("attack", 0, 4) {
+    let attack = match k.count("attack", 0, 6) {
         1 => AttackStyle::Thrust,
         2 => AttackStyle::Throw,
         3 => AttackStyle::Draw,
         4 => AttackStyle::Whirl,
+        5 => AttackStyle::Fire,
+        6 => AttackStyle::Pistol,
         _ => AttackStyle::Strike,
     };
     let work = match k.count("work", 0, 1) {
@@ -1291,7 +1295,8 @@ fn figure(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) -> Vec<Socket> {
     let attack_period = match style.attack {
         AttackStyle::Strike | AttackStyle::Thrust => 1.2,
         AttackStyle::Throw | AttackStyle::Whirl => 1.6,
-        AttackStyle::Draw => 2.0,
+        AttackStyle::Draw | AttackStyle::Pistol => 2.0,
+        AttackStyle::Fire => 2.4,
     };
     p.suggest_period(Activity::Move, k.size("pace", 1.0));
     p.suggest_period(Activity::Attack, attack_period);
@@ -1666,16 +1671,28 @@ fn oar_bank(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
 }
 
 /// `sail`: a square sail `w` wide and `h` high above its foot, bellied `billow` towards +z,
-/// hanging from a yard (colour `yard_colour`); the cloth is the part's surface.
+/// hanging from a yard (colour `yard_colour`); the cloth is the part's surface. With `lateen`
+/// the sail is a triangle, its foot closing to the yard's −x end (lean the part to slant it).
 fn sail(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
     let (w, h) = (k.size("w", 1.4), k.size("h", 1.1));
     let billow = k.get("billow", 0.15);
+    let lateen = k.get("lateen", 0.0) > 0.5;
     let cells = if fine { 2 } else { 1 };
     let point = |i: usize, j: usize, back: f32| {
         let (u, v) = (i as f32 / cells as f32, j as f32 / cells as f32);
-        let x = (u - 0.5) * w;
-        let bulge = billow * (1.0 - (2.0 * u - 1.0).powi(2)) * (0.55 + 0.45 * (PI * v).sin());
-        [x, v * h, if fine { bulge } else { billow * 0.6 } - back]
+        let x = if lateen {
+            -0.5 * w + u * v * w
+        } else {
+            (u - 0.5) * w
+        };
+        let mut bulge = billow * (1.0 - (2.0 * u - 1.0).powi(2)) * (0.55 + 0.45 * (PI * v).sin());
+        let mut flat = billow * 0.6;
+        if lateen {
+            // The foot closes to a point, which has no belly.
+            bulge *= v;
+            flat *= v;
+        }
+        [x, v * h, if fine { bulge } else { flat } - back]
     };
     for i in 0..cells {
         for j in 0..cells {
@@ -1700,7 +1717,8 @@ fn sail(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
 
 /// `shield`: a round shield `w` across (or, with `h`, a rectangle `w` by `h`) and `t` thick,
 /// centred on its origin and facing +z; the face is the part's surface, the rim and `boss` are
-/// colour `rim`.
+/// colour `rim`. With `h`, `point` (0..1) is the share of the height over which the sides close
+/// to a point at the bottom (a heater or kite shield).
 fn shield(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
     let w = k.size("w", 0.5);
     let tall = k.get("h", 0.0);
@@ -1708,7 +1726,12 @@ fn shield(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
     let boss = k.get("boss", w * 0.22).max(0.0);
     let face = p.surface;
     let rim = Surface::of(METAL, k.colour("rim", [0.72, 0.55, 0.3]), 0.2);
-    let outline: Vec<[f32; 2]> = if tall > 0.0 {
+    let point = k.get("point", 0.0).clamp(0.0, 1.0);
+    let outline: Vec<[f32; 2]> = if tall > 0.0 && point > 0.0 {
+        let (x, y) = (w / 2.0, tall / 2.0);
+        let shoulder = y - tall * point;
+        vec![[0.0, -y], [x, shoulder], [x, y], [-x, y], [-x, shoulder]]
+    } else if tall > 0.0 {
         let (x, y) = (w / 2.0, tall / 2.0);
         vec![[-x, -y], [x, -y], [x, y], [-x, y]]
     } else {
