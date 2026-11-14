@@ -4,3 +4,8 @@
 # model's geometry changes. Add a line when the owner approves a model; change a fingerprint
 # only with the owner's say-so. See docs/art-direction.md, "How models are reviewed".
 [models]
+"bld.barracks@ancient" = "41939ff44fd35d93"
+"bld.city@ancient" = "92df61115c785464"
+"bld.city@classical" = "46d5b53ed5c586bb"
+"bld.library@ancient" = "040b8443a8eaabf5"
+"unit.citizen@any" = "d9e4d850c5badf02"
