@@ -298,7 +298,8 @@ distances. `material.params` is a flat JSON object:
 map seed when the planet or map is published to the renderer, before the first
 tick, and the feature tiles get one instance each. A building type drawn as
 objects names its mesh and material in `entity_visual` (the farm's crop rows);
-the row without faction and age is the one drawn. Unknown programs and
+the row without faction and age is the one drawn. A composed row for the same
+type (the farm's barn, task 38) is drawn as well, standing among the rows. Unknown programs and
 generators fall back to the map colour and the plain building box. The rows
 were appended after the generated content so existing definition ids did not
 move (task 34).
@@ -317,9 +318,14 @@ the owner's colour; `attach` names an earlier part, or a socket (`head`,
 `part.socket`), whose frame the part moves with. `params` is flat JSON.
 
 Every part takes `x`, `y`, `z` (its base centre), `yaw` (degrees,
-counter-clockwise seen from above), `repeat` with `dx`, `dz` (copies, each moved
-by that much), `far` (0 leaves it out of the far version) and `tint`
-(`#rrggbb`, multiplies the material colours). The shapes and their own knobs:
+counter-clockwise seen from above), `roll` and `pitch` (degrees, default 0: the
+part leans about its base centre, `roll` tipping its top towards +x, then
+`pitch` towards +z, before the yaw; on `gable_roof` and `hip_roof`, whose own
+`pitch` is the slope, only `roll` leans), `repeat` with `dx`, `dz` (copies,
+each moved by that much), `far` (0 leaves it out of the far version) and `tint`
+(`#rrggbb`, multiplies the material colours). A part with both leans at 0 bakes
+exactly as it did before leaning existed (task 38). The shapes and their own
+knobs:
 
 | Shape | Knobs |
 | --- | --- |
@@ -327,7 +333,7 @@ by that much), `far` (0 leaves it out of the far version) and `tint`
 | `plinth` | `w`, `d`, `h`, `steps`, `inset` |
 | `gable_roof`, `hip_roof` | `w`, `d` (of the block below), `pitch`, `overhang`, `t` |
 | `flat_roof` | `w`, `d`, `t`, `overhang`, `parapet`, `parapet_t` |
-| `dome`, `cylinder`, `cone` | `w` (diameter), `h`, `segments`; `cylinder` also `taper` |
+| `dome`, `cylinder`, `cone` | `w` (diameter), `h`, `segments`; `cylinder` also `taper` and `bottom` (1 closes the foot; default 1 on a leaning cylinder such as a log or a wheel, else 0) |
 | `column_row` | `count`, `radius`, `spacing`, `h`, `segments`, `capital` |
 | `wall` | `w`, `h`, `t`, the openings of `box`; `ring` (four walls round `w` × `d`), `gap` (gate in the front) |
 | `crenellation` | `w`, `d`, `h`, `t`, `merlon`, `ring`, `gap` |
@@ -335,6 +341,8 @@ by that much), `far` (0 leaves it out of the far version) and `tint`
 | `palisade` | `w`, `d`, `h`, `t`, `spacing`, `ring`, `gap` |
 | `banner` | `h`, `fw`, `fh`, `pole`, `notch`; colour `pole_colour` (the cloth is the part) |
 | `awning` | `w`, `d`, `h`, `rise`, `posts`; colour `post_colour` |
+| `arch` | `w`, `h`, `t` (a wall along x), `span` (width of the round-headed opening in its middle), `spring` (height where the head begins), `segments` |
+| `hull` | `w` (length along x), `d` (beam), `h` (depth amidships), `sheer` (rise of both pointed ends), `segments`; an open boat, planked inside and out |
 | `figure` | `h` (1 tile), `build`; colours `skin`, `hair`, `legs` (the tunic is the part) |
 | `include` | `mesh` (key of another composed mesh), `scale`; its parts without a material take the include's |
 
