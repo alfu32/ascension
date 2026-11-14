@@ -15,6 +15,12 @@
 //! city's face). Other commands: `rclick`,
 //! `key <char> [ctrl] [shift]`, `escape`; `hud` takes `tab`, `arrow`, `slot`, `queue`, `tile`.
 //!
+//! Live names (resolved at the step, in entity id order): `relicN` = free carry nodes,
+//! `templeN` = own completed keepers, `marketN` = own completed buildings training route
+//! traders, `cityN` = own completed cities, `carrierN` = own claim-tag units,
+//! `traderN` = own route traders. `click` and `rclick` support these names and Shift.
+//! These component-based aliases replace a dependency on the last trained type.
+//!
 //! Space commands: `ships` selects every ship of player one, `producers` its finished
 //! training buildings (not cities), `orbit <rockN|=body>` and
 //! `travel <systemN|=system>` order the selected ships (`rockN` is the N-th nearest resource body
@@ -103,7 +109,7 @@ impl ScriptSetup {
 }
 
 /// A script step that is not a pick.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ScriptAction {
     /// Select all of player one's ships.
     SelectShips,
@@ -111,6 +117,12 @@ pub enum ScriptAction {
     SelectProducers,
     /// Select finished producers that offer track research.
     SelectResearchers,
+    /// Resolve a named entity against the live world and replay a click.
+    EntityPick {
+        target: String,
+        right: bool,
+        shift: bool,
+    },
     /// Set the game speed in percent.
     Speed(u32),
 }
@@ -182,6 +194,20 @@ impl Script {
                 }
                 _ => {}
             }
+            if let (Some(tick), Some(command @ ("click" | "rclick"))) =
+                (tick, words.get(1).copied())
+                && let Some(target) = words.get(2).filter(|word| dynamic_name(word))
+            {
+                actions.push((
+                    tick,
+                    ScriptAction::EntityPick {
+                        target: (*target).to_owned(),
+                        right: command == "rclick",
+                        shift: words.contains(&"shift"),
+                    },
+                ));
+                continue;
+            }
             let event = parse_line(line, context, offset)
                 .map_err(|error| format!("line {}: {error}", number + 1))?;
             events.push(event);
@@ -203,7 +229,7 @@ impl Script {
             if *at > tick {
                 break;
             }
-            out.push(*action);
+            out.push(action.clone());
             self.next_action += 1;
         }
         out
@@ -378,6 +404,7 @@ fn parse_line(
         "hover" => {
             let (world_point, surface) = point(arg(0)?, context, offset)?;
             PickEvent::Hover {
+                entity: None,
                 world_point,
                 surface,
             }
@@ -423,6 +450,109 @@ fn parse_line(
         other => return Err(format!("unknown command {other:?}")),
     };
     Ok((tick, event))
+}
+
+fn dynamic_name(word: &str) -> bool {
+    ["relic", "temple", "market", "city", "carrier", "trader"]
+        .iter()
+        .any(|prefix| {
+            word.strip_prefix(prefix)
+                .is_some_and(|n| n.parse::<usize>().is_ok())
+        })
+}
+
+/// Resolve a screenshot alias using components, without bypassing normal pick/order handling.
+pub fn live_pick(
+    world: &rom_sim::World,
+    target: &str,
+    right: bool,
+    shift: bool,
+) -> Result<PickEvent, String> {
+    use rom_rules::{ClaimMode, EntityClass, ProductionMode};
+    let rules = world.rules();
+    let (name, n) = ["relic", "temple", "market", "city", "carrier", "trader"]
+        .iter()
+        .find_map(|name| {
+            target
+                .strip_prefix(name)
+                .and_then(|n| n.parse::<usize>().ok())
+                .map(|n| (*name, n))
+        })
+        .ok_or_else(|| format!("unknown live entity {target}"))?;
+    let trader = |id| {
+        rules.entity_types[&id]
+            .trader
+            .as_ref()
+            .is_some_and(|t| t.runs_routes)
+    };
+    let entity =
+        world
+            .entities()
+            .filter(|e| e.container_id.is_none())
+            .filter(|e| {
+                let et = &rules.entity_types[&e.type_id];
+                if name == "relic" {
+                    return et
+                        .node
+                        .as_ref()
+                        .is_some_and(|n| n.claim_mode == ClaimMode::Carry);
+                }
+                if e.owner != crate::selection::PLAYER || e.build_progress.is_some() {
+                    return false;
+                }
+                match name {
+                    "temple" => et.keeper.is_some(),
+                    "market" => {
+                        et.class == EntityClass::Building
+                            && rules.production.get(&et.id).into_iter().flatten().any(|r| {
+                                r.mode == ProductionMode::Train && trader(r.product_def_id)
+                            })
+                    }
+                    "city" => et.territory.as_ref().is_some_and(|t| t.is_city),
+                    "trader" => trader(et.id),
+                    "carrier" => {
+                        et.class == EntityClass::Unit
+                            && rules.entity_types.values().any(|node| {
+                                node.node.as_ref().is_some_and(|node| {
+                                    node.claim_mode == ClaimMode::Carry
+                                        && node
+                                            .claim_tag_id
+                                            .is_some_and(|tag| rules.has_tag(et.id, tag))
+                                })
+                            })
+                    }
+                    _ => false,
+                }
+            })
+            .nth(n.wrapping_sub(1))
+            .ok_or_else(|| format!("there is no {target}"))?;
+    let surface = SurfacePos {
+        face: entity.pos.face,
+        x: i64::from(entity.pos.x),
+        y: i64::from(entity.pos.y),
+    };
+    let world_point = (entity.pos.x as f32 / 1000.0, entity.pos.y as f32 / 1000.0);
+    let modifiers = Modifiers {
+        shift,
+        ..Modifiers::default()
+    };
+    Ok(if right {
+        PickEvent::RightClick {
+            surface,
+            world_point,
+            entity: Some(entity.id.0),
+            modifiers,
+        }
+    } else {
+        PickEvent::Click {
+            surface,
+            world_point,
+            entity: Some(entity.id.0),
+            modifiers,
+            double: false,
+            on_screen: Vec::new(),
+        }
+    })
 }
 
 #[cfg(test)]
@@ -494,6 +624,7 @@ mod tests {
         assert_eq!(
             later[4],
             PickEvent::Hover {
+                entity: None,
                 world_point: (108.0, 48.0),
                 surface: SurfacePos {
                     face: 0,

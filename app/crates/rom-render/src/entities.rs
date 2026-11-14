@@ -49,6 +49,14 @@ pub struct EntityView {
     pub footprint: (u8, u8),
     /// Collision radius in tiles.
     pub radius: f32,
+    /// True when this unit contains a carried node.
+    pub carrying: bool,
+    /// Number of nodes in this keeper.
+    pub kept: u8,
+    /// Keeper capacity, zero for other entities.
+    pub capacity: u8,
+    /// A carry-mode node drawn as a gold-capped plinth.
+    pub carry_node: bool,
     /// Construction progress 0 to 1 for a site, `None` when complete.
     pub under_construction: Option<f32>,
 }
@@ -346,6 +354,19 @@ impl GroundFrame {
 /// The surface entities stand on: a flat map or a sphere planet. Positions are face-local
 /// tiles (face 0 and map tiles on a flat map).
 pub trait Footing {
+    /// A sampled route between surface positions, lifted above the terrain.
+    fn route_point(&self, from: SurfacePos, to: SurfacePos, t: f32, lift: f32) -> [f32; 3] {
+        self.point(
+            from.face,
+            from.x as f32 / 1000.0,
+            from.y as f32 / 1000.0,
+            (
+                (to.x - from.x) as f32 / 1000.0 * t,
+                (to.y - from.y) as f32 / 1000.0 * t,
+            ),
+            lift,
+        )
+    }
     /// Height above sea level in tiles at (`x`, `y`), never below zero.
     fn height_at(&self, face: u8, x: f32, y: f32) -> f32;
     /// The frame standing on the ground at (`x`, `y`).
@@ -459,6 +480,12 @@ pub fn pick_box(view: &EntityView, ground: &dyn Fn(f32, f32) -> f32) -> ([f32; 3
         let progress = view.under_construction.map_or(1.0, |p| p.clamp(0.0, 1.0));
         let body = building_height(view) * progress.max(0.12) + 0.2;
         ([view.x, base + body / 2.0, view.y], [w, body, h], 0.0)
+    } else if view.carry_node {
+        (
+            [view.x, base + 0.54, view.y],
+            [1.0, 1.08, 1.0],
+            view.facing_deg,
+        )
     } else if view.owner == 0 {
         (
             [view.x, base + 0.35, view.y],
@@ -564,13 +591,31 @@ fn instances_on(
         let body_start = out.len();
         let top = if view.building {
             push_building(view, ground, &frame, base, out)
-        } else if view.owner == 0 {
+        } else if view.owner == 0 || view.carry_node {
             push_node(view, &frame, out)
         } else {
             push_unit(view, &frame, out)
         };
         if let Some(casters) = casters.as_mut() {
             casters.push(body_start..out.len());
+        }
+        let axes = [frame.ex, frame.up, frame.ey];
+        if view.carrying {
+            out.push(frame_box(
+                frame.at([0.0, top + 0.8, 0.0]),
+                axes,
+                [0.28, 0.28, 0.28],
+                NODE_COLOR,
+            ));
+        }
+        for i in 0..view.kept.min(view.capacity) {
+            let across = (f32::from(i) - f32::from(view.kept.min(view.capacity) - 1) / 2.0) * 0.38;
+            out.push(frame_box(
+                frame.at([across, top + 0.22, 0.0]),
+                axes,
+                [0.22, 0.22, 0.22],
+                NODE_COLOR,
+            ));
         }
         if view.hp_frac < 1.0 {
             let width = if view.building {
@@ -693,6 +738,22 @@ fn push_building(
 
 /// Pushes a node marker; returns the height of its top above the ground.
 fn push_node(view: &EntityView, frame: &GroundFrame, out: &mut Vec<[f32; 16]>) -> f32 {
+    if view.carry_node {
+        let axes = [frame.ex, frame.up, frame.ey];
+        out.push(frame_box(
+            frame.at([0.0, 0.4, 0.0]),
+            axes,
+            [0.85, 0.8, 0.85],
+            [0.48, 0.46, 0.40],
+        ));
+        out.push(frame_box(
+            frame.at([0.0, 0.94, 0.0]),
+            axes,
+            [1.0, 0.28, 1.0],
+            NODE_COLOR,
+        ));
+        return 1.08;
+    }
     let size = 0.7;
     let forward = heading_of(frame, view.facing_deg);
     out.push(frame_box(
@@ -723,6 +784,10 @@ mod tests {
             building: false,
             footprint: (1, 1),
             radius: 0.25,
+            carrying: false,
+            kept: 0,
+            capacity: 0,
+            carry_node: false,
             under_construction: None,
         }
     }
@@ -745,6 +810,40 @@ mod tests {
             start + Duration::from_millis(100),
         );
         pair
+    }
+
+    #[test]
+    fn carried_marker_sits_above_the_unit() {
+        let mut unit = view(1, 8.0, 10.0, 0.0);
+        unit.carrying = true;
+        let ground = FlatGround(&|_, _| 2.0);
+        let mut instances = Vec::new();
+        build_instances_on(&[unit], &ground, [1.0, 0.0, 0.0], &mut instances);
+        assert_eq!(instances.len(), 3);
+        let marker = instances[2];
+        assert_eq!([marker[3], marker[7], marker[11]], NODE_COLOR);
+        let top = instances[0][13] + instances[0][5] / 2.0;
+        assert!(
+            marker[13] - marker[5] / 2.0 > top + 0.6,
+            "cargo clears the health bar"
+        );
+        assert_eq!((marker[12], marker[14]), (8.0, 10.0));
+        let globe = Globe::new(&crate::PlanetScene {
+            n: 64,
+            kinds: vec![TileKind::Land; 6 * 64 * 64],
+            heights: vec![0; 6 * 64 * 64],
+            feature_colors: Default::default(),
+            starts: vec![],
+            nodes: vec![],
+            sun: Default::default(),
+        });
+        build_instances_on(&[unit], &globe, [1.0, 0.0, 0.0], &mut instances);
+        let frame = globe.frame(unit.face, unit.x, unit.y);
+        let marker = instances[2];
+        let lift: f32 = (0..3)
+            .map(|i| (marker[12 + i] - frame.origin[i]) * frame.up[i])
+            .sum();
+        assert!(lift > unit_height(&unit));
     }
 
     #[test]

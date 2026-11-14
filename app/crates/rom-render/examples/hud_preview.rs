@@ -153,6 +153,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             building: i % 8 == 0,
             footprint: (1, 1),
             radius: 0.3,
+            carrying: false,
+            kept: 0,
+            capacity: 0,
+            carry_node: false,
             under_construction: None,
         })
         .collect::<Vec<_>>();

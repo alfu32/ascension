@@ -377,6 +377,14 @@ fn run(
                         ScriptAction::SelectShips => controller.select_own_ships(&world),
                         ScriptAction::SelectProducers => controller.select_producers(&world),
                         ScriptAction::SelectResearchers => controller.select_researchers(&world),
+                        ScriptAction::EntityPick {
+                            target,
+                            right,
+                            shift,
+                        } => match crate::script::live_pick(&world, &target, right, shift) {
+                            Ok(pick) => controller.handle(&mut world, pick),
+                            Err(error) => controller.notify(&world, error),
+                        },
                         ScriptAction::Speed(percent) => link.set_speed(percent),
                     }
                 }
@@ -496,6 +504,18 @@ pub fn snapshot_on(world: &World, body: BodyId, sightings: &[Sighting<'_>]) -> E
     let rules = world.rules();
     let mut sources: BTreeMap<PlayerId, ActiveSources> = BTreeMap::new();
     let clamp_u8 = |value: i64| u8::try_from(value.clamp(0, 255)).unwrap_or(u8::MAX);
+    let mut held = BTreeMap::<rom_sim::EntityId, u8>::new();
+    for entity in world.entities() {
+        if let Some(container) = entity.container_id
+            && rules.entity_types[&entity.type_id]
+                .node
+                .as_ref()
+                .is_some_and(|n| n.claim_mode == rom_rules::ClaimMode::Carry)
+        {
+            let count = held.entry(container).or_default();
+            *count = count.saturating_add(1);
+        }
+    }
     let mut views: Vec<EntityView> = Vec::with_capacity(sightings.len());
     let mut remembered = false;
     let mut live = sightings.iter().filter_map(|s| match s {
@@ -512,7 +532,7 @@ pub fn snapshot_on(world: &World, body: BodyId, sightings: &[Sighting<'_>]) -> E
             }
             _ => false,
         };
-        if !on_body {
+        if !on_body || entity.container_id.is_some() {
             continue;
         }
         let known_ground = || {
@@ -542,7 +562,11 @@ pub fn snapshot_on(world: &World, body: BodyId, sightings: &[Sighting<'_>]) -> E
             let total = rules.build_ticks(entity.type_id, sources).max(1) as f32;
             (done as f32 / total).clamp(0.0, 1.0)
         });
-        views.push(view_of(entity, et, under_construction, &clamp_u8));
+        let mut view = view_of(entity, et, under_construction, &clamp_u8);
+        let count = held.get(&entity.id).copied().unwrap_or(0);
+        view.carrying = !view.building && count > 0;
+        view.kept = if view.building { count } else { 0 };
+        views.push(view);
     }
     for sighting in sightings {
         if let Sighting::Remembered(building) = sighting {
@@ -565,6 +589,10 @@ pub fn snapshot_on(world: &World, body: BodyId, sightings: &[Sighting<'_>]) -> E
                 building: true,
                 footprint: (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h)),
                 radius: et.radius as f32 / 1000.0,
+                carrying: false,
+                kept: 0,
+                capacity: 0,
+                carry_node: false,
                 under_construction: None,
             });
         }
@@ -597,6 +625,13 @@ fn view_of(
         building: et.class == EntityClass::Building,
         footprint: (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h)),
         radius: et.radius as f32 / 1000.0,
+        carrying: false,
+        kept: 0,
+        capacity: et.keeper.as_ref().map_or(0, |k| clamp_u8(k.capacity)),
+        carry_node: et
+            .node
+            .as_ref()
+            .is_some_and(|n| n.claim_mode == rom_rules::ClaimMode::Carry),
         under_construction,
     }
 }

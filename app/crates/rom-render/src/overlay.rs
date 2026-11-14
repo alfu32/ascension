@@ -235,6 +235,47 @@ pub fn build_overlays_on(
 ) {
     out.lines.clear();
     out.tris.clear();
+    let gold = [250, 214, 41, 255];
+    for route in &hud.trade_routes {
+        let steps = (route.length.div_ceil(500) as usize).clamp(2, 4096);
+        for i in (0..steps).step_by(2) {
+            out.line(
+                ground.route_point(route.home, route.target, i as f32 / steps as f32, LIFT),
+                ground.route_point(
+                    route.home,
+                    route.target,
+                    (i + 1) as f32 / steps as f32,
+                    LIFT,
+                ),
+                gold,
+            );
+        }
+        let end = if route.to_target {
+            route.target
+        } else {
+            route.home
+        };
+        let o = Origin {
+            ground,
+            face: end.face,
+            x: end.x as f32 / 1000.0,
+            y: end.y as f32 / 1000.0,
+        };
+        // Keep the destination ring outside the city's roof so it remains visible.
+        let radius = views
+            .iter()
+            .find(|v| {
+                v.building
+                    && v.face == end.face
+                    && (v.x - o.x).abs() < 0.001
+                    && (v.y - o.y).abs() < 0.001
+            })
+            .map_or(0.8, |v| {
+                f32::from(v.footprint.0.max(v.footprint.1)) * 0.75 + 0.5
+            });
+        out.ring(o, radius, gold);
+        out.line(o.at(0.0, 0.0, LIFT), o.at(0.0, 0.0, 1.4), gold);
+    }
     for city in &hud.city_radii {
         let origin = Origin {
             ground,
@@ -411,6 +452,10 @@ pub fn build_overlays_on(
             building: true,
             footprint: (p.width, p.height),
             radius: 0.0,
+            carrying: false,
+            kept: 0,
+            capacity: 0,
+            carry_node: false,
             under_construction: None,
         };
         out.building_ghost(origin, &view, line, false);
@@ -442,8 +487,84 @@ mod tests {
             building: false,
             footprint: (1, 1),
             radius: 0.3,
+            carrying: false,
+            kept: 0,
+            capacity: 0,
+            carry_node: false,
             under_construction: None,
         }
+    }
+
+    #[test]
+    fn route_line_conforms_to_the_globe() {
+        let globe = crate::Globe::new(&crate::PlanetScene {
+            n: 64,
+            kinds: vec![crate::TileKind::Land; 6 * 64 * 64],
+            heights: vec![0; 6 * 64 * 64],
+            feature_colors: Default::default(),
+            starts: vec![],
+            nodes: vec![],
+            sun: Default::default(),
+        });
+        let home = crate::SurfacePos {
+            face: 0,
+            x: 62_000,
+            y: 32_000,
+        };
+        let target = globe.step_on(home, 25_000, 0);
+        assert_ne!(home.face, target.face, "route crosses a face seam");
+        let mut hud = HudSnapshot {
+            trade_routes: vec![crate::HudTradeRoute {
+                home,
+                target,
+                to_target: true,
+                length: 25_000,
+            }],
+            ..HudSnapshot::default()
+        };
+        let mut out = OverlayGeometry::default();
+        build_overlays_on(&[], &globe, [1.0, 0.0, 0.0], &hud, &mut out);
+        assert!(out.lines.len() > 50);
+        for line in out.lines.iter().take(25) {
+            for p in [line.a, line.b] {
+                let radius = p.iter().map(|x| x * x).sum::<f32>().sqrt();
+                assert!((radius - globe.radius() - LIFT).abs() < 0.002);
+            }
+        }
+        // Flat routes follow slopes too, and changing direction moves the endpoint marker.
+        hud.trade_routes[0].home = crate::SurfacePos {
+            face: 0,
+            x: 1000,
+            y: 1000,
+        };
+        hud.trade_routes[0].target = crate::SurfacePos {
+            face: 0,
+            x: 26_000,
+            y: 1000,
+        };
+        let slope = |x: f32, y: f32| x * 0.1 + y * 0.05;
+        let city = EntityView {
+            building: true,
+            footprint: (7, 7),
+            x: 26.0,
+            y: 1.0,
+            ..unit(9)
+        };
+        build_overlays(&[city], &slope, &hud, 0.0, &mut out);
+        assert!(
+            (out.lines[25].a[0] - 26.0).abs() > 5.0,
+            "destination ring clears the city roof"
+        );
+        for line in out.lines.iter().take(25) {
+            for p in [line.a, line.b] {
+                assert!((p[1] - slope(p[0], p[2]) - LIFT).abs() < 0.001);
+            }
+        }
+        let pole = out.lines.last().unwrap();
+        assert_eq!(pole.a[0], 26.0);
+        hud.trade_routes[0].to_target = false;
+        build_overlays(&[], &slope, &hud, 0.0, &mut out);
+        assert_eq!(out.lines.last().unwrap().a[0], 1.0);
     }
 
     #[test]
@@ -485,6 +606,10 @@ mod tests {
             kind: 3,
             x: 20.0,
             y: 30.0,
+            carrying: false,
+            kept: 0,
+            capacity: 0,
+            carry_node: false,
             under_construction: Some(0.0),
             ..unit(7)
         };

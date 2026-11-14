@@ -74,6 +74,10 @@ pub struct HudSnapshot {
     pub overview: ResearchOverview,
     /// City circles on the current surface.
     pub city_radii: Vec<HudCityRadius>,
+    /// Own wealth economy totals.
+    pub wealth: crate::HudWealth,
+    /// Selected traders' routes on the current surface.
+    pub trade_routes: Vec<crate::HudTradeRoute>,
     /// The building footprint being placed.
     pub placement: Option<HudPlacement>,
 }
@@ -99,6 +103,8 @@ impl Default for HudSnapshot {
             data_tab: 0,
             overview: ResearchOverview::default(),
             city_radii: Vec::new(),
+            wealth: Default::default(),
+            trade_routes: Vec::new(),
         }
     }
 }
@@ -640,6 +646,15 @@ impl HudPainter {
                     ("stat_garrison", "GARRISON", card.garrison.clone()),
                     ("stat_workers", "WORKERS", card.workers.clone()),
                 ];
+                for (i, line) in card.wealth.iter().enumerate() {
+                    self.caption(
+                        l,
+                        R,
+                        line,
+                        Rect::new(998.0, 864.0 + i as f32 * 19.0, 322.0, 17.0),
+                        GOLD,
+                    );
+                }
                 let mut row = 0.0;
                 for (icon, label, value) in rows {
                     let Some(value) = value else {
@@ -1017,6 +1032,25 @@ impl HudPainter {
                 l.map(R, Rect::new(1359.0, y + 7.0, 24.0, 24.0)),
             );
             self.caption(l, R, label, Rect::new(1392.0, y + 10.0, 85.0, 16.0), GOLD);
+        }
+        if h.data_tab == 2 {
+            for (i, line) in [
+                "Wealth".to_owned(),
+                format!("Relics kept: {}", h.wealth.relics),
+                format!("Routes: {} / {}", h.wealth.routes, h.wealth.limit),
+                format!("+{} per trip", h.wealth.per_trip),
+            ]
+            .iter()
+            .enumerate()
+            {
+                self.caption(
+                    l,
+                    R,
+                    line,
+                    Rect::new(1492.0, 709.0 + i as f32 * 26.0, 148.0, 19.0),
+                    GOLD,
+                );
+            }
         }
         if h.data_tab == 4 {
             self.research_overview(l, &h.overview);

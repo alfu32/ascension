@@ -703,6 +703,22 @@ impl Globe {
 }
 
 impl Footing for Globe {
+    fn route_point(&self, from: SurfacePos, to: SurfacePos, t: f32, lift: f32) -> [f32; 3] {
+        let (a, b) = (self.dir_of(from), self.dir_of(to));
+        let angle = dot(a, b).clamp(-1.0, 1.0).acos();
+        let dir = if angle.abs() < 1e-5 {
+            a
+        } else {
+            let (u, v) = (
+                ((1.0 - t) * angle).sin() / angle.sin(),
+                (t * angle).sin() / angle.sin(),
+            );
+            std::array::from_fn(|i| a[i] * u + b[i] * v)
+        };
+        let p = self.pos_of(dir);
+        self.world_point(p.face, p.x as f32 / 1000.0, p.y as f32 / 1000.0, lift)
+    }
+
     fn height_at(&self, face: u8, x: f32, y: f32) -> f32 {
         self.surface_height(face, x, y)
     }

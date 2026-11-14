@@ -233,6 +233,77 @@ const RESOURCE_ICONS: &[(&str, &str)] = &[
     ("E", "energy"),
 ];
 
+/// The player's route slots after active modifiers.
+pub(crate) fn caravan_limit(world: &World, player: PlayerId) -> i64 {
+    let rules = world.rules();
+    world.players().find(|p| p.id == player).map_or(0, |p| {
+        rules.player_stat(
+            "caravan_limit",
+            rules.constant("player.caravan_limit.base").unwrap_or(0),
+            &p.active_sources(),
+        )
+    })
+}
+
+/// Keeper income shares or the trader's accepted city names and payment.
+pub(crate) fn wealth_card(world: &World, entity: &rom_sim::Entity) -> Vec<String> {
+    let rules = world.rules();
+    let et = &rules.entity_types[&entity.type_id];
+    if let Some(keeper) = &et.keeper {
+        let mut raw = std::collections::BTreeMap::<_, i64>::new();
+        let mut kept = 0;
+        for node in world.kept_nodes(entity.id) {
+            if let Some(n) = &rules.entity_types[&node.type_id].node {
+                kept += 1;
+                *raw.entry(n.resource_id).or_default() += n.income;
+            }
+        }
+        let income: i64 = if entity.build_progress.is_none()
+            && !entity.neutralised
+            && entity.assimilation_until.is_none()
+        {
+            raw.into_iter()
+                .map(|(resource, amount)| {
+                    let total = world.income(entity.owner, resource);
+                    (i128::from(total.effective) * i128::from(amount)
+                        / i128::from(total.raw.max(1))) as i64
+                })
+                .sum()
+        } else {
+            0
+        };
+        let seconds = rules.constant("economy.income_period_ticks").unwrap_or(600)
+            / i64::from(TICKS_PER_SECOND);
+        return vec![
+            format!("Relics {kept} / {}", keeper.capacity),
+            format!("+{income} wealth per {seconds} s"),
+        ];
+    }
+    if et.trader.as_ref().is_some_and(|t| t.runs_routes) {
+        if let Some(route) = world
+            .trade_routes(entity.owner)
+            .find(|r| r.trader == entity.id)
+        {
+            let faction = world
+                .players()
+                .find(|p| p.id == entity.owner)
+                .map_or(DefId(0), |p| p.faction);
+            let label = |id| {
+                world.entity(id).map_or_else(
+                    || "City lost".into(),
+                    |e| format!("{} {}", rules.display_name(e.type_id, faction), e.id.0),
+                )
+            };
+            return vec![
+                format!("Route: {} → {}", label(route.home), label(route.target)),
+                format!("+{} per trip", route.per_trip_income),
+            ];
+        }
+        return vec!["No route".into()];
+    }
+    Vec::new()
+}
+
 /// Reads stock, effective income per configured income period, caps and active research.
 pub fn snapshot_of(world: &World) -> HudSnapshot {
     let rules = world.rules();
@@ -243,6 +314,19 @@ pub fn snapshot_of(world: &World) -> HudSnapshot {
     };
     let Some(player) = world.players().find(|p| p.id == PlayerId(1)) else {
         return result;
+    };
+    result.wealth = rom_render::HudWealth {
+        relics: world
+            .entities()
+            .filter(|e| e.owner == player.id && rules.entity_types[&e.type_id].keeper.is_some())
+            .map(|e| world.kept_nodes(e.id).count())
+            .sum(),
+        routes: world.trade_routes(player.id).count(),
+        limit: caravan_limit(world, player.id),
+        per_trip: world
+            .trade_routes(player.id)
+            .map(|r| r.per_trip_income)
+            .sum(),
     };
     let sources = player.active_sources();
     let ordinal = rules.ages[&player.age].ordinal;
