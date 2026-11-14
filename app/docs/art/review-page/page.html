@@ -1,0 +1,273 @@
+<title>Ascension Model Review</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a review sheet — one wide card per model (picture left, verdict right), overview first. */
+:root {
+  --bg: #eef0f2;
+  --surface: #ffffff;
+  --ink: #18202b;
+  --muted: #5b6573;
+  --line: #d5dae1;
+  --gold: #9a6d16;
+  --gold-soft: #f4ead3;
+  --ok: #2f7d4f;
+  --ok-soft: #e1f1e7;
+  --warn: #b0491f;
+  --warn-soft: #f8e4da;
+  --draft: #5b6573;
+  --draft-soft: #e7eaee;
+  --display: "Marcellus", Georgia, "Times New Roman", serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e141c; --surface: #16202b; --ink: #e6e9ee; --muted: #9aa5b3; --line: #2a3644;
+    --gold: #d9ab4f; --gold-soft: #2c2512; --ok: #6cc28f; --ok-soft: #15301f;
+    --warn: #ee8a5e; --warn-soft: #3a1f14; --draft: #9aa5b3; --draft-soft: #222c38;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e141c; --surface: #16202b; --ink: #e6e9ee; --muted: #9aa5b3; --line: #2a3644;
+  --gold: #d9ab4f; --gold-soft: #2c2512; --ok: #6cc28f; --ok-soft: #15301f;
+  --warn: #ee8a5e; --warn-soft: #3a1f14; --draft: #9aa5b3; --draft-soft: #222c38;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 64px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 28px; }
+header { display: grid; gap: 10px; }
+.eyebrow { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); font-weight: 600; }
+h1 { font-family: var(--display); font-weight: 400; font-size: clamp(30px, 5vw, 44px); margin: 0; line-height: 1.1; text-wrap: balance; }
+h2 { font-family: var(--display); font-weight: 400; font-size: 26px; margin: 0; text-wrap: balance; }
+.lead { max-width: 68ch; color: var(--muted); margin: 0; }
+code, .mono { font-family: var(--mono); font-size: .9em; }
+.how { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.how div { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-size: 14px; color: var(--muted); }
+.how strong { color: var(--ink); display: block; font-weight: 600; margin-bottom: 2px; }
+.tally { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font-size: 12px; font-weight: 600; letter-spacing: .04em; padding: 3px 10px; border-radius: 999px; background: var(--draft-soft); color: var(--draft); }
+.chip.approved { background: var(--ok-soft); color: var(--ok); }
+.chip.needs-work { background: var(--warn-soft); color: var(--warn); }
+.overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+figure { margin: 0; display: grid; gap: 6px; }
+figure img { width: 100%; border-radius: 6px; border: 1px solid var(--line); display: block; background: var(--line); }
+figcaption { font-size: 13px; color: var(--muted); }
+.model { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 20px; }
+.model[data-status="approved"] { border-color: var(--ok); }
+.model[data-status="needs-work"] { border-color: var(--warn); }
+@media (max-width: 860px) { .model { grid-template-columns: minmax(0, 1fr); } }
+.pic { display: grid; gap: 8px; min-width: 0; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tabs button, .status button, .save {
+  font: inherit; font-size: 13px; font-weight: 500; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+  padding: 5px 12px; border-radius: 6px; cursor: pointer;
+}
+.tabs button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+button:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.side { display: grid; gap: 14px; align-content: start; min-width: 0; }
+.idline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.idline .mono { font-size: 15px; color: var(--gold); font-weight: 500; }
+.copy { font: inherit; font-size: 12px; border: none; background: none; color: var(--muted); cursor: pointer; text-decoration: underline; padding: 0; }
+dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-size: 14px; }
+dt { color: var(--muted); }
+dd { margin: 0; font-variant-numeric: tabular-nums; }
+.status { display: flex; flex-wrap: wrap; gap: 6px; }
+.status button[aria-pressed="true"][data-v="draft"] { background: var(--draft-soft); color: var(--draft); border-color: var(--draft); }
+.status button[aria-pressed="true"][data-v="needs-work"] { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); }
+.status button[aria-pressed="true"][data-v="approved"] { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+label { font-size: 13px; font-weight: 600; }
+textarea { width: 100%; min-height: 110px; resize: vertical; font: inherit; font-size: 14px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.save { background: var(--gold); color: var(--surface); border-color: var(--gold); font-weight: 600; }
+.save:disabled { opacity: .5; cursor: default; }
+.state { font-size: 12px; color: var(--muted); }
+details { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 10px; }
+summary { cursor: pointer; font-size: 14px; font-weight: 500; }
+.tablewrap { overflow-x: auto; margin-top: 8px; }
+table { border-collapse: collapse; font-size: 13px; width: 100%; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; }
+td.p { font-family: var(--mono); font-size: 12px; color: var(--muted); word-break: break-word; min-width: 220px; }
+td .team { color: var(--gold); font-weight: 600; }
+.general { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 10px; }
+.offline { font-size: 13px; color: var(--warn); }
+@media (prefers-reduced-motion: no-preference) { .model { transition: border-color .2s; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Ascension · Rise of Man · review round __ROUND__ · __VERSION__</div>
+    <h1>Model review</h1>
+    <p class="lead">Buildings and units built from parts inside the game. Round __ROUND__ carries the look into the medieval age: stone, timber framing, slate and towers for every building, a new fort and smelter, medieval units, and the gunpowder units with firing motion. "Through the ages" shows each building's earlier looks beside the medieval one. Set a status for each model and write directions. Name a part as <code>model id/part</code>, for example <code>bld.temple@classical/roof</code>.</p>
+    <div class="tally" id="tally"></div>
+    <p class="offline" id="offline" hidden>Saving is not available in this view. Open the page signed in to claude.ai, or send your directions in chat using the model ids.</p>
+  </header>
+
+  <section class="how" aria-label="How to review">
+    <div><strong>Views</strong>Each sheet shows the game camera (60° tilt), front, side and a close view. "Parts" labels every named part; "Walking", "Attacking" and "Working" show a unit mid-motion.</div>
+    <div><strong>Status</strong>Draft (not reviewed), Needs work, or Approved. Approved models are locked in the game repository so later work cannot change them.</div>
+    <div><strong>Directions</strong>Say what to change in plain words: proportions, materials, colours, missing or extra parts. Most changes are data edits, back in the next round.</div>
+  </section>
+
+  <section class="overview" aria-label="Overview" id="overview"></section>
+
+  <h2 id="current-head">Round __ROUND__: to review</h2>
+  <div id="models" style="display:grid;gap:22px"></div>
+
+  <h2 id="earlier-head">Earlier rounds</h2>
+  <p class="lead" style="font-size:14px;margin-top:-18px">Round 2 (early buildings) is still open for your review here. Approved models are locked in the game repository; changing one of those needs your say.</p>
+  <div id="earlier" style="display:grid;gap:22px"></div>
+
+  <section class="general">
+    <h2>General directions</h2>
+    <p class="lead" style="font-size:14px">Anything that applies to every model: style, scale, team colour share, lighting, what the next round should cover.</p>
+    <label for="general-note">Directions for all models</label>
+    <textarea id="general-note" placeholder="For example: units should be larger; more team colour on roofs; warmer light."></textarea>
+    <div class="row"><button class="save" id="general-save" type="button">Save</button><span class="state" id="general-state"></span></div>
+  </section>
+</div>
+
+<script>
+const MODELS = __MODELS__;
+const OVERVIEW = __OVERVIEW__;
+const ROUND = "__ROUND__";
+const STATUSES = [["draft", "Draft"], ["needs-work", "Needs work"], ["approved", "Approved"]];
+const docId = (id) => id.replace(/[^a-z0-9]+/gi, "-");
+const state = {};
+let db = null;
+
+function el(tag, attrs = {}, kids = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "text") e.textContent = v; else if (k === "html") e.innerHTML = v; else e.setAttribute(k, v);
+  }
+  for (const k of [].concat(kids)) if (k) e.append(k);
+  return e;
+}
+
+function tally() {
+  const counts = { draft: 0, "needs-work": 0, approved: 0 };
+  const now = MODELS.filter((m) => String(m.round) === ROUND);
+  for (const m of now) counts[(state[m.id] && state[m.id].status) || "draft"]++;
+  const t = document.getElementById("tally");
+  t.replaceChildren(el("span", { class: "chip", text: `Round ${ROUND}: ${now.length} models` }),
+    ...STATUSES.map(([v, label]) => el("span", { class: "chip " + v, text: `${counts[v]} ${label.toLowerCase()}` })));
+}
+
+function render() {
+  const ov = document.getElementById("overview");
+  for (const [img, cap] of OVERVIEW) {
+    const fig = el("figure", {}, [el("img", { src: `img/${img}.jpg`, alt: cap.replace(/<[^>]+>/g, ""), loading: "lazy" }), el("figcaption", { html: cap })]);
+    ov.append(fig);
+  }
+  const current = document.getElementById("models");
+  const earlier = document.getElementById("earlier");
+  if (!MODELS.some((m) => String(m.round) !== ROUND)) { document.getElementById("earlier-head").hidden = true; earlier.hidden = true; }
+  for (const m of MODELS) {
+    const host = String(m.round) === ROUND ? current : earlier;
+    const card = el("article", { class: "model", id: "m-" + docId(m.id), "data-status": "draft" });
+    const img = el("img", { src: `img/${m.img}.jpg`, alt: `${m.name}, ${m.age}: game, front, side and close views`, loading: "lazy" });
+    const LABELS = { "": "Views", parts: "Parts", ages: "Through the ages", move: "Walking", attack: "Attacking", work: "Working" };
+    const tabs = ["", ...(m.poses || ["parts"])].map((p) => {
+      const b = el("button", { type: "button", "aria-pressed": p === "" ? "true" : "false", text: LABELS[p] || p });
+      b.onclick = () => { img.src = `img/${m.img}${p ? "-" + p : ""}.jpg`; tabs.forEach((t) => t.setAttribute("aria-pressed", t === b ? "true" : "false")); };
+      return b;
+    });
+    const pic = el("div", { class: "pic" }, [el("div", { class: "tabs" }, tabs), img]);
+
+    const copy = el("button", { class: "copy", type: "button", text: "copy id" });
+    copy.onclick = () => navigator.clipboard.writeText(m.id).then(() => { copy.textContent = "copied"; }, () => { copy.textContent = m.id; });
+    const head = el("div", { class: "idline" }, [el("h2", { text: `${m.name}` }), el("span", { class: "mono", text: m.id }), copy]);
+    const dl = el("dl", {}, [
+      el("dt", { text: "Age" }), el("dd", { text: m.age }),
+      el("dt", { text: "Triangles" }), el("dd", { text: `${m.near} near · ${m.far} far` }),
+      el("dt", { text: "Size (tiles)" }), el("dd", { text: `${m.size[0]} × ${m.size[2]} × ${m.size[1]} high` }),
+      el("dt", { text: "Parts" }), el("dd", { text: String(m.parts.length) }),
+      el("dt", { text: "Fingerprint" }), el("dd", { class: "mono", text: m.fp }),
+    ]);
+    const status = el("div", { class: "status", role: "group", "aria-label": "Status" });
+    const buttons = STATUSES.map(([v, label]) => {
+      const b = el("button", { type: "button", "data-v": v, "aria-pressed": v === "draft" ? "true" : "false", text: label });
+      b.onclick = () => setStatus(m.id, v);
+      status.append(b);
+      return b;
+    });
+    const noteId = "note-" + docId(m.id);
+    const note = el("textarea", { id: noteId, placeholder: `Directions for ${m.id}, e.g. "${m.id}/${m.parts[Math.min(3, m.parts.length - 1)].name}: …"` });
+    const save = el("button", { class: "save", type: "button", text: "Save directions" });
+    const st = el("span", { class: "state" });
+    save.onclick = () => saveNote(m.id, note.value);
+    const side = el("div", { class: "side" }, [head, dl, el("div", {}, [el("label", { text: "Status" })]), status,
+      el("label", { for: noteId, text: "Directions" }), note, el("div", { class: "row" }, [save, st])]);
+
+    const rows = m.parts.map((p) => el("tr", {}, [
+      el("td", { class: "mono", text: p.name }), el("td", { text: p.shape }), el("td", { text: p.material || "—" }),
+      el("td", { html: p.team ? '<span class="team">team</span>' : "" }), el("td", { class: "p", text: p.params + (p.attach ? ` attach=${p.attach}` : "") }),
+    ]));
+    const table = el("table", {}, [el("thead", {}, el("tr", {}, ["Part", "Shape", "Material", "Colour", "Settings"].map((h) => el("th", { text: h })))), el("tbody", {}, rows)]);
+    const details = el("details", {}, [el("summary", { text: `Part list (${m.parts.length})` }), el("div", { class: "tablewrap" }, table)]);
+
+    card.append(pic, side, details);
+    host.append(card);
+    m.ui = { card, buttons, note, st, save };
+  }
+}
+
+function paint(id) {
+  const m = MODELS.find((x) => x.id === id);
+  const s = state[id] || {};
+  const v = s.status || "draft";
+  m.ui.card.dataset.status = v;
+  m.ui.buttons.forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === v ? "true" : "false"));
+  if (document.activeElement !== m.ui.note && typeof s.note === "string") m.ui.note.value = s.note;
+  m.ui.st.textContent = s.updated ? "Saved " + new Date(s.updated).toLocaleString() : "";
+  tally();
+}
+
+async function write(id, patch) {
+  if (!db) { document.getElementById("offline").hidden = false; return false; }
+  const doc = { ...(state[id] || {}), ...patch, model: id, round: ROUND, updated: new Date().toISOString() };
+  state[id] = doc;
+  paint(id);
+  try { await db.collection("reviews").doc(docId(id)).set(doc); return true; }
+  catch (e) { const m = MODELS.find((x) => x.id === id); m.ui.st.textContent = "Not saved: " + (e && e.message ? e.message : "try again"); return false; }
+}
+const setStatus = (id, v) => write(id, { status: v });
+const saveNote = (id, text) => write(id, { note: text });
+
+async function boot() {
+  render();
+  tally();
+  const timer = setTimeout(() => { if (!db) document.getElementById("offline").hidden = false; }, 10000);
+  let handle = null;
+  try { handle = await window.claude?.use?.("db"); } catch (_) { handle = null; }
+  clearTimeout(timer);
+  if (!handle) { document.getElementById("offline").hidden = false; return; }
+  db = handle;
+  db.collection("reviews").onSnapshot((snap) => {
+    for (const d of snap.docs) { const data = d.data(); if (data && data.model) { state[data.model] = data; if (MODELS.some((m) => m.id === data.model)) paint(data.model); } }
+  }, () => { document.getElementById("offline").hidden = false; });
+  const gnote = document.getElementById("general-note");
+  const gstate = document.getElementById("general-state");
+  db.doc("general/round-" + ROUND).onSnapshot((d) => {
+    const data = d.exists ? d.data() : null;
+    if (data && document.activeElement !== gnote) gnote.value = data.note || "";
+    if (data && data.updated) gstate.textContent = "Saved " + new Date(data.updated).toLocaleString();
+  });
+  document.getElementById("general-save").onclick = async () => {
+    try { await db.doc("general/round-" + ROUND).set({ note: gnote.value, round: ROUND, updated: new Date().toISOString() }); }
+    catch (e) { gstate.textContent = "Not saved: " + (e && e.message ? e.message : "try again"); }
+  };
+}
+boot();
+</script>
