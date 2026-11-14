@@ -4850,4 +4850,225 @@ WITH v(e,a,m,mat) AS (VALUES
 INSERT INTO entity_visual(entity_type_id,age_id,mesh_id,material_id)
  SELECT e.id, a.id, m.id, mt.id FROM v JOIN def e ON e.key=v.e LEFT JOIN def a ON a.key=v.a
  JOIN def m ON m.key=v.m JOIN def mt ON mt.key=v.mat;
+
+-- ── medieval and gunpowder units (task 40) ──────────────────────────────
+-- Medieval units and the first gunpowder units in the style of the approved
+-- early units. Figures with `attack` 5 raise, aim and fire a long arm (or a
+-- crossbow), 6 a pistol; a part with `flash` shows only as the shot goes off, one
+-- with `recoil` kicks back; a floating hull with `heel` leans while under way.
+INSERT INTO def(kind,key,name) VALUES
+ ('material','mat.steel','Steel'),
+ ('material','mat.fur','Fur'),
+ ('material','mat.felt','Felt'),
+ ('material','mat.flash','Muzzle flash'),
+ ('material','mat.canvas','Canvas'),
+ ('mesh','mesh.pikeman_medieval','Pikeman'),
+ ('mesh','mesh.crossbowman_medieval','Crossbowman'),
+ ('mesh','mesh.light_cavalry_medieval','Light cavalryman'),
+ ('mesh','mesh.knight_medieval','Knight'),
+ ('mesh','mesh.trebuchet_medieval','Trebuchet'),
+ ('mesh','mesh.supply_wagon_medieval','Supply wagon'),
+ ('mesh','mesh.war_galley_medieval','War galley'),
+ ('mesh','mesh.musketeer_gunpowder','Musketeer'),
+ ('mesh','mesh.arquebusier_gunpowder','Arquebusier'),
+ ('mesh','mesh.hussar_gunpowder','Hussar'),
+ ('mesh','mesh.cuirassier_gunpowder','Cuirassier'),
+ ('mesh','mesh.bombard_gunpowder','Bombard'),
+ ('mesh','mesh.carrack_gunpowder','Carrack');
+WITH v(k,prog,params) AS (VALUES
+  ('mat.steel','metal','{"colour":"#b9bec6","colour_alt":"#7a7f88","scale":0.3}'),
+  ('mat.fur','plaster','{"colour":"#4a382a","colour_alt":"#2c2119","scale":0.18}'),
+  ('mat.felt','cloth','{"colour":"#3a332e","colour_alt":"#25201c","scale":0.2}'),
+  ('mat.flash','plaster','{"colour":"#ffeb8a","colour_alt":"#ffa424","scale":0.5}'),
+  ('mat.canvas','cloth','{"colour":"#ece4cf","colour_alt":"#c6bb9f","scale":0.3}'))
+INSERT INTO material(id,program,params) SELECT d.id, v.prog, v.params FROM v JOIN def d ON d.key=v.k;
+INSERT INTO mesh(id,generator,params,baked)
+ SELECT id, 'composed', '{}', 1 FROM def WHERE kind='mesh' AND key IN
+  ('mesh.pikeman_medieval','mesh.crossbowman_medieval','mesh.light_cavalry_medieval','mesh.knight_medieval','mesh.trebuchet_medieval','mesh.supply_wagon_medieval','mesh.war_galley_medieval','mesh.musketeer_gunpowder','mesh.arquebusier_gunpowder','mesh.hussar_gunpowder','mesh.cuirassier_gunpowder','mesh.bombard_gunpowder','mesh.carrack_gunpowder');
+WITH v(m,name,shape,mat,team,attach,params) AS (VALUES
+  -- the pikeman: a quilted coat, a broad-brimmed kettle helmet, a very long pike
+  ('mesh.pikeman_medieval','body','figure','mat.cloth',1,'','{"attack":1,"hold_right":10,"hold_left":28,"build":1.05}'),
+  ('mesh.pikeman_medieval','coat','box','mat.cloth',1,'body','{"y":0.26,"w":0.4,"d":0.28,"h":0.32,"taper":0.12,"tint":"#e6e0d6"}'),
+  ('mesh.pikeman_medieval','helmet','dome','mat.iron',0,'head','{"y":-0.14,"w":0.25,"h":0.15,"segments":8}'),
+  ('mesh.pikeman_medieval','brim','cylinder','mat.iron',0,'head','{"y":-0.13,"w":0.42,"h":0.025,"segments":8}'),
+  ('mesh.pikeman_medieval','pike','cylinder','mat.timber',0,'right_hand','{"y":-0.5,"w":0.035,"h":3,"segments":4}'),
+  ('mesh.pikeman_medieval','pike_tip','cone','mat.iron',0,'pike','{"y":3,"w":0.07,"h":0.2,"segments":4}'),
+  -- the crossbowman: an iron cap, a crossbow, a tall pavise of the owner's colour on the back
+  ('mesh.crossbowman_medieval','body','figure','mat.cloth',1,'','{"attack":5,"hold_right":20}'),
+  ('mesh.crossbowman_medieval','cap','dome','mat.iron',0,'head','{"y":-0.13,"w":0.25,"h":0.15,"segments":8}'),
+  ('mesh.crossbowman_medieval','stock','box','mat.timber',0,'right_hand','{"y":-0.16,"w":0.05,"d":0.06,"h":0.62}'),
+  ('mesh.crossbowman_medieval','prod','bow','mat.iron',0,'stock','{"y":0.42,"roll":90,"pitch":-90,"h":0.56,"bend":0.09,"w":0.03}'),
+  ('mesh.crossbowman_medieval','pavise','shield','mat.cloth',1,'back','{"y":-0.12,"z":-0.05,"yaw":180,"w":0.5,"h":0.82,"t":0.04,"boss":0,"rim":"#5a3d26"}'),
+  ('mesh.crossbowman_medieval','bolts','box','mat.leather',0,'body','{"x":0.2,"y":0.32,"z":0.02,"w":0.07,"d":0.12,"h":0.2}'),
+  -- the light cavalryman: a rider with a short bow and a quiver, a pointed cap, on a light
+  -- horse under a saddle cloth of the owner's colour
+  ('mesh.light_cavalry_medieval','beast','quadruped','mat.hide',0,'','{"pace":0.55,"stride":34,"tint":"#c49a72"}'),
+  ('mesh.light_cavalry_medieval','saddle_cloth','box','mat.cloth',1,'beast.rider','{"y":-0.09,"z":-0.02,"w":0.36,"d":0.5,"h":0.12}'),
+  ('mesh.light_cavalry_medieval','rider','figure','mat.cloth',1,'beast.rider','{"y":-0.4,"seat":1,"attack":3,"build":0.95}'),
+  ('mesh.light_cavalry_medieval','cap','cone','mat.felt',0,'rider.head','{"y":-0.1,"w":0.23,"h":0.24,"segments":6}'),
+  ('mesh.light_cavalry_medieval','cap_rim','cylinder','mat.fur',0,'rider.head','{"y":-0.12,"w":0.25,"h":0.05,"segments":8}'),
+  ('mesh.light_cavalry_medieval','bow','bow','mat.timber',0,'rider.left_hand','{"z":0.03,"h":0.68,"bend":0.14,"w":0.035}'),
+  ('mesh.light_cavalry_medieval','quiver','cylinder','mat.leather',0,'rider.back','{"x":0.06,"y":-0.28,"z":-0.03,"w":0.1,"h":0.42,"roll":-20,"segments":6,"far":0}'),
+  -- the knight: a full helm with a crest, a lance with a pennon, a heater shield, on a horse
+  -- in a caparison of the owner's colour
+  ('mesh.knight_medieval','beast','quadruped','mat.hide',0,'','{"pace":0.75,"stride":26,"tint":"#d8d2c8"}'),
+  ('mesh.knight_medieval','caparison','box','mat.cloth',1,'beast','{"y":0.36,"w":0.4,"d":1.08,"h":0.48,"taper":0.06}'),
+  ('mesh.knight_medieval','chanfron','box','mat.steel',0,'beast.head','{"y":-0.2,"z":-0.12,"w":0.13,"d":0.12,"h":0.24,"pitch":40,"far":0}'),
+  ('mesh.knight_medieval','rider','figure','mat.cloth',1,'beast.rider','{"y":-0.37,"seat":1,"attack":1,"build":1.1,"hold_left":25}'),
+  ('mesh.knight_medieval','armour','box','mat.steel',0,'rider','{"y":0.5,"w":0.37,"d":0.25,"h":0.27,"far":0}'),
+  ('mesh.knight_medieval','helm','cylinder','mat.steel',0,'rider.head','{"y":-0.17,"w":0.25,"h":0.25,"segments":8}'),
+  ('mesh.knight_medieval','visor','box','mat.felt',0,'rider.head','{"y":-0.07,"z":0.12,"w":0.17,"d":0.02,"h":0.025,"far":0}'),
+  ('mesh.knight_medieval','crest','box','mat.cloth',1,'rider.head','{"y":0.08,"w":0.04,"d":0.22,"h":0.12,"taper":0.3}'),
+  ('mesh.knight_medieval','lance','cylinder','mat.timber',0,'rider.right_hand','{"y":-0.7,"w":0.045,"h":2.4,"segments":4}'),
+  ('mesh.knight_medieval','lance_tip','cone','mat.steel',0,'lance','{"y":2.4,"w":0.07,"h":0.18,"segments":4}'),
+  ('mesh.knight_medieval','pennon','box','mat.cloth',1,'lance','{"y":1.95,"z":-0.14,"w":0.015,"d":0.26,"h":0.18}'),
+  ('mesh.knight_medieval','shield','shield','mat.cloth',1,'rider.left_hand','{"y":0.05,"z":0.07,"w":0.38,"h":0.48,"point":0.45,"t":0.04,"boss":0,"rim":"#c9ccd2"}'),
+  -- the trebuchet: a wheeled base, two tall A-frames, a long arm on the axle; attacking, the
+  -- arm swings up and over, its counterweight hanging free and the sling whipping round
+  ('mesh.trebuchet_medieval','beams','box','mat.oak',0,'','{"x":-0.36,"y":0.22,"w":0.14,"d":1.7,"h":0.14,"repeat":2,"dx":0.72}'),
+  ('mesh.trebuchet_medieval','ties','box','mat.oak',0,'','{"y":0.22,"z":-0.7,"w":0.86,"d":0.12,"h":0.12,"repeat":3,"dz":0.7,"far":0}'),
+  ('mesh.trebuchet_medieval','wheels_w','wheel','mat.oak',0,'','{"x":-0.5,"z":-0.6,"w":0.44,"t":0.08,"spokes":2,"segments":8,"repeat":2,"dz":1.2}'),
+  ('mesh.trebuchet_medieval','wheels_e','wheel','mat.oak',0,'','{"x":0.5,"z":-0.6,"w":0.44,"t":0.08,"spokes":2,"segments":8,"repeat":2,"dz":1.2}'),
+  ('mesh.trebuchet_medieval','legs_f','box','mat.oak',0,'','{"x":-0.36,"y":0.36,"z":0.6,"w":0.1,"d":0.1,"h":1.42,"pitch":-23,"repeat":2,"dx":0.72}'),
+  ('mesh.trebuchet_medieval','legs_b','box','mat.oak',0,'','{"x":-0.36,"y":0.36,"z":-0.6,"w":0.1,"d":0.1,"h":1.42,"pitch":23,"repeat":2,"dx":0.72,"far":0}'),
+  ('mesh.trebuchet_medieval','axle','box','mat.oak',0,'','{"y":1.64,"w":0.86,"d":0.12,"h":0.12,"far":0}'),
+  ('mesh.trebuchet_medieval','hub','box','mat.iron',0,'','{"y":1.7,"w":0.16,"d":0.16,"h":0.16,"strike":170}'),
+  ('mesh.trebuchet_medieval','arm','box','mat.sawn_timber',0,'hub','{"w":0.11,"d":0.11,"h":2.1,"pitch":-142}'),
+  ('mesh.trebuchet_medieval','short_arm','box','mat.sawn_timber',0,'hub','{"w":0.12,"d":0.12,"h":0.5,"pitch":40,"far":0}'),
+  ('mesh.trebuchet_medieval','hinge','box','mat.iron',0,'short_arm','{"y":0.5,"w":0.3,"d":0.06,"h":0.06,"pitch":-40,"strike":-170}'),
+  ('mesh.trebuchet_medieval','counterweight','box','mat.oak',0,'hinge','{"y":-0.48,"w":0.42,"d":0.4,"h":0.42,"taper":0.15}'),
+  ('mesh.trebuchet_medieval','weight_cloth','box','mat.cloth',1,'hinge','{"y":-0.4,"w":0.44,"d":0.42,"h":0.3,"far":0}'),
+  ('mesh.trebuchet_medieval','sling','cylinder','mat.thatch',0,'arm','{"y":2.06,"w":0.025,"h":0.5,"segments":3,"pitch":150,"strike":50,"far":0}'),
+  ('mesh.trebuchet_medieval','pouch','box','mat.leather',0,'sling','{"y":0.5,"w":0.12,"d":0.12,"h":0.1}'),
+  ('mesh.trebuchet_medieval','banner','banner','mat.cloth',1,'','{"x":0.44,"z":-0.8,"h":1.95,"fw":0.5,"fh":0.7}'),
+  ('mesh.trebuchet_medieval','pennons','box','mat.cloth',1,'','{"x":-0.36,"y":1.55,"z":0.12,"w":0.02,"d":0.34,"h":0.24,"repeat":2,"dx":0.72,"far":0}'),
+  -- the supply wagon: a covered four-wheeled wagon drawn by two oxen, its driver on the box
+  ('mesh.supply_wagon_medieval','ox_w','quadruped','mat.hide',0,'','{"x":-0.24,"z":0.82,"h":0.82,"l":1,"w":0.36,"pace":1.1,"stride":20,"tint":"#9a8270"}'),
+  ('mesh.supply_wagon_medieval','ox_e','quadruped','mat.hide',0,'','{"x":0.24,"z":0.82,"h":0.82,"l":1,"w":0.36,"pace":1.1,"stride":20,"tint":"#9a8270","far":0}'),
+  ('mesh.supply_wagon_medieval','yoke','box','mat.oak',0,'','{"y":0.72,"z":1.12,"w":0.86,"d":0.08,"h":0.08,"far":0}'),
+  ('mesh.supply_wagon_medieval','pole','box','mat.oak',0,'','{"y":0.42,"z":0.3,"w":0.06,"d":0.06,"h":0.95,"pitch":82,"far":0}'),
+  ('mesh.supply_wagon_medieval','bed','box','mat.sawn_timber',0,'','{"y":0.3,"z":-0.55,"w":0.78,"d":1.25,"h":0.28}'),
+  ('mesh.supply_wagon_medieval','wheels_w','wheel','mat.oak',0,'','{"x":-0.44,"z":-0.12,"w":0.5,"t":0.07,"spokes":1,"segments":8,"repeat":2,"dz":-0.9}'),
+  ('mesh.supply_wagon_medieval','wheels_e','wheel','mat.oak',0,'','{"x":0.44,"z":-0.12,"w":0.5,"t":0.07,"spokes":1,"segments":8,"repeat":2,"dz":-0.9}'),
+  ('mesh.supply_wagon_medieval','cover','cylinder','mat.canvas',0,'','{"y":0.62,"z":-1.15,"w":0.76,"h":1.1,"segments":10,"pitch":90,"bottom":1}'),
+  ('mesh.supply_wagon_medieval','bands','cylinder','mat.cloth',1,'','{"y":0.62,"z":-0.95,"w":0.8,"h":0.22,"segments":10,"pitch":90,"bottom":0,"repeat":2,"dz":0.5,"far":0}'),
+  ('mesh.supply_wagon_medieval','seat','box','mat.oak',0,'','{"y":0.58,"z":-0.02,"w":0.6,"d":0.22,"h":0.12,"far":0}'),
+  ('mesh.supply_wagon_medieval','driver','figure','mat.cloth',1,'','{"y":0.3,"z":0,"seat":1,"build":1.05,"far":0}'),
+  -- the war galley: a long hull riding the water with a bank of oars, a fighting castle at
+  -- bow and stern, a beak, a lateen sail of the owner's colour
+  ('mesh.war_galley_medieval','hull','hull','mat.timber',0,'','{"yaw":-90,"y":-0.08,"w":3.6,"d":0.8,"h":0.4,"sheer":0.26,"segments":10,"float":1,"tint":"#7a6a5c"}'),
+  ('mesh.war_galley_medieval','oars','oar_bank','mat.timber',0,'hull','{"y":0.3,"w":2.2,"count":7,"beam":0.82,"length":0.85,"drop":28}'),
+  ('mesh.war_galley_medieval','stripes','box','mat.cloth',1,'hull','{"y":0.27,"z":-0.41,"w":2.4,"d":0.05,"h":0.09,"repeat":2,"dz":0.82}'),
+  ('mesh.war_galley_medieval','deck','box','mat.sawn_timber',0,'hull','{"y":0.34,"w":2.8,"d":0.4,"h":0.05}'),
+  ('mesh.war_galley_medieval','forecastle','box','mat.sawn_timber',0,'hull','{"x":1.25,"y":0.38,"w":0.6,"d":0.62,"h":0.36}'),
+  ('mesh.war_galley_medieval','fore_merlons','crenellation','mat.sawn_timber',0,'hull','{"x":1.25,"y":0.74,"w":0.62,"d":0.64,"h":0.14,"t":0.05,"merlon":0.12,"ring":1,"far":0}'),
+  ('mesh.war_galley_medieval','sterncastle','box','mat.sawn_timber',0,'hull','{"x":-1.25,"y":0.38,"w":0.7,"d":0.66,"h":0.5}'),
+  ('mesh.war_galley_medieval','stern_merlons','crenellation','mat.sawn_timber',0,'hull','{"x":-1.25,"y":0.88,"w":0.72,"d":0.68,"h":0.14,"t":0.05,"merlon":0.12,"ring":1,"far":0}'),
+  ('mesh.war_galley_medieval','castle_trim','box','mat.cloth',1,'hull','{"x":-1.25,"y":0.74,"w":0.72,"d":0.68,"h":0.08}'),
+  ('mesh.war_galley_medieval','beak','box','mat.timber',0,'hull','{"x":1.55,"y":0.3,"w":0.08,"d":0.08,"h":0.7,"roll":78}'),
+  ('mesh.war_galley_medieval','mast','cylinder','mat.timber',0,'hull','{"x":0.3,"y":0.3,"w":0.07,"h":2,"segments":5}'),
+  ('mesh.war_galley_medieval','sail','sail','mat.cloth',1,'mast','{"y":0.35,"roll":28,"w":1.7,"h":1.5,"billow":0.14,"lateen":1}'),
+  ('mesh.war_galley_medieval','pennant','box','mat.cloth',1,'mast','{"y":2,"z":-0.15,"w":0.015,"d":0.3,"h":0.1}'),
+  -- the musketeer: a wide felt hat with a plume, a bandolier, a matchlock musket raised,
+  -- aimed and fired with a flash at the muzzle
+  ('mesh.musketeer_gunpowder','body','figure','mat.cloth',1,'','{"attack":5,"hold_right":14,"legs":"#4a3a30"}'),
+  ('mesh.musketeer_gunpowder','brim','cylinder','mat.felt',0,'head','{"y":-0.08,"w":0.42,"h":0.025,"segments":8,"far":0}'),
+  ('mesh.musketeer_gunpowder','crown','cylinder','mat.felt',0,'head','{"y":-0.07,"w":0.21,"h":0.14,"taper":0.15,"segments":6}'),
+  ('mesh.musketeer_gunpowder','plume','box','mat.canvas',0,'head','{"x":0.1,"y":-0.06,"z":-0.02,"w":0.06,"d":0.22,"h":0.07,"roll":-55,"far":0}'),
+  ('mesh.musketeer_gunpowder','stock','box','mat.timber',0,'right_hand','{"y":-0.3,"w":0.05,"d":0.08,"h":0.44,"far":0}'),
+  ('mesh.musketeer_gunpowder','barrel','cylinder','mat.iron',0,'stock','{"y":0.36,"w":0.035,"h":0.9,"segments":5}'),
+  ('mesh.musketeer_gunpowder','spark','cone','mat.flash',0,'barrel','{"y":0.9,"w":0.08,"h":0.08,"segments":3,"flash":1,"far":0}'),
+  ('mesh.musketeer_gunpowder','flash','cone','mat.flash',0,'spark','{"y":0.36,"w":0.34,"h":0.36,"segments":6,"pitch":180,"far":0}'),
+  -- the arquebusier: a combed steel morion, a breastplate, a lighter firearm with a flash
+  ('mesh.arquebusier_gunpowder','body','figure','mat.cloth',1,'','{"attack":5,"hold_right":10,"build":0.95,"legs":"#6a5444"}'),
+  ('mesh.arquebusier_gunpowder','breastplate','box','mat.steel',0,'body','{"y":0.5,"w":0.32,"d":0.22,"h":0.25,"taper":0.1,"far":0}'),
+  ('mesh.arquebusier_gunpowder','morion','dome','mat.steel',0,'head','{"y":-0.12,"w":0.25,"h":0.17,"segments":7}'),
+  ('mesh.arquebusier_gunpowder','comb','box','mat.steel',0,'head','{"y":-0.02,"w":0.025,"d":0.22,"h":0.12,"taper":0.2}'),
+  ('mesh.arquebusier_gunpowder','brim','box','mat.steel',0,'head','{"y":-0.115,"w":0.24,"d":0.44,"h":0.02,"far":0}'),
+  ('mesh.arquebusier_gunpowder','stock','box','mat.timber',0,'right_hand','{"y":-0.25,"w":0.045,"d":0.07,"h":0.36,"far":0}'),
+  ('mesh.arquebusier_gunpowder','barrel','cylinder','mat.iron',0,'stock','{"y":0.3,"w":0.03,"h":0.62,"segments":5}'),
+  ('mesh.arquebusier_gunpowder','spark','cone','mat.flash',0,'barrel','{"y":0.62,"w":0.08,"h":0.08,"segments":3,"flash":1,"far":0}'),
+  ('mesh.arquebusier_gunpowder','flash','cone','mat.flash',0,'spark','{"y":0.32,"w":0.32,"h":0.32,"segments":6,"pitch":180,"far":0}'),
+  -- the hussar: a rider in a fur cap with tall wings on his back and a sabre, on a light
+  -- horse under a saddle cloth of the owner's colour
+  ('mesh.hussar_gunpowder','beast','quadruped','mat.hide',0,'','{"pace":0.55,"stride":34,"tint":"#8a6448"}'),
+  ('mesh.hussar_gunpowder','saddle_cloth','box','mat.cloth',1,'beast.rider','{"y":-0.1,"z":-0.04,"w":0.38,"d":0.56,"h":0.14,"far":0}'),
+  ('mesh.hussar_gunpowder','rider','figure','mat.cloth',1,'beast.rider','{"y":-0.4,"seat":1,"build":0.95}'),
+  ('mesh.hussar_gunpowder','cap','cylinder','mat.fur',0,'rider.head','{"y":-0.12,"w":0.24,"h":0.24,"taper":0.08,"segments":8}'),
+  ('mesh.hussar_gunpowder','cap_bag','box','mat.cloth',1,'rider.head','{"x":0.06,"y":0.08,"z":-0.04,"w":0.08,"d":0.08,"h":0.12,"roll":-40,"far":0}'),
+  ('mesh.hussar_gunpowder','wings','bow','mat.canvas',0,'rider.back','{"x":-0.1,"y":0.42,"yaw":180,"h":1.05,"bend":0.2,"w":0.06,"string":"#e8e2d4","repeat":2,"dx":0.2}'),
+  ('mesh.hussar_gunpowder','sabre','box','mat.steel',0,'rider.right_hand','{"y":-0.04,"w":0.02,"d":0.055,"h":0.6,"pitch":8,"far":0}'),
+  ('mesh.hussar_gunpowder','hilt','box','mat.bronze',0,'rider.right_hand','{"y":-0.06,"w":0.1,"d":0.03,"h":0.03,"far":0}'),
+  -- the cuirassier: an armoured rider in a breastplate and a lobster-tailed helmet firing a
+  -- pistol, on a dark horse under a saddle cloth of the owner's colour
+  ('mesh.cuirassier_gunpowder','beast','quadruped','mat.hide',0,'','{"pace":0.72,"stride":26,"tint":"#5a463c"}'),
+  ('mesh.cuirassier_gunpowder','saddle_cloth','box','mat.cloth',1,'beast.rider','{"y":-0.1,"z":-0.04,"w":0.4,"d":0.6,"h":0.16}'),
+  ('mesh.cuirassier_gunpowder','holsters','box','mat.leather',0,'beast.rider','{"z":0.26,"y":-0.06,"w":0.42,"d":0.1,"h":0.14,"far":0}'),
+  ('mesh.cuirassier_gunpowder','rider','figure','mat.cloth',1,'beast.rider','{"y":-0.38,"seat":1,"attack":6,"hold_right":10,"build":1.1}'),
+  ('mesh.cuirassier_gunpowder','cuirass','box','mat.steel',0,'rider','{"y":0.46,"w":0.38,"d":0.26,"h":0.32,"taper":0.08}'),
+  ('mesh.cuirassier_gunpowder','helmet','dome','mat.steel',0,'rider.head','{"y":-0.14,"w":0.25,"h":0.17,"segments":8}'),
+  ('mesh.cuirassier_gunpowder','tail','box','mat.steel',0,'rider.head','{"y":-0.2,"z":-0.1,"w":0.18,"d":0.06,"h":0.12,"pitch":-30,"far":0}'),
+  ('mesh.cuirassier_gunpowder','visor','box','mat.steel',0,'rider.head','{"y":-0.13,"z":0.11,"w":0.04,"d":0.03,"h":0.12,"far":0}'),
+  ('mesh.cuirassier_gunpowder','grip','box','mat.timber',0,'rider.right_hand','{"y":-0.06,"w":0.04,"d":0.05,"h":0.12}'),
+  ('mesh.cuirassier_gunpowder','pistol','cylinder','mat.iron',0,'grip','{"y":0.06,"w":0.035,"h":0.32,"segments":5}'),
+  ('mesh.cuirassier_gunpowder','spark','cone','mat.flash',0,'pistol','{"y":0.32,"w":0.08,"h":0.08,"segments":3,"flash":1,"far":0}'),
+  ('mesh.cuirassier_gunpowder','flash','cone','mat.flash',0,'spark','{"y":0.28,"w":0.28,"h":0.28,"segments":6,"pitch":180,"far":0}'),
+  -- the bombard: a heavy short iron gun on a timber bed with truck wheels; firing, it kicks
+  -- back with a flash at the muzzle while its gunner works the linstock
+  ('mesh.bombard_gunpowder','bed','box','mat.oak',0,'','{"y":0.18,"w":0.62,"d":1.4,"h":0.24}'),
+  ('mesh.bombard_gunpowder','trucks_w','wheel','mat.oak',0,'','{"x":-0.36,"z":-0.45,"w":0.34,"t":0.1,"spokes":0,"segments":8,"repeat":2,"dz":0.9}'),
+  ('mesh.bombard_gunpowder','trucks_e','wheel','mat.oak',0,'','{"x":0.36,"z":-0.45,"w":0.34,"t":0.1,"spokes":0,"segments":8,"repeat":2,"dz":0.9}'),
+  ('mesh.bombard_gunpowder','cradle','box','mat.oak',0,'','{"y":0.42,"z":-0.1,"w":0.5,"d":1,"h":0.12}'),
+  ('mesh.bombard_gunpowder','barrel','cylinder','mat.iron',0,'','{"y":0.72,"z":-0.45,"w":0.48,"h":0.95,"taper":0.06,"segments":10,"pitch":84,"recoil":0.14,"tint":"#7a7e86"}'),
+  ('mesh.bombard_gunpowder','breech','dome','mat.iron',0,'barrel','{"y":0,"w":0.5,"h":0.18,"segments":10,"pitch":180,"tint":"#6a6e76","far":0}'),
+  ('mesh.bombard_gunpowder','hoops','cylinder','mat.iron',0,'barrel','{"y":0.25,"w":0.54,"h":0.08,"segments":10,"tint":"#5a5e66","far":0}'),
+  ('mesh.bombard_gunpowder','hoops_2','cylinder','mat.iron',0,'barrel','{"y":0.55,"w":0.52,"h":0.08,"segments":10,"tint":"#5a5e66","far":0}'),
+  ('mesh.bombard_gunpowder','muzzle','cylinder','mat.iron',0,'barrel','{"y":0.83,"w":0.56,"h":0.14,"segments":10,"tint":"#5a5e66"}'),
+  ('mesh.bombard_gunpowder','bore','cylinder','mat.felt',0,'barrel','{"y":0.95,"w":0.3,"h":0.03,"segments":8,"far":0}'),
+  ('mesh.bombard_gunpowder','spark','cone','mat.flash',0,'barrel','{"y":0.92,"w":0.08,"h":0.08,"segments":3,"flash":1,"far":0}'),
+  ('mesh.bombard_gunpowder','flash','cone','mat.flash',0,'spark','{"y":0.7,"w":0.8,"h":0.7,"segments":8,"pitch":180,"far":0}'),
+  ('mesh.bombard_gunpowder','lashing','box','mat.cloth',1,'','{"y":0.42,"z":0.25,"w":0.66,"d":0.16,"h":0.2}'),
+  ('mesh.bombard_gunpowder','skirt','box','mat.cloth',1,'','{"x":-0.32,"y":0.2,"w":0.02,"d":1.2,"h":0.2,"repeat":2,"dx":0.64}'),
+  ('mesh.bombard_gunpowder','gunner','figure','mat.cloth',1,'','{"x":-0.6,"z":-0.55,"hold_right":30,"far":0}'),
+  ('mesh.bombard_gunpowder','linstock','cylinder','mat.timber',0,'gunner.right_hand','{"y":-0.3,"w":0.03,"h":0.85,"segments":4,"far":0}'),
+  ('mesh.bombard_gunpowder','pennant','banner','mat.cloth',1,'','{"x":0.32,"z":-0.62,"h":1.2,"fw":0.3,"fh":0.36}'),
+  -- the carrack: a high-sided hull riding the water and heeling under way, a tall forecastle
+  -- and sterncastle, square sails of the owner's colour on the fore and main masts, a lateen
+  -- on the mizzen, a bowsprit
+  ('mesh.carrack_gunpowder','hull','hull','mat.timber',0,'','{"yaw":-90,"y":-0.12,"w":3.3,"d":1.1,"h":0.8,"sheer":0.35,"segments":10,"float":1,"heel":8,"tint":"#806a58"}'),
+  ('mesh.carrack_gunpowder','wale','box','mat.cloth',1,'hull','{"y":0.72,"z":-0.52,"w":2,"d":0.05,"h":0.08,"repeat":2,"dz":1.04}'),
+  ('mesh.carrack_gunpowder','deck','box','mat.sawn_timber',0,'hull','{"y":0.7,"w":2.4,"d":0.8,"h":0.05}'),
+  ('mesh.carrack_gunpowder','forecastle','box','mat.sawn_timber',0,'hull','{"x":1.05,"y":0.72,"w":0.75,"d":0.82,"h":0.48,"taper":0.08}'),
+  ('mesh.carrack_gunpowder','sterncastle','box','mat.sawn_timber',0,'hull','{"x":-1.12,"y":0.72,"w":0.85,"d":0.8,"h":0.82,"taper":0.06}'),
+  ('mesh.carrack_gunpowder','stern_trim','box','mat.cloth',1,'hull','{"x":-1.12,"y":1.47,"w":0.78,"d":0.76,"h":0.08}'),
+  ('mesh.carrack_gunpowder','fore_trim','box','mat.cloth',1,'hull','{"x":1.05,"y":1.13,"w":0.66,"d":0.75,"h":0.07}'),
+  ('mesh.carrack_gunpowder','bowsprit','cylinder','mat.timber',0,'hull','{"x":1.35,"y":1.05,"w":0.06,"h":0.9,"roll":62,"segments":4}'),
+  ('mesh.carrack_gunpowder','mainmast','cylinder','mat.timber',0,'hull','{"x":0.05,"y":0.7,"w":0.08,"h":2.35,"segments":5}'),
+  ('mesh.carrack_gunpowder','mainsail','sail','mat.cloth',1,'mainmast','{"y":0.75,"yaw":90,"w":1.25,"h":1.15,"billow":0.2}'),
+  ('mesh.carrack_gunpowder','topsail','sail','mat.canvas',0,'mainmast','{"y":1.95,"yaw":90,"w":0.75,"h":0.4,"billow":0.1,"far":0}'),
+  ('mesh.carrack_gunpowder','foremast','cylinder','mat.timber',0,'hull','{"x":0.95,"y":1.2,"w":0.07,"h":1.45,"segments":5}'),
+  ('mesh.carrack_gunpowder','foresail','sail','mat.cloth',1,'foremast','{"y":0.5,"yaw":90,"w":0.95,"h":0.9,"billow":0.16}'),
+  ('mesh.carrack_gunpowder','mizzen','cylinder','mat.timber',0,'hull','{"x":-0.95,"y":1.54,"w":0.06,"h":1.2,"segments":5}'),
+  ('mesh.carrack_gunpowder','mizzen_sail','sail','mat.canvas',0,'mizzen','{"y":0.15,"roll":28,"w":0.9,"h":0.85,"billow":0.1,"lateen":1}'),
+  ('mesh.carrack_gunpowder','flag','box','mat.cloth',1,'mainmast','{"y":2.3,"z":-0.18,"w":0.015,"d":0.34,"h":0.2,"far":0}'))
+INSERT INTO mesh_part(mesh_id,name,shape,material_id,team,attach,params)
+ SELECT m.id, v.name, v.shape, mt.id, v.team, v.attach, v.params
+ FROM v JOIN def m ON m.key=v.m LEFT JOIN def mt ON mt.key=v.mat;
+WITH v(e,a,m,mat) AS (VALUES
+  ('unit.pikeman','age.medieval','mesh.pikeman_medieval','mat.cloth'),
+  ('unit.crossbowman','age.medieval','mesh.crossbowman_medieval','mat.cloth'),
+  ('unit.light_cavalry','age.medieval','mesh.light_cavalry_medieval','mat.cloth'),
+  ('unit.knight','age.medieval','mesh.knight_medieval','mat.cloth'),
+  ('unit.trebuchet','age.medieval','mesh.trebuchet_medieval','mat.oak'),
+  ('unit.supply_wagon','age.medieval','mesh.supply_wagon_medieval','mat.oak'),
+  ('unit.war_galley','age.medieval','mesh.war_galley_medieval','mat.timber'),
+  ('unit.musketeer','age.gunpowder','mesh.musketeer_gunpowder','mat.cloth'),
+  ('unit.arquebusier','age.gunpowder','mesh.arquebusier_gunpowder','mat.cloth'),
+  ('unit.hussar','age.gunpowder','mesh.hussar_gunpowder','mat.cloth'),
+  ('unit.cuirassier','age.gunpowder','mesh.cuirassier_gunpowder','mat.cloth'),
+  ('unit.bombard','age.gunpowder','mesh.bombard_gunpowder','mat.oak'),
+  ('unit.carrack','age.gunpowder','mesh.carrack_gunpowder','mat.timber'))
+INSERT INTO entity_visual(entity_type_id,age_id,mesh_id,material_id)
+ SELECT e.id, a.id, m.id, mt.id FROM v JOIN def e ON e.key=v.e LEFT JOIN def a ON a.key=v.a
+ JOIN def m ON m.key=v.m JOIN def mt ON mt.key=v.mat;
 COMMIT;
