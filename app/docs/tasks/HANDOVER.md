@@ -75,8 +75,10 @@ card.
 ## Next cards (agreed direction, not yet written)
 
 1. **Task 43 — space tiers, ships seen from the planet, fire from orbit**
-   (`43-space-on-the-planet.md`, written; owner's request 2026-11-14 — confirm
-   the proposed design with the owner before starting). Includes the
+   (`43-space-on-the-planet.md`; design confirmed by the owner 2026-11-14:
+   starfaring = system view, expansion = star map, bombard from orbit by
+   right-clicking ground targets). Start it after task 42 is merged: both
+   touch `rom-app`. Includes the
    universe zoom bug below.
 2. **Task 44 — renderer: oil and glow.** Oil deposits (`ter.oil`) still read
    as dull dark ground and are drawn before the industrial age (task 41 made

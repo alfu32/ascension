@@ -26,7 +26,10 @@ Also open (HANDOVER.md, "Known open items"): in universe matches the age's
 view range does not widen the planet camera before fusion (`--age 8
 --zoom-out` frames like `--age 0`); fix it here.
 
-## Design (proposed by the orchestrator; confirm with the owner first)
+## Design (confirmed by the owner, 2026-11-14)
+
+The owner confirmed: **starfaring = system view, expansion = star map**, and
+**bombarding from orbit by right-clicking ground targets**.
 
 - **Three tiers.** `map_scale` gets `interplanetary` between `planetary` and
   `interstellar` (ranks 0, 1, 2). The camera cap follows the player's tier:
