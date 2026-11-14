@@ -72,6 +72,12 @@ card.
   the binary and the `cargo run` form, with Copy buttons (card item 4).
   Check that in the launcher screenshot; if missing, run a short follow-up.
 
+- **Task 43 — space tiers, ships from the planet, fire from orbit**, Codex,
+  started 2026-11-14 in `../rise-of-man-worktrees/43-space-on-the-planet`
+  (in parallel with 42; both touch `rom-app`). Result in
+  `../rise-of-man-worktrees/logs/43-result.md`. Review, check its
+  screenshots, run the gate, commit in the worktree, merge after 42, release.
+
 ## Next cards (agreed direction, not yet written)
 
 1. **Task 43 — space tiers, ships seen from the planet, fire from orbit**
