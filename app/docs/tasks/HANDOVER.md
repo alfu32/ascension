@@ -67,6 +67,10 @@ card.
   `../rise-of-man-worktrees/logs/42-result.md`. Review the diff and the
   launcher screenshot, run the gate, commit in the worktree, merge, bump the
   version, tag and push.
+  The card was sharpened after Codex started: the owner wants the launch
+  command formulated from the chosen options always visible, live, in both
+  the binary and the `cargo run` form, with Copy buttons (card item 4).
+  Check that in the launcher screenshot; if missing, run a short follow-up.
 
 ## Next cards (agreed direction, not yet written)
 

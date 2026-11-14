@@ -49,9 +49,16 @@ offers every option and launches the app** with them.
 3. **Presets** at the top: Play (universe), Play (single planet), Demo, Model
    gallery, One model, Bench. Choosing one fills the form; the owner can then
    change anything.
-4. **Command line.** Show the exact command line the form produces, live, with
-   a Copy button. Validate it with `args::parse` as the form changes and show
-   the error next to the Launch button (disabled while invalid).
+4. **Command line (owner's explicit request).** Always visible, in a fixed
+   panel beside or under the form: the exact launch command formulated from
+   the chosen options, updated live on every change, listing only options
+   that differ from their defaults. Show it in two forms, each with a Copy
+   button: the release binary
+   (`env -u WAYLAND_DISPLAY target/release/rise-of-man --sphere 256 …`) and
+   the cargo form (`cargo run --release -p rom-app -- --sphere 256 …`), with
+   arguments quoted for the shell where needed. Validate it with `args::parse`
+   as the form changes and show the error next to the Launch button (disabled
+   while invalid).
 5. **Launch.** Start the game as a separate process: the same executable with
    the form's arguments (`std::env::current_exe`). The launcher stays open, so
    several games can be started; show each started game's process id and
