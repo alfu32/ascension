@@ -296,8 +296,9 @@ pub fn faces_and_edges(tris: &[Tri]) -> (Vec<Value>, Vec<Value>) {
         let l = dot(n, n).sqrt().max(1e-12);
         n.map(|v| v / l)
     };
-    let mut edges: BTreeMap<(Key, Key), (usize, [f64; 3], [f64; 3], [f64; 3], bool)> =
-        BTreeMap::new();
+    // Per edge: faces met, its ends, the first face's normal, and whether it is a crease.
+    type Edge = (usize, [f64; 3], [f64; 3], [f64; 3], bool);
+    let mut edges: BTreeMap<(Key, Key), Edge> = BTreeMap::new();
     let mut order = Vec::new();
     let mut faces = Vec::with_capacity(tris.len());
     for (i, t) in tris.iter().enumerate() {

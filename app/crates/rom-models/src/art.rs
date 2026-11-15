@@ -62,11 +62,12 @@ fn bullets(text: &str, heading: &str) -> Vec<String> {
         }
         if let Some(rest) = line.strip_prefix("- ") {
             out.push(rest.trim().to_owned());
-        } else if line.starts_with("  ") && !line.trim().is_empty() {
-            if let Some(last) = out.last_mut() {
-                last.push(' ');
-                last.push_str(line.trim());
-            }
+        } else if line.starts_with("  ")
+            && !line.trim().is_empty()
+            && let Some(last) = out.last_mut()
+        {
+            last.push(' ');
+            last.push_str(line.trim());
         }
     }
     out

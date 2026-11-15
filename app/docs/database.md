@@ -1,14 +1,22 @@
 # Game database
 
-Files: [`../db/schema.sql`](../db/schema.sql) (90 tables, 4 views) and
+Files: [`../db/schema.sql`](../db/schema.sql) (90 tables, 4 views),
 [`../db/seed.sql`](../db/seed.sql) (the full generated content catalogue and hand-written
-world rules). Both load cleanly in SQLite ≥ 3.37:
+world rules) and the model files in [`../db/models/`](../db/models/) (one per building or
+unit model, task 55; see §10a and `docs/models-in-meshcraft.md`), which load after the seed:
+materials, shared sub-assemblies, then models. All load cleanly in SQLite ≥ 3.37:
 
 ```sh
 sqlite3 game.db < app/db/schema.sql && sqlite3 game.db < app/db/seed.sql
+cat app/db/models/materials.sql app/db/models/shared/*.sql \
+    $(ls app/db/models/*.sql | grep -v '/materials.sql$') | sqlite3 game.db
 sqlite3 game.db "PRAGMA foreign_key_check; SELECT * FROM lint_def_without_subtype; SELECT * FROM lint_unproducible;"
 # all three must print nothing
 ```
+
+`rom build-rules --schema db/schema.sql --seed db/seed.sql --out rules.db` does the same
+(the model files beside the seed, or `--models <dir>`) and refuses a database whose checks
+fail.
 
 ## How the database is used
 
@@ -392,6 +400,7 @@ knobs:
 | `shield` | `w` (diameter, or width with `h`), `h` (0: round), `t`, `boss`, `segments`, `point` (with `h`: the share of the height over which the sides close to a point at the bottom, a heater or kite shield); colour `rim`; centred on its origin, facing +z |
 | `bow` | `h`, `bend` (towards +z), `w` (stave thickness); colour `string`; held at its middle (the origin) |
 | `include` | `mesh` (key of another composed mesh), `scale`; its parts without a material take the include's |
+| `custom` | `file` (its triangles: a `.mesh` file under `assets/models/`, usually `<model id>/<part>.mesh`; format in `docs/models-in-meshcraft.md`); faces name their own material, colour and team flag, `-` taking the part's material (task 55) |
 
 Composed models move (task 39), as presentation only. Baking records the
 joints of the moving shapes: a figure's body, legs and arms (and one joint per
@@ -410,6 +419,17 @@ or knob once on stderr and skips it. Object programs for parts are
 `plaster`, `brick` (also ashlar), `timber`, `roof_tile`, `thatch`, `metal`,
 `cloth`, plus `stone` and the plain colour; their `colour`, `colour_alt` and
 `scale` work as for terrain materials.
+
+**Where the rows live (task 55).** Each composed model is its own file
+`db/models/<model id>.sql` (the `mesh` definition, its `mesh_part` rows and its
+`entity_visual` row), shared sub-assemblies are `db/models/shared/<mesh key>.sql`, and the
+materials only models wear are `db/models/materials.sql`. The files load after the seed
+(materials, shared, models; each group by file name), in `rom build-rules` and in the game,
+which embeds them (`rom-models`); the model definitions therefore take the last `def` ids.
+Moving the rows out of `seed.sql` kept every other row and id, and the same model rows by
+key. The shape `custom` was added to the kit for free-form parts made in Meshcraft. `rom
+model export`/`import` convert a model to and from a Meshcraft project
+(`docs/models-in-meshcraft.md`).
 
 `entity_visual` picks a model per entity type: the most specific row wins —
 a row of the owner's faction (or its nearest ancestor) before a row for every
@@ -452,10 +472,11 @@ the block so their references resolve during loading.
 row with `mode='research'`, then `modifier` rows for numbers and `tech_effect`
 rows for unlocks.
 
-**A new building or unit model**: a `def` (`kind='mesh'`) and `mesh` row with
-`generator='composed'`, its `mesh_part` rows, and an `entity_visual` row
-(entity type, age from which it applies, mesh, default material). Check it
-with `--model <id> --parts` and keep it within the budgets of
+**A new building or unit model**: a file `db/models/<model id>.sql` with a `def`
+(`kind='mesh'`) and `mesh` row with `generator='composed'`, its `mesh_part` rows, and an
+`entity_visual` row (entity type, age from which it applies, mesh, default material), in
+the style of the existing files (or made in Meshcraft and written by `rom model import`).
+Check it with `--model <id> --parts` and keep it within the budgets of
 `docs/art-direction.md`.
 
 **A new bonus of any origin**: only `modifier` rows. If it needs a stat that

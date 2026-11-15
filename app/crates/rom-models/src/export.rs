@@ -214,6 +214,9 @@ fn part_props(row: &PartRow, role: &str) -> Vec<(String, Prop)> {
     props
 }
 
+/// The footprint guide of a document: its size and the notes it carries.
+type Footprint = ([f64; 2], Vec<(String, Prop)>);
+
 /// Writes Meshcraft documents for one model or shared mesh.
 struct Writer<'a> {
     conn: &'a Connection,
@@ -266,7 +269,7 @@ impl<'a> Writer<'a> {
         inverse: &Frame,
     ) -> Vec<Tri> {
         let mut out = Vec::new();
-        for tri in mesh.indices[range].chunks_exact(3) {
+        for tri in mesh.indices[range].as_chunks::<3>().0 {
             let corners = [tri[0], tri[1], tri[2]].map(usize::from);
             let points = corners.map(|i| inverse.apply(mesh.positions[i].map(f64::from)));
             let colour = mesh.colors[corners[0]];
@@ -468,7 +471,7 @@ impl<'a> Writer<'a> {
         baked: &BakedModel,
         rows: &[PartRow],
         default_key: &str,
-        footprint: Option<([f64; 2], Vec<(String, Prop)>)>,
+        footprint: Option<Footprint>,
     ) -> Result<Value, ModelError> {
         let (mut children, far) = self.parts(spec, baked, rows, default_key, "part", "")?;
         let [lo, hi] = baked.bounds().map(|v| v.map(f64::from));

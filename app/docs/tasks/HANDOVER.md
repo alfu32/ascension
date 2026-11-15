@@ -49,8 +49,11 @@ pushed, tree clean). Read `CLAUDE.md` (it imports `AGENTS.md`), then
 
 ## Recipe: building the models of the next age (the game assets)
 
-Models are data, not files: every building and unit look is rows in
-`app/db/seed.sql` that the part kit in `rom-render` bakes before play. To
+Models are data: every building and unit look is rows in its own file
+`app/db/models/<model id>.sql` (task 55; shared sub-assemblies in
+`app/db/models/shared/`, materials in `app/db/models/materials.sql`) that the part kit in
+`rom-kit` bakes before play. The owner can also edit them in Meshcraft
+(`app/docs/models-in-meshcraft.md`: `rom model export`/`import`). To
 model a new age (next: gunpowder/enlightenment buildings, enlightenment
 units — card "early-modern looks"; then industrial … galactic):
 
@@ -69,8 +72,9 @@ units — card "early-modern looks"; then industrial … galactic):
      where a.key='age.<age>' group by e.class"
    ```
    plus every building of earlier ages for the restyles.
-3. **Write the rows** (append a section at the end of `seed.sql`, before
-   `COMMIT;`, in the same shape as the existing ones):
+3. **Write the rows**, one file per model in `app/db/models/` named by its model id, in
+   the same shape as the existing files (`rom model import` writes this style; a model
+   started in Meshcraft from `rom model export-all`'s starter file can be imported):
    - `def` rows (kind `mesh`, key `mesh.<thing>_<age>`) and `mesh` rows with
      `generator = 'composed'`;
    - `mesh_part` rows through a `WITH v(m,name,shape,mat,team,attach,params)`
@@ -78,17 +82,19 @@ units — card "early-modern looks"; then industrial … galactic):
      part or socket for anything that moves with it;
    - shared sub-assemblies (`mesh.house_*`, `mesh.silo`, `mesh.horse`,
      `mesh.trebuchet_frame` …) placed with `shape = 'include'`;
-   - new `material` rows when the era needs a new surface (programs are listed
-     in `rom-render/src/looks.rs`);
+   - new `material` rows in `app/db/models/materials.sql` when the era needs a new
+     surface (programs are listed in `rom-kit/src/material.rs`);
    - `entity_visual(entity_type_id, age_id, mesh_id, material_id)` rows: the
      most specific row (faction, then age) wins; an age row applies from that
      age until a later one.
    Shapes, knobs, sockets and motion knobs (`strike`, `recoil`, `flash`, hull
    `float`/`heel`, figure `attack`/`work` styles) are documented in
-   `docs/database.md` §10a. Add a kit shape in `rom-render/src/kit.rs` only
+   `docs/database.md` §10a. Add a kit shape in `rom-kit/src/kit.rs` only
    when no combination of existing shapes works (with bounds and triangle
-   tests). Task 40's agent generated its rows with a scratch Python script
-   that is not in the repository; the SQL is the source.
+   tests); a one-off form can also be a free-form `custom` part made in Meshcraft. The
+   model files are the source.
+   After writing them, regenerate the briefs and Meshcraft files
+   (`rom model export-all`) so the owner can open the new models.
 4. **Rules every model keeps:** footprint covered 85–95 %; budgets (buildings
    ≤ 1,500 near / ≤ 300 far, figures ≤ 300 / 80, mounted, siege, wagons and
    ships ≤ 800 / 160) — tests assert them; team colour 15–25 % except foot

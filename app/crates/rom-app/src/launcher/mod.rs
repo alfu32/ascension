@@ -2,6 +2,7 @@
 
 mod assets;
 mod form;
+mod models;
 mod ui;
 
 use std::collections::{BTreeMap, BTreeSet};

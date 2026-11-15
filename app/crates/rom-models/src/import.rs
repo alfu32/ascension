@@ -78,6 +78,9 @@ pub fn part_name(object: &str) -> String {
     if out.is_empty() { "part".into() } else { out }
 }
 
+/// Triangles in the model frame, each with its catalogue material name.
+type Triangles = Vec<([[f64; 3]; 3], Option<String>)>;
+
 /// One object of the file that becomes a part.
 struct Object {
     name: String,
@@ -85,7 +88,7 @@ struct Object {
     /// Its frame in the model frame (instance and definition frames composed).
     frame: Frame,
     /// Its triangles in the model frame, each with its catalogue material name.
-    tris: Vec<([[f64; 3]; 3], Option<String>)>,
+    tris: Triangles,
 }
 
 /// The parsed file.
@@ -93,7 +96,7 @@ struct Document {
     model: Option<String>,
     objects: Vec<Object>,
     /// Far versions by part name, triangles in the model frame.
-    far: BTreeMap<String, Vec<([[f64; 3]; 3], Option<String>)>>,
+    far: BTreeMap<String, Triangles>,
     problems: Vec<String>,
     warnings: Vec<String>,
 }
@@ -125,7 +128,7 @@ impl Reader<'_> {
         instance: &Map<String, Value>,
         outer: &Frame,
         depth: usize,
-        out: &mut Vec<([[f64; 3]; 3], Option<String>)>,
+        out: &mut Triangles,
         problems: &mut Vec<String>,
     ) {
         let Some(prototype) = self.prototypes.get(text(instance, "prototypeId")) else {

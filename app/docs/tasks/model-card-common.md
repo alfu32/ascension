@@ -5,7 +5,7 @@ Every model card (45 early modern, 46 industrial, 47 modern buildings,
 51 space age) follows these rules. Implementer: Codex (`gpt-6.1-sol`, high,
 full permissions: it opens windows and takes its own screenshots). Cards run
 **one at a time, in order**, each after the previous one is merged (they all
-add rows to `seed.sql` and may extend the part kit), and after task 43.
+add model files to `app/db/models/` and may extend the part kit), and after task 55.
 
 ## Read first
 
@@ -14,8 +14,14 @@ add rows to `seed.sql` and may extend the part kit), and after task 43.
 - `app/docs/tasks/HANDOVER.md` → "Recipe: building the models of the next
   age" — the step-by-step method. Follow it.
 - `app/docs/database.md` §10a (shapes, knobs, sockets, motion knobs).
-- `app/docs/tasks/40-medieval-models.md` and the medieval rows at the end of
-  `app/db/seed.sql` — the latest finished example of a whole era.
+- `app/docs/tasks/40-medieval-models.md` and its model files (`app/db/models/*@medieval.sql`)
+  — the latest finished example of a whole era.
+- `app/docs/models-in-meshcraft.md` — the model files, the `custom` shape, and the
+  Meshcraft round trip the owner uses. Each model is one file
+  `app/db/models/<model id>.sql` (new materials in `app/db/models/materials.sql`).
+- The brief of each model: `rom model export <model id>` writes `<model id>.md` (what it
+  does in the game, its era, signature, budgets) beside a Meshcraft file; the owner may
+  already have started some models from their starter files.
 - `app/docs/art/approved.toml` — locked models; never change them.
 - Look at what exists before adding: `--gallery all`, `--gallery units`,
   `--gallery <entity key>` (all looks of one building side by side).
@@ -56,6 +62,14 @@ Under `app/target/review<N>/` (N = the card's review round), 1600×900:
 - `gallery_<age>.png` and `_close` for each age of the card, `gallery_units`
   `_close`, and one in-match screenshot of a town in the card's age
   (`--sphere 192 --demo --seed 1 --age <ordinal>`).
+
+## Model files and briefs
+
+- Write each new look as its own file `app/db/models/<model id>.sql` (the style of the
+  existing files; `rom model import` writes the same style), never into `seed.sql`.
+- After the models are in, run `rom model export-all` (default `app/art/models/`, not in
+  git) so the briefs and Meshcraft files are regenerated, and check that every model of
+  the card's ages now exports as done, not as a starter.
 
 ## Tests
 
