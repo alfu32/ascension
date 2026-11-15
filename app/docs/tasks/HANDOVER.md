@@ -135,11 +135,8 @@ the reset, finishing them with Claude agents, or adding OpenAI credits.
 
 
 - **Task 42** (launcher) merged in 0.0.44.
-- **Task 43** — Codex (owner's choice), scheduled to start 2026-11-15 00:48
-  beside task 42 in `../rise-of-man-worktrees/43-space-on-the-planet`, prompt
-  `../rise-of-man-worktrees/logs/43-prompt.md`; it stays off `args.rs`,
-  `main.rs` and the launcher module. If the timer did not fire (session
-  closed), run it like task 42 with that prompt. Merge after 42.
+- **Task 43** merged in 0.0.45.
+- **Owner's order (2026-11-15): task 52, then task 53, and only then the model cards (44–51).**
 
 ## Next cards (written, queued, all Codex)
 
