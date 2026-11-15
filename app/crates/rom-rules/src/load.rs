@@ -200,6 +200,7 @@ fn load_age(conn: &Connection) -> Result<Vec<Age>, RulesError> {
             era: enum_value(row, "era", "age", &identity)?,
             map_scale: row.get("map_scale")?,
             view_range: row.get("view_range")?,
+            free_colonisation: row.get::<_, i64>("free_colonisation")? != 0,
         })
     })
 }

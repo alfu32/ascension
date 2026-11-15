@@ -981,6 +981,9 @@ pub struct Age {
     pub map_scale: String,
     /// The `view_range` column: largest ground half-width of the camera in milli-tiles, 0 = globe.
     pub view_range: i64,
+    /// The `free_colonisation` column: a player in this age (or later) may found a city anywhere
+    /// outside another player's territory.
+    pub free_colonisation: bool,
 }
 /// One `faction` row.
 #[derive(Debug, Clone)]

@@ -3,6 +3,9 @@
 use crate::{EntityId, Order, OrderStatus, Pos, World, movement::Walk};
 use std::collections::VecDeque;
 
+/// How far from a producer's footprint, in milli-tiles, a new unit may appear.
+const SPAWN_REACH: i64 = 10_000;
+
 impl World {
     pub(crate) fn advance_executor(&mut self, id: EntityId) {
         let e = self.entity(id).expect("executor");
@@ -176,10 +179,11 @@ impl World {
         let entity = self.entity(producer).expect("producer");
         let et = &self.rules.entity_types[&entity.type_id];
         let (across, down) = (et.footprint_w * 500 + 1, et.footprint_h * 500 + 1);
-        // Just outside the footprint's right, left, bottom or top edge; on a sphere
-        // the first of these always exists, across a face edge if need be.
+        let bounds = crate::construction::footprint(et, entity.pos);
+        // The gate side first: just outside the footprint's right, left, bottom or top edge;
+        // on a sphere the first of these always exists, across a face edge if need be.
         let geo = self.geo(entity.pos.body);
-        let pos = [(across, 0), (-across, 0), (0, down), (0, -down)]
+        let front = [(across, 0), (-across, 0), (0, down), (0, -down)]
             .into_iter()
             .map(|(dx, dy)| geo.offset(entity.pos, dx, dy).0)
             .find(|p| geo.contains(*p))
@@ -192,15 +196,26 @@ impl World {
                     ..entity.pos
                 }
             });
-        let launch = !self.systems().is_empty() && !self.can_stand(subject, entity.pos);
-        if launch
+        // A mover appears on the free tile its movement class can use nearest to the gate,
+        // around the whole footprint (water for ships), never stuck inside or on land.
+        let class = self.rules.entity_types[&subject]
+            .movement
+            .as_ref()
+            .map(|m| m.movement_class_id);
+        let beside = class
+            .and_then(|class| self.free_tile_beside(class, entity.pos, bounds, front, SPAWN_REACH));
+        // A craft that cannot stand beside the building but can stand in space lifts off.
+        let launch = beside.is_none()
+            && !self.systems().is_empty()
+            && !self.can_stand(subject, entity.pos)
             && self
                 .body_position(entity.pos.body)
-                .is_none_or(|space_pos| !self.can_stand(subject, space_pos))
-        {
-            order.status = OrderStatus::Blocked("no_spawn_space".into());
+                .is_some_and(|space_pos| self.can_stand(subject, space_pos));
+        if class.is_some() && beside.is_none() && !launch {
+            order.status = OrderStatus::Blocked("no_spawn_tile".into());
             return;
         }
+        let pos = beside.unwrap_or(front);
         if launch && !self.space_age(order.player) {
             order.status = OrderStatus::Blocked("space_age".into());
             return;

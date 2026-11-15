@@ -123,6 +123,8 @@ WITH v(k,r) AS (VALUES ('age.ancient',30000), ('age.classical',36000), ('age.med
   ('age.modern',70000), ('age.information',78000), ('age.automation',110000))
 UPDATE age SET view_range = (SELECT v.r FROM v JOIN def d ON d.key = v.k WHERE d.id = age.id)
  WHERE id IN (SELECT d.id FROM v JOIN def d ON d.key = v.k);
+-- Colonisation since the 1600s ignored national borders (owner decision, task 52).
+UPDATE age SET free_colonisation = 1 WHERE ordinal >= 4;
 
 INSERT INTO def(kind,key,name) VALUES
  ('resource','res.food','Food'), ('resource','res.timber','Timber'), ('resource','res.metal','Metal'),

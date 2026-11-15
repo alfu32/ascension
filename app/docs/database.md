@@ -524,9 +524,23 @@ the existing `trade_route` table is unchanged (save support is a later task).
 
 Every building with an `in_city_radius` row also has an `in_own_territory`
 row, including automated variants copied by the content generator. The
-first checks the building centre against the city's economic radius using
-unfolded cube-face distance. The second checks every footprint tile against
+first checks all four corners of the building footprint against the economic
+radius of one complete city using unfolded cube-face distance (task 52: it
+used to test only the centre, so a farm or mine could stand half outside the
+city that serves it). The second checks every footprint tile against
 the owner's national border. Economic radius growth never grants territory.
+
+**Free colonisation (task 52, owner decision).** `age.free_colonisation`
+(0/1, seed: ordinal 4 and later, the enlightenment age on) lets a player of
+that age found a **city** anywhere not inside another player's territory: the
+`in_own_territory` row of a city type then means "no footprint tile owned by
+another player", and the refusal is `InForeignTerritory`. Before the flag the
+rule is unchanged (own borders only, except the first city). Only city types
+change: every other building keeps `in_city_radius` and `in_own_territory`.
+City spacing, the city limit and every other row still apply. A construct
+order whose site is on another body than the builder is refused (`OtherBody`);
+the placement preview turns red when no selected builder stands on the site's
+body, and clicking says so. Carrying units across space is task 54.
 
 `resource.first_age_id` is a discovery gate. Terrain-to-resource associations
 come from existing `et_gather_site.resource_id`, `needs_node_terrain_id` and

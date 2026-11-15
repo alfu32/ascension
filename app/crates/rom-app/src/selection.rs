@@ -1451,7 +1451,26 @@ impl Controller {
         self.refresh_placement(world);
     }
 
+    /// Whether a selected builder of `def` stands on the body of `centre`, so it can walk there.
+    fn builder_can_reach(&self, world: &World, def: DefId, centre: Pos) -> bool {
+        let rules = world.rules();
+        self.own_selected(world).iter().any(|e| {
+            e.build_progress.is_none()
+                && e.pos.body == centre.body
+                && rules
+                    .production
+                    .get(&e.type_id)
+                    .into_iter()
+                    .flatten()
+                    .any(|row| row.mode == ProductionMode::Construct && row.product_def_id == def)
+        })
+    }
+
     fn refresh_placement(&mut self, world: &World) {
+        let reachable = self
+            .placement
+            .as_ref()
+            .and_then(|p| p.centre.map(|c| self.builder_can_reach(world, p.def, c)));
         let Some(p) = &mut self.placement else {
             return;
         };
@@ -1461,7 +1480,14 @@ impl Controller {
             || p.checked
                 .is_none_or(|at| world.tick() >= at + PLACEMENT_CHECK_TICKS);
         if let (true, true, Some(centre)) = (p.dirty || age_changed, due, p.centre) {
-            let result = placement_check(world, p.def, centre);
+            let result = placement_check(world, p.def, centre).and_then(|()| {
+                // A site no selected builder can walk to (another planet) is refused too.
+                if reachable == Some(false) {
+                    Err(SimError::OtherBody)
+                } else {
+                    Ok(())
+                }
+            });
             p.valid = Some(result.is_ok());
             p.dirty = false;
             p.checked = Some(world.tick());
@@ -1479,7 +1505,7 @@ impl Controller {
             ..at
         };
         let rules = world.rules().clone();
-        let mut builders: Vec<(u64, EntityId)> = self
+        let mut builders: Vec<(bool, u64, EntityId)> = self
             .own_selected(world)
             .iter()
             .filter(|e| e.build_progress.is_none())
@@ -1491,11 +1517,28 @@ impl Controller {
                     .flatten()
                     .any(|row| row.mode == ProductionMode::Construct && row.product_def_id == p.def)
             })
-            .map(|e| (distance(world, e.pos, centre), e.id))
+            .map(|e| {
+                (
+                    e.pos.body == centre.body,
+                    distance(world, e.pos, centre),
+                    e.id,
+                )
+            })
             .collect();
+        if builders.is_empty() {
+            self.say(world, "No selected builder can build this");
+            return;
+        }
+        // Builders on another body cannot walk to the site.
+        builders.retain(|(same_body, _, _)| *same_body);
+        let mut builders: Vec<(u64, EntityId)> =
+            builders.into_iter().map(|(_, d, id)| (d, id)).collect();
         builders.sort();
         let Some(&(_, first)) = builders.first() else {
-            self.say(world, "No selected builder can build this");
+            self.say(world, rejection_message(world, &SimError::OtherBody, None));
+            if let Some(active) = &mut self.placement {
+                active.valid = Some(false);
+            }
             return;
         };
         if !self.submit(
@@ -2021,6 +2064,8 @@ fn rejection_message(world: &World, error: &SimError, subject: Option<DefId>) ->
             format!("Deposit revealed in {}", world.rules().def(*age).name)
         }
         SimError::NotInOwnTerritory => "Outside your borders".into(),
+        SimError::InForeignTerritory => "Another nation's territory".into(),
+        SimError::OtherBody => "No selected builder can reach this site (another planet)".into(),
         SimError::NotInCityRadius => "Outside a city's economic radius".into(),
         SimError::CityLimit => "City limit reached".into(),
         SimError::Locked => subject.map_or("Needs a prerequisite".into(), |id| {
