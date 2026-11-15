@@ -64,6 +64,13 @@ move the eye can follow, never a cut.
    **Focus**: selecting a ship and pressing the focus key (or double-clicking
    its portrait) moves the camera to it at the right level; a "follow" toggle
    keeps it centred.
+3a. **Make it obvious.** The owner found double-click-to-enter on systems and
+   planets only by trying ("not obvious"). Hovering a system, planet or ship
+   highlights it and shows a tooltip naming it with the actions ("Double-click
+   or scroll in to enter", "Double-click to land the camera"); the cursor
+   changes over enterable objects; the help line at the bottom of the HUD
+   says how to move between levels; the first time a player reaches the
+   interplanetary and interstellar tiers, a short hint explains it.
 4. **Minimap and HUD follow the level**: the minimap shows the planet, the
    system or the star map you are in, with ship markers and the camera's view
    box; clicking it pans there. The level indicator shows where you are.
