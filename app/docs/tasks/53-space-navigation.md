@@ -19,7 +19,21 @@ Implementer: Claude (Opus: camera and input work is in the "hard" column).
   the focus point by panning and zooming in to another solar system would
   also solve landing on other planets and actually taking them in the view."
 
+Follow-up from the owner the same day: double-clicking a star system on the
+star map does enter it, but "I still can't see the ships in transit, I don't
+know where they are; navigating between star systems and focusing on other
+systems breaks the attention flow of the user." So: (a) ships in transit
+must be visible, and (b) every change of place must be a continuous camera
+move the eye can follow, never a cut.
+
 ## Design
+
+0. **No cuts; keep the user's attention.** Every change of level or place is
+   an animated camera flight (a short, eased move of focus, distance and
+   heading, interruptible by any input), so the player always sees where they
+   came from and where they arrive. The existing double-click on a system
+   becomes "fly into this system" (the same continuous zoom-in as below), and
+   double-click on a planet "fly down to this planet". The camera never jumps.
 
 1. **One camera, three planes.** The planet (cube-sphere surface), the star
    system (a flat plane around the star) and the star map (a flat plane of
@@ -41,7 +55,11 @@ Implementer: Claude (Opus: camera and input work is in the "hard" column).
 3. **Ships are always findable.** Ships are drawn at every level: models
    above a planet in orbit (task 43), models or icons on the system plane,
    icons on the star map, including ships **in transit along a route**
-   (moving along the lane). They can be selected at every level and given
+   (moving along the lane at their real progress, with a direction arrow and
+   the destination system highlighted; today they are drawn nowhere — find
+   out why first and report it). A ship ordered to another system stays
+   selectable for its whole journey, and its departure and arrival show in
+   the event line with a click-to-focus. They can be selected at every level and given
    orders there (move, orbit, travel to another system, bombard).
    **Focus**: selecting a ship and pressing the focus key (or double-clicking
    its portrait) moves the camera to it at the right level; a "follow" toggle
