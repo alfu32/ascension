@@ -286,11 +286,21 @@ integer arithmetic retains half-integer averages until the final division.
 The last unbuildable, sight-blocking ground terrain in style-row order follows
 highest elevation, while other land terrains follow an independent seamless
 3D moisture field, preferring the middle 60% of land elevations. Every start's
-3-tile disc stays clear. Missing per-player terrain is grown in the distance
-annulus scaled by `sqrt(tiles / 65,536)` (each radius capped at 40 tiles),
-with a minimum outer radius of 4 on small worlds to clear the protected disc,
-exchanging low-ranked global tiles to preserve coverage; on very small planets
-start guarantees can exceed the budget. Scattered sites scale a rolled flat
+3-tile disc stays clear. Per-player terrain is guaranteed twice around every
+start, and the guarantee is a tile count, not just one tile: `avg(clumps) ×
+avg(sizes)` tiles (within the planet's share per player) must exist in the
+ring `start_min_dist..start_max_dist`, and the same count again in the ring
+from `start_max_dist + 6` to 40 tiles (the city border radius), so expansion
+finds more. Ring distances are plain tiles and do not grow with the planet
+(task 52: they used to be scaled by `sqrt(tiles / 65,536)`, which put oil
+19–34 tiles from a start on a 256 planet, outside a city's 16-tile economic
+radius, so no well could be built). Seed values keep the near ring within the
+economic radius: forest 3–13 tiles, mountain 6–14, oil 8–14 (a mine needs the
+mountain tiles within 6 tiles of it for its slots). Missing tiles are grown
+from the clump already there, or a new patch when it is boxed in, exchanging
+low-ranked global tiles to preserve coverage; on very small planets start
+guarantees can exceed the budget. Seed coverage is forest 12 %, mountain 4 %
+of non-ice land (task 52, was 24 % and 7 %). Scattered sites scale a rolled flat
 count by the same area ratio, never below that flat count, and stay at least
 12 tiles apart on valid land. The loader reports nonzero `coverage_pct` on
 entity features or features outside `region_kind = 'planet'`. Flat generation

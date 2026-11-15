@@ -286,7 +286,7 @@ UPDATE map_style SET
   route_extra_pct=v.extra, star_map_radius=v.radius
  FROM v JOIN def d ON d.key=v.k WHERE map_style.id=d.id;
 WITH v(k,rk,p,c0,c1,s0,s1,d0,d1) AS (VALUES
-  ('ter.forest','planet','per_player',1,2,5,9,2,6), ('ter.mountain','planet','per_player',1,1,2,3,5,8),
+  ('ter.forest','planet','per_player',1,2,8,12,3,13), ('ter.mountain','planet','per_player',1,2,6,10,6,14),
   ('node.relics','planet','scattered',2,4,1,1,10,0),
   ('node.ore_planet','space','scattered',6,10,1,1,0,0), ('ter.nebula','space','scattered',2,3,6,12,0,0))
 INSERT INTO map_style_feature(map_style_id,feature_def_id,region_kind,pattern,clumps_min,clumps_max,size_min,size_max,start_min_dist,start_max_dist)
@@ -295,7 +295,7 @@ INSERT INTO map_style_feature(map_style_id,feature_def_id,region_kind,pattern,cl
  SELECT (SELECT id FROM def WHERE key='map.many_worlds'), feature_def_id, region_kind, pattern, clumps_min, clumps_max, size_min, size_max, start_min_dist, start_max_dist
  FROM map_style_feature WHERE map_style_id=(SELECT id FROM def WHERE key='map.one_world') ORDER BY id;
 
-WITH v(k,pct) AS (VALUES ('ter.forest',24), ('ter.mountain',7))
+WITH v(k,pct) AS (VALUES ('ter.forest',12), ('ter.mountain',4))
 UPDATE map_style_feature SET coverage_pct=v.pct
  FROM v JOIN def d ON d.key=v.k
  WHERE map_style_feature.feature_def_id=d.id AND region_kind='planet';

@@ -203,13 +203,14 @@ fn terrain_rows<'a>(rules: &'a Rules, map: &SpherePlanet) -> Vec<&'a rom_rules::
         .collect()
 }
 
+/// The ring a per-player terrain is guaranteed in: absolute tiles, at least outside the start disc.
 fn scaled_range(map: &SpherePlanet, row: &rom_rules::MapStyleFeature) -> (i64, i64) {
-    let radius = |d: i64| {
-        ((d * d * map.surface.len() as i64 / 65_536) as u64)
-            .isqrt()
-            .min(40) as i64
-    };
-    (radius(row.start_min_dist), radius(row.start_max_dist))
+    let max = row
+        .start_max_dist
+        .max(7)
+        .min(i64::from(map.surface.n) / 2)
+        .min(40);
+    (row.start_min_dist.min(max), max)
 }
 
 #[test]
@@ -608,6 +609,47 @@ fn cap_terrain_is_selected_by_reference() {
     for i in 0..map.surface.len() {
         if latitude_mdeg(map.surface.sphere_point(map.surface.tile(i))).abs() >= 75_000 {
             assert_eq!(map.terrain[i], alternate);
+        }
+    }
+}
+
+#[test]
+fn every_start_has_enough_of_each_resource_terrain_inside_a_citys_economic_radius() {
+    // A city's economic radius is 16 tiles; its border reaches 40. Oil, forest and mountain
+    // must be near enough for the first city and plentiful enough for the next.
+    let rules = rules();
+    for (n, players) in [(128, 4), (192, 2), (256, 2)] {
+        for seed in 0..6 {
+            let m = make(&rules, seed, n, players);
+            for row in terrain_rows(&rules, &m)
+                .into_iter()
+                .filter(|r| r.pattern == FeaturePattern::PerPlayer)
+            {
+                for (p, &start) in m.starts.iter().enumerate() {
+                    let within = |radius: i64| {
+                        m.terrain
+                            .iter()
+                            .enumerate()
+                            .filter(|&(i, &t)| {
+                                t == row.feature_def_id
+                                    && local_distance2(m.surface, start, m.surface.tile(i).into())
+                                        .is_some_and(|d| d <= (radius * 1000).pow(2))
+                            })
+                            .count()
+                    };
+                    let name = rules.key(row.feature_def_id);
+                    assert!(
+                        within(16) >= 7,
+                        "n={n} seed={seed} player {p}: {} tiles of {name} within 16 tiles",
+                        within(16)
+                    );
+                    assert!(
+                        within(40) >= 12,
+                        "n={n} seed={seed} player {p}: {} tiles of {name} within 40 tiles",
+                        within(40)
+                    );
+                }
+            }
         }
     }
 }

@@ -478,7 +478,8 @@ fn same_request_same_map_with_factions() {
 fn flat_generation_is_unchanged() {
     let mut r = rules();
     // Includes generated content and oil deposits; polar knobs still do not affect flat maps.
-    let expected = 0x1f501b11aab202d7;
+    // Re-pinned in task 52 when forest and mountain clumps grew and moved inside a city's reach.
+    let expected = 0x3391c8d91eaf13b2;
     assert_eq!(make(&r, "map.one_world", 1, 4, 256).hash(), expected);
     let style = r.id_of("map.one_world").unwrap();
     let knobs = r.map_styles.get_mut(&style).unwrap();
