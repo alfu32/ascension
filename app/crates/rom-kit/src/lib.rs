@@ -2,6 +2,7 @@
 //! into near and far vertex data before play. Plain Rust with no graphics library, so the
 //! renderer, the command-line tools and the model files share one bake and one fingerprint.
 
+pub mod custom;
 pub mod kit;
 pub mod material;
 pub mod models;

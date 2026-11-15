@@ -4871,6 +4871,7 @@ dependencies = [
  "gpui",
  "gpui-component",
  "rom-mapgen",
+ "rom-models",
  "rom-render",
  "rom-rules",
  "rom-sim",
@@ -4884,6 +4885,7 @@ version = "0.0.46"
 dependencies = [
  "rom-geo",
  "rom-mapgen",
+ "rom-models",
  "rom-rules",
  "rom-sim",
  "rusqlite",
@@ -4905,6 +4907,17 @@ dependencies = [
  "rom-rules",
  "rom-sim",
  "rusqlite",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "rom-models"
+version = "0.0.46"
+dependencies = [
+ "rom-kit",
+ "rom-rules",
+ "rusqlite",
+ "serde_json",
  "thiserror 2.0.21",
 ]
 

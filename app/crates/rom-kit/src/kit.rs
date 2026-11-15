@@ -5,6 +5,7 @@
 
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
+use crate::custom::FaceLook;
 use crate::models::{ModelMesh, PartSpec, Shape, TEAM_BIT};
 use crate::rig::{Activity, AttackStyle, BeastStyle, FigureStyle, Joint, Motion, Rig, WorkStyle};
 
@@ -560,8 +561,49 @@ pub fn paint(part: &PartSpec, p: &mut Painter<'_>, fine: bool) -> Vec<Socket> {
         Shape::Shield => shield(&k, p, fine),
         Shape::Bow => bow(&k, p, fine),
         Shape::Include => {}
+        Shape::Custom => custom(part, &k, p, fine),
     }
     Vec::new()
+}
+
+/// `custom`: the triangles of the part's `.mesh` file, each face in its slot's look.
+fn custom(part: &PartSpec, k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
+    let Some(paint) = &part.custom else {
+        return;
+    };
+    let lod = if fine {
+        &paint.mesh.near
+    } else {
+        &paint.mesh.far
+    };
+    let base = p.surface;
+    let tint = k.colour("tint", [1.0; 3]);
+    for face in &lod.faces {
+        let mut surface = match paint.looks.get(face.material as usize) {
+            Some(FaceLook::Material(m)) => Surface {
+                colour: std::array::from_fn(|i| m.colour[i] * tint[i]),
+                alt: std::array::from_fn(|i| m.colour_alt[i] * tint[i]),
+                program: m.program.id() as u8,
+                team: base.team,
+                scale: m.scale,
+            },
+            Some(FaceLook::Plain(rgb)) => Surface {
+                team: base.team,
+                ..Surface::plain(std::array::from_fn(|i| rgb[i] * tint[i]))
+            },
+            Some(FaceLook::Part) | None => base,
+        };
+        surface.team |= face.team;
+        p.surface = surface;
+        let corners = face.corners.map(|c| c as usize);
+        let points = corners.map(|c| lod.positions[c]);
+        let outward = corners
+            .iter()
+            .map(|&c| lod.normals[c])
+            .fold([0.0; 3], |a, n| [a[0] + n[0], a[1] + n[1], a[2] + n[2]]);
+        p.face(&points, outward);
+    }
+    p.surface = base;
 }
 
 /// `box`: a block, tapered or gabled, with openings.

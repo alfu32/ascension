@@ -7,6 +7,9 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use std::ops::Range;
+
+use crate::custom::CustomPaint;
 use crate::kit::{self, Painter, Place, Surface};
 use crate::material::MaterialLook;
 use crate::rig::{Activity, Motion, Rig};
@@ -79,6 +82,8 @@ pub enum Shape {
     Bow,
     /// Another composed mesh placed as a sub-assembly.
     Include,
+    /// Free-form triangles from a `.mesh` file (see [`crate::custom`]).
+    Custom,
 }
 
 /// Knobs every part understands: position, turn, lean (`roll` tips the top towards +x, then
@@ -96,7 +101,7 @@ pub const COMMON_COLOURS: &[&str] = &["tint"];
 
 impl Shape {
     /// Every shape, in a fixed order.
-    pub const ALL: [Shape; 25] = [
+    pub const ALL: [Shape; 26] = [
         Shape::Box,
         Shape::Plinth,
         Shape::GableRoof,
@@ -122,6 +127,7 @@ impl Shape {
         Shape::Shield,
         Shape::Bow,
         Shape::Include,
+        Shape::Custom,
     ];
 
     /// The shape a `mesh_part.shape` value names, if the renderer has it.
@@ -157,6 +163,7 @@ impl Shape {
             Shape::Shield => "shield",
             Shape::Bow => "bow",
             Shape::Include => "include",
+            Shape::Custom => "custom",
         }
     }
 
@@ -232,6 +239,7 @@ impl Shape {
             Shape::Shield => &["w", "h", "t", "boss", "segments", "point"],
             Shape::Bow => &["h", "bend", "w"],
             Shape::Include => &["scale"],
+            Shape::Custom => &[],
         }
     }
 
@@ -250,10 +258,11 @@ impl Shape {
         }
     }
 
-    /// Text knobs (resolved by the caller): only an include's `mesh`.
+    /// Text knobs (resolved by the caller): an include's `mesh`, a custom part's `file`.
     pub fn text_knobs(self) -> &'static [&'static str] {
         match self {
             Shape::Include => &["mesh"],
+            Shape::Custom => &["file"],
             _ => &[],
         }
     }
@@ -287,6 +296,8 @@ pub struct PartSpec {
     pub colours: BTreeMap<String, [f32; 3]>,
     /// The sub-assembly of an include.
     pub include: Option<Arc<ModelSpec>>,
+    /// The geometry of a custom part.
+    pub custom: Option<Arc<CustomPaint>>,
 }
 
 impl PartSpec {
@@ -301,6 +312,7 @@ impl PartSpec {
             knobs: BTreeMap::new(),
             colours: BTreeMap::new(),
             include: None,
+            custom: None,
         }
     }
 
@@ -399,6 +411,22 @@ pub struct PartInfo {
     pub triangles: usize,
 }
 
+/// Where one part of a model's own list sits and which triangles it baked (includes and
+/// every copy of a repeated part included), for exporting models part by part.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Placement {
+    /// The part's name.
+    pub name: String,
+    /// The frame of its first copy in the model frame.
+    pub place: Place,
+    /// The frame its own position and turn are given in: the model, a part or a socket.
+    pub anchor: Place,
+    /// Its range of [`ModelMesh::indices`] in the near version.
+    pub near: Range<usize>,
+    /// Its range of indices in the far version.
+    pub far: Range<usize>,
+}
+
 /// A model baked into its near and far versions.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct BakedModel {
@@ -412,6 +440,8 @@ pub struct BakedModel {
     pub warnings: Vec<String>,
     /// The joints the near and far versions move with.
     pub rig: Rig,
+    /// The model's own parts (not those inside includes), in row order.
+    pub placements: Vec<Placement>,
 }
 
 impl BakedModel {
@@ -477,6 +507,16 @@ pub fn bake_model(spec: &ModelSpec) -> BakedModel {
     near.emit(spec, Place::IDENTITY, "", 0, 0);
     let mut far = Bake::new(false);
     far.emit(spec, Place::IDENTITY, "", 0, 0);
+    let placements = near
+        .placed
+        .into_iter()
+        .zip(far.placed)
+        .map(|(n, f)| Placement {
+            near: n.near,
+            far: f.near,
+            ..n
+        })
+        .collect();
     let mut warnings = near.warnings;
     if far.rig != near.rig {
         warnings.push("the far version's joints differ from the near version's".into());
@@ -493,6 +533,7 @@ pub fn bake_model(spec: &ModelSpec) -> BakedModel {
         parts: near.parts,
         warnings,
         rig: near.rig,
+        placements,
     }
 }
 
@@ -506,6 +547,8 @@ struct Bake {
     record: bool,
     warnings: Vec<String>,
     rig: Rig,
+    /// Placements of the top-level parts (`far` unused: each bake fills `near`).
+    placed: Vec<Placement>,
 }
 
 /// Where parts can attach: placed parts by name and their sockets, each with its joint.
@@ -547,6 +590,7 @@ impl Bake {
             record: true,
             warnings: Vec::new(),
             rig: Rig::default(),
+            placed: Vec::new(),
         }
     }
 
@@ -709,6 +753,15 @@ impl Bake {
                         mesh.truncate(copy_start.0, copy_start.1);
                     }
                 }
+            }
+            if depth == 0 {
+                self.placed.push(Placement {
+                    name: part.name.clone(),
+                    place: place_of(0),
+                    anchor: parent,
+                    near: start.1..self.mesh.indices.len(),
+                    far: 0..0,
+                });
             }
             // Later parts attach to the first copy, even when the far version leaves the part out.
             anchors

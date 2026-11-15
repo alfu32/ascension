@@ -18,9 +18,21 @@ use crate::match_setup::default_factions;
 pub(crate) const SCHEMA: &str = include_str!("../../../db/schema.sql");
 pub(crate) const SEED: &str = include_str!("../../../db/seed.sql");
 
-/// Builds the rules from the embedded schema and seed.
+/// The model files built into the game (`db/models`, `assets/models`).
+pub fn model_files() -> &'static rom_models::ModelFiles {
+    static FILES: std::sync::OnceLock<rom_models::ModelFiles> = std::sync::OnceLock::new();
+    FILES.get_or_init(rom_models::ModelFiles::embedded)
+}
+
+/// The embedded seed followed by the embedded model files.
+pub fn seed_with_models() -> String {
+    model_files().seed_with_models(SEED)
+}
+
+/// Builds the rules from the embedded schema, seed and model files.
 pub fn load_rules() -> Result<Rules, String> {
-    let conn = build_rules_db(SCHEMA, SEED).map_err(|error| format!("building rules: {error}"))?;
+    let conn = build_rules_db(SCHEMA, &seed_with_models())
+        .map_err(|error| format!("building rules: {error}"))?;
     Rules::load(&conn).map_err(|error| format!("loading rules: {error}"))
 }
 

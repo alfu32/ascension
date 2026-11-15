@@ -1042,7 +1042,7 @@ mod tests {
                 let shape = PartShape::from_name(&part.shape).unwrap_or_else(|| {
                     panic!("{}/{}: shape {}", rules.key(*mesh), part.name, part.shape)
                 });
-                for key in crate::looks::parse_params(&part.params).keys() {
+                for key in rom_models::params::parse_params(&part.params).keys() {
                     let known = rom_render::models::COMMON_KNOBS.contains(&key.as_str())
                         || rom_render::models::COMMON_COLOURS.contains(&key.as_str())
                         || shape.knobs().contains(&key.as_str())
