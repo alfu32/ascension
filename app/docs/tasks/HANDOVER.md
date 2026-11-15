@@ -144,6 +144,7 @@ the reset, finishing them with Claude agents, or adding OpenAI credits.
 - **Task 43** merged in 0.0.45.
 - **Tasks 52 and 53** merged in 0.0.46 with the HUD fix that shows resource stocks and rates whole; playthrough hash re-pinned to 7da3b4dbff81ce7b.
 - **Task 56** merged in 0.0.47: realistic star systems, resource bodies that say what they hold.
+- **Task 55** merged in 0.0.48: models live in `app/db/models/`, Meshcraft export/import (`docs/models-in-meshcraft.md`).
 - **Owner's order (2026-11-15): task 52, then task 53, then task 56 (realistic star systems), then task 55 (Meshcraft export/import, so the owner can edit models himself), and only then the model cards (44–51). Task 54 (colonies) design confirmed; it follows 55 unless the owner reorders.**
 
 ## Next cards (written, queued, all Codex)
