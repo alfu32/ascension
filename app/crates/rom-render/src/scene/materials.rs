@@ -202,6 +202,7 @@ struct Placed {
     transform: Matrix,
     tint: f32,
     tile: u32,
+    hidden: bool,
 }
 
 /// The instances of one object chunk.
@@ -274,6 +275,15 @@ impl FeatureGpu {
         }
     }
 
+    /// Hides baked instances on unknown terrain without rebuilding them.
+    pub(super) fn conceal(&mut self, kinds: &[TileKind], hidden: &[TileKind]) {
+        for chunk in &mut self.chunks {
+            for placed in &mut chunk.placed {
+                placed.hidden = hidden.contains(&kinds[placed.tile as usize]);
+            }
+        }
+    }
+
     /// Fills the draw lists with the chunks `visible` accepts within reach of `eye`, then the
     /// crops of this frame.
     pub(super) fn prepare(&mut self, eye: [f32; 3], visible: &dyn Fn([f32; 3], f32) -> bool) {
@@ -289,7 +299,7 @@ impl FeatureGpu {
                 continue;
             }
             let near = distance - chunk.radius < OBJECT_NEAR_DISTANCE;
-            for placed in &chunk.placed {
+            for placed in chunk.placed.iter().filter(|p| !p.hidden) {
                 let e = placed.transform;
                 let lists = if near
                     && (e.m12 - eye[0]).powi(2)
@@ -381,7 +391,7 @@ impl FeatureGpu {
                         chunk
                             .placed
                             .iter()
-                            .filter(|p| usize::from(p.mesh) == index)
+                            .filter(|p| !p.hidden && usize::from(p.mesh) == index)
                             .map(|p| p.transform),
                     );
                 }
@@ -406,6 +416,7 @@ fn chunk_gpu(chunk: &FeatureChunk) -> ChunkGpu {
                 transform: matrix_of(&i.transform),
                 tint: i.transform[3],
                 tile: i.tile,
+                hidden: false,
             })
             .collect(),
     }

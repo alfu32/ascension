@@ -7,7 +7,7 @@ pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <f
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] \
 [--map-size <width>x<height>] [--sphere <n>] [--single-planet] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
 [--universe] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-hud] [--hud-scale <percent>] [--stats] \
-[--sun <orbit|fixed|night>] [--graticule <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
+[--sun <orbit|fixed|midnight>] [--graticule <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
 [--gallery <all|units|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
 [--model <model id>] [--parts] [--pose <idle|move|attack|work>] [--anim-time <seconds>] \
 [--gallery-manifest <file.json>]\n\n--sphere N builds a universe with home face size N (64..=512).\n--single-planet preserves an isolated sphere (16..=512; default 192).";
@@ -278,8 +278,12 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                 {
                     "orbit" => (false, false),
                     "fixed" => (true, false),
-                    "night" => (true, true),
-                    _ => return Err(format!("--sun expects orbit, fixed or night, got {text:?}")),
+                    "night" | "midnight" => (true, true),
+                    _ => {
+                        return Err(format!(
+                            "--sun expects orbit, fixed or midnight, got {text:?}"
+                        ));
+                    }
                 };
             }
             "--graticule" => {
@@ -568,6 +572,7 @@ mod tests {
         assert!(!o.sun_fixed && o.graticule);
         let o = parse(args(&["--sun", "night"])).unwrap();
         assert!(o.sun_fixed && o.sun_midnight);
+        assert_eq!(parse(args(&["--sun", "midnight"])).unwrap(), o);
         for bad in [["--sun", "still"], ["--graticule", "maybe"]] {
             assert!(parse(args(&bad)).is_err(), "{bad:?}");
         }

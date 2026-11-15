@@ -3,7 +3,7 @@
 // pattern size in tiles and `px` the width of a pixel in tiles there.
 // Program ids: 1 grass, 2 sand, 3 stone, 4 snow, 5 forest floor, 7 foliage, 8 bark, 9 crop;
 // on composed models also 10 plaster, 11 brick, 12 timber, 13 roof tile, 14 thatch, 15 metal,
-// 16 cloth (0 is a plain colour).
+// 16 cloth, 17 oil, 18 emissive (0 is a plain colour).
 uniform float time;
 
 // Grass: patches of two greens, tufts of blades, and gusts of wind sweeping across, turning
@@ -37,14 +37,27 @@ vec4 sandMaterial(vec3 p, vec3 a, vec3 b, float s, float px) {
 }
 
 // Rough stone: two tones of rock, coarse grain and darker hollows.
-vec4 stoneMaterial(vec3 p, vec3 a, vec3 b, float s, float px) {
+vec4 stoneMaterial(vec3 p, vec3 a, vec3 b, float s, float px, bool seep) {
     vec3 q = p / s;
     float body = fbm(q, 3, px / s);
     float fine = keep(6.0 / s, px);
     float grain = fine > 0.0 ? valueNoise(q * 6.0) : 0.5;
     vec3 colour = mix(b, a, smoothstep(0.22, 0.78, body));
     colour *= 1.0 + (grain - 0.5) * 0.3 * fine;
-    return vec4(colour, (body - 0.5) * 0.2 * s + (grain - 0.5) * 0.025 * fine);
+    float height = (body - 0.5) * 0.2 * s + (grain - 0.5) * 0.025 * fine;
+#ifdef LAND_MATERIALS
+    if (seep) {
+        float pool = smoothstep(0.3, 0.6, body);
+        // Pools suppress the grain and relief; vertex alpha carries smooth sky/sun gloss.
+        colour = mix(colour, b + vec3(fragColor.a), pool);
+        height = mix(height * 0.1, -0.02, pool);
+    }
+#endif
+    return vec4(colour, height);
+}
+
+vec4 stoneMaterial(vec3 p, vec3 a, vec3 b, float s, float px) {
+    return stoneMaterial(p, a, b, s, px, false);
 }
 
 // Snow and ice: soft drifts, blue in the hollows, a little sparkle.
@@ -92,7 +105,7 @@ vec4 cropMaterial(vec3 p, vec3 base, float s, float px) {
 vec4 landMaterial(int program, vec3 p, vec3 a, vec3 b, float s, float px) {
     if (program == 1) return grassMaterial(p, a, b, s, px);
     if (program == 2) return sandMaterial(p, a, b, s, px);
-    if (program == 3) return stoneMaterial(p, a, b, s, px);
+    if (program == 3 || program == 17) return stoneMaterial(p, a, b, s, px, program == 17);
     if (program == 4) return snowMaterial(p, a, b, s, px);
     if (program == 5) return forestFloorMaterial(p, a, b, s, px);
     return vec4(a, 0.0);
@@ -217,6 +230,7 @@ vec4 clothMaterial(vec3 p, vec2 uv, vec3 a, vec3 b, float s, float px) {
 // A part of a composed model by program id, `a` and `b` its two colours, `s` its pattern size.
 vec4 modelMaterial(int program, vec3 p, vec3 n, vec3 a, vec3 b, float s, float px) {
     vec2 uv = surfaceUV(p, n);
+    if (program == 18) return vec4(mix(b, a, 0.7), 0.0);
     if (program == 10) return plasterMaterial(p, uv, a, b, s, px);
     if (program == 11) return brickMaterial(p, uv, a, b, s, px);
     if (program == 12) return timberMaterial(p, uv, a, b, s, px);

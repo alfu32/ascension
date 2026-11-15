@@ -185,6 +185,8 @@ mod tests {
             ("thatch", Program::Thatch),
             ("metal", Program::Metal),
             ("cloth", Program::Cloth),
+            ("oil", Program::Oil),
+            ("emissive", Program::Emissive),
         ] {
             assert_eq!(Program::from_name(name), Some(program));
         }
