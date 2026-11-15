@@ -543,14 +543,24 @@ pub fn space_marks(
                     marks.push(dot(x, y, 5.0, [rgb[0], rgb[1], rgb[2], 255]));
                 }
                 BodyViewKind::Resource => {
-                    marks.push(MapMark::Ring(
-                        (cx, cy),
-                        placed.orbit * scale,
-                        [60, 72, 100, 255],
-                    ));
-                    marks.push(dot(x, y, 3.0, [170, 160, 140, 255]));
+                    // Moons and belt bodies carry no ring of their own; the belt gets one below.
+                    // Each is a dot in the colour of its resource.
+                    let rgb = space
+                        .resource_body(body.id)
+                        .map_or([170, 160, 140], |r| r.colour);
+                    marks.push(dot(x, y, 4.0, [rgb[0], rgb[1], rgb[2], 255]));
                 }
             }
+        }
+        let belt: Vec<f32> = zoom
+            .placed()
+            .iter()
+            .filter(|p| scene.bodies[p.body].kind == BodyViewKind::Resource && p.moon_of.is_none())
+            .map(|p| p.orbit)
+            .collect();
+        if !belt.is_empty() {
+            let mean = belt.iter().sum::<f32>() / belt.len() as f32;
+            marks.push(MapMark::Ring((cx, cy), mean * scale, [60, 72, 100, 255]));
         }
         if let Some(system) = zoom.system_id() {
             let outermost = scene.system_outermost(system);

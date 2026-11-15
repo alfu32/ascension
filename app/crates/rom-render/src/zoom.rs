@@ -28,7 +28,7 @@ pub const FADE_HALF: f32 = 0.3;
 /// Orbit distance in tiles below which the view counts as street level.
 pub const SURFACE_DISTANCE: f32 = 24.0;
 /// System camera distance at which the whole system fits the view, in system units.
-pub const SYSTEM_MAX_DISTANCE: f32 = 12_000.0;
+pub const SYSTEM_MAX_DISTANCE: f32 = 48_000.0;
 /// Star-map camera distance at the hand-over from the system frame, in map units.
 pub const MAP_MIN_DISTANCE: f32 = 5000.0;
 /// Star-map camera distance at which the whole map fits the view, in map units.

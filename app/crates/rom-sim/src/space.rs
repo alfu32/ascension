@@ -7,6 +7,28 @@ use crate::{
 use rom_rules::{BodyKind, ClaimMode, DefId, EntityClass, Layer, ProductionMode};
 use std::collections::{BTreeMap, BTreeSet};
 
+/// Who holds a resource body.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BodyClaim {
+    /// Nobody keeps station there.
+    Unclaimed,
+    /// One player, or allies, hold it and are paid.
+    Held(PlayerId),
+    /// Rivals keep station there at once; nobody is paid.
+    Contested,
+}
+
+/// The income of a presence resource body for one player.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BodyYield {
+    /// The base resource paid.
+    pub resource: DefId,
+    /// Amount per income period after the player's modifiers.
+    pub per_period: i64,
+    /// Length of the income period in ticks.
+    pub period_ticks: i64,
+}
+
 /// A ship absent from every surface until its route leg ends.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Transit {
@@ -680,6 +702,71 @@ impl World {
             self.space.transits_done += 1;
         }
     }
+    /// The players whose claim-tagged units keep station within a presence node's claim radius;
+    /// `None` when the entity is not a presence node.
+    fn presence_owners(&self, entity: &Entity) -> Option<BTreeSet<PlayerId>> {
+        let node = self.rules.entity_types[&entity.type_id]
+            .node
+            .as_ref()
+            .filter(|n| n.claim_mode == ClaimMode::Presence)?;
+        let tag = node.claim_tag_id?;
+        let radius = if node.claim_radius == 0 {
+            self.rules.constant("space.orbit_reach").expect("reach")
+        } else {
+            node.claim_radius
+        };
+        Some(
+            self.entities_in_radius(entity.pos, radius.clamp(0, i64::from(u32::MAX)) as u32)
+                .into_iter()
+                .filter_map(|id| self.entity(id))
+                .filter(|e| {
+                    e.owner != PlayerId(0)
+                        && e.build_progress.is_none()
+                        && self.rules.has_tag(e.type_id, tag)
+                })
+                .map(|e| e.owner)
+                .collect(),
+        )
+    }
+
+    /// Who holds a resource body now: nobody, one player, or rivals keeping station together.
+    pub fn body_claim(&self, body: BodyId) -> BodyClaim {
+        if let Some(owner) = self.space.claims.get(&body) {
+            return BodyClaim::Held(*owner);
+        }
+        let contested = self
+            .space
+            .markers
+            .get(&body)
+            .and_then(|m| self.entity(*m))
+            .and_then(|marker| self.presence_owners(marker))
+            .is_some_and(|owners| {
+                owners
+                    .iter()
+                    .any(|a| owners.iter().any(|b| self.enemies(*a, *b)))
+            });
+        if contested {
+            BodyClaim::Contested
+        } else {
+            BodyClaim::Unclaimed
+        }
+    }
+
+    /// What a presence resource body pays `player` per income period if it holds it: the node's
+    /// income after the player's modifiers, as the economy pays it. `None` for other bodies.
+    pub fn body_yield(&self, body: BodyId, player: PlayerId) -> Option<BodyYield> {
+        let marker = self.entity(*self.space.markers.get(&body)?)?;
+        let node = self.rules.entity_types[&marker.type_id]
+            .node
+            .as_ref()
+            .filter(|n| n.claim_mode == ClaimMode::Presence)?;
+        Some(BodyYield {
+            resource: node.resource_id,
+            per_period: self.stat_modified(player, node.resource_id, node.income),
+            period_ticks: self.rules.constant("economy.income_period_ticks")?,
+        })
+    }
+
     pub(crate) fn update_claims(&mut self) {
         let markers: Vec<_> = self
             .space
@@ -693,32 +780,9 @@ impl World {
                 self.space.claims.remove(&body);
                 continue;
             };
-            let Some(node) = self.rules.entity_types[&entity.type_id]
-                .node
-                .as_ref()
-                .filter(|n| n.claim_mode == ClaimMode::Presence)
-            else {
+            let Some(owners) = self.presence_owners(entity) else {
                 continue;
             };
-            let Some(tag) = node.claim_tag_id else {
-                continue;
-            };
-            let radius = if node.claim_radius == 0 {
-                self.rules.constant("space.orbit_reach").expect("reach")
-            } else {
-                node.claim_radius
-            };
-            let owners: BTreeSet<_> = self
-                .entities_in_radius(entity.pos, radius.clamp(0, i64::from(u32::MAX)) as u32)
-                .into_iter()
-                .filter_map(|id| self.entity(id))
-                .filter(|e| {
-                    e.owner != PlayerId(0)
-                        && e.build_progress.is_none()
-                        && self.rules.has_tag(e.type_id, tag)
-                })
-                .map(|e| e.owner)
-                .collect();
             if owners.is_empty() {
                 continue;
             }

@@ -45,7 +45,7 @@ pub use pathing::PathStats;
 pub use placement::CITY_SITE_RADIUS;
 pub use rng::SimRng;
 pub use scenario::Playthrough;
-pub use space::{Orbit, OrbitalShot, Transit};
+pub use space::{BodyClaim, BodyYield, Orbit, OrbitalShot, Transit};
 pub use surface::Surface;
 pub use universe::{BodyId, BodyInfo, PlanetSurface, RouteInfo, SystemInfo, UniverseSetup};
 pub use victory::{Elimination, MatchOptions, Outcome, PlayerStatus};

@@ -131,6 +131,47 @@ ship keeps orbiting and fires as targets pass within its footprint. A short
 beam uses the actual shot's target position. Surface weapons cannot hit an
 orbital ship; anti-space batteries remain a later task.
 
+### What a star system looks like (task 56)
+
+- **Orbits grow geometrically.** The generator spaces orbit slots from the
+  star outward, each 1.4 to 1.9 times the previous (seeded), the innermost
+  at about 1500 to 2000 system units. Habitable planets take the slots in
+  order of size, small ones near the star and large ones far out. The
+  simulation still lays the plane out within 240 tiles of the outermost
+  orbit, so the inner planets lie 35 to 90 tiles from the star.
+- **Belt and moons.** Resource bodies are either **moons** (about 40 %,
+  at most two per planet) or **belt bodies**. A moon lies 10 to 12 tiles
+  from its planet along the planet's orbit radius, at a fixed 0.6 degree from
+  its angle; belt bodies share one slot's orbit with a spread of one sixth of
+  its radius, and every belt body keeps at least 1.4 degrees from any other
+  body's angle. The renderer tells a moon from its angle and radius alone (no
+  parent column exists); claim range (3 tiles) never reaches a neighbour.
+  Every home system gets the same planets, belt slot and moons; only the
+  radii and angles differ.
+- **Proportions in the system view.** The disc holds 12 000 system units;
+  the star is 600 and a median planet 300 units in radius (a thirtieth to a
+  fiftieth of the disc, instead of a tenth). Orbit radii keep their ratios
+  (linear map from the generator's units to the frame). A moon is drawn on a
+  small ring about its planet, a few planet radii away, not at its true
+  distance. Every body is at least 2.5 pixels in radius on screen and wears
+  a soft halo below 6 pixels, so it can still be seen, hovered and
+  double-clicked. Orbit rings are faint one-pixel lines: one per planet, one
+  small ring per moon, one through the middle of the belt.
+- **Zoom.** The planet-to-system hand-over is unchanged (the planet is drawn
+  with `HOME_PLANET_RADIUS`); the whole system now fits at 48 000 units of
+  camera distance, four times as far, which adds about 1.4 to the log
+  distance (seven wheel steps in space), and the star map hand-over keeps
+  the system at the same size on the map.
+- **Resource bodies say what they hold.** Each is tinted with its resource's
+  colour, has the resource's HUD icon beside it at every zoom of the system
+  view and a coloured dot on the minimap. The tooltip reads
+  "Tar Moon · Oil +42 / 30 s" and "Unclaimed" / "Claimed by you" / "Claimed
+  by player N" / "Contested"; the yield is what `World::body_yield` reports
+  (the node's income with the player's modifiers, the same term the economy
+  pays), the state `World::body_claim`. The event line says "Tar Moon
+  claimed: Oil +42 / 30 s", "Tar Moon lost" or "Tar Moon contested", and the
+  card of a ship holding a claim says "Holds Tar Moon: Oil +42 / 30 s".
+
 ### Moving between levels (task 53)
 
 One orbit-style camera serves the planet, the star system and the star map:

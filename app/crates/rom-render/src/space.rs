@@ -20,6 +20,9 @@ use crate::zoom::Target;
 
 /// Radius of the ring ships hold around a body, in radii of that body, at one orbit reach.
 pub const CLUSTER_RADII: f32 = 1.9;
+/// Smallest body radius the cluster ring is reckoned from, in system units: small moons and
+/// asteroids still hold their ships clear of the body.
+pub const CLUSTER_MIN_RADIUS: f32 = 100.0;
 /// Smallest pick radius of a ship on screen, in pixels.
 const SHIP_PICK_PIXELS: f32 = 13.0;
 
@@ -55,6 +58,50 @@ pub struct ClaimView {
     pub owner: u8,
 }
 
+/// Who holds a resource body, as player one hears of it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClaimState {
+    /// Nobody keeps station there.
+    Unclaimed,
+    /// Player one, or an ally of player one, holds it and is paid.
+    Yours,
+    /// Another player holds it.
+    Other(u8),
+    /// Rivals keep station there together; nobody is paid.
+    Contested,
+}
+
+/// What a resource body holds and what it pays, as the simulation reports it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResourceBodyView {
+    /// The body.
+    pub body: u32,
+    /// Display name of the kind of body ("Tar Moon").
+    pub kind_name: String,
+    /// Display name of the resource it yields.
+    pub resource_name: String,
+    /// HUD atlas icon of the resource (`icons/res_...`).
+    pub icon: String,
+    /// The resource's colour, which tints the body and its marker.
+    pub colour: [u8; 3],
+    /// What holding it pays player one per income period, with player one's modifiers.
+    pub per_period: i64,
+    /// Length of the income period in game seconds.
+    pub period_secs: i64,
+    /// Who holds it.
+    pub claim: ClaimState,
+}
+
+impl ResourceBodyView {
+    /// "Oil +42 / 30 s": the resource and its yield.
+    pub fn yield_text(&self) -> String {
+        format!(
+            "{} +{} / {} s",
+            self.resource_name, self.per_period, self.period_secs
+        )
+    }
+}
+
 /// A ship between two systems.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TransitView {
@@ -83,6 +130,8 @@ pub struct SpaceSnapshot {
     pub ships: Vec<ShipView>,
     /// Claimed bodies of that system.
     pub claims: Vec<ClaimView>,
+    /// The resource bodies of that system with what they hold, ascending by body id.
+    pub resources: Vec<ResourceBodyView>,
     /// Ships in transit anywhere on the star map.
     pub transits: Vec<TransitView>,
     /// The systems the player knows, ascending ids; `None` before the first report (all shown).
@@ -90,6 +139,11 @@ pub struct SpaceSnapshot {
 }
 
 impl SpaceSnapshot {
+    /// What the resource body `id` holds, if it is listed.
+    pub fn resource_body(&self, id: u32) -> Option<&ResourceBodyView> {
+        self.resources.iter().find(|r| r.body == id)
+    }
+
     /// Whether the player knows system `id`: its bodies are drawn and named.
     pub fn knows(&self, id: u32) -> bool {
         self.known
@@ -109,7 +163,7 @@ pub fn ship_frame_pos(
     if let Some(body) = ship.body.and_then(|id| scene.body_index(id))
         && let Some(at) = placed.iter().find(|p| p.body == body)
     {
-        let step = at.radius * CLUSTER_RADII;
+        let step = at.radius.max(CLUSTER_MIN_RADIUS) * CLUSTER_RADII;
         return [
             at.pos[0] + ship.x * step,
             at.pos[1],
@@ -322,6 +376,7 @@ pub fn hover_help(
     loaded: Option<usize>,
     ships: bool,
     known: impl Fn(u32) -> bool,
+    resource: impl Fn(u32) -> Option<ResourceBodyView>,
 ) -> (String, String) {
     let send = if ships {
         " · right-click: send the selected ships"
@@ -361,16 +416,32 @@ pub fn hover_help(
                         format!("Double-click or scroll in to fly there and land the camera{send}")
                     },
                 ),
-                crate::universe::BodyViewKind::Resource => (
-                    format!("{} (resource body)", body.name),
-                    if ships {
-                        "Double-click to fly there · right-click: orbit and claim it".to_owned()
+                crate::universe::BodyViewKind::Resource => {
+                    let action = if ships {
+                        "Double-click to fly there · right-click: orbit and claim it"
                     } else {
-                        "Double-click to fly there · ships orbiting it claim it".to_owned()
-                    },
-                ),
+                        "Double-click to fly there · ships orbiting it claim it"
+                    };
+                    match resource(body.id) {
+                        Some(r) => (
+                            format!("{} · {}", r.kind_name, r.yield_text()),
+                            format!("{} · {action}", claim_text(r.claim)),
+                        ),
+                        None => (format!("{} (resource body)", body.name), action.to_owned()),
+                    }
+                }
             }
         }
+    }
+}
+
+/// The claim state in words for the tooltip.
+pub fn claim_text(claim: ClaimState) -> String {
+    match claim {
+        ClaimState::Unclaimed => "Unclaimed".to_owned(),
+        ClaimState::Yours => "Claimed by you".to_owned(),
+        ClaimState::Other(player) => format!("Claimed by player {player}"),
+        ClaimState::Contested => "Contested".to_owned(),
     }
 }
 
@@ -432,7 +503,7 @@ pub fn claim_rings(
             Some(ClaimRing {
                 body: claim.body,
                 centre: at.pos,
-                radius: at.radius * CLUSTER_RADII * 1.2,
+                radius: at.radius.max(CLUSTER_MIN_RADIUS) * CLUSTER_RADII * 1.2,
                 colour: [r, g, b].map(|c| (c * 255.0).round() as u8),
             })
         })
@@ -869,6 +940,7 @@ mod tests {
             None,
             true,
             |_| true,
+            |_| None,
         );
         assert_eq!(name, "S2 (star system)");
         assert!(action.contains("Double-click or scroll in to enter"));
@@ -879,6 +951,7 @@ mod tests {
             Some(1),
             false,
             |_| true,
+            |_| None,
         );
         assert_eq!(name, "B2 (planet)");
         assert!(action.contains("land the camera") && !action.contains("send"));
@@ -888,6 +961,7 @@ mod tests {
             Some(1),
             false,
             |_| true,
+            |_| None,
         );
         assert!(action.contains("fly there and land"));
         let (name, _) = hover_help(
@@ -896,10 +970,11 @@ mod tests {
             None,
             false,
             |_| true,
+            |_| None,
         );
         assert!(name.contains("resource body"));
         assert_eq!(
-            hover_help(&scene, SpaceHover::Ship(9), None, false, |_| true).0,
+            hover_help(&scene, SpaceHover::Ship(9), None, false, |_| true, |_| None).0,
             "Ship"
         );
         let (name, action) = hover_help(
@@ -908,9 +983,41 @@ mod tests {
             None,
             false,
             |id| id != 2,
+            |_| None,
         );
         assert_eq!(name, "S2 (unexplored)");
         assert!(action.contains("Send a ship"));
+        // A listed resource body names its kind, resource, yield and claim state.
+        let listed = |claim| {
+            Some(ResourceBodyView {
+                body: 3,
+                kind_name: "Tar Moon".into(),
+                resource_name: "Oil".into(),
+                icon: "icons/res_oil".into(),
+                colour: [200, 160, 60],
+                per_period: 42,
+                period_secs: 30,
+                claim,
+            })
+        };
+        for (claim, words) in [
+            (ClaimState::Unclaimed, "Unclaimed"),
+            (ClaimState::Yours, "Claimed by you"),
+            (ClaimState::Other(2), "Claimed by player 2"),
+            (ClaimState::Contested, "Contested"),
+        ] {
+            let (name, action) = hover_help(
+                &scene,
+                SpaceHover::Target(Target::Body(2)),
+                None,
+                true,
+                |_| true,
+                |id| listed(claim).filter(|r| r.body == id),
+            );
+            assert_eq!(name, "Tar Moon · Oil +42 / 30 s");
+            assert!(action.starts_with(words), "{action}");
+            assert!(action.contains("orbit and claim it"));
+        }
         assert!(level_help(Level::Globe, Level::Globe).is_none());
         assert!(
             level_help(Level::Globe, Level::System)
@@ -970,7 +1077,7 @@ mod tests {
             .unwrap();
         let held = ship_frame_pos(&scene, &placed, outermost, &ship(10, Some(3), 1.0, 0.0));
         let distance = (held[0] - body.pos[0]).hypot(held[2] - body.pos[2]);
-        assert!((distance - body.radius * CLUSTER_RADII).abs() < 1e-2);
+        assert!((distance - body.radius.max(CLUSTER_MIN_RADIUS) * CLUSTER_RADII).abs() < 1e-2);
         // A free ship at the orbit radius of body 3 is on that body's orbit ring.
         let orbit = f32::from(2000_u16);
         let free = ship_frame_pos(&scene, &placed, outermost, &ship(11, None, orbit, 0.0));

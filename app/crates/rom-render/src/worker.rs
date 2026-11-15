@@ -1073,12 +1073,17 @@ fn render_loop(shared: &Shared) {
                 if let (Some((hover, (x, y))), Some(_)) = (pointing, zoom.pointer()) {
                     let ratio = size.0 as f32 / layout.0.max(1) as f32;
                     let ships = !hud_snapshot.selected.is_empty();
-                    let (name, action) =
-                        hover_help(zoom.scene(), hover, zoom.surface_body(), ships, |id| {
-                            space_snapshot.knows(id)
-                        });
+                    let (name, action) = hover_help(
+                        zoom.scene(),
+                        hover,
+                        zoom.surface_body(),
+                        ships,
+                        |id| space_snapshot.knows(id),
+                        |id| space_snapshot.resource_body(id).cloned(),
+                    );
                     for (row, text) in [name, action].into_iter().enumerate() {
                         scene.push_space_label(crate::scene::SpaceLabel {
+                            icon: None,
                             text,
                             x: (x + 18.0) * ratio,
                             y: (y + 28.0) * ratio + row as f32 * 17.0 * ratio,
@@ -1152,6 +1157,7 @@ fn render_loop(shared: &Shared) {
                             zoom.surface_body(),
                             !hud_snapshot.selected.is_empty(),
                             |id| space_snapshot.knows(id),
+                            |id| space_snapshot.resource_body(id).cloned(),
                         )),
                         None => level_help(zoom.level(), zoom.cap()),
                     });
@@ -1199,6 +1205,7 @@ fn render_loop(shared: &Shared) {
                     // The level indicator names where the camera is.
                     let view = hud_layout.rect(crate::hud_layout::Region::MinimapView);
                     let label = crate::scene::SpaceLabel {
+                        icon: None,
                         text: level_name(zoom),
                         x: view.x + 6.0 * hud_layout.scale,
                         y: view.y + 16.0 * hud_layout.scale,
@@ -1349,6 +1356,7 @@ fn review_tags(
                 && (0.0..cell.1 as f32).contains(&y)
             {
                 tags.push(crate::scene::SpaceLabel {
+                    icon: None,
                     text: label.text.clone(),
                     x: x + x0 as f32,
                     y: y + y0 as f32,
@@ -1370,6 +1378,7 @@ fn review_tags(
     for (index, view) in review.sheet.iter().enumerate() {
         let ((x, y), cell) = sheet_cell(index, count, size);
         tags.push(crate::scene::SpaceLabel {
+            icon: None,
             text: view.title.clone(),
             x: (x + cell.0 / 2) as f32,
             y: y as f32 + 26.0,

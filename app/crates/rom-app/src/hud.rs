@@ -15,6 +15,15 @@ pub(crate) fn resource_icon(rules: &Rules, id: DefId) -> String {
         .map_or("icons/help".into(), |(_, name)| format!("icons/res_{name}"))
 }
 
+/// The colour of a base resource for markers in space: presentation metadata keyed by the
+/// database abbreviation, like [`resource_icon`].
+pub(crate) fn resource_colour(rules: &Rules, id: DefId) -> [u8; 3] {
+    RESOURCE_COLOURS
+        .iter()
+        .find(|(abbr, _)| *abbr == rules.resources[&id].abbrev)
+        .map_or([190, 190, 200], |(_, rgb)| *rgb)
+}
+
 /// Public entity queues omit submissions awaiting their first tick; the controller
 /// supplies those locally until the queue becomes visible.
 pub(crate) fn button_state(world: &World, def: DefId, pending: bool) -> ButtonState {
@@ -223,6 +232,16 @@ pub(crate) fn research_overview(world: &World, pending: &[DefId]) -> ResearchOve
 }
 
 // Presentation metadata only, keyed by the database resource abbreviation.
+const RESOURCE_COLOURS: &[(&str, [u8; 3])] = &[
+    ("F", [120, 200, 80]),
+    ("T", [170, 115, 60]),
+    ("M", [175, 190, 210]),
+    ("W", [240, 205, 80]),
+    ("K", [130, 170, 245]),
+    ("O", [230, 140, 50]),
+    ("E", [90, 225, 240]),
+];
+
 const RESOURCE_ICONS: &[(&str, &str)] = &[
     ("F", "food"),
     ("T", "timber"),

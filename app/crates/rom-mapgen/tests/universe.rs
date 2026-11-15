@@ -410,3 +410,133 @@ fn invalid_universe_requests_are_errors() {
         Err(MapGenError::InvalidRequest(_))
     ));
 }
+
+/// Distance in simulation tiles between two bodies of one system, as the simulation lays the
+/// plane out (at most 240 tiles from the star to the outermost orbit).
+fn tiles_apart(a: &rom_mapgen::Body, b: &rom_mapgen::Body, scale: f64) -> f64 {
+    let at = |body: &rom_mapgen::Body| {
+        let angle = f64::from(body.orbit_angle_mdeg) / 1000.0_f64 * std::f64::consts::PI / 180.0;
+        let r = f64::from(body.orbit_radius);
+        (r * angle.cos(), r * angle.sin())
+    };
+    let (p, q) = (at(a), at(b));
+    ((p.0 - q.0).hypot(p.1 - q.1)) / scale
+}
+
+fn system_scale(bodies: &[&rom_mapgen::Body]) -> f64 {
+    let outer = bodies
+        .iter()
+        .map(|b| i64::from(b.orbit_radius))
+        .max()
+        .unwrap();
+    ((outer + 239) / 240).max(1) as f64
+}
+
+#[test]
+fn planet_orbits_grow_geometrically_with_size() {
+    let r = rules();
+    let mut checked = 0;
+    for seed in 0..40 {
+        let u = plan(&r, "map.many_worlds", seed, &FOUR);
+        for s in &u.systems {
+            let mut planets: Vec<_> = u
+                .bodies
+                .iter()
+                .filter(|b| b.system_id == s.id && b.kind == BodyKind::Habitable)
+                .collect();
+            planets.sort_by_key(|b| b.orbit_radius);
+            for pair in planets.windows(2) {
+                let ratio = f64::from(pair[1].orbit_radius) / f64::from(pair[0].orbit_radius);
+                // One orbit step is 1.4 to 1.9; a belt between two planets adds a second step.
+                assert!(
+                    (1.39..=3.7).contains(&ratio),
+                    "seed {seed} system {}: ratio {ratio}",
+                    s.id
+                );
+                // Small rocky worlds lie near the star, large ones far out.
+                assert!(pair[0].n <= pair[1].n, "seed {seed} system {}", s.id);
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked > 20);
+}
+
+#[test]
+fn resource_bodies_are_moons_or_belt_and_kept_clear_of_each_other() {
+    let r = rules();
+    let (mut moons, mut belts) = (0, 0);
+    for seed in 0..40 {
+        let u = plan(&r, "map.many_worlds", seed, &FOUR);
+        for s in &u.systems {
+            let bodies: Vec<_> = u.bodies.iter().filter(|b| b.system_id == s.id).collect();
+            let scale = system_scale(&bodies);
+            let planets: Vec<_> = bodies
+                .iter()
+                .filter(|b| b.kind == BodyKind::Habitable)
+                .collect();
+            let near = |a: i32, b: i32| {
+                let d = (a - b).rem_euclid(360_000);
+                d.min(360_000 - d)
+            };
+            let mut moons_of = std::collections::BTreeMap::<u32, u32>::new();
+            for body in bodies.iter().filter(|b| b.kind == BodyKind::Resource) {
+                let parent = planets
+                    .iter()
+                    .filter(|p| near(p.orbit_angle_mdeg, body.orbit_angle_mdeg) <= 1100)
+                    .min_by_key(|p| near(p.orbit_angle_mdeg, body.orbit_angle_mdeg));
+                match parent {
+                    Some(p) => {
+                        // A moon lies ten or more tiles from its planet, off its orbit radius.
+                        let apart = tiles_apart(body, p, scale);
+                        assert!(
+                            (9.5..=26.5).contains(&apart),
+                            "seed {seed}: moon {apart} tiles from its planet"
+                        );
+                        *moons_of.entry(p.id).or_default() += 1;
+                        moons += 1;
+                    }
+                    None => belts += 1,
+                }
+                // Every body keeps claim range (3 tiles) between it and any other body but its
+                // own planet, so a ship at one never holds another.
+                for other in bodies.iter().filter(|o| o.kind != BodyKind::Star) {
+                    if other.id == body.id || parent.is_some_and(|p| p.id == other.id) {
+                        continue;
+                    }
+                    assert!(
+                        tiles_apart(body, other, scale) > 3.0,
+                        "seed {seed} system {}: bodies {} and {} crowd",
+                        s.id,
+                        body.id,
+                        other.id
+                    );
+                }
+            }
+            assert!(moons_of.values().all(|&n| n <= 2), "seed {seed}");
+        }
+    }
+    assert!(moons > 10 && belts > 10, "moons {moons} belts {belts}");
+}
+
+#[test]
+fn home_systems_hold_the_same_things() {
+    let r = rules();
+    for seed in 0..20 {
+        let u = plan(&r, "map.many_worlds", seed, &FOUR);
+        let homes: Vec<_> = u.home_systems().into_iter().map(|(_, s)| s).collect();
+        let contents = |system: u32| {
+            let mut v: Vec<_> = u
+                .bodies
+                .iter()
+                .filter(|b| b.system_id == system && b.kind != BodyKind::Star)
+                .map(|b| (b.kind.key(), b.n, b.node_entity_type))
+                .collect();
+            v.sort();
+            v
+        };
+        for pair in homes.windows(2) {
+            assert_eq!(contents(pair[0]), contents(pair[1]), "seed {seed}");
+        }
+    }
+}
