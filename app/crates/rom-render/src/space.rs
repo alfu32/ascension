@@ -293,6 +293,99 @@ pub fn diamond(at: [f32; 3], size: f32, colour: [u8; 4]) -> Vec<Tri3> {
     ]
 }
 
+/// What the pointer rests on in space.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpaceHover {
+    /// A ship, by entity id.
+    Ship(u32),
+    /// A body or a system.
+    Target(Target),
+}
+
+/// The two lines of help for what the pointer rests on: its name, then what can be done with it.
+/// `loaded` is the planet whose globe is loaded; `ships` tells whether ships are selected.
+pub fn hover_help(
+    scene: &UniverseScene,
+    hover: SpaceHover,
+    loaded: Option<usize>,
+    ships: bool,
+) -> (String, String) {
+    let send = if ships {
+        " · right-click: send the selected ships"
+    } else {
+        ""
+    };
+    match hover {
+        SpaceHover::Ship(_) => (
+            "Ship".to_owned(),
+            "Click to select · Space flies to the selection, Shift + Space follows it".to_owned(),
+        ),
+        SpaceHover::Target(Target::System(i)) => (
+            scene
+                .systems
+                .get(i)
+                .map_or_else(String::new, |s| format!("{} (star system)", s.name)),
+            format!("Double-click or scroll in to enter{send}"),
+        ),
+        SpaceHover::Target(Target::Body(i)) => {
+            let Some(body) = scene.bodies.get(i) else {
+                return Default::default();
+            };
+            match body.kind {
+                crate::universe::BodyViewKind::Star => (
+                    format!("{} (star)", body.name),
+                    "Double-click to centre the view on the star".to_owned(),
+                ),
+                crate::universe::BodyViewKind::Habitable => (
+                    format!("{} (planet)", body.name),
+                    if loaded == Some(i) {
+                        format!("Double-click or scroll in to land the camera{send}")
+                    } else {
+                        format!("Double-click or scroll in to fly there and land the camera{send}")
+                    },
+                ),
+                crate::universe::BodyViewKind::Resource => (
+                    format!("{} (resource body)", body.name),
+                    if ships {
+                        "Double-click to fly there · right-click: orbit and claim it".to_owned()
+                    } else {
+                        "Double-click to fly there · ships orbiting it claim it".to_owned()
+                    },
+                ),
+            }
+        }
+    }
+}
+
+/// The help lines of a level when the pointer rests on nothing: how to move about and between
+/// levels. `cap` is the farthest level the player may reach.
+pub fn level_help(level: crate::zoom::Level, cap: crate::zoom::Level) -> Option<(String, String)> {
+    use crate::zoom::Level;
+    let lines = |a: &str, b: &str| Some((a.to_owned(), b.to_owned()));
+    match level {
+        Level::Surface | Level::Globe if cap >= Level::System => lines(
+            "Scroll out past the globe to see your star system",
+            "Home comes back to your planet",
+        ),
+        Level::Surface | Level::Globe => None,
+        Level::System => Some((
+            "Star system: scroll zooms to the cursor; double-click a planet to land".to_owned(),
+            format!(
+                "Middle-drag pans · Shift + middle-drag turns · Home: your planet{}",
+                if cap >= Level::StarMap {
+                    " · scroll out: star map"
+                } else {
+                    ""
+                }
+            ),
+        )),
+        Level::StarMap => lines(
+            "Star map: scroll in on a system, or double-click it, to enter",
+            "Middle-drag pans · Shift + middle-drag turns · Home: your planet",
+        ),
+    }
+}
+
 /// A ring around a claimed body.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ClaimRing {
@@ -746,6 +839,53 @@ mod tests {
         assert_eq!(
             chevron([0.0; 3], [1.0, 0.0, 0.0], 10.0, [1, 2, 3, 4]).len(),
             2
+        );
+    }
+
+    #[test]
+    fn hover_help_names_the_object_and_its_actions() {
+        use crate::zoom::Level;
+        let scene = sample_scene();
+        let (name, action) = hover_help(&scene, SpaceHover::Target(Target::System(1)), None, true);
+        assert_eq!(name, "S2 (star system)");
+        assert!(action.contains("Double-click or scroll in to enter"));
+        assert!(action.contains("send the selected ships"));
+        let (name, action) =
+            hover_help(&scene, SpaceHover::Target(Target::Body(1)), Some(1), false);
+        assert_eq!(name, "B2 (planet)");
+        assert!(action.contains("land the camera") && !action.contains("send"));
+        let (_, action) = hover_help(&scene, SpaceHover::Target(Target::Body(5)), Some(1), false);
+        assert!(action.contains("fly there and land"));
+        let (name, _) = hover_help(&scene, SpaceHover::Target(Target::Body(2)), None, false);
+        assert!(name.contains("resource body"));
+        assert_eq!(
+            hover_help(&scene, SpaceHover::Ship(9), None, false).0,
+            "Ship"
+        );
+        assert!(level_help(Level::Globe, Level::Globe).is_none());
+        assert!(
+            level_help(Level::Globe, Level::System)
+                .unwrap()
+                .0
+                .contains("Scroll out")
+        );
+        assert!(
+            !level_help(Level::System, Level::System)
+                .unwrap()
+                .1
+                .contains("star map")
+        );
+        assert!(
+            level_help(Level::System, Level::StarMap)
+                .unwrap()
+                .1
+                .contains("star map")
+        );
+        assert!(
+            level_help(Level::StarMap, Level::StarMap)
+                .unwrap()
+                .0
+                .contains("enter")
         );
     }
 

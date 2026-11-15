@@ -226,7 +226,24 @@ pub struct Notices {
     claims: BTreeMap<BodyId, PlayerId>,
     /// Ships of player one between systems, with the system each is bound for.
     travelling: BTreeMap<EntityId, u32>,
+    /// The rank of player one's map scale, to explain each new reach once.
+    reach: Option<i64>,
     started: bool,
+}
+
+/// How to see a newly reached tier (by its rank: 1 a star system, 2 the star map).
+pub fn reach_hint(rank: i64) -> Option<&'static str> {
+    match rank {
+        1 => Some(
+            "New reach: your star system. Scroll out past the planet to see it; \
+             double-click a planet to fly there",
+        ),
+        2.. => Some(
+            "New reach: the star map. Scroll out past the system to see it; \
+             double-click or scroll in on a system to enter it",
+        ),
+        _ => None,
+    }
 }
 
 /// One line for the event line, and the entity it is about (clicking the line flies there).
@@ -293,6 +310,21 @@ impl Notices {
             }
         }
         self.travelling = travelling;
+        let reach = world.players().find(|p| p.id == PLAYER).and_then(|p| {
+            let age = rules.ages.get(&p.age)?;
+            Some(rules.map_scales.get(&age.map_scale)?.rank)
+        });
+        if self.started
+            && let (Some(before), Some(now)) = (self.reach, reach)
+            && now > before
+            && let Some(text) = reach_hint(now)
+        {
+            notices.push(Notice {
+                text: text.to_owned(),
+                about: None,
+            });
+        }
+        self.reach = reach;
         self.started = true;
         notices
     }

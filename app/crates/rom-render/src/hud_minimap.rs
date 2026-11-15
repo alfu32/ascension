@@ -495,11 +495,12 @@ pub fn globe_marks(
 }
 
 /// Marks of the minimap above the planet range: a small diagram of the system (orbits, bodies,
-/// where the camera looks) or the star map (systems, routes, the part in view). Drawn into
-/// `area`, which is fitted to a square.
+/// ships, the part of the plane in view) or the star map (systems, routes, ships, the part in
+/// view). Drawn into `area`, which is fitted to a square; north (`-z`) is up.
 pub fn space_marks(
     zoom: &crate::zoom::ZoomCamera,
     orbit: &crate::orbit::OrbitCamera,
+    space: &crate::space::SpaceSnapshot,
     layout: &crate::hud_layout::HudLayout,
     area: Rect,
 ) -> Vec<MapMark> {
@@ -515,13 +516,19 @@ pub fn space_marks(
             colour,
         )
     };
+    let owner = |o: u8| {
+        let [r, g, b] = crate::entities::owner_color(o).map(|c| (c * 255.0).round() as u8);
+        [r, g, b, 255]
+    };
     let mut marks = Vec::new();
     let scene = zoom.scene();
-    if zoom.level() == Level::System {
-        let scale = half / SYSTEM_RADIUS;
+    let map = zoom.level() >= Level::StarMap;
+    let scale = half / if map { MAP_RADIUS } else { SYSTEM_RADIUS };
+    let to_area = |p: [f32; 3]| (cx + p[0] * scale, cy + p[2] * scale);
+    if !map {
         for placed in zoom.placed() {
             let body = &scene.bodies[placed.body];
-            let (x, y) = (cx + placed.pos[0] * scale, cy + placed.pos[2] * scale);
+            let (x, y) = to_area(placed.pos);
             match body.kind {
                 BodyViewKind::Star => marks.push(dot(x, y, 6.0, [255, 230, 150, 255])),
                 BodyViewKind::Habitable => {
@@ -545,19 +552,32 @@ pub fn space_marks(
                 }
             }
         }
-        let target = zoom.system_target(orbit);
-        let (x, y) = (cx + target[0] * scale, cy + target[2] * scale);
-        let arm = 6.0 * layout.scale;
-        marks.push(MapMark::Line((x - arm, y), (x + arm, y)));
-        marks.push(MapMark::Line((x, y - arm), (x, y + arm)));
+        if let Some(system) = zoom.system_id() {
+            let outermost = scene.system_outermost(system);
+            for ship in space.ships.iter().filter(|s| s.system == system) {
+                let at = crate::space::ship_frame_pos(scene, zoom.placed(), outermost, ship);
+                let (x, y) = to_area(at);
+                marks.push(dot(x, y, 4.0, owner(ship.owner)));
+            }
+            for transit in &space.transits {
+                if let Some((at, _)) = crate::space::transit_at_rim(
+                    scene,
+                    zoom.map_positions(),
+                    zoom.system(),
+                    transit,
+                ) {
+                    let (x, y) = to_area(at);
+                    marks.push(dot(x, y, 4.0, owner(transit.owner)));
+                }
+            }
+        }
     } else {
-        let scale = half / MAP_RADIUS;
-        let positions = scene.place_systems();
+        let positions = zoom.map_positions();
         for &(a, b) in &scene.routes {
             if let (Some(a), Some(b)) = (scene.system_index(a), scene.system_index(b)) {
                 marks.push(MapMark::Segment(
-                    (cx + positions[a][0] * scale, cy + positions[a][2] * scale),
-                    (cx + positions[b][0] * scale, cy + positions[b][2] * scale),
+                    to_area(positions[a]),
+                    to_area(positions[b]),
                     [70, 90, 130, 255],
                 ));
             }
@@ -570,30 +590,64 @@ pub fn space_marks(
                 .and_then(|b| b.home_race_colour);
             let rgb = tint.unwrap_or(system.star_colour);
             let size = if tint.is_some() { 5.0 } else { 3.0 };
-            marks.push(dot(
-                cx + positions[i][0] * scale,
-                cy + positions[i][2] * scale,
-                size,
-                [rgb[0], rgb[1], rgb[2], 255],
-            ));
+            let (x, y) = to_area(positions[i]);
+            marks.push(dot(x, y, size, [rgb[0], rgb[1], rgb[2], 255]));
         }
-        let target = zoom.map_target(orbit);
-        let half_height =
-            zoom.scale().map_distance(zoom.l()) * (FOV_DEGREES.to_radians() / 2.0).tan();
-        let half_width = half_height * layout.width / layout.height.max(1.0);
-        let (x, y) = (cx + target[0] * scale, cy + target[2] * scale);
-        let (w, h) = (half_width * scale, half_height * scale);
-        let corners = [
-            (x - w, y - h),
-            (x + w, y - h),
-            (x + w, y + h),
-            (x - w, y + h),
-        ];
+        let beside = [half * 0.05 / scale, 0.0, 0.0];
+        for mark in crate::space::map_ship_marks(scene, positions, space, beside) {
+            let (x, y) = to_area(mark.at);
+            marks.push(dot(x, y, 4.0, owner(mark.owner)));
+        }
+    }
+    // The part of the plane in view, a trapezoid for a tilted camera, and the focus.
+    let canvas = (layout.width, layout.height);
+    let world = layout.world_area();
+    let centre_y = ndc_centre_y(world, layout.height);
+    let view = zoom.space_view_at(orbit, canvas, centre_y);
+    let corners = [
+        (0.0, world.y),
+        (canvas.0, world.y),
+        (canvas.0, world.bottom()),
+        (0.0, world.bottom()),
+    ]
+    .map(|(x, y)| crate::space::plane_point(&view, x, y).map(to_area));
+    if corners.iter().all(Option::is_some) {
+        let corners = corners.map(|c| c.unwrap_or_default());
         for i in 0..4 {
             marks.push(MapMark::Line(corners[i], corners[(i + 1) % 4]));
         }
     }
+    let target = if map {
+        zoom.map_target(orbit)
+    } else {
+        zoom.system_target(orbit)
+    };
+    let (x, y) = to_area(target);
+    let arm = 6.0 * layout.scale;
+    marks.push(MapMark::Line((x - arm, y), (x + arm, y)));
+    marks.push(MapMark::Line((x, y - arm), (x, y + arm)));
     marks
+}
+
+/// The point of the space shown in the minimap under canvas pixel `(x, y)`: in the anchored
+/// system's frame, or on the star map (then `true`). `None` outside the fitted diagram.
+pub fn space_minimap_point(
+    zoom: &crate::zoom::ZoomCamera,
+    layout: &crate::hud_layout::HudLayout,
+    x: f32,
+    y: f32,
+) -> Option<([f32; 3], bool)> {
+    use crate::universe::{MAP_RADIUS, SYSTEM_RADIUS};
+    let area = layout.rect(crate::hud_layout::Region::MinimapView);
+    let side = area.w.min(area.h);
+    let (cx, cy) = area.centre();
+    if (x - cx).abs() > side / 2.0 || (y - cy).abs() > side / 2.0 {
+        return None;
+    }
+    let half = side / 2.0 * 0.92;
+    let map = zoom.level() >= crate::zoom::Level::StarMap;
+    let scale = half / if map { MAP_RADIUS } else { SYSTEM_RADIUS };
+    Some(([(x - cx) / scale, 0.0, (y - cy) / scale], map))
 }
 
 /// Which labels fit: greedy by priority, a label that would overlap one already kept is dropped.

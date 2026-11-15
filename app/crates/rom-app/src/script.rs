@@ -34,8 +34,9 @@
 //!
 //! Camera commands replay input on the render thread exactly as the window would send it
 //! (positions in canvas pixels): `cam wheel <steps> [x,y]`, `cam drag x,y x,y [rotate]`
-//! (middle-button drag; `rotate` holds Shift), `cam dblclick x,y`, `cam key <up|down|left|right>
-//! <down|up>`, `cam home`, `cam focus` and `cam follow` (the focus and follow keys).
+//! (middle-button drag; `rotate` holds Shift), `cam dblclick x,y`, `cam click x,y`, `cam point
+//! x,y` (move the pointer only), `cam key <up|down|left|right> <down|up>`, `cam home`,
+//! `cam focus` and `cam follow` (the focus and follow keys).
 
 use rom_render::{HudRegionKind, Modifiers, PickEvent, PointerButton, SurfacePos};
 
@@ -675,6 +676,29 @@ fn camera_input(words: &[&str]) -> Result<Vec<rom_render::InputEvent>, String> {
                 Some("up") => vec![InputEvent::KeyUp(key)],
                 _ => return Err("cam key needs down or up".into()),
             }
+        }
+        Some("point") => {
+            let (x, y) = at(1)?;
+            vec![InputEvent::PointerMoved { x, y }]
+        }
+        Some("click") => {
+            let (x, y) = at(1)?;
+            let button = PointerButton::Left;
+            vec![
+                InputEvent::PointerMoved { x, y },
+                InputEvent::ButtonDown {
+                    button,
+                    x,
+                    y,
+                    mods: shift,
+                },
+                InputEvent::ButtonUp {
+                    button,
+                    x,
+                    y,
+                    mods: shift,
+                },
+            ]
         }
         Some("home") => vec![InputEvent::KeyDown(Key::FrameMap)],
         Some("focus") => vec![InputEvent::KeyDown(Key::FocusSelection)],

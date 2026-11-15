@@ -32,7 +32,9 @@ use crate::pixels::rgba_to_bgra_flipped;
 use crate::readback::{AsyncReadback, ReadyFrame};
 use crate::review::{Review, sheet_cell};
 use crate::scene::{BakeReport, Scene};
-use crate::space::{SpaceContext, SpacePicker, SpaceSnapshot, ship_frame_pos};
+use crate::space::{
+    SpaceContext, SpaceHover, SpacePicker, SpaceSnapshot, hover_help, level_help, ship_frame_pos,
+};
 use crate::stats::{RenderStats, StatsWindow};
 use crate::sun::SunClock;
 use crate::terrain::{TerrainScene, home_camera, overview_camera};
@@ -126,6 +128,8 @@ struct Shared {
     /// Zoom out to the limit once, as soon as the view range is known.
     zoom_out: AtomicBool,
     zoom_all: AtomicBool,
+    /// Whether the pointer rests on something a double click enters (a hand cursor).
+    pointer_hand: AtomicBool,
     space: Mutex<Arc<SpaceSnapshot>>,
     view_state: Mutex<ViewState>,
     surface_request: Mutex<Option<u32>>,
@@ -210,6 +214,11 @@ impl RenderBridge {
     /// Hands over what is in space: ships, claims and transits (the newest replaces the last).
     pub fn publish_space(&self, space: Arc<SpaceSnapshot>) {
         *lock(&self.shared.space) = space;
+    }
+
+    /// Whether the pointer rests on something a double click enters; the window shows a hand.
+    pub fn pointer_hand(&self) -> bool {
+        self.shared.pointer_hand.load(Ordering::Relaxed)
     }
 
     /// What the camera looks at now.
@@ -442,6 +451,7 @@ impl Shared {
             view_range: AtomicU32::new(u32::MAX),
             zoom_out: AtomicBool::new(false),
             zoom_all: AtomicBool::new(false),
+            pointer_hand: AtomicBool::new(false),
             space: Mutex::new(Arc::new(SpaceSnapshot::default())),
             view_state: Mutex::new(ViewState::default()),
             surface_request: Mutex::new(None),
@@ -794,6 +804,27 @@ fn render_loop(shared: &Shared) {
                     );
                     continue;
                 }
+                // A click on the space minimap glides there.
+                if let (
+                    InputEvent::ButtonDown {
+                        button: PointerButton::Left,
+                        x,
+                        y,
+                        ..
+                    },
+                    Some(zoom),
+                    Some(orbit),
+                    true,
+                ) = (event, zoom.as_mut(), orbit.as_mut(), hud_visible)
+                    && zoom.level() >= Level::System
+                    && !zoom.pans_planet()
+                    && let Some((at, map)) =
+                        crate::hud_minimap::space_minimap_point(zoom, &canvas, x, y)
+                {
+                    zoom.glide_to(at, map, orbit);
+                    follow = None;
+                    continue;
+                }
                 if matches!(
                     event,
                     InputEvent::KeyDown(
@@ -999,11 +1030,44 @@ fn render_loop(shared: &Shared) {
             0.0
         };
         scene.set_space_state(&space_snapshot, &hud_snapshot.selected);
+        // What the pointer rests on in space: highlighted, named and explained, with a hand
+        // cursor over what a double click enters.
+        let pointing = match (zoom.as_ref(), orbit.as_ref()) {
+            (Some(zoom), Some(orbit)) if !over_hud => space_hover(
+                zoom,
+                orbit,
+                &space_snapshot,
+                (canvas.width, canvas.height),
+                centre_of(&canvas, hud_visible),
+            ),
+            _ => None,
+        };
+        scene.set_space_hover(pointing.map(|(hover, _)| hover));
+        shared.pointer_hand.store(
+            matches!(pointing, Some((SpaceHover::Target(_), _))),
+            Ordering::Relaxed,
+        );
         let graticule = shared.graticule.load(Ordering::Relaxed);
         scene.show_graticule = graticule;
         match (&orbit, &zoom) {
             (Some(orbit), Some(zoom)) if scene.has_space() => {
                 scene.draw_zoomed(&mut rl, &thread, texture, zoom, orbit);
+                // A tooltip beside the pointer names what it rests on.
+                if let (Some((hover, (x, y))), Some(_)) = (pointing, zoom.pointer()) {
+                    let ratio = size.0 as f32 / layout.0.max(1) as f32;
+                    let ships = !hud_snapshot.selected.is_empty();
+                    let (name, action) =
+                        hover_help(zoom.scene(), hover, zoom.surface_body(), ships);
+                    for (row, text) in [name, action].into_iter().enumerate() {
+                        scene.push_space_label(crate::scene::SpaceLabel {
+                            text,
+                            x: (x + 18.0) * ratio,
+                            y: (y + 28.0) * ratio + row as f32 * 17.0 * ratio,
+                            colour: [255, 240, 200, 255],
+                            priority: -5.0 - row as f32,
+                        });
+                    }
+                }
             }
             (Some(orbit), _) => scene.draw_globe(&mut rl, &thread, texture, orbit),
             (None, _) => match review.as_deref().filter(|r| !r.sheet.is_empty()) {
@@ -1062,12 +1126,22 @@ fn render_loop(shared: &Shared) {
                         map_size,
                         now_ms: 0,
                     };
+                    let world_help = zoom.as_ref().and_then(|zoom| match pointing {
+                        Some((hover, _)) => Some(hover_help(
+                            zoom.scene(),
+                            hover,
+                            zoom.surface_body(),
+                            !hud_snapshot.selected.is_empty(),
+                        )),
+                        None => level_help(zoom.level(), zoom.cap()),
+                    });
                     HudOverlay {
                         hover: picker.hover(&ctx),
                         drag_box: picker
                             .drag_rect()
                             .or_else(|| space_picker.drag_rect())
                             .map(|r| Rect::new(r.x * ratio, r.y * ratio, r.w * ratio, r.h * ratio)),
+                        world_help,
                     }
                 };
                 let mut drawing = rl.begin_texture_mode(&thread, texture);
@@ -1077,7 +1151,7 @@ fn render_loop(shared: &Shared) {
                     .filter(|level| *level >= Level::System);
                 match (&zoom, &orbit, space_level) {
                     (Some(zoom), Some(orbit), Some(_)) => {
-                        draw_space_minimap(&mut drawing, &hud_layout, zoom, orbit);
+                        draw_space_minimap(&mut drawing, &hud_layout, zoom, orbit, &space_snapshot);
                     }
                     _ => {
                         if let Some(map) = &minimap {
@@ -1102,6 +1176,16 @@ fn render_loop(shared: &Shared) {
                 hud.draw(&mut drawing, &hud_layout, &hud_snapshot, &hud_overlay);
                 if let Some(zoom) = &zoom {
                     draw_level_pips(&mut drawing, &hud_layout, zoom.level(), zoom.cap());
+                    // The level indicator names where the camera is.
+                    let view = hud_layout.rect(crate::hud_layout::Region::MinimapView);
+                    let label = crate::scene::SpaceLabel {
+                        text: level_name(zoom),
+                        x: view.x + 6.0 * hud_layout.scale,
+                        y: view.y + 16.0 * hud_layout.scale,
+                        colour: [240, 200, 90, 255],
+                        priority: 0.0,
+                    };
+                    hud.draw_labels_in(&mut drawing, &hud_layout, &[label], 1.0, false);
                 }
             }
         }
@@ -1621,6 +1705,50 @@ fn steer_to(
             None
         }
         (Some(_), None) => follow,
+    }
+}
+
+/// What the pointer rests on in space, and where the pointer is: the nearest ship, else the body
+/// or system under it.
+fn space_hover(
+    zoom: &ZoomCamera,
+    orbit: &OrbitCamera,
+    space: &SpaceSnapshot,
+    canvas: (f32, f32),
+    centre_y: f32,
+) -> Option<(SpaceHover, (f32, f32))> {
+    let cursor = zoom.pointer()?;
+    if zoom.level() < Level::System || zoom.pans_planet() || zoom.dragging() {
+        return None;
+    }
+    let view = zoom.space_view_at(orbit, canvas, centre_y);
+    let ships = ship_points(zoom, orbit, space);
+    let hover = crate::space::nearest_ship(&view, &ships, cursor, 0.0)
+        .map(SpaceHover::Ship)
+        .or_else(|| {
+            zoom.target_at(&view, cursor.0, cursor.1)
+                .map(SpaceHover::Target)
+        })?;
+    Some((hover, cursor))
+}
+
+/// The name of where the camera is: the planet, the system or the star map.
+fn level_name(zoom: &ZoomCamera) -> String {
+    let scene = zoom.scene();
+    let system = scene
+        .systems
+        .get(zoom.system())
+        .map_or("", |s| s.name.as_str());
+    match zoom.level() {
+        Level::Surface | Level::Globe => {
+            let planet = zoom
+                .surface_body()
+                .and_then(|b| scene.bodies.get(b))
+                .map_or("", |b| b.name.as_str());
+            format!("Planet {planet}")
+        }
+        Level::System => format!("System {system}"),
+        Level::StarMap => "Star map".to_owned(),
     }
 }
 

@@ -11,13 +11,13 @@ use crate::entities::{frame_box, owner_color};
 use crate::globe::PlanetScene;
 use crate::hud_minimap::planet_pixels;
 use crate::space::{
-    SpaceSnapshot, annulus, chevron, claim_rings, diamond, map_mark_scale, map_ship_marks,
-    ship_frame_pos, transit_at_rim,
+    SpaceHover, SpaceSnapshot, annulus, chevron, claim_rings, diamond, map_mark_scale,
+    map_ship_marks, ship_frame_pos, transit_at_rim,
 };
 use crate::universe::{
     BodyViewKind, UniverseScene, planet_colour, ring_points, rock_colour, uv_sphere,
 };
-use crate::zoom::ZoomCamera;
+use crate::zoom::{Target, ZoomCamera};
 
 const BODY_VS: &str = r#"#version 330
 in vec3 vertexPosition;
@@ -78,6 +78,7 @@ const ROUTE_LINE: Color = Color::new(110, 140, 200, 110);
 pub(super) struct SpaceState {
     snapshot: Arc<SpaceSnapshot>,
     selected: Vec<u32>,
+    hover: Option<SpaceHover>,
 }
 
 /// A colour from owner palette values.
@@ -252,6 +253,18 @@ impl Scene {
         }
         if self.space_state.selected != selected {
             self.space_state.selected = selected.to_vec();
+        }
+    }
+
+    /// What the pointer rests on in space, highlighted in the next draw.
+    pub(crate) fn set_space_hover(&mut self, hover: Option<SpaceHover>) {
+        self.space_state.hover = hover;
+    }
+
+    /// Adds a name to draw over the frame just drawn, in render-target pixels.
+    pub(crate) fn push_space_label(&mut self, label: SpaceLabel) {
+        if let Some(space) = &mut self.space {
+            space.labels.push(label);
         }
     }
 
@@ -546,6 +559,18 @@ impl Scene {
                         &matrices,
                     );
                 }
+                // The body under the pointer wears a ring.
+                if let Some(SpaceHover::Target(Target::Body(index))) = state.hover
+                    && let Some(at) = zoom.placed().iter().find(|p| p.body == index)
+                {
+                    overlay.tris.extend(annulus(
+                        [at.pos[0], 0.5, at.pos[2]],
+                        at.radius * 1.35 + thickness * 2.0,
+                        thickness * 1.2,
+                        [255, 230, 160, 230],
+                        64,
+                    ));
+                }
                 // Ships between systems wait at the rim, toward the other end of their lane.
                 let size = (distance * 0.03).max(60.0);
                 for transit in &state.snapshot.transits {
@@ -749,6 +774,17 @@ impl Scene {
                         28,
                     ));
                 }
+            }
+            if let Some(SpaceHover::Target(Target::System(index))) = self.space_state.hover
+                && let Some(&at) = space.map_positions.get(index)
+            {
+                overlay.tris.extend(annulus(
+                    at,
+                    icon * 4.0,
+                    icon * 0.4,
+                    [255, 230, 160, 230],
+                    48,
+                ));
             }
             // SAFETY: the render thread has an active GL context; the marks lie in one plane, so
             // they are drawn in order over everything rather than depth-tested.

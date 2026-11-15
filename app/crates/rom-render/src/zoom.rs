@@ -1584,6 +1584,17 @@ impl ZoomCamera {
         Ok(())
     }
 
+    /// Glides the focus to `at` without changing level: a point of the anchored system's plane,
+    /// or of the star map when `map` (a click on the minimap).
+    pub fn glide_to(&mut self, at: [f32; 3], map: bool, orbit: &mut OrbitCamera) {
+        let point = if map {
+            scale3(sub3(at, self.here()), 1.0 / self.k())
+        } else {
+            at
+        };
+        self.fly([Leg::Point(point)], orbit);
+    }
+
     /// Keeps `place` centred without changing level (the follow toggle): only when the camera
     /// already shows it and no flight is under way.
     pub fn follow(&mut self, place: FocusPlace) {
