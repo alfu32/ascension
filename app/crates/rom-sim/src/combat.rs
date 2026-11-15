@@ -202,10 +202,10 @@ impl World {
     pub(crate) fn advance_combat(&mut self, id: EntityId, order: &mut Order) {
         order.progress_ticks += 1;
         if order.kind == "attack_move" {
-            if order
-                .target_entity
-                .is_some_and(|target| self.entity(target).is_none_or(|e| e.hp <= 0))
-            {
+            if order.target_entity.is_some_and(|target| {
+                self.entity(target)
+                    .is_none_or(|e| e.hp <= 0 || e.container_id.is_some())
+            }) {
                 order.target_entity = None;
                 order.movement = None;
             }
@@ -221,7 +221,10 @@ impl World {
             order.status = OrderStatus::Done;
             return;
         };
-        if target.hp <= 0 || !self.enemies(order.player, target.owner) {
+        if target.hp <= 0
+            || target.container_id.is_some()
+            || !self.enemies(order.player, target.owner)
+        {
             order.status = OrderStatus::Done;
             return;
         }
@@ -486,19 +489,32 @@ impl World {
     }
 
     pub(crate) fn remove_dead(&mut self) {
-        let dead: Vec<_> = self
-            .entities()
-            .filter(|e| e.hp <= 0)
-            .map(|e| {
-                (
-                    e.id,
-                    e.owner,
-                    e.type_id,
-                    e.killer,
-                    e.build_progress.is_none(),
-                )
-            })
+        let collect = |w: &World| -> Vec<_> {
+            w.entities()
+                .filter(|e| e.hp <= 0)
+                .map(|e| {
+                    (
+                        e.id,
+                        e.owner,
+                        e.type_id,
+                        e.killer,
+                        e.build_progress.is_none(),
+                    )
+                })
+                .collect()
+        };
+        let mut dead = collect(self);
+        // Units aboard a carrier that died go down with it, before it.
+        let carriers: Vec<_> = dead
+            .iter()
+            .filter(|d| self.is_carrier_type(d.2))
+            .map(|d| d.0)
             .collect();
+        if !carriers.is_empty() {
+            self.sink_passengers(&carriers);
+            dead = collect(self);
+            dead.sort_by_key(|d| self.entity(d.0).is_none_or(|e| e.container_id.is_none()));
+        }
         for (id, owner, type_id, killer, complete) in dead {
             // A complete capturable building is disabled instead; an unfinished site dies.
             if complete && self.is_capturable(type_id) {

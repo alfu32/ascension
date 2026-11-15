@@ -186,14 +186,16 @@ hit-point percentage. The first step of each line needs only its age and buildin
 | Fighters | Airfield | Biplanes (5), Fighters (6), Jet Fighters (7), Drone Fighters (8), Interceptors (9) |
 | Bombers | Airfield | Bombers (6), Strategic Bombers (7), Drone Bombers (8) |
 | Starships | Spaceport | Survey Ship (10), Corvettes (10), Space Frigates (11), Space Cruisers (12), Battleships (13) |
+| Transport | Spaceport | Transport Ships (10): unarmed, carries 20 population; every other starship carries 1 (10) or 2 (11+) |
 | Civilian | City | Citizens (0), Worker Drones (8) |
 | Scholar | University | Scholars (1) |
 | Merchant | Market | Merchants (0) |
 | Priest | Temple | Priests (1) |
 
-Transports, submarines, generals, spies, caravans and colony ships are left
-out until the simulation supports boarding, stealth, auras, trade routes and
-colonisation; adding them later is data plus that mechanic.
+Submarines, generals, spies and colony ships are left out until the
+simulation supports stealth, auras and their own mechanics; adding them later
+is data plus that mechanic. Boarding and landing came with task 54 (ground
+units ride starships; workers landed on a planet found its colony).
 
 ## 6. Other research
 

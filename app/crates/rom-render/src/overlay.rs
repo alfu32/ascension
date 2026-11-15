@@ -529,6 +529,7 @@ pub fn build_overlays_on(
             model: None,
             altitude: 0.0,
             beam_target: None,
+            spacecraft: false,
             activity: Default::default(),
         };
         out.building_ghost(origin, &view, line, false);
@@ -568,6 +569,7 @@ mod tests {
             model: None,
             altitude: 0.0,
             beam_target: None,
+            spacecraft: false,
             activity: Default::default(),
         }
     }

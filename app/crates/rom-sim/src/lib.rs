@@ -29,6 +29,7 @@ mod sphere_tests;
 mod stance;
 mod surface;
 mod territory;
+mod transport;
 mod universe;
 mod victory;
 mod vision;
@@ -242,6 +243,26 @@ pub enum SimError {
     /// No route connects the current system to the travel destination.
     #[error("invalid or unreachable system destination")]
     InvalidTravelTarget,
+    /// The target cannot take this unit aboard: not an own carrier, a carrier that does not
+    /// accept it, or one that is neither landed on the unit's planet nor orbiting it above an
+    /// own spaceport.
+    #[error("cannot board that carrier")]
+    CannotBoard,
+    /// The carrier has no room for the unit.
+    #[error("no room aboard")]
+    NoRoomAboard,
+    /// The executor is aboard a ship that has not landed; it can only act once unloaded.
+    #[error("unit is aboard a ship in space")]
+    Aboard,
+    /// A landing needs a carrier in orbit of that planet and open ground outside enemy cities.
+    #[error("cannot land there")]
+    CannotLand,
+    /// Lifting off needs a landed ship.
+    #[error("ship has not landed")]
+    NotLanded,
+    /// Unloading needs passengers and a landed carrier, or one in orbit above an own spaceport.
+    #[error("cannot unload here")]
+    CannotUnload,
     /// The catalogue cannot supply the requested headless scenario.
     #[error("no eligible {0} for movement scenario")]
     ScenarioUnavailable(&'static str),

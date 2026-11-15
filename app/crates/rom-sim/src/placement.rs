@@ -101,6 +101,20 @@ impl World {
         (standing + queued) as i64
     }
 
+    /// Whether the player has a city, a city site or a queued city on `body`.
+    pub(crate) fn has_city_on(&self, player: PlayerId, body: BodyId) -> bool {
+        self.territory.cities.iter().any(|id| {
+            self.entity(*id)
+                .is_some_and(|e| e.owner == player && e.pos.body == body)
+        }) || self.all_orders().any(|o| {
+            o.player == player
+                && o.kind == "construct"
+                && o.target_entity.is_none()
+                && o.subject.is_some_and(|s| self.is_city_type(s))
+                && o.target_pos.is_some_and(|p| p.body == body)
+        })
+    }
+
     /// How many cities the player may have, after modifiers.
     pub(crate) fn city_limit(&self, player: PlayerId) -> i64 {
         self.rules.player_stat(
@@ -169,7 +183,10 @@ impl World {
         let is_city = self.is_city_type(subject);
         // A player without a city may found one outside any border.
         let first_city = ignore_territory || (is_city && self.city_count(player) == 0);
-        let free_colonisation = self.rules.ages[&self.players[&player].age].free_colonisation;
+        // The first city on another planet may also stand outside any border, though never
+        // inside another player's (as free colonisation allows everywhere).
+        let free_colonisation = self.rules.ages[&self.players[&player].age].free_colonisation
+            || (is_city && !first_city && !self.has_city_on(player, pos.body));
         let surface = self.surf(pos.body);
         let geo = &surface.geo;
         let within = |other: Pos, distance: i64| geo.within(pos, other, distance);

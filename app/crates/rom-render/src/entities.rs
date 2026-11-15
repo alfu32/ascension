@@ -44,6 +44,8 @@ pub struct EntityView {
     pub altitude: f32,
     /// Ground target of a recent orbital shot, when its beam is visible.
     pub beam_target: Option<SurfacePos>,
+    /// A ship that flies through space: drawn as a hull in orbit and when it has landed.
+    pub spacecraft: bool,
     /// Facing in degrees, clockwise from the positive x axis.
     pub facing_deg: f32,
     /// Hit points as a fraction of the maximum, 0 to 1.
@@ -495,7 +497,11 @@ pub fn unit_width(view: &EntityView) -> f32 {
     if let Some(model) = view.model {
         return model.size[0].max(model.size[2]).max(0.6);
     }
-    (view.radius * 2.0 * 1.6).max(if view.altitude > 0.0 { 3.0 } else { 0.6 })
+    (view.radius * 2.0 * 1.6).max(if view.altitude > 0.0 || view.spacecraft {
+        3.0
+    } else {
+        0.6
+    })
 }
 
 /// Height of a unit body in tiles.
@@ -503,7 +509,7 @@ pub fn unit_height(view: &EntityView) -> f32 {
     if let Some(model) = view.model {
         return model.size[1].max(0.3);
     }
-    if view.altitude > 0.0 {
+    if view.altitude > 0.0 || view.spacecraft {
         unit_width(view) * 0.35
     } else {
         (unit_width(view) * 1.8).max(0.9)
@@ -564,8 +570,12 @@ pub fn pick_frame(view: &EntityView, ground: &dyn Footing) -> ([f32; 3], [[f32; 
 pub(crate) fn entity_frame(view: &EntityView, ground: &dyn Footing) -> GroundFrame {
     let frame = ground.frame(view.face, view.x, view.y);
     if view.altitude > 0.0 {
+        // A descending ship never sinks below the ground it lands on.
+        let height = view
+            .altitude
+            .max(ground.height_at(view.face, view.x, view.y));
         GroundFrame {
-            origin: ground.datum_point(view.face, view.x, view.y, (0.0, 0.0), view.altitude),
+            origin: ground.datum_point(view.face, view.x, view.y, (0.0, 0.0), height),
             ..frame
         }
     } else {
@@ -660,7 +670,7 @@ fn instances_on(
             push_building(view, ground, &frame, base, out)
         } else if view.owner == 0 || view.carry_node {
             push_node(view, &frame, out)
-        } else if view.altitude > 0.0 {
+        } else if view.altitude > 0.0 || view.spacecraft {
             push_orbital_ship(view, &frame, out)
         } else {
             push_unit(view, &frame, out)
@@ -962,6 +972,7 @@ mod tests {
             model: None,
             altitude: 0.0,
             beam_target: None,
+            spacecraft: false,
             activity: Default::default(),
         }
     }

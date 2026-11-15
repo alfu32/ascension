@@ -393,6 +393,15 @@ pub fn build_universe_match(
         }
     }
     set_age_by_ordinal(rules, &mut players, age_ordinal)?;
+    for key in &setup.techs {
+        let tech = rules
+            .id_of(key)
+            .filter(|id| rules.techs.contains_key(id))
+            .ok_or_else(|| SetupError::Setup(format!("unknown technology {key:?}")))?;
+        if let Some(player) = players.iter_mut().find(|p| p.id == PlayerId(1)) {
+            player.techs.insert(tech, 1);
+        }
+    }
     let homes: BTreeMap<PlayerId, BodyId> = universe
         .starts
         .iter()

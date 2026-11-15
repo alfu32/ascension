@@ -87,6 +87,11 @@ enum Action {
     Travel,
     /// Every worker inside the selected gather buildings leaves.
     Release,
+    /// The selected carriers set their passengers down: around themselves when landed, at an
+    /// own spaceport below when in orbit.
+    Unload,
+    /// The selected landed ships return to orbit.
+    Lift,
 }
 
 /// What the camera shows, as far as turning picks into orders needs it.
@@ -647,6 +652,7 @@ impl Controller {
         let rules = world.rules().clone();
         enum Kind {
             Ground,
+            Board(EntityId),
             Enemy(EntityId),
             Site(EntityId),
             Gather(EntityId, DefId),
@@ -670,6 +676,11 @@ impl Controller {
                     Kind::Enemy(e.id)
                 } else if e.owner == PLAYER && e.build_progress.is_some() {
                     Kind::Site(e.id)
+                } else if e.owner == PLAYER
+                    && world.is_carrier_type(e.type_id)
+                    && (world.is_landed(e.id) || world.orbit(e.id).is_some())
+                {
+                    Kind::Board(e.id)
                 } else if e.owner != PlayerId(0)
                     && e.build_progress.is_none()
                     && et.territory.as_ref().is_some_and(|t| t.is_city)
@@ -698,7 +709,27 @@ impl Controller {
             let can_move = et.movement.is_some();
             let armed = !et.weapons.is_empty();
             let queue = mods.shift;
+            let orbiting_here = world.orbit(id).is_some_and(|o| o.body == target.body);
             match &kind {
+                Kind::Board(ship)
+                    if *ship != id
+                        && et.class == EntityClass::Unit
+                        && !world.is_spacecraft_type(et.id) =>
+                {
+                    issued |= self.submit(world, id, "enter", None, Some(*ship), None, queue);
+                }
+                // A carrier above this planet comes down where the ground was clicked.
+                Kind::Ground if orbiting_here => {
+                    if world.is_carrier_type(et.id) {
+                        issued |= self.submit(world, id, "land", None, None, Some(target), queue);
+                    }
+                }
+                // A landed carrier sends its passengers to the clicked point.
+                Kind::Ground if world.is_landed(id) => {
+                    if !world.passengers(id).is_empty() {
+                        issued |= self.submit(world, id, "unload", None, None, Some(target), queue);
+                    }
+                }
                 Kind::Carry(node, tag)
                     if et.class == EntityClass::Unit && rules.has_tag(et.id, *tag) =>
                 {
@@ -845,6 +876,29 @@ impl Controller {
                 .min();
             if let Some((_, body)) = near {
                 self.order_orbit(world, id, body, false);
+            }
+        }
+    }
+
+    /// The Unload button: a landed carrier sets everyone down around itself; one in orbit sets
+    /// them down at the own spaceport below, if there is one.
+    fn unload_selected(&mut self, world: &mut World) {
+        let carriers: Vec<EntityId> = self
+            .own_selected(world)
+            .iter()
+            .filter(|e| !world.passengers(e.id).is_empty())
+            .map(|e| e.id)
+            .collect();
+        for id in carriers {
+            if world.is_landed(id) {
+                self.submit(world, id, "unload", None, Some(id), None, false);
+            } else if let Some(port) = world.spaceport_below(id) {
+                self.submit(world, id, "unload", None, Some(port), None, false);
+            } else {
+                self.say(
+                    world,
+                    "No spaceport of yours below: land the ship to set its passengers down",
+                );
             }
         }
     }
@@ -1049,6 +1103,9 @@ impl Controller {
         match self.own_selected(world).as_slice() {
             [one] if one.owner == PLAYER => {
                 let mut ids = world.occupants(one.id);
+                if ids.is_empty() {
+                    ids = world.passengers(one.id);
+                }
                 ids.truncate(12);
                 ids
             }
@@ -1280,6 +1337,12 @@ impl Controller {
                 if has_workers {
                     actions.push((3, Action::Release));
                 }
+                if own.iter().any(|e| !world.passengers(e.id).is_empty()) {
+                    actions.push((4, Action::Unload));
+                }
+                if own.iter().any(|e| world.is_landed(e.id)) {
+                    actions.push((5, Action::Lift));
+                }
                 if own.iter().any(|e| {
                     in_space(world, e) && rules.entity_types[&e.type_id].movement.is_some()
                 }) {
@@ -1367,6 +1430,14 @@ impl Controller {
             Action::Release => {
                 button.name = "Release all workers".into();
                 button.icon = "icons/cmd_cancel".into();
+            }
+            Action::Unload => {
+                button.name = "Unload".into();
+                button.icon = "icons/cmd_cancel".into();
+            }
+            Action::Lift => {
+                button.name = "Lift off".into();
+                button.icon = "icons/cmd_guard".into();
             }
             Action::Orbit => {
                 button.name = "Orbit".into();
@@ -1482,6 +1553,18 @@ impl Controller {
             }
             Action::Orbit => self.orbit_nearest(world),
             Action::Travel => self.travel_on(world),
+            Action::Unload => self.unload_selected(world),
+            Action::Lift => {
+                let ids: Vec<EntityId> = self
+                    .own_selected(world)
+                    .iter()
+                    .filter(|e| world.is_landed(e.id))
+                    .map(|e| e.id)
+                    .collect();
+                for id in ids {
+                    self.submit(world, id, "lift", None, None, None, false);
+                }
+            }
             Action::Stance(stance) => {
                 let ids: Vec<EntityId> = self
                     .own_selected(world)
@@ -1934,6 +2017,18 @@ impl Controller {
             .find(|p| p.id == PLAYER)
             .map_or(DefId(0), |p| p.faction);
         let own = self.own_selected(world);
+        if hud.help.is_empty()
+            && !self.view.in_space
+            && own.iter().any(|e| {
+                world.is_carrier_type(e.type_id)
+                    && world
+                        .orbit(e.id)
+                        .is_some_and(|o| o.body == self.view.planet)
+            })
+        {
+            hud.help =
+                "Right-click open ground to land; units board at your spaceport below".into();
+        }
         let mut selected: Vec<u32> = own.iter().map(|e| e.id.0).collect();
         selected.extend(
             self.foreign
@@ -1964,13 +2059,26 @@ impl Controller {
                         format!("{}", r / 1000)
                     }
                 }),
-                garrison: et.container.as_ref().map(|c| format!("max {}", c.capacity)),
+                garrison: et.container.as_ref().map(|c| {
+                    if world.is_carrier_type(e.type_id) {
+                        format!(
+                            "{} / {}",
+                            world.carried_load(e.id),
+                            world.carry_capacity(e.id)
+                        )
+                    } else {
+                        format!("max {}", c.capacity)
+                    }
+                }),
                 workers,
                 inside: if foreign {
                     Vec::new()
                 } else {
-                    world
-                        .occupants(e.id)
+                    let mut inside = world.occupants(e.id);
+                    if inside.is_empty() {
+                        inside = world.passengers(e.id);
+                    }
+                    inside
                         .into_iter()
                         .take(12)
                         .filter_map(|id| world.entity(id))
@@ -2226,6 +2334,16 @@ fn rejection_message(world: &World, error: &SimError, subject: Option<DefId>) ->
         SimError::InForeignTerritory => "Another nation's territory".into(),
         SimError::OtherBody => "No selected builder can reach this site (another planet)".into(),
         SimError::NotInCityRadius => "Outside a city's economic radius".into(),
+        SimError::CannotBoard => {
+            "Cannot board: the ship must have landed here, or orbit above your spaceport".into()
+        }
+        SimError::NoRoomAboard => "No room aboard".into(),
+        SimError::Aboard => "Aboard a ship in space: land it first".into(),
+        SimError::CannotLand => "Cannot land there: open ground only, outside enemy cities".into(),
+        SimError::NotLanded => "The ship has not landed".into(),
+        SimError::CannotUnload => {
+            "Land first, or orbit above your spaceport, to set passengers down".into()
+        }
         SimError::CityLimit => "City limit reached".into(),
         SimError::Locked => subject.map_or("Needs a prerequisite".into(), |id| {
             format!("Needs {}", crate::hud::unmet(world, id))

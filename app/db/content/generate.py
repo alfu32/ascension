@@ -63,6 +63,7 @@ LINES = [
     ('merchant', 'market', 'merchant:Merchants:0'),
     ('caravan', 'market', 'caravan:Caravans:1|freight_wagon:Freight Wagons:4|lorry:Lorries:6|cargo_drone:Cargo Drones:8'),
     ('priest', 'temple', 'priest:Priests:1'),
+    ('transport', 'spaceport', 'transport_ship:Transport Ships:10'),
 ]
 RESEARCH = [
     ('granary', 'income.food', 'agriculture:1:10|crop_rotation:3:15|food_processing:5:20'),
@@ -254,7 +255,8 @@ def generate():
             mounted = line in ('light_mounted', 'heavy_mounted')
             aircraft = line in ('fighter', 'bomber')
             support = line in ('civilian', 'scholar', 'merchant', 'caravan', 'priest', 'medic', 'repair', 'supply')
-            mechanical = (mounted and age >= 5) or line in ('caravan', 'siege', 'anti_air', 'repair', 'supply', 'warship', 'starship') or aircraft or 'drone' in key or 'robot' in key
+            spacecraft = line in ('starship', 'transport')
+            mechanical = (mounted and age >= 5) or line in ('caravan', 'siege', 'anti_air', 'repair', 'supply', 'warship') or spacecraft or aircraft or 'drone' in key or 'robot' in key
             hp, attack, reach, speed, dc, ac, prices = 70, 7, 5000, 1200, 'pierce', 'flesh', {'food': 30, 'timber': 30}
             if line == 'infantry':
                 hp, attack, reach, speed = 100, 9, 0 if age <= 2 else 5000, 1250
@@ -283,6 +285,10 @@ def generate():
             elif line == 'starship':
                 hp, attack, reach, speed, dc, ac = 400, 30, 8000, 3000, 'energy', 'shield'
                 prices = {'metal': 200, 'energy': 100}
+            elif line == 'transport':
+                # Unarmed and roomy: it carries ground units between planets.
+                hp, attack, reach, speed, dc, ac = 600, 0, 0, 2600, 'energy', 'shield'
+                prices = {'metal': 240, 'energy': 80}
             elif line == 'caravan':
                 step_index = [1, 4, 6, 8].index(age)
                 hp, attack, reach, speed, ac = 90 + 40 * step_index, 0, 0, 1300 + 300 * step_index, 'vehicle'
@@ -297,15 +303,15 @@ def generate():
             ticks = min(500, 150 + 25 * age)
             row('entity_type', id=Ref(full), **{'class': 'unit'}, ui_group=line, hp=hp if support else scale(hp), armor=2 if line == 'infantry' else age // 2,
                 armor_class_id=Ref(ac, 'armor_class'), los=2000 if line == 'civilian' else 5000 if line == 'infantry' else 9000 if line in ('scout', 'starship') else 6000,
-                pop_cost=2 if line == 'starship' else 1, build_ticks=ticks, ramp_mode='per_type', upgrades_from_id=Ref(old) if old else None,
+                pop_cost=2 if spacecraft else 1, build_ticks=ticks, ramp_mode='per_type', upgrades_from_id=Ref(old) if old else None,
                 first_age_id=Ref('age.' + AGES[age]))
             tag(full, 'mechanical' if mechanical else 'biological', 'civilian' if line in ('civilian', 'scholar', 'merchant', 'caravan', 'priest') else 'military')
-            role = 'vehicle' if mounted and age >= 5 else 'mounted' if mounted else 'aircraft' if aircraft else 'ship' if line == 'warship' else 'starship' if line == 'starship' else 'siege' if line == 'siege' else 'infantry' if not support else None
+            role = 'vehicle' if mounted and age >= 5 else 'mounted' if mounted else 'aircraft' if aircraft else 'ship' if line == 'warship' else 'starship' if spacecraft else 'siege' if line == 'siege' else 'infantry' if not support else None
             if role:
                 tag(full, role)
             if 'drone' in key:
                 tag(full, 'drone')
-            movement = 'starship' if line == 'starship' else 'ship' if line == 'warship' else 'aircraft' if aircraft or line == 'repair' else 'wheeled' if mechanical and not line in ('civilian', 'scout') else 'foot'
+            movement = 'starship' if spacecraft else 'ship' if line == 'warship' else 'aircraft' if aircraft or line == 'repair' else 'wheeled' if mechanical and not line in ('civilian', 'scout') else 'foot'
             row('et_movement', entity_type_id=Ref(full), movement_class_id=Ref(movement, 'movement_class'), speed=speed)
             if attack:
                 layers = ['air'] if line in ('fighter', 'anti_air') else ['fluid', 'ground'] if line == 'warship' else ['space'] if line == 'starship' else ['ground']
@@ -332,6 +338,10 @@ def generate():
                     row('et_energy', entity_type_id=Ref(full), max=100, regen_per_second=2)
             if line == 'supply':
                 row('et_supply', entity_type_id=Ref(full), radius=6000)
+            if spacecraft:
+                # Carriers: a transport takes a company, every other starship one or two squads
+                # (population, one unit each).
+                row('et_container', entity_type_id=Ref(full), capacity=20 if line == 'transport' else 1 if age <= 10 else 2)
             need(full, 'age.' + AGES[age])
             produce('bld.' + building, full, 'train', 'units')
             cost(full, prices, True)

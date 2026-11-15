@@ -1191,6 +1191,7 @@ mod tests {
             model: None,
             altitude: 0.0,
             beam_target: None,
+            spacecraft: false,
             activity: Default::default(),
             carrying: false,
             kept: 0,

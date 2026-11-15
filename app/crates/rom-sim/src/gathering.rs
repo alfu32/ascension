@@ -155,6 +155,7 @@ impl World {
         self.entity(id).is_some_and(|e| {
             e.orders.is_empty()
                 && e.work_site.is_none()
+                && e.container_id.is_none()
                 && e.build_progress.is_none()
                 && !pending.contains(&id)
                 && !self.rules.entity_types[&e.type_id].harvester.is_empty()

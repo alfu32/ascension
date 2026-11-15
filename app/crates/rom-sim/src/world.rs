@@ -500,8 +500,7 @@ impl World {
         let after = &self.rules.entity_types[&new];
         pathing.occupy(after, pos.face, footprint(after, pos), true);
         let motion = self
-            .orbit(id)
-            .is_none()
+            .walks(id)
             .then(|| Motion::of(&self.rules, new))
             .flatten();
         self.avoid.set(id, motion, pos);
@@ -551,8 +550,7 @@ impl World {
             self.surfaces[slot].spatial.insert(id, to);
             let entity = self.entity(id).expect("relocated entity");
             let motion = self
-                .orbit(id)
-                .is_none()
+                .walks(id)
                 .then(|| Motion::of(&self.rules, entity.type_id))
                 .flatten();
             self.avoid.set(id, motion, to);
@@ -576,12 +574,17 @@ impl World {
         if self.may_hold_nodes(type_id) {
             self.drop_nodes(id, pos);
         }
+        // Units aboard a carrier go down with it.
+        for passenger in self.passengers(id) {
+            self.despawn(passenger)?;
+        }
         let entity = self
             .entities
             .get_mut(id.0 as usize)
             .and_then(Option::take)
             .ok_or(SimError::UnknownExecutor(id))?;
         self.space.orbits.remove(&id);
+        self.space.landed.remove(&id);
         self.capture.neutralised.remove(&id);
         self.capture.assimilating.remove(&id);
         let slot = self.slot(entity.pos.body);
@@ -661,6 +664,10 @@ impl World {
         if entity.owner != command.player {
             return Err(SimError::ForeignOwner(command.executor));
         }
+        // A unit aboard acts only once its carrier stands on a planet; it then steps out.
+        if self.aboard_in_space(entity) {
+            return Err(SimError::Aboard);
+        }
         let kind = self
             .rules
             .order_kinds
@@ -677,6 +684,7 @@ impl World {
             return Err(SimError::WrongTargetShape);
         }
         self.validate_space_order(&command)?;
+        self.validate_transport(&command)?;
         // Orbit can name a body's surface; an orbiting ship can attack that surface.
         let body = entity.pos.body;
         let orbital_attack = command.kind == "attack"
@@ -686,7 +694,11 @@ impl World {
                     .and_then(|id| self.entity(id))
                     .is_some_and(|target| target.pos.body == orbit.body)
             });
-        let cross_body = matches!(command.kind.as_str(), "travel" | "orbit") || orbital_attack;
+        // Boarding, landing and unloading check their own bodies.
+        let cross_body = matches!(
+            command.kind.as_str(),
+            "travel" | "orbit" | "enter" | "land" | "unload"
+        ) || orbital_attack;
         if !cross_body
             && (command.target_pos.is_some_and(|pos| pos.body != body)
                 || command
@@ -780,6 +792,11 @@ impl World {
         self.acquire_idle();
         self.regenerate_energy();
         for (mut order, append) in std::mem::take(&mut self.pending) {
+            // A passenger given an order steps out of its landed carrier to obey it.
+            if !self.step_out(order.executor) {
+                self.stats.orders_cancelled += 1;
+                continue;
+            }
             if order.kind == "construct" {
                 self.create_site(&mut order);
             }

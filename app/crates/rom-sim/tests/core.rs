@@ -885,6 +885,19 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
                     assert!(matches!(kind.key.as_str(), "orbit" | "travel" | "launch"));
                     needs_space = true;
                 }
+                // Carrying needs a carrier in orbit or landed on a planet of a universe.
+                Err(
+                    SimError::CannotBoard
+                    | SimError::CannotLand
+                    | SimError::NotLanded
+                    | SimError::CannotUnload,
+                ) => {
+                    assert!(matches!(
+                        kind.key.as_str(),
+                        "enter" | "land" | "lift" | "unload"
+                    ));
+                    needs_space = true;
+                }
                 other => panic!("unexpected result for {}: {other:?}", kind.key),
             }
         }

@@ -40,7 +40,8 @@ INSERT INTO game_constant(key,value,unit,note) VALUES
 
 INSERT INTO game_constant(key,value,unit,note) VALUES
  ('space.launch_ticks',20,'ticks','launch duration from a surface producer'),
- ('space.orbit_speed',400,'milli-tiles/second','speed of the orbital ground footprint');
+ ('space.orbit_speed',400,'milli-tiles/second','speed of the orbital ground footprint'),
+ ('space.land_ticks',60,'ticks','descent of a carrier from orbit to open ground');
 
 INSERT INTO layer VALUES
  ('ground','solid surface'), ('fluid','sea'), ('subfluid','underwater'),
@@ -97,7 +98,10 @@ INSERT INTO order_kind(key,needs,target,note) VALUES
  ('heal','healer','entity',''), ('trade','trader','entity','target = city'),
  ('carry','movement','entity','target = carry node; brought to the nearest own keeper'),
  ('claim','trader','entity','target = rare resource node'),
- ('enter','movement','entity','garrison / board'), ('unload','container','entity_or_point',''),
+ ('enter','movement','entity','board a carrier: beside it when it has landed, or at an own spaceport below its orbit'),
+ ('unload','container','entity_or_point','landed: set passengers down around the carrier (a point: they walk there); in orbit: at the target own spaceport below'),
+ ('land','container','point','descend from orbit onto open ground of that planet, outside enemy cities; passengers come out and the carrier stays landed'),
+ ('lift','movement','none','a landed carrier returns to orbit'),
  ('train','producer','def',''), ('research','producer','def',''), ('morph','','def','upgrade in place'),
  ('ability','energy','entity_or_point','subject = ability'), ('set_rally','producer','entity_or_point',''),
  ('raze','','none','self-destruct building'), ('disband','','none',''),
@@ -545,6 +549,7 @@ INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.freight_wagon','Freig
 INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.lorry','Lorries');
 INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.cargo_drone','Cargo Drones');
 INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.priest','Priests');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.transport_ship','Transport Ships');
 INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.city'),'building','economic',1200,3,(SELECT id FROM armor_class WHERE key='structure'),12000,7,7,150,'per_type','none',0,(SELECT id FROM def WHERE key='age.ancient'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.city'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.city'),(SELECT id FROM tag WHERE key='mechanical'));
@@ -2068,6 +2073,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.s
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),(SELECT id FROM movement_class WHERE key='starship'),3000);
 INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),75,(SELECT id FROM damage_class WHERE key='energy'),8000,30);
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.survey_ship')),'space');
+INSERT INTO et_container(entity_type_id,capacity) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),1);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='unit.survey_ship'),'train','units',0,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),(SELECT id FROM def WHERE key='res.metal'),500,10);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),(SELECT id FROM def WHERE key='res.energy'),250,5);
@@ -2078,6 +2084,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.c
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),(SELECT id FROM movement_class WHERE key='starship'),3000);
 INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),75,(SELECT id FROM damage_class WHERE key='energy'),8000,30);
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.corvette')),'space');
+INSERT INTO et_container(entity_type_id,capacity) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),1);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='unit.corvette'),'train','units',1,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),(SELECT id FROM def WHERE key='res.metal'),500,10);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),(SELECT id FROM def WHERE key='res.energy'),250,5);
@@ -2093,6 +2100,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.s
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),(SELECT id FROM movement_class WHERE key='starship'),3000);
 INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),79,(SELECT id FROM damage_class WHERE key='energy'),8000,30);
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.space_frigate')),'space');
+INSERT INTO et_container(entity_type_id,capacity) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),2);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='unit.space_frigate'),'train','units',2,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),(SELECT id FROM def WHERE key='res.metal'),530,10);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),(SELECT id FROM def WHERE key='res.energy'),265,5);
@@ -2108,6 +2116,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.s
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),(SELECT id FROM movement_class WHERE key='starship'),3000);
 INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),84,(SELECT id FROM damage_class WHERE key='energy'),8000,30);
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.space_cruiser')),'space');
+INSERT INTO et_container(entity_type_id,capacity) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),2);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='unit.space_cruiser'),'train','units',3,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),(SELECT id FROM def WHERE key='res.metal'),560,11);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),(SELECT id FROM def WHERE key='res.energy'),280,5);
@@ -2123,6 +2132,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.b
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),(SELECT id FROM movement_class WHERE key='starship'),3000);
 INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),88,(SELECT id FROM damage_class WHERE key='energy'),8000,30);
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.battleship')),'space');
+INSERT INTO et_container(entity_type_id,capacity) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),2);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='unit.battleship'),'train','units',4,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),(SELECT id FROM def WHERE key='res.metal'),590,11);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),(SELECT id FROM def WHERE key='res.energy'),295,5);
@@ -2238,6 +2248,15 @@ INSERT INTO et_healer(entity_type_id,target_tag_id,hp_per_second,range,energy_pe
 INSERT INTO et_energy(entity_type_id,max,regen_per_second) VALUES ((SELECT id FROM def WHERE key='unit.priest'),100,2);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.temple'),(SELECT id FROM def WHERE key='unit.priest'),'train','units',0,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.priest'),(SELECT id FROM def WHERE key='res.wealth'),46,1);
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),'unit','transport',1500,5,(SELECT id FROM armor_class WHERE key='shield'),6000,2,400,'per_type',NULL,(SELECT id FROM def WHERE key='age.starfaring'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),(SELECT id FROM tag WHERE key='military'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),(SELECT id FROM tag WHERE key='starship'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),(SELECT id FROM movement_class WHERE key='starship'),2600);
+INSERT INTO et_container(entity_type_id,capacity) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),20);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='unit.transport_ship'),'train','units',0,1);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),(SELECT id FROM def WHERE key='res.metal'),600,12);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),(SELECT id FROM def WHERE key='res.energy'),200,4);
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.military.1','Militia');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.military.1'),'track','military',1,400);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.military.1'),(SELECT id FROM def WHERE key='res.food'),200,0);
@@ -3405,6 +3424,7 @@ INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FR
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.up.cargo_drone'),(SELECT id FROM def WHERE key='tech.up.lorry'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),(SELECT id FROM def WHERE key='tech.up.cargo_drone'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.priest'),(SELECT id FROM def WHERE key='age.classical'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),(SELECT id FROM def WHERE key='age.starfaring'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.military.1'),(SELECT id FROM def WHERE key='age.ancient'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.military.2'),(SELECT id FROM def WHERE key='age.classical'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.military.2'),(SELECT id FROM def WHERE key='tech.military.1'),1);
