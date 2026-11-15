@@ -126,6 +126,14 @@ card.
 
 ## In progress (nothing running)
 
+**Both Codex runs stopped at 01:09 on 2026-11-15: the OpenAI account hit its
+weekly limit (resets 2026-11-18 11:11).** Task 42 and task 43 each have
+partial, uncommitted, unverified work in their worktrees; resume each in
+place (prompt + "continue from the changes already in the worktree; check
+what is done first"), 42 first. The owner is choosing between waiting for
+the reset, finishing them with Claude agents, or adding OpenAI credits.
+
+
 - **Task 42 — launcher window** (`42-launcher.md`), Codex. **Interrupted
   2026-11-14 by the Codex usage limit, which resets 2026-11-15 00:44.** Partial,
   unbuilt, untested changes are uncommitted in `../rise-of-man-worktrees/42-launcher`
