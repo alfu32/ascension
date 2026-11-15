@@ -36,6 +36,21 @@ with equal hashes), `app/docs/world-model.md`, `app/docs/database.md`
    `bld.auto_*`, sites started by computer players), and close it. Rule the
    owner wants: every harvesting building inside a city's radius **and**
    inside the owner's borders. Scenario tests for each building type.
+2b. **Owner decision (2026-11-15): free colonisation from the enlightenment
+   age.** "Colonisation since the 1600s has been done in spite of any
+   national borders: if it is free, you can build cities." From the
+   enlightenment age on (ordinal 4; data, not names: an age flag or a
+   placement rule that only applies before that age, never a key in code), a
+   player may found a **city** anywhere on any planet that is not inside
+   another player's territory; their own borders no longer limit where a
+   city goes. Before that age today's rules stay. Only cities change: every
+   other building keeps its rules (harvesting buildings inside a city's
+   radius and the owner's borders, item 2). City spacing still applies.
+   The placement preview must also refuse, with a clear message, a site no
+   builder of the player can reach (for example a city placed on another
+   planet while the selected worker is on the home planet — carrying units
+   there is task 54). Scenario tests: before and after the age, on free
+   land, on own land, on foreign land.
 3. **"We do not need that much forest nor that many mountains."** Forest
    coverage is 24 % and mountains 7 % of land in both map styles. Reduce
    them (start around forest 12 %, mountains 4 %; tune by screenshots of the
