@@ -289,7 +289,7 @@ UPDATE map_style SET
   route_extra_pct=v.extra, star_map_radius=v.radius
  FROM v JOIN def d ON d.key=v.k WHERE map_style.id=d.id;
 WITH v(k,rk,p,c0,c1,s0,s1,d0,d1) AS (VALUES
-  ('ter.forest','planet','per_player',1,2,8,12,3,13), ('ter.mountain','planet','per_player',1,2,6,10,6,14),
+  ('ter.forest','planet','per_player',1,2,6,10,3,13), ('ter.mountain','planet','per_player',1,2,5,8,6,14),
   ('node.relics','planet','scattered',2,4,1,1,10,0),
   ('node.ore_planet','space','scattered',6,10,1,1,0,0), ('ter.nebula','space','scattered',2,3,6,12,0,0))
 INSERT INTO map_style_feature(map_style_id,feature_def_id,region_kind,pattern,clumps_min,clumps_max,size_min,size_max,start_min_dist,start_max_dist)

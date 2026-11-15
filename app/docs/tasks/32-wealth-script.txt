@@ -18,10 +18,10 @@
 3000 box builders
 3001 hud tab 0
 3002 hud slot 9
-3003 click @0,-10
+3003 click @0,10
 3600 box builders
 3601 hud slot 4
-3602 click @-10,0
+3602 click @-10,10
 4200 box builders
 4201 hud slot 0
 4202 click @27,0

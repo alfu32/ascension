@@ -539,7 +539,22 @@ impl Populator<'_> {
                         .iter()
                         .enumerate()
                         .filter(|&(_, &i)| can_grow(i, &room))
-                        .max_by_key(|&(_, &i)| (scores[i], std::cmp::Reverse(i)))
+                        .max_by_key(|&(_, &i)| {
+                            // Compact blobs: a deposit must hold a whole building footprint.
+                            let touching = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+                                .into_iter()
+                                .filter(|&(dx, dy)| {
+                                    let tile = self
+                                        .map
+                                        .surface
+                                        .neighbor(self.map.surface.tile(i), dx, dy)
+                                        .unwrap();
+                                    self.map.terrain[self.map.surface.index(tile)]
+                                        == row.feature_def_id
+                                })
+                                .count();
+                            (touching, scores[i], std::cmp::Reverse(i))
+                        })
                     else {
                         frontier.clear();
                         // Nothing growable here; stop rather than loop on a dead frontier.

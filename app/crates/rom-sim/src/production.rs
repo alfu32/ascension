@@ -215,7 +215,21 @@ impl World {
             && self
                 .body_position(entity.pos.body)
                 .is_some_and(|space_pos| self.can_stand(subject, space_pos));
-        if class.is_some() && beside.is_none() && !launch {
+        // A craft that lives in space on a map without systems has nowhere to launch to: it
+        // appears at the gate, as in single-surface test worlds.
+        let space_craft = class.is_some_and(|class| {
+            self.rules
+                .movement_class_terrain
+                .get(&class)
+                .into_iter()
+                .flatten()
+                .any(|r| {
+                    r.speed_pct > 0
+                        && self.rules.terrains[&r.terrain_id].layer == rom_rules::Layer::Space
+                })
+        });
+        let legacy_gate = space_craft && beside.is_none() && self.systems().is_empty();
+        if class.is_some() && beside.is_none() && !launch && !legacy_gate {
             order.status = OrderStatus::Blocked("no_spawn_tile".into());
             return;
         }
