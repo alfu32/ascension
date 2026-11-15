@@ -47,6 +47,17 @@ with equal hashes), `app/docs/world-model.md`, `app/docs/database.md`
    should be inside it: not drawn, not targetable, counted in the building,
    leaving it when ordered elsewhere. Use the existing container/garrison
    mechanism (`entity_container`) if it fits; report what you chose.
+   **How the player reaches them (owner asked; proposed design):** selecting
+   the building shows the workers inside as portraits in the selection
+   panel's unit strip with a count ("Workers 4/10"); clicking a portrait
+   selects that worker (it stays inside until it gets an order, then walks
+   out to carry it out); shift-click adds, double-click selects every worker
+   of that type inside; a "Release all" button (with a hotkey) sends everyone
+   out to the rally point, or beside the door; an order given to the building
+   itself (right-click a forest from a woodcutter's camp) applies to everyone
+   inside; the idle-citizen button keeps skipping working citizens. The
+   simulation needs a public way to list a building's occupants and an
+   order to release them (one way in: orders only).
 5. **Docks: ships stay at 100 % in the queue, and appear on land.** "Ships are
    not cleared from docks; they stay completed at 100 % in the queue. If the
    dock's gate points the wrong way (towards land) I had ships commissioned on
