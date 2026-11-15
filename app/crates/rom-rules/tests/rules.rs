@@ -732,7 +732,7 @@ fn universe_knobs_load_and_validate() {
     );
     assert!(many.route_extra_pct > 0 && many.star_map_radius > 0);
     for style in [one, many] {
-        for (key, pct) in [("ter.forest", 24), ("ter.mountain", 7)] {
+        for (key, pct) in [("ter.forest", 12), ("ter.mountain", 4)] {
             let row = rules.map_style_features[&style.id]
                 .iter()
                 .find(|row| row.feature_def_id == rules.id_of(key).unwrap())

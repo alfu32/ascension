@@ -524,6 +524,38 @@ impl Playthrough {
         &self.ages
     }
 
+    /// Available production items not yet exercised: mode name and definition.
+    pub fn missing(&self) -> Vec<(&'static str, DefId)> {
+        use rom_rules::ProductionMode;
+        let player = &self.world.players[&PlayerId(1)];
+        let mut out = Vec::new();
+        for row in self.world.rules.production.values().flatten() {
+            if !self
+                .world
+                .rules
+                .is_available(row.product_def_id, player.faction)
+            {
+                continue;
+            }
+            let (name, done) = match row.mode {
+                ProductionMode::Construct => {
+                    ("construct", self.constructed.contains(&row.product_def_id))
+                }
+                ProductionMode::Train => ("train", self.trained.contains(&row.product_def_id)),
+                ProductionMode::Research => {
+                    ("research", player.techs.contains_key(&row.product_def_id))
+                }
+                ProductionMode::Morph => continue,
+            };
+            if !done {
+                out.push((name, row.product_def_id));
+            }
+        }
+        out.sort();
+        out.dedup();
+        out
+    }
+
     /// Whether every available production item has been exercised and completed.
     pub fn is_complete(&self) -> bool {
         use rom_rules::ProductionMode;
@@ -723,7 +755,14 @@ impl Playthrough {
         }
     }
 
+    /// A site for `subject`: first with a free lane around it, then, for a deposit that has
+    /// little room, packed against its neighbours (finished buildings never trap units).
     fn building_site(&self, subject: DefId) -> Option<Pos> {
+        self.building_site_with(subject, true)
+            .or_else(|| self.building_site_with(subject, false))
+    }
+
+    fn building_site_with(&self, subject: DefId, lane: bool) -> Option<Pos> {
         let player = PlayerId(1);
         // Square rings give a stable outward spiral around each city. Both the
         // placement preview and the per-city limit must pass before submission.
@@ -760,20 +799,21 @@ impl Playthrough {
                     );
                     // Leave a tile-wide lane between footprints so completed
                     // buildings cannot enclose a builder or block later sites.
-                    let blocked = self
-                        .world
-                        .entities()
-                        .filter(|e| self.world.is_building(e.type_id))
-                        .any(|e| {
-                            let other = crate::construction::footprint(
-                                &self.world.rules.entity_types[&e.type_id],
-                                e.pos,
-                            );
-                            candidate[0] - 1000 < other[2]
-                                && other[0] < candidate[2] + 1000
-                                && candidate[1] - 1000 < other[3]
-                                && other[1] < candidate[3] + 1000
-                        });
+                    let blocked = lane
+                        && self
+                            .world
+                            .entities()
+                            .filter(|e| self.world.is_building(e.type_id))
+                            .any(|e| {
+                                let other = crate::construction::footprint(
+                                    &self.world.rules.entity_types[&e.type_id],
+                                    e.pos,
+                                );
+                                candidate[0] - 1000 < other[2]
+                                    && other[0] < candidate[2] + 1000
+                                    && candidate[1] - 1000 < other[3]
+                                    && other[1] < candidate[3] + 1000
+                            });
                     if blocked {
                         continue;
                     }

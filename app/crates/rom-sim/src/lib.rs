@@ -200,6 +200,9 @@ pub enum SimError {
     /// Placement rule `in_own_territory`: a footprint tile is outside own borders.
     #[error("placement must be inside own territory")]
     NotInOwnTerritory,
+    /// Free colonisation: the city's footprint lies in another player's territory.
+    #[error("a city cannot be founded inside another player's territory")]
+    InForeignTerritory,
     /// Placement rule `in_city_radius`: no own city's economic radius covers the centre.
     #[error("placement must be inside a city's economic radius")]
     NotInCityRadius,

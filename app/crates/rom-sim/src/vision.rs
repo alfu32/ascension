@@ -224,6 +224,10 @@ impl World {
         if e.container_id.is_some() {
             return false;
         }
+        // Workers inside a gather building are hidden from everyone but their own side.
+        if e.is_inside() && !self.allied(player, e.owner) {
+            return false;
+        }
         self.allied(player, e.owner)
             || [Some(e.pos), self.orbit(e.id).map(|orbit| orbit.pos)]
                 .into_iter()

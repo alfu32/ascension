@@ -917,9 +917,10 @@ fn subjects_and_construction_placement_are_accepted() {
     let id = citizen(&mut world, Pos::default());
     let mut command = untargeted(id, "construct", false);
     command.subject = world.rules().id_of("bld.farm");
+    // The whole 4 x 4 footprint stands inside the city's 16-tile economic radius.
     command.target_pos = Some(Pos {
-        x: 10_000,
-        y: 10_000,
+        x: 12_000,
+        y: 12_000,
         face: 0,
         ..Pos::default()
     });

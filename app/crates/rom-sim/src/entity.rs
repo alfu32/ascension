@@ -106,6 +106,12 @@ pub struct Entity {
 }
 
 impl Entity {
+    /// Whether this worker is inside the gather building it works in: not drawn, not
+    /// targetable, counted in the building, out again when it is given another order.
+    pub fn is_inside(&self) -> bool {
+        self.work_site.is_some()
+    }
+
     /// Returns the executor's orders from active/front to last queued.
     pub fn orders(&self) -> &VecDeque<Order> {
         &self.orders

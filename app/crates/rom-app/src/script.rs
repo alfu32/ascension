@@ -18,7 +18,7 @@
 //! Live names (resolved at the step, in entity id order): `relicN` = free carry nodes,
 //! `templeN` = own completed keepers, `marketN` = own completed buildings training route
 //! traders, `cityN` = own completed cities, `carrierN` = own claim-tag units,
-//! `traderN` = own route traders, `shipN` = own orbiting ships, `enemyN` = enemy non-city buildings
+//! `traderN` = own route traders, `gatherN` = own completed gather buildings, `shipN` = own orbiting ships, `enemyN` = enemy non-city buildings
 //! on the home planet. `click` and `rclick` support these names and Shift.
 //! These component-based aliases replace a dependency on the last trained type.
 //!
@@ -451,6 +451,8 @@ fn parse_line(
                 "slot" => HudRegionKind::CommandSlot,
                 "queue" => HudRegionKind::QueueItem,
                 "tile" => HudRegionKind::SelectionTile,
+                "inside" => HudRegionKind::InsideWorker,
+                "insideall" => HudRegionKind::InsideWorkerAll,
                 other => return Err(format!("unknown HUD region {other:?}")),
             };
             let index = arg(1)?
@@ -516,7 +518,7 @@ fn parse_line(
 
 fn dynamic_name(word: &str) -> bool {
     [
-        "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy",
+        "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy", "gather",
     ]
     .iter()
     .any(|prefix| {
@@ -535,7 +537,7 @@ pub fn live_pick(
     use rom_rules::{ClaimMode, EntityClass, ProductionMode};
     let rules = world.rules();
     let (name, n) = [
-        "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy",
+        "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy", "gather",
     ]
     .iter()
     .find_map(|name| {
@@ -583,6 +585,7 @@ pub fn live_pick(
                 match name {
                     "ship" => world.orbit(e.id).is_some(),
                     "temple" => et.keeper.is_some(),
+                    "gather" => et.gather_site.is_some() && et.class == EntityClass::Building,
                     "market" => {
                         et.class == EntityClass::Building
                             && rules.production.get(&et.id).into_iter().flatten().any(|r| {

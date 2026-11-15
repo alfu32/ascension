@@ -169,6 +169,7 @@ impl World {
         let is_city = self.is_city_type(subject);
         // A player without a city may found one outside any border.
         let first_city = ignore_territory || (is_city && self.city_count(player) == 0);
+        let free_colonisation = self.rules.ages[&self.players[&player].age].free_colonisation;
         let surface = self.surf(pos.body);
         let geo = &surface.geo;
         let within = |other: Pos, distance: i64| geo.within(pos, other, distance);
@@ -191,6 +192,15 @@ impl World {
         }
         for rule in &et.placement_rules {
             let pass = match rule.rule {
+                PlacementKind::InOwnTerritory
+                    if is_city && free_colonisation && !ignore_territory =>
+                {
+                    // Free colonisation: only another player's land is closed to a new city.
+                    geo.footprint_tiles(pos.face, bounds).all(|t| {
+                        self.territory_owner_on_body(pos.body, t.face, t.x, t.y)
+                            .is_none_or(|owner| owner == player)
+                    })
+                }
                 PlacementKind::InOwnTerritory => {
                     first_city
                         || geo.footprint_tiles(pos.face, bounds).all(|t| {
@@ -198,7 +208,7 @@ impl World {
                         })
                 }
                 PlacementKind::InCityRadius => {
-                    first_city || self.city_covering(player, pos).is_some()
+                    first_city || self.footprint_in_city_radius(player, pos, bounds)
                 }
                 PlacementKind::OnTerrain => {
                     footprint_terrain().all(|terrain| terrain == rule.ref_def_id)
@@ -236,6 +246,11 @@ impl World {
             };
             if !pass {
                 return Err(match rule.rule {
+                    PlacementKind::InOwnTerritory
+                        if is_city && free_colonisation && !ignore_territory =>
+                    {
+                        SimError::InForeignTerritory
+                    }
                     PlacementKind::InOwnTerritory => SimError::NotInOwnTerritory,
                     PlacementKind::InCityRadius => SimError::NotInCityRadius,
                     PlacementKind::OnTerrain => SimError::NotOnTerrain,
@@ -249,6 +264,34 @@ impl World {
             }
         }
         Ok(())
+    }
+
+    /// Whether one complete city of the player has all four corners of the footprint inside its
+    /// economic radius, so a building never stands half outside the city that serves it.
+    fn footprint_in_city_radius(&self, player: PlayerId, pos: Pos, bounds: [i64; 4]) -> bool {
+        let geo = self.geo(pos.body);
+        let corners = [
+            (bounds[0], bounds[1]),
+            (bounds[2] - 1, bounds[1]),
+            (bounds[0], bounds[3] - 1),
+            (bounds[2] - 1, bounds[3] - 1),
+        ]
+        .map(|(x, y)| Pos {
+            x: x as i32,
+            y: y as i32,
+            ..pos
+        });
+        self.territory.cities.iter().any(|id| {
+            let Some(city) = self.entity(*id) else {
+                return false;
+            };
+            let radius = self.city_economic_radius(*id);
+            city.owner == player
+                && city.build_progress.is_none()
+                && !city.neutralised
+                && city.pos.body == pos.body
+                && corners.iter().all(|c| geo.within(city.pos, *c, radius))
+        })
     }
 
     /// The player's city type: the first city type in id order available to its faction.

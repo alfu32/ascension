@@ -689,7 +689,8 @@ pub fn snapshot_on(
             }
             _ => false,
         };
-        if !on_body || entity.container_id.is_some() {
+        // Workers inside a gather building are not drawn; the building's panel lists them.
+        if !on_body || entity.container_id.is_some() || entity.is_inside() {
             continue;
         }
         let moving = motions.moving(entity, world.tick());
@@ -1021,7 +1022,22 @@ mod tests {
         assert_eq!(activity(world, &mut motions, walker), Some(Activity::Idle));
         // Ordered to walk three tiles, it moves, then stands still once there.
         let from = world.entity(walker).unwrap().pos;
-        let goal = world.offset(from, 3000, 0);
+        // Walk three tiles in a direction whose tiles are all open ground (map changes move trees).
+        let plain = content.rules.id_of("ter.plain").unwrap();
+        let goal = [(3000, 0), (-3000, 0), (0, 3000), (0, -3000)]
+            .into_iter()
+            .map(|(dx, dy)| world.offset(from, dx, dy))
+            .find(|goal| {
+                (0..=4).all(|k| {
+                    let step = Pos {
+                        x: from.x + (goal.x - from.x) * k / 4,
+                        y: from.y + (goal.y - from.y) * k / 4,
+                        ..from
+                    };
+                    world.terrain_at(step) == Some(plain)
+                })
+            })
+            .expect("open ground beside the builder");
         world
             .submit(Command {
                 player: PLAYER,

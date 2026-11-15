@@ -188,7 +188,7 @@ fn train_deducts_cost_and_spawns_after_build_ticks() {
         .find(|e| e.type_id == id(&w, "unit.citizen"))
         .unwrap();
     assert_eq!(unit.owner, OWNER);
-    assert_eq!(unit.pos, at(14_001, 10_500));
+    assert_eq!(unit.pos, at(14_500, 10_500));
     assert_eq!(w.stats().orders_done, 1);
 }
 
@@ -820,8 +820,8 @@ fn training_chooses_another_side_when_producer_touches_map_edge() {
     train(&mut w, city, "unit.citizen").unwrap();
     ticks(&mut w, 100);
     let unit = site(&w, "unit.citizen");
-    assert_eq!(w.entity(unit).unwrap().pos, at(56_999, 10_500));
-    assert_eq!(w.entities_in_radius(at(56_999, 10_500), 0), [unit]);
+    assert_eq!(w.entity(unit).unwrap().pos, at(56_500, 10_500));
+    assert_eq!(w.entities_in_radius(at(56_500, 10_500), 0), [unit]);
 }
 
 #[test]

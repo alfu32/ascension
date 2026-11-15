@@ -93,6 +93,9 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
         world.tick(),
         start.elapsed().as_secs_f64()
     );
+    for (mode, def) in audit.missing() {
+        eprintln!("playthrough missing {mode} {}", rules.key(def));
+    }
     if player.age != final_age || !audit.is_complete() {
         return Err("playthrough did not complete all content within 400000 ticks".into());
     }

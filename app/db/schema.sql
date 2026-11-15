@@ -136,7 +136,8 @@ CREATE TABLE age (
   ordinal   INTEGER NOT NULL UNIQUE,   -- 0 = first age
   era       TEXT NOT NULL CHECK (era IN ('history','near_future','stellar','galactic')),
   map_scale TEXT NOT NULL REFERENCES map_scale(key),  -- tier this age gives its owner
-  view_range INTEGER NOT NULL DEFAULT 0 CHECK (view_range >= 0)  -- largest ground half-width the camera may show, milli-tiles; 0 = whole globe
+  view_range INTEGER NOT NULL DEFAULT 0 CHECK (view_range >= 0),  -- largest ground half-width the camera may show, milli-tiles; 0 = whole globe
+  free_colonisation INTEGER NOT NULL DEFAULT 0 CHECK (free_colonisation IN (0,1))  -- 1: from this age a city may be founded anywhere not inside another player's territory
 ) STRICT;
 
 -- ── A4. Factions (nations → races) ──────────────────────────────────────────
@@ -698,7 +699,7 @@ CREATE TABLE ai_difficulty (
 -- Order vocabulary. `needs` names the et_* component the executor must have.
 CREATE TABLE order_kind (
   key    TEXT PRIMARY KEY,
-  needs  TEXT NOT NULL DEFAULT '',     -- '', 'movement','weapon','builder','harvester','healer','trader','container','producer','energy'
+  needs  TEXT NOT NULL DEFAULT '',     -- '', 'movement','weapon','builder','harvester','healer','trader','container','producer','energy','gather_site'
   target TEXT NOT NULL CHECK (target IN ('none','point','entity','def','entity_or_point')),
   note   TEXT NOT NULL DEFAULT ''
 ) STRICT, WITHOUT ROWID;

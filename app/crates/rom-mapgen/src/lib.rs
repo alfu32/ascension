@@ -584,19 +584,40 @@ impl Builder<'_> {
             let mut painted = vec![seed_tile];
             self.map.grid.terrain[first] = row.feature_def_id;
             let mut attempts = 0;
+            // Grow a compact blob: a deposit must hold a whole building footprint, so each step
+            // takes a free neighbour touching the most painted tiles (random among equals).
             while painted.len() < target && attempts < target * 30 {
                 attempts += 1;
-                let (x, y) = painted[self.rng.range(0, painted.len() as u32) as usize];
-                let (dx, dy) = [(1, 0), (-1, 0), (0, 1), (0, -1)][self.rng.range(0, 4) as usize];
-                let (nx, ny) = (x + dx, y + dy);
-                if let Some(j) = self.idx(nx, ny)
-                    && self.map.grid.terrain[j] == base
-                    && !self.protected[j]
-                    && !self.occupied[j]
-                {
-                    self.map.grid.terrain[j] = row.feature_def_id;
-                    painted.push((nx, ny));
+                let mut best: Vec<(i64, i64)> = Vec::new();
+                let mut best_touch = 0;
+                for &(x, y) in &painted {
+                    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                        let (nx, ny) = (x + dx, y + dy);
+                        let Some(j) = self.idx(nx, ny) else { continue };
+                        if self.map.grid.terrain[j] != base || self.protected[j] || self.occupied[j]
+                        {
+                            continue;
+                        }
+                        let touch = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+                            .iter()
+                            .filter(|(ex, ey)| painted.contains(&(nx + ex, ny + ey)))
+                            .count();
+                        if touch > best_touch {
+                            best_touch = touch;
+                            best.clear();
+                        }
+                        if touch == best_touch && !best.contains(&(nx, ny)) {
+                            best.push((nx, ny));
+                        }
+                    }
                 }
+                if best.is_empty() {
+                    break;
+                }
+                let (nx, ny) = best[self.rng.range(0, best.len() as u32) as usize];
+                let j = self.idx(nx, ny).expect("checked");
+                self.map.grid.terrain[j] = row.feature_def_id;
+                painted.push((nx, ny));
             }
         } else {
             self.occupied[first] = true;

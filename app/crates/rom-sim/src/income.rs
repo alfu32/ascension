@@ -375,7 +375,7 @@ mod tests {
             })
             .collect();
         for (n, worker) in workers.iter().take(4).enumerate() {
-            let pos = at(8000 + n as i32 * 8000, 20_000);
+            let pos = at(10_000 + n as i32 * 8_000, 26_000);
             w.submit(order(*worker, "construct", Some(id("bld.farm")), Some(pos)))
                 .unwrap();
         }

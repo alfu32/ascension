@@ -214,10 +214,7 @@ fn starts(
                     .get(&r.feature_def_id)
                     .is_some_and(|t| !t.buildable || t.layer != Layer::Ground)
         })
-        .map(|r| {
-            ((r.size_min + r.size_max).max(2) as usize / 2)
-                .min((coverage(r, surface.len(), land_tiles, players) / players).max(1))
-        })
+        .map(|r| guarantee_count(r, coverage(r, surface.len(), land_tiles, players), players))
         .sum();
     let required = disc(
         surface,
@@ -324,21 +321,26 @@ fn coverage(row: &MapStyleFeature, tiles: usize, land_tiles: usize, players: usi
         / (4 * 65_536)) as usize
 }
 
+/// Tiles a start must have of a per-player terrain inside its range: the average clump count
+/// times the average clump size, within the planet's share per player.
+fn guarantee_count(row: &MapStyleFeature, target: usize, players: usize) -> usize {
+    let wanted = (row.clumps_min + row.clumps_max).max(0) as usize
+        * (row.size_min + row.size_max).max(0) as usize
+        / 4;
+    wanted.max(1).min((target / players.max(1)).max(1))
+}
+
+/// The ring, in whole tiles from a start, where a per-player feature is guaranteed. Distances are
+/// tiles of the map and do not grow with the planet, so they stay inside a city's economic radius.
 fn feature_range(surface: CubeSurface, row: &MapStyleFeature) -> (i64, i64) {
-    let scaled = |distance: i64| {
-        ((distance.max(0) as u128).pow(2) * surface.len() as u128 / 65_536)
-            .isqrt()
-            .min(40) as i64
-    };
-    // Below the reference area, a scaled annulus can lie wholly inside the
-    // protected start disc. Keep one accessible ring for those small worlds.
+    // A ring wholly inside the protected start disc would hold nothing: keep one open ring.
     let max = if row.start_max_dist > 0 {
-        scaled(row.start_max_dist).max(START_CLEAR_RADIUS + 1)
+        row.start_max_dist.max(START_CLEAR_RADIUS + 1)
     } else {
         40
     };
-    let max = max.min(i64::from(surface.n) / 2);
-    (scaled(row.start_min_dist).min(max), max)
+    let max = max.min(i64::from(surface.n) / 2).min(40);
+    (row.start_min_dist.max(0).min(max), max)
 }
 
 fn in_range(surface: CubeSurface, a: SurfacePos, b: SurfacePos, min: i64, max: i64) -> bool {
@@ -415,7 +417,14 @@ impl Populator<'_> {
             self.land_tiles,
             self.map.starts.len(),
         );
-        let (min, max) = feature_range(self.map.surface, row);
+        // The near ring is where a first city can use the feature; the far ring, out to the
+        // border radius, is where expansion finds more of it.
+        let (near_min, near_max) = feature_range(self.map.surface, row);
+        let far_max = 40.min(i64::from(self.map.surface.n) / 2);
+        let mut rings = vec![(near_min, near_max)];
+        if far_max > near_max + 6 {
+            rings.push((near_max + 6, far_max));
+        }
         // Local guarantees must preserve every start's buildable share, even
         // where several players' fairness discs overlap on a small world.
         let consumes_land = {
@@ -448,83 +457,133 @@ impl Populator<'_> {
         };
         let mut keep = vec![false; self.map.surface.len()];
         let mut added = 0;
-        for p in 0..self.map.starts.len() {
-            let start = self.map.starts[p];
-            let nearby: Vec<_> = disc(self.map.surface, start, max)
-                .into_iter()
-                .filter(|&i| {
-                    in_range(
-                        self.map.surface,
-                        start,
-                        self.map.surface.tile(i).into(),
-                        min,
-                        max,
-                    )
-                })
-                .collect();
-            if let Some(&i) = nearby
-                .iter()
-                .find(|&&i| self.map.terrain[i] == row.feature_def_id)
-            {
-                keep[i] = true;
-                continue;
-            }
-            let first = nearby
-                .iter()
-                .copied()
-                .filter(|&i| self.available(i) && can_grow(i, &room))
-                .max_by_key(|&i| {
-                    let connected =
-                        [(1, 0), (-1, 0), (0, 1), (0, -1)]
-                            .into_iter()
-                            .any(|(dx, dy)| {
-                                let tile = self
-                                    .map
-                                    .surface
-                                    .neighbor(self.map.surface.tile(i), dx, dy)
-                                    .unwrap();
-                                self.available(self.map.surface.index(tile))
-                                    && in_range(self.map.surface, start, tile.into(), min, max)
-                            });
-                    (connected, scores[i], std::cmp::Reverse(i))
-                });
-            let Some(first) = first else { continue };
-            // Keep fairness patches within the area budget even on small planets.
-            let size = ((row.size_min + row.size_max).max(2) as usize / 2)
-                .min((target / self.map.starts.len()).max(1));
-            let mut frontier = vec![first];
-            for _ in 0..size {
-                let Some((at, &i)) = frontier
+        let rings_len = rings.len();
+        for (min, max) in rings {
+            for p in 0..self.map.starts.len() {
+                let start = self.map.starts[p];
+                let nearby: Vec<_> = disc(self.map.surface, start, max)
+                    .into_iter()
+                    .filter(|&i| {
+                        in_range(
+                            self.map.surface,
+                            start,
+                            self.map.surface.tile(i).into(),
+                            min,
+                            max,
+                        )
+                    })
+                    .collect();
+                let existing: Vec<usize> = nearby
                     .iter()
-                    .enumerate()
-                    .filter(|&(_, &i)| can_grow(i, &room))
-                    .max_by_key(|&(_, &i)| (scores[i], std::cmp::Reverse(i)))
-                else {
-                    break;
-                };
-                frontier.swap_remove(at);
-                self.map.terrain[i] = row.feature_def_id;
-                if consumes_land {
-                    for (tiles, spare) in &mut room {
-                        if tiles.binary_search(&i).is_ok() {
-                            *spare -= 1;
+                    .copied()
+                    .filter(|&i| self.map.terrain[i] == row.feature_def_id)
+                    .collect();
+                for &i in &existing {
+                    keep[i] = true;
+                }
+                // Top up what the global scatter left near this start to the guaranteed count.
+                let wanted = guarantee_count(row, target / rings_len, self.map.starts.len());
+                if existing.len() >= wanted {
+                    continue;
+                }
+                let mut frontier: Vec<usize> = Vec::new();
+                for &i in &existing {
+                    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                        let tile = self
+                            .map
+                            .surface
+                            .neighbor(self.map.surface.tile(i), dx, dy)
+                            .unwrap();
+                        let j = self.map.surface.index(tile);
+                        if self.available(j)
+                            && !frontier.contains(&j)
+                            && in_range(self.map.surface, start, tile.into(), min, max)
+                        {
+                            frontier.push(j);
                         }
                     }
                 }
-                keep[i] = true;
-                added += 1;
-                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
-                    let tile = self
-                        .map
-                        .surface
-                        .neighbor(self.map.surface.tile(i), dx, dy)
-                        .unwrap();
-                    let j = self.map.surface.index(tile);
-                    if self.available(j)
-                        && !frontier.contains(&j)
-                        && in_range(self.map.surface, start, tile.into(), min, max)
-                    {
-                        frontier.push(j);
+                let mut remaining = wanted - existing.len();
+                while remaining > 0 {
+                    if frontier.is_empty() {
+                        // Boxed in: start another patch within range.
+                        let first = nearby
+                            .iter()
+                            .copied()
+                            .filter(|&i| self.available(i) && can_grow(i, &room))
+                            .max_by_key(|&i| {
+                                let connected = [(1, 0), (-1, 0), (0, 1), (0, -1)].into_iter().any(
+                                    |(dx, dy)| {
+                                        let tile = self
+                                            .map
+                                            .surface
+                                            .neighbor(self.map.surface.tile(i), dx, dy)
+                                            .unwrap();
+                                        self.available(self.map.surface.index(tile))
+                                            && in_range(
+                                                self.map.surface,
+                                                start,
+                                                tile.into(),
+                                                min,
+                                                max,
+                                            )
+                                    },
+                                );
+                                (connected, scores[i], std::cmp::Reverse(i))
+                            });
+                        let Some(first) = first else { break };
+                        frontier.push(first);
+                    }
+                    remaining -= 1;
+                    let Some((at, &i)) = frontier
+                        .iter()
+                        .enumerate()
+                        .filter(|&(_, &i)| can_grow(i, &room))
+                        .max_by_key(|&(_, &i)| {
+                            // Compact blobs: a deposit must hold a whole building footprint.
+                            let touching = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+                                .into_iter()
+                                .filter(|&(dx, dy)| {
+                                    let tile = self
+                                        .map
+                                        .surface
+                                        .neighbor(self.map.surface.tile(i), dx, dy)
+                                        .unwrap();
+                                    self.map.terrain[self.map.surface.index(tile)]
+                                        == row.feature_def_id
+                                })
+                                .count();
+                            (touching, scores[i], std::cmp::Reverse(i))
+                        })
+                    else {
+                        frontier.clear();
+                        // Nothing growable here; stop rather than loop on a dead frontier.
+                        break;
+                    };
+                    frontier.swap_remove(at);
+                    self.map.terrain[i] = row.feature_def_id;
+                    if consumes_land {
+                        for (tiles, spare) in &mut room {
+                            if tiles.binary_search(&i).is_ok() {
+                                *spare -= 1;
+                            }
+                        }
+                    }
+                    keep[i] = true;
+                    added += 1;
+                    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                        let tile = self
+                            .map
+                            .surface
+                            .neighbor(self.map.surface.tile(i), dx, dy)
+                            .unwrap();
+                        let j = self.map.surface.index(tile);
+                        if self.available(j)
+                            && !frontier.contains(&j)
+                            && in_range(self.map.surface, start, tile.into(), min, max)
+                        {
+                            frontier.push(j);
+                        }
                     }
                 }
             }

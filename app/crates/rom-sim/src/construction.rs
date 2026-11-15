@@ -145,6 +145,67 @@ impl World {
         Ok(pos)
     }
 
+    /// The free tile of a movement class nearest `anchor` among the tiles within `reach`
+    /// milli-tiles around a footprint, as a tile centre. Tiles of buildings, tiles the class
+    /// cannot enter (land for ships) and the footprint itself are never chosen.
+    pub(crate) fn free_tile_beside(
+        &self,
+        class: u32,
+        at: Pos,
+        bounds: [i64; 4],
+        anchor: Pos,
+        reach: i64,
+    ) -> Option<Pos> {
+        let surface = self.surf(at.body);
+        let geo = &surface.geo;
+        geo.footprint_surroundings(at.face, bounds, reach)
+            .filter(|&index| surface.pathing.passable(class, geo.tile_at(index), None))
+            .map(|index| (geo.rank_distance(anchor, geo.index_centre(index)), index))
+            .min()
+            .map(|(_, index)| geo.index_centre(index))
+    }
+
+    /// Moves every walking unit standing on a building's footprint to the nearest free tile its
+    /// movement class can enter, so nothing is ever shut inside a site or a finished building.
+    pub(crate) fn clear_footprint(&mut self, building: EntityId) {
+        let Some(site) = self.entity(building) else {
+            return;
+        };
+        let (at, bounds) = (
+            site.pos,
+            footprint(&self.rules.entity_types[&site.type_id], site.pos),
+        );
+        let inside: Vec<(EntityId, Pos, u32)> = self
+            .entities()
+            .filter(|e| {
+                e.id != building
+                    && e.container_id.is_none()
+                    && e.pos.body == at.body
+                    && e.pos.face == at.face
+                    && (bounds[0]..bounds[2]).contains(&i64::from(e.pos.x))
+                    && (bounds[1]..bounds[3]).contains(&i64::from(e.pos.y))
+            })
+            .filter_map(|e| {
+                let et = &self.rules.entity_types[&e.type_id];
+                let class = et.movement.as_ref()?.movement_class_id;
+                (et.class != EntityClass::Building && !self.rules.movement_classes[&class].flies)
+                    .then_some((e.id, e.pos, class))
+            })
+            .collect();
+        for (id, old, class) in inside {
+            let Some(to) = self.free_tile_beside(class, at, bounds, old, 12_000) else {
+                continue;
+            };
+            let unit = self.entities[id.0 as usize].as_mut().expect("unit");
+            unit.pos = to;
+            // The unit repaths from where it now stands.
+            for order in &mut unit.orders {
+                order.movement = None;
+            }
+            self.relocate(id, old, to);
+        }
+    }
+
     pub(crate) fn create_site(&mut self, order: &mut Order) {
         let subject = order.subject.expect("construction subject");
         let id = self
@@ -163,6 +224,7 @@ impl World {
         site.gather_slots = 0;
         site.hp = (i128::from(site.hp) * i128::from(pct) / 100) as i64;
         order.target_entity = Some(id);
+        self.clear_footprint(id);
         self.refresh_site(id);
         self.economy.dirty.insert(id);
     }
@@ -253,6 +315,7 @@ impl World {
             self.economy.dirty.insert(site_id);
             self.refresh_territory(site_id);
             self.note_capital(site_id);
+            self.clear_footprint(site_id);
         }
     }
 }

@@ -286,11 +286,21 @@ integer arithmetic retains half-integer averages until the final division.
 The last unbuildable, sight-blocking ground terrain in style-row order follows
 highest elevation, while other land terrains follow an independent seamless
 3D moisture field, preferring the middle 60% of land elevations. Every start's
-3-tile disc stays clear. Missing per-player terrain is grown in the distance
-annulus scaled by `sqrt(tiles / 65,536)` (each radius capped at 40 tiles),
-with a minimum outer radius of 4 on small worlds to clear the protected disc,
-exchanging low-ranked global tiles to preserve coverage; on very small planets
-start guarantees can exceed the budget. Scattered sites scale a rolled flat
+3-tile disc stays clear. Per-player terrain is guaranteed twice around every
+start, and the guarantee is a tile count, not just one tile: `avg(clumps) ×
+avg(sizes)` tiles (within the planet's share per player) must exist in the
+ring `start_min_dist..start_max_dist`, and the same count again in the ring
+from `start_max_dist + 6` to 40 tiles (the city border radius), so expansion
+finds more. Ring distances are plain tiles and do not grow with the planet
+(task 52: they used to be scaled by `sqrt(tiles / 65,536)`, which put oil
+19–34 tiles from a start on a 256 planet, outside a city's 16-tile economic
+radius, so no well could be built). Seed values keep the near ring within the
+economic radius: forest 3–13 tiles, mountain 6–14, oil 8–14 (a mine needs the
+mountain tiles within 6 tiles of it for its slots). Missing tiles are grown
+from the clump already there, or a new patch when it is boxed in, exchanging
+low-ranked global tiles to preserve coverage; on very small planets start
+guarantees can exceed the budget. Seed coverage is forest 12 %, mountain 4 %
+of non-ice land (task 52, was 24 % and 7 %). Scattered sites scale a rolled flat
 count by the same area ratio, never below that flat count, and stay at least
 12 tiles apart on valid land. The loader reports nonzero `coverage_pct` on
 entity features or features outside `region_kind = 'planet'`. Flat generation
@@ -510,13 +520,63 @@ add route slots. Pending route orders reserve slots. Orders retain the home,
 target, accepted length, delivery resource/amount and current leg in memory;
 the existing `trade_route` table is unchanged (save support is a later task).
 
+## Workers inside, units leaving buildings (task 52)
+
+**Workers inside a gather building.** A worker that holds a gather slot
+(`entity.work_site`) is *inside* the building: `Entity::is_inside`,
+`World::occupants(building)` (id order). Nothing new is stored. Inside workers
+are not drawn and cannot be picked on the map; enemies cannot see or target
+them (`sees_entity`); their own side still lists them. The building's
+selection panel shows their portraits ("Workers 4 / 10"); clicking one selects
+that worker, shift adds it, a double click selects every worker of its type
+inside. The container component (`et_container`, `entity.container_id`) was
+not used: it models nodes carried by units, and garrisoned units do not
+exist yet. Any order given to a worker takes it out of the slot (as before). The
+order kind `release` (`needs = gather_site`, target none) lets a gather
+building send every worker out: they leave their slot and work order and
+stand beside the building; with a rally point set the app also orders them to
+walk there. Idle citizens look for work again after
+`citizen.auto_work_delay_ticks`, so released workers who are not given a task
+go back to work by themselves. Right-click and the **Release all workers**
+button (Order tab, slot 3, hotkey R) with a gather building selected act on
+everyone inside it.
+
+**Where a produced unit appears.** `complete_training` puts a mover on the
+free tile its movement class can enter nearest the building's gate within 10
+tiles of the footprint, around all four sides (`World::free_tile_beside`:
+water for ships, never a building tile). A mover that finds none and can stand
+in space (spacecraft) launches as before; otherwise the order stays at the head
+of the queue as `Blocked("no_spawn_tile")` and the HUD queue row says "No free
+ground or water beside it". (In a universe a ship used to count as a
+spacecraft to launch, find no room in space and stay at 100 % forever.)
+Other blocked reasons the HUD words: `pop_cap`, `space_age`.
+
+**Footprints are cleared.** When a site is placed and when a building
+completes, every walking unit standing on its footprint is moved to the nearest
+free tile of its movement class (`World::clear_footprint`), so builders are
+never shut inside.
+
 ## Placement and resource discovery (task 41)
 
 Every building with an `in_city_radius` row also has an `in_own_territory`
 row, including automated variants copied by the content generator. The
-first checks the building centre against the city's economic radius using
-unfolded cube-face distance. The second checks every footprint tile against
+first checks all four corners of the building footprint against the economic
+radius of one complete city using unfolded cube-face distance (task 52: it
+used to test only the centre, so a farm or mine could stand half outside the
+city that serves it). The second checks every footprint tile against
 the owner's national border. Economic radius growth never grants territory.
+
+**Free colonisation (task 52, owner decision).** `age.free_colonisation`
+(0/1, seed: ordinal 4 and later, the enlightenment age on) lets a player of
+that age found a **city** anywhere not inside another player's territory: the
+`in_own_territory` row of a city type then means "no footprint tile owned by
+another player", and the refusal is `InForeignTerritory`. Before the flag the
+rule is unchanged (own borders only, except the first city). Only city types
+change: every other building keeps `in_city_radius` and `in_own_territory`.
+City spacing, the city limit and every other row still apply. A construct
+order whose site is on another body than the builder is refused (`OtherBody`);
+the placement preview turns red when no selected builder stands on the site's
+body, and clicking says so. Carrying units across space is task 54.
 
 `resource.first_age_id` is a discovery gate. Terrain-to-resource associations
 come from existing `et_gather_site.resource_id`, `needs_node_terrain_id` and
