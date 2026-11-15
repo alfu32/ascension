@@ -163,7 +163,8 @@ the reset, finishing them with Claude agents, or adding OpenAI credits.
 ## Next cards (written, queued, all Codex)
 
 Run them **one at a time, in order**, each after the previous one is merged
-(they all touch `seed.sql` and may extend the part kit): **44** oil you can
+(they all touch `seed.sql` and may extend the part kit). **First, task 52**
+(gameplay fixes from the owner's second game, Claude, right after 43). Then **44** oil you can
 see and a glowing material (renderer), then the model cards **45** early
 modern, **46** industrial, **47** modern and information buildings, **48**
 modern and information units, **49** future buildings, **50** future units,
