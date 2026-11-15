@@ -120,13 +120,25 @@ impl HudGpu {
         labels: &[SpaceLabel],
         alpha: f32,
     ) {
+        self.draw_labels_in(d, layout, labels, alpha, true);
+    }
+
+    /// Draws labels; with `in_world` only those over the world area between the HUD bars.
+    pub(crate) fn draw_labels_in(
+        &mut self,
+        d: &mut impl RaylibDraw,
+        layout: &HudLayout,
+        labels: &[SpaceLabel],
+        alpha: f32,
+        in_world: bool,
+    ) {
         if labels.is_empty() || alpha <= 0.01 {
             return;
         }
         let world = layout.world_area();
         let labels: Vec<SpaceLabel> = labels
             .iter()
-            .filter(|l| l.y > world.y && l.y < world.bottom() && l.x > 0.0)
+            .filter(|l| !in_world || (l.y > world.y && l.y < world.bottom() && l.x > 0.0))
             .cloned()
             .collect();
         let labels = &labels[..];
@@ -143,7 +155,12 @@ impl HudGpu {
         let mut quads = Vec::new();
         for index in hud_minimap::declutter(&boxes) {
             let label = &labels[index];
-            let shade = [0, 0, 0, (200.0 * alpha) as u8];
+            let shade = [
+                0,
+                0,
+                0,
+                (200.0 * alpha * f32::from(label.colour[3]) / 255.0) as u8,
+            ];
             let colour = [
                 label.colour[0],
                 label.colour[1],
@@ -455,6 +472,7 @@ pub(crate) fn draw_space_minimap(
     layout: &HudLayout,
     zoom: &ZoomCamera,
     orbit: &OrbitCamera,
+    space: &crate::space::SpaceSnapshot,
 ) {
     let view = layout.rect(Region::MinimapView);
     d.draw_rectangle_rec(rectangle(view), Color::new(4, 6, 12, 255));
@@ -467,7 +485,7 @@ pub(crate) fn draw_space_minimap(
     draw_marks(
         &mut clip,
         layout,
-        hud_minimap::space_marks(zoom, orbit, layout, view),
+        hud_minimap::space_marks(zoom, orbit, space, layout, view),
     );
 }
 

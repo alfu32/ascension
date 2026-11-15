@@ -8,10 +8,11 @@ use std::time::{Duration, Instant};
 
 use crate::sim_thread::{SimLink, SimReport};
 use gpui::{
-    Context, FocusHandle, ImageSource, InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent,
-    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit, ParentElement, Pixels,
-    Point, Render, RenderImage, ScrollDelta, ScrollWheelEvent, StatefulInteractiveElement, Styled,
-    StyledImage, Timer, Window, canvas, div, img, px, rgb, rgba,
+    Context, CursorStyle, FocusHandle, ImageSource, InteractiveElement, IntoElement, KeyDownEvent,
+    KeyUpEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit,
+    ParentElement, Pixels, Point, Render, RenderImage, ScrollDelta, ScrollWheelEvent,
+    StatefulInteractiveElement, Styled, StyledImage, Timer, Window, canvas, div, img, px, rgb,
+    rgba,
 };
 use rom_render::{Frame, InputEvent, Key, Modifiers, PointerButton, RenderBridge, RenderStats};
 
@@ -183,6 +184,9 @@ impl WorldView {
                 .set_speed(self.sim.speed().saturating_mul(2).min(1600)),
             "-" => self.sim.set_speed((self.sim.speed() / 2).max(6)),
             "escape" => self.bridge.push_input(InputEvent::Escape),
+            "space" if event.keystroke.modifiers.shift => self
+                .bridge
+                .push_input(InputEvent::KeyDown(Key::FollowSelection)),
             name => {
                 if let Some(key) = Key::from_name(name) {
                     self.bridge.push_input(InputEvent::KeyDown(key));
@@ -248,9 +252,16 @@ impl Render for WorldView {
                 self.sim.report(),
             )
         });
+        // A hand over what a double click enters (a planet, a star, a system).
+        let cursor = if self.bridge.pointer_hand() {
+            CursorStyle::PointingHand
+        } else {
+            CursorStyle::Arrow
+        };
         div()
             .id("world-view")
             .track_focus(&self.focus)
+            .cursor(cursor)
             .relative()
             .size_full()
             .overflow_hidden()

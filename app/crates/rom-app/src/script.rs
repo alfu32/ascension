@@ -27,8 +27,16 @@
 //! `travel <systemN|=system>` order the selected ships (`rockN` is the N-th nearest resource body
 //! of the home system, `systemN` the N-th nearest neighbouring system), `speed <percent>` sets
 //! the game speed. Test-only setup lines take effect before the match starts, whatever their tick:
-//! `grant-age <age key>`, `grant <resource key> <amount>` for player one, and
-//! `place <owner id> <entity key> @dx,dy` to place a test scene before tick one.
+//! `grant-age <age key>`, `grant <resource key> <amount>` for player one,
+//! `place <owner id> <entity key> @dx,dy` to place a test scene before tick one, and
+//! `place-space <owner id> <entity key> dx,dy` to place a ship in the plane of player one's home
+//! system, `dx`, `dy` tiles from its star.
+//!
+//! Camera commands replay input on the render thread exactly as the window would send it
+//! (positions in canvas pixels): `cam wheel <steps> [x,y]`, `cam drag x,y x,y [rotate]`
+//! (middle-button drag; `rotate` holds Shift), `cam dblclick x,y`, `cam click x,y`, `cam point
+//! x,y` (move the pointer only), `cam key <up|down|left|right> <down|up>`, `cam home`,
+//! `cam focus` and `cam follow` (the focus and follow keys).
 
 use rom_render::{HudRegionKind, Modifiers, PickEvent, PointerButton, SurfacePos};
 
@@ -60,6 +68,9 @@ pub struct ScriptSetup {
     pub grants: Vec<(String, i64)>,
     /// Test scene entities: owner, type key and milli-tile offsets from player one's city.
     pub placements: Vec<(u32, String, i64, i64)>,
+    /// Test ships: owner, type key and milli-tile offsets from the star of player one's home
+    /// system, in that system's plane.
+    pub space_placements: Vec<(u32, String, i64, i64)>,
 }
 
 impl ScriptSetup {
@@ -74,6 +85,7 @@ impl ScriptSetup {
                 .grant(crate::selection::PLAYER, resource, *amount)
                 .map_err(|e| e.to_string())?;
         }
+        self.apply_space_placements(world)?;
         if !self.placements.is_empty() {
             let origin = world
                 .entities()
@@ -111,6 +123,37 @@ impl ScriptSetup {
         Ok(())
     }
 
+    /// Places the requested test ships in the plane of player one's home system.
+    pub fn apply_space_placements(&self, world: &mut rom_sim::World) -> Result<(), String> {
+        if self.space_placements.is_empty() {
+            return Ok(());
+        }
+        let star = world
+            .home_body(crate::selection::PLAYER)
+            .and_then(|home| world.body(home))
+            .and_then(|home| world.space_of(home.system))
+            .ok_or("place-space needs a universe match")?;
+        let centre = world
+            .body_position(star)
+            .ok_or("the home star has no position")?;
+        for (owner, key, dx, dy) in &self.space_placements {
+            let kind = world
+                .rules()
+                .id_of(key)
+                .filter(|id| world.rules().entity_types.contains_key(id))
+                .ok_or_else(|| format!("unknown entity type {key:?}"))?;
+            let at = rom_sim::Pos {
+                x: centre.x + i32::try_from(*dx).map_err(|_| "offset too large")?,
+                y: centre.y + i32::try_from(*dy).map_err(|_| "offset too large")?,
+                ..centre
+            };
+            world
+                .spawn(kind, rom_sim::PlayerId(*owner), at)
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
     /// Reads the `grant-age` and `grant` lines of a script.
     pub fn scan(text: &str) -> Result<Self, String> {
         let mut setup = Self::default();
@@ -119,6 +162,29 @@ impl ScriptSetup {
             let words: Vec<&str> = line.split_whitespace().collect();
             let at = || format!("line {}", number + 1);
             match words.get(1).copied() {
+                Some("place-space") => {
+                    let (Some(owner), Some(key), Some(offset)) =
+                        (words.get(2), words.get(3), words.get(4))
+                    else {
+                        return Err(format!(
+                            "{}: place-space needs owner, entity key and dx,dy",
+                            at()
+                        ));
+                    };
+                    let owner = owner.parse().map_err(|_| format!("{}: bad owner", at()))?;
+                    let (dx, dy) = offset
+                        .split_once(',')
+                        .ok_or_else(|| format!("{}: place-space needs dx,dy", at()))?;
+                    let parse = |v: &str| {
+                        v.parse::<i64>()
+                            .ok()
+                            .and_then(|v| v.checked_mul(1000))
+                            .ok_or_else(|| format!("{}: bad tile offset", at()))
+                    };
+                    setup
+                        .space_placements
+                        .push((owner, (*key).to_owned(), parse(dx)?, parse(dy)?));
+                }
                 Some("place") => {
                     let (Some(owner), Some(key), Some(offset)) =
                         (words.get(2), words.get(3), words.get(4))
@@ -171,7 +237,7 @@ impl ScriptSetup {
 }
 
 /// A script step that is not a pick.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ScriptAction {
     /// Select all of player one's ships.
     SelectShips,
@@ -187,6 +253,8 @@ pub enum ScriptAction {
     },
     /// Set the game speed in percent.
     Speed(u32),
+    /// Input for the render thread, as the window would send it.
+    Input(Vec<rom_render::InputEvent>),
 }
 
 impl ScriptContext {
@@ -232,7 +300,13 @@ impl Script {
             let words: Vec<&str> = line.split_whitespace().collect();
             let tick = words.first().and_then(|t| t.parse::<u64>().ok());
             match (tick, words.get(1).copied()) {
-                (Some(_), Some("grant-age" | "grant" | "place")) => continue,
+                (Some(_), Some("grant-age" | "grant" | "place" | "place-space")) => continue,
+                (Some(tick), Some("cam")) => {
+                    let input = camera_input(&words[2..])
+                        .map_err(|error| format!("line {}: {error}", number + 1))?;
+                    actions.push((tick, ScriptAction::Input(input)));
+                    continue;
+                }
                 (Some(tick), Some("ships")) => {
                     actions.push((tick, ScriptAction::SelectShips));
                     continue;
@@ -516,6 +590,123 @@ fn parse_line(
     Ok((tick, event))
 }
 
+/// The input events of a `cam` line.
+fn camera_input(words: &[&str]) -> Result<Vec<rom_render::InputEvent>, String> {
+    use rom_render::{InputEvent, Key};
+    let pixel = |word: &str| -> Result<(f32, f32), String> {
+        let (x, y) = word
+            .split_once(',')
+            .ok_or_else(|| format!("expected x,y in pixels, got {word:?}"))?;
+        let parse = |t: &str| {
+            t.parse::<f32>()
+                .map_err(|_| format!("bad number {t:?} in {word:?}"))
+        };
+        Ok((parse(x)?, parse(y)?))
+    };
+    let shift = Modifiers {
+        shift: words.contains(&"rotate"),
+        ..Modifiers::default()
+    };
+    let at = |n: usize| {
+        words
+            .get(n)
+            .copied()
+            .ok_or_else(|| "cam needs more arguments".to_owned())
+            .and_then(pixel)
+    };
+    Ok(match words.first().copied() {
+        Some("wheel") => {
+            let steps = words
+                .get(1)
+                .and_then(|w| w.parse::<f32>().ok())
+                .ok_or("cam wheel needs a number of steps")?;
+            let mut events = Vec::new();
+            if words.len() > 2 {
+                let (x, y) = at(2)?;
+                events.push(InputEvent::PointerMoved { x, y });
+            }
+            events.push(InputEvent::Wheel { steps });
+            events
+        }
+        Some("drag") => {
+            let ((x0, y0), (x1, y1)) = (at(1)?, at(2)?);
+            let mut events = vec![
+                InputEvent::PointerMoved { x: x0, y: y0 },
+                InputEvent::ButtonDown {
+                    button: PointerButton::Middle,
+                    x: x0,
+                    y: y0,
+                    mods: shift,
+                },
+            ];
+            for step in 1..=8 {
+                let t = step as f32 / 8.0;
+                events.push(InputEvent::PointerMoved {
+                    x: x0 + (x1 - x0) * t,
+                    y: y0 + (y1 - y0) * t,
+                });
+            }
+            events.push(InputEvent::ButtonUp {
+                button: PointerButton::Middle,
+                x: x1,
+                y: y1,
+                mods: shift,
+            });
+            events
+        }
+        Some("dblclick") => {
+            let (x, y) = at(1)?;
+            let mods = Modifiers::default();
+            let button = PointerButton::Left;
+            vec![
+                InputEvent::PointerMoved { x, y },
+                InputEvent::ButtonDown { button, x, y, mods },
+                InputEvent::ButtonUp { button, x, y, mods },
+                InputEvent::ButtonDown { button, x, y, mods },
+                InputEvent::ButtonUp { button, x, y, mods },
+            ]
+        }
+        Some("key") => {
+            let key = words
+                .get(1)
+                .and_then(|w| Key::from_name(w))
+                .ok_or("cam key needs up, down, left or right")?;
+            match words.get(2).copied() {
+                Some("down") => vec![InputEvent::KeyDown(key)],
+                Some("up") => vec![InputEvent::KeyUp(key)],
+                _ => return Err("cam key needs down or up".into()),
+            }
+        }
+        Some("point") => {
+            let (x, y) = at(1)?;
+            vec![InputEvent::PointerMoved { x, y }]
+        }
+        Some("click") => {
+            let (x, y) = at(1)?;
+            let button = PointerButton::Left;
+            vec![
+                InputEvent::PointerMoved { x, y },
+                InputEvent::ButtonDown {
+                    button,
+                    x,
+                    y,
+                    mods: shift,
+                },
+                InputEvent::ButtonUp {
+                    button,
+                    x,
+                    y,
+                    mods: shift,
+                },
+            ]
+        }
+        Some("home") => vec![InputEvent::KeyDown(Key::FrameMap)],
+        Some("focus") => vec![InputEvent::KeyDown(Key::FocusSelection)],
+        Some("follow") => vec![InputEvent::KeyDown(Key::FollowSelection)],
+        other => return Err(format!("unknown camera command {other:?}")),
+    })
+}
+
 fn dynamic_name(word: &str) -> bool {
     [
         "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy", "gather",
@@ -763,6 +954,68 @@ mod tests {
         ));
         assert!(Script::parse("1 orbit rock9", &context(), &offset).is_err());
         assert!(ScriptSetup::scan("1 grant res.food").is_err());
+    }
+
+    #[test]
+    fn camera_lines_replay_window_input_and_space_ships_are_set_up() {
+        use rom_render::{InputEvent, Key};
+        let text = "
+            0 place-space 1 unit.corvette 30,-5
+            3 cam wheel -2 640,360
+            4 cam drag 100,100 300,100 rotate
+            5 cam dblclick 50,60
+            6 cam key left down
+            7 cam focus
+        ";
+        let setup = ScriptSetup::scan(text).unwrap();
+        assert_eq!(
+            setup.space_placements,
+            vec![(1, "unit.corvette".to_owned(), 30_000, -5_000)]
+        );
+        let mut script = Script::parse(text, &context(), &offset).unwrap();
+        let input = |actions: Vec<ScriptAction>| match actions.as_slice() {
+            [ScriptAction::Input(events)] => events.clone(),
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(
+            input(script.due_actions(3)),
+            vec![
+                InputEvent::PointerMoved { x: 640.0, y: 360.0 },
+                InputEvent::Wheel { steps: -2.0 }
+            ]
+        );
+        let drag = input(script.due_actions(4));
+        assert!(matches!(
+            drag.first(),
+            Some(InputEvent::PointerMoved { x: 100.0, .. })
+        ));
+        assert!(matches!(
+            drag[1],
+            InputEvent::ButtonDown {
+                button: PointerButton::Middle,
+                mods: Modifiers { shift: true, .. },
+                ..
+            }
+        ));
+        assert!(matches!(
+            drag.last(),
+            Some(InputEvent::ButtonUp { x: 300.0, .. })
+        ));
+        let presses = input(script.due_actions(5))
+            .iter()
+            .filter(|e| matches!(e, InputEvent::ButtonDown { .. }))
+            .count();
+        assert_eq!(presses, 2);
+        assert_eq!(
+            input(script.due_actions(6)),
+            vec![InputEvent::KeyDown(Key::PanLeft)]
+        );
+        assert_eq!(
+            input(script.due_actions(7)),
+            vec![InputEvent::KeyDown(Key::FocusSelection)]
+        );
+        assert!(Script::parse("1 cam spin", &context(), &offset).is_err());
+        assert!(ScriptSetup::scan("0 place-space 1 unit.corvette 30").is_err());
     }
 
     #[test]

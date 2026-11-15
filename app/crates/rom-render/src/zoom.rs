@@ -5,13 +5,23 @@
 //! derived from `l`; crossing a level threshold hands the view over to the next frame, and a
 //! short range of `l` around the threshold cross-fades the two, so no frame needs coordinates
 //! far from its origin and nothing pops. Pure maths: no window, no GPU.
+//!
+//! All three frames are 2.5D grounds under one orbit-style camera: a focus point, a heading, an
+//! elevation that rises with the distance and the distance itself. At the planet's hand-over the
+//! space camera takes the planet camera's exact pose (the planet frame carried into the system
+//! frame), then eases to the plane's own pose as it moves out; the star map shares the system's
+//! heading and elevation. Every change of place is a flight of short legs, interrupted by input.
 
 use std::sync::Arc;
+
+use std::collections::VecDeque;
 
 use crate::orbit::{MIN_DISTANCE, OrbitCamera};
 use crate::pick::View;
 use crate::sun::PlanetFrame;
-use crate::universe::{BodyViewKind, HOME_PLANET_RADIUS, PlacedBody, UniverseScene};
+use crate::universe::{
+    BodyViewKind, HOME_PLANET_RADIUS, MAP_RADIUS, PlacedBody, SYSTEM_RADIUS, UniverseScene,
+};
 
 /// Half the width of a cross-fade, in log-distance units.
 pub const FADE_HALF: f32 = 0.3;
@@ -23,24 +33,42 @@ pub const SYSTEM_MAX_DISTANCE: f32 = 12_000.0;
 pub const MAP_MIN_DISTANCE: f32 = 5000.0;
 /// Star-map camera distance at which the whole map fits the view, in map units.
 pub const MAP_MAX_DISTANCE: f32 = 230_000.0;
-/// Elevation of the system camera above the orbit plane, in degrees.
-pub const SYSTEM_ELEVATION: f32 = 50.0;
-/// Elevation of the star-map camera above the map plane, in degrees.
-pub const MAP_ELEVATION: f32 = 62.0;
+/// Elevation of the space camera above the plane at the planet's hand-over, in degrees.
+pub const NEAR_ELEVATION: f32 = 38.0;
+/// Elevation of the space camera at the system-to-map hand-over, in degrees.
+pub const MID_ELEVATION: f32 = 52.0;
+/// Elevation of the space camera over the whole star map, in degrees.
+pub const FAR_ELEVATION: f32 = 70.0;
+/// Log-distance over which the view eases from the planet camera's pose to the plane's pose.
+pub const HANDOVER_SPAN: f32 = 1.0;
+/// Log-distance over which a pan away from an anchored body fades in above the hand-over.
+const PAN_FADE_SPAN: f32 = 0.6;
 /// Log-distance change per wheel step on the globe (a factor of 1 / 0.88).
 const WHEEL_LOG: f32 = 0.127_833_37;
 /// Wheel steps count this much more in space, where the distances are larger.
 const SPACE_WHEEL_FACTOR: f32 = 1.5;
-/// Per second rate at which flights and offsets settle.
+/// Per second rate at which flights and glides settle.
 const FLY_RATE: f32 = 3.5;
+/// Fastest change of the log-distance in a flight, per second (a factor of about 20).
+const MAX_LOG_RATE: f32 = 3.0;
 /// Pan speed in space as a fraction of the camera distance per second.
 const SPACE_PAN_RATE: f32 = 0.5;
+/// Pointer distance from the canvas edge, in pixels, that starts edge panning in space.
+const EDGE_PIXELS: f32 = 8.0;
+/// Radians of heading per pixel of Shift + middle-button drag, as on the planet.
+const ROTATE_RATE: f32 = 0.005;
 /// Seconds between two presses that make a double click.
 const DOUBLE_CLICK_MS: u64 = 450;
 /// Pixels between two presses that make a double click.
 const DOUBLE_CLICK_PIXELS: f32 = 8.0;
 /// Smallest pick radius of a body or system on screen, in pixels.
 const PICK_PIXELS: f32 = 14.0;
+/// Camera distance of a focus in a system, in system units.
+pub const SYSTEM_FOCUS_DISTANCE: f32 = 4500.0;
+/// Camera distance of a focus on the star map, in map units.
+pub const MAP_FOCUS_DISTANCE: f32 = 30_000.0;
+/// Planet-camera distance of a focus on the surface or in orbit, in tiles.
+pub const PLANET_FOCUS_DISTANCE: f32 = 70.0;
 
 /// What the camera shows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -219,6 +247,68 @@ pub fn system_to_map(scale: &ZoomScale, system: [f32; 3], p: [f32; 3]) -> [f32; 
     add3(system, scale3(p, scale.map_per_system()))
 }
 
+fn dot3(a: [f32; 3], b: [f32; 3]) -> f32 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+fn cross3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+fn unit3(v: [f32; 3]) -> Option<[f32; 3]> {
+    let length = dot3(v, v).sqrt();
+    (length > 1e-6).then(|| scale3(v, 1.0 / length))
+}
+
+fn rotate_about(v: [f32; 3], axis: [f32; 3], angle: f32) -> [f32; 3] {
+    let (sin, cos) = angle.sin_cos();
+    let k = cross3(axis, v);
+    let along = dot3(axis, v) * (1.0 - cos);
+    [0, 1, 2].map(|i| v[i] * cos + k[i] * sin + axis[i] * along)
+}
+
+const UP: [f32; 3] = [0.0, 1.0, 0.0];
+
+/// Unit direction from the focus to the eye for a heading `yaw` (radians; 0 puts the eye on
+/// `+z`, looking toward `-z`) and an elevation above the plane (radians).
+pub fn eye_direction(yaw: f32, elevation: f32) -> [f32; 3] {
+    let (sin_e, cos_e) = elevation.sin_cos();
+    let (sin_y, cos_y) = yaw.sin_cos();
+    [cos_e * sin_y, sin_e, cos_e * cos_y]
+}
+
+/// The up vector of a camera looking along `-eye` without roll: the plane's normal as seen on
+/// screen. Looking straight down it is the direction the heading `yaw` faces.
+fn level_up(eye: [f32; 3], yaw: f32) -> [f32; 3] {
+    unit3(sub3(UP, scale3(eye, dot3(UP, eye)))).unwrap_or_else(|| {
+        let (sin, cos) = yaw.sin_cos();
+        [-sin, 0.0, -cos]
+    })
+}
+
+/// The heading of an eye direction: the yaw of its part along the plane.
+fn yaw_of(eye: [f32; 3]) -> Option<f32> {
+    (eye[0].hypot(eye[2]) > 0.05).then(|| eye[0].atan2(eye[2]))
+}
+
+/// Signed angle about `axis` that turns `from` into `to` (both perpendicular to `axis`).
+fn angle_about(axis: [f32; 3], from: [f32; 3], to: [f32; 3]) -> f32 {
+    dot3(axis, cross3(from, to)).atan2(dot3(from, to))
+}
+
+/// Where a camera looks from: the unit direction from the focus to the eye and the view's up.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Pose {
+    /// Unit direction from the focus to the eye.
+    pub eye: [f32; 3],
+    /// Unit up vector, perpendicular to `eye`.
+    pub up: [f32; 3],
+}
+
 /// A camera placed by eye, target and up vector, with its clip planes.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SpaceView {
@@ -241,15 +331,25 @@ impl SpaceView {
     }
 }
 
-fn space_view(target: [f32; 3], distance: f32, elevation_deg: f32, extent: f32) -> SpaceView {
-    let (sin, cos) = elevation_deg.to_radians().sin_cos();
+fn space_view(target: [f32; 3], distance: f32, pose: Pose, extent: f32) -> SpaceView {
     SpaceView {
-        eye: add3(target, scale3([0.0, sin, cos], distance)),
+        eye: add3(target, scale3(pose.eye, distance)),
         target,
-        up: [0.0, 1.0, 0.0],
+        up: pose.up,
         near: (distance * 0.05).max(1.0),
         far: distance + extent,
     }
+}
+
+/// Where the ray through pixel `(x, y)` of `view` meets the plane `y = 0`.
+fn plane_hit(view: &View, x: f32, y: f32) -> Option<[f32; 3]> {
+    let dir = view.ray(x, y);
+    let eye = view.eye();
+    if dir[1].abs() < 1e-5 {
+        return None;
+    }
+    let t = -eye[1] / dir[1];
+    (t > 0.0).then(|| [eye[0] + dir[0] * t, 0.0, eye[2] + dir[2] * t])
 }
 
 /// What a double click can fly to.
@@ -259,6 +359,32 @@ pub enum Target {
     Body(usize),
     /// The system at this index of [`UniverseScene::systems`].
     System(usize),
+}
+
+/// A place the camera can be asked to fly to: where a ship is, at the level it is seen at.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum FocusPlace {
+    /// A direction from the centre of the loaded planet, in the planet frame (a ship in orbit or
+    /// a unit on the surface).
+    Globe([f32; 3]),
+    /// A point of the plane of system `system` (an id), in system units.
+    System {
+        /// Id of the system.
+        system: u32,
+        /// Point in that system's frame.
+        at: [f32; 3],
+    },
+    /// A point of the star map, in map units (a ship between systems).
+    Map([f32; 3]),
+}
+
+/// Why the camera cannot fly to a place.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FocusRefused {
+    /// The place lies beyond the level the player's age allows.
+    BeyondReach,
+    /// The place names a planet or system the camera does not know.
+    Unknown,
 }
 
 /// Index of the marker nearest to `cursor` whose pick radius contains it; markers are
@@ -302,6 +428,34 @@ pub struct Home {
     pub dir: [f32; 3],
 }
 
+/// One step of a camera flight.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Leg {
+    /// Fly the log-distance to `to` (only outward when `out_only`) and wait until it is there.
+    Zoom { to: f32, out_only: bool },
+    /// Anchor on a system (an index) with the focus at a point of its plane, gliding there.
+    System { index: usize, at: [f32; 3] },
+    /// Anchor on a body (an index), gliding there.
+    Body(usize),
+    /// Glide the focus to a point of the anchored system's plane.
+    Point([f32; 3]),
+    /// Let go of the anchored body, keeping the picture.
+    Free,
+    /// Turn the planet camera toward a direction, alongside the following legs.
+    Look([f32; 3]),
+    /// Ask for the globe of a planet (an id).
+    Surface(u32),
+}
+
+/// How a pointer drag over space moves the camera.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Drag {
+    /// Middle button: the plane follows the pointer.
+    Pan { x: f32, y: f32 },
+    /// Shift + middle button: the heading turns, as on the planet.
+    Rotate { x: f32 },
+}
+
 /// The continuous-zoom camera above the planet camera.
 #[derive(Clone, Debug)]
 pub struct ZoomCamera {
@@ -311,7 +465,7 @@ pub struct ZoomCamera {
     /// The system the view is anchored to (an index), with its bodies placed.
     system: usize,
     placed: Vec<PlacedBody>,
-    /// The planet the view is anchored to (an index into the scene's bodies).
+    /// The body the view is anchored to (an index into the scene's bodies); none for the star.
     body: Option<usize>,
     home_body: Option<usize>,
     /// The planet whose globe is loaded: the only one that can be entered.
@@ -324,14 +478,29 @@ pub struct ZoomCamera {
     /// Largest planet-camera distance the age's view range allows, when it limits the globe.
     globe_limit: Option<f32>,
     goal: Option<f32>,
-    system_pan: [f32; 3],
-    map_pan: [f32; 3],
-    system_offset: [f32; 3],
-    map_offset: [f32; 3],
+    /// Focus offset from the anchor in the anchored system's frame (system units).
+    pan: [f32; 3],
+    /// A gliding offset of the focus that settles to zero (system units).
+    offset: [f32; 3],
+    /// Heading of the space camera: the yaw of the direction from the focus to the eye.
+    yaw: f32,
+    /// A turn about the plane's normal still to be applied to the planet camera.
+    spin: f32,
     held: [bool; 4],
+    pointer: Option<(f32, f32)>,
+    viewport: (f32, f32),
+    drag: Option<Drag>,
     clicks: ClickTracker,
+    legs: VecDeque<Leg>,
+    leg_started: bool,
+    look: Option<[f32; 3]>,
+    seconds: f32,
+    /// A pose the planet camera takes over once the newly loaded planet's frame is known.
+    align_pending: Option<Pose>,
     /// Turn of the loaded planet about its axis from the planet frame into the system frame.
     planet_frame: PlanetFrame,
+    /// The systems whose bodies the player knows (ids, ascending); `None` knows them all.
+    known: Option<Vec<u32>>,
 }
 
 impl ZoomCamera {
@@ -345,6 +514,15 @@ impl ZoomCamera {
     ) -> Self {
         let home_body = home.and_then(|h| scene.body_index(h.body));
         let system = home.and_then(|h| scene.system_index(h.system)).unwrap_or(0);
+        // The planet frame and the system frame show the home planet equally large: its drawn
+        // radius in the system frame decides the scale between them.
+        let scale = home_body.map_or(scale, |index| {
+            let drawn = crate::universe::body_radius(&scene.bodies[index]);
+            ZoomScale::new(
+                scale.planet_radius * HOME_PLANET_RADIUS / drawn.max(1.0),
+                scale.globe_max,
+            )
+        });
         let map_positions = scene.place_systems();
         let placed = scene
             .systems
@@ -366,13 +544,22 @@ impl ZoomCamera {
             cap,
             globe_limit: None,
             goal: None,
-            system_pan: [0.0; 3],
-            map_pan: [0.0; 3],
-            system_offset: [0.0; 3],
-            map_offset: [0.0; 3],
+            pan: [0.0; 3],
+            offset: [0.0; 3],
+            yaw: 0.0,
+            spin: 0.0,
             held: [false; 4],
+            pointer: None,
+            viewport: (0.0, 0.0),
+            drag: None,
             clicks: ClickTracker::default(),
+            legs: VecDeque::new(),
+            leg_started: false,
+            look: None,
+            seconds: 0.0,
+            align_pending: None,
             planet_frame: PlanetFrame::default(),
+            known: None,
         };
         camera.l = camera.l.min(camera.l_cap());
         camera
@@ -393,14 +580,19 @@ impl ZoomCamera {
         Arc::clone(&self.scene)
     }
 
+    /// Star-map positions of the systems, indexed like the scene's systems.
+    pub fn map_positions(&self) -> &[[f32; 3]] {
+        &self.map_positions
+    }
+
     /// The log-distance of the camera.
     pub fn l(&self) -> f32 {
         self.l
     }
 
-    /// Sets the log-distance, within the limits.
+    /// Sets the log-distance, within the limits; a flight under way stops.
     pub fn set_l(&mut self, l: f32) {
-        self.goal = None;
+        self.interrupt();
         self.l = l.clamp(self.l_min(), self.l_cap());
     }
 
@@ -443,8 +635,13 @@ impl ZoomCamera {
         if self.anchored_at_surface() {
             self.scale.l_min()
         } else {
-            self.scale.l_globe_system + FADE_HALF
+            self.space_floor()
         }
+    }
+
+    /// The closest the camera comes to a body that cannot be entered.
+    fn space_floor(&self) -> f32 {
+        self.scale.l_globe_system + FADE_HALF
     }
 
     /// The weights of the frames now.
@@ -482,15 +679,54 @@ impl ZoomCamera {
         self.want_surface
     }
 
+    /// Sets the systems whose bodies the player knows; the bodies of others cannot be picked.
+    pub fn set_known(&mut self, known: Option<&[u32]>) {
+        if self.known.as_deref() != known {
+            self.known = known.map(<[u32]>::to_vec);
+        }
+    }
+
+    /// Whether the player knows the bodies of the anchored system.
+    pub fn knows_system(&self) -> bool {
+        match (&self.known, self.system_id()) {
+            (Some(known), Some(id)) => known.binary_search(&id).is_ok(),
+            _ => true,
+        }
+    }
+
     /// The id of the system the view is anchored to.
     pub fn system_id(&self) -> Option<u32> {
         self.scene.systems.get(self.system).map(|s| s.id)
     }
 
+    /// The heading of the space camera in radians, clockwise from the plane's `-z` seen from
+    /// above, like the planet camera's heading from north.
+    pub fn heading(&self) -> f32 {
+        (-self.yaw).rem_euclid(std::f32::consts::TAU)
+    }
+
+    /// Map units per system unit at the hand-over.
+    fn k(&self) -> f32 {
+        self.scale.map_per_system()
+    }
+
+    fn here(&self) -> [f32; 3] {
+        self.map_positions
+            .get(self.system)
+            .copied()
+            .unwrap_or([0.0; 3])
+    }
+
+    fn anchor_pos(&self) -> [f32; 3] {
+        self.body
+            .and_then(|b| self.placed.iter().find(|p| p.body == b))
+            .map_or([0.0; 3], |p| p.pos)
+    }
+
     /// The globe of planet `body` is loaded: `globe_radius` tiles and the planet camera's
     /// farthest distance `max_distance` describe it, `dir` is where the planet camera looks.
     /// The log-distance scale is rebuilt for the planet's size; a camera anchored on the planet
-    /// flies in to it.
+    /// takes it over from the pose it shows now and flies in.
     pub fn surface_ready(
         &mut self,
         body: u32,
@@ -502,8 +738,13 @@ impl ZoomCamera {
         let Some(index) = self.scene.body_index(body) else {
             return;
         };
+        let shown = self.pose(orbit);
         let drawn = crate::universe::body_radius(&self.scene.bodies[index]);
         let anchored = self.body == Some(index);
+        // The system camera keeps its distance: the picture does not move when the scale between
+        // the frames changes to the new planet's.
+        let distance = self.scale.system_distance(self.l);
+        let in_space = self.l >= self.space_floor();
         self.scale = ZoomScale::new(
             globe_radius * HOME_PLANET_RADIUS / drawn.max(1.0),
             max_distance,
@@ -512,22 +753,50 @@ impl ZoomCamera {
         if self.want_surface == Some(body) {
             self.want_surface = None;
         }
-        orbit.look_at(dir);
-        self.l = self.l.clamp(self.l_min(), self.l_cap());
         if anchored {
-            let target = if Some(index) == self.home_body {
+            // The planet camera starts from the pose the system view shows (once the new planet's
+            // frame is known), so the flight down continues without a turn.
+            self.l = self.keep_distance(distance);
+            self.align_pending = Some(shown);
+            self.interrupt();
+            if Some(index) == self.home_body {
+                self.legs.push_back(Leg::Look(dir));
+            }
+            let to = if Some(index) == self.home_body {
                 (2.0 * globe_radius).max(MIN_DISTANCE).ln()
             } else {
                 max_distance.max(MIN_DISTANCE).ln() - 0.2
             };
-            self.l = self.scale.l_globe_system + FADE_HALF;
-            self.fly_to(target);
+            self.legs.push_back(Leg::Zoom {
+                to,
+                out_only: false,
+            });
+        } else {
+            orbit.look_at(dir);
+            if in_space {
+                self.l = self.keep_distance(distance);
+            }
         }
+        self.l = self.l.clamp(self.l_min(), self.l_cap());
     }
 
-    /// Zooms in for positive `steps`, out for negative ones, within the limits.
-    pub fn wheel(&mut self, steps: f32) {
+    /// The log-distance at which the system camera is `distance` away, above the floor.
+    fn keep_distance(&self, distance: f32) -> f32 {
+        (self.scale.l_globe_system + (distance / self.scale.system_min).ln())
+            .max(self.space_floor())
+    }
+
+    /// Stops a flight under way: any input of the player does.
+    pub fn interrupt(&mut self) {
         self.goal = None;
+        self.legs.clear();
+        self.leg_started = false;
+        self.look = None;
+    }
+
+    /// Zooms in for positive `steps`, out for negative ones, within the limits, about the centre.
+    pub fn wheel(&mut self, steps: f32) {
+        self.interrupt();
         let factor = if self.l > self.scale.l_globe_system {
             SPACE_WHEEL_FACTOR
         } else {
@@ -536,8 +805,215 @@ impl ZoomCamera {
         self.l = (self.l - steps * WHEEL_LOG * factor).clamp(self.l_min(), self.l_cap());
     }
 
+    /// The view of the frame the level shows: the system or the star map.
+    pub fn space_view_at(&self, orbit: &OrbitCamera, canvas: (f32, f32), centre_y: f32) -> View {
+        if self.level() >= Level::StarMap {
+            self.map_view(orbit).view(canvas, centre_y)
+        } else {
+            self.system_view(orbit).view(canvas, centre_y)
+        }
+    }
+
+    /// The point of the plane under `cursor` in system units of the anchored system, through
+    /// `view` of the system frame or, for `map`, of the star-map frame.
+    fn plane_point(&self, view: &View, cursor: (f32, f32), map: bool) -> Option<[f32; 3]> {
+        let hit = plane_hit(view, cursor.0, cursor.1)?;
+        Some(if map {
+            scale3(sub3(hit, self.here()), 1.0 / self.k())
+        } else {
+            hit
+        })
+    }
+
+    /// Whether zooming keeps the point under the cursor in place: on the star map, and in a
+    /// system once the focus floats free of any body.
+    fn zooms_to_cursor(&self) -> bool {
+        match self.level() {
+            Level::StarMap => true,
+            Level::System => !self.pans_planet() && self.pan_weight() > 0.2,
+            Level::Surface | Level::Globe => false,
+        }
+    }
+
+    /// The wheel over the canvas at `cursor`: zooms toward the point under it. Zooming in over a
+    /// body anchors the view on it (a planet with a globe is entered, another one is asked for);
+    /// zooming in past the star map enters the system nearest the focus.
+    pub fn wheel_at(
+        &mut self,
+        steps: f32,
+        cursor: Option<(f32, f32)>,
+        canvas: (f32, f32),
+        centre_y: f32,
+        orbit: &mut OrbitCamera,
+    ) {
+        self.interrupt();
+        let level = self.level();
+        if steps > 0.0
+            && level == Level::System
+            && !self.pans_planet()
+            && let Some(cursor) = cursor
+        {
+            let view = self.system_view(orbit).view(canvas, centre_y);
+            self.choose_anchor(cursor, &view, orbit);
+        }
+        let map = level >= Level::StarMap;
+        let grip = if self.zooms_to_cursor() {
+            cursor.and_then(|c| {
+                let view = self.space_view_at(orbit, canvas, centre_y);
+                Some((c, self.plane_point(&view, c, map)?))
+            })
+        } else {
+            None
+        };
+        let threshold = self.scale.l_system_map + FADE_HALF;
+        let before = self.l;
+        self.wheel(steps);
+        if let Some((cursor, held)) = grip {
+            let view = if map {
+                self.map_view(orbit).view(canvas, centre_y)
+            } else {
+                self.system_view(orbit).view(canvas, centre_y)
+            };
+            if let Some(now) = self.plane_point(&view, cursor, map) {
+                let weight = self.pan_weight().max(0.2);
+                self.pan = add3(self.pan, scale3(sub3(held, now), 1.0 / weight));
+                self.clamp_pan_in(map);
+            }
+        }
+        if before >= threshold && self.l < threshold {
+            self.enter_nearest_system(orbit);
+        }
+    }
+
+    /// Zooming in over the plane of a system: the body under the cursor becomes the anchor;
+    /// over empty space a free-floating focus replaces the anchor without moving the picture.
+    fn choose_anchor(&mut self, cursor: (f32, f32), view: &View, orbit: &mut OrbitCamera) {
+        let hit = match self.target_at(view, cursor.0, cursor.1) {
+            Some(Target::Body(i)) if self.scene.bodies[i].kind != BodyViewKind::Star => Some(i),
+            _ => None,
+        };
+        match hit {
+            Some(index) if self.body != Some(index) => {
+                self.anchor_keeping_picture(index, orbit);
+                let body = &self.scene.bodies[index];
+                if body.kind == BodyViewKind::Habitable && self.surface_body != Some(index) {
+                    self.want_surface = Some(body.id);
+                }
+            }
+            Some(_) => {}
+            None => {
+                // Far from the anchored body the focus floats free, so zooming in on empty space
+                // does not slide back to the body.
+                let far = self
+                    .body
+                    .and_then(|b| self.placed.iter().find(|p| p.body == b))
+                    .zip(plane_hit(view, cursor.0, cursor.1))
+                    .is_some_and(|(p, at)| {
+                        (at[0] - p.pos[0]).hypot(at[2] - p.pos[2]) > (p.radius * 4.0).max(600.0)
+                    });
+                if far && self.handover_weight() >= 1.0 && self.pan_weight() >= 1.0 {
+                    self.free_focus(orbit);
+                }
+            }
+        }
+    }
+
+    /// Anchors on `body` without moving the picture: the pan away from it fades out as the
+    /// camera comes down to it, so zooming in toward it ends centred on it.
+    fn anchor_keeping_picture(&mut self, body: usize, orbit: &mut OrbitCamera) {
+        let before = self.system_target(orbit);
+        let shown = self.pose(orbit);
+        let tracking = self.anchored_at_surface();
+        self.body = Some(body);
+        self.pan = [0.0; 3];
+        if self.anchored_at_surface() && !tracking {
+            self.align_orbit(orbit, shown);
+        }
+        let base = self.system_target(orbit);
+        let weight = self.pan_weight();
+        if weight > 0.05 {
+            self.pan = scale3(sub3(before, base), 1.0 / weight);
+        } else {
+            self.offset = add3(self.offset, sub3(before, base));
+        }
+    }
+
+    /// Lets go of the anchored body without moving the picture: the focus floats on the plane.
+    fn free_focus(&mut self, orbit: &OrbitCamera) {
+        if self.body.is_some() {
+            let target = sub3(self.system_target(orbit), self.offset);
+            self.body = None;
+            self.pan = target;
+        }
+    }
+
+    /// Re-anchors on the system nearest the star-map focus, keeping the picture.
+    fn enter_nearest_system(&mut self, orbit: &OrbitCamera) {
+        let focus = sub3(self.map_target(orbit), scale3(self.offset, self.k()));
+        let nearest = self
+            .map_positions
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (i, (p[0] - focus[0]).hypot(p[2] - focus[2])))
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(i, _)| i);
+        if let Some(index) = nearest
+            && index != self.system
+        {
+            let wanted = scale3(sub3(focus, self.map_positions[index]), 1.0 / self.k());
+            let kept = scale3(self.offset, 1.0);
+            self.set_system(index);
+            self.pan = clamp_disc(wanted, SYSTEM_RADIUS * 2.0);
+            // Whatever the disc does not hold glides in, in both frames alike.
+            self.offset = add3(kept, sub3(wanted, self.pan));
+        }
+    }
+
+    fn set_system(&mut self, index: usize) {
+        self.system = index;
+        self.placed = self
+            .scene
+            .systems
+            .get(index)
+            .map(|s| self.scene.place_system(s.id))
+            .unwrap_or_default();
+        self.body = None;
+        self.pan = [0.0; 3];
+        self.offset = [0.0; 3];
+    }
+
     /// Makes `orbit` match the camera: its distance follows `l` up to the planet camera's limit.
-    pub fn sync_orbit(&self, orbit: &mut OrbitCamera) {
+    /// Also runs the flight's legs, turns and glides the planet camera, and keeps the space
+    /// heading on the planet camera's while the planet frame shows.
+    pub fn sync_orbit(&mut self, orbit: &mut OrbitCamera) {
+        if let Some(pose) = self.align_pending.take()
+            && self.anchored_at_surface()
+        {
+            self.align_orbit(orbit, pose);
+        }
+        self.run_legs(orbit);
+        if let Some(goal) = self.look {
+            let settle = 1.0 - (-FLY_RATE * self.seconds.max(0.0)).exp();
+            let angle = dot3(orbit.dir, goal).clamp(-1.0, 1.0).acos();
+            if angle < 0.002 {
+                orbit.look_at(goal);
+                self.look = None;
+            } else if settle > 0.0 {
+                let axis = unit3(cross3(orbit.dir, goal)).unwrap_or(UP);
+                orbit.look_at(rotate_about(orbit.dir, axis, angle * settle));
+            }
+        }
+        if self.anchored_at_surface() {
+            if self.spin != 0.0 {
+                orbit.turn_about(self.planet_frame.uncarry(UP), self.spin);
+            }
+            if self.l <= self.scale.l_globe_system + FADE_HALF
+                && let Some(yaw) = yaw_of(self.planet_to_system(orbit.dir))
+            {
+                self.yaw = yaw;
+            }
+        }
+        self.spin = 0.0;
         orbit.distance = self
             .scale
             .globe_distance(self.l)
@@ -547,7 +1023,7 @@ impl ZoomCamera {
     /// Takes over a change that the planet camera made itself (a camera reset): in the planet
     /// range the orbit distance is the truth.
     pub fn adopt_orbit(&mut self, orbit: &OrbitCamera) {
-        if self.l <= orbit.max_distance.ln() + 1e-3 && self.goal.is_none() {
+        if self.l <= orbit.max_distance.ln() + 1e-3 && self.goal.is_none() && self.legs.is_empty() {
             self.l = orbit.distance.ln().clamp(self.l_min(), self.l_cap());
         }
     }
@@ -585,176 +1061,604 @@ impl ZoomCamera {
 
     /// Records a pan key being held or released (`index`: forward, back, left, right).
     pub fn hold(&mut self, index: usize, pressed: bool) {
-        if let Some(h) = self.held.get_mut(index) {
-            *h = pressed;
+        if index < self.held.len() {
+            if pressed {
+                self.interrupt();
+            }
+            self.held[index] = pressed;
         }
     }
 
-    /// Whether the planet camera should handle pan input: only in the planet range.
-    pub fn pans_planet(&self) -> bool {
-        self.level() <= Level::Globe
+    /// The pointer over the canvas (`None` when it left), for edge panning.
+    pub fn set_pointer(&mut self, pointer: Option<(f32, f32)>) {
+        self.pointer = pointer;
     }
 
-    fn pan_fade(&self, start: f32) -> f32 {
-        smoothstep((self.l - start) / 0.5)
+    /// The pointer over the canvas, as last seen.
+    pub fn pointer(&self) -> Option<(f32, f32)> {
+        self.pointer
+    }
+
+    /// The canvas size in pixels, for edge panning.
+    pub fn set_viewport(&mut self, width: f32, height: f32) {
+        self.viewport = (width, height);
+    }
+
+    /// Whether the planet camera should handle pan input: in the planet range, and in the
+    /// hand-over band where the planet camera still decides the picture.
+    pub fn pans_planet(&self) -> bool {
+        self.level() <= Level::Globe
+            || (self.anchored_at_surface() && self.l < self.scale.l_globe_system + FADE_HALF + 0.05)
+    }
+
+    /// How far the view has left the planet camera's pose: 0 in the hand-over band, 1 once the
+    /// plane's own pose has taken over (always 1 away from the loaded planet).
+    pub fn handover_weight(&self) -> f32 {
+        if !self.anchored_at_surface() {
+            return 1.0;
+        }
+        smoothstep((self.l - (self.scale.l_globe_system + FADE_HALF)) / HANDOVER_SPAN)
+    }
+
+    /// How much of the pan away from an anchored body shows: none at the body's hand-over.
+    fn pan_weight(&self) -> f32 {
+        if self.body.is_none() {
+            return 1.0;
+        }
+        smoothstep((self.l - (self.scale.l_globe_system + FADE_HALF)) / PAN_FADE_SPAN)
+    }
+
+    /// Elevation of the plane's own pose above the plane at `l`, in radians: it rises with the
+    /// distance, as the planet camera turns to look straight down.
+    pub fn elevation_at(&self, l: f32) -> f32 {
+        let s = &self.scale;
+        let (near, mid, far) = (
+            NEAR_ELEVATION.to_radians(),
+            MID_ELEVATION.to_radians(),
+            FAR_ELEVATION.to_radians(),
+        );
+        if l <= s.l_system_map {
+            let span = (s.l_system_map - s.l_globe_system).max(1e-3);
+            near + (mid - near) * smoothstep((l - s.l_globe_system) / span)
+        } else {
+            let span = (s.l_end - s.l_system_map).max(1e-3);
+            mid + (far - mid) * smoothstep((l - s.l_system_map) / span)
+        }
+    }
+
+    fn plane_pose(&self) -> Pose {
+        let eye = eye_direction(self.yaw, self.elevation_at(self.l));
+        Pose {
+            eye,
+            up: level_up(eye, self.yaw),
+        }
+    }
+
+    /// The planet camera's pose carried into the system frame (it looks straight down from
+    /// beyond its own limit, so its up is the direction it faces).
+    fn planet_pose(&self, orbit: &OrbitCamera) -> Pose {
+        Pose {
+            eye: self.planet_to_system(orbit.dir),
+            up: self.planet_to_system(orbit.forward_tangent()),
+        }
+    }
+
+    /// Where the space camera looks from now: the planet camera's pose in the hand-over band,
+    /// easing to the plane's own pose (the heading kept, no roll) as it moves out.
+    pub fn pose(&self, orbit: &OrbitCamera) -> Pose {
+        let plane = self.plane_pose();
+        let w = self.handover_weight();
+        if w >= 1.0 {
+            return plane;
+        }
+        let planet = self.planet_pose(orbit);
+        let eye = unit3(lerp3(planet.eye, plane.eye, w)).unwrap_or(plane.eye);
+        let roll = angle_about(planet.eye, level_up(planet.eye, self.yaw), planet.up);
+        Pose {
+            eye,
+            up: rotate_about(level_up(eye, self.yaw), eye, roll * (1.0 - w)),
+        }
+    }
+
+    /// Makes the planet camera show `pose`: it looks along the pose's eye direction, its up
+    /// toward the pose's up.
+    fn align_orbit(&self, orbit: &mut OrbitCamera, pose: Pose) {
+        orbit.orient(
+            self.planet_frame.uncarry(pose.eye),
+            self.planet_frame.uncarry(pose.up),
+        );
     }
 
     /// Where the system camera looks, in the system frame.
     pub fn system_target(&self, orbit: &OrbitCamera) -> [f32; 3] {
-        let anchor = self
-            .body
-            .and_then(|b| self.placed.iter().find(|p| p.body == b))
-            .map_or([0.0; 3], |p| p.pos);
-        let base = if self.anchored_at_surface() {
-            globe_to_system(&self.scale, anchor, self.planet_to_system(orbit.target()))
+        let anchor = self.anchor_pos();
+        let near = if self.anchored_at_surface() {
+            let surface =
+                globe_to_system(&self.scale, anchor, self.planet_to_system(orbit.target()));
+            lerp3(surface, anchor, self.handover_weight())
         } else {
             anchor
         };
-        let t = smoothstep(
-            (self.l - self.scale.l_globe_system)
-                / (self.scale.l_system_map - self.scale.l_globe_system),
-        );
-        let pan = scale3(self.system_pan, self.pan_fade(self.scale.l_globe_system));
-        add3(add3(lerp3(base, [0.0; 3], t), pan), self.system_offset)
+        add3(add3(near, scale3(self.pan, self.pan_weight())), self.offset)
     }
 
-    /// Where the star-map camera looks, in the star-map frame.
-    pub fn map_target(&self) -> [f32; 3] {
-        let here = self
-            .map_positions
-            .get(self.system)
-            .copied()
-            .unwrap_or([0.0; 3]);
-        // The hand-over keeps the centre: the system frame's own target maps to the map.
-        let carried = system_to_map(&self.scale, here, [0.0; 3]);
-        let t = smoothstep(
-            (self.l - self.scale.l_system_map) / (self.scale.l_end - self.scale.l_system_map),
-        );
-        let pan = scale3(self.map_pan, self.pan_fade(self.scale.l_system_map));
-        add3(add3(lerp3(carried, [0.0; 3], t), pan), self.map_offset)
+    /// Where the star-map camera looks, in the star-map frame: the system camera's focus carried
+    /// onto the map.
+    pub fn map_target(&self, orbit: &OrbitCamera) -> [f32; 3] {
+        system_to_map(&self.scale, self.here(), self.system_target(orbit))
     }
 
     /// The system camera.
     pub fn system_view(&self, orbit: &OrbitCamera) -> SpaceView {
+        let target = self.system_target(orbit);
         space_view(
-            self.system_target(orbit),
+            target,
             self.scale.system_distance(self.l),
-            SYSTEM_ELEVATION,
-            crate::universe::SYSTEM_RADIUS * 3.0,
+            self.pose(orbit),
+            SYSTEM_RADIUS * 3.0 + target[0].hypot(target[2]),
         )
     }
 
-    /// The star-map camera.
-    pub fn map_view(&self) -> SpaceView {
+    /// The star-map camera: the system camera seen at the star map's scale.
+    pub fn map_view(&self, orbit: &OrbitCamera) -> SpaceView {
+        let target = self.map_target(orbit);
         space_view(
-            self.map_target(),
+            target,
             self.scale.map_distance(self.l),
-            MAP_ELEVATION,
-            crate::universe::MAP_RADIUS * 3.0,
+            self.pose(orbit),
+            MAP_RADIUS * 3.0 + target[0].hypot(target[2]),
         )
     }
 
-    /// Moves the camera for `seconds`: flights settle and held pan keys move the view across the
-    /// frame of the level shown.
+    /// The focus's horizontal axes: (right, forward) along the plane for the current heading.
+    fn plane_axes(&self) -> ([f32; 3], [f32; 3]) {
+        let (sin, cos) = self.yaw.sin_cos();
+        ([cos, 0.0, -sin], [-sin, 0.0, -cos])
+    }
+
+    /// Moves the focus by `right` and `forward` system units across the plane, relative to the
+    /// heading.
+    pub fn pan_by(&mut self, right: f32, forward: f32) {
+        let (r, f) = self.plane_axes();
+        let weight = self.pan_weight().max(0.05);
+        let step = add3(scale3(r, right), scale3(f, forward));
+        self.pan = add3(self.pan, scale3(step, 1.0 / weight));
+        self.clamp_pan();
+    }
+
+    /// Turns the space camera's heading by `delta` radians (clockwise seen from above), about the
+    /// focus; the planet camera turns with it about the planet's axis.
+    pub fn rotate_heading(&mut self, delta: f32) {
+        self.yaw -= delta;
+        self.spin -= delta;
+    }
+
+    fn clamp_pan(&mut self) {
+        self.clamp_pan_in(self.level() >= Level::StarMap);
+    }
+
+    /// Keeps the focus on the star map (`map`) or near the anchored system.
+    fn clamp_pan_in(&mut self, map: bool) {
+        let anchor = self.anchor_pos();
+        if map {
+            let (here, k) = (self.here(), self.k());
+            let at = add3(here, scale3(add3(anchor, self.pan), k));
+            let kept = clamp_disc(at, MAP_RADIUS * 1.2);
+            self.pan = sub3(scale3(sub3(kept, here), 1.0 / k), anchor);
+        } else {
+            let kept = clamp_disc(add3(anchor, self.pan), SYSTEM_RADIUS * 2.0);
+            self.pan = sub3(kept, anchor);
+        }
+    }
+
+    /// Starts a pointer drag over space (middle button; with Shift it turns the heading).
+    pub fn drag_start(&mut self, x: f32, y: f32, rotate: bool) {
+        self.interrupt();
+        self.drag = Some(if rotate {
+            Drag::Rotate { x }
+        } else {
+            Drag::Pan { x, y }
+        });
+    }
+
+    /// Whether a pointer drag over space is under way.
+    pub fn dragging(&self) -> bool {
+        self.drag.is_some()
+    }
+
+    /// Ends a pointer drag over space.
+    pub fn drag_end(&mut self) {
+        self.drag = None;
+    }
+
+    /// Moves a pointer drag to `(x, y)`: the grabbed point of the plane stays under the pointer,
+    /// or the heading turns.
+    pub fn drag_to(&mut self, x: f32, y: f32, view: &View) {
+        match self.drag {
+            Some(Drag::Pan { x: lx, y: ly }) => {
+                let map = self.level() >= Level::StarMap;
+                if let (Some(from), Some(to)) = (
+                    self.plane_point(view, (lx, ly), map),
+                    self.plane_point(view, (x, y), map),
+                ) {
+                    let weight = self.pan_weight().max(0.05);
+                    self.pan = add3(self.pan, scale3(sub3(from, to), 1.0 / weight));
+                    self.clamp_pan();
+                }
+                self.drag = Some(Drag::Pan { x, y });
+            }
+            Some(Drag::Rotate { x: lx }) => {
+                self.rotate_heading(-(x - lx) * ROTATE_RATE);
+                self.drag = Some(Drag::Rotate { x });
+            }
+            None => {}
+        }
+    }
+
+    /// Moves the camera for `seconds`: flights settle, glides fade, and held pan keys and the
+    /// pointer at the canvas edge move the focus across the plane of the level shown.
     pub fn advance(&mut self, seconds: f32) {
+        self.seconds = seconds;
         let settle = 1.0 - (-FLY_RATE * seconds).exp();
         if let Some(goal) = self.goal {
-            self.l += (goal - self.l) * settle;
+            let most = MAX_LOG_RATE * seconds;
+            self.l += ((goal - self.l) * settle).clamp(-most, most);
             if (goal - self.l).abs() < 0.003 {
                 self.l = goal;
                 self.goal = None;
             }
         }
-        let keep = 1.0 - settle;
-        self.system_offset = scale3(self.system_offset, keep);
-        self.map_offset = scale3(self.map_offset, keep);
-        let right = f32::from(u8::from(self.held[3])) - f32::from(u8::from(self.held[2]));
-        let forward = f32::from(u8::from(self.held[0])) - f32::from(u8::from(self.held[1]));
+        self.offset = scale3(self.offset, 1.0 - settle);
+        if self.pans_planet() || self.level() < Level::System {
+            return;
+        }
+        let [forward_key, back_key, left_key, right_key] = self.held.map(f32::from);
+        let (edge_right, edge_forward) = self.edge_direction();
+        let right = (right_key - left_key + edge_right).clamp(-1.0, 1.0);
+        let forward = (forward_key - back_key + edge_forward).clamp(-1.0, 1.0);
         if right == 0.0 && forward == 0.0 {
             return;
         }
-        match self.level() {
-            Level::System => {
-                let step = self.scale.system_distance(self.l) * SPACE_PAN_RATE * seconds;
-                self.system_pan = add3(self.system_pan, [right * step, 0.0, -forward * step]);
-                let limit = crate::universe::SYSTEM_RADIUS * 2.0;
-                self.system_pan = clamp_disc(self.system_pan, limit);
-            }
-            Level::StarMap => {
-                let step = self.scale.map_distance(self.l) * SPACE_PAN_RATE * seconds;
-                self.map_pan = add3(self.map_pan, [right * step, 0.0, -forward * step]);
-                self.map_pan = clamp_disc(self.map_pan, crate::universe::MAP_RADIUS * 1.2);
-            }
-            Level::Surface | Level::Globe => {}
+        if self.drag.is_none() {
+            self.goal = None;
+            self.legs.clear();
         }
+        let step = self.scale.system_distance(self.l) * SPACE_PAN_RATE * seconds;
+        self.pan_by(right * step, forward * step);
+    }
+
+    fn edge_direction(&self) -> (f32, f32) {
+        let (Some((x, y)), (width, height)) = (self.pointer, self.viewport) else {
+            return (0.0, 0.0);
+        };
+        if self.drag.is_some() || width <= 0.0 || height <= 0.0 {
+            return (0.0, 0.0);
+        }
+        let axis = |position: f32, extent: f32| {
+            if position <= EDGE_PIXELS {
+                -1.0
+            } else if position >= extent - EDGE_PIXELS {
+                1.0
+            } else {
+                0.0
+            }
+        };
+        (axis(x, width), -axis(y, height))
     }
 
     /// Whether a flight is under way.
     pub fn flying(&self) -> bool {
-        self.goal.is_some()
+        self.goal.is_some() || !self.legs.is_empty() || self.look.is_some()
     }
 
     fn fly_to(&mut self, l: f32) {
         self.goal = Some(l.clamp(self.l_min(), self.l_cap()));
     }
 
-    /// Reanchors the view on `body` (or the star) without moving the picture: the difference is
-    /// kept as an offset that settles, so the camera glides.
-    fn anchor_to(&mut self, body: Option<usize>, orbit: &OrbitCamera) {
-        let before = self.system_target(orbit);
-        self.body = body;
-        self.system_pan = [0.0; 3];
-        let after = self.system_target(orbit);
-        self.system_offset = add3(self.system_offset, sub3(before, after));
+    /// Starts a flight of `legs`, replacing any flight under way.
+    fn fly(&mut self, legs: impl IntoIterator<Item = Leg>, orbit: &mut OrbitCamera) {
+        self.interrupt();
+        self.legs.extend(legs);
+        self.run_legs(orbit);
     }
 
-    /// Reanchors the view on system `index`, gliding on the star map.
-    fn anchor_system(&mut self, index: usize) {
-        let before = self.map_target();
-        self.system = index;
-        self.placed = self
-            .scene
-            .systems
-            .get(index)
-            .map(|s| self.scene.place_system(s.id))
-            .unwrap_or_default();
-        self.body = None;
-        self.system_pan = [0.0; 3];
-        self.system_offset = [0.0; 3];
-        self.map_pan = [0.0; 3];
-        let after = self.map_target();
-        self.map_offset = add3(self.map_offset, sub3(before, after));
+    /// Applies the legs that take no time and starts the next zoom.
+    fn run_legs(&mut self, orbit: &mut OrbitCamera) {
+        while let Some(&leg) = self.legs.front() {
+            match leg {
+                Leg::Zoom { to, out_only } => {
+                    if !self.leg_started {
+                        self.leg_started = true;
+                        let to = if out_only { to.max(self.l) } else { to };
+                        self.fly_to(to);
+                    }
+                    if self.goal.is_some() {
+                        return;
+                    }
+                    self.leg_started = false;
+                }
+                Leg::System { index, at } => self.anchor_system_at(index, at, orbit),
+                Leg::Body(index) => self.anchor_to(Some(index), orbit),
+                Leg::Point(at) => {
+                    let before = self.system_target(orbit);
+                    self.pan = sub3(at, self.anchor_pos());
+                    let after = sub3(self.system_target(orbit), self.offset);
+                    self.offset = sub3(before, after);
+                }
+                Leg::Free => self.free_focus(orbit),
+                Leg::Look(dir) => self.look = Some(dir),
+                Leg::Surface(id) => self.want_surface = Some(id),
+            }
+            self.legs.pop_front();
+        }
+    }
+
+    /// Reanchors the view on `body` (or the star) without moving the picture: the difference is
+    /// kept as an offset that settles, so the camera glides. A camera that starts following the
+    /// loaded planet takes the planet camera over from the pose it shows.
+    fn anchor_to(&mut self, body: Option<usize>, orbit: &mut OrbitCamera) {
+        let before = self.system_target(orbit);
+        let shown = self.pose(orbit);
+        let tracking = self.anchored_at_surface();
+        self.body = body;
+        self.pan = [0.0; 3];
+        if self.anchored_at_surface() && !tracking {
+            self.align_orbit(orbit, shown);
+        }
+        let after = sub3(self.system_target(orbit), self.offset);
+        self.offset = sub3(before, after);
+    }
+
+    /// Reanchors the view on system `index` with the focus at `at` of its plane, gliding on the
+    /// star map from where it looks now.
+    fn anchor_system_at(&mut self, index: usize, at: [f32; 3], orbit: &OrbitCamera) {
+        let before = self.map_target(orbit);
+        self.set_system(index);
+        self.pan = at;
+        let after = self.map_target(orbit);
+        self.offset = scale3(sub3(before, after), 1.0 / self.k());
+    }
+
+    /// The log-distance of a view of a whole system around a point of it.
+    fn system_focus_l(&self) -> f32 {
+        let l = self.scale.l_globe_system + (SYSTEM_FOCUS_DISTANCE / self.scale.system_min).ln();
+        l.max(self.scale.l_globe_system + FADE_HALF + HANDOVER_SPAN + 0.05)
+            .min(self.scale.l_system_map - FADE_HALF - 0.05)
+    }
+
+    /// The log-distance of the star map, high enough that the system frame is gone.
+    fn map_focus_l(&self) -> f32 {
+        let l = self.scale.l_system_map + (MAP_FOCUS_DISTANCE / MAP_MIN_DISTANCE).ln();
+        l.max(self.scale.l_system_map + FADE_HALF + 0.05)
+            .min(self.scale.l_end)
+    }
+
+    /// Flies out of the planet until the plane's own pose shows, if needed.
+    fn leave_planet(&self) -> Leg {
+        Leg::Zoom {
+            to: self.space_floor() + HANDOVER_SPAN + 0.05,
+            out_only: true,
+        }
+    }
+
+    /// Flies out to the star map, if needed, before the camera crosses to system `index`: high
+    /// enough that the crossing glides over a picture wider than the way.
+    fn out_to_map(&self, index: usize, orbit: &OrbitCamera) -> Leg {
+        let from = self.map_target(orbit);
+        let to = self.map_positions.get(index).copied().unwrap_or(from);
+        let way = (to[0] - from[0]).hypot(to[2] - from[2]);
+        let fit = self.scale.l_system_map + (way * 1.5 / MAP_MIN_DISTANCE).max(1.0).ln();
+        Leg::Zoom {
+            to: fit
+                .max(self.scale.l_system_map + FADE_HALF + 0.1)
+                .min(self.scale.l_end),
+            out_only: true,
+        }
     }
 
     /// Flies to a planet, a star or a system found by a double click and zooms in to the next
     /// level. A planet without a generated surface is shown as a plain sphere: the zoom stops at
-    /// the system level.
+    /// the system level until its globe is loaded.
     pub fn fly_to_target(&mut self, target: Target, orbit: &mut OrbitCamera) {
         match target {
             Target::System(index) => {
-                self.anchor_system(index);
-                self.fly_to(self.scale.l_system_map - FADE_HALF - 0.1);
+                let legs = [
+                    Leg::System {
+                        index,
+                        at: [0.0; 3],
+                    },
+                    Leg::Zoom {
+                        to: self.scale.l_system_map - FADE_HALF - 0.1,
+                        out_only: false,
+                    },
+                ];
+                self.fly(legs, orbit);
             }
             Target::Body(index) => {
                 let body = &self.scene.bodies[index];
-                let star = body.kind == BodyViewKind::Star;
-                let habitable = body.kind == BodyViewKind::Habitable;
-                let id = body.id;
-                self.anchor_to((!star).then_some(index), orbit);
-                if !star && Some(index) == self.surface_body {
-                    self.fly_to(self.scale.globe_max.max(MIN_DISTANCE).ln() - 0.2);
+                let (kind, id) = (body.kind, body.id);
+                if kind == BodyViewKind::Star {
+                    let to = self.system_focus_l().max(self.l);
+                    let legs = [
+                        self.leave_planet(),
+                        Leg::Free,
+                        Leg::Point([0.0; 3]),
+                        Leg::Zoom {
+                            to,
+                            out_only: false,
+                        },
+                    ];
+                    self.fly(legs, orbit);
+                    return;
+                }
+                if Some(index) == self.surface_body {
+                    let to = self.scale.globe_max.max(MIN_DISTANCE).ln() - 0.2;
+                    self.fly(
+                        [
+                            Leg::Body(index),
+                            Leg::Zoom {
+                                to,
+                                out_only: false,
+                            },
+                        ],
+                        orbit,
+                    );
                 } else {
-                    if habitable {
-                        self.want_surface = Some(id);
+                    let mut legs = vec![Leg::Body(index)];
+                    if kind == BodyViewKind::Habitable {
+                        legs.push(Leg::Surface(id));
                     }
-                    self.fly_to(self.scale.l_globe_system + FADE_HALF);
+                    legs.push(Leg::Zoom {
+                        to: self.space_floor(),
+                        out_only: false,
+                    });
+                    self.fly(legs, orbit);
                 }
             }
         }
     }
 
-    /// Returns to the home globe: anchors on the home planet, looks at the first start and flies
-    /// to a view of the whole planet.
+    /// Flies to `place`: out of the planet and across the star map when it lies in another
+    /// system, then in to the level it is seen at. Refused when the place lies beyond the cap.
+    pub fn focus(
+        &mut self,
+        place: FocusPlace,
+        orbit: &mut OrbitCamera,
+    ) -> Result<(), FocusRefused> {
+        match place {
+            FocusPlace::Globe(dir) => {
+                let surface = self.surface_body.ok_or(FocusRefused::Unknown)?;
+                let planet_l = PLANET_FOCUS_DISTANCE
+                    .ln()
+                    .min(self.scale.globe_max.max(MIN_DISTANCE).ln());
+                if self.anchored_at_surface() && self.level() <= Level::Globe {
+                    self.fly([Leg::Look(dir)], orbit);
+                    return Ok(());
+                }
+                let system = self
+                    .scene
+                    .system_index(self.scene.bodies[surface].system)
+                    .ok_or(FocusRefused::Unknown)?;
+                let mut legs = Vec::new();
+                if system != self.system {
+                    if self.cap < Level::StarMap {
+                        return Err(FocusRefused::BeyondReach);
+                    }
+                    let at = self
+                        .scene
+                        .place_system(self.scene.systems[system].id)
+                        .iter()
+                        .find(|p| p.body == surface)
+                        .map_or([0.0; 3], |p| p.pos);
+                    legs.push(self.out_to_map(system, orbit));
+                    legs.push(Leg::System { index: system, at });
+                }
+                legs.extend([
+                    Leg::Body(surface),
+                    Leg::Look(dir),
+                    Leg::Zoom {
+                        to: planet_l,
+                        out_only: false,
+                    },
+                ]);
+                self.fly(legs, orbit);
+            }
+            FocusPlace::System { system, at } => {
+                if self.cap < Level::System {
+                    return Err(FocusRefused::BeyondReach);
+                }
+                let index = self
+                    .scene
+                    .system_index(system)
+                    .ok_or(FocusRefused::Unknown)?;
+                let to = self.system_focus_l();
+                if index == self.system {
+                    let legs = [
+                        self.leave_planet(),
+                        Leg::Free,
+                        Leg::Point(at),
+                        Leg::Zoom {
+                            to,
+                            out_only: false,
+                        },
+                    ];
+                    self.fly(legs, orbit);
+                } else {
+                    if self.cap < Level::StarMap {
+                        return Err(FocusRefused::BeyondReach);
+                    }
+                    let legs = [
+                        self.out_to_map(index, orbit),
+                        Leg::System { index, at },
+                        Leg::Zoom {
+                            to,
+                            out_only: false,
+                        },
+                    ];
+                    self.fly(legs, orbit);
+                }
+            }
+            FocusPlace::Map(at) => {
+                if self.cap < Level::StarMap {
+                    return Err(FocusRefused::BeyondReach);
+                }
+                let point = scale3(sub3(at, self.here()), 1.0 / self.k());
+                let from = self.map_target(orbit);
+                let way = (at[0] - from[0]).hypot(at[2] - from[2]);
+                let fit = self.scale.l_system_map + (way * 1.5 / MAP_MIN_DISTANCE).max(1.0).ln();
+                let to = self.map_focus_l().max(fit.min(self.scale.l_end));
+                let legs = [Leg::Zoom { to, out_only: true }, Leg::Point(point)];
+                self.fly(legs, orbit);
+            }
+        }
+        Ok(())
+    }
+
+    /// Glides the focus to `at` without changing level: a point of the anchored system's plane,
+    /// or of the star map when `map` (a click on the minimap).
+    pub fn glide_to(&mut self, at: [f32; 3], map: bool, orbit: &mut OrbitCamera) {
+        let point = if map {
+            scale3(sub3(at, self.here()), 1.0 / self.k())
+        } else {
+            at
+        };
+        self.fly([Leg::Point(point)], orbit);
+    }
+
+    /// Keeps `place` centred without changing level (the follow toggle): only when the camera
+    /// already shows it and no flight is under way.
+    pub fn follow(&mut self, place: FocusPlace) {
+        if self.goal.is_some() || !self.legs.is_empty() || self.drag.is_some() {
+            return;
+        }
+        let settle = 1.0 - (-FLY_RATE * self.seconds.max(0.0)).exp();
+        match place {
+            FocusPlace::Globe(dir) => {
+                if self.anchored_at_surface() && self.pans_planet() {
+                    self.look = Some(dir);
+                }
+            }
+            FocusPlace::System { system, at } => {
+                if self.level() == Level::System
+                    && !self.pans_planet()
+                    && self.system_id() == Some(system)
+                {
+                    let wanted = sub3(at, self.anchor_pos());
+                    self.pan = lerp3(self.pan, wanted, settle);
+                }
+            }
+            FocusPlace::Map(at) => {
+                if self.level() == Level::StarMap {
+                    let point = scale3(sub3(at, self.here()), 1.0 / self.k());
+                    let wanted = sub3(point, self.anchor_pos());
+                    self.pan = lerp3(self.pan, wanted, settle);
+                }
+            }
+        }
+    }
+
+    /// Returns to the home globe: out to the star map if the camera is in another system, across
+    /// to the home system, then down to the home planet looking at the first start.
     pub fn fly_home(&mut self, orbit: &mut OrbitCamera) {
         let Some(home_body) = self.home_body else {
             return;
@@ -763,33 +1667,65 @@ impl ZoomCamera {
             .scene
             .system_index(self.scene.bodies[home_body].system)
             .unwrap_or(0);
+        let mut legs = Vec::new();
         if system != self.system {
-            self.anchor_system(system);
+            let at = self
+                .scene
+                .place_system(self.scene.systems[system].id)
+                .iter()
+                .find(|p| p.body == home_body)
+                .map_or([0.0; 3], |p| p.pos);
+            legs.push(self.out_to_map(system, orbit));
+            legs.push(Leg::System { index: system, at });
         }
-        self.anchor_to(Some(home_body), orbit);
+        legs.push(Leg::Body(home_body));
         if self.surface_body == Some(home_body) {
-            orbit.look_at(self.home_dir);
-            self.fly_to((2.0 * self.scale.planet_radius).max(MIN_DISTANCE).ln());
+            legs.push(Leg::Look(self.home_dir));
+            legs.push(Leg::Zoom {
+                to: (2.0 * self.scale.planet_radius).max(MIN_DISTANCE).ln(),
+                out_only: false,
+            });
         } else {
             // The home globe is not loaded: ask for it and fly in once it is.
-            self.want_surface = Some(self.scene.bodies[home_body].id);
-            self.fly_to(self.scale.l_globe_system + FADE_HALF);
+            legs.push(Leg::Surface(self.scene.bodies[home_body].id));
+            legs.push(Leg::Zoom {
+                to: self.space_floor(),
+                out_only: false,
+            });
         }
+        self.fly(legs, orbit);
     }
 
     /// Places the camera for a reproducible view (`--view`): `level` over the home planet.
     pub fn set_view(&mut self, level: Level, orbit: &mut OrbitCamera) {
-        self.fly_home(orbit);
-        self.goal = None;
+        self.interrupt();
+        if let Some(home) = self.home_body {
+            let system = self
+                .scene
+                .system_index(self.scene.bodies[home].system)
+                .unwrap_or(0);
+            if system != self.system {
+                self.set_system(system);
+            }
+            self.body = Some(home);
+            if self.surface_body == Some(home) {
+                orbit.look_at(self.home_dir);
+            } else {
+                self.want_surface = Some(self.scene.bodies[home].id);
+            }
+        }
+        self.pan = [0.0; 3];
+        self.offset = [0.0; 3];
         let l = match level {
             Level::Surface => 12.0_f32.ln(),
             Level::Globe => self.scale.l_cap(Level::Globe),
             Level::System => self.scale.l_globe_system + (8000.0 / self.scale.system_min).ln(),
             Level::StarMap => self.scale.l_end,
         };
-        self.system_offset = [0.0; 3];
-        self.map_offset = [0.0; 3];
         self.l = l.clamp(self.l_min(), self.l_cap());
+        if let Some(yaw) = yaw_of(self.planet_to_system(orbit.dir)) {
+            self.yaw = yaw;
+        }
         self.sync_orbit(orbit);
     }
 
@@ -800,7 +1736,11 @@ impl ZoomCamera {
         let mut out = Vec::new();
         match self.level() {
             Level::System => {
+                let known = self.knows_system();
                 for p in &self.placed {
+                    if !known && self.scene.bodies[p.body].kind != BodyViewKind::Star {
+                        continue;
+                    }
                     if let Some((x, y, depth)) = view.project(p.pos) {
                         let on_screen = p.radius / depth * canvas.1 / (2.0 * view.tan());
                         out.push((Target::Body(p.body), (x, y, on_screen)));
@@ -881,6 +1821,23 @@ mod tests {
 
     fn near(a: [f32; 3], b: [f32; 3]) -> bool {
         (0..3).all(|i| (a[i] - b[i]).abs() < 1e-2 * (1.0 + a[i].abs()))
+    }
+
+    /// Runs `frames` frames of 50 ms, as the render thread does.
+    fn run(zoom: &mut ZoomCamera, orbit: &mut OrbitCamera, frames: usize) {
+        for _ in 0..frames {
+            zoom.adopt_orbit(orbit);
+            zoom.advance(0.05);
+            zoom.sync_orbit(orbit);
+        }
+    }
+
+    fn close(a: [f32; 3], b: [f32; 3], eps: f32) -> bool {
+        (0..3).all(|i| (a[i] - b[i]).abs() <= eps)
+    }
+
+    fn length(v: [f32; 3]) -> f32 {
+        dot3(v, v).sqrt()
     }
 
     #[test]
@@ -1023,7 +1980,7 @@ mod tests {
         zoom.set_l(s.l_system_map);
         let here = zoom.map_positions[zoom.system()];
         assert!(near(
-            zoom.map_target(),
+            zoom.map_target(&orbit),
             system_to_map(&s, here, zoom.system_target(&orbit))
         ));
         // The planet frame's centre point projects to the same place in the system frame's
@@ -1093,9 +2050,7 @@ mod tests {
         assert_eq!(zoom.anchor_body(), Some(placed[2].body));
         assert!(zoom.flying());
         // A resource body has no surface: the flight stops at the system level.
-        for _ in 0..400 {
-            zoom.advance(0.05);
-        }
+        run(&mut zoom, &mut orbit, 400);
         assert_eq!(zoom.level(), Level::System);
         assert!(!zoom.anchored_at_surface());
         // The nearest marker wins and the pick radius has a floor.
@@ -1106,15 +2061,13 @@ mod tests {
         assert_eq!(nearest_marker(&[(10.0, 10.0, 1.0)], (200.0, 10.0)), None);
         // On the star map a double click flies to a system and zooms in to its level.
         zoom.set_view(Level::StarMap, &mut orbit);
-        let view = zoom.map_view().view(size, 0.0);
+        let view = zoom.map_view(&orbit).view(size, 0.0);
         let (x, y, _) = view.project(zoom.map_positions[1]).unwrap();
         assert_eq!(zoom.target_at(&view, x, y), Some(Target::System(1)));
         zoom.press(5000, (x, y), &view, &mut orbit);
         assert!(zoom.press(5100, (x, y), &view, &mut orbit));
         assert_eq!(zoom.system(), 1);
-        for _ in 0..400 {
-            zoom.advance(0.05);
-        }
+        run(&mut zoom, &mut orbit, 400);
         assert_eq!(zoom.level(), Level::System);
     }
 
@@ -1123,18 +2076,16 @@ mod tests {
         let (mut zoom, mut orbit) = camera(Level::StarMap);
         zoom.set_view(Level::StarMap, &mut orbit);
         zoom.fly_to_target(Target::System(1), &mut orbit);
-        for _ in 0..400 {
-            zoom.advance(0.05);
-        }
+        run(&mut zoom, &mut orbit, 400);
+        assert_eq!(zoom.system(), 1);
         zoom.fly_home(&mut orbit);
-        for _ in 0..600 {
-            zoom.advance(0.05);
-        }
-        zoom.sync_orbit(&mut orbit);
+        run(&mut zoom, &mut orbit, 600);
         assert_eq!(zoom.level(), Level::Globe);
         assert_eq!(zoom.system(), 0);
         assert!(zoom.anchored_at_surface());
         assert!((orbit.distance - 2.0 * R).abs() < 1.0);
+        // The flight ends looking at the first start.
+        assert!(dot3(orbit.dir, [0.0, 0.0, 1.0]) > 0.999);
     }
 
     #[test]
@@ -1145,5 +2096,427 @@ mod tests {
         assert!(!tracker.press(300, 12.0, 11.0));
         assert!(!tracker.press(1000, 12.0, 11.0));
         assert!(!tracker.press(1100, 100.0, 11.0));
+    }
+
+    /// The planet camera as the system frame sees it: eye, target and up carried over.
+    fn planet_in_system(zoom: &ZoomCamera, orbit: &OrbitCamera) -> ([f32; 3], [f32; 3], [f32; 3]) {
+        let s = zoom.scale();
+        let anchor = zoom
+            .placed()
+            .iter()
+            .find(|p| Some(p.body) == zoom.surface_body())
+            .unwrap()
+            .pos;
+        let drawn = zoom.draw_orbit(orbit);
+        let carry = |p: [f32; 3]| globe_to_system(s, anchor, zoom.planet_to_system(p));
+        (
+            carry(drawn.position()),
+            carry(drawn.target()),
+            zoom.planet_to_system(drawn.view_up()),
+        )
+    }
+
+    fn turned_camera() -> (ZoomCamera, OrbitCamera) {
+        let (mut zoom, _) = camera(Level::StarMap);
+        let mut orbit = OrbitCamera::at(40.0, -25.0, 3.0 * R, 70.0, R, 3.0 * R);
+        zoom.follow_sun(unit3([0.3, 0.2, -0.9]).unwrap());
+        zoom.set_l(orbit.max_distance.ln());
+        zoom.sync_orbit(&mut orbit);
+        (zoom, orbit)
+    }
+
+    #[test]
+    fn planet_hand_over_shows_the_planet_cameras_own_picture() {
+        let (mut zoom, mut orbit) = turned_camera();
+        let s = *zoom.scale();
+        // Through the whole hand-over band the system camera is the planet camera, scaled: the
+        // same eye, the same point looked at and the same up, so the cross-fade shows one picture.
+        let mut l = orbit.max_distance.ln();
+        while l <= s.l_globe_system + FADE_HALF {
+            zoom.set_l(l);
+            zoom.sync_orbit(&mut orbit);
+            let view = zoom.system_view(&orbit);
+            let (eye, target, up) = planet_in_system(&zoom, &orbit);
+            let distance = length(sub3(view.eye, view.target));
+            assert!(close(view.target, target, 1e-3 * distance), "l = {l}");
+            assert!(close(view.eye, eye, 1e-3 * distance), "l = {l}");
+            assert!(close(view.up, unit3(up).unwrap(), 1e-4), "l = {l}");
+            l += 0.01;
+        }
+        // Beyond it the view turns and tilts continuously to the plane's pose: no step jumps.
+        let mut last = zoom.pose(&orbit);
+        let mut last_target = zoom.map_target(&orbit);
+        let mut l = s.l_globe_system;
+        while l <= s.l_end {
+            zoom.set_l(l);
+            zoom.sync_orbit(&mut orbit);
+            let pose = zoom.pose(&orbit);
+            assert!(dot3(pose.eye, last.eye) > 0.995, "eye jumps at l = {l}");
+            assert!(dot3(pose.up, last.up) > 0.995, "up jumps at l = {l}");
+            let target = zoom.map_target(&orbit);
+            let step = length(sub3(target, last_target));
+            assert!(step < 0.05 * s.map_distance(l), "focus jumps at l = {l}");
+            last = pose;
+            last_target = target;
+            l += 0.01;
+        }
+        // Out there the plane's own pose: no roll, the elevation of the level.
+        let pose = zoom.pose(&orbit);
+        assert!(close(pose.up, level_up(pose.eye, zoom.yaw), 1e-5));
+        assert!((pose.eye[1].asin() - zoom.elevation_at(s.l_end)).abs() < 1e-4);
+    }
+
+    #[test]
+    fn heading_is_kept_from_planet_to_star_map_and_back() {
+        let (mut zoom, mut orbit) = turned_camera();
+        let s = *zoom.scale();
+        let start = orbit;
+        // Leaving the planet, the space heading is the planet camera's.
+        zoom.set_l(s.l_globe_system + FADE_HALF);
+        zoom.sync_orbit(&mut orbit);
+        let carried = zoom.planet_to_system(orbit.dir);
+        let heading = zoom.heading();
+        assert!(
+            (carried[0].atan2(carried[2]) + heading).rem_euclid(TAU_F) < 1e-4
+                || (carried[0].atan2(carried[2]) + heading).rem_euclid(TAU_F) > TAU_F - 1e-4
+        );
+        // The system and the star map share it, and the two frames meet exactly at the hand-over.
+        for l in [s.l_globe_system + 1.5, s.l_system_map, s.l_end] {
+            zoom.set_l(l);
+            zoom.sync_orbit(&mut orbit);
+            assert!((zoom.heading() - heading).abs() < 1e-6);
+        }
+        zoom.set_l(s.l_system_map);
+        let system = zoom.system_view(&orbit);
+        let map = zoom.map_view(&orbit);
+        let here = zoom.map_positions()[zoom.system()];
+        let distance = length(sub3(map.eye, map.target));
+        assert!(close(
+            map.eye,
+            system_to_map(&s, here, system.eye),
+            1e-3 * distance
+        ));
+        assert!(close(
+            map.target,
+            system_to_map(&s, here, system.target),
+            1e-3 * distance
+        ));
+        assert!(close(map.up, system.up, 1e-6));
+        // Back down without other input: the planet camera is where it was.
+        let mut l = s.l_end;
+        while l > start.max_distance.ln() {
+            zoom.set_l(l);
+            zoom.sync_orbit(&mut orbit);
+            l -= 0.05;
+        }
+        assert!(dot3(orbit.dir, start.dir) > 0.99999);
+        assert!(dot3(orbit.forward_tangent(), start.forward_tangent()) > 0.99999);
+        // A turn in space turns the planet camera about the planet's axis by as much, so the
+        // heading seen on the way back in is the one the player chose.
+        zoom.set_l(s.l_globe_system + 1.6);
+        zoom.rotate_heading(0.6);
+        zoom.sync_orbit(&mut orbit);
+        let turned = zoom.heading();
+        assert!((turned - (heading + 0.6).rem_euclid(TAU_F)).abs() < 1e-4);
+        zoom.set_l(s.l_globe_system);
+        zoom.sync_orbit(&mut orbit);
+        assert!((zoom.heading() - turned).abs() < 1e-3);
+    }
+
+    const TAU_F: f32 = std::f32::consts::TAU;
+
+    fn free_system_view(zoom: &mut ZoomCamera, orbit: &mut OrbitCamera) {
+        zoom.set_view(Level::System, orbit);
+        let size = (1280.0, 720.0);
+        let view = zoom.system_view(orbit).view(size, 0.0);
+        // A wheel step over empty space lets go of the planet.
+        zoom.wheel_at(0.5, Some((40.0, 40.0)), size, 0.0, orbit);
+        zoom.sync_orbit(orbit);
+        assert_eq!(zoom.anchor_body(), None);
+        let _ = view;
+    }
+
+    #[test]
+    fn zoom_follows_the_cursor_on_the_system_plane_and_the_star_map() {
+        let size = (1280.0, 720.0);
+        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        free_system_view(&mut zoom, &mut orbit);
+        for (steps, cursor) in [(1.0, (900.0, 500.0)), (-1.0, (200.0, 150.0))] {
+            let before = zoom.system_view(&orbit).view(size, 0.0);
+            let held = plane_hit(&before, cursor.0, cursor.1).unwrap();
+            zoom.wheel_at(steps, Some(cursor), size, 0.0, &mut orbit);
+            zoom.sync_orbit(&mut orbit);
+            let after = zoom.system_view(&orbit).view(size, 0.0);
+            let (x, y, _) = after.project(held).unwrap();
+            assert!((x - cursor.0).hypot(y - cursor.1) < 0.5, "{x} {y}");
+        }
+        zoom.set_l(zoom.scale().l_end - 1.0);
+        let cursor = (300.0, 420.0);
+        let before = zoom.map_view(&orbit).view(size, 0.0);
+        let held = plane_hit(&before, cursor.0, cursor.1).unwrap();
+        zoom.wheel_at(1.0, Some(cursor), size, 0.0, &mut orbit);
+        let after = zoom.map_view(&orbit).view(size, 0.0);
+        let (x, y, _) = after.project(held).unwrap();
+        assert!((x - cursor.0).hypot(y - cursor.1) < 0.5, "{x} {y}");
+    }
+
+    #[test]
+    fn drag_pans_the_plane_and_shift_drag_turns_the_heading() {
+        let size = (1280.0, 720.0);
+        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        free_system_view(&mut zoom, &mut orbit);
+        let view = zoom.system_view(&orbit).view(size, 0.0);
+        let grabbed = plane_hit(&view, 500.0, 300.0).unwrap();
+        zoom.drag_start(500.0, 300.0, false);
+        zoom.drag_to(650.0, 420.0, &view);
+        zoom.drag_end();
+        let after = zoom.system_view(&orbit).view(size, 0.0);
+        let (x, y, _) = after.project(grabbed).unwrap();
+        assert!((x - 650.0).hypot(y - 420.0) < 1.0, "{x} {y}");
+        // Turning keeps the focus and changes the heading as the planet camera's drag does.
+        let target = zoom.system_target(&orbit);
+        let heading = zoom.heading();
+        zoom.drag_start(600.0, 300.0, true);
+        zoom.drag_to(700.0, 300.0, &after);
+        zoom.sync_orbit(&mut orbit);
+        assert!(close(zoom.system_target(&orbit), target, 1e-3));
+        let expected = (heading - 100.0 * ROTATE_RATE).rem_euclid(TAU_F);
+        assert!((zoom.heading() - expected).abs() < 1e-4);
+        // Pan keys move across the plane relative to that heading: forward is up the screen.
+        let before = zoom.system_target(&orbit);
+        zoom.hold(0, true);
+        zoom.advance(0.1);
+        zoom.hold(0, false);
+        let moved = sub3(zoom.system_target(&orbit), before);
+        let view = zoom.system_view(&orbit);
+        let screen_up = view.up;
+        assert!(dot3(moved, screen_up) > 0.0 && moved[1].abs() < 1e-3);
+    }
+
+    #[test]
+    fn zooming_in_on_a_body_lands_on_it() {
+        let size = (1280.0, 720.0);
+        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        free_system_view(&mut zoom, &mut orbit);
+        // A resource body: the camera anchors on it and stops above it.
+        // The cursor rests where the rock first shows, as a player's does.
+        let rock = *zoom.placed().iter().find(|p| p.body == 2).unwrap();
+        let view = zoom.system_view(&orbit).view(size, 0.0);
+        let (x, y, _) = view.project(rock.pos).unwrap();
+        for _ in 0..80 {
+            zoom.wheel_at(1.0, Some((x, y)), size, 0.0, &mut orbit);
+            zoom.sync_orbit(&mut orbit);
+            run(&mut zoom, &mut orbit, 2);
+        }
+        run(&mut zoom, &mut orbit, 100);
+        assert_eq!(zoom.anchor_body(), Some(2));
+        assert_eq!(zoom.l(), zoom.l_min());
+        assert!(close(zoom.system_target(&orbit), rock.pos, 1.0));
+        // The loaded planet: the camera goes on down to its surface.
+        let planet = *zoom.placed().iter().find(|p| p.body == 1).unwrap();
+        zoom.set_l(zoom.scale().l_globe_system + 2.0);
+        for _ in 0..120 {
+            let view = zoom.system_view(&orbit).view(size, 0.0);
+            let (x, y, _) = view.project(planet.pos).unwrap_or((640.0, 360.0, 1.0));
+            zoom.wheel_at(1.0, Some((x, y)), size, 0.0, &mut orbit);
+            zoom.sync_orbit(&mut orbit);
+            run(&mut zoom, &mut orbit, 2);
+        }
+        assert!(zoom.anchored_at_surface());
+        assert_eq!(zoom.level(), Level::Surface);
+        // A planet of another system without a globe: the camera anchors and asks for it.
+        zoom.fly_to_target(Target::System(1), &mut orbit);
+        run(&mut zoom, &mut orbit, 300);
+        let other = *zoom.placed().iter().find(|p| p.body == 5).unwrap();
+        for _ in 0..60 {
+            let view = zoom.system_view(&orbit).view(size, 0.0);
+            let Some((x, y, _)) = view.project(other.pos) else {
+                break;
+            };
+            zoom.wheel_at(1.0, Some((x, y)), size, 0.0, &mut orbit);
+            zoom.sync_orbit(&mut orbit);
+            run(&mut zoom, &mut orbit, 2);
+        }
+        assert_eq!(zoom.anchor_body(), Some(5));
+        assert_eq!(zoom.want_surface(), Some(6));
+        assert_eq!(zoom.l(), zoom.l_min());
+    }
+
+    #[test]
+    fn a_globe_that_loads_keeps_the_picture_and_flies_in() {
+        let size = (1280.0, 720.0);
+        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        zoom.fly_to_target(Target::System(1), &mut orbit);
+        run(&mut zoom, &mut orbit, 300);
+        let planet = *zoom.placed().iter().find(|p| p.body == 5).unwrap();
+        zoom.fly_to_target(Target::Body(5), &mut orbit);
+        run(&mut zoom, &mut orbit, 300);
+        assert_eq!(zoom.want_surface(), Some(6));
+        let view = zoom.system_view(&orbit).view(size, 0.0);
+        let before = view.project(planet.pos).unwrap();
+        let distance = zoom.scale().system_distance(zoom.l());
+        // The globe of a planet of 140 tiles a face arrives.
+        let radius = crate::globe::planet_radius(140);
+        let mut globe = OrbitCamera::new(radius, 3.0 * radius);
+        zoom.surface_ready(6, radius, 3.0 * radius, [0.0, 0.0, 1.0], &mut globe);
+        assert!((zoom.scale().system_distance(zoom.l()) - distance).abs() < 0.5);
+        zoom.sync_orbit(&mut globe);
+        let view = zoom.system_view(&globe).view(size, 0.0);
+        let after = view.project(planet.pos).unwrap();
+        assert!((after.0 - before.0).hypot(after.1 - before.1) < 1.0);
+        // Then the camera goes down onto it.
+        run(&mut zoom, &mut globe, 300);
+        assert!(zoom.anchored_at_surface());
+        assert!(zoom.level() <= Level::Globe);
+    }
+
+    #[test]
+    fn zooming_in_on_a_system_of_the_star_map_enters_it() {
+        let size = (1280.0, 720.0);
+        // Small and large wheel steps alike: the step that crosses into the system frame may
+        // land anywhere below the hand-over.
+        for steps in [1.0, 3.0, 5.0] {
+            let (mut zoom, mut orbit) = camera(Level::StarMap);
+            zoom.set_view(Level::StarMap, &mut orbit);
+            let mut entered = false;
+            let view = zoom.map_view(&orbit).view(size, 0.0);
+            let (x, y, _) = view.project(zoom.map_positions()[1]).unwrap();
+            for _ in 0..80 {
+                zoom.wheel_at(steps, Some((x, y)), size, 0.0, &mut orbit);
+                zoom.sync_orbit(&mut orbit);
+                run(&mut zoom, &mut orbit, 1);
+                entered |= zoom.system() == 1 && zoom.level() == Level::System;
+            }
+            assert!(entered, "steps {steps}");
+            assert_eq!(zoom.system(), 1);
+            // The picture never jumped: the star stays where the cursor held it.
+            let view = zoom.system_view(&orbit).view(size, 0.0);
+            let (sx, sy, _) = view.project([0.0; 3]).unwrap();
+            assert!((sx - x).hypot(sy - y) < 2.0, "{sx} {sy} vs {x} {y}");
+        }
+    }
+
+    #[test]
+    fn the_tier_caps_bound_zoom_and_flights() {
+        let size = (1280.0, 720.0);
+        let (mut zoom, mut orbit) = camera(Level::System);
+        for _ in 0..200 {
+            zoom.wheel_at(-1.0, Some((100.0, 100.0)), size, 0.0, &mut orbit);
+        }
+        assert_eq!(zoom.level(), Level::System);
+        assert_eq!(
+            zoom.focus(FocusPlace::Map([0.0; 3]), &mut orbit),
+            Err(FocusRefused::BeyondReach)
+        );
+        assert_eq!(
+            zoom.focus(
+                FocusPlace::System {
+                    system: 2,
+                    at: [0.0; 3]
+                },
+                &mut orbit
+            ),
+            Err(FocusRefused::BeyondReach)
+        );
+        // The own system is in reach.
+        assert!(
+            zoom.focus(
+                FocusPlace::System {
+                    system: 1,
+                    at: [900.0, 0.0, 300.0]
+                },
+                &mut orbit
+            )
+            .is_ok()
+        );
+        run(&mut zoom, &mut orbit, 400);
+        assert_eq!(zoom.system(), 0);
+        let (mut planet_only, mut orbit) = camera(Level::Globe);
+        assert_eq!(
+            planet_only.focus(
+                FocusPlace::System {
+                    system: 1,
+                    at: [0.0; 3]
+                },
+                &mut orbit
+            ),
+            Err(FocusRefused::BeyondReach)
+        );
+    }
+
+    /// Runs a flight and checks every frame for a cut: the log-distance and the star-map focus
+    /// move by small steps only.
+    fn fly_without_cuts(zoom: &mut ZoomCamera, orbit: &mut OrbitCamera, frames: usize) {
+        let mut last = (zoom.l(), zoom.map_target(orbit));
+        for frame in 0..frames {
+            run(zoom, orbit, 1);
+            let now = (zoom.l(), zoom.map_target(orbit));
+            assert!((now.0 - last.0).abs() < 0.5, "zoom cut at frame {frame}");
+            let step = length(sub3(now.1, last.1));
+            let seen = zoom.scale().map_distance(zoom.l().max(last.0));
+            assert!(
+                step < 0.25 * seen,
+                "focus cut at frame {frame}: {step} vs {seen}"
+            );
+            last = now;
+        }
+    }
+
+    #[test]
+    fn focus_flies_to_a_ship_in_orbit_in_system_space_and_in_transit() {
+        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        zoom.set_view(Level::Globe, &mut orbit);
+        // A ship in another system's space: out to the star map, across, in to the system.
+        let at = [1800.0, 0.0, -700.0];
+        zoom.focus(FocusPlace::System { system: 2, at }, &mut orbit)
+            .unwrap();
+        fly_without_cuts(&mut zoom, &mut orbit, 500);
+        assert_eq!(zoom.system(), 1);
+        assert_eq!(zoom.level(), Level::System);
+        assert!(close(zoom.system_target(&orbit), at, 1.0));
+        // A ship between systems: out to the star map, onto its place on the lane.
+        let lane = transit_like(&zoom, 0, 1, 0.4);
+        zoom.focus(FocusPlace::Map(lane), &mut orbit).unwrap();
+        fly_without_cuts(&mut zoom, &mut orbit, 400);
+        assert_eq!(zoom.level(), Level::StarMap);
+        assert!(close(zoom.map_target(&orbit), lane, 1.0));
+        // A ship in orbit of the home planet: back across and down to the globe, looking at it.
+        let dir = unit3([0.5, 0.4, 0.7]).unwrap();
+        zoom.focus(FocusPlace::Globe(dir), &mut orbit).unwrap();
+        fly_without_cuts(&mut zoom, &mut orbit, 600);
+        assert_eq!(zoom.system(), 0);
+        assert!(zoom.level() <= Level::Globe);
+        assert!(dot3(orbit.dir, dir) > 0.999);
+        assert!((orbit.distance - PLANET_FOCUS_DISTANCE).abs() < 1.0);
+        // Already on the planet, a focus only turns the planet camera.
+        let next = unit3([-0.2, 0.3, 0.9]).unwrap();
+        zoom.focus(FocusPlace::Globe(next), &mut orbit).unwrap();
+        run(&mut zoom, &mut orbit, 200);
+        assert!(dot3(orbit.dir, next) > 0.999);
+        // Following keeps a moving ship centred.
+        zoom.set_view(Level::System, &mut orbit);
+        let mut point = [600.0, 0.0, 600.0];
+        zoom.focus(
+            FocusPlace::System {
+                system: 1,
+                at: point,
+            },
+            &mut orbit,
+        )
+        .unwrap();
+        run(&mut zoom, &mut orbit, 300);
+        for _ in 0..200 {
+            point[0] += 2.0;
+            zoom.follow(FocusPlace::System {
+                system: 1,
+                at: point,
+            });
+            run(&mut zoom, &mut orbit, 1);
+        }
+        assert!(length(sub3(zoom.system_target(&orbit), point)) < 30.0);
+    }
+
+    fn transit_like(zoom: &ZoomCamera, a: usize, b: usize, progress: f32) -> [f32; 3] {
+        lerp3(zoom.map_positions()[a], zoom.map_positions()[b], progress)
     }
 }

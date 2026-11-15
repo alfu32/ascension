@@ -56,6 +56,9 @@ pub struct HudSnapshot {
     pub research: Vec<HudResearch>,
     /// Recent event messages, oldest first.
     pub events: Vec<String>,
+    /// The entity the newest event is about (a ship that departed or arrived): clicking the
+    /// event line flies the camera there.
+    pub event_about: Option<u32>,
     /// Rollover help, or empty for the default.
     pub help: String,
     /// Current selection.
@@ -93,6 +96,7 @@ impl Default for HudSnapshot {
             cities: (0, 0),
             research: Vec::new(),
             events: Vec::new(),
+            event_about: None,
             help: String::new(),
             selection: HudSelection::None,
             palette: None,
@@ -143,12 +147,15 @@ pub struct HudQuad {
 }
 
 /// Per-frame pointer state the HUD draws on top of the snapshot.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct HudOverlay {
     /// The HUD element under the pointer.
     pub hover: Option<HudTarget>,
     /// The selection rectangle being dragged, in the same pixels as the layout.
     pub drag_box: Option<Rect>,
+    /// Help about what the pointer rests on in the world, or about the level shown: shown when
+    /// no HUD element is hovered and the simulation has no help of its own.
+    pub world_help: Option<(String, String)>,
 }
 
 /// CPU artwork and font atlases with the common HUD composition code.
@@ -398,15 +405,17 @@ impl HudPainter {
             ),
             _ => Default::default(),
         };
-        let (first, second) = if first.is_empty() {
-            let text = if h.help.is_empty() {
-                "Rollover an item for help and details..."
-            } else {
-                &h.help
-            };
-            (text.to_owned(), String::new())
-        } else {
+        let (first, second) = if !first.is_empty() {
             (first, second)
+        } else if !h.help.is_empty() {
+            (h.help.clone(), String::new())
+        } else if let Some(help) = &overlay.world_help {
+            help.clone()
+        } else {
+            (
+                "Rollover an item for help and details...".to_owned(),
+                String::new(),
+            )
         };
         let right = if h.palette.as_ref().is_some_and(|p| p.pages > 1) {
             110.0

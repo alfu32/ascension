@@ -150,6 +150,10 @@ pub enum Key {
     ResetCamera,
     /// Frame the whole map (Home).
     FrameMap,
+    /// Fly the camera to the selection, at the level it is seen at (Space).
+    FocusSelection,
+    /// Keep the selection centred until the key is pressed again (Shift + Space).
+    FollowSelection,
 }
 
 impl Key {
@@ -163,6 +167,7 @@ impl Key {
             "right" => Some(Self::PanRight),
             "end" => Some(Self::ResetCamera),
             "home" => Some(Self::FrameMap),
+            "space" => Some(Self::FocusSelection),
             _ => None,
         }
     }
@@ -173,7 +178,9 @@ impl Key {
             Self::PanBack => Some(1),
             Self::PanLeft => Some(2),
             Self::PanRight => Some(3),
-            Self::ResetCamera | Self::FrameMap => None,
+            Self::ResetCamera | Self::FrameMap | Self::FocusSelection | Self::FollowSelection => {
+                None
+            }
         }
     }
 }

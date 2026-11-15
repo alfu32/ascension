@@ -400,6 +400,11 @@ impl HudLayout {
         )
     }
 
+    /// Screen rectangle of the event line (its icon and the newest event).
+    pub fn event_line(&self) -> Rect {
+        self.map(Group::BottomLeft, Rect::new(20.0, 608.0, 346.0, 25.0))
+    }
+
     /// Screen rectangle of minimap button `index` (zoom in, zoom out, centre, signal).
     pub fn minimap_button(&self, index: usize) -> Rect {
         self.map(

@@ -50,6 +50,8 @@ pub struct SystemView {
 pub struct BodyView {
     /// Id, unique within the scene.
     pub id: u32,
+    /// Name shown when the pointer rests on it.
+    pub name: String,
     /// The system it belongs to.
     pub system: u32,
     /// Star, habitable planet or resource body.
@@ -286,6 +288,7 @@ pub(crate) fn sample_scene() -> UniverseScene {
     };
     let body = |id, system, kind, orbit_radius, orbit_angle, n_or_size| BodyView {
         id,
+        name: format!("B{id}"),
         system,
         kind,
         orbit_radius,

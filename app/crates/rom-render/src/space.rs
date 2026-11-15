@@ -32,6 +32,8 @@ pub struct ShipView {
     pub kind: u16,
     /// Owning player.
     pub owner: u8,
+    /// The system whose plane it is in (an id).
+    pub system: u32,
     /// The body it holds, if any: then `x`, `y` are in orbit reaches from that body.
     pub body: Option<u32>,
     /// East offset, see the module documentation.
@@ -75,14 +77,25 @@ pub struct TransitView {
 pub struct SpaceSnapshot {
     /// Tick of the simulation the data stems from.
     pub tick: u64,
-    /// The system whose space the ships and claims belong to.
+    /// The system whose claims are listed.
     pub system: Option<u32>,
-    /// Ships in that system's space, ascending by id.
+    /// Ships the player sees in the space of every system, ascending by id.
     pub ships: Vec<ShipView>,
     /// Claimed bodies of that system.
     pub claims: Vec<ClaimView>,
     /// Ships in transit anywhere on the star map.
     pub transits: Vec<TransitView>,
+    /// The systems the player knows, ascending ids; `None` before the first report (all shown).
+    pub known: Option<Vec<u32>>,
+}
+
+impl SpaceSnapshot {
+    /// Whether the player knows system `id`: its bodies are drawn and named.
+    pub fn knows(&self, id: u32) -> bool {
+        self.known
+            .as_ref()
+            .is_none_or(|known| known.binary_search(&id).is_ok())
+    }
 }
 
 /// Where a ship stands in the system frame. `placed` are the bodies of the system as laid out by
@@ -125,6 +138,269 @@ pub fn frame_to_orbit_point(frame: [f32; 3], outermost: f32) -> (f32, f32) {
 pub fn transit_point(from: [f32; 3], to: [f32; 3], progress: f32) -> [f32; 3] {
     let t = progress.clamp(0.0, 1.0);
     [0, 1, 2].map(|i| from[i] + (to[i] - from[i]) * t)
+}
+
+/// A ship, or the ships of one owner in one system, marked on the star map.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MapShipMark {
+    /// The ships it stands for, ascending.
+    pub ids: Vec<u32>,
+    /// Owning player.
+    pub owner: u8,
+    /// Place on the star map.
+    pub at: [f32; 3],
+    /// Unit direction of travel along the lane, for a ship in transit.
+    pub heading: Option<[f32; 3]>,
+    /// The system it is bound for (an index of the scene's systems), for a ship in transit.
+    pub bound_for: Option<usize>,
+    /// The system it is in (an index), for ships in a system's space.
+    pub system: Option<usize>,
+}
+
+/// The ship marks of the star map: every ship in transit at its place on its lane, heading for
+/// its destination, and the ships in each system's space grouped by owner beside the system,
+/// `beside` map units apart (a step toward the screen's right).
+pub fn map_ship_marks(
+    scene: &UniverseScene,
+    positions: &[[f32; 3]],
+    snapshot: &SpaceSnapshot,
+    beside: [f32; 3],
+) -> Vec<MapShipMark> {
+    let mut marks = Vec::new();
+    for transit in &snapshot.transits {
+        let (Some(a), Some(b)) = (
+            scene.system_index(transit.from),
+            scene.system_index(transit.to),
+        ) else {
+            continue;
+        };
+        let (from, to) = (positions[a], positions[b]);
+        let way = [to[0] - from[0], 0.0, to[2] - from[2]];
+        let length = way[0].hypot(way[2]);
+        marks.push(MapShipMark {
+            ids: vec![transit.id],
+            owner: transit.owner,
+            at: transit_point(from, to, transit.progress),
+            heading: (length > 1e-3).then(|| way.map(|c| c / length)),
+            bound_for: Some(b),
+            system: None,
+        });
+    }
+    let mut groups: std::collections::BTreeMap<(usize, u8), Vec<u32>> = Default::default();
+    for ship in &snapshot.ships {
+        if let Some(system) = scene.system_index(ship.system) {
+            groups
+                .entry((system, ship.owner))
+                .or_default()
+                .push(ship.id);
+        }
+    }
+    let mut slot: std::collections::BTreeMap<usize, f32> = Default::default();
+    for ((system, owner), mut ids) in groups {
+        ids.sort_unstable();
+        let n = slot.entry(system).or_insert(0.0);
+        let step = 1.0 + *n;
+        *n += 1.0;
+        let base = positions[system];
+        marks.push(MapShipMark {
+            ids,
+            owner,
+            at: [0, 1, 2].map(|i| base[i] + beside[i] * step),
+            heading: None,
+            bound_for: None,
+            system: Some(system),
+        });
+    }
+    marks
+}
+
+/// The size of a ship mark on the star map seen through `view` from camera distance `distance`,
+/// in map units (a fixed share of the picture's height, about five pixels of 720), and the step
+/// between the marks beside a system, toward the screen's right.
+pub fn map_mark_scale(view: &crate::zoom::SpaceView, distance: f32) -> (f32, [f32; 3]) {
+    let per_pixel = distance * 2.0 * 22.5_f32.to_radians().tan() / 720.0;
+    let icon = per_pixel * 5.0;
+    let f = [
+        view.target[0] - view.eye[0],
+        view.target[1] - view.eye[1],
+        view.target[2] - view.eye[2],
+    ];
+    let u = view.up;
+    let right = [f[1] * u[2] - f[2] * u[1], 0.0, f[0] * u[1] - f[1] * u[0]];
+    let length = right[0].hypot(right[2]).max(1e-6);
+    (icon, right.map(|c| c / length * icon * 4.5))
+}
+
+/// Where a ship between systems shows in the plane of system `index`: at the rim, toward the
+/// other end of its lane, with the direction it moves (outward when it left this system, inward
+/// when it is bound for it). `None` for a transit that does not touch the system.
+pub fn transit_at_rim(
+    scene: &UniverseScene,
+    positions: &[[f32; 3]],
+    index: usize,
+    transit: &TransitView,
+) -> Option<([f32; 3], [f32; 3])> {
+    let (a, b) = (
+        scene.system_index(transit.from)?,
+        scene.system_index(transit.to)?,
+    );
+    let (other, outward) = if a == index {
+        (b, true)
+    } else if b == index {
+        (a, false)
+    } else {
+        return None;
+    };
+    let way = [
+        positions[other][0] - positions[index][0],
+        0.0,
+        positions[other][2] - positions[index][2],
+    ];
+    let length = way[0].hypot(way[2]);
+    if length <= 1e-3 {
+        return None;
+    }
+    let toward = way.map(|c| c / length);
+    let at = toward.map(|c| c * crate::universe::SYSTEM_RADIUS * 1.12);
+    Some((at, if outward { toward } else { toward.map(|c| -c) }))
+}
+
+/// A flat arrowhead in the plane `y = at.y`, `size` units long, pointing along `dir`.
+pub fn chevron(at: [f32; 3], dir: [f32; 3], size: f32, colour: [u8; 4]) -> Vec<Tri3> {
+    let side = [-dir[2], 0.0, dir[0]];
+    let point = |along: f32, across: f32| {
+        [
+            at[0] + dir[0] * along * size + side[0] * across * size,
+            at[1],
+            at[2] + dir[2] * along * size + side[2] * across * size,
+        ]
+    };
+    let (tip, notch) = (point(0.75, 0.0), point(-0.2, 0.0));
+    let (left, right) = (point(-0.6, -0.6), point(-0.6, 0.6));
+    vec![
+        Tri3 {
+            v: [tip, left, notch],
+            colour,
+        },
+        Tri3 {
+            v: [tip, notch, right],
+            colour,
+        },
+    ]
+}
+
+/// A flat diamond of half-diagonal `size` in the plane `y = at.y`.
+pub fn diamond(at: [f32; 3], size: f32, colour: [u8; 4]) -> Vec<Tri3> {
+    let p = |dx: f32, dz: f32| [at[0] + dx * size, at[1], at[2] + dz * size];
+    vec![
+        Tri3 {
+            v: [p(1.0, 0.0), p(0.0, 1.0), p(-1.0, 0.0)],
+            colour,
+        },
+        Tri3 {
+            v: [p(1.0, 0.0), p(-1.0, 0.0), p(0.0, -1.0)],
+            colour,
+        },
+    ]
+}
+
+/// What the pointer rests on in space.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpaceHover {
+    /// A ship, by entity id.
+    Ship(u32),
+    /// A body or a system.
+    Target(Target),
+}
+
+/// The two lines of help for what the pointer rests on: its name, then what can be done with it.
+/// `loaded` is the planet whose globe is loaded; `ships` tells whether ships are selected;
+/// `known` tells whether the player knows a system (by id).
+pub fn hover_help(
+    scene: &UniverseScene,
+    hover: SpaceHover,
+    loaded: Option<usize>,
+    ships: bool,
+    known: impl Fn(u32) -> bool,
+) -> (String, String) {
+    let send = if ships {
+        " · right-click: send the selected ships"
+    } else {
+        ""
+    };
+    match hover {
+        SpaceHover::Ship(_) => (
+            "Ship".to_owned(),
+            "Click to select · Space flies to the selection, Shift + Space follows it".to_owned(),
+        ),
+        SpaceHover::Target(Target::System(i)) => match scene.systems.get(i) {
+            Some(system) if known(system.id) => (
+                format!("{} (star system)", system.name),
+                format!("Double-click or scroll in to enter{send}"),
+            ),
+            Some(system) => (
+                format!("{} (unexplored)", system.name),
+                format!("Send a ship to learn what it holds{send}"),
+            ),
+            None => Default::default(),
+        },
+        SpaceHover::Target(Target::Body(i)) => {
+            let Some(body) = scene.bodies.get(i) else {
+                return Default::default();
+            };
+            match body.kind {
+                crate::universe::BodyViewKind::Star => (
+                    format!("{} (star)", body.name),
+                    "Double-click to centre the view on the star".to_owned(),
+                ),
+                crate::universe::BodyViewKind::Habitable => (
+                    format!("{} (planet)", body.name),
+                    if loaded == Some(i) {
+                        format!("Double-click or scroll in to land the camera{send}")
+                    } else {
+                        format!("Double-click or scroll in to fly there and land the camera{send}")
+                    },
+                ),
+                crate::universe::BodyViewKind::Resource => (
+                    format!("{} (resource body)", body.name),
+                    if ships {
+                        "Double-click to fly there · right-click: orbit and claim it".to_owned()
+                    } else {
+                        "Double-click to fly there · ships orbiting it claim it".to_owned()
+                    },
+                ),
+            }
+        }
+    }
+}
+
+/// The help lines of a level when the pointer rests on nothing: how to move about and between
+/// levels. `cap` is the farthest level the player may reach.
+pub fn level_help(level: crate::zoom::Level, cap: crate::zoom::Level) -> Option<(String, String)> {
+    use crate::zoom::Level;
+    let lines = |a: &str, b: &str| Some((a.to_owned(), b.to_owned()));
+    match level {
+        Level::Surface | Level::Globe if cap >= Level::System => lines(
+            "Scroll out past the globe to see the star system",
+            "Home comes back to your planet",
+        ),
+        Level::Surface | Level::Globe => None,
+        Level::System => Some((
+            "Star system: scroll zooms to the cursor; double-click a planet to land".to_owned(),
+            format!(
+                "Middle-drag pans · Shift + middle-drag turns · Home: your planet{}",
+                if cap >= Level::StarMap {
+                    " · scroll out: star map"
+                } else {
+                    ""
+                }
+            ),
+        )),
+        Level::StarMap => lines(
+            "Star map: scroll in on a system, or double-click it, to enter",
+            "Middle-drag pans · Shift + middle-drag turns · Home: your planet",
+        ),
+    }
 }
 
 /// A ring around a claimed body.
@@ -267,10 +543,22 @@ impl SpaceContext<'_> {
     }
 
     fn ship_at(&self, cursor: (f32, f32)) -> Option<u32> {
-        if self.star_map {
-            return None;
-        }
         nearest_ship(&self.view, self.ships, cursor, 0.0)
+    }
+
+    /// Every ship drawn at the same mark as `id` (a fleet beside a system on the star map).
+    fn mark_of(&self, id: u32) -> Vec<u32> {
+        let Some(&(_, at)) = self.ships.iter().find(|s| s.0 == id) else {
+            return vec![id];
+        };
+        let mut ids: Vec<u32> = self
+            .ships
+            .iter()
+            .filter(|s| s.1 == at)
+            .map(|s| s.0)
+            .collect();
+        ids.sort_unstable();
+        ids
     }
 
     fn ground(&self, cursor: (f32, f32)) -> (f32, f32) {
@@ -317,6 +605,11 @@ impl SpacePicker {
         ))
     }
 
+    /// Records the pointer without picking (it moves a camera drag).
+    pub fn track(&mut self, x: f32, y: f32) {
+        self.pointer = Some((x, y));
+    }
+
     /// Drops a press in progress (a double click started a flight).
     pub fn cancel(&mut self) {
         self.press = None;
@@ -343,14 +636,12 @@ impl SpacePicker {
                 mods,
             } => {
                 self.pointer = Some((x, y));
-                if !ctx.star_map {
-                    self.press = Some(Press {
-                        x,
-                        y,
-                        mods,
-                        dragging: false,
-                    });
-                }
+                self.press = Some(Press {
+                    x,
+                    y,
+                    mods,
+                    dragging: false,
+                });
             }
             InputEvent::ButtonDown {
                 button: PointerButton::Right,
@@ -428,6 +719,17 @@ impl SpacePicker {
                 modifiers: mods,
             };
         }
+        if ctx.star_map {
+            // On the star map a click takes the ships of the mark under it: a ship between
+            // systems, or the fleet beside a system.
+            let entities = ctx
+                .ship_at((x, y))
+                .map_or_else(Vec::new, |id| ctx.mark_of(id));
+            return PickEvent::BoxSelect {
+                entities,
+                modifiers: mods,
+            };
+        }
         let double = self.last_click.is_some_and(|(at, lx, ly)| {
             now_ms.saturating_sub(at) <= DOUBLE_CLICK_MS && (lx - x).hypot(ly - y) <= DRAG_PIXELS
         });
@@ -460,6 +762,7 @@ mod tests {
             id,
             kind: 1,
             owner: 1,
+            system: 1,
             body,
             x,
             y,
@@ -496,6 +799,143 @@ mod tests {
         assert_eq!(tris.len(), 48);
         assert!(tris.iter().all(|t| t.colour == [1, 2, 3, 255]));
         assert!(claim_rings(&scene, &placed, &[]).is_empty());
+    }
+
+    fn transit(id: u32, from: u32, to: u32, progress: f32) -> TransitView {
+        TransitView {
+            id,
+            kind: 1,
+            owner: 1,
+            from,
+            to,
+            progress,
+        }
+    }
+
+    #[test]
+    fn star_map_marks_every_transit_and_every_fleet() {
+        let scene = sample_scene();
+        let positions = scene.place_systems();
+        let mut snapshot = SpaceSnapshot {
+            transits: vec![transit(20, 1, 2, 0.25)],
+            ships: vec![ship(10, None, 100.0, 0.0), ship(11, Some(3), 0.5, 0.0)],
+            ..SpaceSnapshot::default()
+        };
+        let mut enemy = ship(12, None, 0.0, 0.0);
+        enemy.owner = 2;
+        enemy.system = 2;
+        snapshot.ships.push(enemy);
+        let marks = map_ship_marks(&scene, &positions, &snapshot, [500.0, 0.0, 0.0]);
+        assert_eq!(marks.len(), 3);
+        // The ship in transit stands on its lane, a quarter of the way, heading for system 2.
+        let lane = &marks[0];
+        assert_eq!(lane.ids, vec![20]);
+        assert_eq!(lane.bound_for, Some(1));
+        assert_eq!(lane.at, transit_point(positions[0], positions[1], 0.25));
+        let heading = lane.heading.unwrap();
+        let way = [
+            positions[1][0] - positions[0][0],
+            positions[1][2] - positions[0][2],
+        ];
+        assert!((heading[0] * way[1] - heading[2] * way[0]).abs() < 1e-2);
+        assert!(heading[0] * way[0] + heading[2] * way[1] > 0.0);
+        // The two ships of player one in system 1 are one mark beside it; the enemy another.
+        let home = marks.iter().find(|m| m.system == Some(0)).unwrap();
+        assert_eq!(home.ids, vec![10, 11]);
+        assert_eq!(home.at, [positions[0][0] + 500.0, 0.0, positions[0][2]]);
+        let far = marks.iter().find(|m| m.system == Some(1)).unwrap();
+        assert_eq!((far.owner, far.ids.clone()), (2, vec![12]));
+        // In the system plane the transit shows at the rim: outward from 1, inward to 2.
+        let t = transit(20, 1, 2, 0.5);
+        let (at, dir) = transit_at_rim(&scene, &positions, 0, &t).unwrap();
+        assert!((at[0].hypot(at[2]) - crate::universe::SYSTEM_RADIUS * 1.12).abs() < 1.0);
+        assert!(dir[0] * at[0] + dir[2] * at[2] > 0.0);
+        let (at, dir) = transit_at_rim(&scene, &positions, 1, &t).unwrap();
+        assert!(dir[0] * at[0] + dir[2] * at[2] < 0.0);
+        assert!(transit_at_rim(&scene, &positions, 2, &t).is_none());
+        assert_eq!(
+            chevron([0.0; 3], [1.0, 0.0, 0.0], 10.0, [1, 2, 3, 4]).len(),
+            2
+        );
+    }
+
+    #[test]
+    fn hover_help_names_the_object_and_its_actions() {
+        use crate::zoom::Level;
+        let scene = sample_scene();
+        let (name, action) = hover_help(
+            &scene,
+            SpaceHover::Target(Target::System(1)),
+            None,
+            true,
+            |_| true,
+        );
+        assert_eq!(name, "S2 (star system)");
+        assert!(action.contains("Double-click or scroll in to enter"));
+        assert!(action.contains("send the selected ships"));
+        let (name, action) = hover_help(
+            &scene,
+            SpaceHover::Target(Target::Body(1)),
+            Some(1),
+            false,
+            |_| true,
+        );
+        assert_eq!(name, "B2 (planet)");
+        assert!(action.contains("land the camera") && !action.contains("send"));
+        let (_, action) = hover_help(
+            &scene,
+            SpaceHover::Target(Target::Body(5)),
+            Some(1),
+            false,
+            |_| true,
+        );
+        assert!(action.contains("fly there and land"));
+        let (name, _) = hover_help(
+            &scene,
+            SpaceHover::Target(Target::Body(2)),
+            None,
+            false,
+            |_| true,
+        );
+        assert!(name.contains("resource body"));
+        assert_eq!(
+            hover_help(&scene, SpaceHover::Ship(9), None, false, |_| true).0,
+            "Ship"
+        );
+        let (name, action) = hover_help(
+            &scene,
+            SpaceHover::Target(Target::System(1)),
+            None,
+            false,
+            |id| id != 2,
+        );
+        assert_eq!(name, "S2 (unexplored)");
+        assert!(action.contains("Send a ship"));
+        assert!(level_help(Level::Globe, Level::Globe).is_none());
+        assert!(
+            level_help(Level::Globe, Level::System)
+                .unwrap()
+                .0
+                .contains("Scroll out")
+        );
+        assert!(
+            !level_help(Level::System, Level::System)
+                .unwrap()
+                .1
+                .contains("star map")
+        );
+        assert!(
+            level_help(Level::System, Level::StarMap)
+                .unwrap()
+                .1
+                .contains("star map")
+        );
+        assert!(
+            level_help(Level::StarMap, Level::StarMap)
+                .unwrap()
+                .0
+                .contains("enter")
+        );
     }
 
     #[test]

@@ -63,6 +63,7 @@ pub fn to_universe_scene(universe: &Universe, start_bodies: &[u32]) -> UniverseS
             .iter()
             .map(|b| BodyView {
                 id: b.id,
+                name: b.name.clone(),
                 system: b.system_id,
                 kind: match b.kind {
                     BodyKind::Star => BodyViewKind::Star,
@@ -353,6 +354,9 @@ mod match_tests {
             camera.set_l(f32::MAX);
             let before = camera.l();
             assert!(camera.level() <= Level::Globe);
+            let mut notices = crate::space_view::Notices::default();
+            notices.update(&game.world);
+            let mut hints = Vec::new();
             // Some start is near a face edge: take the first offset where the footprint fits.
             let executor = [10000, -10000, 14000, -14000]
                 .into_iter()
@@ -374,6 +378,7 @@ mod match_tests {
                 .unwrap();
             for _ in 0..10 {
                 game.world.step();
+                hints.extend(notices.update(&game.world).into_iter().map(|n| n.text));
                 if game
                     .world
                     .players()
@@ -398,6 +403,11 @@ mod match_tests {
                 camera.l(),
                 before,
                 "raising a limit must not jump the camera"
+            );
+            // The first time the reach widens, the event line says how to see it.
+            assert_eq!(
+                hints,
+                vec![crate::space_view::reach_hint(1).unwrap().to_owned()]
             );
             camera.set_l(f32::MAX);
             assert_eq!(camera.level(), Level::System);

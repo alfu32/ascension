@@ -10,11 +10,14 @@ use super::*;
 use crate::entities::{frame_box, owner_color};
 use crate::globe::PlanetScene;
 use crate::hud_minimap::planet_pixels;
-use crate::space::{SpaceSnapshot, annulus, claim_rings, ship_frame_pos, transit_point};
+use crate::space::{
+    SpaceHover, SpaceSnapshot, annulus, chevron, claim_rings, diamond, map_mark_scale,
+    map_ship_marks, ship_frame_pos, transit_at_rim,
+};
 use crate::universe::{
     BodyViewKind, UniverseScene, planet_colour, ring_points, rock_colour, uv_sphere,
 };
-use crate::zoom::ZoomCamera;
+use crate::zoom::{Target, ZoomCamera};
 
 const BODY_VS: &str = r#"#version 330
 in vec3 vertexPosition;
@@ -75,6 +78,7 @@ const ROUTE_LINE: Color = Color::new(110, 140, 200, 110);
 pub(super) struct SpaceState {
     snapshot: Arc<SpaceSnapshot>,
     selected: Vec<u32>,
+    hover: Option<SpaceHover>,
 }
 
 /// A colour from owner palette values.
@@ -252,6 +256,18 @@ impl Scene {
         }
     }
 
+    /// What the pointer rests on in space, highlighted in the next draw.
+    pub(crate) fn set_space_hover(&mut self, hover: Option<SpaceHover>) {
+        self.space_state.hover = hover;
+    }
+
+    /// Adds a name to draw over the frame just drawn, in render-target pixels.
+    pub(crate) fn push_space_label(&mut self, label: SpaceLabel) {
+        if let Some(space) = &mut self.space {
+            space.labels.push(label);
+        }
+    }
+
     /// The names to draw over the last frame, in render-target pixels.
     pub(crate) fn space_labels(&self) -> &[SpaceLabel] {
         self.space.as_ref().map_or(&[], |s| &s.labels)
@@ -338,7 +354,7 @@ impl Scene {
         match frame {
             Frame::Globe => self.draw_globe(rl, thread, target, &zoom.draw_orbit(orbit)),
             Frame::System => self.draw_system(rl, thread, target, zoom, orbit),
-            Frame::Map => self.draw_star_map(rl, thread, target, zoom),
+            Frame::Map => self.draw_star_map(rl, thread, target, zoom, orbit),
         }
     }
 
@@ -368,6 +384,8 @@ impl Scene {
             .map_or([255, 244, 214], |s| s.star_colour);
         let tint_at = space.shader.get_shader_location("tint");
         let emissive_at = space.shader.get_shader_location("emissive");
+        let (width, height) = (target.texture.width as f32, target.texture.height as f32);
+        let mut rim_labels: Vec<([f32; 3], u32, u32, f32)> = Vec::new();
         let mut drawing = rl.begin_texture_mode(thread, target);
         drawing.clear_background(SPACE);
         if let Some(stars) = &self.star_mesh {
@@ -376,12 +394,8 @@ impl Scene {
                 view.target[1] - view.eye[1],
                 view.target[2] - view.eye[2],
             ]);
-            let sky = Camera3D::perspective(
-                Vector3::new(0.0, 0.0, 0.0),
-                forward,
-                Vector3::new(0.0, 1.0, 0.0),
-                45.0,
-            );
+            let sky =
+                Camera3D::perspective(Vector3::new(0.0, 0.0, 0.0), forward, vec3(view.up), 45.0);
             let mut backdrop = drawing.begin_mode3D(sky);
             shift_projection(self.projection_centre_y);
             backdrop.draw_mesh(stars, self.star_material.clone(), Matrix::identity());
@@ -390,9 +404,11 @@ impl Scene {
         {
             let mut world = drawing.begin_mode3D(camera);
             shift_projection(self.projection_centre_y);
+            // An unexplored system shows its star only.
+            let known = zoom.knows_system();
             for placed in zoom.placed() {
                 let body = &universe.bodies[placed.body];
-                if body.kind != BodyViewKind::Star {
+                if body.kind != BodyViewKind::Star && known {
                     let ring = ring_points(placed.orbit, RING_SEGMENTS);
                     for pair in ring.windows(2) {
                         world.draw_line3D(vec3(pair[0]), vec3(pair[1]), ORBIT_RING);
@@ -401,6 +417,9 @@ impl Scene {
             }
             for placed in zoom.placed() {
                 let body = &universe.bodies[placed.body];
+                if body.kind != BodyViewKind::Star && !known {
+                    continue;
+                }
                 let (colour, emissive) = match body.kind {
                     BodyViewKind::Star => (star_colour, 1.0),
                     BodyViewKind::Habitable => (planet_colour(body.id), 0.0),
@@ -429,7 +448,7 @@ impl Scene {
             }
             // Every habitable planet wears an atmosphere halo, lit from the star at the origin.
             for placed in zoom.placed() {
-                if universe.bodies[placed.body].kind == BodyViewKind::Habitable {
+                if universe.bodies[placed.body].kind == BodyViewKind::Habitable && known {
                     let toward = unit_vector(placed.pos.map(|c| -c));
                     let thickness = super::sky::SYSTEM_HALO_THICKNESS;
                     self.sky
@@ -440,8 +459,8 @@ impl Scene {
             }
             let system_id = universe.systems.get(zoom.system()).map(|s| s.id);
             let state = &self.space_state;
-            if state.snapshot.system == system_id && system_id.is_some() {
-                let outermost = system_id.map_or(1.0, |id| universe.system_outermost(id));
+            if let Some(system_id) = system_id {
+                let outermost = universe.system_outermost(system_id);
                 let distance = zoom.scale().system_distance(zoom.l());
                 let unit = (distance * 0.016).max(24.0);
                 let rings = claim_rings(&universe, zoom.placed(), &state.snapshot.claims);
@@ -465,7 +484,12 @@ impl Scene {
                 let right = unit_vector(cross3(forward, [0.0, 1.0, 0.0]));
                 let cam_up = cross3(right, forward);
                 let mut matrices: Vec<Matrix> = Vec::with_capacity(state.snapshot.ships.len() * 2);
-                for ship in &state.snapshot.ships {
+                for ship in state
+                    .snapshot
+                    .ships
+                    .iter()
+                    .filter(|s| s.system == system_id)
+                {
                     let at = ship_frame_pos(&universe, zoom.placed(), outermost, ship);
                     let theta = ship.facing_deg.to_radians();
                     let f = [theta.cos(), 0.0, theta.sin()];
@@ -540,6 +564,45 @@ impl Scene {
                         &matrices,
                     );
                 }
+                // The body under the pointer wears a ring.
+                if let Some(SpaceHover::Target(Target::Body(index))) = state.hover
+                    && let Some(at) = zoom.placed().iter().find(|p| p.body == index)
+                {
+                    overlay.tris.extend(annulus(
+                        [at.pos[0], 0.5, at.pos[2]],
+                        at.radius * 1.35 + thickness * 2.0,
+                        thickness * 1.2,
+                        [255, 230, 160, 230],
+                        64,
+                    ));
+                }
+                // Ships between systems wait at the rim, toward the other end of their lane.
+                let size = (distance * 0.03).max(60.0);
+                for transit in &state.snapshot.transits {
+                    let Some((at, dir)) =
+                        transit_at_rim(&universe, &space.map_positions, zoom.system(), transit)
+                    else {
+                        continue;
+                    };
+                    let [r, g, b] = owner_rgb(transit.owner);
+                    let lifted = [at[0], 2.0, at[2]];
+                    overlay
+                        .tris
+                        .extend(chevron(lifted, dir, size * 1.3, [255, 255, 255, 255]));
+                    overlay
+                        .tris
+                        .extend(chevron([at[0], 3.0, at[2]], dir, size, [r, g, b, 255]));
+                    if state.selected.binary_search(&transit.id).is_ok() {
+                        overlay.tris.extend(annulus(
+                            lifted,
+                            size * 1.2,
+                            size * 0.15,
+                            [63, 208, 255, 255],
+                            28,
+                        ));
+                    }
+                    rim_labels.push((lifted, transit.from, transit.to, transit.progress));
+                }
                 super::draw_overlay(&mut world, &overlay);
             }
             // The glow of the star: additive, without writing depth.
@@ -569,6 +632,34 @@ impl Scene {
             }
         }
         set_clip_planes(DEFAULT_NEAR, DEFAULT_FAR);
+        drop(drawing);
+        let alpha = zoom.weights().system;
+        let look = view.view((width, height), self.projection_centre_y);
+        let here = zoom.system_id();
+        for (at, from, to, progress) in rim_labels {
+            let Some((x, y, _)) = look.project(at) else {
+                continue;
+            };
+            let name = |id: u32| {
+                universe
+                    .systems
+                    .iter()
+                    .find(|s| s.id == id)
+                    .map_or("?", |s| s.name.as_str())
+            };
+            let text = if Some(from) == here {
+                format!("in transit to {} {:.0}%", name(to), progress * 100.0)
+            } else {
+                format!("in transit from {} {:.0}%", name(from), progress * 100.0)
+            };
+            space.labels.push(SpaceLabel {
+                text,
+                x: x + 14.0,
+                y: y + 5.0,
+                colour: [200, 225, 255, (235.0 * alpha) as u8],
+                priority: -2.0,
+            });
+        }
     }
 
     fn draw_star_map(
@@ -577,15 +668,24 @@ impl Scene {
         thread: &RaylibThread,
         target: &mut RenderTexture2D,
         zoom: &ZoomCamera,
+        orbit: &OrbitCamera,
     ) {
         self.set_star_fade(1.0);
         let Some(space) = &mut self.space else {
             return;
         };
-        let view = zoom.map_view();
+        let view = zoom.map_view(orbit);
         let camera = Camera3D::perspective(vec3(view.eye), vec3(view.target), vec3(view.up), 45.0);
         let universe = Arc::clone(&space.universe);
         let (width, height) = (target.texture.width as f32, target.texture.height as f32);
+        // Marks keep their size on screen.
+        let (icon, beside) = map_mark_scale(&view, zoom.scale().map_distance(zoom.l()));
+        let marks = map_ship_marks(
+            &universe,
+            &space.map_positions,
+            &self.space_state.snapshot,
+            beside,
+        );
         let mut drawing = rl.begin_texture_mode(thread, target);
         drawing.clear_background(SPACE);
         if let Some(stars) = &self.star_mesh {
@@ -594,12 +694,8 @@ impl Scene {
                 view.target[1] - view.eye[1],
                 view.target[2] - view.eye[2],
             ]);
-            let sky = Camera3D::perspective(
-                Vector3::new(0.0, 0.0, 0.0),
-                forward,
-                Vector3::new(0.0, 1.0, 0.0),
-                45.0,
-            );
+            let sky =
+                Camera3D::perspective(Vector3::new(0.0, 0.0, 0.0), forward, vec3(view.up), 45.0);
             let mut backdrop = drawing.begin_mode3D(sky);
             shift_projection(self.projection_centre_y);
             backdrop.draw_mesh(stars, self.star_material.clone(), Matrix::identity());
@@ -617,49 +713,26 @@ impl Scene {
                     );
                 }
             }
-            let grow_now = zoom.scale().map_distance(zoom.l()) * 0.1;
-            for transit in &self.space_state.snapshot.transits {
-                if let (Some(a), Some(b)) = (
-                    universe.system_index(transit.from),
-                    universe.system_index(transit.to),
-                ) {
-                    let [r, g, b_] = owner_rgb(transit.owner);
-                    world.draw_line3D(
-                        vec3(space.map_positions[a]),
-                        vec3(space.map_positions[b]),
-                        Color::new(r, g, b_, 190),
-                    );
-                    let at = transit_point(
-                        space.map_positions[a],
-                        space.map_positions[b],
-                        transit.progress,
-                    );
-                    sprite(
-                        &mut world,
-                        camera,
-                        &space.glow,
-                        at,
-                        (grow_now * 0.55).max(1300.0),
-                        [r, g, b_],
-                        255,
-                    );
-                    sprite(
-                        &mut world,
-                        camera,
-                        &space.glow,
-                        at,
-                        (grow_now * 0.2).max(480.0),
-                        [255, 255, 255],
-                        255,
-                    );
-                }
-            }
             for (i, system) in universe.systems.iter().enumerate() {
                 let pos = space.map_positions[i];
                 let halo = space.tints[i].unwrap_or(system.star_colour);
                 let grow = zoom.scale().map_distance(zoom.l()) * 0.1;
                 let (halo_size, core_size) = (HALO_SIZE.max(grow), CORE_SIZE.max(grow * 0.3));
-                sprite(&mut world, camera, &space.glow, pos, halo_size, halo, 230);
+                // An unexplored system is a faint marker.
+                let (halo_size, halo_alpha) = if self.space_state.snapshot.knows(system.id) {
+                    (halo_size, 230)
+                } else {
+                    (halo_size * 0.5, 90)
+                };
+                sprite(
+                    &mut world,
+                    camera,
+                    &space.glow,
+                    pos,
+                    halo_size,
+                    halo,
+                    halo_alpha,
+                );
                 sprite(
                     &mut world,
                     camera,
@@ -670,9 +743,84 @@ impl Scene {
                     255,
                 );
             }
+            // Ships: a mark beside each system that has ships, an arrowhead on the lane for each
+            // ship between systems, its lane ahead lit and its destination ringed.
+            let mut overlay = OverlayGeometry::default();
+            for mark in &marks {
+                let [r, g, b] = owner_rgb(mark.owner);
+                let chosen = mark
+                    .ids
+                    .iter()
+                    .any(|id| self.space_state.selected.binary_search(id).is_ok());
+                let at = mark.at;
+                match (mark.heading, mark.bound_for) {
+                    (Some(dir), Some(dest)) => {
+                        let goal = space.map_positions[dest];
+                        overlay.lines.push(crate::overlay::Line3 {
+                            a: at,
+                            b: goal,
+                            colour: [r, g, b, 255],
+                        });
+                        overlay.tris.extend(annulus(
+                            goal,
+                            icon * 2.6,
+                            icon * 0.35,
+                            [r, g, b, 235],
+                            40,
+                        ));
+                        overlay
+                            .tris
+                            .extend(chevron(at, dir, icon * 2.9, [255, 255, 255, 255]));
+                        overlay
+                            .tris
+                            .extend(chevron(at, dir, icon * 2.2, [r, g, b, 255]));
+                    }
+                    _ => {
+                        overlay
+                            .tris
+                            .extend(diamond(at, icon * 1.3, [255, 255, 255, 255]));
+                        overlay
+                            .tris
+                            .extend(diamond(at, icon * 0.95, [r, g, b, 255]));
+                    }
+                }
+                if chosen {
+                    overlay.tris.extend(annulus(
+                        at,
+                        icon * 2.0,
+                        icon * 0.3,
+                        [63, 208, 255, 255],
+                        28,
+                    ));
+                }
+            }
+            if let Some(SpaceHover::Target(Target::System(index))) = self.space_state.hover
+                && let Some(&at) = space.map_positions.get(index)
+            {
+                overlay.tris.extend(annulus(
+                    at,
+                    icon * 4.0,
+                    icon * 0.4,
+                    [255, 230, 160, 230],
+                    48,
+                ));
+            }
+            // SAFETY: the render thread has an active GL context; the marks lie in one plane, so
+            // they are drawn in order over everything rather than depth-tested.
+            unsafe {
+                raylib::ffi::rlDrawRenderBatchActive();
+                raylib::ffi::rlDisableDepthTest();
+            }
+            super::draw_overlay(&mut world, &overlay);
+            // SAFETY: as above; the batch is flushed before depth testing is restored.
+            unsafe {
+                raylib::ffi::rlDrawRenderBatchActive();
+                raylib::ffi::rlEnableDepthTest();
+            }
         }
         set_clip_planes(DEFAULT_NEAR, DEFAULT_FAR);
         drop(drawing);
+        let alpha = zoom.weights().map;
         // Names, nearest the centre of the picture first.
         let centre_y = self.projection_centre_y;
         let look = view.view((width, height), centre_y);
@@ -687,17 +835,45 @@ impl Scene {
                 HALO_SIZE.max(zoom.scale().map_distance(zoom.l()) * 0.1) / 2.0 / depth * height
                     / (2.0 * look.tan());
             let home = space.tints[i];
-            let rgb = home.unwrap_or([200, 215, 235]);
+            let known = self.space_state.snapshot.knows(system.id);
+            let rgb = match (home, known) {
+                (_, false) => [130, 140, 155],
+                (Some(tint), true) => tint,
+                (None, true) => [200, 215, 235],
+            };
             space.labels.push(SpaceLabel {
-                text: system.name.clone(),
+                text: if known {
+                    system.name.clone()
+                } else {
+                    format!("{} (unexplored)", system.name)
+                },
                 x: x + halo_pixels.max(8.0) * 0.5,
                 y: y + halo_pixels.max(8.0) * 0.4,
-                colour: [rgb[0], rgb[1], rgb[2], 235],
+                colour: [rgb[0], rgb[1], rgb[2], (235.0 * alpha) as u8],
                 priority: if home.is_some() {
                     -1.0
                 } else {
                     (x - width / 2.0).hypot(y - height / 2.0) / width
                 },
+            });
+        }
+        for mark in &marks {
+            let Some((x, y, _)) = look.project(mark.at) else {
+                continue;
+            };
+            let text = match mark.bound_for {
+                Some(dest) => format!("to {}", universe.systems[dest].name),
+                None if mark.ids.len() > 1 => format!("{} ships", mark.ids.len()),
+                None => "1 ship".to_owned(),
+            };
+            let [r, g, b] = owner_rgb(mark.owner);
+            let lighter = lerp_colour([r, g, b], 0.5).map(|c| (c * 255.0) as u8);
+            space.labels.push(SpaceLabel {
+                text,
+                x: x + 12.0,
+                y: y + 16.0,
+                colour: [lighter[0], lighter[1], lighter[2], (235.0 * alpha) as u8],
+                priority: 0.9,
             });
         }
     }
@@ -733,11 +909,17 @@ fn sprite(
         raylib::ffi::rlDisableDepthMask();
         raylib::ffi::BeginBlendMode(BlendMode::BLEND_ADDITIVE as i32);
     }
-    world.draw_billboard(
+    // The quad faces the camera with the camera's own up, so it stays round seen from above.
+    let side = texture.width as f32;
+    world.draw_billboard_pro(
         camera,
-        texture,
+        **texture,
+        Rectangle::new(0.0, 0.0, side, texture.height as f32),
         vec3(pos),
-        size,
+        camera.up,
+        Vector2::new(size, size),
+        Vector2::new(size / 2.0, size / 2.0),
+        0.0,
         Color::new(colour[0], colour[1], colour[2], alpha),
     );
     // SAFETY: as above; the batch is flushed so the sprite is drawn with the settings above.
