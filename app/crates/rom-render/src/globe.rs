@@ -287,6 +287,28 @@ impl Globe {
         globe
     }
 
+    /// Changes ground-feature identities and colours while retaining all baked geometry.
+    pub(crate) fn with_ground_kinds(&self, planet: &PlanetScene) -> Self {
+        let mut visible = self.clone();
+        visible.kinds.clone_from(&planet.kinds);
+        visible.shape = Shape::from_tiles(&planet.kinds, &planet.heights, &planet.feature_colors);
+        let side = self.n() as usize + 1;
+        for (i, colour) in visible.colors.iter_mut().enumerate() {
+            let (face, vy, vx) = (i / (side * side), i / side % side, i % side);
+            let (tiles, count) = self.adjoining(face as u8, vx as u32, vy as u32);
+            let sum = tiles[..count]
+                .iter()
+                .fold([0.0; 3], |sum, &t| add(sum, visible.shape.color[t]));
+            *colour = along(sum, 1.0 / count.max(1) as f32);
+        }
+        visible
+    }
+
+    /// Unshaded map colour per tile.
+    pub(crate) fn tile_colours(&self) -> &[[f32; 3]] {
+        &self.shape.color
+    }
+
     /// Kind per tile, in cube-surface index order.
     pub fn kinds(&self) -> &[TileKind] {
         &self.kinds

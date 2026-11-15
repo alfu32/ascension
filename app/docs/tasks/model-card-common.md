@@ -2,8 +2,9 @@
 
 Every model card (45 early modern, 46 industrial, 47 modern buildings,
 48 modern and information units, 49 future buildings, 50 future units,
-51 space age) follows these rules. Implementer: Codex (`gpt-6.1-sol`, high,
-full permissions: it opens windows and takes its own screenshots). Cards run
+51 space age) follows these rules. Implementer: Claude agent (Opus) — the
+owner moved these cards off Codex on 2026-11-16; it opens windows and takes its
+own screenshots. Cards run
 **one at a time, in order**, each after the previous one is merged (they all
 add model files to `app/db/models/` and may extend the part kit), and after task 55.
 
@@ -92,7 +93,7 @@ env -u WAYLAND_DISPLAY target/release/rise-of-man --sphere 192 --demo --seed 1 -
 
 ## Finish
 
-Do not commit (the orchestrator reviews and commits). Final message: commands
+Commit on the branch (stage by name), do not push or merge. Final message: commands
 with real output, the review folder, model ids with near/far triangle counts,
 files changed, new shapes or motion, deviations and why, anything not
 verified.

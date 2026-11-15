@@ -512,9 +512,9 @@ struct TerrainKnowledge {
 }
 
 impl TerrainKnowledge {
-    fn refresh(memory: &mut Option<Self>, world: &World, body: BodyId) {
+    fn refresh(memory: &mut Option<Self>, world: &World, body: BodyId) -> bool {
         let Some(player) = world.players().find(|p| p.id == PLAYER) else {
-            return;
+            return false;
         };
         if memory.as_ref().is_some_and(|known| {
             known.body == body
@@ -523,13 +523,14 @@ impl TerrainKnowledge {
                     .surface(body)
                     .is_some_and(|s| s.tiles() == known.tiles.len())
         }) {
-            return;
+            return false;
         }
         *memory = Some(Self {
             body,
             age: player.age,
             tiles: crate::terrain::known_terrain(world, PLAYER, body),
         });
+        true
     }
 }
 
@@ -550,7 +551,10 @@ fn publish(
 ) {
     let sightings = world.visible_entities(PLAYER);
     let body = host.map_or_else(|| world.surfaces()[0].body(), |h| h.viewed);
-    TerrainKnowledge::refresh(&mut memory.terrain, world, body);
+    if TerrainKnowledge::refresh(&mut memory.terrain, world, body) {
+        let hidden = crate::terrain::hidden_terrain(world, PLAYER);
+        bridge.publish_hidden_terrain(Arc::new(hidden));
+    }
     let snapshot = snapshot_on(world, body, &sightings, models, &mut memory.motions);
     link.stats.tick.store(snapshot.tick, Ordering::Relaxed);
     link.stats
@@ -1473,6 +1477,9 @@ mod terrain_knowledge_tests {
             let mut memory = None;
             TerrainKnowledge::refresh(&mut memory, &world, BodyId(0));
             assert_eq!(memory.as_ref().unwrap().tiles[24 * 64 + 24], None);
+            let oil_kind = rom_render::TileKind::Feature(oil.0 as u16);
+            assert!(crate::terrain::hidden_terrain(&world, PLAYER).contains(&oil_kind));
+            assert!(!crate::terrain::hidden_terrain(&world, PlayerId(2)).contains(&oil_kind));
             assert_eq!(memory.as_ref().unwrap().tiles[0], Some(plain));
             assert_eq!(
                 crate::terrain::known_terrain(&world, PlayerId(2), BodyId(0)),
@@ -1501,6 +1508,7 @@ mod terrain_knowledge_tests {
                 }
             }
             assert_eq!(memory.as_ref().unwrap().age, age);
+            assert!(!crate::terrain::hidden_terrain(&world, PLAYER).contains(&oil_kind));
             assert_eq!(memory.as_ref().unwrap().tiles[24 * 64 + 24], Some(oil));
             assert_eq!(
                 world.surface(BodyId(0)).unwrap().terrain(),

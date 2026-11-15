@@ -11,6 +11,8 @@ in vec2 vertexTexCoord2;
 in vec4 vertexTangent;
 uniform mat4 mvp;
 uniform mat4 matModel;
+uniform vec3 viewPosition;
+uniform vec3 toSun;
 out vec3 fragNormal;
 out vec4 fragColor;
 out vec3 fragWorld;
@@ -26,5 +28,19 @@ void main() {
     fragNormal = vertexNormal;
     fragColor = vertexColor;
     fragWorld = (matModel * vec4(vertexPosition, 1.0)).xyz;
+    // Broad reflections vary smoothly over the terrain mesh. Keeping them here preserves
+    // the fragment material library's register budget; alpha is unused by land colours.
+    vec3 normal = normalize(vertexNormal);
+    vec3 eye = normalize(viewPosition - fragWorld);
+    float glint = max(dot(reflect(-toSun, normal), eye), 0.0);
+    glint *= glint;
+    glint *= glint;
+    glint *= glint;
+    glint *= glint;
+    glint *= max(dot(normal, toSun), 0.0);
+    float fresnel = 1.0 - max(dot(normal, eye), 0.0);
+    fresnel *= fresnel;
+    fresnel *= fresnel;
+    fragColor.a = 0.01 + 0.04 * fresnel + 0.7 * glint;
     gl_Position = mvp * vec4(vertexPosition, 1.0);
 }

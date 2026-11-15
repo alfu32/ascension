@@ -26,7 +26,7 @@ use crate::orbit::OrbitCamera;
 use crate::overlay::{OverlayGeometry, build_overlays, build_overlays_on};
 use crate::sun;
 use crate::terrain::{
-    ChunkMesh, RELIEF, STAR_COUNT, TerrainScene, build_sea_chunks_with_specs,
+    ChunkMesh, RELIEF, STAR_COUNT, TerrainScene, TileKind, build_sea_chunks_with_specs,
     build_terrain_chunks_with_specs, ground_height, star_field, star_triangles,
 };
 use crate::vision::{ChunkSpec, shade_chunk};
@@ -353,6 +353,7 @@ pub(crate) struct Scene {
     last_shades: Vec<[f32; 3]>,
     /// Chunk meshes (land, then sea) waiting to be recoloured.
     shade_queue: Vec<usize>,
+    hidden_terrain: Vec<TileKind>,
 }
 
 /// A chunk mesh whose vertex colours follow the player's fog of war and borders.
@@ -390,6 +391,126 @@ impl ShadedMesh {
                 self.mesh.update_buffer::<u8>(3, scratch.as_flattened(), 0);
             }
             std::mem::swap(&mut self.current, scratch);
+        }
+    }
+}
+
+/// Material slots keep their original numbering when terrain is concealed or revealed.
+fn concealed_slots(
+    visible: &dyn crate::features::TileGrid,
+    looks: &SceneLooks,
+    original: &dyn crate::features::TileGrid,
+    raw_kinds: &[TileKind],
+) -> SurfaceSlots {
+    struct RawGrid<'a> {
+        grid: &'a dyn crate::features::TileGrid,
+        kinds: &'a [TileKind],
+    }
+    impl crate::features::TileGrid for RawGrid<'_> {
+        fn tile_count(&self) -> usize {
+            self.kinds.len()
+        }
+        fn kind(&self, i: usize) -> TileKind {
+            self.kinds[i]
+        }
+        fn neighbour(&self, i: usize, dx: i32, dy: i32) -> Option<usize> {
+            self.grid.neighbour(i, dx, dy)
+        }
+        fn coords(&self, i: usize) -> (u8, u32, u32) {
+            self.grid.coords(i)
+        }
+        fn face_size(&self) -> (u32, u32) {
+            self.grid.face_size()
+        }
+    }
+    let raw = RawGrid {
+        grid: original,
+        kinds: raw_kinds,
+    };
+    let mut slots = surface_slots(&raw, looks);
+    let masked = surface_slots(visible, looks);
+    for (tile, &index) in slots.tile_slot.iter_mut().zip(&masked.tile_slot) {
+        *tile = if index == 0 {
+            0
+        } else {
+            slots
+                .slots
+                .iter()
+                .position(|m| *m == masked.slots[index as usize - 1])
+                .map_or(0, |i| i as u8 + 1)
+        };
+    }
+    slots
+}
+
+fn changed_kinds(raw: &[TileKind], old: &[TileKind], new: &[TileKind]) -> Vec<bool> {
+    raw.iter()
+        .map(|kind| old.contains(kind) != new.contains(kind))
+        .collect()
+}
+
+fn flat_corner_tiles(width: u32, height: u32, x: u32, y: u32) -> ([usize; 4], usize) {
+    let mut tiles = [0; 4];
+    let mut count = 0;
+    for (dx, dy) in [(-1, -1), (0, -1), (-1, 0), (0, 0)] {
+        let (x, y) = (i64::from(x) + dx, i64::from(y) + dy);
+        if (0..i64::from(width)).contains(&x) && (0..i64::from(height)).contains(&y) {
+            tiles[count] = (y * i64::from(width) + x) as usize;
+            count += 1;
+        }
+    }
+    (tiles, count)
+}
+
+fn float_bytes(values: &[f32]) -> Vec<u8> {
+    values.iter().flat_map(|v| v.to_ne_bytes()).collect()
+}
+
+impl ShadedMesh {
+    fn set_ground_colours(
+        &mut self,
+        colours: &[[f32; 3]],
+        slots: &SurfaceSlots,
+        adjoining: crate::vision::Adjoining,
+        shades: &[[f32; 3]],
+    ) {
+        let mut base = Vec::with_capacity(self.base.len());
+        for y in 0..=self.spec.h {
+            for x in 0..=self.spec.w {
+                let (tiles, count) = adjoining(self.spec.face, self.spec.x0 + x, self.spec.y0 + y);
+                let mut sum = [0.0; 3];
+                for &tile in &tiles[..count] {
+                    for (s, c) in sum.iter_mut().zip(colours[tile]) {
+                        *s += c;
+                    }
+                }
+                let rgb = sum.map(|c| crate::terrain::byte(c / count.max(1) as f32));
+                base.push([rgb[0], rgb[1], rgb[2], 255]);
+            }
+        }
+        let attributes = chunk_attributes(self.spec, &slots.tile_slot, adjoining, &base);
+        self.base = base;
+        // SAFETY: render thread; all arrays contain exactly one attribute per uploaded vertex.
+        unsafe {
+            self.mesh
+                .update_buffer::<f32>(1, &float_bytes(attributes.texcoords.as_flattened()), 0);
+            self.mesh
+                .update_buffer::<f32>(4, &float_bytes(attributes.tangents.as_flattened()), 0);
+            self.mesh.update_buffer::<f32>(
+                5,
+                &float_bytes(attributes.texcoords2.as_flattened()),
+                0,
+            );
+        }
+        if shades.len() == colours.len() {
+            self.apply(shades, adjoining, &mut Vec::new());
+        } else {
+            // SAFETY: render thread; buffer 3 has one RGBA value per vertex.
+            unsafe {
+                self.mesh
+                    .update_buffer::<u8>(3, self.base.as_flattened(), 0);
+            }
+            self.current.clone_from(&self.base);
         }
     }
 }
@@ -591,6 +712,7 @@ impl Scene {
             overlay: OverlayGeometry::default(),
             last_shades: Vec::new(),
             shade_queue: Vec::new(),
+            hidden_terrain: Vec::new(),
         }
     }
 
@@ -683,6 +805,67 @@ impl Scene {
         }
         self.last_shades.clear();
         self.last_shades.extend_from_slice(shades);
+    }
+
+    /// Conceals unknown features by changing only affected chunk colour/material buffers.
+    /// Geometry, model meshes and feature instances remain baked before play.
+    pub(crate) fn set_hidden_terrain(&mut self, hidden: &[TileKind]) -> Option<Arc<Globe>> {
+        let old = &self.hidden_terrain;
+        let mut updated_globe = None;
+        if let Some(gpu) = &mut self.globe {
+            let raw = &gpu.planet;
+            let mut visible = (**raw).clone();
+            crate::vision::conceal_kinds(&mut visible.kinds, hidden);
+            let changed = changed_kinds(&raw.kinds, old, hidden);
+            if changed.iter().any(|&c| c) {
+                let globe = Arc::new(gpu.globe.with_ground_kinds(&visible));
+                let slots = concealed_slots(&*globe, &self.looks, &*gpu.globe, &raw.kinds);
+                let adjoining = |face, x, y| globe.corner_tiles(face, x, y);
+                for (chunk, _) in &mut gpu.land {
+                    if chunk_touches_change(chunk.spec, raw.n, &changed, Some(&adjoining)) {
+                        chunk.set_ground_colours(
+                            globe.tile_colours(),
+                            &slots,
+                            &adjoining,
+                            &self.last_shades,
+                        );
+                    }
+                }
+                gpu.globe = Arc::clone(&globe);
+                updated_globe = Some(globe);
+            }
+            if let Some(features) = &mut self.features {
+                features.conceal(&raw.kinds, hidden);
+            }
+        } else if let Some(gpu) = &mut self.terrain {
+            let raw = gpu.surface.scene();
+            let mut visible = raw.clone();
+            crate::vision::conceal_kinds(&mut visible.kinds, hidden);
+            let changed = changed_kinds(&raw.kinds, old, hidden);
+            if changed.iter().any(|&c| c) {
+                let surface = Surface::new(Arc::new(visible));
+                let slots = concealed_slots(&surface, &self.looks, &gpu.surface, &raw.kinds);
+                let adjoining = |_: u8, x, y| flat_corner_tiles(raw.width, raw.height, x, y);
+                for chunk in &mut gpu.land {
+                    if flat_chunk_touches_change(chunk.spec, raw.width, raw.height, &changed) {
+                        chunk.set_ground_colours(
+                            &surface.shape().color,
+                            &slots,
+                            &adjoining,
+                            &self.last_shades,
+                        );
+                    }
+                }
+            }
+            if let Some(features) = &mut self.features {
+                features.conceal(&raw.kinds, hidden);
+            }
+        }
+        if let Some(shadow) = &mut self.shadow {
+            shadow.invalidate();
+        }
+        self.hidden_terrain = hidden.to_vec();
+        updated_globe
     }
 
     /// Sets the per-frame uniforms of the material shaders for an eye at `eye` and a camera
@@ -784,6 +967,7 @@ impl Scene {
         self.space = None;
         self.features = None;
         self.models = None;
+        self.hidden_terrain.clear();
         self.last_shades.clear();
         self.shade_queue.clear();
         self.graticule.clear();
@@ -975,6 +1159,7 @@ impl Scene {
         self.space = None;
         self.features = None;
         self.models = None;
+        self.hidden_terrain.clear();
         self.last_shades.clear();
         self.shade_queue.clear();
         self.sun = sun;
@@ -1603,6 +1788,89 @@ fn shift_projection(centre_y: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn concealed_ground_and_minimap_match_plain_land_and_reveal_across_seams() {
+        use crate::looks::{MaterialLook, Program, TileLook};
+        use std::collections::BTreeMap;
+        let oil = TileKind::Feature(99);
+        let material = |program| MaterialLook {
+            program,
+            colour: [0.3; 3],
+            colour_alt: [0.2; 3],
+            scale: 1.0,
+        };
+        let looks = SceneLooks {
+            tiles: vec![
+                (
+                    TileKind::Land,
+                    TileLook {
+                        surface: Some(material(Program::Grass)),
+                        ..TileLook::default()
+                    },
+                ),
+                (
+                    oil,
+                    TileLook {
+                        surface: Some(material(Program::Oil)),
+                        ..TileLook::default()
+                    },
+                ),
+            ],
+            ..SceneLooks::default()
+        };
+        let plain = PlanetScene {
+            n: 64,
+            kinds: vec![TileKind::Land; 6 * 64 * 64],
+            heights: vec![100; 6 * 64 * 64],
+            feature_colors: BTreeMap::from([(99, [23, 26, 41])]),
+            starts: Vec::new(),
+            nodes: Vec::new(),
+            sun: sun::SunSettings::default(),
+        };
+        let mut raw = plain.clone();
+        // A cube corner and a four-chunk intersection exercise both sorts of seam.
+        for i in [0, 31 * 64 + 31] {
+            raw.kinds[i] = oil;
+        }
+        let original = Globe::new(&raw);
+        let original_slots = surface_slots(&original, &looks);
+        let mut masked = raw.clone();
+        crate::vision::conceal_kinds(&mut masked.kinds, &[oil]);
+        let concealed = original.with_ground_kinds(&masked);
+        assert_eq!(
+            crate::hud_minimap::planet_pixels(&masked),
+            crate::hud_minimap::planet_pixels(&plain)
+        );
+        let expected = Globe::new(&plain).land_chunks_with_specs();
+        let actual = concealed.land_chunks_with_specs();
+        let changed = changed_kinds(&raw.kinds, &[], &[oil]);
+        let adjoining = |f, x, y| original.corner_tiles(f, x, y);
+        let mut touched = 0;
+        for (((mesh, spec), (plain_mesh, _)), (raw_mesh, _)) in actual
+            .iter()
+            .zip(&expected)
+            .zip(original.land_chunks_with_specs())
+        {
+            assert_eq!(mesh.colors, plain_mesh.colors);
+            assert_eq!(mesh.positions, raw_mesh.positions);
+            assert_eq!(mesh.normals, raw_mesh.normals);
+            assert_eq!(mesh.indices, raw_mesh.indices);
+            let affected = chunk_touches_change(*spec, raw.n, &changed, Some(&adjoining));
+            if mesh.colors != raw_mesh.colors {
+                assert!(affected);
+            }
+            touched += usize::from(affected);
+        }
+        assert!(touched >= 6 && touched < actual.len());
+        let slots = concealed_slots(&concealed, &looks, &original, &raw.kinds);
+        assert_eq!(slots.slots, original_slots.slots);
+        let land = original_slots.tile_slot[1];
+        assert!(slots.tile_slot.iter().all(|&s| s == land));
+        let revealed = concealed.with_ground_kinds(&raw);
+        assert_eq!(revealed.tile_colours(), original.tile_colours());
+        assert_eq!(surface_slots(&revealed, &looks), original_slots);
+    }
 
     #[test]
     fn fixed_sun_lights_the_home_start() {
