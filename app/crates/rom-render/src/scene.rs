@@ -31,12 +31,15 @@ use crate::terrain::{
 };
 use crate::vision::{ChunkSpec, shade_chunk};
 
+mod globe_eye;
 mod materials;
 mod models;
 mod shadow;
 mod sky;
 mod space;
-pub(crate) use space::SpaceLabel;
+use globe_eye::{GlobeEye, GlobeFrame};
+use globe_eye::{clear_depth, eye_clip_planes};
+pub(crate) use space::{OrbitalShip, SpaceLabel};
 
 /// Width of the ground in tiles.
 const GROUND_TILES: f32 = 256.0;
@@ -1030,10 +1033,24 @@ impl Scene {
         target: &mut RenderTexture2D,
         orbit: &OrbitCamera,
     ) {
-        let Some(gpu) = &mut self.globe else {
-            return;
-        };
-        let growth = (orbit.distance / MARKER_NEAR).clamp(1.0, MARKER_GROWTH);
+        let eye = GlobeEye::of_orbit(orbit);
+        if let Some(frame) = self.globe_backdrop(rl, thread, target, orbit, &eye) {
+            self.globe_world(rl, thread, target, orbit, &eye, &frame);
+        }
+    }
+
+    /// Clears `target` and draws the sky of the sphere planet seen from `eye`; `orbit` describes
+    /// the planet. Returns what the world pass needs, or `None` without a globe.
+    fn globe_backdrop(
+        &mut self,
+        rl: &mut RaylibHandle,
+        thread: &RaylibThread,
+        target: &mut RenderTexture2D,
+        orbit: &OrbitCamera,
+        eye: &GlobeEye,
+    ) -> Option<GlobeFrame> {
+        let gpu = self.globe.as_mut()?;
+        let growth = (eye.distance / MARKER_NEAR).clamp(1.0, MARKER_GROWTH);
         let mut instances = std::mem::take(&mut self.instances);
         gpu.globe
             .marker_instances(&gpu.planet, growth, &mut instances);
@@ -1041,16 +1058,18 @@ impl Scene {
         gpu.markers.extend(instances.iter().map(matrix_of));
         self.instances = instances;
         let size = (target.texture.width as f32, target.texture.height as f32);
-        self.set_material_frame(orbit.position(), orbit.distance);
-        let shadow = self.globe_shadow_pass(rl, thread, orbit, size);
+        self.set_material_frame(eye.eye, eye.distance);
+        let shadow = match &eye.orbit {
+            Some(orbit) => self.globe_shadow_pass(rl, thread, orbit, size),
+            None => None,
+        };
         let toward = sun::unit_or(self.sun.map(|c| -c));
         self.set_lighting(toward, true, shadow);
-        let shadow_texture = shadow.and(self.shadow.as_ref()).map(|s| s.texture_id());
         let aspect = target.texture.width as f32 / target.texture.height.max(1) as f32;
-        let cull = CullView::of_orbit(orbit, aspect, 45.0, 1.5);
+        let cull = eye.cull(aspect, 45.0, 1.5);
         if let Some(features) = &mut self.features {
             let radius = orbit.radius;
-            features.prepare(orbit.position(), &|centre, size| {
+            features.prepare(eye.eye, &|centre, size| {
                 let top = (centre[0] * centre[0] + centre[1] * centre[1] + centre[2] * centre[2])
                     .sqrt()
                     + size;
@@ -1063,43 +1082,81 @@ impl Scene {
             });
         }
         // Near the ground the sky of the point looked at; from higher up, black space.
-        let altitude = orbit.altitude();
-        let sun_height = (0..3).map(|i| orbit.dir[i] * toward[i]).sum::<f32>();
+        let altitude = eye.altitude();
+        let local_up = eye.local_up();
+        let sun_height = (0..3).map(|i| local_up[i] * toward[i]).sum::<f32>();
         let backdrop = crate::sky::backdrop(sun_height, altitude, orbit.radius);
         let dip = crate::sky::horizon_dip(altitude, orbit.radius);
-        self.sky.set_sky(&backdrop, orbit.dir, toward, dip);
+        self.sky.set_sky(&backdrop, local_up, toward, dip);
         self.set_star_fade(backdrop.stars);
         let halo = crate::sky::space_share(altitude, orbit.radius);
         self.sky.set_halo(
             [0.0; 3],
             orbit.radius,
             sky::HALO_THICKNESS,
-            orbit.position(),
+            eye.eye,
             toward,
             halo,
         );
-        let Some(gpu) = &self.globe else {
-            return;
-        };
-
-        let eye = orbit.position();
-        let target_point = orbit.target();
-        let up = orbit.view_up();
-        let vector = |v: [f32; 3]| Vector3::new(v[0], v[1], v[2]);
-        let view = Camera3D::perspective(vector(eye), vector(target_point), vector(up), 45.0);
         let mut drawing = rl.begin_texture_mode(thread, target);
         drawing.clear_background(SPACE);
         sky::draw_backdrop(
             &mut drawing,
-            ([0, 1, 2].map(|i| target_point[i] - eye[i]), up),
+            ([0, 1, 2].map(|i| eye.target[i] - eye.eye[i]), eye.up),
             self.projection_centre_y,
             &backdrop,
             &self.sky,
             self.star_mesh.as_ref(),
             &self.star_material,
         );
+        Some(GlobeFrame {
+            toward,
+            shadow,
+            halo,
+            cull,
+            stars: backdrop.stars,
+        })
+    }
+
+    /// Draws the sphere planet seen from `eye` over what `target` holds, in its own depth range;
+    /// `frame` comes from [`Scene::globe_backdrop`].
+    fn globe_world(
+        &mut self,
+        rl: &mut RaylibHandle,
+        thread: &RaylibThread,
+        target: &mut RenderTexture2D,
+        orbit: &OrbitCamera,
+        eye: &GlobeEye,
+        frame: &GlobeFrame,
+    ) {
+        // Other layers may have lit their own things since the backdrop.
+        self.set_lighting(frame.toward, true, frame.shadow);
+        self.sky.set_halo(
+            [0.0; 3],
+            orbit.radius,
+            sky::HALO_THICKNESS,
+            eye.eye,
+            frame.toward,
+            frame.halo,
+        );
+        let shadow_texture = frame
+            .shadow
+            .and(self.shadow.as_ref())
+            .map(|s| s.texture_id());
+        let (cull, halo) = (&frame.cull, frame.halo);
+        let Some(gpu) = &self.globe else {
+            return;
+        };
+        let target_point = eye.target;
+        let up = eye.up;
+        let frame_distance = eye.distance;
+        let eye = eye.eye;
+        let vector = |v: [f32; 3]| Vector3::new(v[0], v[1], v[2]);
+        let view = Camera3D::perspective(vector(eye), vector(target_point), vector(up), 45.0);
+        let mut drawing = rl.begin_texture_mode(thread, target);
+        clear_depth();
         let radius = orbit.radius;
-        let (near, far) = orbit.clip_planes(RELIEF);
+        let (near, far) = eye_clip_planes(eye, radius, RELIEF);
         set_clip_planes(f64::from(near), f64::from(far));
         {
             let mut world = drawing.begin_mode3D(view);
@@ -1107,7 +1164,7 @@ impl Scene {
             shadow::bind_shadow_map(shadow_texture);
             materials::bind_noise(self.noise.as_ref().map(|t| t.id));
             for (shaded, bounds) in &gpu.land {
-                if bounds.may_be_seen(radius, &cull) {
+                if bounds.may_be_seen(radius, cull) {
                     world.draw_mesh(
                         &shaded.mesh,
                         self.terrain_material.clone(),
@@ -1141,7 +1198,7 @@ impl Scene {
                 models.draw(&mut world, &mut self.model_shader, &self.model_material);
             }
             for (shaded, bounds) in &gpu.sea {
-                if bounds.may_be_seen(radius, &cull) {
+                if bounds.may_be_seen(radius, cull) {
                     world.draw_mesh(
                         &shaded.mesh,
                         self.sea_globe_material.clone(),
@@ -1158,7 +1215,7 @@ impl Scene {
                     &mut world,
                     &self.graticule,
                     eye,
-                    graticule_fade(orbit.distance),
+                    graticule_fade(frame_distance),
                 );
             }
             draw_overlay(&mut world, &self.overlay);

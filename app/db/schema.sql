@@ -574,6 +574,15 @@ CREATE TABLE entity_visual (           -- most specific row wins (faction, then 
 ) STRICT;
 CREATE INDEX entity_visual_by_type ON entity_visual(entity_type_id);
 
+-- How large a unit is drawn in the space views (presentation only, task 57): above a
+-- planet as a percentage of its true size, on a star system's plane as a percentage of
+-- the readable reference size there. No row: 100 and 100.
+CREATE TABLE et_view_scale (
+  entity_type_id INTEGER PRIMARY KEY REFERENCES entity_type(id),
+  planet_pct     INTEGER NOT NULL DEFAULT 100 CHECK (planet_pct BETWEEN 10 AND 1000),
+  system_pct     INTEGER NOT NULL DEFAULT 100 CHECK (system_pct BETWEEN 10 AND 400)
+) STRICT;
+
 -- ── A12. Map styles and match options ───────────────────────────────────────
 -- A style is a recipe for a whole universe (and, for tests and skirmishes, a flat map).
 -- Universe knobs: one home system per race present, plus neutral systems; every

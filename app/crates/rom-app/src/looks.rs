@@ -10,6 +10,7 @@ use rom_mapgen::BaseTerrains;
 use rom_models::book::material_look;
 use rom_models::params::{Param, hex_colour, parse_params};
 pub use rom_models::{COMPOSED, ModelEntry, model_id};
+use rom_render::layers::{ShipScale, ShipScales};
 use rom_render::{
     Generator, MaterialLook, ModelLook, ModelRef, ObjectLook, SceneLooks, SnowLook, TileKind,
     TileLook,
@@ -130,6 +131,22 @@ fn tile_kind(id: DefId, base: BaseTerrains) -> TileKind {
     } else {
         TileKind::Feature(u16::try_from(id.0).unwrap_or(u16::MAX))
     }
+}
+
+/// How large each ship type is drawn in the space views, from the `et_view_scale` rows, by
+/// entity type (the `kind` of the renderer's entity and ship views).
+pub fn ship_scales(rules: &Rules) -> ShipScales {
+    ShipScales(
+        rules
+            .entity_types
+            .iter()
+            .filter_map(|(id, et)| {
+                let row = et.view_scale.as_ref()?;
+                let kind = u16::try_from(id.0).ok()?;
+                Some((kind, ShipScale::from_pct(row.planet_pct, row.system_pct)))
+            })
+            .collect(),
+    )
 }
 
 /// Everything the renderer needs to draw a planet or map of these rules up close, its baked
@@ -420,5 +437,30 @@ mod tests {
             assert!(rules.entity_visuals.contains_key(&DefId(u32::from(*kind))));
         }
         assert_eq!(looks.seed, 7);
+    }
+
+    #[test]
+    fn ship_scales_per_view_come_from_the_rules() {
+        let rules = load_rules().expect("rules");
+        let scales = ship_scales(&rules);
+        assert!(scales.0.len() >= 5, "{scales:?}");
+        for (kind, scale) in &scales.0 {
+            let et = &rules.entity_types[&DefId(u32::from(*kind))];
+            assert!(et.movement.is_some(), "{kind}");
+            // Two to five times their true size above a planet, a quarter to a half of the
+            // reference size on a system's plane.
+            assert!((2.0..=5.0).contains(&scale.planet), "{kind}: {scale:?}");
+            assert!((0.25..=0.5).contains(&scale.system), "{kind}: {scale:?}");
+        }
+        // The sizes differ by ship class, and a type without a row keeps the default.
+        let mut sizes: Vec<i64> = scales
+            .0
+            .values()
+            .map(|s| (s.planet * 100.0) as i64)
+            .collect();
+        sizes.sort_unstable();
+        sizes.dedup();
+        assert!(sizes.len() >= 3, "{sizes:?}");
+        assert_eq!(scales.of(u16::MAX), ShipScale::default());
     }
 }

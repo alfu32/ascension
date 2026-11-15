@@ -63,6 +63,7 @@ def ─┬─ age            ordinal, era, map scale
      │                 ├─ et_energy        ability pool
      │                 ├─ et_supply        supply radius
      │                 ├─ et_gather_site   farm, mine, camp, university
+     │                 ├─ et_view_scale    drawn size in the space views (presentation)
      │                 └─ et_node          deposit placed by the map generator
      ├─ tech           age | track | upgrade | unit_upgrade | government | project | evolution
      ├─ ability        active abilities
@@ -438,6 +439,22 @@ every age). The model id is `<entity key>@<age without "age.">` (`@any` with no
 age), with `+<faction key>` for a faction's own row. Budgets, style and the
 review loop (`--gallery`, `--model`, `--parts`, `--gallery-manifest`,
 `docs/art/approved.toml`) are in `docs/art-direction.md`.
+
+### 10b. How large ships are drawn in the space views (task 57)
+
+`et_view_scale` (added by task 57; presentation only, the simulation never
+reads it) gives a unit type two drawn sizes: `planet_pct`, its size above a
+planet as a percentage of its true size (in orbit; it eases back to its true
+size as the ship comes down to land), and `system_pct`, its size on a star
+system's plane as a percentage of the readable reference size there (the
+size task 53 drew every ship at, which keeps its size on screen). No row
+means 100 and 100. The seed gives the starships two to five times their size
+above a planet and a quarter to a half of the reference on the plane, by
+class (survey ship smallest, battleship largest); the rows are appended after
+the generated content, keyed by definition key, so no id moves. The renderer
+takes them through `rom-app`'s `looks::ship_scales` and never looks at a key.
+The same hull is drawn at every level; between the planet and the plane its
+size and place blend smoothly with the camera's distance.
 
 ### 11. Computer opponents are data too
 
