@@ -85,6 +85,17 @@ pub struct SpaceSnapshot {
     pub claims: Vec<ClaimView>,
     /// Ships in transit anywhere on the star map.
     pub transits: Vec<TransitView>,
+    /// The systems the player knows, ascending ids; `None` before the first report (all shown).
+    pub known: Option<Vec<u32>>,
+}
+
+impl SpaceSnapshot {
+    /// Whether the player knows system `id`: its bodies are drawn and named.
+    pub fn knows(&self, id: u32) -> bool {
+        self.known
+            .as_ref()
+            .is_none_or(|known| known.binary_search(&id).is_ok())
+    }
 }
 
 /// Where a ship stands in the system frame. `placed` are the bodies of the system as laid out by
@@ -303,12 +314,14 @@ pub enum SpaceHover {
 }
 
 /// The two lines of help for what the pointer rests on: its name, then what can be done with it.
-/// `loaded` is the planet whose globe is loaded; `ships` tells whether ships are selected.
+/// `loaded` is the planet whose globe is loaded; `ships` tells whether ships are selected;
+/// `known` tells whether the player knows a system (by id).
 pub fn hover_help(
     scene: &UniverseScene,
     hover: SpaceHover,
     loaded: Option<usize>,
     ships: bool,
+    known: impl Fn(u32) -> bool,
 ) -> (String, String) {
     let send = if ships {
         " · right-click: send the selected ships"
@@ -320,13 +333,17 @@ pub fn hover_help(
             "Ship".to_owned(),
             "Click to select · Space flies to the selection, Shift + Space follows it".to_owned(),
         ),
-        SpaceHover::Target(Target::System(i)) => (
-            scene
-                .systems
-                .get(i)
-                .map_or_else(String::new, |s| format!("{} (star system)", s.name)),
-            format!("Double-click or scroll in to enter{send}"),
-        ),
+        SpaceHover::Target(Target::System(i)) => match scene.systems.get(i) {
+            Some(system) if known(system.id) => (
+                format!("{} (star system)", system.name),
+                format!("Double-click or scroll in to enter{send}"),
+            ),
+            Some(system) => (
+                format!("{} (unexplored)", system.name),
+                format!("Send a ship to learn what it holds{send}"),
+            ),
+            None => Default::default(),
+        },
         SpaceHover::Target(Target::Body(i)) => {
             let Some(body) = scene.bodies.get(i) else {
                 return Default::default();
@@ -364,7 +381,7 @@ pub fn level_help(level: crate::zoom::Level, cap: crate::zoom::Level) -> Option<
     let lines = |a: &str, b: &str| Some((a.to_owned(), b.to_owned()));
     match level {
         Level::Surface | Level::Globe if cap >= Level::System => lines(
-            "Scroll out past the globe to see your star system",
+            "Scroll out past the globe to see the star system",
             "Home comes back to your planet",
         ),
         Level::Surface | Level::Globe => None,
@@ -846,22 +863,54 @@ mod tests {
     fn hover_help_names_the_object_and_its_actions() {
         use crate::zoom::Level;
         let scene = sample_scene();
-        let (name, action) = hover_help(&scene, SpaceHover::Target(Target::System(1)), None, true);
+        let (name, action) = hover_help(
+            &scene,
+            SpaceHover::Target(Target::System(1)),
+            None,
+            true,
+            |_| true,
+        );
         assert_eq!(name, "S2 (star system)");
         assert!(action.contains("Double-click or scroll in to enter"));
         assert!(action.contains("send the selected ships"));
-        let (name, action) =
-            hover_help(&scene, SpaceHover::Target(Target::Body(1)), Some(1), false);
+        let (name, action) = hover_help(
+            &scene,
+            SpaceHover::Target(Target::Body(1)),
+            Some(1),
+            false,
+            |_| true,
+        );
         assert_eq!(name, "B2 (planet)");
         assert!(action.contains("land the camera") && !action.contains("send"));
-        let (_, action) = hover_help(&scene, SpaceHover::Target(Target::Body(5)), Some(1), false);
+        let (_, action) = hover_help(
+            &scene,
+            SpaceHover::Target(Target::Body(5)),
+            Some(1),
+            false,
+            |_| true,
+        );
         assert!(action.contains("fly there and land"));
-        let (name, _) = hover_help(&scene, SpaceHover::Target(Target::Body(2)), None, false);
+        let (name, _) = hover_help(
+            &scene,
+            SpaceHover::Target(Target::Body(2)),
+            None,
+            false,
+            |_| true,
+        );
         assert!(name.contains("resource body"));
         assert_eq!(
-            hover_help(&scene, SpaceHover::Ship(9), None, false).0,
+            hover_help(&scene, SpaceHover::Ship(9), None, false, |_| true).0,
             "Ship"
         );
+        let (name, action) = hover_help(
+            &scene,
+            SpaceHover::Target(Target::System(1)),
+            None,
+            false,
+            |id| id != 2,
+        );
+        assert_eq!(name, "S2 (unexplored)");
+        assert!(action.contains("Send a ship"));
         assert!(level_help(Level::Globe, Level::Globe).is_none());
         assert!(
             level_help(Level::Globe, Level::System)

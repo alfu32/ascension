@@ -404,9 +404,11 @@ impl Scene {
         {
             let mut world = drawing.begin_mode3D(camera);
             shift_projection(self.projection_centre_y);
+            // An unexplored system shows its star only.
+            let known = zoom.knows_system();
             for placed in zoom.placed() {
                 let body = &universe.bodies[placed.body];
-                if body.kind != BodyViewKind::Star {
+                if body.kind != BodyViewKind::Star && known {
                     let ring = ring_points(placed.orbit, RING_SEGMENTS);
                     for pair in ring.windows(2) {
                         world.draw_line3D(vec3(pair[0]), vec3(pair[1]), ORBIT_RING);
@@ -415,6 +417,9 @@ impl Scene {
             }
             for placed in zoom.placed() {
                 let body = &universe.bodies[placed.body];
+                if body.kind != BodyViewKind::Star && !known {
+                    continue;
+                }
                 let (colour, emissive) = match body.kind {
                     BodyViewKind::Star => (star_colour, 1.0),
                     BodyViewKind::Habitable => (planet_colour(body.id), 0.0),
@@ -443,7 +448,7 @@ impl Scene {
             }
             // Every habitable planet wears an atmosphere halo, lit from the star at the origin.
             for placed in zoom.placed() {
-                if universe.bodies[placed.body].kind == BodyViewKind::Habitable {
+                if universe.bodies[placed.body].kind == BodyViewKind::Habitable && known {
                     let toward = unit_vector(placed.pos.map(|c| -c));
                     let thickness = super::sky::SYSTEM_HALO_THICKNESS;
                     self.sky
@@ -713,7 +718,21 @@ impl Scene {
                 let halo = space.tints[i].unwrap_or(system.star_colour);
                 let grow = zoom.scale().map_distance(zoom.l()) * 0.1;
                 let (halo_size, core_size) = (HALO_SIZE.max(grow), CORE_SIZE.max(grow * 0.3));
-                sprite(&mut world, camera, &space.glow, pos, halo_size, halo, 230);
+                // An unexplored system is a faint marker.
+                let (halo_size, halo_alpha) = if self.space_state.snapshot.knows(system.id) {
+                    (halo_size, 230)
+                } else {
+                    (halo_size * 0.5, 90)
+                };
+                sprite(
+                    &mut world,
+                    camera,
+                    &space.glow,
+                    pos,
+                    halo_size,
+                    halo,
+                    halo_alpha,
+                );
                 sprite(
                     &mut world,
                     camera,
@@ -816,9 +835,18 @@ impl Scene {
                 HALO_SIZE.max(zoom.scale().map_distance(zoom.l()) * 0.1) / 2.0 / depth * height
                     / (2.0 * look.tan());
             let home = space.tints[i];
-            let rgb = home.unwrap_or([200, 215, 235]);
+            let known = self.space_state.snapshot.knows(system.id);
+            let rgb = match (home, known) {
+                (_, false) => [130, 140, 155],
+                (Some(tint), true) => tint,
+                (None, true) => [200, 215, 235],
+            };
             space.labels.push(SpaceLabel {
-                text: system.name.clone(),
+                text: if known {
+                    system.name.clone()
+                } else {
+                    format!("{} (unexplored)", system.name)
+                },
                 x: x + halo_pixels.max(8.0) * 0.5,
                 y: y + halo_pixels.max(8.0) * 0.4,
                 colour: [rgb[0], rgb[1], rgb[2], (235.0 * alpha) as u8],

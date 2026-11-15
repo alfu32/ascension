@@ -544,6 +544,8 @@ fn render_loop(shared: &Shared) {
     let mut space_picker = SpacePicker::default();
     // The entity the camera keeps centred (the follow toggle).
     let mut follow: Option<u32> = None;
+    // Double clicks on the selection's portrait fly to the selection.
+    let mut portrait_clicks = crate::zoom::ClickTracker::default();
     let mut shades: Vec<[f32; 3]> = Vec::new();
     let mut stats = StatsWindow::default();
     let mut blended: Vec<EntityView> = Vec::new();
@@ -741,6 +743,7 @@ fn render_loop(shared: &Shared) {
         }
         if let Some(zoom) = zoom.as_mut() {
             zoom.set_cap(current_cap(shared));
+            zoom.set_known(lock(&shared.space).known.as_deref());
         }
         let view_range = shared.view_range.load(Ordering::Relaxed);
         if view_range != u32::MAX {
@@ -788,7 +791,21 @@ fn render_loop(shared: &Shared) {
             let ground = |x: f32, y: f32| surface.map_or(0.0, |s| s.height(x, y));
             let now_ms = frame_start.duration_since(started).as_millis() as u64;
             for event in events {
-                let ask = camera_request(event, &canvas, hud_visible, &hud_snapshot);
+                let mut ask = camera_request(event, &canvas, hud_visible, &hud_snapshot);
+                if let InputEvent::ButtonDown {
+                    button: PointerButton::Left,
+                    x,
+                    y,
+                    ..
+                } = event
+                    && hud_visible
+                    && canvas
+                        .rect(crate::hud_layout::Region::Portrait)
+                        .contains(x, y)
+                    && portrait_clicks.press(now_ms, x, y)
+                {
+                    ask = Some(CameraAsk::Selection);
+                }
                 if let Some(ask) = ask {
                     let whereabouts = Whereabouts {
                         entities: &blended,
@@ -1057,7 +1074,9 @@ fn render_loop(shared: &Shared) {
                     let ratio = size.0 as f32 / layout.0.max(1) as f32;
                     let ships = !hud_snapshot.selected.is_empty();
                     let (name, action) =
-                        hover_help(zoom.scene(), hover, zoom.surface_body(), ships);
+                        hover_help(zoom.scene(), hover, zoom.surface_body(), ships, |id| {
+                            space_snapshot.knows(id)
+                        });
                     for (row, text) in [name, action].into_iter().enumerate() {
                         scene.push_space_label(crate::scene::SpaceLabel {
                             text,
@@ -1132,6 +1151,7 @@ fn render_loop(shared: &Shared) {
                             hover,
                             zoom.surface_body(),
                             !hud_snapshot.selected.is_empty(),
+                            |id| space_snapshot.knows(id),
                         )),
                         None => level_help(zoom.level(), zoom.cap()),
                     });

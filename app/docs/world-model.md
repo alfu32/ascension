@@ -131,6 +131,53 @@ ship keeps orbiting and fires as targets pass within its footprint. A short
 beam uses the actual shot's target position. Surface weapons cannot hit an
 orbital ship; anti-space batteries remain a later task.
 
+### Moving between levels (task 53)
+
+One orbit-style camera serves the planet, the star system and the star map:
+a focus point, a heading, an elevation that rises with the distance, and
+the distance. Every level answers the same input:
+
+| Input | Planet | System and star map |
+| --- | --- | --- |
+| Wheel | zoom | zoom toward the point under the cursor |
+| Middle drag | pan | pan (the plane follows the pointer) |
+| Shift + middle drag | turn the heading | turn the heading about the focus |
+| Arrows, pointer at the edge | pan | pan, relative to the heading |
+| Double-click | — | fly to a planet, star or system |
+| Home | home view | fly back to the home planet |
+| Space / Shift + Space | fly to / follow the selection | the same, at the level it is seen at |
+
+- **No seams.** At the planet's hand-over the space camera takes the planet
+  camera's exact pose (carried into the system frame), so the cross-fade
+  shows one picture; above it the view eases to the plane's own pose
+  (heading kept, no roll). The star map shares the system's heading and
+  elevation, and the two frames meet exactly at their hand-over. Zooming
+  out and back in without other input returns the planet camera to where it
+  was; a turn made in space turns the planet camera about the planet's axis.
+- **Zooming in lands where you look.** Over a body, the wheel anchors on it
+  (keeping the picture) and comes down to it; a loaded planet is entered,
+  another habitable planet is asked for and entered once its globe is
+  loaded. Past the star map's hand-over the wheel enters the system nearest
+  the focus. Visiting another system is: zoom out, pan, zoom in.
+- **Every change of place is a flight** of short legs (out of the planet, up
+  to a star-map height that fits the way, across, down), interrupted by any
+  input. The camera never cuts.
+- **Ships are findable at every level.** In orbit above the planet (task
+  43), on the system plane, at the plane's rim toward the other end of their
+  lane while between systems, and on the star map: a mark beside each system
+  that has ships, an arrowhead on the lane for each ship in transit, its lane
+  ahead lit and its destination ringed. A ship in transit stays selected;
+  its departure and arrival are event lines, and clicking the event line
+  flies the camera to it.
+- **Discoverability.** Hovering a body, system or ship rings it and names it
+  beside the pointer with what can be done; the pointer turns into a hand
+  over what a double click enters; the help line explains the level; the
+  first time a player's reach widens, the event line says how to see it.
+  The minimap names the level, shows the ships, outlines the part of the
+  plane in view and glides there on a click.
+- The tier caps still bound everything: wheel, flights and focus requests
+  (an interplanetary player cannot leave the home system's view).
+
 ## Rendering notes
 
 - One scene per level with its own coordinate frame (surface/globe frame

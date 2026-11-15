@@ -499,6 +499,8 @@ pub struct ZoomCamera {
     align_pending: Option<Pose>,
     /// Turn of the loaded planet about its axis from the planet frame into the system frame.
     planet_frame: PlanetFrame,
+    /// The systems whose bodies the player knows (ids, ascending); `None` knows them all.
+    known: Option<Vec<u32>>,
 }
 
 impl ZoomCamera {
@@ -557,6 +559,7 @@ impl ZoomCamera {
             seconds: 0.0,
             align_pending: None,
             planet_frame: PlanetFrame::default(),
+            known: None,
         };
         camera.l = camera.l.min(camera.l_cap());
         camera
@@ -676,6 +679,21 @@ impl ZoomCamera {
         self.want_surface
     }
 
+    /// Sets the systems whose bodies the player knows; the bodies of others cannot be picked.
+    pub fn set_known(&mut self, known: Option<&[u32]>) {
+        if self.known.as_deref() != known {
+            self.known = known.map(<[u32]>::to_vec);
+        }
+    }
+
+    /// Whether the player knows the bodies of the anchored system.
+    pub fn knows_system(&self) -> bool {
+        match (&self.known, self.system_id()) {
+            (Some(known), Some(id)) => known.binary_search(&id).is_ok(),
+            _ => true,
+        }
+    }
+
     /// The id of the system the view is anchored to.
     pub fn system_id(&self) -> Option<u32> {
         self.scene.systems.get(self.system).map(|s| s.id)
@@ -723,7 +741,10 @@ impl ZoomCamera {
         let shown = self.pose(orbit);
         let drawn = crate::universe::body_radius(&self.scene.bodies[index]);
         let anchored = self.body == Some(index);
-        let above = self.l - self.scale.l_globe_system;
+        // The system camera keeps its distance: the picture does not move when the scale between
+        // the frames changes to the new planet's.
+        let distance = self.scale.system_distance(self.l);
+        let in_space = self.l >= self.space_floor();
         self.scale = ZoomScale::new(
             globe_radius * HOME_PLANET_RADIUS / drawn.max(1.0),
             max_distance,
@@ -735,7 +756,7 @@ impl ZoomCamera {
         if anchored {
             // The planet camera starts from the pose the system view shows (once the new planet's
             // frame is known), so the flight down continues without a turn.
-            self.l = (self.scale.l_globe_system + above).max(self.space_floor());
+            self.l = self.keep_distance(distance);
             self.align_pending = Some(shown);
             self.interrupt();
             if Some(index) == self.home_body {
@@ -752,8 +773,17 @@ impl ZoomCamera {
             });
         } else {
             orbit.look_at(dir);
+            if in_space {
+                self.l = self.keep_distance(distance);
+            }
         }
         self.l = self.l.clamp(self.l_min(), self.l_cap());
+    }
+
+    /// The log-distance at which the system camera is `distance` away, above the floor.
+    fn keep_distance(&self, distance: f32) -> f32 {
+        (self.scale.l_globe_system + (distance / self.scale.system_min).ln())
+            .max(self.space_floor())
     }
 
     /// Stops a flight under way: any input of the player does.
@@ -1706,7 +1736,11 @@ impl ZoomCamera {
         let mut out = Vec::new();
         match self.level() {
             Level::System => {
+                let known = self.knows_system();
                 for p in &self.placed {
+                    if !known && self.scene.bodies[p.body].kind != BodyViewKind::Star {
+                        continue;
+                    }
                     if let Some((x, y, depth)) = view.project(p.pos) {
                         let on_screen = p.radius / depth * canvas.1 / (2.0 * view.tan());
                         out.push((Target::Body(p.body), (x, y, on_screen)));
@@ -2306,6 +2340,34 @@ mod tests {
         assert_eq!(zoom.anchor_body(), Some(5));
         assert_eq!(zoom.want_surface(), Some(6));
         assert_eq!(zoom.l(), zoom.l_min());
+    }
+
+    #[test]
+    fn a_globe_that_loads_keeps_the_picture_and_flies_in() {
+        let size = (1280.0, 720.0);
+        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        zoom.fly_to_target(Target::System(1), &mut orbit);
+        run(&mut zoom, &mut orbit, 300);
+        let planet = *zoom.placed().iter().find(|p| p.body == 5).unwrap();
+        zoom.fly_to_target(Target::Body(5), &mut orbit);
+        run(&mut zoom, &mut orbit, 300);
+        assert_eq!(zoom.want_surface(), Some(6));
+        let view = zoom.system_view(&orbit).view(size, 0.0);
+        let before = view.project(planet.pos).unwrap();
+        let distance = zoom.scale().system_distance(zoom.l());
+        // The globe of a planet of 140 tiles a face arrives.
+        let radius = crate::globe::planet_radius(140);
+        let mut globe = OrbitCamera::new(radius, 3.0 * radius);
+        zoom.surface_ready(6, radius, 3.0 * radius, [0.0, 0.0, 1.0], &mut globe);
+        assert!((zoom.scale().system_distance(zoom.l()) - distance).abs() < 0.5);
+        zoom.sync_orbit(&mut globe);
+        let view = zoom.system_view(&globe).view(size, 0.0);
+        let after = view.project(planet.pos).unwrap();
+        assert!((after.0 - before.0).hypot(after.1 - before.1) < 1.0);
+        // Then the camera goes down onto it.
+        run(&mut zoom, &mut globe, 300);
+        assert!(zoom.anchored_at_surface());
+        assert!(zoom.level() <= Level::Globe);
     }
 
     #[test]

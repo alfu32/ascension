@@ -174,7 +174,56 @@ pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) ->
         }
     }
     snapshot.transits = transits(world);
+    snapshot.known = Some(known_systems(world));
     snapshot
+}
+
+/// The systems player one knows, ascending: its home system, any system it has ships in or
+/// bound for, and any whose star or bodies its team has seen.
+pub fn known_systems(world: &World) -> Vec<u32> {
+    let home = world
+        .home_body(PLAYER)
+        .and_then(|b| world.body(b))
+        .map(|b| b.system);
+    let mut known: BTreeSet<u32> = home.into_iter().collect();
+    for t in world
+        .transits()
+        .filter(|t| allied(world, PLAYER, t.entity.owner))
+    {
+        known.insert(t.origin);
+        known.insert(t.destination);
+    }
+    let crowded: BTreeSet<BodyId> = world
+        .entities()
+        .filter(|e| allied(world, PLAYER, e.owner))
+        .map(|e| e.pos.body)
+        .collect();
+    for system in world.systems() {
+        let Some(star) = world.space_of(system.id) else {
+            continue;
+        };
+        let seen = |at: Pos| {
+            world.is_explored_on_body(
+                PLAYER,
+                star,
+                0,
+                at.x.div_euclid(1000),
+                at.y.div_euclid(1000),
+            )
+        };
+        let bodies = world
+            .bodies()
+            .iter()
+            .filter(|b| b.system == system.id)
+            .filter_map(|b| world.body_position(b.id));
+        if crowded.contains(&star)
+            || world.body_position(star).is_some_and(seen)
+            || bodies.into_iter().any(seen)
+        {
+            known.insert(system.id);
+        }
+    }
+    known.into_iter().collect()
 }
 
 /// Ships between systems that belong to player one or an ally; others are not seen.
@@ -429,6 +478,9 @@ mod transit_tests {
                 }
             })
             .unwrap();
+        // At first only the home system is known; the other end of the lane is not.
+        let known = known_systems(&game.world);
+        assert!(known.contains(&home_system) && !known.contains(&other));
         let mut controller = Controller::new();
         let mut notices = Notices::default();
         notices.update(&game.world);
@@ -496,6 +548,8 @@ mod transit_tests {
         assert!(departed.text.ends_with(&name(other)), "{}", departed.text);
         let arrived = arrived.expect("an arrival line");
         assert_eq!(arrived.about, Some(ship));
+        // Its destination is known now: its bodies are drawn and named.
+        assert!(known_systems(&game.world).contains(&other));
         // Arrived, it is in the space of the other system, still selected.
         let sightings = game.world.visible_entities(PLAYER);
         let space = space_snapshot(&game.world, home_system, &sightings);
