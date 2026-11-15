@@ -353,10 +353,13 @@ mod match_tests {
             camera.set_l(f32::MAX);
             let before = camera.l();
             assert!(camera.level() <= Level::Globe);
-            let at = game.world.offset(game.starts[0].city_pos, 10000, 0);
-            let executor = game
-                .world
-                .place_for_setup(producer, PlayerId(1), at)
+            // Some start is near a face edge: take the first offset where the footprint fits.
+            let executor = [10000, -10000, 14000, -14000]
+                .into_iter()
+                .find_map(|dx| {
+                    let at = game.world.offset(game.starts[0].city_pos, dx, 0);
+                    game.world.place_for_setup(producer, PlayerId(1), at).ok()
+                })
                 .unwrap();
             game.world
                 .submit(Command {

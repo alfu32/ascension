@@ -1981,8 +1981,10 @@ impl Controller {
             [] => self
                 .foreign
                 .and_then(|id| world.entity(id))
-                .map_or(HudSelection::None, |e| HudSelection::Single(card(e, true))),
-            [one] => HudSelection::Single(card(one, false)),
+                .map_or(HudSelection::None, |e| {
+                    HudSelection::Single(Box::new(card(e, true)))
+                }),
+            [one] => HudSelection::Single(Box::new(card(one, false))),
             many => {
                 let mut tiles = Vec::new();
                 for type_id in self.tile_types(world) {

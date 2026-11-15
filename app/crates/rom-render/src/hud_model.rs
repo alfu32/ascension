@@ -245,7 +245,7 @@ pub enum HudSelection {
     #[default]
     None,
     /// One own or foreign entity.
-    Single(HudCard),
+    Single(Box<HudCard>),
     /// Several own entities: up to twelve type tiles and the total.
     Multiple {
         /// Selected entities.

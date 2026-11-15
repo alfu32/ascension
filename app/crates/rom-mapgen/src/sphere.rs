@@ -457,6 +457,7 @@ impl Populator<'_> {
         };
         let mut keep = vec![false; self.map.surface.len()];
         let mut added = 0;
+        let rings_len = rings.len();
         for (min, max) in rings {
             for p in 0..self.map.starts.len() {
                 let start = self.map.starts[p];
@@ -481,7 +482,7 @@ impl Populator<'_> {
                     keep[i] = true;
                 }
                 // Top up what the global scatter left near this start to the guaranteed count.
-                let wanted = guarantee_count(row, target, self.map.starts.len());
+                let wanted = guarantee_count(row, target / rings_len, self.map.starts.len());
                 if existing.len() >= wanted {
                     continue;
                 }

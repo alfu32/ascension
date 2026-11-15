@@ -520,6 +520,42 @@ add route slots. Pending route orders reserve slots. Orders retain the home,
 target, accepted length, delivery resource/amount and current leg in memory;
 the existing `trade_route` table is unchanged (save support is a later task).
 
+## Workers inside, units leaving buildings (task 52)
+
+**Workers inside a gather building.** A worker that holds a gather slot
+(`entity.work_site`) is *inside* the building: `Entity::is_inside`,
+`World::occupants(building)` (id order). Nothing new is stored. Inside workers
+are not drawn and cannot be picked on the map; enemies cannot see or target
+them (`sees_entity`); their own side still lists them. The building's
+selection panel shows their portraits ("Workers 4 / 10"); clicking one selects
+that worker, shift adds it, a double click selects every worker of its type
+inside. The container component (`et_container`, `entity.container_id`) was
+not used: it models nodes carried by units, and garrisoned units do not
+exist yet. Any order given to a worker takes it out of the slot (as before). The
+order kind `release` (`needs = gather_site`, target none) lets a gather
+building send every worker out: they leave their slot and work order and
+stand beside the building; with a rally point set the app also orders them to
+walk there. Idle citizens look for work again after
+`citizen.auto_work_delay_ticks`, so released workers who are not given a task
+go back to work by themselves. Right-click and the **Release all workers**
+button (Order tab, slot 3, hotkey R) with a gather building selected act on
+everyone inside it.
+
+**Where a produced unit appears.** `complete_training` puts a mover on the
+free tile its movement class can enter nearest the building's gate within 10
+tiles of the footprint, around all four sides (`World::free_tile_beside`:
+water for ships, never a building tile). A mover that finds none and can stand
+in space (spacecraft) launches as before; otherwise the order stays at the head
+of the queue as `Blocked("no_spawn_tile")` and the HUD queue row says "No free
+ground or water beside it". (In a universe a ship used to count as a
+spacecraft to launch, find no room in space and stay at 100 % forever.)
+Other blocked reasons the HUD words: `pop_cap`, `space_age`.
+
+**Footprints are cleared.** When a site is placed and when a building
+completes, every walking unit standing on its footprint is moved to the nearest
+free tile of its movement class (`World::clear_footprint`), so builders are
+never shut inside.
+
 ## Placement and resource discovery (task 41)
 
 Every building with an `in_city_radius` row also has an `in_own_territory`

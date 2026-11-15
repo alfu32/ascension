@@ -349,6 +349,84 @@ pub(crate) fn net_ppm(map: &SpherePlanet, pixels: &[[u8; 3]]) -> Vec<u8> {
     out
 }
 
+/// Prints, per ground feature terrain, its share of land, and per start the tiles of it within
+/// 20 and 40 tiles and the distance in tiles to the nearest one.
+fn sphere_resource_report(map: &SpherePlanet, rules: &Rules) {
+    let land = map
+        .terrain
+        .iter()
+        .filter(|t| rules.terrains[t].layer == Layer::Ground)
+        .count()
+        .max(1);
+    let mut kinds: BTreeMap<DefId, usize> = BTreeMap::new();
+    for t in &map.terrain {
+        if *t != map.base.land && rules.terrains[t].layer == Layer::Ground {
+            *kinds.entry(*t).or_default() += 1;
+        }
+    }
+    for (terrain, count) in &kinds {
+        let mut line = format!(
+            "  {} total={} land_pct={:.1}",
+            rules.key(*terrain),
+            count,
+            *count as f64 * 100.0 / land as f64
+        );
+        for (index, start) in map.starts.iter().enumerate() {
+            let (mut near16, mut near40, mut nearest) = (0, 0, i64::MAX);
+            for (i, t) in map.terrain.iter().enumerate() {
+                if t != terrain {
+                    continue;
+                }
+                let tile = map.surface.tile(i);
+                let Some((x, y)) = map.surface.unfold(*start, tile.into()) else {
+                    continue;
+                };
+                let d = ((x * x + y * y) as u64).isqrt() as i64 / 1000;
+                nearest = nearest.min(d);
+                near16 += i64::from(d <= 16);
+                near40 += i64::from(d <= 40);
+            }
+            line.push_str(&format!(
+                " | p{} n16={near16} n40={near40} nearest={nearest}",
+                index + 1
+            ));
+        }
+        println!("{line}");
+    }
+    for (index, start) in map.starts.iter().enumerate() {
+        let mut nearest: Option<(i64, i64, i64)> = None;
+        for (i, t) in map.terrain.iter().enumerate() {
+            if rules.terrains[t].layer != Layer::Fluid {
+                continue;
+            }
+            let Some((x, y)) = map.surface.unfold(*start, map.surface.tile(i).into()) else {
+                continue;
+            };
+            let d = ((x * x + y * y) as u64).isqrt() as i64;
+            if nearest.is_none_or(|(best, _, _)| d < best) {
+                nearest = Some((d, x / 1000, y / 1000));
+            }
+        }
+        if let Some((d, dx, dy)) = nearest {
+            println!(
+                "  start p{} on face {} at ({}, {}): nearest water {} tiles away at @{dx},{dy}",
+                index + 1,
+                start.face,
+                start.x / 1000,
+                start.y / 1000,
+                d / 1000
+            );
+        }
+    }
+    let mut nodes: BTreeMap<DefId, usize> = BTreeMap::new();
+    for (node, _) in &map.nodes {
+        *nodes.entry(*node).or_default() += 1;
+    }
+    for (node, count) in nodes {
+        println!("  {} total={count}", rules.key(node));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -415,58 +493,5 @@ mod tests {
                 face as u8
             );
         }
-    }
-}
-
-/// Prints, per ground feature terrain, its share of land, and per start the tiles of it within
-/// 20 and 40 tiles and the distance in tiles to the nearest one.
-fn sphere_resource_report(map: &SpherePlanet, rules: &Rules) {
-    let land = map
-        .terrain
-        .iter()
-        .filter(|t| rules.terrains[t].layer == Layer::Ground)
-        .count()
-        .max(1);
-    let mut kinds: BTreeMap<DefId, usize> = BTreeMap::new();
-    for t in &map.terrain {
-        if *t != map.base.land && rules.terrains[t].layer == Layer::Ground {
-            *kinds.entry(*t).or_default() += 1;
-        }
-    }
-    for (terrain, count) in &kinds {
-        let mut line = format!(
-            "  {} total={} land_pct={:.1}",
-            rules.key(*terrain),
-            count,
-            *count as f64 * 100.0 / land as f64
-        );
-        for (index, start) in map.starts.iter().enumerate() {
-            let (mut near16, mut near40, mut nearest) = (0, 0, i64::MAX);
-            for (i, t) in map.terrain.iter().enumerate() {
-                if t != terrain {
-                    continue;
-                }
-                let tile = map.surface.tile(i);
-                let Some((x, y)) = map.surface.unfold(*start, tile.into()) else {
-                    continue;
-                };
-                let d = ((x * x + y * y) as u64).isqrt() as i64 / 1000;
-                nearest = nearest.min(d);
-                near16 += i64::from(d <= 16);
-                near40 += i64::from(d <= 40);
-            }
-            line.push_str(&format!(
-                " | p{} n16={near16} n40={near40} nearest={nearest}",
-                index + 1
-            ));
-        }
-        println!("{line}");
-    }
-    let mut nodes: BTreeMap<DefId, usize> = BTreeMap::new();
-    for (node, _) in &map.nodes {
-        *nodes.entry(*node).or_default() += 1;
-    }
-    for (node, count) in nodes {
-        println!("  {} total={count}", rules.key(node));
     }
 }
