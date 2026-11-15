@@ -338,7 +338,7 @@ impl Scene {
         match frame {
             Frame::Globe => self.draw_globe(rl, thread, target, &zoom.draw_orbit(orbit)),
             Frame::System => self.draw_system(rl, thread, target, zoom, orbit),
-            Frame::Map => self.draw_star_map(rl, thread, target, zoom),
+            Frame::Map => self.draw_star_map(rl, thread, target, zoom, orbit),
         }
     }
 
@@ -376,12 +376,8 @@ impl Scene {
                 view.target[1] - view.eye[1],
                 view.target[2] - view.eye[2],
             ]);
-            let sky = Camera3D::perspective(
-                Vector3::new(0.0, 0.0, 0.0),
-                forward,
-                Vector3::new(0.0, 1.0, 0.0),
-                45.0,
-            );
+            let sky =
+                Camera3D::perspective(Vector3::new(0.0, 0.0, 0.0), forward, vec3(view.up), 45.0);
             let mut backdrop = drawing.begin_mode3D(sky);
             shift_projection(self.projection_centre_y);
             backdrop.draw_mesh(stars, self.star_material.clone(), Matrix::identity());
@@ -440,8 +436,8 @@ impl Scene {
             }
             let system_id = universe.systems.get(zoom.system()).map(|s| s.id);
             let state = &self.space_state;
-            if state.snapshot.system == system_id && system_id.is_some() {
-                let outermost = system_id.map_or(1.0, |id| universe.system_outermost(id));
+            if let Some(system_id) = system_id {
+                let outermost = universe.system_outermost(system_id);
                 let distance = zoom.scale().system_distance(zoom.l());
                 let unit = (distance * 0.016).max(24.0);
                 let rings = claim_rings(&universe, zoom.placed(), &state.snapshot.claims);
@@ -465,7 +461,12 @@ impl Scene {
                 let right = unit_vector(cross3(forward, [0.0, 1.0, 0.0]));
                 let cam_up = cross3(right, forward);
                 let mut matrices: Vec<Matrix> = Vec::with_capacity(state.snapshot.ships.len() * 2);
-                for ship in &state.snapshot.ships {
+                for ship in state
+                    .snapshot
+                    .ships
+                    .iter()
+                    .filter(|s| s.system == system_id)
+                {
                     let at = ship_frame_pos(&universe, zoom.placed(), outermost, ship);
                     let theta = ship.facing_deg.to_radians();
                     let f = [theta.cos(), 0.0, theta.sin()];
@@ -577,12 +578,13 @@ impl Scene {
         thread: &RaylibThread,
         target: &mut RenderTexture2D,
         zoom: &ZoomCamera,
+        orbit: &OrbitCamera,
     ) {
         self.set_star_fade(1.0);
         let Some(space) = &mut self.space else {
             return;
         };
-        let view = zoom.map_view();
+        let view = zoom.map_view(orbit);
         let camera = Camera3D::perspective(vec3(view.eye), vec3(view.target), vec3(view.up), 45.0);
         let universe = Arc::clone(&space.universe);
         let (width, height) = (target.texture.width as f32, target.texture.height as f32);
@@ -594,12 +596,8 @@ impl Scene {
                 view.target[1] - view.eye[1],
                 view.target[2] - view.eye[2],
             ]);
-            let sky = Camera3D::perspective(
-                Vector3::new(0.0, 0.0, 0.0),
-                forward,
-                Vector3::new(0.0, 1.0, 0.0),
-                45.0,
-            );
+            let sky =
+                Camera3D::perspective(Vector3::new(0.0, 0.0, 0.0), forward, vec3(view.up), 45.0);
             let mut backdrop = drawing.begin_mode3D(sky);
             shift_projection(self.projection_centre_y);
             backdrop.draw_mesh(stars, self.star_material.clone(), Matrix::identity());
@@ -733,11 +731,17 @@ fn sprite(
         raylib::ffi::rlDisableDepthMask();
         raylib::ffi::BeginBlendMode(BlendMode::BLEND_ADDITIVE as i32);
     }
-    world.draw_billboard(
+    // The quad faces the camera with the camera's own up, so it stays round seen from above.
+    let side = texture.width as f32;
+    world.draw_billboard_pro(
         camera,
-        texture,
+        **texture,
+        Rectangle::new(0.0, 0.0, side, texture.height as f32),
         vec3(pos),
-        size,
+        camera.up,
+        Vector2::new(size, size),
+        Vector2::new(size / 2.0, size / 2.0),
+        0.0,
         Color::new(colour[0], colour[1], colour[2], alpha),
     );
     // SAFETY: as above; the batch is flushed so the sprite is drawn with the settings above.

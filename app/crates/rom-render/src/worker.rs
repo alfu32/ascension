@@ -876,6 +876,9 @@ fn render_loop(shared: &Shared) {
         }
         controller.set_viewport(layout.0, layout.1);
         orbit_controller.set_viewport(layout.0, layout.1);
+        if let Some(zoom) = zoom.as_mut() {
+            zoom.set_viewport(layout.0 as f32, layout.1 as f32);
+        }
         if !picker.is_panning() {
             match (orbit.as_mut(), zoom.as_mut()) {
                 (Some(orbit), Some(zoom)) => {
@@ -1316,15 +1319,22 @@ fn zoom_event(
         space,
         out,
     } = input;
-    let in_space = zoom.level() >= Level::System;
+    let in_space = zoom.level() >= Level::System && !zoom.pans_planet();
     let on_world = |x: f32, y: f32| in_space && !(hud_visible && canvas.contains_hud(x, y));
+    let size = (canvas.width, canvas.height);
+    let centre_y = centre_of(canvas, hud_visible);
     match event {
         InputEvent::Wheel { steps } if !over_hud => {
-            zoom.wheel(steps);
+            let cursor = zoom.pointer();
+            zoom.wheel_at(steps, cursor, size, centre_y, orbit);
             zoom.sync_orbit(orbit);
             true
         }
         InputEvent::KeyDown(Key::FrameMap) => {
+            zoom.fly_home(orbit);
+            true
+        }
+        InputEvent::KeyDown(Key::ResetCamera) if in_space => {
             zoom.fly_home(orbit);
             true
         }
@@ -1343,14 +1353,46 @@ fn zoom_event(
         }
         InputEvent::ReleaseAll => {
             (0..4).for_each(|index| zoom.hold(index, false));
+            zoom.drag_end();
+            zoom.set_pointer(None);
             picker.cancel();
             false
         }
-        InputEvent::PointerMoved { .. } if in_space => {
-            let ships = ship_points(zoom, space);
-            let ctx = space_context(zoom, orbit, canvas, hud_visible, &ships);
-            out.extend(picker.handle(event, &ctx.context(), now_ms));
+        InputEvent::PointerLeft => {
+            zoom.set_pointer(None);
+            zoom.drag_end();
             false
+        }
+        InputEvent::PointerMoved { x, y } => {
+            zoom.set_pointer(Some((x, y)));
+            if zoom.dragging() {
+                let view = zoom.space_view_at(orbit, size, centre_y);
+                zoom.drag_to(x, y, &view);
+                picker.track(x, y);
+                return true;
+            }
+            if in_space {
+                let ships = ship_points(zoom, space);
+                let ctx = space_context(zoom, orbit, canvas, hud_visible, &ships);
+                out.extend(picker.handle(event, &ctx.context(), now_ms));
+            }
+            false
+        }
+        InputEvent::ButtonDown {
+            button: PointerButton::Middle,
+            x,
+            y,
+            mods,
+        } if on_world(x, y) => {
+            zoom.drag_start(x, y, mods.shift);
+            true
+        }
+        InputEvent::ButtonUp {
+            button: PointerButton::Middle,
+            ..
+        } if zoom.dragging() => {
+            zoom.drag_end();
+            true
         }
         InputEvent::ButtonDown {
             button: PointerButton::Left,
@@ -1358,12 +1400,7 @@ fn zoom_event(
             y,
             ..
         } if on_world(x, y) => {
-            let size = (canvas.width, canvas.height);
-            let centre_y = centre_of(canvas, hud_visible);
-            let view = match zoom.level() {
-                Level::System => zoom.system_view(orbit).view(size, centre_y),
-                _ => zoom.map_view().view(size, centre_y),
-            };
+            let view = zoom.space_view_at(orbit, size, centre_y);
             if zoom.press(now_ms, (x, y), &view, orbit) {
                 picker.cancel();
             } else {
@@ -1413,13 +1450,14 @@ fn centre_of(canvas: &HudLayout, hud_visible: bool) -> f32 {
 /// The ships of the anchored system with their places in the system frame.
 fn ship_points(zoom: &ZoomCamera, space: &SpaceSnapshot) -> Vec<(u32, [f32; 3])> {
     let scene = zoom.scene();
-    if space.system != zoom.system_id() {
+    let Some(system) = zoom.system_id() else {
         return Vec::new();
-    }
-    let outermost = zoom.system_id().map_or(1.0, |s| scene.system_outermost(s));
+    };
+    let outermost = scene.system_outermost(system);
     space
         .ships
         .iter()
+        .filter(|ship| ship.system == system)
         .map(|ship| {
             (
                 ship.id,
@@ -1462,11 +1500,7 @@ fn space_context<'a>(
     let size = (canvas.width, canvas.height);
     let centre_y = centre_of(canvas, hud_visible);
     let star_map = zoom.level() >= Level::StarMap;
-    let view = if star_map {
-        zoom.map_view().view(size, centre_y)
-    } else {
-        zoom.system_view(orbit).view(size, centre_y)
-    };
+    let view = zoom.space_view_at(orbit, size, centre_y);
     OwnedSpaceContext {
         markers: zoom.markers(&view),
         view,

@@ -64,7 +64,8 @@ fn allied(world: &World, a: PlayerId, b: PlayerId) -> bool {
     a == b || (team(a).is_some() && team(a) == team(b))
 }
 
-/// What player one sees in the space of `system`, on the star map and in transit.
+/// What player one sees in space: the ships in the plane of every system, the claims of
+/// `system` and the ships in transit.
 pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) -> SpaceSnapshot {
     let rules = world.rules();
     let mut snapshot = SpaceSnapshot {
@@ -72,17 +73,22 @@ pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) ->
         system: Some(system),
         ..SpaceSnapshot::default()
     };
-    let (Some(frame), Some(reach)) = (
-        SpaceFrame::of(world, system),
-        rules.constant("space.orbit_reach"),
-    ) else {
+    let Some(reach) = rules.constant("space.orbit_reach") else {
         return snapshot;
     };
-    let bodies: Vec<(u32, Pos)> = world
+    let planes: BTreeMap<BodyId, (u32, SpaceFrame)> = world
+        .systems()
+        .iter()
+        .filter_map(|s| {
+            let frame = SpaceFrame::of(world, s.id)?;
+            Some((frame.body, (s.id, frame)))
+        })
+        .collect();
+    let bodies: Vec<(u32, u32, Pos)> = world
         .bodies()
         .iter()
-        .filter(|b| b.system == system && b.kind != BodyKind::Star)
-        .filter_map(|b| Some((b.id.0, world.body_position(b.id)?)))
+        .filter(|b| b.kind != BodyKind::Star)
+        .filter_map(|b| Some((b.system, b.id.0, world.body_position(b.id)?)))
         .collect();
     for sighting in sightings {
         let Sighting::Live(e) = sighting else {
@@ -91,12 +97,16 @@ pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) ->
         let Some(et) = rules.entity_type(e.type_id) else {
             continue;
         };
-        if e.pos.body != frame.body || et.class == EntityClass::Node {
+        let Some(&(in_system, frame)) = planes.get(&e.pos.body) else {
+            continue;
+        };
+        if et.class == EntityClass::Node {
             continue;
         }
         let held = bodies
             .iter()
-            .map(|(id, at)| (e.pos.distance(*at) as i64, *id, *at))
+            .filter(|(s, _, _)| *s == in_system)
+            .map(|(_, id, at)| (e.pos.distance(*at) as i64, *id, *at))
             .filter(|(d, _, _)| *d <= reach * 3 / 2)
             .min_by_key(|(d, id, _)| (*d, *id));
         let (body, x, y) = if let Some(orbit) = world.orbit(e.id) {
@@ -131,6 +141,7 @@ pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) ->
             id: e.id.0,
             kind: u16::try_from(e.type_id.0).unwrap_or(u16::MAX),
             owner: u8::try_from(e.owner.0).unwrap_or(u8::MAX),
+            system: in_system,
             body,
             x,
             y,
@@ -138,25 +149,28 @@ pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) ->
             hp_frac: (e.hp as f32 / et.hp.max(1) as f32).clamp(0.0, 1.0),
         });
     }
-    for (body, owner) in world.claims() {
-        let Some(info) = world.body(body).filter(|b| b.system == system) else {
-            continue;
-        };
-        let seen = allied(world, PLAYER, owner)
-            || world.body_position(info.id).is_some_and(|at| {
-                world.is_visible_on_body(
-                    PLAYER,
-                    frame.body,
-                    0,
-                    at.x.div_euclid(1000),
-                    at.y.div_euclid(1000),
-                )
-            });
-        if seen {
-            snapshot.claims.push(ClaimView {
-                body: body.0,
-                owner: u8::try_from(owner.0).unwrap_or(u8::MAX),
-            });
+    snapshot.ships.sort_by_key(|s| s.id);
+    if let Some(frame) = SpaceFrame::of(world, system) {
+        for (body, owner) in world.claims() {
+            let Some(info) = world.body(body).filter(|b| b.system == system) else {
+                continue;
+            };
+            let seen = allied(world, PLAYER, owner)
+                || world.body_position(info.id).is_some_and(|at| {
+                    world.is_visible_on_body(
+                        PLAYER,
+                        frame.body,
+                        0,
+                        at.x.div_euclid(1000),
+                        at.y.div_euclid(1000),
+                    )
+                });
+            if seen {
+                snapshot.claims.push(ClaimView {
+                    body: body.0,
+                    owner: u8::try_from(owner.0).unwrap_or(u8::MAX),
+                });
+            }
         }
     }
     snapshot.transits = transits(world);

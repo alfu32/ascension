@@ -308,6 +308,33 @@ impl OrbitCamera {
         self.clamp();
     }
 
+    /// Looks along `dir` (from the planet centre) with the view's up, at the largest distance
+    /// (straight down), toward `forward`: the heading is the tangent part of `forward`.
+    pub fn orient(&mut self, dir: [f32; 3], forward: [f32; 3]) {
+        let dir = normalize(dir);
+        let (north, east) = tangent_frame(dir);
+        let along = sub(forward, scale(dir, dot(forward, dir)));
+        if dot(along, along) > 1e-10 {
+            self.heading = dot(along, east).atan2(dot(along, north));
+        }
+        self.dir = dir;
+        self.clamp();
+    }
+
+    /// Turns the whole view about `axis` through the planet centre by `angle` radians
+    /// (right-handed), carrying the heading along.
+    pub fn turn_about(&mut self, axis: [f32; 3], angle: f32) {
+        if angle == 0.0 || dot(axis, axis) < 1e-12 {
+            return;
+        }
+        let axis = normalize(axis);
+        let carried = rotate_about(self.forward_tangent(), axis, angle);
+        self.dir = normalize(rotate_about(self.dir, axis, angle));
+        let (north, east) = tangent_frame(self.dir);
+        self.heading = dot(carried, east).atan2(dot(carried, north));
+        self.clamp();
+    }
+
     /// The whole planet in view: the largest distance, straight down.
     pub fn frame_globe(&mut self) {
         self.distance = self.distance_cap();
@@ -433,7 +460,7 @@ pub(crate) fn pan_index(key: Key) -> Option<usize> {
         Key::PanBack => Some(1),
         Key::PanLeft => Some(2),
         Key::PanRight => Some(3),
-        Key::ResetCamera | Key::FrameMap => None,
+        Key::ResetCamera | Key::FrameMap | Key::FocusSelection | Key::FollowSelection => None,
     }
 }
 
@@ -463,6 +490,25 @@ mod tests {
         camera.drag_surface(to, from);
         assert!(dot(camera.dir, from) > 0.99999);
         assert!(dot(camera.forward_tangent(), heading) > 0.99999);
+    }
+
+    #[test]
+    fn orient_and_turn_keep_the_view_consistent() {
+        let mut c = camera(80.0);
+        let dir = normalize([0.4, -0.3, 0.8]);
+        let forward = normalize(cross([0.0, 1.0, 0.0], dir));
+        c.orient(dir, forward);
+        assert!(dot(c.dir, dir) > 0.99999);
+        assert!(dot(c.forward_tangent(), forward) > 0.9999);
+        // A turn about the axis moves the target and the facing by the same rotation.
+        let before = (c.dir, c.forward_tangent());
+        c.turn_about([0.0, 1.0, 0.0], 0.7);
+        let turned = rotate_about(before.0, [0.0, 1.0, 0.0], 0.7);
+        assert!(dot(c.dir, turned) > 0.99999);
+        let facing = rotate_about(before.1, [0.0, 1.0, 0.0], 0.7);
+        assert!(dot(c.forward_tangent(), facing) > 0.9999);
+        c.turn_about([0.0, 1.0, 0.0], -0.7);
+        assert!(dot(c.dir, before.0) > 0.99999 && dot(c.forward_tangent(), before.1) > 0.9999);
     }
 
     #[test]

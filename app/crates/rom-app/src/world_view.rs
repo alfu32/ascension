@@ -183,6 +183,9 @@ impl WorldView {
                 .set_speed(self.sim.speed().saturating_mul(2).min(1600)),
             "-" => self.sim.set_speed((self.sim.speed() / 2).max(6)),
             "escape" => self.bridge.push_input(InputEvent::Escape),
+            "space" if event.keystroke.modifiers.shift => self
+                .bridge
+                .push_input(InputEvent::KeyDown(Key::FollowSelection)),
             name => {
                 if let Some(key) = Key::from_name(name) {
                     self.bridge.push_input(InputEvent::KeyDown(key));

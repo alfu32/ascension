@@ -577,7 +577,7 @@ pub fn space_marks(
                 [rgb[0], rgb[1], rgb[2], 255],
             ));
         }
-        let target = zoom.map_target();
+        let target = zoom.map_target(orbit);
         let half_height =
             zoom.scale().map_distance(zoom.l()) * (FOV_DEGREES.to_radians() / 2.0).tan();
         let half_width = half_height * layout.width / layout.height.max(1.0);

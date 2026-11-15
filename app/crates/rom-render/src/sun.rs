@@ -176,6 +176,13 @@ impl PlanetFrame {
         let v = rotate_x(rotate_y(v, -self.light_lon), self.light_lat);
         rotate_y(rotate_x(v, -self.star_lat), self.star_lon)
     }
+
+    /// Carries a point or vector from system space back to planet space: the inverse of
+    /// [`Self::carry`].
+    pub fn uncarry(&self, v: [f32; 3]) -> [f32; 3] {
+        let v = rotate_x(rotate_y(v, -self.star_lon), self.star_lat);
+        rotate_y(rotate_x(v, -self.light_lat), self.light_lon)
+    }
 }
 
 fn rotate_x(v: [f32; 3], angle: f32) -> [f32; 3] {
@@ -324,6 +331,15 @@ mod tests {
 
     fn home() -> [f32; 3] {
         unit([0.4, -0.3, 0.8])
+    }
+
+    #[test]
+    fn planet_frame_uncarry_inverts_carry() {
+        let frame = PlanetFrame::aligned(unit([0.2, 0.5, -0.7]), [900.0, 0.0, -300.0], [0.0; 3]);
+        for v in [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], unit([0.3, -0.6, 0.2])] {
+            assert!(close(frame.uncarry(frame.carry(v)), v, 1e-5));
+            assert!(close(frame.carry(frame.uncarry(v)), v, 1e-5));
+        }
     }
 
     #[test]

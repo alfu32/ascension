@@ -395,6 +395,11 @@ fn run(
                             Err(error) => controller.notify(&world, error),
                         },
                         ScriptAction::Speed(percent) => link.set_speed(percent),
+                        ScriptAction::Input(events) => {
+                            for event in events {
+                                bridge.push_input(event);
+                            }
+                        }
                     }
                 }
                 for pick in script.due(world.tick()) {
@@ -1262,12 +1267,23 @@ mod tests {
         }
         let space = space_snapshot(world, home_system, &sightings);
         assert_eq!(space.system, Some(home_system));
-        let ids: Vec<u32> = space.ships.iter().map(|s| s.id).collect();
-        assert!(ids.contains(&here.0), "the ship of the system is there");
-        assert!(!ids.contains(&there.0), "the ship of another system is not");
-        assert!(!ids.contains(&own.city.0), "no surface entities in space");
+        let system_of = |id: u32| space.ships.iter().find(|s| s.id == id).map(|s| s.system);
+        assert_eq!(
+            system_of(here.0),
+            Some(home_system),
+            "the ship of the system"
+        );
+        assert_eq!(
+            system_of(there.0),
+            Some(other_system),
+            "the ship of another system, with its system"
+        );
+        assert_eq!(system_of(own.city.0), None, "no surface entities in space");
         let far = space_snapshot(world, other_system, &sightings);
-        assert!(far.ships.iter().any(|s| s.id == there.0));
+        assert_eq!(
+            far.ships, space.ships,
+            "every system's ships, whatever the view"
+        );
     }
 
     #[test]

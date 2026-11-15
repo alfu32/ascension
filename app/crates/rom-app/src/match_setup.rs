@@ -429,6 +429,9 @@ pub fn build_universe_match(
     setup
         .apply_placements(&mut world, starts[0].city_pos)
         .map_err(SetupError::Setup)?;
+    setup
+        .apply_space_placements(&mut world)
+        .map_err(SetupError::Setup)?;
     Ok(Match {
         world,
         starts,

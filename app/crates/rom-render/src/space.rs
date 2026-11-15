@@ -32,6 +32,8 @@ pub struct ShipView {
     pub kind: u16,
     /// Owning player.
     pub owner: u8,
+    /// The system whose plane it is in (an id).
+    pub system: u32,
     /// The body it holds, if any: then `x`, `y` are in orbit reaches from that body.
     pub body: Option<u32>,
     /// East offset, see the module documentation.
@@ -75,9 +77,9 @@ pub struct TransitView {
 pub struct SpaceSnapshot {
     /// Tick of the simulation the data stems from.
     pub tick: u64,
-    /// The system whose space the ships and claims belong to.
+    /// The system whose claims are listed.
     pub system: Option<u32>,
-    /// Ships in that system's space, ascending by id.
+    /// Ships the player sees in the space of every system, ascending by id.
     pub ships: Vec<ShipView>,
     /// Claimed bodies of that system.
     pub claims: Vec<ClaimView>,
@@ -317,6 +319,11 @@ impl SpacePicker {
         ))
     }
 
+    /// Records the pointer without picking (it moves a camera drag).
+    pub fn track(&mut self, x: f32, y: f32) {
+        self.pointer = Some((x, y));
+    }
+
     /// Drops a press in progress (a double click started a flight).
     pub fn cancel(&mut self) {
         self.press = None;
@@ -460,6 +467,7 @@ mod tests {
             id,
             kind: 1,
             owner: 1,
+            system: 1,
             body,
             x,
             y,
