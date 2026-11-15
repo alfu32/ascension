@@ -1,7 +1,7 @@
 # Task 56 — Star systems that look like star systems
 
 Crates: `rom-mapgen` (universe layout), `rom-render` (system scene, zoom
-scale), `rom-app` only if a test needs it, docs. Starts after task 53 is
+scale), `rom-app` (snapshot and event line for item 5), docs. Starts after task 53 is
 merged (both work on the system view). Implementer: Claude (Sonnet).
 
 ## Why — the owner (2026-11-15)
@@ -33,12 +33,34 @@ system looks like a tight target of rings.
 4. Orbit rings faint and thin; orbits may be slightly elliptical if it reads
    well, and bodies move along them slowly (presentation only).
 
+5. **Say what a resource body holds (owner, 2026-11-15: "it's not clear
+   what types of resources the moons hold … surprise").** Claiming a tar
+   moon with a survey ship silently added oil income. Make it readable
+   before and after:
+   - each resource body is drawn in a look of its resource (the resource's
+     own colour and its HUD icon beside the body, from the rules, not by
+     key) at every zoom where the body is visible, in the system view and
+     in the minimap;
+   - the hover tooltip (task 53's `hover_help`, today "(resource body)")
+     names the body's type and resource and its yield per income period
+     as the player would get it (base income with the player's modifiers,
+     e.g. "Tar Moon · Oil +42 / 30 s"), and its claim state: unclaimed,
+     yours, another player's, or contested;
+   - the event line reports changes for the player: "Tar Moon claimed: Oil
+     +42 / 30 s", "Tar Moon lost", "Tar Moon contested";
+   - the selected ship's panel, when it holds a claim, says which body and
+     what it yields.
+   The yield shown is whatever the simulation pays (publish it in the
+   snapshot; never recompute it in the renderer with its own rules). This
+   item may touch `rom-app` (snapshot and event line) as well as
+   `rom-render`.
+
 ## Done when
 
 Gate green (fmt, clippy `-D warnings`, `cargo test --workspace --locked
 --no-fail-fast`); universe generation deterministic (run twice, equal
 hashes); re-pinned hashes explained; screenshots you looked at: the home
 system whole, a system with a belt and moons, the zoom from the planet out to
-the whole system in steps showing the hand-over. Commit on the branch (stage
+the whole system in steps showing the hand-over, and a resource body hovered (type, resource, yield, claim state) with the event line after a claim. Commit on the branch (stage
 by name), do not push or merge; final message with commands and real output,
 screenshots, files changed, deviations, anything not verified.
