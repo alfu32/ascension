@@ -53,7 +53,7 @@ impl World {
     pub(crate) fn combat_behavior(&self, id: EntityId) -> &str {
         let e = self.entity(id).expect("combat entity");
         let et = &self.rules.entity_types[&e.type_id];
-        if et.class == EntityClass::Building || et.movement.is_none() {
+        if et.class == EntityClass::Building || et.movement.is_none() || self.orbit(id).is_some() {
             return "stand_ground";
         }
         &self.rules.stances[&e.stance].behavior
@@ -112,50 +112,55 @@ impl World {
             .values()
             .find(|t| t.key == "civilian")
             .map(|t| t.id);
-        self.entities_in_radius(
-            e.pos,
-            range.saturating_add(extent).min(u64::from(u32::MAX)) as u32,
-        )
-        .into_iter()
-        .filter_map(|target| {
-            let t = self.entity(target).expect("candidate");
-            if t.hp <= 0
-                || !self.sees_entity(e.owner, t)
-                || (t.owner == PlayerId(0) && self.players[&t.owner].team == 0)
-                || !self.enemies(e.owner, t.owner)
-                || self.target_distance(e.pos, target) > range
-                || !et.weapons.iter().any(|w| {
-                    w.targets
+        let radius = range.saturating_add(extent).min(u64::from(u32::MAX)) as u32;
+        let mut candidates = self.entities_in_radius(e.pos, radius);
+        if let Some(orbit) = self.orbit(id) {
+            candidates.extend(self.entities_in_radius(orbit.pos, radius));
+            candidates.sort_unstable();
+            candidates.dedup();
+        }
+        candidates
+            .into_iter()
+            .filter_map(|target| {
+                let t = self.entity(target).expect("candidate");
+                if t.hp <= 0
+                    || !self.sees_entity(e.owner, t)
+                    || (t.owner == PlayerId(0) && self.players[&t.owner].team == 0)
+                    || !self.enemies(e.owner, t.owner)
+                    || self.target_distance(self.attack_position(id, target), target) > range
+                    || !et
+                        .weapons
                         .iter()
-                        .any(|r| r.layer == self.target_layer(target))
-                })
-                || (behavior == "stand_ground" && !self.can_fire_at(id, target))
-            {
-                return None;
-            }
-            let preferred = match behavior {
-                "raid" => civilian.is_some_and(|tag| self.rules.has_tag(t.type_id, tag)),
-                "raze" => self.rules.entity_types[&t.type_id].class == EntityClass::Building,
-                _ => false,
-            };
-            let pos = self.seen_pos(target);
-            let geo = self.geo(e.pos.body);
-            let (dx, dy) = geo.vector(e.pos, pos)?;
-            // Geometry survives renumbering. The unsigned horizontal displacement
-            // also gives reflected lines the same choice between neighbours.
-            let rank = crate::rng::tie_rank(self.tick, dx.unsigned_abs() as u32, dy as i32 as u32);
-            Some((
-                !preferred,
-                geo.rank_distance(e.pos, pos),
-                rank,
-                pos.face,
-                pos.y,
-                pos.x,
-                target,
-            ))
-        })
-        .min()
-        .map(|(_, _, _, _, _, _, id)| id)
+                        .any(|w| self.weapon_can_target(id, w, target))
+                    || (behavior == "stand_ground" && !self.can_fire_at(id, target))
+                {
+                    return None;
+                }
+                let preferred = match behavior {
+                    "raid" => civilian.is_some_and(|tag| self.rules.has_tag(t.type_id, tag)),
+                    "raze" => self.rules.entity_types[&t.type_id].class == EntityClass::Building,
+                    _ => false,
+                };
+                let pos = self.seen_pos(target);
+                let origin = self.attack_position(id, target);
+                let geo = self.geo(origin.body);
+                let (dx, dy) = geo.vector(origin, pos)?;
+                // Geometry survives renumbering. The unsigned horizontal displacement
+                // also gives reflected lines the same choice between neighbours.
+                let rank =
+                    crate::rng::tie_rank(self.tick, dx.unsigned_abs() as u32, dy as i32 as u32);
+                Some((
+                    !preferred,
+                    geo.rank_distance(origin, pos),
+                    rank,
+                    pos.face,
+                    pos.y,
+                    pos.x,
+                    target,
+                ))
+            })
+            .min()
+            .map(|(_, _, _, _, _, _, id)| id)
     }
 
     fn automatic_attack(&mut self, id: EntityId, target: EntityId, home: Option<Pos>) {

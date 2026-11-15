@@ -6,14 +6,12 @@ set in open space" model (`database.md` section 6, `research/03-timeline.md`
 
 ## What the player experiences
 
-- Every planet is a **sphere**. While their age has a positive `view_range`, the camera stays
-  around their own planet: the camera orbits it, from street level up to a
-  view of the whole globe, and no further.
-- Once their age has `view_range = 0` the camera zooms out **continuously**: from the
-  surface to the globe, to the star system (planets around their star), to
-  the star map (systems as points of light). The player travels by zooming
-  out, moving to another system or planet, and zooming in on it, where they
-  can look and act.
+- Every planet is a **sphere**. A planetary-tier player's camera stays around
+  the home planet, limited by `age.view_range`; zero allows the whole globe.
+- Interplanetary-tier players can zoom continuously from their planet to the
+  home star system. Interstellar-tier players can also reach the star map,
+  visit known systems and zoom in on their planets. Each player unlocks these
+  tiers separately through `age.map_scale`, using the tier's numeric rank.
 - Ground, sea and air play happen on planet surfaces. Space play happens in
   star-system space and on the routes between systems.
 
@@ -98,16 +96,40 @@ skirmish maps and the existing scenarios.
 
 ## Camera and visibility by age
 
-| Positive `age.view_range` | `age.view_range = 0` |
-| --- | --- |
-| camera bound to the home planet: orbit, zoom from surface to globe | zoom out continuously to system and star map; zoom in on any known planet |
-| nothing beyond the home planet is visible | other bodies become visible as they are explored (fog of war per level) |
+| Tier rank | Camera and reach | First seeded age |
+| --- | --- | --- |
+| 0, planetary | home planet, positive `view_range` limits ground half-width; zero shows the globe | ancient; fusion first has zero range |
+| 1, interplanetary | home system, ships may move and orbit within that system | starfaring |
+| 2, interstellar | star map and route travel between systems | expansion |
 
-Task 41 makes zero view range the camera unlock (Fusion, ordinal 9, in the
-current seed). This supersedes task 35's separate globe-only age. Research
-completion updates the camera limit immediately; `age.map_scale` and entity
-capabilities continue to govern space gameplay. Players unlock the view one
-by one.
+Research updates the existing camera's limit immediately without moving it.
+Starting zoom-out and mouse-wheel zoom obey the same limits. The code reads
+ranks and range, never age or tier names.
+
+### Launch, orbit and ground fire (task 43)
+
+Training a space-only mover on a habitable planet queues a `launch` order
+against its producing spaceport. After `space.launch_ticks`, it enters that
+planet's orbit. An orbit has a body, current integer surface subpoint and
+facing. Its footprint advances across cube-face edges at
+`space.orbit_speed` milli-tiles per second. The system-plane position stays
+at the body's marker for system interactions; the orbit record determines
+its actual location, ground visibility and combat footprint. Moving in
+system space or travelling leaves orbit; an orbit order to another habitable
+body enters its orbit when the ship arrives. Resource-body orbit orders
+continue holding the ship near the resource marker.
+
+The planet view places these ships eight tiles above their subpoint, with
+raised hulls, selection rings and hit boxes. The ship's ground sight follows
+that subpoint. `et_weapon.orbit_only` weapons can hit their declared surface
+layers only while orbiting that same body; their ranges are measured from
+the subpoint to the target footprint. The seeded corvette and later combat
+ships have a separate ground bombardment weapon. The survey ship does not.
+Select an orbital ship and right-click an enemy ground unit or building to
+attack; the attack hotkey followed by clicking that entity also works. The
+ship keeps orbiting and fires as targets pass within its footprint. A short
+beam uses the actual shot's target position. Surface weapons cannot hit an
+orbital ship; anti-space batteries remain a later task.
 
 ## Rendering notes
 

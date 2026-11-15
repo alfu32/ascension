@@ -237,7 +237,7 @@ pub fn simulate_universe(
             .values()
             .filter(|a| {
                 let rank = rules.map_scales[&a.map_scale].rank;
-                rules.map_scales.values().any(|s| s.rank < rank)
+                rules.map_scales.values().all(|s| s.rank <= rank)
             })
             .min_by_key(|a| (a.ordinal, a.id))
             .ok_or("no space age")?

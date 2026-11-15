@@ -392,6 +392,26 @@ impl StateHash {
             self.u32(body.0);
             self.u32(player.0);
         }
+        self.u64(space.orbits.len() as u64);
+        for (id, orbit) in &space.orbits {
+            self.u32(id.0);
+            self.u32(orbit.body.0);
+            self.pos(orbit.pos);
+            self.u32(u32::from(orbit.facing));
+            self.bytes(&orbit.move_remainder.to_le_bytes());
+            self.optional(orbit.last_shot, |h, shot| {
+                h.u64(shot.tick);
+                h.pos(shot.target);
+            });
+        }
+        self.u64(world.vision.orbit_viewers.len() as u64);
+        for (id, viewer) in &world.vision.orbit_viewers {
+            self.u32(id.0);
+            self.u32(viewer.body.0);
+            self.u32(viewer.tile);
+            self.bytes(&viewer.los.to_le_bytes());
+            self.u32(viewer.owner.0);
+        }
         self.u64(space.transits.len() as u64);
         for (id, transit) in &space.transits {
             self.u32(id.0);

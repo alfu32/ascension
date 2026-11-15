@@ -680,7 +680,8 @@ pub fn snapshot_on(
     });
     let mut next_live = live.next();
     for entity in world.entities() {
-        let on_body = entity.pos.body == body;
+        let orbit = world.orbit(entity.id).filter(|orbit| orbit.body == body);
+        let on_body = entity.pos.body == body || orbit.is_some();
         let seen = match next_live {
             Some(e) if e.id == entity.id => {
                 next_live = live.next();
@@ -721,6 +722,22 @@ pub fn snapshot_on(
         });
         let mut view = view_of(entity, et, under_construction, &clamp_u8);
         view.model = model_of(entity.owner, entity.type_id);
+        if let Some(orbit) = orbit {
+            view.face = orbit.pos.face;
+            view.x = orbit.pos.x as f32 / 1000.0;
+            view.y = orbit.pos.y as f32 / 1000.0;
+            view.facing_deg = f32::from(orbit.facing);
+            view.altitude = 8.0;
+            view.beam_target = orbit
+                .last_shot
+                .as_ref()
+                .filter(|shot| world.tick().saturating_sub(shot.tick) <= 4)
+                .map(|shot| SurfacePos {
+                    face: shot.target.face,
+                    x: i64::from(shot.target.x),
+                    y: i64::from(shot.target.y),
+                });
+        }
         if !view.building {
             view.activity = activity_of(world, entity, moving);
         }
@@ -746,6 +763,8 @@ pub fn snapshot_on(
                 x: building.pos.x as f32 / 1000.0,
                 y: building.pos.y as f32 / 1000.0,
                 facing_deg: 0.0,
+                altitude: 0.0,
+                beam_target: None,
                 hp_frac: 1.0,
                 building: true,
                 footprint: (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h)),
@@ -785,6 +804,8 @@ fn view_of(
         x: entity.pos.x as f32 / 1000.0,
         y: entity.pos.y as f32 / 1000.0,
         facing_deg: f32::from(entity.facing),
+        altitude: 0.0,
+        beam_target: None,
         hp_frac: (entity.hp as f32 / et.hp.max(1) as f32).clamp(0.0, 1.0),
         building: et.class == EntityClass::Building,
         footprint: (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h)),

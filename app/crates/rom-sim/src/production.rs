@@ -54,7 +54,7 @@ impl World {
                     order.status = OrderStatus::Failed("unsupported".into());
                 }
                 "move" | "construct" | "repair" | "harvest" | "attack" | "attack_move" | "heal"
-                | "orbit" | "travel" | "carry" | "trade" => {
+                | "orbit" | "travel" | "launch" | "carry" | "trade" => {
                     if worked {
                         self.entities[id.0 as usize]
                             .as_mut()
@@ -64,7 +64,12 @@ impl World {
                         break;
                     }
                     worked = true;
-                    if order.kind == "carry" {
+                    if matches!(order.kind.as_str(), "move" | "travel" | "attack_move") {
+                        self.leave_orbit(id);
+                    }
+                    if order.kind == "launch" {
+                        self.advance_launch(id, &mut order);
+                    } else if order.kind == "carry" {
                         self.advance_carry(id, &mut order);
                     } else if order.kind == "trade" {
                         self.advance_trade(id, &mut order);
@@ -187,18 +192,40 @@ impl World {
                     ..entity.pos
                 }
             });
-        let pos = if self.systems().is_empty() || self.can_stand(subject, entity.pos) {
-            pos
-        } else if let Some(space_pos) = self.body_position(entity.pos.body)
-            && self.can_stand(subject, space_pos)
+        let launch = !self.systems().is_empty() && !self.can_stand(subject, entity.pos);
+        if launch
+            && self
+                .body_position(entity.pos.body)
+                .is_none_or(|space_pos| !self.can_stand(subject, space_pos))
         {
-            self.offset(space_pos, 1000, 0)
-        } else {
             order.status = OrderStatus::Blocked("no_spawn_space".into());
             return;
-        };
+        }
+        if launch && !self.space_age(order.player) {
+            order.status = OrderStatus::Blocked("space_age".into());
+            return;
+        }
         order.status = match self.spawn(subject, order.player, pos) {
-            Ok(_) => OrderStatus::Done,
+            Ok(ship) => {
+                if launch
+                    && self
+                        .submit(crate::Command {
+                            player: order.player,
+                            executor: ship,
+                            kind: "launch".into(),
+                            subject: None,
+                            target_entity: Some(producer),
+                            target_pos: None,
+                            queue: false,
+                        })
+                        .is_err()
+                {
+                    self.despawn(ship).expect("new ship");
+                    OrderStatus::Blocked("launch_site".into())
+                } else {
+                    OrderStatus::Done
+                }
+            }
             Err(crate::SimError::CannotEnterSpace) => OrderStatus::Blocked("space_age".into()),
             Err(_) => OrderStatus::Failed("spawn_failed".into()),
         };

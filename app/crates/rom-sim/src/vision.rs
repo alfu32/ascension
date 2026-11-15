@@ -63,6 +63,8 @@ pub(crate) struct SurfaceVision {
 pub(crate) struct Vision {
     /// What each entity id currently reveals.
     pub viewers: Vec<Option<Viewer>>,
+    /// Surface footprints revealed by orbiting ships in addition to system vision.
+    pub orbit_viewers: BTreeMap<EntityId, Viewer>,
     scratch: Vec<u32>,
 }
 
@@ -222,13 +224,17 @@ impl World {
         if e.container_id.is_some() {
             return false;
         }
-        self.allied(player, e.owner) || {
-            let slot = self.slot(e.pos.body);
-            self.surfaces[slot]
-                .geo
-                .pos_index(e.pos)
-                .is_some_and(|index| self.visible_index(player, slot, index))
-        }
+        self.allied(player, e.owner)
+            || [Some(e.pos), self.orbit(e.id).map(|orbit| orbit.pos)]
+                .into_iter()
+                .flatten()
+                .any(|pos| {
+                    let slot = self.slot(pos.body);
+                    self.surfaces[slot]
+                        .geo
+                        .pos_index(pos)
+                        .is_some_and(|index| self.visible_index(player, slot, index))
+                })
     }
 
     pub(crate) fn visible_index(&self, player: PlayerId, slot: usize, index: usize) -> bool {
@@ -285,9 +291,21 @@ impl World {
         if e.container_id.is_some() {
             return None;
         }
+        let pos = e.pos;
         Some(Viewer {
-            body: e.pos.body,
-            tile: self.geo(e.pos.body).pos_index(e.pos)? as u32,
+            body: pos.body,
+            tile: self.geo(pos.body).pos_index(pos)? as u32,
+            los: e.los.max(0),
+            owner: e.owner,
+        })
+    }
+
+    fn desired_orbit_viewer(&self, id: EntityId) -> Option<Viewer> {
+        let e = self.entity(id).filter(|e| e.container_id.is_none())?;
+        let pos = self.orbit(id)?.pos;
+        Some(Viewer {
+            body: pos.body,
+            tile: self.geo(pos.body).pos_index(pos)? as u32,
             los: e.los.max(0),
             owner: e.owner,
         })
@@ -301,16 +319,27 @@ impl World {
         }
         let desired = self.desired_viewer(id);
         let old = self.vision.viewers[index];
-        if old == desired {
-            return;
+        if old != desired {
+            if let Some(old) = old {
+                self.apply_view(old, false);
+            }
+            if let Some(new) = desired {
+                self.apply_view(new, true);
+            }
+            self.vision.viewers[index] = desired;
         }
-        if let Some(old) = old {
-            self.apply_view(old, false);
+        let desired = self.desired_orbit_viewer(id);
+        let old = self.vision.orbit_viewers.get(&id).copied();
+        if old != desired {
+            if let Some(old) = old {
+                self.apply_view(old, false);
+                self.vision.orbit_viewers.remove(&id);
+            }
+            if let Some(new) = desired {
+                self.apply_view(new, true);
+                self.vision.orbit_viewers.insert(id, new);
+            }
         }
-        if let Some(new) = desired {
-            self.apply_view(new, true);
-        }
-        self.vision.viewers[index] = desired;
     }
 
     /// Adds or removes one circle of viewers on its surface, recording tiles that

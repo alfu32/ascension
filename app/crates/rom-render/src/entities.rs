@@ -40,6 +40,10 @@ pub struct EntityView {
     pub x: f32,
     /// Position in tiles (south).
     pub y: f32,
+    /// Orbital height in tiles above sea level; zero places the entity on the surface.
+    pub altitude: f32,
+    /// Ground target of a recent orbital shot, when its beam is visible.
+    pub beam_target: Option<SurfacePos>,
     /// Facing in degrees, clockwise from the positive x axis.
     pub facing_deg: f32,
     /// Hit points as a fraction of the maximum, 0 to 1.
@@ -382,6 +386,16 @@ pub trait Footing {
             lift,
         )
     }
+    /// A point at a fixed height above sea level, independent of the terrain below.
+    fn datum_point(&self, face: u8, x: f32, y: f32, delta: (f32, f32), height: f32) -> [f32; 3] {
+        self.point(
+            face,
+            x,
+            y,
+            delta,
+            height - self.height_at(face, x + delta.0, y + delta.1),
+        )
+    }
     /// Height above sea level in tiles at (`x`, `y`), never below zero.
     fn height_at(&self, face: u8, x: f32, y: f32) -> f32;
     /// The frame standing on the ground at (`x`, `y`).
@@ -481,7 +495,7 @@ pub fn unit_width(view: &EntityView) -> f32 {
     if let Some(model) = view.model {
         return model.size[0].max(model.size[2]).max(0.6);
     }
-    (view.radius * 2.0 * 1.6).max(0.6)
+    (view.radius * 2.0 * 1.6).max(if view.altitude > 0.0 { 3.0 } else { 0.6 })
 }
 
 /// Height of a unit body in tiles.
@@ -489,13 +503,21 @@ pub fn unit_height(view: &EntityView) -> f32 {
     if let Some(model) = view.model {
         return model.size[1].max(0.3);
     }
-    (unit_width(view) * 1.8).max(0.9)
+    if view.altitude > 0.0 {
+        unit_width(view) * 0.35
+    } else {
+        (unit_width(view) * 1.8).max(0.9)
+    }
 }
 
 /// The box that stands for `view` when picking: centre `[east, up, south]`, size and yaw in
 /// degrees, matching how [`build_instances`] draws the entity. `ground` samples the surface.
 pub fn pick_box(view: &EntityView, ground: &dyn Fn(f32, f32) -> f32) -> ([f32; 3], [f32; 3], f32) {
-    let base = ground(view.x, view.y);
+    let base = if view.altitude > 0.0 {
+        view.altitude
+    } else {
+        ground(view.x, view.y)
+    };
     if view.building {
         let (w, h) = (
             f32::from(view.footprint.0.max(1)),
@@ -528,14 +550,27 @@ pub fn pick_box(view: &EntityView, ground: &dyn Fn(f32, f32) -> f32) -> ([f32; 3
 
 /// [`pick_box`] on any ground: the centre, the box axes and the size.
 pub fn pick_frame(view: &EntityView, ground: &dyn Footing) -> ([f32; 3], [[f32; 3]; 3], [f32; 3]) {
-    let frame = ground.frame(view.face, view.x, view.y);
+    let frame = entity_frame(view, ground);
     let (offset, size, yaw) = {
         let (centre, size, yaw) = pick_box(view, &|_, _| 0.0);
-        ([0.0, centre[1], 0.0], size, yaw)
+        ([0.0, centre[1] - view.altitude, 0.0], size, yaw)
     };
     let forward = heading_of(&frame, yaw);
     let axes = [forward, frame.up, cross3(forward, frame.up)];
     (frame.at(offset), axes, size)
+}
+
+/// The surface frame for a ground entity or a constant-radius frame for an orbital one.
+pub(crate) fn entity_frame(view: &EntityView, ground: &dyn Footing) -> GroundFrame {
+    let frame = ground.frame(view.face, view.x, view.y);
+    if view.altitude > 0.0 {
+        GroundFrame {
+            origin: ground.datum_point(view.face, view.x, view.y, (0.0, 0.0), view.altitude),
+            ..frame
+        }
+    } else {
+        frame
+    }
 }
 
 /// The eight corners of a box from [`pick_box`].
@@ -614,7 +649,7 @@ fn instances_on(
 ) {
     out.clear();
     for view in views {
-        let frame = ground.frame(view.face, view.x, view.y);
+        let frame = entity_frame(view, ground);
         let base = ground.height_at(view.face, view.x, view.y);
         let body_start = out.len();
         let top = if let Some(model) = view.model {
@@ -625,6 +660,8 @@ fn instances_on(
             push_building(view, ground, &frame, base, out)
         } else if view.owner == 0 || view.carry_node {
             push_node(view, &frame, out)
+        } else if view.altitude > 0.0 {
+            push_orbital_ship(view, &frame, out)
         } else {
             push_unit(view, &frame, out)
         };
@@ -710,6 +747,54 @@ fn push_unit(view: &EntityView, frame: &GroundFrame, out: &mut Vec<[f32; 16]>) -
         [width * 0.55, height * 0.26, width * 0.4],
         scaled(color, 0.45),
     ));
+    height
+}
+
+/// A compact hull, swept wings and twin engines for ships without a composed model.
+fn push_orbital_ship(view: &EntityView, frame: &GroundFrame, out: &mut Vec<[f32; 16]>) -> f32 {
+    let width = unit_width(view);
+    let height = unit_height(view);
+    let forward = heading_of(frame, view.facing_deg);
+    let side = cross3(forward, frame.up);
+    let axes = [forward, frame.up, side];
+    let at = |along: f32, up: f32, across: f32| -> [f32; 3] {
+        std::array::from_fn(|i| {
+            frame.origin[i] + forward[i] * along + frame.up[i] * up + side[i] * across
+        })
+    };
+    let team = owner_color(view.owner);
+    out.push(frame_box(
+        at(0.0, height * 0.5, 0.0),
+        axes,
+        [width, height * 0.55, width * 0.3],
+        [0.58, 0.64, 0.72],
+    ));
+    out.push(frame_box(
+        at(width * 0.25, height * 0.66, 0.0),
+        axes,
+        [width * 0.4, height * 0.45, width * 0.2],
+        team,
+    ));
+    out.push(frame_box(
+        at(-width * 0.18, height * 0.3, 0.0),
+        axes,
+        [width * 0.36, height * 0.18, width],
+        team,
+    ));
+    for sign in [-1.0, 1.0] {
+        out.push(frame_box(
+            at(-width * 0.31, height * 0.3, sign * width * 0.35),
+            axes,
+            [width * 0.35, height * 0.4, width * 0.18],
+            [0.22, 0.27, 0.34],
+        ));
+        out.push(frame_box(
+            at(-width * 0.5, height * 0.3, sign * width * 0.35),
+            axes,
+            [width * 0.035, height * 0.28, width * 0.12],
+            [0.2, 0.8, 1.0],
+        ));
+    }
     height
 }
 
@@ -875,6 +960,8 @@ mod tests {
             carry_node: false,
             under_construction: None,
             model: None,
+            altitude: 0.0,
+            beam_target: None,
             activity: Default::default(),
         }
     }
@@ -1094,6 +1181,32 @@ mod tests {
 
     fn norm(v: [f32; 3]) -> f32 {
         dot3(v, v).sqrt()
+    }
+
+    #[test]
+    fn orbital_hull_and_pick_box_share_the_raised_frame() {
+        let globe = Globe::new(&hilly_planet(64));
+        let mut ship = view(9, 32.5, 32.5, 20.0);
+        ship.altitude = 8.0;
+        let (centre, axes, size) = pick_frame(&ship, &globe);
+        assert_eq!(
+            size,
+            [unit_width(&ship), unit_height(&ship), unit_width(&ship)]
+        );
+        let ground = globe.ground_frame(ship.face, ship.x, ship.y);
+        let foot: [f32; 3] = std::array::from_fn(|i| centre[i] - axes[1][i] * size[1] * 0.5);
+        let raised = ground.up.map(|v| v * (globe.radius() + ship.altitude));
+        assert!(norm(std::array::from_fn(|i| foot[i] - raised[i])) < 0.001);
+        let mut instances = Vec::new();
+        build_instances_on(&[ship], &globe, [1.0, 0.0, 0.0], &mut instances);
+        assert!(!instances.is_empty());
+        for matrix in instances {
+            let at = [matrix[12], matrix[13], matrix[14]];
+            assert!(
+                norm(at) >= globe.radius() + ship.altitude,
+                "all hull pieces clear the orbit's base"
+            );
+        }
     }
 
     #[test]

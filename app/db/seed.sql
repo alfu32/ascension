@@ -38,6 +38,10 @@ INSERT INTO game_constant(key,value,unit,note) VALUES
  ('world.day_ticks',6000,'ticks','one orbit of the light that represents the sun around the planet orb (5 game minutes); presentation only'),
  ('world.axial_tilt_mdeg',0,'milli-degrees','latitude the light stays over; 0 means no seasons');
 
+INSERT INTO game_constant(key,value,unit,note) VALUES
+ ('space.launch_ticks',20,'ticks','launch duration from a surface producer'),
+ ('space.orbit_speed',400,'milli-tiles/second','speed of the orbital ground footprint');
+
 INSERT INTO layer VALUES
  ('ground','solid surface'), ('fluid','sea'), ('subfluid','underwater'),
  ('air','atmosphere'), ('orbit','near orbit'), ('space','open space between planets');
@@ -46,7 +50,8 @@ INSERT INTO body_kind VALUES
  ('resource','moon, asteroid or small planet claimed by starship presence');
 
 INSERT INTO map_scale VALUES
- ('planetary','Planetary',0,60), ('interstellar','Interstellar',1,240);
+ ('planetary','Planetary',0,60), ('interplanetary','Interplanetary',1,160),
+ ('interstellar','Interstellar',2,240);
 
 INSERT INTO tag(key,category) VALUES
  ('biological','body'), ('mechanical','body'),
@@ -82,6 +87,7 @@ INSERT INTO movement_class(key,flies) VALUES
 
 INSERT INTO order_kind(key,needs,target,note) VALUES
  ('stop','','none',''), ('move','movement','entity_or_point','entity target = follow'),
+ ('launch','movement','entity','launch from a completed own producer'),
  ('orbit','movement','entity_or_point','body marker or holding point'),
  ('travel','movement','point','target point body = destination system star body; coordinates ignored'),
  ('attack','weapon','entity',''), ('attack_move','weapon','point',''), ('patrol','movement','point',''),
@@ -109,7 +115,8 @@ INSERT INTO age(id,ordinal,era,map_scale)
  SELECT id, sort,
    CASE WHEN sort<=7 THEN 'history' WHEN sort<=9 THEN 'near_future' WHEN sort<=12 THEN 'stellar'
         ELSE 'galactic' END,
-   CASE WHEN sort<=9 THEN 'planetary' ELSE 'interstellar' END
+   CASE WHEN sort<=9 THEN 'planetary' WHEN sort=10 THEN 'interplanetary'
+        ELSE 'interstellar' END
  FROM def WHERE kind='age';
 WITH v(k,r) AS (VALUES ('age.ancient',30000), ('age.classical',36000), ('age.medieval',42000),
   ('age.gunpowder',48000), ('age.enlightenment',55000), ('age.industrial',62000),
@@ -5084,4 +5091,13 @@ WITH v(e,a,m,mat) AS (VALUES
 INSERT INTO entity_visual(entity_type_id,age_id,mesh_id,material_id)
  SELECT e.id, a.id, m.id, mt.id FROM v JOIN def e ON e.key=v.e LEFT JOIN def a ON a.key=v.a
  JOIN def m ON m.key=v.m JOIN def mt ON mt.key=v.mat;
+-- Orbital bombardment: separate ground-only slot, usable only in a body orbit.
+INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks,orbit_only)
+ SELECT d.id,1,w.damage/2,c.id,12000,60,1
+ FROM def d JOIN et_weapon w ON w.entity_type_id=d.id AND w.slot=0
+ JOIN damage_class c ON c.key='explosive'
+ WHERE d.key IN ('unit.corvette','unit.space_frigate','unit.space_cruiser','unit.battleship');
+INSERT INTO et_weapon_target(weapon_id,layer)
+ SELECT id,'ground' FROM et_weapon WHERE orbit_only=1;
+
 COMMIT;

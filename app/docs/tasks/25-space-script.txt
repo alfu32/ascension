@@ -1,5 +1,5 @@
 # Replayed by --script in --universe mode (task 25). Test-only setup lines first.
-0 grant-age age.starfaring
+0 grant-age age.expansion
 0 grant res.food 5000
 0 grant res.timber 5000
 0 grant res.metal 5000

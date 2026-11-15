@@ -4,7 +4,7 @@ use crate::{
     BodyId, Command, Entity, EntityId, MapGrid, Order, OrderStatus, PlayerId, Pos, SimError,
     Topology, World, avoidance::Motion, movement::Walk,
 };
-use rom_rules::{BodyKind, ClaimMode, DefId, EntityClass, Layer};
+use rom_rules::{BodyKind, ClaimMode, DefId, EntityClass, Layer, ProductionMode};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// A ship absent from every surface until its route leg ends.
@@ -22,8 +22,32 @@ pub struct Transit {
     pub arrives: u64,
 }
 
+/// The most recent orbital weapon discharge, at its authoritative fire-time target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OrbitalShot {
+    /// Simulation tick at which the weapon fired.
+    pub tick: u64,
+    /// Surface target position when fired.
+    pub target: Pos,
+}
+
+/// A ship's body and moving footprint below its fixed orbital height.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Orbit {
+    /// Body being orbited.
+    pub body: BodyId,
+    /// Current surface subpoint in milli-tiles.
+    pub pos: Pos,
+    /// Cardinal direction along the current cube-face frame, in degrees.
+    pub facing: u16,
+    /// Last weapon discharge; presentation decides how long to show it.
+    pub last_shot: Option<OrbitalShot>,
+    pub(crate) move_remainder: i64,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct Space {
+    pub orbits: BTreeMap<EntityId, Orbit>,
     pub positions: BTreeMap<BodyId, Pos>,
     pub markers: BTreeMap<BodyId, EntityId>,
     pub claims: BTreeMap<BodyId, PlayerId>,
@@ -44,6 +68,130 @@ fn sine(angle: i64) -> i64 {
 }
 
 impl World {
+    /// The orbit of a ship; absent for surface, free-space and transit locations.
+    pub fn orbit(&self, id: EntityId) -> Option<&Orbit> {
+        self.space.orbits.get(&id)
+    }
+
+    fn space_rank(&self, player: PlayerId) -> i64 {
+        let age = &self.rules.ages[&self.players[&player].age];
+        self.rules.map_scales[&age.map_scale].rank
+    }
+
+    pub(crate) fn begin_orbit(&mut self, id: EntityId, pos: Pos) {
+        let marker = self.body_position(pos.body).expect("body marker");
+        self.space.orbits.insert(
+            id,
+            Orbit {
+                body: pos.body,
+                pos,
+                facing: 0,
+                last_shot: None,
+                move_remainder: 0,
+            },
+        );
+        self.entities[id.0 as usize]
+            .as_mut()
+            .expect("orbit ship")
+            .pos = marker;
+        self.avoid.set(id, None, marker);
+        self.refresh_viewer(id);
+    }
+
+    pub(crate) fn leave_orbit(&mut self, id: EntityId) {
+        if self.space.orbits.remove(&id).is_some() {
+            let e = self.entity(id).expect("orbit ship");
+            self.avoid
+                .set(id, Motion::of(&self.rules, e.type_id), e.pos);
+            self.refresh_viewer(id);
+        }
+    }
+
+    pub(crate) fn advance_orbits(&mut self) {
+        let ids: Vec<_> = self.space.orbits.keys().copied().collect();
+        for id in ids {
+            let orbit = &self.space.orbits[&id];
+            let numerator = orbit.move_remainder
+                + self
+                    .rules
+                    .constant("space.orbit_speed")
+                    .expect("orbit speed");
+            let distance = numerator / self.tick_rate;
+            let remainder = numerator % self.tick_rate;
+            let (dx, dy) = crate::geometry::rotate((distance, 0), (orbit.facing / 90) as u8);
+            let (pos, turns) = self.geo(orbit.body).offset(orbit.pos, dx, dy);
+            let facing = crate::geometry::turn_facing(orbit.facing, turns);
+            let orbit = self.space.orbits.get_mut(&id).expect("orbit ship");
+            orbit.pos = pos;
+            orbit.facing = facing;
+            orbit.move_remainder = remainder;
+            self.refresh_viewer(id);
+        }
+    }
+
+    fn launch_site(&self, command: &Command) -> Result<Pos, SimError> {
+        let ship = self.entity(command.executor).expect("executor");
+        let port = command
+            .target_entity
+            .and_then(|id| self.entity(id))
+            .ok_or(SimError::WrongTargetShape)?;
+        let body = self.body(port.pos.body).ok_or(SimError::CannotEnterSpace)?;
+        let marker = self
+            .body_position(body.id)
+            .ok_or(SimError::CannotEnterSpace)?;
+        let trains_ship = self
+            .rules
+            .production
+            .get(&port.type_id)
+            .into_iter()
+            .flatten()
+            .any(|p| p.mode == ProductionMode::Train && p.product_def_id == ship.type_id);
+        if body.kind != BodyKind::Habitable
+            || port.pos.body != ship.pos.body
+            || port.owner != ship.owner
+            || port.build_progress.is_some()
+            || !trains_ship
+            || !self.space_age(ship.owner)
+            || self.can_stand(ship.type_id, ship.pos)
+            || !self.can_stand(ship.type_id, marker)
+            || self.target_distance(ship.pos, port.id)
+                > self
+                    .rules
+                    .constant("build.reach")
+                    .expect("build reach")
+                    .max(0) as u64
+        {
+            return Err(SimError::CannotEnterSpace);
+        }
+        Ok(port.pos)
+    }
+
+    pub(crate) fn advance_launch(&mut self, id: EntityId, order: &mut Order) {
+        let command = Command {
+            player: order.player,
+            executor: id,
+            kind: "launch".into(),
+            subject: None,
+            target_entity: order.target_entity,
+            target_pos: None,
+            queue: false,
+        };
+        let Ok(pos) = self.launch_site(&command) else {
+            order.status = OrderStatus::Failed("launch_site".into());
+            return;
+        };
+        order.progress_ticks += 1;
+        if order.progress_ticks
+            >= self
+                .rules
+                .constant("space.launch_ticks")
+                .expect("launch ticks") as u64
+        {
+            self.begin_orbit(id, pos);
+            order.status = OrderStatus::Done;
+        }
+    }
+
     /// The star body whose flat surface holds a system's ships.
     pub fn space_of(&self, system: u32) -> Option<BodyId> {
         self.bodies()
@@ -76,7 +224,12 @@ impl World {
         if self.systems().is_empty() {
             return Ok(());
         }
-        for key in ["space.orbit_reach", "space.route_ticks_per_unit"] {
+        for key in [
+            "space.orbit_reach",
+            "space.route_ticks_per_unit",
+            "space.launch_ticks",
+            "space.orbit_speed",
+        ] {
             if self.rules.constant(key).is_none_or(|v| v <= 0) {
                 return Err(SimError::InvalidRules(key));
             }
@@ -192,10 +345,8 @@ impl World {
         self.surface(pos.body)
             .is_some_and(|s| s.pathing.speed_pct(movement.movement_class_id, pos) > 0)
     }
-    fn space_age(&self, player: PlayerId) -> bool {
-        let age = &self.rules.ages[&self.players[&player].age];
-        let rank = self.rules.map_scales[&age.map_scale].rank;
-        self.rules.map_scales.values().any(|s| s.rank < rank)
+    pub(crate) fn space_age(&self, player: PlayerId) -> bool {
+        self.space_rank(player) >= 1
     }
     pub(crate) fn check_space_placement(
         &self,
@@ -213,6 +364,9 @@ impl World {
         Ok(())
     }
     pub(crate) fn validate_space_order(&self, command: &Command) -> Result<(), SimError> {
+        if command.kind == "launch" {
+            return self.launch_site(command).map(|_| ());
+        }
         if !matches!(command.kind.as_str(), "orbit" | "travel") {
             return Ok(());
         }
@@ -222,6 +376,9 @@ impl World {
             .ok_or(SimError::CannotEnterSpace)?;
         self.check_space_placement(ship.type_id, ship.owner, ship.pos)?;
         if command.kind == "travel" {
+            if self.space_rank(ship.owner) < 2 {
+                return Err(SimError::CannotEnterSpace);
+            }
             let destination = command
                 .target_pos
                 .and_then(|p| self.system_space(p.body))
@@ -230,24 +387,63 @@ impl World {
                 return Err(SimError::InvalidTravelTarget);
             }
         } else if let Some(target) = command.target_entity {
-            if !self.space.markers.values().any(|m| *m == target) || self.entity(target).is_none() {
+            if !self.space.markers.values().any(|m| *m == target)
+                || self
+                    .entity(target)
+                    .is_none_or(|e| e.pos.body != ship.pos.body)
+            {
                 return Err(SimError::WrongTargetShape);
             }
-        } else if command
-            .target_pos
-            .is_none_or(|p| !self.geo(ship.pos.body).contains(p))
-        {
-            return Err(SimError::OutsideMap);
+        } else if let Some(pos) = command.target_pos {
+            if pos.body != ship.pos.body {
+                let body = self.body(pos.body).ok_or(SimError::UnknownBody(pos.body))?;
+                if body.system != origin
+                    || body.kind != BodyKind::Habitable
+                    || self.surface(pos.body).is_none_or(|s| !s.geo.contains(pos))
+                {
+                    return Err(SimError::CannotEnterSpace);
+                }
+            } else if !self.geo(ship.pos.body).contains(pos) {
+                return Err(SimError::OutsideMap);
+            }
+        } else {
+            return Err(SimError::WrongTargetShape);
         }
         Ok(())
     }
     pub(crate) fn advance_orbit(&mut self, id: EntityId, order: &mut Order) {
-        let goal = order.target_pos.or_else(|| {
-            order
-                .target_entity
-                .and_then(|t| self.entity(t))
-                .map(|e| e.pos)
-        });
+        let orbit_body = order
+            .target_pos
+            .filter(|p| {
+                self.body(p.body)
+                    .is_some_and(|b| b.kind == BodyKind::Habitable)
+            })
+            .map(|p| p.body)
+            .or_else(|| {
+                order.target_entity.and_then(|target| {
+                    self.space.markers.iter().find_map(|(body, id)| {
+                        (*id == target
+                            && self
+                                .body(*body)
+                                .is_some_and(|b| b.kind == BodyKind::Habitable))
+                        .then_some(*body)
+                    })
+                })
+            });
+        if orbit_body.is_some_and(|body| self.orbit(id).is_some_and(|o| o.body == body)) {
+            order.movement = None;
+            return;
+        }
+        self.leave_orbit(id);
+        let goal = orbit_body
+            .and_then(|body| self.body_position(body))
+            .or(order.target_pos)
+            .or_else(|| {
+                order
+                    .target_entity
+                    .and_then(|t| self.entity(t))
+                    .map(|e| e.pos)
+            });
         let Some(goal) = goal else {
             order.status = OrderStatus::Failed("target_gone".into());
             return;
@@ -270,6 +466,16 @@ impl World {
             self.walk(id, order, goal, None, false);
         } else {
             order.movement = None;
+            if let Some(body) = orbit_body
+                && let Some(surface) = self.surface(body)
+            {
+                let (width, height) = surface.geo.face_size();
+                let pos = order
+                    .target_pos
+                    .filter(|p| p.body == body)
+                    .unwrap_or_else(|| Pos::on(body, 0, width * 500, height * 500));
+                self.begin_orbit(id, pos);
+            }
         }
         // Holding stays active so a pushed ship returns within reach.
     }
@@ -624,6 +830,62 @@ mod tests {
                 .progress_ticks += 1;
         });
     }
+    #[test]
+    fn hash_covers_orbit_position_facing_remainder_and_last_shot() {
+        let mut w = fixture();
+        changes(&mut w, |w| {
+            w.space.orbits.insert(
+                EntityId(1),
+                Orbit {
+                    body: BodyId(0),
+                    pos: Pos::default(),
+                    facing: 0,
+                    move_remainder: 0,
+                    last_shot: None,
+                },
+            );
+        });
+        changes(&mut w, |w| {
+            w.space.orbits.get_mut(&EntityId(1)).unwrap().body.0 += 1
+        });
+        changes(&mut w, |w| {
+            w.space.orbits.get_mut(&EntityId(1)).unwrap().pos.x += 1
+        });
+        changes(&mut w, |w| {
+            w.space.orbits.get_mut(&EntityId(1)).unwrap().facing = 90
+        });
+        changes(&mut w, |w| {
+            w.space.orbits.get_mut(&EntityId(1)).unwrap().move_remainder += 1
+        });
+        changes(&mut w, |w| {
+            w.space.orbits.get_mut(&EntityId(1)).unwrap().last_shot = Some(OrbitalShot {
+                tick: 7,
+                target: Pos::default(),
+            })
+        });
+        changes(&mut w, |w| {
+            w.space
+                .orbits
+                .get_mut(&EntityId(1))
+                .unwrap()
+                .last_shot
+                .as_mut()
+                .unwrap()
+                .tick += 1
+        });
+        changes(&mut w, |w| {
+            w.space
+                .orbits
+                .get_mut(&EntityId(1))
+                .unwrap()
+                .last_shot
+                .as_mut()
+                .unwrap()
+                .target
+                .y += 1
+        });
+    }
+
     #[test]
     fn equal_route_lengths_choose_the_lower_system_id() {
         let mut w = fixture();

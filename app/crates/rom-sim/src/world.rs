@@ -499,7 +499,12 @@ impl World {
         pathing.occupy(before, pos.face, footprint(before, pos), false);
         let after = &self.rules.entity_types[&new];
         pathing.occupy(after, pos.face, footprint(after, pos), true);
-        self.avoid.set(id, Motion::of(&self.rules, new), pos);
+        let motion = self
+            .orbit(id)
+            .is_none()
+            .then(|| Motion::of(&self.rules, new))
+            .flatten();
+        self.avoid.set(id, motion, pos);
         if after.gather_site.is_some() {
             self.economy.sites.insert(id);
         } else {
@@ -540,6 +545,20 @@ impl World {
     /// Moves an entity between spatial cells of its surface after its position changed.
     pub(crate) fn relocate(&mut self, id: EntityId, from: Pos, to: Pos) {
         let slot = self.slot(to.body);
+        if from.body != to.body {
+            let from_slot = self.slot(from.body);
+            self.surfaces[from_slot].spatial.remove(id, from);
+            self.surfaces[slot].spatial.insert(id, to);
+            let entity = self.entity(id).expect("relocated entity");
+            let motion = self
+                .orbit(id)
+                .is_none()
+                .then(|| Motion::of(&self.rules, entity.type_id))
+                .flatten();
+            self.avoid.set(id, motion, to);
+            self.refresh_viewer(id);
+            return;
+        }
         let surface = &mut self.surfaces[slot];
         surface.spatial.relocate(id, from, to);
         self.avoid.pos[id.0 as usize] = to;
@@ -562,6 +581,7 @@ impl World {
             .get_mut(id.0 as usize)
             .and_then(Option::take)
             .ok_or(SimError::UnknownExecutor(id))?;
+        self.space.orbits.remove(&id);
         self.capture.neutralised.remove(&id);
         self.capture.assimilating.remove(&id);
         let slot = self.slot(entity.pos.body);
@@ -657,9 +677,17 @@ impl World {
             return Err(SimError::WrongTargetShape);
         }
         self.validate_space_order(&command)?;
-        // Travel is the only order allowed to name a different surface.
+        // Orbit can name a body's surface; an orbiting ship can attack that surface.
         let body = entity.pos.body;
-        if command.kind != "travel"
+        let orbital_attack = command.kind == "attack"
+            && self.orbit(command.executor).is_some_and(|orbit| {
+                command
+                    .target_entity
+                    .and_then(|id| self.entity(id))
+                    .is_some_and(|target| target.pos.body == orbit.body)
+            });
+        let cross_body = matches!(command.kind.as_str(), "travel" | "orbit") || orbital_attack;
+        if !cross_body
             && (command.target_pos.is_some_and(|pos| pos.body != body)
                 || command
                     .target_entity
@@ -670,9 +698,7 @@ impl World {
         }
         // A flat map clamps far goals onto itself; a sphere has no outside to clamp from.
         let geo = self.geo(body);
-        if command.kind != "travel"
-            && !geo.is_flat()
-            && command.target_pos.is_some_and(|pos| !geo.contains(pos))
+        if !cross_body && !geo.is_flat() && command.target_pos.is_some_and(|pos| !geo.contains(pos))
         {
             return Err(SimError::OutsideMap);
         }
@@ -749,6 +775,7 @@ impl World {
     /// they were when the order phase began, so the id order of updates cannot decide
     /// who strikes first.
     pub fn step(&mut self) {
+        self.advance_orbits();
         self.find_idle_work();
         self.acquire_idle();
         self.regenerate_energy();

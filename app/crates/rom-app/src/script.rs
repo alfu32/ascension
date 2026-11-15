@@ -18,15 +18,17 @@
 //! Live names (resolved at the step, in entity id order): `relicN` = free carry nodes,
 //! `templeN` = own completed keepers, `marketN` = own completed buildings training route
 //! traders, `cityN` = own completed cities, `carrierN` = own claim-tag units,
-//! `traderN` = own route traders. `click` and `rclick` support these names and Shift.
+//! `traderN` = own route traders, `shipN` = own orbiting ships, `enemyN` = enemy buildings
+//! on the home planet. `click` and `rclick` support these names and Shift.
 //! These component-based aliases replace a dependency on the last trained type.
 //!
 //! Space commands: `ships` selects every ship of player one, `producers` its finished
 //! training buildings (not cities), `orbit <rockN|=body>` and
 //! `travel <systemN|=system>` order the selected ships (`rockN` is the N-th nearest resource body
 //! of the home system, `systemN` the N-th nearest neighbouring system), `speed <percent>` sets
-//! the game speed. Two test-only lines take effect before the match starts, whatever their tick:
-//! `grant-age <age key>` and `grant <resource key> <amount>` for player one.
+//! the game speed. Test-only setup lines take effect before the match starts, whatever their tick:
+//! `grant-age <age key>`, `grant <resource key> <amount>` for player one, and
+//! `place <owner id> <entity key> @dx,dy` to place a test scene before tick one.
 
 use rom_render::{HudRegionKind, Modifiers, PickEvent, PointerButton, SurfacePos};
 
@@ -56,6 +58,8 @@ pub struct ScriptSetup {
     pub age: Option<String>,
     /// Resources granted to player one: key and amount.
     pub grants: Vec<(String, i64)>,
+    /// Test scene entities: owner, type key and milli-tile offsets from player one's city.
+    pub placements: Vec<(u32, String, i64, i64)>,
 }
 
 impl ScriptSetup {
@@ -70,6 +74,40 @@ impl ScriptSetup {
                 .grant(crate::selection::PLAYER, resource, *amount)
                 .map_err(|e| e.to_string())?;
         }
+        if !self.placements.is_empty() {
+            let origin = world
+                .entities()
+                .find(|e| {
+                    e.owner == crate::selection::PLAYER
+                        && world.rules().entity_types[&e.type_id]
+                            .territory
+                            .as_ref()
+                            .is_some_and(|t| t.is_city)
+                })
+                .map(|e| e.pos)
+                .ok_or("test scene needs a starting city")?;
+            self.apply_placements(world, origin)?;
+        }
+        Ok(())
+    }
+
+    /// Places explicitly requested test-scene entities before the first tick.
+    pub fn apply_placements(
+        &self,
+        world: &mut rom_sim::World,
+        origin: rom_sim::Pos,
+    ) -> Result<(), String> {
+        for (owner, key, dx, dy) in &self.placements {
+            let kind = world
+                .rules()
+                .id_of(key)
+                .filter(|id| world.rules().entity_types.contains_key(id))
+                .ok_or_else(|| format!("unknown entity type {key:?}"))?;
+            let pos = world.offset(origin, *dx, *dy);
+            world
+                .place_for_setup(kind, rom_sim::PlayerId(*owner), pos)
+                .map_err(|e| e.to_string())?;
+        }
         Ok(())
     }
 
@@ -81,6 +119,30 @@ impl ScriptSetup {
             let words: Vec<&str> = line.split_whitespace().collect();
             let at = || format!("line {}", number + 1);
             match words.get(1).copied() {
+                Some("place") => {
+                    let (Some(owner), Some(key), Some(offset)) =
+                        (words.get(2), words.get(3), words.get(4))
+                    else {
+                        return Err(format!(
+                            "{}: place needs owner, entity key and @dx,dy",
+                            at()
+                        ));
+                    };
+                    let owner = owner.parse().map_err(|_| format!("{}: bad owner", at()))?;
+                    let (dx, dy) = offset
+                        .strip_prefix('@')
+                        .and_then(|v| v.split_once(','))
+                        .ok_or_else(|| format!("{}: place needs @dx,dy", at()))?;
+                    let parse = |v: &str| {
+                        v.parse::<i64>()
+                            .ok()
+                            .and_then(|v| v.checked_mul(1000))
+                            .ok_or_else(|| format!("{}: bad tile offset", at()))
+                    };
+                    setup
+                        .placements
+                        .push((owner, (*key).to_owned(), parse(dx)?, parse(dy)?));
+                }
                 Some("grant-age") => {
                     setup.age = Some(
                         words
@@ -170,7 +232,7 @@ impl Script {
             let words: Vec<&str> = line.split_whitespace().collect();
             let tick = words.first().and_then(|t| t.parse::<u64>().ok());
             match (tick, words.get(1).copied()) {
-                (Some(_), Some("grant-age" | "grant")) => continue,
+                (Some(_), Some("grant-age" | "grant" | "place")) => continue,
                 (Some(tick), Some("ships")) => {
                     actions.push((tick, ScriptAction::SelectShips));
                     continue;
@@ -453,12 +515,14 @@ fn parse_line(
 }
 
 fn dynamic_name(word: &str) -> bool {
-    ["relic", "temple", "market", "city", "carrier", "trader"]
-        .iter()
-        .any(|prefix| {
-            word.strip_prefix(prefix)
-                .is_some_and(|n| n.parse::<usize>().is_ok())
-        })
+    [
+        "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy",
+    ]
+    .iter()
+    .any(|prefix| {
+        word.strip_prefix(prefix)
+            .is_some_and(|n| n.parse::<usize>().is_ok())
+    })
 }
 
 /// Resolve a screenshot alias using components, without bypassing normal pick/order handling.
@@ -470,15 +534,17 @@ pub fn live_pick(
 ) -> Result<PickEvent, String> {
     use rom_rules::{ClaimMode, EntityClass, ProductionMode};
     let rules = world.rules();
-    let (name, n) = ["relic", "temple", "market", "city", "carrier", "trader"]
-        .iter()
-        .find_map(|name| {
-            target
-                .strip_prefix(name)
-                .and_then(|n| n.parse::<usize>().ok())
-                .map(|n| (*name, n))
-        })
-        .ok_or_else(|| format!("unknown live entity {target}"))?;
+    let (name, n) = [
+        "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy",
+    ]
+    .iter()
+    .find_map(|name| {
+        target
+            .strip_prefix(name)
+            .and_then(|n| n.parse::<usize>().ok())
+            .map(|n| (*name, n))
+    })
+    .ok_or_else(|| format!("unknown live entity {target}"))?;
     let trader = |id| {
         rules.entity_types[&id]
             .trader
@@ -497,10 +563,24 @@ pub fn live_pick(
                         .as_ref()
                         .is_some_and(|n| n.claim_mode == ClaimMode::Carry);
                 }
+                if name == "enemy" {
+                    let own = world
+                        .players()
+                        .find(|p| p.id == crate::selection::PLAYER)
+                        .map(|p| p.team);
+                    return Some(e.pos.body) == world.home_body(crate::selection::PLAYER)
+                        && e.owner != rom_sim::PlayerId(0)
+                        && world
+                            .players()
+                            .find(|p| p.id == e.owner)
+                            .is_some_and(|p| Some(p.team) != own)
+                        && et.class == EntityClass::Building;
+                }
                 if e.owner != crate::selection::PLAYER || e.build_progress.is_some() {
                     return false;
                 }
                 match name {
+                    "ship" => world.orbit(e.id).is_some(),
                     "temple" => et.keeper.is_some(),
                     "market" => {
                         et.class == EntityClass::Building
@@ -526,12 +606,13 @@ pub fn live_pick(
             })
             .nth(n.wrapping_sub(1))
             .ok_or_else(|| format!("there is no {target}"))?;
+    let pos = world.orbit(entity.id).map_or(entity.pos, |orbit| orbit.pos);
     let surface = SurfacePos {
-        face: entity.pos.face,
-        x: i64::from(entity.pos.x),
-        y: i64::from(entity.pos.y),
+        face: pos.face,
+        x: i64::from(pos.x),
+        y: i64::from(pos.y),
     };
-    let world_point = (entity.pos.x as f32 / 1000.0, entity.pos.y as f32 / 1000.0);
+    let world_point = (pos.x as f32 / 1000.0, pos.y as f32 / 1000.0);
     let modifiers = Modifiers {
         shift,
         ..Modifiers::default()

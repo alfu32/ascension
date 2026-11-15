@@ -734,17 +734,10 @@ fn render_loop(shared: &Shared) {
         if view_range != u32::MAX {
             let all = shared.zoom_all.load(Ordering::Relaxed);
             let range = if all { 0 } else { view_range };
-            let zoom_out = shared.zoom_out.swap(false, Ordering::Relaxed);
+            let zoom_out = shared.terrain_ready.load(Ordering::Acquire)
+                && shared.zoom_out.swap(false, Ordering::Relaxed);
             if let Some(orbit) = orbit.as_mut() {
-                orbit.set_view_range(range);
-                if let Some(zoom) = zoom.as_mut() {
-                    zoom.set_globe_limit((range > 0).then(|| orbit.distance_cap()));
-                    if zoom_out {
-                        zoom.set_l(f32::MAX);
-                    }
-                } else if zoom_out {
-                    orbit.frame_globe();
-                }
+                apply_orbit_limits(orbit, zoom.as_mut(), range, zoom_out);
             } else {
                 let half_width = (range > 0).then(|| range as f32 / 1000.0);
                 camera.limit_half_width(half_width);
@@ -1257,6 +1250,32 @@ fn graticule_key(event: InputEvent, hud: &HudSnapshot) -> bool {
             .is_some_and(|p| p.buttons.iter().any(|b| Some(b.slot) == slot))
 }
 
+/// Keeps the two planet-camera representations in step when applying an age's limit.
+fn apply_orbit_limits(
+    orbit: &mut OrbitCamera,
+    zoom: Option<&mut ZoomCamera>,
+    range: u32,
+    zoom_out: bool,
+) {
+    let range = if zoom.as_ref().is_some_and(|z| z.cap() > Level::Globe) {
+        0
+    } else {
+        range
+    };
+    orbit.set_view_range(range);
+    if let Some(zoom) = zoom {
+        zoom.set_globe_limit((range > 0).then(|| orbit.distance_cap()));
+        if zoom_out {
+            zoom.set_l(f32::MAX);
+            // The frame's adopt_orbit must see the new distance rather than restoring the
+            // close startup view, which matters while the cap is still on the planet.
+            zoom.sync_orbit(orbit);
+        }
+    } else if zoom_out {
+        orbit.frame_globe();
+    }
+}
+
 /// The farthest level the zoom may reach now.
 fn current_cap(shared: &Shared) -> Level {
     if shared.zoom_all.load(Ordering::Relaxed) {
@@ -1513,6 +1532,68 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn universe_zoom_out_survives_the_frames_orbit_adoption() {
+        use crate::universe::sample_scene;
+        let radius = 122.0;
+        let scale = ZoomScale::new(radius, 3.0 * radius);
+        let scene = Arc::new(sample_scene());
+        let home = Home {
+            system: 1,
+            body: 2,
+            dir: [0.0, 0.0, 1.0],
+        };
+        let mut previous = 0.0;
+        for (range, cap) in [
+            (30_000, Level::Globe),
+            (110_000, Level::Globe),
+            (0, Level::Globe),
+            (0, Level::System),
+            (0, Level::StarMap),
+        ] {
+            let mut orbit = OrbitCamera::at(0.0, 0.0, HOME_DISTANCE, 0.0, radius, 3.0 * radius);
+            let mut zoom = ZoomCamera::new(Arc::clone(&scene), scale, Some(home), cap);
+            apply_orbit_limits(&mut orbit, Some(&mut zoom), range, true);
+            let limit = zoom.l_cap();
+            assert!(limit > previous);
+            previous = limit;
+            for _ in 0..4 {
+                zoom.adopt_orbit(&orbit);
+                zoom.advance(0.05);
+                zoom.sync_orbit(&mut orbit);
+                assert!((zoom.l() - limit).abs() < 1e-5);
+            }
+            assert_eq!(zoom.level(), cap);
+        }
+    }
+
+    #[test]
+    fn a_space_tier_can_wheel_past_a_positive_planet_view_range() {
+        use crate::universe::sample_scene;
+        let radius = 122.0;
+        let mut orbit = OrbitCamera::at(0.0, 0.0, HOME_DISTANCE, 0.0, radius, 3.0 * radius);
+        let mut zoom = ZoomCamera::new(
+            Arc::new(sample_scene()),
+            ZoomScale::new(radius, 3.0 * radius),
+            Some(Home {
+                system: 1,
+                body: 2,
+                dir: orbit.dir,
+            }),
+            Level::System,
+        );
+        zoom.adopt_orbit(&orbit);
+        for _ in 0..100 {
+            apply_orbit_limits(&mut orbit, Some(&mut zoom), 30_000, false);
+            zoom.wheel(-1.0);
+            zoom.sync_orbit(&mut orbit);
+            zoom.adopt_orbit(&orbit);
+            zoom.advance(0.05);
+        }
+        assert_eq!(zoom.level(), Level::System);
+        assert_eq!(zoom.l(), zoom.l_cap());
+    }
 
     #[test]
     fn graticule_toggle_preserves_palette_commands() {
