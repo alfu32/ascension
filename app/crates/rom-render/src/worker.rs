@@ -1658,6 +1658,14 @@ fn place_of(id: u32, zoom: &ZoomCamera, whereabouts: &Whereabouts) -> Option<Foc
     }
     let scene = zoom.scene();
     if let Some(ship) = whereabouts.space.ships.iter().find(|s| s.id == id) {
+        // A ship at a planet whose globe is not loaded is seen down on that planet.
+        if let Some(index) = ship
+            .body
+            .and_then(|b| scene.body_index(b))
+            .filter(|i| scene.bodies[*i].kind == crate::universe::BodyViewKind::Habitable)
+        {
+            return Some(FocusPlace::Planet(index));
+        }
         let placed = scene.place_system(ship.system);
         let outermost = scene.system_outermost(ship.system);
         return Some(FocusPlace::System {

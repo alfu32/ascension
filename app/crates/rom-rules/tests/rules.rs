@@ -998,7 +998,7 @@ fn every_line_has_one_first_step_and_continuous_ages() {
     {
         lines.entry(&unit.ui_group).or_default().push(unit);
     }
-    assert_eq!(lines.len(), 20);
+    assert_eq!(lines.len(), 21);
     for (line, steps) in lines {
         let roots: Vec<_> = steps
             .iter()

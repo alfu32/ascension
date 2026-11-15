@@ -1,0 +1,46 @@
+# Task 54, replayed by --script in --universe mode: train a transport, board the builders at
+# the spaceport, fly to the nearest other planet of the home system, land, unload and found a
+# city there. Test-only setup lines first.
+0 grant-age age.expansion
+0 grant-tech tech.civic.1
+0 grant res.food 50000
+0 grant res.timber 50000
+0 grant res.metal 50000
+0 grant res.wealth 50000
+0 grant res.energy 50000
+0 place 1 bld.spaceport @0,16
+1 speed 800
+# Train a transport at the spaceport: TRAIN tab, the transport's slot.
+4 producers
+6 hud tab 2
+8 hud slot 5
+# Training takes 400 ticks and the launch 20; then the builders walk to the spaceport and board.
+440 box builders
+442 rclick ship1
+# Off to the next planet (it is generated when the transport is ordered there); the transport
+# enters its orbit about tick 2700.
+900 ships
+902 orbit planet1
+# Slow down and fly the camera down to the planet the transport orbits.
+2800 speed 100
+2802 ships
+2804 cam focus
+# Land on open ground below the transport, slowly enough to watch the descent.
+3000 rclick landing1
+3002 speed 20
+3003 cam focus
+3010 cam wheel 13 636,330
+3060 speed 20
+# Closer, to see who came out.
+3062 cam wheel 6 632,312
+# The builders found the planet's first city beside the landed transport.
+3090 box builders
+3092 hud tab 0
+3094 hud slot 0
+3096 click colony1
+3098 speed 400
+# Once the city stands, zoom out to the star system: the colony is ringed in the player's colour.
+3700 speed 100
+3702 escape
+3704 cam wheel -31 640,340
+3706 cam point 150,160

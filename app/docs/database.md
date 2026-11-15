@@ -551,8 +551,8 @@ them (`sees_entity`); their own side still lists them. The building's
 selection panel shows their portraits ("Workers 4 / 10"); clicking one selects
 that worker, shift adds it, a double click selects every worker of its type
 inside. The container component (`et_container`, `entity.container_id`) was
-not used: it models nodes carried by units, and garrisoned units do not
-exist yet. Any order given to a worker takes it out of the slot (as before). The
+not used: it models nodes carried by units and, since task 54, units aboard
+ships; building garrisons do not exist yet. Any order given to a worker takes it out of the slot (as before). The
 order kind `release` (`needs = gather_site`, target none) lets a gather
 building send every worker out: they leave their slot and work order and
 stand beside the building; with a rally point set the app also orders them to
@@ -577,6 +577,48 @@ completes, every walking unit standing on its footprint is moved to the nearest
 free tile of its movement class (`World::clear_footprint`), so builders are
 never shut inside.
 
+## Carriers, landing and colonies (task 54)
+
+No table or column was added: carrying uses the existing component and state.
+
+- **Carrier = `et_container` + `et_movement`.** `capacity` is in population
+  (`pop_cost`), raised or lowered by `garrison_capacity` modifiers;
+  `accept_tag_id`, when set, limits who may board. A passenger must be a unit
+  that moves and cannot cross a space terrain itself (ships do not carry ships)
+  and has no container of its own. The seed gives the new **Transport Ship**
+  (`unit.transport_ship`, line `transport` in the generator, spaceport,
+  starfaring, unarmed, `pop_cost` 2) a capacity of 20, and every other starship
+  1 (survey ship, corvette) or 2 (frigate, cruiser, battleship): one or two
+  squads. The city's `et_container` row (capacity 10) stays unused: a container
+  that does not move is not a carrier, and building garrisons are not built yet.
+- **Passengers** have `entity.container_id` = the carrier, as carried nodes do:
+  off the map (no spatial index, no avoidance, no sight, not visible or
+  targetable), skipped by the tick, by idle work, automatic targeting and
+  attrition, still counted in population and for conquest. They ride along
+  between systems. When a carrier dies, its passengers die with it (counted
+  as losses, credited to the same killer).
+- **Order kinds.** `enter` (existing, `needs = movement`, entity): board an own
+  carrier — beside it when it has landed on the unit's planet, or, when it
+  orbits the unit's planet, at the nearest own completed building that trains
+  spacecraft (a spaceport). `land` (new, `container`, point): from the orbit of
+  that planet, onto open ground (`layer = ground`, `buildable`, no building)
+  outside every enemy city's economic radius; the descent takes
+  `space.land_ticks` (new constant, 60); then everyone aboard comes out on free
+  tiles around it, and the carrier stays landed. `lift` (new, `movement`,
+  none): a landed carrier returns to orbit after `space.launch_ticks`.
+  `unload` (existing, `container`, entity or point): landed — passengers come
+  out around it (to a point: they walk there); in orbit — at the target own
+  spaceport below. A passenger of a landed carrier that is given any order
+  steps out first; aboard a carrier in space it refuses orders (`Aboard`).
+- **Landed ships** stand on the planet's surface (`entity.body_id` that planet,
+  no `entity_orbit` row) and are listed in the simulation's landed set; they do
+  not walk. Saving them needs that set in the save format (a later task, like
+  orbits). Surface weapons can hit them; their own space weapons cannot fire.
+- **Colonies.** The first city a player founds on a planet may stand outside
+  any border (never inside another player's territory), as free colonisation
+  allows everywhere from the enlightenment age. Its borders, economy and
+  production are those of any city.
+
 ## Placement and resource discovery (task 41)
 
 Every building with an `in_city_radius` row also has an `in_own_territory`
@@ -597,7 +639,8 @@ change: every other building keeps `in_city_radius` and `in_own_territory`.
 City spacing, the city limit and every other row still apply. A construct
 order whose site is on another body than the builder is refused (`OtherBody`);
 the placement preview turns red when no selected builder stands on the site's
-body, and clicking says so. Carrying units across space is task 54.
+body, and clicking says so. Carrying units across space: see "Carriers, landing
+and colonies" above.
 
 `resource.first_age_id` is a discovery gate. Terrain-to-resource associations
 come from existing `et_gather_site.resource_id`, `needs_node_terrain_id` and

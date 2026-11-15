@@ -11,8 +11,8 @@ use crate::entities::{frame_box, owner_color};
 use crate::globe::PlanetScene;
 use crate::hud_minimap::planet_pixels;
 use crate::space::{
-    SpaceHover, SpaceSnapshot, annulus, chevron, claim_rings, diamond, map_mark_scale,
-    map_ship_marks, ship_frame_pos, transit_at_rim,
+    SpaceHover, SpaceSnapshot, annulus, chevron, claim_rings, colony_rings, diamond,
+    map_colony_rings, map_mark_scale, map_ship_marks, ship_frame_pos, transit_at_rim,
 };
 use crate::universe::{
     BodyViewKind, UniverseScene, planet_colour, ring_points, rock_colour, uv_sphere,
@@ -540,6 +540,26 @@ impl Scene {
                         96,
                     ));
                 }
+                // Colonies: a ring in the owner's colour around each planet with its cities,
+                // never smaller on screen than a few pixels beyond the planet's least size.
+                if known {
+                    for ring in colony_rings(
+                        &universe,
+                        zoom.placed(),
+                        &state.snapshot.colonies,
+                        system_id,
+                    ) {
+                        let [r, g, b] = ring.colour;
+                        let least = per_pixel_at(ring.centre) * (MIN_BODY_PIXELS + 6.0);
+                        overlay.tris.extend(annulus(
+                            [ring.centre[0], 0.4, ring.centre[2]],
+                            ring.radius.max(least),
+                            thickness * 0.8,
+                            [r, g, b, 240],
+                            96,
+                        ));
+                    }
+                }
                 let forward = unit_vector([
                     view.target[0] - view.eye[0],
                     view.target[1] - view.eye[1],
@@ -873,6 +893,19 @@ impl Scene {
                         28,
                     ));
                 }
+            }
+            // Colonies: a ring in each owner's colour around every system with its cities.
+            for (index, owner, rank) in
+                map_colony_rings(&universe, &self.space_state.snapshot.colonies)
+            {
+                let [r, g, b] = owner_rgb(owner);
+                overlay.tris.extend(annulus(
+                    space.map_positions[index],
+                    icon * (3.3 + 0.6 * f32::from(rank)),
+                    icon * 0.26,
+                    [r, g, b, 230],
+                    40,
+                ));
             }
             if let Some(SpaceHover::Target(Target::System(index))) = self.space_state.hover
                 && let Some(&at) = space.map_positions.get(index)

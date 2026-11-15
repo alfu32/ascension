@@ -57,6 +57,8 @@ pub struct ScriptContext {
     pub rocks: Vec<u32>,
     /// Systems joined to the home system by a route, shortest route first (universe worlds).
     pub systems: Vec<u32>,
+    /// The other habitable planets of the home system, nearest to the home planet first.
+    pub planets: Vec<u32>,
 }
 
 /// What a script does to the match before it starts (test only).
@@ -71,6 +73,8 @@ pub struct ScriptSetup {
     /// Test ships: owner, type key and milli-tile offsets from the star of player one's home
     /// system, in that system's plane.
     pub space_placements: Vec<(u32, String, i64, i64)>,
+    /// Technologies player one starts with, by key.
+    pub techs: Vec<String>,
 }
 
 impl ScriptSetup {
@@ -209,6 +213,14 @@ impl ScriptSetup {
                         .placements
                         .push((owner, (*key).to_owned(), parse(dx)?, parse(dy)?));
                 }
+                Some("grant-tech") => {
+                    setup.techs.push(
+                        words
+                            .get(2)
+                            .ok_or_else(|| format!("{}: grant-tech needs a technology key", at()))?
+                            .to_string(),
+                    );
+                }
                 Some("grant-age") => {
                     setup.age = Some(
                         words
@@ -270,6 +282,7 @@ impl ScriptContext {
             builders: start.builders.iter().map(|b| b.0).collect(),
             rocks: Vec::new(),
             systems: Vec::new(),
+            planets: Vec::new(),
         }
     }
 }
@@ -300,7 +313,9 @@ impl Script {
             let words: Vec<&str> = line.split_whitespace().collect();
             let tick = words.first().and_then(|t| t.parse::<u64>().ok());
             match (tick, words.get(1).copied()) {
-                (Some(_), Some("grant-age" | "grant" | "place" | "place-space")) => continue,
+                (Some(_), Some("grant-age" | "grant" | "grant-tech" | "place" | "place-space")) => {
+                    continue;
+                }
                 (Some(tick), Some("cam")) => {
                     let input = camera_input(&words[2..])
                         .map_err(|error| format!("line {}: {error}", number + 1))?;
@@ -565,12 +580,17 @@ fn parse_line(
             } else {
                 ("system", &context.systems)
             };
+            let nth = |prefix: &str, list: &[u32]| {
+                word.strip_prefix(prefix)
+                    .and_then(|n| n.parse::<usize>().ok())
+                    .and_then(|n| list.get(n.wrapping_sub(1)).copied())
+            };
             let id = match word.strip_prefix('=') {
                 Some(n) => n.parse().ok(),
-                None => word
-                    .strip_prefix(prefix)
-                    .and_then(|n| n.parse::<usize>().ok())
-                    .and_then(|n| list.get(n.wrapping_sub(1)).copied()),
+                None if command == "orbit" && word.starts_with("planet") => {
+                    nth("planet", &context.planets)
+                }
+                None => nth(prefix, list),
             }
             .ok_or_else(|| format!("{command} needs {prefix}N or =id, got {word:?}"))?;
             PickEvent::SpaceRightClick {
@@ -710,12 +730,48 @@ fn camera_input(words: &[&str]) -> Result<Vec<rom_render::InputEvent>, String> {
 fn dynamic_name(word: &str) -> bool {
     [
         "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy", "gather",
+        "landing", "colony",
     ]
     .iter()
     .any(|prefix| {
         word.strip_prefix(prefix)
             .is_some_and(|n| n.parse::<usize>().is_ok())
     })
+}
+
+/// Ground points named by the live world: `landingN` is open ground nearest the point below
+/// player one's N-th carrier in orbit, `colonyN` a city site nearest its N-th landed ship.
+fn live_point(world: &rom_sim::World, target: &str) -> Result<Option<rom_sim::Pos>, String> {
+    let player = crate::selection::PLAYER;
+    let nth = |prefix: &str, pick: &dyn Fn(&rom_sim::Entity) -> bool| {
+        let n: usize = target.strip_prefix(prefix)?.parse().ok()?;
+        world
+            .entities()
+            .filter(|e| e.owner == player && pick(e))
+            .nth(n.wrapping_sub(1))
+            .map(|e| e.id)
+    };
+    if target.starts_with("landing") {
+        let ship = nth("landing", &|e| {
+            world.is_carrier_type(e.type_id) && world.orbit(e.id).is_some()
+        })
+        .ok_or_else(|| format!("there is no {target}"))?;
+        let below = world.orbit(ship).expect("orbiting carrier").pos;
+        return world
+            .landing_site(ship, below)
+            .map(Some)
+            .ok_or_else(|| format!("no open ground below {target}"));
+    }
+    if target.starts_with("colony") {
+        let ship = nth("colony", &|e| world.is_landed(e.id))
+            .ok_or_else(|| format!("there is no {target}"))?;
+        let at = world.entity(ship).expect("landed ship").pos;
+        return world
+            .find_city_site(player, at.body, at)
+            .map(Some)
+            .ok_or_else(|| format!("no city site near {target}"));
+    }
+    Ok(None)
 }
 
 /// Resolve a screenshot alias using components, without bypassing normal pick/order handling.
@@ -727,6 +783,35 @@ pub fn live_pick(
 ) -> Result<PickEvent, String> {
     use rom_rules::{ClaimMode, EntityClass, ProductionMode};
     let rules = world.rules();
+    let modifiers = Modifiers {
+        shift,
+        ..Modifiers::default()
+    };
+    if let Some(pos) = live_point(world, target)? {
+        let surface = SurfacePos {
+            face: pos.face,
+            x: i64::from(pos.x),
+            y: i64::from(pos.y),
+        };
+        let world_point = (pos.x as f32 / 1000.0, pos.y as f32 / 1000.0);
+        return Ok(if right {
+            PickEvent::RightClick {
+                surface,
+                world_point,
+                entity: None,
+                modifiers,
+            }
+        } else {
+            PickEvent::Click {
+                surface,
+                world_point,
+                entity: None,
+                modifiers,
+                double: false,
+                on_screen: Vec::new(),
+            }
+        });
+    }
     let (name, n) = [
         "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy", "gather",
     ]
@@ -808,10 +893,6 @@ pub fn live_pick(
         y: i64::from(pos.y),
     };
     let world_point = (pos.x as f32 / 1000.0, pos.y as f32 / 1000.0);
-    let modifiers = Modifiers {
-        shift,
-        ..Modifiers::default()
-    };
     Ok(if right {
         PickEvent::RightClick {
             surface,
@@ -843,6 +924,7 @@ mod tests {
             builders: vec![2, 3, 4],
             rocks: vec![40, 41],
             systems: vec![7],
+            planets: vec![9],
         }
     }
 

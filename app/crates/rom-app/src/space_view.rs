@@ -3,7 +3,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use rom_render::{ClaimState, ClaimView, ResourceBodyView, ShipView, SpaceSnapshot, TransitView};
+use rom_render::{
+    ClaimState, ClaimView, ColonyView, ResourceBodyView, ShipView, SpaceSnapshot, TransitView,
+};
 use rom_rules::{BodyKind, EntityClass};
 use rom_sim::{BodyClaim, BodyId, EntityId, PlayerId, Pos, Sighting, Topology, World};
 
@@ -207,7 +209,46 @@ pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) ->
     }
     snapshot.transits = transits(world);
     snapshot.known = Some(known_systems(world));
+    snapshot.colonies = colonies(world);
     snapshot
+}
+
+/// The planets with cities that player one knows of: its own and its allies' everywhere, other
+/// players' where it has explored the city's ground. By system, body and owner.
+pub fn colonies(world: &World) -> Vec<ColonyView> {
+    let rules = world.rules();
+    let mut out: Vec<ColonyView> = world
+        .entities()
+        .filter(|e| {
+            e.owner != PlayerId(0)
+                && e.build_progress.is_none()
+                && rules.entity_types[&e.type_id]
+                    .territory
+                    .as_ref()
+                    .is_some_and(|t| t.is_city)
+        })
+        .filter(|e| {
+            allied(world, PLAYER, e.owner)
+                || world.is_explored_on_body(
+                    PLAYER,
+                    e.pos.body,
+                    e.pos.face,
+                    e.pos.x.div_euclid(1000),
+                    e.pos.y.div_euclid(1000),
+                )
+        })
+        .filter_map(|e| {
+            let body = world.body(e.pos.body)?;
+            Some(ColonyView {
+                system: body.system,
+                body: body.id.0,
+                owner: u8::try_from(e.owner.0).unwrap_or(u8::MAX),
+            })
+        })
+        .collect();
+    out.sort_unstable();
+    out.dedup();
+    out
 }
 
 /// What the resource body `body` holds and pays player one, with no claim state filled in.

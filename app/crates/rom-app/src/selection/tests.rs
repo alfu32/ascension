@@ -2146,3 +2146,183 @@ fn placing_a_city_on_another_planet_is_refused_with_a_message() {
         "No selected builder can reach this site (another planet)"
     );
 }
+
+/// Runs the task 54 review script without a window: the camera's flight to the planet the
+/// transport orbits is stood in for by showing that planet when the script asks for focus.
+fn colony_script_run() -> (crate::match_setup::Match, Controller, BodyId, u64) {
+    use crate::script::{Script, ScriptAction, ScriptContext, ScriptSetup};
+    let text = include_str!("../../../../docs/tasks/54-colony-script.txt");
+    let options = crate::args::Options {
+        sphere: Some(64),
+        players: 2,
+        ..crate::args::Options::default()
+    };
+    let content = crate::terrain::generate_universe_content(&options).unwrap();
+    let setup = ScriptSetup::scan(text).unwrap();
+    let mut game = crate::match_setup::build_universe_match(
+        &content.rules,
+        &content.universe,
+        &content.factions,
+        1,
+        None,
+        &setup,
+    )
+    .unwrap();
+    let home = game.world.home_body(PLAYER).unwrap();
+    let system = game.world.body(home).unwrap().system;
+    let start = game.starts[0].clone();
+    let mut context = ScriptContext::of(&start);
+    let at = game.world.body_position(home).unwrap();
+    let mut planets: Vec<(u64, u32)> = game
+        .world
+        .bodies()
+        .iter()
+        .filter(|b| b.system == system && b.kind == rom_rules::BodyKind::Habitable && b.id != home)
+        .map(|b| (at.distance(game.world.body_position(b.id).unwrap()), b.id.0))
+        .collect();
+    planets.sort_unstable();
+    context.planets = planets.iter().map(|(_, id)| *id).collect();
+    let colony = BodyId(context.planets[0]);
+    let mut script = Script::parse(text, &context, &|dx, dy| {
+        surface_of(game.world.offset(start.city_pos, dx, dy))
+    })
+    .unwrap();
+    let mut host = crate::sim_thread::UniverseHost::new(content.universe, home, system);
+    let mut ctl = Controller::new();
+    ctl.set_view(ViewCtx {
+        planet: home,
+        system: Some(system),
+        ..ViewCtx::default()
+    });
+    for _ in 0..3800 {
+        for action in script.due_actions(game.world.tick()) {
+            match action {
+                ScriptAction::SelectResearchers => ctl.select_researchers(&game.world),
+                ScriptAction::SelectProducers => ctl.select_producers(&game.world),
+                ScriptAction::SelectShips => ctl.select_own_ships(&game.world),
+                ScriptAction::EntityPick {
+                    target,
+                    right,
+                    shift,
+                } => {
+                    let pick =
+                        crate::script::live_pick(&game.world, &target, right, shift).unwrap();
+                    ctl.handle(&mut game.world, pick);
+                }
+                // The focus key: the camera comes down to the planet the selected ship orbits.
+                ScriptAction::Input(_) => {
+                    let below = ctl
+                        .selection()
+                        .iter()
+                        .find_map(|id| game.world.orbit(*id).map(|o| o.body));
+                    if let Some(planet) = below {
+                        ctl.set_view(ViewCtx {
+                            planet,
+                            system: Some(system),
+                            ..ViewCtx::default()
+                        });
+                    }
+                }
+                ScriptAction::Speed(_) => {}
+            }
+        }
+        for event in script.due(game.world.tick()) {
+            ctl.handle(&mut game.world, event);
+        }
+        game.world.step();
+        if game.world.tick().is_multiple_of(10) {
+            host.generate_visited(&mut game.world).unwrap();
+        }
+        ctl.after_step(&mut game.world);
+    }
+    let hash = game.world.hash();
+    (game, ctl, colony, hash)
+}
+
+#[test]
+fn colony_review_script_boards_lands_unloads_and_founds_a_city_through_picks() {
+    let (game, ctl, colony, hash) = colony_script_run();
+    let world = &game.world;
+    let builders = &game.starts[0].builders;
+    let transport = world
+        .entities()
+        .find(|e| e.owner == PLAYER && world.is_carrier_type(e.type_id) && world.is_landed(e.id))
+        .expect("the transport landed");
+    assert_eq!(transport.pos.body, colony);
+    assert!(world.passengers(transport.id).is_empty());
+    for builder in builders {
+        let e = world.entity(*builder).unwrap();
+        assert_eq!((e.pos.body, e.container_id), (colony, None));
+    }
+    let city = world
+        .cities(PLAYER)
+        .into_iter()
+        .find(|c| world.entity(*c).unwrap().pos.body == colony)
+        .expect("a city on the colony planet");
+    println!(
+        "colony review tick={} city={city:?} complete={} hash={hash:016x}",
+        world.tick(),
+        world.entity(city).unwrap().build_progress.is_none()
+    );
+    // The system view rings the colony in the player's colour.
+    let system = world.body(colony).unwrap().system;
+    let snapshot =
+        crate::space_view::space_snapshot(world, system, &world.visible_entities(PLAYER));
+    assert!(
+        snapshot
+            .colonies
+            .iter()
+            .any(|c| c.body == colony.0 && c.owner == 1)
+    );
+    let _ = ctl;
+    assert_eq!(hash, colony_script_run().3);
+}
+
+#[test]
+fn a_carrier_lists_its_passengers_and_offers_unload_and_lift_off() {
+    let (mut game, mut ctl, colony, _) = colony_script_run();
+    let transport = game
+        .world
+        .entities()
+        .find(|e| e.owner == PLAYER && game.world.is_landed(e.id))
+        .unwrap()
+        .id;
+    // Two units walk up to the landed transport and board it.
+    let walkers: Vec<EntityId> = game.starts[0].builders[..2].to_vec();
+    ctl.set_selection(walkers.clone());
+    let landed_at = game.world.entity(transport).unwrap().pos;
+    ctl.right_click(
+        &mut game.world,
+        landed_at,
+        Some(transport.0),
+        Modifiers::default(),
+    );
+    for _ in 0..600 {
+        game.world.step();
+    }
+    assert_eq!(game.world.passengers(transport), walkers);
+    ctl.set_selection(vec![transport]);
+    let mut hud = HudSnapshot::default();
+    ctl.fill(&game.world, &mut hud);
+    let HudSelection::Single(card) = &hud.selection else {
+        panic!("one card");
+    };
+    assert_eq!(card.inside.len(), 2);
+    assert_eq!(card.garrison.as_deref(), Some("2 / 20"));
+    let (_, actions) = ctl.palette(&game.world).unwrap();
+    assert!(actions.contains(&(4, Action::Unload)));
+    assert!(actions.contains(&(5, Action::Lift)));
+    // Unload sets them down; Lift off takes the ship back to orbit.
+    ctl.press_slot(&mut game.world, 4, false);
+    game.world.step();
+    assert!(game.world.passengers(transport).is_empty());
+    ctl.press_slot(&mut game.world, 5, false);
+    for _ in 0..40 {
+        game.world.step();
+    }
+    assert_eq!(
+        game.world.orbit(transport).map(|o| o.body),
+        Some(colony),
+        "back in orbit"
+    );
+}

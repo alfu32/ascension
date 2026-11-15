@@ -63,6 +63,56 @@ impl UniverseHost {
         body: BodyId,
         bridge: &RenderBridge,
     ) -> Result<bool, String> {
+        let added = self.generate(world, body)?;
+        self.viewed = body;
+        let home = self.home_starts.get(&body).copied().or_else(|| {
+            self.universe
+                .starts
+                .iter()
+                .find(|(b, _)| *b == body.0)
+                .map(|(_, at)| *at)
+        });
+        bridge.publish_planet(
+            Arc::clone(&self.scenes[&body]),
+            OrbitSettings {
+                home,
+                body: Some(body.0),
+                ..OrbitSettings::default()
+            },
+        );
+        Ok(added)
+    }
+
+    /// Generates the planets ships are ordered to orbit, so the first visit (and a landing there)
+    /// finds a surface: a planet is made when it is first visited, by camera or by ship.
+    pub fn generate_visited(&mut self, world: &mut World) -> Result<(), String> {
+        let waiting = world.ungenerated_bodies();
+        if waiting.is_empty() {
+            return Ok(());
+        }
+        let wanted: std::collections::BTreeSet<BodyId> = world
+            .entities()
+            .filter_map(|e| e.orders().front().filter(|o| o.kind == "orbit"))
+            .filter_map(|o| {
+                o.target_pos.map(|p| p.body).or_else(|| {
+                    let marker = o.target_entity?;
+                    waiting
+                        .iter()
+                        .copied()
+                        .find(|b| world.body_marker(*b) == Some(marker))
+                })
+            })
+            .filter(|b| waiting.contains(b))
+            .collect();
+        for body in wanted {
+            self.generate(world, body)?;
+        }
+        Ok(())
+    }
+
+    /// Generates `body` and adds its surface when the world has none, keeping its globe for the
+    /// render thread. Returns whether a surface was added.
+    fn generate(&mut self, world: &mut World, body: BodyId) -> Result<bool, String> {
         let rules = Arc::clone(world.rules());
         let mut added = false;
         if !self.scenes.contains_key(&body) {
@@ -85,22 +135,6 @@ impl UniverseHost {
             scene.nodes.clear();
             self.scenes.insert(body, Arc::new(scene));
         }
-        self.viewed = body;
-        let home = self.home_starts.get(&body).copied().or_else(|| {
-            self.universe
-                .starts
-                .iter()
-                .find(|(b, _)| *b == body.0)
-                .map(|(_, at)| *at)
-        });
-        bridge.publish_planet(
-            Arc::clone(&self.scenes[&body]),
-            OrbitSettings {
-                home,
-                body: Some(body.0),
-                ..OrbitSettings::default()
-            },
-        );
         Ok(added)
     }
 }
@@ -414,6 +448,12 @@ fn run(
                 link.stats.rejected.fetch_add(rejected, Ordering::Relaxed);
             }
             world.step();
+            if world.tick().is_multiple_of(VISIT_INTERVAL)
+                && let Some(host) = host.as_mut()
+                && let Err(error) = host.generate_visited(&mut world)
+            {
+                eprintln!("rise-of-man: {error}");
+            }
             controller.after_step(&mut world);
             for notice in notices.update(&world) {
                 match notice.about {
@@ -493,6 +533,9 @@ impl TerrainKnowledge {
     }
 }
 
+/// Ticks between two looks for planets that ships are bound for and that are not made yet.
+const VISIT_INTERVAL: u64 = 10;
+
 /// Ticks between two visibility maps sent to the render thread.
 const VISION_INTERVAL: u64 = 5;
 
@@ -570,6 +613,9 @@ pub fn snapshot_of(world: &World) -> EntitySnapshot {
         &mut Motions::default(),
     )
 }
+
+/// Height of an orbit above the planet in the planet view, in tiles.
+const ORBIT_HEIGHT: f32 = 8.0;
 
 /// Ticks after its last step during which a unit still counts as moving (a path search or a
 /// push can hold a walker for a tick or two).
@@ -731,12 +777,18 @@ pub fn snapshot_on(
         });
         let mut view = view_of(entity, et, under_construction, &clamp_u8);
         view.model = model_of(entity.owner, entity.type_id);
+        view.spacecraft = world.is_spacecraft_type(entity.type_id);
+        // Orbit is eight tiles up; a ship landing or lifting off is drawn on its way.
+        let altitude = world
+            .altitude_pct(entity.id)
+            .map_or(0.0, |pct| ORBIT_HEIGHT * pct as f32 / 100.0);
+        view.altitude = altitude;
         if let Some(orbit) = orbit {
             view.face = orbit.pos.face;
             view.x = orbit.pos.x as f32 / 1000.0;
             view.y = orbit.pos.y as f32 / 1000.0;
             view.facing_deg = f32::from(orbit.facing);
-            view.altitude = 8.0;
+            view.altitude = altitude.max(0.05);
             view.beam_target = orbit
                 .last_shot
                 .as_ref()
@@ -774,6 +826,7 @@ pub fn snapshot_on(
                 facing_deg: 0.0,
                 altitude: 0.0,
                 beam_target: None,
+                spacecraft: false,
                 hp_frac: 1.0,
                 building: true,
                 footprint: (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h)),
@@ -815,6 +868,7 @@ fn view_of(
         facing_deg: f32::from(entity.facing),
         altitude: 0.0,
         beam_target: None,
+        spacecraft: false,
         hp_frac: (entity.hp as f32 / et.hp.max(1) as f32).clamp(0.0, 1.0),
         building: et.class == EntityClass::Building,
         footprint: (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h)),

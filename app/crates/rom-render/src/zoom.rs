@@ -376,6 +376,9 @@ pub enum FocusPlace {
     },
     /// A point of the star map, in map units (a ship between systems).
     Map([f32; 3]),
+    /// The habitable planet at this index of [`UniverseScene::bodies`], whose globe is not
+    /// loaded: a ship in its orbit is seen on it, so the camera flies down to it.
+    Planet(usize),
 }
 
 /// Why the camera cannot fly to a place.
@@ -1598,6 +1601,41 @@ impl ZoomCamera {
                     self.fly(legs, orbit);
                 }
             }
+            FocusPlace::Planet(index) => {
+                let body = self.scene.bodies.get(index).ok_or(FocusRefused::Unknown)?;
+                let id = body.id;
+                let system = self
+                    .scene
+                    .system_index(body.system)
+                    .ok_or(FocusRefused::Unknown)?;
+                if self.cap < Level::System {
+                    return Err(FocusRefused::BeyondReach);
+                }
+                if system == self.system {
+                    self.fly_to_target(Target::Body(index), orbit);
+                } else {
+                    if self.cap < Level::StarMap {
+                        return Err(FocusRefused::BeyondReach);
+                    }
+                    let at = self
+                        .scene
+                        .place_system(self.scene.systems[system].id)
+                        .iter()
+                        .find(|p| p.body == index)
+                        .map_or([0.0; 3], |p| p.pos);
+                    let legs = [
+                        self.out_to_map(system, orbit),
+                        Leg::System { index: system, at },
+                        Leg::Body(index),
+                        Leg::Surface(id),
+                        Leg::Zoom {
+                            to: self.space_floor(),
+                            out_only: false,
+                        },
+                    ];
+                    self.fly(legs, orbit);
+                }
+            }
             FocusPlace::Map(at) => {
                 if self.cap < Level::StarMap {
                     return Err(FocusRefused::BeyondReach);
@@ -1654,6 +1692,8 @@ impl ZoomCamera {
                     self.pan = lerp3(self.pan, wanted, settle);
                 }
             }
+            // Following waits for the planet's globe; then the ship is followed on it.
+            FocusPlace::Planet(_) => {}
         }
     }
 

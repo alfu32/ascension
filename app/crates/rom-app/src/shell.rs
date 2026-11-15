@@ -438,6 +438,18 @@ fn read_script(path: &std::path::Path, game: &Match) -> Result<Script, String> {
             .collect();
         rocks.sort_unstable();
         context.rocks = rocks.into_iter().map(|(_, id)| id).collect();
+        let mut planets: Vec<(u64, u32)> = world
+            .bodies()
+            .iter()
+            .filter(|b| {
+                b.system == home.system
+                    && b.kind == rom_rules::BodyKind::Habitable
+                    && b.id != home.id
+            })
+            .filter_map(|b| Some((at.distance(world.body_position(b.id)?), b.id.0)))
+            .collect();
+        planets.sort_unstable();
+        context.planets = planets.into_iter().map(|(_, id)| id).collect();
         let mut neighbours: Vec<(i32, u32)> = world
             .routes()
             .iter()

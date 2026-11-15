@@ -131,6 +131,37 @@ ship keeps orbiting and fires as targets pass within its footprint. A short
 beam uses the actual shot's target position. Surface weapons cannot hit an
 orbital ship; anti-space batteries remain a later task.
 
+### Carrying, landing and colonies (task 54)
+
+Starships carry ground units: the **transport ship** (starfaring age, unarmed)
+takes twenty population, every other starship one or two squads. Units board
+a ship that orbits their planet by walking into an own spaceport below it, or
+walk up to a ship that has landed. Selecting a carrier lists who is aboard
+(portraits, as workers inside a building) and its load ("Garrison 3 / 20");
+**Unload** sets them down beside a landed ship, or at the own spaceport below
+one in orbit.
+
+To land, select a carrier in orbit and right-click open ground in that
+planet's view (the bombard gesture of task 43, on empty ground): any
+buildable ground tile without a building, outside every enemy city's economic
+radius. The ship descends for `space.land_ticks` (drawn coming down from its
+orbital height), lands, sets everyone down on free tiles around it and stays
+as a landing zone: units can walk up and board it, right-clicking ground with
+it selected sends its passengers there, and **Lift off** returns it to orbit.
+On the ground it can be shot by surface weapons.
+
+A planet that is not generated yet is generated when a ship is ordered into
+its orbit (as when the camera first visits it), so the ship can enter orbit
+and land. Workers set down on a planet where their player has no city may
+found one outside any border (never inside another player's); it grows its
+own borders, economy and production, and the planet becomes part of the
+player's territory. Troops set down there fight with the normal combat and
+capture or raze cities as on the home planet; the conquest victory counts
+every unit and city, aboard or not. The system view rings each planet with
+cities in its owners' colours, and the star map rings each system with them.
+Pressing the focus key on a ship that orbits a planet whose globe is not shown
+flies the camera down to that planet.
+
 ### What a star system looks like (task 56)
 
 - **Orbits grow geometrically.** The generator spaces orbit slots from the

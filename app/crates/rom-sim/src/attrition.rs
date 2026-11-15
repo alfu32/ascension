@@ -30,7 +30,10 @@ impl World {
         for index in (start..self.entities.len()).step_by(STRIDE as usize) {
             let id = EntityId(index as u32);
             let Some(e) = self.entity(id) else { continue };
-            if e.hp <= 0 || self.rules.entity_types[&e.type_id].class != EntityClass::Unit {
+            if e.hp <= 0
+                || e.container_id.is_some()
+                || self.rules.entity_types[&e.type_id].class != EntityClass::Unit
+            {
                 continue;
             }
             let owner = self.territory_owner_on_body(

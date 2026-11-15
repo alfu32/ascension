@@ -193,7 +193,10 @@ impl World {
         let ids: Vec<_> = self
             .entities()
             .filter(|e| {
-                e.orders.is_empty() && e.build_progress.is_none() && !pending.contains(&e.id)
+                e.orders.is_empty()
+                    && e.build_progress.is_none()
+                    && e.container_id.is_none()
+                    && !pending.contains(&e.id)
             })
             .map(|e| e.id)
             .collect();

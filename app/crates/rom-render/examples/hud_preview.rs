@@ -162,6 +162,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             activity: Default::default(),
             altitude: 0.0,
             beam_target: None,
+            spacecraft: false,
         })
         .collect::<Vec<_>>();
     let camera = Camera {

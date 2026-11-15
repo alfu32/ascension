@@ -75,6 +75,8 @@ pub(crate) struct Space {
     pub claims: BTreeMap<BodyId, PlayerId>,
     pub transits: BTreeMap<EntityId, Transit>,
     pub transits_done: u64,
+    /// Ships standing on a planet's surface after landing, until they lift off.
+    pub landed: BTreeSet<EntityId>,
 }
 
 /// Sine in millionths using the integer Bhaskara approximation on a half turn.
@@ -132,6 +134,10 @@ impl World {
     pub(crate) fn advance_orbits(&mut self) {
         let ids: Vec<_> = self.space.orbits.keys().copied().collect();
         for id in ids {
+            // A descending ship keeps its footprint over the landing point.
+            if self.landing_progress(id).is_some() {
+                continue;
+            }
             let orbit = &self.space.orbits[&id];
             let numerator = orbit.move_remainder
                 + self
@@ -250,6 +256,7 @@ impl World {
             "space.orbit_reach",
             "space.route_ticks_per_unit",
             "space.launch_ticks",
+            "space.land_ticks",
             "space.orbit_speed",
         ] {
             if self.rules.constant(key).is_none_or(|v| v <= 0) {
@@ -868,6 +875,9 @@ mod tests {
         });
         changes(&mut w, |w| {
             w.space.transits_done += 1;
+        });
+        changes(&mut w, |w| {
+            w.space.landed.insert(EntityId(2));
         });
         changes(&mut w, |w| {
             w.space.transits.get_mut(&EntityId(1)).unwrap().origin += 1;

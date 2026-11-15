@@ -426,6 +426,10 @@ impl StateHash {
             self.u64(transit.arrives);
         }
         self.u64(space.transits_done);
+        self.u64(space.landed.len() as u64);
+        for id in &space.landed {
+            self.u32(id.0);
+        }
     }
 
     /// Star systems, bodies and routes.

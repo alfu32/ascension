@@ -61,7 +61,8 @@ impl World {
                     order.status = OrderStatus::Failed("unsupported".into());
                 }
                 "move" | "construct" | "repair" | "harvest" | "attack" | "attack_move" | "heal"
-                | "orbit" | "travel" | "launch" | "carry" | "trade" => {
+                | "orbit" | "travel" | "launch" | "carry" | "trade" | "enter" | "land" | "lift"
+                | "unload" => {
                     if worked {
                         self.entities[id.0 as usize]
                             .as_mut()
@@ -74,7 +75,9 @@ impl World {
                     if matches!(order.kind.as_str(), "move" | "travel" | "attack_move") {
                         self.leave_orbit(id);
                     }
-                    if order.kind == "launch" {
+                    if matches!(order.kind.as_str(), "enter" | "land" | "lift" | "unload") {
+                        self.advance_transport(id, &mut order);
+                    } else if order.kind == "launch" {
                         self.advance_launch(id, &mut order);
                     } else if order.kind == "carry" {
                         self.advance_carry(id, &mut order);

@@ -58,6 +58,17 @@ pub struct ClaimView {
     pub owner: u8,
 }
 
+/// A habitable planet where a player has a city.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ColonyView {
+    /// Its system.
+    pub system: u32,
+    /// The planet.
+    pub body: u32,
+    /// The player with a city there.
+    pub owner: u8,
+}
+
 /// Who holds a resource body, as player one hears of it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClaimState {
@@ -134,6 +145,8 @@ pub struct SpaceSnapshot {
     pub resources: Vec<ResourceBodyView>,
     /// Ships in transit anywhere on the star map.
     pub transits: Vec<TransitView>,
+    /// Planets with cities, anywhere, that the player knows of; by system, body and owner.
+    pub colonies: Vec<ColonyView>,
     /// The systems the player knows, ascending ids; `None` before the first report (all shown).
     pub known: Option<Vec<u32>>,
 }
@@ -508,6 +521,59 @@ pub fn claim_rings(
             })
         })
         .collect()
+}
+
+/// The rings around the planets of `system` laid out as `placed` where players have cities,
+/// one per owner in the owner's colour, each owner's a little wider than the one before.
+pub fn colony_rings(
+    scene: &UniverseScene,
+    placed: &[PlacedBody],
+    colonies: &[ColonyView],
+    system: u32,
+) -> Vec<ClaimRing> {
+    let mut out: Vec<ClaimRing> = Vec::new();
+    for colony in colonies.iter().filter(|c| c.system == system) {
+        let Some(at) = scene
+            .body_index(colony.body)
+            .and_then(|index| placed.iter().find(|p| p.body == index))
+        else {
+            continue;
+        };
+        let rank = out.iter().filter(|r| r.body == colony.body).count() as f32;
+        let [r, g, b] = owner_color(colony.owner);
+        out.push(ClaimRing {
+            body: colony.body,
+            centre: at.pos,
+            radius: at.radius * (COLONY_RING + COLONY_RING_STEP * rank),
+            colour: [r, g, b].map(|c| (c * 255.0).round() as u8),
+        });
+    }
+    out
+}
+
+/// Radius of a colony ring in planet radii.
+pub const COLONY_RING: f32 = 1.8;
+/// How much wider each further owner's ring on the same planet is, in planet radii.
+pub const COLONY_RING_STEP: f32 = 0.45;
+
+/// For the star map: each system with colonies, as `(system index, owner, rank)`, the rank
+/// counting the owners already ringed around that system.
+pub fn map_colony_rings(scene: &UniverseScene, colonies: &[ColonyView]) -> Vec<(usize, u8, u8)> {
+    let mut out: Vec<(usize, u8, u8)> = Vec::new();
+    for colony in colonies {
+        let Some(index) = scene.system_index(colony.system) else {
+            continue;
+        };
+        if out
+            .iter()
+            .any(|(i, o, _)| *i == index && *o == colony.owner)
+        {
+            continue;
+        }
+        let rank = out.iter().filter(|(i, _, _)| *i == index).count() as u8;
+        out.push((index, colony.owner, rank));
+    }
+    out
 }
 
 /// A flat annulus in the plane `y = centre.y` as triangles of `segments` steps.

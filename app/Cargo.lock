@@ -4897,7 +4897,7 @@ version = "0.0.47"
 
 [[package]]
 name = "rom-kit"
-version = "0.0.46"
+version = "0.0.47"
 
 [[package]]
 name = "rom-mapgen"
@@ -4912,7 +4912,7 @@ dependencies = [
 
 [[package]]
 name = "rom-models"
-version = "0.0.46"
+version = "0.0.47"
 dependencies = [
  "rom-kit",
  "rom-rules",
