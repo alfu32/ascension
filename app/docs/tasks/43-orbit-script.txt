@@ -14,7 +14,6 @@
 1300 ships
 1302 key 1 ctrl
 1304 key 1
-1306 key 1
 1310 rclick enemy1
-# Pause almost completely just after a shot for a stable review frame.
-1372 speed 1
+# Pause almost completely just after the shot of tick 1340 for a stable review frame.
+1350 speed 1

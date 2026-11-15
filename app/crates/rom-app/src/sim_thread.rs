@@ -731,7 +731,7 @@ pub fn snapshot_on(
             view.beam_target = orbit
                 .last_shot
                 .as_ref()
-                .filter(|shot| world.tick().saturating_sub(shot.tick) <= 4)
+                .filter(|shot| world.tick().saturating_sub(shot.tick) <= 20)
                 .map(|shot| SurfacePos {
                     face: shot.target.face,
                     x: i64::from(shot.target.x),

@@ -18,7 +18,7 @@
 //! Live names (resolved at the step, in entity id order): `relicN` = free carry nodes,
 //! `templeN` = own completed keepers, `marketN` = own completed buildings training route
 //! traders, `cityN` = own completed cities, `carrierN` = own claim-tag units,
-//! `traderN` = own route traders, `shipN` = own orbiting ships, `enemyN` = enemy buildings
+//! `traderN` = own route traders, `shipN` = own orbiting ships, `enemyN` = enemy non-city buildings
 //! on the home planet. `click` and `rclick` support these names and Shift.
 //! These component-based aliases replace a dependency on the last trained type.
 //!
@@ -574,7 +574,8 @@ pub fn live_pick(
                             .players()
                             .find(|p| p.id == e.owner)
                             .is_some_and(|p| Some(p.team) != own)
-                        && et.class == EntityClass::Building;
+                        && et.class == EntityClass::Building
+                        && et.territory.as_ref().is_none_or(|t| !t.is_city);
                 }
                 if e.owner != crate::selection::PLAYER || e.build_progress.is_some() {
                     return false;
