@@ -2,7 +2,7 @@
 
 Crates: `rom-sim`, `rom-app`, `rom-render` (as needed), schema, seed, docs.
 Starts after task 53 (navigable space). Implementer: Claude (Opus).
-**Design proposed by the orchestrator; confirm it with the owner first.**
+**Design confirmed by the owner (2026-11-15):** a dedicated transport carries many units and every other starship carries one or two squads; ships land anywhere on open ground. Colonisation follows the free-colonisation rule of task 52 (cities anywhere not in another player's territory from the enlightenment age).
 
 ## Why — the owner (2026-11-15)
 
@@ -15,14 +15,15 @@ carrying, landing or unloading today.
 ## Proposed design
 
 1. **Carrying.** Starships with a `carry` capacity (component row; data, not
-   names) take units aboard: a new transport starship at the starfaring age
-   (large capacity, unarmed) and a small squad on the corvette. Units board at
+   names) take units aboard: a new dedicated transport starship at the
+   starfaring age (large capacity, unarmed) and **every other starship** a
+   capacity of one or two squads (owner). Units board at
    a spaceport (they walk in; the ship in orbit above it takes them) or by
    boarding a ship that has landed. Selecting the ship shows who is aboard
    (same panel as task 52's garrison: portraits, release).
 2. **Landing.** Order a carrying ship in orbit of a known habitable planet to
-   land at a point on the surface (right-click the ground in that planet's
-   view, as task 43's bombard): the ship descends (a duration, drawn), lands
+   land at a point on **any open ground** (owner) — right-click the ground in
+   that planet's view, as task 43's bombard: the ship descends (a duration, drawn), lands
    on open land, unloads its units around it, and returns to orbit (or stays
    as a landing zone until ordered up). Landing on a planet with enemy
    territory is allowed outside their cities' radius; anti-orbit defences

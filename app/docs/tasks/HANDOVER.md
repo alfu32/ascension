@@ -136,7 +136,7 @@ the reset, finishing them with Claude agents, or adding OpenAI credits.
 
 - **Task 42** (launcher) merged in 0.0.44.
 - **Task 43** merged in 0.0.45.
-- **Owner's order (2026-11-15): task 52, then task 53, then task 55 (Meshcraft export/import, so the owner can edit models himself), and only then the model cards (44–51). Task 54 (colonies) waits for the owner's design answers.**
+- **Owner's order (2026-11-15): task 52, then task 53, then task 55 (Meshcraft export/import, so the owner can edit models himself), and only then the model cards (44–51). Task 54 (colonies) design confirmed; it follows 55 unless the owner reorders.**
 
 ## Next cards (written, queued, all Codex)
 
