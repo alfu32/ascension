@@ -195,6 +195,8 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
     while let Some(arg) = args.next() {
         let mut value = |name: &str| args.next().ok_or_else(|| format!("{name} needs a value"));
         match arg.as_str() {
+            // Lets the launcher start a default game without reopening itself.
+            "--run" => {}
             "--bench" => {
                 let text = value("--bench")?;
                 let seconds = text

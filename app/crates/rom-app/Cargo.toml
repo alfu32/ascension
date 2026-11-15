@@ -17,3 +17,4 @@ rom-rules.workspace = true
 rom-mapgen = { path = "../rom-mapgen" }
 rom-sim = { path = "../rom-sim" }
 thiserror.workspace = true
+serde_json = "=1.0.154"

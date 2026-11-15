@@ -5,6 +5,7 @@ mod bench;
 mod demo;
 mod gallery;
 mod hud;
+mod launcher;
 mod looks;
 mod match_setup;
 mod screenshot;
@@ -20,7 +21,11 @@ mod world_view;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    let options = match args::parse(std::env::args().skip(1)) {
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if launcher::requested(&arguments) {
+        return launcher::run(&arguments);
+    }
+    let options = match args::parse(arguments) {
         Ok(options) => options,
         Err(error) => {
             eprintln!("rise-of-man: {error}\n{}", args::USAGE);
@@ -29,6 +34,7 @@ fn main() -> ExitCode {
     };
     if options.help {
         println!("rise-of-man {}\n{}", env!("CARGO_PKG_VERSION"), args::USAGE);
+        println!("\nNo arguments or --launcher opens the launcher. --run starts a default game.");
         return ExitCode::SUCCESS;
     }
     if let Some(path) = &options.gallery_manifest {
