@@ -152,27 +152,20 @@ card.
   `main.rs` and the launcher module. If the timer did not fire (session
   closed), run it like task 42 with that prompt. Merge after 42.
 
-## Next cards (agreed direction, not yet written)
+## Next cards (written, queued, all Codex)
 
-1. **Task 43 — space tiers, ships seen from the planet, fire from orbit**
-   (`43-space-on-the-planet.md`; design confirmed by the owner 2026-11-14:
-   starfaring = system view, expansion = star map, bombard from orbit by
-   right-clicking ground targets). Start it after task 42 is merged: both
-   touch `rom-app`. Includes the
-   universe zoom bug below.
-2. **Task 44 — renderer: oil and glow.** Oil deposits (`ter.oil`) still read
-   as dull dark ground and are drawn before the industrial age (task 41 made
-   them unknown and unplaceable before that age in the simulation and app;
-   the renderer must hide them per player and show them when the age is
-   reached, without a restart). Give oil glossy black seep pools and a map
-   colour that stands out on the globe and minimap. Add an emissive material
-   program for furnace glow and muzzle flashes (task 40 uses lit colours).
-   Opus, `rom-render` + seed.
-3. **Task 45 — early-modern looks:** gunpowder/enlightenment look of every
-   building (plaster, tile, brick, sash windows), `bld.bastion` and
-   `bld.star_fort`, enlightenment units (fusilier, light infantry, ranger,
-   dragoon, lancer, cannon, frigate, freight wagon). Same pattern as card 40.
-   Then industrial, modern, information, automation and the space ages.
+Run them **one at a time, in order**, each after the previous one is merged
+(they all touch `seed.sql` and may extend the part kit): **44** oil you can
+see and a glowing material (renderer), then the model cards **45** early
+modern, **46** industrial, **47** modern and information buildings, **48**
+modern and information units, **49** future buildings, **50** future units,
+**51** space age (also needs 43). The model cards share
+`app/docs/tasks/model-card-common.md` (method, rules, review material, tests,
+done-when). For each: worktree `../rise-of-man-worktrees/<card>`, prompt =
+the card + "Read model-card-common.md first; you have full permissions and
+take your own screenshots; do not commit", review its screenshots, run the
+gate, commit in the worktree, merge, release, publish the review round on the
+review page, and lock what the owner approves.
 
 ## Known open items
 
