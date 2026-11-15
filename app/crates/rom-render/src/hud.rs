@@ -251,6 +251,38 @@ impl HudPainter {
         }));
     }
 
+    /// Scale factor (at most 1) at which `text` fits `width` screen pixels whole.
+    fn fit_factor(&self, text: &str, width: f32, size: TextSize) -> f32 {
+        let natural = self.glyphs.measure(text, size) as f32 * self.scale / self.glyphs.scale;
+        if natural <= width {
+            1.0
+        } else {
+            // A pixel of slack keeps the fitted text clear of the truncation check.
+            ((width - 1.0) / natural).max(0.1)
+        }
+    }
+
+    /// Draws a right-aligned number whole, shrinking it instead of cutting digits.
+    fn number_fitted(&mut self, text: &str, area: Rect, colour: [u8; 4]) {
+        let factor = self.fit_factor(text, area.w, TextSize::Small);
+        self.text_scaled(text, area, (TextSize::Small, factor), Align::Right, colour);
+    }
+
+    /// Draws a stock and its rate as one right-aligned line; both shrink together to fit whole.
+    fn amount_and_rate(&mut self, amount: &str, rate: &str, area: Rect, rate_colour: [u8; 4]) {
+        let size = TextSize::Small;
+        let line = format!("{amount} {rate}");
+        let factor = self.fit_factor(&line, area.w, size);
+        let ratio = self.scale / self.glyphs.scale * factor;
+        let rate_w = self.glyphs.measure(rate, size) as f32 * ratio + 0.5;
+        let rate_area = Rect::new(area.right() - rate_w, area.y, rate_w, area.h);
+        let amount_area = Rect::new(area.x, area.y, area.w - rate_w, area.h);
+        self.text_scaled(rate, rate_area, (size, factor), Align::Right, rate_colour);
+        let gap = self.glyphs.measure(" ", size) as f32 * ratio;
+        let amount_area = Rect::new(amount_area.x, area.y, amount_area.w - gap, area.h);
+        self.text_scaled(amount, amount_area, (size, factor), Align::Right, WHITE);
+    }
+
     fn caption(&mut self, l: &HudLayout, group: Group, text: &str, rect: Rect, colour: [u8; 4]) {
         self.text(
             text,
@@ -825,11 +857,9 @@ impl HudPainter {
                 l.map(T, Rect::new(59.0, y + 5.0, 29.0, 29.0)),
             );
             self.caption(l, T, label, Rect::new(100.0, y, 115.0, 15.0), WHITE);
-            self.text(
+            self.number_fitted(
                 &format!("{} / {}", number(value), number(cap)),
                 l.map(T, Rect::new(94.0, y + 17.0, 119.0, 17.0)),
-                TextSize::Small,
-                Align::Right,
                 if value >= cap && cap > 0 && flashing {
                     AMBER
                 } else {
@@ -867,26 +897,34 @@ impl HudPainter {
                 Rect::new(x + 34.0, y + 2.0, w - 38.0, 14.0),
                 WHITE,
             );
-            self.text(
-                &number(res.amount),
-                l.map(T, Rect::new(x + 30.0, y + 23.0, w - 67.0, 15.0)),
-                TextSize::Small,
-                Align::Right,
-                WHITE,
-            );
-            self.text(
-                &format!("{:+}", res.rate),
-                l.map(T, Rect::new(x + w - 37.0, y + 23.0, 33.0, 15.0)),
-                TextSize::Small,
-                Align::Right,
-                if res.capped {
-                    if flashing { AMBER } else { GOLD }
-                } else if res.rate < 0 {
-                    AMBER
-                } else {
-                    GREEN
-                },
-            );
+            let rate_colour = if res.capped {
+                if flashing { AMBER } else { GOLD }
+            } else if res.rate < 0 {
+                AMBER
+            } else {
+                GREEN
+            };
+            let (amount, rate) = (number(res.amount), signed_number(res.rate));
+            if wide {
+                self.amount_and_rate(
+                    &amount,
+                    &rate,
+                    l.map(T, Rect::new(x + 32.0, y + 23.0, w - 36.0, 15.0)),
+                    rate_colour,
+                );
+            } else {
+                // Narrow cells stack the stock over the rate so both stay readable.
+                self.number_fitted(
+                    &amount,
+                    l.map(T, Rect::new(x + 32.0, y + 15.0, w - 36.0, 14.0)),
+                    WHITE,
+                );
+                self.number_fitted(
+                    &rate,
+                    l.map(T, Rect::new(x + 32.0, y + 28.0, w - 36.0, 14.0)),
+                    rate_colour,
+                );
+            }
         }
         for (i, research) in h.research.iter().take(3).enumerate() {
             let y = 16.0 + i as f32 * 35.0;
@@ -1060,6 +1098,15 @@ impl HudPainter {
             self.frame(drag, (1.5 * l.scale).max(1.0), CYAN);
         }
         &self.quads
+    }
+}
+
+/// A rate with its sign and thousands separators: `+1,234`, `-56`, `+0`.
+fn signed_number(value: i64) -> String {
+    if value < 0 {
+        number(value)
+    } else {
+        format!("+{}", number(value))
     }
 }
 

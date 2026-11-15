@@ -24,13 +24,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         population: (1240, 1500),
         cities: (5, 8),
         resources: [
-            ("food", 4280, 20),
-            ("timber", 2160, 30),
-            ("metal", 1340, 42),
-            ("wealth", 3050, 88),
-            ("knowledge", 1720, 76),
-            ("oil", 640, 36),
-            ("energy", 960, 48),
+            ("food", 62_345, 2_345),
+            ("timber", 95_120, 2_100),
+            ("metal", 44_321, -1_234),
+            ("wealth", 1_198_765, 12_890),
+            ("knowledge", 82_828, 3_456),
+            ("oil", 2_001, 84),
+            ("energy", 10_878, 2_222),
         ]
         .into_iter()
         .map(|(label, amount, rate)| HudResource {
