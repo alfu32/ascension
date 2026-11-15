@@ -55,7 +55,7 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 
-# run the application once it exists (X11 path is the validated one)
+# open the launcher (no arguments; X11 is the validated path)
 env -u WAYLAND_DISPLAY cargo run -p rom-app
 ```
 
