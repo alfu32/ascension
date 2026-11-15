@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 rom-geo = { path = "../rom-geo" }
 rom-rules.workspace = true
+rom-models.workspace = true
 rom-sim = { path = "../rom-sim" }
 rom-mapgen = { path = "../rom-mapgen" }
 rusqlite.workspace = true

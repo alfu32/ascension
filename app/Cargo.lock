@@ -4871,6 +4871,7 @@ dependencies = [
  "gpui",
  "gpui-component",
  "rom-mapgen",
+ "rom-models",
  "rom-render",
  "rom-rules",
  "rom-sim",
@@ -4884,6 +4885,7 @@ version = "0.0.47"
 dependencies = [
  "rom-geo",
  "rom-mapgen",
+ "rom-models",
  "rom-rules",
  "rom-sim",
  "rusqlite",
@@ -4892,6 +4894,10 @@ dependencies = [
 [[package]]
 name = "rom-geo"
 version = "0.0.47"
+
+[[package]]
+name = "rom-kit"
+version = "0.0.46"
 
 [[package]]
 name = "rom-mapgen"
@@ -4905,6 +4911,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rom-models"
+version = "0.0.46"
+dependencies = [
+ "rom-kit",
+ "rom-rules",
+ "rusqlite",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "rom-render"
 version = "0.0.47"
 dependencies = [
@@ -4913,6 +4930,7 @@ dependencies = [
  "raylib",
  "resvg 0.47.0",
  "rom-geo",
+ "rom-kit",
 ]
 
 [[package]]

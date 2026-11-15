@@ -1,2 +1,4 @@
 /target/
 *.db
+# Meshcraft exports (rom model export-all): regenerated from db/models.
+/art/models/

@@ -487,35 +487,13 @@ pub fn write_manifest(path: &std::path::Path) -> Result<usize, String> {
 /// The model ids and fingerprints of an `approved.toml` (`"<model id>" = "<fingerprint>"` lines
 /// under `[models]`).
 pub fn approved(text: &str) -> BTreeMap<String, String> {
-    let unquote = |s: &str| s.trim().trim_matches('"').to_owned();
-    text.lines()
-        .map(|line| line.split('#').next().unwrap_or("").trim())
-        .filter(|line| !line.is_empty() && !line.starts_with('['))
-        .filter_map(|line| {
-            let (id, fingerprint) = line.split_once('=')?;
-            Some((unquote(id), unquote(fingerprint)))
-        })
-        .collect()
+    rom_models::lock::approved(text)
 }
 
 /// The approved models whose fingerprint no longer matches (or which no longer exist), each
 /// with the old and new fingerprint.
 pub fn changed_models(book: &ModelBook, approved: &BTreeMap<String, String>) -> Vec<String> {
-    approved
-        .iter()
-        .filter_map(|(id, fingerprint)| {
-            let now = book
-                .entries
-                .iter()
-                .find(|e| &e.id == id)
-                .map(|e| format!("{:016x}", e.baked.fingerprint()));
-            match now {
-                Some(now) if &now == fingerprint => None,
-                Some(now) => Some(format!("{id}: approved {fingerprint}, now {now}")),
-                None => Some(format!("{id}: approved {fingerprint}, model gone")),
-            }
-        })
-        .collect()
+    rom_models::lock::changed(&book.entries, approved)
 }
 
 #[cfg(test)]
@@ -1042,7 +1020,7 @@ mod tests {
                 let shape = PartShape::from_name(&part.shape).unwrap_or_else(|| {
                     panic!("{}/{}: shape {}", rules.key(*mesh), part.name, part.shape)
                 });
-                for key in crate::looks::parse_params(&part.params).keys() {
+                for key in rom_models::params::parse_params(&part.params).keys() {
                     let known = rom_render::models::COMMON_KNOBS.contains(&key.as_str())
                         || rom_render::models::COMMON_COLOURS.contains(&key.as_str())
                         || shape.knobs().contains(&key.as_str())

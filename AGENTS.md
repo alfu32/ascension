@@ -26,7 +26,8 @@ Meshes and materials are procedural. Remote: `git@github.com:alfu32/ascension.gi
 - `research/` — study notes. Not shipped.
 - `app/` — the application. Cargo workspace root is `app/`.
 - `app/db/schema.sql`, `app/db/seed.sql` — the game database. The schema is
-  the contract between all crates.
+  the contract between all crates. Building and unit models are one file each in
+  `app/db/models/` (`app/docs/models-in-meshcraft.md`), loaded after the seed.
 - `app/docs/` — design documents for the application.
 
 Crates (create only what your task needs):
@@ -39,15 +40,19 @@ Crates (create only what your task needs):
 | `rom-mapgen` | map generation from seed and map style | graphics |
 | `rom-ai` | computer players: read state, emit orders | graphics |
 | `rom-save` | save and load a match | graphics |
-| `rom-render` | raylib world and HUD drawing from render snapshots; may use `rom-geo` | gpui, sim, rules, mapgen |
+| `rom-kit` | the part kit: composed models baked into vertices, plain Rust | everything |
+| `rom-models` | model files, rules → kit parts, Meshcraft export/import, briefs | graphics, sim |
+| `rom-render` | raylib world and HUD drawing from render snapshots; may use `rom-geo`, `rom-kit` | gpui, sim, rules, mapgen |
 | `rom-app` | GPUI shell, screens, input, threads | — |
 | `rom-cli` | headless runner | render, app |
 
 ## Commands
 
 ```sh
-# database (must print nothing after the two loads)
+# database: schema, seed, then the model files (must print nothing)
 sqlite3 /tmp/rom.db < app/db/schema.sql && sqlite3 /tmp/rom.db < app/db/seed.sql
+cat app/db/models/materials.sql app/db/models/shared/*.sql \
+    $(ls app/db/models/*.sql | grep -v '/materials.sql$') | sqlite3 /tmp/rom.db
 sqlite3 /tmp/rom.db "PRAGMA foreign_key_check; SELECT * FROM lint_def_without_subtype; SELECT * FROM lint_unproducible;"
 
 # release gate — all three, from app/, before any task is called done

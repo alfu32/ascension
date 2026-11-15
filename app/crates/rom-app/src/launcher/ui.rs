@@ -16,7 +16,10 @@ use gpui_component::{
     select::{SearchableVec, Select, SelectEvent, SelectState},
 };
 
-use super::form::{CONTROLS, Config, Form, GROUPS, PRESETS, command_line, commands, preset};
+use super::form::{
+    CONTROLS, Config, Form, GROUPS, MODELS_GROUP, PRESETS, command_line, commands, preset,
+};
+use super::models;
 use super::{Catalog, Choice};
 
 type ChoiceState = Entity<SelectState<SearchableVec<Choice>>>;
@@ -47,6 +50,10 @@ pub(super) struct Launcher {
     preset_name: Entity<InputState>,
     processes: Vec<Process>,
     message: Option<String>,
+    model_folder: Entity<InputState>,
+    model_status: String,
+    model_unlock: bool,
+    model_busy: bool,
 }
 
 impl Launcher {
@@ -75,6 +82,15 @@ impl Launcher {
                 .new(|cx| InputState::new(window, cx).placeholder("Name a custom preset")),
             processes: Vec::new(),
             message: warning,
+            model_folder: cx.new(|cx| {
+                InputState::new(window, cx)
+                    .default_value(models::default_folder().display().to_string())
+            }),
+            model_status: "Export writes <model id>.octd and .md for every model; import reads \
+                           one edited .octd back into db/models."
+                .into(),
+            model_unlock: false,
+            model_busy: false,
         };
         this.prepare(window, cx);
         cx.spawn(async |this, cx| {
@@ -127,6 +143,14 @@ impl Launcher {
             }
         })
         .detach();
+        // Opt-in: open on another group (`ROM_LAUNCHER_GROUP=5` shows Models), for screenshots.
+        if let Some(group) = std::env::var("ROM_LAUNCHER_GROUP")
+            .ok()
+            .and_then(|g| g.parse::<usize>().ok())
+            .filter(|g| *g < GROUPS.len())
+        {
+            this.group = group;
+        }
         // Opt-in visual smoke test uses the same form and launch handler as the button.
         // Use an isolated XDG_CONFIG_HOME; no desktop automation or window manipulation.
         if std::env::var_os("ROM_LAUNCHER_SMOKE").is_some() {
@@ -359,6 +383,174 @@ impl Launcher {
             }
         }
         cx.notify();
+    }
+
+    /// Runs `work` off the UI thread, showing `pending` until its status line arrives.
+    fn model_job(
+        &mut self,
+        pending: &str,
+        work: impl FnOnce() -> Result<String, String> + Send + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        if self.model_busy {
+            return;
+        }
+        self.model_busy = true;
+        self.model_status = pending.into();
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let result = cx.background_executor().spawn(async move { work() }).await;
+            let _ = this.update(cx, |this, cx| {
+                this.model_busy = false;
+                this.model_status = result.unwrap_or_else(|e| e);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// The Models group: the export folder, the two model tools and their status line.
+    fn models_panel(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let folder_row = div()
+            .flex()
+            .items_center()
+            .gap_2()
+            .child(
+                div()
+                    .w(px(145.))
+                    .flex_shrink_0()
+                    .text_color(rgb(0xe8c98a))
+                    .child("Export folder"),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .child(Input::new(&self.model_folder).small()),
+            )
+            .child(
+                Button::new("model-folder")
+                    .small()
+                    .label("Choose folder…")
+                    .on_click(cx.listener(|_, _, window, cx| {
+                        let chosen = cx.prompt_for_paths(gpui::PathPromptOptions {
+                            files: false,
+                            directories: true,
+                            multiple: false,
+                            prompt: Some("Export here".into()),
+                        });
+                        cx.spawn_in(window, async move |this, cx| {
+                            let picked = chosen.await;
+                            let _ = this.update_in(cx, |this, window, cx| {
+                            match picked {
+                                Ok(Ok(Some(paths))) => {
+                                    if let Some(path) = paths.first() {
+                                        let text = path.display().to_string();
+                                        this.model_folder.update(cx, |input, cx| {
+                                            input.set_value(text, window, cx)
+                                        });
+                                    }
+                                }
+                                Ok(Ok(None)) => {}
+                                Ok(Err(e)) => {
+                                    this.model_status = format!(
+                                        "Folder picker unavailable ({e}); type the folder instead."
+                                    )
+                                }
+                                Err(_) => {}
+                            }
+                            cx.notify();
+                        });
+                        })
+                        .detach();
+                    })),
+            );
+        let actions = div()
+            .flex()
+            .items_center()
+            .gap_3()
+            .child(
+                Button::new("export-models")
+                    .primary()
+                    .label("Export all models")
+                    .disabled(self.model_busy)
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        let folder = PathBuf::from(this.model_folder.read(cx).value().trim());
+                        this.model_job(
+                            "Exporting every model…",
+                            move || models::export_into(&folder),
+                            cx,
+                        );
+                    })),
+            )
+            .child(
+                Button::new("import-model")
+                    .label("Import model…")
+                    .disabled(self.model_busy)
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        let chosen = cx.prompt_for_paths(gpui::PathPromptOptions {
+                            files: true,
+                            directories: false,
+                            multiple: false,
+                            prompt: Some("Import".into()),
+                        });
+                        let unlock = this.model_unlock;
+                        cx.spawn(async move |this, cx| {
+                            let picked = chosen.await;
+                            let _ = this.update(cx, |this, cx| match picked {
+                                Ok(Ok(Some(paths))) => {
+                                    if let Some(path) = paths.first().cloned() {
+                                        this.model_job(
+                                            "Importing…",
+                                            move || models::import_file(&path, unlock),
+                                            cx,
+                                        );
+                                    }
+                                }
+                                Ok(Ok(None)) => {}
+                                Ok(Err(e)) => {
+                                    this.model_status = format!(
+                                        "File picker unavailable ({e}); use rom model import <file>."
+                                    );
+                                    cx.notify();
+                                }
+                                Err(_) => {}
+                            });
+                        })
+                        .detach();
+                    })),
+            )
+            .child(
+                Checkbox::new("model-unlock")
+                    .label("Allow changing approved models (--unlock)")
+                    .checked(self.model_unlock)
+                    .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                        this.model_unlock = *checked;
+                        cx.notify();
+                    })),
+            );
+        div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .p_4()
+            .child(
+                div().text_color(rgb(0xe8c98a)).child(
+                    "Edit building and unit models in Meshcraft · docs/models-in-meshcraft.md",
+                ),
+            )
+            .child(folder_row)
+            .child(actions)
+            .child(
+                div()
+                    .id("model-status")
+                    .text_sm()
+                    .max_h(px(160.))
+                    .overflow_y_scroll()
+                    .text_color(rgb(if self.model_busy { 0xf0b030 } else { 0x3fd0ff }))
+                    .child(self.model_status.clone()),
+            )
+            .into_any_element()
     }
 
     fn row(&self, index: usize, cx: &mut Context<Self>) -> gpui::AnyElement {
@@ -595,12 +787,16 @@ impl Render for Launcher {
                     })),
             );
         }
-        let rows = CONTROLS
-            .iter()
-            .enumerate()
-            .filter(|(_, c)| c.group == self.group)
-            .map(|(i, _)| self.row(i, cx))
-            .collect::<Vec<_>>();
+        let rows = if self.group == MODELS_GROUP {
+            vec![self.models_panel(cx)]
+        } else {
+            CONTROLS
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| c.group == self.group)
+                .map(|(i, _)| self.row(i, cx))
+                .collect::<Vec<_>>()
+        };
         let arguments = self.config.form.arguments();
         let [binary_command, cargo_command] = commands(&self.executable, &arguments);
         let mut footer = div()
