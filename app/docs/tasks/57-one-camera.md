@@ -61,7 +61,13 @@ as a jump. Task 56 then re-proportioned the systems.
    e.g. a stat or a per-type presentation row, never by key) and **¼–½ on
    the system plane** compared with today. The scale changes smoothly with
    distance, never jumps. Ships stay pickable (task 53's pick floors).
-4. **Wheel steps.** Retune so the whole range, street to whole system, and
+4. **Do not assume a flat star map.** The owner wants the galactic map to
+   become a 3D network of star systems later (task 59). Today systems have
+   `x, y` only; build the camera and the star-map drawing so that a third
+   coordinate drops in without redesign (free orbit of the camera around
+   the star map, depth sorting and picking that work off the plane), even
+   though the generator still places every system at height 0.
+5. **Wheel steps.** Retune so the whole range, street to whole system, and
    system to star map, takes a comfortable number of wheel steps (task 56
    measured about 31 from the globe to the whole system; aim for clearly
    fewer, and document the count).
