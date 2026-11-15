@@ -34,6 +34,14 @@ move the eye can follow, never a cut.
    came from and where they arrive. The existing double-click on a system
    becomes "fly into this system" (the same continuous zoom-in as below), and
    double-click on a planet "fly down to this planet". The camera never jumps.
+   The owner confirmed (2026-11-15) that double-click is the coherent way in
+   and must stay; what is missing is free movement and a **borderless
+   transition**: on every level the player can shift/pan, rotate and zoom,
+   and zooming continuously from the planet into space and back shows no seam
+   — the planet shrinks into its place in the system plane (and the system
+   into its place on the star map) while the surrounding level fades in,
+   with the same heading and the focus point kept, so the player never feels
+   a mode switch.
 
 1. **One camera, three planes.** The planet (cube-sphere surface), the star
    system (a flat plane around the star) and the star map (a flat plane of
