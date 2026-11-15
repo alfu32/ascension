@@ -4,16 +4,18 @@
 //!
 //! The system frame has the star at the origin and the orbit plane at `y = 0`; the whole system
 //! fits a disc of [`SYSTEM_RADIUS`] units. The star-map frame spreads the systems over a disc of
-//! [`MAP_RADIUS`] units. Planets are drawn with a radius that is not to scale.
+//! [`MAP_RADIUS`] units. Orbit radii keep their proportions (they grow geometrically); the star
+//! and the planets are drawn much smaller than their orbits but larger than true scale, and the
+//! renderer keeps every body at least a few pixels wide.
 
 use std::f32::consts::TAU;
 
 /// Radius in units of the disc that holds every orbit of one system.
-pub const SYSTEM_RADIUS: f32 = 3000.0;
+pub const SYSTEM_RADIUS: f32 = 12_000.0;
 /// Distance from the star to the innermost possible orbit ring, in system units.
-pub const STAR_CLEAR: f32 = 500.0;
+pub const STAR_CLEAR: f32 = 1200.0;
 /// Drawn radius of a star in system units.
-pub const STAR_RADIUS: f32 = 350.0;
+pub const STAR_RADIUS: f32 = 600.0;
 /// Drawn radius of the home planet in system units (a planet 600 units wide).
 pub const HOME_PLANET_RADIUS: f32 = 300.0;
 /// Radius in units of the disc that holds every system of the star map.
@@ -86,9 +88,17 @@ pub struct PlacedBody {
     pub pos: [f32; 3],
     /// Drawn radius in system units.
     pub radius: f32,
-    /// Radius of its orbit ring in system units.
+    /// Radius of its orbit ring in system units, about the star or, for a moon, its planet.
     pub orbit: f32,
+    /// The planet (an index into [`UniverseScene::bodies`]) a resource body circles as a moon.
+    pub moon_of: Option<usize>,
 }
+
+/// Largest angle in millidegrees between a moon and its planet on their shared orbit.
+pub const MOON_LINK_MDEG: i32 = 1100;
+/// Largest radial gap between a moon and its planet, as a share of the system's outermost orbit
+/// in percent.
+pub const MOON_LINK_PCT: f32 = 15.0;
 
 impl UniverseScene {
     /// True when ids are unique and every body and route names a system of the scene.
@@ -126,7 +136,7 @@ impl UniverseScene {
                 .filter(move |(_, b)| b.system == system)
         };
         let outermost = self.system_outermost(system);
-        members()
+        let mut placed: Vec<PlacedBody> = members()
             .map(|(index, b)| {
                 let (orbit, pos) = if b.kind == BodyViewKind::Star {
                     (0.0, [0.0; 3])
@@ -141,9 +151,62 @@ impl UniverseScene {
                     pos,
                     radius: body_radius(b),
                     orbit,
+                    moon_of: None,
                 }
             })
-            .collect()
+            .collect();
+        // A moon circles its planet at a small drawn distance instead of keeping the tiny gap
+        // that its true orbit would give at this scale.
+        let moons: Vec<(usize, usize)> = (0..placed.len())
+            .filter_map(|i| Some((i, self.moon_parent(placed[i].body, outermost)?)))
+            .collect();
+        for (i, parent) in moons {
+            let Some(at) = placed.iter().position(|p| p.body == parent) else {
+                continue;
+            };
+            let rank = placed.iter().filter(|p| p.moon_of == Some(parent)).count();
+            let (centre, planet) = (placed[at].pos, placed[at].radius);
+            let orbit = planet * (2.6 + 1.1 * rank as f32) + placed[i].radius;
+            let heading = (self.bodies[placed[i].body].id as f32 * 2.399_963).rem_euclid(TAU);
+            placed[i].orbit = orbit;
+            placed[i].moon_of = Some(parent);
+            placed[i].pos = [
+                centre[0] + orbit * heading.cos(),
+                0.0,
+                centre[2] + orbit * heading.sin(),
+            ];
+        }
+        placed
+    }
+
+    /// The habitable planet that the resource body at `index` circles as a moon: the generator
+    /// puts a moon a few tiles off its planet's orbit radius and a fraction of a degree from its
+    /// angle, which no other body does. `None` for anything that is not a moon.
+    pub fn moon_parent(&self, index: usize, outermost: f32) -> Option<usize> {
+        let body = self.bodies.get(index)?;
+        if body.kind != BodyViewKind::Resource {
+            return None;
+        }
+        let near = |a: i32, b: i32| {
+            let d = (a - b).rem_euclid(360_000);
+            d.min(360_000 - d)
+        };
+        self.bodies
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.system == body.system && p.kind == BodyViewKind::Habitable)
+            .map(|(i, p)| {
+                (
+                    near(p.orbit_angle, body.orbit_angle),
+                    (p.orbit_radius - body.orbit_radius).abs(),
+                    i,
+                )
+            })
+            .filter(|&(angle, gap, _)| {
+                angle <= MOON_LINK_MDEG && gap as f32 <= outermost * MOON_LINK_PCT / 100.0
+            })
+            .min()
+            .map(|(_, _, i)| i)
     }
 
     /// The largest orbit radius of `system` (at least 1), the scale of its frame layout.
@@ -197,7 +260,7 @@ pub fn body_radius(body: &BodyView) -> f32 {
         BodyViewKind::Habitable => {
             HOME_PLANET_RADIUS * body.n_or_size.clamp(96, 288) as f32 / 192.0
         }
-        BodyViewKind::Resource => 40.0 * (1 + body.n_or_size.clamp(1, 3)) as f32,
+        BodyViewKind::Resource => 15.0 * (1 + body.n_or_size.clamp(1, 3)) as f32,
     }
 }
 
@@ -311,6 +374,8 @@ pub(crate) fn sample_scene() -> UniverseScene {
             body(5, 2, Star, 0, 0, 0),
             body(6, 2, Habitable, 4000, 30_000, 140),
             body(7, 3, Star, 0, 0, 0),
+            // A moon of body 2: a little outside its orbit, a fraction of a degree from it.
+            body(8, 1, Resource, 1100, 600, 1),
         ],
         routes: vec![(1, 2), (1, 3)],
     }
@@ -328,10 +393,19 @@ mod tests {
             let placed = scene.place_system(system.id);
             assert!(!placed.is_empty());
             for p in &placed {
+                let kind = scene.bodies[p.body].kind;
+                if p.moon_of.is_some() {
+                    // A moon lies on a small ring about its planet.
+                    let parent = placed.iter().find(|q| Some(q.body) == p.moon_of).unwrap();
+                    let distance = (p.pos[0] - parent.pos[0]).hypot(p.pos[2] - parent.pos[2]);
+                    assert!((distance - p.orbit).abs() < 0.5, "{p:?}");
+                    assert!(p.orbit > parent.radius + p.radius, "{p:?}");
+                    continue;
+                }
                 let distance = p.pos[0].hypot(p.pos[2]);
                 assert!((distance - p.orbit).abs() < 0.5, "{p:?}");
                 assert!(p.orbit <= SYSTEM_RADIUS + 0.5, "{p:?}");
-                if scene.bodies[p.body].kind != BodyViewKind::Star {
+                if kind != BodyViewKind::Star {
                     assert!(p.orbit >= STAR_CLEAR);
                     // A body never reaches the star.
                     assert!(p.orbit - p.radius > STAR_RADIUS);
@@ -346,8 +420,39 @@ mod tests {
             .fold(0.0, f32::max);
         assert!((outer - SYSTEM_RADIUS).abs() < 0.5);
         // Orbit order is kept.
-        let orbits: Vec<f32> = scene.place_system(1).iter().map(|p| p.orbit).collect();
+        let orbits: Vec<f32> = scene
+            .place_system(1)
+            .iter()
+            .filter(|p| p.moon_of.is_none())
+            .map(|p| p.orbit)
+            .collect();
         assert!(orbits.windows(2).all(|w| w[0] <= w[1]));
+    }
+
+    #[test]
+    fn a_moon_is_told_by_its_place_next_to_its_planet() {
+        let scene = sample_scene();
+        let outermost = scene.system_outermost(1);
+        let moon = scene.body_index(8).unwrap();
+        assert_eq!(scene.moon_parent(moon, outermost), scene.body_index(2));
+        // A belt body far from every planet's angle, a planet and a star are no moons.
+        for id in [3, 4, 2, 1] {
+            let index = scene.body_index(id).unwrap();
+            assert_eq!(scene.moon_parent(index, outermost), None, "body {id}");
+        }
+        let placed = scene.place_system(1);
+        let parent = placed.iter().find(|p| p.body == 1).unwrap();
+        let at = placed.iter().find(|p| p.body == moon).unwrap();
+        assert_eq!(at.moon_of, Some(1));
+        // Drawn close to the planet, well inside the gap to the next orbit.
+        assert!(at.orbit < parent.radius * 6.0);
+    }
+
+    #[test]
+    fn the_star_and_planets_are_small_against_their_orbits() {
+        // The system disc is many times wider than the star and a planet.
+        const { assert!(SYSTEM_RADIUS / STAR_RADIUS >= 15.0) };
+        const { assert!(SYSTEM_RADIUS / HOME_PLANET_RADIUS >= 30.0) };
     }
 
     #[test]

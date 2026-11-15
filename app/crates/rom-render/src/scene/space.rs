@@ -70,7 +70,13 @@ const CORE_SIZE: f32 = 650.0;
 /// Diameter of the star's glow in the system frame, in system units.
 const STAR_GLOW: f32 = 2600.0;
 const GLOW_SIDE: u32 = 128;
-const ORBIT_RING: Color = Color::new(120, 140, 185, 120);
+const ORBIT_RING: Color = Color::new(120, 140, 185, 58);
+/// Smallest radius of a body on screen, in pixels, and the radius below which it also wears a
+/// soft halo so it can still be seen, hovered and double-clicked.
+const MIN_BODY_PIXELS: f32 = 2.5;
+const HALO_BELOW_PIXELS: f32 = 6.0;
+/// Diameter of a body's halo on screen, in pixels.
+const HALO_PIXELS: f32 = 22.0;
 const ROUTE_LINE: Color = Color::new(110, 140, 200, 110);
 
 /// What is in space and which ships are selected, kept for the next draw.
@@ -94,6 +100,8 @@ fn lerp_colour(colour: [u8; 3], toward: f32) -> [f32; 3] {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct SpaceLabel {
     pub(crate) text: String,
+    /// An HUD atlas icon drawn before the text (alone when the text is empty).
+    pub(crate) icon: Option<String>,
     pub(crate) x: f32,
     pub(crate) y: f32,
     pub(crate) colour: [u8; 4],
@@ -164,6 +172,15 @@ fn glow_pixels() -> Vec<u8> {
 }
 
 /// A sphere of `radius` at `pos`, with the planet frame's three unit axes.
+/// A faint circle of `radius` about `centre` in the plane of the system.
+fn draw_ring(world: &mut impl RaylibDraw3D, centre: [f32; 3], radius: f32) {
+    let ring = ring_points(radius, RING_SEGMENTS);
+    for pair in ring.windows(2) {
+        let at = |p: [f32; 3]| vec3([p[0] + centre[0], p[1], p[2] + centre[2]]);
+        world.draw_line3D(at(pair[0]), at(pair[1]), ORBIT_RING);
+    }
+}
+
 fn ball(pos: [f32; 3], radius: f32, axes: [[f32; 3]; 3]) -> Matrix {
     let [x, y, z] = axes.map(|axis| axis.map(|c| c * radius));
     Matrix {
@@ -386,6 +403,7 @@ impl Scene {
         let emissive_at = space.shader.get_shader_location("emissive");
         let (width, height) = (target.texture.width as f32, target.texture.height as f32);
         let mut rim_labels: Vec<([f32; 3], u32, u32, f32)> = Vec::new();
+        let mut icons: Vec<([f32; 3], f32, String, f32)> = Vec::new();
         let mut drawing = rl.begin_texture_mode(thread, target);
         drawing.clear_background(SPACE);
         if let Some(stars) = &self.star_mesh {
@@ -406,24 +424,56 @@ impl Scene {
             shift_projection(self.projection_centre_y);
             // An unexplored system shows its star only.
             let known = zoom.knows_system();
-            for placed in zoom.placed() {
-                let body = &universe.bodies[placed.body];
-                if body.kind != BodyViewKind::Star && known {
-                    let ring = ring_points(placed.orbit, RING_SEGMENTS);
-                    for pair in ring.windows(2) {
-                        world.draw_line3D(vec3(pair[0]), vec3(pair[1]), ORBIT_RING);
+            if known {
+                // Planets keep their rings, moons a small one about their planet and the belt
+                // one faint ring through its middle.
+                let mut belt = Vec::new();
+                for placed in zoom.placed() {
+                    match (universe.bodies[placed.body].kind, placed.moon_of) {
+                        (BodyViewKind::Habitable, _) => {
+                            draw_ring(&mut world, [0.0; 3], placed.orbit)
+                        }
+                        (BodyViewKind::Resource, Some(parent)) => {
+                            if let Some(at) = zoom.placed().iter().find(|p| p.body == parent) {
+                                draw_ring(&mut world, at.pos, placed.orbit);
+                            }
+                        }
+                        (BodyViewKind::Resource, None) => belt.push(placed.orbit),
+                        _ => {}
                     }
                 }
+                if !belt.is_empty() {
+                    let mean = belt.iter().sum::<f32>() / belt.len() as f32;
+                    draw_ring(&mut world, [0.0; 3], mean);
+                }
             }
+            let per_pixel_at = |pos: [f32; 3]| {
+                let d = (0..3)
+                    .map(|i| (pos[i] - view.eye[i]).powi(2))
+                    .sum::<f32>()
+                    .sqrt();
+                d * 2.0 * 22.5_f32.to_radians().tan() / height.max(1.0)
+            };
+            let state = &self.space_state;
             for placed in zoom.placed() {
                 let body = &universe.bodies[placed.body];
                 if body.kind != BodyViewKind::Star && !known {
                     continue;
                 }
+                let held = state.snapshot.resource_body(body.id);
                 let (colour, emissive) = match body.kind {
                     BodyViewKind::Star => (star_colour, 1.0),
                     BodyViewKind::Habitable => (planet_colour(body.id), 0.0),
-                    BodyViewKind::Resource => (rock_colour(body.id), 0.0),
+                    BodyViewKind::Resource => {
+                        // A resource body wears its resource's colour over the grey of the rock.
+                        let rock = rock_colour(body.id);
+                        let rgb = held.map_or(rock, |r| {
+                            [0, 1, 2].map(|i| {
+                                ((u16::from(rock[i]) + 3 * u16::from(r.colour[i])) / 4) as u8
+                            })
+                        });
+                        (rgb, 0.0)
+                    }
                 };
                 let is_home =
                     Some(placed.body) == space.home_body && space.planet_texture.is_some();
@@ -440,11 +490,26 @@ impl Scene {
                 }
                 space.shader.set_shader_value(tint_at, tint);
                 space.shader.set_shader_value(emissive_at, emissive);
-                world.draw_mesh(
-                    mesh,
-                    material.clone(),
-                    ball(placed.pos, placed.radius, axes),
-                );
+                // Never smaller than a few pixels, and a soft halo below that.
+                let per_pixel = per_pixel_at(placed.pos);
+                let radius = placed.radius.max(per_pixel * MIN_BODY_PIXELS);
+                world.draw_mesh(mesh, material.clone(), ball(placed.pos, radius, axes));
+                if body.kind != BodyViewKind::Star && placed.radius < per_pixel * HALO_BELOW_PIXELS
+                {
+                    let faint = 1.0 - placed.radius / (per_pixel * HALO_BELOW_PIXELS);
+                    sprite(
+                        &mut world,
+                        camera,
+                        &space.glow,
+                        placed.pos,
+                        per_pixel * HALO_PIXELS,
+                        colour,
+                        (120.0 * faint) as u8 + 30,
+                    );
+                }
+                if let Some(r) = held {
+                    icons.push((placed.pos, radius, r.icon.clone(), per_pixel));
+                }
             }
             // Every habitable planet wears an atmosphere halo, lit from the star at the origin.
             for placed in zoom.placed() {
@@ -458,7 +523,6 @@ impl Scene {
                 }
             }
             let system_id = universe.systems.get(zoom.system()).map(|s| s.id);
-            let state = &self.space_state;
             if let Some(system_id) = system_id {
                 let outermost = universe.system_outermost(system_id);
                 let distance = zoom.scale().system_distance(zoom.l());
@@ -636,6 +700,21 @@ impl Scene {
         let alpha = zoom.weights().system;
         let look = view.view((width, height), self.projection_centre_y);
         let here = zoom.system_id();
+        // The icon of a resource body's resource stands beside it at every zoom.
+        for (at, radius, icon, per_pixel) in icons {
+            let Some((x, y, _)) = look.project(at) else {
+                continue;
+            };
+            let beside = radius / per_pixel.max(1e-6) + 5.0;
+            space.labels.push(SpaceLabel {
+                text: String::new(),
+                icon: Some(icon),
+                x: x + beside,
+                y: y + 4.0,
+                colour: [255, 255, 255, (255.0 * alpha) as u8],
+                priority: -1.0,
+            });
+        }
         for (at, from, to, progress) in rim_labels {
             let Some((x, y, _)) = look.project(at) else {
                 continue;
@@ -653,6 +732,7 @@ impl Scene {
                 format!("in transit from {} {:.0}%", name(from), progress * 100.0)
             };
             space.labels.push(SpaceLabel {
+                icon: None,
                 text,
                 x: x + 14.0,
                 y: y + 5.0,
@@ -842,6 +922,7 @@ impl Scene {
                 (None, true) => [200, 215, 235],
             };
             space.labels.push(SpaceLabel {
+                icon: None,
                 text: if known {
                     system.name.clone()
                 } else {
@@ -869,6 +950,7 @@ impl Scene {
             let [r, g, b] = owner_rgb(mark.owner);
             let lighter = lerp_colour([r, g, b], 0.5).map(|c| (c * 255.0) as u8);
             space.labels.push(SpaceLabel {
+                icon: None,
                 text,
                 x: x + 12.0,
                 y: y + 16.0,

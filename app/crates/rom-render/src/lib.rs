@@ -68,7 +68,7 @@ pub use pixels::rgba_to_bgra_flipped;
 pub use review::{Review, SheetView, WorldLabel};
 pub use rig::Activity;
 pub use rom_geo::SurfacePos;
-pub use space::{ClaimView, ShipView, SpaceSnapshot, TransitView};
+pub use space::{ClaimState, ClaimView, ResourceBodyView, ShipView, SpaceSnapshot, TransitView};
 pub use stats::RenderStats;
 pub use sun::{SunClock, SunSettings};
 pub use terrain::{

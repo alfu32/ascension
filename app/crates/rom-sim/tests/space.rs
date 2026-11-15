@@ -287,6 +287,33 @@ fn contested_body_pays_nobody() {
 }
 
 #[test]
+fn body_claim_and_yield_report_what_the_economy_pays() {
+    use rom_sim::BodyClaim;
+    let mut w = world();
+    let body = BodyId(3);
+    assert_eq!(w.body_claim(body), BodyClaim::Unclaimed);
+    let paid = w.body_yield(body, PlayerId(1)).expect("a presence body");
+    assert_eq!(paid.period_ticks, 600);
+    let pos = w.body_position(body).unwrap();
+    ship(&mut w, 1, pos);
+    run(&mut w, 40);
+    assert_eq!(w.body_claim(body), BodyClaim::Held(PlayerId(1)));
+    // What the body lists is what the player's income gains by holding it.
+    let income = w.income(PlayerId(1), paid.resource);
+    assert_eq!(income.effective, paid.per_period.min(income.effective));
+    assert_eq!(
+        income.raw,
+        w.body_yield(body, PlayerId(1)).unwrap().per_period
+    );
+    // Rivals at once: contested, and no one is paid.
+    ship(&mut w, 2, pos);
+    run(&mut w, 40);
+    assert_eq!(w.body_claim(body), BodyClaim::Contested);
+    // A habitable planet's marker is no presence body.
+    assert!(w.body_yield(BodyId(2), PlayerId(1)).is_none());
+}
+
+#[test]
 fn claim_persists_when_the_ship_leaves_until_someone_else_claims() {
     let mut w = world();
     let pos = w.body_position(BodyId(3)).unwrap();

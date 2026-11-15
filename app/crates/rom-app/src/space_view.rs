@@ -3,9 +3,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use rom_render::{ClaimView, ShipView, SpaceSnapshot, TransitView};
+use rom_render::{ClaimState, ClaimView, ResourceBodyView, ShipView, SpaceSnapshot, TransitView};
 use rom_rules::{BodyKind, EntityClass};
-use rom_sim::{BodyId, EntityId, PlayerId, Pos, Sighting, Topology, World};
+use rom_sim::{BodyClaim, BodyId, EntityId, PlayerId, Pos, Sighting, Topology, World};
+
+use crate::sim_thread::TICKS_PER_SECOND;
 
 use crate::selection::PLAYER;
 
@@ -172,10 +174,84 @@ pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) ->
                 });
             }
         }
+        let visible = |at: Pos| {
+            world.is_visible_on_body(
+                PLAYER,
+                frame.body,
+                0,
+                at.x.div_euclid(1000),
+                at.y.div_euclid(1000),
+            )
+        };
+        for info in world
+            .bodies()
+            .iter()
+            .filter(|b| b.system == system && b.kind == BodyKind::Resource)
+        {
+            let Some(mut view) = resource_view(world, info.id) else {
+                continue;
+            };
+            let seen = |owner: PlayerId| {
+                allied(world, PLAYER, owner) || world.body_position(info.id).is_some_and(visible)
+            };
+            view.claim = match world.body_claim(info.id) {
+                BodyClaim::Held(owner) if allied(world, PLAYER, owner) => ClaimState::Yours,
+                BodyClaim::Held(owner) if seen(owner) => {
+                    ClaimState::Other(u8::try_from(owner.0).unwrap_or(u8::MAX))
+                }
+                BodyClaim::Contested if seen(PLAYER) => ClaimState::Contested,
+                _ => ClaimState::Unclaimed,
+            };
+            snapshot.resources.push(view);
+        }
     }
     snapshot.transits = transits(world);
     snapshot.known = Some(known_systems(world));
     snapshot
+}
+
+/// What the resource body `body` holds and pays player one, with no claim state filled in.
+/// `None` for bodies that are not presence resource bodies.
+pub fn resource_view(world: &World, body: BodyId) -> Option<ResourceBodyView> {
+    let rules = world.rules();
+    let info = world.body(body)?;
+    let node_type = info.node_type?;
+    let paid = world.body_yield(body, PLAYER)?;
+    let faction = world
+        .players()
+        .find(|p| p.id == PLAYER)
+        .map_or(rom_rules::DefId(0), |p| p.faction);
+    Some(ResourceBodyView {
+        body: body.0,
+        kind_name: rules.display_name(node_type, faction).to_owned(),
+        resource_name: rules.def(paid.resource).name.clone(),
+        icon: crate::hud::resource_icon(rules, paid.resource),
+        colour: crate::hud::resource_colour(rules, paid.resource),
+        per_period: paid.per_period,
+        period_secs: paid.period_ticks / i64::from(TICKS_PER_SECOND),
+        claim: ClaimState::Unclaimed,
+    })
+}
+
+/// "Tar Moon: Oil +42 / 30 s" for a ship of player `owner` that keeps station at a resource body
+/// the owner holds, for the selected ship's card.
+pub fn holding_line(world: &World, ship: &rom_sim::Entity) -> Option<String> {
+    let rules = world.rules();
+    let (info, _) = world
+        .claims()
+        .filter(|(_, owner)| *owner == ship.owner)
+        .filter_map(|(body, owner)| Some((world.body(body)?, owner)))
+        .find(|(info, _)| {
+            let radius = info
+                .node_type
+                .and_then(|t| rules.entity_types.get(&t)?.node.as_ref())
+                .map_or(0, |n| n.claim_radius);
+            world.body_position(info.id).is_some_and(|at| {
+                at.body == ship.pos.body && ship.pos.distance(at) as i64 <= radius
+            })
+        })?;
+    let view = resource_view(world, info.id)?;
+    Some(format!("Holds {}: {}", view.kind_name, view.yield_text()))
 }
 
 /// The systems player one knows, ascending: its home system, any system it has ships in or
@@ -410,10 +486,17 @@ impl Notices {
         let claims: BTreeMap<BodyId, PlayerId> = world.claims().collect();
         if self.started {
             for (body, change) in claim_changes(&self.claims, &claims) {
-                let name = world.body(body).map_or("a body", |b| b.name.as_str());
+                let Some(view) = resource_view(world, body) else {
+                    continue;
+                };
                 lines.push(match change {
-                    ClaimChange::Won => format!("Claim won: {name}"),
-                    ClaimChange::Lost => format!("Claim lost: {name}"),
+                    ClaimChange::Won => {
+                        format!("{} claimed: {}", view.kind_name, view.yield_text())
+                    }
+                    ClaimChange::Lost if world.body_claim(body) == BodyClaim::Contested => {
+                        format!("{} contested", view.kind_name)
+                    }
+                    ClaimChange::Lost => format!("{} lost", view.kind_name),
                 });
             }
         }
@@ -564,5 +647,77 @@ mod transit_tests {
         let mut hud = HudSnapshot::default();
         controller.fill(&game.world, &mut hud);
         assert_eq!(hud.selected, vec![ship.0]);
+    }
+}
+
+#[cfg(test)]
+mod resource_body_tests {
+    use super::*;
+    use rom_sim::Command;
+
+    /// A survey ship claims a resource body of the home system: the body lists its kind, resource
+    /// and the yield the economy then pays, the event line says what was claimed, and the ship's
+    /// card says what it holds. A rival ship beside it makes the body contested.
+    #[test]
+    fn a_claim_says_what_the_body_holds_and_pays() {
+        let (_content, mut game) = crate::match_setup::universe_game_for_tests();
+        let world = &mut game.world;
+        let home = world.home_body(PLAYER).unwrap();
+        let system = world.body(home).unwrap().system;
+        let body = world
+            .bodies()
+            .iter()
+            .find(|b| b.system == system && b.kind == BodyKind::Resource)
+            .unwrap()
+            .clone();
+        let before = resource_view(world, body.id).unwrap();
+        assert_eq!(before.claim, ClaimState::Unclaimed);
+        assert!(before.per_period > 0 && before.period_secs > 0);
+        assert!(!before.kind_name.is_empty() && before.icon.starts_with("icons/res_"));
+        let resource = world.body_yield(body.id, PLAYER).unwrap().resource;
+        let income_before = world.income(PLAYER, resource).effective;
+        let ship_type = world.rules().id_of("unit.survey_ship").unwrap();
+        let ship = world
+            .spawn(ship_type, PLAYER, world.body_position(body.id).unwrap())
+            .unwrap();
+        let mut notices = Notices::default();
+        notices.update(world);
+        world
+            .submit(Command {
+                player: PLAYER,
+                executor: ship,
+                kind: "orbit".into(),
+                subject: None,
+                target_entity: world.body_marker(body.id),
+                target_pos: None,
+                queue: false,
+            })
+            .unwrap();
+        let mut lines = Vec::new();
+        for _ in 0..400 {
+            world.step();
+            lines.extend(notices.update(world).into_iter().map(|n| n.text));
+            if world.claims().any(|(b, _)| b == body.id) {
+                break;
+            }
+        }
+        let claimed = resource_view(world, body.id).unwrap();
+        let sightings = world.visible_entities(PLAYER);
+        let space = space_snapshot(world, system, &sightings);
+        let listed = space.resource_body(body.id.0).expect("listed");
+        assert_eq!(listed.claim, ClaimState::Yours);
+        assert_eq!(listed.kind_name, claimed.kind_name);
+        // The event line names the body kind and the yield.
+        let expected = format!("{} claimed: {}", claimed.kind_name, claimed.yield_text());
+        assert!(lines.contains(&expected), "{lines:?}");
+        // The listed yield is what the economy pays more once the body is held.
+        let income_after = world.income(PLAYER, resource).effective;
+        assert_eq!(income_after - income_before, listed.per_period);
+        // The ship's card says what it holds.
+        let card = holding_line(world, world.entity(ship).unwrap()).expect("holding line");
+        assert_eq!(
+            card,
+            format!("Holds {}: {}", claimed.kind_name, claimed.yield_text())
+        );
     }
 }

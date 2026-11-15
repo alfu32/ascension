@@ -1986,7 +1986,11 @@ impl Controller {
                         })
                         .collect()
                 },
-                wealth: crate::hud::wealth_card(world, e),
+                wealth: {
+                    let mut lines = crate::hud::wealth_card(world, e);
+                    lines.extend(crate::space_view::holding_line(world, e));
+                    lines
+                },
                 progress_pct: e.build_progress.map(|done| {
                     let sources = world
                         .players()

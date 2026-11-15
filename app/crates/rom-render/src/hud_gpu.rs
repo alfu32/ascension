@@ -145,16 +145,56 @@ impl HudGpu {
         let atlas = &self.painter.glyphs;
         let ratio = layout.scale / atlas.scale;
         let height = atlas.line_height(TextSize::Small) as f32 * ratio;
+        // An icon is a square a little taller than the text line, in front of the text.
+        let icon_side = height * 1.3;
         let boxes: Vec<_> = labels
             .iter()
             .map(|l| {
-                let width = atlas.measure(&l.text, TextSize::Small) as f32 * ratio;
-                (l.x, l.y - height, width, height, l.priority)
+                let text = if l.text.is_empty() {
+                    0.0
+                } else {
+                    atlas.measure(&l.text, TextSize::Small) as f32 * ratio
+                };
+                let icon = if l.icon.is_some() {
+                    icon_side + 3.0
+                } else {
+                    0.0
+                };
+                let h = if l.icon.is_some() { icon_side } else { height };
+                (l.x, l.y - h, text + icon, h, l.priority)
             })
             .collect();
         let mut quads = Vec::new();
         for index in hud_minimap::declutter(&boxes) {
             let label = &labels[index];
+            let mut text_x = label.x;
+            if let Some(rect) = label
+                .icon
+                .as_deref()
+                .and_then(|n| self.painter.artwork.rect(n))
+            {
+                // A dark disc behind the icon keeps it readable against any background.
+                let centre = Vector2::new(label.x + icon_side / 2.0, label.y - icon_side / 2.0);
+                d.draw_circle_v(
+                    centre,
+                    icon_side * 0.55,
+                    Color::new(
+                        8,
+                        10,
+                        18,
+                        (170.0 * alpha * f32::from(label.colour[3]) / 255.0) as u8,
+                    ),
+                );
+                d.draw_texture_pro(
+                    &self.artwork,
+                    Rectangle::new(rect.x as f32, rect.y as f32, rect.w as f32, rect.h as f32),
+                    Rectangle::new(label.x, label.y - icon_side, icon_side, icon_side),
+                    Vector2::zero(),
+                    0.0,
+                    Color::new(255, 255, 255, (f32::from(label.colour[3]) * alpha) as u8),
+                );
+                text_x += icon_side + 3.0;
+            }
             let shade = [
                 0,
                 0,
@@ -176,7 +216,7 @@ impl HudGpu {
                 atlas.draw(
                     &label.text,
                     style,
-                    label.x.round() as i32 + dx,
+                    text_x.round() as i32 + dx,
                     label.y.round() as i32 + dy,
                     &mut quads,
                 );

@@ -161,6 +161,20 @@ impl World {
         self.economy.dirty.insert(worker);
     }
 
+    /// `raw` of a base resource after the player's `income.*` modifiers, before any cap.
+    pub(crate) fn stat_modified(&self, player: PlayerId, resource: DefId, raw: i64) -> i64 {
+        let Some(owner) = self.players.get(&player) else {
+            return raw;
+        };
+        let sources = owner.active_sources();
+        self.rules
+            .key(resource)
+            .strip_prefix("res.")
+            .map(|suffix| format!("income.{suffix}"))
+            .filter(|stat| self.rules.stats.contains_key(stat))
+            .map_or(raw, |stat| self.rules.player_stat(&stat, raw, &sources))
+    }
+
     fn modified_income(&self, player: PlayerId, resource: DefId, raw: i64) -> Income {
         let Some(owner) = self.players.get(&player) else {
             return Income::default();
@@ -174,13 +188,7 @@ impl World {
             return Income::default();
         };
         let sources = owner.active_sources();
-        let modified = self
-            .rules
-            .key(resource)
-            .strip_prefix("res.")
-            .map(|suffix| format!("income.{suffix}"))
-            .filter(|stat| self.rules.stats.contains_key(stat))
-            .map_or(raw, |stat| self.rules.player_stat(&stat, raw, &sources));
+        let modified = self.stat_modified(player, resource, raw);
         let effective = if resource_row.rate_capped {
             let base = self
                 .rules

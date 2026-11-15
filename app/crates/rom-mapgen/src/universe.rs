@@ -13,8 +13,6 @@ use rom_sim::SimRng;
 
 use crate::{MapGenError, SpherePlanet, SphereRequest, expand_planet, generate_sphere, mix64};
 
-/// System units between successive orbits around a star.
-const ORBIT_STEP: i32 = 1000;
 /// Golden angle in millidegrees: successive orbits never line up.
 const GOLDEN_MDEG: i64 = 137_508;
 /// Full turn in millidegrees.
@@ -348,9 +346,193 @@ fn resource_kinds(
     kinds
 }
 
-enum Orbiting {
-    Habitable(u32, Option<DefId>),
-    Resource(DefId),
+/// Share of resource bodies that circle a habitable planet as moons, in percent.
+const MOON_PCT: u32 = 40;
+/// Most moons of one planet.
+const MOONS_PER_PLANET: u8 = 2;
+/// Tiles of the system plane from a planet to its first moon (the simulation lays a system out
+/// within [`PLANE_TILES`] tiles), plus up to [`MOON_SPREAD_TILES`] more.
+const MOON_TILES: i64 = 10;
+const MOON_SPREAD_TILES: u32 = 3;
+/// Tiles from the star to the outermost orbit in the simulation's layout.
+const PLANE_TILES: i64 = 240;
+/// Innermost orbit radius in system units, and its seeded spread.
+const INNER_ORBIT: i64 = 1500;
+const INNER_SPREAD: u32 = 500;
+/// Each orbit is this many percent of the previous one, plus a seeded spread (140..=190).
+const RATIO_PCT: i64 = 140;
+const RATIO_SPREAD: u32 = 51;
+/// Angle between a moon and its planet in millidegrees; less than the clearance of any two
+/// other bodies, so a moon is told from its neighbours by position alone.
+pub const MOON_ANGLE_MDEG: i64 = 600;
+/// Largest angular clearance bodies other than moons keep from one another.
+const CLEARANCE_MDEG: i64 = 5000;
+
+/// What orbits one star and how it is arranged, before any radius is chosen: planets by size
+/// outward (small and rocky near the star), a belt of resource bodies in one orbit slot, and
+/// resource bodies that circle a planet as moons.
+#[derive(Clone)]
+struct Arrangement {
+    /// Habitable planets from the star outward: face size and whether it is the home planet.
+    planets: Vec<(u32, bool)>,
+    /// Orbit slot (counted from the star) the belt takes, when any body belongs to it.
+    belt_slot: Option<usize>,
+    /// Resource bodies and the planet each circles; `None` for belt bodies.
+    resources: Vec<(DefId, Option<usize>)>,
+}
+
+impl Arrangement {
+    fn new(rng: &mut SimRng, mut planets: Vec<(u32, bool)>, kinds: Vec<DefId>) -> Self {
+        planets.sort_by_key(|&(n, home)| (n, !home));
+        let mut moons = vec![0u8; planets.len()];
+        let mut resources = Vec::new();
+        for kind in kinds {
+            let open: Vec<usize> = (0..planets.len())
+                .filter(|&p| moons[p] < MOONS_PER_PLANET)
+                .collect();
+            let parent = (rng.range(0, 100) < MOON_PCT && !open.is_empty())
+                .then(|| open[rng.range(0, open.len() as u32) as usize]);
+            if let Some(p) = parent {
+                moons[p] += 1;
+            }
+            resources.push((kind, parent));
+        }
+        let belt_slot = resources
+            .iter()
+            .any(|r| r.1.is_none())
+            .then(|| rng.range(0, planets.len() as u32 + 1) as usize);
+        Self {
+            planets,
+            belt_slot,
+            resources,
+        }
+    }
+
+    /// The bodies of the system with radii growing geometrically from the star, ids and names
+    /// left for the caller.
+    fn orbits(&self, rng: &mut SimRng, race: Option<DefId>) -> Vec<Body> {
+        let slots = self.planets.len() + usize::from(self.belt_slot.is_some());
+        let mut radii = Vec::with_capacity(slots);
+        let mut radius = INNER_ORBIT + i64::from(rng.range(0, INNER_SPREAD));
+        for _ in 0..slots {
+            radii.push(radius);
+            radius = radius * (RATIO_PCT + i64::from(rng.range(0, RATIO_SPREAD))) / 100;
+        }
+        let mut planet_radii = Vec::new();
+        let mut belt_radius = 0;
+        let mut next = radii.iter();
+        for slot in 0..slots {
+            let r = *next.next().expect("one radius per slot");
+            if Some(slot) == self.belt_slot {
+                belt_radius = r;
+            } else {
+                planet_radii.push(r);
+            }
+        }
+        let count = (self.planets.len() + self.resources.len()) as i64;
+        let clearance = CLEARANCE_MDEG.min(TURN_MDEG / (4 * count.max(1)));
+        let clear = |angles: &[i64], angle: i64| {
+            angles.iter().all(|&a| {
+                let d = (angle - a).rem_euclid(TURN_MDEG);
+                d.min(TURN_MDEG - d) >= clearance
+            })
+        };
+        let mut angles: Vec<i64> = Vec::new();
+        let spot = |angles: &mut Vec<i64>, want: i64| {
+            let mut angle = want.rem_euclid(TURN_MDEG);
+            while !clear(angles, angle) {
+                angle = (angle + clearance) % TURN_MDEG;
+            }
+            angles.push(angle);
+            angle
+        };
+        let start = i64::from(rng.range(0, TURN_MDEG as u32));
+        let mut out = Vec::new();
+        let mut planet_angle = Vec::new();
+        for (i, &(n, home)) in self.planets.iter().enumerate() {
+            let jitter = i64::from(rng.range(0, 6001)) - 3000;
+            let angle = spot(&mut angles, start + i as i64 * GOLDEN_MDEG + jitter);
+            planet_angle.push(angle);
+            out.push(Body {
+                id: 0,
+                system_id: 0,
+                kind: BodyKind::Habitable,
+                name: String::new(),
+                orbit_radius: planet_radii[i] as i32,
+                orbit_angle_mdeg: angle as i32,
+                n: Some(n),
+                home_race: if home { race } else { None },
+                node_entity_type: None,
+            });
+        }
+        let belt_start = i64::from(rng.range(0, TURN_MDEG as u32));
+        let width = belt_radius / 6;
+        let mut seen: BTreeSet<i64> = planet_radii.iter().copied().collect();
+        let mut belt_n = 0;
+        let mut moon_n = vec![0usize; self.planets.len()];
+        let plane = |radii: &[i64]| radii.iter().copied().max().unwrap_or(0);
+        // The outermost orbit decides the simulation's tile scale; moons never extend it.
+        let mut belt_radii = Vec::new();
+        for &(_, parent) in &self.resources {
+            if parent.is_none() {
+                let mut r = belt_radius - width / 2 + i64::from(rng.range(0, width.max(1) as u32));
+                while !seen.insert(r) {
+                    r += 1;
+                }
+                belt_radii.push(r);
+            }
+        }
+        let outer = plane(&planet_radii).max(plane(&belt_radii)).max(1);
+        let scale = ((outer + PLANE_TILES - 1) / PLANE_TILES).max(1);
+        let outermost_planet = planet_radii
+            .iter()
+            .position(|&r| r == plane(&planet_radii))
+            .filter(|_| plane(&planet_radii) >= plane(&belt_radii));
+        for &(kind, parent) in &self.resources {
+            let (radius, angle) = match parent {
+                None => {
+                    let r = belt_radii[belt_n];
+                    let angle = spot(&mut angles, belt_start + belt_n as i64 * GOLDEN_MDEG);
+                    belt_n += 1;
+                    (r, angle)
+                }
+                Some(p) => {
+                    let m = moon_n[p];
+                    moon_n[p] += 1;
+                    let reach = (MOON_TILES + i64::from(rng.range(0, MOON_SPREAD_TILES))) * scale;
+                    // The outermost planet's moons lie inside its orbit, the others' outside
+                    // and then inside, so a moon never extends the system.
+                    let offset = match (outermost_planet == Some(p), m) {
+                        (true, m) => -reach * (m as i64 + 1),
+                        (false, 0) => reach,
+                        (false, _) => -reach,
+                    };
+                    let sign = if m == 0 { 1 } else { -1 };
+                    let mut r = planet_radii[p] + offset;
+                    while !seen.insert(r) {
+                        r += 1;
+                    }
+                    (
+                        r,
+                        (planet_angle[p] + sign * MOON_ANGLE_MDEG).rem_euclid(TURN_MDEG),
+                    )
+                }
+            };
+            out.push(Body {
+                id: 0,
+                system_id: 0,
+                kind: BodyKind::Resource,
+                name: String::new(),
+                orbit_radius: radius as i32,
+                orbit_angle_mdeg: angle as i32,
+                n: None,
+                home_race: None,
+                node_entity_type: Some(kind),
+            });
+        }
+        out.sort_by_key(|b| (b.orbit_radius, b.orbit_angle_mdeg));
+        out
+    }
 }
 
 struct Layout {
@@ -478,41 +660,33 @@ fn layout(
         })
         .collect();
 
-    // Every home system gets the same contents; only the orbits differ.
+    // Every home system gets the same contents and the same arrangement (planets by size,
+    // belt slot, moons); only the orbit radii and angles differ.
     let n_pick = |rng: &mut SimRng| pick(rng, style.planet_n_min, style.planet_n_max) as u32;
     let home_habitable = pick(
         rng,
         style.habitable_per_system_min,
         style.habitable_per_system_max,
     ) as usize;
-    let home_sizes: Vec<u32> = (1..home_habitable).map(|_| n_pick(rng)).collect();
+    let mut home_planets: Vec<(u32, bool)> = vec![(style.planet_n_median as u32, true)];
+    home_planets.extend((1..home_habitable).map(|_| (n_pick(rng), false)));
     let home_resources = resource_kinds(rng, style, rows, true);
+    let home_plan = Arrangement::new(rng, home_planets, home_resources);
 
     let mut bodies = Vec::new();
     for system in &systems {
-        let mut orbiting = Vec::new();
-        if let Some(&race) = races.get(system.id as usize - 1) {
-            orbiting.push(Orbiting::Habitable(
-                style.planet_n_median as u32,
-                Some(race),
-            ));
-            orbiting.extend(home_sizes.iter().map(|&n| Orbiting::Habitable(n, None)));
-            orbiting.extend(home_resources.iter().map(|&d| Orbiting::Resource(d)));
+        let (plan, race) = if let Some(&race) = races.get(system.id as usize - 1) {
+            (home_plan.clone(), Some(race))
         } else {
             let habitable = pick(
                 rng,
                 style.habitable_per_system_min,
                 style.habitable_per_system_max,
             );
-            for _ in 0..habitable {
-                orbiting.push(Orbiting::Habitable(n_pick(rng), None));
-            }
+            let planets = (0..habitable).map(|_| (n_pick(rng), false)).collect();
             let kinds = resource_kinds(rng, style, rows, false);
-            orbiting.extend(kinds.into_iter().map(Orbiting::Resource));
-        }
-        for i in (1..orbiting.len()).rev() {
-            orbiting.swap(i, rng.range(0, i as u32 + 1) as usize);
-        }
+            (Arrangement::new(rng, planets, kinds), None)
+        };
         bodies.push(Body {
             id: bodies.len() as u32 + 1,
             system_id: system.id,
@@ -524,31 +698,11 @@ fn layout(
             home_race: None,
             node_entity_type: None,
         });
-        let start = i64::from(rng.range(0, TURN_MDEG as u32));
-        let mut angles = BTreeSet::new();
-        for (i, body) in orbiting.into_iter().enumerate() {
-            let radius =
-                ORBIT_STEP * (i as i32 + 1) + rng.range(0, ORBIT_STEP as u32 * 2 / 5) as i32;
-            let jitter = i64::from(rng.range(0, 6001)) - 3000;
-            let mut angle = (start + i as i64 * GOLDEN_MDEG + jitter).rem_euclid(TURN_MDEG);
-            while !angles.insert(angle) {
-                angle = (angle + 1) % TURN_MDEG;
-            }
-            let (kind, n, home_race, node) = match body {
-                Orbiting::Habitable(n, race) => (BodyKind::Habitable, Some(n), race, None),
-                Orbiting::Resource(d) => (BodyKind::Resource, None, None, Some(d)),
-            };
-            bodies.push(Body {
-                id: bodies.len() as u32 + 1,
-                system_id: system.id,
-                kind,
-                name: format!("{} {}", system.name, i + 1),
-                orbit_radius: radius,
-                orbit_angle_mdeg: angle as i32,
-                n,
-                home_race,
-                node_entity_type: node,
-            });
+        for (i, mut body) in plan.orbits(rng, race).into_iter().enumerate() {
+            body.id = bodies.len() as u32 + 1;
+            body.system_id = system.id;
+            body.name = format!("{} {}", system.name, i + 1);
+            bodies.push(body);
         }
     }
     Some(Layout {
