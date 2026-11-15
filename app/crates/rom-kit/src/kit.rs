@@ -1837,7 +1837,7 @@ fn bow(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::looks::{MaterialLook, Program};
+    use crate::material::{MaterialLook, Program};
     use crate::models::{ModelSpec, bake_model};
 
     fn part(shape: Shape, knobs: &[(&str, f32)]) -> PartSpec {

@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::kit::{self, Painter, Place, Surface};
-use crate::looks::MaterialLook;
+use crate::material::MaterialLook;
 use crate::rig::{Activity, Motion, Rig};
 
 /// Parts whose far mesh spans less than this (tiles) are left out of the far version.
@@ -753,7 +753,7 @@ fn shade_contact(mesh: &mut ModelMesh, start: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::looks::Program;
+    use crate::material::Program;
 
     pub(crate) fn plain() -> MaterialLook {
         MaterialLook {

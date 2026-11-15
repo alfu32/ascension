@@ -4894,6 +4894,10 @@ name = "rom-geo"
 version = "0.0.46"
 
 [[package]]
+name = "rom-kit"
+version = "0.0.46"
+
+[[package]]
 name = "rom-mapgen"
 version = "0.0.46"
 dependencies = [
@@ -4913,6 +4917,7 @@ dependencies = [
  "raylib",
  "resvg 0.47.0",
  "rom-geo",
+ "rom-kit",
 ]
 
 [[package]]

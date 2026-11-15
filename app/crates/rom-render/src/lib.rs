@@ -21,18 +21,15 @@ pub mod hud_minimap;
 pub mod hud_model;
 pub mod hud_preview;
 pub mod hud_text;
-pub mod kit;
 pub mod looks;
 mod mailbox;
 mod materials;
-pub mod models;
 mod orbit;
 mod overlay;
 pub mod pick;
 mod pixels;
 mod readback;
 pub mod review;
-pub mod rig;
 mod scene;
 pub mod shadow;
 pub mod sky;
@@ -44,6 +41,8 @@ pub mod universe;
 pub mod vision;
 mod worker;
 pub mod zoom;
+
+pub use rom_kit::{kit, models, rig};
 
 pub use camera::{Camera, CameraController, InputEvent, Key, Modifiers, PointerButton};
 pub use entities::{
