@@ -143,6 +143,14 @@ impl Launcher {
             }
         })
         .detach();
+        // Opt-in: open on another group (`ROM_LAUNCHER_GROUP=5` shows Models), for screenshots.
+        if let Some(group) = std::env::var("ROM_LAUNCHER_GROUP")
+            .ok()
+            .and_then(|g| g.parse::<usize>().ok())
+            .filter(|g| *g < GROUPS.len())
+        {
+            this.group = group;
+        }
         // Opt-in visual smoke test uses the same form and launch handler as the button.
         // Use an isolated XDG_CONFIG_HOME; no desktop automation or window manipulation.
         if std::env::var_os("ROM_LAUNCHER_SMOKE").is_some() {

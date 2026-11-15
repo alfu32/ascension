@@ -751,7 +751,10 @@ pub fn import(
             let check = if free { Shape::Custom } else { shape };
             match knob_value(check, key, prop) {
                 Ok(value) => {
-                    if PLACEMENT.contains(&key.as_str())
+                    // A roof's own `pitch` is its slope, not a lean.
+                    let placement = PLACEMENT.contains(&key.as_str())
+                        && !(key == "pitch" && check.knobs().contains(&"pitch"));
+                    if placement
                         && !params
                             .get(key)
                             .is_some_and(|v| crate::params::same(v, &value))
