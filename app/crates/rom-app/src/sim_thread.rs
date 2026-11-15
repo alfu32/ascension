@@ -689,7 +689,8 @@ pub fn snapshot_on(
             }
             _ => false,
         };
-        if !on_body || entity.container_id.is_some() {
+        // Workers inside a gather building are not drawn; the building's panel lists them.
+        if !on_body || entity.container_id.is_some() || entity.is_inside() {
             continue;
         }
         let moving = motions.moving(entity, world.tick());

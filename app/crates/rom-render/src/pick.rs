@@ -39,6 +39,10 @@ pub enum HudRegionKind {
     QueueItem,
     /// Multi-selection tile, 0 to 11.
     SelectionTile,
+    /// Portrait of a worker inside the selected building, 0 to 11.
+    InsideWorker,
+    /// The second press of a double click on an inside portrait: every worker of that type.
+    InsideWorkerAll,
     /// The minimap picture.
     Minimap,
     /// Minimap button: zoom in, zoom out, centre on selection, signal.
@@ -509,6 +513,13 @@ pub fn hud_target(
             }
         }
     }
+    if let crate::hud::HudSelection::Single(card) = &hud.selection {
+        for i in 0..card.inside.len().min(12) {
+            if layout.inside_tile(i).contains(x, y) {
+                return target(HudRegionKind::InsideWorker, i);
+            }
+        }
+    }
     target(HudRegionKind::Panel, 0)
 }
 
@@ -682,6 +693,7 @@ pub struct PickController {
     pointer: Option<(f32, f32)>,
     press: Option<Press>,
     last_click: Option<(u64, f32, f32)>,
+    last_inside: Option<(u64, usize)>,
     last_hover: Option<(f32, f32)>,
     pan: Option<(PointerButton, f32, f32)>,
 }
@@ -981,6 +993,26 @@ impl PickController {
                 }
                 _ => {}
             },
+            (HudRegionKind::InsideWorker, PointerButton::Left) => {
+                let double = self.last_inside.is_some_and(|(at, index)| {
+                    index == target.index && ctx.now_ms.saturating_sub(at) <= DOUBLE_CLICK_MS
+                });
+                self.last_inside = if double {
+                    None
+                } else {
+                    Some((ctx.now_ms, target.index))
+                };
+                out.push(PickEvent::HudClick {
+                    region: if double {
+                        HudRegionKind::InsideWorkerAll
+                    } else {
+                        HudRegionKind::InsideWorker
+                    },
+                    index: target.index,
+                    button,
+                    modifiers: mods,
+                });
+            }
             (HudRegionKind::Panel | HudRegionKind::MinimapButton, _) => {}
             (region, button) => out.push(PickEvent::HudClick {
                 region,

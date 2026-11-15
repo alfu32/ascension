@@ -2016,3 +2016,133 @@ fn orbital_review_script_trains_launches_selects_and_bombards_through_picks() {
         game.world.hash()
     );
 }
+
+/// A university with three scholars working in it.
+fn university_with_workers() -> (Fx, EntityId, Vec<EntityId>) {
+    let mut fx = fixture();
+    let university = fx.rules.id_of("bld.university").unwrap();
+    let scholar = fx.rules.id_of("unit.scholar").unwrap();
+    let building = fx.spawn(university, 1, 20, 20);
+    let workers: Vec<EntityId> = (0..3).map(|k| fx.spawn(scholar, 1, 16 + k, 24)).collect();
+    for worker in &workers {
+        assert!(fx.ctl.submit(
+            &mut fx.world,
+            *worker,
+            "harvest",
+            None,
+            Some(building),
+            None,
+            false
+        ));
+    }
+    fx.step(400);
+    assert_eq!(
+        fx.world.occupants(building),
+        workers,
+        "all three are inside"
+    );
+    (fx, building, workers)
+}
+
+#[test]
+fn workers_inside_show_in_the_building_panel_and_can_be_picked() {
+    let (mut fx, building, workers) = university_with_workers();
+    fx.click(building, false);
+    let hud = fx.hud_snapshot();
+    let HudSelection::Single(card) = &hud.selection else {
+        panic!("one building selected");
+    };
+    assert_eq!(card.inside.len(), 3);
+    assert_eq!(card.workers.as_deref(), Some("3 / 7"));
+    // Clicking a portrait selects that worker; it stays inside until it is ordered.
+    fx.hud(HudRegionKind::InsideWorker, 1, PointerButton::Left, false);
+    assert_eq!(ids(&fx), vec![workers[1].0]);
+    assert!(fx.world.entity(workers[1]).unwrap().is_inside());
+    // Shift adds a second worker to the first.
+    fx.click(building, false);
+    fx.hud(HudRegionKind::InsideWorker, 0, PointerButton::Left, false);
+    fx.click(building, false);
+    fx.hud(HudRegionKind::InsideWorker, 2, PointerButton::Left, true);
+    assert_eq!(
+        ids(&fx),
+        vec![workers[2].0],
+        "shift keeps units, not the building"
+    );
+    // A double click selects every worker of that type inside.
+    fx.click(building, false);
+    fx.hud(
+        HudRegionKind::InsideWorkerAll,
+        0,
+        PointerButton::Left,
+        false,
+    );
+    assert_eq!(ids(&fx), workers.iter().map(|w| w.0).collect::<Vec<_>>());
+    // An order given to one of them takes just that worker out.
+    fx.rclick(None, (40.0, 40.0), false);
+    fx.step(2);
+    assert!(
+        fx.world.occupants(building).is_empty(),
+        "all three were selected and ordered"
+    );
+}
+
+#[test]
+fn release_button_and_right_click_apply_to_everyone_inside() {
+    let (mut fx, building, workers) = university_with_workers();
+    fx.click(building, false);
+    let hud = fx.hud_snapshot();
+    let palette = hud.palette.expect("palette of a building with workers");
+    let release = palette
+        .buttons
+        .iter()
+        .find(|b| b.name == "Release all workers")
+        .expect("release button");
+    assert_eq!(release.slot, 3, "hotkey R");
+    // The hotkey works.
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Hotkey {
+            ch: 'r',
+            modifiers: Modifiers::default(),
+        },
+    );
+    fx.step(2);
+    assert!(fx.world.occupants(building).is_empty());
+    for worker in &workers {
+        assert!(!fx.world.entity(*worker).unwrap().is_inside());
+    }
+    // A right click with the building selected sends all its workers to the point.
+    let (mut fx, building, workers) = university_with_workers();
+    fx.click(building, false);
+    fx.rclick(None, (40.0, 40.0), false);
+    fx.step(2);
+    assert!(fx.world.occupants(building).is_empty());
+    assert!(workers.iter().all(|w| {
+        fx.world
+            .entity(*w)
+            .unwrap()
+            .orders()
+            .iter()
+            .any(|o| o.kind == "move")
+    }));
+}
+
+#[test]
+fn placing_a_city_on_another_planet_is_refused_with_a_message() {
+    // A builder on another body cannot reach the site; the preview says so.
+    let mut fx = fixture();
+    let city = fx.rules.id_of("bld.city").unwrap();
+    let builder = fx.mover();
+    let worker = fx.spawn(builder, 1, 10, 10);
+    fx.click(worker, false);
+    let site = Pos {
+        body: rom_sim::BodyId(7),
+        ..at(30, 30)
+    };
+    assert!(!fx.ctl.builder_can_reach(&fx.world, city, site));
+    assert!(fx.ctl.builder_can_reach(&fx.world, city, at(30, 30)));
+    assert_eq!(
+        rejection_message(&fx.world, &SimError::OtherBody, Some(city)),
+        "No selected builder can reach this site (another planet)"
+    );
+}

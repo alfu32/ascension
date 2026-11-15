@@ -451,6 +451,8 @@ fn parse_line(
                 "slot" => HudRegionKind::CommandSlot,
                 "queue" => HudRegionKind::QueueItem,
                 "tile" => HudRegionKind::SelectionTile,
+                "inside" => HudRegionKind::InsideWorker,
+                "insideall" => HudRegionKind::InsideWorkerAll,
                 other => return Err(format!("unknown HUD region {other:?}")),
             };
             let index = arg(1)?

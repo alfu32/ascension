@@ -182,6 +182,9 @@ pub struct HudQueueItem {
     pub name: String,
     /// Completion percentage, 0 to 100.
     pub progress_pct: u32,
+    /// Why a finished entry has not left the queue (no water beside a dock, population cap),
+    /// in player-facing words; None while it is merely in progress.
+    pub blocked: Option<String>,
 }
 
 /// The queue of the single selected producer.
@@ -218,6 +221,8 @@ pub struct HudCard {
     pub wealth: Vec<String>,
     /// Construction percentage while unfinished.
     pub progress_pct: Option<u32>,
+    /// The workers inside a gather building, one portrait each (at most twelve).
+    pub inside: Vec<HudTile>,
 }
 
 /// One tile of the multi-selection grid.

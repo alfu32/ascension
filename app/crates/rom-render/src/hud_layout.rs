@@ -386,6 +386,20 @@ impl HudLayout {
         )
     }
 
+    /// Screen rectangle of the portrait of the worker inside the selected building at `index`
+    /// (0 to 11, eight to a row).
+    pub fn inside_tile(&self, index: usize) -> Rect {
+        self.map(
+            Group::BottomRight,
+            Rect::new(
+                1004.0 + (index % 8) as f32 * 39.0,
+                868.0 + (index / 8) as f32 * 36.0,
+                37.0,
+                34.0,
+            ),
+        )
+    }
+
     /// Screen rectangle of minimap button `index` (zoom in, zoom out, centre, signal).
     pub fn minimap_button(&self, index: usize) -> Rect {
         self.map(

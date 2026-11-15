@@ -324,7 +324,13 @@ impl HudPainter {
                 .as_ref()
                 .and_then(|q| q.items.get(index))
                 .map_or_else(Default::default, |item| {
-                    (item.name.clone(), "Right-click to cancel".to_owned())
+                    (
+                        item.name.clone(),
+                        match &item.blocked {
+                            Some(reason) => format!("{reason}. Right-click to cancel"),
+                            None => "Right-click to cancel".to_owned(),
+                        },
+                    )
                 }),
             Some(HudTarget {
                 region: K::SelectionTile,
@@ -333,6 +339,20 @@ impl HudPainter {
                 HudSelection::Multiple { tiles, .. } => {
                     tiles.get(index).map_or_else(Default::default, |t| {
                         (t.name.clone(), "Click to select only these".to_owned())
+                    })
+                }
+                _ => Default::default(),
+            },
+            Some(HudTarget {
+                region: K::InsideWorker,
+                index,
+            }) => match &h.selection {
+                HudSelection::Single(card) => {
+                    card.inside.get(index).map_or_else(Default::default, |t| {
+                        (
+                            format!("{} (inside)", t.name),
+                            "Click to select; double-click for every one of its kind".to_owned(),
+                        )
                     })
                 }
                 _ => Default::default(),
@@ -543,6 +563,15 @@ impl HudPainter {
             );
             let bar = l.map(Group::BottomLeft, Rect::new(434.0, y + 24.0, 160.0, 8.0));
             self.bar(bar, item.progress_pct.min(100) as f32 / 100.0, CYAN);
+            if let Some(reason) = &item.blocked {
+                self.caption(
+                    l,
+                    Group::BottomLeft,
+                    reason,
+                    Rect::new(434.0, y + 34.0, 170.0, 14.0),
+                    AMBER,
+                );
+            }
             if overlay.hover
                 == Some(HudTarget {
                     region: K::QueueItem,
@@ -654,6 +683,38 @@ impl HudPainter {
                         Rect::new(998.0, 864.0 + i as f32 * 19.0, 322.0, 17.0),
                         GOLD,
                     );
+                }
+                if !card.inside.is_empty() {
+                    self.caption(
+                        l,
+                        R,
+                        "WORKERS INSIDE",
+                        Rect::new(1122.0, 848.0, 190.0, 16.0),
+                        GOLD,
+                    );
+                }
+                for (i, worker) in card.inside.iter().take(12).enumerate() {
+                    let r = l.inside_tile(i);
+                    self.art("chrome/tile", r);
+                    let icon = 20.0 * s;
+                    self.art(
+                        &worker.icon,
+                        Rect::new(r.x + (r.w - icon) / 2.0, r.y + 3.0 * s, icon, icon),
+                    );
+                    let fraction = worker.hp_permille as f32 / 1000.0;
+                    self.bar(
+                        Rect::new(r.x + 4.0 * s, r.bottom() - 8.0 * s, r.w - 8.0 * s, 4.0 * s),
+                        fraction,
+                        Self::health_colour(fraction),
+                    );
+                    if overlay.hover
+                        == Some(HudTarget {
+                            region: K::InsideWorker,
+                            index: i,
+                        })
+                    {
+                        self.frame(r, 1.5 * s, GOLD);
+                    }
                 }
                 let mut row = 0.0;
                 for (icon, label, value) in rows {

@@ -85,6 +85,8 @@ enum Action {
     Stance(DefId),
     Orbit,
     Travel,
+    /// Every worker inside the selected gather buildings leaves.
+    Release,
 }
 
 /// What the camera shows, as far as turning picks into orders needs it.
@@ -220,6 +222,22 @@ fn icon_of(et: &EntityType) -> &'static str {
         (EntityClass::Unit, "military" | "foot" | "mounted") => "icons/pic_shield",
         _ => "icons/pic_person",
     }
+}
+
+/// A blocked production order's reason in player-facing words.
+fn blocked_reason(reason: &str) -> String {
+    match reason {
+        "pop_cap" => "Population limit reached",
+        "no_spawn_tile" => "No free ground or water beside it",
+        "space_age" => "Needs the space age",
+        "launch_site" | "no_spawn_space" => "No room to launch",
+        other => other,
+    }
+    .to_owned()
+}
+
+fn rules_class(world: &World, entity: &Entity) -> EntityClass {
+    world.rules().entity_types[&entity.type_id].class
 }
 
 fn stance_icon(behavior: &str) -> &'static str {
@@ -643,7 +661,14 @@ impl Controller {
                     Kind::Ground
                 }
             });
-        let selected: Vec<EntityId> = self.own_selected(world).iter().map(|e| e.id).collect();
+        let mut selected: Vec<EntityId> = self.own_selected(world).iter().map(|e| e.id).collect();
+        // An order given to a gather building applies to every worker inside it.
+        let inside: Vec<EntityId> = selected
+            .iter()
+            .flat_map(|id| world.occupants(*id))
+            .filter(|id| !selected.contains(id))
+            .collect();
+        selected.extend(inside);
         let mut issued = false;
         for id in selected {
             let Some(e) = world.entity(id) else {
@@ -951,6 +976,37 @@ impl Controller {
             HudRegionKind::QueueItem if button == PointerButton::Right => {
                 self.cancel_queued(world, index);
             }
+            HudRegionKind::InsideWorker | HudRegionKind::InsideWorkerAll
+                if button == PointerButton::Left =>
+            {
+                let inside = self.inside_workers(world);
+                let Some(&worker) = inside.get(index) else {
+                    return;
+                };
+                let ids: Vec<EntityId> = if region == HudRegionKind::InsideWorkerAll {
+                    // Every worker of that type inside the building.
+                    let kind = world.entity(worker).map(|w| w.type_id);
+                    inside
+                        .iter()
+                        .copied()
+                        .filter(|id| world.entity(*id).map(|w| w.type_id) == kind)
+                        .collect()
+                } else {
+                    vec![worker]
+                };
+                let mut next: Vec<EntityId> = if mods.shift {
+                    // Shift adds to the workers and units already chosen, not to the building.
+                    self.own_selected(world)
+                        .iter()
+                        .filter(|e| rules_class(world, e) == EntityClass::Unit)
+                        .map(|e| e.id)
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                next.extend(ids);
+                self.set_selection(next);
+            }
             HudRegionKind::SelectionTile if button == PointerButton::Left => {
                 let types = self.tile_types(world);
                 if let Some(type_id) = types.get(index) {
@@ -964,6 +1020,18 @@ impl Controller {
                 }
             }
             _ => {}
+        }
+    }
+
+    /// The workers inside the single selected own building, in strip order (at most twelve).
+    fn inside_workers(&self, world: &World) -> Vec<EntityId> {
+        match self.own_selected(world).as_slice() {
+            [one] if one.owner == PLAYER => {
+                let mut ids = world.occupants(one.id);
+                ids.truncate(12);
+                ids
+            }
+            _ => Vec::new(),
         }
     }
 
@@ -1134,9 +1202,12 @@ impl Controller {
         let can_move = own
             .iter()
             .any(|e| rules.entity_types[&e.type_id].movement.is_some());
+        let has_workers = own
+            .iter()
+            .any(|e| e.owner == PLAYER && !world.occupants(e.id).is_empty());
         let tabs = [
             !build_pages.is_empty(),
-            can_move,
+            can_move || has_workers,
             !train_pages.is_empty(),
             !research_pages.is_empty(),
         ];
@@ -1185,6 +1256,9 @@ impl Controller {
             }
             PaletteTab::Order => {
                 actions.push((0, Action::Stop));
+                if has_workers {
+                    actions.push((3, Action::Release));
+                }
                 if own.iter().any(|e| {
                     in_space(world, e) && rules.entity_types[&e.type_id].movement.is_some()
                 }) {
@@ -1268,6 +1342,10 @@ impl Controller {
             Action::Stop => {
                 button.name = "Stop".into();
                 button.icon = "icons/cmd_stop".into();
+            }
+            Action::Release => {
+                button.name = "Release all workers".into();
+                button.icon = "icons/cmd_cancel".into();
             }
             Action::Orbit => {
                 button.name = "Orbit".into();
@@ -1361,6 +1439,26 @@ impl Controller {
                 self.attack_move = false;
             }
             Action::AttackMove => self.attack_move = !self.attack_move,
+            Action::Release => {
+                let sites: Vec<EntityId> = self
+                    .own_selected(world)
+                    .iter()
+                    .filter(|e| !world.occupants(e.id).is_empty())
+                    .map(|e| e.id)
+                    .collect();
+                for site in sites {
+                    let workers = world.occupants(site);
+                    if !self.submit(world, site, "release", None, None, None, false) {
+                        continue;
+                    }
+                    // With a rally point they walk to it; without one they stand beside the door.
+                    if let Some(&rally) = self.rally.get(&site) {
+                        for worker in workers {
+                            self.submit(world, worker, "move", None, None, Some(rally), false);
+                        }
+                    }
+                }
+            }
             Action::Orbit => self.orbit_nearest(world),
             Action::Travel => self.travel_on(world),
             Action::Stance(stance) => {
@@ -1827,13 +1925,10 @@ impl Controller {
             let et = &rules.entity_types[&e.type_id];
             let attack = et.weapons.iter().map(|w| w.damage).max();
             let range = et.weapons.iter().map(|w| w.range_max).max();
-            let workers = et.gather_site.as_ref().map(|_| {
-                let busy = world
-                    .entities()
-                    .filter(|w| w.work_site == Some(e.id))
-                    .count();
-                format!("{busy} / {}", e.gather_slots)
-            });
+            let workers = et
+                .gather_site
+                .as_ref()
+                .map(|_| format!("{} / {}", world.occupants(e.id).len(), e.gather_slots));
             HudCard {
                 icon: icon_of(et).to_owned(),
                 name: rules.display_name(e.type_id, faction).to_owned(),
@@ -1850,6 +1945,26 @@ impl Controller {
                 }),
                 garrison: et.container.as_ref().map(|c| format!("max {}", c.capacity)),
                 workers,
+                inside: if foreign {
+                    Vec::new()
+                } else {
+                    world
+                        .occupants(e.id)
+                        .into_iter()
+                        .take(12)
+                        .filter_map(|id| world.entity(id))
+                        .map(|w| {
+                            let wet = &rules.entity_types[&w.type_id];
+                            HudTile {
+                                icon: icon_of(wet).to_owned(),
+                                name: rules.display_name(w.type_id, faction).to_owned(),
+                                count: 1,
+                                hp_permille: (w.hp.max(0) * 1000 / w.max_hp.max(1)).min(1000)
+                                    as u32,
+                            }
+                        })
+                        .collect()
+                },
                 wealth: crate::hud::wealth_card(world, e),
                 progress_pct: e.build_progress.map(|done| {
                     let sources = world
@@ -1909,6 +2024,12 @@ impl Controller {
                             progress_pct: (o.progress_ticks * 100)
                                 .checked_div(total)
                                 .map_or(0, |p| p.min(100) as u32),
+                            blocked: match &o.status {
+                                rom_sim::OrderStatus::Blocked(reason) => {
+                                    Some(blocked_reason(reason))
+                                }
+                                _ => None,
+                            },
                         })
                     })
                     .collect();
@@ -1969,6 +2090,16 @@ impl Controller {
             .and_then(|p| world.placement_discovery_age(PLAYER, p.def))
         {
             hud.help = rejection_message(world, &SimError::ResourceAgeRequired(age), None);
+        } else if let Some(p) = self.placement.as_ref().filter(|p| p.valid == Some(false))
+            && let Some(centre) = p.centre
+        {
+            // Say why the red footprint is red.
+            let reason = placement_check(world, p.def, centre).err().or_else(|| {
+                (!self.builder_can_reach(world, p.def, centre)).then_some(SimError::OtherBody)
+            });
+            if let Some(reason) = reason {
+                hud.help = rejection_message(world, &reason, Some(p.def));
+            }
         }
         hud.placement = self.placement.as_ref().and_then(|p| {
             p.centre.map(|c| HudPlacement {
