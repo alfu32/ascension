@@ -100,7 +100,8 @@ INSERT INTO order_kind(key,needs,target,note) VALUES
  ('enter','movement','entity','garrison / board'), ('unload','container','entity_or_point',''),
  ('train','producer','def',''), ('research','producer','def',''), ('morph','','def','upgrade in place'),
  ('ability','energy','entity_or_point','subject = ability'), ('set_rally','producer','entity_or_point',''),
- ('raze','','none','self-destruct building'), ('disband','','none','');
+ ('raze','','none','self-destruct building'), ('disband','','none',''),
+ ('release','gather_site','none','every worker inside a gather building leaves it');
 
 -- ── defs ────────────────────────────────────────────────────────────────────
 INSERT INTO def(kind,key,name,sort) VALUES

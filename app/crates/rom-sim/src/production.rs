@@ -53,6 +53,10 @@ impl World {
                     self.cancel_orders(id);
                     order.status = OrderStatus::Done;
                 }
+                "release" => {
+                    self.release_workers(id);
+                    order.status = OrderStatus::Done;
+                }
                 "move" if order.target_pos.is_none() => {
                     order.status = OrderStatus::Failed("unsupported".into());
                 }

@@ -82,6 +82,22 @@ impl World {
         self.set_work_site(worker, Some(site_id));
     }
 
+    /// The workers inside a gather building, in id order.
+    pub fn occupants(&self, building: EntityId) -> Vec<EntityId> {
+        self.economy
+            .occupants
+            .get(&building)
+            .map_or_else(Vec::new, |set| set.iter().copied().collect())
+    }
+
+    /// Sends every worker out of a building: each leaves its slot and its work order and stands
+    /// beside the building again, idle.
+    pub(crate) fn release_workers(&mut self, building: EntityId) {
+        for worker in self.occupants(building) {
+            self.cancel_orders(worker);
+        }
+    }
+
     pub(crate) fn interrupt_harvest(&mut self, executor: EntityId) {
         self.set_work_site(executor, None);
         let entity = self.entities[executor.0 as usize]

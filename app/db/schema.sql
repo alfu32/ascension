@@ -699,7 +699,7 @@ CREATE TABLE ai_difficulty (
 -- Order vocabulary. `needs` names the et_* component the executor must have.
 CREATE TABLE order_kind (
   key    TEXT PRIMARY KEY,
-  needs  TEXT NOT NULL DEFAULT '',     -- '', 'movement','weapon','builder','harvester','healer','trader','container','producer','energy'
+  needs  TEXT NOT NULL DEFAULT '',     -- '', 'movement','weapon','builder','harvester','healer','trader','container','producer','energy','gather_site'
   target TEXT NOT NULL CHECK (target IN ('none','point','entity','def','entity_or_point')),
   note   TEXT NOT NULL DEFAULT ''
 ) STRICT, WITHOUT ROWID;
