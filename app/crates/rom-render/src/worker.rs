@@ -38,7 +38,7 @@ use crate::sun::SunClock;
 use crate::terrain::{TerrainScene, home_camera, overview_camera};
 use crate::universe::UniverseScene;
 use crate::vision::VisionMap;
-use crate::zoom::{Home, Level, ZoomCamera, ZoomScale};
+use crate::zoom::{FocusPlace, Home, Level, ZoomCamera, ZoomScale};
 use rom_geo::SurfacePos;
 
 /// Smallest internal render scale, in percent of the canvas size.
@@ -532,6 +532,8 @@ fn render_loop(shared: &Shared) {
     let mut zoom: Option<ZoomCamera> = None;
     let mut surface_requested: Option<u32> = None;
     let mut space_picker = SpacePicker::default();
+    // The entity the camera keeps centred (the follow toggle).
+    let mut follow: Option<u32> = None;
     let mut shades: Vec<[f32; 3]> = Vec::new();
     let mut stats = StatsWindow::default();
     let mut blended: Vec<EntityView> = Vec::new();
@@ -776,6 +778,33 @@ fn render_loop(shared: &Shared) {
             let ground = |x: f32, y: f32| surface.map_or(0.0, |s| s.height(x, y));
             let now_ms = frame_start.duration_since(started).as_millis() as u64;
             for event in events {
+                let ask = camera_request(event, &canvas, hud_visible, &hud_snapshot);
+                if let Some(ask) = ask {
+                    let whereabouts = Whereabouts {
+                        entities: &blended,
+                        space: &space_snapshot,
+                        globe: globe.as_deref(),
+                    };
+                    follow = steer_to(
+                        ask,
+                        follow,
+                        &whereabouts,
+                        &hud_snapshot,
+                        (zoom.as_mut(), orbit.as_mut(), &mut camera),
+                    );
+                    continue;
+                }
+                if matches!(
+                    event,
+                    InputEvent::KeyDown(
+                        Key::PanForward | Key::PanBack | Key::PanLeft | Key::PanRight
+                    ) | InputEvent::ButtonDown {
+                        button: PointerButton::Middle,
+                        ..
+                    }
+                ) {
+                    follow = None;
+                }
                 if graticule_key(event, &hud_snapshot) {
                     let shown = shared.graticule.load(Ordering::Relaxed);
                     shared.graticule.store(!shown, Ordering::Relaxed);
@@ -878,6 +907,17 @@ fn render_loop(shared: &Shared) {
         orbit_controller.set_viewport(layout.0, layout.1);
         if let Some(zoom) = zoom.as_mut() {
             zoom.set_viewport(layout.0 as f32, layout.1 as f32);
+        }
+        if let (Some(id), Some(zoom)) = (follow, zoom.as_mut()) {
+            let whereabouts = Whereabouts {
+                entities: &blended,
+                space: &space_snapshot,
+                globe: globe.as_deref(),
+            };
+            match place_of(id, zoom, &whereabouts) {
+                Some(place) => zoom.follow(place),
+                None => follow = None,
+            }
         }
         if !picker.is_panning() {
             match (orbit.as_mut(), zoom.as_mut()) {
@@ -1055,9 +1095,9 @@ fn render_loop(shared: &Shared) {
                         }
                     }
                 }
-                if let Some(zoom) = &zoom {
-                    let alpha = zoom.weights().map;
-                    hud.draw_labels(&mut drawing, &hud_layout, scene.space_labels(), alpha);
+                if zoom.is_some() {
+                    // Each label carries the weight of the frame it belongs to.
+                    hud.draw_labels(&mut drawing, &hud_layout, scene.space_labels(), 1.0);
                 }
                 hud.draw(&mut drawing, &hud_layout, &hud_snapshot, &hud_overlay);
                 if let Some(zoom) = &zoom {
@@ -1372,7 +1412,7 @@ fn zoom_event(
                 return true;
             }
             if in_space {
-                let ships = ship_points(zoom, space);
+                let ships = ship_points(zoom, orbit, space);
                 let ctx = space_context(zoom, orbit, canvas, hud_visible, &ships);
                 out.extend(picker.handle(event, &ctx.context(), now_ms));
             }
@@ -1404,7 +1444,7 @@ fn zoom_event(
             if zoom.press(now_ms, (x, y), &view, orbit) {
                 picker.cancel();
             } else {
-                let ships = ship_points(zoom, space);
+                let ships = ship_points(zoom, orbit, space);
                 let ctx = space_context(zoom, orbit, canvas, hud_visible, &ships);
                 out.extend(picker.handle(event, &ctx.context(), now_ms));
             }
@@ -1416,7 +1456,7 @@ fn zoom_event(
             y,
             ..
         } if on_world(x, y) => {
-            let ships = ship_points(zoom, space);
+            let ships = ship_points(zoom, orbit, space);
             let ctx = space_context(zoom, orbit, canvas, hud_visible, &ships);
             out.extend(picker.handle(event, &ctx.context(), now_ms));
             true
@@ -1430,12 +1470,157 @@ fn zoom_event(
             if !on_world(x, y) {
                 return false;
             }
-            let ships = ship_points(zoom, space);
+            let ships = ship_points(zoom, orbit, space);
             let ctx = space_context(zoom, orbit, canvas, hud_visible, &ships);
             out.extend(picker.handle(event, &ctx.context(), now_ms));
             true
         }
         _ => false,
+    }
+}
+
+/// A request to move the camera to something: the selection (Space, the minimap's centre
+/// button), following it (Shift + Space, Shift + the centre button), or what the newest event
+/// is about (a click on the event line).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CameraAsk {
+    Selection,
+    Follow,
+    Event,
+}
+
+/// The camera request an input event makes, if any.
+fn camera_request(
+    event: InputEvent,
+    canvas: &HudLayout,
+    hud_visible: bool,
+    hud: &HudSnapshot,
+) -> Option<CameraAsk> {
+    match event {
+        InputEvent::KeyDown(Key::FocusSelection) => Some(CameraAsk::Selection),
+        InputEvent::KeyDown(Key::FollowSelection) => Some(CameraAsk::Follow),
+        InputEvent::ButtonDown {
+            button: PointerButton::Left,
+            x,
+            y,
+            mods,
+        } if hud_visible => {
+            if canvas.minimap_button(2).contains(x, y) {
+                Some(if mods.shift {
+                    CameraAsk::Follow
+                } else {
+                    CameraAsk::Selection
+                })
+            } else if hud.event_about.is_some() && canvas.event_line().contains(x, y) {
+                Some(CameraAsk::Event)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// What the render thread knows about where entities are.
+struct Whereabouts<'a> {
+    /// Entities of the loaded planet (or the flat map), ascending by id.
+    entities: &'a [EntityView],
+    space: &'a SpaceSnapshot,
+    globe: Option<&'a Globe>,
+}
+
+/// Where entity `id` is seen: on the loaded planet (a unit, or a ship in its orbit), in a system's
+/// plane, or on its lane between systems.
+fn place_of(id: u32, zoom: &ZoomCamera, whereabouts: &Whereabouts) -> Option<FocusPlace> {
+    if let (Some(globe), Ok(i)) = (
+        whereabouts.globe,
+        whereabouts.entities.binary_search_by_key(&id, |e| e.id),
+    ) {
+        let e = &whereabouts.entities[i];
+        return Some(FocusPlace::Globe(globe.dir_of(SurfacePos {
+            face: e.face,
+            x: (e.x * 1000.0).round() as i64,
+            y: (e.y * 1000.0).round() as i64,
+        })));
+    }
+    let scene = zoom.scene();
+    if let Some(ship) = whereabouts.space.ships.iter().find(|s| s.id == id) {
+        let placed = scene.place_system(ship.system);
+        let outermost = scene.system_outermost(ship.system);
+        return Some(FocusPlace::System {
+            system: ship.system,
+            at: ship_frame_pos(scene, &placed, outermost, ship),
+        });
+    }
+    let transit = whereabouts.space.transits.iter().find(|t| t.id == id)?;
+    let positions = zoom.map_positions();
+    let (a, b) = (
+        scene.system_index(transit.from)?,
+        scene.system_index(transit.to)?,
+    );
+    Some(FocusPlace::Map(crate::space::transit_point(
+        positions[a],
+        positions[b],
+        transit.progress,
+    )))
+}
+
+/// Carries out a camera request; returns the entity to follow from now on.
+fn steer_to(
+    ask: CameraAsk,
+    follow: Option<u32>,
+    whereabouts: &Whereabouts,
+    hud: &HudSnapshot,
+    (zoom, orbit, camera): (
+        Option<&mut ZoomCamera>,
+        Option<&mut OrbitCamera>,
+        &mut Camera,
+    ),
+) -> Option<u32> {
+    if ask == CameraAsk::Follow && follow.is_some() {
+        return None;
+    }
+    let wanted: Vec<u32> = match ask {
+        CameraAsk::Event => hud.event_about.into_iter().collect(),
+        CameraAsk::Selection | CameraAsk::Follow => hud.selected.clone(),
+    };
+    match (zoom, orbit) {
+        (Some(zoom), Some(orbit)) => {
+            let Some((id, place)) = wanted
+                .iter()
+                .find_map(|id| Some((*id, place_of(*id, zoom, whereabouts)?)))
+            else {
+                return follow;
+            };
+            if zoom.focus(place, orbit).is_err() {
+                return follow;
+            }
+            (ask == CameraAsk::Follow).then_some(id)
+        }
+        (None, orbit) => {
+            let entity = wanted.iter().find_map(|id| {
+                whereabouts
+                    .entities
+                    .binary_search_by_key(id, |e| e.id)
+                    .ok()
+                    .map(|i| &whereabouts.entities[i])
+            });
+            if let Some(e) = entity {
+                match (orbit, whereabouts.globe) {
+                    (Some(orbit), Some(globe)) => orbit.look_at(globe.dir_of(SurfacePos {
+                        face: e.face,
+                        x: (e.x * 1000.0).round() as i64,
+                        y: (e.y * 1000.0).round() as i64,
+                    })),
+                    _ => {
+                        camera.target = [e.x, 0.0, e.y];
+                        camera.pan(0.0, 0.0);
+                    }
+                }
+            }
+            None
+        }
+        (Some(_), None) => follow,
     }
 }
 
@@ -1447,9 +1632,23 @@ fn centre_of(canvas: &HudLayout, hud_visible: bool) -> f32 {
     }
 }
 
-/// The ships of the anchored system with their places in the system frame.
-fn ship_points(zoom: &ZoomCamera, space: &SpaceSnapshot) -> Vec<(u32, [f32; 3])> {
+/// The ships a click can pick, with their places: in the anchored system's frame at the system
+/// level, at their marks on the star map.
+fn ship_points(
+    zoom: &ZoomCamera,
+    orbit: &OrbitCamera,
+    space: &SpaceSnapshot,
+) -> Vec<(u32, [f32; 3])> {
     let scene = zoom.scene();
+    if zoom.level() >= Level::StarMap {
+        let view = zoom.map_view(orbit);
+        let distance = zoom.scale().map_distance(zoom.l());
+        let (_, beside) = crate::space::map_mark_scale(&view, distance);
+        return crate::space::map_ship_marks(scene, zoom.map_positions(), space, beside)
+            .into_iter()
+            .flat_map(|mark| mark.ids.into_iter().map(move |id| (id, mark.at)))
+            .collect();
+    }
     let Some(system) = zoom.system_id() else {
         return Vec::new();
     };
@@ -1673,6 +1872,136 @@ mod tests {
         assert!(bridge.graticule());
         bridge.publish_graticule(false);
         assert!(!bridge.graticule());
+    }
+
+    #[test]
+    fn the_focus_key_finds_a_ship_in_a_system_or_in_transit_and_flies_there() {
+        use crate::space::{ShipView, TransitView};
+        use crate::universe::sample_scene;
+        let radius = 122.0;
+        let mut orbit = OrbitCamera::at(0.0, 0.0, HOME_DISTANCE, 0.0, radius, 3.0 * radius);
+        let mut zoom = ZoomCamera::new(
+            Arc::new(sample_scene()),
+            ZoomScale::new(radius, 3.0 * radius),
+            Some(Home {
+                system: 1,
+                body: 2,
+                dir: orbit.dir,
+            }),
+            Level::StarMap,
+        );
+        let ship = ShipView {
+            id: 40,
+            kind: 1,
+            owner: 1,
+            system: 2,
+            body: None,
+            x: 2000.0,
+            y: -500.0,
+            facing_deg: 0.0,
+            hp_frac: 1.0,
+        };
+        let space = SpaceSnapshot {
+            ships: vec![ship],
+            transits: vec![TransitView {
+                id: 41,
+                kind: 1,
+                owner: 1,
+                from: 1,
+                to: 2,
+                progress: 0.5,
+            }],
+            ..SpaceSnapshot::default()
+        };
+        let whereabouts = Whereabouts {
+            entities: &[],
+            space: &space,
+            globe: None,
+        };
+        let scene = sample_scene();
+        let placed = scene.place_system(2);
+        let at = ship_frame_pos(&scene, &placed, scene.system_outermost(2), &ship);
+        assert_eq!(
+            place_of(40, &zoom, &whereabouts),
+            Some(FocusPlace::System { system: 2, at })
+        );
+        let positions = scene.place_systems();
+        let middle = crate::space::transit_point(positions[0], positions[1], 0.5);
+        assert_eq!(
+            place_of(41, &zoom, &whereabouts),
+            Some(FocusPlace::Map(middle))
+        );
+        assert_eq!(place_of(42, &zoom, &whereabouts), None);
+        // Space flies to the selected ship; Shift + Space follows it, and again lets go.
+        let mut hud = HudSnapshot {
+            selected: vec![41],
+            ..HudSnapshot::default()
+        };
+        let mut camera = Camera::default();
+        let follow = steer_to(
+            CameraAsk::Follow,
+            None,
+            &whereabouts,
+            &hud,
+            (Some(&mut zoom), Some(&mut orbit), &mut camera),
+        );
+        assert_eq!(follow, Some(41));
+        for _ in 0..400 {
+            zoom.advance(0.05);
+            zoom.sync_orbit(&mut orbit);
+        }
+        assert_eq!(zoom.level(), Level::StarMap);
+        let target = zoom.map_target(&orbit);
+        assert!((target[0] - middle[0]).hypot(target[2] - middle[2]) < 1.0);
+        let follow = steer_to(
+            CameraAsk::Follow,
+            follow,
+            &whereabouts,
+            &hud,
+            (Some(&mut zoom), Some(&mut orbit), &mut camera),
+        );
+        assert_eq!(follow, None);
+        // A click on the event line flies to what the event is about.
+        hud.event_about = Some(40);
+        steer_to(
+            CameraAsk::Event,
+            None,
+            &whereabouts,
+            &hud,
+            (Some(&mut zoom), Some(&mut orbit), &mut camera),
+        );
+        for _ in 0..600 {
+            zoom.advance(0.05);
+            zoom.sync_orbit(&mut orbit);
+        }
+        assert_eq!(zoom.level(), Level::System);
+        assert_eq!(zoom.system_id(), Some(2));
+        let target = zoom.system_target(&orbit);
+        assert!((target[0] - at[0]).hypot(target[2] - at[2]) < 1.0);
+        // The keys and the HUD make the requests.
+        let layout = HudLayout::new(1280, 720, None);
+        let key = |k| InputEvent::KeyDown(k);
+        assert_eq!(
+            camera_request(key(Key::FocusSelection), &layout, true, &hud),
+            Some(CameraAsk::Selection)
+        );
+        assert_eq!(
+            camera_request(key(Key::FollowSelection), &layout, true, &hud),
+            Some(CameraAsk::Follow)
+        );
+        let line = layout.event_line();
+        let click = InputEvent::ButtonDown {
+            button: PointerButton::Left,
+            x: line.x + 10.0,
+            y: line.y + 5.0,
+            mods: crate::camera::Modifiers::default(),
+        };
+        assert_eq!(
+            camera_request(click, &layout, true, &hud),
+            Some(CameraAsk::Event)
+        );
+        hud.event_about = None;
+        assert_eq!(camera_request(click, &layout, true, &hud), None);
     }
 
     #[test]

@@ -512,6 +512,15 @@ impl ZoomCamera {
     ) -> Self {
         let home_body = home.and_then(|h| scene.body_index(h.body));
         let system = home.and_then(|h| scene.system_index(h.system)).unwrap_or(0);
+        // The planet frame and the system frame show the home planet equally large: its drawn
+        // radius in the system frame decides the scale between them.
+        let scale = home_body.map_or(scale, |index| {
+            let drawn = crate::universe::body_radius(&scene.bodies[index]);
+            ZoomScale::new(
+                scale.planet_radius * HOME_PLANET_RADIUS / drawn.max(1.0),
+                scale.globe_max,
+            )
+        });
         let map_positions = scene.place_systems();
         let placed = scene
             .systems
@@ -791,7 +800,7 @@ impl ZoomCamera {
     fn zooms_to_cursor(&self) -> bool {
         match self.level() {
             Level::StarMap => true,
-            Level::System => self.body.is_none() && !self.pans_planet(),
+            Level::System => !self.pans_planet() && self.pan_weight() > 0.2,
             Level::Surface | Level::Globe => false,
         }
     }
@@ -836,8 +845,9 @@ impl ZoomCamera {
                 self.system_view(orbit).view(canvas, centre_y)
             };
             if let Some(now) = self.plane_point(&view, cursor, map) {
-                self.pan = add3(self.pan, sub3(held, now));
-                self.clamp_pan();
+                let weight = self.pan_weight().max(0.2);
+                self.pan = add3(self.pan, scale3(sub3(held, now), 1.0 / weight));
+                self.clamp_pan_in(map);
             }
         }
         if before >= threshold && self.l < threshold {
@@ -854,7 +864,7 @@ impl ZoomCamera {
         };
         match hit {
             Some(index) if self.body != Some(index) => {
-                self.anchor_to(Some(index), orbit);
+                self.anchor_keeping_picture(index, orbit);
                 let body = &self.scene.bodies[index];
                 if body.kind == BodyViewKind::Habitable && self.surface_body != Some(index) {
                     self.want_surface = Some(body.id);
@@ -862,10 +872,39 @@ impl ZoomCamera {
             }
             Some(_) => {}
             None => {
-                if self.handover_weight() >= 1.0 && self.pan_weight() >= 1.0 {
+                // Far from the anchored body the focus floats free, so zooming in on empty space
+                // does not slide back to the body.
+                let far = self
+                    .body
+                    .and_then(|b| self.placed.iter().find(|p| p.body == b))
+                    .zip(plane_hit(view, cursor.0, cursor.1))
+                    .is_some_and(|(p, at)| {
+                        (at[0] - p.pos[0]).hypot(at[2] - p.pos[2]) > (p.radius * 4.0).max(600.0)
+                    });
+                if far && self.handover_weight() >= 1.0 && self.pan_weight() >= 1.0 {
                     self.free_focus(orbit);
                 }
             }
+        }
+    }
+
+    /// Anchors on `body` without moving the picture: the pan away from it fades out as the
+    /// camera comes down to it, so zooming in toward it ends centred on it.
+    fn anchor_keeping_picture(&mut self, body: usize, orbit: &mut OrbitCamera) {
+        let before = self.system_target(orbit);
+        let shown = self.pose(orbit);
+        let tracking = self.anchored_at_surface();
+        self.body = Some(body);
+        self.pan = [0.0; 3];
+        if self.anchored_at_surface() && !tracking {
+            self.align_orbit(orbit, shown);
+        }
+        let base = self.system_target(orbit);
+        let weight = self.pan_weight();
+        if weight > 0.05 {
+            self.pan = scale3(sub3(before, base), 1.0 / weight);
+        } else {
+            self.offset = add3(self.offset, sub3(before, base));
         }
     }
 
@@ -1165,8 +1204,13 @@ impl ZoomCamera {
     }
 
     fn clamp_pan(&mut self) {
+        self.clamp_pan_in(self.level() >= Level::StarMap);
+    }
+
+    /// Keeps the focus on the star map (`map`) or near the anchored system.
+    fn clamp_pan_in(&mut self, map: bool) {
         let anchor = self.anchor_pos();
-        if self.level() >= Level::StarMap {
+        if map {
             let (here, k) = (self.here(), self.k());
             let at = add3(here, scale3(add3(anchor, self.pan), k));
             let kept = clamp_disc(at, MAP_RADIUS * 1.2);
@@ -2210,10 +2254,11 @@ mod tests {
         let (mut zoom, mut orbit) = camera(Level::StarMap);
         free_system_view(&mut zoom, &mut orbit);
         // A resource body: the camera anchors on it and stops above it.
+        // The cursor rests where the rock first shows, as a player's does.
         let rock = *zoom.placed().iter().find(|p| p.body == 2).unwrap();
+        let view = zoom.system_view(&orbit).view(size, 0.0);
+        let (x, y, _) = view.project(rock.pos).unwrap();
         for _ in 0..80 {
-            let view = zoom.system_view(&orbit).view(size, 0.0);
-            let (x, y, _) = view.project(rock.pos).unwrap();
             zoom.wheel_at(1.0, Some((x, y)), size, 0.0, &mut orbit);
             zoom.sync_orbit(&mut orbit);
             run(&mut zoom, &mut orbit, 2);
@@ -2255,22 +2300,27 @@ mod tests {
     #[test]
     fn zooming_in_on_a_system_of_the_star_map_enters_it() {
         let size = (1280.0, 720.0);
-        let (mut zoom, mut orbit) = camera(Level::StarMap);
-        zoom.set_view(Level::StarMap, &mut orbit);
-        let mut entered = false;
-        for _ in 0..80 {
+        // Small and large wheel steps alike: the step that crosses into the system frame may
+        // land anywhere below the hand-over.
+        for steps in [1.0, 3.0, 5.0] {
+            let (mut zoom, mut orbit) = camera(Level::StarMap);
+            zoom.set_view(Level::StarMap, &mut orbit);
+            let mut entered = false;
             let view = zoom.map_view(&orbit).view(size, 0.0);
             let (x, y, _) = view.project(zoom.map_positions()[1]).unwrap();
-            zoom.wheel_at(1.0, Some((x, y)), size, 0.0, &mut orbit);
-            zoom.sync_orbit(&mut orbit);
-            run(&mut zoom, &mut orbit, 1);
-            entered |= zoom.system() == 1 && zoom.level() == Level::System;
+            for _ in 0..80 {
+                zoom.wheel_at(steps, Some((x, y)), size, 0.0, &mut orbit);
+                zoom.sync_orbit(&mut orbit);
+                run(&mut zoom, &mut orbit, 1);
+                entered |= zoom.system() == 1 && zoom.level() == Level::System;
+            }
+            assert!(entered, "steps {steps}");
+            assert_eq!(zoom.system(), 1);
+            // The picture never jumped: the star stays where the cursor held it.
+            let view = zoom.system_view(&orbit).view(size, 0.0);
+            let (sx, sy, _) = view.project([0.0; 3]).unwrap();
+            assert!((sx - x).hypot(sy - y) < 2.0, "{sx} {sy} vs {x} {y}");
         }
-        assert!(entered);
-        assert_eq!(zoom.system(), 1);
-        // The picture never jumped: the system it entered is where the cursor held it.
-        let view = zoom.system_view(&orbit).view(size, 0.0);
-        assert!(view.project([0.0; 3]).is_some());
     }
 
     #[test]

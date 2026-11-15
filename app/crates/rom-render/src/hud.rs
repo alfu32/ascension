@@ -56,6 +56,9 @@ pub struct HudSnapshot {
     pub research: Vec<HudResearch>,
     /// Recent event messages, oldest first.
     pub events: Vec<String>,
+    /// The entity the newest event is about (a ship that departed or arrived): clicking the
+    /// event line flies the camera there.
+    pub event_about: Option<u32>,
     /// Rollover help, or empty for the default.
     pub help: String,
     /// Current selection.
@@ -93,6 +96,7 @@ impl Default for HudSnapshot {
             cities: (0, 0),
             research: Vec::new(),
             events: Vec::new(),
+            event_about: None,
             help: String::new(),
             selection: HudSelection::None,
             palette: None,

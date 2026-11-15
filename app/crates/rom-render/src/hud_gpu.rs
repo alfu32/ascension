@@ -143,7 +143,12 @@ impl HudGpu {
         let mut quads = Vec::new();
         for index in hud_minimap::declutter(&boxes) {
             let label = &labels[index];
-            let shade = [0, 0, 0, (200.0 * alpha) as u8];
+            let shade = [
+                0,
+                0,
+                0,
+                (200.0 * alpha * f32::from(label.colour[3]) / 255.0) as u8,
+            ];
             let colour = [
                 label.colour[0],
                 label.colour[1],

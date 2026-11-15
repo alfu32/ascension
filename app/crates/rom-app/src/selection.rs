@@ -167,6 +167,8 @@ pub struct Controller {
     helpers: Vec<Helpers>,
     requeue: Vec<Requeue>,
     message: Option<(String, u64)>,
+    /// The entity the event line's message is about: clicking the line flies there.
+    message_about: Option<EntityId>,
     focus: Option<Pos>,
     ordered: bool,
     seen_next_id: u32,
@@ -180,6 +182,17 @@ fn distance(world: &World, a: Pos, b: Pos) -> u64 {
 }
 
 /// Whether an entity stands in the space of a system (on a star's plane).
+/// An entity on a surface, in a system's space or between systems: a ship in transit stays
+/// selectable for its whole journey.
+fn present(world: &World, id: EntityId) -> Option<&Entity> {
+    world.entity(id).or_else(|| {
+        world
+            .transits()
+            .find(|t| t.entity.id == id)
+            .map(|t| &t.entity)
+    })
+}
+
 fn in_space(world: &World, entity: &Entity) -> bool {
     world
         .body(entity.pos.body)
@@ -288,6 +301,12 @@ impl Controller {
         self.say(world, text);
     }
 
+    /// Puts a line about an entity in the event line; clicking the line flies the camera to it.
+    pub fn notify_about(&mut self, world: &World, text: impl Into<String>, about: EntityId) {
+        self.say(world, text);
+        self.message_about = Some(about);
+    }
+
     /// Player one's finished buildings that train units and are not cities.
     pub fn select_producers(&mut self, world: &World) {
         let rules = world.rules();
@@ -375,10 +394,11 @@ impl Controller {
 
     fn say(&mut self, world: &World, text: impl Into<String>) {
         self.message = Some((text.into(), world.tick()));
+        self.message_about = None;
     }
 
     fn mine<'w>(&self, world: &'w World, id: EntityId) -> Option<&'w Entity> {
-        world.entity(id).filter(|e| e.owner == PLAYER)
+        present(world, id).filter(|e| e.owner == PLAYER)
     }
 
     fn own_selected<'w>(&self, world: &'w World) -> Vec<&'w Entity> {
@@ -537,7 +557,7 @@ impl Controller {
             }
             return;
         };
-        let Some(clicked) = world.entity(id) else {
+        let Some(clicked) = present(world, id) else {
             return;
         };
         if clicked.owner != PLAYER {
@@ -729,11 +749,12 @@ impl Controller {
         }
     }
 
-    /// Own ships selected, in space and able to move.
+    /// Own ships selected, in space (not between systems) and able to move.
     fn selected_ships(&self, world: &World) -> Vec<EntityId> {
         let rules = world.rules();
         self.own_selected(world)
             .iter()
+            .filter(|e| world.entity(e.id).is_some())
             .filter(|e| in_space(world, e) && rules.entity_types[&e.type_id].movement.is_some())
             .map(|e| e.id)
             .collect()
@@ -1678,12 +1699,12 @@ impl Controller {
     /// re-queued orders, follow rally points, refresh the placement check.
     pub fn after_step(&mut self, world: &mut World) {
         self.update_wealth(world);
-        let alive = |id: &EntityId| world.entity(*id).is_some();
+        let alive = |id: &EntityId| present(world, *id).is_some();
         self.selection.retain(|id| alive(id));
         for group in &mut self.groups {
-            group.retain(|id| world.entity(*id).is_some());
+            group.retain(|id| alive(id));
         }
-        if self.foreign.is_some_and(|id| world.entity(id).is_none()) {
+        if self.foreign.is_some_and(|id| present(world, id).is_none()) {
             self.foreign = None;
         }
         self.rally.retain(|id, _| world.entity(*id).is_some());
@@ -1916,7 +1937,7 @@ impl Controller {
         let mut selected: Vec<u32> = own.iter().map(|e| e.id.0).collect();
         selected.extend(
             self.foreign
-                .filter(|id| world.entity(*id).is_some())
+                .filter(|id| present(world, *id).is_some())
                 .map(|id| id.0),
         );
         selected.sort_unstable();
@@ -1980,7 +2001,7 @@ impl Controller {
         hud.selection = match own.as_slice() {
             [] => self
                 .foreign
-                .and_then(|id| world.entity(id))
+                .and_then(|id| present(world, id))
                 .map_or(HudSelection::None, |e| {
                     HudSelection::Single(Box::new(card(e, true)))
                 }),
@@ -2169,6 +2190,7 @@ impl Controller {
             && tick.saturating_sub(*at) <= MESSAGE_TICKS
         {
             hud.events.push(text.clone());
+            hud.event_about = self.message_about.map(|id| id.0);
         }
     }
 }

@@ -415,8 +415,11 @@ fn run(
             }
             world.step();
             controller.after_step(&mut world);
-            for line in notices.update(&world) {
-                controller.notify(&world, line);
+            for notice in notices.update(&world) {
+                match notice.about {
+                    Some(id) => controller.notify_about(&world, notice.text, id),
+                    None => controller.notify(&world, notice.text),
+                }
             }
             focus_camera(&world, &mut controller, bridge);
             window_ticks += 1;
