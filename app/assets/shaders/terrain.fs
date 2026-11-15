@@ -18,6 +18,7 @@ uniform vec3 slotAlt[7];
 uniform float slotScale[7];
 /*LIGHTING*/
 /*NOISE*/
+#define LAND_MATERIALS
 /*MATERIALS*/
 // Adds slot `i`'s material at weight `w` (the slot index is a constant at each call, so no
 // local array is indexed at run time).

@@ -56,12 +56,12 @@ WITH v(k,prog,params) AS (VALUES
   ('mat.shingle','roof_tile','{"colour":"#8a735b","colour_alt":"#58483a","scale":0.13}'),
   ('mat.daub','plaster','{"colour":"#e8dcc0","colour_alt":"#c8b998","scale":0.8}'),
   ('mat.oak','timber','{"colour":"#4f3726","colour_alt":"#2f2118","scale":0.08}'),
-  ('mat.glow','plaster','{"colour":"#ffc04a","colour_alt":"#ff7a1c","scale":0.5}'),
+  ('mat.glow','emissive','{"colour":"#ffc04a","colour_alt":"#ff7a1c","scale":0.5}'),
   ('mat.ore','stone','{"colour":"#8c5e46","colour_alt":"#5a3a2b","scale":0.25}'),
   ('mat.charcoal','stone','{"colour":"#3e3a37","colour_alt":"#242120","scale":0.2}'),
   ('mat.steel','metal','{"colour":"#b9bec6","colour_alt":"#7a7f88","scale":0.3}'),
   ('mat.fur','plaster','{"colour":"#4a382a","colour_alt":"#2c2119","scale":0.18}'),
   ('mat.felt','cloth','{"colour":"#3a332e","colour_alt":"#25201c","scale":0.2}'),
-  ('mat.flash','plaster','{"colour":"#ffeb8a","colour_alt":"#ffa424","scale":0.5}'),
+  ('mat.flash','emissive','{"colour":"#ffeb8a","colour_alt":"#ffa424","scale":0.5}'),
   ('mat.canvas','cloth','{"colour":"#ece4cf","colour_alt":"#c6bb9f","scale":0.3}'))
 INSERT INTO material(id,program,params) SELECT d.id, v.prog, v.params FROM v JOIN def d ON d.key=v.k;

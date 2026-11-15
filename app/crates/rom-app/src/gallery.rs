@@ -517,6 +517,59 @@ mod tests {
     ];
 
     #[test]
+    fn emissive_materials_preserve_geometry_and_only_change_their_users() {
+        let (mut rules, current) = book();
+        for key in ["mat.glow", "mat.flash"] {
+            let id = rules.id_of(key).unwrap();
+            let material = rules.materials.get_mut(&id).unwrap();
+            assert_eq!(material.program, "emissive");
+            material.program = "plaster".into();
+        }
+        let previous = ModelBook::new(&rules);
+        let mut changed = Vec::new();
+        for (old, new) in previous.entries.iter().zip(&current.entries) {
+            assert_eq!(old.id, new.id);
+            for (a, b) in [
+                (&old.baked.near, &new.baked.near),
+                (&old.baked.far, &new.baked.far),
+            ] {
+                assert_eq!(a.positions, b.positions, "{}", new.id);
+                assert_eq!(a.normals, b.normals, "{}", new.id);
+                assert_eq!(a.indices, b.indices, "{}", new.id);
+                assert_eq!(a.joints, b.joints, "{}", new.id);
+            }
+            if old.baked.fingerprint() != new.baked.fingerprint() {
+                println!(
+                    "{}: {:016x} -> {:016x}",
+                    new.id,
+                    old.baked.fingerprint(),
+                    new.baked.fingerprint()
+                );
+                assert!(
+                    new.baked
+                        .near
+                        .colors
+                        .iter()
+                        .any(|c| c[3] == rom_render::Program::Emissive.id() as u8)
+                );
+                changed.push(new.id.as_str());
+            }
+        }
+        changed.sort_unstable();
+        assert_eq!(
+            changed,
+            [
+                "bld.smelter@medieval",
+                "unit.arquebusier@gunpowder",
+                "unit.bombard@gunpowder",
+                "unit.cuirassier@gunpowder",
+                "unit.musketeer@gunpowder",
+                "unit.transport_ship@starfaring"
+            ]
+        );
+    }
+
+    #[test]
     fn manifest_lists_the_sample_set_with_stable_fingerprints() {
         let (rules, book) = book();
         let text = manifest(&rules, &book);
