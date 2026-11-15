@@ -5,7 +5,8 @@
 //! the curvature.
 
 use crate::entities::{
-    EntityView, FlatGround, Footing, building_height, owner_color, pick_frame, side_of, unit_width,
+    EntityView, FlatGround, Footing, building_height, entity_frame, owner_color, pick_frame,
+    side_of, unit_width,
 };
 use crate::hud::{HudSnapshot, MarkerKind};
 
@@ -62,12 +63,18 @@ struct Origin<'a> {
     face: u8,
     x: f32,
     y: f32,
+    altitude: f32,
 }
 
 impl Origin<'_> {
     /// The point `lift` above the ground at the offset (`dx`, `dy`) tiles from the origin.
     fn at(&self, dx: f32, dy: f32, lift: f32) -> [f32; 3] {
-        self.ground.point(self.face, self.x, self.y, (dx, dy), lift)
+        if self.altitude > 0.0 {
+            self.ground
+                .datum_point(self.face, self.x, self.y, (dx, dy), lift + self.altitude)
+        } else {
+            self.ground.point(self.face, self.x, self.y, (dx, dy), lift)
+        }
     }
 }
 
@@ -260,6 +267,7 @@ pub fn build_overlays_on(
             face: end.face,
             x: end.x as f32 / 1000.0,
             y: end.y as f32 / 1000.0,
+            altitude: 0.0,
         };
         // Keep the destination ring outside the city's roof so it remains visible.
         let radius = views
@@ -282,6 +290,7 @@ pub fn build_overlays_on(
             face: city.face,
             x: city.x as f32 / 1000.0,
             y: city.y as f32 / 1000.0,
+            altitude: 0.0,
         };
         if city.economic > 0 {
             out.dashed_ring(origin, city.economic as f32 / 1000.0, [235, 235, 235, 210]);
@@ -299,8 +308,65 @@ pub fn build_overlays_on(
             face: view.face,
             x: view.x,
             y: view.y,
+            altitude: view.altitude,
         };
         out.building_ghost(origin, view, rgba(owner_color(view.owner)), true);
+    }
+    for view in views {
+        let Some(target) = view.beam_target.filter(|_| view.altitude > 0.0) else {
+            continue;
+        };
+        let from = entity_frame(view, ground).at([0.0, unit_width(view) * 0.15, 0.0]);
+        let target_height = views
+            .iter()
+            .find(|v| {
+                v.face == target.face
+                    && (v.x * 1000.0 - target.x as f32).abs() < 1.0
+                    && (v.y * 1000.0 - target.y as f32).abs() < 1.0
+                    && v.altitude == 0.0
+            })
+            .map_or(0.8, |v| {
+                if v.building {
+                    building_height(v) + 0.2
+                } else {
+                    crate::entities::unit_height(v) * 0.5
+                }
+            });
+        let to = ground.point(
+            target.face,
+            target.x as f32 / 1000.0,
+            target.y as f32 / 1000.0,
+            (0.0, 0.0),
+            target_height,
+        );
+        let direction = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
+        let mut side = [
+            direction[1] * right[2] - direction[2] * right[1],
+            direction[2] * right[0] - direction[0] * right[2],
+            direction[0] * right[1] - direction[1] * right[0],
+        ];
+        let length = side.iter().map(|v| v * v).sum::<f32>().sqrt().max(0.001);
+        side = side.map(|v| v / length * 0.07);
+        let offset = |p: [f32; 3], sign: f32| std::array::from_fn(|i| p[i] + side[i] * sign);
+        out.quad(
+            [
+                offset(from, -1.0),
+                offset(from, 1.0),
+                offset(to, 1.0),
+                offset(to, -1.0),
+            ],
+            [90, 200, 255, 220],
+        );
+        out.line(from, to, [230, 250, 255, 255]);
+        let impact = Origin {
+            ground,
+            face: target.face,
+            x: target.x as f32 / 1000.0,
+            y: target.y as f32 / 1000.0,
+            altitude: 0.0,
+        };
+        out.ring(impact, 0.8, [255, 190, 70, 255]);
+        out.line(to, impact.at(0.0, 0.0, 2.0), [255, 235, 160, 255]);
     }
     for id in &hud.selected {
         let Ok(index) = views.binary_search_by_key(id, |v| v.id) else {
@@ -313,6 +379,7 @@ pub fn build_overlays_on(
             face: view.face,
             x: view.x,
             y: view.y,
+            altitude: view.altitude,
         };
         let frame = ground.frame(view.face, view.x, view.y);
         let (centre, _, size) = pick_frame(view, ground);
@@ -373,6 +440,7 @@ pub fn build_overlays_on(
             face: marker.face,
             x,
             y,
+            altitude: 0.0,
         };
         let base = origin.at(0.0, 0.0, LIFT);
         let frame = ground.frame(marker.face, x, y);
@@ -417,6 +485,7 @@ pub fn build_overlays_on(
             face: p.face,
             x: cx,
             y: cy,
+            altitude: 0.0,
         };
         let (w, h) = (f32::from(p.width.max(1)), f32::from(p.height.max(1)));
         let (min, max) = ((-w / 2.0, -h / 2.0), (w / 2.0, h / 2.0));
@@ -458,6 +527,8 @@ pub fn build_overlays_on(
             carry_node: false,
             under_construction: None,
             model: None,
+            altitude: 0.0,
+            beam_target: None,
             activity: Default::default(),
         };
         out.building_ghost(origin, &view, line, false);
@@ -495,6 +566,8 @@ mod tests {
             carry_node: false,
             under_construction: None,
             model: None,
+            altitude: 0.0,
+            beam_target: None,
             activity: Default::default(),
         }
     }
@@ -717,6 +790,38 @@ mod tests {
         // An unselected unit draws nothing.
         build_overlays(&[unit(2)], &|_, _| 0.0, &hud, 0.0, &mut out);
         assert!(out.lines.is_empty() && out.tris.is_empty());
+    }
+
+    #[test]
+    fn orbital_selection_and_bombard_beam_follow_the_ships_altitude() {
+        let mut ship = unit(1);
+        ship.altitude = 8.0;
+        ship.beam_target = Some(rom_geo::SurfacePos {
+            face: 0,
+            x: 32_000,
+            y: 32_000,
+        });
+        let hud = HudSnapshot {
+            selected: vec![1],
+            ..HudSnapshot::default()
+        };
+        let mut out = OverlayGeometry::default();
+        build_overlays(&[ship], &|_, _| 2.0, &hud, 0.0, &mut out);
+        let selection = rgba(owner_color(ship.owner));
+        let rings: Vec<_> = out.lines.iter().filter(|l| l.colour == selection).collect();
+        assert_eq!(rings.len(), RING_SEGMENTS * 3);
+        assert!(rings.iter().all(|l| (l.a[1] - (8.0 + LIFT)).abs() < 0.001));
+        let beam = out
+            .lines
+            .iter()
+            .find(|l| l.colour == [230, 250, 255, 255])
+            .unwrap();
+        assert!(beam.a[1] > 8.0);
+        assert!((beam.b[1] - 2.8).abs() < 0.001);
+        assert_eq!((beam.b[0], beam.b[2]), (32.0, 32.0));
+        ship.altitude = 0.0;
+        build_overlays(&[ship], &|_, _| 2.0, &hud, 0.0, &mut out);
+        assert!(!out.lines.iter().any(|l| l.colour == [230, 250, 255, 255]));
     }
 
     #[test]

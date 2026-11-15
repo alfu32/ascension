@@ -882,7 +882,7 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
                     assert!(!rules.has_tag(et.id, tag));
                 }
                 Err(SimError::CannotEnterSpace) => {
-                    assert!(matches!(kind.key.as_str(), "orbit" | "travel"));
+                    assert!(matches!(kind.key.as_str(), "orbit" | "travel" | "launch"));
                     needs_space = true;
                 }
                 other => panic!("unexpected result for {}: {other:?}", kind.key),

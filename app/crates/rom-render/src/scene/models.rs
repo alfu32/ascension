@@ -6,7 +6,7 @@
 //! upload; shadows keep the models at rest.
 
 use super::*;
-use crate::entities::{EntityView, Footing, heading_of};
+use crate::entities::{EntityView, Footing, entity_frame, heading_of};
 use crate::models::{ModelLook, ModelMesh, bake_model};
 use crate::rig::{Activity, POSE_SAMPLES, Rig};
 
@@ -289,7 +289,7 @@ impl ModelGpu {
             let Some(Some(meshes)) = self.models.get(index) else {
                 continue;
             };
-            let frame = ground.frame(view.face, view.x, view.y);
+            let frame = entity_frame(view, ground);
             // Buildings keep the ground frame (their footprint is not turned); units face their
             // heading with the model's front (+z).
             let (x_axis, z_axis) = if view.building {

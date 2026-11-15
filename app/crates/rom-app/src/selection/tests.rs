@@ -1888,3 +1888,131 @@ fn undiscovered_deposit_preview_names_the_required_age() {
         format!("Deposit revealed in {}", fx.rules.def(age).name)
     );
 }
+
+#[test]
+fn orbital_review_script_trains_launches_selects_and_bombards_through_picks() {
+    use crate::script::{Script, ScriptAction, ScriptContext, ScriptSetup};
+    let text = include_str!("../../../../docs/tasks/43-orbit-script.txt");
+    let options = crate::args::Options {
+        sphere: Some(64),
+        players: 2,
+        ..crate::args::Options::default()
+    };
+    let content = crate::terrain::generate_universe_content(&options).unwrap();
+    let setup = ScriptSetup::scan(text).unwrap();
+    let mut game = crate::match_setup::build_universe_match(
+        &content.rules,
+        &content.universe,
+        &content.factions,
+        1,
+        None,
+        &setup,
+    )
+    .unwrap();
+    let home = game.world.home_body(PLAYER).unwrap();
+    let start = game.starts[0].clone();
+    let context = ScriptContext::of(&start);
+    let mut script = Script::parse(text, &context, &|dx, dy| {
+        surface_of(game.world.offset(start.city_pos, dx, dy))
+    })
+    .unwrap();
+    let mut ctl = Controller::new();
+    ctl.set_view(ViewCtx {
+        planet: home,
+        ..ViewCtx::default()
+    });
+    let target = game
+        .world
+        .entities()
+        .find(|e| e.owner == PlayerId(2) && e.pos.body == home)
+        .unwrap()
+        .id;
+    let hp = game.world.entity(target).unwrap().hp;
+    let mut saw_beam = false;
+    for _ in 0..1400 {
+        for action in script.due_actions(game.world.tick()) {
+            match action {
+                ScriptAction::SelectResearchers => ctl.select_researchers(&game.world),
+                ScriptAction::SelectProducers => ctl.select_producers(&game.world),
+                ScriptAction::SelectShips => ctl.select_own_ships(&game.world),
+                ScriptAction::EntityPick {
+                    target,
+                    right,
+                    shift,
+                } => {
+                    let pick =
+                        crate::script::live_pick(&game.world, &target, right, shift).unwrap();
+                    ctl.handle(&mut game.world, pick);
+                }
+                ScriptAction::Speed(1) => {
+                    let last = game
+                        .world
+                        .entities()
+                        .find_map(|e| game.world.orbit(e.id).and_then(|o| o.last_shot));
+                    println!("review capture tick={} shot={last:?}", game.world.tick());
+                }
+                ScriptAction::Speed(_) => {}
+            }
+        }
+        for event in script.due(game.world.tick()) {
+            ctl.handle(&mut game.world, event);
+        }
+        game.world.step();
+        ctl.after_step(&mut game.world);
+        if game.world.tick() >= 1300 {
+            let snapshot = crate::sim_thread::snapshot_on(
+                &game.world,
+                home,
+                &game.world.visible_entities(PLAYER),
+                &crate::looks::ModelBook::default(),
+                &mut crate::sim_thread::Motions::default(),
+            );
+            saw_beam |= snapshot
+                .entities
+                .iter()
+                .any(|e| e.altitude == 8.0 && e.beam_target.is_some());
+        }
+    }
+    let ship = *ctl
+        .selection()
+        .first()
+        .expect("script selects the orbital ship");
+    let orbit = game
+        .world
+        .orbit(ship)
+        .expect("training launched into orbit")
+        .clone();
+    assert_eq!(orbit.body, home);
+    assert!(saw_beam, "render snapshots include actual bombard shots");
+    assert!(
+        game.world.entity(target).unwrap().hp < hp,
+        "ground building took damage"
+    );
+    assert!(
+        game.world
+            .entity(ship)
+            .unwrap()
+            .orders()
+            .iter()
+            .any(|o| o.kind == "attack" && o.target_entity == Some(target))
+    );
+    // The attack-hotkey click takes the same ordinary attack path as right-click.
+    ctl.attack_move = true;
+    let pick = crate::script::live_pick(&game.world, "enemy1", false, false).unwrap();
+    ctl.handle(&mut game.world, pick);
+    assert!(
+        game.world
+            .entity(ship)
+            .unwrap()
+            .orders()
+            .iter()
+            .any(|o| o.kind == "attack" && o.target_entity == Some(target))
+    );
+    println!(
+        "orbital review tick={} last_shot={:?} target_hp={} hash={:016x}",
+        game.world.tick(),
+        orbit.last_shot,
+        game.world.entity(target).unwrap().hp,
+        game.world.hash()
+    );
+}

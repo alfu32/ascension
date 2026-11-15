@@ -75,6 +75,16 @@ impl World {
                 .and_then(|id| self.entity(id))
                 .filter(|target| self.enemies(command.player, target.owner))
                 .ok_or(SimError::InvalidAttackTarget)?;
+            if let Some(orbit) = self.orbit(command.executor)
+                && target.pos.body == orbit.body
+                && !self.rules.entity_types
+                    [&self.entity(command.executor).expect("attacker").type_id]
+                    .weapons
+                    .iter()
+                    .any(|weapon| self.weapon_can_target(command.executor, weapon, target.id))
+            {
+                return Err(SimError::InvalidAttackTarget);
+            }
             if !self.sees_entity(command.player, target) {
                 return Err(SimError::TargetHidden);
             }
@@ -98,6 +108,9 @@ impl World {
 
     pub(crate) fn target_layer(&self, id: EntityId) -> Layer {
         let e = self.entity(id).expect("target");
+        if self.orbit(id).is_some() {
+            return Layer::Space;
+        }
         let et = &self.rules.entity_types[&e.type_id];
         if et
             .movement
@@ -133,14 +146,56 @@ impl World {
         (weapon.range_max.saturating_add(bonus)).max(0) as u64
     }
 
+    pub(crate) fn attack_position(&self, id: EntityId, target: EntityId) -> Pos {
+        let attacker = self.entity(id).expect("attacker");
+        self.orbit(id)
+            .filter(|orbit| {
+                self.entity(target)
+                    .is_some_and(|t| t.pos.body == orbit.body)
+            })
+            .map_or(attacker.pos, |orbit| orbit.pos)
+    }
+
+    pub(crate) fn weapon_can_target(
+        &self,
+        id: EntityId,
+        weapon: &Weapon,
+        target: EntityId,
+    ) -> bool {
+        if !weapon
+            .targets
+            .iter()
+            .any(|t| t.layer == self.target_layer(target))
+        {
+            return false;
+        }
+        if weapon.orbit_only {
+            return self.orbit(id).is_some_and(|orbit| {
+                self.orbit(target).is_none()
+                    && self
+                        .entity(target)
+                        .is_some_and(|t| t.pos.body == orbit.body)
+            });
+        }
+        self.entity(id).expect("attacker").pos.body == self.entity(target).expect("target").pos.body
+    }
+
+    fn weapon_origin(&self, id: EntityId, weapon: &Weapon) -> Pos {
+        if weapon.orbit_only {
+            self.orbit(id).expect("orbital weapon").pos
+        } else {
+            self.entity(id).expect("attacker").pos
+        }
+    }
+
     pub(crate) fn can_fire_at(&self, id: EntityId, target: EntityId) -> bool {
         let e = self.entity(id).expect("attacker");
-        let layer = self.target_layer(target);
-        let distance = self.target_distance(e.pos, target);
         self.rules.entity_types[&e.type_id].weapons.iter().any(|w| {
-            w.targets.iter().any(|t| t.layer == layer)
-                && distance >= w.range_min.max(0) as u64
-                && distance <= self.weapon_range(id, w)
+            if !self.weapon_can_target(id, w, target) {
+                return false;
+            }
+            let distance = self.target_distance(self.weapon_origin(id, w), target);
+            distance >= w.range_min.max(0) as u64 && distance <= self.weapon_range(id, w)
         })
     }
 
@@ -193,20 +248,20 @@ impl World {
         }
         let attacker = self.entity(id).expect("attacker");
         let type_id = attacker.type_id;
-        let movable = self.rules.entity_types[&type_id].movement.is_some();
+        let movable =
+            self.rules.entity_types[&type_id].movement.is_some() && self.orbit(id).is_none();
         let move_allowed =
             movable && !(order.automatic && self.combat_behavior(id) == "stand_ground");
-        let layer = self.target_layer(target_id);
         let mut weapons: Vec<_> = self.rules.entity_types[&type_id]
             .weapons
             .iter()
-            .filter(|w| w.targets.iter().any(|t| t.layer == layer))
+            .filter(|w| self.weapon_can_target(id, w, target_id))
             .cloned()
             .collect();
         weapons.sort_by_key(|w| (w.slot, w.id));
-        let mut distance = self.target_distance(attacker.pos, target_id);
         let mut walked = false;
         for weapon in weapons {
+            let mut distance = self.target_distance(self.weapon_origin(id, &weapon), target_id);
             if distance < weapon.range_min.max(0) as u64 {
                 continue;
             }
@@ -260,7 +315,17 @@ impl World {
             let accuracy = (i128::from(weapon.accuracy_pct)
                 - i128::from(weapon.accuracy_falloff) * i128::from(distance) / 1000)
                 .clamp(5, 100) as u32;
-            let origin = attacker.pos;
+            let origin = self.weapon_origin(id, &weapon);
+            if weapon.orbit_only {
+                self.space
+                    .orbits
+                    .get_mut(&id)
+                    .expect("orbital weapon")
+                    .last_shot = Some(crate::OrbitalShot {
+                    tick: self.tick,
+                    target: target_pos,
+                });
+            }
             let e = self.entities[id.0 as usize].as_mut().expect("attacker");
             e.cooldowns.insert(
                 weapon.id,
@@ -354,6 +419,13 @@ impl World {
             .find(|w| w.id == hit.weapon_id)
             .expect("projectile weapon")
             .clone();
+        if !weapon
+            .targets
+            .iter()
+            .any(|target| target.layer == self.target_layer(hit.target))
+        {
+            return;
+        }
         let damage = self.hit_damage(hit, &weapon, hit.target);
         self.damage_entity(hit.target, damage, hit);
         if weapon.splash_radius > 0 {

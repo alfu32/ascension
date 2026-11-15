@@ -160,6 +160,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             under_construction: None,
             model: None,
             activity: Default::default(),
+            altitude: 0.0,
+            beam_target: None,
         })
         .collect::<Vec<_>>();
     let camera = Camera {

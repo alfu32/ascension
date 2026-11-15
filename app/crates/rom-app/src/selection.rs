@@ -501,15 +501,13 @@ impl Controller {
             let target = at;
             let ids: Vec<EntityId> = self.own_selected(world).iter().map(|e| e.id).collect();
             for id in ids {
-                self.submit(
-                    world,
-                    id,
-                    "attack_move",
-                    None,
-                    None,
-                    Some(target),
-                    mods.shift,
-                );
+                let orbital_target = entity.filter(|_| world.orbit(id).is_some()).map(EntityId);
+                let (kind, point) = if orbital_target.is_some() {
+                    ("attack", None)
+                } else {
+                    ("attack_move", Some(target))
+                };
+                self.submit(world, id, kind, None, orbital_target, point, mods.shift);
             }
             self.marker(world, target, MarkerKind::Move);
             self.attack_move = mods.shift;
@@ -864,7 +862,9 @@ impl Controller {
                 let topology = alive
                     .first()
                     .and_then(|id| world.entity(*id))
-                    .and_then(|e| world.surface(e.pos.body))
+                    .and_then(|e| {
+                        world.surface(world.orbit(e.id).map_or(e.pos.body, |orbit| orbit.body))
+                    })
                     .map_or_else(|| world.topology(), |s| s.topology());
                 self.focus = match topology {
                     Topology::Flat { .. } => {
@@ -885,7 +885,7 @@ impl Controller {
                     Topology::Cube(_) => alive
                         .first()
                         .and_then(|id| world.entity(*id))
-                        .map(|e| e.pos),
+                        .map(|e| world.orbit(e.id).map_or(e.pos, |orbit| orbit.pos)),
                 };
             }
             self.set_selection(alive);

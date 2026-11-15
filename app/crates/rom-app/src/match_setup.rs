@@ -426,6 +426,9 @@ pub fn build_universe_match(
         let city = rules.entity_types[&city_id].clone();
         starts.push(place_start(&mut world, player, &city, builder_id, site)?);
     }
+    setup
+        .apply_placements(&mut world, starts[0].city_pos)
+        .map_err(SetupError::Setup)?;
     Ok(Match {
         world,
         starts,
@@ -502,7 +505,7 @@ fn starts_players(world: &World) -> Vec<PlayerId> {
         .collect()
 }
 
-/// A one-seed universe world in the space age with stock for player one, for tests.
+/// A one-seed interstellar universe world with stock for player one, for tests.
 #[cfg(test)]
 pub(crate) fn universe_game_for_tests() -> (crate::terrain::UniverseContent, Match) {
     let options = crate::args::Options {
@@ -512,8 +515,9 @@ pub(crate) fn universe_game_for_tests() -> (crate::terrain::UniverseContent, Mat
     };
     let content = crate::terrain::generate_universe_content(&options).expect("universe");
     let setup = ScriptSetup {
-        age: Some("age.starfaring".into()),
+        age: Some("age.expansion".into()),
         grants: vec![("res.metal".into(), 5000), ("res.energy".into(), 5000)],
+        ..ScriptSetup::default()
     };
     let game = build_universe_match(
         &content.rules,

@@ -101,7 +101,7 @@ CREATE TABLE body_kind (
 -- a player's view and reach widen when THAT player reaches the tier — players
 -- get there one by one, and the first to arrive finds space unclaimed.
 CREATE TABLE map_scale (
-  key   TEXT PRIMARY KEY,              -- planetary | interstellar
+  key   TEXT PRIMARY KEY,              -- planetary | interplanetary | interstellar
   name  TEXT NOT NULL,
   rank  INTEGER NOT NULL UNIQUE,       -- 0 = closest
   max_zoom_out INTEGER NOT NULL        -- camera limit, tiles visible across the screen
@@ -278,6 +278,7 @@ CREATE TABLE et_weapon (               -- "attacks" (0..n per type)
   accuracy_falloff INTEGER NOT NULL DEFAULT 0, -- % lost per tile of range
   fires_moving   INTEGER NOT NULL DEFAULT 0,
   consumed       INTEGER NOT NULL DEFAULT 0,   -- attacker is destroyed (missile, fire ship, kamikaze drone)
+  orbit_only     INTEGER NOT NULL DEFAULT 0 CHECK (orbit_only IN (0,1)), -- surface range below an orbiting attacker
   UNIQUE (entity_type_id, slot)
 ) STRICT;
 
@@ -839,8 +840,8 @@ CREATE TABLE entity (
   id             INTEGER PRIMARY KEY,
   entity_type_id INTEGER NOT NULL REFERENCES entity_type(id),
   owner_id       INTEGER NOT NULL REFERENCES player(id),
-  -- Location: on the surface of a habitable body at (face, x, y); NULL body_id =
-  -- the flat map. Orbit, system-space and transit locations come in world-model step 4b.
+  -- Surface or system-plane position; NULL body_id = the legacy flat map.
+  -- entity_orbit classifies a ship at a system marker as orbiting that body.
   body_id        INTEGER REFERENCES body(id),
   face           INTEGER NOT NULL DEFAULT 0 CHECK (face BETWEEN 0 AND 5),  -- cube face; 0 on a flat map
   x              INTEGER NOT NULL,     -- milli-tiles
@@ -870,6 +871,24 @@ CREATE INDEX entity_owner     ON entity(owner_id, entity_type_id);
 CREATE INDEX entity_body      ON entity(body_id) WHERE body_id IS NOT NULL;
 CREATE INDEX entity_container ON entity(container_id) WHERE container_id IS NOT NULL;
 CREATE INDEX entity_city      ON entity(city_id) WHERE city_id IS NOT NULL;
+
+-- A ship in orbit retains its system-plane position in entity; this row records
+-- its body and moving surface footprint. Shots retain the last fire-time target.
+CREATE TABLE entity_orbit (
+  entity_id INTEGER PRIMARY KEY REFERENCES entity(id) ON DELETE CASCADE,
+  body_id INTEGER NOT NULL REFERENCES body(id),
+  face INTEGER NOT NULL CHECK (face BETWEEN 0 AND 5),
+  x INTEGER NOT NULL,
+  y INTEGER NOT NULL,
+  facing INTEGER NOT NULL CHECK (facing IN (0,90,180,270)),
+  move_remainder INTEGER NOT NULL DEFAULT 0,
+  last_shot_tick INTEGER,
+  last_shot_face INTEGER CHECK (last_shot_face BETWEEN 0 AND 5),
+  last_shot_x INTEGER,
+  last_shot_y INTEGER,
+  CHECK ((last_shot_tick IS NULL AND last_shot_face IS NULL AND last_shot_x IS NULL AND last_shot_y IS NULL)
+      OR (last_shot_tick IS NOT NULL AND last_shot_face IS NOT NULL AND last_shot_x IS NOT NULL AND last_shot_y IS NOT NULL))
+) STRICT;
 
 CREATE TABLE entity_cooldown (
   entity_id  INTEGER NOT NULL REFERENCES entity(id) ON DELETE CASCADE,

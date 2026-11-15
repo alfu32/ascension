@@ -162,6 +162,8 @@ pub fn lay_out(
             y: z,
             // Units face south, towards the camera.
             facing_deg: 90.0,
+            altitude: 0.0,
+            beam_target: None,
             hp_frac: 1.0,
             building,
             footprint: et.map_or((1, 1), |t| (clamp(t.footprint_w), clamp(t.footprint_h))),

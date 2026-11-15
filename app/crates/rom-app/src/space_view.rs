@@ -99,15 +99,32 @@ pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) ->
             .map(|(id, at)| (e.pos.distance(*at) as i64, *id, *at))
             .filter(|(d, _, _)| *d <= reach * 3 / 2)
             .min_by_key(|(d, id, _)| (*d, *id));
-        let (body, x, y) = match held {
-            Some((_, id, at)) => (
-                Some(id),
-                (i64::from(e.pos.x) - i64::from(at.x)) as f32 / reach as f32,
-                (i64::from(e.pos.y) - i64::from(at.y)) as f32 / reach as f32,
-            ),
-            None => {
-                let (x, y) = frame.units_of(e.pos);
-                (None, x, y)
+        let (body, x, y) = if let Some(orbit) = world.orbit(e.id) {
+            let point = match world.surface(orbit.body).map(|surface| surface.topology()) {
+                Some(Topology::Cube(cube)) => cube.sphere_point(rom_render::SurfacePos {
+                    face: orbit.pos.face,
+                    x: i64::from(orbit.pos.x),
+                    y: i64::from(orbit.pos.y),
+                }),
+                _ => [1_000_000, 0, 0],
+            };
+            let length = (point[0] as f32).hypot(point[2] as f32).max(1.0);
+            (
+                Some(orbit.body.0),
+                point[0] as f32 / length,
+                point[2] as f32 / length,
+            )
+        } else {
+            match held {
+                Some((_, id, at)) => (
+                    Some(id),
+                    (i64::from(e.pos.x) - i64::from(at.x)) as f32 / reach as f32,
+                    (i64::from(e.pos.y) - i64::from(at.y)) as f32 / reach as f32,
+                ),
+                None => {
+                    let (x, y) = frame.units_of(e.pos);
+                    (None, x, y)
+                }
             }
         };
         snapshot.ships.push(ShipView {

@@ -1,0 +1,19 @@
+# Test scene set up before tick one; training and attack use the ordinary palette and picks.
+0 grant-age age.starfaring
+0 grant res.metal 5000
+0 grant res.energy 5000
+0 place 1 bld.spaceport @-12,0
+0 place 2 bld.factory @-12,8
+1 speed 800
+4 producers
+6 hud tab 3
+8 hud slot 0
+850 hud tab 2
+852 hud slot 1
+# Corvette research is 800 ticks and training is 400 ticks, then the explicit launch order takes 20 ticks.
+1300 ships
+1302 key 1 ctrl
+1304 key 1
+1310 rclick enemy1
+# Pause almost completely just after the shot of tick 1340 for a stable review frame.
+1350 speed 1

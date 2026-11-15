@@ -708,6 +708,16 @@ impl Globe {
 }
 
 impl Footing for Globe {
+    fn datum_point(&self, face: u8, x: f32, y: f32, delta: (f32, f32), height: f32) -> [f32; 3] {
+        let from = self.clamp_pos(face, x, y);
+        let to = self.step_on(
+            from,
+            (delta.0 * 1000.0).round() as i64,
+            (delta.1 * 1000.0).round() as i64,
+        );
+        along(self.dir_of(to), self.radius + height)
+    }
+
     fn route_point(&self, from: SurfacePos, to: SurfacePos, t: f32, lift: f32) -> [f32; 3] {
         let (a, b) = (self.dir_of(from), self.dir_of(to));
         let angle = dot(a, b).clamp(-1.0, 1.0).acos();

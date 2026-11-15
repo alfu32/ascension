@@ -14,12 +14,17 @@ const STAR_COLOURS: [[u8; 3]; 5] = [
     [240, 240, 255],
 ];
 
-/// The farthest camera level in `age`: zero view range unlocks continuous space zoom.
+/// The farthest camera level allowed by the age's map-scale rank.
 pub fn max_level(rules: &Rules, age: DefId) -> Level {
-    if rules.ages.get(&age).is_some_and(|a| a.view_range == 0) {
-        Level::StarMap
-    } else {
-        Level::Globe
+    match rules
+        .ages
+        .get(&age)
+        .and_then(|a| rules.map_scales.get(&a.map_scale))
+        .map(|scale| scale.rank)
+    {
+        Some(1) => Level::System,
+        Some(2..) => Level::StarMap,
+        _ => Level::Globe,
     }
 }
 
@@ -87,13 +92,20 @@ mod tests {
     use crate::terrain::{generate_universe_content, load_rules};
 
     #[test]
-    fn unlimited_view_is_found_by_data() {
-        let rules = load_rules().expect("rules");
-        for age in rules.ages.values() {
-            assert_eq!(
-                max_level(&rules, age.id) == Level::StarMap,
-                age.view_range == 0
-            );
+    fn camera_tier_is_found_by_rank_independently_of_view_range_or_names() {
+        let mut rules = load_rules().expect("rules");
+        let age = rules.ages.values().next().unwrap().id;
+        let scale_key = rules.ages[&age].map_scale.clone();
+        let mut scale = rules.map_scales.remove(&scale_key).unwrap();
+        scale.key = "renamed".into();
+        rules.ages.get_mut(&age).unwrap().map_scale = scale.key.clone();
+        rules.map_scales.insert(scale.key.clone(), scale);
+        for (rank, level) in [(0, Level::Globe), (1, Level::System), (2, Level::StarMap)] {
+            rules.map_scales.get_mut("renamed").unwrap().rank = rank;
+            for range in [0, 30_000] {
+                rules.ages.get_mut(&age).unwrap().view_range = range;
+                assert_eq!(max_level(&rules, age), level);
+            }
         }
         assert_eq!(max_level(&rules, DefId(u32::MAX)), Level::Globe);
     }
@@ -109,8 +121,11 @@ mod tests {
             assert_eq!(max_level(&rules, by_ordinal(n)), Level::Globe);
             last = range;
         }
-        // Zero view range removes the planetary restriction; an unknown id has no ground limit.
+        // Zero view range allows the whole globe; the map-scale tier still caps space zoom.
         assert_eq!(view_range(&rules, by_ordinal(9)), 0);
+        assert_eq!(max_level(&rules, by_ordinal(9)), Level::Globe);
+        assert_eq!(max_level(&rules, by_ordinal(10)), Level::System);
+        assert_eq!(max_level(&rules, by_ordinal(11)), Level::StarMap);
         assert_eq!(view_range(&rules, DefId(u32::MAX)), 0);
     }
 
@@ -219,7 +234,7 @@ mod match_tests {
                 .filter(|b| b.home_race.is_some())
                 .all(|b| b.n == Some(64))
         );
-        for ordinal in [0, 5, 9, 13] {
+        for ordinal in [0, 5, 8, 9, 10, 11, 13] {
             let game = build_universe_match(
                 &content.rules,
                 &content.universe,
@@ -235,25 +250,44 @@ mod match_tests {
             let (mut camera, mut orbit) = camera(&content, &game.world);
             update_limits(&game.world, &mut camera, &mut orbit);
             camera.set_l(f32::MAX);
-            if ordinal < 9 {
-                assert!(camera.level() <= Level::Globe);
+            let expected = max_level(
+                &content.rules,
+                game.world
+                    .players()
+                    .find(|p| p.id == PlayerId(1))
+                    .unwrap()
+                    .age,
+            );
+            assert_eq!(camera.level(), expected);
+            if expected == Level::Globe {
                 assert!((camera.l().exp() - orbit.distance_cap()).abs() < 0.01);
             } else {
-                assert_eq!(camera.level(), Level::StarMap);
-                assert_eq!(camera.l(), camera.scale().l_end);
-                for level in [Level::Surface, Level::Globe, Level::System, Level::StarMap] {
-                    camera.set_view(level, &mut orbit);
+                assert_eq!(camera.l(), camera.scale().l_cap(expected));
+            }
+            for level in Level::ALL {
+                camera.set_view(level, &mut orbit);
+                assert!(camera.level() <= expected);
+                if level <= expected {
                     assert_eq!(camera.level(), level);
                 }
-                // Continuous log-distance zoom visits every level without changing cameras.
-                let mut levels = std::collections::BTreeSet::new();
-                camera.set_l(camera.scale().l_min());
-                for _ in 0..160 {
-                    camera.wheel(-1.0);
-                    levels.insert(camera.level());
-                }
-                assert!(Level::ALL.iter().all(|level| levels.contains(level)));
             }
+            // The wheel reaches exactly the same cap, and never skips an unlocked level.
+            let mut levels = std::collections::BTreeSet::new();
+            camera.set_l(camera.scale().l_min());
+            for _ in 0..160 {
+                camera.wheel(-1.0);
+                camera.sync_orbit(&mut orbit);
+                camera.adopt_orbit(&orbit);
+                levels.insert(camera.level());
+                assert!(camera.level() <= expected);
+            }
+            assert_eq!(camera.level(), expected);
+            assert!(
+                Level::ALL
+                    .iter()
+                    .filter(|level| **level <= expected)
+                    .all(|level| levels.contains(level))
+            );
         }
         assert!(
             build_universe_match(
@@ -275,7 +309,7 @@ mod match_tests {
         let target_age = rules
             .ages
             .values()
-            .filter(|a| a.view_range == 0)
+            .filter(|a| rules.map_scales[&a.map_scale].rank == 1)
             .min_by_key(|a| a.ordinal)
             .unwrap()
             .clone();
@@ -363,7 +397,7 @@ mod match_tests {
                 "raising a limit must not jump the camera"
             );
             camera.set_l(f32::MAX);
-            assert_eq!(camera.level(), Level::StarMap);
+            assert_eq!(camera.level(), Level::System);
             assert!(camera.l() > before);
             game.world.hash()
         };

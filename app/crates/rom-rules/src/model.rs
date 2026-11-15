@@ -1229,6 +1229,8 @@ pub struct Weapon {
     pub fires_moving: bool,
     /// The `consumed` column.
     pub consumed: bool,
+    /// Whether the weapon fires only from orbit onto the surface below.
+    pub orbit_only: bool,
     /// Layers this weapon can hit.
     pub targets: Vec<WeaponTarget>,
 }

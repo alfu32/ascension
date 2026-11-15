@@ -1,6 +1,6 @@
 # Game database
 
-Files: [`../db/schema.sql`](../db/schema.sql) (89 tables, 4 views) and
+Files: [`../db/schema.sql`](../db/schema.sql) (90 tables, 4 views) and
 [`../db/seed.sql`](../db/seed.sql) (the full generated content catalogue and hand-written
 world rules). Both load cleanly in SQLite ≥ 3.37:
 
@@ -166,7 +166,7 @@ planets belong to star systems, and systems are joined by routes.
 | `star_system` | state | name and star-map position (integers, display only) |
 | `body` | state | the star (orbit radius 0), habitable planets (`n`, `home_race_id`) and resource bodies (`node_entity_type_id`), each on its own orbit (radius, angle in millidegrees) |
 | `route` | state | a lane between two systems (`system_a < system_b`) and its integer length |
-| `entity.body_id`, `entity.face` | state | an entity's location on a habitable body's surface at `(face, x, y)`; no body = the flat map. Orbit, system-space and transit locations come in world-model step 4b |
+| `entity.body_id`, `entity.face` | state | an entity's surface or system-plane position at `(face, x, y)`; no body = the flat map; `entity_orbit` classifies ships orbiting a body |
 
 The generator (`rom-mapgen`, integers only) gives each race present one home
 system holding one home planet at the median size, shared by all of that
@@ -203,6 +203,33 @@ separate whole-globe-only age.
 A flat rectangular map remains for tests and skirmish maps: `map_style.planets`
 and `space_pct` and the `planet`/`space` feature rows drive it, and `map_grid`
 holds its arrays.
+
+### Space tiers and orbital weapons (task 43)
+
+`map_scale` contains `planetary` (rank 0), `interplanetary` (rank 1), and
+`interstellar` (rank 2). `age.map_scale` governs camera levels and ship reach;
+`age.view_range` governs the planetary camera's ground half-width only.
+Fusion remains rank 0 with zero range (whole globe); starfaring is rank 1
+(home system); expansion and later ages rank 2 (star map and route travel).
+The numeric ranks are the rules contract; code does not branch on the keys.
+
+`et_weapon.orbit_only INTEGER NOT NULL DEFAULT 0 CHECK (orbit_only IN (0,1))`
+marks weapons that require the attacker to orbit the target's body. Their
+`range_min`/`range_max` measure ground distance from the orbital subpoint to
+the target footprint. Ordinary weapons retain their usual layer/range rules.
+Corvettes, space frigates, space cruisers and battleships get slot 1 explosive
+bombardment weapons targeting `ground`; their original space weapons stay
+in slot 0. The hand-written rows follow the generated seed block.
+
+`entity_orbit` records an orbiting entity's body, integer surface subpoint,
+facing, movement remainder and last orbital shot for deterministic state and
+render snapshots. The entity's underlying system-plane position identifies
+the body marker; the orbit record classifies its location. `launch` is an
+ordinary order against a completed own producer; training a space-only mover
+on a sphere automatically queues it. `space.launch_ticks` and
+`space.orbit_speed` set duration and orbital footprint speed. Universe save
+round-tripping is not yet implemented; the table defines the shared state
+contract for that work.
 
 ### 7. Ages, nations and races
 

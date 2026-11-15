@@ -1103,6 +1103,8 @@ mod tests {
             carry_node: false,
             under_construction: None,
             model: None,
+            altitude: 0.0,
+            beam_target: None,
             activity: Default::default(),
         }
     }
@@ -1489,5 +1491,58 @@ mod tests {
         let swapped = vec![unit_view(1, 50.0, 60.3), unit_view(2, 50.0, 60.0)];
         let ctx = context(&swapped, &hud, &cam);
         assert_eq!(ctx.entity_at(x, y), Some(1));
+    }
+    #[test]
+    fn orbital_ships_are_picked_above_the_surface_and_occluded_on_the_far_side() {
+        let n = 64;
+        let globe = Globe::new(&crate::PlanetScene {
+            n,
+            kinds: vec![crate::TileKind::Land; 6 * (n * n) as usize],
+            heights: vec![0; 6 * (n * n) as usize],
+            feature_colors: Default::default(),
+            starts: vec![],
+            nodes: vec![],
+            sun: Default::default(),
+        });
+        let mut surface = unit_view(1, 32.0, 32.0);
+        let mut orbit = surface;
+        orbit.id = 2;
+        orbit.altitude = 8.0;
+        surface.face = 2;
+        let mut far_orbit = orbit;
+        far_orbit.id = 3;
+        far_orbit.face = 2;
+        let views = [surface, orbit, far_orbit];
+        let hud = HudSnapshot::default();
+        let ctx = PickContext {
+            layout: layout(),
+            view: View::looking(
+                [0.0, 0.0, globe.radius() + 50.0],
+                [0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                (1280.0, 800.0),
+                0.0,
+            ),
+            entities: &views,
+            ground: FLAT,
+            globe: Some(&globe),
+            hud: &hud,
+            hud_visible: false,
+            map_size: (n, n),
+            now_ms: 0,
+        };
+        let centre = pick_frame(&orbit, &globe).0;
+        let (x, y, _) = ctx.view.project(centre).unwrap();
+        assert_eq!(ctx.entity_at(x, y), Some(2));
+        assert!(!ctx.hidden_by_planet(centre));
+        assert!(ctx.hidden_by_planet(pick_frame(&far_orbit, &globe).0));
+        assert!(
+            ctx.entities_in_rect(Rect::new(0.0, 0.0, 1280.0, 800.0))
+                .contains(&2)
+        );
+        assert!(
+            !ctx.entities_in_rect(Rect::new(0.0, 0.0, 1280.0, 800.0))
+                .contains(&3)
+        );
     }
 }

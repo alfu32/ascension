@@ -7,7 +7,7 @@ use rom_sim::{
 };
 use std::{collections::BTreeMap, sync::Arc};
 
-fn world_with(sql: &str, early: bool) -> World {
+fn world_at(sql: &str, age_key: &str) -> World {
     let conn = build_rules_db(
         include_str!("../../../db/schema.sql"),
         include_str!("../../../db/seed.sql"),
@@ -21,11 +21,7 @@ fn world_with(sql: &str, early: bool) -> World {
             id: PlayerId(p),
             team: p,
             faction: id("nation.romans"),
-            age: id(if early {
-                "age.ancient"
-            } else {
-                "age.starfaring"
-            }),
+            age: id(age_key),
             resources: BTreeMap::new(),
             techs: BTreeMap::new(),
         })
@@ -98,6 +94,16 @@ fn world_with(sql: &str, early: bool) -> World {
         BTreeMap::from([(PlayerId(1), BodyId(2)), (PlayerId(2), BodyId(2))]),
     )
     .unwrap()
+}
+fn world_with(sql: &str, early: bool) -> World {
+    world_at(
+        sql,
+        if early {
+            "age.ancient"
+        } else {
+            "age.expansion"
+        },
+    )
 }
 fn world() -> World {
     world_with("", false)
@@ -420,7 +426,7 @@ fn space_vision_is_per_system() {
 }
 
 #[test]
-fn spaceport_spawns_starships_in_system_space() {
+fn spaceport_trains_and_launches_starships_into_planet_orbit() {
     let mut w = world();
     let p = PlayerId(1);
     let rules = w.rules().clone();
@@ -456,6 +462,8 @@ fn spaceport_spawns_starships_in_system_space() {
         .find(|e| e.type_id == id("unit.survey_ship"))
         .expect("trained ship");
     assert_eq!(ship.pos.body, w.space_of(1).unwrap());
+    let orbit = w.orbit(ship.id).expect("trained ship launched into orbit");
+    assert_eq!(orbit.body, BodyId(2));
     assert!(
         w.distance(ship.pos, w.body_position(BodyId(2)).unwrap())
             .unwrap()
@@ -503,4 +511,204 @@ fn zero_claim_radius_uses_orbit_reach_and_contest_clears_existing_income() {
     let before = (balance(&w, 1), balance(&w, 2));
     run(&mut w, 600);
     assert_eq!((balance(&w, 1), balance(&w, 2)), before);
+}
+
+fn launch(w: &mut World, type_key: &str, owner: u32, pos: Pos) -> EntityId {
+    let port = w
+        .spawn(
+            w.rules().id_of("bld.spaceport").unwrap(),
+            PlayerId(owner),
+            pos,
+        )
+        .unwrap();
+    let id = w
+        .spawn(
+            w.rules().id_of(type_key).unwrap(),
+            PlayerId(owner),
+            w.offset(pos, 3000, 0),
+        )
+        .unwrap();
+    w.submit(Command {
+        target_entity: Some(port),
+        ..command(w, id, "launch")
+    })
+    .unwrap();
+    let duration = w.rules().constant("space.launch_ticks").unwrap() as u64;
+    run(w, duration - 1);
+    assert!(w.orbit(id).is_none());
+    w.step();
+    assert_eq!(w.orbit(id).unwrap().pos, pos);
+    assert!(
+        !w.entities_in_radius(pos, 10000).contains(&id),
+        "launched ship leaves the ground spatial index"
+    );
+    assert!(
+        w.entities_in_radius(w.body_position(pos.body).unwrap(), 1000)
+            .contains(&id),
+        "orbiting ship remains targetable in system space"
+    );
+    id
+}
+
+#[test]
+fn launch_orbit_and_bombardment_repeat_with_equal_hashes() {
+    let scenario = || {
+        let mut w = world_at("", "age.starfaring");
+        let pos = Pos::on(BodyId(2), 0, 32_000, 32_000);
+        let id = launch(&mut w, "unit.corvette", 1, pos);
+        let ground = w
+            .spawn(
+                w.rules().id_of("bld.library").unwrap(),
+                PlayerId(2),
+                w.offset(pos, 3000, 0),
+            )
+            .unwrap();
+        let before = w.entity(ground).unwrap().hp;
+        w.submit(Command {
+            target_entity: Some(ground),
+            ..command(&w, id, "attack")
+        })
+        .unwrap();
+        run(&mut w, 65);
+        assert!(w.entity(ground).unwrap().hp < before);
+        let orbit = w.orbit(id).unwrap();
+        assert_ne!(orbit.pos, pos);
+        assert_eq!(orbit.body, BodyId(2));
+        let shot = orbit.last_shot.expect("orbital weapon fired");
+        assert_eq!(shot.target, w.entity(ground).unwrap().pos);
+        assert!(w.is_visible_on_body(
+            PlayerId(1),
+            BodyId(2),
+            orbit.pos.face,
+            orbit.pos.x / 1000,
+            orbit.pos.y / 1000
+        ));
+        let defender = w
+            .spawn(
+                w.rules().id_of("bld.tower").unwrap(),
+                PlayerId(2),
+                w.offset(pos, 5000, 0),
+            )
+            .unwrap();
+        assert_eq!(
+            w.submit(Command {
+                target_entity: Some(id),
+                ..command(&w, defender, "attack")
+            }),
+            Err(SimError::OtherBody)
+        );
+        let hp = w.entity(id).unwrap().hp;
+        run(&mut w, 40);
+        assert_eq!(w.entity(id).unwrap().hp, hp);
+        w.hash()
+    };
+    assert_eq!(scenario(), scenario());
+}
+
+#[test]
+fn bombardment_requires_orbit_compatible_weapon_and_local_footprint() {
+    let mut w = world_at("", "age.starfaring");
+    let pos = Pos::on(BodyId(2), 0, 32_000, 32_000);
+    let scout = launch(&mut w, "unit.survey_ship", 1, pos);
+    let ground = w
+        .spawn(
+            w.rules().id_of("bld.library").unwrap(),
+            PlayerId(2),
+            w.offset(pos, 3000, 0),
+        )
+        .unwrap();
+    let before = w.hash();
+    assert_eq!(
+        w.submit(Command {
+            target_entity: Some(ground),
+            ..command(&w, scout, "attack")
+        }),
+        Err(SimError::InvalidAttackTarget)
+    );
+    assert_eq!(w.hash(), before);
+    let ship = launch(&mut w, "unit.corvette", 1, pos);
+    let far = Pos::on(BodyId(2), 2, 32_000, 32_000);
+    let target = w
+        .spawn(w.rules().id_of("bld.library").unwrap(), PlayerId(2), far)
+        .unwrap();
+    w.spawn(
+        w.rules().id_of("bld.library").unwrap(),
+        PlayerId(1),
+        w.offset(far, 6000, 0),
+    )
+    .unwrap();
+    let hp = w.entity(target).unwrap().hp;
+    w.submit(Command {
+        target_entity: Some(target),
+        ..command(&w, ship, "attack")
+    })
+    .unwrap();
+    run(&mut w, 100);
+    assert_eq!(
+        w.entity(target).unwrap().hp,
+        hp,
+        "target beyond the orbital footprint"
+    );
+    assert!(w.orbit(ship).unwrap().last_shot.is_none());
+    let system_pos = w.body_position(BodyId(2)).unwrap();
+    w.submit(Command {
+        target_pos: Some(w.offset(system_pos, 10000, 0)),
+        ..command(&w, ship, "move")
+    })
+    .unwrap();
+    w.step();
+    assert!(w.orbit(ship).is_none());
+    assert_eq!(
+        w.submit(Command {
+            target_entity: Some(ground),
+            ..command(&w, ship, "attack")
+        }),
+        Err(SimError::OtherBody)
+    );
+}
+
+#[test]
+fn interplanetary_ships_can_orbit_but_cannot_depart_the_system() {
+    let mut w = world_at("", "age.starfaring");
+    let pos = w.body_position(BodyId(2)).unwrap();
+    let id = ship(&mut w, 1, pos);
+    let before = w.hash();
+    assert_eq!(travel(&mut w, id, 2), Err(SimError::CannotEnterSpace));
+    assert_eq!(w.hash(), before);
+    let subpoint = Pos::on(BodyId(2), 1, 32000, 32000);
+    w.submit(Command {
+        target_pos: Some(subpoint),
+        ..command(&w, id, "orbit")
+    })
+    .unwrap();
+    w.step();
+    assert_eq!(w.orbit(id).unwrap().pos, subpoint);
+    let before = w.orbit(id).unwrap().pos;
+    run(&mut w, 2000);
+    let orbit = w.orbit(id).unwrap();
+    assert_ne!(orbit.pos.face, before.face, "orbit crosses cube face edges");
+    assert_eq!(w.entity(id).unwrap().pos.body, BodyId(1));
+}
+
+#[test]
+fn ships_in_orbit_and_system_space_can_see_and_fight_each_other() {
+    let mut w = world_at("", "age.starfaring");
+    let pos = Pos::on(BodyId(2), 0, 32_000, 32_000);
+    let orbiter = launch(&mut w, "unit.survey_ship", 1, pos);
+    let system_pos = w.offset(w.body_position(BodyId(2)).unwrap(), 5000, 0);
+    let enemy = ship(&mut w, 2, system_pos);
+    let before = (w.entity(orbiter).unwrap().hp, w.entity(enemy).unwrap().hp);
+    w.submit(Command {
+        target_entity: Some(enemy),
+        ..command(&w, orbiter, "attack")
+    })
+    .unwrap();
+    w.submit(Command {
+        target_entity: Some(orbiter),
+        ..command(&w, enemy, "attack")
+    })
+    .unwrap();
+    w.step();
+    assert!(w.entity(orbiter).unwrap().hp < before.0);
+    assert!(w.entity(enemy).unwrap().hp < before.1);
 }

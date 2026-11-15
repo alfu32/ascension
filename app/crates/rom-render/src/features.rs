@@ -1189,6 +1189,8 @@ mod tests {
             radius: 2.0,
             under_construction: None,
             model: None,
+            altitude: 0.0,
+            beam_target: None,
             activity: Default::default(),
             carrying: false,
             kept: 0,
