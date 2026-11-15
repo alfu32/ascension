@@ -2,8 +2,14 @@
 //! into kit part lists, Meshcraft export and import (`.octd`), the briefs written beside each
 //! export, and the lock on approved models. Used by `rom model …` and the launcher alike.
 
+pub mod art;
 pub mod book;
+pub mod brief;
+pub mod export;
 pub mod files;
+pub mod import;
+pub mod lock;
+pub mod octd;
 pub mod params;
 pub mod sql;
 

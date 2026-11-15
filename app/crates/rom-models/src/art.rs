@@ -133,7 +133,11 @@ impl ArtDirection {
         let name = name.to_lowercase();
         self.signatures
             .iter()
-            .find(|(names, _)| names.iter().any(|n| *n == name || name.starts_with(n.as_str())))
+            .find(|(names, _)| {
+                names
+                    .iter()
+                    .any(|n| *n == name || name.starts_with(n.as_str()))
+            })
             .map(|(_, s)| s.as_str())
     }
 

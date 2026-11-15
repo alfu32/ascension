@@ -998,6 +998,39 @@ mod tests {
     }
 
     #[test]
+    fn custom_parts_bake_their_triangles_in_their_looks() {
+        use crate::custom::{CustomMesh, CustomPaint, FaceLook};
+        let mesh = CustomMesh::parse(
+            "rom-mesh 1\nmaterial 0 -\nmaterial 1 #ff0000\nlod near\n\
+             v 0 0 0\nv 1 0 0\nv 0 2 0\nv 0 0 -1\nn 0 0 1\nn 0 0 1\nn 0 0 1\nn 0 0 1\n\
+             f 0 1 2 0 0\nf 0 2 3 1 1\nlod far\nv 0 0 0\nv 1 0 0\nv 0 2 0\n\
+             n 0 0 1\nn 0 0 1\nn 0 0 1\nf 0 1 2 0 0\n",
+        )
+        .unwrap();
+        let mut part = PartSpec::new("statue", Shape::Custom, plain()).knob("x", 3.0);
+        part.custom = Some(Arc::new(CustomPaint {
+            mesh,
+            looks: vec![FaceLook::Part, FaceLook::Plain([1.0, 0.0, 0.0])],
+        }));
+        let baked = one(part);
+        assert_eq!(baked.near.triangles(), 2);
+        assert_eq!(baked.far.triangles(), 1);
+        let [lo, hi] = baked.bounds();
+        assert!(
+            (lo[0] - 3.0).abs() < 1e-5 && (hi[0] - 4.0).abs() < 1e-5 && (hi[1] - 2.0).abs() < 1e-5
+        );
+        // The first face wears the part's material, the second plain red in the owner's colour.
+        assert_eq!(
+            baked.near.colors[0][3] & !TEAM_BIT,
+            Program::Plaster.id() as u8
+        );
+        assert_eq!(baked.near.colors[3], [255, 0, 0, TEAM_BIT]);
+        // Faces face the way their normals say.
+        assert!(baked.near.normals[0][2] > 0.99);
+        assert_eq!(baked.placements[0].near, 0..6);
+    }
+
+    #[test]
     fn far_versions_drop_small_parts() {
         let big = PartSpec::new("big", Shape::Box, plain());
         let small = PartSpec::new("small", Shape::Box, plain())
