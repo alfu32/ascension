@@ -26,6 +26,18 @@ systems breaks the attention flow of the user." So: (a) ships in transit
 must be visible, and (b) every change of place must be a continuous camera
 move the eye can follow, never a cut.
 
+## Scope (owner, 2026-11-15)
+
+"What you did until now, interaction-wise, is coherent: double-click focuses
+the planet or the star system. The seamless transitioning and the solar and
+star maps are a bit less natural; that is what we need to improve,
+navigation-wise." So **keep today's interactions** (double-click focuses a
+planet or system, selection, orders, hotkeys) and do not redesign them;
+improve (a) the transitions between levels, made seamless, and (b) moving
+around the solar-system and star-map planes, made as natural as on the
+planet (pan, rotate, zoom toward the cursor, tilt with zoom). Items 3–5 below
+(ships findable, minimap, visibility) support that.
+
 ## Design
 
 0. **No cuts; keep the user's attention.** Every change of level or place is
