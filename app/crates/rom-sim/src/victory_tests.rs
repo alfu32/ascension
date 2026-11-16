@@ -227,6 +227,113 @@ fn contested_city_is_not_captured() {
 }
 
 #[test]
+fn workers_do_not_hold_a_city() {
+    let mut w = world("");
+    let city = city(&mut w, P2);
+    soldier(&mut w, P1);
+    // An armed citizen of the owner stands in the radius: it gathers and builds, so it
+    // does not keep the city.
+    let citizen = spawn(&mut w, "unit.citizen", P2, Pos::flat(46_500, 50_500));
+    assert!(!w.holds_cities(w.entity(citizen).unwrap().type_id));
+    assert!(w.holds_cities(id(&w, "unit.spearman")));
+    neutralise(&mut w, city);
+    w.step();
+    assert_eq!(w.entity(city).unwrap().owner, P1);
+    assert!(w.entity(citizen).is_some());
+}
+
+#[test]
+fn workers_alone_do_not_restore_a_struck_city() {
+    let mut w = world("");
+    let city = city(&mut w, P2);
+    spawn(&mut w, "unit.citizen", P2, Pos::flat(46_500, 50_500));
+    spawn(&mut w, "unit.citizen", P1, Pos::flat(44_500, 50_500));
+    neutralise(&mut w, city);
+    ticks(&mut w, 20);
+    let e = w.entity(city).unwrap();
+    assert!(e.neutralised);
+    assert_eq!(e.owner, P2);
+    assert_eq!(w.capture_countdown(city), None);
+}
+
+#[test]
+fn a_held_down_city_falls_after_the_hold() {
+    let mut w = world("UPDATE game_constant SET value=30 WHERE key='city.capture_hold_ticks';");
+    let city = city(&mut w, P2);
+    let attacker = soldier(&mut w, P1);
+    let defender = spawn(&mut w, "unit.spearman", P2, Pos::flat(46_500, 50_500));
+    neutralise(&mut w, city);
+    w.step();
+    let countdown = w.capture_countdown(city).expect("held down");
+    assert_eq!(countdown.team, 1);
+    assert_eq!(countdown.ends, countdown.since + 30);
+    assert_eq!(w.capture_countdowns().count(), 1);
+    ticks(&mut w, 25);
+    assert_eq!(w.entity(city).unwrap().owner, P2);
+    assert!(w.entity(city).unwrap().neutralised);
+    ticks(&mut w, 10);
+    let e = w.entity(city).unwrap();
+    assert_eq!(e.owner, P1);
+    assert!(!e.neutralised);
+    assert_eq!(w.capture_countdown(city), None);
+    assert!(w.entity(attacker).is_some() && w.entity(defender).is_some());
+}
+
+#[test]
+fn a_hold_broken_off_starts_again() {
+    let mut w = world("UPDATE game_constant SET value=30 WHERE key='city.capture_hold_ticks';");
+    let city = city(&mut w, P2);
+    let attacker = soldier(&mut w, P1);
+    spawn(&mut w, "unit.spearman", P2, Pos::flat(46_500, 50_500));
+    neutralise(&mut w, city);
+    ticks(&mut w, 20);
+    w.despawn(attacker).unwrap();
+    // The defender alone restores the city: the countdown is gone.
+    w.step();
+    assert_eq!(w.capture_countdown(city), None);
+    assert!(!w.entity(city).unwrap().neutralised);
+    assert_eq!(w.entity(city).unwrap().owner, P2);
+}
+
+#[test]
+fn the_owner_cannot_repair_a_city_held_down() {
+    let mut w = world("");
+    let city = city(&mut w, P2);
+    let attacker = soldier(&mut w, P1);
+    spawn(&mut w, "unit.spearman", P2, Pos::flat(46_500, 50_500));
+    let builder = spawn(&mut w, "unit.citizen", P2, Pos::flat(46_500, 51_500));
+    neutralise(&mut w, city);
+    w.step();
+    w.submit(command(&w, builder, "repair", Some(city)))
+        .unwrap();
+    ticks(&mut w, 20);
+    assert!(w.entity(city).unwrap().neutralised);
+    w.despawn(attacker).unwrap();
+    ticks(&mut w, 2);
+    assert!(!w.entity(city).unwrap().neutralised);
+}
+
+#[test]
+fn a_siege_runs_alike_twice() {
+    let run = || {
+        let mut w = world("UPDATE game_constant SET value=40 WHERE key='city.capture_hold_ticks';");
+        let city = city(&mut w, P2);
+        soldier(&mut w, P1);
+        spawn(&mut w, "unit.spearman", P2, Pos::flat(46_500, 50_500));
+        neutralise(&mut w, city);
+        let mut hashes = Vec::new();
+        for _ in 0..6 {
+            ticks(&mut w, 10);
+            hashes.push(w.hash());
+        }
+        (hashes, w.entity(city).unwrap().owner)
+    };
+    let (first, owner) = run();
+    assert_eq!(owner, P1);
+    assert_eq!((first, owner), run());
+}
+
+#[test]
 fn former_owner_can_retake_a_neutralised_city() {
     let mut w = world("");
     let city = city(&mut w, P2);

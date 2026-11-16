@@ -242,6 +242,11 @@ impl<'a> Plan<'a> {
             || self.view.count(type_id) < et.limit_count
     }
 
+    /// Whether a producer's queue holds a research already.
+    fn researches(&self, producer: EntityId) -> bool {
+        self.view.researching_at.contains(&producer)
+    }
+
     fn queue_of(&self, producer: EntityId) -> usize {
         self.view.queue_len.get(&producer).copied().unwrap_or(0)
     }
@@ -313,13 +318,15 @@ impl<'a> Plan<'a> {
         {
             return Outcome::Impossible;
         }
+        // A producer busy training takes the research behind what it trains, so upgrades
+        // are not held back for good by a building that never stops training.
         let Some(producer) = self
             .view
             .producers(ProductionMode::Research, tech)
             .into_iter()
-            .filter(|p| self.queue_of(p.id) == 0)
+            .filter(|p| self.queue_of(p.id) < TRAIN_QUEUE && !self.researches(p.id))
+            .min_by_key(|p| (self.queue_of(p.id), p.id))
             .map(|p| p.id)
-            .next()
         else {
             return Outcome::Impossible;
         };
@@ -334,6 +341,7 @@ impl<'a> Plan<'a> {
         self.out.last_mut().expect("order written").queue = true;
         self.pay(&price);
         self.view.researching.insert(tech);
+        self.view.researching_at.insert(producer);
         *self.view.queue_len.entry(producer).or_default() += 1;
         Outcome::Ordered
     }
@@ -377,9 +385,13 @@ impl<'a> Plan<'a> {
         if self.searched {
             return Outcome::Impossible;
         }
-        let ground = self
-            .ground
-            .get_or_insert_with(|| Ground::new(&self.view, &memory.enemies));
+        let ground = self.ground.get_or_insert_with(|| {
+            let mut ground = Ground::new(&self.view, &memory.enemies);
+            if let Some(rally) = memory.rally {
+                ground.keep_clear(rally, crate::production::RALLY_CLEAR);
+            }
+            ground
+        });
         if !ground.reserved_done {
             ground.reserved_done = true;
             reserve_first_sites(&self.view, ground, building, memory, situation);

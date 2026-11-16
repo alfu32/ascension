@@ -42,6 +42,7 @@ mod vision;
 mod wealth;
 mod world;
 
+pub use capture::CaptureCountdown;
 pub use entity::{Entity, EntityId, Player, PlayerId};
 pub use geometry::Topology;
 pub use income::Income;

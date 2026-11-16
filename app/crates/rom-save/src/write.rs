@@ -599,6 +599,12 @@ fn write_entities(tx: &Transaction, s: &Snapshot) -> Result<(), SaveError> {
             )?;
         }
     }
+    for (city, team, since) in &s.sieges {
+        tx.execute(
+            "INSERT INTO city_siege VALUES (?,?,?)",
+            params![city.0, team, w(*since)],
+        )?;
+    }
     for (producer, rally) in &s.rallies {
         let (target, at) = match rally {
             Rally::Entity(target) => (Some(target.0), [None; 4]),

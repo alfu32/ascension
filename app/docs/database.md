@@ -940,6 +940,43 @@ Schema and save format (deliberate; both lint views stay empty, the seed loads):
   300 / 35, satellite 220 / 20); sight modifier rows; arrow speed on three weapons.
   No PART A column was added.
 
+## Capture and difficulty (task 67)
+
+Owner's choice (2026-11-16) after tasks 61 and 65 ended most duels in stand-offs:
+
+- **Workers do not hold a city.** A unit holds or contests a struck-down city only when
+  it is armed and neither gathers nor builds (no `et_harvester` row, no `et_builder`
+  row): `World::holds_cities(type)`. Workers still fight back; they no longer keep a
+  city at 0 hit points from falling, nor restore it.
+- **A held-down city falls.** A neutralised city with armed attackers in its economic
+  radius starts a countdown for the strongest attacking team; after
+  `city.capture_hold_ticks` (new constant, 2400 ticks = 2 game minutes) it is captured
+  by that team's strongest player even though defenders remain. A change of attacking
+  team restarts it; no attacker in the radius ends it. `World::capture_countdown(city)`
+  and `World::capture_countdowns()` give the team, start and end tick (for the HUD of
+  the city's owner). While the countdown runs the owner's builders cannot restore the
+  city by repair (the order waits).
+- **State and saves.** The countdowns are hashed (only while one runs, so other worlds
+  keep their hashes), in the snapshot (`Snapshot::sieges`) and saved in the new PART B
+  table `city_siege(city_id, team, since)`. Save format 5; format 4 saves are refused.
+- **`ai_difficulty` columns** (all with defaults, so older rows load):
+  `grace_ticks` (no attack or raid on enemy towns, and no orbital strike, before this
+  tick), `first_wave_max` (most units in a wave of the main army; 0 = no limit),
+  `wave_growth_per_hour` (units the limit grows per game hour after the grace),
+  `army_vs_enemy_pct` (the army stays within this share of the largest enemy army seen,
+  never below eight population; 0 = no limit) and `economy_pct` (share of the profile's
+  workers kept). Seed values:
+
+| Difficulty | grace_ticks | first_wave_max | wave_growth_per_hour | army_vs_enemy_pct | economy_pct | reaction_ticks |
+| --- | --- | --- | --- | --- | --- | --- |
+| easiest | 36000 (30 min) | 5 | 10 | 40 | 50 | 600 (was 200) |
+| easy | 12000 (10 min) | 8 | 20 | 80 | 80 | 300 (was 120) |
+| moderate | 3600 (3 min) | 0 | 0 | 0 | 100 | 60 |
+| tough, tougher, toughest | 0 | 0 | 0 | 0 | 100 | as before |
+
+  The brain does not know which player is a person, so the grace and the wave limit
+  apply to every opponent.
+
 ## Placement and resource discovery (task 41)
 
 Every building with an `in_city_radius` row also has an `in_own_territory`
@@ -1003,6 +1040,9 @@ back. No SQL runs in `rom-sim`.
 - **Rally points.** `entity_rally(entity_id, target_entity_id | x, y, face, body)`
   (task 64). Not part of the state hash while no producer has one, so worlds
   without rally points keep their hashes.
+- **Held-down cities of task 67 (format 5).** `city_siege(city_id, team, since)`: a
+  struck-down city's capture countdown. In the state hash only while a city is held
+  down. Format 4 saves are refused.
 - **Orders of task 65 (format 3).** `"order".pace` (a formation's walking speed
   cap, milli-tiles per second) and `"order".engaged_id` (the enemy a `guard` is
   fighting off), NULL otherwise; both enter the state hash only when set, so

@@ -1877,6 +1877,17 @@ pub struct AiDifficulty {
     pub sees_all: bool,
     /// The `handicap_tech_id` column: the technology a host grants a player of this difficulty.
     pub handicap_tech_id: Option<DefId>,
+    /// The `grace_ticks` column: no attack or raid on enemy towns before this tick.
+    pub grace_ticks: i64,
+    /// The `first_wave_max` column: most units in the first attack wave; 0 for no limit.
+    pub first_wave_max: i64,
+    /// The `wave_growth_per_hour` column: units the wave limit grows per game hour.
+    pub wave_growth_per_hour: i64,
+    /// The `army_vs_enemy_pct` column: own military at most this share of the enemy army
+    /// seen; 0 for no limit.
+    pub army_vs_enemy_pct: i64,
+    /// The `economy_pct` column: share of the profile's workers this level keeps.
+    pub economy_pct: i64,
 }
 /// One `order_kind` row.
 #[derive(Debug, Clone)]

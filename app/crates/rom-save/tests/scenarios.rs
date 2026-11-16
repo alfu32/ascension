@@ -368,6 +368,62 @@ fn a_player_near_a_victory_timer() {
     assert!(outcome.hash_before != 0);
 }
 
+#[test]
+fn a_city_held_down_mid_countdown() {
+    let rules = rules_with(
+        "UPDATE game_constant SET value=300 WHERE key='city.capture_hold_ticks';
+         UPDATE et_weapon SET shots=0 WHERE entity_type_id IN (SELECT id FROM entity_type WHERE class='building');
+         UPDATE entity_type SET hp=5 WHERE id=(SELECT id FROM def WHERE key='bld.city');",
+    );
+    let players = (0..=2)
+        .map(|n| Player {
+            id: PlayerId(n),
+            team: n,
+            faction: rules.id_of("nation.romans").unwrap(),
+            age: rules.id_of("age.ancient").unwrap(),
+            resources: BTreeMap::new(),
+            techs: BTreeMap::new(),
+        })
+        .collect();
+    let ground = rules.id_of("ter.plain").unwrap();
+    let mut w = World::new(
+        rules.clone(),
+        MapGrid::new(96, 96, vec![ground; 96 * 96]).unwrap(),
+        1,
+        players,
+    )
+    .unwrap();
+    let city = w
+        .place_for_setup(id(&w, "bld.city"), P2, Pos::flat(50_500, 50_500))
+        .unwrap();
+    let hold_fire = w
+        .rules()
+        .stances
+        .values()
+        .find(|s| s.behavior == "hold_fire")
+        .unwrap()
+        .id;
+    let attacker = w
+        .place_for_setup(id(&w, "unit.spearman"), P1, Pos::flat(46_500, 50_500))
+        .unwrap();
+    let defender = w
+        .place_for_setup(id(&w, "unit.spearman"), P2, Pos::flat(46_500, 52_500))
+        .unwrap();
+    w.set_stance(P2, defender, hold_fire).unwrap();
+    let mut strike = command(&w, attacker, "attack");
+    strike.target_entity = Some(city);
+    w.submit(strike).unwrap();
+    run_until(&mut w, 600, |w| {
+        w.entity(city).is_some_and(|c| c.neutralised)
+    });
+    w.set_stance(P1, attacker, hold_fire).unwrap();
+    ticks(&mut w, 20);
+    let countdown = w.capture_countdown(city).expect("held down");
+    assert_eq!(countdown.team, 1);
+    // The run crosses the end of the hold: the city falls to the attacker on both sides.
+    check("siege", &rules, w, 400, |_| {});
+}
+
 /// The audit the playthrough command runs, up to the final age.
 fn late_game(rules: &std::sync::Arc<rom_rules::Rules>) -> Playthrough {
     let age = rules

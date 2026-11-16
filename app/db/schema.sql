@@ -715,7 +715,19 @@ CREATE TABLE ai_difficulty (
   sees_all             INTEGER NOT NULL DEFAULT 0, -- ignores fog of war
   -- The 'handicap' technology the host grants a player of this difficulty at
   -- setup; its income.* modifiers must equal income_bonus_pct (validator).
-  handicap_tech_id     INTEGER REFERENCES tech(id)
+  handicap_tech_id     INTEGER REFERENCES tech(id),
+  -- Task 67: how hard the military presses (a learner must be able to win at
+  -- the lowest levels). No attack or raid on enemy towns before grace_ticks;
+  -- the first wave holds at most first_wave_max units (0 = no limit) and the
+  -- limit grows by wave_growth_per_hour units per game hour after the grace;
+  -- the army stays within army_vs_enemy_pct of the enemy army it has seen
+  -- (0 = no limit); economy_pct of the profile's workers are kept (an honest
+  -- limit of attention: fewer hands, a smaller economy).
+  grace_ticks          INTEGER NOT NULL DEFAULT 0 CHECK (grace_ticks >= 0),
+  first_wave_max       INTEGER NOT NULL DEFAULT 0 CHECK (first_wave_max >= 0),
+  wave_growth_per_hour INTEGER NOT NULL DEFAULT 0 CHECK (wave_growth_per_hour >= 0),
+  army_vs_enemy_pct    INTEGER NOT NULL DEFAULT 0 CHECK (army_vs_enemy_pct >= 0),
+  economy_pct          INTEGER NOT NULL DEFAULT 100 CHECK (economy_pct BETWEEN 1 AND 100)
 ) STRICT, WITHOUT ROWID;
 
 -- Order vocabulary. `needs` names the et_* component the executor must have.
@@ -1080,6 +1092,14 @@ CREATE TABLE entity_flag (
   flag      TEXT NOT NULL CHECK (flag IN ('landed','neutralised','assimilating','idle','dirty','awake')),
   PRIMARY KEY (entity_id, flag)
 ) STRICT, WITHOUT ROWID;
+
+-- A struck-down city held by an attacking team (task 67): the team and the tick
+-- its hold began; the city falls to it after `city.capture_hold_ticks`.
+CREATE TABLE city_siege (
+  city_id INTEGER PRIMARY KEY REFERENCES entity(id),
+  team    INTEGER NOT NULL,
+  since   INTEGER NOT NULL
+) STRICT;
 
 -- Income contributed by an entity: its terms sum to the per-player rates.
 CREATE TABLE income_term (

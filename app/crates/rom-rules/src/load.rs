@@ -1099,6 +1099,11 @@ fn load_ai_difficulty(conn: &Connection) -> Result<Vec<AiDifficulty>, RulesError
             income_bonus_pct: row.get("income_bonus_pct")?,
             sees_all: boolean(row, "sees_all", "ai_difficulty", &identity)?,
             handicap_tech_id: row.get::<_, Option<u32>>("handicap_tech_id")?.map(DefId),
+            grace_ticks: row.get("grace_ticks")?,
+            first_wave_max: row.get("first_wave_max")?,
+            wave_growth_per_hour: row.get("wave_growth_per_hour")?,
+            army_vs_enemy_pct: row.get("army_vs_enemy_pct")?,
+            economy_pct: row.get("economy_pct")?,
         })
     })
 }

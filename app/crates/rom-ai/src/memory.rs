@@ -14,8 +14,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// Version of the byte layout written by `Memory::to_bytes`. Version 1 (task 60) is the
 /// same layout without the armies, the scouting record and the fleet; version 2 (task 61)
-/// ends after the fleet, without the age clock (task 65). Both still read.
-pub(crate) const VERSION: u32 = 3;
+/// ends after the fleet, without the age clock (task 65); version 3 ends after the age
+/// clock, without the measured defences, the enemy peak and the rally moves (task 67). All
+/// still read.
+pub(crate) const VERSION: u32 = 4;
 
 /// What an army is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -207,6 +209,16 @@ pub(crate) struct Memory {
     pub age: u32,
     /// Tick at which `age` was first seen.
     pub age_since: u64,
+    /// The strongest defence seen around each enemy city (by entity id), and when it was
+    /// last measured: what a wave must clearly exceed before it sets off.
+    pub defence: BTreeMap<u32, (i64, u64)>,
+    /// The largest enemy army seen (population of armed enemy units remembered at once),
+    /// and when.
+    pub enemy_peak: (i64, u64),
+    /// How many times the rally point was moved because units there were boxed in.
+    pub rally_moves: u32,
+    /// Tick of the last such move.
+    pub rally_since: u64,
 }
 
 fn put_pos(w: &mut Writer, pos: Pos) {
@@ -322,6 +334,14 @@ impl Memory {
         w.u64(self.intruded_since.unwrap_or(0));
         w.u32(self.age);
         w.u64(self.age_since);
+        put_map(&mut w, &self.defence, |w, (strength, tick)| {
+            w.i64(*strength);
+            w.u64(*tick);
+        });
+        w.i64(self.enemy_peak.0);
+        w.u64(self.enemy_peak.1);
+        w.u32(self.rally_moves);
+        w.u64(self.rally_since);
         w.0
     }
 
@@ -423,6 +443,16 @@ impl Memory {
             age = r.u32()?;
             age_since = r.u64()?;
         }
+        let mut defence = BTreeMap::new();
+        let mut enemy_peak = (0, 0);
+        let mut rally_moves = 0;
+        let mut rally_since = 0;
+        if version >= 4 {
+            defence = get_map(&mut r, |r| Ok((r.i64()?, r.u64()?)))?;
+            enemy_peak = (r.i64()?, r.u64()?);
+            rally_moves = r.u32()?;
+            rally_since = r.u64()?;
+        }
         if !r.is_done() {
             return Err(AiError::CorruptState);
         }
@@ -452,6 +482,10 @@ impl Memory {
             intruded_since,
             age,
             age_since,
+            defence,
+            enemy_peak,
+            rally_moves,
+            rally_since,
         })
     }
 }
@@ -523,6 +557,10 @@ mod tests {
             intruded_since: Some(390),
             age: 3,
             age_since: 200,
+            defence: [(77, (1200, 350))].into(),
+            enemy_peak: (40, 330),
+            rally_moves: 2,
+            rally_since: 345,
         }
     }
 
@@ -545,10 +583,14 @@ mod tests {
         memory.intruded_since = None;
         memory.age = 0;
         memory.age_since = 0;
+        memory.defence.clear();
+        memory.enemy_peak = (0, 0);
+        memory.rally_moves = 0;
+        memory.rally_since = 0;
         let mut bytes = memory.to_bytes();
-        // Version 1 ended after the counters: five empty collections, an absent tick and
-        // the age clock follow them now.
-        bytes.truncate(bytes.len() - 5 * 4 - 9 - 12);
+        // Version 1 ended after the counters: five empty collections, an absent tick,
+        // the age clock, the empty defences, the enemy peak and the rally moves follow now.
+        bytes.truncate(bytes.len() - 5 * 4 - 9 - 12 - 4 - 16 - 12);
         bytes[..4].copy_from_slice(&1_u32.to_le_bytes());
         assert_eq!(Memory::from_bytes(&bytes).unwrap(), memory);
     }
@@ -558,10 +600,30 @@ mod tests {
         let mut memory = sample();
         memory.age = 0;
         memory.age_since = 0;
+        memory.defence.clear();
+        memory.enemy_peak = (0, 0);
+        memory.rally_moves = 0;
+        memory.rally_since = 0;
         let mut bytes = memory.to_bytes();
-        // Version 2 ended after the intruder tick; the age clock follows it now.
-        bytes.truncate(bytes.len() - 12);
+        // Version 2 ended after the intruder tick; the age clock, the (empty) defences, the
+        // enemy peak and the rally moves follow it now.
+        bytes.truncate(bytes.len() - 12 - 4 - 16 - 12);
         bytes[..4].copy_from_slice(&2_u32.to_le_bytes());
+        assert_eq!(Memory::from_bytes(&bytes).unwrap(), memory);
+    }
+
+    #[test]
+    fn the_third_layout_still_reads() {
+        let mut memory = sample();
+        memory.defence.clear();
+        memory.enemy_peak = (0, 0);
+        memory.rally_moves = 0;
+        memory.rally_since = 0;
+        let mut bytes = memory.to_bytes();
+        // Version 3 ended after the age clock; the defences, the enemy peak and the rally
+        // moves follow it.
+        bytes.truncate(bytes.len() - 4 - 16 - 12);
+        bytes[..4].copy_from_slice(&3_u32.to_le_bytes());
         assert_eq!(Memory::from_bytes(&bytes).unwrap(), memory);
     }
 

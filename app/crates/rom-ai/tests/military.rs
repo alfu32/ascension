@@ -150,6 +150,53 @@ fn the_army_waits_for_the_attack_ratio() {
     assert_eq!(near, 0, "soldiers went to the enemy city");
 }
 
+#[test]
+fn the_easiest_level_keeps_its_grace_and_sends_small_waves() {
+    let rules = seeing("easiest", |d| {
+        d.grace_ticks = 4000;
+        d.first_wave_max = 5;
+        d.wave_growth_per_hour = 0;
+        d.mistake_pct = 0;
+    });
+    let players = [("balanced", "easiest"), ("balanced", "easiest")];
+    let (mut world, mut brains) = common::plain(&rules, 3, &players);
+    let target = city_of(&world, THEM);
+    let city_type = world.entity(target).unwrap().type_id;
+    spawn(
+        &mut world,
+        ME,
+        breaker(&rules, city_type),
+        10,
+        Pos::flat(55_500, 52_500),
+    );
+    spawn(
+        &mut world,
+        ME,
+        soldier(&rules),
+        10,
+        Pos::flat(55_500, 57_500),
+    );
+    // Strong enough to take the city, but the grace period holds it back.
+    while world.tick() < 3800 {
+        run_first(&mut world, &mut brains, 200);
+        assert!(
+            brains[0].armies().all(|(_, a)| a.phase != Phase::Advance),
+            "set off during the grace period at tick {}",
+            world.tick()
+        );
+    }
+    let mut wave = None;
+    for _ in 0..40 {
+        run_first(&mut world, &mut brains, 200);
+        if let Some(main) = army(&brains[0], Role::Attack).filter(|a| a.phase == Phase::Advance) {
+            wave = Some(main.members.len());
+            break;
+        }
+    }
+    let wave = wave.expect("the main army never set off after the grace period");
+    assert!(wave <= 5, "a first wave of {wave} units");
+}
+
 /// Runs an advance into a sudden enemy army; returns whether the main army retreated.
 fn retreats(retreat: bool) -> bool {
     let rules = seeing("tougher", |d| d.retreats = retreat);

@@ -503,6 +503,8 @@ pub struct Snapshot {
     pub neutralised: Vec<EntityId>,
     /// Buildings being assimilated.
     pub assimilating: Vec<EntityId>,
+    /// Neutralised cities held down by an attacking team: city, team, start tick.
+    pub sieges: Vec<(EntityId, u32, u64)>,
     /// Rally points of producers, by producer id.
     pub rallies: Vec<(EntityId, crate::Rally)>,
     /// Each player's latest order failures, oldest first, in player order.
@@ -959,6 +961,12 @@ impl World {
             awake: self.avoid.awake.clone(),
             neutralised: self.capture.neutralised.iter().copied().collect(),
             assimilating: self.capture.assimilating.iter().copied().collect(),
+            sieges: self
+                .capture
+                .sieges
+                .iter()
+                .map(|(id, (team, since))| (*id, *team, *since))
+                .collect(),
             rallies: self.rallies().collect(),
             failures: self
                 .failures
@@ -1001,6 +1009,7 @@ impl World {
             awake,
             neutralised,
             assimilating,
+            sieges,
             rallies,
             failures,
         } = snapshot;
@@ -1302,6 +1311,10 @@ impl World {
             holds: players
                 .iter()
                 .filter_map(|p| p.hold.map(|h| (p.player.id, h)))
+                .collect(),
+            sieges: sieges
+                .into_iter()
+                .map(|(id, team, since)| (id, (team, since)))
                 .collect(),
         };
         world.victory = VictoryState {

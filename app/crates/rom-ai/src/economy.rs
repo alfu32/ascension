@@ -334,7 +334,10 @@ pub(crate) fn wishes(view: &View<'_>, eco: &Economy, late: bool, wishes: &mut Ve
                         760 + (g.desired - g.slots).clamp(0, 5) * 10
                     },
                     act: Act::Construct(site),
-                    reserve: nothing,
+                    // A resource with less than half the slots its workers need saves for
+                    // its next site: else cheaper wishes spend what it earns before it ever
+                    // pays for one, and idle hands wait for good.
+                    reserve: nothing || g.slots * 2 < g.desired,
                     opening: false,
                 });
             }
@@ -437,7 +440,12 @@ fn free_site(plan: &Plan<'_>, eco: &Economy, worker: &Entity, resource: DefId) -
 
 /// Sends builders to untended sites, idle workers to the resource that lacks them most,
 /// moves one worker off an overstaffed resource, and puts idle traders on a route.
-pub(crate) fn assign(plan: &mut Plan<'_>, eco: &mut Economy, rebalance: bool) {
+pub(crate) fn assign(
+    plan: &mut Plan<'_>,
+    eco: &mut Economy,
+    rebalance: bool,
+    unreachable: &BTreeSet<u32>,
+) {
     let workers: Vec<&Entity> = plan
         .view
         .own
@@ -456,6 +464,8 @@ pub(crate) fn assign(plan: &mut Plan<'_>, eco: &mut Economy, rebalance: bool) {
             e.build_progress.is_some()
                 && plan.view.is_building(e.type_id)
                 && !plan.view.tended.contains(&e.id)
+                // A site no builder could reach lately is left alone for a while.
+                && !unreachable.contains(&e.id.0)
         })
         .collect();
     for site in untended {
@@ -582,8 +592,30 @@ pub(crate) fn assign(plan: &mut Plan<'_>, eco: &mut Economy, rebalance: bool) {
     trade(plan);
 }
 
-/// Own complete cities far enough apart for a trade route, as (home, target) for a unit.
+/// The other end of a route for a trader: for one that flies through space (task 68's
+/// freighter), an own city on another planet of its star system; for one that walks, the
+/// own city farthest from its home city on its planet, far enough for a route.
 fn route_for(view: &View<'_>, trader: &Entity) -> Option<EntityId> {
+    if view.world.is_spacecraft_type(trader.type_id) {
+        let here = view
+            .world
+            .orbit(trader.id)
+            .map_or(trader.pos.body, |o| o.body);
+        let system = view.world.body(here)?.system;
+        return view
+            .cities
+            .iter()
+            .filter(|c| {
+                c.complete
+                    && c.pos.body != here
+                    && view
+                        .world
+                        .body(c.pos.body)
+                        .is_some_and(|b| b.system == system)
+            })
+            .min_by_key(|c| (c.pos.body, c.id))
+            .map(|c| c.id);
+    }
     let minimum = view.rules.constant("trade.min_route").unwrap_or(0).max(0) as u64;
     let cities: Vec<_> = view
         .cities
@@ -613,6 +645,20 @@ pub(crate) fn can_trade(view: &View<'_>) -> bool {
             }
         })
     })
+}
+
+/// Whether own cities stand on two planets of one star system: a route for a trader that
+/// flies.
+pub(crate) fn can_trade_in_space(view: &View<'_>) -> bool {
+    let systems: Vec<(u32, rom_sim::BodyId)> = view
+        .cities
+        .iter()
+        .filter(|c| c.complete)
+        .filter_map(|c| Some((view.world.body(c.pos.body)?.system, c.pos.body)))
+        .collect();
+    systems
+        .iter()
+        .any(|(system, body)| systems.iter().any(|(s, b)| s == system && b != body))
 }
 
 /// Own units that run trade routes.

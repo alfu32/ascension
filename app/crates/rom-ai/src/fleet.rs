@@ -25,12 +25,18 @@ use std::collections::BTreeSet;
 const SPACEPORT_SCORE: i64 = 620;
 /// Score of the wish for a transport when a colony is waiting for one.
 const TRANSPORT_SCORE: i64 = 540;
+/// Score of the wish for a satellite over a planet with a spaceport.
+const WATCHER_SCORE: i64 = 400;
 /// Ticks a transport waits at home for its passengers before it leaves with what it has.
 const LOAD_TICKS: u64 = 1200;
 /// Ticks a voyage stage may take before it is given up.
 const STAGE_TICKS: u64 = 12_000;
 /// Warships the escort keeps together before it strikes an enemy orbit.
 const STRIKE_SHIPS: usize = 3;
+/// How far beside the capital a patrol over it turns, in milli-tiles.
+const PATROL_REACH: i64 = 40_000;
+/// How far from a point a ship in orbit counts as above it, in milli-tiles.
+const ORBIT_SLACK: u64 = 4000;
 /// Troops a transport takes along besides its builder when there is room.
 const ESCORT_TROOPS: usize = 4;
 
@@ -57,6 +63,9 @@ pub(crate) struct Ships {
     pub launcher: Option<DefId>,
     /// The orbital craft with the most strength per resource.
     pub craft: Option<DefId>,
+    /// The unarmed ship that sees farthest and neither claims, carries nor trades: a
+    /// satellite that watches a planet from its orbit (task 68).
+    pub watcher: Option<DefId>,
 }
 
 /// Tags that let a unit claim a presence body.
@@ -165,6 +174,10 @@ impl Ships {
                     std::cmp::Reverse(*t),
                 )
             }),
+            watcher: of_kind(Kind::Other)
+                .into_iter()
+                .filter(|t| rules.entity_types[t].trader.is_none())
+                .max_by_key(|t| (rules.entity_types[t].los, std::cmp::Reverse(*t))),
             craft: view
                 .owned
                 .iter()
@@ -392,6 +405,35 @@ pub(crate) fn wishes(view: &View<'_>, weights: &Weights, memory: &Memory, wishes
             });
         }
     }
+    // A satellite over every planet where the player has a spaceport: it sees attackers
+    // coming long before the walls do.
+    if let Some(watcher) = ships.watcher {
+        let ports: BTreeSet<BodyId> = view
+            .own
+            .iter()
+            .filter(|e| {
+                operational(e)
+                    && view
+                        .rules
+                        .production
+                        .get(&e.type_id)
+                        .into_iter()
+                        .flatten()
+                        .any(|row| {
+                            row.mode == ProductionMode::Train && row.product_def_id == watcher
+                        })
+            })
+            .map(|e| e.pos.body)
+            .collect();
+        if view.count(watcher) < ports.len() as i64 {
+            wishes.push(Wish {
+                score: WATCHER_SCORE,
+                act: Act::Train(watcher),
+                reserve: false,
+                opening: false,
+            });
+        }
+    }
     if let Some(transport) = ships.transport
         && view.count(transport) == 0
         && !colony_targets(view, memory, &systems).is_empty()
@@ -460,7 +502,12 @@ fn fly(plan: &mut Plan<'_>, ship: &Entity, body: BodyId, reach: u64) -> bool {
 }
 
 /// Leads the ships for one thought.
-pub(crate) fn command(plan: &mut Plan<'_>, memory: &mut Memory, weights: &Weights) {
+pub(crate) fn command(
+    plan: &mut Plan<'_>,
+    memory: &mut Memory,
+    weights: &Weights,
+    difficulty: &rom_rules::AiDifficulty,
+) {
     if rank(&plan.view) < 1 || plan.view.world.systems().is_empty() {
         return;
     }
@@ -500,7 +547,9 @@ pub(crate) fn command(plan: &mut Plan<'_>, memory: &mut Memory, weights: &Weight
         .filter(|s| !memory.voyages.contains_key(&s.id.0))
         .chain(launchers.into_iter().filter(|l| !waiting.contains(&l.id)))
         .collect();
-    escort(plan, memory, &warships, &systems);
+    // No strike on an enemy world during the difficulty's grace period.
+    let strikes = tick >= difficulty.grace_ticks.max(0) as u64;
+    escort(plan, memory, &warships, &systems, strikes);
     colonise(plan, memory, &transports, &systems, weights, tick);
 }
 
@@ -622,7 +671,13 @@ fn presence_reach(view: &View<'_>, body: BodyId) -> u64 {
 
 /// Warships: contest enemy-held bodies, escort own claims, and with enough of them strike
 /// the orbit of a planet where enemy buildings are known.
-fn escort(plan: &mut Plan<'_>, memory: &mut Memory, ships: &[&Entity], systems: &BTreeSet<u32>) {
+fn escort(
+    plan: &mut Plan<'_>,
+    memory: &mut Memory,
+    ships: &[&Entity],
+    systems: &BTreeSet<u32>,
+    strikes: bool,
+) {
     let mut army = memory.armies.remove(&Role::Escort).unwrap_or_default();
     army.members.retain(|id| exists(&plan.view, *id));
     army.members.extend(ships.iter().map(|s| s.id.0));
@@ -636,7 +691,7 @@ fn escort(plan: &mut Plan<'_>, memory: &mut Memory, ships: &[&Entity], systems: 
     let enemy_world = memory
         .enemies
         .values()
-        .filter(|e| e.building)
+        .filter(|e| strikes && e.building)
         .map(|e| e.pos.body)
         .filter(|b| {
             view.world.body(*b).is_some_and(|info| {
@@ -665,6 +720,7 @@ fn escort(plan: &mut Plan<'_>, memory: &mut Memory, ships: &[&Entity], systems: 
         Phase::Gather
     };
     let Some(target) = target else {
+        patrol_home(plan, ships);
         memory.armies.insert(Role::Escort, army);
         return;
     };
@@ -702,13 +758,67 @@ fn escort(plan: &mut Plan<'_>, memory: &mut Memory, ships: &[&Entity], systems: 
             .filter(|(_, e)| e.pos.body == target && e.tick == plan.view.tick)
             .min_by_key(|(id, e)| (plan.view.distance(below, e.pos), **id))
             .map(|(id, _)| EntityId(*id));
-        if let Some(mark) = mark
-            && !plan.order(ship.id, "attack", None, Some(mark), None)
+        if let Some(mark) = mark {
+            if !plan.order(ship.id, "attack", None, Some(mark), None) {
+                break;
+            }
+            continue;
+        }
+        // Nothing in sight: a ship in orbit holds over one point (task 68), so it moves
+        // within its orbit to the nearest enemy building it remembers there.
+        let remembered = memory
+            .enemies
+            .values()
+            .filter(|e| e.building && e.pos.body == target)
+            .min_by_key(|e| {
+                (
+                    plan.view.distance(below, e.pos),
+                    e.pos.face,
+                    e.pos.x,
+                    e.pos.y,
+                )
+            })
+            .map(|e| e.pos);
+        if let Some(at) = remembered
+            && plan.view.distance(below, at) > ORBIT_SLACK
+            && !plan.order(ship.id, "attack_move", None, None, Some(at))
         {
             break;
         }
     }
     memory.armies.insert(Role::Escort, army);
+}
+
+/// Warships with nothing to do patrol the orbit of the home planet: in orbit a ship holds
+/// over one point (task 68), and a patrol circles the planet on a great circle through the
+/// capital, fighting what it meets.
+fn patrol_home(plan: &mut Plan<'_>, ships: &[&Entity]) {
+    let Some(capital) = plan.view.cities.first().map(|c| c.pos) else {
+        return;
+    };
+    for ship in ships {
+        if !ship.orders().is_empty() || plan.view.busy.contains(&ship.id) {
+            continue;
+        }
+        let Some(below) = plan
+            .view
+            .world
+            .orbit(ship.id)
+            .filter(|o| o.body == capital.body)
+            .map(|o| o.pos)
+        else {
+            continue;
+        };
+        // A patrol needs two points: over the capital it heads for a point beside it.
+        let point = if plan.view.distance(below, capital) > ORBIT_SLACK {
+            capital
+        } else {
+            plan.view.world.offset(capital, PATROL_REACH, 0)
+        };
+        if !plan.order(ship.id, "patrol", None, None, Some(point)) {
+            return;
+        }
+    }
 }
 
 /// Transports: load a builder and troops at home, fly to a planet without an own city,

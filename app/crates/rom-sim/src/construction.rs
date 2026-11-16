@@ -256,6 +256,10 @@ impl World {
         };
         if site.neutralised && site.owner == order.player && order.kind == "repair" {
             let site_id = site.id;
+            // Attackers holding the city down keep it down: the builder waits.
+            if self.capture.sieges.contains_key(&site_id) {
+                return;
+            }
             let at = site.pos;
             let bounds = footprint(&self.rules.entity_types[&site.type_id], at);
             if self.approach(builder, order, at, bounds) {

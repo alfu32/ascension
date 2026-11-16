@@ -30,6 +30,9 @@ pub const DEFAULT_TICKS_LIMIT: u64 = 108_000;
 const MAP_TRIES: u64 = 16;
 /// The least land one start may hold, as a share of the other's.
 const LAND_BALANCE_PCT: i64 = 75;
+/// The fewest node tiles the best gather site of one start may work, as a share of the
+/// other's.
+const NODE_BALANCE_PCT: i64 = 60;
 
 /// What the command was asked to run.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,7 +75,7 @@ pub struct DuelResult {
 }
 
 /// The first race in id order with its playable start factions, one picked by the seed.
-fn duel_faction(rules: &Rules, seed: u64) -> Result<DefId, String> {
+pub(crate) fn duel_faction(rules: &Rules, seed: u64) -> Result<DefId, String> {
     let age = rules
         .ages
         .values()
@@ -93,8 +96,9 @@ fn duel_faction(rules: &Rules, seed: u64) -> Result<DefId, String> {
     Ok(factions[(seed % factions.len() as u64) as usize])
 }
 
-/// Whether the starts are fair: about equal land, and room for the gather sites.
-fn fair(world: &World) -> bool {
+/// Whether the starts are fair: about equal land, and room for gather sites that work
+/// about as much node terrain (forest, rock) at every capital.
+pub(crate) fn fair(world: &World) -> bool {
     balanced_land(world) && gather_sites_fit(world)
 }
 
@@ -137,68 +141,84 @@ fn balanced_land(world: &World) -> bool {
     least * 100 >= most * LAND_BALANCE_PCT
 }
 
-/// Whether every player's capital can place a gather site on each node terrain that a site
-/// it may build at the start draws from, with some of that terrain in reach.
-fn gather_sites_fit(world: &World) -> bool {
+/// For each node terrain a start's gather sites draw from, the most node tiles one site
+/// placed in reach of each player's capital could work, in player order; `None` when a
+/// player has no city.
+fn best_site_nodes(world: &World) -> Option<BTreeMap<DefId, Vec<i64>>> {
     let rules = world.rules();
-    world
-        .players()
-        .filter(|p| p.id != PlayerId(0))
-        .all(|player| {
-            let Some(city) = world
-                .cities(player.id)
-                .first()
-                .and_then(|c| world.entity(*c))
-            else {
-                return false;
-            };
-            let active = player.active_sources();
-            let owned = player.owned_types(world);
-            let mut needs: BTreeMap<DefId, Vec<DefId>> = BTreeMap::new();
-            for et in rules.entity_types.values() {
-                if let Some(site) = et.gather_site.as_ref().filter(|s| s.slots_per_node > 0)
-                    && let Some(node) = site.needs_node_terrain_id
-                    && rules.is_available(et.id, player.faction)
-                    && rules.is_unlocked(et.id, &active, &owned)
-                {
-                    needs.entry(node).or_default().push(et.id);
+    let mut best: BTreeMap<DefId, Vec<i64>> = BTreeMap::new();
+    for player in world.players().filter(|p| p.id != PlayerId(0)) {
+        let city = world
+            .cities(player.id)
+            .first()
+            .and_then(|c| world.entity(*c))?;
+        let active = player.active_sources();
+        let owned = player.owned_types(world);
+        let mut needs: BTreeMap<DefId, Vec<DefId>> = BTreeMap::new();
+        for et in rules.entity_types.values() {
+            if let Some(site) = et.gather_site.as_ref().filter(|s| s.slots_per_node > 0)
+                && let Some(node) = site.needs_node_terrain_id
+                && rules.is_available(et.id, player.faction)
+                && rules.is_unlocked(et.id, &active, &owned)
+            {
+                needs.entry(node).or_default().push(et.id);
+            }
+        }
+        let reach = world.city_economic_radius(city.id) / 1000;
+        for (node, sites) in &needs {
+            let mut most = 0;
+            for site in sites {
+                let radius_mt = rules.entity_types[site]
+                    .gather_site
+                    .as_ref()
+                    .map_or(0, |s| s.node_radius);
+                let radius = radius_mt / 1000;
+                for dy in -reach..=reach {
+                    for dx in -reach..=reach {
+                        let at = world.offset(city.pos, dx * 1000, dy * 1000);
+                        let Ok(pos) = world.check_placement(player.id, *site, at) else {
+                            continue;
+                        };
+                        // Node tiles whose centres lie within the radius, as the
+                        // simulation counts them.
+                        let (bx, by) = (pos.x.div_euclid(1000), pos.y.div_euclid(1000));
+                        let mut count = 0;
+                        for ny in -radius - 1..=radius + 1 {
+                            for nx in -radius - 1..=radius + 1 {
+                                let dx = i64::from((bx + nx as i32) * 1000 + 500 - pos.x);
+                                let dy = i64::from((by + ny as i32) * 1000 + 500 - pos.y);
+                                if dx * dx + dy * dy <= radius_mt * radius_mt
+                                    && world.terrain_at(world.offset(pos, dx, dy)) == Some(*node)
+                                {
+                                    count += 1;
+                                }
+                            }
+                        }
+                        most = most.max(count);
+                    }
                 }
             }
-            let reach = world.city_economic_radius(city.id) / 1000;
-            needs.iter().all(|(node, sites)| {
-                sites.iter().any(|site| {
-                    let radius_mt = rules.entity_types[site]
-                        .gather_site
-                        .as_ref()
-                        .map_or(0, |s| s.node_radius);
-                    let radius = radius_mt / 1000;
-                    (-reach..=reach).any(|dy| {
-                        (-reach..=reach).any(|dx| {
-                            let at = world.offset(city.pos, dx * 1000, dy * 1000);
-                            world
-                                .check_placement(player.id, *site, at)
-                                .is_ok_and(|pos| {
-                                    // Node tiles whose centres lie within the radius, as
-                                    // the simulation counts them.
-                                    let (bx, by) = (pos.x.div_euclid(1000), pos.y.div_euclid(1000));
-                                    (-radius - 1..=radius + 1).any(|ny| {
-                                        (-radius - 1..=radius + 1).any(|nx| {
-                                            let dx =
-                                                i64::from((bx + nx as i32) * 1000 + 500 - pos.x);
-                                            let dy =
-                                                i64::from((by + ny as i32) * 1000 + 500 - pos.y);
-                                            let reach = radius_mt;
-                                            dx * dx + dy * dy <= reach * reach
-                                                && world.terrain_at(world.offset(pos, dx, dy))
-                                                    == Some(*node)
-                                        })
-                                    })
-                                })
-                        })
-                    })
-                })
-            })
+            best.entry(*node).or_default().push(most);
+        }
+    }
+    Some(best)
+}
+
+/// Whether every player's capital can place a gather site on each node terrain that a site
+/// it may build at the start draws from, with some of that terrain in reach, and the best
+/// such site of one start works about as many node tiles as the other's (a start whose
+/// only woodcutter's camp reaches one tree of forest runs out of timber at once).
+fn gather_sites_fit(world: &World) -> bool {
+    let players = world.players().filter(|p| p.id != PlayerId(0)).count();
+    best_site_nodes(world).is_some_and(|best| {
+        best.values().all(|counts| {
+            let (least, most) = (
+                counts.iter().copied().min().unwrap_or(0),
+                counts.iter().copied().max().unwrap_or(0),
+            );
+            counts.len() == players && least > 0 && least * 100 >= most * NODE_BALANCE_PCT
         })
+    })
 }
 
 /// Plays one seeded match until a team wins or the tick limit.
@@ -236,6 +256,12 @@ pub fn play(rules: &Arc<Rules>, duel: &DuelRequest, seed: u64) -> Result<DuelRes
             _ => {}
         }
     };
+    if std::env::var("ROM_NODES").is_ok() {
+        eprintln!(
+            "nodes seed={seed} maps={maps} {:?}",
+            best_site_nodes(&world)
+        );
+    }
     let mut brains = request
         .players
         .iter()
@@ -352,6 +378,80 @@ fn trace(world: &World, brain: &Brain, seed: u64) {
                         )
                     })
                     .collect()
+            } else if let Some(goal) = a.goal.filter(|_| a.phase == rom_ai::Phase::Advance) {
+                // How far the members are from the goal, in tiles, and what they are doing.
+                let mut far: Vec<u64> = a
+                    .members
+                    .iter()
+                    .filter_map(|id| world.entity(rom_sim::EntityId(*id)))
+                    .filter_map(|e| world.distance(e.pos, goal))
+                    .map(|d| d / 1000)
+                    .collect();
+                far.sort_unstable();
+                let mut doing: BTreeMap<String, usize> = BTreeMap::new();
+                for e in a
+                    .members
+                    .iter()
+                    .filter_map(|id| world.entity(rom_sim::EntityId(*id)))
+                {
+                    let kind = e.orders().front().map_or("-".to_string(), |o| {
+                        format!("{}{}", o.kind, if o.automatic { "*" } else { "" })
+                    });
+                    *doing.entry(kind).or_default() += 1;
+                }
+                let doing: Vec<String> = doing.iter().map(|(k, n)| format!("{k}={n}")).collect();
+                // Who stands around the members: enemies within 10 tiles of any, by type.
+                let mut around: BTreeMap<DefId, BTreeSet<u32>> = BTreeMap::new();
+                for e in a
+                    .members
+                    .iter()
+                    .filter_map(|id| world.entity(rom_sim::EntityId(*id)))
+                {
+                    for other in world.entities_in_radius(e.pos, 10_000) {
+                        if let Some(o) = world.entity(other)
+                            && o.owner != PlayerId(0)
+                            && (o.owner != brain.player()
+                                || world.rules().entity_types[&o.type_id].supply.is_some())
+                        {
+                            around.entry(o.type_id).or_default().insert(o.id.0);
+                        }
+                    }
+                }
+                let around: Vec<String> = around
+                    .iter()
+                    .map(|(t, ids)| {
+                        format!(
+                            "{}x{}",
+                            world.rules().key(*t).trim_start_matches("unit."),
+                            ids.len()
+                        )
+                    })
+                    .collect();
+                // Own supply units: tiles from the goal and what they do.
+                let wagons: Vec<String> = world
+                    .entities()
+                    .filter(|e| {
+                        e.owner == brain.player()
+                            && world.rules().entity_types[&e.type_id].supply.is_some()
+                    })
+                    .map(|e| {
+                        format!(
+                            "{}:{}",
+                            world.distance(e.pos, goal).map_or(0, |d| d / 1000),
+                            e.orders().front().map_or("-", |o| o.kind.as_str())
+                        )
+                    })
+                    .collect();
+                vec![format!(
+                    "[goal {},{} near={} mid={} {} supply={} vs {}]",
+                    goal.x / 1000,
+                    goal.y / 1000,
+                    far.first().copied().unwrap_or(0),
+                    far.get(far.len() / 2).copied().unwrap_or(0),
+                    doing.join(" "),
+                    wagons.join(","),
+                    around.join(" ")
+                )]
             } else {
                 Vec::new()
             };
@@ -413,12 +513,40 @@ fn trace(world: &World, brain: &Brain, seed: u64) {
                 )
             })
             .collect();
+        // The military by type, most numerous first.
+        let mut kinds: BTreeMap<DefId, usize> = BTreeMap::new();
+        for e in world.entities().filter(|e| e.owner == brain.player()) {
+            let et = &rules.entity_types[&e.type_id];
+            if et.class == rom_rules::EntityClass::Unit
+                && !et.weapons.is_empty()
+                && et.harvester.is_empty()
+                && et.builder.is_none()
+            {
+                *kinds.entry(e.type_id).or_default() += 1;
+            }
+        }
+        let mut kinds: Vec<(usize, DefId)> = kinds.into_iter().map(|(t, n)| (n, t)).collect();
+        kinds.sort_by_key(|(n, t)| (std::cmp::Reverse(*n), *t));
+        let kinds: Vec<String> = kinds
+            .iter()
+            .map(|(n, t)| format!("{}x{n}", rules.key(*t)))
+            .collect();
+        // Orders that failed lately, by kind and reason.
+        let mut failed: BTreeMap<String, usize> = BTreeMap::new();
+        for f in world.order_failures(brain.player()) {
+            *failed
+                .entry(format!("{}:{}", f.kind, f.reason))
+                .or_default() += 1;
+        }
+        let failed: Vec<String> = failed.iter().map(|(k, n)| format!("{k}={n}")).collect();
+        println!("  failed=[{}]", failed.join(" "));
         println!(
-            "  econ workers={} idle={} {} stats={:?}",
+            "  econ workers={} idle={} {} stats={:?} army=[{}]",
             s.workers,
             s.idle_workers,
             economy.join(" "),
-            brain.stats()
+            brain.stats(),
+            kinds.join(" ")
         );
     }
 }
