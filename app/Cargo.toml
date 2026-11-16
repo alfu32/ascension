@@ -16,7 +16,7 @@ exclude = ["vendor"]
 resolver = "3"
 
 [workspace.package]
-version = "0.0.49"
+version = "0.0.51"
 edition = "2024"
 rust-version = "1.99.1"
 license = "MIT OR Apache-2.0"
@@ -41,3 +41,14 @@ image = { version = "=0.25.10", default-features = false, features = ["png"] }
 gpui-component = { path = "vendor/gpui-component" }
 # GPUI 0.2.2 resolves xattr 0.2.3, whose Linux branch uses ENOATTR; the copy maps it to ENODATA.
 xattr = { path = "vendor/xattr" }
+
+# The late-game save test runs the whole content audit; the simulation crates are
+# optimised in dev and test builds so it finishes in a minute or two.
+[profile.dev.package.rom-sim]
+opt-level = 3
+[profile.dev.package.rom-geo]
+opt-level = 3
+[profile.dev.package.rom-rules]
+opt-level = 3
+[profile.dev.package.rom-mapgen]
+opt-level = 3

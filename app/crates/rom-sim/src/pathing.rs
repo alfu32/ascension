@@ -132,7 +132,7 @@ pub(crate) struct Pathing {
     pub stamp: Vec<u32>,
     pub closed: Vec<u32>,
     /// Heuristic per tile, valid where `stamp` equals the search generation.
-    h: Vec<u64>,
+    pub(crate) h: Vec<u64>,
     pub generation: u32,
     /// Tile centres in space on a cube (doubled milli-tiles); empty for a flat map.
     space: Vec<[i32; 3]>,
