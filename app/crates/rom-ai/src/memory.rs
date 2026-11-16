@@ -3,16 +3,124 @@
 //! Everything a later decision depends on lives here, so a brain restored from these bytes
 //! issues the same orders as the one that was saved.
 
+use crate::view::Cell;
 use crate::{
     AiError,
     bytes::{Reader, Writer},
 };
 use rom_rules::DefId;
 use rom_sim::{BodyId, PlayerId, Pos};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-/// Version of the byte layout written by `Memory::to_bytes`.
-pub(crate) const VERSION: u32 = 1;
+/// Version of the byte layout written by `Memory::to_bytes`. Version 1 (task 60) is the
+/// same layout without the armies, the scouting record and the fleet, and still reads.
+pub(crate) const VERSION: u32 = 2;
+
+/// What an army is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Role {
+    /// Home guard: stays at the rally point and answers attacks on cities.
+    Defend,
+    /// The main army: gathers, attacks the best target, retreats when beaten.
+    Attack,
+    /// Goes after workers, gather sites and traders where the defence is thin.
+    Raid,
+    /// Explores the ground nobody has looked at for a while.
+    Scout,
+    /// Warships: escort claimed bodies, contest the enemy's and strike enemy orbits.
+    Escort,
+}
+
+impl Role {
+    /// Every role, in the order armies are served.
+    pub const ALL: [Role; 5] = [
+        Role::Defend,
+        Role::Attack,
+        Role::Raid,
+        Role::Scout,
+        Role::Escort,
+    ];
+
+    fn code(self) -> u8 {
+        self as u8
+    }
+
+    fn from_code(code: u8) -> Result<Self, AiError> {
+        Self::ALL
+            .get(usize::from(code))
+            .copied()
+            .ok_or(AiError::CorruptState)
+    }
+}
+
+/// What an army is doing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Phase {
+    /// Waiting at the rally point for strength.
+    #[default]
+    Gather,
+    /// On its way to its target, or fighting there.
+    Advance,
+    /// Pulling back to the rally point after losing.
+    Retreat,
+    /// Meeting enemies inside the borders.
+    Respond,
+}
+
+impl Phase {
+    const ALL: [Phase; 4] = [
+        Phase::Gather,
+        Phase::Advance,
+        Phase::Retreat,
+        Phase::Respond,
+    ];
+
+    fn from_code(code: u8) -> Result<Self, AiError> {
+        Self::ALL
+            .get(usize::from(code))
+            .copied()
+            .ok_or(AiError::CorruptState)
+    }
+}
+
+/// A group of own units with one role.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Army {
+    /// What it is doing.
+    pub phase: Phase,
+    /// Its units (or ships), by entity id.
+    pub members: BTreeSet<u32>,
+    /// The enemy entity (or, for warships, the body) it is after.
+    pub target: Option<u32>,
+    /// Where it is going.
+    pub goal: Option<Pos>,
+    /// Tick of the last change of phase or target.
+    pub since: u64,
+    /// Strength when the advance began.
+    pub peak: i64,
+}
+
+/// What a ship has been sent to do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Job {
+    /// Keep station beside a resource body so it pays.
+    Claim,
+    /// Carry builders and troops to a planet, land them and found a city.
+    Colonise,
+}
+
+/// One ship's errand: the job, the body it is for, the stage reached and since when.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Voyage {
+    /// The job.
+    pub job: Job,
+    /// The body it is for.
+    pub body: u32,
+    /// How far it has got: for a colony 0 loading, 1 flying, 2 landing, 3 landed.
+    pub stage: u8,
+    /// Tick the stage began.
+    pub since: u64,
+}
 
 /// An enemy entity as it was last seen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -81,6 +189,18 @@ pub(crate) struct Memory {
     pub rally: Option<Pos>,
     /// Activity counters.
     pub stats: BrainStats,
+    /// Armies by role.
+    pub armies: BTreeMap<Role, Army>,
+    /// Cells of the map and the tick an own unit last stood there.
+    pub looked: BTreeMap<Cell, u64>,
+    /// Targets the army could not reach, and the tick until which they are left alone.
+    pub unreachable: BTreeMap<u32, u64>,
+    /// Ships on an errand, by entity id.
+    pub voyages: BTreeMap<u32, Voyage>,
+    /// Bodies an own ship has orbited.
+    pub visited: BTreeSet<u32>,
+    /// Tick since which armed intruders have been seen without a break.
+    pub intruded_since: Option<u64>,
 }
 
 fn put_pos(w: &mut Writer, pos: Pos) {
@@ -158,6 +278,42 @@ impl Memory {
         ] {
             w.u64(value);
         }
+        w.u32(self.armies.len() as u32);
+        for (role, army) in &self.armies {
+            w.u8(role.code());
+            w.u8(army.phase as u8);
+            w.u32(army.members.len() as u32);
+            for member in &army.members {
+                w.u32(*member);
+            }
+            w.bool(army.target.is_some());
+            w.u32(army.target.unwrap_or(0));
+            w.bool(army.goal.is_some());
+            put_pos(&mut w, army.goal.unwrap_or_default());
+            w.u64(army.since);
+            w.i64(army.peak);
+        }
+        w.u32(self.looked.len() as u32);
+        for ((body, face, x, y), tick) in &self.looked {
+            w.u32(*body);
+            w.u8(*face);
+            w.i32(*x);
+            w.i32(*y);
+            w.u64(*tick);
+        }
+        put_map(&mut w, &self.unreachable, |w, v| w.u64(*v));
+        put_map(&mut w, &self.voyages, |w, v| {
+            w.u8(v.job as u8);
+            w.u32(v.body);
+            w.u8(v.stage);
+            w.u64(v.since);
+        });
+        w.u32(self.visited.len() as u32);
+        for body in &self.visited {
+            w.u32(*body);
+        }
+        w.bool(self.intruded_since.is_some());
+        w.u64(self.intruded_since.unwrap_or(0));
         w.0
     }
 
@@ -165,7 +321,7 @@ impl Memory {
     pub fn from_bytes(data: &[u8]) -> Result<Self, AiError> {
         let mut r = Reader::new(data);
         let version = r.u32()?;
-        if version != VERSION {
+        if !(1..=VERSION).contains(&version) {
             return Err(AiError::UnknownVersion(version));
         }
         let rng = r.u64()?;
@@ -201,6 +357,59 @@ impl Memory {
             reject_streak: r.u64()?,
             max_reject_streak: r.u64()?,
         };
+        let mut armies = BTreeMap::new();
+        let mut looked = BTreeMap::new();
+        let mut unreachable = BTreeMap::new();
+        let mut voyages = BTreeMap::new();
+        let mut visited = BTreeSet::new();
+        let mut intruded_since = None;
+        if version >= 2 {
+            for _ in 0..r.len()? {
+                let role = Role::from_code(r.u8()?)?;
+                let phase = Phase::from_code(r.u8()?)?;
+                let mut members = BTreeSet::new();
+                for _ in 0..r.len()? {
+                    members.insert(r.u32()?);
+                }
+                let has_target = r.bool()?;
+                let target = r.u32()?;
+                let has_goal = r.bool()?;
+                let goal = get_pos(&mut r)?;
+                let army = Army {
+                    phase,
+                    members,
+                    target: has_target.then_some(target),
+                    goal: has_goal.then_some(goal),
+                    since: r.u64()?,
+                    peak: r.i64()?,
+                };
+                armies.insert(role, army);
+            }
+            for _ in 0..r.len()? {
+                let cell = (r.u32()?, r.u8()?, r.i32()?, r.i32()?);
+                looked.insert(cell, r.u64()?);
+            }
+            unreachable = get_map(&mut r, |r| r.u64())?;
+            voyages = get_map(&mut r, |r| {
+                let job = match r.u8()? {
+                    0 => Job::Claim,
+                    1 => Job::Colonise,
+                    _ => return Err(AiError::CorruptState),
+                };
+                Ok(Voyage {
+                    job,
+                    body: r.u32()?,
+                    stage: r.u8()?,
+                    since: r.u64()?,
+                })
+            })?;
+            for _ in 0..r.len()? {
+                visited.insert(r.u32()?);
+            }
+            let intruded = r.bool()?;
+            let since = r.u64()?;
+            intruded_since = intruded.then_some(since);
+        }
         if !r.is_done() {
             return Err(AiError::CorruptState);
         }
@@ -222,6 +431,12 @@ impl Memory {
             blocked,
             rally,
             stats,
+            armies,
+            looked,
+            unreachable,
+            voyages,
+            visited,
+            intruded_since,
         })
     }
 }
@@ -265,6 +480,32 @@ mod tests {
                 reject_streak: 0,
                 max_reject_streak: 1,
             },
+            armies: [(
+                Role::Attack,
+                Army {
+                    phase: Phase::Advance,
+                    members: [12, 15, 19].into(),
+                    target: Some(77),
+                    goal: Some(Pos::flat(70_000, 71_000)),
+                    since: 380,
+                    peak: 900,
+                },
+            )]
+            .into(),
+            looked: [((0, 0, 3, -2), 120)].into(),
+            unreachable: [(78, 4000)].into(),
+            voyages: [(
+                44,
+                Voyage {
+                    job: Job::Colonise,
+                    body: 5,
+                    stage: 2,
+                    since: 410,
+                },
+            )]
+            .into(),
+            visited: [5, 7].into(),
+            intruded_since: Some(390),
         }
     }
 
@@ -274,6 +515,23 @@ mod tests {
         assert_eq!(Memory::from_bytes(&memory.to_bytes()).unwrap(), memory);
         let empty = Memory::default();
         assert_eq!(Memory::from_bytes(&empty.to_bytes()).unwrap(), empty);
+    }
+
+    #[test]
+    fn the_first_layout_still_reads() {
+        let mut memory = sample();
+        memory.armies.clear();
+        memory.looked.clear();
+        memory.unreachable.clear();
+        memory.voyages.clear();
+        memory.visited.clear();
+        memory.intruded_since = None;
+        let mut bytes = memory.to_bytes();
+        // Version 1 ended after the counters: five empty collections and an absent tick
+        // follow them now.
+        bytes.truncate(bytes.len() - 5 * 4 - 9);
+        bytes[..4].copy_from_slice(&1_u32.to_le_bytes());
+        assert_eq!(Memory::from_bytes(&bytes).unwrap(), memory);
     }
 
     #[test]
@@ -289,6 +547,8 @@ mod tests {
         let mut other = bytes;
         other[0] = 9;
         assert_eq!(Memory::from_bytes(&other), Err(AiError::UnknownVersion(9)));
+        other[0] = 0;
+        assert_eq!(Memory::from_bytes(&other), Err(AiError::UnknownVersion(0)));
         assert_eq!(Memory::from_bytes(&[]), Err(AiError::CorruptState));
     }
 }

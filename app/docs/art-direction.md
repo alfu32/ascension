@@ -89,13 +89,24 @@ left shoulder towards the target, beds the butt in the right shoulder with the
 piece beside the cheek and holds the barrel up with the left hand; a rider turns
 in the saddle the same way while the legs keep straddling the horse.
 
+Task 46 adds the first machines. A tank's tracks are belts round road wheels that
+turn as it moves; its turret swings off and back onto the target before each shot
+and the gun recoils; a machine gun fires bursts, its flash showing on every other
+keyframe, while its seated gunner keeps both hands on it and shakes with it; a
+propeller spins all the time; an aircraft flies, bobbing and banking gently from
+side to side while it moves. The renderer draws every unit that is not a
+spacecraft on the ground (only ships in orbit get an altitude), so an aircraft's
+model carries its own height: the biplane's fuselage is 2.7 tiles up and its
+shadow falls on the ground below. A medic bends over the wounded with both hands
+when it works. Funnels and chimneys do not smoke yet.
+
 ## Budgets
 
 | Model | Near | Far |
 | --- | --- | --- |
 | Building | ≤ 1,500 triangles | ≤ 300 |
-| Unit figure | ≤ 300 | ≤ 80 |
-| Vehicle, ship | ≤ 800 | ≤ 160 |
+| Unit figure (each figure of a crew) | ≤ 300 | ≤ 80 |
+| Vehicle, ship, aircraft | ≤ 800 | ≤ 160 |
 
 Construction: a foundation plate first, then the model rises from the ground
 as work progresses.

@@ -1,12 +1,12 @@
 //! The production manager: keeps the army share, picks unit types from what the player can
-//! make and what the enemies it has seen are weak to, and gathers new units at a rally point.
+//! make and what the enemies it has seen are weak to, and chooses the rally point.
 
 use crate::{
     Weights,
     economy::can_trade,
     memory::{EnemySighting, Memory},
-    plan::{Act, Plan, Wish},
-    view::{View, operational},
+    plan::{Act, Wish},
+    view::View,
 };
 use rom_rules::{DefId, EntityClass, Layer, ProductionMode, Rules};
 use rom_sim::Pos;
@@ -14,8 +14,6 @@ use std::collections::BTreeMap;
 
 /// Distance of the rally point from the capital, in milli-tiles.
 const RALLY_REACH: i64 = 9000;
-/// Idle military units farther than this from the rally point are called to it.
-const RALLY_SLACK: u64 = 6000;
 
 /// Whether a type fights for a living: an armed, moving unit that neither works, builds,
 /// trades nor carries.
@@ -31,8 +29,13 @@ pub(crate) fn is_military(rules: &Rules, type_id: DefId) -> bool {
     })
 }
 
-/// Whether a unit type can move on the ground its player's capital stands on.
-fn walks_at_home(view: &View<'_>, type_id: DefId) -> bool {
+/// Whether a unit type can move on the ground its player's capital stands on (orbital craft,
+/// which the space manager leads, do not count).
+pub(crate) fn walks_at_home(view: &View<'_>, type_id: DefId) -> bool {
+    // Orbital craft belong to the space manager.
+    if view.world.is_craft_type(type_id) {
+        return false;
+    }
     let Some(class) = view.rules.entity_types[&type_id]
         .movement
         .as_ref()
@@ -59,7 +62,12 @@ fn walks_at_home(view: &View<'_>, type_id: DefId) -> bool {
 }
 
 /// Damage per second of `attacker` against an armour class, with the damage matrix.
-fn dps_against(rules: &Rules, attacker: DefId, armor_class: Option<u32>, armor: i64) -> i64 {
+pub(crate) fn dps_against(
+    rules: &Rules,
+    attacker: DefId,
+    armor_class: Option<u32>,
+    armor: i64,
+) -> i64 {
     rules.entity_types[&attacker]
         .weapons
         .iter()
@@ -223,7 +231,7 @@ pub(crate) fn wishes(
 }
 
 /// Chooses the rally point once: open ground of the player beside the capital.
-fn rally_point(view: &View<'_>) -> Option<Pos> {
+pub(crate) fn rally_point(view: &View<'_>) -> Option<Pos> {
     let capital = view.cities.first()?;
     let steps = [
         (1, 0),
@@ -247,38 +255,4 @@ fn rally_point(view: &View<'_>) -> Option<Pos> {
                 terrain.buildable && terrain.layer == Layer::Ground
             })
         })
-}
-
-/// Calls idle military units to the rally point.
-pub(crate) fn rally(plan: &mut Plan<'_>, memory: &mut Memory) {
-    if memory.rally.is_none_or(|at| {
-        plan.view
-            .cities
-            .first()
-            .is_none_or(|c| c.pos.body != at.body)
-    }) {
-        memory.rally = rally_point(&plan.view);
-    }
-    let Some(rally) = memory.rally else {
-        return;
-    };
-    let idle: Vec<_> = plan
-        .view
-        .own
-        .iter()
-        .copied()
-        .filter(|e| {
-            is_military(plan.view.rules, e.type_id)
-                && operational(e)
-                && plan.view.is_idle(e)
-                && e.pos.body == rally.body
-                && plan.view.distance(e.pos, rally) > RALLY_SLACK
-        })
-        .map(|e| e.id)
-        .collect();
-    for unit in idle {
-        if !plan.order(unit, "move", None, None, Some(rally)) {
-            return;
-        }
-    }
 }

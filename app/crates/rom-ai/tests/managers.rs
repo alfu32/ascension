@@ -280,7 +280,7 @@ fn mistakes_change_the_choices() {
         let rules = Arc::new(rules);
         let (mut world, mut brains) = common::plain(&rules, 3, &[("balanced", "tougher")]);
         let mut orders = Vec::new();
-        for tick in 0..1500 {
+        for tick in 0..3000 {
             for command in brains[0].think(&world, tick) {
                 let _ = world.submit(command.clone());
                 orders.push((command.kind, command.subject));

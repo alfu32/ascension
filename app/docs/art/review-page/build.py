@@ -46,7 +46,21 @@ OVERVIEW5 = [
     ("unit.crossbowman_medieval_attack", "Crossbowman, after"),
     ("gallery_units_close", "Every unit so far, close: <code>--gallery units</code>"),
 ]
-OVERVIEW = OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
+OVERVIEW6 = [
+    ("gallery_industrial", "Industrial age, game camera: <code>--gallery industrial</code>"),
+    ("gallery_industrial_close", "Industrial age, close: <code>--gallery industrial</code>"),
+    ("ages_bld.city", "One building through five ages: the city, ancient to industrial"),
+    ("match_industrial", "In a match in the industrial age: the city, its farm and citizens"),
+    ("gallery_units_close", "Every unit so far, close: <code>--gallery units</code>"),
+    ("unit.light_tank_industrial_attack", "A tank firing: the turret has swung back onto the target, the gun recoils"),
+    ("unit.machine_gunner_industrial_attack", "A machine gun firing a burst"),
+    ("unit.biplane_industrial_move", "A biplane under way: aloft, banking, its propeller spinning"),
+    ("orbital-dogfight", "Starfaring: orbital fighters fighting in orbit above a city"),
+    ("orbital-battery", "Starfaring: ground batteries firing at a ship in orbit"),
+    ("unit.musketeer_gunpowder_attack_before", "Still open from round 5 — firing a long gun, before: one hand, from the hip"),
+    ("unit.musketeer_gunpowder_attack", "Round 5 — after: from the shoulder, both hands (also the arquebusier and crossbowman)"),
+]
+OVERVIEW = OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
     ("gallery_ancient", "Ancient age, game camera: <code>--gallery ancient</code>"),
     ("gallery_classical", "Classical age, game camera: <code>--gallery classical</code>"),
     ("gallery_classical_close_team2", "Classical age, close, in player 2's blue to show where team colour sits"),
@@ -64,16 +78,20 @@ def fmt_params(params):
 
 def round_of(m):
     """Review round: 1 the samples, 2 early buildings, 3 early units, 4 medieval models and
-    gunpowder units, 5 early-modern buildings and enlightenment models."""
+    gunpowder units, 5 early-modern buildings and enlightenment models, 6 industrial models."""
     if m["id"] in ROUND1:
         return 1
     unit = m["entity"].startswith("unit.")
+    if m["age"] == "age.industrial":
+        return 6
     if m["age"] == "age.enlightenment" or (m["age"] == "age.gunpowder" and not unit):
         return 5
     if m["age"] in ("age.medieval", "age.gunpowder"):
         return 4
+    if m["id"] == "unit.transport_ship@starfaring":
+        return 5
     if m["age"] not in ("age.ancient", "age.classical", None, ""):
-        return 5  # later models not yet reviewed (the starfaring transport ship)
+        return 6  # later models built before their age's card: the task 58 craft, carrier, battery
     return 3 if unit else 2
 
 models = []
@@ -104,7 +122,7 @@ for m in manifest["models"]:
         ],
     })
 
-AGES = ["ancient", "classical", "medieval", "gunpowder", "enlightenment", "any"]
+AGES = ["ancient", "classical", "medieval", "gunpowder", "enlightenment", "industrial", "any"]
 models.sort(key=lambda m: (-m["round"], not m["id"].startswith("unit."), AGES.index(m["age"]) if m["age"] in AGES else 9, m["id"]))
 
 template = (here / "page.html").read_text()

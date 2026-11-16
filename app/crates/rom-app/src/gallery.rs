@@ -561,21 +561,34 @@ mod tests {
             changed,
             [
                 "bld.ground_battery@starfaring",
+                "bld.library@industrial",
+                "bld.refinery@industrial",
                 "bld.smelter@gunpowder",
+                "bld.smelter@industrial",
                 "bld.smelter@medieval",
+                "bld.stable@industrial",
+                "bld.tower@industrial",
+                "unit.anti_tank_rifleman@industrial",
+                "unit.armoured_car@industrial",
                 "unit.arquebusier@gunpowder",
+                "unit.biplane@industrial",
                 "unit.bombard@gunpowder",
                 "unit.cannon@enlightenment",
                 "unit.carrier@starfaring",
                 "unit.cuirassier@gunpowder",
                 "unit.dragoon@enlightenment",
+                "unit.field_gun@industrial",
                 "unit.frigate@enlightenment",
                 "unit.fusilier@enlightenment",
+                "unit.ironclad@industrial",
                 "unit.light_infantry@enlightenment",
+                "unit.light_tank@industrial",
+                "unit.machine_gunner@industrial",
                 "unit.musketeer@gunpowder",
                 "unit.orbital_bomber@starfaring",
                 "unit.orbital_fighter@starfaring",
                 "unit.ranger@enlightenment",
+                "unit.rifleman@industrial",
                 "unit.transport_ship@starfaring"
             ]
         );
@@ -622,12 +635,20 @@ mod tests {
             );
             let building = rules.entity_type(entry.entity).unwrap().class == EntityClass::Building;
             let vehicle = is_vehicle(entry);
+            // A crew of foot figures (a machine gun's) has each figure's budget.
+            let crew = entry
+                .baked
+                .parts
+                .iter()
+                .filter(|p| p.shape == PartShape::Figure)
+                .count()
+                .max(1);
             let (near, far) = if building {
                 (1_500, 300)
             } else if vehicle {
                 (800, 160)
             } else {
-                (300, 80)
+                (300 * crew, 80 * crew)
             };
             let baked = &entry.baked;
             assert!(
@@ -658,12 +679,18 @@ mod tests {
         }
     }
 
-    /// Mounted units, siege engines, wagons and ships: models with a beast, a wheel or a hull.
+    /// Mounted units, siege engines, wagons, ships, tanks and aircraft: models with a beast, a
+    /// wheel, a hull, a track or a propeller.
     fn is_vehicle(entry: &ModelEntry) -> bool {
         entry.baked.parts.iter().any(|p| {
             matches!(
                 p.shape,
-                PartShape::Quadruped | PartShape::Wheel | PartShape::Hull | PartShape::OarBank
+                PartShape::Quadruped
+                    | PartShape::Wheel
+                    | PartShape::Hull
+                    | PartShape::OarBank
+                    | PartShape::Track
+                    | PartShape::Propeller
             )
         })
     }
@@ -1053,6 +1080,45 @@ mod tests {
     }
 
     #[test]
+    fn industrial_models_are_complete() {
+        let (rules, book) = book();
+        let industrial_id = rules.id_of("age.industrial").unwrap();
+        let industrial = rules.ages[&industrial_id].ordinal;
+        let (mut first_looks, mut restyled) = (0, 0);
+        for (&id, et) in &rules.entity_types {
+            let Some(first) = et.first_age_id else {
+                continue;
+            };
+            let Some(age) = rules.ages.get(&first).map(|a| a.ordinal) else {
+                continue;
+            };
+            let has = |age_id| {
+                book.entries
+                    .iter()
+                    .any(|e| e.entity == id && e.faction.is_none() && e.age == Some(age_id))
+            };
+            let key = rules.key(id);
+            match et.class {
+                // Every building and unit of the industrial age has its first look; every
+                // earlier building changes look when its owner reaches the industrial age.
+                EntityClass::Building | EntityClass::Unit if age == industrial => {
+                    assert!(has(first), "{key} has no composed look for its first age");
+                    first_looks += 1;
+                }
+                EntityClass::Building if age < industrial => {
+                    assert!(has(industrial_id), "{key} has no industrial look");
+                    restyled += 1;
+                }
+                _ => {}
+            }
+        }
+        assert!(
+            first_looks >= 15 && restyled >= 19,
+            "{first_looks} {restyled}"
+        );
+    }
+
+    #[test]
     fn approved_models_are_unchanged() {
         let (_, book) = book();
         let changed = changed_models(&book, &approved(APPROVED));
@@ -1105,7 +1171,8 @@ mod tests {
                 "bld.city@ancient",
                 "bld.city@classical",
                 "bld.city@medieval",
-                "bld.city@gunpowder"
+                "bld.city@gunpowder",
+                "bld.city@industrial"
             ]
         );
         assert_eq!(ids("bld.library@ancient"), ["bld.library@ancient"]);

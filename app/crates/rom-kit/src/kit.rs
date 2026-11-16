@@ -560,6 +560,8 @@ pub fn paint(part: &PartSpec, p: &mut Painter<'_>, fine: bool) -> Vec<Socket> {
         Shape::Sail => sail(&k, p, fine),
         Shape::Shield => shield(&k, p, fine),
         Shape::Bow => bow(&k, p, fine),
+        Shape::Track => track(&k, p, fine),
+        Shape::Propeller => propeller(&k, p, fine),
         Shape::Include => {}
         Shape::Custom => custom(part, &k, p, fine),
     }
@@ -1293,17 +1295,19 @@ fn hull(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
 
 /// The motion knobs of a figure.
 fn figure_style(k: &Knobs<'_>, h: f32) -> FigureStyle {
-    let attack = match k.count("attack", 0, 6) {
+    let attack = match k.count("attack", 0, 7) {
         1 => AttackStyle::Thrust,
         2 => AttackStyle::Throw,
         3 => AttackStyle::Draw,
         4 => AttackStyle::Whirl,
         5 => AttackStyle::Fire,
         6 => AttackStyle::Pistol,
+        7 => AttackStyle::Brace,
         _ => AttackStyle::Strike,
     };
-    let work = match k.count("work", 0, 1) {
+    let work = match k.count("work", 0, 2) {
         1 => WorkStyle::Raise,
+        2 => WorkStyle::Tend,
         _ => WorkStyle::Tool,
     };
     FigureStyle {
@@ -1338,7 +1342,7 @@ fn figure(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) -> Vec<Socket> {
         AttackStyle::Strike | AttackStyle::Thrust => 1.2,
         AttackStyle::Throw | AttackStyle::Whirl => 1.6,
         AttackStyle::Draw | AttackStyle::Pistol => 2.0,
-        AttackStyle::Fire => 2.4,
+        AttackStyle::Fire | AttackStyle::Brace => 2.4,
     };
     p.suggest_period(Activity::Move, k.size("pace", 1.0));
     p.suggest_period(Activity::Attack, attack_period);
@@ -1625,6 +1629,13 @@ fn wheel(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
     let t = k.size("t", 0.08);
     let spokes = k.count("spokes", 2, 6);
     let n = segments(k, 10, fine, 5);
+    rolling_wheel(p, (r, t), n, spokes, fine);
+}
+
+/// A wheel of radius `r` and thickness `t` resting on the origin, axle along x, `n` sides,
+/// `spokes` bars across its faces (near version only), turning on its own joint as its unit
+/// moves.
+fn rolling_wheel(p: &mut Painter<'_>, (r, t): (f32, f32), n: usize, spokes: usize, fine: bool) {
     p.joint = p.add_joint([0.0, r, 0.0], Motion::Wheel);
     let rim = |x: f32| -> Vec<[f32; 3]> {
         (0..n)
@@ -1662,6 +1673,102 @@ fn wheel(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
             );
         }
         p.surface = wheel;
+    }
+}
+
+/// `track`: a tank's track run `l` long along z, `h` high and `t` wide (across x), resting on
+/// the ground: a belt round two rounded ends (`segments` sides each), open at its sides, and
+/// `wheels` road wheels inside it (colour `wheel_colour`), each turning on its own joint as its
+/// unit moves. The far version is the outside of the belt alone (the wheels keep their joints).
+fn track(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
+    let l = k.size("l", 1.6);
+    let h = k.size("h", 0.42).min(l);
+    let t = k.size("t", 0.24);
+    let wheels = k.count("wheels", 4, 8).max(1);
+    let n = if fine {
+        k.count("segments", 4, 12).max(2)
+    } else {
+        (k.count("segments", 4, 12) / 2).max(2)
+    };
+    let r = h / 2.0;
+    let c = (l / 2.0 - r).max(0.0);
+    // The belt's outline in the y–z plane: round the front end, then round the back.
+    let outline: Vec<[f32; 2]> = (0..=n)
+        .map(|i| (-FRAC_PI_2 + PI * i as f32 / n as f32, c))
+        .chain((0..=n).map(|i| (FRAC_PI_2 + PI * i as f32 / n as f32, -c)))
+        .map(|(a, centre)| [r + r * a.sin(), centre + r * a.cos()])
+        .collect();
+    let belt = p.surface;
+    for i in 0..outline.len() {
+        let ([y0, z0], [y1, z1]) = (outline[i], outline[(i + 1) % outline.len()]);
+        let quad = [
+            [-t / 2.0, y0, z0],
+            [t / 2.0, y0, z0],
+            [t / 2.0, y1, z1],
+            [-t / 2.0, y1, z1],
+        ];
+        let (ym, zm) = ((y0 + y1) / 2.0, (z0 + z1) / 2.0);
+        let out = [0.0, ym - r, zm - zm.clamp(-c, c)];
+        p.face(&quad, out);
+        if fine {
+            p.face(&quad, out.map(|v| -v));
+        }
+    }
+    // Road wheels along the bottom run, from under the back end to under the front.
+    let base = p.joint;
+    let wr = h * 0.31;
+    p.surface = Surface::of(METAL, k.colour("wheel_colour", [0.36, 0.37, 0.36]), 0.3);
+    for i in 0..wheels {
+        let z = if wheels == 1 {
+            0.0
+        } else {
+            -c + 2.0 * c * i as f32 / (wheels - 1) as f32
+        };
+        p.joint = base;
+        let place = Place::at([0.0, 0.02, z]);
+        if fine {
+            p.within(place, None, |p| rolling_wheel(p, (wr, t * 0.6), 6, 1, true));
+        } else {
+            p.within(place, None, |p| {
+                p.add_joint([0.0, wr, 0.0], Motion::Wheel);
+            });
+        }
+    }
+    p.surface = belt;
+    p.joint = base;
+}
+
+/// `propeller`: a propeller of diameter `w` facing +z (its axis along z, through the origin),
+/// `blades` blades `chord` wide round a pointed hub (colour `hub_colour`); it spins about its
+/// axis all the time. Pitched −90°, its face turned up, it is a rotor.
+fn propeller(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
+    let r = k.size("w", 0.8) / 2.0;
+    let blades = k.count("blades", 2, 6).max(2);
+    let chord = k.size("chord", 0.08);
+    p.joint = p.add_joint([0.0; 3], Motion::Spin);
+    for i in 0..blades {
+        let turn = 360.0 * i as f32 / blades as f32;
+        p.within(
+            Place {
+                tilt: tilt(0.0, turn),
+                ..Place::IDENTITY
+            },
+            None,
+            |p| p.cuboid([0.0, 0.0, 0.0], [chord, r, 0.025], 0.55, false),
+        );
+    }
+    if fine {
+        let blade = p.surface;
+        p.surface = Surface::of(METAL, k.colour("hub_colour", [0.36, 0.37, 0.4]), 0.3);
+        p.within(
+            Place {
+                tilt: tilt(90.0, 0.0),
+                ..Place::IDENTITY
+            },
+            None,
+            |p| p.cone([0.0, -chord * 0.4, 0.0], chord * 0.85, chord * 1.9, 6),
+        );
+        p.surface = blade;
     }
 }
 
@@ -2360,6 +2467,43 @@ mod tests {
     }
 
     #[test]
+    fn vehicle_shapes_have_their_bounds_and_triangles() {
+        // A belt of ten faces, seen from both sides, round four road wheels (two six-sided
+        // faces, six tread faces and a spoke bar each).
+        check(
+            Shape::Track,
+            &[],
+            10 * 2 * 2 + 4 * (2 * 4 + 6 * 2 + 12),
+            [-0.12, 0.0, -0.8],
+            [0.12, 0.42, 0.8],
+        );
+        let track = bake_model(&ModelSpec {
+            parts: vec![part(Shape::Track, &[("wheels", 5.0), ("l", 2.0)])],
+        });
+        // Far out: the outside of the belt alone; the wheels keep their joints.
+        assert_eq!(track.far.triangles(), 6 * 2);
+        assert_eq!(track.rig.joints.len(), 1 + 5);
+        assert!(
+            track.rig.joints[1..]
+                .iter()
+                .all(|j| j.motion == Motion::Wheel && j.pivot[1] > 0.1 && j.pivot[1] < 0.21)
+        );
+        // Two tapered blades and a pointed hub.
+        check(
+            Shape::Propeller,
+            &[],
+            2 * 10 + 6,
+            [-0.068, -0.4, -0.032],
+            [0.068, 0.4, 0.12],
+        );
+        let rotor = bake_model(&ModelSpec {
+            parts: vec![part(Shape::Propeller, &[("blades", 4.0), ("w", 2.0)])],
+        });
+        assert_eq!(rotor.near.triangles(), 4 * 10 + 6);
+        assert!(matches!(rotor.rig.joints[1].motion, Motion::Spin));
+    }
+
+    #[test]
     fn moving_shapes_record_their_joints() {
         let joints = |shape: Shape, knobs: &[(&str, f32)]| {
             let baked = bake_model(&ModelSpec {
@@ -2386,6 +2530,27 @@ mod tests {
                 &[("strike", 30.0), ("recoil", 0.1), ("flash", 1.0)]
             ),
             4
+        );
+        // A machine gun's flash is a burst; a turret traverses; an aircraft flies.
+        let motion = |knobs: &[(&str, f32)]| {
+            bake_model(&ModelSpec {
+                parts: vec![part(Shape::Box, knobs)],
+            })
+            .rig
+            .joints[1..]
+                .iter()
+                .map(|j| j.motion)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(motion(&[("flash", 4.0)]), [Motion::Burst(4)]);
+        assert_eq!(motion(&[("flash", 9.0)]), [Motion::Burst(5)]);
+        assert_eq!(
+            motion(&[("bank", 10.0), ("traverse", 20.0), ("recoil", 0.1)]),
+            [
+                Motion::Fly(10_f32.to_radians()),
+                Motion::Traverse(20_f32.to_radians()),
+                Motion::Recoil(0.1)
+            ]
         );
         // A sailing hull heels under way; the heel is part of its float.
         let hull = bake_model(&ModelSpec {

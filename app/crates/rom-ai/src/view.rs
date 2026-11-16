@@ -328,7 +328,8 @@ pub(crate) fn sightings(
 }
 
 /// Updates the memory of enemies: what is seen now is refreshed, units not seen for a
-/// while fade, and buildings last as long as the simulation's own fog memory keeps them.
+/// while (or missing from a place in sight) fade, and buildings last as long as the
+/// simulation's own fog memory keeps them.
 pub(crate) fn remember(
     enemies: &mut BTreeMap<u32, EnemySighting>,
     world: &World,
@@ -355,8 +356,19 @@ pub(crate) fn remember(
             },
         );
     }
+    // A unit not seen again fades; one whose last place is in sight now has gone (or died).
     enemies.retain(|id, e| {
-        now.contains(id) || (!e.building && tick.saturating_sub(e.tick) < UNIT_MEMORY_TICKS)
+        now.contains(id)
+            || (!e.building
+                && tick.saturating_sub(e.tick) < UNIT_MEMORY_TICKS
+                && (sees_all
+                    || !world.is_visible_on_body(
+                        me,
+                        e.pos.body,
+                        e.pos.face,
+                        e.pos.x.div_euclid(1000),
+                        e.pos.y.div_euclid(1000),
+                    )))
     });
 }
 

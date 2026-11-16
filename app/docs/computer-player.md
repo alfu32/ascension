@@ -3,7 +3,8 @@
 How `rom-ai` plays. The design is in `research/05-computer-opponents.md`; this
 is what is built. Part 1 (task 60) runs a civilisation: perception, opening
 book, economy, construction, research, production and the difficulty limits.
-Armies, scouting, space and the application wiring are part 2 (task 61).
+Part 2 (task 61) fights and flies: armies, scouting, siege, formations, the
+space manager and the duel harness. The application wiring is task 64.
 
 ## Interface
 
@@ -117,7 +118,104 @@ Scores (higher first):
   cities stand a route apart.
 - **Difficulty** — think interval; an order budget (`orders_per_minute`,
   with a quarter of a minute in reserve); reaction delay; `mistake_pct` (the
-  runner-up technology, unit or wish is taken); `sees_all`.
+  runner-up technology, unit or wish is taken, and the main army may set off
+  for a city before it can take it); `retreats`; `uses_formations`;
+  `sees_all`.
+- **First gather sites** (changed in part 2) — while the player has no site
+  for a base resource, the price of the cheapest site it can build is kept
+  back from every other purchase (unless a search for it has just failed),
+  and the spot the site would take is kept free of other buildings in the
+  same thought. Node sites are searched only at spots near tiles of their
+  node terrain, found once per city. Without these a start could spend its
+  last timber, give its only camp spot to a farm, or — once it had several
+  cities — spend its lookup budget far from any mountain and never build a
+  mine.
+
+## Armies (part 2)
+
+Every own fighter (armed, moving, neither worker, builder, trader, carrier,
+ship nor orbital craft) belongs to one army; the role is chosen when it is
+first seen: the fastest become **scouts** (`scout.units`), then the **home
+guard** gets `mil.defense_share_pct` of the fighters, the **raiders**
+`mil.raid_share_pct` once ten stand, and the rest is the **main army**. Each
+army has a phase — gather, advance, retreat, respond — and remembers its
+target, goal, the tick of the last change and its strength when it set off
+(all in the saved bytes, layout version 2; version 1 still reads).
+
+- **Strength** is hit points × damage per second of a type, scaled by the
+  unit's health; a remembered building counts a quarter (it stands still).
+- **Gather.** Idle members walk to the rally point. The main army waits for
+  half its share of the army target (at least six, at most sixteen units),
+  then needs `mil.attack_ratio_pct` of the known enemy army plus the defence
+  around the target, and a target it **can take**: its damage against the
+  target's armour (damage matrix) must destroy it before the defence there —
+  the target, buildings and units seen lately — has cost it half its hit
+  points. Targets are cities, capitals first, valued by price over danger
+  and distance; while an enemy territory timer runs, every building that
+  holds land is a target and the ratio is waived. With nothing known and no
+  scout out, a large main army goes looking itself.
+- **Advance.** Attack-move to the target, in formation when the difficulty
+  `uses_formations` (the formation row's width to depth and spacing, close
+  fighters in front and ranged behind across the line of advance). Members
+  already near the goal fight there; reinforcements stream out. A target
+  gone, taken or forgotten gives the next one, or home; an advance that has
+  not come within reach after four minutes, or not reached its target after
+  six, marks it unreachable for a while. At a neutralised city the army goes
+  for whatever enemy still stands in its radius (a worker inside a gather site
+  keeps a city from being taken), and sweeps the radius when nothing is known.
+- **Focus fire.** Members in a fight turn on the weakest armed enemy seen
+  within their reach. Every such order comes out of the order budget, so a
+  difficulty with few orders a minute leaves its units to pick their own.
+- **Retreat** (when the difficulty `retreats`): half the army lost against a
+  local enemy stronger than `mil.retreat_ratio_pct`, or the target no longer
+  within its means; back to the rally point, then gather; the target is left
+  alone for two minutes.
+- **Mistakes.** `mistake_pct` of the thoughts in a minute of ticks send the
+  main army at a city before it can take it (on top of the runner-up choices
+  of part 1).
+- **Respond.** Armed enemies seen lately inside own territory or a city's
+  radius, for longer than the difficulty's `reaction_ticks`: the home guard attack-moves to the one nearest a city; armies at
+  home join when the guard is weaker than the intruders; against more than
+  twice everything at home they hold at the city instead. The alarm that
+  ends the opening book and moves military wishes to the front now needs a
+  hurt city or intruders stronger than the fighters at home.
+- **Raiders** go after workers, traders and gather sites whose defence is
+  less than half their strength.
+- **Scouts** walk to the cell (8 × 8 tiles) nobody has stood in for longest,
+  nearest first, on ground they can walk and away from known danger. Every
+  own unit marks its cell, fighters the cells around it too.
+- **Siege.** A quarter of the main army is trained of the type with the most
+  damage per resource against the armour of the city it is after (or the
+  most valuable one it knows).
+- Memory of enemy units forgets a unit whose last place is in sight and
+  empty.
+
+## Space (part 2)
+
+From the first age whose map scale rank is above 0 and in a world with star
+systems:
+
+- a building that trains spacecraft is wished for when the player has none;
+- **ships** that can claim a presence body (its claim tag) go to the free
+  resource bodies in reach (own system; every system on a route once the
+  rank allows travel), by income over distance; `space.claim_eagerness`
+  decides how many free bodies are worth a ship;
+- **warships** (the escort, in the brain's armies) contest enemy-held
+  bodies, guard own claims and, three or more, strike the orbit of a planet
+  where enemy buildings are known, firing on what is seen below;
+- a **transport** loads a builder and some of the main army's troops at an
+  own spaceport, flies (and travels) to a habitable planet without an own
+  city — free planets first — lands on open ground, founds a city with the
+  builder (troops ashore attack the nearest known enemy building), lifts off
+  and takes the next planet;
+- **orbital craft** (task 58: movement with `climb_ticks`) climb to their
+  planet's orbit and defend it; a **launching carrier** (`et_container.launches`)
+  waits at home while craft there board it, then joins the escort and
+  launches them over its target; craft are trained to fill the carriers.
+  Ground batteries are ordinary defensive buildings.
+
+Headless hosts generate a planet when a ship is first ordered into its orbit,
+as the application does (`ai_match_cmd::generate_visited`).
 
 Nothing above names a definition: types are found by component rows
 (harvester, gather site, builder, producer, trader, territory, weapons),
@@ -197,11 +295,68 @@ longest run of them, the tick of each age), the rejection reasons, the state
 hash; processor time of thinking goes to standard error. `--trace N` prints
 every player's economy each N ticks.
 
+## Simulation gaps found in part 2
+
+Task 61 did not change `rom-sim`; these are for task 64 or later:
+
+- `explore`, `patrol` and `guard` are accepted but fail as unsupported when
+  they run; scouting uses `move` to cells the brain picks itself.
+- A stance is set through `World::set_stance`, not an order, so a brain (one
+  way in) cannot put raiders on `raid` or the home guard on `defensive`.
+- Units cannot garrison in a building (`enter` boards carriers only), so
+  wounded units cannot heal in a city that heals (`et_container.heals`).
+- A player is not told when an accepted order fails while it runs
+  (`no_path`, `no_slot`, a site nobody can reach): a brain sends the same
+  futile order again. Seen as workers sent thought after thought to a full
+  or unreachable gather site, and builders to a site they cannot reach.
+- An own unfinished building cannot be cancelled (`raze` is unsupported):
+  a site placed where builders cannot reach blocks its type for good.
+- Planets are generated by the host when a ship is ordered into their
+  orbit; until then an `orbit` order to them holds forever. `rom ai-match`
+  and `rom duel` now do it like the application.
+- No path or reachability query: an army whose target is across water finds
+  out only by not getting there (four minutes, then the target is left alone).
+- Formations are only where the brain sends each unit; the simulation has no
+  formation movement (`formation.keeps_slowest`).
+- Map generation: on a two-player one-world map the two starts can differ
+  twofold in land, and a forest or mountain clump can lie where no gather site
+  fits. `rom duel` redraws such maps; a match in the application would not.
+
+## Duels
+
+```sh
+rom duel --db target/rules.db --profiles balanced:moderate,balanced:easiest --seeds 1..100 \
+    [--ticks-limit 108000] [--victories conquest[,territory]] [--universe] [--side 160] \
+    [--jobs 4] [--trace 12000]
+```
+
+Two computer players of one race (races meet only in space) and the same
+faction, picked by the seed, start on one generated map with the victory rules
+on (capital elimination, conquest by default). On odd seeds the second
+profile takes the first start. A drawn map whose starts are unfair — one holds
+less than three quarters of the other's land, or a capital has no room for a
+gather site on a node terrain its start sites draw from — is replaced by
+another map of the same seed (`maps=` in the output, at most sixteen). Each
+match runs until a team wins or the tick limit; output is one line per seed
+(players, winner, rule, tick, hash) and the win-rate table; matches run on
+`--jobs` threads (default: up to four), each deterministic on its own.
+
+Territory is off by default: on the two-player map the first city of a
+central start already holds half the land, so the territory timer decides
+the match before an army can.
+
 ## Tests
 
 - `crates/rom-ai/tests/managers.rs` — each manager on a small hand-built world.
 - `crates/rom-ai/tests/determinism.rs` — the same match twice; a brain
-  restored in mid-match issues the same orders.
+  restored in mid-match, and one restored in mid-war, issues the same orders.
+- `crates/rom-ai/tests/military.rs` — taking a known city, waiting for the
+  attack ratio, retreating only where the difficulty allows, the home guard,
+  scouting, formations.
+- `crates/rom-ai/tests/space.rs` — claiming resource bodies and founding a
+  colony with a transport in a small universe, craft climbing to orbit and
+  boarding a carrier, the space-age brain twice.
+- `crates/rom-cli/src/duel_cmd.rs` — a short duel twice with equal hashes.
 - `crates/rom-ai/tests/ages.rs` — the second age in the ordinary run; every
   profile to the third age on seeds 1–5 with
   `cargo test --release -p rom-ai --test ages -- --ignored`.
