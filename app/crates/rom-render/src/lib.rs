@@ -21,6 +21,7 @@ pub mod hud_minimap;
 pub mod hud_model;
 pub mod hud_preview;
 pub mod hud_text;
+pub mod layers;
 pub mod looks;
 mod mailbox;
 mod materials;

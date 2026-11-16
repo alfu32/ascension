@@ -273,6 +273,7 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
                 view: options.view,
             },
         );
+        bridge.publish_ship_scales(Arc::new(looks::ship_scales(&content.rules)));
         bridge.publish_looks(Arc::new(looks::scene_looks(
             &content.rules,
             options.seed,
@@ -283,6 +284,10 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
         scene.sun = sun;
         scene.starts.clear();
         scene.nodes.clear();
+        bridge.publish_hidden_terrain(Arc::new(terrain::hidden_terrain(
+            &game.world,
+            crate::selection::PLAYER,
+        )));
         bridge.publish_planet(
             Arc::new(scene),
             OrbitSettings {
@@ -339,6 +344,10 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
                     options.seed,
                     content.planet.base,
                 )));
+                bridge.publish_hidden_terrain(Arc::new(terrain::hidden_terrain(
+                    &game.world,
+                    crate::selection::PLAYER,
+                )));
                 bridge.publish_planet(
                     Arc::new(scene),
                     OrbitSettings {
@@ -359,15 +368,20 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
                     options.seed,
                     content.map.base,
                 )));
-                bridge.publish_terrain(Arc::new(scene));
-                build_match_in_age(
+                let game = build_match_in_age(
                     &content.rules,
                     &content.map,
                     &content.factions,
                     options.seed,
                     options.age,
                 )
-                .map_err(|error| format!("setting up the match: {error}"))?
+                .map_err(|error| format!("setting up the match: {error}"))?;
+                bridge.publish_hidden_terrain(Arc::new(terrain::hidden_terrain(
+                    &game.world,
+                    crate::selection::PLAYER,
+                )));
+                bridge.publish_terrain(Arc::new(scene));
+                game
             }
         }
     };

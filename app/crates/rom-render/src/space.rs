@@ -472,7 +472,7 @@ pub fn level_help(level: crate::zoom::Level, cap: crate::zoom::Level) -> Option<
         Level::System => Some((
             "Star system: scroll zooms to the cursor; double-click a planet to land".to_owned(),
             format!(
-                "Middle-drag pans · Shift + middle-drag turns · Home: your planet{}",
+                "Middle-drag pans · Shift + middle-drag turns and tilts · Home: your planet{}",
                 if cap >= Level::StarMap {
                     " · scroll out: star map"
                 } else {
@@ -482,7 +482,7 @@ pub fn level_help(level: crate::zoom::Level, cap: crate::zoom::Level) -> Option<
         )),
         Level::StarMap => lines(
             "Star map: scroll in on a system, or double-click it, to enter",
-            "Middle-drag pans · Shift + middle-drag turns · Home: your planet",
+            "Middle-drag pans · Shift + middle-drag turns and tilts · Home: your planet",
         ),
     }
 }

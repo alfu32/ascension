@@ -92,6 +92,15 @@ pub struct ChunkSpec {
 /// The tile indices (at most four) touching a corner of a face, and how many there are.
 pub type Adjoining<'a> = &'a dyn Fn(u8, u32, u32) -> ([usize; 4], usize);
 
+/// Replaces unknown ground features with the ordinary land material and map colour.
+pub(crate) fn conceal_kinds(kinds: &mut [crate::TileKind], hidden: &[crate::TileKind]) {
+    for kind in kinds {
+        if hidden.contains(kind) {
+            *kind = crate::TileKind::Land;
+        }
+    }
+}
+
 /// Multiplies the colours of a chunk by the mean shade of the tiles around each vertex.
 /// `base` holds the unshaded vertex colours of the chunk in vertex order.
 pub fn shade_chunk(

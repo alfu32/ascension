@@ -3751,7 +3751,7 @@ WITH v(k,prog,params) AS (VALUES
   ('mat.shallows','water','{"colour":"#3ea3b2","colour_alt":"#2a7e98","scale":1.0}'),
   ('mat.deep_water','water','{"colour":"#14426f","colour_alt":"#0b2b55","scale":1.0}'),
   ('mat.foliage','foliage','{"colour":"#2e6428","colour_alt":"#6f9636","scale":0.2}'),
-  ('mat.tar_ground','stone','{"base_colour":"#3b3631","colour":"#4a433b","colour_alt":"#25211e","scale":0.5}'),
+  ('mat.tar_ground','oil','{"base_colour":"#171a29","colour":"#24212b","colour_alt":"#05080e","scale":0.8}'),
   ('mat.crop','crop','{"colour":"#6f9a34","colour_alt":"#c8b45c","scale":0.3}'))
 INSERT INTO material(id,program,params) SELECT d.id, v.prog, v.params FROM v JOIN def d ON d.key=v.k;
 WITH v(k,prog,params) AS (VALUES
@@ -3788,5 +3788,14 @@ INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,coold
  WHERE d.key IN ('unit.corvette','unit.space_frigate','unit.space_cruiser','unit.battleship');
 INSERT INTO et_weapon_target(weapon_id,layer)
  SELECT id,'ground' FROM et_weapon WHERE orbit_only=1;
+
+-- How large ships are drawn in the space views (task 57): above a planet two to five
+-- times their true size by class, on a system's plane a quarter to a half of the
+-- readable reference size.
+WITH v(k,planet,system) AS (VALUES
+  ('unit.survey_ship',200,25), ('unit.corvette',250,30), ('unit.space_frigate',300,35),
+  ('unit.space_cruiser',400,40), ('unit.battleship',500,50), ('unit.transport_ship',350,40))
+INSERT INTO et_view_scale(entity_type_id,planet_pct,system_pct)
+ SELECT d.id, v.planet, v.system FROM v JOIN def d ON d.key=v.k;
 
 COMMIT;

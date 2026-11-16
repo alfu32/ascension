@@ -35,6 +35,10 @@ pub enum Program {
     Metal = 15,
     /// Woven cloth with soft folds.
     Cloth = 16,
+    /// Glossy black seep pools in dark soil.
+    Oil = 17,
+    /// Self-lit colour, unaffected by lighting or contact shade.
+    Emissive = 18,
 }
 
 impl Program {
@@ -57,6 +61,8 @@ impl Program {
             "thatch" => Self::Thatch,
             "metal" => Self::Metal,
             "cloth" => Self::Cloth,
+            "oil" => Self::Oil,
+            "emissive" => Self::Emissive,
             _ => return None,
         })
     }

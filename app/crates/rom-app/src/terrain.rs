@@ -188,7 +188,7 @@ pub fn generate_universe_content(options: &Options) -> Result<UniverseContent, S
 }
 
 /// Terrain identities known to a player; `None` means display the surrounding plain land.
-/// The renderer still draws its baked terrain until it supports per-player tile updates.
+/// The same knowledge conceals terrain kinds on the render thread.
 pub fn known_terrain(
     world: &rom_sim::World,
     player: rom_sim::PlayerId,
@@ -213,6 +213,21 @@ pub fn known_terrain(
             .map(|terrain| known[terrain])
             .collect()
     })
+}
+
+/// Terrain features concealed by the renderer for this player, on every planet.
+pub fn hidden_terrain(world: &rom_sim::World, player: rom_sim::PlayerId) -> Vec<TileKind> {
+    world
+        .rules()
+        .terrains
+        .keys()
+        .filter_map(|&id| {
+            if world.knows_terrain(player, id) {
+                return None;
+            }
+            u16::try_from(id.0).ok().map(TileKind::Feature)
+        })
+        .collect()
 }
 
 /// The tile kind of a terrain definition; other terrains are features with a colour of their own.

@@ -15,13 +15,16 @@ use raylib::prelude::{
 };
 
 use crate::camera::{Camera, CameraController, InputEvent, Key, PointerButton};
-use crate::entities::{EntitySnapshot, EntityView, SnapshotPair};
+use crate::entities::{
+    EntitySnapshot, EntityView, SnapshotPair, aloft_hulls, is_aloft_ship, scale_ship_view,
+};
 use crate::globe::{Globe, PlanetScene};
 use crate::hud::{HudOverlay, HudSnapshot};
 use crate::hud_gpu::{HudGpu, MinimapGpu, MinimapOverlays, draw_level_pips, draw_space_minimap};
 use crate::hud_layout::HudLayout;
 use crate::hud_layout::Rect;
 use crate::hud_minimap::{GLOBE_MINIMAP_SIZE, ndc_centre_y};
+use crate::layers::{ShipScales, planet_factor};
 use crate::looks::SceneLooks;
 use crate::mailbox::{Frame, FrameMailbox, FramePixels};
 use crate::orbit::{
@@ -31,7 +34,7 @@ use crate::pick::{PickContext, PickController, PickEvent, canvas_view, canvas_vi
 use crate::pixels::rgba_to_bgra_flipped;
 use crate::readback::{AsyncReadback, ReadyFrame};
 use crate::review::{Review, sheet_cell};
-use crate::scene::{BakeReport, Scene};
+use crate::scene::{BakeReport, OrbitalShip, Scene};
 use crate::space::{
     SpaceContext, SpaceHover, SpacePicker, SpaceSnapshot, hover_help, level_help, ship_frame_pos,
 };
@@ -131,6 +134,7 @@ struct Shared {
     /// Whether the pointer rests on something a double click enters (a hand cursor).
     pointer_hand: AtomicBool,
     space: Mutex<Arc<SpaceSnapshot>>,
+    ship_scales: Mutex<Arc<ShipScales>>,
     view_state: Mutex<ViewState>,
     surface_request: Mutex<Option<u32>>,
     terrain_ready: AtomicBool,
@@ -144,6 +148,7 @@ struct Shared {
     focus: Mutex<Option<[f32; 2]>>,
     focus_surface: Mutex<Option<SurfacePos>>,
     vision: Mutex<Option<Arc<VisionMap>>>,
+    hidden_terrain: Mutex<Option<Arc<Vec<crate::TileKind>>>>,
     start_markers: AtomicBool,
     graticule: AtomicBool,
     snapshot_wanted: AtomicBool,
@@ -214,6 +219,11 @@ impl RenderBridge {
     /// Hands over what is in space: ships, claims and transits (the newest replaces the last).
     pub fn publish_space(&self, space: Arc<SpaceSnapshot>) {
         *lock(&self.shared.space) = space;
+    }
+
+    /// Hands over how large each ship type is drawn in the space views (from the rules).
+    pub fn publish_ship_scales(&self, scales: Arc<ShipScales>) {
+        *lock(&self.shared.ship_scales) = scales;
     }
 
     /// Whether the pointer rests on something a double click enters; the window shows a hand.
@@ -363,6 +373,11 @@ impl RenderBridge {
         *lock(&self.shared.vision) = Some(vision);
     }
 
+    /// Conceals terrain kinds unknown to the local player as plain land, on every surface.
+    pub fn publish_hidden_terrain(&self, kinds: Arc<Vec<crate::TileKind>>) {
+        *lock(&self.shared.hidden_terrain) = Some(kinds);
+    }
+
     /// Takes the newest finished frame, if one arrived since the last call.
     ///
     /// The frame is rendered at the internal scale; the UI stretches it to the canvas.
@@ -453,6 +468,7 @@ impl Shared {
             zoom_all: AtomicBool::new(false),
             pointer_hand: AtomicBool::new(false),
             space: Mutex::new(Arc::new(SpaceSnapshot::default())),
+            ship_scales: Mutex::new(Arc::new(ShipScales::default())),
             view_state: Mutex::new(ViewState::default()),
             surface_request: Mutex::new(None),
             terrain_ready: AtomicBool::new(false),
@@ -466,6 +482,7 @@ impl Shared {
             focus: Mutex::new(None),
             focus_surface: Mutex::new(None),
             vision: Mutex::new(None),
+            hidden_terrain: Mutex::new(None),
             start_markers: AtomicBool::new(false),
             graticule: AtomicBool::new(true),
             snapshot_wanted: AtomicBool::new(false),
@@ -536,6 +553,8 @@ fn render_loop(shared: &Shared) {
     let mut orbit_controller = OrbitController::default();
     let mut globe: Option<Arc<Globe>> = None;
     let mut planet_scene: Option<Arc<PlanetScene>> = None;
+    let mut terrain_scene: Option<Arc<TerrainScene>> = None;
+    let mut hidden_terrain = Arc::new(Vec::new());
     let mut home_dir = [0.0, 0.0, 1.0];
     let mut sun_clock: Option<SunClock> = None;
     let mut pending_universe: Option<(Arc<UniverseScene>, UniverseSettings)> = None;
@@ -567,8 +586,11 @@ fn render_loop(shared: &Shared) {
             .min(0.1);
         last_frame = frame_start;
 
+        let mut knowledge_dirty = false;
         let published_planet = lock(&shared.planet).take();
         if let Some((planet, settings)) = published_planet {
+            knowledge_dirty = true;
+            terrain_scene = None;
             // A planet with a body, published while the zoom camera exists, is another globe for
             // the same camera.
             let swap = settings.body.is_some() && zoom.is_some();
@@ -678,6 +700,9 @@ fn render_loop(shared: &Shared) {
         }
         let published_terrain = lock(&shared.terrain).take();
         if let Some(terrain) = published_terrain {
+            knowledge_dirty = true;
+            planet_scene = None;
+            terrain_scene = Some(Arc::clone(&terrain));
             orbit = None;
             globe = None;
             zoom = None;
@@ -705,6 +730,41 @@ fn render_loop(shared: &Shared) {
                 terrain.width, terrain.height
             );
             shared.terrain_ready.store(true, Ordering::Release);
+        }
+        if let Some(hidden) = lock(&shared.hidden_terrain).take() {
+            knowledge_dirty |= *hidden != *hidden_terrain;
+            hidden_terrain = hidden;
+        }
+        if knowledge_dirty {
+            if let Some(updated) = scene.set_hidden_terrain(&hidden_terrain) {
+                globe = Some(updated);
+            }
+            // The same concealed kinds feed the terrain and minimap; fog and night are
+            // applied again by the usual update path below.
+            if let (Some(raw), Some(globe)) = (&planet_scene, &globe) {
+                let mut visible = (**raw).clone();
+                crate::vision::conceal_kinds(&mut visible.kinds, &hidden_terrain);
+                minimap = match MinimapGpu::load_planet(&mut rl, &thread, &visible, globe) {
+                    Ok(map) => Some(map),
+                    Err(error) => {
+                        eprintln!("rom-render: minimap: {error}");
+                        None
+                    }
+                };
+            } else if let Some(raw) = &terrain_scene {
+                let mut visible = (**raw).clone();
+                crate::vision::conceal_kinds(&mut visible.kinds, &hidden_terrain);
+                minimap = match MinimapGpu::load(&mut rl, &thread, &visible) {
+                    Ok(map) => Some(map),
+                    Err(error) => {
+                        eprintln!("rom-render: minimap: {error}");
+                        None
+                    }
+                };
+            }
+            if let Some(map) = &mut minimap {
+                map.apply_shades(&shades);
+            }
         }
         if let Some(published) = lock(&shared.review).take() {
             scene.set_review(published.light, published.near_only, published.anim_time);
@@ -771,6 +831,14 @@ fn render_loop(shared: &Shared) {
         let space_snapshot = Arc::clone(&lock(&shared.space));
         let pair = lock(&shared.snapshots).clone();
         pair.blend_at_on(frame_start, globe.as_deref(), &mut blended);
+        // Ships above the planet are drawn larger than true, by their type's scale.
+        let ship_scales = Arc::clone(&lock(&shared.ship_scales));
+        if globe.is_some() {
+            for view in blended.iter_mut().filter(|v| is_aloft_ship(v)) {
+                let factor = planet_factor(ship_scales.of(view.kind), view.altitude);
+                scale_ship_view(view, factor);
+            }
+        }
         if let Some(clock) = &sun_clock {
             // Simulation time drives the light, so it follows game speed and pause.
             let tick = pair.latest_tick().unwrap_or(0);
@@ -1029,13 +1097,36 @@ fn render_loop(shared: &Shared) {
         let snapshot_due = shared.snapshot_wanted.swap(false, Ordering::AcqRel);
         let elapsed = frame_start.duration_since(started).as_secs_f32();
         let boxes = shared.box_count.load(Ordering::Relaxed) as usize;
+        // Once the camera leaves the planet, the ships above it move to their places in the
+        // system: the system draws them, the globe no longer does.
+        scene.set_ship_scales(&ship_scales);
+        scene.set_orbital_ships(
+            globe
+                .as_deref()
+                .map(|g| aloft_hulls(&blended, g))
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(id, hull)| OrbitalShip { id, hull }),
+        );
+        let leaving = zoom.as_ref().is_some_and(|z| z.fades().space > 0.0);
+        let on_globe: Vec<EntityView>;
+        let drawn: &[EntityView] = if leaving {
+            on_globe = blended
+                .iter()
+                .filter(|v| !is_aloft_ship(v))
+                .copied()
+                .collect();
+            &on_globe
+        } else {
+            &blended
+        };
         scene.prepare_entities(
-            &blended,
+            drawn,
             camera.yaw,
             shared.start_markers.load(Ordering::Relaxed),
             orbit.as_ref(),
         );
-        scene.prepare_overlays(&blended, &hud_snapshot, camera.yaw, orbit.as_ref());
+        scene.prepare_overlays(drawn, &hud_snapshot, camera.yaw, orbit.as_ref());
         // Scale explicit HUD pixels with the offscreen render target, just like automatic scale.
         let mut hud_layout = HudLayout::new(size.0, size.1, None);
         if percent > 0 {

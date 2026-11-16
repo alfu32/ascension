@@ -63,6 +63,7 @@ def ─┬─ age            ordinal, era, map scale
      │                 ├─ et_energy        ability pool
      │                 ├─ et_supply        supply radius
      │                 ├─ et_gather_site   farm, mine, camp, university
+     │                 ├─ et_view_scale    drawn size in the space views (presentation)
      │                 └─ et_node          deposit placed by the map generator
      ├─ tech           age | track | upgrade | unit_upgrade | government | project | evolution
      ├─ ability        active abilities
@@ -235,9 +236,8 @@ render snapshots. The entity's underlying system-plane position identifies
 the body marker; the orbit record classifies its location. `launch` is an
 ordinary order against a completed own producer; training a space-only mover
 on a sphere automatically queues it. `space.launch_ticks` and
-`space.orbit_speed` set duration and orbital footprint speed. Universe save
-round-tripping is not yet implemented; the table defines the shared state
-contract for that work.
+`space.orbit_speed` set duration and orbital footprint speed. Universe state is saved
+and restored by `rom-save` (see "Saving a match" below).
 
 ### 7. Ages, nations and races
 
@@ -318,7 +318,7 @@ ignores `coverage_pct` and retains its original rules.
 
 Every ground and fluid terrain has a `material_id`. `material.program` picks a
 shader of the material library (`grass`, `sand`, `stone`, `snow`,
-`forest_floor`, `water`, and for objects `foliage`, `bark`, `crop`); the
+`forest_floor`, `oil`, `water`, and for objects `foliage`, `bark`, `crop`); the
 renderer draws it up close and blends to the map colour across a band of camera
 distances. `material.params` is a flat JSON object:
 
@@ -332,6 +332,15 @@ distances. `material.params` is a flat JSON object:
 | `edge_objects` | mesh on tiles at the terrain's edge (else `objects`) |
 | `object_material` | material of those meshes (else the terrain's own) |
 | `snow_material` | material of object parts above the mesh's `snow_line` |
+
+The `oil` ground program makes black pools in dark soil with a wet sky reflection
+and a sun highlight. It uses the ordinary `colour`, `colour_alt` and `scale`
+parameters and the same near-to-map-colour blend as other terrain. Its declared
+`base_colour` also colours the minimap. Terrain unknown to the local player
+(`World::knows_terrain`, governed by resource `first_age_id`) uses plain land
+for material, map colour, minimap and baked-object visibility. Age changes
+refresh only chunk colour/material buffers touching changed tiles, including
+corners across cube seams; no terrain geometry or objects are generated in play.
 
 `mesh.generator` names a generator (`forest_centre`, `forest_edge`,
 `rock_massif`, `crop_rows`); its params (`variants`, `count`, `height`,
@@ -359,6 +368,13 @@ the owner's colour; `attach` names an earlier part, or a socket (`head`,
 `right_hand`, `left_hand`, `back` of a `figure`; `rider`, `back`, `head`,
 `chest` of a `quadruped`; written `socket` or `part.socket`), whose frame the
 part moves with. `params` is flat JSON.
+
+`material.program = 'emissive'` draws a part's `colour` and `colour_alt` without
+sunlight, night dimming, shadow-map occlusion or baked contact shade. Use it for
+furnace mouths, muzzle flashes, light strips, reactors and engines; ordinary
+`tint` and the attack-only `flash` animation still apply. It emits no light onto
+neighbouring surfaces and adds no bloom. The model materials `mat.glow` and
+`mat.flash` in `db/models/materials.sql` use it; geometry and joints are unchanged.
 
 Every part takes `x`, `y`, `z` (its base centre), `yaw` (degrees,
 counter-clockwise seen from above), `roll` and `pitch` (degrees, default 0: the
@@ -417,7 +433,7 @@ keep the models at rest.
 The loader refuses include cycles; the application reports an unknown shape
 or knob once on stderr and skips it. Object programs for parts are
 `plaster`, `brick` (also ashlar), `timber`, `roof_tile`, `thatch`, `metal`,
-`cloth`, plus `stone` and the plain colour; their `colour`, `colour_alt` and
+`cloth`, `emissive`, plus `stone` and the plain colour; their `colour`, `colour_alt` and
 `scale` work as for terrain materials.
 
 **Where the rows live (task 55).** Each composed model is its own file
@@ -438,6 +454,22 @@ every age). The model id is `<entity key>@<age without "age.">` (`@any` with no
 age), with `+<faction key>` for a faction's own row. Budgets, style and the
 review loop (`--gallery`, `--model`, `--parts`, `--gallery-manifest`,
 `docs/art/approved.toml`) are in `docs/art-direction.md`.
+
+### 10b. How large ships are drawn in the space views (task 57)
+
+`et_view_scale` (added by task 57; presentation only, the simulation never
+reads it) gives a unit type two drawn sizes: `planet_pct`, its size above a
+planet as a percentage of its true size (in orbit; it eases back to its true
+size as the ship comes down to land), and `system_pct`, its size on a star
+system's plane as a percentage of the readable reference size there (the
+size task 53 drew every ship at, which keeps its size on screen). No row
+means 100 and 100. The seed gives the starships two to five times their size
+above a planet and a quarter to a half of the reference on the plane, by
+class (survey ship smallest, battleship largest); the rows are appended after
+the generated content, keyed by definition key, so no id moves. The renderer
+takes them through `rom-app`'s `looks::ship_scales` and never looks at a key.
+The same hull is drawn at every level; between the planet and the plane its
+size and place blend smoothly with the camera's distance.
 
 ### 11. Computer opponents are data too
 
@@ -558,7 +590,8 @@ accepted city-centre distance, paid at arrivals rather than per income period.
 of `city.spacing`). `player.caravan_limit.base` is 2; `caravan_limit` modifiers
 add route slots. Pending route orders reserve slots. Orders retain the home,
 target, accepted length, delivery resource/amount and current leg in memory;
-the existing `trade_route` table is unchanged (save support is a later task).
+a trade route in progress is saved in the order's `route_*` columns (the old
+`trade_route` table was dropped).
 
 ## Workers inside, units leaving buildings (task 52)
 
@@ -631,8 +664,7 @@ No table or column was added: carrying uses the existing component and state.
   steps out first; aboard a carrier in space it refuses orders (`Aboard`).
 - **Landed ships** stand on the planet's surface (`entity.body_id` that planet,
   no `entity_orbit` row) and are listed in the simulation's landed set; they do
-  not walk. Saving them needs that set in the save format (a later task, like
-  orbits). Surface weapons can hit them; their own space weapons cannot fire.
+  not walk. They are saved as the `landed` flag in `entity_flag`. Surface weapons can hit them; their own space weapons cannot fire.
 - **Colonies.** The first city a player founds on a planet may stand outside
   any border (never inside another player's territory), as free colonisation
   allows everywhere from the enlightenment age. Its borders, economy and
@@ -671,9 +703,51 @@ placement preview return the discovery age; oil wells remain locked through
 their ordinary production prerequisites too.
 
 The app caches the current player's known tile identities by age and viewed
-body, marking undiscovered deposits as plain-land replacements. That cache
-is ready for a renderer tile-update interface; baked terrain and minimaps
-currently still show oil at every age. The existing land shader also lacks
-a glossy pool program: the `water` program is handled by the sea shader and
-falls back to a flat colour on land. No material-only substitution can
-produce the requested glossy black pools yet.
+body and publishes the unknown terrain kinds to the renderer (task 44).
+Undiscovered deposits use plain land on the surface and minimap; another
+player's age never reveals them. On discovery, only chunks touching changed
+tiles receive new colour/material buffers, and the minimap refreshes. The
+`oil` land program supplies glossy black pools; `water` remains a sea material.
+
+## Saving a match (task 62)
+
+`rom-save` writes one SQLite file per save, containing PART B of the schema
+only (the rules are not repeated). `rom_sim::World::snapshot()` exports the
+complete simulation state as plain structs and `World::restore(rules, snapshot)`
+rebuilds a world; `rom_save::save` / `load` map the snapshot to the tables and
+back. No SQL runs in `rom-sim`.
+
+- **Rules check.** `match.rules_version` (the `schema_meta` row) and
+  `match.rules_fingerprint` (FNV-1a over the loaded rules) must equal those of
+  the rules passed to `load`; otherwise `SaveError::RulesMismatch`. The
+  fingerprint is only comparable between builds of the same rules model.
+  `read_header` returns version, tick and match settings without the rules.
+- **Match settings.** `MatchInfo` carries the seed, `map_style` key, speed, the
+  caller's own `match_setting` pairs and one seat per player (`player.slot`,
+  name, controller, AI profile, colour). Players without a seat get the next
+  free slot.
+- **Computer players.** `player_ai_state(player_id, profile_key, difficulty_key,
+  version, data)` stores the opaque blob the AI crate hands in per player and
+  returns it unchanged.
+- **Encoding.** Positions are four columns; unsigned 64-bit values are stored as
+  the same bits read as signed; terrain and territory grids are run-length
+  encoded blobs; explored bits are raw words; `entity.move_remainder` is
+  decimal text. Foreign keys to PART A document the link and are not enforced
+  (the save has no PART A tables).
+- **Changed from the early design.** Dropped as unused by the simulation:
+  `map_grid`, `player_explored`, `diplomacy`, `diplomacy_offer(_item)`,
+  `market_price`, `unit_group`, `entity_effect`, `trade_route`;
+  `match_setting` is free-form text. `entity` lost rally and node columns and
+  gained `max_hp`, `los`, `killer_id`, `gather_slots`, `idle_ticks`,
+  `heal/attrition_remainder`, `location`; `entity_cooldown` is keyed by weapon.
+  Added: `surface`, `surface_touched`, `path_request/waiter/search/open/node`,
+  `player_vision`, `vision_memory`, `vision_building`, `vision_viewer`,
+  `entity_transit`, `entity_flag`, `income_term`, `income_remainder`,
+  `order_payment/waypoint`, `pending_hit/shot`, `body_position/marker/claim`,
+  `emitter`, `city`, `city_widener`, `match_victory`; orders gain the pending
+  queue (`place`), trade-route and walking columns.
+- **Rebuilt on load, not stored.** The spatial buckets, path occupancy, the
+  per-tile viewer counts (rebuilt from `vision_viewer`), the motion cache,
+  income rates (summed from `income_term`) and gather-slot occupants (from
+  `entity.work_site_id`). The state hash after a load equals the hash before
+  the save; the save tests also run both worlds on for several hundred ticks.

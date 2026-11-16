@@ -32,6 +32,10 @@ void main() {
         b = mix(fragTeam * 0.62, fragAlt, 0.12);
     }
     vec4 m = modelMaterial(fragProgram, fragLocal, normalize(fragLocalNormal), a, b, fragScale, px);
+    if (fragProgram == 18) {
+        finalColor = vec4(m.rgb, 1.0);
+        return;
+    }
     vec3 bumped = patternBump(normal, m.a, fragWorld);
     finalColor = vec4(m.rgb * fragShade * terrainLight(fragWorld, bumped), 1.0);
 }
