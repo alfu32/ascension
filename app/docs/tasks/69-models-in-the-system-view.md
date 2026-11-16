@@ -43,9 +43,9 @@ ships in a system.
    out; blend scale and position, keep the model.
 3. **Fallback.** A ship kind with no model keeps the box hull, so nothing
    disappears.
-4. **Resource bodies (optional, report if not done).** If cheap once 1–3
-   exist: give `node.ore_asteroid`, `node.crystal_asteroid`, `node.tar_moon`
-   a size rule and draw them as models; otherwise state what remains.
+4. **Resource bodies stay spheres.** The owner decided (2026-11-16): "not
+   proper 3D models, just bigger on the starmap". No models for resource
+   bodies; item 5 makes them bigger.
 5. **Bigger resource bodies (owner, 2026-11-16: "planetoids are a tad too
    small, let's make them bigger in spite of the physical reality").** Moons,
    asteroids and small planets are drawn at 15 × (1 + size) system units
@@ -53,7 +53,9 @@ ships in a system.
    median planet (300). Draw them about three times larger, roughly a third
    to a half of a median planet, but always smaller than the smallest
    habitable planet (`HOME_PLANET_RADIUS` × 96 / 192), in the system view and
-   on the minimap. Keep them readable and
+   on the minimap, and clearly bigger at whole-system zoom and further out
+   (a screen-size floor per kind, rocks about 55–75 % of the smallest planet
+   on screen), not only close up. Keep them readable and
    apart: moons must not touch their planet (widen their small ring as
    needed), belt bodies must not overlap, and hover, double-click and the
    claim ring still pick the right body. Presentation only: no change to
