@@ -834,7 +834,24 @@ fn lead(
                     })
                     .min_by_key(|(other, e)| (plan.view.distance(from, e.pos), **other))
                     .map(|(_, e)| e.pos);
-                let goal = next.unwrap_or(seen.pos);
+                // Nothing known there: sweep the radius, one point of a ring at a time.
+                let goal = next.unwrap_or_else(|| {
+                    const RING: [(i64, i64); 8] = [
+                        (1000, 0),
+                        (707, 707),
+                        (0, 1000),
+                        (-707, 707),
+                        (-1000, 0),
+                        (-707, -707),
+                        (0, -1000),
+                        (707, -707),
+                    ];
+                    let (dx, dy) = RING[(tick / RETRY_TICKS % 8) as usize];
+                    let reach = radius as i64 * 2 / 3;
+                    plan.view
+                        .world
+                        .offset(seen.pos, dx * reach / 1000, dy * reach / 1000)
+                });
                 if army.goal != Some(goal) {
                     army.goal = Some(goal);
                     army.since = tick;
@@ -856,7 +873,13 @@ fn lead(
                         .iter()
                         .all(|e| plan.view.distance(e.pos, goal) > THREAT_REACH)
                 });
-            let overdue = tick >= army.since + SIEGE_TICKS;
+            // A siege the army is at goes on; one it never reached is given up.
+            let overdue = tick >= army.since + SIEGE_TICKS
+                && army.goal.is_some_and(|goal| {
+                    units
+                        .iter()
+                        .all(|e| plan.view.distance(e.pos, goal) > THREAT_REACH)
+                });
             if (stalled || overdue)
                 && let Some(target) = army.target
             {
@@ -922,9 +945,7 @@ fn focus(plan: &mut Plan<'_>, memory: &Memory, units: &[&Entity]) {
         let target = memory
             .enemies
             .iter()
-            .filter(|(_, e)| {
-                e.tick == view.tick && !e.building && e.pos.body == unit.pos.body
-            })
+            .filter(|(_, e)| e.tick == view.tick && !e.building && e.pos.body == unit.pos.body)
             .filter_map(|(id, e)| {
                 let live = view.world.entity(EntityId(*id))?;
                 let d = view.distance(unit.pos, e.pos);
