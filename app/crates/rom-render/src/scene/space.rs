@@ -23,8 +23,8 @@ use crate::space::{
     map_colony_rings, map_mark_scale, map_ship_marks, ship_frame_pos, transit_at_rim,
 };
 use crate::universe::{
-    BodyViewKind, MAP_RADIUS, PlacedBody, SYSTEM_RADIUS, UniverseScene, planet_colour, ring_points,
-    rock_colour, uv_sphere,
+    BodyViewKind, MAP_RADIUS, PlacedBody, SYSTEM_RADIUS, UniverseScene, drawn_pixels, least_pixels,
+    planet_colour, ring_points, rock_colour, shown_pixels, uv_sphere,
 };
 use crate::zoom::{Target, ZoomCamera};
 
@@ -81,9 +81,8 @@ const CORE_SIZE: f32 = 650.0;
 const STAR_GLOW: f32 = 2600.0;
 const GLOW_SIDE: u32 = 128;
 const ORBIT_RING: Color = Color::new(120, 140, 185, 58);
-/// Smallest radius of a body on screen, in pixels, and the radius below which it also wears a
-/// soft halo so it can still be seen, hovered and double-clicked.
-const MIN_BODY_PIXELS: f32 = 2.5;
+/// The radius on screen below which a body also wears a soft halo so it can still be seen,
+/// hovered and double-clicked.
 const HALO_BELOW_PIXELS: f32 = 6.0;
 /// Diameter of a body's halo on screen, in pixels.
 const HALO_PIXELS: f32 = 22.0;
@@ -96,6 +95,12 @@ const SKY_PLANET_DISC: f32 = 3.5;
 const SKY_ROCK_DISC: f32 = 2.5;
 /// Diameter in pixels of another system's point of light seen from inside a system.
 const SKY_STAR_PIXELS: f32 = 3.0;
+/// A ship drawn as its model on the system plane is this many times the hull's length: the
+/// hull is as wide as it is long, a model is slender, and this keeps them as large on screen.
+const MODEL_ON_PLANE: f32 = 1.6;
+/// Light from above the system's plane on ships drawn as their models, out in space (none in
+/// the planet's orbit, where the globe lights them).
+const STAR_FILL: f32 = 0.35;
 
 /// What is in space and which ships are selected, kept for the next draw.
 #[derive(Default)]
@@ -166,10 +171,10 @@ impl Part {
     }
 }
 
-/// The radius a body of true radius `radius` is drawn with, `per_pixel` units a pixel away:
-/// seen from the ground (`space` = 0) a small disc in the sky, growing to its true size as the
-/// camera leaves the planet, and never under a few pixels.
-fn shown_radius(kind: BodyViewKind, radius: f32, per_pixel: f32, space: f32) -> f32 {
+/// The radius in pixels a body of true radius `radius` is drawn with, `per_pixel` units a pixel
+/// away, before the floors of [`shown_pixels`]: seen from the ground (`space` = 0) a small disc
+/// in the sky, growing to its true size as the camera leaves the planet.
+fn sky_pixels(kind: BodyViewKind, radius: f32, per_pixel: f32, space: f32) -> f32 {
     let sky = match kind {
         BodyViewKind::Star => SKY_STAR_DISC,
         BodyViewKind::Habitable => SKY_PLANET_DISC,
@@ -177,12 +182,11 @@ fn shown_radius(kind: BodyViewKind, radius: f32, per_pixel: f32, space: f32) -> 
     };
     let per_pixel = per_pixel.max(1e-9);
     let pixels = radius / per_pixel;
-    let shown = if pixels > sky {
+    if pixels > sky {
         morph_size(sky, pixels, space)
     } else {
         pixels
-    };
-    shown.max(MIN_BODY_PIXELS) * per_pixel
+    }
 }
 
 /// A ship's hull on its way from above the loaded globe (`above`, planet frame) to its place on
@@ -480,7 +484,9 @@ impl Scene {
         let globe = match (&one.planet, &one.place) {
             (Some(view), Some(place)) if self.globe.is_some() => {
                 let pixels = view.sphere_pixels([0.0; 3], orbit.radius, height);
-                (pixels >= MIN_BODY_PIXELS).then(|| {
+                // Below a planet's floor the system's sphere, drawn at the floor, takes over.
+                let floor = least_pixels(BodyViewKind::Habitable, 0.0, one.fades.space);
+                (pixels >= floor).then(|| {
                     let eye = match &one.planet_camera {
                         Some(camera) => GlobeEye::of_orbit(camera),
                         None => GlobeEye::of_view(view, orbit.radius),
@@ -609,6 +615,13 @@ impl Scene {
             false,
             None,
         );
+        // Ships drawn as their models move as they do on the planet, even with no globe drawn.
+        let time = self
+            .anim_time
+            .unwrap_or(self.clock.elapsed().as_secs_f32() % 3_600.0);
+        if let Some(models) = &mut self.models {
+            models.time = time;
+        }
         let Some(space) = &mut self.space else {
             return;
         };
@@ -676,8 +689,38 @@ impl Scene {
                 }
             }
             let state = &self.space_state;
+            // Every body's radius as drawn, its kind's floor on screen included.
+            let per_pixels: Vec<f32> = bodies_placed
+                .iter()
+                .map(|p| view.per_pixel(p.pos, height).max(1e-9))
+                .collect();
+            let kinds: Vec<BodyViewKind> = bodies_placed
+                .iter()
+                .map(|p| universe.bodies[p.body].kind)
+                .collect();
+            let pixels: Vec<f32> = bodies_placed
+                .iter()
+                .zip(&kinds)
+                .zip(&per_pixels)
+                .map(|((p, &k), &per)| sky_pixels(k, p.radius, per, pass.space))
+                .collect();
+            let drawn: Vec<f32> = shown_pixels(&kinds, &pixels, pass.space)
+                .into_iter()
+                .zip(&per_pixels)
+                .zip(&bodies_placed)
+                .map(|((px, &per), p)| drawn_pixels(px, p.room, per) * per)
+                .collect();
+            // How much larger than true a body is drawn, for the rings about it.
+            let grown = |body: u32| -> f32 {
+                universe
+                    .body_index(body)
+                    .and_then(|index| bodies_placed.iter().position(|p| p.body == index))
+                    .map_or(1.0, |i| {
+                        (drawn[i] / bodies_placed[i].radius.max(1e-6)).max(1.0)
+                    })
+            };
             let mut halos: Vec<([f32; 3], f32)> = Vec::new();
-            for placed in &bodies_placed {
+            for (placed, &radius) in bodies_placed.iter().zip(&drawn) {
                 let body = &universe.bodies[placed.body];
                 if body.kind != BodyViewKind::Star && !known {
                     continue;
@@ -717,7 +760,6 @@ impl Scene {
                 space.shader.set_shader_value(emissive_at, emissive);
                 space.shader.set_shader_value(alpha_at, pass.detail);
                 let per_pixel = view.per_pixel(placed.pos, height);
-                let radius = shown_radius(body.kind, placed.radius, per_pixel, pass.space);
                 world.draw_mesh(mesh, material.clone(), ball(placed.pos, radius, axes));
                 // Never smaller than a few pixels, and a soft halo below that.
                 if body.kind != BodyViewKind::Star && radius < per_pixel * HALO_BELOW_PIXELS {
@@ -761,14 +803,14 @@ impl Scene {
                     let [r, g, b] = ring.colour;
                     overlay.tris.extend(annulus(
                         [ring.centre[0], 0.4, ring.centre[2]],
-                        ring.radius,
+                        ring.radius * grown(ring.body),
                         thickness,
                         [r, g, b, (235.0 * detail) as u8],
                         96,
                     ));
                 }
                 // Colonies: a ring in the owner's colour around each planet with its cities,
-                // never smaller on screen than a few pixels beyond the planet's least size.
+                // as much wider than true as the planet is drawn.
                 if known {
                     for ring in colony_rings(
                         &universe,
@@ -777,10 +819,9 @@ impl Scene {
                         system_id,
                     ) {
                         let [r, g, b] = ring.colour;
-                        let least = view.per_pixel(ring.centre, height) * (MIN_BODY_PIXELS + 6.0);
                         overlay.tris.extend(annulus(
                             [ring.centre[0], 0.4, ring.centre[2]],
-                            ring.radius.max(least),
+                            ring.radius * grown(ring.body),
                             thickness * 0.8,
                             [r, g, b, (240.0 * detail) as u8],
                             96,
@@ -791,6 +832,8 @@ impl Scene {
                 let right = unit_vector(cross3(forward, [0.0, 1.0, 0.0]));
                 let cam_up = cross3(right, forward);
                 let mut boxes: Vec<[f32; 16]> = Vec::with_capacity(state.snapshot.ships.len() * 8);
+                let mut model_ships: Vec<(u16, bool, Matrix)> = Vec::new();
+                let models = self.models.as_ref();
                 let loaded_id = loaded.map(|b| universe.bodies[b].id);
                 for ship in state
                     .snapshot
@@ -801,11 +844,16 @@ impl Scene {
                     let scale = state.scales.of(ship.kind);
                     let at = ship_frame_pos(&universe, &bodies_placed, outermost, ship);
                     let theta = ship.facing_deg.to_radians();
+                    // A ship whose model was uploaded is drawn as it; any other keeps the hull.
+                    let model = ship
+                        .model
+                        .filter(|m| models.is_some_and(|g| g.has(m.index)));
+                    let on_plane = if model.is_some() { MODEL_ON_PLANE } else { 1.0 };
                     let plane = Hull {
                         origin: [at[0], at[1] + unit * 0.4, at[2]],
                         forward: [theta.cos(), 0.0, theta.sin()],
                         up: [0.0, 1.0, 0.0],
-                        length: system_ship_length(scale, distance),
+                        length: system_ship_length(scale, distance) * on_plane,
                         height: 0.0,
                     };
                     // A ship in orbit of the loaded globe leaves its place above the ground
@@ -818,7 +866,15 @@ impl Scene {
                         .zip(pass.place);
                     let hull = match above {
                         Some(_) if pass.space <= 0.0 => continue,
-                        Some((o, place)) => morph_hull(&o.hull, &place, &plane, pass.space),
+                        Some((o, place)) => {
+                            // The globe draws a model at its own size, a hull at its planet
+                            // scale: the morph starts from what the globe drew.
+                            let length = model
+                                .and_then(|m| models?.planet_length(m.index))
+                                .unwrap_or(o.hull.length);
+                            let drawn = Hull { length, ..o.hull };
+                            morph_hull(&drawn, &place, &plane, pass.space)
+                        }
                         None => plane,
                     };
                     let hull = Hull {
@@ -829,7 +885,23 @@ impl Scene {
                     if !keeps(hull.origin) || hull.length <= 0.0 {
                         continue;
                     }
-                    hull.push(owner_color(ship.owner), &mut boxes);
+                    let instance = model.and_then(|m| {
+                        let (transform, near) = models?.instance_at(
+                            m.index,
+                            hull.origin,
+                            hull.forward,
+                            hull.up,
+                            hull.length,
+                            owner_color(ship.owner),
+                            super::models::phase_of(ship.id),
+                            view.eye,
+                        )?;
+                        Some((m.index, near, transform))
+                    });
+                    match instance {
+                        Some(instance) => model_ships.push(instance),
+                        None => hull.push(owner_color(ship.owner), &mut boxes),
+                    }
                     let selected = state.selected.binary_search(&ship.id).is_ok();
                     let mark = (255.0 * pass.detail * pass.space) as u8;
                     if selected {
@@ -882,13 +954,43 @@ impl Scene {
                         &matrices,
                     );
                 }
+                if let (Some(models), false) = (&self.models, model_ships.is_empty()) {
+                    // Lit by the star from its direction; the loaded planet shades what lies
+                    // in its shadow, as its night side does on the globe.
+                    let shade = bodies_placed
+                        .iter()
+                        .find(|b| Some(b.body) == loaded)
+                        .map_or([0.0; 4], |b| [b.pos[0], b.pos[1], b.pos[2], b.radius]);
+                    let shader = &mut self.model_shader;
+                    let at = shader.get_shader_location("starLight");
+                    shader.set_shader_value(at, 1_i32);
+                    let at = shader.get_shader_location("starShade");
+                    shader.set_shader_value(at, shade);
+                    let at = shader.get_shader_location("starFill");
+                    shader.set_shader_value(at, STAR_FILL * pass.space);
+                    let at = shader.get_shader_location("time");
+                    shader.set_shader_value(at, time);
+                    super::materials::bind_noise(self.noise.as_ref().map(|t| t.id));
+                    let mut scratch = Vec::new();
+                    models.draw_instances(
+                        &mut world,
+                        shader,
+                        &self.model_material,
+                        &mut model_ships,
+                        &mut scratch,
+                    );
+                    super::materials::bind_noise(None);
+                    let at = shader.get_shader_location("starLight");
+                    shader.set_shader_value(at, 0_i32);
+                }
                 // The body under the pointer wears a ring.
                 if let Some(SpaceHover::Target(Target::Body(index))) = state.hover
-                    && let Some(at) = bodies_placed.iter().find(|p| p.body == index)
+                    && let Some(i) = bodies_placed.iter().position(|p| p.body == index)
                 {
+                    let at = &bodies_placed[i];
                     overlay.tris.extend(annulus(
                         [at.pos[0], 0.5, at.pos[2]],
-                        at.radius * 1.35 + thickness * 2.0,
+                        drawn[i] * 1.35 + thickness * 2.0,
                         thickness * 1.2,
                         [255, 230, 160, (230.0 * pass.detail) as u8],
                         64,

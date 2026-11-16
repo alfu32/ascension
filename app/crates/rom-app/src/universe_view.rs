@@ -171,6 +171,37 @@ mod tests {
         let again = generate_universe_content(&options).unwrap();
         assert_eq!(scene, to_universe_scene(&again.universe, &bodies));
     }
+
+    /// Resource bodies are drawn far larger than true (task 69), yet in every generated system
+    /// no two drawn bodies touch and every rock stays smaller than every planet.
+    #[test]
+    fn generated_systems_draw_their_bodies_apart() {
+        use rom_render::universe::{BODY_GAP, SMALLEST_PLANET_RADIUS, body_radius, closest_gap};
+        for seed in 1..=3 {
+            let options = Options {
+                universe: true,
+                seed,
+                players: 4,
+                ..Options::default()
+            };
+            let content = generate_universe_content(&options).expect("universe");
+            let scene = to_universe_scene(&content.universe, &[]);
+            for system in &scene.systems {
+                let placed = scene.place_system(system.id);
+                let gap = closest_gap(&placed);
+                assert!(
+                    gap >= BODY_GAP - 1.0,
+                    "seed {seed} system {}: {gap}",
+                    system.id
+                );
+            }
+            for body in &scene.bodies {
+                if body.kind == BodyViewKind::Resource {
+                    assert!(body_radius(body) < SMALLEST_PLANET_RADIUS, "{body:?}");
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]

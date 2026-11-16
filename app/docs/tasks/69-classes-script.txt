@@ -1,0 +1,19 @@
+# Task 69: the five starship classes of two teams side by side in the plane of player one's
+# home system, smallest to largest (survey ship, corvette, frigate, cruiser, battleship); the
+# camera comes out to the system and closes in on them. Test-only setup lines first.
+0 grant-age age.galactic
+0 place-space 1 unit.survey_ship 52,-9
+0 place-space 1 unit.corvette 58,-9
+0 place-space 1 unit.space_frigate 64,-9
+0 place-space 1 unit.space_cruiser 70,-9
+0 place-space 1 unit.battleship 76,-9
+0 place-space 2 unit.survey_ship 52,9
+0 place-space 2 unit.corvette 58,9
+0 place-space 2 unit.space_frigate 64,9
+0 place-space 2 unit.space_cruiser 70,9
+0 place-space 2 unit.battleship 76,9
+2 cam wheel -4 640,350
+3 cam drag 685,530 640,400
+4 cam wheel 3 640,400
+5 cam wheel 2 640,420
+6 speed 1
