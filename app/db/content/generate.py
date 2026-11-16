@@ -596,7 +596,7 @@ def orbit_units(definition, row, tag, need, produce, cost):
     row('et_movement', entity_type_id=Ref(full), movement_class_id=Ref('starship', 'movement_class'), speed=2800)
     # Like the caravan's route: income per arrival by route length, here measured in the system plane.
     row('et_trader', entity_type_id=Ref(full), runs_routes=1, claims_nodes=0,
-        route_resource_id=Ref('res.wealth'), route_income=20)
+        route_resource_id=Ref('res.wealth'), route_income=8)
     need(full, 'age.starfaring')
     produce('bld.spaceport', full, 'train', 'units')
     cost(full, {'metal': 260, 'energy': 60}, True)

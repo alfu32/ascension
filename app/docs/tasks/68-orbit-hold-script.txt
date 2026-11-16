@@ -1,0 +1,12 @@
+# Task 68, replayed by --script in universe mode: ships hold over one ground point. Two
+# corvettes above the city and the field east of it; the view turns about the planet (Shift +
+# middle drag) and the ships turn with the ground under them. Test-only setup lines first.
+0 grant-age age.starfaring
+0 place-orbit 1 unit.corvette @0,0
+0 place-orbit 1 unit.corvette @10,0
+0 place-orbit 1 unit.transport_ship @0,10
+1 speed 400
+10 cam wheel -6 640,400
+400 speed 100
+# Turn the view about the planet: the ships stay over the same ground.
+500 cam drag 400,420 900,420 rotate

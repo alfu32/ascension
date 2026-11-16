@@ -415,16 +415,34 @@ pub fn build_overlays_on(
             let up = ground.frame(view.face, view.x, view.y).up;
             let arc = |t: f32| -> [f32; 3] {
                 let p = along(t);
-                let lift = 4.0 * t * (1.0 - t) * length * 0.12;
+                let lift = 4.0 * t * (1.0 - t) * length * 0.06;
                 std::array::from_fn(|i| p[i] + up[i] * lift)
             };
-            let tail = (flight - 0.9 / length.max(1.0)).max(0.0);
-            out.line(arc(tail), arc(flight), [70, 45, 25, 255]);
-            out.line(
-                arc((flight - 0.25 / length.max(1.0)).max(0.0)),
-                arc(flight),
-                [235, 225, 200, 255],
-            );
+            // A shaft of a tile and a half with flat sides across and up, so that it shows from
+            // above and from the side.
+            let (tail, head) = (arc((flight - 1.5 / length.max(1.0)).max(0.0)), arc(flight));
+            let d: [f32; 3] = std::array::from_fn(|i| head[i] - tail[i]);
+            let across = [
+                d[1] * up[2] - d[2] * up[1],
+                d[2] * up[0] - d[0] * up[2],
+                d[0] * up[1] - d[1] * up[0],
+            ];
+            let norm = across.iter().map(|v| v * v).sum::<f32>().sqrt().max(0.001);
+            for side in [across.map(|v| v / norm * 0.05), up.map(|v| v * 0.05)] {
+                let offset =
+                    |p: [f32; 3], sign: f32| std::array::from_fn(|i| p[i] + side[i] * sign);
+                out.quad(
+                    [
+                        offset(tail, -1.0),
+                        offset(tail, 1.0),
+                        offset(head, 1.0),
+                        offset(head, -1.0),
+                    ],
+                    [60, 40, 22, 255],
+                );
+            }
+            let tip = arc((flight - 0.3 / length.max(1.0)).max(0.0));
+            out.line(tip, head, [250, 240, 215, 255]);
             continue;
         }
         // Thin lines only: their width never follows the ship view scale. A bright streak

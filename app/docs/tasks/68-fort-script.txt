@@ -1,0 +1,10 @@
+# Task 68, replayed by --script (medieval age, `--age 2`): a fort shoots arrows at intruders.
+# Test-only setup lines first.
+0 place 1 bld.fort @14,0
+0 place 2 unit.pikeman @23,3
+0 place 2 unit.pikeman @24,0
+0 place 2 unit.crossbowman @23,-3
+0 cam drag 920,290 700,330
+1 cam wheel 4 700,330
+# The fort takes aim at tick 0; freeze with its arrows in flight.
+3 speed 1

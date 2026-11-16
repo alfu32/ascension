@@ -85,8 +85,8 @@ enum Action {
     Travel,
     /// Every worker inside the selected gather buildings leaves.
     Release,
-    /// The selected carriers set their passengers down: around themselves when landed, at an
-    /// own spaceport below when in orbit.
+    /// The selected carriers set their passengers down around themselves once landed; a carrier
+    /// in orbit launches its craft.
     Unload,
     /// The selected landed ships return to orbit.
     Lift,
@@ -227,6 +227,10 @@ fn in_space(world: &World, entity: &Entity) -> bool {
 
 /// Reconstructs the arrival check from public city footprints; route direction is private.
 fn reached_city(world: &World, unit: Pos, city: &Entity) -> bool {
+    // A freighter between planets (or in their orbit) is on another body than its city.
+    if unit.body != city.pos.body {
+        return false;
+    }
     let et = &world.rules().entity_types[&city.type_id];
     let pos = |p: Pos| SurfacePos {
         face: p.face,
@@ -978,8 +982,8 @@ impl Controller {
         }
     }
 
-    /// The Unload button: a landed carrier sets everyone down around itself; one in orbit sets
-    /// them down at the own spaceport below, if there is one.
+    /// The Unload button: a landed carrier sets everyone down around itself; a launching carrier
+    /// in orbit sends its craft out; anything else in orbit must land first.
     fn unload_selected(&mut self, world: &mut World) {
         let carriers: Vec<EntityId> = self
             .own_selected(world)
@@ -2146,14 +2150,17 @@ impl Controller {
         if hud.help.is_empty()
             && !self.view.in_space
             && own.iter().any(|e| {
-                world.is_carrier_type(e.type_id)
-                    && world
-                        .orbit(e.id)
-                        .is_some_and(|o| o.body == self.view.planet)
+                world
+                    .orbit(e.id)
+                    .is_some_and(|o| o.body == self.view.planet)
             })
         {
-            hud.help =
-                "Right-click open ground to land; units board at your spaceport below".into();
+            hud.help = if own.iter().any(|e| lands(world, e)) {
+                "Right-click to move within the orbit; Land comes straight down; troops board on the ground"
+            } else {
+                "Right-click to move within the orbit; Patrol circles the planet"
+            }
+            .into();
         }
         if hud.help.is_empty()
             && own.iter().any(|e| {

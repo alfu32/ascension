@@ -1,0 +1,13 @@
+# Task 68, replayed by --script in universe mode (`--sun fixed`): a satellite trained at the
+# spaceport goes up into orbit and reveals most of the horizon. Test-only setup lines first.
+0 grant-age age.starfaring
+0 grant res.metal 5000
+0 grant res.energy 5000
+0 place 1 bld.spaceport @0,16
+1 speed 400
+4 producers
+6 hud tab 2
+8 hud slot 8
+10 cam wheel -9 640,400
+# Trained in 300 ticks and launched in 20.
+360 speed 100

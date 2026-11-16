@@ -1,0 +1,10 @@
+# Task 68, replayed by --script: a tower beside the city shoots arrows at intruders walking in.
+# Test-only setup lines first.
+0 place 1 bld.tower @12,0
+0 place 2 unit.spearman @20,3
+0 place 2 unit.spearman @21,0
+0 place 2 unit.spearman @20,-3
+0 cam drag 900,290 700,330
+1 cam wheel 4 700,330
+# The tower takes aim at tick 0 and its first arrows fly about seven ticks; freeze in flight.
+2 speed 1

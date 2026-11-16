@@ -3040,7 +3040,7 @@ INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,b
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.space_freighter'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.space_freighter'),(SELECT id FROM tag WHERE key='civilian'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.space_freighter'),(SELECT id FROM movement_class WHERE key='starship'),2800);
-INSERT INTO et_trader(entity_type_id,runs_routes,claims_nodes,route_resource_id,route_income) VALUES ((SELECT id FROM def WHERE key='unit.space_freighter'),1,0,(SELECT id FROM def WHERE key='res.wealth'),20);
+INSERT INTO et_trader(entity_type_id,runs_routes,claims_nodes,route_resource_id,route_income) VALUES ((SELECT id FROM def WHERE key='unit.space_freighter'),1,0,(SELECT id FROM def WHERE key='res.wealth'),8);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='unit.space_freighter'),'train','units',2,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.space_freighter'),(SELECT id FROM def WHERE key='res.metal'),260,5);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.space_freighter'),(SELECT id FROM def WHERE key='res.energy'),60,1);

@@ -1,0 +1,7 @@
+# Task 68, replayed by --script (`--sphere 192 --age 3 --sun fixed`): 68-fog-script.txt with Optics
+# researched (sight +15 %): the lit disc around the scout grows.
+0 grant-tech tech.science.4
+0 place 1 unit.scout @34,0
+0 cam drag 1100,330 640,400
+1 cam wheel -2 640,400
+2 speed 1

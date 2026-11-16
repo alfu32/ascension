@@ -1,0 +1,7 @@
+# Task 68, replayed by --script (`--sphere 192 --age 3 --sun fixed`): a scout out in the fog, its sight a
+# lit disc in the dimmed ground. 68-fog-optics-script.txt is the same scene with Optics
+# researched (sight +15 %).
+0 place 1 unit.scout @34,0
+0 cam drag 1100,330 640,400
+1 cam wheel -2 640,400
+2 speed 1

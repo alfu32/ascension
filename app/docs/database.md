@@ -891,6 +891,11 @@ after their flight and the arrow is drawn in flight; the gun-age variants hit at
 and draw a tracer. (The city's weapon is `pierce` in every age in the data, so a city
 shoots arrows in every age.)
 
+Screenshots (scripts `tasks/68-*-script.txt`): `img/sight-tower-firing.png`,
+`img/sight-city-training-firing.png` (the city fires while its queue trains),
+`img/sight-fort-firing.png`, `img/sight-fog.png`, `img/sight-fog-optics.png` and
+`img/sight-fog-before-after.png` (a scout's lit disc before and after Optics).
+
 ## Ships in orbit (task 68)
 
 - **Geosynchronous.** A ship or craft in a planet's orbit holds over one ground point
@@ -912,7 +917,7 @@ shoots arrows in every age.)
   refused (`SimError::ShipNotLanded`); orbital craft keep boarding and launching from
   carriers in orbit.
 - **Space freighter** (`unit.space_freighter`, spaceport, starfaring): a route trader
-  that flies (`et_trader.runs_routes`, wealth, 20 per arrival per `trade.route_unit`).
+  that flies (`et_trader.runs_routes`, wealth, 8 per arrival per `trade.route_unit`).
   Its route joins an own city of the planet it stands on or orbits and an own or
   allied city of another planet of the same star system; the length is the distance
   between the two planets in the system plane. It runs the route as legs queued in

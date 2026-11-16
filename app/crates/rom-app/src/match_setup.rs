@@ -487,8 +487,10 @@ fn found_colony(
     world.reveal_terrain(PlayerId(1), body);
     let n = world.body(body).and_then(|b| b.n).unwrap_or(192) as i32;
     let city = world.city_type(owner).ok_or(SetupError::NoCity)?;
-    let site = world
-        .find_city_site(owner, body, Pos::on(body, 0, n * 500, n * 500))
+    // Near the middle of the first face (of the four around the equator) with room for it.
+    let site = [0, 1, 2, 3, 4, 5]
+        .into_iter()
+        .find_map(|face| world.find_city_site(owner, body, Pos::on(body, face, n * 500, n * 500)))
         .ok_or_else(|| fail("no room for a city"))?;
     world.place_for_setup(city, owner, site)?;
     Ok(())

@@ -155,6 +155,13 @@ orbital ship only when they have an `orbit` target layer (task 58, below).
 - **Sight from orbit** grows with altitude and hull size (16 to 28 tiles, the survey
   ship more); see `database.md`, "Sight".
 
+Screenshots (scripts `tasks/68-*-script.txt`): `img/orbit-hold-before-turn.png` and
+`img/orbit-hold-after-turn.png` (ships over the city before and after the view turns),
+`img/orbit-patrol.png` (a patrol's great circle round the planet),
+`img/orbit-landing.png` (a transport coming straight down), `img/orbit-freighter-route.png`
+(a freighter between the home planet and the colony), `img/orbit-satellite-sight.png` and
+`img/orbit-satellite-before-after.png` (the fog before and after a satellite goes up).
+
 ### Orbital craft, carriers and ground batteries (task 58)
 
 The airfield trains **orbital fighters** and **orbital bombers** from the
