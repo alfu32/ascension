@@ -68,6 +68,8 @@ OVERVIEW7 = [
     ("gallery_information_close", "Information age, close: <code>--gallery information</code>"),
     ("match_information", "In a match in the information age: the glass city"),
     ("gallery_units_close", "Every unit so far, close: <code>--gallery units</code>"),
+    ("unit.musketeer_gunpowder_attack_before", "Still open from round 5 — firing a long gun, before: one hand, from the hip"),
+    ("unit.musketeer_gunpowder_attack", "Round 5 — after: from the shoulder, both hands (also the arquebusier and crossbowman)"),
 ]
 OVERVIEW = OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
     ("gallery_ancient", "Ancient age, game camera: <code>--gallery ancient</code>"),
