@@ -43,6 +43,11 @@ pub(crate) struct Ground {
     pub threat: BTreeMap<Cell, i64>,
     /// Buildings planned during this thought: line root and city.
     planned: Vec<(DefId, Option<EntityId>)>,
+    /// Footprints kept free for the first gather site of a resource drawn from a node
+    /// terrain: other buildings must not take the only spot such a site has.
+    reserved: BTreeSet<Tile>,
+    /// Whether the reservations of this thought have been made.
+    pub reserved_done: bool,
     /// Placement previews asked of the simulation during this thought.
     previews: std::cell::Cell<usize>,
     /// Tile lookups spent on site searches during this thought.
@@ -99,6 +104,16 @@ impl Ground {
         }
     }
 
+    /// Keeps the footprint of a planned node gather site free of other buildings.
+    pub fn reserve(&mut self, et: &EntityType, pos: Pos) {
+        let (x0, y0, w, h) = footprint(et, pos);
+        for y in y0..y0 + h {
+            for x in x0..x0 + w {
+                self.reserved.insert((pos.body.0, pos.face, x, y));
+            }
+        }
+    }
+
     /// Records a building this thought has ordered, so later choices keep clear of it.
     pub fn plan(&mut self, view: &View<'_>, type_id: DefId, pos: Pos) {
         self.occupy(&view.rules.entity_types[&type_id], pos);
@@ -151,6 +166,8 @@ fn covering_city(view: &View<'_>, pos: Pos) -> Option<EntityId> {
 /// What the placement rules of a type ask of the ground, read once per search.
 struct Needs<'a> {
     et: &'a EntityType,
+    /// A gather site whose slots come from node terrain: it may use reserved ground.
+    node_site: bool,
     on_terrain: Vec<DefId>,
     adjacent: Vec<(DefId, i64)>,
     own_territory: bool,
@@ -163,6 +180,10 @@ impl<'a> Needs<'a> {
         let rules = &et.placement_rules;
         Some(Self {
             et,
+            node_site: et
+                .gather_site
+                .as_ref()
+                .is_some_and(|s| s.slots_per_node > 0 && s.needs_node_terrain_id.is_some()),
             on_terrain: rules
                 .iter()
                 .filter(|r| r.rule == PlacementKind::OnTerrain)
@@ -203,7 +224,9 @@ fn fits(
     for y in y0..y0 + h {
         for x in x0..x0 + w {
             ground.spend(1);
-            if obstacles.contains(&(pos.body.0, pos.face, x, y)) {
+            if obstacles.contains(&(pos.body.0, pos.face, x, y))
+                || (!needs.node_site && ground.reserved.contains(&(pos.body.0, pos.face, x, y)))
+            {
                 return None;
             }
             if !view
@@ -339,14 +362,31 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
                         .offset(city.pos, i64::from(*dx) * 1000, i64::from(*dy) * 1000)
                 });
             if let Some((terrain, site)) = node {
-                // The most node tiles in reach first, then the nearest to the city.
+                // The most node tiles in reach first, then the nearest to the city. The node
+                // tiles around the city are found once; only spots near one are tried.
+                let radius = site.node_radius.max(0);
+                let scan = reach + (radius / 1000) as i32 + 3;
+                let node_tiles: Vec<Pos> = view
+                    .cat
+                    .spiral
+                    .iter()
+                    .take_while(|(dx, dy)| dx * dx + dy * dy <= scan * scan)
+                    .map(|(dx, dy)| {
+                        view.world
+                            .offset(city.pos, i64::from(*dx) * 1000, i64::from(*dy) * 1000)
+                    })
+                    .filter(|at| view.world.terrain_at(*at) == Some(terrain))
+                    .collect();
+                ground.spend((scan * scan * 3) as usize);
                 let mut ranked: Vec<(i64, usize, Pos)> = Vec::new();
                 for (order, at) in spots.enumerate() {
                     if !ground.spend(0) {
                         break;
                     }
-                    // A coarse lattice keeps the count of terrain scans small.
-                    if at.x.div_euclid(1000) % 2 != 0 || at.y.div_euclid(1000) % 2 != 0 {
+                    let near = node_tiles
+                        .iter()
+                        .any(|n| view.distance(at, *n) <= radius as u64 + 3000);
+                    if !near {
                         continue;
                     }
                     let Some(pos) = fits(view, ground, &needs, at, lane, needs.own_territory)
@@ -356,7 +396,7 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
                     if full(pos) {
                         continue;
                     }
-                    let nodes = count_terrain(view, pos, terrain, site.node_radius.max(0));
+                    let nodes = count_terrain(view, pos, terrain, radius);
                     ground.spend(120);
                     let slots = (site.slots_base + site.slots_per_node * nodes).min(site.slots_max);
                     if slots > 0 {

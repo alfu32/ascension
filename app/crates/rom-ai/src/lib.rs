@@ -6,14 +6,18 @@
 //! `World::submit`. Its personality is a profile's weights and opening book, its skill a
 //! difficulty row; nothing in the decision code names a unit, building or technology.
 //!
-//! This crate holds the half that runs a civilisation: perception, opening book, economy,
-//! construction, research and production. Armies, space and diplomacy build on it.
+//! It runs a civilisation (perception, opening book, economy, construction, research and
+//! production), fights with armies (defence, attack, raids, scouting, siege, formations) and,
+//! from the starfaring ages, flies: survey ships claim resource bodies, warships escort and
+//! contest them and attack enemy orbits, transports carry armies and found colonies.
 
+mod army;
 mod brain;
 mod bytes;
 mod catalogue;
 mod construction;
 mod economy;
+mod fleet;
 mod memory;
 mod opening;
 mod plan;
@@ -23,7 +27,7 @@ mod sites;
 mod view;
 
 pub use brain::{Brain, SavedBrain};
-pub use memory::{BrainStats, EnemySighting};
+pub use memory::{Army, BrainStats, EnemySighting, Job, Phase, Role, Voyage};
 
 use rom_rules::{DefId, ModifierOp, Rules};
 use thiserror::Error;
@@ -60,8 +64,18 @@ pub(crate) struct Weights {
     pub age_priority: i64,
     /// `mil.army_share_pct`: share of the population cap kept as military.
     pub army_share: i64,
-    /// `mil.defense_share_pct`: share of the army kept at home; here, how much is fortified.
+    /// `mil.defense_share_pct`: share of the army kept at home, and how much is fortified.
     pub defense_share: i64,
+    /// `mil.attack_ratio_pct`: own strength against the known enemy strength before attacking.
+    pub attack_ratio: i64,
+    /// `mil.retreat_ratio_pct`: local strength ratio below which a beaten army pulls back.
+    pub retreat_ratio: i64,
+    /// `mil.raid_share_pct`: share of the army sent after workers and trade.
+    pub raid_share: i64,
+    /// `scout.units`: units kept exploring.
+    pub scouts: i64,
+    /// `space.claim_eagerness`: priority of resource bodies once in space.
+    pub claim: i64,
 }
 
 /// A player's state in a few numbers, for match reports.
