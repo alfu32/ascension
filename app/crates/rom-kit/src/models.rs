@@ -84,6 +84,8 @@ pub enum Shape {
     Track,
     /// A propeller or rotor about the z axis, turning all the time.
     Propeller,
+    /// A ring of round tube lying flat on the ground: a reactor torus, a dish rim.
+    Torus,
     /// Another composed mesh placed as a sub-assembly.
     Include,
     /// Free-form triangles from a `.mesh` file (see [`crate::custom`]).
@@ -109,7 +111,7 @@ pub const COMMON_COLOURS: &[&str] = &["tint"];
 
 impl Shape {
     /// Every shape, in a fixed order.
-    pub const ALL: [Shape; 28] = [
+    pub const ALL: [Shape; 29] = [
         Shape::Box,
         Shape::Plinth,
         Shape::GableRoof,
@@ -136,6 +138,7 @@ impl Shape {
         Shape::Bow,
         Shape::Track,
         Shape::Propeller,
+        Shape::Torus,
         Shape::Include,
         Shape::Custom,
     ];
@@ -174,6 +177,7 @@ impl Shape {
             Shape::Bow => "bow",
             Shape::Track => "track",
             Shape::Propeller => "propeller",
+            Shape::Torus => "torus",
             Shape::Include => "include",
             Shape::Custom => "custom",
         }
@@ -252,6 +256,7 @@ impl Shape {
             Shape::Bow => &["h", "bend", "w"],
             Shape::Track => &["l", "h", "t", "wheels", "segments"],
             Shape::Propeller => &["w", "blades", "chord"],
+            Shape::Torus => &["w", "t", "segments", "sides"],
             Shape::Include => &["scale"],
             Shape::Custom => &[],
         }
