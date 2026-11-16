@@ -232,7 +232,7 @@ impl Shape {
                 "stride",
                 "pace",
             ],
-            Shape::Quadruped => &["h", "l", "w", "stride", "pace"],
+            Shape::Quadruped => &["h", "l", "w", "stride", "pace", "plain"],
             Shape::Wheel => &["w", "t", "spokes", "segments"],
             Shape::OarBank => &["w", "count", "beam", "length", "drop"],
             Shape::Sail => &["w", "h", "billow", "lateen"],

@@ -10,6 +10,12 @@ use rom_models::sql::{MeshRows, ModelRows, PartRow, VisualRow};
 use rom_models::{ModelError, files};
 use serde_json::{Value, json};
 
+/// The temple these edit tests use is approved, so they unlock it as an owner's edit would.
+const EDIT_LOCKED: ImportOptions = ImportOptions {
+    model: None,
+    unlock: true,
+};
+
 /// A fresh copy of the model files in a temporary folder.
 struct Scratch {
     root: PathBuf,
@@ -421,13 +427,6 @@ fn prototype_named<'a>(doc: &'a Value, name: &str) -> &'a str {
         .unwrap()
 }
 
-/// The editing tests change the temple, which the owner has approved since: they write it
-/// anyway, as `--unlock` does (locking has its own test).
-const UNLOCKED: ImportOptions = ImportOptions {
-    model: None,
-    unlock: true,
-};
-
 #[test]
 fn free_form_objects_become_custom_parts() {
     let scratch = Scratch::new("free");
@@ -471,7 +470,7 @@ fn free_form_objects_become_custom_parts() {
     }));
     let file = scratch.root.join("edited.octd");
     std::fs::write(&file, doc.to_string()).unwrap();
-    let report = import(&lib, &file, &UNLOCKED).unwrap();
+    let report = import(&lib, &file, &EDIT_LOCKED).unwrap();
     assert_eq!(report.counts, [13, 1, 0]);
     let sql = read(&report.sql);
     assert!(
@@ -507,7 +506,7 @@ fn free_form_objects_become_custom_parts() {
         .unwrap();
     faces[0]["meshcraftMaterialId"] = "ansi-grey".into();
     std::fs::write(&file, bad.to_string()).unwrap();
-    match import(&after, &file, &UNLOCKED) {
+    match import(&after, &file, &ImportOptions::default()) {
         Err(ModelError::Invalid(message)) => {
             assert!(
                 message.contains("statue_2") && message.contains("ansi-grey"),
@@ -533,7 +532,7 @@ fn edited_properties_win_and_unknown_settings_are_refused() {
     roof["ifcProperties"]["Rise of Man"]["y"]["value"] = json!(3.6);
     let file = scratch.root.join("edited.octd");
     std::fs::write(&file, doc.to_string()).unwrap();
-    let report = import(&lib, &file, &UNLOCKED).unwrap();
+    let report = import(&lib, &file, &EDIT_LOCKED).unwrap();
     let sql = read(&report.sql);
     assert!(
         sql.contains(r#"('roof','gable_roof','mat.terracotta',0,'','{"y":3.6,"yaw":90,"w":2.95,"d":2.95,"pitch":35,"overhang":0.1,"t":0.1}')"#),
@@ -549,7 +548,7 @@ fn edited_properties_win_and_unknown_settings_are_refused() {
         children[0]["ifcProperties"]["Rise of Man"][key] =
             json!({"kind": "single", "dataType": "IfcLabel", "value": value});
         std::fs::write(&file, bad.to_string()).unwrap();
-        match import(&lib, &file, &UNLOCKED) {
+        match import(&lib, &file, &ImportOptions::default()) {
             Err(ModelError::Invalid(message)) => assert!(message.contains(needle), "{message}"),
             other => panic!("{key}: {other:?}"),
         }

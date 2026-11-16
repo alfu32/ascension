@@ -409,8 +409,8 @@ knobs:
 | `awning` | `w`, `d`, `h`, `rise`, `posts`; colour `post_colour` |
 | `arch` | `w`, `h`, `t` (a wall along x), `span` (width of the round-headed opening in its middle), `spring` (height where the head begins), `segments` |
 | `hull` | `w` (length along x), `d` (beam), `h` (depth amidships), `sheer` (rise of both pointed ends), `segments`, `float` (1: rides the water, carrying the parts attached to it), `heel` (degrees a floating hull leans while under way: a sailing ship); an open boat, planked inside and out |
-| `figure` | `h` (1 tile), `build`, `robe` (1: a long robe to the ground), `seat` (1: sits astride, hips on its origin + 0.4 `h`); motion `attack` (0 overhead strike, 1 thrust, 2 overhand throw, 3 draw a bow held in the left hand, 4 whirl a sling, 5 raise a firearm or crossbow to the shoulder, aim, fire and lower it, 6 level a pistol, fire and lower it), `work` (0 swing a tool, 1 raise both arms), `hold_right`, `hold_left` (degrees an arm is carried forward, still, keeping what it holds upright; 0 swings), `stride` (degrees of leg swing, default 28), `pace` (seconds per step cycle, default 1); colours `skin`, `hair`, `legs` (the tunic is the part) |
-| `quadruped` | `h` (size, 1: a horse with its back 0.82 up), `l`, `w` (body length and width), `stride`, `pace` (gait); colours `mane`, `hoof` (the hide is the part); faces +z |
+| `figure` | `h` (1 tile), `build`, `robe` (1: a long robe to the ground), `seat` (1: sits astride, hips on its origin + 0.4 `h`); motion `attack` (0 overhead strike, 1 thrust, 2 overhand throw, 3 draw a bow held in the left hand, 4 whirl a sling, 5 raise a long firearm or crossbow to the shoulder with both hands, aim, fire and lower it: the body turns its left shoulder towards the target, the butt beds in the right shoulder beside the cheek and the left hand holds the barrel up, 6 level a pistol, fire and lower it), `work` (0 swing a tool, 1 raise both arms), `hold_right`, `hold_left` (degrees an arm is carried forward, still, keeping what it holds upright; 0 swings), `stride` (degrees of leg swing, default 28), `pace` (seconds per step cycle, default 1); colours `skin`, `hair`, `legs` (the tunic is the part) |
+| `quadruped` | `h` (size, 1: a horse with its back 0.82 up), `l`, `w` (body length and width), `stride`, `pace` (gait), `plain` (1: no ears, mane or hooves, for a team in harness); colours `mane`, `hoof` (the hide is the part); faces +z |
 | `wheel` | `w` (diameter), `t` (thickness), `spokes` (bars across the faces), `segments`; upright on the ground, axle along x; turns as its unit moves |
 | `oar_bank` | `w` (length of the bank along x), `count` (oars a side), `beam` (distance between the oarlocks across z), `length`, `drop` (degrees down to the water); each oar sweeps as its unit moves |
 | `sail` | `w`, `h`, `billow` (belly towards +z), `lateen` (1: a triangle, its foot closing to the yard's −x end; lean the part to slant the yard); colour `yard_colour`; the cloth is the part |
@@ -429,7 +429,8 @@ flash (`FIRE_AT` in `rig.rs`), so they stay in step. Each unit's snapshot carrie
 idle, move, attack or work, read from the simulation's public state (see
 `activity_of` in `rom-app`'s `sim_thread.rs`) — and the GPU poses the model from
 keyframes baked before play, the render clock and a phase per entity. Shadows
-keep the models at rest.
+keep the models at rest. A model has at most 40 joints, itself included (`MAX_JOINTS`;
+raised from 32 by task 45 for a wagon drawn by four horses).
 
 The loader refuses include cycles; the application reports an unknown shape
 or knob once on stderr and skips it. Object programs for parts are
@@ -478,7 +479,26 @@ size and place blend smoothly with the camera's distance.
 list) and `ai_difficulty` (thinking speed, order budget, reaction time,
 mistakes). A computer player acts only by adding rows to `order`, like a
 human. Its memory is saved in `player_ai_state`. See
-`research/05-computer-opponents.md`.
+`research/05-computer-opponents.md` and, for what is built,
+`docs/computer-player.md`.
+
+Notes from task 60:
+
+- **Weights read so far:** `econ.worker_share_pct`, `econ.expand_eagerness`,
+  `tech.age_priority`, `mil.army_share_pct`, `mil.defense_share_pct`. No
+  weight key had to be added.
+- **Opening steps must be reachable in order.** A step whose subject is still
+  locked when its turn comes is waited for one minute and then skipped, so a
+  building's technology is a step of its own before it. The seed's books were
+  rewritten on that rule and now cover all four profiles (the old rows asked
+  for a barracks before the technology that unlocks it).
+- **`ai_difficulty.income_bonus_pct` has no carrier yet.** A modifier needs a
+  source among the player's technologies, age or faction. The computer player
+  looks for a technology with no `production` row whose modifiers are all
+  `income.*` percentages equal to the bonus, and the host grants it at setup;
+  the seed holds none because `rom check-rules` reports such a technology as
+  unreachable. Open decision: exempt granted technologies from that check, or
+  give the simulation a per-player modifier source.
 
 ## Content generator
 

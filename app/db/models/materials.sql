@@ -31,7 +31,14 @@ INSERT INTO def(kind,key,name) VALUES
   ('material','mat.fur','Fur'),
   ('material','mat.felt','Felt'),
   ('material','mat.flash','Muzzle flash'),
-  ('material','mat.canvas','Canvas');
+  ('material','mat.canvas','Canvas'),
+  ('material','mat.brick','Brick'),
+  ('material','mat.pantile','Pantiles'),
+  ('material','mat.ochre_plaster','Ochre plaster'),
+  ('material','mat.ashlar','Ashlar'),
+  ('material','mat.copper','Copper'),
+  ('material','mat.turf','Turf'),
+  ('material','mat.brass','Brass');
 WITH v(k,prog,params) AS (VALUES
   ('mat.mud_plaster','plaster','{"colour":"#c4a27a","colour_alt":"#a3825c","scale":0.7}'),
   ('mat.mud_brick','brick','{"colour":"#b58a5e","colour_alt":"#8c6b4c","scale":0.32}'),
@@ -63,5 +70,12 @@ WITH v(k,prog,params) AS (VALUES
   ('mat.fur','plaster','{"colour":"#4a382a","colour_alt":"#2c2119","scale":0.18}'),
   ('mat.felt','cloth','{"colour":"#3a332e","colour_alt":"#25201c","scale":0.2}'),
   ('mat.flash','emissive','{"colour":"#ffeb8a","colour_alt":"#ffa424","scale":0.5}'),
-  ('mat.canvas','cloth','{"colour":"#ece4cf","colour_alt":"#c6bb9f","scale":0.3}'))
+  ('mat.canvas','cloth','{"colour":"#ece4cf","colour_alt":"#c6bb9f","scale":0.3}'),
+  ('mat.brick','brick','{"colour":"#a85a3c","colour_alt":"#7a3d28","scale":0.28}'),
+  ('mat.pantile','roof_tile','{"colour":"#a3502f","colour_alt":"#6b2e1c","scale":0.16}'),
+  ('mat.ochre_plaster','plaster','{"colour":"#dcbf86","colour_alt":"#c0a26c","scale":0.9}'),
+  ('mat.ashlar','brick','{"colour":"#d6cbb0","colour_alt":"#ab9f84","scale":0.5}'),
+  ('mat.copper','metal','{"colour":"#6fa58f","colour_alt":"#4a7a68","scale":0.3}'),
+  ('mat.turf','plaster','{"colour":"#73904c","colour_alt":"#58723a","scale":1.2}'),
+  ('mat.brass','metal','{"colour":"#d0a84e","colour_alt":"#94702e","scale":0.3}'))
 INSERT INTO material(id,program,params) SELECT d.id, v.prog, v.params FROM v JOIN def d ON d.key=v.k;

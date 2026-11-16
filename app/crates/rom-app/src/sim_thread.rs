@@ -1082,8 +1082,9 @@ mod tests {
         assert_eq!(model_of(None, "bld.city"), "bld.city@ancient");
         assert_eq!(model_of(Some(1), "bld.city"), "bld.city@classical");
         assert_eq!(model_of(Some(2), "bld.city"), "bld.city@medieval");
-        // The gunpowder age has no city look of its own yet: the medieval one stays.
-        assert_eq!(model_of(Some(3), "bld.city"), "bld.city@medieval");
+        // The early-modern look comes with the gunpowder age and stays through the next.
+        assert_eq!(model_of(Some(3), "bld.city"), "bld.city@gunpowder");
+        assert_eq!(model_of(Some(4), "bld.city"), "bld.city@gunpowder");
         assert_eq!(model_of(None, "unit.citizen"), "unit.citizen@any");
     }
 
