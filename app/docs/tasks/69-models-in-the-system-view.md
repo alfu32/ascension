@@ -44,7 +44,8 @@ ships in a system.
 3. **Fallback.** A ship kind with no model keeps the box hull, so nothing
    disappears.
 4. **Resource bodies stay spheres.** The owner decided (2026-11-16): "not
-   proper 3D models, just bigger on the starmap". No models for resource
+   proper 3D models, just bigger on the starmap" (meaning the system view,
+   "the solar plane map"). No models for resource
    bodies; item 5 makes them bigger.
 5. **Bigger resource bodies (owner, 2026-11-16: "planetoids are a tad too
    small, let's make them bigger in spite of the physical reality").** Moons,
@@ -53,8 +54,8 @@ ships in a system.
    median planet (300). Draw them about three times larger, roughly a third
    to a half of a median planet, but always smaller than the smallest
    habitable planet (`HOME_PLANET_RADIUS` × 96 / 192), in the system view and
-   on the minimap, and clearly bigger at whole-system zoom and further out
-   (a screen-size floor per kind, rocks about 55–75 % of the smallest planet
+   on the minimap, and clearly bigger at every zoom of the system view,
+   whole-system zoom above all (a screen-size floor per kind, rocks about 55–75 % of the smallest planet
    on screen), not only close up. Keep them readable and
    apart: moons must not touch their planet (widen their small ring as
    needed), belt bodies must not overlap, and hover, double-click and the
