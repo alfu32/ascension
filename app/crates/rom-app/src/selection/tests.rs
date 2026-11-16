@@ -1384,7 +1384,11 @@ fn task_30_scripts_reach_the_capture_states_without_a_window() {
                         Ok(pick) => ctl.handle(&mut game.world, pick),
                         Err(error) => ctl.notify(&game.world, error),
                     },
-                    ScriptAction::Speed(_) | ScriptAction::Input(_) => {}
+                    ScriptAction::Speed(_)
+                    | ScriptAction::Input(_)
+                    | ScriptAction::Save(_)
+                    | ScriptAction::QuickSave
+                    | ScriptAction::Menu(_) => {}
                 }
             }
             for event in script.due(game.world.tick()) {
@@ -1753,7 +1757,11 @@ fn wealth_screenshot_script_reaches_capture_without_a_window() {
                         });
                     ctl.handle(&mut game.world, pick);
                 }
-                ScriptAction::Speed(_) | ScriptAction::Input(_) => {}
+                ScriptAction::Speed(_)
+                | ScriptAction::Input(_)
+                | ScriptAction::Save(_)
+                | ScriptAction::QuickSave
+                | ScriptAction::Menu(_) => {}
             }
         }
         for pick in script.due(game.world.tick()) {
@@ -1954,7 +1962,11 @@ fn orbital_review_script_trains_launches_selects_and_bombards_through_picks() {
                         .find_map(|e| game.world.orbit(e.id).and_then(|o| o.last_shot));
                     println!("review capture tick={} shot={last:?}", game.world.tick());
                 }
-                ScriptAction::Speed(_) | ScriptAction::Input(_) => {}
+                ScriptAction::Speed(_)
+                | ScriptAction::Input(_)
+                | ScriptAction::Save(_)
+                | ScriptAction::QuickSave
+                | ScriptAction::Menu(_) => {}
             }
         }
         for event in script.due(game.world.tick()) {
@@ -2227,7 +2239,10 @@ fn colony_script_run() -> (crate::match_setup::Match, Controller, BodyId, u64) {
                         });
                     }
                 }
-                ScriptAction::Speed(_) => {}
+                ScriptAction::Speed(_)
+                | ScriptAction::Save(_)
+                | ScriptAction::QuickSave
+                | ScriptAction::Menu(_) => {}
             }
         }
         for event in script.due(game.world.tick()) {
@@ -2383,7 +2398,11 @@ fn orbital_combat_script(
                         crate::script::live_pick(&game.world, &target, right, shift).unwrap();
                     ctl.handle(&mut game.world, pick);
                 }
-                ScriptAction::Speed(_) | ScriptAction::Input(_) => {}
+                ScriptAction::Speed(_)
+                | ScriptAction::Input(_)
+                | ScriptAction::Save(_)
+                | ScriptAction::QuickSave
+                | ScriptAction::Menu(_) => {}
             }
         }
         for event in script.due(game.world.tick()) {

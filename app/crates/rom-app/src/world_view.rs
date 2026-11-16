@@ -6,6 +6,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+mod menu;
+
+use crate::saves::Kind;
 use crate::sim_thread::{SimLink, SimReport};
 use gpui::{
     Context, CursorStyle, FocusHandle, ImageSource, InteractiveElement, IntoElement, KeyDownEvent,
@@ -40,6 +43,10 @@ pub struct WorldView {
     /// Whether the real pointer reaches the renderer; off for screenshot and benchmark runs,
     /// where a pointer resting at the window edge would pan the camera.
     pointer_input: bool,
+    /// The in-match menu while it is open.
+    menu: Option<menu::Menu>,
+    /// This window's own options (size, scale, HUD) that a loaded game keeps.
+    display_arguments: Vec<String>,
 }
 
 impl WorldView {
@@ -53,6 +60,7 @@ impl WorldView {
         bridge: RenderBridge,
         sim: SimLink,
         show_stats: bool,
+        display_arguments: Vec<String>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -86,6 +94,7 @@ impl WorldView {
                 if !alive {
                     break;
                 }
+                let _ = view.update_in(cx, |view, window, cx| view.pump(window, cx));
             }
         })
         .detach();
@@ -101,6 +110,8 @@ impl WorldView {
             recent_presents: VecDeque::new(),
             origin: Rc::new(Cell::new(Point::default())),
             pointer_input: true,
+            menu: None,
+            display_arguments,
         }
     }
 
@@ -170,7 +181,29 @@ impl WorldView {
         });
     }
 
-    fn key_down(&mut self, event: &KeyDownEvent) {
+    fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if self.menu_open() {
+            if event.keystroke.key == "escape" {
+                self.menu_back(window, cx);
+            }
+            return;
+        }
+        match event.keystroke.key.as_str() {
+            "escape" => {
+                self.bridge.push_input(InputEvent::Escape);
+                self.open_menu(window, cx);
+                return;
+            }
+            "f5" => {
+                self.sim.request_save(Kind::Quick, "");
+                return;
+            }
+            "f9" => {
+                self.quick_load(window, cx);
+                return;
+            }
+            _ => {}
+        }
         let current = self.bridge.render_scale();
         match event.keystroke.key.as_str() {
             "pageup" => self
@@ -183,7 +216,6 @@ impl WorldView {
                 .sim
                 .set_speed(self.sim.speed().saturating_mul(2).min(1600)),
             "-" => self.sim.set_speed((self.sim.speed() / 2).max(6)),
-            "escape" => self.bridge.push_input(InputEvent::Escape),
             "space" if event.keystroke.modifiers.shift => self
                 .bridge
                 .push_input(InputEvent::KeyDown(Key::FollowSelection)),
@@ -267,20 +299,23 @@ impl Render for WorldView {
             .overflow_hidden()
             .bg(rgb(0x1b2430))
             .on_mouse_move(cx.listener(|view, event: &MouseMoveEvent, window, _| {
-                if !view.pointer_input {
+                if !view.pointer_input || view.menu_open() {
                     return;
                 }
                 let (x, y) = view.canvas_point(event.position, window);
                 view.bridge.push_input(InputEvent::PointerMoved { x, y });
             }))
             .on_hover(cx.listener(|view, hovered: &bool, _, _| {
-                if !*hovered {
+                if !*hovered && !view.menu_open() {
                     view.bridge.push_input(InputEvent::PointerLeft);
                 }
             }))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|view, event: &MouseDownEvent, window, _| {
+                    if view.menu_open() {
+                        return;
+                    }
                     window.focus(&view.focus);
                     view.button_event(event.button, event.position, window, event.modifiers, true);
                 }),
@@ -288,30 +323,45 @@ impl Render for WorldView {
             .on_mouse_down(
                 MouseButton::Right,
                 cx.listener(|view, event: &MouseDownEvent, window, _| {
+                    if view.menu_open() {
+                        return;
+                    }
                     view.button_event(event.button, event.position, window, event.modifiers, true);
                 }),
             )
             .on_mouse_down(
                 MouseButton::Middle,
                 cx.listener(|view, event: &MouseDownEvent, window, _| {
+                    if view.menu_open() {
+                        return;
+                    }
                     view.button_event(event.button, event.position, window, event.modifiers, true);
                 }),
             )
             .on_mouse_up(
                 MouseButton::Left,
                 cx.listener(|view, event: &MouseUpEvent, window, _| {
+                    if view.menu_open() {
+                        return;
+                    }
                     view.button_event(event.button, event.position, window, event.modifiers, false);
                 }),
             )
             .on_mouse_up(
                 MouseButton::Right,
                 cx.listener(|view, event: &MouseUpEvent, window, _| {
+                    if view.menu_open() {
+                        return;
+                    }
                     view.button_event(event.button, event.position, window, event.modifiers, false);
                 }),
             )
             .on_mouse_up(
                 MouseButton::Middle,
                 cx.listener(|view, event: &MouseUpEvent, window, _| {
+                    if view.menu_open() {
+                        return;
+                    }
                     view.button_event(event.button, event.position, window, event.modifiers, false);
                 }),
             )
@@ -320,15 +370,18 @@ impl Render for WorldView {
                     ScrollDelta::Lines(delta) => delta.y,
                     ScrollDelta::Pixels(delta) => f32::from(delta.y) / PIXELS_PER_WHEEL_STEP,
                 };
-                if steps != 0.0 {
+                if steps != 0.0 && !view.menu_open() {
                     view.bridge.push_input(InputEvent::Wheel { steps });
                 }
             }))
-            .on_key_down(cx.listener(|view, event: &KeyDownEvent, _, cx| {
-                view.key_down(event);
+            .on_key_down(cx.listener(|view, event: &KeyDownEvent, window, cx| {
+                view.key_down(event, window, cx);
                 cx.notify();
             }))
             .on_key_up(cx.listener(|view, event: &KeyUpEvent, _, _| {
+                if view.menu_open() {
+                    return;
+                }
                 if let Some(key) = Key::from_name(&event.keystroke.key) {
                     view.bridge.push_input(InputEvent::KeyUp(key));
                 }
@@ -336,6 +389,7 @@ impl Render for WorldView {
             .child(layout_probe)
             .child(picture)
             .children(overlay)
+            .children(self.render_menu(cx))
     }
 }
 

@@ -17,7 +17,8 @@ use gpui_component::{
 };
 
 use super::form::{
-    CONTROLS, Config, Form, GROUPS, MODELS_GROUP, PRESETS, command_line, commands, preset,
+    CONTROLS, Config, Form, GROUPS, MODELS_GROUP, PRESETS, SAVES_GROUP, command_line, commands,
+    preset,
 };
 use super::models;
 use super::{Catalog, Choice};
@@ -55,6 +56,8 @@ pub(super) struct Launcher {
     model_status: String,
     model_unlock: bool,
     model_busy: bool,
+    saves: Vec<crate::saves::Entry>,
+    saves_note: Option<String>,
 }
 
 impl Launcher {
@@ -93,7 +96,10 @@ impl Launcher {
                 .into(),
             model_unlock: false,
             model_busy: false,
+            saves: Vec::new(),
+            saves_note: None,
         };
+        this.refresh_saves();
         this.prepare(window, cx);
         cx.spawn(async |this, cx| {
             // Present the initial form after X11 has mapped the window, even without input.
@@ -385,6 +391,123 @@ impl Launcher {
             }
         }
         cx.notify();
+    }
+
+    /// Reads the save folder again.
+    fn refresh_saves(&mut self) {
+        match crate::saves::folder() {
+            Ok(folder) => {
+                self.saves = crate::saves::list(&folder, &self.catalog.rules_id);
+                self.saves_note = Some(if self.saves.is_empty() {
+                    format!("No saved games in {}.", folder.display())
+                } else {
+                    format!("Saved games in {}", folder.display())
+                });
+            }
+            Err(error) => {
+                self.saves.clear();
+                self.saves_note = Some(format!("No save folder: {error}"));
+            }
+        }
+    }
+
+    /// Starts a game process that continues the save at `path`, paused.
+    fn load_save(&mut self, path: &std::path::Path, cx: &mut Context<Self>) {
+        let display = crate::saves::display_arguments(&self.config.form.arguments());
+        match crate::saves::relaunch(path, &display) {
+            Ok(child) => {
+                eprintln!(
+                    "launcher: started pid {} --load {}",
+                    child.id(),
+                    path.display()
+                );
+                self.message = None;
+                self.processes.push(Process {
+                    child,
+                    status: "running".into(),
+                    finished: false,
+                });
+            }
+            Err(error) => self.message = Some(error),
+        }
+        cx.notify();
+    }
+
+    /// Continues the newest save this game can load.
+    fn continue_latest(&mut self, cx: &mut Context<Self>) {
+        self.refresh_saves();
+        match self
+            .saves
+            .iter()
+            .find(|e| e.refusal.is_none())
+            .map(|e| e.path.clone())
+        {
+            Some(path) => self.load_save(&path, cx),
+            None => {
+                self.message = Some("There is no saved game to continue.".into());
+                cx.notify();
+            }
+        }
+    }
+
+    /// The Saved games group: every save, newest first, with a Load button each.
+    fn saves_panel(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let mut panel = div().flex().flex_col().gap_2().p_3().child(
+            div()
+                .flex()
+                .items_center()
+                .gap_3()
+                .child(
+                    Button::new("saves-refresh")
+                        .small()
+                        .label("Refresh")
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.refresh_saves();
+                            cx.notify();
+                        })),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(rgb(0x9fb0c3))
+                        .child(self.saves_note.clone().unwrap_or_default()),
+                ),
+        );
+        for (index, entry) in self.saves.iter().enumerate() {
+            let path = entry.path.clone();
+            let refused = entry.refusal.is_some();
+            panel = panel.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_3()
+                    .p_2()
+                    .bg(rgb(0x141b24))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .child(
+                                div()
+                                    .text_color(rgb(if refused { 0x9fb0c3 } else { 0x3fd0ff }))
+                                    .child(format!("{} ({})", entry.name, entry.kind.label())),
+                            )
+                            .child(div().text_xs().child(entry.summary()))
+                            .children(entry.refusal.as_ref().map(|why| {
+                                div().text_xs().text_color(rgb(0xf0b030)).child(why.clone())
+                            })),
+                    )
+                    .child(
+                        Button::new(("load-save", index))
+                            .label("Load")
+                            .disabled(refused)
+                            .on_click(cx.listener(move |this, _, _, cx| this.load_save(&path, cx))),
+                    ),
+            );
+        }
+        panel.into_any_element()
     }
 
     /// Runs `work` off the UI thread, showing `pending` until its status line arrives.
@@ -852,12 +975,17 @@ impl Render for Launcher {
                     .selected(index == self.group)
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.group = index;
+                        if index == SAVES_GROUP {
+                            this.refresh_saves();
+                        }
                         cx.notify();
                     })),
             );
         }
         let rows = if self.group == MODELS_GROUP {
             vec![self.models_panel(cx)]
+        } else if self.group == SAVES_GROUP {
+            vec![self.saves_panel(cx)]
         } else {
             CONTROLS
                 .iter()
@@ -923,6 +1051,11 @@ impl Render for Launcher {
                         .label("Launch game")
                         .disabled(error.is_some())
                         .on_click(cx.listener(|this, _, _, cx| this.launch(cx))),
+                )
+                .child(
+                    Button::new("continue")
+                        .label("Continue")
+                        .on_click(cx.listener(|this, _, _, cx| this.continue_latest(cx))),
                 )
                 .child(
                     div()
