@@ -10,7 +10,7 @@ use rom_models::sql::{MeshRows, ModelRows, PartRow, VisualRow};
 use rom_models::{ModelError, files};
 use serde_json::{Value, json};
 
-/// The temple these edit tests use is approved, so they unlock it as an owner's edit would.
+/// The temples these edit tests replace are approved, so they unlock them as an owner's edit would.
 const EDIT_LOCKED: ImportOptions = ImportOptions {
     model: None,
     unlock: true,
@@ -377,7 +377,7 @@ fn every_shape_comes_back_as_the_same_rows() {
     assert_eq!(entry.look.spec.parts.len(), rows.mesh.parts.len());
     let fingerprint = entry.baked.fingerprint();
     let written = export(&lib, "bld.temple@industrial", &scratch.out()).unwrap();
-    let report = import(&lib, &written[0], &ImportOptions::default()).unwrap();
+    let report = import(&lib, &written[0], &EDIT_LOCKED).unwrap();
     assert_eq!(report.counts, [27, 1, 1]);
     assert_eq!(read(&report.sql), sql, "rows changed by the round trip");
     assert_eq!(read(&statue), STATUE, "the free-form part's file changed");
