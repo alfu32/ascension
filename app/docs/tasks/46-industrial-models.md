@@ -1,7 +1,8 @@
 # Task 46 — Models: Industrial
 
-Implementer: Codex (`gpt-6.1-sol`, high). Crates: seed (and `rom-render`
-part kit and motion, `rom-app` tests, only as needed). Review round 6.
+Implementer: Claude agent (moved off Codex by the owner, 2026-11-16). Model files in
+`db/models/` (and the `rom-kit` part kit and motion, `rom-app` tests, only as
+needed). Review round 6.
 
 **Read `model-card-common.md` first**: it holds the method, rules, review
 material, tests, the done-when list and how to finish. This card lists only
@@ -45,3 +46,17 @@ wheels roll with movement, turrets traverse and guns recoil on attack,
 propellers spin, aircraft fly at altitude with a gentle bank while moving
 (check how the renderer places air units today and report it), funnels may
 smoke later (not required). A machine gun fires bursts (repeated flashes).
+
+## Done (task 46)
+
+- 24 building looks and 10 units in `db/models/*@industrial.sql`, shared
+  `mesh.house_industrial` and `mesh.silo_industrial`; materials red brick,
+  corrugated iron, cast iron, glass, tarred felt, olive drab, khaki, rubber,
+  tarmac, cinders, rusted iron and crude oil.
+- Kit: shapes `track` and `propeller`; part knobs `traverse` (turret),
+  `bank` (aircraft) and `flash` 2–5 (burst); figure `attack` 7 (brace at a
+  mounted gun) and `work` 2 (tend). Turrets, wings and funnels are boxes and
+  cylinders; no separate shapes were needed.
+- The renderer draws non-spacecraft units on the ground, so the biplane's
+  model carries its own height (2.7 tiles).
+- A crew of foot figures (the machine gunner) has the figure budget per figure.

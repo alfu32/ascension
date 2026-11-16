@@ -12,7 +12,7 @@ use std::ops::Range;
 use crate::custom::CustomPaint;
 use crate::kit::{self, Painter, Place, Surface};
 use crate::material::MaterialLook;
-use crate::rig::{Activity, Motion, Rig};
+use crate::rig::{Activity, FLIGHT_PERIOD, MAX_BURST, Motion, Rig};
 
 /// Parts whose far mesh spans less than this (tiles) are left out of the far version.
 pub const FAR_MIN_EXTENT: f32 = 0.3;
@@ -80,6 +80,10 @@ pub enum Shape {
     Shield,
     /// A bow and its string.
     Bow,
+    /// A tank's track run along z: a belt round its road wheels, which turn as its unit moves.
+    Track,
+    /// A propeller or rotor about the z axis, turning all the time.
+    Propeller,
     /// Another composed mesh placed as a sub-assembly.
     Include,
     /// Free-form triangles from a `.mesh` file (see [`crate::custom`]).
@@ -91,17 +95,21 @@ pub enum Shape {
 /// repeat (`repeat` copies, each moved by `dx`, `dz`), `far` (0: left out of the far version),
 /// `strike` (degrees the part swings forward about its base, along its x axis, when its unit
 /// attacks), `recoil` (tiles the part kicks back along its own −y when its unit fires: a gun
-/// barrel) and `flash` (1: the part shows only for a moment when its unit fires: a muzzle
-/// flash).
+/// barrel), `flash` (1: the part shows only for a moment when its unit fires: a muzzle
+/// flash; 2 or more: that many flashes in quick succession, a machine gun's burst),
+/// `traverse` (degrees the part swings about its upright axis and back before each shot: a gun
+/// turret laying its gun) and `bank` (the part flies: it bobs, and under way banks from side to
+/// side by up to this many degrees: an aircraft's fuselage, carrying everything attached).
 pub const COMMON_KNOBS: &[&str] = &[
-    "x", "y", "z", "yaw", "pitch", "roll", "repeat", "dx", "dz", "far", "strike", "recoil", "flash",
+    "x", "y", "z", "yaw", "pitch", "roll", "repeat", "dx", "dz", "far", "strike", "recoil",
+    "flash", "traverse", "bank",
 ];
 /// Colour knobs every part understands.
 pub const COMMON_COLOURS: &[&str] = &["tint"];
 
 impl Shape {
     /// Every shape, in a fixed order.
-    pub const ALL: [Shape; 26] = [
+    pub const ALL: [Shape; 28] = [
         Shape::Box,
         Shape::Plinth,
         Shape::GableRoof,
@@ -126,6 +134,8 @@ impl Shape {
         Shape::Sail,
         Shape::Shield,
         Shape::Bow,
+        Shape::Track,
+        Shape::Propeller,
         Shape::Include,
         Shape::Custom,
     ];
@@ -162,6 +172,8 @@ impl Shape {
             Shape::Sail => "sail",
             Shape::Shield => "shield",
             Shape::Bow => "bow",
+            Shape::Track => "track",
+            Shape::Propeller => "propeller",
             Shape::Include => "include",
             Shape::Custom => "custom",
         }
@@ -238,6 +250,8 @@ impl Shape {
             Shape::Sail => &["w", "h", "billow", "lateen"],
             Shape::Shield => &["w", "h", "t", "boss", "segments", "point"],
             Shape::Bow => &["h", "bend", "w"],
+            Shape::Track => &["l", "h", "t", "wheels", "segments"],
+            Shape::Propeller => &["w", "blades", "chord"],
             Shape::Include => &["scale"],
             Shape::Custom => &[],
         }
@@ -254,6 +268,8 @@ impl Shape {
             Shape::Sail => &["yard_colour"],
             Shape::Shield => &["rim"],
             Shape::Bow => &["string"],
+            Shape::Track => &["wheel_colour"],
+            Shape::Propeller => &["hub_colour"],
             _ => &[],
         }
     }
@@ -653,7 +669,9 @@ impl Bake {
             };
             let strike = knob("strike", 0.0);
             let recoil = knob("recoil", 0.0);
-            let flash = knob("flash", 0.0) > 0.5;
+            let flash = knob("flash", 0.0).round().clamp(0.0, f32::from(MAX_BURST)) as u8;
+            let traverse = knob("traverse", 0.0);
+            let bank = knob("bank", 0.0);
             let start = (self.mesh.positions.len(), self.mesh.indices.len());
             let place_of = |copy: usize| {
                 parent.then(&Place {
@@ -675,6 +693,15 @@ impl Bake {
             for copy in 0..copies {
                 let at = place_of(copy);
                 let mut own = parent_joint;
+                if bank != 0.0 {
+                    // An aircraft weaves slowly, one bank to each side a cycle.
+                    self.rig.suggest_period(Activity::Move, FLIGHT_PERIOD);
+                    self.rig.suggest_period(Activity::Attack, FLIGHT_PERIOD);
+                    own = self.joint(own, &at, Motion::Fly(bank.to_radians()));
+                }
+                if traverse != 0.0 {
+                    own = self.joint(own, &at, Motion::Traverse(traverse.to_radians()));
+                }
                 if strike != 0.0 {
                     // A swinging part is a siege engine's arm: a slow cycle of loading.
                     self.rig.suggest_period(Activity::Attack, 2.4);
@@ -685,8 +712,10 @@ impl Bake {
                     self.rig.suggest_period(Activity::Attack, 3.0);
                     own = self.joint(own, &at, Motion::Recoil(recoil));
                 }
-                if flash {
+                if flash == 1 {
                     own = self.joint(own, &at, Motion::Flash);
+                } else if flash > 1 {
+                    own = self.joint(own, &at, Motion::Burst(flash));
                 }
                 let copy_start = (self.mesh.positions.len(), self.mesh.indices.len());
                 if part.shape == Shape::Include {
