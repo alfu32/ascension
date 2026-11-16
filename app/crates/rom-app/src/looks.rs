@@ -304,7 +304,7 @@ mod tests {
         // A later age without a look of its own keeps the latest one before it.
         assert_eq!(
             look("bld.city", "race.human", "age.galactic").as_deref(),
-            Some("bld.city@medieval")
+            Some("bld.city@gunpowder")
         );
         // The race's own row wins over every age row, for the race and its nations.
         assert_eq!(

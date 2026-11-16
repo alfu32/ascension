@@ -11,7 +11,7 @@ use std::f32::consts::{PI, TAU};
 use crate::kit::Rotation;
 
 /// Most joints a model may have, the model itself (joint 0) included.
-pub const MAX_JOINTS: usize = 32;
+pub const MAX_JOINTS: usize = 40;
 /// Keyframes per activity cycle.
 pub const POSE_SAMPLES: usize = 24;
 /// Default cycle lengths in seconds: idle, move, attack, work.
@@ -271,6 +271,9 @@ fn track(u: f32, rest: f32, keys: &[(f32, f32)]) -> f32 {
 struct FigurePose {
     bob: f32,
     lean: f32,
+    /// Turn of the body about the vertical, radians (positive turns the right shoulder
+    /// forward).
+    yaw: f32,
     legs: [Rotation; 2],
     arms: [Rotation; 2],
     grips: [Rotation; 2],
@@ -287,6 +290,7 @@ fn figure_pose(style: &FigureStyle, activity: Activity, u: f32) -> FigurePose {
     let mut pose = FigurePose {
         bob: 0.0,
         lean: 0.0,
+        yaw: 0.0,
         legs: [ROT_IDENTITY; 2],
         arms: [swing(hold[0]), swing(hold[1])],
         grips: [carry(0, hold[0]), carry(1, hold[1])],
@@ -327,8 +331,13 @@ fn figure_pose(style: &FigureStyle, activity: Activity, u: f32) -> FigurePose {
         Activity::Attack => attack_pose(style, u, &mut pose),
         Activity::Work => work_pose(style, u, &mut pose),
     }
-    // The body leans about the hips; the legs, hanging from the same line, stay upright.
-    let upright = rx(-pose.lean);
+    // The body leans about the hips; the legs, hanging from the same line, stay upright. A
+    // standing figure turns on its feet; a rider's legs keep straddling the mount.
+    let upright = if style.seated {
+        transpose(&mul(&ry(pose.yaw), &rx(pose.lean)))
+    } else {
+        rx(-pose.lean)
+    };
     pose.legs = pose.legs.map(|leg| mul(&upright, &leg));
     pose
 }
@@ -367,6 +376,38 @@ fn work_pose(style: &FigureStyle, u: f32, pose: &mut FigurePose) {
             pose.lean = track(u, 0.0, &[(0.3, -0.06), (0.7, -0.06)]);
         }
     }
+}
+
+/// The hips and the right shoulder of a figure one unit tall and of build 1 (the left
+/// shoulder mirrors it), and the reach from a shoulder to the hand: what an aim is worked out
+/// on.
+const HIP: [f32; 3] = [0.0, 0.4, 0.0];
+const SHOULDER: [f32; 3] = [-0.205, 0.72, 0.0];
+const REACH: f32 = 0.27;
+/// Turn of a shooter's body while a long gun is up: the left shoulder towards the target.
+const AIM_TURN: f32 = -50.0 * PI / 180.0;
+/// Lean of a shooter's body into the aim.
+const AIM_LEAN: f32 = 0.02;
+/// Where the right hand holds a shouldered long gun (figure frame, x and height): on the
+/// stock beside the cheek, the butt in the shoulder.
+const STOCK_HAND: [f32; 2] = [-0.09, 0.77];
+/// Where the left hand holds it: under the barrel, ahead of the right.
+const BARREL_HAND: [f32; 2] = [-0.075, 0.74];
+
+/// The swing and turn of the arm on `side` (0 right, 1 left) that bring its hand to `hand`
+/// (x and height in the figure frame; the hand reaches as far forward as the arm allows) while
+/// the body is turned by `body`; the arm's rotation is `ry(turn) · swing(swing)`.
+fn reach(body: &Rotation, side: usize, hand: [f32; 2]) -> (f32, f32) {
+    let x = if side == 0 { SHOULDER[0] } else { -SHOULDER[0] };
+    let rest = [x - HIP[0], SHOULDER[1] - HIP[1], SHOULDER[2] - HIP[2]];
+    let turned = turn(body, rest);
+    let shoulder: [f32; 3] = std::array::from_fn(|i| HIP[i] + turned[i]);
+    let (dx, dy) = (hand[0] - shoulder[0], hand[1] - shoulder[1]);
+    let dz = (REACH * REACH - dx * dx - dy * dy).max(0.0).sqrt();
+    let local = turn(&transpose(body), [dx, dy, dz]);
+    let length = local.iter().map(|v| v * v).sum::<f32>().sqrt().max(1e-6);
+    let swing = (-local[1] / length).clamp(-1.0, 1.0).acos();
+    (swing, local[0].atan2(local[2]))
 }
 
 fn attack_pose(style: &FigureStyle, u: f32, pose: &mut FigurePose) {
@@ -466,30 +507,31 @@ fn attack_pose(style: &FigureStyle, u: f32, pose: &mut FigurePose) {
             pose.lean = track(u, 0.0, &[(0.62, -0.05), (0.74, 0.12)]);
         }
         AttackStyle::Fire => {
-            // Up to the shoulder, aim, the kick of the shot, back down to the carry.
-            let r = track(
+            // Up to the shoulder, aim, the kick of the shot, back down to the carry. The
+            // shooter turns the left shoulder towards the target, beds the butt in the right
+            // shoulder with the piece beside the cheek and holds the barrel up with the left
+            // hand.
+            let t = track(u, 0.0, &[(0.22, 1.0), (0.74, 1.0), (0.9, 0.0)]);
+            let aimed = mul(&ry(AIM_TURN), &rx(AIM_LEAN));
+            let (ra, rb) = reach(&aimed, 0, STOCK_HAND);
+            let (la, lb) = reach(&aimed, 1, BARREL_HAND);
+            pose.yaw = AIM_TURN * t;
+            pose.lean = track(
                 u,
-                hold[0],
+                0.0,
                 &[
-                    (0.22, deg(72.0)),
-                    (FIRE_AT, deg(72.0)),
-                    (FIRE_AT + 0.05, deg(84.0)),
-                    (0.74, deg(72.0)),
-                    (0.9, hold[0]),
+                    (0.22, AIM_LEAN),
+                    (FIRE_AT, AIM_LEAN),
+                    (FIRE_AT + 0.05, -0.05),
+                    (0.74, AIM_LEAN),
+                    (0.9, 0.0),
                 ],
             );
-            let l = track(
-                u,
-                hold[1],
-                &[
-                    (0.22, deg(92.0)),
-                    (FIRE_AT, deg(92.0)),
-                    (FIRE_AT + 0.05, deg(100.0)),
-                    (0.74, deg(92.0)),
-                    (0.9, hold[1]),
-                ],
-            );
-            // The piece points forward while aimed, its muzzle jumping up as it fires.
+            let body = mul(&ry(pose.yaw), &rx(pose.lean));
+            pose.arms[0] = mul(&ry(rb * t), &swing(hold[0] + (ra - hold[0]) * t));
+            pose.arms[1] = mul(&ry(lb * t), &swing(hold[1] + (la - hold[1]) * t));
+            // The piece points forward while aimed, its muzzle jumping up as it fires,
+            // whatever the body and arms do.
             let aim = track(
                 u,
                 0.0,
@@ -501,27 +543,13 @@ fn attack_pose(style: &FigureStyle, u: f32, pose: &mut FigurePose) {
                     (0.9, 0.0),
                 ],
             );
-            // The left hand reaches in under the barrel.
-            let inward = track(
-                u,
-                0.0,
-                &[(0.22, deg(-32.0)), (0.74, deg(-32.0)), (0.9, 0.0)],
-            );
-            pose.arms[0] = swing(r);
-            pose.grips[0] = rx(r + aim);
-            pose.arms[1] = mul(&ry(inward), &swing(l));
-            pose.grips[1] = if hold[1] != 0.0 { rx(l) } else { ROT_IDENTITY };
-            pose.lean = track(
-                u,
-                0.0,
-                &[
-                    (0.22, 0.05),
-                    (FIRE_AT, 0.05),
-                    (FIRE_AT + 0.05, -0.05),
-                    (0.74, 0.04),
-                    (0.9, 0.0),
-                ],
-            );
+            let carried = |side: usize| transpose(&mul(&body, &pose.arms[side]));
+            pose.grips[0] = mul(&carried(0), &rx(aim));
+            pose.grips[1] = if hold[1] != 0.0 {
+                carried(1)
+            } else {
+                ROT_IDENTITY
+            };
         }
         AttackStyle::Pistol => {
             let r = track(
@@ -604,7 +632,10 @@ fn local(motion: &Motion, activity: Activity, u: f32) -> (Rotation, [f32; 3]) {
         Motion::Fixed => (ROT_IDENTITY, [0.0; 3]),
         Motion::Body(style) => {
             let pose = figure_pose(style, activity, u);
-            (rx(pose.lean), [0.0, pose.bob * style.height, 0.0])
+            (
+                mul(&ry(pose.yaw), &rx(pose.lean)),
+                [0.0, pose.bob * style.height, 0.0],
+            )
         }
         Motion::Leg(style, side) => (figure_pose(style, activity, u).legs[*side], [0.0; 3]),
         Motion::Arm(style, side) => (figure_pose(style, activity, u).arms[*side], [0.0; 3]),
@@ -929,6 +960,75 @@ mod tests {
             assert!(kick[1] > 0.2 && kick[2] > 0.9, "{attack:?} {kick:?}");
             let lowered = weapon_up(attack, 0.95);
             assert!(lowered[1] > 0.99, "{attack:?} {lowered:?}");
+        }
+    }
+
+    #[test]
+    fn a_long_gun_is_fired_from_the_shoulder_with_both_hands() {
+        let style = FigureStyle {
+            attack: AttackStyle::Fire,
+            hold: [deg(14.0), 0.0],
+            ..style()
+        };
+        // A figure with both arms and a grip in each hand, as the kit builds it.
+        let mut rig = Rig::default();
+        let joint = |parent: u8, pivot: [f32; 3], motion: Motion| Joint {
+            parent,
+            pivot,
+            frame: ROT_IDENTITY,
+            scale: 1.0,
+            motion,
+        };
+        let body = rig.add(joint(0, HIP, Motion::Body(style))).unwrap();
+        let hands = [0_usize, 1].map(|side| {
+            let x = if side == 0 { SHOULDER[0] } else { -SHOULDER[0] };
+            let arm = rig
+                .add(joint(body, [x, 0.72, 0.0], Motion::Arm(style, side)))
+                .unwrap();
+            rig.add(joint(arm, [x, 0.45, 0.03], Motion::Grip(style, side)))
+                .unwrap()
+        });
+        let pose = rig.pose(Activity::Attack, 0.4);
+        let at = |side: usize| {
+            let j = usize::from(hands[side]);
+            apply(&pose[j], rig.joints[j].pivot)
+        };
+        let (right, left) = (at(0), at(1));
+        let grip = &pose[usize::from(hands[0])];
+        let along = [grip[0][1], grip[1][1], grip[2][1]];
+        assert!(along[2] > 0.99, "aimed forward: {along:?}");
+        // The right hand is up by the cheek, beside the head and near the shoulder line.
+        assert!(
+            right[1] > 0.7 && right[0] < -0.03 && right[0] > -0.16,
+            "{right:?}"
+        );
+        // The left hand is ahead of it, under the same line of the barrel.
+        assert!(left[2] > right[2] + 0.12, "{left:?} {right:?}");
+        assert!((left[0] - right[0]).abs() < 0.05, "{left:?} {right:?}");
+        assert!(
+            left[1] < right[1] && right[1] - left[1] < 0.08,
+            "{left:?} {right:?}"
+        );
+        // Carried at the start and the end of the cycle: the body faces forward.
+        for u in [0.0, 0.95] {
+            let rest = rig.pose(Activity::Attack, u);
+            let facing = [rest[1][0][2], rest[1][2][2]];
+            assert!(facing[1] > 0.99, "{u}: {facing:?}");
+        }
+    }
+
+    #[test]
+    fn a_turning_rider_keeps_straddling_the_mount() {
+        let rig = figure(FigureStyle {
+            attack: AttackStyle::Fire,
+            seated: true,
+            ..style()
+        });
+        let pose = rig.pose(Activity::Attack, 0.4);
+        // The body is turned; the leg (joint 2) keeps the model's axes.
+        assert!(pose[1][0][0] < 0.9, "{:?}", pose[1]);
+        for i in 0..3 {
+            assert!((pose[2][i][i] - 1.0).abs() < 1e-4, "{:?}", pose[2]);
         }
     }
 

@@ -84,6 +84,11 @@ bed. A trebuchet's arm swings up and over while its counterweight drops,
 hanging free, and the sling whips round. Sailing ships heel to the wind and bob
 under way, with no oars.
 
+Task 45 fires long guns from the shoulder with both hands: the shooter turns the
+left shoulder towards the target, beds the butt in the right shoulder with the
+piece beside the cheek and holds the barrel up with the left hand; a rider turns
+in the saddle the same way while the legs keep straddling the horse.
+
 ## Budgets
 
 | Model | Near | Far |

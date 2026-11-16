@@ -559,11 +559,18 @@ mod tests {
         assert_eq!(
             changed,
             [
+                "bld.smelter@gunpowder",
                 "bld.smelter@medieval",
                 "unit.arquebusier@gunpowder",
                 "unit.bombard@gunpowder",
+                "unit.cannon@enlightenment",
                 "unit.cuirassier@gunpowder",
+                "unit.dragoon@enlightenment",
+                "unit.frigate@enlightenment",
+                "unit.fusilier@enlightenment",
+                "unit.light_infantry@enlightenment",
                 "unit.musketeer@gunpowder",
+                "unit.ranger@enlightenment",
                 "unit.transport_ship@starfaring"
             ]
         );
@@ -992,6 +999,55 @@ mod tests {
     }
 
     #[test]
+    fn early_modern_models_are_complete() {
+        let (rules, book) = book();
+        let ordinal = |key: &str| {
+            rules
+                .id_of(key)
+                .and_then(|a| rules.ages.get(&a))
+                .map(|a| a.ordinal)
+                .unwrap()
+        };
+        let (gunpowder, enlightenment) = (ordinal("age.gunpowder"), ordinal("age.enlightenment"));
+        let gunpowder_id = rules.id_of("age.gunpowder").unwrap();
+        let (mut first_looks, mut restyled) = (0, 0);
+        for (&id, et) in &rules.entity_types {
+            let Some(first) = et.first_age_id else {
+                continue;
+            };
+            let Some(age) = rules.ages.get(&first).map(|a| a.ordinal) else {
+                continue;
+            };
+            let has = |age_id| {
+                book.entries
+                    .iter()
+                    .any(|e| e.entity == id && e.faction.is_none() && e.age == Some(age_id))
+            };
+            let key = rules.key(id);
+            match et.class {
+                // Every building and unit of the gunpowder and enlightenment ages has its first
+                // look; every earlier building changes look when its owner reaches the gunpowder
+                // age (the early-modern look lasts through the enlightenment).
+                EntityClass::Building | EntityClass::Unit
+                    if age == gunpowder || age == enlightenment =>
+                {
+                    assert!(has(first), "{key} has no composed look for its first age");
+                    first_looks += 1;
+                }
+                EntityClass::Building if age < gunpowder => {
+                    assert!(has(gunpowder_id), "{key} has no early-modern look");
+                    restyled += 1;
+                }
+                _ => {}
+            }
+        }
+        assert!(
+            first_looks >= 16 && restyled >= 17,
+            "{first_looks} {restyled}"
+        );
+    }
+
+    #[test]
     fn approved_models_are_unchanged() {
         let (_, book) = book();
         let changed = changed_models(&book, &approved(APPROVED));
@@ -1043,7 +1099,8 @@ mod tests {
             [
                 "bld.city@ancient",
                 "bld.city@classical",
-                "bld.city@medieval"
+                "bld.city@medieval",
+                "bld.city@gunpowder"
             ]
         );
         assert_eq!(ids("bld.library@ancient"), ["bld.library@ancient"]);

@@ -1482,7 +1482,8 @@ fn figure(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) -> Vec<Socket> {
 
 /// `quadruped`: a horse-like beast standing along z (its head to +z), `h` its size factor (1:
 /// a horse, its back 0.8 tiles up), `l` and `w` the length and width of its body; hide in the
-/// part's surface, colours `mane` and `hoof`. `pace` and `stride` shape its gait. Sockets:
+/// part's surface, colours `mane` and `hoof`; `plain` leaves out the ears, mane and hooves (a
+/// team in harness). `pace` and `stride` shape its gait. Sockets:
 /// `rider` (the saddle), `back` (behind it, for loads), `head`, `chest`. Joints: the body, four
 /// legs, the neck with the head, the tail.
 fn quadruped(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) -> Vec<Socket> {
@@ -1493,6 +1494,7 @@ fn quadruped(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) -> Vec<Socket> {
         stride: k.get("stride", 30.0).clamp(0.0, 60.0).to_radians(),
     };
     p.suggest_period(Activity::Move, k.size("pace", 0.7));
+    let detail = fine && k.get("plain", 0.0) < 0.5;
     let hide = p.surface;
     let mane = Surface::plain(k.colour("mane", [0.24, 0.17, 0.12]));
     let hoof = Surface::plain(k.colour("hoof", [0.16, 0.13, 0.11]));
@@ -1542,7 +1544,7 @@ fn quadruped(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) -> Vec<Socket> {
                 p.cuboid([0.0; 3], [w * 0.5, 0.5, 0.22], 0.75, false);
                 p.within(head_place, None, |p| {
                     p.cuboid([0.0, -0.06, 0.0], [w * 0.48, 0.38, 0.17], 0.7, true);
-                    if fine {
+                    if detail {
                         // Ears stand up from the poll (the head's −z side).
                         for e in [-1.0, 1.0] {
                             p.within(
@@ -1557,7 +1559,7 @@ fn quadruped(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) -> Vec<Socket> {
                         }
                     }
                 });
-                if fine {
+                if detail {
                     p.surface = mane;
                     p.cuboid([0.0, 0.04, -0.11], [0.04, 0.46, 0.05], 1.0, false);
                 }
@@ -1578,9 +1580,13 @@ fn quadruped(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) -> Vec<Socket> {
                 for &(joint, x, z) in &legs {
                     p.joint = joint;
                     p.surface = hide;
-                    p.cuboid([x, 0.06, z], [0.075, leg_h, 0.09], 1.35, false);
-                    p.surface = hoof;
-                    p.cuboid([x, 0.0, z], [0.085, 0.07, 0.1], 0.95, false);
+                    if detail {
+                        p.cuboid([x, 0.06, z], [0.075, leg_h, 0.09], 1.35, false);
+                        p.surface = hoof;
+                        p.cuboid([x, 0.0, z], [0.085, 0.07, 0.1], 0.95, false);
+                    } else {
+                        p.cuboid([x, 0.0, z], [0.075, leg_h + 0.06, 0.09], 1.35, false);
+                    }
                 }
             } else {
                 p.joint = body;
@@ -2342,6 +2348,14 @@ mod tests {
             12 + 10 + 12 + 8 + 10 + 12 + 4 * 20,
             [-0.15, 0.0, -0.70405],
             [0.15, 1.16212, 0.97213],
+        );
+        // Plain: no ears, mane or hooves; the legs reach the ground.
+        check(
+            Shape::Quadruped,
+            &[("plain", 1.0)],
+            12 + 10 + 12 + 12 + 4 * 10,
+            [-0.15, 0.0, -0.70405],
+            [0.15, 1.1298, 0.97213],
         );
     }
 
