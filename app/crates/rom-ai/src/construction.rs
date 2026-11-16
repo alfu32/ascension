@@ -94,11 +94,12 @@ pub(crate) fn wishes(
         let et = &rules.entity_types[&building];
         let have = view.line_count(building);
         if view.is_city(building) {
+            // Cities are where the land, the farms and the food are: the main way to grow.
             if have < view.city_limit() && weights.expand > 0 {
                 wishes.push(Wish {
-                    score: 300 + weights.expand * 4,
+                    score: 450 + weights.expand * 4,
                     act: Act::Construct(building),
-                    reserve: weights.expand >= 70,
+                    reserve: weights.expand >= 50,
                     opening: false,
                 });
             }

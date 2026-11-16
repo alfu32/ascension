@@ -77,10 +77,36 @@ pub struct Order {
     pub build_remainder: i64,
     /// Whether this order was created by automatic combat acquisition.
     pub automatic: bool,
-    /// Original position for a defensive pursuit or return.
+    /// Original position for a defensive pursuit or return; a patrol's other end.
     pub home: Option<Pos>,
+    /// Walking speed cap in milli-tiles per second: the slowest member of a formation
+    /// that keeps to its slowest member's pace.
+    pub pace: Option<i64>,
+    /// The enemy a guard is fighting off, while it does.
+    pub engaged: Option<EntityId>,
     pub(crate) route: Option<Box<crate::wealth::RouteState>>,
     pub(crate) movement: Option<MoveState>,
+}
+
+/// An accepted order that failed while it ran, as its player is told of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OrderFailure {
+    /// Tick of the failure.
+    pub tick: u64,
+    /// The order's identity.
+    pub order: OrderId,
+    /// Its executor.
+    pub executor: EntityId,
+    /// Its kind.
+    pub kind: OrderKindKey,
+    /// Its subject definition.
+    pub subject: Option<DefId>,
+    /// Its entity target.
+    pub target_entity: Option<EntityId>,
+    /// Its point target.
+    pub target_pos: Option<Pos>,
+    /// The machine-readable reason (`no_path`, `no_slot`, `target_gone`, …).
+    pub reason: String,
 }
 
 /// Walking progress: the current straight segment and the remaining waypoints.

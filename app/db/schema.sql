@@ -1123,6 +1123,8 @@ CREATE TABLE "order" (
   move_goal_x INTEGER, move_goal_y INTEGER, move_goal_face INTEGER, move_goal_body INTEGER,
   move_distance INTEGER, move_traveled INTEGER, move_index INTEGER,
   move_request INTEGER, move_repaths INTEGER,
+  pace          INTEGER,                 -- formation pace: walking speed cap (milli-tiles/s)
+  engaged_id    INTEGER,                 -- guard: the enemy it is fighting off
   UNIQUE (place, executor_id, seq)
 ) STRICT;
 CREATE INDEX order_by_player ON "order"(player_id, status);
@@ -1133,6 +1135,22 @@ CREATE TABLE order_payment (            -- what was actually charged (for refund
   resource_id INTEGER NOT NULL,
   amount      INTEGER NOT NULL,
   PRIMARY KEY (ord, seq)
+) STRICT, WITHOUT ROWID;
+
+-- Each player's latest failures of accepted orders (no path, no slot, target gone, ...),
+-- oldest first: what World::order_failures reports to the player and its computer brain.
+CREATE TABLE order_failure (
+  player_id   INTEGER NOT NULL,
+  seq         INTEGER NOT NULL,
+  tick        INTEGER NOT NULL,
+  order_id    INTEGER NOT NULL,
+  executor_id INTEGER NOT NULL,
+  kind        TEXT NOT NULL,
+  subject_def_id INTEGER,
+  target_entity_id INTEGER,
+  target_x INTEGER, target_y INTEGER, target_face INTEGER, target_body INTEGER,
+  reason      TEXT NOT NULL,
+  PRIMARY KEY (player_id, seq)
 ) STRICT, WITHOUT ROWID;
 
 CREATE TABLE order_waypoint (           -- intermediate points of a smoothed path

@@ -415,7 +415,7 @@ fn write_order(
     let m = o.movement.as_ref();
     let origin = opos(m.map(|m| m.origin));
     let goal = opos(m.map(|m| m.goal));
-    tx.prepare_cached(&format!("INSERT INTO \"order\" VALUES ({})", marks(46)))?
+    tx.prepare_cached(&format!("INSERT INTO \"order\" VALUES ({})", marks(48)))?
         .execute(params![
             *ord,
             place,
@@ -463,6 +463,8 @@ fn write_order(
             m.map(|m| m.index as i64),
             m.and_then(|m| m.request).map(w),
             m.map(|m| m.repaths),
+            o.pace,
+            o.engaged.map(|e| e.0),
         ])?;
     for (n, (resource, amount)) in o.payment.iter().enumerate() {
         tx.execute(
@@ -571,6 +573,29 @@ fn write_entities(tx: &Transaction, s: &Snapshot) -> Result<(), SaveError> {
     for (flag, ids) in flags {
         for id in ids {
             tx.execute("INSERT INTO entity_flag VALUES (?,?)", params![id.0, flag])?;
+        }
+    }
+    for (player, list) in &s.failures {
+        for (seq, f) in list.iter().enumerate() {
+            let at = opos(f.target_pos);
+            tx.execute(
+                "INSERT INTO order_failure VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                params![
+                    player.0,
+                    seq as i64,
+                    w(f.tick),
+                    w(f.order.0),
+                    f.executor.0,
+                    f.kind,
+                    f.subject.map(|d| d.0),
+                    f.target_entity.map(|e| e.0),
+                    at[0],
+                    at[1],
+                    at[2],
+                    at[3],
+                    f.reason,
+                ],
+            )?;
         }
     }
     for (producer, rally) in &s.rallies {

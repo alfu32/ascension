@@ -69,7 +69,7 @@ impl World {
                 }
                 "move" | "construct" | "repair" | "harvest" | "attack" | "attack_move" | "heal"
                 | "orbit" | "travel" | "launch" | "carry" | "trade" | "enter" | "land" | "lift"
-                | "unload" => {
+                | "unload" | "explore" | "patrol" | "guard" => {
                     if worked {
                         self.entities[id.0 as usize]
                             .as_mut()
@@ -79,7 +79,10 @@ impl World {
                         break;
                     }
                     worked = true;
-                    if matches!(order.kind.as_str(), "move" | "travel" | "attack_move") {
+                    if matches!(
+                        order.kind.as_str(),
+                        "move" | "travel" | "attack_move" | "explore" | "patrol" | "guard"
+                    ) {
                         self.leave_orbit(id);
                     }
                     if matches!(order.kind.as_str(), "enter" | "land" | "lift" | "unload") {
@@ -94,8 +97,12 @@ impl World {
                         self.advance_orbit(id, &mut order);
                     } else if order.kind == "travel" {
                         self.advance_travel(id, &mut order);
-                    } else if order.kind == "attack" || order.kind == "attack_move" {
+                    } else if matches!(order.kind.as_str(), "attack" | "attack_move" | "patrol") {
                         self.advance_combat(id, &mut order);
+                    } else if order.kind == "explore" {
+                        self.advance_explore(id, &mut order);
+                    } else if order.kind == "guard" {
+                        self.advance_guard(id, &mut order);
                     } else if order.kind == "heal" {
                         self.advance_heal(id, &mut order);
                     } else if order.kind == "move" {
@@ -281,6 +288,7 @@ impl World {
         match &order.status {
             OrderStatus::Done => self.stats.orders_done += 1,
             OrderStatus::Failed(reason) => {
+                self.record_failure(order, &reason.clone());
                 self.stats.orders_failed += 1;
                 match reason.as_str() {
                     "no_path" => self.stats.orders_no_path += 1,

@@ -13,8 +13,9 @@ use rom_sim::{BodyId, PlayerId, Pos};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Version of the byte layout written by `Memory::to_bytes`. Version 1 (task 60) is the
-/// same layout without the armies, the scouting record and the fleet, and still reads.
-pub(crate) const VERSION: u32 = 2;
+/// same layout without the armies, the scouting record and the fleet; version 2 (task 61)
+/// ends after the fleet, without the age clock (task 65). Both still read.
+pub(crate) const VERSION: u32 = 3;
 
 /// What an army is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -193,7 +194,8 @@ pub(crate) struct Memory {
     pub armies: BTreeMap<Role, Army>,
     /// Cells of the map and the tick an own unit last stood there.
     pub looked: BTreeMap<Cell, u64>,
-    /// Targets the army could not reach, and the tick until which they are left alone.
+    /// Entities own units could not reach or use (enemy targets, own gather sites), and the
+    /// tick until which they are left alone.
     pub unreachable: BTreeMap<u32, u64>,
     /// Ships on an errand, by entity id.
     pub voyages: BTreeMap<u32, Voyage>,
@@ -201,6 +203,10 @@ pub(crate) struct Memory {
     pub visited: BTreeSet<u32>,
     /// Tick since which armed intruders have been seen without a break.
     pub intruded_since: Option<u64>,
+    /// The age the player was in at the last thought, and the tick it was first seen there.
+    pub age: u32,
+    /// Tick at which `age` was first seen.
+    pub age_since: u64,
 }
 
 fn put_pos(w: &mut Writer, pos: Pos) {
@@ -314,6 +320,8 @@ impl Memory {
         }
         w.bool(self.intruded_since.is_some());
         w.u64(self.intruded_since.unwrap_or(0));
+        w.u32(self.age);
+        w.u64(self.age_since);
         w.0
     }
 
@@ -410,6 +418,11 @@ impl Memory {
             let since = r.u64()?;
             intruded_since = intruded.then_some(since);
         }
+        let (mut age, mut age_since) = (0, 0);
+        if version >= 3 {
+            age = r.u32()?;
+            age_since = r.u64()?;
+        }
         if !r.is_done() {
             return Err(AiError::CorruptState);
         }
@@ -437,6 +450,8 @@ impl Memory {
             voyages,
             visited,
             intruded_since,
+            age,
+            age_since,
         })
     }
 }
@@ -506,6 +521,8 @@ mod tests {
             .into(),
             visited: [5, 7].into(),
             intruded_since: Some(390),
+            age: 3,
+            age_since: 200,
         }
     }
 
@@ -526,11 +543,25 @@ mod tests {
         memory.voyages.clear();
         memory.visited.clear();
         memory.intruded_since = None;
+        memory.age = 0;
+        memory.age_since = 0;
         let mut bytes = memory.to_bytes();
-        // Version 1 ended after the counters: five empty collections and an absent tick
-        // follow them now.
-        bytes.truncate(bytes.len() - 5 * 4 - 9);
+        // Version 1 ended after the counters: five empty collections, an absent tick and
+        // the age clock follow them now.
+        bytes.truncate(bytes.len() - 5 * 4 - 9 - 12);
         bytes[..4].copy_from_slice(&1_u32.to_le_bytes());
+        assert_eq!(Memory::from_bytes(&bytes).unwrap(), memory);
+    }
+
+    #[test]
+    fn the_second_layout_still_reads() {
+        let mut memory = sample();
+        memory.age = 0;
+        memory.age_since = 0;
+        let mut bytes = memory.to_bytes();
+        // Version 2 ended after the intruder tick; the age clock follows it now.
+        bytes.truncate(bytes.len() - 12);
+        bytes[..4].copy_from_slice(&2_u32.to_le_bytes());
         assert_eq!(Memory::from_bytes(&bytes).unwrap(), memory);
     }
 

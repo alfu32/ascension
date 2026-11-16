@@ -32,6 +32,7 @@ mod spatial;
 mod sphere_tests;
 mod stance;
 mod surface;
+mod tactics;
 mod territory;
 mod transport;
 mod universe;
@@ -45,7 +46,7 @@ pub use geometry::Topology;
 pub use income::Income;
 pub use map::MapGrid;
 pub use math::{Pos, integer_sqrt};
-pub use order::{Command, Order, OrderId, OrderKindKey, OrderStatus};
+pub use order::{Command, Order, OrderFailure, OrderId, OrderKindKey, OrderStatus};
 pub use pathing::PathStats;
 pub use placement::CITY_SITE_RADIUS;
 pub use rally::Rally;
@@ -293,6 +294,15 @@ pub enum SimError {
     /// The catalogue cannot supply the requested headless scenario.
     #[error("no eligible {0} for movement scenario")]
     ScenarioUnavailable(&'static str),
+    /// `raze` takes an own building; a finished city cannot be razed.
+    #[error("cannot raze that")]
+    CannotRaze,
+    /// A movement order's subject must be a formation.
+    #[error("unknown formation")]
+    UnknownFormation,
+    /// `guard` takes an own or allied entity other than the guard itself.
+    #[error("invalid guard target")]
+    InvalidGuardTarget,
 }
 
 #[cfg(test)]

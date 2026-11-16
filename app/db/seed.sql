@@ -88,12 +88,15 @@ INSERT INTO movement_class(key,flies) VALUES
  ('foot',0),('wheeled',0),('ship',0),('submarine',0),('aircraft',1),('amphibious',0),('starship',0);
 
 INSERT INTO order_kind(key,needs,target,note) VALUES
- ('stop','','none',''), ('move','movement','entity_or_point','entity target = follow'),
+ ('stop','','none',''), ('move','movement','entity_or_point','entity target = follow; subject = formation (optional): one order batch walks at its slowest member''s pace when the formation keeps_slowest'),
  ('launch','movement','entity','launch from a completed own producer'),
  ('orbit','movement','entity_or_point','body marker or holding point'),
  ('travel','movement','point','target point body = destination system star body; coordinates ignored'),
- ('attack','weapon','entity',''), ('attack_move','weapon','point',''), ('patrol','movement','point',''),
- ('guard','weapon','entity',''), ('explore','movement','none','auto explore'),
+ ('attack','weapon','entity',''), ('attack_move','weapon','point','subject = formation (optional), as for move'),
+ ('patrol','movement','point','walk between the start and the point and back, fighting like attack_move; subject = formation (optional)'),
+ ('guard','weapon','entity','stay beside an own or allied entity and fight off enemies near it'),
+ ('explore','movement','none','walk to the nearest ground the player has not seen, until none is left in reach'),
+ ('stance','weapon','def','subject = combat stance; applied at once, the queue stays'),
  ('construct','builder','def','subject = building type, target point = site'),
  ('repair','builder','entity',''), ('harvest','harvester','entity','target = gather site'),
  ('heal','healer','entity',''), ('trade','trader','entity','target = city'),
@@ -105,7 +108,7 @@ INSERT INTO order_kind(key,needs,target,note) VALUES
  ('lift','movement','none','a landed carrier returns to orbit; an orbital craft climbs from its planet to that planet''s orbit'),
  ('train','producer','def',''), ('research','producer','def',''), ('morph','','def','upgrade in place'),
  ('ability','energy','entity_or_point','subject = ability'), ('set_rally','producer','entity_or_point','units it trains walk to the point or entity; applied at once, the queue stays'),
- ('raze','','none','self-destruct building'), ('disband','movement','none','the unit leaves the match; no refund'),
+ ('raze','','none','pull down an own building at once: an unfinished one refunds the work not done; not a finished city'), ('disband','movement','none','the unit leaves the match; no refund'),
  ('release','gather_site','none','every worker inside a gather building leaves it');
 
 -- ── defs ────────────────────────────────────────────────────────────────────

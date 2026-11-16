@@ -376,8 +376,11 @@ impl World {
                             let closing = |attacker, target| {
                                 self.entity(attacker).is_some_and(|e| {
                                     e.orders.front().is_some_and(|o| {
-                                        matches!(o.kind.as_str(), "attack" | "attack_move")
-                                            && o.target_entity == Some(target)
+                                        (matches!(
+                                            o.kind.as_str(),
+                                            "attack" | "attack_move" | "patrol"
+                                        ) && o.target_entity == Some(target))
+                                            || (o.kind == "guard" && o.engaged == Some(target))
                                     }) && self.rules.entity_types[&e.type_id]
                                         .weapons
                                         .iter()

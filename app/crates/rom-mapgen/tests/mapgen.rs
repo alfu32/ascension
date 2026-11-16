@@ -489,3 +489,44 @@ fn flat_generation_is_unchanged() {
     knobs.polar_terrain_id = None;
     assert_eq!(make(&r, "map.one_world", 1, 4, 256).hash(), expected);
 }
+
+#[test]
+fn fair_maps_give_two_players_even_land_and_the_same_clumps() {
+    let r = rules();
+    let style = r.id_of("map.one_world").unwrap();
+    let faction = r.id_of("nation.romans").unwrap();
+    let (mut fair_even, mut plain_even) = (0, 0);
+    for seed in 1..=30 {
+        let request = MapRequest::uniform(style, seed, 160, 160, 2, faction);
+        let fair = rom_mapgen::generate_fair(&r, &request).unwrap();
+        assert_eq!(fair, rom_mapgen::generate_fair(&r, &request).unwrap());
+        let even = |shares: Vec<i64>| {
+            let (least, most) = (shares[0].min(shares[1]), shares[0].max(shares[1]).max(1));
+            least * 100 >= most * 85
+        };
+        fair_even += usize::from(even(fair.start_land_shares(&r)));
+        plain_even += usize::from(even(generate(&r, &request).unwrap().start_land_shares(&r)));
+        // Every start has as many tiles of each per-player terrain within its band.
+        for terrain in ["ter.forest", "ter.mountain"] {
+            let id = r.id_of(terrain).unwrap();
+            let counts: Vec<usize> = fair
+                .starts
+                .iter()
+                .map(|s| {
+                    let (sx, sy) = (i64::from(s.x / 1000), i64::from(s.y / 1000));
+                    (0..160_i64)
+                        .flat_map(|y| (0..160_i64).map(move |x| (x, y)))
+                        .filter(|(x, y)| (x - sx).pow(2) + (y - sy).pow(2) <= 16 * 16)
+                        .filter(|(x, y)| fair.grid.terrain_at(*x as i32, *y as i32) == Some(id))
+                        .count()
+                })
+                .collect();
+            assert!(
+                counts.iter().all(|c| *c > 0),
+                "seed {seed} {terrain}: {counts:?}"
+            );
+        }
+    }
+    assert!(fair_even >= 27, "{fair_even} of 30 fair maps even");
+    assert!(fair_even > plain_even, "{fair_even} vs {plain_even}");
+}
