@@ -121,13 +121,15 @@ Scores (higher first):
   runner-up technology, unit or wish is taken, and the main army may set off
   for a city before it can take it); `retreats`; `uses_formations`;
   `sees_all`.
-- **First gather sites** — while the player has no site for a base resource
-  whose first site is paid in that resource (a woodcutter camp costs timber),
-  that price is kept back from every other purchase, and the spot the site
-  would take is kept free of other buildings in the same thought; the node
-  search falls back from its two-tile lattice to every tile when the lattice
-  finds nothing. Without these a start could spend its last timber, or give
-  its only camp spot to a farm, and never earn timber again.
+- **First gather sites** (changed in part 2) — while the player has no site
+  for a base resource, the price of the cheapest site it can build is kept
+  back from every other purchase (unless a search for it has just failed),
+  and the spot the site would take is kept free of other buildings in the
+  same thought. Node sites are searched only at spots near tiles of their
+  node terrain, found once per city. Without these a start could spend its
+  last timber, give its only camp spot to a farm, or — once it had several
+  cities — spend its lookup budget far from any mountain and never build a
+  mine.
 
 ## Armies (part 2)
 
@@ -157,13 +159,22 @@ target, goal, the tick of the last change and its strength when it set off
   fighters in front and ranged behind across the line of advance). Members
   already near the goal fight there; reinforcements stream out. A target
   gone, taken or forgotten gives the next one, or home; an advance that has
-  not come within reach after four minutes or not taken its target after six
-  marks it unreachable for a while.
+  not come within reach after four minutes, or not reached its target after
+  six, marks it unreachable for a while. At a neutralised city the army goes
+  for whatever enemy still stands in its radius (a worker inside a gather site
+  keeps a city from being taken), and sweeps the radius when nothing is known.
+- **Focus fire.** Members in a fight turn on the weakest armed enemy seen
+  within their reach. Every such order comes out of the order budget, so a
+  difficulty with few orders a minute leaves its units to pick their own.
 - **Retreat** (when the difficulty `retreats`): half the army lost against a
   local enemy stronger than `mil.retreat_ratio_pct`, or the target no longer
-  within its means; back to the rally point, then gather.
+  within its means; back to the rally point, then gather; the target is left
+  alone for two minutes.
+- **Mistakes.** `mistake_pct` of the thoughts in a minute of ticks send the
+  main army at a city before it can take it (on top of the runner-up choices
+  of part 1).
 - **Respond.** Armed enemies seen lately inside own territory or a city's
-  radius: the home guard attack-moves to the one nearest a city; armies at
+  radius, for longer than the difficulty's `reaction_ticks`: the home guard attack-moves to the one nearest a city; armies at
   home join when the guard is weaker than the intruders; against more than
   twice everything at home they hold at the city instead. The alarm that
   ends the opening book and moves military wishes to the front now needs a
