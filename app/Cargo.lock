@@ -4944,6 +4944,14 @@ dependencies = [
 [[package]]
 name = "rom-save"
 version = "0.0.50"
+dependencies = [
+ "rom-geo",
+ "rom-mapgen",
+ "rom-rules",
+ "rom-sim",
+ "rusqlite",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "rom-sim"

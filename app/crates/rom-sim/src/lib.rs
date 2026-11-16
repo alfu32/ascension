@@ -22,6 +22,7 @@ mod production;
 mod research;
 mod rng;
 mod scenario;
+mod snapshot;
 mod space;
 mod spatial;
 #[cfg(test)]
@@ -46,6 +47,7 @@ pub use pathing::PathStats;
 pub use placement::CITY_SITE_RADIUS;
 pub use rng::SimRng;
 pub use scenario::Playthrough;
+pub use snapshot::*;
 pub use space::{BodyClaim, BodyYield, Orbit, OrbitalShot, Transit};
 pub use surface::Surface;
 pub use universe::{BodyId, BodyInfo, PlanetSurface, RouteInfo, SystemInfo, UniverseSetup};
@@ -237,6 +239,9 @@ pub enum SimError {
     /// The universe data is inconsistent.
     #[error("invalid universe: {0}")]
     InvalidUniverse(&'static str),
+    /// A snapshot is inconsistent with itself or with the rules it is restored onto.
+    #[error("invalid snapshot: {0}")]
+    InvalidSnapshot(&'static str),
     /// The unit cannot occupy system space or its owner has not reached space.
     #[error("entity cannot enter system space")]
     CannotEnterSpace,
