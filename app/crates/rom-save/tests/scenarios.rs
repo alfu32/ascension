@@ -250,7 +250,7 @@ fn landing_world(
         .landing_site(ship_a, at(NEIGHBOUR, 40_500, 40_500))
         .unwrap();
     order(&mut w, ship_a, "land", None, Some(site));
-    run_until(&mut w, 200, |w| w.is_landed(ship_a));
+    run_until(&mut w, 4000, |w| w.is_landed(ship_a));
     let second = passengers(&mut w, 1, 2);
     let ship_b = transport_in_orbit(&mut w, HOME);
     board(&mut w, &second, ship_b);
@@ -258,6 +258,11 @@ fn landing_world(
     let site = w
         .landing_site(ship_b, at(NEIGHBOUR, 20_500, 20_500))
         .unwrap();
+    // Within its orbit above the site first (task 68), then straight down.
+    order(&mut w, ship_b, "move", None, Some(site));
+    run_until(&mut w, 4000, |w| {
+        w.orbit(ship_b).is_some_and(|o| o.pos == site)
+    });
     order(&mut w, ship_b, "land", None, Some(site));
     ticks(&mut w, 3);
     (w, first, second, ship_b)

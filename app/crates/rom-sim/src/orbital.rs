@@ -21,6 +21,16 @@ impl World {
             .map(|m| m.climb_ticks as u64)
     }
 
+    /// Whether entities of this type never leave the orbit they are launched into (tag
+    /// `orbit_bound`, the satellite): they move only within it and cannot land.
+    pub fn is_orbit_bound(&self, type_id: DefId) -> bool {
+        self.rules
+            .tags
+            .values()
+            .find(|t| t.key == "orbit_bound")
+            .is_some_and(|tag| self.rules.has_tag(type_id, tag.id))
+    }
+
     /// Whether entities of this type are orbital craft.
     pub fn is_craft_type(&self, type_id: DefId) -> bool {
         self.climb_ticks(type_id).is_some()
@@ -66,6 +76,20 @@ impl World {
     /// Orders an orbital craft may take while in orbit: fight, board a carrier, come down.
     pub(crate) fn validate_craft(&self, command: &Command) -> Result<(), SimError> {
         let e = self.entity(command.executor).expect("checked executor");
+        // Moving, attack-moving and patrolling to a point of the planet it orbits.
+        let within = matches!(command.kind.as_str(), "move" | "attack_move" | "patrol")
+            && self.orbit(e.id).is_some_and(|orbit| {
+                command
+                    .target_pos
+                    .is_some_and(|p| p.body == orbit.body && self.geo(orbit.body).contains(p))
+            });
+        if self.is_orbit_bound(e.type_id) {
+            return match command.kind.as_str() {
+                "stop" | "stance" | "disband" | "launch" | "attack" => Ok(()),
+                "move" | "attack_move" | "patrol" if within => Ok(()),
+                _ => Err(SimError::BoundToOrbit),
+            };
+        }
         if !self.is_craft_type(e.type_id) {
             return Ok(());
         }
@@ -73,6 +97,7 @@ impl World {
             "lift" if self.orbit(e.id).is_some() || !self.can_climb_from(e.pos) => {
                 Err(SimError::CannotClimb)
             }
+            "move" | "attack_move" | "patrol" if within => Ok(()),
             "move" | "attack_move" | "patrol" | "guard" | "explore" | "orbit" | "travel"
                 if self.orbit(e.id).is_some() =>
             {
@@ -134,11 +159,9 @@ impl World {
             order.status = OrderStatus::Failed("descent".into());
             return;
         };
-        if order.progress_ticks == 0 {
-            if let Some(orbit) = self.space.orbits.get_mut(&id) {
-                orbit.pos = at;
-            }
-            self.refresh_viewer(id);
+        // It moves within its orbit above the point, then comes straight down.
+        if order.progress_ticks == 0 && !self.orbit_move(id, at) {
+            return;
         }
         order.progress_ticks += 1;
         let ticks = self

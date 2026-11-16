@@ -81,6 +81,8 @@ pub struct HudSnapshot {
     pub wealth: crate::HudWealth,
     /// Selected traders' routes on the current surface.
     pub trade_routes: Vec<crate::HudTradeRoute>,
+    /// Selected units' patrols on the current surface.
+    pub patrols: Vec<crate::HudPatrol>,
     /// The building footprint being placed.
     pub placement: Option<HudPlacement>,
 }
@@ -109,6 +111,7 @@ impl Default for HudSnapshot {
             city_radii: Vec::new(),
             wealth: Default::default(),
             trade_routes: Vec::new(),
+            patrols: Vec::new(),
         }
     }
 }

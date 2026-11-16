@@ -352,12 +352,25 @@ pub fn passengers(w: &mut World, citizens: u32, marines: u32) -> Vec<EntityId> {
     out
 }
 
+/// Units board only a landed ship (task 68): a ship in orbit comes down beside them first and
+/// lifts off again once they are aboard.
 pub fn board(w: &mut World, units: &[EntityId], ship: EntityId) {
+    let in_orbit = w.orbit(ship).is_some();
+    if in_orbit {
+        let near = w.entity(units[0]).unwrap().pos;
+        let site = w.landing_site(ship, near).expect("open ground");
+        order(w, ship, "land", None, Some(site));
+        run_until(w, 4000, |w| w.is_landed(ship));
+    }
     for unit in units {
         order(w, *unit, "enter", Some(ship), None);
     }
     let count = units.len();
     run_until(w, 2000, |w| w.passengers(ship).len() == count);
+    if in_orbit {
+        order(w, ship, "lift", None, None);
+        run_until(w, 200, |w| w.orbit(ship).is_some());
+    }
 }
 
 pub fn add_neighbour(w: &mut World, rules: &Rules) {

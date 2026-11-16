@@ -212,6 +212,7 @@ fn place(
             altitude: 0.0,
             beam_target: None,
             shot_at: None,
+            shot_flight: None,
             spacecraft: false,
             hp_frac: 1.0,
             building,
@@ -659,7 +660,9 @@ mod tests {
                 "unit.recon_drone@information",
                 "unit.rifleman@industrial",
                 "unit.rocket_artillery@information",
+                "unit.satellite@starfaring",
                 "unit.scout_car@modern",
+                "unit.space_freighter@starfaring",
                 "unit.strategic_bomber@information",
                 "unit.tank@modern",
                 "unit.transport_ship@starfaring"

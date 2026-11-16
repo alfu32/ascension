@@ -18,7 +18,7 @@
 //! Live names (resolved at the step, in entity id order): `relicN` = free carry nodes,
 //! `templeN` = own completed keepers, `marketN` = own completed buildings training route
 //! traders, `cityN` = own completed cities, `carrierN` = own claim-tag units,
-//! `traderN` = own route traders, `gatherN` = own completed gather buildings, `shipN` = own orbiting ships, `enemyN` = enemy non-city buildings
+//! `traderN` = own route traders, `gatherN` = own completed gather buildings, `shipN` = own orbiting ships, `landedN` = own landed ships, `enemyN` = enemy non-city buildings
 //! on the home planet. `click` and `rclick` support these names and Shift.
 //! These component-based aliases replace a dependency on the last trained type.
 //!
@@ -32,7 +32,9 @@
 //! `place-space <owner id> <entity key> dx,dy` to place a ship in the plane of player one's home
 //! system, `dx`, `dy` tiles from its star, and `place-orbit <owner id> <entity key> @dx,dy` to
 //! put a ship into the orbit of player one's home planet above that point (an ordinary `orbit`
-//! order given before tick one; an orbital craft is placed there and ordered to climb). `craft` selects player one's orbital craft that are not
+//! order given before tick one; an orbital craft is placed there and ordered to climb);
+//! `colony <owner id>` founds a city for that owner on the nearest other habitable planet of
+//! player one's home system, generating the planet first (task 68's freighter route). `craft` selects player one's orbital craft that are not
 //! aboard a carrier; `craftN` names the N-th of them for `click` and `rclick`.
 //!
 //! `save <name>`, `quicksave` and `menu [main|save|load]` write a save or open the in-match menu.
@@ -83,6 +85,9 @@ pub struct ScriptSetup {
     pub orbit_placements: Vec<(u32, String, i64, i64)>,
     /// Technologies player one starts with, by key.
     pub techs: Vec<String>,
+    /// Owners given a city on the nearest other habitable planet of player one's home system
+    /// (`colony <owner id>`; the planet is generated before tick one).
+    pub colonies: Vec<u32>,
 }
 
 impl ScriptSetup {
@@ -268,6 +273,13 @@ impl ScriptSetup {
                     };
                     list.push((owner, (*key).to_owned(), parse(dx)?, parse(dy)?));
                 }
+                Some("colony") => {
+                    let owner = words
+                        .get(2)
+                        .and_then(|o| o.parse().ok())
+                        .ok_or_else(|| format!("{}: colony needs an owner id", at()))?;
+                    setup.colonies.push(owner);
+                }
                 Some("grant-tech") => {
                     setup.techs.push(
                         words
@@ -380,7 +392,7 @@ impl Script {
                     Some(_),
                     Some(
                         "grant-age" | "grant" | "grant-tech" | "place" | "place-space"
-                        | "place-orbit",
+                        | "place-orbit" | "colony",
                     ),
                 ) => {
                     continue;
@@ -829,7 +841,7 @@ fn camera_input(words: &[&str]) -> Result<Vec<rom_render::InputEvent>, String> {
 fn dynamic_name(word: &str) -> bool {
     [
         "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy", "gather",
-        "landing", "colony",
+        "landing", "colony", "landed",
     ]
     .iter()
     .any(|prefix| {
@@ -838,8 +850,8 @@ fn dynamic_name(word: &str) -> bool {
     })
 }
 
-/// Ground points named by the live world: `landingN` is open ground nearest the point below
-/// player one's N-th carrier in orbit, `colonyN` a city site nearest its N-th landed ship.
+/// Ground points named by the live world: `landingN` is open ground near the point below
+/// player one's N-th carrier in orbit (within forty tiles), `colonyN` a city site nearest its N-th landed ship.
 fn live_point(world: &rom_sim::World, target: &str) -> Result<Option<rom_sim::Pos>, String> {
     let player = crate::selection::PLAYER;
     let nth = |prefix: &str, pick: &dyn Fn(&rom_sim::Entity) -> bool| {
@@ -856,8 +868,24 @@ fn live_point(world: &rom_sim::World, target: &str) -> Result<Option<rom_sim::Po
         })
         .ok_or_else(|| format!("there is no {target}"))?;
         let below = world.orbit(ship).expect("orbiting carrier").pos;
-        return world
-            .landing_site(ship, below)
+        // Below it, else the nearest open ground up to forty tiles away (the ship moves there
+        // within its orbit before it lands).
+        let rings = [(0, 0)].into_iter().chain((1..=4).flat_map(|r| {
+            let d = r * 10_000;
+            [
+                (d, 0),
+                (-d, 0),
+                (0, d),
+                (0, -d),
+                (d, d),
+                (-d, d),
+                (d, -d),
+                (-d, -d),
+            ]
+        }));
+        return rings
+            .filter_map(|(dx, dy)| world.landing_site(ship, world.offset(below, dx, dy)))
+            .next()
             .map(Some)
             .ok_or_else(|| format!("no open ground below {target}"));
     }
@@ -913,7 +941,7 @@ pub fn live_pick(
     }
     let (name, n) = [
         "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy", "gather",
-        "craft",
+        "craft", "landed",
     ]
     .iter()
     .find_map(|name| {
@@ -960,6 +988,7 @@ pub fn live_pick(
                 }
                 match name {
                     "ship" => world.orbit(e.id).is_some(),
+                    "landed" => world.is_landed(e.id),
                     "craft" => world.is_craft_type(e.type_id),
                     "temple" => et.keeper.is_some(),
                     "gather" => et.gather_site.is_some() && et.class == EntityClass::Building,

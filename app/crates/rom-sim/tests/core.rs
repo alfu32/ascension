@@ -904,12 +904,24 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
                     assert!(matches!(kind.key.as_str(), "orbit" | "travel" | "launch"));
                     needs_space = true;
                 }
+                // A space freighter trades from a planet it holds orbit above or stands on.
+                Err(SimError::NoHomeCity) => {
+                    assert_eq!(kind.key, "trade");
+                    assert!(world.is_spacecraft_type(et.id));
+                    needs_space = true;
+                }
+                // A satellite takes only the orders that keep it in its orbit.
+                Err(SimError::BoundToOrbit) => {
+                    assert!(world.is_orbit_bound(et.id), "{}", kind.key);
+                    needs_space = true;
+                }
                 // Carrying needs a carrier in orbit or landed on a planet of a universe.
                 Err(
                     SimError::CannotBoard
                     | SimError::CannotLand
                     | SimError::NotLanded
                     | SimError::CannotUnload
+                    | SimError::ShipNotLanded
                     | SimError::CannotClimb,
                 ) => {
                     assert!(matches!(

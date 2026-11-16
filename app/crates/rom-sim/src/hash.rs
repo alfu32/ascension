@@ -396,6 +396,7 @@ impl StateHash {
         self.optional(entity.container_id, |h, id| h.u32(id.0));
         self.optional(entity.city_id, |h, id| h.u32(id.0));
         self.u64(entity.idle_ticks);
+        self.optional(entity.aim, |h, id| h.u32(id.0));
         self.u64(entity.orders.len() as u64);
         for order in &entity.orders {
             self.u64(order.id.0);

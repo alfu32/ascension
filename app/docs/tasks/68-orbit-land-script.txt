@@ -1,0 +1,12 @@
+# Task 68, replayed by --script in universe mode: a transport in orbit moves above open ground
+# and comes straight down with the Land button. Test-only setup lines first.
+0 grant-age age.starfaring
+0 place-orbit 1 unit.transport_ship @12,8
+1 speed 400
+10 cam wheel 2 640,400
+300 ships
+302 hud tab 1
+304 hud slot 6
+306 speed 100
+# Freeze half-way down (the descent takes 60 ticks).
+336 speed 1

@@ -425,6 +425,7 @@ INSERT INTO map_style_feature(map_style_id,feature_def_id,region_kind,pattern,co
 INSERT INTO map_style_feature(map_style_id,feature_def_id,region_kind,pattern,coverage_pct,clumps_min,clumps_max,size_min,size_max,start_min_dist,start_max_dist) VALUES ((SELECT id FROM def WHERE key='map.many_worlds'),(SELECT id FROM def WHERE key='ter.oil'),'planet','per_player',1,1,2,4,6,8,14);
 INSERT INTO tag(key,category) VALUES ('building','structure');
 INSERT INTO tag(key,category) VALUES ('fort','structure');
+INSERT INTO tag(key,category) VALUES ('tower','structure');
 INSERT INTO def(kind,key,name) VALUES ('entity_type','bld.city','City');
 INSERT INTO def(kind,key,name) VALUES ('entity_type','bld.farm','Farm');
 INSERT INTO def(kind,key,name) VALUES ('entity_type','bld.woodcutter_camp','Woodcutter''s Camp');
@@ -554,7 +555,7 @@ INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.lorry','Lorries');
 INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.cargo_drone','Cargo Drones');
 INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.priest','Priests');
 INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.transport_ship','Transport Ships');
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.city'),'building','economic',1200,3,(SELECT id FROM armor_class WHERE key='structure'),12000,7,7,150,'per_type','none',0,(SELECT id FROM def WHERE key='age.ancient'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.city'),'building','economic',1200,3,(SELECT id FROM armor_class WHERE key='structure'),15500,7,7,150,'per_type','none',0,(SELECT id FROM def WHERE key='age.ancient'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.city'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.city'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.city'),(SELECT id FROM def WHERE key='res.timber'),300,6);
@@ -565,10 +566,10 @@ INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHER
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.city'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.city'),(SELECT id FROM tag WHERE key='city'));
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) VALUES ((SELECT id FROM def WHERE key='bld.city'),1,40000,16000,1);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='bld.city'),8,(SELECT id FROM damage_class WHERE key='pierce'),10000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile_speed) VALUES ((SELECT id FROM def WHERE key='bld.city'),8,(SELECT id FROM damage_class WHERE key='pierce'),10000,30,25000);
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.city')),'ground');
 INSERT INTO et_container(entity_type_id,capacity,heals,adds_firepower) VALUES ((SELECT id FROM def WHERE key='bld.city'),10,1,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.farm'),'building','economic',400,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,150,'per_type','per_city',5,(SELECT id FROM def WHERE key='age.ancient'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.farm'),'building','economic',400,3,(SELECT id FROM armor_class WHERE key='structure'),14000,4,4,150,'per_type','per_city',5,(SELECT id FROM def WHERE key='age.ancient'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.farm'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.farm'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.farm'),(SELECT id FROM def WHERE key='res.timber'),50,1);
@@ -581,7 +582,7 @@ INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FR
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_max,slots_per_node,node_radius,needs_node_terrain_id,self_income) VALUES ((SELECT id FROM def WHERE key='bld.farm'),(SELECT id FROM def WHERE key='res.food'),1,1,0,0,NULL,0);
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.farm'),(SELECT id FROM tag WHERE key='gather'));
 INSERT INTO completion_bonus(entity_type_id,resource_id,amount) VALUES ((SELECT id FROM def WHERE key='bld.farm'),(SELECT id FROM def WHERE key='res.food'),20);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.woodcutter_camp'),'building','economic',500,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,150,'per_type','none',0,(SELECT id FROM def WHERE key='age.ancient'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.woodcutter_camp'),'building','economic',500,3,(SELECT id FROM armor_class WHERE key='structure'),14000,4,4,150,'per_type','none',0,(SELECT id FROM def WHERE key='age.ancient'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.woodcutter_camp'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.woodcutter_camp'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.woodcutter_camp'),(SELECT id FROM def WHERE key='res.timber'),60,1);
@@ -593,7 +594,7 @@ INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHER
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.woodcutter_camp'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_max,slots_per_node,node_radius,needs_node_terrain_id,self_income) VALUES ((SELECT id FROM def WHERE key='bld.woodcutter_camp'),(SELECT id FROM def WHERE key='res.timber'),0,10,1,6000,(SELECT id FROM def WHERE key='ter.forest'),0);
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.woodcutter_camp'),(SELECT id FROM tag WHERE key='gather'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.library'),'building','economic',800,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,150,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.ancient'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.library'),'building','economic',800,3,(SELECT id FROM armor_class WHERE key='structure'),14000,4,4,150,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.ancient'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='res.timber'),60,1);
@@ -603,7 +604,7 @@ INSERT INTO et_producer(entity_type_id) VALUES ((SELECT id FROM def WHERE key='b
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.library'),'in_city_radius');
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.library'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.library'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.market'),'building','economic',800,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,150,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.ancient'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.market'),'building','economic',800,3,(SELECT id FROM armor_class WHERE key='structure'),14000,4,4,150,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.ancient'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.market'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.market'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.market'),(SELECT id FROM def WHERE key='res.timber'),80,1);
@@ -614,7 +615,7 @@ INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHER
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.market'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.market'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
 INSERT INTO completion_bonus(entity_type_id,resource_id,amount) VALUES ((SELECT id FROM def WHERE key='bld.market'),(SELECT id FROM def WHERE key='res.wealth'),20);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.granary'),'building','economic',880,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,175,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.classical'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.granary'),'building','economic',880,3,(SELECT id FROM armor_class WHERE key='structure'),14000,4,4,175,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.classical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.granary'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.granary'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.granary'),(SELECT id FROM def WHERE key='res.timber'),80,1);
@@ -624,7 +625,7 @@ INSERT INTO et_producer(entity_type_id) VALUES ((SELECT id FROM def WHERE key='b
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.granary'),'in_city_radius');
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.granary'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.granary'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.lumber_mill'),'building','economic',880,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,175,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.classical'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.lumber_mill'),'building','economic',880,3,(SELECT id FROM armor_class WHERE key='structure'),14000,4,4,175,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.classical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.lumber_mill'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.lumber_mill'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.lumber_mill'),(SELECT id FROM def WHERE key='res.timber'),80,1);
@@ -634,7 +635,7 @@ INSERT INTO et_producer(entity_type_id) VALUES ((SELECT id FROM def WHERE key='b
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.lumber_mill'),'in_city_radius');
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.lumber_mill'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.lumber_mill'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.mine'),'building','economic',660,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,175,'per_type','none',0,(SELECT id FROM def WHERE key='age.classical'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.mine'),'building','economic',660,3,(SELECT id FROM armor_class WHERE key='structure'),14000,4,4,175,'per_type','none',0,(SELECT id FROM def WHERE key='age.classical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.mine'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.mine'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.mine'),(SELECT id FROM def WHERE key='res.timber'),80,1);
@@ -646,7 +647,7 @@ INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHER
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.mine'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_max,slots_per_node,node_radius,needs_node_terrain_id,self_income) VALUES ((SELECT id FROM def WHERE key='bld.mine'),(SELECT id FROM def WHERE key='res.metal'),0,10,1,6000,(SELECT id FROM def WHERE key='ter.mountain'),0);
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.mine'),(SELECT id FROM tag WHERE key='gather'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.university'),'building','economic',880,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,175,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.classical'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.university'),'building','economic',880,3,(SELECT id FROM armor_class WHERE key='structure'),14000,4,4,175,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.classical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.university'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.university'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.university'),(SELECT id FROM def WHERE key='res.timber'),100,2);
@@ -658,7 +659,7 @@ INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHER
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.university'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_max,slots_per_node,node_radius,needs_node_terrain_id,self_income) VALUES ((SELECT id FROM def WHERE key='bld.university'),(SELECT id FROM def WHERE key='res.knowledge'),7,7,0,0,NULL,0);
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.university'),(SELECT id FROM tag WHERE key='gather'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.temple'),'building','economic',880,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,175,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.classical'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.temple'),'building','economic',880,3,(SELECT id FROM armor_class WHERE key='structure'),14000,4,4,175,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.classical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.temple'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.temple'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.temple'),(SELECT id FROM def WHERE key='res.timber'),80,1);
@@ -671,7 +672,7 @@ INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FR
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.temple'),(SELECT id FROM tag WHERE key='temple'));
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) VALUES ((SELECT id FROM def WHERE key='bld.temple'),0,2000,0,0);
 INSERT INTO et_keeper(entity_type_id,capacity) VALUES ((SELECT id FROM def WHERE key='bld.temple'),5);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.smelter'),'building','economic',1200,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,200,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.medieval'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.smelter'),'building','economic',1200,3,(SELECT id FROM armor_class WHERE key='structure'),14000,4,4,200,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.medieval'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.smelter'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.smelter'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.smelter'),(SELECT id FROM def WHERE key='res.timber'),120,2);
@@ -682,7 +683,7 @@ INSERT INTO et_producer(entity_type_id) VALUES ((SELECT id FROM def WHERE key='b
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.smelter'),'in_city_radius');
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.smelter'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.smelter'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.oil_well'),'building','economic',900,3,(SELECT id FROM armor_class WHERE key='structure'),12000,2,2,275,'per_type','none',0,(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.oil_well'),'building','economic',900,3,(SELECT id FROM armor_class WHERE key='structure'),14000,2,2,275,'per_type','none',0,(SELECT id FROM def WHERE key='age.industrial'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.oil_well'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.oil_well'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.oil_well'),(SELECT id FROM def WHERE key='res.timber'),120,2);
@@ -695,7 +696,7 @@ INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHER
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.oil_well'),'on_terrain',(SELECT id FROM def WHERE key='ter.oil'));
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_max,slots_per_node,node_radius,needs_node_terrain_id,self_income) VALUES ((SELECT id FROM def WHERE key='bld.oil_well'),(SELECT id FROM def WHERE key='res.oil'),3,3,0,0,NULL,0);
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.oil_well'),(SELECT id FROM tag WHERE key='gather'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.refinery'),'building','economic',1800,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,275,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.refinery'),'building','economic',1800,3,(SELECT id FROM armor_class WHERE key='structure'),15000,4,4,275,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.industrial'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.refinery'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.refinery'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.refinery'),(SELECT id FROM def WHERE key='res.timber'),160,3);
@@ -706,7 +707,7 @@ INSERT INTO et_producer(entity_type_id) VALUES ((SELECT id FROM def WHERE key='b
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.refinery'),'in_city_radius');
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.refinery'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.refinery'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.fusion_plant'),'building','economic',3420,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,375,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.fusion'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.fusion_plant'),'building','economic',3420,3,(SELECT id FROM armor_class WHERE key='structure'),17000,4,4,375,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.fusion'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.fusion_plant'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.fusion_plant'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.fusion_plant'),(SELECT id FROM def WHERE key='res.timber'),200,4);
@@ -719,7 +720,7 @@ INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHER
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.fusion_plant'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_max,slots_per_node,node_radius,needs_node_terrain_id,self_income) VALUES ((SELECT id FROM def WHERE key='bld.fusion_plant'),(SELECT id FROM def WHERE key='res.energy'),0,0,0,0,NULL,40);
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.fusion_plant'),(SELECT id FROM tag WHERE key='gather'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),'building','military',1000,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,150,'per_type','none',0,(SELECT id FROM def WHERE key='age.ancient'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),'building','military',1000,3,(SELECT id FROM armor_class WHERE key='structure'),14000,4,4,150,'per_type','none',0,(SELECT id FROM def WHERE key='age.ancient'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='res.timber'),60,1);
@@ -728,7 +729,7 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
 INSERT INTO et_producer(entity_type_id) VALUES ((SELECT id FROM def WHERE key='bld.barracks'));
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.tower'),'building','military',1000,3,(SELECT id FROM armor_class WHERE key='structure'),12000,2,2,150,'per_type','none',0,(SELECT id FROM def WHERE key='age.ancient'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.tower'),'building','military',1000,3,(SELECT id FROM armor_class WHERE key='structure'),15000,2,2,150,'per_type','none',0,(SELECT id FROM def WHERE key='age.ancient'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.tower'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.tower'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.tower'),(SELECT id FROM def WHERE key='res.timber'),80,1);
@@ -737,9 +738,10 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
 INSERT INTO et_producer(entity_type_id) VALUES ((SELECT id FROM def WHERE key='bld.tower'));
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.tower'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.tower'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='bld.tower'),8,(SELECT id FROM damage_class WHERE key='pierce'),10000,30);
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.tower'),(SELECT id FROM tag WHERE key='tower'));
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile_speed) VALUES ((SELECT id FROM def WHERE key='bld.tower'),8,(SELECT id FROM damage_class WHERE key='pierce'),10000,30,25000);
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.tower')),'ground');
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.dock'),'building','military',1000,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,150,'per_type','none',0,(SELECT id FROM def WHERE key='age.ancient'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.dock'),'building','military',1000,3,(SELECT id FROM armor_class WHERE key='structure'),14000,4,4,150,'per_type','none',0,(SELECT id FROM def WHERE key='age.ancient'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='res.timber'),100,2);
@@ -749,7 +751,7 @@ INSERT INTO et_producer(entity_type_id) VALUES ((SELECT id FROM def WHERE key='b
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.dock'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.dock'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id,distance) VALUES ((SELECT id FROM def WHERE key='bld.dock'),'adjacent_terrain',(SELECT id FROM def WHERE key='ter.coast'),2000);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.stable'),'building','military',1100,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,175,'per_type','none',0,(SELECT id FROM def WHERE key='age.classical'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.stable'),'building','military',1100,3,(SELECT id FROM armor_class WHERE key='structure'),14000,4,4,175,'per_type','none',0,(SELECT id FROM def WHERE key='age.classical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.stable'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.stable'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.stable'),(SELECT id FROM def WHERE key='res.timber'),100,2);
@@ -758,7 +760,7 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
 INSERT INTO et_producer(entity_type_id) VALUES ((SELECT id FROM def WHERE key='bld.stable'));
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.stable'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.stable'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.siege_workshop'),'building','military',1320,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,175,'per_type','none',0,(SELECT id FROM def WHERE key='age.classical'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.siege_workshop'),'building','military',1320,3,(SELECT id FROM armor_class WHERE key='structure'),14000,4,4,175,'per_type','none',0,(SELECT id FROM def WHERE key='age.classical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.siege_workshop'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.siege_workshop'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.siege_workshop'),(SELECT id FROM def WHERE key='res.timber'),120,2);
@@ -767,7 +769,7 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
 INSERT INTO et_producer(entity_type_id) VALUES ((SELECT id FROM def WHERE key='bld.siege_workshop'));
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.siege_workshop'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.siege_workshop'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.fort'),'building','military',2640,3,(SELECT id FROM armor_class WHERE key='structure'),12000,6,6,200,'per_type','none',0,(SELECT id FROM def WHERE key='age.medieval'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.fort'),'building','military',2640,3,(SELECT id FROM armor_class WHERE key='structure'),15000,6,6,200,'per_type','none',0,(SELECT id FROM def WHERE key='age.medieval'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.fort'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.fort'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.fort'),(SELECT id FROM def WHERE key='res.timber'),200,4);
@@ -779,9 +781,9 @@ INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHER
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.fort'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.fort'),(SELECT id FROM tag WHERE key='fort'));
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) VALUES ((SELECT id FROM def WHERE key='bld.fort'),0,14000,0,0);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='bld.fort'),12,(SELECT id FROM damage_class WHERE key='pierce'),10000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile_speed) VALUES ((SELECT id FROM def WHERE key='bld.fort'),12,(SELECT id FROM damage_class WHERE key='pierce'),10000,30,25000);
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fort')),'ground');
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.factory'),'building','military',2700,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,275,'per_type','none',0,(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.factory'),'building','military',2700,3,(SELECT id FROM armor_class WHERE key='structure'),15000,4,4,275,'per_type','none',0,(SELECT id FROM def WHERE key='age.industrial'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.factory'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.factory'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.factory'),(SELECT id FROM def WHERE key='res.timber'),200,4);
@@ -791,7 +793,7 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
 INSERT INTO et_producer(entity_type_id) VALUES ((SELECT id FROM def WHERE key='bld.factory'));
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.factory'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.factory'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),'building','military',2700,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,275,'per_type','none',0,(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),'building','military',2700,3,(SELECT id FROM armor_class WHERE key='structure'),15000,4,4,275,'per_type','none',0,(SELECT id FROM def WHERE key='age.industrial'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),(SELECT id FROM def WHERE key='res.timber'),200,4);
@@ -801,7 +803,7 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
 INSERT INTO et_producer(entity_type_id) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'));
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),'building','military',2700,3,(SELECT id FROM armor_class WHERE key='structure'),12000,6,6,275,'per_type','none',0,(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),'building','military',2700,3,(SELECT id FROM armor_class WHERE key='structure'),16000,6,6,275,'per_type','none',0,(SELECT id FROM def WHERE key='age.industrial'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM def WHERE key='res.timber'),200,4);
@@ -811,7 +813,7 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
 INSERT INTO et_producer(entity_type_id) VALUES ((SELECT id FROM def WHERE key='bld.airfield'));
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),'building','military',5000,3,(SELECT id FROM armor_class WHERE key='structure'),12000,8,8,400,'per_type','none',0,(SELECT id FROM def WHERE key='age.starfaring'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),'building','military',5000,3,(SELECT id FROM armor_class WHERE key='structure'),19000,8,8,400,'per_type','none',0,(SELECT id FROM def WHERE key='age.starfaring'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='res.timber'),300,6);
@@ -823,9 +825,10 @@ INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHER
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM tag WHERE key='production'));
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),0,12000,0,0);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,first_age_id,upgrades_from_id) VALUES ((SELECT id FROM def WHERE key='bld.bastion'),'building','military',2100,5,(SELECT id FROM armor_class WHERE key='structure'),14000,2,2,250,(SELECT id FROM def WHERE key='age.enlightenment'),(SELECT id FROM def WHERE key='bld.tower'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,first_age_id,upgrades_from_id) VALUES ((SELECT id FROM def WHERE key='bld.bastion'),'building','military',2100,5,(SELECT id FROM armor_class WHERE key='structure'),15000,2,2,250,(SELECT id FROM def WHERE key='age.enlightenment'),(SELECT id FROM def WHERE key='bld.tower'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.bastion'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.bastion'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.bastion'),(SELECT id FROM tag WHERE key='tower'));
 INSERT INTO et_producer(entity_type_id,queue_limit,parallel,has_rally) SELECT (SELECT id FROM def WHERE key='bld.bastion'),queue_limit,parallel,has_rally FROM et_producer WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.tower');
 INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE key='bld.bastion'),capacity FROM et_keeper WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.tower');
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.bastion'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.tower');
@@ -840,9 +843,10 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.bastion'),'upgrade_type',(SELECT id FROM def WHERE key='bld.tower'),(SELECT id FROM def WHERE key='bld.bastion'));
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='bld.bastion'),'construct','military',0,2);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.bastion'),'construct','military',0,2);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,first_age_id,upgrades_from_id) VALUES ((SELECT id FROM def WHERE key='bld.bunker'),'building','military',2400,5,(SELECT id FROM armor_class WHERE key='structure'),14000,2,2,300,(SELECT id FROM def WHERE key='age.modern'),(SELECT id FROM def WHERE key='bld.bastion'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,first_age_id,upgrades_from_id) VALUES ((SELECT id FROM def WHERE key='bld.bunker'),'building','military',2400,5,(SELECT id FROM armor_class WHERE key='structure'),15000,2,2,300,(SELECT id FROM def WHERE key='age.modern'),(SELECT id FROM def WHERE key='bld.bastion'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.bunker'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.bunker'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.bunker'),(SELECT id FROM tag WHERE key='tower'));
 INSERT INTO et_producer(entity_type_id,queue_limit,parallel,has_rally) SELECT (SELECT id FROM def WHERE key='bld.bunker'),queue_limit,parallel,has_rally FROM et_producer WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bastion');
 INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE key='bld.bunker'),capacity FROM et_keeper WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bastion');
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.bunker'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bastion');
@@ -857,9 +861,10 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.bunker'),'upgrade_type',(SELECT id FROM def WHERE key='bld.bastion'),(SELECT id FROM def WHERE key='bld.bunker'));
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='bld.bunker'),'construct','military',1,2);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.bunker'),'construct','military',1,2);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,first_age_id,upgrades_from_id) VALUES ((SELECT id FROM def WHERE key='bld.defence_turret'),'building','military',2700,5,(SELECT id FROM armor_class WHERE key='structure'),14000,2,2,350,(SELECT id FROM def WHERE key='age.automation'),(SELECT id FROM def WHERE key='bld.bunker'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,first_age_id,upgrades_from_id) VALUES ((SELECT id FROM def WHERE key='bld.defence_turret'),'building','military',2700,5,(SELECT id FROM armor_class WHERE key='structure'),16000,2,2,350,(SELECT id FROM def WHERE key='age.automation'),(SELECT id FROM def WHERE key='bld.bunker'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.defence_turret'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.defence_turret'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.defence_turret'),(SELECT id FROM tag WHERE key='tower'));
 INSERT INTO et_producer(entity_type_id,queue_limit,parallel,has_rally) SELECT (SELECT id FROM def WHERE key='bld.defence_turret'),queue_limit,parallel,has_rally FROM et_producer WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bunker');
 INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE key='bld.defence_turret'),capacity FROM et_keeper WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bunker');
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.defence_turret'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bunker');
@@ -875,7 +880,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.defence_turret'),'upgrade_type',(SELECT id FROM def WHERE key='bld.bunker'),(SELECT id FROM def WHERE key='bld.defence_turret'));
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='bld.defence_turret'),'construct','military',2,2);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.defence_turret'),'construct','military',2,2);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,first_age_id,upgrades_from_id) VALUES ((SELECT id FROM def WHERE key='bld.star_fort'),'building','military',2100,5,(SELECT id FROM armor_class WHERE key='structure'),14000,6,6,250,(SELECT id FROM def WHERE key='age.enlightenment'),(SELECT id FROM def WHERE key='bld.fort'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,first_age_id,upgrades_from_id) VALUES ((SELECT id FROM def WHERE key='bld.star_fort'),'building','military',2100,5,(SELECT id FROM armor_class WHERE key='structure'),16000,6,6,250,(SELECT id FROM def WHERE key='age.enlightenment'),(SELECT id FROM def WHERE key='bld.fort'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.star_fort'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.star_fort'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.star_fort'),(SELECT id FROM tag WHERE key='fort'));
@@ -893,7 +898,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.star_fort'),'upgrade_type',(SELECT id FROM def WHERE key='bld.fort'),(SELECT id FROM def WHERE key='bld.star_fort'));
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='bld.star_fort'),'construct','military',3,2);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.star_fort'),'construct','military',3,2);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,first_age_id,upgrades_from_id) VALUES ((SELECT id FROM def WHERE key='bld.fortress'),'building','military',2400,5,(SELECT id FROM armor_class WHERE key='structure'),14000,6,6,300,(SELECT id FROM def WHERE key='age.modern'),(SELECT id FROM def WHERE key='bld.star_fort'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,first_age_id,upgrades_from_id) VALUES ((SELECT id FROM def WHERE key='bld.fortress'),'building','military',2400,5,(SELECT id FROM armor_class WHERE key='structure'),16000,6,6,300,(SELECT id FROM def WHERE key='age.modern'),(SELECT id FROM def WHERE key='bld.star_fort'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.fortress'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.fortress'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.fortress'),(SELECT id FROM tag WHERE key='fort'));
@@ -911,7 +916,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.fortress'),'upgrade_type',(SELECT id FROM def WHERE key='bld.star_fort'),(SELECT id FROM def WHERE key='bld.fortress'));
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='bld.fortress'),'construct','military',4,2);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.fortress'),'construct','military',4,2);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,first_age_id,upgrades_from_id) VALUES ((SELECT id FROM def WHERE key='bld.citadel'),'building','military',2850,5,(SELECT id FROM armor_class WHERE key='structure'),14000,6,6,375,(SELECT id FROM def WHERE key='age.fusion'),(SELECT id FROM def WHERE key='bld.fortress'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,first_age_id,upgrades_from_id) VALUES ((SELECT id FROM def WHERE key='bld.citadel'),'building','military',2850,5,(SELECT id FROM armor_class WHERE key='structure'),18000,6,6,375,(SELECT id FROM def WHERE key='age.fusion'),(SELECT id FROM def WHERE key='bld.fortress'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.citadel'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.citadel'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.citadel'),(SELECT id FROM tag WHERE key='fort'));
@@ -973,7 +978,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.pikeman'),(SELECT id FROM def WHERE key='res.food'),104,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.pikeman'),(SELECT id FROM def WHERE key='res.metal'),52,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.pikeman'),'upgrade_type',(SELECT id FROM def WHERE key='unit.hoplite'),(SELECT id FROM def WHERE key='unit.pikeman'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.musketeer'),'unit','infantry',145,2,(SELECT id FROM armor_class WHERE key='plate'),5000,1,225,'per_type',(SELECT id FROM def WHERE key='unit.pikeman'),(SELECT id FROM def WHERE key='age.gunpowder'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.musketeer'),'unit','infantry',145,2,(SELECT id FROM armor_class WHERE key='plate'),6000,1,225,'per_type',(SELECT id FROM def WHERE key='unit.pikeman'),(SELECT id FROM def WHERE key='age.gunpowder'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.musketeer'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.musketeer'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.musketeer'),(SELECT id FROM tag WHERE key='infantry'));
@@ -989,7 +994,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.musketeer'),(SELECT id FROM def WHERE key='res.food'),116,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.musketeer'),(SELECT id FROM def WHERE key='res.metal'),58,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.musketeer'),'upgrade_type',(SELECT id FROM def WHERE key='unit.pikeman'),(SELECT id FROM def WHERE key='unit.musketeer'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.fusilier'),'unit','infantry',160,2,(SELECT id FROM armor_class WHERE key='plate'),5000,1,250,'per_type',(SELECT id FROM def WHERE key='unit.musketeer'),(SELECT id FROM def WHERE key='age.enlightenment'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.fusilier'),'unit','infantry',160,2,(SELECT id FROM armor_class WHERE key='plate'),6000,1,250,'per_type',(SELECT id FROM def WHERE key='unit.musketeer'),(SELECT id FROM def WHERE key='age.enlightenment'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fusilier'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fusilier'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fusilier'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1005,7 +1010,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.fusilier'),(SELECT id FROM def WHERE key='res.food'),128,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.fusilier'),(SELECT id FROM def WHERE key='res.metal'),64,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.fusilier'),'upgrade_type',(SELECT id FROM def WHERE key='unit.musketeer'),(SELECT id FROM def WHERE key='unit.fusilier'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.rifleman'),'unit','infantry',175,2,(SELECT id FROM armor_class WHERE key='plate'),5000,1,275,'per_type',(SELECT id FROM def WHERE key='unit.fusilier'),(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.rifleman'),'unit','infantry',175,2,(SELECT id FROM armor_class WHERE key='plate'),6000,1,275,'per_type',(SELECT id FROM def WHERE key='unit.fusilier'),(SELECT id FROM def WHERE key='age.industrial'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.rifleman'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.rifleman'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.rifleman'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1021,7 +1026,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.rifleman'),(SELECT id FROM def WHERE key='res.food'),140,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.rifleman'),(SELECT id FROM def WHERE key='res.metal'),70,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.rifleman'),'upgrade_type',(SELECT id FROM def WHERE key='unit.fusilier'),(SELECT id FROM def WHERE key='unit.rifleman'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.infantry'),'unit','infantry',190,2,(SELECT id FROM armor_class WHERE key='plate'),5000,1,300,'per_type',(SELECT id FROM def WHERE key='unit.rifleman'),(SELECT id FROM def WHERE key='age.modern'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.infantry'),'unit','infantry',190,2,(SELECT id FROM armor_class WHERE key='plate'),6000,1,300,'per_type',(SELECT id FROM def WHERE key='unit.rifleman'),(SELECT id FROM def WHERE key='age.modern'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.infantry'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.infantry'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.infantry'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1037,7 +1042,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.infantry'),(SELECT id FROM def WHERE key='res.food'),152,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.infantry'),(SELECT id FROM def WHERE key='res.metal'),76,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.infantry'),'upgrade_type',(SELECT id FROM def WHERE key='unit.rifleman'),(SELECT id FROM def WHERE key='unit.infantry'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.assault_infantry'),'unit','infantry',205,2,(SELECT id FROM armor_class WHERE key='plate'),5000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.infantry'),(SELECT id FROM def WHERE key='age.information'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.assault_infantry'),'unit','infantry',205,2,(SELECT id FROM armor_class WHERE key='plate'),6000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.infantry'),(SELECT id FROM def WHERE key='age.information'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.assault_infantry'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.assault_infantry'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.assault_infantry'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1053,7 +1058,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.assault_infantry'),(SELECT id FROM def WHERE key='res.food'),164,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.assault_infantry'),(SELECT id FROM def WHERE key='res.metal'),82,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.assault_infantry'),'upgrade_type',(SELECT id FROM def WHERE key='unit.infantry'),(SELECT id FROM def WHERE key='unit.assault_infantry'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.combat_robot'),'unit','infantry',220,2,(SELECT id FROM armor_class WHERE key='plate'),5000,1,350,'per_type',(SELECT id FROM def WHERE key='unit.assault_infantry'),(SELECT id FROM def WHERE key='age.automation'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.combat_robot'),'unit','infantry',220,2,(SELECT id FROM armor_class WHERE key='plate'),6000,1,350,'per_type',(SELECT id FROM def WHERE key='unit.assault_infantry'),(SELECT id FROM def WHERE key='age.automation'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.combat_robot'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.combat_robot'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.combat_robot'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1069,7 +1074,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.combat_robot'),(SELECT id FROM def WHERE key='res.food'),176,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.combat_robot'),(SELECT id FROM def WHERE key='res.metal'),88,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.combat_robot'),'upgrade_type',(SELECT id FROM def WHERE key='unit.assault_infantry'),(SELECT id FROM def WHERE key='unit.combat_robot'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.exo_trooper'),'unit','infantry',235,2,(SELECT id FROM armor_class WHERE key='plate'),5000,1,375,'per_type',(SELECT id FROM def WHERE key='unit.combat_robot'),(SELECT id FROM def WHERE key='age.fusion'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.exo_trooper'),'unit','infantry',235,2,(SELECT id FROM armor_class WHERE key='plate'),6000,1,375,'per_type',(SELECT id FROM def WHERE key='unit.combat_robot'),(SELECT id FROM def WHERE key='age.fusion'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.exo_trooper'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.exo_trooper'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.exo_trooper'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1085,7 +1090,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.exo_trooper'),(SELECT id FROM def WHERE key='res.food'),188,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.exo_trooper'),(SELECT id FROM def WHERE key='res.metal'),94,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.exo_trooper'),'upgrade_type',(SELECT id FROM def WHERE key='unit.combat_robot'),(SELECT id FROM def WHERE key='unit.exo_trooper'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.marine'),'unit','infantry',250,2,(SELECT id FROM armor_class WHERE key='plate'),5000,1,400,'per_type',(SELECT id FROM def WHERE key='unit.exo_trooper'),(SELECT id FROM def WHERE key='age.starfaring'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.marine'),'unit','infantry',250,2,(SELECT id FROM armor_class WHERE key='plate'),6000,1,400,'per_type',(SELECT id FROM def WHERE key='unit.exo_trooper'),(SELECT id FROM def WHERE key='age.starfaring'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.marine'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.marine'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.marine'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1101,7 +1106,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.marine'),(SELECT id FROM def WHERE key='res.food'),200,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.marine'),(SELECT id FROM def WHERE key='res.metal'),100,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.marine'),'upgrade_type',(SELECT id FROM def WHERE key='unit.exo_trooper'),(SELECT id FROM def WHERE key='unit.marine'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.shock_marine'),'unit','infantry',280,2,(SELECT id FROM armor_class WHERE key='plate'),5000,1,450,'per_type',(SELECT id FROM def WHERE key='unit.marine'),(SELECT id FROM def WHERE key='age.abundance'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.shock_marine'),'unit','infantry',280,2,(SELECT id FROM armor_class WHERE key='plate'),6000,1,450,'per_type',(SELECT id FROM def WHERE key='unit.marine'),(SELECT id FROM def WHERE key='age.abundance'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.shock_marine'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.shock_marine'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.shock_marine'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1224,7 +1229,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.heavy_machine_gunner'),(SELECT id FROM def WHERE key='res.food'),114,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.heavy_machine_gunner'),(SELECT id FROM def WHERE key='res.timber'),114,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.heavy_machine_gunner'),'upgrade_type',(SELECT id FROM def WHERE key='unit.machine_gunner'),(SELECT id FROM def WHERE key='unit.heavy_machine_gunner'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.gun_drone'),'unit','ranged',143,3,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.heavy_machine_gunner'),(SELECT id FROM def WHERE key='age.information'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.gun_drone'),'unit','ranged',143,3,(SELECT id FROM armor_class WHERE key='flesh'),7000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.heavy_machine_gunner'),(SELECT id FROM def WHERE key='age.information'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.gun_drone'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.gun_drone'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.gun_drone'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1241,7 +1246,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.gun_drone'),(SELECT id FROM def WHERE key='res.food'),122,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.gun_drone'),(SELECT id FROM def WHERE key='res.timber'),122,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.gun_drone'),'upgrade_type',(SELECT id FROM def WHERE key='unit.heavy_machine_gunner'),(SELECT id FROM def WHERE key='unit.gun_drone'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.pulse_gunner'),'unit','ranged',164,4,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,375,'per_type',(SELECT id FROM def WHERE key='unit.gun_drone'),(SELECT id FROM def WHERE key='age.fusion'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.pulse_gunner'),'unit','ranged',164,4,(SELECT id FROM armor_class WHERE key='flesh'),7000,1,375,'per_type',(SELECT id FROM def WHERE key='unit.gun_drone'),(SELECT id FROM def WHERE key='age.fusion'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.pulse_gunner'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.pulse_gunner'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.pulse_gunner'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1257,7 +1262,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.pulse_gunner'),(SELECT id FROM def WHERE key='res.food'),140,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.pulse_gunner'),(SELECT id FROM def WHERE key='res.timber'),140,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.pulse_gunner'),'upgrade_type',(SELECT id FROM def WHERE key='unit.gun_drone'),(SELECT id FROM def WHERE key='unit.pulse_gunner'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.beam_trooper'),'unit','ranged',185,5,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,425,'per_type',(SELECT id FROM def WHERE key='unit.pulse_gunner'),(SELECT id FROM def WHERE key='age.expansion'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.beam_trooper'),'unit','ranged',185,5,(SELECT id FROM armor_class WHERE key='flesh'),7000,1,425,'per_type',(SELECT id FROM def WHERE key='unit.pulse_gunner'),(SELECT id FROM def WHERE key='age.expansion'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.beam_trooper'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.beam_trooper'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.beam_trooper'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1273,7 +1278,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.beam_trooper'),(SELECT id FROM def WHERE key='res.food'),158,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.beam_trooper'),(SELECT id FROM def WHERE key='res.timber'),158,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.beam_trooper'),'upgrade_type',(SELECT id FROM def WHERE key='unit.pulse_gunner'),(SELECT id FROM def WHERE key='unit.beam_trooper'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.anti_tank_rifleman'),'unit','anti_armour',122,2,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,275,'per_type',NULL,(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.anti_tank_rifleman'),'unit','anti_armour',122,2,(SELECT id FROM armor_class WHERE key='flesh'),7000,1,275,'per_type',NULL,(SELECT id FROM def WHERE key='age.industrial'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.anti_tank_rifleman'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.anti_tank_rifleman'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.anti_tank_rifleman'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1284,7 +1289,7 @@ INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon 
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.anti_tank_rifleman'),'train','units_2',2,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.anti_tank_rifleman'),(SELECT id FROM def WHERE key='res.food'),70,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.anti_tank_rifleman'),(SELECT id FROM def WHERE key='res.metal'),70,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.bazooka_team'),'unit','anti_armour',133,3,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,300,'per_type',(SELECT id FROM def WHERE key='unit.anti_tank_rifleman'),(SELECT id FROM def WHERE key='age.modern'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.bazooka_team'),'unit','anti_armour',133,3,(SELECT id FROM armor_class WHERE key='flesh'),7000,1,300,'per_type',(SELECT id FROM def WHERE key='unit.anti_tank_rifleman'),(SELECT id FROM def WHERE key='age.modern'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.bazooka_team'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.bazooka_team'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.bazooka_team'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1300,7 +1305,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.bazooka_team'),(SELECT id FROM def WHERE key='res.food'),152,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.bazooka_team'),(SELECT id FROM def WHERE key='res.metal'),152,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.bazooka_team'),'upgrade_type',(SELECT id FROM def WHERE key='unit.anti_tank_rifleman'),(SELECT id FROM def WHERE key='unit.bazooka_team'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_team'),'unit','anti_armour',143,3,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.bazooka_team'),(SELECT id FROM def WHERE key='age.information'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_team'),'unit','anti_armour',143,3,(SELECT id FROM armor_class WHERE key='flesh'),7000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.bazooka_team'),(SELECT id FROM def WHERE key='age.information'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_team'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_team'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_team'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1316,7 +1321,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.missile_team'),(SELECT id FROM def WHERE key='res.food'),164,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.missile_team'),(SELECT id FROM def WHERE key='res.metal'),164,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.missile_team'),'upgrade_type',(SELECT id FROM def WHERE key='unit.bazooka_team'),(SELECT id FROM def WHERE key='unit.missile_team'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.railgun_team'),'unit','anti_armour',164,4,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,375,'per_type',(SELECT id FROM def WHERE key='unit.missile_team'),(SELECT id FROM def WHERE key='age.fusion'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.railgun_team'),'unit','anti_armour',164,4,(SELECT id FROM armor_class WHERE key='flesh'),7000,1,375,'per_type',(SELECT id FROM def WHERE key='unit.missile_team'),(SELECT id FROM def WHERE key='age.fusion'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.railgun_team'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.railgun_team'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.railgun_team'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1332,7 +1337,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.railgun_team'),(SELECT id FROM def WHERE key='res.food'),188,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.railgun_team'),(SELECT id FROM def WHERE key='res.metal'),188,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.railgun_team'),'upgrade_type',(SELECT id FROM def WHERE key='unit.missile_team'),(SELECT id FROM def WHERE key='unit.railgun_team'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.scout'),'unit','scout',70,0,(SELECT id FROM armor_class WHERE key='flesh'),9000,1,150,'per_type',NULL,(SELECT id FROM def WHERE key='age.ancient'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.scout'),'unit','scout',70,0,(SELECT id FROM armor_class WHERE key='flesh'),11000,1,150,'per_type',NULL,(SELECT id FROM def WHERE key='age.ancient'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.scout'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.scout'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.scout'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1343,7 +1348,7 @@ INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon 
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.scout'),'train','units_2',1,2);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.scout'),(SELECT id FROM def WHERE key='res.food'),30,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.scout'),(SELECT id FROM def WHERE key='res.timber'),30,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.ranger'),'unit','scout',112,2,(SELECT id FROM armor_class WHERE key='flesh'),9000,1,250,'per_type',(SELECT id FROM def WHERE key='unit.scout'),(SELECT id FROM def WHERE key='age.enlightenment'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.ranger'),'unit','scout',112,2,(SELECT id FROM armor_class WHERE key='flesh'),12000,1,250,'per_type',(SELECT id FROM def WHERE key='unit.scout'),(SELECT id FROM def WHERE key='age.enlightenment'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.ranger'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.ranger'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.ranger'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1359,7 +1364,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.ranger'),(SELECT id FROM def WHERE key='res.food'),96,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.ranger'),(SELECT id FROM def WHERE key='res.timber'),96,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.ranger'),'upgrade_type',(SELECT id FROM def WHERE key='unit.scout'),(SELECT id FROM def WHERE key='unit.ranger'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.recon_drone'),'unit','scout',143,3,(SELECT id FROM armor_class WHERE key='flesh'),9000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.ranger'),(SELECT id FROM def WHERE key='age.information'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.recon_drone'),'unit','scout',143,3,(SELECT id FROM armor_class WHERE key='flesh'),14000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.ranger'),(SELECT id FROM def WHERE key='age.information'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.recon_drone'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.recon_drone'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.recon_drone'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1376,7 +1381,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.recon_drone'),(SELECT id FROM def WHERE key='res.food'),122,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.recon_drone'),(SELECT id FROM def WHERE key='res.timber'),122,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.recon_drone'),'upgrade_type',(SELECT id FROM def WHERE key='unit.ranger'),(SELECT id FROM def WHERE key='unit.recon_drone'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.medic'),'unit','medic',60,2,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,275,'per_type',NULL,(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.medic'),'unit','medic',60,2,(SELECT id FROM armor_class WHERE key='flesh'),5000,1,275,'per_type',NULL,(SELECT id FROM def WHERE key='age.industrial'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.medic'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.medic'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.medic'),(SELECT id FROM tag WHERE key='passenger'));
@@ -1386,7 +1391,7 @@ INSERT INTO et_healer(entity_type_id,target_tag_id,hp_per_second,range,energy_pe
 INSERT INTO et_energy(entity_type_id,max,regen_per_second) VALUES ((SELECT id FROM def WHERE key='unit.medic'),100,2);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.medic'),'train','units_2',4,2);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.medic'),(SELECT id FROM def WHERE key='res.wealth'),70,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.horseman'),'unit','light_mounted',184,0,(SELECT id FROM armor_class WHERE key='plate'),6000,1,175,'per_type',NULL,(SELECT id FROM def WHERE key='age.classical'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.horseman'),'unit','light_mounted',184,0,(SELECT id FROM armor_class WHERE key='plate'),8000,1,175,'per_type',NULL,(SELECT id FROM def WHERE key='age.classical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.horseman'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.horseman'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.horseman'),(SELECT id FROM tag WHERE key='mounted'));
@@ -1397,7 +1402,7 @@ INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon 
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.stable'),(SELECT id FROM def WHERE key='unit.horseman'),'train','units',0,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.horseman'),(SELECT id FROM def WHERE key='res.food'),69,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.horseman'),(SELECT id FROM def WHERE key='res.metal'),46,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.light_cavalry'),'unit','light_mounted',208,1,(SELECT id FROM armor_class WHERE key='plate'),6000,1,200,'per_type',(SELECT id FROM def WHERE key='unit.horseman'),(SELECT id FROM def WHERE key='age.medieval'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.light_cavalry'),'unit','light_mounted',208,1,(SELECT id FROM armor_class WHERE key='plate'),8000,1,200,'per_type',(SELECT id FROM def WHERE key='unit.horseman'),(SELECT id FROM def WHERE key='age.medieval'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.light_cavalry'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.light_cavalry'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.light_cavalry'),(SELECT id FROM tag WHERE key='mounted'));
@@ -1413,7 +1418,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.light_cavalry'),(SELECT id FROM def WHERE key='res.food'),156,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.light_cavalry'),(SELECT id FROM def WHERE key='res.metal'),104,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.light_cavalry'),'upgrade_type',(SELECT id FROM def WHERE key='unit.horseman'),(SELECT id FROM def WHERE key='unit.light_cavalry'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.hussar'),'unit','light_mounted',232,1,(SELECT id FROM armor_class WHERE key='plate'),6000,1,225,'per_type',(SELECT id FROM def WHERE key='unit.light_cavalry'),(SELECT id FROM def WHERE key='age.gunpowder'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.hussar'),'unit','light_mounted',232,1,(SELECT id FROM armor_class WHERE key='plate'),8000,1,225,'per_type',(SELECT id FROM def WHERE key='unit.light_cavalry'),(SELECT id FROM def WHERE key='age.gunpowder'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.hussar'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.hussar'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.hussar'),(SELECT id FROM tag WHERE key='mounted'));
@@ -1429,7 +1434,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.hussar'),(SELECT id FROM def WHERE key='res.food'),174,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.hussar'),(SELECT id FROM def WHERE key='res.metal'),116,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.hussar'),'upgrade_type',(SELECT id FROM def WHERE key='unit.light_cavalry'),(SELECT id FROM def WHERE key='unit.hussar'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.dragoon'),'unit','light_mounted',256,2,(SELECT id FROM armor_class WHERE key='plate'),6000,1,250,'per_type',(SELECT id FROM def WHERE key='unit.hussar'),(SELECT id FROM def WHERE key='age.enlightenment'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.dragoon'),'unit','light_mounted',256,2,(SELECT id FROM armor_class WHERE key='plate'),8000,1,250,'per_type',(SELECT id FROM def WHERE key='unit.hussar'),(SELECT id FROM def WHERE key='age.enlightenment'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.dragoon'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.dragoon'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.dragoon'),(SELECT id FROM tag WHERE key='mounted'));
@@ -1445,7 +1450,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.dragoon'),(SELECT id FROM def WHERE key='res.food'),192,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.dragoon'),(SELECT id FROM def WHERE key='res.metal'),128,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.dragoon'),'upgrade_type',(SELECT id FROM def WHERE key='unit.hussar'),(SELECT id FROM def WHERE key='unit.dragoon'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.armoured_car'),'unit','light_mounted',280,2,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,275,'per_type',(SELECT id FROM def WHERE key='unit.dragoon'),(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.armoured_car'),'unit','light_mounted',280,2,(SELECT id FROM armor_class WHERE key='vehicle'),8000,1,275,'per_type',(SELECT id FROM def WHERE key='unit.dragoon'),(SELECT id FROM def WHERE key='age.industrial'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.armoured_car'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.armoured_car'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.armoured_car'),(SELECT id FROM tag WHERE key='vehicle'));
@@ -1463,7 +1468,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.armoured_car'),(SELECT id FROM def WHERE key='res.metal'),140,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.armoured_car'),(SELECT id FROM def WHERE key='res.oil'),70,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.armoured_car'),'upgrade_type',(SELECT id FROM def WHERE key='unit.dragoon'),(SELECT id FROM def WHERE key='unit.armoured_car'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.scout_car'),'unit','light_mounted',304,3,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,300,'per_type',(SELECT id FROM def WHERE key='unit.armoured_car'),(SELECT id FROM def WHERE key='age.modern'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.scout_car'),'unit','light_mounted',304,3,(SELECT id FROM armor_class WHERE key='vehicle'),8000,1,300,'per_type',(SELECT id FROM def WHERE key='unit.armoured_car'),(SELECT id FROM def WHERE key='age.modern'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.scout_car'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.scout_car'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.scout_car'),(SELECT id FROM tag WHERE key='vehicle'));
@@ -1481,7 +1486,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.scout_car'),(SELECT id FROM def WHERE key='res.metal'),152,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.scout_car'),(SELECT id FROM def WHERE key='res.oil'),76,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.scout_car'),'upgrade_type',(SELECT id FROM def WHERE key='unit.armoured_car'),(SELECT id FROM def WHERE key='unit.scout_car'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.hovercraft'),'unit','light_mounted',352,4,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,350,'per_type',(SELECT id FROM def WHERE key='unit.scout_car'),(SELECT id FROM def WHERE key='age.automation'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.hovercraft'),'unit','light_mounted',352,4,(SELECT id FROM armor_class WHERE key='vehicle'),8000,1,350,'per_type',(SELECT id FROM def WHERE key='unit.scout_car'),(SELECT id FROM def WHERE key='age.automation'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.hovercraft'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.hovercraft'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.hovercraft'),(SELECT id FROM tag WHERE key='vehicle'));
@@ -1499,7 +1504,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.hovercraft'),(SELECT id FROM def WHERE key='res.metal'),176,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.hovercraft'),(SELECT id FROM def WHERE key='res.oil'),88,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.hovercraft'),'upgrade_type',(SELECT id FROM def WHERE key='unit.scout_car'),(SELECT id FROM def WHERE key='unit.hovercraft'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.grav_skimmer'),'unit','light_mounted',400,5,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,400,'per_type',(SELECT id FROM def WHERE key='unit.hovercraft'),(SELECT id FROM def WHERE key='age.starfaring'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.grav_skimmer'),'unit','light_mounted',400,5,(SELECT id FROM armor_class WHERE key='vehicle'),8000,1,400,'per_type',(SELECT id FROM def WHERE key='unit.hovercraft'),(SELECT id FROM def WHERE key='age.starfaring'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.grav_skimmer'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.grav_skimmer'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.grav_skimmer'),(SELECT id FROM tag WHERE key='vehicle'));
@@ -1517,7 +1522,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.grav_skimmer'),(SELECT id FROM def WHERE key='res.metal'),200,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.grav_skimmer'),(SELECT id FROM def WHERE key='res.oil'),100,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.grav_skimmer'),'upgrade_type',(SELECT id FROM def WHERE key='unit.hovercraft'),(SELECT id FROM def WHERE key='unit.grav_skimmer'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.cataphract'),'unit','heavy_mounted',184,0,(SELECT id FROM armor_class WHERE key='plate'),6000,1,175,'per_type',NULL,(SELECT id FROM def WHERE key='age.classical'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.cataphract'),'unit','heavy_mounted',184,0,(SELECT id FROM armor_class WHERE key='plate'),7000,1,175,'per_type',NULL,(SELECT id FROM def WHERE key='age.classical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cataphract'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cataphract'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cataphract'),(SELECT id FROM tag WHERE key='mounted'));
@@ -1528,7 +1533,7 @@ INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon 
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.stable'),(SELECT id FROM def WHERE key='unit.cataphract'),'train','units',4,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.cataphract'),(SELECT id FROM def WHERE key='res.food'),69,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.cataphract'),(SELECT id FROM def WHERE key='res.metal'),46,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.knight'),'unit','heavy_mounted',208,1,(SELECT id FROM armor_class WHERE key='plate'),6000,1,200,'per_type',(SELECT id FROM def WHERE key='unit.cataphract'),(SELECT id FROM def WHERE key='age.medieval'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.knight'),'unit','heavy_mounted',208,1,(SELECT id FROM armor_class WHERE key='plate'),7000,1,200,'per_type',(SELECT id FROM def WHERE key='unit.cataphract'),(SELECT id FROM def WHERE key='age.medieval'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.knight'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.knight'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.knight'),(SELECT id FROM tag WHERE key='mounted'));
@@ -1544,7 +1549,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.knight'),(SELECT id FROM def WHERE key='res.food'),156,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.knight'),(SELECT id FROM def WHERE key='res.metal'),104,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.knight'),'upgrade_type',(SELECT id FROM def WHERE key='unit.cataphract'),(SELECT id FROM def WHERE key='unit.knight'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.cuirassier'),'unit','heavy_mounted',232,1,(SELECT id FROM armor_class WHERE key='plate'),6000,1,225,'per_type',(SELECT id FROM def WHERE key='unit.knight'),(SELECT id FROM def WHERE key='age.gunpowder'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.cuirassier'),'unit','heavy_mounted',232,1,(SELECT id FROM armor_class WHERE key='plate'),7000,1,225,'per_type',(SELECT id FROM def WHERE key='unit.knight'),(SELECT id FROM def WHERE key='age.gunpowder'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cuirassier'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cuirassier'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cuirassier'),(SELECT id FROM tag WHERE key='mounted'));
@@ -1560,7 +1565,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.cuirassier'),(SELECT id FROM def WHERE key='res.food'),174,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.cuirassier'),(SELECT id FROM def WHERE key='res.metal'),116,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.cuirassier'),'upgrade_type',(SELECT id FROM def WHERE key='unit.knight'),(SELECT id FROM def WHERE key='unit.cuirassier'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.lancer'),'unit','heavy_mounted',256,2,(SELECT id FROM armor_class WHERE key='plate'),6000,1,250,'per_type',(SELECT id FROM def WHERE key='unit.cuirassier'),(SELECT id FROM def WHERE key='age.enlightenment'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.lancer'),'unit','heavy_mounted',256,2,(SELECT id FROM armor_class WHERE key='plate'),7000,1,250,'per_type',(SELECT id FROM def WHERE key='unit.cuirassier'),(SELECT id FROM def WHERE key='age.enlightenment'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.lancer'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.lancer'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.lancer'),(SELECT id FROM tag WHERE key='mounted'));
@@ -1576,7 +1581,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.lancer'),(SELECT id FROM def WHERE key='res.food'),192,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.lancer'),(SELECT id FROM def WHERE key='res.metal'),128,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.lancer'),'upgrade_type',(SELECT id FROM def WHERE key='unit.cuirassier'),(SELECT id FROM def WHERE key='unit.lancer'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.light_tank'),'unit','heavy_mounted',280,2,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,275,'per_type',(SELECT id FROM def WHERE key='unit.lancer'),(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.light_tank'),'unit','heavy_mounted',280,2,(SELECT id FROM armor_class WHERE key='vehicle'),7000,1,275,'per_type',(SELECT id FROM def WHERE key='unit.lancer'),(SELECT id FROM def WHERE key='age.industrial'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.light_tank'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.light_tank'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.light_tank'),(SELECT id FROM tag WHERE key='vehicle'));
@@ -1594,7 +1599,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.light_tank'),(SELECT id FROM def WHERE key='res.metal'),140,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.light_tank'),(SELECT id FROM def WHERE key='res.oil'),70,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.light_tank'),'upgrade_type',(SELECT id FROM def WHERE key='unit.lancer'),(SELECT id FROM def WHERE key='unit.light_tank'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.tank'),'unit','heavy_mounted',304,3,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,300,'per_type',(SELECT id FROM def WHERE key='unit.light_tank'),(SELECT id FROM def WHERE key='age.modern'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.tank'),'unit','heavy_mounted',304,3,(SELECT id FROM armor_class WHERE key='vehicle'),7000,1,300,'per_type',(SELECT id FROM def WHERE key='unit.light_tank'),(SELECT id FROM def WHERE key='age.modern'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.tank'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.tank'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.tank'),(SELECT id FROM tag WHERE key='vehicle'));
@@ -1612,7 +1617,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.tank'),(SELECT id FROM def WHERE key='res.metal'),152,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.tank'),(SELECT id FROM def WHERE key='res.oil'),76,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.tank'),'upgrade_type',(SELECT id FROM def WHERE key='unit.light_tank'),(SELECT id FROM def WHERE key='unit.tank'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.main_battle_tank'),'unit','heavy_mounted',328,3,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.tank'),(SELECT id FROM def WHERE key='age.information'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.main_battle_tank'),'unit','heavy_mounted',328,3,(SELECT id FROM armor_class WHERE key='vehicle'),7000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.tank'),(SELECT id FROM def WHERE key='age.information'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.main_battle_tank'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.main_battle_tank'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.main_battle_tank'),(SELECT id FROM tag WHERE key='vehicle'));
@@ -1630,7 +1635,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.main_battle_tank'),(SELECT id FROM def WHERE key='res.metal'),164,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.main_battle_tank'),(SELECT id FROM def WHERE key='res.oil'),82,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.main_battle_tank'),'upgrade_type',(SELECT id FROM def WHERE key='unit.tank'),(SELECT id FROM def WHERE key='unit.main_battle_tank'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.robot_tank'),'unit','heavy_mounted',352,4,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,350,'per_type',(SELECT id FROM def WHERE key='unit.main_battle_tank'),(SELECT id FROM def WHERE key='age.automation'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.robot_tank'),'unit','heavy_mounted',352,4,(SELECT id FROM armor_class WHERE key='vehicle'),7000,1,350,'per_type',(SELECT id FROM def WHERE key='unit.main_battle_tank'),(SELECT id FROM def WHERE key='age.automation'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.robot_tank'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.robot_tank'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.robot_tank'),(SELECT id FROM tag WHERE key='vehicle'));
@@ -1648,7 +1653,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.robot_tank'),(SELECT id FROM def WHERE key='res.metal'),176,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.robot_tank'),(SELECT id FROM def WHERE key='res.oil'),88,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.robot_tank'),'upgrade_type',(SELECT id FROM def WHERE key='unit.main_battle_tank'),(SELECT id FROM def WHERE key='unit.robot_tank'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.fusion_tank'),'unit','heavy_mounted',376,4,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,375,'per_type',(SELECT id FROM def WHERE key='unit.robot_tank'),(SELECT id FROM def WHERE key='age.fusion'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.fusion_tank'),'unit','heavy_mounted',376,4,(SELECT id FROM armor_class WHERE key='vehicle'),7000,1,375,'per_type',(SELECT id FROM def WHERE key='unit.robot_tank'),(SELECT id FROM def WHERE key='age.fusion'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fusion_tank'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fusion_tank'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fusion_tank'),(SELECT id FROM tag WHERE key='vehicle'));
@@ -1666,7 +1671,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.fusion_tank'),(SELECT id FROM def WHERE key='res.metal'),188,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.fusion_tank'),(SELECT id FROM def WHERE key='res.oil'),94,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.fusion_tank'),'upgrade_type',(SELECT id FROM def WHERE key='unit.robot_tank'),(SELECT id FROM def WHERE key='unit.fusion_tank'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.grav_tank'),'unit','heavy_mounted',424,5,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,425,'per_type',(SELECT id FROM def WHERE key='unit.fusion_tank'),(SELECT id FROM def WHERE key='age.expansion'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.grav_tank'),'unit','heavy_mounted',424,5,(SELECT id FROM armor_class WHERE key='vehicle'),7000,1,425,'per_type',(SELECT id FROM def WHERE key='unit.fusion_tank'),(SELECT id FROM def WHERE key='age.expansion'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.grav_tank'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.grav_tank'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.grav_tank'),(SELECT id FROM tag WHERE key='vehicle'));
@@ -1684,7 +1689,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.grav_tank'),(SELECT id FROM def WHERE key='res.metal'),212,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.grav_tank'),(SELECT id FROM def WHERE key='res.oil'),106,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.grav_tank'),'upgrade_type',(SELECT id FROM def WHERE key='unit.fusion_tank'),(SELECT id FROM def WHERE key='unit.grav_tank'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.catapult'),'unit','siege',138,0,(SELECT id FROM armor_class WHERE key='structure'),6000,1,175,'per_type',NULL,(SELECT id FROM def WHERE key='age.classical'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.catapult'),'unit','siege',138,0,(SELECT id FROM armor_class WHERE key='structure'),5000,1,175,'per_type',NULL,(SELECT id FROM def WHERE key='age.classical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.catapult'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.catapult'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.catapult'),(SELECT id FROM tag WHERE key='siege'));
@@ -1695,7 +1700,7 @@ INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon 
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.siege_workshop'),(SELECT id FROM def WHERE key='unit.catapult'),'train','units',0,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.catapult'),(SELECT id FROM def WHERE key='res.timber'),69,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.catapult'),(SELECT id FROM def WHERE key='res.metal'),69,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.trebuchet'),'unit','siege',156,1,(SELECT id FROM armor_class WHERE key='structure'),6000,1,200,'per_type',(SELECT id FROM def WHERE key='unit.catapult'),(SELECT id FROM def WHERE key='age.medieval'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.trebuchet'),'unit','siege',156,1,(SELECT id FROM armor_class WHERE key='structure'),5000,1,200,'per_type',(SELECT id FROM def WHERE key='unit.catapult'),(SELECT id FROM def WHERE key='age.medieval'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.trebuchet'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.trebuchet'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.trebuchet'),(SELECT id FROM tag WHERE key='siege'));
@@ -1711,7 +1716,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.trebuchet'),(SELECT id FROM def WHERE key='res.timber'),156,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.trebuchet'),(SELECT id FROM def WHERE key='res.metal'),156,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.trebuchet'),'upgrade_type',(SELECT id FROM def WHERE key='unit.catapult'),(SELECT id FROM def WHERE key='unit.trebuchet'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.bombard'),'unit','siege',174,1,(SELECT id FROM armor_class WHERE key='structure'),6000,1,225,'per_type',(SELECT id FROM def WHERE key='unit.trebuchet'),(SELECT id FROM def WHERE key='age.gunpowder'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.bombard'),'unit','siege',174,1,(SELECT id FROM armor_class WHERE key='structure'),5000,1,225,'per_type',(SELECT id FROM def WHERE key='unit.trebuchet'),(SELECT id FROM def WHERE key='age.gunpowder'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.bombard'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.bombard'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.bombard'),(SELECT id FROM tag WHERE key='siege'));
@@ -1727,7 +1732,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.bombard'),(SELECT id FROM def WHERE key='res.timber'),174,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.bombard'),(SELECT id FROM def WHERE key='res.metal'),174,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.bombard'),'upgrade_type',(SELECT id FROM def WHERE key='unit.trebuchet'),(SELECT id FROM def WHERE key='unit.bombard'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.cannon'),'unit','siege',192,2,(SELECT id FROM armor_class WHERE key='structure'),6000,1,250,'per_type',(SELECT id FROM def WHERE key='unit.bombard'),(SELECT id FROM def WHERE key='age.enlightenment'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.cannon'),'unit','siege',192,2,(SELECT id FROM armor_class WHERE key='structure'),5000,1,250,'per_type',(SELECT id FROM def WHERE key='unit.bombard'),(SELECT id FROM def WHERE key='age.enlightenment'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cannon'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cannon'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cannon'),(SELECT id FROM tag WHERE key='siege'));
@@ -1743,7 +1748,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.cannon'),(SELECT id FROM def WHERE key='res.timber'),192,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.cannon'),(SELECT id FROM def WHERE key='res.metal'),192,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.cannon'),'upgrade_type',(SELECT id FROM def WHERE key='unit.bombard'),(SELECT id FROM def WHERE key='unit.cannon'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.field_gun'),'unit','siege',210,2,(SELECT id FROM armor_class WHERE key='structure'),6000,1,275,'per_type',(SELECT id FROM def WHERE key='unit.cannon'),(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.field_gun'),'unit','siege',210,2,(SELECT id FROM armor_class WHERE key='structure'),5000,1,275,'per_type',(SELECT id FROM def WHERE key='unit.cannon'),(SELECT id FROM def WHERE key='age.industrial'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.field_gun'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.field_gun'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.field_gun'),(SELECT id FROM tag WHERE key='siege'));
@@ -1759,7 +1764,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.field_gun'),(SELECT id FROM def WHERE key='res.timber'),210,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.field_gun'),(SELECT id FROM def WHERE key='res.metal'),210,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.field_gun'),'upgrade_type',(SELECT id FROM def WHERE key='unit.cannon'),(SELECT id FROM def WHERE key='unit.field_gun'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.howitzer'),'unit','siege',228,3,(SELECT id FROM armor_class WHERE key='structure'),6000,1,300,'per_type',(SELECT id FROM def WHERE key='unit.field_gun'),(SELECT id FROM def WHERE key='age.modern'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.howitzer'),'unit','siege',228,3,(SELECT id FROM armor_class WHERE key='structure'),5000,1,300,'per_type',(SELECT id FROM def WHERE key='unit.field_gun'),(SELECT id FROM def WHERE key='age.modern'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.howitzer'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.howitzer'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.howitzer'),(SELECT id FROM tag WHERE key='siege'));
@@ -1775,7 +1780,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.howitzer'),(SELECT id FROM def WHERE key='res.timber'),228,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.howitzer'),(SELECT id FROM def WHERE key='res.metal'),228,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.howitzer'),'upgrade_type',(SELECT id FROM def WHERE key='unit.field_gun'),(SELECT id FROM def WHERE key='unit.howitzer'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.rocket_artillery'),'unit','siege',246,3,(SELECT id FROM armor_class WHERE key='structure'),6000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.howitzer'),(SELECT id FROM def WHERE key='age.information'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.rocket_artillery'),'unit','siege',246,3,(SELECT id FROM armor_class WHERE key='structure'),5000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.howitzer'),(SELECT id FROM def WHERE key='age.information'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.rocket_artillery'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.rocket_artillery'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.rocket_artillery'),(SELECT id FROM tag WHERE key='siege'));
@@ -1791,7 +1796,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.rocket_artillery'),(SELECT id FROM def WHERE key='res.timber'),246,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.rocket_artillery'),(SELECT id FROM def WHERE key='res.metal'),246,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.rocket_artillery'),'upgrade_type',(SELECT id FROM def WHERE key='unit.howitzer'),(SELECT id FROM def WHERE key='unit.rocket_artillery'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.railgun_battery'),'unit','siege',282,4,(SELECT id FROM armor_class WHERE key='structure'),6000,1,375,'per_type',(SELECT id FROM def WHERE key='unit.rocket_artillery'),(SELECT id FROM def WHERE key='age.fusion'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.railgun_battery'),'unit','siege',282,4,(SELECT id FROM armor_class WHERE key='structure'),5000,1,375,'per_type',(SELECT id FROM def WHERE key='unit.rocket_artillery'),(SELECT id FROM def WHERE key='age.fusion'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.railgun_battery'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.railgun_battery'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.railgun_battery'),(SELECT id FROM tag WHERE key='siege'));
@@ -1807,7 +1812,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.railgun_battery'),(SELECT id FROM def WHERE key='res.timber'),282,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.railgun_battery'),(SELECT id FROM def WHERE key='res.metal'),282,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.railgun_battery'),'upgrade_type',(SELECT id FROM def WHERE key='unit.rocket_artillery'),(SELECT id FROM def WHERE key='unit.railgun_battery'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.flak_gun'),'unit','anti_air',133,3,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,300,'per_type',NULL,(SELECT id FROM def WHERE key='age.modern'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.flak_gun'),'unit','anti_air',133,3,(SELECT id FROM armor_class WHERE key='flesh'),7000,1,300,'per_type',NULL,(SELECT id FROM def WHERE key='age.modern'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.flak_gun'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.flak_gun'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.flak_gun'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1818,7 +1823,7 @@ INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon 
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.factory'),(SELECT id FROM def WHERE key='unit.flak_gun'),'train','units',4,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.flak_gun'),(SELECT id FROM def WHERE key='res.food'),76,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.flak_gun'),(SELECT id FROM def WHERE key='res.metal'),76,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_launcher'),'unit','anti_air',143,3,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.flak_gun'),(SELECT id FROM def WHERE key='age.information'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_launcher'),'unit','anti_air',143,3,(SELECT id FROM armor_class WHERE key='flesh'),7000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.flak_gun'),(SELECT id FROM def WHERE key='age.information'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_launcher'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_launcher'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_launcher'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1834,7 +1839,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.missile_launcher'),(SELECT id FROM def WHERE key='res.food'),164,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.missile_launcher'),(SELECT id FROM def WHERE key='res.metal'),164,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.missile_launcher'),'upgrade_type',(SELECT id FROM def WHERE key='unit.flak_gun'),(SELECT id FROM def WHERE key='unit.missile_launcher'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.laser_battery'),'unit','anti_air',164,4,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,375,'per_type',(SELECT id FROM def WHERE key='unit.missile_launcher'),(SELECT id FROM def WHERE key='age.fusion'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.laser_battery'),'unit','anti_air',164,4,(SELECT id FROM armor_class WHERE key='flesh'),7000,1,375,'per_type',(SELECT id FROM def WHERE key='unit.missile_launcher'),(SELECT id FROM def WHERE key='age.fusion'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.laser_battery'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.laser_battery'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.laser_battery'),(SELECT id FROM tag WHERE key='infantry'));
@@ -1850,7 +1855,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.laser_battery'),(SELECT id FROM def WHERE key='res.food'),188,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.laser_battery'),(SELECT id FROM def WHERE key='res.metal'),188,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.laser_battery'),'upgrade_type',(SELECT id FROM def WHERE key='unit.missile_launcher'),(SELECT id FROM def WHERE key='unit.laser_battery'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.supply_wagon'),'unit','supply',120,1,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,200,'per_type',NULL,(SELECT id FROM def WHERE key='age.medieval'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.supply_wagon'),'unit','supply',120,1,(SELECT id FROM armor_class WHERE key='flesh'),5000,1,200,'per_type',NULL,(SELECT id FROM def WHERE key='age.medieval'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.supply_wagon'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.supply_wagon'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.supply_wagon'),(SELECT id FROM tag WHERE key='passenger'));
@@ -1858,7 +1863,7 @@ INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT 
 INSERT INTO et_supply(entity_type_id,radius) VALUES ((SELECT id FROM def WHERE key='unit.supply_wagon'),6000);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.siege_workshop'),(SELECT id FROM def WHERE key='unit.supply_wagon'),'train','units',4,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.supply_wagon'),(SELECT id FROM def WHERE key='res.wealth'),52,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.supply_truck'),'unit','supply',120,2,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,275,'per_type',(SELECT id FROM def WHERE key='unit.supply_wagon'),(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.supply_truck'),'unit','supply',120,2,(SELECT id FROM armor_class WHERE key='flesh'),5000,1,275,'per_type',(SELECT id FROM def WHERE key='unit.supply_wagon'),(SELECT id FROM def WHERE key='age.industrial'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.supply_truck'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.supply_truck'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.supply_truck'),(SELECT id FROM tag WHERE key='passenger'));
@@ -1880,7 +1885,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.r
 INSERT INTO et_healer(entity_type_id,target_tag_id,hp_per_second,range,energy_per_hp,can_convert) VALUES ((SELECT id FROM def WHERE key='unit.repair_drone'),(SELECT id FROM tag WHERE key='mechanical'),8,3000,0,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.factory'),(SELECT id FROM def WHERE key='unit.repair_drone'),'train','units',3,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.repair_drone'),(SELECT id FROM def WHERE key='res.wealth'),82,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.trireme'),'unit','warship',345,0,(SELECT id FROM armor_class WHERE key='hull'),6000,1,175,'per_type',NULL,(SELECT id FROM def WHERE key='age.classical'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.trireme'),'unit','warship',345,0,(SELECT id FROM armor_class WHERE key='hull'),8000,1,175,'per_type',NULL,(SELECT id FROM def WHERE key='age.classical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.trireme'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.trireme'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.trireme'),(SELECT id FROM tag WHERE key='ship'));
@@ -1892,7 +1897,7 @@ INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon 
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='unit.trireme'),'train','units',0,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.trireme'),(SELECT id FROM def WHERE key='res.timber'),92,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.trireme'),(SELECT id FROM def WHERE key='res.metal'),46,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.war_galley'),'unit','warship',390,1,(SELECT id FROM armor_class WHERE key='hull'),6000,1,200,'per_type',(SELECT id FROM def WHERE key='unit.trireme'),(SELECT id FROM def WHERE key='age.medieval'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.war_galley'),'unit','warship',390,1,(SELECT id FROM armor_class WHERE key='hull'),8000,1,200,'per_type',(SELECT id FROM def WHERE key='unit.trireme'),(SELECT id FROM def WHERE key='age.medieval'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.war_galley'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.war_galley'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.war_galley'),(SELECT id FROM tag WHERE key='ship'));
@@ -1909,7 +1914,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.war_galley'),(SELECT id FROM def WHERE key='res.timber'),208,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.war_galley'),(SELECT id FROM def WHERE key='res.metal'),104,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.war_galley'),'upgrade_type',(SELECT id FROM def WHERE key='unit.trireme'),(SELECT id FROM def WHERE key='unit.war_galley'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.carrack'),'unit','warship',435,1,(SELECT id FROM armor_class WHERE key='hull'),6000,1,225,'per_type',(SELECT id FROM def WHERE key='unit.war_galley'),(SELECT id FROM def WHERE key='age.gunpowder'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.carrack'),'unit','warship',435,1,(SELECT id FROM armor_class WHERE key='hull'),9000,1,225,'per_type',(SELECT id FROM def WHERE key='unit.war_galley'),(SELECT id FROM def WHERE key='age.gunpowder'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.carrack'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.carrack'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.carrack'),(SELECT id FROM tag WHERE key='ship'));
@@ -1926,7 +1931,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.carrack'),(SELECT id FROM def WHERE key='res.timber'),232,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.carrack'),(SELECT id FROM def WHERE key='res.metal'),116,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.carrack'),'upgrade_type',(SELECT id FROM def WHERE key='unit.war_galley'),(SELECT id FROM def WHERE key='unit.carrack'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.frigate'),'unit','warship',480,2,(SELECT id FROM armor_class WHERE key='hull'),6000,1,250,'per_type',(SELECT id FROM def WHERE key='unit.carrack'),(SELECT id FROM def WHERE key='age.enlightenment'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.frigate'),'unit','warship',480,2,(SELECT id FROM armor_class WHERE key='hull'),9000,1,250,'per_type',(SELECT id FROM def WHERE key='unit.carrack'),(SELECT id FROM def WHERE key='age.enlightenment'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.frigate'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.frigate'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.frigate'),(SELECT id FROM tag WHERE key='ship'));
@@ -1943,7 +1948,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.frigate'),(SELECT id FROM def WHERE key='res.timber'),256,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.frigate'),(SELECT id FROM def WHERE key='res.metal'),128,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.frigate'),'upgrade_type',(SELECT id FROM def WHERE key='unit.carrack'),(SELECT id FROM def WHERE key='unit.frigate'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.ironclad'),'unit','warship',525,2,(SELECT id FROM armor_class WHERE key='hull'),6000,1,275,'per_type',(SELECT id FROM def WHERE key='unit.frigate'),(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.ironclad'),'unit','warship',525,2,(SELECT id FROM armor_class WHERE key='hull'),9000,1,275,'per_type',(SELECT id FROM def WHERE key='unit.frigate'),(SELECT id FROM def WHERE key='age.industrial'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.ironclad'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.ironclad'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.ironclad'),(SELECT id FROM tag WHERE key='ship'));
@@ -1960,7 +1965,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.ironclad'),(SELECT id FROM def WHERE key='res.timber'),280,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.ironclad'),(SELECT id FROM def WHERE key='res.metal'),140,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.ironclad'),'upgrade_type',(SELECT id FROM def WHERE key='unit.frigate'),(SELECT id FROM def WHERE key='unit.ironclad'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.destroyer'),'unit','warship',570,3,(SELECT id FROM armor_class WHERE key='hull'),6000,1,300,'per_type',(SELECT id FROM def WHERE key='unit.ironclad'),(SELECT id FROM def WHERE key='age.modern'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.destroyer'),'unit','warship',570,3,(SELECT id FROM armor_class WHERE key='hull'),10000,1,300,'per_type',(SELECT id FROM def WHERE key='unit.ironclad'),(SELECT id FROM def WHERE key='age.modern'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.destroyer'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.destroyer'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.destroyer'),(SELECT id FROM tag WHERE key='ship'));
@@ -1977,7 +1982,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.destroyer'),(SELECT id FROM def WHERE key='res.timber'),304,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.destroyer'),(SELECT id FROM def WHERE key='res.metal'),152,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.destroyer'),'upgrade_type',(SELECT id FROM def WHERE key='unit.ironclad'),(SELECT id FROM def WHERE key='unit.destroyer'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_cruiser'),'unit','warship',615,3,(SELECT id FROM armor_class WHERE key='hull'),6000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.destroyer'),(SELECT id FROM def WHERE key='age.information'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_cruiser'),'unit','warship',615,3,(SELECT id FROM armor_class WHERE key='hull'),10000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.destroyer'),(SELECT id FROM def WHERE key='age.information'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_cruiser'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_cruiser'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_cruiser'),(SELECT id FROM tag WHERE key='ship'));
@@ -1994,7 +1999,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.missile_cruiser'),(SELECT id FROM def WHERE key='res.timber'),328,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.missile_cruiser'),(SELECT id FROM def WHERE key='res.metal'),164,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.missile_cruiser'),'upgrade_type',(SELECT id FROM def WHERE key='unit.destroyer'),(SELECT id FROM def WHERE key='unit.missile_cruiser'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_cruiser'),'unit','warship',660,4,(SELECT id FROM armor_class WHERE key='hull'),6000,1,350,'per_type',(SELECT id FROM def WHERE key='unit.missile_cruiser'),(SELECT id FROM def WHERE key='age.automation'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_cruiser'),'unit','warship',660,4,(SELECT id FROM armor_class WHERE key='hull'),10000,1,350,'per_type',(SELECT id FROM def WHERE key='unit.missile_cruiser'),(SELECT id FROM def WHERE key='age.automation'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_cruiser'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_cruiser'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_cruiser'),(SELECT id FROM tag WHERE key='ship'));
@@ -2012,7 +2017,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.drone_cruiser'),(SELECT id FROM def WHERE key='res.timber'),352,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.drone_cruiser'),(SELECT id FROM def WHERE key='res.metal'),176,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.drone_cruiser'),'upgrade_type',(SELECT id FROM def WHERE key='unit.missile_cruiser'),(SELECT id FROM def WHERE key='unit.drone_cruiser'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.hover_frigate'),'unit','warship',705,4,(SELECT id FROM armor_class WHERE key='hull'),6000,1,375,'per_type',(SELECT id FROM def WHERE key='unit.drone_cruiser'),(SELECT id FROM def WHERE key='age.fusion'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.hover_frigate'),'unit','warship',705,4,(SELECT id FROM armor_class WHERE key='hull'),11000,1,375,'per_type',(SELECT id FROM def WHERE key='unit.drone_cruiser'),(SELECT id FROM def WHERE key='age.fusion'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.hover_frigate'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.hover_frigate'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.hover_frigate'),(SELECT id FROM tag WHERE key='ship'));
@@ -2029,7 +2034,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.hover_frigate'),(SELECT id FROM def WHERE key='res.timber'),376,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.hover_frigate'),(SELECT id FROM def WHERE key='res.metal'),188,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.hover_frigate'),'upgrade_type',(SELECT id FROM def WHERE key='unit.drone_cruiser'),(SELECT id FROM def WHERE key='unit.hover_frigate'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.biplane'),'unit','fighter',262,2,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,275,'per_type',NULL,(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.biplane'),'unit','fighter',262,2,(SELECT id FROM armor_class WHERE key='vehicle'),12000,1,275,'per_type',NULL,(SELECT id FROM def WHERE key='age.industrial'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.biplane'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.biplane'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.biplane'),(SELECT id FROM tag WHERE key='aircraft'));
@@ -2040,7 +2045,7 @@ INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon 
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM def WHERE key='unit.biplane'),'train','units',0,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.biplane'),(SELECT id FROM def WHERE key='res.metal'),140,2);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.biplane'),(SELECT id FROM def WHERE key='res.oil'),70,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.fighter'),'unit','fighter',285,3,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,300,'per_type',(SELECT id FROM def WHERE key='unit.biplane'),(SELECT id FROM def WHERE key='age.modern'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.fighter'),'unit','fighter',285,3,(SELECT id FROM armor_class WHERE key='vehicle'),12000,1,300,'per_type',(SELECT id FROM def WHERE key='unit.biplane'),(SELECT id FROM def WHERE key='age.modern'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fighter'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fighter'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fighter'),(SELECT id FROM tag WHERE key='aircraft'));
@@ -2056,7 +2061,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.fighter'),(SELECT id FROM def WHERE key='res.metal'),304,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.fighter'),(SELECT id FROM def WHERE key='res.oil'),152,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.fighter'),'upgrade_type',(SELECT id FROM def WHERE key='unit.biplane'),(SELECT id FROM def WHERE key='unit.fighter'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.jet_fighter'),'unit','fighter',307,3,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.fighter'),(SELECT id FROM def WHERE key='age.information'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.jet_fighter'),'unit','fighter',307,3,(SELECT id FROM armor_class WHERE key='vehicle'),12000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.fighter'),(SELECT id FROM def WHERE key='age.information'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.jet_fighter'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.jet_fighter'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.jet_fighter'),(SELECT id FROM tag WHERE key='aircraft'));
@@ -2072,7 +2077,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.jet_fighter'),(SELECT id FROM def WHERE key='res.metal'),328,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.jet_fighter'),(SELECT id FROM def WHERE key='res.oil'),164,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.jet_fighter'),'upgrade_type',(SELECT id FROM def WHERE key='unit.fighter'),(SELECT id FROM def WHERE key='unit.jet_fighter'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_fighter'),'unit','fighter',330,4,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,350,'per_type',(SELECT id FROM def WHERE key='unit.jet_fighter'),(SELECT id FROM def WHERE key='age.automation'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_fighter'),'unit','fighter',330,4,(SELECT id FROM armor_class WHERE key='vehicle'),13000,1,350,'per_type',(SELECT id FROM def WHERE key='unit.jet_fighter'),(SELECT id FROM def WHERE key='age.automation'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_fighter'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_fighter'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_fighter'),(SELECT id FROM tag WHERE key='aircraft'));
@@ -2089,7 +2094,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.drone_fighter'),(SELECT id FROM def WHERE key='res.metal'),352,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.drone_fighter'),(SELECT id FROM def WHERE key='res.oil'),176,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.drone_fighter'),'upgrade_type',(SELECT id FROM def WHERE key='unit.jet_fighter'),(SELECT id FROM def WHERE key='unit.drone_fighter'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.interceptor'),'unit','fighter',352,4,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,375,'per_type',(SELECT id FROM def WHERE key='unit.drone_fighter'),(SELECT id FROM def WHERE key='age.fusion'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.interceptor'),'unit','fighter',352,4,(SELECT id FROM armor_class WHERE key='vehicle'),12000,1,375,'per_type',(SELECT id FROM def WHERE key='unit.drone_fighter'),(SELECT id FROM def WHERE key='age.fusion'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.interceptor'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.interceptor'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.interceptor'),(SELECT id FROM tag WHERE key='aircraft'));
@@ -2105,7 +2110,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.interceptor'),(SELECT id FROM def WHERE key='res.metal'),376,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.interceptor'),(SELECT id FROM def WHERE key='res.oil'),188,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.interceptor'),'upgrade_type',(SELECT id FROM def WHERE key='unit.drone_fighter'),(SELECT id FROM def WHERE key='unit.interceptor'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.bomber'),'unit','bomber',285,3,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,300,'per_type',NULL,(SELECT id FROM def WHERE key='age.modern'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.bomber'),'unit','bomber',285,3,(SELECT id FROM armor_class WHERE key='vehicle'),12000,1,300,'per_type',NULL,(SELECT id FROM def WHERE key='age.modern'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.bomber'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.bomber'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.bomber'),(SELECT id FROM tag WHERE key='aircraft'));
@@ -2116,7 +2121,7 @@ INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon 
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM def WHERE key='unit.bomber'),'train','units',0,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.bomber'),(SELECT id FROM def WHERE key='res.metal'),152,3);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.bomber'),(SELECT id FROM def WHERE key='res.oil'),76,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.strategic_bomber'),'unit','bomber',307,3,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.bomber'),(SELECT id FROM def WHERE key='age.information'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.strategic_bomber'),'unit','bomber',307,3,(SELECT id FROM armor_class WHERE key='vehicle'),12000,1,325,'per_type',(SELECT id FROM def WHERE key='unit.bomber'),(SELECT id FROM def WHERE key='age.information'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.strategic_bomber'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.strategic_bomber'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.strategic_bomber'),(SELECT id FROM tag WHERE key='aircraft'));
@@ -2132,7 +2137,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.strategic_bomber'),(SELECT id FROM def WHERE key='res.metal'),328,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.strategic_bomber'),(SELECT id FROM def WHERE key='res.oil'),164,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.strategic_bomber'),'upgrade_type',(SELECT id FROM def WHERE key='unit.bomber'),(SELECT id FROM def WHERE key='unit.strategic_bomber'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_bomber'),'unit','bomber',330,4,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,350,'per_type',(SELECT id FROM def WHERE key='unit.strategic_bomber'),(SELECT id FROM def WHERE key='age.automation'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_bomber'),'unit','bomber',330,4,(SELECT id FROM armor_class WHERE key='vehicle'),13000,1,350,'per_type',(SELECT id FROM def WHERE key='unit.strategic_bomber'),(SELECT id FROM def WHERE key='age.automation'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_bomber'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_bomber'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_bomber'),(SELECT id FROM tag WHERE key='aircraft'));
@@ -2149,7 +2154,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.drone_bomber'),(SELECT id FROM def WHERE key='res.metal'),352,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.drone_bomber'),(SELECT id FROM def WHERE key='res.oil'),176,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.drone_bomber'),'upgrade_type',(SELECT id FROM def WHERE key='unit.strategic_bomber'),(SELECT id FROM def WHERE key='unit.drone_bomber'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),'unit','starship',1000,5,(SELECT id FROM armor_class WHERE key='shield'),9000,2,400,'per_type',NULL,(SELECT id FROM def WHERE key='age.starfaring'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),'unit','starship',1000,5,(SELECT id FROM armor_class WHERE key='shield'),27000,2,400,'per_type',NULL,(SELECT id FROM def WHERE key='age.starfaring'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),(SELECT id FROM tag WHERE key='starship'));
@@ -2161,7 +2166,7 @@ INSERT INTO et_container(entity_type_id,capacity,accept_tag_id) VALUES ((SELECT 
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='unit.survey_ship'),'train','units',0,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),(SELECT id FROM def WHERE key='res.metal'),500,10);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),(SELECT id FROM def WHERE key='res.energy'),250,5);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),'unit','starship',1000,5,(SELECT id FROM armor_class WHERE key='shield'),9000,2,400,'per_type',(SELECT id FROM def WHERE key='unit.survey_ship'),(SELECT id FROM def WHERE key='age.starfaring'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),'unit','starship',1000,5,(SELECT id FROM armor_class WHERE key='shield'),19000,2,400,'per_type',(SELECT id FROM def WHERE key='unit.survey_ship'),(SELECT id FROM def WHERE key='age.starfaring'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),(SELECT id FROM tag WHERE key='starship'));
@@ -2178,7 +2183,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.corvette'),(SELECT id FROM def WHERE key='res.metal'),1000,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.corvette'),(SELECT id FROM def WHERE key='res.energy'),500,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.corvette'),'upgrade_type',(SELECT id FROM def WHERE key='unit.survey_ship'),(SELECT id FROM def WHERE key='unit.corvette'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),'unit','starship',1060,5,(SELECT id FROM armor_class WHERE key='shield'),9000,2,425,'per_type',(SELECT id FROM def WHERE key='unit.corvette'),(SELECT id FROM def WHERE key='age.expansion'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),'unit','starship',1060,5,(SELECT id FROM armor_class WHERE key='shield'),22000,2,425,'per_type',(SELECT id FROM def WHERE key='unit.corvette'),(SELECT id FROM def WHERE key='age.expansion'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),(SELECT id FROM tag WHERE key='starship'));
@@ -2195,7 +2200,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.space_frigate'),(SELECT id FROM def WHERE key='res.metal'),1060,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.space_frigate'),(SELECT id FROM def WHERE key='res.energy'),530,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.space_frigate'),'upgrade_type',(SELECT id FROM def WHERE key='unit.corvette'),(SELECT id FROM def WHERE key='unit.space_frigate'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),'unit','starship',1120,6,(SELECT id FROM armor_class WHERE key='shield'),9000,2,450,'per_type',(SELECT id FROM def WHERE key='unit.space_frigate'),(SELECT id FROM def WHERE key='age.abundance'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),'unit','starship',1120,6,(SELECT id FROM armor_class WHERE key='shield'),25000,2,450,'per_type',(SELECT id FROM def WHERE key='unit.space_frigate'),(SELECT id FROM def WHERE key='age.abundance'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),(SELECT id FROM tag WHERE key='starship'));
@@ -2212,7 +2217,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.space_cruiser'),(SELECT id FROM def WHERE key='res.metal'),1120,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.space_cruiser'),(SELECT id FROM def WHERE key='res.energy'),560,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.space_cruiser'),'upgrade_type',(SELECT id FROM def WHERE key='unit.space_frigate'),(SELECT id FROM def WHERE key='unit.space_cruiser'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),'unit','starship',1180,6,(SELECT id FROM armor_class WHERE key='shield'),9000,2,475,'per_type',(SELECT id FROM def WHERE key='unit.space_cruiser'),(SELECT id FROM def WHERE key='age.galactic'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),'unit','starship',1180,6,(SELECT id FROM armor_class WHERE key='shield'),28000,2,475,'per_type',(SELECT id FROM def WHERE key='unit.space_cruiser'),(SELECT id FROM def WHERE key='age.galactic'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),(SELECT id FROM tag WHERE key='starship'));
@@ -2229,7 +2234,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.battleship'),(SELECT id FROM def WHERE key='res.metal'),1180,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.battleship'),(SELECT id FROM def WHERE key='res.energy'),590,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.battleship'),'upgrade_type',(SELECT id FROM def WHERE key='unit.space_cruiser'),(SELECT id FROM def WHERE key='unit.battleship'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),'unit','civilian',40,0,(SELECT id FROM armor_class WHERE key='flesh'),2000,1,150,'per_type',NULL,(SELECT id FROM def WHERE key='age.ancient'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),'unit','civilian',40,0,(SELECT id FROM armor_class WHERE key='flesh'),4000,1,150,'per_type',NULL,(SELECT id FROM def WHERE key='age.ancient'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM tag WHERE key='civilian'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM tag WHERE key='passenger'));
@@ -2243,7 +2248,7 @@ INSERT INTO et_harvester(entity_type_id,resource_id,amount) VALUES ((SELECT id F
 INSERT INTO et_harvester(entity_type_id,resource_id,amount) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='res.oil'),10);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.city'),(SELECT id FROM def WHERE key='unit.citizen'),'train','units',0,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='res.food'),20,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),'unit','civilian',40,4,(SELECT id FROM armor_class WHERE key='flesh'),2000,1,350,'per_type',(SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='age.automation'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),'unit','civilian',40,4,(SELECT id FROM armor_class WHERE key='flesh'),4000,1,350,'per_type',(SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='age.automation'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM tag WHERE key='civilian'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM tag WHERE key='drone'));
@@ -2262,7 +2267,7 @@ INSERT INTO def(kind,key,name) VALUES ('tech','tech.up.worker_drone','Upgrade to
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.up.worker_drone'),'unit_upgrade','',0,700);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.worker_drone'),(SELECT id FROM def WHERE key='res.food'),88,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.worker_drone'),'upgrade_type',(SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='unit.worker_drone'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.scholar'),'unit','scholar',50,0,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,175,'per_type',NULL,(SELECT id FROM def WHERE key='age.classical'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.scholar'),'unit','scholar',50,0,(SELECT id FROM armor_class WHERE key='flesh'),5000,1,175,'per_type',NULL,(SELECT id FROM def WHERE key='age.classical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.scholar'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.scholar'),(SELECT id FROM tag WHERE key='civilian'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.scholar'),(SELECT id FROM tag WHERE key='passenger'));
@@ -2270,7 +2275,7 @@ INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT 
 INSERT INTO et_harvester(entity_type_id,resource_id,amount) VALUES ((SELECT id FROM def WHERE key='unit.scholar'),(SELECT id FROM def WHERE key='res.knowledge'),10);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.university'),(SELECT id FROM def WHERE key='unit.scholar'),'train','units',0,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.scholar'),(SELECT id FROM def WHERE key='res.wealth'),46,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.merchant'),'unit','merchant',50,0,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,150,'per_type',NULL,(SELECT id FROM def WHERE key='age.ancient'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.merchant'),'unit','merchant',50,0,(SELECT id FROM armor_class WHERE key='flesh'),5000,1,150,'per_type',NULL,(SELECT id FROM def WHERE key='age.ancient'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.merchant'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.merchant'),(SELECT id FROM tag WHERE key='civilian'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.merchant'),(SELECT id FROM tag WHERE key='passenger'));
@@ -2278,7 +2283,7 @@ INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT 
 INSERT INTO et_trader(entity_type_id,runs_routes,claims_nodes,route_resource_id,route_income) VALUES ((SELECT id FROM def WHERE key='unit.merchant'),1,0,(SELECT id FROM def WHERE key='res.wealth'),3);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.market'),(SELECT id FROM def WHERE key='unit.merchant'),'train','units',0,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.merchant'),(SELECT id FROM def WHERE key='res.wealth'),40,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.caravan'),'unit','caravan',90,0,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,175,'per_type',NULL,(SELECT id FROM def WHERE key='age.classical'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.caravan'),'unit','caravan',90,0,(SELECT id FROM armor_class WHERE key='vehicle'),5000,1,175,'per_type',NULL,(SELECT id FROM def WHERE key='age.classical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.caravan'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.caravan'),(SELECT id FROM tag WHERE key='civilian'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.caravan'),(SELECT id FROM tag WHERE key='passenger'));
@@ -2287,7 +2292,7 @@ INSERT INTO et_trader(entity_type_id,runs_routes,claims_nodes,route_resource_id,
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.market'),(SELECT id FROM def WHERE key='unit.caravan'),'train','units',1,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.caravan'),(SELECT id FROM def WHERE key='res.food'),46,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.caravan'),(SELECT id FROM def WHERE key='res.timber'),69,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.freight_wagon'),'unit','caravan',130,2,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,250,'per_type',(SELECT id FROM def WHERE key='unit.caravan'),(SELECT id FROM def WHERE key='age.enlightenment'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.freight_wagon'),'unit','caravan',130,2,(SELECT id FROM armor_class WHERE key='vehicle'),5000,1,250,'per_type',(SELECT id FROM def WHERE key='unit.caravan'),(SELECT id FROM def WHERE key='age.enlightenment'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.freight_wagon'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.freight_wagon'),(SELECT id FROM tag WHERE key='civilian'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.freight_wagon'),(SELECT id FROM tag WHERE key='passenger'));
@@ -2301,7 +2306,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.freight_wagon'),(SELECT id FROM def WHERE key='res.food'),128,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.freight_wagon'),(SELECT id FROM def WHERE key='res.timber'),192,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.freight_wagon'),'upgrade_type',(SELECT id FROM def WHERE key='unit.caravan'),(SELECT id FROM def WHERE key='unit.freight_wagon'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.lorry'),'unit','caravan',170,3,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,300,'per_type',(SELECT id FROM def WHERE key='unit.freight_wagon'),(SELECT id FROM def WHERE key='age.modern'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.lorry'),'unit','caravan',170,3,(SELECT id FROM armor_class WHERE key='vehicle'),5000,1,300,'per_type',(SELECT id FROM def WHERE key='unit.freight_wagon'),(SELECT id FROM def WHERE key='age.modern'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.lorry'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.lorry'),(SELECT id FROM tag WHERE key='civilian'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.lorry'),(SELECT id FROM tag WHERE key='passenger'));
@@ -2317,7 +2322,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.lorry'),(SELECT id FROM def WHERE key='res.metal'),228,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.lorry'),(SELECT id FROM def WHERE key='res.oil'),76,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.lorry'),'upgrade_type',(SELECT id FROM def WHERE key='unit.freight_wagon'),(SELECT id FROM def WHERE key='unit.lorry'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),'unit','caravan',210,4,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,350,'per_type',(SELECT id FROM def WHERE key='unit.lorry'),(SELECT id FROM def WHERE key='age.automation'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),'unit','caravan',210,4,(SELECT id FROM armor_class WHERE key='vehicle'),5000,1,350,'per_type',(SELECT id FROM def WHERE key='unit.lorry'),(SELECT id FROM def WHERE key='age.automation'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),(SELECT id FROM tag WHERE key='civilian'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),(SELECT id FROM tag WHERE key='drone'));
@@ -2334,7 +2339,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.cargo_drone'),(SELECT id FROM def WHERE key='res.metal'),264,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.cargo_drone'),(SELECT id FROM def WHERE key='res.oil'),88,0);
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.cargo_drone'),'upgrade_type',(SELECT id FROM def WHERE key='unit.lorry'),(SELECT id FROM def WHERE key='unit.cargo_drone'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.priest'),'unit','priest',35,0,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,175,'per_type',NULL,(SELECT id FROM def WHERE key='age.classical'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.priest'),'unit','priest',35,0,(SELECT id FROM armor_class WHERE key='flesh'),5000,1,175,'per_type',NULL,(SELECT id FROM def WHERE key='age.classical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.priest'),(SELECT id FROM tag WHERE key='biological'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.priest'),(SELECT id FROM tag WHERE key='civilian'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.priest'),(SELECT id FROM tag WHERE key='passenger'));
@@ -2345,7 +2350,7 @@ INSERT INTO et_healer(entity_type_id,target_tag_id,hp_per_second,range,energy_pe
 INSERT INTO et_energy(entity_type_id,max,regen_per_second) VALUES ((SELECT id FROM def WHERE key='unit.priest'),100,2);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.temple'),(SELECT id FROM def WHERE key='unit.priest'),'train','units',0,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.priest'),(SELECT id FROM def WHERE key='res.wealth'),46,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),'unit','transport',1500,5,(SELECT id FROM armor_class WHERE key='shield'),6000,2,400,'per_type',NULL,(SELECT id FROM def WHERE key='age.starfaring'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),'unit','transport',1500,5,(SELECT id FROM armor_class WHERE key='shield'),22000,2,400,'per_type',NULL,(SELECT id FROM def WHERE key='age.starfaring'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),(SELECT id FROM tag WHERE key='starship'));
@@ -2653,6 +2658,17 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.science.13'),(SELECT id FROM def WHERE key='res.food'),1400,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.science.13'),(SELECT id FROM def WHERE key='res.knowledge'),1400,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.science.13'),'research_time','pct',-4);
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.military.2'),'los','add',1000,(SELECT id FROM tag WHERE key='infantry'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.science.2'),'range','add',1000,(SELECT id FROM tag WHERE key='tower'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.science.2'),'los','add',1500,(SELECT id FROM tag WHERE key='tower'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.science.2'),'range','add',1000,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.science.2'),'los','add',1500,(SELECT id FROM tag WHERE key='city'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.science.3'),'los','add',2000,(SELECT id FROM tag WHERE key='ship'));
+INSERT INTO modifier(source_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.science.4'),'los','pct',15);
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.science.7'),'los','pct',20,(SELECT id FROM tag WHERE key='building'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.science.7'),'los','pct',20,(SELECT id FROM tag WHERE key='aircraft'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.military.8'),'los','pct',15,(SELECT id FROM tag WHERE key='military'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.military.10'),'los','pct',25,(SELECT id FROM tag WHERE key='starship'));
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.age.classical','Advance to Classical');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.age.classical'),'age','',1,600);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.age.classical'),(SELECT id FROM def WHERE key='res.food'),250,0);
@@ -2856,19 +2872,22 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.fortification'),(SELECT id FROM def WHERE key='res.knowledge'),150,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.fortification'),'border_radius','add',3000,(SELECT id FROM tag WHERE key='fort'));
 INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.fortification'),'range','add',1000,(SELECT id FROM tag WHERE key='fort'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.fortification'),'los','add',1500,(SELECT id FROM tag WHERE key='fort'));
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.bombardment','Bombardment');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.bombardment'),'upgrade','',0,500);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.bombardment'),(SELECT id FROM def WHERE key='res.wealth'),500,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.bombardment'),(SELECT id FROM def WHERE key='res.knowledge'),250,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.bombardment'),'border_radius','add',3000,(SELECT id FROM tag WHERE key='fort'));
 INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.bombardment'),'range','add',1000,(SELECT id FROM tag WHERE key='fort'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.bombardment'),'los','add',1500,(SELECT id FROM tag WHERE key='fort'));
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.strategic_reserves','Strategic Reserves');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.strategic_reserves'),'upgrade','',0,600);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.strategic_reserves'),(SELECT id FROM def WHERE key='res.wealth'),700,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.strategic_reserves'),(SELECT id FROM def WHERE key='res.knowledge'),350,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.strategic_reserves'),'border_radius','add',3000,(SELECT id FROM tag WHERE key='fort'));
 INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.strategic_reserves'),'range','add',1000,(SELECT id FROM tag WHERE key='fort'));
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,limit_scope,limit_count,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_farm'),'building','economic',720,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,350,'per_city',5,(SELECT id FROM def WHERE key='bld.farm'),(SELECT id FROM def WHERE key='age.automation'));
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.strategic_reserves'),'los','add',1500,(SELECT id FROM tag WHERE key='fort'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,limit_scope,limit_count,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_farm'),'building','economic',720,3,(SELECT id FROM armor_class WHERE key='structure'),17000,4,4,350,'per_city',5,(SELECT id FROM def WHERE key='bld.farm'),(SELECT id FROM def WHERE key='age.automation'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_farm'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_farm'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_farm'),(SELECT id FROM tag WHERE key='gather'));
@@ -2885,7 +2904,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.auto_farm'),'upgrade_type',(SELECT id FROM def WHERE key='bld.farm'),(SELECT id FROM def WHERE key='bld.auto_farm'));
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='bld.auto_farm'),'construct','economic',4,2);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.auto_farm'),'construct','economic',4,2);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,limit_scope,limit_count,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),'building','economic',900,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,350,'none',0,(SELECT id FROM def WHERE key='bld.woodcutter_camp'),(SELECT id FROM def WHERE key='age.automation'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,limit_scope,limit_count,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),'building','economic',900,3,(SELECT id FROM armor_class WHERE key='structure'),17000,4,4,350,'none',0,(SELECT id FROM def WHERE key='bld.woodcutter_camp'),(SELECT id FROM def WHERE key='age.automation'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),(SELECT id FROM tag WHERE key='gather'));
@@ -2902,7 +2921,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.auto_woodcutter_camp'),'upgrade_type',(SELECT id FROM def WHERE key='bld.woodcutter_camp'),(SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'));
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),'construct','economic_2',0,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),'construct','economic_2',0,0);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,limit_scope,limit_count,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_mine'),'building','economic',1080,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,350,'none',0,(SELECT id FROM def WHERE key='bld.mine'),(SELECT id FROM def WHERE key='age.automation'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,limit_scope,limit_count,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_mine'),'building','economic',1080,3,(SELECT id FROM armor_class WHERE key='structure'),17000,4,4,350,'none',0,(SELECT id FROM def WHERE key='bld.mine'),(SELECT id FROM def WHERE key='age.automation'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_mine'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_mine'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_mine'),(SELECT id FROM tag WHERE key='gather'));
@@ -2919,7 +2938,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.auto_mine'),'upgrade_type',(SELECT id FROM def WHERE key='bld.mine'),(SELECT id FROM def WHERE key='bld.auto_mine'));
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='bld.auto_mine'),'construct','economic_2',1,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.auto_mine'),'construct','economic_2',1,0);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,limit_scope,limit_count,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_oil_well'),'building','economic',1080,3,(SELECT id FROM armor_class WHERE key='structure'),12000,2,2,350,'none',0,(SELECT id FROM def WHERE key='bld.oil_well'),(SELECT id FROM def WHERE key='age.automation'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,limit_scope,limit_count,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_oil_well'),'building','economic',1080,3,(SELECT id FROM armor_class WHERE key='structure'),16000,2,2,350,'none',0,(SELECT id FROM def WHERE key='bld.oil_well'),(SELECT id FROM def WHERE key='age.automation'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_oil_well'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_oil_well'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_oil_well'),(SELECT id FROM tag WHERE key='gather'));
@@ -2936,7 +2955,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.up.auto_oil_well'),'upgrade_type',(SELECT id FROM def WHERE key='bld.oil_well'),(SELECT id FROM def WHERE key='bld.auto_oil_well'));
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='bld.auto_oil_well'),'construct','economic_2',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.auto_oil_well'),'construct','economic_2',2,0);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,limit_scope,limit_count,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_university'),'building','economic',1440,3,(SELECT id FROM armor_class WHERE key='structure'),12000,4,4,350,'per_city',1,(SELECT id FROM def WHERE key='bld.university'),(SELECT id FROM def WHERE key='age.automation'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,limit_scope,limit_count,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_university'),'building','economic',1440,3,(SELECT id FROM armor_class WHERE key='structure'),17000,4,4,350,'per_city',1,(SELECT id FROM def WHERE key='bld.university'),(SELECT id FROM def WHERE key='age.automation'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_university'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_university'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.auto_university'),(SELECT id FROM tag WHERE key='gather'));
@@ -2964,7 +2983,7 @@ INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.orbital_fighter','Orb
 INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.orbital_bomber','Orbital Bombers');
 INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.carrier','Carriers');
 INSERT INTO def(kind,key,name) VALUES ('entity_type','bld.ground_battery','Ground Battery');
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.orbital_fighter'),'unit','orbital_fighter',420,4,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,400,'per_type',(SELECT id FROM def WHERE key='age.starfaring'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.orbital_fighter'),'unit','orbital_fighter',420,4,(SELECT id FROM armor_class WHERE key='vehicle'),16000,1,400,'per_type',(SELECT id FROM def WHERE key='age.starfaring'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.orbital_fighter'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.orbital_fighter'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.orbital_fighter'),(SELECT id FROM tag WHERE key='aircraft'));
@@ -2977,7 +2996,7 @@ INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon 
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM def WHERE key='unit.orbital_fighter'),'train','units',3,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.orbital_fighter'),(SELECT id FROM def WHERE key='res.metal'),220,4);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.orbital_fighter'),(SELECT id FROM def WHERE key='res.energy'),80,1);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.orbital_bomber'),'unit','orbital_bomber',520,4,(SELECT id FROM armor_class WHERE key='vehicle'),6000,1,450,'per_type',(SELECT id FROM def WHERE key='age.starfaring'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.orbital_bomber'),'unit','orbital_bomber',520,4,(SELECT id FROM armor_class WHERE key='vehicle'),16000,1,450,'per_type',(SELECT id FROM def WHERE key='age.starfaring'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.orbital_bomber'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.orbital_bomber'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.orbital_bomber'),(SELECT id FROM tag WHERE key='aircraft'));
@@ -2991,7 +3010,7 @@ INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon 
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM def WHERE key='unit.orbital_bomber'),'train','units',4,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.orbital_bomber'),(SELECT id FROM def WHERE key='res.metal'),260,5);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.orbital_bomber'),(SELECT id FROM def WHERE key='res.energy'),100,2);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.carrier'),'unit','carrier',2000,6,(SELECT id FROM armor_class WHERE key='shield'),9000,2,500,'per_type',(SELECT id FROM def WHERE key='age.starfaring'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.carrier'),'unit','carrier',2000,6,(SELECT id FROM armor_class WHERE key='shield'),28000,2,500,'per_type',(SELECT id FROM def WHERE key='age.starfaring'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.carrier'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.carrier'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.carrier'),(SELECT id FROM tag WHERE key='starship'));
@@ -3003,7 +3022,7 @@ INSERT INTO et_container(entity_type_id,capacity,accept_tag_id,launches) VALUES 
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='unit.carrier'),'train','units',1,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.carrier'),(SELECT id FROM def WHERE key='res.metal'),700,14);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.carrier'),(SELECT id FROM def WHERE key='res.energy'),300,6);
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.ground_battery'),'building','military',2400,5,(SELECT id FROM armor_class WHERE key='structure'),16000,3,3,400,'per_type',(SELECT id FROM def WHERE key='age.starfaring'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.ground_battery'),'building','military',2400,5,(SELECT id FROM armor_class WHERE key='structure'),21000,3,3,400,'per_type',(SELECT id FROM def WHERE key='age.starfaring'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.ground_battery'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.ground_battery'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.ground_battery'),(SELECT id FROM def WHERE key='res.metal'),400,8);
@@ -3014,6 +3033,26 @@ INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHER
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.ground_battery'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
 INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='bld.ground_battery'),150,(SELECT id FROM damage_class WHERE key='explosive'),14000,30);
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.ground_battery')),'orbit');
+INSERT INTO tag(key,category) VALUES ('orbit_bound','movement');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.space_freighter','Space Freighters');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.satellite','Satellites');
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.space_freighter'),'unit','space_freighter',500,3,(SELECT id FROM armor_class WHERE key='shield'),22000,2,450,'per_type',(SELECT id FROM def WHERE key='age.starfaring'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.space_freighter'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.space_freighter'),(SELECT id FROM tag WHERE key='civilian'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.space_freighter'),(SELECT id FROM movement_class WHERE key='starship'),2800);
+INSERT INTO et_trader(entity_type_id,runs_routes,claims_nodes,route_resource_id,route_income) VALUES ((SELECT id FROM def WHERE key='unit.space_freighter'),1,0,(SELECT id FROM def WHERE key='res.wealth'),8);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='unit.space_freighter'),'train','units',2,1);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.space_freighter'),(SELECT id FROM def WHERE key='res.metal'),260,5);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.space_freighter'),(SELECT id FROM def WHERE key='res.energy'),60,1);
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.satellite'),'unit','satellite',150,0,(SELECT id FROM armor_class WHERE key='shield'),96000,1,300,'per_type',(SELECT id FROM def WHERE key='age.starfaring'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.satellite'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.satellite'),(SELECT id FROM tag WHERE key='orbit_bound'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.satellite'),(SELECT id FROM movement_class WHERE key='starship'),1500);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='unit.satellite'),'train','units',3,1);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.satellite'),(SELECT id FROM def WHERE key='res.metal'),150,3);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.satellite'),(SELECT id FROM def WHERE key='res.energy'),100,2);
+INSERT INTO et_view_scale(entity_type_id,planet_pct,system_pct) VALUES ((SELECT id FROM def WHERE key='unit.space_freighter'),300,35);
+INSERT INTO et_view_scale(entity_type_id,planet_pct,system_pct) VALUES ((SELECT id FROM def WHERE key='unit.satellite'),220,25);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.1'),'research','research',1,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.civic.1'),'research','research',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.commerce.1'),'research','research',3,0);
@@ -3811,6 +3850,8 @@ INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FR
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.orbital_bomber'),(SELECT id FROM def WHERE key='age.starfaring'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.carrier'),(SELECT id FROM def WHERE key='age.starfaring'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.ground_battery'),(SELECT id FROM def WHERE key='age.starfaring'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.space_freighter'),(SELECT id FROM def WHERE key='age.starfaring'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.satellite'),(SELECT id FROM def WHERE key='age.starfaring'),0);
 -- END GENERATED CONTENT
 
 -- Hand-authored relations to generated definitions.

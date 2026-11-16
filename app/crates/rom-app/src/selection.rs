@@ -85,11 +85,15 @@ enum Action {
     Travel,
     /// Every worker inside the selected gather buildings leaves.
     Release,
-    /// The selected carriers set their passengers down: around themselves when landed, at an
-    /// own spaceport below when in orbit.
+    /// The selected carriers set their passengers down around themselves once landed; a carrier
+    /// in orbit launches its craft.
     Unload,
     /// The selected landed ships return to orbit.
     Lift,
+    /// The selected ships in orbit come straight down onto the ground below them.
+    Land,
+    /// The next point clicked is patrolled: walked to and from, or in orbit circled.
+    Patrol,
 }
 
 /// What the camera shows, as far as turning picks into orders needs it.
@@ -164,6 +168,8 @@ pub struct Controller {
     data_tab: usize,
     pending_research: BTreeMap<DefId, u64>,
     attack_move: bool,
+    /// The next right-click (or click) on the ground orders a patrol there.
+    patrol: bool,
     placement: Option<Placement>,
     markers: Vec<Marker>,
     helpers: Vec<Helpers>,
@@ -202,6 +208,17 @@ fn climbs(world: &World, entity: &Entity) -> bool {
         && !in_space(world, entity)
 }
 
+/// Whether the entity orbits a planet and can come down onto it (a carrier, a freighter or an
+/// orbital craft; never a satellite).
+fn lands(world: &World, entity: &Entity) -> bool {
+    world.orbit(entity.id).is_some()
+        && !world.is_orbit_bound(entity.type_id)
+        && (world.can_land_type(entity.type_id) || world.is_craft_type(entity.type_id))
+}
+
+/// Height of a ship in orbit above the ground, in tiles, as the world view draws it.
+const ORBIT_LIFT_MILLI: u32 = 8000;
+
 fn in_space(world: &World, entity: &Entity) -> bool {
     world
         .body(entity.pos.body)
@@ -210,6 +227,10 @@ fn in_space(world: &World, entity: &Entity) -> bool {
 
 /// Reconstructs the arrival check from public city footprints; route direction is private.
 fn reached_city(world: &World, unit: Pos, city: &Entity) -> bool {
+    // A freighter between planets (or in their orbit) is on another body than its city.
+    if unit.body != city.pos.body {
+        return false;
+    }
     let et = &world.rules().entity_types[&city.type_id];
     let pos = |p: Pos| SurfacePos {
         face: p.face,
@@ -538,6 +559,7 @@ impl Controller {
             PickEvent::Escape => {
                 self.placement = None;
                 self.attack_move = false;
+                self.patrol = false;
             }
         }
     }
@@ -553,6 +575,15 @@ impl Controller {
     ) {
         if self.placement.is_some() {
             self.place(world, at, mods.shift);
+            return;
+        }
+        if self.patrol {
+            let ids: Vec<EntityId> = self.own_selected(world).iter().map(|e| e.id).collect();
+            for id in ids {
+                self.submit(world, id, "patrol", None, None, Some(at), mods.shift);
+            }
+            self.marker(world, at, MarkerKind::Move);
+            self.patrol = mods.shift;
             return;
         }
         if self.attack_move {
@@ -637,6 +668,48 @@ impl Controller {
             return;
         }
         self.set_selection(next);
+    }
+
+    /// The patrols of the selected units on the planet shown: between their ends on the ground,
+    /// all the way round the great circle through them in orbit.
+    fn patrols(&self, world: &World) -> Vec<rom_render::HudPatrol> {
+        let surface = |p: Pos| SurfacePos {
+            face: p.face,
+            x: i64::from(p.x),
+            y: i64::from(p.y),
+        };
+        self.own_selected(world)
+            .iter()
+            .filter_map(|e| {
+                let order = e.orders().front().filter(|o| o.kind == "patrol")?;
+                let (from, to) = (order.home?, order.target_pos?);
+                if from.body != self.view.planet || to.body != self.view.planet {
+                    return None;
+                }
+                let orbit = world.orbit(e.id).is_some();
+                let ends = world.sphere_point(from).zip(world.sphere_point(to));
+                let span = match ends.filter(|_| orbit) {
+                    Some((a, b)) => {
+                        let (a, b) = (a.map(f64::from), b.map(f64::from));
+                        let length = |v: [f64; 3]| v.iter().map(|c| c * c).sum::<f64>().sqrt();
+                        let dot: f64 =
+                            (0..3).map(|i| a[i] * b[i]).sum::<f64>() / (length(a) * length(b));
+                        let angle = dot.clamp(-1.0, 1.0).acos();
+                        if angle < 1e-4 {
+                            return None;
+                        }
+                        (std::f64::consts::TAU / angle * 1000.0) as u32
+                    }
+                    None => 1000,
+                };
+                Some(rom_render::HudPatrol {
+                    from: surface(from),
+                    to: surface(to),
+                    span_milli: span,
+                    lift_milli: if orbit { ORBIT_LIFT_MILLI } else { 0 },
+                })
+            })
+            .collect()
     }
 
     fn marker(&mut self, world: &World, pos: Pos, kind: MarkerKind) {
@@ -733,12 +806,17 @@ impl Controller {
                 {
                     issued |= self.submit(world, id, "enter", None, Some(*ship), None, queue);
                 }
-                // A carrier above this planet comes down where the ground was clicked; an orbital
-                // craft comes down into the air above it.
+                // A ship above this planet moves within its orbit to above the clicked point; it
+                // comes down only with the Land button.
                 Kind::Ground if orbiting_here => {
-                    if world.is_carrier_type(et.id) || world.is_craft_type(et.id) {
-                        issued |= self.submit(world, id, "land", None, None, Some(target), queue);
-                    }
+                    let kind = if self.patrol {
+                        "patrol"
+                    } else if self.attack_move && armed {
+                        "attack_move"
+                    } else {
+                        "move"
+                    };
+                    issued |= self.submit(world, id, kind, None, None, Some(target), queue);
                 }
                 // A landed carrier sends its passengers to the clicked point.
                 Kind::Ground if world.is_landed(id) => {
@@ -766,7 +844,9 @@ impl Controller {
                     issued |= self.submit(world, id, "harvest", None, Some(*site), None, queue);
                 }
                 _ if can_move => {
-                    let kind = if self.attack_move && armed {
+                    let kind = if self.patrol {
+                        "patrol"
+                    } else if self.attack_move && armed {
                         "attack_move"
                     } else {
                         "move"
@@ -798,6 +878,7 @@ impl Controller {
             };
             self.marker(world, at, kind);
             self.attack_move = false;
+            self.patrol = false;
         }
     }
 
@@ -901,8 +982,8 @@ impl Controller {
         }
     }
 
-    /// The Unload button: a landed carrier sets everyone down around itself; one in orbit sets
-    /// them down at the own spaceport below, if there is one.
+    /// The Unload button: a landed carrier sets everyone down around itself; a launching carrier
+    /// in orbit sends its craft out; anything else in orbit must land first.
     fn unload_selected(&mut self, world: &mut World) {
         let carriers: Vec<EntityId> = self
             .own_selected(world)
@@ -914,12 +995,10 @@ impl Controller {
             let launches = world.orbit(id).is_some() && world.launches_craft(id);
             if world.is_landed(id) || launches {
                 self.submit(world, id, "unload", None, Some(id), None, false);
-            } else if let Some(port) = world.spaceport_below(id) {
-                self.submit(world, id, "unload", None, Some(port), None, false);
             } else {
                 self.say(
                     world,
-                    "No spaceport of yours below: land the ship to set its passengers down",
+                    "Land the ship first: troops leave it only on the ground",
                 );
             }
         }
@@ -1368,10 +1447,17 @@ impl Controller {
                 {
                     actions.push((5, Action::Lift));
                 }
+                if own.iter().any(|e| lands(world, e)) {
+                    actions.push((6, Action::Land));
+                }
+                if armed_mover || own.iter().any(|e| world.orbit(e.id).is_some()) {
+                    actions.push((7, Action::Patrol));
+                }
                 if own.iter().any(|e| {
                     in_space(world, e)
                         && rules.entity_types[&e.type_id].movement.is_some()
                         && !world.is_craft_type(e.type_id)
+                        && !world.is_orbit_bound(e.type_id)
                 }) {
                     actions.push((2, Action::Orbit));
                     actions.push((3, Action::Travel));
@@ -1475,6 +1561,15 @@ impl Controller {
                 .into();
                 button.icon = "icons/cmd_guard".into();
             }
+            Action::Land => {
+                button.name = "Land".into();
+                button.icon = "icons/cmd_hold".into();
+            }
+            Action::Patrol => {
+                button.name = "Patrol".into();
+                button.icon = "icons/cmd_attack_move".into();
+                button.armed = self.patrol;
+            }
             Action::Orbit => {
                 button.name = "Orbit".into();
                 button.icon = "icons/cmd_guard".into();
@@ -1567,6 +1662,33 @@ impl Controller {
                 self.attack_move = false;
             }
             Action::AttackMove => self.attack_move = !self.attack_move,
+            Action::Patrol => {
+                self.patrol = !self.patrol;
+                self.attack_move = false;
+            }
+            Action::Land => {
+                let ids: Vec<EntityId> = self
+                    .own_selected(world)
+                    .iter()
+                    .filter(|e| lands(world, e))
+                    .map(|e| e.id)
+                    .collect();
+                for id in ids {
+                    let Some(below) = world.orbit(id).map(|o| o.pos) else {
+                        continue;
+                    };
+                    // Straight down onto the point below, or a clear refusal.
+                    let problem = (!world.is_craft_type(world.entity(id).expect("own").type_id))
+                        .then(|| world.landing_problem(id, below))
+                        .flatten();
+                    match problem {
+                        Some(reason) => self.say(world, format!("Cannot land: {reason}")),
+                        None => {
+                            self.submit(world, id, "land", None, None, Some(below), false);
+                        }
+                    }
+                }
+            }
             Action::Release => {
                 let sites: Vec<EntityId> = self
                     .own_selected(world)
@@ -2028,14 +2150,17 @@ impl Controller {
         if hud.help.is_empty()
             && !self.view.in_space
             && own.iter().any(|e| {
-                world.is_carrier_type(e.type_id)
-                    && world
-                        .orbit(e.id)
-                        .is_some_and(|o| o.body == self.view.planet)
+                world
+                    .orbit(e.id)
+                    .is_some_and(|o| o.body == self.view.planet)
             })
         {
-            hud.help =
-                "Right-click open ground to land; units board at your spaceport below".into();
+            hud.help = if own.iter().any(|e| lands(world, e)) {
+                "Right-click to move within the orbit; Land comes straight down; troops board on the ground"
+            } else {
+                "Right-click to move within the orbit; Patrol circles the planet"
+            }
+            .into();
         }
         if hud.help.is_empty()
             && own.iter().any(|e| {
@@ -2214,6 +2339,7 @@ impl Controller {
                 })
             })
             .collect();
+        hud.patrols = self.patrols(world);
         let tick = world.tick();
         hud.markers = self
             .markers
@@ -2364,9 +2490,11 @@ fn rejection_message(world: &World, error: &SimError, subject: Option<DefId>) ->
         SimError::InForeignTerritory => "Another nation's territory".into(),
         SimError::OtherBody => "No selected builder can reach this site (another planet)".into(),
         SimError::NotInCityRadius => "Outside a city's economic radius".into(),
-        SimError::CannotBoard => {
-            "Cannot board: the ship must have landed here, or orbit above your spaceport".into()
+        SimError::CannotBoard => "Cannot board that ship".into(),
+        SimError::ShipNotLanded => {
+            "The ship must land first: troops board and leave it only on the ground".into()
         }
+        SimError::BoundToOrbit => "A satellite moves only within its orbit".into(),
         SimError::NoRoomAboard => "No room aboard".into(),
         SimError::Aboard => "Aboard a ship in space: land it first".into(),
         SimError::CannotLand => "Cannot land there: open ground only, outside enemy cities".into(),
@@ -2375,9 +2503,7 @@ fn rejection_message(world: &World, error: &SimError, subject: Option<DefId>) ->
         SimError::CraftInOrbit => {
             "Orbital craft hold their orbit: attack, board a carrier or come down".into()
         }
-        SimError::CannotUnload => {
-            "Land first, or orbit above your spaceport, to set passengers down".into()
-        }
+        SimError::CannotUnload => "Nobody to set down here".into(),
         SimError::CityLimit => "City limit reached".into(),
         SimError::Locked => subject.map_or("Needs a prerequisite".into(), |id| {
             format!("Needs {}", crate::hud::unmet(world, id))

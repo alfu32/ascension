@@ -1066,7 +1066,10 @@ pub fn snapshot_on(
         // Orbital craft are drawn like ships while they climb, orbit and come down.
         view.spacecraft =
             world.is_spacecraft_type(entity.type_id) || world.is_craft_type(entity.type_id);
-        view.shot_at = recent_shot(world, entity);
+        if let Some((target, flight)) = recent_shot(world, entity) {
+            view.shot_at = Some(target);
+            view.shot_flight = flight;
+        }
         // Orbit is eight tiles up; a ship landing or lifting off is drawn on its way.
         let altitude = world
             .altitude_pct(entity.id)
@@ -1116,6 +1119,7 @@ pub fn snapshot_on(
                 altitude: 0.0,
                 beam_target: None,
                 shot_at: None,
+                shot_flight: None,
                 spacecraft: false,
                 hp_frac: 1.0,
                 building: true,
@@ -1142,27 +1146,44 @@ pub fn snapshot_on(
     }
 }
 
-/// The entity `entity` fired at in the last few ticks, when the shot went to or from orbit;
+/// The entity `entity` fired at in the last few ticks, when the shot went to or from orbit or
+/// came from a building (a defence's arrows and gunfire), with how far a projectile has flown;
 /// shots from orbit at the ground have their own beam (`beam_target`).
-fn recent_shot(world: &World, entity: &Entity) -> Option<u32> {
-    let target = entity
+fn recent_shot(world: &World, entity: &Entity) -> Option<(u32, Option<f32>)> {
+    let et = &world.rules().entity_types[&entity.type_id];
+    let ordered = entity
         .orders()
         .front()
-        .filter(|o| matches!(o.kind.as_str(), "attack" | "attack_move"))?
-        .target_entity?;
-    if world.orbit(entity.id).is_none() && world.orbit(target).is_none() {
+        .filter(|o| matches!(o.kind.as_str(), "attack" | "attack_move" | "patrol"))
+        .and_then(|o| o.target_entity);
+    let target = ordered.or(entity.aim)?;
+    let building = et.class == EntityClass::Building;
+    if !building && world.orbit(entity.id).is_none() && world.orbit(target).is_none() {
         return None;
     }
-    let fired = world.rules().entity_types[&entity.type_id]
+    let (fired, weapon) = et
         .weapons
         .iter()
         .filter(|w| !w.orbit_only)
         .filter_map(|w| {
             let ready = entity.cooldowns.get(&w.id)?;
-            Some(ready.saturating_sub(w.cooldown_ticks.max(1) as u64))
+            Some((ready.saturating_sub(w.cooldown_ticks.max(1) as u64), w))
         })
-        .max()?;
-    (world.tick().saturating_sub(fired) <= 6).then_some(target.0)
+        .max_by_key(|(fired, _)| *fired)?;
+    let since = world.tick().saturating_sub(fired);
+    if weapon.projectile_speed <= 0 {
+        return (since <= 6).then_some((target.0, None));
+    }
+    // A projectile is drawn on its way: the travel time is the simulation's.
+    let to = world.entity(target)?.pos;
+    let distance = world.distance(entity.pos, to)?;
+    let rate = world
+        .rules()
+        .constant("sim.ticks_per_second")
+        .unwrap_or(20)
+        .max(1) as u64;
+    let travel = (distance * rate / weapon.projectile_speed as u64).max(1);
+    (since <= travel).then_some((target.0, Some(since as f32 / travel as f32)))
 }
 
 fn view_of(
@@ -1182,6 +1203,7 @@ fn view_of(
         altitude: 0.0,
         beam_target: None,
         shot_at: None,
+        shot_flight: None,
         spacecraft: false,
         hp_frac: (entity.hp as f32 / et.hp.max(1) as f32).clamp(0.0, 1.0),
         building: et.class == EntityClass::Building,

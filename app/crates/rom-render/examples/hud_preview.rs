@@ -163,6 +163,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             altitude: 0.0,
             beam_target: None,
             shot_at: None,
+            shot_flight: None,
             spacecraft: false,
         })
         .collect::<Vec<_>>();

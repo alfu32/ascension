@@ -142,29 +142,49 @@ impl World {
         })
     }
 
-    /// Where `ship` may come down nearest `at`: the centre of an open ground tile of the planet
-    /// it orbits, outside every enemy city's radius.
-    pub fn check_landing(&self, ship: EntityId, at: Pos) -> Result<Pos, SimError> {
-        let e = self.entity(ship).ok_or(SimError::UnknownExecutor(ship))?;
-        let orbit = self.orbit(ship).ok_or(SimError::CannotLand)?;
-        if orbit.body != at.body || !self.is_carrier_type(e.type_id) {
-            return Err(SimError::CannotLand);
+    /// Whether ships of this type can land on a planet: carriers and route traders that fly
+    /// through space (not a satellite).
+    pub fn can_land_type(&self, type_id: DefId) -> bool {
+        self.is_carrier_type(type_id)
+            || (self.is_spacecraft_type(type_id)
+                && self
+                    .rules
+                    .entity_type(type_id)
+                    .and_then(|et| et.trader.as_ref())
+                    .is_some_and(|t| t.runs_routes))
+    }
+
+    /// Why `ship` cannot come down at `at`, in words for its player; `None` when it can.
+    pub fn landing_problem(&self, ship: EntityId, at: Pos) -> Option<&'static str> {
+        let Some(e) = self.entity(ship) else {
+            return Some("that ship is gone");
+        };
+        if !self.can_land_type(e.type_id) || self.is_orbit_bound(e.type_id) {
+            return Some("this ship cannot land");
         }
-        let surface = self
+        let Some(orbit) = self.orbit(ship).filter(|o| o.body == at.body) else {
+            return Some("the ship is not in orbit of this planet");
+        };
+        let Some((surface, index)) = self
             .surface(at.body)
-            .ok_or(SimError::UnknownBody(at.body))?;
-        let index = surface.geo.pos_index(at).ok_or(SimError::CannotLand)?;
+            .and_then(|s| Some((s, s.geo.pos_index(at)?)))
+        else {
+            return Some("there is no ground there");
+        };
         let terrain = &self.rules.terrains[&surface.map.terrain[index]];
-        if terrain.layer != Layer::Ground
-            || !terrain.buildable
-            || surface.pathing.occupancy[index] != 0
-        {
-            return Err(SimError::CannotLand);
+        if terrain.layer != Layer::Ground {
+            return Some("the ground below is water");
+        }
+        if !terrain.buildable {
+            return Some("the ground below is too rough to land on");
+        }
+        if surface.pathing.occupancy[index] != 0 {
+            return Some("a building stands below");
         }
         let centre = surface.geo.index_centre(index);
         let hostile = self.territory.cities.iter().any(|id| {
             self.entity(*id).is_some_and(|city| {
-                city.pos.body == at.body
+                city.pos.body == orbit.body
                     && city.build_progress.is_none()
                     && self.enemies(e.owner, city.owner)
                     && surface
@@ -172,10 +192,19 @@ impl World {
                         .within(city.pos, centre, self.city_economic_radius(*id))
             })
         });
-        if hostile {
+        hostile.then_some("an enemy city lies below")
+    }
+
+    /// Where `ship` may come down nearest `at`: the centre of an open ground tile of the planet
+    /// it orbits, outside every enemy city's radius.
+    pub fn check_landing(&self, ship: EntityId, at: Pos) -> Result<Pos, SimError> {
+        self.entity(ship).ok_or(SimError::UnknownExecutor(ship))?;
+        if self.landing_problem(ship, at).is_some() {
             return Err(SimError::CannotLand);
         }
-        Ok(centre)
+        let surface = self.surface(at.body).ok_or(SimError::CannotLand)?;
+        let index = surface.geo.pos_index(at).ok_or(SimError::CannotLand)?;
+        Ok(surface.geo.index_centre(index))
     }
 
     /// The landing point for `ship` nearest `near` on the planet it orbits, ties to the lower
@@ -248,19 +277,10 @@ impl World {
     /// Where `unit` boards `ship`: beside the ship when it has landed on the unit's planet, or
     /// at the nearest own spaceport below it when it orbits that planet. Position and footprint.
     fn boarding_point(&self, unit: &Entity, ship: &Entity) -> Option<(Pos, [i64; 4])> {
-        if self.is_landed(ship.id) && ship.pos.body == unit.pos.body {
+        (self.is_landed(ship.id) && ship.pos.body == unit.pos.body).then(|| {
             let et = &self.rules.entity_types[&ship.type_id];
-            return Some((ship.pos, footprint(et, ship.pos)));
-        }
-        let orbit = self.orbit(ship.id)?;
-        if orbit.body != unit.pos.body {
-            return None;
-        }
-        let port = self.spaceport_near(unit.owner, unit.pos)?;
-        Some((
-            port.pos,
-            footprint(&self.rules.entity_types[&port.type_id], port.pos),
-        ))
+            (ship.pos, footprint(et, ship.pos))
+        })
     }
 
     fn room_for(&self, ship: EntityId, unit: DefId) -> bool {
@@ -289,6 +309,10 @@ impl World {
                     return Err(SimError::NoRoomAboard);
                 }
                 if !self.boards_in_orbit(e.id, ship.id) {
+                    // Troops board only a ship standing on the ground.
+                    if !self.is_landed(ship.id) {
+                        return Err(SimError::ShipNotLanded);
+                    }
                     self.boarding_point(e, ship).ok_or(SimError::CannotBoard)?;
                 }
             }
@@ -328,18 +352,8 @@ impl World {
                         return Err(SimError::CannotUnload);
                     }
                 } else {
-                    let orbit = self.orbit(e.id).ok_or(SimError::CannotUnload)?;
-                    command
-                        .target_entity
-                        .and_then(|t| self.entity(t))
-                        .filter(|port| {
-                            port.owner == e.owner
-                                && port.pos.body == orbit.body
-                                && port.build_progress.is_none()
-                                && !port.neutralised
-                                && self.is_spaceport(port.type_id)
-                        })
-                        .ok_or(SimError::CannotUnload)?;
+                    // Troops leave only a ship standing on the ground.
+                    return Err(SimError::ShipNotLanded);
                 }
             }
             _ => {}
@@ -385,7 +399,7 @@ impl World {
         }
         let unit = self.entity(id).expect("boarding unit");
         let Some((at, bounds)) = self.boarding_point(unit, ship) else {
-            order.status = OrderStatus::Failed("no_carrier".into());
+            order.status = OrderStatus::Failed("not_landed".into());
             return;
         };
         if order.target_pos != Some(at) {
@@ -509,12 +523,12 @@ impl World {
             return;
         };
         if order.progress_ticks == 0 {
-            // The descent starts straight above the landing point.
+            // It moves within its orbit until it holds above the landing point, then comes
+            // straight down.
             order.target_pos = Some(at);
-            if let Some(orbit) = self.space.orbits.get_mut(&id) {
-                orbit.pos = at;
+            if !self.orbit_move(id, at) {
+                return;
             }
-            self.refresh_viewer(id);
         }
         order.progress_ticks += 1;
         let ticks = self.rules.constant("space.land_ticks").expect("land ticks") as u64;
@@ -581,30 +595,8 @@ impl World {
             order.status = OrderStatus::Done;
             return;
         }
-        let port = self.orbit(id).and_then(|orbit| {
-            order
-                .target_entity
-                .and_then(|t| self.entity(t))
-                .filter(|p| {
-                    p.pos.body == orbit.body
-                        && p.owner == order.player
-                        && p.build_progress.is_none()
-                        && !p.neutralised
-                })
-                .map(|p| {
-                    (
-                        p.pos,
-                        footprint(&self.rules.entity_types[&p.type_id], p.pos),
-                    )
-                })
-        });
-        match port {
-            Some((at, bounds)) => {
-                self.unload_around(id, at, bounds);
-                order.status = OrderStatus::Done;
-            }
-            None => order.status = OrderStatus::Failed("no_port".into()),
-        }
+        // Troops leave only a ship standing on the ground.
+        order.status = OrderStatus::Failed("not_landed".into());
     }
 
     /// Marks the passengers of the `carriers` that died this tick as dead too, credited to the

@@ -260,9 +260,14 @@ impl World {
     pub(crate) fn advance_combat(&mut self, id: EntityId, order: &mut Order) {
         order.progress_ticks += 1;
         let patrol = order.kind == "patrol";
-        // A patrol walks between where it began and its point, fighting like an attack move.
+        let in_orbit = self.orbit_order(id, order);
+        // A patrol walks between where it began and its point, fighting like an attack move; in
+        // orbit it circles the planet on the great circle through both.
         if patrol && order.home.is_none() {
-            order.home = Some(self.entity(id).expect("patroller").pos);
+            order.home = Some(match self.orbit(id).filter(|_| in_orbit) {
+                Some(orbit) => orbit.pos,
+                None => self.entity(id).expect("patroller").pos,
+            });
         }
         if order.kind == "attack_move" || patrol {
             if order.target_entity.is_some_and(|target| {
@@ -274,6 +279,14 @@ impl World {
             }
             if order.target_entity.is_none() {
                 let goal = order.target_pos.expect("attack move point");
+                if in_orbit {
+                    if patrol {
+                        self.orbit_patrol(id, order.home.unwrap_or(goal), goal);
+                    } else if self.orbit_move(id, goal) {
+                        order.status = OrderStatus::Done;
+                    }
+                    return;
+                }
                 if self.walk(id, order, goal, None, !patrol) == Walk::Arrived {
                     match order.home.filter(|home| patrol && *home != goal) {
                         Some(home) => {
@@ -325,6 +338,16 @@ impl World {
             self.rules.entity_types[&type_id].movement.is_some() && self.orbit(id).is_none();
         let move_allowed =
             movable && !(order.automatic && self.combat_behavior(id) == "stand_ground");
+        // In orbit an ordered attack carries the ship's ground point toward its target.
+        let chase = self
+            .orbit(id)
+            .filter(|_| !order.automatic)
+            .and_then(|orbit| {
+                self.orbit(target_id)
+                    .map(|o| o.pos)
+                    .or_else(|| Some(self.seen_pos(target_id)))
+                    .filter(|p| p.body == orbit.body)
+            });
         let mut weapons: Vec<_> = self.rules.entity_types[&type_id]
             .weapons
             .iter()
@@ -339,6 +362,11 @@ impl World {
                 continue;
             }
             let range = self.weapon_range(id, &weapon);
+            if let Some(point) = chase.filter(|_| distance > range && !walked) {
+                self.orbit_move(id, point);
+                walked = true;
+                distance = self.target_distance(self.weapon_origin(id, &weapon), target_id);
+            }
             if distance > range {
                 if !move_allowed || walked {
                     continue;

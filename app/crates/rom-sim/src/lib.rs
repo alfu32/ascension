@@ -16,6 +16,7 @@ mod index;
 mod map;
 mod math;
 mod movement;
+mod orbit_motion;
 mod orbital;
 mod order;
 mod pathing;
@@ -267,6 +268,12 @@ pub enum SimError {
     /// A landing needs a carrier in orbit of that planet and open ground outside enemy cities.
     #[error("cannot land there")]
     CannotLand,
+    /// A satellite moves only within the orbit it was launched into.
+    #[error("a satellite moves only within its orbit")]
+    BoundToOrbit,
+    /// Troops board and leave a ship only while it stands on the ground.
+    #[error("the ship must land first: troops board and leave it only on the ground")]
+    ShipNotLanded,
     /// Lifting off needs a landed ship.
     #[error("ship has not landed")]
     NotLanded,

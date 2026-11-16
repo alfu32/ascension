@@ -491,7 +491,7 @@ fn write_entity(
     location: &str,
 ) -> Result<(), SaveError> {
     let p = pos(e.pos);
-    tx.prepare_cached(&format!("INSERT INTO entity VALUES ({})", marks(27)))?
+    tx.prepare_cached(&format!("INSERT INTO entity VALUES ({})", marks(28)))?
         .execute(params![
             e.id.0,
             location,
@@ -520,6 +520,7 @@ fn write_entity(
             e.container_id.map(|x| x.0),
             e.city_id.map(|x| x.0),
             w(e.idle_ticks),
+            e.aim.map(|x| x.0),
         ])?;
     for (weapon, ready) in &e.cooldowns {
         tx.execute(

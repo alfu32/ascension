@@ -141,8 +141,9 @@ fn ranged_building_attacks_enemy_in_range_only() {
     ticks(&mut w, 50);
     assert_eq!(hp(&w, far), 40);
     attack(&mut w, city, near);
-    w.step();
-    assert_eq!(hp(&w, near), 32);
+    // The arrow flies about eight ticks.
+    ticks(&mut w, 40);
+    assert!(hp(&w, near) <= 32, "{}", hp(&w, near));
     assert_eq!(w.entity(city).unwrap().pos, at(20000, 20000));
 }
 
@@ -709,8 +710,9 @@ fn armed_buildings_acquire_automatically_and_release_out_of_range_targets() {
     let mut w = world("");
     let city = spawn(&mut w, "bld.city", 1, at(20000, 20000));
     let a = spawn(&mut w, "unit.citizen", 2, at(30000, 20000));
-    ticks(&mut w, 2);
-    assert_eq!(hp(&w, a), 32);
+    // The city's arrows fly about eight ticks, and may miss.
+    ticks(&mut w, 40);
+    assert!(hp(&w, a) <= 32, "{}", hp(&w, a));
     w.submit(command(&w, a, "move", None, Some(at(45000, 20000))))
         .unwrap();
     ticks(&mut w, 30);

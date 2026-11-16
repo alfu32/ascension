@@ -5,6 +5,10 @@ use crate::{Command, Entity, EntityId, Order, OrderStatus, PlayerId, Pos, SimErr
 use rom_rules::{ClaimMode, DefId, EntityClass, Layer};
 use std::collections::{BTreeMap, BTreeSet};
 
+/// How near its city a landed freighter delivers, in milli-tiles (its landing search and a
+/// little more).
+const DOCK_REACH: i64 = 14_000;
+
 /// A trader's accepted route and current owner-adjusted delivery income.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TradeRoute {
@@ -232,6 +236,15 @@ impl World {
             && e.hp > 0
     }
 
+    /// Where a trader stands for its route: on the ground, or for a space freighter the point of
+    /// the planet it has landed on or holds in orbit above.
+    fn trade_point(&self, unit: &Entity) -> Option<Pos> {
+        if !self.is_spacecraft_type(unit.type_id) || self.is_landed(unit.id) {
+            return self.surface(unit.pos.body).map(|_| unit.pos);
+        }
+        self.orbit(unit.id).map(|orbit| orbit.pos)
+    }
+
     pub(crate) fn validate_trade(&self, c: &Command) -> Result<RouteState, SimError> {
         let unit = self.entity(c.executor).expect("executor");
         let trader = self.rules.entity_types[&unit.type_id]
@@ -240,25 +253,39 @@ impl World {
             .filter(|t| t.runs_routes)
             .ok_or(SimError::NotATradePartner)?;
         let resource = trader.route_resource_id.ok_or(SimError::NotATradePartner)?;
+        // A space freighter trades between cities of two planets of one star system.
+        let space = self.is_spacecraft_type(unit.type_id);
+        let here = self.trade_point(unit).ok_or(SimError::NoHomeCity)?;
         let home = self
             .entities()
-            .filter(|e| {
-                e.owner == c.player && e.pos.body == unit.pos.body && self.completed_city(e)
-            })
-            .min_by_key(|e| (self.geo(unit.pos.body).rank_distance(unit.pos, e.pos), e.id))
+            .filter(|e| e.owner == c.player && e.pos.body == here.body && self.completed_city(e))
+            .min_by_key(|e| (self.geo(here.body).rank_distance(here, e.pos), e.id))
             .ok_or(SimError::NoHomeCity)?;
         let target = c
             .target_entity
             .and_then(|id| self.entity(id))
             .filter(|e| {
-                e.pos.body == unit.pos.body
-                    && self.completed_city(e)
-                    && !self.enemies(c.player, e.owner)
+                let placed = if space {
+                    e.pos.body != here.body
+                        && self
+                            .body(e.pos.body)
+                            .zip(self.body(here.body))
+                            .is_some_and(|(a, b)| a.system == b.system)
+                } else {
+                    e.pos.body == here.body
+                };
+                placed && self.completed_city(e) && !self.enemies(c.player, e.owner)
             })
             .ok_or(SimError::NotATradePartner)?;
-        let length = self
-            .distance(home.pos, target.pos)
-            .ok_or(SimError::NotATradePartner)?;
+        // Between planets the length is measured in the plane of their star system.
+        let length = if space {
+            self.body_position(home.pos.body)
+                .zip(self.body_position(target.pos.body))
+                .and_then(|(a, b)| self.distance(a, b))
+        } else {
+            self.distance(home.pos, target.pos)
+        }
+        .ok_or(SimError::NotATradePartner)?;
         if home.id == target.id
             || length < self.rules.constant("trade.min_route").expect("minimum") as u64
         {
@@ -343,7 +370,83 @@ impl World {
             })
     }
 
+    /// Pays one delivery of a route to its runner's player and, if another, the partner.
+    fn pay_delivery(&mut self, order: &Order, route: &RouteState, partner: PlayerId) {
+        let payment =
+            self.delivery_income(order.player, route.resource, route.info.per_trip_income);
+        for player in [
+            Some(order.player),
+            (partner != order.player).then_some(partner),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            let balance = self
+                .players
+                .get_mut(&player)
+                .expect("partner")
+                .resources
+                .entry(route.resource)
+                .or_default();
+            *balance = balance.saturating_add(payment);
+        }
+        self.stats.trade_trips = self.stats.trade_trips.saturating_add(1);
+    }
+
+    /// Queues `kind` in front of a freighter's route: lifting off, flying into orbit above a
+    /// point or landing at one. It runs as an ordinary order; the route resumes after it.
+    fn trade_leg(&mut self, unit: EntityId, order: &Order, kind: &str, at: Option<Pos>) {
+        let mut leg = Order::internal(order.player, unit, kind, None, at);
+        leg.id = crate::OrderId(self.next_order_id);
+        leg.issued_tick = self.tick;
+        self.next_order_id = self.next_order_id.checked_add(1).expect("order ids");
+        self.legs.push(leg);
+    }
+
+    /// One tick of a space freighter's route: lift off, fly to the planet of the next city,
+    /// land beside it and deliver, in turn.
+    fn advance_space_trade(&mut self, unit: EntityId, order: &mut Order) {
+        let route = order.route.as_ref().expect("accepted trade route").clone();
+        let cities = [route.info.home, route.info.target].map(|id| {
+            self.entity(id)
+                .filter(|e| self.completed_city(e) && !self.enemies(order.player, e.owner))
+                .map(|e| (e.owner, e.pos))
+        });
+        let [Some(home), Some(target)] = cities else {
+            order.status = OrderStatus::Failed("city_lost".into());
+            return;
+        };
+        let (partner, at) = if route.to_target { target } else { home };
+        order.progress_ticks = order.progress_ticks.saturating_add(1);
+        if self.is_landed(unit) {
+            let here = self.entity(unit).expect("freighter").pos;
+            if here.body == at.body && self.geo(at.body).within(here, at, DOCK_REACH) {
+                if route.started {
+                    self.pay_delivery(order, &route, partner);
+                }
+                let route = order.route.as_mut().expect("route");
+                route.started = true;
+                route.to_target = !route.to_target;
+                return;
+            }
+            self.trade_leg(unit, order, "lift", None);
+            return;
+        }
+        if self.orbit(unit).is_some_and(|o| o.body == at.body) {
+            match self.landing_site(unit, at) {
+                Some(site) => self.trade_leg(unit, order, "land", Some(site)),
+                None => order.status = OrderStatus::Failed("no_landing".into()),
+            }
+            return;
+        }
+        self.trade_leg(unit, order, "orbit", Some(at));
+    }
+
     pub(crate) fn advance_trade(&mut self, unit: EntityId, order: &mut Order) {
+        if self.is_spacecraft_type(self.entity(unit).expect("trader").type_id) {
+            self.advance_space_trade(unit, order);
+            return;
+        }
         let route = order.route.as_ref().expect("accepted trade route").clone();
         let (home, target) = (self.entity(route.info.home), self.entity(route.info.target));
         let body = self.entity(unit).expect("trader").pos.body;
@@ -370,25 +473,7 @@ impl World {
             return;
         }
         if route.started {
-            let payment =
-                self.delivery_income(order.player, route.resource, route.info.per_trip_income);
-            for player in [
-                Some(order.player),
-                (partner != order.player).then_some(partner),
-            ]
-            .into_iter()
-            .flatten()
-            {
-                let balance = self
-                    .players
-                    .get_mut(&player)
-                    .expect("partner")
-                    .resources
-                    .entry(route.resource)
-                    .or_default();
-                *balance = balance.saturating_add(payment);
-            }
-            self.stats.trade_trips = self.stats.trade_trips.saturating_add(1);
+            self.pay_delivery(order, &route, partner);
         }
         let route = order.route.as_mut().expect("route");
         route.started = true;

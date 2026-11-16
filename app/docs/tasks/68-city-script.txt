@@ -1,0 +1,14 @@
+# Task 68, replayed by --script: the city trains citizens and shoots arrows at intruders all the
+# same. Test-only setup lines first.
+0 place 2 unit.spearman @10,5
+0 place 2 unit.spearman @11,3
+0 place 2 unit.spearman @10,7
+0 cam drag 760,330 640,360
+1 cam wheel 3 640,360
+2 click city
+3 hud tab 2
+4 hud slot 0
+5 hud slot 0
+6 hud slot 0
+# The city fires every 30 ticks; freeze with the second volley in flight while it trains.
+33 speed 1
