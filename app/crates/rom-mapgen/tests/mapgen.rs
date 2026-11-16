@@ -521,7 +521,10 @@ fn fair_maps_give_two_players_even_land_and_the_same_clumps() {
                         .count()
                 })
                 .collect();
-            assert!(counts.iter().all(|c| *c > 0), "seed {seed} {terrain}: {counts:?}");
+            assert!(
+                counts.iter().all(|c| *c > 0),
+                "seed {seed} {terrain}: {counts:?}"
+            );
         }
     }
     assert!(fair_even >= 27, "{fair_even} of 30 fair maps even");

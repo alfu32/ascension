@@ -186,12 +186,13 @@ fn formations_patrols_guards_and_failure_reports() {
     );
     order(&mut w, units[3], "guard", Some(units[0]), None);
     w.spawn(spearman, P2, at(body, 24_000, 30_000)).unwrap();
-    ticks(&mut w, 300);
-    assert!(w.order_failures(P1).count() >= 1);
+    w.step();
     assert!(
         w.entities()
             .any(|e| e.orders().iter().any(|o| o.pace.is_some()))
     );
+    ticks(&mut w, 300);
+    assert!(w.order_failures(P1).count() >= 1);
     check("tactics", &rules, w, 400, |_| {});
 }
 

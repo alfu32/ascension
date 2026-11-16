@@ -758,7 +758,7 @@ fn unsupported_kinds_fail_when_activated() {
             false,
         ))
         .unwrap();
-    world.submit(untargeted(id, "explore", true)).unwrap();
+    // `explore` runs since task 65 (tests/tactics.rs); following an entity does not yet.
     let mut follow = untargeted(id, "move", true);
     follow.target_entity = Some(id);
     world.submit(follow).unwrap();
@@ -772,8 +772,8 @@ fn unsupported_kinds_fail_when_activated() {
     world.step();
     assert!(world.entity(id).unwrap().orders().is_empty());
     assert_eq!(world.stats().orders_done, 1);
-    assert_eq!(world.stats().orders_failed, 2);
-    assert_eq!(world.stats().orders_unsupported, 2);
+    assert_eq!(world.stats().orders_failed, 1);
+    assert_eq!(world.stats().orders_unsupported, 1);
 }
 
 #[test]
@@ -852,6 +852,12 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
             if kind.key == "attack" {
                 command.target_entity = Some(enemy);
             }
+            if kind.key == "guard" {
+                command.target_entity = Some(patient);
+            }
+            if kind.key == "stance" {
+                command.subject = rules.id_of("stance.defensive");
+            }
             if kind.key == "heal" {
                 command.target_entity = Some(
                     if et.healer.as_ref().is_some_and(|h| {
@@ -880,6 +886,19 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
                         .claim_tag_id
                         .unwrap();
                     assert!(!rules.has_tag(et.id, tag));
+                }
+                // Only buildings can be razed, never a finished city; a guard cannot guard
+                // itself.
+                Err(SimError::CannotRaze) => {
+                    assert_eq!(kind.key, "raze");
+                    assert!(
+                        et.class != rom_rules::EntityClass::Building
+                            || et.territory.as_ref().is_some_and(|t| t.capturable)
+                    );
+                }
+                Err(SimError::InvalidGuardTarget) => {
+                    assert_eq!(kind.key, "guard");
+                    assert_eq!(id, patient);
                 }
                 Err(SimError::CannotEnterSpace) => {
                     assert!(matches!(kind.key.as_str(), "orbit" | "travel" | "launch"));
