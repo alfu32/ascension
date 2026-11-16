@@ -1,1 +1,115 @@
 //! Computer players for the simulation.
+//!
+//! A [`Brain`] plays one player. It perceives the world through the simulation's public
+//! queries (its own state, and of others only what the fog of war shows), decides with
+//! integers and its own seeded random generator, and acts only by returning orders for
+//! `World::submit`. Its personality is a profile's weights and opening book, its skill a
+//! difficulty row; nothing in the decision code names a unit, building or technology.
+//!
+//! This crate holds the half that runs a civilisation: perception, opening book, economy,
+//! construction, research and production. Armies, space and diplomacy build on it.
+
+mod brain;
+mod bytes;
+mod catalogue;
+mod construction;
+mod economy;
+mod memory;
+mod opening;
+mod plan;
+mod production;
+mod research;
+mod sites;
+mod view;
+
+pub use brain::{Brain, SavedBrain};
+pub use memory::{BrainStats, EnemySighting};
+
+use rom_rules::{DefId, ModifierOp, Rules};
+use thiserror::Error;
+
+/// Why a brain could not be created or restored.
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum AiError {
+    /// The profile key is not in `ai_profile`.
+    #[error("unknown computer player profile {0}")]
+    UnknownProfile(String),
+    /// The difficulty key is not in `ai_difficulty`.
+    #[error("unknown computer player difficulty {0}")]
+    UnknownDifficulty(String),
+    /// A weight the decision code reads is missing from `ai_weight_key`.
+    #[error("the rules lack the computer player weight {0}")]
+    MissingWeight(&'static str),
+    /// The saved memory was written by another version of the layout.
+    #[error("saved computer player state has unknown version {0}")]
+    UnknownVersion(u32),
+    /// The saved memory is damaged or does not match its columns.
+    #[error("saved computer player state is corrupt")]
+    CorruptState,
+}
+
+/// The profile weights the economic half of the computer player reads, as percentages or
+/// 0–100 eagerness values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Weights {
+    /// `econ.worker_share_pct`: share of the population cap kept as workers.
+    pub worker_share: i64,
+    /// `econ.expand_eagerness`: how soon another city is founded.
+    pub expand: i64,
+    /// `tech.age_priority`: preference for the next age over other research.
+    pub age_priority: i64,
+    /// `mil.army_share_pct`: share of the population cap kept as military.
+    pub army_share: i64,
+    /// `mil.defense_share_pct`: share of the army kept at home; here, how much is fortified.
+    pub defense_share: i64,
+}
+
+/// A player's state in a few numbers, for match reports.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Summary {
+    /// The age the player is in.
+    pub age: DefId,
+    /// Its ordinal.
+    pub age_ordinal: i64,
+    /// Cities, complete or not.
+    pub cities: usize,
+    /// Buildings, complete or not.
+    pub buildings: usize,
+    /// Units of every kind.
+    pub units: usize,
+    /// Units that harvest.
+    pub workers: usize,
+    /// Workers with nothing to do.
+    pub idle_workers: usize,
+    /// Units that fight for a living.
+    pub military: usize,
+    /// Technologies researched.
+    pub techs: usize,
+    /// Population in use.
+    pub pop_used: i64,
+    /// Population cap.
+    pub pop_cap: i64,
+}
+
+/// The technology that carries a difficulty's income bonus as ordinary modifiers: one that
+/// no producer researches and whose modifiers raise income stats, each by exactly the
+/// difficulty's `income_bonus_pct`. A host grants it to the player at match setup; `None`
+/// when the difficulty has no bonus or the rules hold no such technology.
+pub fn handicap_tech(rules: &Rules, difficulty_key: &str) -> Option<DefId> {
+    let bonus = rules.ai_difficulties.get(difficulty_key)?.income_bonus_pct;
+    if bonus <= 0 {
+        return None;
+    }
+    rules
+        .techs
+        .keys()
+        .copied()
+        .filter(|tech| !rules.production_by_product.contains_key(tech))
+        .find(|tech| {
+            let modifiers = rules.modifiers_from(*tech);
+            !modifiers.is_empty()
+                && modifiers.iter().all(|m| {
+                    m.stat_key.starts_with("income.") && m.op == ModifierOp::Pct && m.value == bonus
+                })
+        })
+}

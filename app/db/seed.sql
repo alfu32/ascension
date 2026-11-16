@@ -3703,12 +3703,25 @@ INSERT INTO faction_alias(def_id,faction_id,name)
 INSERT INTO ability_grant(entity_type_id,ability_id)
  SELECT (SELECT id FROM def WHERE key='unit.priest'), (SELECT id FROM def WHERE key='abl.convert');
 
+-- Opening books. A step asks to have `count` of the subject (queued work counts); every
+-- subject must be reachable when its turn comes, so the technology a building waits for is
+-- a step of its own before it.
 WITH v(p,seq,a,k,n) AS (VALUES
-  ('balanced',0,'train','unit.citizen',6), ('balanced',1,'construct','bld.farm',3),
-  ('balanced',2,'construct','bld.library',1), ('balanced',3,'train','unit.citizen',10),
-  ('balanced',4,'construct','bld.barracks',1), ('balanced',5,'research','tech.age.classical',1),
-  ('rusher',0,'train','unit.citizen',5), ('rusher',1,'construct','bld.farm',2),
-  ('rusher',2,'construct','bld.barracks',1), ('rusher',3,'train','unit.spearman',6))
+  ('balanced',0,'train','unit.citizen',7), ('balanced',1,'construct','bld.farm',3),
+  ('balanced',2,'construct','bld.woodcutter_camp',1), ('balanced',3,'construct','bld.library',1),
+  ('balanced',4,'train','unit.citizen',12), ('balanced',5,'research','tech.military.1',1),
+  ('balanced',6,'construct','bld.barracks',1),
+  ('rusher',0,'train','unit.citizen',6), ('rusher',1,'construct','bld.farm',2),
+  ('rusher',2,'construct','bld.woodcutter_camp',1), ('rusher',3,'construct','bld.library',1),
+  ('rusher',4,'research','tech.military.1',1), ('rusher',5,'construct','bld.barracks',1),
+  ('rusher',6,'train','unit.spearman',6),
+  ('builder',0,'train','unit.citizen',8), ('builder',1,'construct','bld.farm',4),
+  ('builder',2,'construct','bld.woodcutter_camp',1), ('builder',3,'construct','bld.library',1),
+  ('builder',4,'train','unit.citizen',14), ('builder',5,'research','tech.civic.1',1),
+  ('builder',6,'found_city','bld.city',2),
+  ('turtle',0,'train','unit.citizen',7), ('turtle',1,'construct','bld.farm',3),
+  ('turtle',2,'construct','bld.woodcutter_camp',1), ('turtle',3,'construct','bld.library',1),
+  ('turtle',4,'research','tech.military.1',1), ('turtle',5,'construct','bld.tower',2))
 INSERT INTO ai_opening_step(profile_key,seq,action,subject_def_id,count)
  SELECT v.p, v.seq, v.a, d.id, v.n FROM v JOIN def d ON d.key=v.k;
 
