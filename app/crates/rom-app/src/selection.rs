@@ -198,6 +198,14 @@ fn present(world: &World, id: EntityId) -> Option<&Entity> {
     })
 }
 
+/// Whether `entity` is an orbital craft in a planet's air that can climb to its orbit.
+fn climbs(world: &World, entity: &Entity) -> bool {
+    world.is_craft_type(entity.type_id)
+        && world.orbit(entity.id).is_none()
+        && entity.container_id.is_none()
+        && !in_space(world, entity)
+}
+
 fn in_space(world: &World, entity: &Entity) -> bool {
     world
         .body(entity.pos.body)
@@ -364,11 +372,22 @@ impl Controller {
     pub fn select_own_ships(&mut self, world: &World) {
         let ships: Vec<EntityId> = world
             .entities()
-            .filter(|e| e.owner == PLAYER && in_space(world, e))
+            .filter(|e| e.owner == PLAYER && e.container_id.is_none() && in_space(world, e))
             .filter(|e| world.rules().entity_types[&e.type_id].movement.is_some())
             .map(|e| e.id)
             .collect();
         self.set_selection(ships);
+    }
+
+    /// Selects every orbital craft of player one that is not aboard a carrier.
+    pub fn select_own_craft(&mut self, world: &World) {
+        let craft: Vec<EntityId> = world
+            .entities()
+            .filter(|e| e.owner == PLAYER && e.container_id.is_none())
+            .filter(|e| world.is_craft_type(e.type_id))
+            .map(|e| e.id)
+            .collect();
+        self.set_selection(craft);
     }
 
     /// True once the player has issued any order; the demo then leaves player one alone.
@@ -718,9 +737,10 @@ impl Controller {
                 {
                     issued |= self.submit(world, id, "enter", None, Some(*ship), None, queue);
                 }
-                // A carrier above this planet comes down where the ground was clicked.
+                // A carrier above this planet comes down where the ground was clicked; an orbital
+                // craft comes down into the air above it.
                 Kind::Ground if orbiting_here => {
-                    if world.is_carrier_type(et.id) {
+                    if world.is_carrier_type(et.id) || world.is_craft_type(et.id) {
                         issued |= self.submit(world, id, "land", None, None, Some(target), queue);
                     }
                 }
@@ -890,7 +910,8 @@ impl Controller {
             .map(|e| e.id)
             .collect();
         for id in carriers {
-            if world.is_landed(id) {
+            let launches = world.orbit(id).is_some() && world.launches_craft(id);
+            if world.is_landed(id) || launches {
                 self.submit(world, id, "unload", None, Some(id), None, false);
             } else if let Some(port) = world.spaceport_below(id) {
                 self.submit(world, id, "unload", None, Some(port), None, false);
@@ -1340,11 +1361,16 @@ impl Controller {
                 if own.iter().any(|e| !world.passengers(e.id).is_empty()) {
                     actions.push((4, Action::Unload));
                 }
-                if own.iter().any(|e| world.is_landed(e.id)) {
+                if own
+                    .iter()
+                    .any(|e| world.is_landed(e.id) || climbs(world, e))
+                {
                     actions.push((5, Action::Lift));
                 }
                 if own.iter().any(|e| {
-                    in_space(world, e) && rules.entity_types[&e.type_id].movement.is_some()
+                    in_space(world, e)
+                        && rules.entity_types[&e.type_id].movement.is_some()
+                        && !world.is_craft_type(e.type_id)
                 }) {
                     actions.push((2, Action::Orbit));
                     actions.push((3, Action::Travel));
@@ -1432,11 +1458,20 @@ impl Controller {
                 button.icon = "icons/cmd_cancel".into();
             }
             Action::Unload => {
-                button.name = "Unload".into();
+                // A carrier in orbit launches its craft; anything else sets passengers down.
+                let launching = own
+                    .iter()
+                    .any(|e| world.orbit(e.id).is_some() && world.launches_craft(e.id));
+                button.name = if launching { "Launch craft" } else { "Unload" }.into();
                 button.icon = "icons/cmd_cancel".into();
             }
             Action::Lift => {
-                button.name = "Lift off".into();
+                button.name = if own.iter().any(|e| climbs(world, e)) {
+                    "Climb to orbit"
+                } else {
+                    "Lift off"
+                }
+                .into();
                 button.icon = "icons/cmd_guard".into();
             }
             Action::Orbit => {
@@ -1558,7 +1593,7 @@ impl Controller {
                 let ids: Vec<EntityId> = self
                     .own_selected(world)
                     .iter()
-                    .filter(|e| world.is_landed(e.id))
+                    .filter(|e| world.is_landed(e.id) || climbs(world, e))
                     .map(|e| e.id)
                     .collect();
                 for id in ids {
@@ -2341,6 +2376,10 @@ fn rejection_message(world: &World, error: &SimError, subject: Option<DefId>) ->
         SimError::Aboard => "Aboard a ship in space: land it first".into(),
         SimError::CannotLand => "Cannot land there: open ground only, outside enemy cities".into(),
         SimError::NotLanded => "The ship has not landed".into(),
+        SimError::CannotClimb => "Orbital craft climb from a planet's air to its orbit".into(),
+        SimError::CraftInOrbit => {
+            "Orbital craft hold their orbit: attack, board a carrier or come down".into()
+        }
         SimError::CannotUnload => {
             "Land first, or orbit above your spaceport, to set passengers down".into()
         }

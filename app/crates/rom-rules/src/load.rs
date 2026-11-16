@@ -398,6 +398,7 @@ fn load_et_movement(conn: &Connection) -> Result<Vec<Movement>, RulesError> {
                 formation_spacing: row.get("formation_spacing")?,
                 packs: boolean(row, "packs", "et_movement", &identity)?,
                 pack_ticks: row.get("pack_ticks")?,
+                climb_ticks: row.get("climb_ticks")?,
             })
         },
     )

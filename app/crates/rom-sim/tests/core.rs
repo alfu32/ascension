@@ -890,7 +890,8 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
                     SimError::CannotBoard
                     | SimError::CannotLand
                     | SimError::NotLanded
-                    | SimError::CannotUnload,
+                    | SimError::CannotUnload
+                    | SimError::CannotClimb,
                 ) => {
                     assert!(matches!(
                         kind.key.as_str(),

@@ -685,15 +685,14 @@ impl World {
         }
         self.validate_space_order(&command)?;
         self.validate_transport(&command)?;
-        // Orbit can name a body's surface; an orbiting ship can attack that surface.
+        self.validate_craft(&command)?;
+        // Orbit can name a body's surface; an orbiting ship can attack that surface, and what
+        // stands on a planet can attack what orbits it.
         let body = entity.pos.body;
         let orbital_attack = command.kind == "attack"
-            && self.orbit(command.executor).is_some_and(|orbit| {
-                command
-                    .target_entity
-                    .and_then(|id| self.entity(id))
-                    .is_some_and(|target| target.pos.body == orbit.body)
-            });
+            && command
+                .target_entity
+                .is_some_and(|target| self.across_orbit(command.executor, target));
         // Boarding, landing and unloading check their own bodies.
         let cross_body = matches!(
             command.kind.as_str(),
