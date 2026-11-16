@@ -107,6 +107,17 @@ mullions from the `timber` program in glass blue, with thin steel or precast flo
 parts), ribbed steel cladding, flat roofs with team-coloured fascias, and red warning lights
 (`mat.signal_red`, self-lit) on masts and chimneys.
 
+Task 48 (modern and information units) adds no new shape or motion knob; it combines the ones
+there are. Aircraft carry their own height: propeller aircraft fly 2.7–2.9 tiles up, jets
+3.8–4.2, and jets bank harder (`bank` 24 against 18). A missile or rocket leaves with a flash,
+the missile itself ahead of the tube and a short smoke trail widening back towards it, all on
+the shot's `flash` joint, so they show only at the moment of firing (a burst of 4 for a rocket
+salvo; vertical from a cruiser's cells); bombs show under the bay the same way. Rotors and a
+search radar's spinning bar are `propeller` parts pitched −90°; drones hover by carrying their
+own height and bob and sway with a small `bank`. Modern vehicles are olive drab, information-age
+ones a darker green (`mat.nato_green`), warships and jets haze grey (`mat.haze_grey`), sights,
+drones and carbines black composite (`mat.composite`); the strategic bomber is anti-flash white.
+
 ## Budgets
 
 | Model | Near | Far |

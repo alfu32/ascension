@@ -575,24 +575,44 @@ mod tests {
                 "unit.anti_tank_rifleman@industrial",
                 "unit.armoured_car@industrial",
                 "unit.arquebusier@gunpowder",
+                "unit.assault_infantry@information",
+                "unit.bazooka_team@modern",
                 "unit.biplane@industrial",
                 "unit.bombard@gunpowder",
+                "unit.bomber@modern",
                 "unit.cannon@enlightenment",
                 "unit.carrier@starfaring",
                 "unit.cuirassier@gunpowder",
+                "unit.destroyer@modern",
                 "unit.dragoon@enlightenment",
                 "unit.field_gun@industrial",
+                "unit.fighter@modern",
+                "unit.flak_gun@modern",
                 "unit.frigate@enlightenment",
                 "unit.fusilier@enlightenment",
+                "unit.gun_drone@information",
+                "unit.heavy_machine_gunner@modern",
+                "unit.howitzer@modern",
+                "unit.infantry@modern",
                 "unit.ironclad@industrial",
+                "unit.jet_fighter@information",
                 "unit.light_infantry@enlightenment",
                 "unit.light_tank@industrial",
                 "unit.machine_gunner@industrial",
+                "unit.main_battle_tank@information",
+                "unit.missile_cruiser@information",
+                "unit.missile_launcher@information",
+                "unit.missile_team@information",
                 "unit.musketeer@gunpowder",
                 "unit.orbital_bomber@starfaring",
                 "unit.orbital_fighter@starfaring",
                 "unit.ranger@enlightenment",
+                "unit.recon_drone@information",
                 "unit.rifleman@industrial",
+                "unit.rocket_artillery@information",
+                "unit.scout_car@modern",
+                "unit.strategic_bomber@information",
+                "unit.tank@modern",
                 "unit.transport_ship@starfaring"
             ]
         );
@@ -1160,6 +1180,34 @@ mod tests {
             first_looks >= 2 && restyled >= 24,
             "{first_looks} {restyled}"
         );
+    }
+
+    #[test]
+    fn modern_and_information_units_are_complete() {
+        let (rules, book) = book();
+        let ordinal = |key: &str| rules.ages[&rules.id_of(key).unwrap()].ordinal;
+        let eras = [ordinal("age.modern"), ordinal("age.information")];
+        let mut units = 0;
+        for (&id, et) in &rules.entity_types {
+            let Some(first) = et.first_age_id else {
+                continue;
+            };
+            if et.class != EntityClass::Unit || !eras.contains(&rules.ages[&first].ordinal) {
+                continue;
+            }
+            // Every unit of the modern and information ages has its first look.
+            let has = book
+                .entries
+                .iter()
+                .any(|e| e.entity == id && e.faction.is_none() && e.age == Some(first));
+            assert!(
+                has,
+                "{} has no composed look for its first age",
+                rules.key(id)
+            );
+            units += 1;
+        }
+        assert!(units >= 22, "{units}");
     }
 
     #[test]
