@@ -316,8 +316,7 @@ fn the_owner_cannot_repair_a_city_held_down() {
 #[test]
 fn a_siege_runs_alike_twice() {
     let run = || {
-        let mut w =
-            world("UPDATE game_constant SET value=40 WHERE key='city.capture_hold_ticks';");
+        let mut w = world("UPDATE game_constant SET value=40 WHERE key='city.capture_hold_ticks';");
         let city = city(&mut w, P2);
         soldier(&mut w, P1);
         spawn(&mut w, "unit.spearman", P2, Pos::flat(46_500, 50_500));

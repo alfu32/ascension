@@ -243,9 +243,7 @@ impl World {
             let radius = self.city_economic_radius(id);
             // Armed units that are not workers, by team and player: hit points summed.
             let mut presence: BTreeMap<u32, BTreeMap<PlayerId, i128>> = BTreeMap::new();
-            for unit in
-                self.entities_in_radius(pos, radius.clamp(0, i64::from(u32::MAX)) as u32)
-            {
+            for unit in self.entities_in_radius(pos, radius.clamp(0, i64::from(u32::MAX)) as u32) {
                 let e = self.entity(unit).expect("presence");
                 if e.hp > 0
                     && self.holds_cities(e.type_id)

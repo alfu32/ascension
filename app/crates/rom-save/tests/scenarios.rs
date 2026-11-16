@@ -413,7 +413,9 @@ fn a_city_held_down_mid_countdown() {
     let mut strike = command(&w, attacker, "attack");
     strike.target_entity = Some(city);
     w.submit(strike).unwrap();
-    run_until(&mut w, 600, |w| w.entity(city).is_some_and(|c| c.neutralised));
+    run_until(&mut w, 600, |w| {
+        w.entity(city).is_some_and(|c| c.neutralised)
+    });
     w.set_stance(P1, attacker, hold_fire).unwrap();
     ticks(&mut w, 20);
     let countdown = w.capture_countdown(city).expect("held down");
