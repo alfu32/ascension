@@ -45,8 +45,14 @@ const LOOK_AGAIN_TICKS: u64 = 12_000;
 const SCOUT_CELLS: usize = 4096;
 /// How far a supply unit may stand from its place beside the army, in milli-tiles.
 const SUPPLY_SLACK: u64 = 3000;
+/// Ticks after an army sets off during which all its members belong to the wave.
+const SET_OFF_TICKS: u64 = 1200;
+/// The longest a gathered main army waits for its supply, in ticks (three game minutes).
+const SUPPLY_WAIT_TICKS: u64 = 3600;
 /// The most supply units a wave waits for before it sets off.
 const SUPPLY_GATE: usize = 3;
+/// Score of the wish for a supply unit the main army lacks.
+const SUPPLY_SCORE: i64 = 720;
 /// Units of a wave per supply unit it takes along.
 const SUPPLY_PER: usize = 8;
 /// Score of the wish for a scout when none is out.
@@ -1156,7 +1162,9 @@ fn lead(
             }
             // Enemy land wears an army down (attrition) except beside its own supply: a
             // main army that can have supply waits for its wagons at the rally point.
+            // It waits a few minutes at most: supply it cannot get does not hold it back.
             if !raid
+                && tick < army.since + SUPPLY_WAIT_TICKS
                 && supply_type(&plan.view, memory).is_some()
                 && supply_near(&plan.view, base) < supply_wanted(units.len()).min(SUPPLY_GATE)
             {
@@ -1239,14 +1247,17 @@ fn lead(
         Phase::Advance => {
             // Units that joined after the wave set off wait at the rally point for the next
             // one: trickling out one by one, they only feed the defence.
+            // (In the first minute every member is still being sent off.)
+            let setting_off = tick < army.since + SET_OFF_TICKS;
             let wave: Vec<&Entity> = units
                 .iter()
                 .copied()
                 .filter(|e| {
-                    !(e.orders().is_empty()
-                        && rally.is_some_and(|r| {
-                            e.pos.body == r.body && plan.view.distance(e.pos, r) <= 2 * SLACK
-                        }))
+                    setting_off
+                        || !(e.orders().is_empty()
+                            && rally.is_some_and(|r| {
+                                e.pos.body == r.body && plan.view.distance(e.pos, r) <= 2 * SLACK
+                            }))
                 })
                 .collect();
             if wave.is_empty() && role != Role::Raid {
@@ -1744,8 +1755,9 @@ pub(crate) fn wishes(view: &View<'_>, weights: &Weights, memory: &Memory, wishes
             .map(|(_, n)| *n)
             .sum();
         if have < supply_wanted(main.members.len()) as i64 {
+            // Cheap, and without them a wave melts in enemy land: before more soldiers.
             wishes.push(Wish {
-                score: 480 + weights.army_share,
+                score: SUPPLY_SCORE,
                 act: Act::Train(wagon),
                 reserve: false,
                 opening: false,

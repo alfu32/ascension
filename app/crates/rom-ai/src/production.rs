@@ -12,8 +12,9 @@ use rom_rules::{AiDifficulty, DefId, EntityClass, Layer, ProductionMode, Rules};
 use rom_sim::Pos;
 use std::collections::BTreeMap;
 
-/// Distance of the rally point from the capital, in milli-tiles.
-const RALLY_REACH: i64 = 9000;
+/// Distance of the rally point beyond the capital's economic radius, in milli-tiles: at the
+/// edge of the town, where buildings box the army in less.
+const RALLY_MARGIN: i64 = 3000;
 /// Tiles around the rally point that no building of the player takes.
 pub(crate) const RALLY_CLEAR: i32 = 3;
 
@@ -343,8 +344,9 @@ pub(crate) fn wishes(
     }
 }
 
-/// Chooses the rally point: open ground beside the capital, at the edge of the town where
-/// buildings do not box the army in. Each move (`moves`) tries the next direction.
+/// Chooses the rally point: open ground of the player's own land just beyond the capital's
+/// economic radius, which the town's buildings keep clear of (`RALLY_CLEAR`). Each move
+/// (`moves`, when units there are boxed in) tries the next direction.
 pub(crate) fn rally_point(view: &View<'_>, moves: u32) -> Option<Pos> {
     let capital = view.cities.first()?;
     let steps = [
@@ -358,6 +360,7 @@ pub(crate) fn rally_point(view: &View<'_>, moves: u32) -> Option<Pos> {
         (1, -1),
     ];
     let shift = moves as usize % steps.len();
+    let reach = capital.radius.max(0) + RALLY_MARGIN;
     // Somewhere the player's own walkers can get to over the terrain.
     let walker = view
         .own
@@ -374,13 +377,26 @@ pub(crate) fn rally_point(view: &View<'_>, moves: u32) -> Option<Pos> {
         .skip(shift)
         .take(steps.len())
         .map(|(dx, dy)| {
+            // Diagonals at the same distance as the straight steps, near enough.
+            let (dx, dy) = if dx * dy != 0 {
+                (dx * 707, dy * 707)
+            } else {
+                (dx * 1000, dy * 1000)
+            };
             view.world
-                .offset(capital.pos, dx * RALLY_REACH, dy * RALLY_REACH)
+                .offset(capital.pos, dx * reach / 1000, dy * reach / 1000)
         })
         .find(|at| {
             view.world.terrain_at(*at).is_some_and(|t| {
                 let terrain = &view.rules.terrains[&t];
                 terrain.buildable && terrain.layer == Layer::Ground
             }) && walker.is_none_or(|w| view.world.reachable(w.type_id, w.pos, *at) != Some(false))
+                // Inside own borders: enemy land wears waiting units down.
+                && view.world.territory_owner_on_body(
+                    at.body,
+                    at.face,
+                    at.x.div_euclid(1000),
+                    at.y.div_euclid(1000),
+                ) == Some(view.me)
         })
 }

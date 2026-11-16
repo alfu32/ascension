@@ -20,7 +20,7 @@ const STREAM: u64 = 0x6272_6169_6e5f_6169;
 /// Units failing to leave the rally point in one thought that make it move.
 const BOXED_UNITS: usize = 3;
 /// How near the rally point a unit counts as standing there, in milli-tiles.
-const BOXED_REACH: u64 = 4000;
+const BOXED_REACH: u64 = 12_000;
 /// Ticks after the last sign of an attack before the alarm ends.
 const ALARM_TICKS: u64 = 2400;
 
