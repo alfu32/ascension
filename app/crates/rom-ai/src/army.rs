@@ -21,10 +21,14 @@ use std::collections::{BTreeMap, BTreeSet};
 const THREAT_REACH: u64 = 12_000;
 /// The fewest units sent to attack.
 const MIN_WAVE: usize = 6;
+/// The main army never waits for more than this many units before it may attack.
+const MAX_WAVE: usize = 16;
 /// The fewest units sent raiding.
 const MIN_RAID: usize = 3;
 /// Idle units farther than this from where they belong are called back, in milli-tiles.
 const SLACK: u64 = 6000;
+/// How far beyond its weapon's reach a unit turns on a target, in milli-tiles.
+const FOCUS_SLACK: u64 = 2000;
 /// A sighting this recent counts as an enemy present now.
 const RECENT_TICKS: u64 = 400;
 /// The longest retreat before an army counts as gathered again.
@@ -42,7 +46,7 @@ const SCOUT_CELLS: usize = 4096;
 /// Score of the wish for a scout when none is out.
 const SCOUT_SCORE: i64 = 700;
 
-/// Own ground fighters that can take orders now, in id order.
+/// Own ground fighters that can take orders now, in id order: no ships, no orbital craft.
 pub(crate) fn fighters<'a>(view: &View<'a>) -> Vec<&'a Entity> {
     view.own
         .iter()
@@ -53,6 +57,7 @@ pub(crate) fn fighters<'a>(view: &View<'a>) -> Vec<&'a Entity> {
                 && e.hp > 0
                 && e.container_id.is_none()
                 && !view.world.is_spacecraft_type(e.type_id)
+                && !view.world.is_craft_type(e.type_id)
         })
         .collect()
 }
@@ -213,7 +218,12 @@ fn choose_target(
 /// Whether an enemy team's territory victory timer runs: then every building that holds
 /// land is worth attacking, and the main army goes without waiting for the attack ratio.
 fn enemy_land_race(view: &View<'_>) -> bool {
-    let Some(team) = view.world.players().find(|p| p.id == view.me).map(|p| p.team) else {
+    let Some(team) = view
+        .world
+        .players()
+        .find(|p| p.id == view.me)
+        .map(|p| p.team)
+    else {
         return false;
     };
     view.world
@@ -560,8 +570,8 @@ pub(crate) fn intruders(view: &View<'_>, memory: &Memory) -> Option<(Pos, i64)> 
 pub(crate) struct Command<'a> {
     pub weights: &'a Weights,
     pub difficulty: &'a AiDifficulty,
-    /// A mistake of judgement this thought (`mistake_pct`): the main army sets off for a
-    /// city before it is strong enough to take it.
+    /// A mistake of judgement this thought (`mistake_pct` of the thoughts in a minute of
+    /// ticks): the main army sets off for a city before it is strong enough to take it.
     pub blunder: bool,
 }
 
@@ -587,7 +597,19 @@ pub(crate) fn command(plan: &mut Plan<'_>, memory: &mut Memory, cmd: &Command<'_
     // Intruders: the home guard answers; armies standing at home join when the guard alone
     // is weaker than the intruders. Against a force far stronger than all of them they
     // hold at the nearest city, under its guns, instead of marching out to die.
+    // Intruders count once they have been seen for the difficulty's reaction time.
     let mut intruder = intruders(&plan.view, memory);
+    if intruder.is_some() {
+        memory.intruded_since.get_or_insert(tick);
+    } else {
+        memory.intruded_since = None;
+    }
+    if memory
+        .intruded_since
+        .is_some_and(|since| tick < since + cmd.difficulty.reaction_ticks.max(0) as u64)
+    {
+        intruder = None;
+    }
     let strength_of = |memory: &Memory, roles: &[Role]| -> i64 {
         roles
             .iter()
@@ -687,6 +709,7 @@ fn lead(
                 let orders: Vec<_> = units.iter().map(|e| (e.id, goal)).collect();
                 send(plan, &orders, "attack_move");
             }
+            focus(plan, memory, units);
         }
         Phase::Gather => {
             if let Some(rally) = rally {
@@ -707,7 +730,7 @@ fn lead(
                 MIN_WAVE
             } else {
                 let target = plan.view.pop_cap * cmd.weights.army_share / 100 * share.max(0) / 100;
-                MIN_WAVE.max((target / 2).max(0) as usize)
+                MIN_WAVE.max((target / 2).clamp(0, MAX_WAVE as i64) as usize)
             };
             if units.len() < wave {
                 return;
@@ -774,6 +797,11 @@ fn lead(
                     .and_then(|id| memory.enemies.get(&id))
                     .is_some_and(|target| !can_take(&plan.view, memory, units, target));
                 if beaten || hopeless {
+                    // The target is left alone for a while so the army comes back stronger
+                    // instead of turning round at once.
+                    if let Some(target) = army.target {
+                        memory.unreachable.insert(target, tick + 2 * RETRY_TICKS);
+                    }
                     army.phase = Phase::Retreat;
                     army.since = tick;
                     if let Some(rally) = rally {
@@ -823,6 +851,7 @@ fn lead(
                 }
             }
             advance(plan, cmd, army, units);
+            focus(plan, memory, units);
         }
         Phase::Retreat => {
             let home = rally.is_none_or(|rally| {
@@ -838,6 +867,59 @@ fn lead(
             } else if let Some(rally) = rally {
                 regroup(plan, units, rally);
             }
+        }
+    }
+}
+
+/// Concentrates fire: members in a fight turn on the weakest armed enemy seen now within
+/// their reach (unarmed ones when none is armed). Every order comes out of the budget, so a
+/// mind with few orders a minute leaves its units to pick their own targets.
+fn focus(plan: &mut Plan<'_>, memory: &Memory, units: &[&Entity]) {
+    let view = &plan.view;
+    let rules = view.rules;
+    let mut orders: Vec<(EntityId, EntityId)> = Vec::new();
+    for unit in units {
+        if view.busy.contains(&unit.id) {
+            continue;
+        }
+        let reach = rules.entity_types[&unit.type_id]
+            .weapons
+            .iter()
+            .map(|w| w.range_max)
+            .max()
+            .unwrap_or(0)
+            .max(0) as u64
+            + FOCUS_SLACK;
+        let target = memory
+            .enemies
+            .iter()
+            .filter(|(_, e)| {
+                e.tick == view.tick && !e.building && e.pos.body == unit.pos.body
+            })
+            .filter_map(|(id, e)| {
+                let live = view.world.entity(EntityId(*id))?;
+                let d = view.distance(unit.pos, e.pos);
+                (d <= reach && live.hp > 0).then(|| {
+                    let armed = view::strength(rules, e.type_id) > 0;
+                    (!armed, live.hp, d, *id)
+                })
+            })
+            .min()
+            .map(|(_, _, _, id)| EntityId(id));
+        let Some(target) = target else {
+            continue;
+        };
+        let already = unit
+            .orders()
+            .front()
+            .is_some_and(|o| o.target_entity == Some(target));
+        if !already {
+            orders.push((unit.id, target));
+        }
+    }
+    for (unit, target) in orders {
+        if !plan.order(unit, "attack", None, Some(target), None) {
+            return;
         }
     }
 }

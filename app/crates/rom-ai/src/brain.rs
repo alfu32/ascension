@@ -381,7 +381,10 @@ impl Brain {
         let command = army::Command {
             weights: &self.weights,
             difficulty: d,
-            blunder: slip(&mut rng),
+            // `mistake_pct` per minute, not per thought: an army is not sent off every few
+            // seconds by a quick mind.
+            blunder: d.mistake_pct > 0
+                && i64::from(rng.range(0, 120_000)) < d.mistake_pct * d.think_interval_ticks.max(1),
         };
         // Under attack the armies take their orders before the workers do.
         if alarmed {

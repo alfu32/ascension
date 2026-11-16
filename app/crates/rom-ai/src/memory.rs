@@ -199,6 +199,8 @@ pub(crate) struct Memory {
     pub voyages: BTreeMap<u32, Voyage>,
     /// Bodies an own ship has orbited.
     pub visited: BTreeSet<u32>,
+    /// Tick since which armed intruders have been seen without a break.
+    pub intruded_since: Option<u64>,
 }
 
 fn put_pos(w: &mut Writer, pos: Pos) {
@@ -310,6 +312,8 @@ impl Memory {
         for body in &self.visited {
             w.u32(*body);
         }
+        w.bool(self.intruded_since.is_some());
+        w.u64(self.intruded_since.unwrap_or(0));
         w.0
     }
 
@@ -358,6 +362,7 @@ impl Memory {
         let mut unreachable = BTreeMap::new();
         let mut voyages = BTreeMap::new();
         let mut visited = BTreeSet::new();
+        let mut intruded_since = None;
         if version >= 2 {
             for _ in 0..r.len()? {
                 let role = Role::from_code(r.u8()?)?;
@@ -401,6 +406,9 @@ impl Memory {
             for _ in 0..r.len()? {
                 visited.insert(r.u32()?);
             }
+            let intruded = r.bool()?;
+            let since = r.u64()?;
+            intruded_since = intruded.then_some(since);
         }
         if !r.is_done() {
             return Err(AiError::CorruptState);
@@ -428,6 +436,7 @@ impl Memory {
             unreachable,
             voyages,
             visited,
+            intruded_since,
         })
     }
 }
@@ -496,6 +505,7 @@ mod tests {
             )]
             .into(),
             visited: [5, 7].into(),
+            intruded_since: Some(390),
         }
     }
 
@@ -515,9 +525,11 @@ mod tests {
         memory.unreachable.clear();
         memory.voyages.clear();
         memory.visited.clear();
+        memory.intruded_since = None;
         let mut bytes = memory.to_bytes();
-        // Version 1 ended after the counters: five empty collections follow them now.
-        bytes.truncate(bytes.len() - 5 * 4);
+        // Version 1 ended after the counters: five empty collections and an absent tick
+        // follow them now.
+        bytes.truncate(bytes.len() - 5 * 4 - 9);
         bytes[..4].copy_from_slice(&1_u32.to_le_bytes());
         assert_eq!(Memory::from_bytes(&bytes).unwrap(), memory);
     }

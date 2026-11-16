@@ -145,7 +145,10 @@ fn gather_sites_fit(world: &World) -> bool {
         .players()
         .filter(|p| p.id != PlayerId(0))
         .all(|player| {
-            let Some(city) = world.cities(player.id).first().and_then(|c| world.entity(*c))
+            let Some(city) = world
+                .cities(player.id)
+                .first()
+                .and_then(|c| world.entity(*c))
             else {
                 return false;
             };
@@ -180,16 +183,14 @@ fn gather_sites_fit(world: &World) -> bool {
                                     let (bx, by) = (pos.x.div_euclid(1000), pos.y.div_euclid(1000));
                                     (-radius - 1..=radius + 1).any(|ny| {
                                         (-radius - 1..=radius + 1).any(|nx| {
-                                            let dx = i64::from((bx + nx as i32) * 1000 + 500 - pos.x);
-                                            let dy = i64::from((by + ny as i32) * 1000 + 500 - pos.y);
+                                            let dx =
+                                                i64::from((bx + nx as i32) * 1000 + 500 - pos.x);
+                                            let dy =
+                                                i64::from((by + ny as i32) * 1000 + 500 - pos.y);
                                             let reach = radius_mt;
-                                            let hit = dx * dx + dy * dy <= reach * reach
+                                            dx * dx + dy * dy <= reach * reach
                                                 && world.terrain_at(world.offset(pos, dx, dy))
-                                                    == Some(*node);
-                                            if hit && std::env::var("DUEL_FAIR").is_ok() {
-                                                eprintln!("FAIR p{} {} at {},{} node tile {},{}", player.id.0, rules.key(*site), pos.x, pos.y, pos.x + dx as i32, pos.y + dy as i32);
-                                            }
-                                            hit
+                                                    == Some(*node)
                                         })
                                     })
                                 })
@@ -288,7 +289,7 @@ pub fn play(rules: &Arc<Rules>, duel: &DuelRequest, seed: u64) -> Result<DuelRes
     })
 }
 
-/// One line of a player's state and armies.
+/// Two lines of a player's state: age, population, armies; then its economy.
 fn trace(world: &World, brain: &Brain, seed: u64) {
     let Some(s) = brain.summary(world) else {
         return;
@@ -336,53 +337,7 @@ fn trace(world: &World, brain: &Brain, seed: u64) {
         world.player_status(brain.player()),
         armies.join(",")
     );
-    if std::env::var("DUEL_LAND").is_ok() {
-        println!("  land {:?} timers {:?} snapshot_ownable={}", world.owned_tile_counts(), world.victory_timers(), world.snapshot().victory.ownable_tiles);
-    }
-    if std::env::var("DUEL_TERRAIN").is_ok()
-        && let Some(c) = world.capital(brain.player()).and_then(|c| world.entity(c))
-    {
-        let mut counts: BTreeMap<(String, i64), i64> = BTreeMap::new();
-        for dy in -40..=40 {
-            for dx in -40..=40 {
-                let at = world.offset(c.pos, dx * 1000, dy * 1000);
-                if let Some(t) = world.terrain_at(at) {
-                    let d = ((dx * dx + dy * dy) as f64).sqrt() as i64 / 10 * 10;
-                    *counts
-                        .entry((world.rules().key(t).to_string(), d))
-                        .or_default() += 1;
-                }
-            }
-        }
-        println!(
-            "  terrain {:?} economic_radius={}",
-            counts,
-            world.city_economic_radius(c.id)
-        );
-        for dy in -20..=20 {
-            let row: String = (-20..=20)
-                .map(|dx| {
-                    let at = world.offset(c.pos, dx * 1000, dy * 1000);
-                    let own = world.territory_owner_on_body(at.body, at.face, at.x.div_euclid(1000), at.y.div_euclid(1000)) == Some(brain.player());
-                    let ch = match world.terrain_at(at).map(|t| world.rules().key(t).to_string()).as_deref() {
-                        Some("ter.plain") => '.',
-                        Some("ter.forest") => 'F',
-                        Some("ter.mountain") => 'M',
-                        Some("ter.coast") => '~',
-                        Some("ter.deep") => 'w',
-                        Some("ter.space") => ' ',
-                        Some("ter.oil") => 'o',
-                        _ => '?',
-                    };
-                    if dx == 0 && dy == 0 { 'C' } else if own && ch == '.' { ',' } else { ch }
-                })
-                .collect();
-            println!("  {row}");
-        }
-    }
-    if std::env::var("DUEL_ECON").is_ok()
-        && let Some(player) = world.players().find(|p| p.id == brain.player())
-    {
+    if let Some(player) = world.players().find(|p| p.id == brain.player()) {
         let rules = world.rules();
         let economy: Vec<String> = rules
             .resources
@@ -406,42 +361,6 @@ fn trace(world: &World, brain: &Brain, seed: u64) {
             brain.stats()
         );
     }
-    if std::env::var("DUEL_DEBUG").is_ok() {
-        for e in world.entities().filter(|e| {
-            e.owner == brain.player() && !world.rules().entity_types[&e.type_id].weapons.is_empty()
-        }) {
-            let o = e.orders().front();
-            println!(
-                "  unit {} {} at {},{} hp={} order={}",
-                e.id.0,
-                world.rules().key(e.type_id),
-                e.pos.x / 1000,
-                e.pos.y / 1000,
-                e.hp,
-                o.map_or("-".to_string(), |o| format!(
-                    "{}{} {:?}",
-                    o.kind,
-                    if o.automatic { "(auto)" } else { "" },
-                    o.target_pos.map(|p| (p.x / 1000, p.y / 1000))
-                ))
-            );
-        }
-        for e in world.entities().filter(|e| {
-            e.owner != brain.player()
-                && e.owner.0 != 0
-                && world.rules().entity_types[&e.type_id].class == rom_rules::EntityClass::Building
-        }) {
-            if e.id.0 % 1 == 0 && !world.rules().entity_types[&e.type_id].weapons.is_empty() {
-                println!(
-                    "  enemy {} {} at {},{}",
-                    e.id.0,
-                    world.rules().key(e.type_id),
-                    e.pos.x / 1000,
-                    e.pos.y / 1000
-                );
-            }
-        }
-    }
 }
 
 /// Runs a match until a team wins or `limit` ticks have passed; in a universe the planets
@@ -458,7 +377,7 @@ pub fn run(
         }
         world.step();
         if let Some(universe) = universe
-            && world.tick() % 20 == 0
+            && world.tick().is_multiple_of(20)
         {
             generate_visited(world, universe)?;
         }
@@ -617,8 +536,7 @@ pub fn run_command(
         duel.seeds.0,
         duel.seeds.1,
         duel.universe,
-        duel
-            .victories
+        duel.victories
             .iter()
             .map(|v| rom_sim::victory_rule_key(*v))
             .collect::<Vec<_>>()

@@ -29,8 +29,13 @@ pub(crate) fn is_military(rules: &Rules, type_id: DefId) -> bool {
     })
 }
 
-/// Whether a unit type can move on the ground its player's capital stands on.
+/// Whether a unit type can move on the ground its player's capital stands on (orbital craft,
+/// which the space manager leads, do not count).
 pub(crate) fn walks_at_home(view: &View<'_>, type_id: DefId) -> bool {
+    // Orbital craft belong to the space manager.
+    if view.world.is_craft_type(type_id) {
+        return false;
+    }
     let Some(class) = view.rules.entity_types[&type_id]
         .movement
         .as_ref()

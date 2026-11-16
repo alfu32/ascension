@@ -81,7 +81,7 @@ fn city_of(world: &World, player: PlayerId) -> EntityId {
     world.cities(player)[0]
 }
 
-fn army<'a>(brain: &'a Brain, role: Role) -> Option<&'a rom_ai::Army> {
+fn army(brain: &Brain, role: Role) -> Option<&rom_ai::Army> {
     brain.armies().find(|(r, _)| *r == role).map(|(_, a)| a)
 }
 
@@ -97,14 +97,25 @@ fn the_main_army_takes_a_city_it_knows() {
     let (mut world, mut brains) = common::plain(&rules, 3, &players);
     let target = city_of(&world, THEM);
     let city_type = world.entity(target).unwrap().type_id;
-    spawn(&mut world, ME, breaker(&rules, city_type), 10, Pos::flat(55_500, 52_500));
-    spawn(&mut world, ME, soldier(&rules), 10, Pos::flat(55_500, 57_500));
+    spawn(
+        &mut world,
+        ME,
+        breaker(&rules, city_type),
+        10,
+        Pos::flat(55_500, 52_500),
+    );
+    spawn(
+        &mut world,
+        ME,
+        soldier(&rules),
+        10,
+        Pos::flat(55_500, 57_500),
+    );
     let mut advanced = false;
     for _ in 0..60 {
         run_first(&mut world, &mut brains, 200);
-        advanced |= army(&brains[0], Role::Attack).is_some_and(|a| {
-            a.phase == Phase::Advance && a.target == Some(target.0)
-        });
+        advanced |= army(&brains[0], Role::Attack)
+            .is_some_and(|a| a.phase == Phase::Advance && a.target == Some(target.0));
         if world.entity(target).is_some_and(|c| c.owner == ME) {
             break;
         }
@@ -146,8 +157,20 @@ fn retreats(retreat: bool) -> bool {
     let (mut world, mut brains) = common::plain(&rules, 3, &players);
     let target = city_of(&world, THEM);
     let city_type = world.entity(target).unwrap().type_id;
-    spawn(&mut world, ME, breaker(&rules, city_type), 8, Pos::flat(55_500, 52_500));
-    spawn(&mut world, ME, soldier(&rules), 8, Pos::flat(55_500, 57_500));
+    spawn(
+        &mut world,
+        ME,
+        breaker(&rules, city_type),
+        8,
+        Pos::flat(55_500, 52_500),
+    );
+    spawn(
+        &mut world,
+        ME,
+        soldier(&rules),
+        8,
+        Pos::flat(55_500, 57_500),
+    );
     for _ in 0..40 {
         run_first(&mut world, &mut brains, 100);
         if army(&brains[0], Role::Attack).is_some_and(|a| a.phase == Phase::Advance) {
@@ -160,8 +183,20 @@ fn retreats(retreat: bool) -> bool {
         "the army never advanced"
     );
     // A large enemy force appears between the army and its target.
-    spawn(&mut world, THEM, breaker(&rules, city_type), 30, Pos::flat(64_500, 64_500));
-    spawn(&mut world, THEM, soldier(&rules), 30, Pos::flat(64_500, 69_500));
+    spawn(
+        &mut world,
+        THEM,
+        breaker(&rules, city_type),
+        30,
+        Pos::flat(64_500, 64_500),
+    );
+    spawn(
+        &mut world,
+        THEM,
+        soldier(&rules),
+        30,
+        Pos::flat(64_500, 69_500),
+    );
     for _ in 0..150 {
         run_first(&mut world, &mut brains, 20);
         if army(&brains[0], Role::Attack).is_some_and(|a| a.phase == Phase::Retreat) {
@@ -215,7 +250,13 @@ fn intruders_are_met_by_the_home_guard() {
 fn scouts_look_at_new_ground() {
     let rules = common::rules();
     let (mut world, mut brains) = common::plain(&rules, 3, &[("rusher", "tougher")]);
-    spawn(&mut world, ME, soldier(&rules), 2, Pos::flat(55_500, 52_500));
+    spawn(
+        &mut world,
+        ME,
+        soldier(&rules),
+        2,
+        Pos::flat(55_500, 52_500),
+    );
     common::run(&mut world, &mut brains, 400);
     let early = brains[0].cells_looked_at();
     let scouts = army(&brains[0], Role::Scout).expect("scouts");
@@ -234,8 +275,20 @@ fn advance_orders(formations: bool) -> Vec<Command> {
     let players = [("balanced", "tougher"), ("balanced", "tougher")];
     let (mut world, mut brains) = common::plain(&rules, 3, &players);
     let city_type = world.entity(city_of(&world, THEM)).unwrap().type_id;
-    spawn(&mut world, ME, breaker(&rules, city_type), 8, Pos::flat(55_500, 52_500));
-    spawn(&mut world, ME, soldier(&rules), 8, Pos::flat(55_500, 57_500));
+    spawn(
+        &mut world,
+        ME,
+        breaker(&rules, city_type),
+        8,
+        Pos::flat(55_500, 52_500),
+    );
+    spawn(
+        &mut world,
+        ME,
+        soldier(&rules),
+        8,
+        Pos::flat(55_500, 57_500),
+    );
     let mut out = Vec::new();
     for tick in 0..4000 {
         for command in brains[0].think(&world, tick) {
@@ -264,6 +317,10 @@ fn formations_spread_the_advance() {
             .collect::<std::collections::BTreeSet<_>>()
             .len()
     };
-    assert_eq!(goals(&massed), 1, "without formations everyone goes to one point");
+    assert_eq!(
+        goals(&massed),
+        1,
+        "without formations everyone goes to one point"
+    );
     assert!(goals(&spread) >= 4, "the formation did not spread the army");
 }

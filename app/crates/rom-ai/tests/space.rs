@@ -111,8 +111,12 @@ fn world(rules: &Arc<Rules>) -> World {
     };
     w.place_for_setup(rules.id_of("bld.city").unwrap(), ME, at(20_500, 32_500))
         .unwrap();
-    w.place_for_setup(rules.id_of("bld.spaceport").unwrap(), ME, at(34_000, 32_000))
-        .unwrap();
+    w.place_for_setup(
+        rules.id_of("bld.spaceport").unwrap(),
+        ME,
+        at(34_000, 32_000),
+    )
+    .unwrap();
     let builder = rules
         .entity_types
         .values()
@@ -143,7 +147,9 @@ fn ships_claim_the_resource_bodies_and_a_transport_founds_a_colony() {
     for _ in 0..80 {
         run(&mut w, &mut brain, 250);
         claimed |= w.claims().any(|(_, owner)| owner == ME);
-        carried |= brain.voyages().any(|(_, v)| v.job == Job::Colonise && v.stage >= 1);
+        carried |= brain
+            .voyages()
+            .any(|(_, v)| v.job == Job::Colonise && v.stage >= 1);
         colony = w
             .cities(ME)
             .iter()
@@ -154,7 +160,11 @@ fn ships_claim_the_resource_bodies_and_a_transport_founds_a_colony() {
     }
     assert!(claimed, "no resource body was claimed by tick {}", w.tick());
     assert!(carried, "no transport set off by tick {}", w.tick());
-    assert!(colony, "no colony stands on the second planet by tick {}", w.tick());
+    assert!(
+        colony,
+        "no colony stands on the second planet by tick {}",
+        w.tick()
+    );
 }
 
 #[test]
@@ -169,3 +179,56 @@ fn the_space_age_brain_repeats() {
     assert_eq!(play(), play());
 }
 
+#[test]
+fn orbital_craft_climb_to_orbit_and_board_a_carrier() {
+    let rules = common::rules();
+    let mut w = world(&rules);
+    let fighter = rules.id_of("unit.orbital_fighter").unwrap();
+    let craft: Vec<_> = (0..3)
+        .map(|n| {
+            w.spawn(fighter, ME, Pos::on(HOME, 0, 24_500 + n * 1500, 40_500))
+                .unwrap()
+        })
+        .collect();
+    let mut brain = Brain::new(Arc::clone(&rules), ME, "balanced", "tougher", 61).unwrap();
+    run(&mut w, &mut brain, 1500);
+    for c in &craft {
+        assert!(
+            w.orbit(*c).is_some_and(|o| o.body == HOME),
+            "craft {c:?} did not climb to orbit"
+        );
+    }
+    // A carrier joins them in orbit: they go aboard.
+    let marker = w.body_position(HOME).unwrap();
+    let carrier = w
+        .spawn(
+            rules.id_of("unit.carrier").unwrap(),
+            ME,
+            Pos {
+                x: marker.x + 1000,
+                ..marker
+            },
+        )
+        .unwrap();
+    w.submit(rom_sim::Command {
+        player: ME,
+        executor: carrier,
+        kind: "orbit".into(),
+        subject: None,
+        target_entity: w.body_marker(HOME),
+        target_pos: None,
+        queue: false,
+    })
+    .unwrap();
+    for _ in 0..40 {
+        run(&mut w, &mut brain, 100);
+        if w.passengers(carrier).len() == craft.len() {
+            break;
+        }
+    }
+    assert_eq!(
+        w.passengers(carrier),
+        craft,
+        "the craft did not board the carrier"
+    );
+}

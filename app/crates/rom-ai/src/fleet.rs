@@ -4,10 +4,11 @@
 //! planets, land them and found colonies (or put troops ashore beside an enemy city).
 //!
 //! Ship types are told apart by their rows: a ship that carries the tag a presence body
-//! asks for can claim, a ship with weapons fights, an unarmed carrier is a transport. Task
-//! 58 adds craft launched from carriers (`et_container.launches`) and ground batteries
-//! that fire into orbit; [`Ships::launchers`] already finds the first, and the fleet leaves
-//! them alone until there is an order to launch their craft.
+//! asks for can claim, a ship with weapons fights, an unarmed carrier is a transport, a
+//! carrier whose container `launches` carries orbital craft (units whose movement climbs to
+//! orbit). Craft climb to their planet's orbit and defend it; once a launching carrier is
+//! in service they board it at home, travel with the escort and are launched over its
+//! target. Ground batteries are ordinary defensive buildings for the construction manager.
 
 use crate::{
     Weights,
@@ -52,8 +53,10 @@ pub(crate) struct Ships {
     pub warship: Option<DefId>,
     /// The carrier with the most room.
     pub transport: Option<DefId>,
-    /// Carriers that launch craft of their own (task 58); none in the seed yet.
-    pub launchers: Vec<DefId>,
+    /// The carrier that launches orbital craft with the most room.
+    pub launcher: Option<DefId>,
+    /// The orbital craft with the most strength per resource.
+    pub craft: Option<DefId>,
 }
 
 /// Tags that let a unit claim a presence body.
@@ -83,7 +86,9 @@ enum Kind {
     Ship,
     /// An unarmed carrier.
     Transport,
-    /// Anything else: carriers that launch craft (task 58), unarmed ships that carry nobody.
+    /// A carrier that launches orbital craft.
+    Launcher,
+    /// Anything else: unarmed ships that carry nobody.
     Other,
 }
 
@@ -91,7 +96,7 @@ enum Kind {
 fn kind(view: &View<'_>, tags: &BTreeSet<u32>, type_id: DefId) -> Kind {
     let et = &view.rules.entity_types[&type_id];
     if et.container.as_ref().is_some_and(|c| c.launches) {
-        Kind::Other
+        Kind::Launcher
     } else if et.weapons.is_empty() && view.world.is_carrier_type(type_id) {
         Kind::Transport
     } else if !et.weapons.is_empty() || claims(view, tags, type_id) {
@@ -151,16 +156,30 @@ impl Ships {
                     std::cmp::Reverse(*t),
                 )
             }),
-            launchers: types
-                .iter()
-                .copied()
-                .filter(|t| {
+            launcher: of_kind(Kind::Launcher).into_iter().max_by_key(|t| {
+                (
                     rules.entity_types[t]
                         .container
                         .as_ref()
-                        .is_some_and(|c| c.launches)
+                        .map_or(0, |c| c.capacity),
+                    std::cmp::Reverse(*t),
+                )
+            }),
+            craft: view
+                .owned
+                .iter()
+                .flat_map(|p| rules.production.get(p).into_iter().flatten())
+                .filter(|row| row.mode == ProductionMode::Train)
+                .map(|row| row.product_def_id)
+                .filter(|unit| {
+                    view.world.is_craft_type(*unit) && view.unlocked(*unit) && !view.obsolete(*unit)
                 })
-                .collect(),
+                .max_by_key(|t| {
+                    (
+                        view::strength(rules, *t) * 100 / price_sum(view, *t),
+                        std::cmp::Reverse(*t),
+                    )
+                }),
         }
     }
 }
@@ -307,19 +326,15 @@ pub(crate) fn wishes(view: &View<'_>, weights: &Weights, memory: &Memory, wishes
     let fleet: i64 = view
         .have
         .iter()
-        .filter(|(t, _)| {
-            view.world.is_spacecraft_type(**t) && kind(view, &tags, **t) == Kind::Ship
-        })
+        .filter(|(t, _)| view.world.is_spacecraft_type(**t) && kind(view, &tags, **t) == Kind::Ship)
         .map(|(_, n)| *n)
         .sum();
-    let count = |test: &dyn Fn(&BodyClaim) -> bool| {
-        bodies.iter().filter(|(_, c)| test(c)).count() as i64
-    };
+    let count =
+        |test: &dyn Fn(&BodyClaim) -> bool| bodies.iter().filter(|(_, c)| test(c)).count() as i64;
     let free = count(&|c| *c == BodyClaim::Unclaimed);
     let held = count(&|c| *c == BodyClaim::Held(view.me));
-    let contested = count(&|c| {
-        matches!(c, BodyClaim::Held(p) if *p != view.me) || *c == BodyClaim::Contested
-    });
+    let contested =
+        count(&|c| matches!(c, BodyClaim::Held(p) if *p != view.me) || *c == BodyClaim::Contested);
     // Eagerness decides how many of the free bodies are worth a ship.
     let claim_want = (held + (free * weights.claim + 99) / 100).min(held + free);
     let escort_want = STRIKE_SHIPS as i64 + contested;
@@ -342,6 +357,40 @@ pub(crate) fn wishes(view: &View<'_>, weights: &Weights, memory: &Memory, wishes
             reserve: false,
             opening: false,
         });
+    }
+    // A launching carrier once the strike force stands, and craft to fill it.
+    if let Some(launcher) = ships.launcher
+        && view.count(launcher) == 0
+        && fleet >= STRIKE_SHIPS as i64
+    {
+        wishes.push(Wish {
+            score: 430 + weights.army_share,
+            act: Act::Train(launcher),
+            reserve: false,
+            opening: false,
+        });
+    }
+    if let Some(craft) = ships.craft {
+        let room: i64 = view
+            .own
+            .iter()
+            .filter(|e| kind(view, &tags, e.type_id) == Kind::Launcher)
+            .map(|e| view.world.carry_capacity(e.id))
+            .sum();
+        let have: i64 = view
+            .have
+            .iter()
+            .filter(|(t, _)| view.world.is_craft_type(**t))
+            .map(|(_, n)| *n)
+            .sum();
+        if have < room {
+            wishes.push(Wish {
+                score: 420 + weights.army_share,
+                act: Act::Train(craft),
+                reserve: false,
+                opening: false,
+            });
+        }
     }
     if let Some(transport) = ships.transport
         && view.count(transport) == 0
@@ -432,7 +481,11 @@ pub(crate) fn command(plan: &mut Plan<'_>, memory: &mut Memory, weights: &Weight
             .filter(|s| kind(&plan.view, &tags, s.type_id) == k)
             .collect()
     };
-    let (fighting, transports) = (of_kind(Kind::Ship), of_kind(Kind::Transport));
+    let (fighting, transports, launchers) = (
+        of_kind(Kind::Ship),
+        of_kind(Kind::Transport),
+        of_kind(Kind::Launcher),
+    );
     // Ships that can claim keep station at the free bodies first; the rest escort.
     let claimers: Vec<&Entity> = fighting
         .iter()
@@ -440,12 +493,64 @@ pub(crate) fn command(plan: &mut Plan<'_>, memory: &mut Memory, weights: &Weight
         .filter(|s| claims(&plan.view, &tags, s.type_id))
         .collect();
     claim(plan, memory, &claimers, &systems);
+    // A carrier waits at home while craft there still have to board it.
+    let waiting = crafts(plan, &launchers);
     let warships: Vec<&Entity> = fighting
         .into_iter()
         .filter(|s| !memory.voyages.contains_key(&s.id.0))
+        .chain(launchers.into_iter().filter(|l| !waiting.contains(&l.id)))
         .collect();
     escort(plan, memory, &warships, &systems);
     colonise(plan, memory, &transports, &systems, weights, tick);
+}
+
+/// Orbital craft: idle on the ground they climb to their planet's orbit; in orbit beside a
+/// launching carrier of their planet that has room, they board it. Returns the carriers
+/// still waiting for craft at home.
+fn crafts(plan: &mut Plan<'_>, launchers: &[&Entity]) -> BTreeSet<EntityId> {
+    let view = &plan.view;
+    let craft: Vec<&Entity> = view
+        .own
+        .iter()
+        .copied()
+        .filter(|e| {
+            view.world.is_craft_type(e.type_id)
+                && operational(e)
+                && e.container_id.is_none()
+                && e.orders().is_empty()
+                && !view.busy.contains(&e.id)
+        })
+        .collect();
+    let mut waiting = BTreeSet::new();
+    let mut orders: Vec<(EntityId, &str, Option<EntityId>)> = Vec::new();
+    let mut room: Vec<(EntityId, BodyId, i64)> = launchers
+        .iter()
+        .filter_map(|l| {
+            let orbit = view.world.orbit(l.id)?;
+            let free = view.world.carry_capacity(l.id) - view.world.carried_load(l.id);
+            Some((l.id, orbit.body, free))
+        })
+        .collect();
+    for c in craft {
+        let planet = view.world.orbit(c.id).map_or(c.pos.body, |o| o.body);
+        let pop = view.rules.entity_types[&c.type_id].pop_cost.max(0);
+        if let Some(slot) = room
+            .iter_mut()
+            .find(|(_, body, free)| *body == planet && *free >= pop)
+        {
+            slot.2 -= pop;
+            waiting.insert(slot.0);
+            orders.push((c.id, "enter", Some(slot.0)));
+        } else if view.world.orbit(c.id).is_none() {
+            orders.push((c.id, "lift", None));
+        }
+    }
+    for (id, kind, target) in orders {
+        if !plan.order(id, kind, None, target, None) {
+            break;
+        }
+    }
+    waiting
 }
 
 /// Ships keeping station stay; others go to the most valuable free body in reach that no
@@ -475,8 +580,7 @@ fn claim(plan: &mut Plan<'_>, memory: &mut Memory, claimers: &[&Entity], systems
                         let paid = view.world.body_yield(*b, view.me)?.per_period;
                         let at = view.world.body_position(*b)?;
                         let tiles = (view.distance(ship.pos, at) / 1000).min(1 << 20) as i64;
-                        let far =
-                            i64::from(system_of(view, *b) != system_of(view, ship.pos.body));
+                        let far = i64::from(system_of(view, *b) != system_of(view, ship.pos.body));
                         Some((paid * 1000 / (tiles + 50) / (1 + 4 * far), *b))
                     })
                     .max_by_key(|(value, b)| (*value, std::cmp::Reverse(*b)));
@@ -567,6 +671,16 @@ fn escort(plan: &mut Plan<'_>, memory: &mut Memory, ships: &[&Entity], systems: 
     let reach = presence_reach(view, target);
     for ship in ships.iter().copied() {
         if !fly(plan, ship, target, reach) {
+            continue;
+        }
+        // A carrier over its target launches its craft.
+        if plan.view.world.launches_craft(ship.id)
+            && plan.view.world.orbit(ship.id).is_some()
+            && !plan.view.world.passengers(ship.id).is_empty()
+            && ship.orders().is_empty()
+            && !plan.view.busy.contains(&ship.id)
+        {
+            plan.order(ship.id, "unload", None, None, None);
             continue;
         }
         // Over an enemy world: fire on the nearest building or unit seen there now.
@@ -701,7 +815,8 @@ fn landing(view: &View<'_>, ship: EntityId, below: Pos) -> Option<Pos> {
     let world = view.world;
     world.landing_site(ship, below).or_else(|| {
         let n = world.body(below.body)?.n? as i32;
-        (0..6).find_map(|face| world.landing_site(ship, Pos::on(below.body, face, n * 500, n * 500)))
+        (0..6)
+            .find_map(|face| world.landing_site(ship, Pos::on(below.body, face, n * 500, n * 500)))
     })
 }
 
