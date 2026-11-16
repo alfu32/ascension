@@ -1,0 +1,14 @@
+# Task 51, replayed by --script in universe mode: the five starships of the space ages in orbit
+# above the city, smallest to largest (survey ship, corvette, frigate, cruiser, battleship), with
+# a carrier and a transport for scale. Test-only setup lines first.
+0 grant-age age.galactic
+0 place-orbit 1 unit.survey_ship @-14,-8
+0 place-orbit 1 unit.corvette @-6,-8
+0 place-orbit 1 unit.space_frigate @3,-8
+0 place-orbit 1 unit.space_cruiser @14,-8
+0 place-orbit 1 unit.battleship @-10,8
+0 place-orbit 1 unit.carrier @6,8
+0 place-orbit 1 unit.transport_ship @18,8
+1 speed 400
+10 cam wheel -2 640,400
+400 speed 1
