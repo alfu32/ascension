@@ -45,6 +45,14 @@ errors appear in the launcher. Writes use a temporary file and rename. The JSON
 contains `form` and `presets` objects, with flag names (without `--`) as keys and
 strings as values, including `"true"` / `"false"` for toggles.
 
+## Saved games
+
+The **Saved games** tab lists every save in the save folder (`docs/database.md`, "The
+save menus"), newest first: name, kind, age, game time, map and seed, date. **Load** starts a
+game process with `--load <file>`, paused, keeping the form's window options (size, scale,
+HUD). A save made with other rules shows the reason and its Load button is off. **Continue**
+beside Launch loads the newest save this game can read.
+
 ## Visual verification
 
 Build before opening a window:

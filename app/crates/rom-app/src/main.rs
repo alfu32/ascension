@@ -9,6 +9,7 @@ mod hud;
 mod launcher;
 mod looks;
 mod match_setup;
+mod saves;
 mod screenshot;
 mod script;
 mod selection;
@@ -26,8 +27,16 @@ fn main() -> ExitCode {
     if launcher::requested(&arguments) {
         return launcher::run(&arguments);
     }
-    let options = match args::parse(arguments) {
-        Ok(options) => options,
+    let parsed = args::parse(arguments.clone()).and_then(|options| match options.load.clone() {
+        // A save decides the map; its launch arguments come last so they win.
+        Some(path) => {
+            let arguments = saves::load_arguments(&arguments, &path)?;
+            args::parse(arguments.clone()).map(|options| (options, arguments))
+        }
+        None => Ok((options, arguments)),
+    });
+    let (options, arguments) = match parsed {
+        Ok(parsed) => parsed,
         Err(error) => {
             eprintln!("rise-of-man: {error}\n{}", args::USAGE);
             return ExitCode::from(2);
@@ -36,6 +45,10 @@ fn main() -> ExitCode {
     if options.help {
         println!("rise-of-man {}\n{}", env!("CARGO_PKG_VERSION"), args::USAGE);
         println!("\nNo arguments or --launcher opens the launcher. --run starts a default game.");
+        println!(
+            "--load <file> continues a saved game, paused; --autosave <minutes> sets the autosave interval (default {}, 0 is off).",
+            args::DEFAULT_AUTOSAVE_MINUTES
+        );
         return ExitCode::SUCCESS;
     }
     if let Some(path) = &options.gallery_manifest {
@@ -50,5 +63,5 @@ fn main() -> ExitCode {
             }
         };
     }
-    shell::run(&options)
+    shell::run(&options, &arguments)
 }

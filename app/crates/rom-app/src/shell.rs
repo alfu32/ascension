@@ -25,7 +25,7 @@ use crate::match_setup::{
 };
 use crate::screenshot;
 use crate::script::{Script, ScriptContext, ScriptSetup};
-use crate::sim_thread::{SimLink, SimThread, UniverseHost};
+use crate::sim_thread::{Extras, SimLink, SimThread, UniverseHost};
 use crate::terrain;
 use crate::universe_view;
 use crate::world_view::WorldView;
@@ -35,7 +35,7 @@ use crate::world_view::WorldView;
 const TERRAIN_WAIT: Duration = Duration::from_secs(30);
 
 /// Opens the window and runs until it is closed (or the benchmark finishes).
-pub fn run(options: &Options) -> ExitCode {
+pub fn run(options: &Options, arguments: &[String]) -> ExitCode {
     // GPUI unwraps platform initialisation errors; report them instead of a raw panic.
     let application = match std::panic::catch_unwind(Application::new) {
         Ok(application) => application,
@@ -57,7 +57,7 @@ pub fn run(options: &Options) -> ExitCode {
         // The review screens show models on plain ground; no match runs.
         crate::gallery::start(options, &bridge).map(|()| None)
     } else {
-        start_simulation(options, &bridge).map(Some)
+        start_simulation(options, arguments, &bridge).map(Some)
     };
     let mut sim = match started {
         Ok(sim) => sim,
@@ -88,9 +88,20 @@ pub fn run(options: &Options) -> ExitCode {
     let exit_code = Arc::new(AtomicU8::new(0));
     let app_exit_code = Arc::clone(&exit_code);
     let options = options.clone();
+    let display_arguments = crate::saves::display_arguments(arguments);
 
     application.run(move |cx: &mut App| {
         gpui_component::init(cx);
+        // The in-match menu is GPUI; give it the launcher's dark look.
+        gpui_component::Theme::change(gpui_component::ThemeMode::Dark, None, cx);
+        {
+            let theme = gpui_component::Theme::global_mut(cx);
+            theme.colors.background = gpui::rgb(0x0c1118).into();
+            theme.colors.foreground = gpui::rgb(0xf2f2f2).into();
+            theme.colors.primary = gpui::rgb(0x3fd0ff).into();
+            theme.colors.border = gpui::rgb(0x2a3340).into();
+            theme.font_family = "DejaVu Sans".into();
+        }
         let (width, height) = options.size;
         let canvas = size(px(width as f32), px(height as f32));
         let mut window_options = WindowOptions {
@@ -118,6 +129,7 @@ pub fn run(options: &Options) -> ExitCode {
                     &shutdown,
                     &sim_link,
                     (options.size, options.stats),
+                    &display_arguments,
                     window,
                     cx,
                 );
@@ -159,6 +171,7 @@ pub fn run(options: &Options) -> ExitCode {
                     &shutdown,
                     &sim_link,
                     (options.size, options.stats),
+                    &display_arguments,
                     window,
                     cx,
                 );
@@ -190,6 +203,7 @@ fn world_view(
     shutdown: &ShutdownHandle,
     sim: &SimLink,
     ((width, height), stats): ((u32, u32), bool),
+    display_arguments: &[String],
     window: &mut Window,
     cx: &mut App,
 ) -> Entity<WorldView> {
@@ -211,12 +225,17 @@ fn world_view(
         ));
     }
     let (bridge, sim) = (bridge.clone(), sim.clone());
-    cx.new(|cx| WorldView::new(bridge, sim, stats, window, cx))
+    let display_arguments = display_arguments.to_vec();
+    cx.new(|cx| WorldView::new(bridge, sim, stats, display_arguments, window, cx))
 }
 
 /// Generates the map or planet, publishes its terrain, builds the match and starts the
 /// simulation thread.
-fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThread, String> {
+fn start_simulation(
+    options: &Options,
+    arguments: &[String],
+    bridge: &RenderBridge,
+) -> Result<SimThread, String> {
     let mut host = None;
     let mut game = if options.uses_universe() {
         let setup = match &options.script {
@@ -394,8 +413,32 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
         let setup = ScriptSetup::scan(&text)?;
         setup.apply_grants(&mut game.world)?;
     }
+    // A save replaces the freshly made world; the planet's looks above came from the same seed.
+    let mut loaded = None;
+    let mut speed_pct = options.speed_pct;
+    if let Some(path) = &options.load {
+        let rules = Arc::clone(game.world.rules());
+        let (world, info, brains) = crate::computer::load_match(path, &rules)
+            .map_err(|error| format!("loading {}: {error}", path.display()))?;
+        game.world = world;
+        speed_pct = info.speed_pct.clamp(1, 10_000);
+        let home = game.starts.first().map(|s| s.city_pos.body);
+        if let Some(at) = capital(&game.world, home) {
+            match game.world.surface(at.body).map(|s| s.topology()) {
+                Some(rom_sim::Topology::Cube(_)) => bridge.focus_surface(SurfacePos {
+                    face: at.face,
+                    x: i64::from(at.x),
+                    y: i64::from(at.y),
+                }),
+                _ => bridge.focus_camera(at.x as f32 / 1000.0, at.y as f32 / 1000.0),
+            }
+        }
+        loaded = Some((info, brains));
+    }
     // Every player no person plays is a computer player, unless `--ai none`.
-    let computers = if options.no_ai {
+    let computers = if let Some((_, brains)) = loaded.as_mut() {
+        Some(std::mem::replace(brains, ComputerPlayers::empty())).filter(|b| b.len() > 0)
+    } else if options.no_ai {
         None
     } else {
         Some(ComputerPlayers::new(
@@ -428,16 +471,74 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
     if options.zoom_out {
         bridge.publish_zoom_out();
     }
+    let saving = match crate::saves::folder() {
+        Ok(folder) => {
+            let style = options
+                .style
+                .clone()
+                .or_else(|| {
+                    let rules = game.world.rules();
+                    rules
+                        .map_styles
+                        .keys()
+                        .next()
+                        .map(|id| rules.key(*id).to_owned())
+                })
+                .unwrap_or_default();
+            let mut setup = crate::saves::SaveSetup::new(
+                &game.world,
+                options.seed,
+                &style,
+                arguments,
+                options.autosave_minutes,
+                folder,
+            );
+            if let Some((info, _)) = loaded {
+                // The save's own settings (seed, map, launch arguments, seats) carry on.
+                setup.info = info;
+            }
+            Some(setup)
+        }
+        Err(error) => {
+            eprintln!("rise-of-man: saving is off: {error}");
+            None
+        }
+    };
     SimThread::spawn(
         game.world,
         driver,
         computers,
         script,
-        options.speed_pct,
+        speed_pct,
         bridge.clone(),
         host,
+        Extras {
+            saving,
+            paused: options.load.is_some(),
+        },
     )
     .map_err(|error| format!("could not start the simulation thread: {error}"))
+}
+
+/// Where the player's first city stands, preferring one on `home`: where a loaded game's
+/// camera starts.
+fn capital(world: &rom_sim::World, home: Option<BodyId>) -> Option<rom_sim::Pos> {
+    let cities: Vec<rom_sim::Pos> = world
+        .entities()
+        .filter(|e| {
+            e.owner == crate::selection::PLAYER
+                && world.rules().entity_types[&e.type_id]
+                    .territory
+                    .as_ref()
+                    .is_some_and(|t| t.is_city)
+        })
+        .map(|e| e.pos)
+        .collect();
+    cities
+        .iter()
+        .find(|p| Some(p.body) == home)
+        .or(cities.first())
+        .copied()
 }
 
 /// Parses a `--script` file against player one's start.

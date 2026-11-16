@@ -1,11 +1,11 @@
 //! The simulation thread: owns the `World`, steps it at a fixed rate, publishes render
 //! snapshots and accepts commands.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::io;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -14,12 +14,14 @@ use rom_render::{
     Activity, EXPLORED, EntitySnapshot, EntityView, Level, OrbitSettings, RenderBridge, SurfacePos,
     UNEXPLORED, VISIBLE, VisionMap,
 };
+use rom_render::{HudRegionKind, PickEvent, PointerButton};
 use rom_rules::{ActiveSources, EntityClass};
 use rom_sim::{BodyId, Command, Entity, OrderStatus, PlayerId, Pos, Sighting, Topology, World};
 
 use crate::computer::ComputerPlayers;
 use crate::demo::DemoDriver;
 use crate::match_setup::planet_surface;
+use crate::saves::{self, Kind, SaveRequest, SaveSetup, Saved};
 use crate::script::{Script, ScriptAction};
 use crate::selection::{Controller, PLAYER, ViewCtx};
 use crate::space_view::{Notices, SpaceFrame, space_snapshot};
@@ -241,10 +243,36 @@ pub struct SimReport {
     pub computer_rejected: u64,
 }
 
+/// A page of the in-match menu.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MenuPage {
+    /// Resume, save, load, quit.
+    Main = 1,
+    /// The save dialog.
+    Save = 2,
+    /// The list of saved games.
+    Load = 3,
+}
+
+/// Where saves go and which rules this game plays, for the windows that list them.
+#[derive(Clone, Debug)]
+pub struct SaveUi {
+    /// The save folder.
+    pub folder: std::path::PathBuf,
+    /// The rules of this game.
+    pub rules: saves::RulesId,
+}
+
 /// What the UI keeps: a cloneable way to read stats, send commands and stop the thread.
 #[derive(Clone, Debug)]
 pub struct SimLink {
     commands: Sender<Command>,
+    requests: Sender<SaveRequest>,
+    outcomes: Arc<Mutex<VecDeque<Result<Saved, String>>>>,
+    saving: Option<Arc<SaveUi>>,
+    suggested: Arc<Mutex<String>>,
+    paused: Arc<AtomicBool>,
+    menu: Arc<AtomicU8>,
     stats: Arc<SimStats>,
     speed: Arc<AtomicU32>,
     stop: Arc<AtomicBool>,
@@ -255,10 +283,64 @@ impl SimLink {
     pub fn idle() -> Self {
         Self {
             commands: channel().0,
+            requests: channel().0,
+            outcomes: Arc::default(),
+            saving: None,
+            suggested: Arc::default(),
+            paused: Arc::default(),
+            menu: Arc::default(),
             stats: Arc::new(SimStats::default()),
             speed: Arc::new(AtomicU32::new(100)),
             stop: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Whether the simulation is held (no tick runs).
+    pub fn paused(&self) -> bool {
+        self.paused.load(Ordering::Acquire)
+    }
+
+    /// Holds or releases the simulation.
+    pub fn set_paused(&self, paused: bool) {
+        self.paused.store(paused, Ordering::Release);
+    }
+
+    /// The menu page the HUD or a script asked for since this was last asked.
+    pub fn take_menu_request(&self) -> Option<MenuPage> {
+        match self.menu.swap(0, Ordering::AcqRel) {
+            1 => Some(MenuPage::Main),
+            2 => Some(MenuPage::Save),
+            3 => Some(MenuPage::Load),
+            _ => None,
+        }
+    }
+
+    /// Asks the window to show a menu page.
+    pub fn request_menu(&self, page: MenuPage) {
+        self.menu.store(page as u8, Ordering::Release);
+    }
+
+    /// Where saves go and which rules this game plays; `None` when the match cannot be saved.
+    pub fn save_ui(&self) -> Option<&SaveUi> {
+        self.saving.as_deref()
+    }
+
+    /// The name a new save would get: map, age and date.
+    pub fn suggested_name(&self) -> String {
+        self.suggested.lock().map(|s| s.clone()).unwrap_or_default()
+    }
+
+    /// Asks the simulation thread to write a save between two ticks.
+    pub fn request_save(&self, kind: Kind, name: impl Into<String>) {
+        let _ = self.requests.send(SaveRequest {
+            kind,
+            name: name.into(),
+        });
+    }
+
+    /// The oldest finished save (or its error) nobody has read yet.
+    pub fn take_save_outcome(&self) -> Option<Result<Saved, String>> {
+        self.outcomes.lock().ok()?.pop_front()
     }
 
     /// Queues a command for the world; the thread submits it after the next tick.
@@ -300,6 +382,15 @@ impl SimLink {
     }
 }
 
+/// What a match starts with besides its world.
+#[derive(Debug, Default)]
+pub struct Extras {
+    /// How saves are written; `None` when this match cannot be saved.
+    pub saving: Option<SaveSetup>,
+    /// Start held, as a loaded game does.
+    pub paused: bool,
+}
+
 /// Owns the simulation thread; dropping it stops and joins the thread.
 #[derive(Debug)]
 pub struct SimThread {
@@ -309,7 +400,9 @@ pub struct SimThread {
 
 impl SimThread {
     /// Moves `world` (and the optional demo driver and computer players) onto a new thread
-    /// that publishes snapshots to `bridge`.
+    /// that publishes snapshots to `bridge`. `extras` says how saving is set up and whether
+    /// the match starts held.
+    #[allow(clippy::too_many_arguments)] // the thread's whole state, moved in once
     pub fn spawn(
         world: World,
         driver: Option<DemoDriver>,
@@ -318,10 +411,23 @@ impl SimThread {
         speed_pct: u32,
         bridge: RenderBridge,
         host: Option<UniverseHost>,
+        extras: Extras,
     ) -> io::Result<Self> {
         let (commands, inbox) = channel();
+        let (requests, request_inbox) = channel();
         let link = SimLink {
             commands,
+            requests,
+            outcomes: Arc::default(),
+            saving: extras.saving.as_ref().map(|s| {
+                Arc::new(SaveUi {
+                    folder: s.folder.clone(),
+                    rules: s.rules.clone(),
+                })
+            }),
+            suggested: Arc::default(),
+            paused: Arc::new(AtomicBool::new(extras.paused)),
+            menu: Arc::default(),
             stats: Arc::new(SimStats::default()),
             speed: Arc::new(AtomicU32::new(speed_pct.max(1))),
             stop: Arc::new(AtomicBool::new(false)),
@@ -336,8 +442,10 @@ impl SimThread {
                     computers,
                     script,
                     host,
+                    extras.saving,
                     &thread_link,
                     &inbox,
+                    &request_inbox,
                     &bridge,
                 )
             })?;
@@ -376,10 +484,16 @@ fn run(
     mut computers: Option<ComputerPlayers>,
     mut script: Option<Script>,
     mut host: Option<UniverseHost>,
+    saving: Option<SaveSetup>,
     link: &SimLink,
     inbox: &Receiver<Command>,
+    requests: &Receiver<SaveRequest>,
     bridge: &RenderBridge,
 ) {
+    let autosave_every = saving
+        .as_ref()
+        .map(|s| u64::from(s.autosave_minutes) * 60 * u64::from(TICKS_PER_SECOND))
+        .filter(|every| *every > 0);
     let mut speed = link.speed.load(Ordering::Relaxed);
     let mut step = FixedStep::new(speed, MAX_TICKS_PER_TURN);
     let mut last = Instant::now();
@@ -391,6 +505,12 @@ fn run(
         Ordering::Relaxed,
     );
     let mut controller = Controller::new();
+    let suggest = |world: &World| {
+        if let (Some(setup), Ok(mut name)) = (saving.as_ref(), link.suggested.lock()) {
+            *name = saves::default_name(world, setup, saves::now_secs());
+        }
+    };
+    suggest(&world);
     let mut memory = Memory::default();
     let models = crate::looks::ModelBook::new(world.rules());
     let mut notices = Notices::default();
@@ -412,8 +532,24 @@ fn run(
             speed = current;
             step.set_speed(speed);
         }
-        let ticks = step.advance(now - last);
+        let ticks = if link.paused() {
+            0
+        } else {
+            step.advance(now - last)
+        };
         last = now;
+        while let Ok(request) = requests.try_recv() {
+            let text = write_save(
+                &world,
+                computers.as_ref(),
+                saving.as_ref(),
+                speed,
+                link,
+                &request,
+            );
+            controller.notify(&world, text);
+            publish_hud(&world, &controller, bridge);
+        }
         if let Some(host) = host.as_mut() {
             if let Some(body) = bridge.take_surface_request()
                 && let Err(error) = host.show(&mut world, BodyId(body), bridge)
@@ -447,7 +583,7 @@ fn run(
         let picks = bridge.take_picks();
         let interacted = !picks.is_empty();
         for pick in picks {
-            controller.handle(&mut world, pick);
+            handle_pick(&mut controller, &mut world, link, pick);
         }
         focus_camera(&world, &mut controller, bridge);
         if interacted && ticks == 0 {
@@ -470,6 +606,9 @@ fn run(
                             Err(error) => controller.notify(&world, error),
                         },
                         ScriptAction::Speed(percent) => link.set_speed(percent),
+                        ScriptAction::Save(name) => link.request_save(Kind::Manual, name),
+                        ScriptAction::QuickSave => link.request_save(Kind::Quick, ""),
+                        ScriptAction::Menu(page) => link.request_menu(page),
                         ScriptAction::Input(events) => {
                             for event in events {
                                 bridge.push_input(event);
@@ -478,7 +617,7 @@ fn run(
                     }
                 }
                 for pick in script.due(world.tick()) {
-                    controller.handle(&mut world, pick);
+                    handle_pick(&mut controller, &mut world, link, pick);
                 }
             }
             if let Some(driver) = driver.as_mut() {
@@ -515,6 +654,25 @@ fn run(
                 }
             }
             focus_camera(&world, &mut controller, bridge);
+            if let Some(every) = autosave_every
+                && world.tick().is_multiple_of(every)
+            {
+                let request = SaveRequest {
+                    kind: Kind::Auto,
+                    name: String::new(),
+                };
+                let text = write_save(
+                    &world,
+                    computers.as_ref(),
+                    saving.as_ref(),
+                    speed,
+                    link,
+                    &request,
+                );
+                if text.starts_with("Save failed") {
+                    controller.notify(&world, text);
+                }
+            }
             window_ticks += 1;
             publish(
                 &world,
@@ -539,6 +697,7 @@ fn run(
                 .store((rate * 10.0).round() as u32, Ordering::Relaxed);
             window_start = now;
             window_ticks = 0;
+            suggest(&world);
             let (count, total, longest) = std::mem::take(&mut thoughts);
             let micros = |d: Duration| d.as_micros().min(u128::from(u32::MAX)) as u32;
             link.stats.think_us_avg.store(
@@ -555,6 +714,67 @@ fn run(
             thread::yield_now();
         }
     }
+}
+
+/// Writes a save the player or the autosave asked for; the event-line text says how it went.
+fn write_save(
+    world: &World,
+    computers: Option<&ComputerPlayers>,
+    saving: Option<&SaveSetup>,
+    speed_pct: u32,
+    link: &SimLink,
+    request: &SaveRequest,
+) -> String {
+    let result = match saving {
+        None => Err("this match cannot be saved".to_owned()),
+        Some(setup) => {
+            let none;
+            let computers = match computers {
+                Some(computers) => computers,
+                None => {
+                    none = ComputerPlayers::empty();
+                    &none
+                }
+            };
+            saves::write(world, computers, setup, speed_pct, request)
+        }
+    };
+    let text = match &result {
+        Ok(saved) => match request.kind {
+            Kind::Manual => format!("Game saved: {}", saved.name),
+            Kind::Quick => "Quick saved".to_owned(),
+            Kind::Auto => "Autosaved".to_owned(),
+        },
+        Err(error) => format!("Save failed: {error}"),
+    };
+    if let Ok(mut outcomes) = link.outcomes.lock() {
+        outcomes.push_back(result);
+    }
+    text
+}
+
+/// Gives a pick to the selection, except the buttons beside the clock: the menu button asks the
+/// window for the menu and the pause button holds or releases the simulation.
+fn handle_pick(controller: &mut Controller, world: &mut World, link: &SimLink, pick: PickEvent) {
+    if let PickEvent::HudClick {
+        region: HudRegionKind::TopButton,
+        index,
+        button: PointerButton::Left,
+        ..
+    } = &pick
+    {
+        match index {
+            2 => link.request_menu(MenuPage::Main),
+            3 => {
+                let paused = !link.paused();
+                link.set_paused(paused);
+                controller.notify(world, if paused { "Paused" } else { "Resumed" });
+            }
+            _ => {}
+        }
+        return;
+    }
+    controller.handle(world, pick);
 }
 
 /// What publishing keeps from one snapshot to the next.
@@ -1499,6 +1719,7 @@ mod tests {
             100,
             bridge.clone(),
             Some(host),
+            Extras::default(),
         )
         .expect("thread");
         let link = thread.link();
@@ -1617,5 +1838,169 @@ mod terrain_knowledge_tests {
             world.hash()
         };
         assert_eq!(run(), run());
+    }
+}
+
+#[cfg(test)]
+mod save_tests {
+    use super::*;
+    use crate::computer::{ComputerPlayers, load_match};
+    use crate::saves::{KEY_NAME, RulesId};
+
+    fn game_with_brains() -> (Arc<rom_rules::Rules>, World, ComputerPlayers) {
+        let options = crate::args::Options {
+            players: 3,
+            seed: 5,
+            ..crate::args::Options::default()
+        };
+        let content = crate::terrain::generate_content(&options).expect("content");
+        let mut game = crate::match_setup::build_match(
+            &content.rules,
+            &content.map,
+            &content.factions,
+            options.seed,
+        )
+        .expect("match");
+        let computers = ComputerPlayers::new(&mut game.world, &[], 5, false).expect("brains");
+        (Arc::clone(game.world.rules()), game.world, computers)
+    }
+
+    fn folder(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("rom-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
+
+    fn wait_for_outcome(link: &SimLink) -> Result<Saved, String> {
+        let started = Instant::now();
+        loop {
+            if let Some(outcome) = link.take_save_outcome() {
+                return outcome;
+            }
+            assert!(
+                started.elapsed() < Duration::from_secs(60),
+                "no save outcome"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    /// A save asked of the running simulation thread loads into the same world and brains.
+    #[test]
+    fn the_thread_saves_between_ticks_and_the_save_loads_alike() {
+        let (rules, mut world, mut computers) = game_with_brains();
+        for _ in 0..600 {
+            computers.step(&mut world);
+            world.step();
+        }
+        let (hash, brains) = (world.hash(), computers.ai_states());
+        let dir = folder("thread-save");
+        let setup = SaveSetup::new(
+            &world,
+            5,
+            "mapstyle.test",
+            &["--seed".into(), "5".into()],
+            0,
+            dir.clone(),
+        );
+        let mut thread = SimThread::spawn(
+            world,
+            None,
+            Some(computers),
+            None,
+            100,
+            RenderBridge::detached(),
+            None,
+            Extras {
+                saving: Some(setup),
+                paused: true,
+            },
+        )
+        .expect("thread");
+        let link = thread.link();
+        assert!(link.paused());
+        link.request_save(Kind::Manual, "Test save / one");
+        let saved = wait_for_outcome(&link).expect("saved");
+        assert_eq!(saved.name, "Test save / one");
+        assert_eq!(link.report().tick, 600, "held, so no tick ran");
+        thread.stop();
+
+        let (loaded, info, restored) = load_match(&saved.path, &rules).expect("loads");
+        assert_eq!(loaded.hash(), hash);
+        assert_eq!(restored.ai_states(), brains);
+        assert_eq!(info.settings[KEY_NAME], "Test save / one");
+        assert_eq!(info.settings[saves::KEY_ARGS], "--seed\n5");
+        assert_eq!(info.seats.len(), 4);
+
+        // The list reads the header only, newest first, and flags other rules.
+        let current = RulesId::of(&rules);
+        let entries = saves::list(&dir, &current);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, "Test save / one");
+        assert_eq!(entries[0].ticks, 600);
+        assert_eq!(entries[0].refusal, None);
+        let other = RulesId {
+            version: "other".into(),
+            fingerprint: "0".into(),
+        };
+        assert!(saves::list(&dir, &other)[0].refusal.is_some());
+        // A game that continues the save takes its map arguments from it.
+        let arguments =
+            saves::load_arguments(&["--size".into(), "800x600".into()], &saved.path).unwrap();
+        let options = crate::args::parse(arguments).unwrap();
+        assert_eq!((options.seed, options.size), (5, (800, 600)));
+        assert_eq!(options.style.as_deref(), Some("mapstyle.test"));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// The autosave fires on its own every N game minutes and keeps a rotating slot.
+    #[test]
+    fn autosave_and_quick_save_write_rotating_slots() {
+        let (rules, world, computers) = game_with_brains();
+        let dir = folder("autosave");
+        let setup = SaveSetup::new(&world, 5, "mapstyle.test", &[], 1, dir.clone());
+        let mut thread = SimThread::spawn(
+            world,
+            None,
+            Some(computers),
+            None,
+            10_000,
+            RenderBridge::detached(),
+            None,
+            Extras {
+                saving: Some(setup),
+                paused: false,
+            },
+        )
+        .expect("thread");
+        let link = thread.link();
+        let auto = wait_for_outcome(&link).expect("autosave");
+        assert_eq!(auto.name, "Autosave");
+        assert!(auto.path.ends_with("autosave-1.rom"));
+        link.set_paused(true);
+        for slot in 1..=4 {
+            link.request_save(Kind::Quick, "");
+            let saved = wait_for_outcome(&link).expect("quick save");
+            assert!(
+                saved.path.to_string_lossy().contains("quicksave-"),
+                "{slot}"
+            );
+            std::thread::sleep(Duration::from_millis(15));
+        }
+        thread.stop();
+        let quick = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter(|e| {
+                e.as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("quicksave")
+            })
+            .count();
+        assert_eq!(quick, saves::KEEP);
+        let (loaded, _, _) = load_match(&auto.path, &rules).expect("autosave loads");
+        assert!(loaded.tick() >= 1_200);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

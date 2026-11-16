@@ -43,6 +43,8 @@ struct Catalog {
     /// Computer player profiles and difficulties (by rank).
     profiles: Vec<Choice>,
     difficulties: Vec<Choice>,
+    /// The rules this launcher was started with; a save must match them to load.
+    rules_id: crate::saves::RulesId,
 }
 
 impl Catalog {
@@ -106,6 +108,7 @@ impl Catalog {
         gallery.extend(definitions(entities.into_iter().collect()));
         gallery.extend(models.clone());
         Self {
+            rules_id: crate::saves::RulesId::of(rules),
             lists: BTreeMap::from([
                 (
                     "style",
