@@ -43,6 +43,8 @@ const BUILDING_THREAT_PCT: i64 = 25;
 const LOOK_AGAIN_TICKS: u64 = 12_000;
 /// Cells the scouting search examines at most per scout.
 const SCOUT_CELLS: usize = 4096;
+/// Supply units ordered in one thought at most.
+const SUPPLY_ORDERS: usize = 2;
 /// How far a supply unit may stand from its place beside the army, in milli-tiles.
 const SUPPLY_SLACK: u64 = 3000;
 /// Ticks after an army sets off during which all its members belong to the wave.
@@ -118,6 +120,12 @@ fn defence_now(view: &View<'_>, memory: &Memory, at: Pos) -> i64 {
         .sum()
 }
 
+/// Ticks into a match after which a wave's required ratio starts to fall (40 minutes).
+const PATIENCE_TICKS: u64 = 48_000;
+/// Percentage points the ratio falls per game minute after that.
+const PATIENCE_PCT_PER_MINUTE: i64 = 2;
+/// The lowest the ratio falls to.
+const PATIENCE_FLOOR_PCT: i64 = 80;
 /// A measured defence counts half after this long without being matched again.
 const DEFENCE_HALF_TICKS: u64 = 24_000;
 
@@ -782,11 +790,30 @@ pub(crate) fn command(plan: &mut Plan<'_>, memory: &mut Memory, cmd: &Command<'_
     {
         intruder = Some((city.pos, strength));
     }
+    // An own city struck down (held at 0 hit points, its capture counting down) calls every
+    // army home, the main army from its advance too: losing a city to a few raiders costs
+    // more than a siege elsewhere gains. The capital comes first.
+    let capital = plan.view.world.capital(plan.view.me);
+    let struck =
+        plan.view
+            .cities
+            .iter()
+            .filter(|c| {
+                plan.view.world.entity(c.id).is_some_and(|e| {
+                    e.neutralised && plan.view.world.capture_countdown(c.id).is_some()
+                })
+            })
+            .min_by_key(|c| (Some(c.id) != capital, c.id))
+            .map(|c| c.pos);
+    if let Some(at) = struck {
+        intruder = Some((at, intruder.map_or(0, |(_, power)| power).max(guard + 1)));
+    }
     for role in [Role::Defend, Role::Attack, Role::Raid] {
         let Some(army) = memory.armies.get_mut(&role) else {
             continue;
         };
-        let home = matches!(army.phase, Phase::Gather | Phase::Respond);
+        let home = matches!(army.phase, Phase::Gather | Phase::Respond)
+            || (struck.is_some() && role != Role::Raid);
         let needed = role == Role::Defend || intruder.is_some_and(|(_, power)| power > guard);
         match intruder {
             Some((at, _)) if home && needed => {
@@ -978,7 +1005,8 @@ fn supply(plan: &mut Plan<'_>, memory: &Memory, rally: Option<Pos>) {
             orders.push((wagon.id, spot));
         }
     }
-    for (wagon, spot) in orders {
+    // A few a thought: the army's own orders come first.
+    for (wagon, spot) in orders.into_iter().take(SUPPLY_ORDERS) {
         if !plan.order(wagon, "move", None, None, Some(spot)) {
             return;
         }
@@ -1188,11 +1216,16 @@ fn lead(
             let own: i64 = units.iter().map(|e| power(&plan.view, e)).sum();
             // A blunder is overconfidence: the army sets off as soon as it merely matches
             // the defence, at a city it may not be able to take.
-            let ratio = if cmd.blunder {
-                cmd.weights.attack_ratio.min(100)
-            } else {
-                cmd.weights.attack_ratio
-            };
+            // A long war wears patience down: past `PATIENCE_TICKS` the ratio a wave needs
+            // falls by `PATIENCE_PCT_PER_MINUTE` a minute, to `PATIENCE_FLOOR_PCT`; equal
+            // armies would otherwise wait for each other until the end.
+            let minutes = tick.saturating_sub(PATIENCE_TICKS) / 1200;
+            let ratio = cmd
+                .weights
+                .attack_ratio
+                .saturating_sub(minutes as i64 * PATIENCE_PCT_PER_MINUTE)
+                .max(PATIENCE_FLOOR_PCT.min(cmd.weights.attack_ratio));
+            let ratio = if cmd.blunder { ratio.min(100) } else { ratio };
             if own * 100 < ratio * needed && !enemy_land_race(&plan.view) {
                 return;
             }
@@ -1399,7 +1432,12 @@ fn lead(
             {
                 memory.unreachable.insert(target, tick + 4 * RETRY_TICKS);
             }
-            if lost || arrived || stalled || overdue {
+            // A search for the enemy that has not got there in a while is given up.
+            let lost_way = army.target.is_none() && tick >= army.since + STALL_TICKS;
+            if lost_way && let Some(goal) = army.goal {
+                memory.looked.insert(cell_of(goal), tick);
+            }
+            if lost || arrived || stalled || overdue || lost_way {
                 let from = front(&plan.view, units, army.goal).unwrap_or(units[0].pos);
                 // A wave that lost half its strength there learnt the defence the hard way.
                 if own * 2 < army.peak

@@ -359,6 +359,81 @@ Solo (`rom ai-match --seed 1 --players balanced:<difficulty> --ticks 72000`):
 Memory layout version 3 adds the age clock (age and the tick it began);
 versions 1 and 2 still read.
 
+## Capture that can be won, and armies that win it (task 67)
+
+The capture rule changed (`docs/database.md`, "Capture and difficulty"): workers no
+longer hold a struck-down city, and a city held at 0 hit points by attackers for
+`city.capture_hold_ticks` falls even with defenders left. Traced duels then showed why
+armies still did not finish a match, one cause after another:
+
+- **Attrition.** Enemy land takes 60 hit points a period from every unit (down to 1)
+  except beside its own supply. A siege of a few minutes left the whole wave at 1 hit
+  point and any arrow killed it. The main army now takes **supply units**
+  (`et_supply`, by component row): one per eight members is wished for at 720 (ahead of
+  more soldiers), a gathered army waits up to three minutes for three of them at the
+  rally point, and while it advances they walk beside members spread along the body of
+  the army (two orders a thought at most).
+- **Waves that never left.** A unit sent to a point inside a building has no path; the
+  army now aims at the edge of the target's footprint on its own side. A rally point
+  in the middle of the town got boxed in by buildings: it now lies just beyond the
+  capital's economic radius inside own borders, a 7 × 7 square around it is kept free
+  of buildings, and when six units fail to find a path from one place within a minute
+  the nearest own building other than a city there is pulled down (`raze`) and, if the
+  place is the rally point, the rally point moves to the next direction (never a gather
+  site is pulled down: an early version razed a start's only woodcutter's camp). An
+  advance with no target (a search for the enemy) is given up after four minutes.
+- **Waves that trickled.** Units that join after a wave set off wait at the rally point
+  for the next one (during the first minute every member belongs to the wave), and the
+  armies take their orders before the wishes while one is on the march (two thirds of
+  the order budget), so a wave is not sent off a few units a thought.
+- **Decisive waves.** A wave sets off only when it exceeds `mil.attack_ratio_pct` of
+  the defence measured at its target: the strongest defence seen around that city
+  (units seen lately, every remembered building, armed ones at full strength), and the
+  strength of every wave that lost half of itself there; a measure counts half after
+  20 game minutes. After 40 minutes of a match the ratio a wave needs falls by two
+  points a minute, to 80 % at least: equal armies would otherwise wait for each other
+  until the end. A wave keeps fighting while it has two thirds of its strength, and a
+  city it holds at 0 hit points is held, not given up. A blunder (`mistake_pct`) lowers
+  the ratio to 100 % instead of ignoring it. A captured enemy capital is held by the
+  main army until its owner falls; an own city struck down calls every army home.
+- **Knowing where to go.** With no enemy city known the main army goes looking even
+  when a scout is out; scouts judge danger by enemy units only (walls and towers can be
+  walked around), and a place no path leads to counts as looked at. Targets are judged
+  reachable when most of the army's kinds can walk there.
+- **Spending surplus.** Two technologies besides the way to the next age are wished
+  for each thought, more when every earned resource has 1000 or more in store;
+  upgrades of fielded military types are valued by how many are fielded; a research
+  queues behind training at a busy producer (the building that trains a line also
+  researches its upgrades, and never stood idle). With a surplus the army target grows
+  to the room the population cap leaves. An army below half its target is wished for
+  at 700. A resource with fewer than half the slots its workers need saves for its next
+  site.
+- **Difficulty that decides.** New `ai_difficulty` columns (`grace_ticks`,
+  `first_wave_max`, `wave_growth_per_hour`, `army_vs_enemy_pct`, `economy_pct`; values
+  in `database.md`). `easiest` leaves an opponent's town alone for ten minutes, sends at
+  most five units in its first wave (ten more per hour), keeps its army within 40 % of
+  the largest enemy army it has seen and keeps half its profile's workers; `easy`
+  six minutes, eight units, 80 %, 80 %. The brain does not know which player is a
+  person, so this holds against every opponent.
+- **Fair duel starts** (`rom duel`): besides land, the best gather site each start can
+  place on each node terrain must work at least 60 % of the node tiles of the other's
+  (a start whose only woodcutter's camp reached one tree stalled for half an hour).
+
+Task 68 adopted in `rom-ai`: warships over an enemy world with nothing in sight move
+within the orbit to the nearest enemy building remembered there (ships hold still in
+orbit); warships with nothing to do patrol the home orbit (a great circle through the
+capital); no orbital strike during the grace period. The colony transport keeps task
+68's stop-gaps deliberately: it lands near a home city before troops board (boarding is
+refused in orbit) and lifts off once loaded; a builder busy constructing may be taken
+when no idle one is near. Traders that fly (the space freighter: a spacecraft with
+`et_trader.runs_routes`) are trained when own cities stand on two planets of one star
+system, up to half the route limit, and run a route to an own city on another planet
+of their system; walking traders keep routes on one planet (before, the best trader by
+income was taken for every route, so a freighter would have been trained for a route
+it cannot run). A satellite (the unarmed ship that sees farthest and neither claims,
+carries nor trades) is wished for over every planet with a spaceport. Cities, towers and
+forts that fire count at full strength in the measured defence.
+
 ## Simulation gaps found in part 2, and what task 65 did with them
 
 - **Closed: `explore`, `patrol`, `guard`.** `explore` walks to the nearest tile

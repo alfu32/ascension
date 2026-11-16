@@ -17,8 +17,12 @@ use std::{collections::BTreeSet, sync::Arc};
 
 /// Mixed into the match seed so a brain's random stream differs from the simulation's.
 const STREAM: u64 = 0x6272_6169_6e5f_6169;
-/// Units failing to leave the rally point in one thought that make it move.
-const BOXED_UNITS: usize = 3;
+/// Units failing to leave the rally point within `BOXED_TICKS` that make it move.
+const BOXED_UNITS: usize = 6;
+/// How far from boxed-in units an own building may be pulled down to free them.
+const UNBOX_REACH: u64 = 8000;
+/// The span over which failures at the rally point are counted, in ticks.
+const BOXED_TICKS: u64 = 1200;
 /// How near the rally point a unit counts as standing there, in milli-tiles.
 const BOXED_REACH: u64 = 12_000;
 /// Ticks after the last sign of an attack before the alarm ends.
@@ -359,13 +363,16 @@ impl Brain {
             memory.opening_done = true;
         }
         memory.blocked.retain(|_, until| *until > tick);
-        heed_failures(world, self.player, memory, last_thought, tick);
+        let boxed_at = heed_failures(world, self.player, memory, last_thought, tick);
         if memory.age != view.age.0 {
             memory.age = view.age.0;
             memory.age_since = tick;
         }
 
         let mut plan = Plan::new(view, allowed, memory);
+        if let Some(at) = boxed_at {
+            unbox(&mut plan, at);
+        }
         let slip =
             |rng: &mut SimRng| d.mistake_pct > 0 && i64::from(rng.range(0, 100)) < d.mistake_pct;
 
@@ -455,32 +462,65 @@ impl Brain {
     }
 }
 
+/// Opens a way out for units boxed in by the player's own buildings: the nearest building
+/// other than a city or a gather site within `UNBOX_REACH` of them is pulled down.
+fn unbox(plan: &mut Plan<'_>, at: rom_sim::Pos) {
+    let view = &plan.view;
+    let building = view
+        .own
+        .iter()
+        .filter(|e| {
+            view.is_building(e.type_id)
+                && !view.is_city(e.type_id)
+                // Never a gather site: the income it brings is what everything else waits on.
+                && view.rules.entity_types[&e.type_id].gather_site.is_none()
+                && e.pos.body == at.body
+                && view.distance(e.pos, at) <= UNBOX_REACH
+        })
+        .min_by_key(|e| (view.distance(e.pos, at), e.id))
+        .map(|e| e.id);
+    if let Some(building) = building {
+        plan.order(building, "raze", None, None, None);
+    }
+}
+
 /// Takes in what the simulation reported as failed since the last thought, as a person
 /// reads the interface: a gather site nobody could reach or find a slot in, a site a
 /// builder could not get to, a target no path led to; each is left alone for a while
-/// instead of being ordered again thought after thought.
-fn heed_failures(world: &World, me: PlayerId, memory: &mut Memory, since: u64, tick: u64) {
-    // Units at the rally point that find no way out: the town has boxed it in.
-    let boxed = memory.rally.is_some_and(|rally| {
-        world
-            .order_failures(me)
-            .filter(|f| {
-                f.tick >= since
-                    && f.reason == "no_path"
-                    && matches!(f.kind.as_str(), "move" | "attack_move")
-            })
-            .filter_map(|f| world.entity(f.executor))
-            .filter(|e| {
-                world
-                    .distance(e.pos, rally)
-                    .is_some_and(|d| d <= BOXED_REACH)
-            })
-            .count()
-            >= BOXED_UNITS
-    });
-    if boxed {
-        memory.rally = None;
-        memory.rally_moves += 1;
+/// instead of being ordered again thought after thought. Returns where units were found
+/// boxed in at the rally point, if they were (the rally point moves).
+fn heed_failures(
+    world: &World,
+    me: PlayerId,
+    memory: &mut Memory,
+    since: u64,
+    tick: u64,
+) -> Option<rom_sim::Pos> {
+    // Units that found no way anywhere lately, standing together: boxed in. At the rally
+    // point, the rally point moves too.
+    let stuck: Vec<rom_sim::Pos> = world
+        .order_failures(me)
+        .filter(|f| {
+            f.tick + BOXED_TICKS >= tick
+                && f.tick >= memory.rally_since
+                && f.reason == "no_path"
+                && matches!(f.kind.as_str(), "move" | "attack_move")
+        })
+        .filter_map(|f| world.entity(f.executor))
+        .map(|e| e.pos)
+        .collect();
+    let near =
+        |a: rom_sim::Pos, b: rom_sim::Pos| world.distance(a, b).is_some_and(|d| d <= BOXED_REACH);
+    let boxed = stuck
+        .first()
+        .copied()
+        .filter(|first| stuck.iter().filter(|p| near(**p, *first)).count() >= BOXED_UNITS);
+    if let Some(at) = boxed {
+        memory.rally_since = tick;
+        if memory.rally.is_some_and(|rally| near(at, rally)) {
+            memory.rally = None;
+            memory.rally_moves += 1;
+        }
     }
     for failure in world.order_failures(me).filter(|f| f.tick >= since) {
         let reachless = matches!(failure.reason.as_str(), "no_path" | "no_slot");
@@ -510,6 +550,7 @@ fn heed_failures(world: &World, me: PlayerId, memory: &mut Memory, since: u64, t
             _ => {}
         }
     }
+    boxed
 }
 
 /// Whether a city lost hit points since the last thought, or armed enemies inside the
