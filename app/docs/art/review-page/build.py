@@ -145,6 +145,8 @@ def round_of(m):
         return 4
     if m["id"] == "unit.transport_ship@starfaring":
         return 5
+    if m["id"] in ("unit.space_freighter@starfaring", "unit.satellite@starfaring"):
+        return 10  # first looks made with task 68, reviewed with the future units
     if m["age"] not in ("age.ancient", "age.classical", None, ""):
         return 6  # later models built before their age's card: the task 58 craft, carrier, battery
     return 3 if unit else 2
