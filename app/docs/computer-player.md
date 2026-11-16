@@ -420,6 +420,20 @@ armies still did not finish a match, one cause after another:
   place on each node terrain must work at least 60 % of the node tiles of the other's
   (a start whose only woodcutter's camp reached one tree stalled for half an hour).
 
+Measured on the i7-6700HQ (`rom duel`, 100 seeds, 8 jobs, 108 000-tick limit):
+
+| Duel | Wins | Draws | Player 1 / 2 wins | Run time |
+| --- | --- | --- | --- | --- |
+| 0.0.63: moderate – easiest | 29 – 9 | 62 | 22 / 16 | 26.1 min (4 jobs) |
+| task 67: moderate – easiest | 86 – 2 | 12 | 43 / 45 | 6.9 min |
+| task 67: moderate – moderate | 36 – 37 | 27 | 33 / 40 | 9.2 min |
+
+**The targets (90 wins and at most 5 draws; at most 10 draws in the mirror) are not
+met.** What is left: armies of equal strength cannot break a defended city (cities,
+towers and forts fire, citizens fight, the hold takes two minutes), so mirrors end
+level; some starts still stall in their first age; a few armies get boxed in faster
+than they are freed.
+
 Task 68 adopted in `rom-ai`: warships over an enemy world with nothing in sight move
 within the orbit to the nearest enemy building remembered there (ships hold still in
 orbit); warships with nothing to do patrol the home orbit (a great circle through the
