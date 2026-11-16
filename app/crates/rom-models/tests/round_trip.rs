@@ -601,7 +601,8 @@ fn export_all_covers_every_expected_model_with_a_brief() {
     let lib = scratch.library();
     let summary = export_all(&lib, &scratch.out()).unwrap();
     assert_eq!(summary.done, lib.entries.len());
-    assert!(summary.starters > 100, "{summary:?}");
+    // Models not made yet get starters; each model card makes fewer of them.
+    assert!(summary.starters > 0, "{summary:?}");
     assert_eq!(summary.shared, lib.shared_meshes().len());
     for model in &lib.expected {
         for ext in ["octd", "md"] {
