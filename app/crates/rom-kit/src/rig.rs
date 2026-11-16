@@ -21,6 +21,13 @@ const DEFAULT_PERIODS: [f32; 4] = [3.2, 1.0, 1.2, 1.2];
 pub const FIRE_AT: f32 = 0.55;
 /// Scale of a muzzle flash while it is not shown (a point, so it draws nothing).
 const HIDDEN: f32 = 1e-3;
+/// Most flashes of a burst: one every other keyframe from [`FIRE_AT`] to the end of the cycle.
+pub const MAX_BURST: u8 = 5;
+/// Turns of a propeller in one cycle of any activity: an eighth of a turn between keyframes,
+/// a two-bladed propeller looking the same after half a turn.
+pub const SPIN_TURNS: f32 = 3.0;
+/// Cycle of an aircraft's flight (seconds): one bank to each side.
+pub const FLIGHT_PERIOD: f32 = 2.0;
 
 /// What a unit is doing, as far as its motion shows it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -84,6 +91,9 @@ pub enum AttackStyle {
     Fire,
     /// A pistol: the right arm levels it, fires, lowers it.
     Pistol,
+    /// A gunner at a mounted gun: the arms keep their hold on it and the body hunches into it,
+    /// shaking as it fires.
+    Brace,
 }
 
 /// How a figure works (`figure` knob `work`).
@@ -93,6 +103,8 @@ pub enum WorkStyle {
     Tool,
     /// Both arms raised (blessing, healing).
     Raise,
+    /// Bent over someone, both hands reaching down to them (a medic tending the wounded).
+    Tend,
 }
 
 /// The knobs of a figure that shape its motion.
@@ -157,6 +169,18 @@ pub enum Motion {
     Recoil(f32),
     /// A muzzle flash: shown only for a moment when its unit fires.
     Flash,
+    /// A machine gun's muzzle flash: shown this many times in quick succession, from the moment
+    /// its unit fires (a burst).
+    Burst(u8),
+    /// A gun turret laying its gun: when its unit attacks it swings this many radians about its
+    /// upright axis and back onto the target before the shot.
+    Traverse(f32),
+    /// A propeller or rotor turning about its own z axis, [`SPIN_TURNS`] turns a cycle, in
+    /// every activity.
+    Spin,
+    /// An aircraft aloft: it bobs gently, and under way banks from side to side by up to this
+    /// many radians.
+    Fly(f32),
 }
 
 impl Motion {
@@ -165,7 +189,11 @@ impl Motion {
     pub fn moves_pivot(&self) -> bool {
         matches!(
             self,
-            Motion::Body(_) | Motion::Beast(_) | Motion::Float(_) | Motion::Recoil(_)
+            Motion::Body(_)
+                | Motion::Beast(_)
+                | Motion::Float(_)
+                | Motion::Recoil(_)
+                | Motion::Fly(_)
         )
     }
 }
@@ -368,6 +396,15 @@ fn work_pose(style: &FigureStyle, u: f32, pose: &mut FigurePose) {
             pose.grips = [carry(0, r), carry(1, l)];
             pose.lean = track(u, 0.0, &[(0.35, -0.04), (0.6, 0.22), (0.75, 0.2)]);
         }
+        WorkStyle::Tend => {
+            let phase = TAU * u;
+            let reach = track(u, 0.0, &[(0.15, 1.0), (0.85, 1.0)]);
+            let r = hold[0] + (deg(55.0) + deg(14.0) * phase.sin() - hold[0]) * reach;
+            let l = hold[1] + (deg(55.0) - deg(14.0) * phase.sin() - hold[1]) * reach;
+            pose.arms = [swing(r), swing(l)];
+            pose.grips = [carry(0, r), carry(1, l)];
+            pose.lean = 0.38 * reach;
+        }
         WorkStyle::Raise => {
             let r = track(u, hold[0], &[(0.3, deg(150.0)), (0.7, deg(150.0))]);
             let l = track(u, hold[1], &[(0.3, deg(150.0)), (0.7, deg(150.0))]);
@@ -551,6 +588,16 @@ fn attack_pose(style: &FigureStyle, u: f32, pose: &mut FigurePose) {
                 ROT_IDENTITY
             };
         }
+        AttackStyle::Brace => {
+            // The arms stay on the gun; from the shot the body shakes on every keyframe.
+            let firing = track(
+                u,
+                0.0,
+                &[(FIRE_AT, 0.0), (FIRE_AT + 0.02, 1.0), (0.92, 1.0)],
+            );
+            let shake = 0.025 * firing * (u * POSE_SAMPLES as f32 * PI).cos();
+            pose.lean = track(u, 0.0, &[(0.2, 0.06), (0.92, 0.06)]) + shake;
+        }
         AttackStyle::Pistol => {
             let r = track(
                 u,
@@ -594,6 +641,19 @@ fn flash_scale(u: f32) -> f32 {
             (FIRE_AT + 0.11, HIDDEN),
         ],
     )
+}
+
+/// Size of a machine gun's muzzle flash at the point `u` of the attack cycle: `shots` flashes,
+/// each at full size on a keyframe from [`FIRE_AT`] on, hidden on the keyframes between them.
+fn burst_scale(u: f32, shots: u8) -> f32 {
+    let step = 1.0 / POSE_SAMPLES as f32;
+    let first = (FIRE_AT * POSE_SAMPLES as f32).ceil() * step;
+    (0..shots.min(MAX_BURST))
+        .map(|i| {
+            let off = (u - (first + 2.0 * step * f32::from(i))).abs();
+            1.0 - off / step
+        })
+        .fold(HIDDEN, f32::max)
 }
 
 /// Rotation and translation (joint frame, joint units) of a beast's joint.
@@ -700,6 +760,31 @@ fn local(motion: &Motion, activity: Activity, u: f32) -> (Rotation, [f32; 3]) {
                 HIDDEN
             };
             ([[s, 0.0, 0.0], [0.0, s, 0.0], [0.0, 0.0, s]], [0.0; 3])
+        }
+        Motion::Burst(shots) => {
+            let s = if activity == Activity::Attack {
+                burst_scale(u, *shots)
+            } else {
+                HIDDEN
+            };
+            ([[s, 0.0, 0.0], [0.0, s, 0.0], [0.0, 0.0, s]], [0.0; 3])
+        }
+        Motion::Traverse(angle) => match activity {
+            Activity::Attack => {
+                let a = track(u, 0.0, &[(0.15, *angle), (0.42, 0.0)]);
+                (ry(a), [0.0; 3])
+            }
+            _ => (ROT_IDENTITY, [0.0; 3]),
+        },
+        Motion::Spin => (rz(SPIN_TURNS * TAU * u), [0.0; 3]),
+        Motion::Fly(bank) => {
+            let (roll, pitch) = match activity {
+                Activity::Move | Activity::Attack => {
+                    (*bank * phase.sin(), deg(2.0) * (2.0 * phase).sin())
+                }
+                _ => (0.25 * *bank * phase.sin(), 0.0),
+            };
+            (mul(&rz(roll), &rx(pitch)), [0.0, 0.05 * phase.sin(), 0.0])
         }
     }
 }
@@ -868,6 +953,7 @@ mod tests {
             AttackStyle::Whirl,
             AttackStyle::Fire,
             AttackStyle::Pistol,
+            AttackStyle::Brace,
         ] {
             let rig = figure(FigureStyle { attack, ..style() });
             for activity in Activity::ALL {
@@ -1114,6 +1200,122 @@ mod tests {
         assert!((mean_heel(Activity::Move) - deg(8.0)).abs() < deg(0.5));
         assert!(mean_heel(Activity::Idle).abs() < deg(0.5));
         assert!(mean_heel(Activity::Attack).abs() < deg(0.5));
+    }
+
+    #[test]
+    fn a_burst_flashes_on_alternate_keyframes() {
+        let pivot = [0.0, 0.6, 0.4];
+        let rig = single(Motion::Burst(4), pivot);
+        let size = |activity: Activity, s: usize| {
+            let pose = rig.pose(activity, s as f32 / POSE_SAMPLES as f32);
+            assert!(
+                close(apply(&pose[1], pivot), pivot),
+                "the flash grows from its pivot"
+            );
+            apply(&pose[1], [pivot[0], pivot[1] + 1.0, pivot[2]])[1] - pivot[1]
+        };
+        let shown: Vec<usize> = (0..POSE_SAMPLES)
+            .filter(|&s| size(Activity::Attack, s) > 0.9)
+            .collect();
+        assert_eq!(shown.len(), 4, "{shown:?}");
+        assert!(shown[0] as f32 >= FIRE_AT * POSE_SAMPLES as f32);
+        // Hidden between the shots, and whenever the unit does not fight.
+        for pair in shown.windows(2) {
+            assert_eq!(pair[1] - pair[0], 2);
+            assert!(size(Activity::Attack, pair[0] + 1) < 0.01);
+        }
+        for activity in [Activity::Idle, Activity::Move, Activity::Work] {
+            assert!((0..POSE_SAMPLES).all(|s| size(activity, s) < 0.01));
+        }
+    }
+
+    #[test]
+    fn a_braced_gunner_keeps_hold_of_the_gun_and_shakes_as_it_fires() {
+        let hold = deg(70.0);
+        let style = FigureStyle {
+            attack: AttackStyle::Brace,
+            hold: [hold, hold],
+            seated: true,
+            ..style()
+        };
+        let lean = |u: f32| figure_pose(&style, Activity::Attack, u).lean;
+        for s in 0..POSE_SAMPLES {
+            let pose = figure_pose(&style, Activity::Attack, s as f32 / POSE_SAMPLES as f32);
+            assert_eq!(pose.arms, [swing(hold), swing(hold)], "{s}");
+        }
+        // Still before the shot; from it, the body jerks between keyframes.
+        let step = 1.0 / POSE_SAMPLES as f32;
+        assert!((lean(0.3) - lean(0.3 + step)).abs() < 1e-4);
+        let first = (FIRE_AT / step).ceil() * step;
+        assert!((lean(first) - lean(first + step)).abs() > 0.04);
+    }
+
+    #[test]
+    fn a_medic_bends_over_and_reaches_down_with_both_hands() {
+        let style = FigureStyle {
+            work: WorkStyle::Tend,
+            ..style()
+        };
+        let pose = figure_pose(&style, Activity::Work, 0.5);
+        assert!(pose.lean > 0.3);
+        for arm in pose.arms {
+            // Each hand is forward of the shoulder and below it.
+            let hand = turn(&arm, [0.0, -1.0, 0.0]);
+            assert!(hand[2] > 0.6 && hand[1] < -0.4, "{hand:?}");
+        }
+        let rest = figure_pose(&style, Activity::Work, 0.0);
+        assert!(rest.lean.abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_turret_lays_its_gun_before_the_shot() {
+        let rig = single(Motion::Traverse(deg(25.0)), [0.0, 0.8, 0.0]);
+        // Where the muzzle, a tile ahead of the turret, points.
+        let aim = |activity: Activity, u: f32| {
+            let p = apply(&rig.pose(activity, u)[1], [0.0, 0.8, 1.0]);
+            p[0].atan2(p[2])
+        };
+        assert!((aim(Activity::Attack, 0.15) - deg(25.0)).abs() < 1e-4);
+        for u in [0.0, 0.45, FIRE_AT, 0.9] {
+            assert!(aim(Activity::Attack, u).abs() < 1e-4, "{u}");
+        }
+        assert!(aim(Activity::Move, 0.15).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_propeller_spins_round_its_axis_in_every_activity() {
+        let rig = single(Motion::Spin, [0.0, 1.0, 0.5]);
+        for activity in Activity::ALL {
+            let tip = |u: f32| apply(&rig.pose(activity, u)[1], [0.0, 1.4, 0.5]);
+            // An eighth of a turn between keyframes, about the axis through the pivot.
+            let next = tip(1.0 / POSE_SAMPLES as f32);
+            let turned = (next[0]).atan2(next[1] - 1.0).abs();
+            assert!((turned - TAU * SPIN_TURNS / POSE_SAMPLES as f32).abs() < 1e-3);
+            assert!((next[2] - 0.5).abs() < 1e-6);
+            assert!(close(tip(0.0), tip(1.0 - 1e-6)));
+        }
+    }
+
+    #[test]
+    fn an_aircraft_banks_under_way_and_stays_aloft() {
+        let rig = single(Motion::Fly(deg(12.0)), [0.0, 3.0, 0.0]);
+        // Bank: how far the wings' up axis tips about the length (z).
+        let bank = |activity: Activity, u: f32| {
+            let m = rig.pose(activity, u)[1];
+            m[0][1].atan2(m[1][1]).abs()
+        };
+        let most = |activity: Activity| {
+            (0..POSE_SAMPLES)
+                .map(|s| bank(activity, s as f32 / POSE_SAMPLES as f32))
+                .fold(0.0, f32::max)
+        };
+        assert!((most(Activity::Move) - deg(12.0)).abs() < deg(1.0));
+        assert!(most(Activity::Idle) < deg(4.0));
+        for s in 0..POSE_SAMPLES {
+            let u = s as f32 / POSE_SAMPLES as f32;
+            let lift = apply(&rig.pose(Activity::Move, u)[1], [0.0, 3.0, 0.0])[1] - 3.0;
+            assert!(lift.abs() <= 0.05 + 1e-5);
+        }
     }
 
     #[test]
