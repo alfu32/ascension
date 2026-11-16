@@ -207,9 +207,10 @@ fn separation(
             ) as i64,
         )
     } else if squared == 0 {
-        // Coincident centres separate along a direction derived from both ids.
-        let (low, high) = (a.0.min(b.id.0), a.0.max(b.id.0));
-        let (x, y) = DIRECTIONS[(low.wrapping_mul(31) ^ high) as usize % 8];
+        // Coincident centres separate along an axis derived from where they stand, one each
+        // way, so the pair ends in the same places whichever ids they have.
+        let axis = (pa.x as u32).wrapping_mul(31) ^ (pa.y as u32);
+        let (x, y) = DIRECTIONS[axis as usize % 8];
         let sign = if a < b.id { 1 } else { -1 };
         (x * sign, y * sign, 1000)
     } else {

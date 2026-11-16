@@ -317,6 +317,21 @@ pub struct HudWealth {
     pub per_trip: i64,
 }
 
+/// A selected unit's patrol on the currently viewed surface: the great circle through its two
+/// ends, sampled from `from` (t = 0) through `to` (t = 1000) up to t = `span_milli`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HudPatrol {
+    /// Where the patrol began.
+    pub from: crate::SurfacePos,
+    /// The point patrolled to.
+    pub to: crate::SurfacePos,
+    /// How far along the circle to draw, in thousandths: 1000 between the ends; a full turn
+    /// of it in orbit.
+    pub span_milli: u32,
+    /// Height above the ground in milli-tiles: the orbit's for a ship in orbit.
+    pub lift_milli: u32,
+}
+
 /// A selected trader's route on the currently viewed surface.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HudTradeRoute {

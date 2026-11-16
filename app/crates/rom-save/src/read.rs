@@ -373,6 +373,7 @@ fn entities(conn: &Connection, location: &str) -> Result<Vec<EntitySnapshot>, Sa
             container_id: ouint(row, 24, "container")?.map(EntityId),
             city_id: ouint(row, 25, "city")?.map(EntityId),
             idle_ticks: u(int(row, 26)?),
+            aim: ouint(row, 27, "aim")?.map(EntityId),
             cooldowns: cooldowns.remove(&id).unwrap_or_default(),
             orders: queues.remove(&id).unwrap_or_default(),
         });

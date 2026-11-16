@@ -774,6 +774,166 @@ definition so earlier ids stay stable):
 ground battery contests a landing: a carrier descending onto ground within its
 range is in orbit until it touches down, so it is shot at all the way down.
 
+## Sight (task 68)
+
+Every base sight (`entity_type.los`, milli-tiles) comes from the content generator
+(`unit_sight`, `ship_sight`, `building_sight` in `db/content/generate.py`); no code
+reads a key. Rules of thumb, in tiles:
+
+- **Units by role.** Citizens 4; other civilians and support 5 (repair drones 6); melee
+  foot 5, foot with guns 6; ranged and anti-armour or anti-air teams their reach + 1
+  (at least 6); heavy cavalry and tanks 7, light cavalry and fast vehicles 8; siege 5
+  (short: siege needs spotters); warships 8 + age ÷ 3; aircraft 12 (drones 13); the
+  scout of each age sees furthest on the ground: 11 (ancient to gunpowder), 12
+  (enlightenment to modern), 14 (from the information age).
+- **Ships by altitude and size.** `2 × ORBIT_ALTITUDE + 3 × size class`, with the
+  orbit 8 tiles up (as drawn) and size classes 0 (orbital craft) to 4 (battleship,
+  carrier); the survey ship sees 8 more. So 16 to 28 tiles, twice to four times a
+  ground unit's.
+- **Satellite.** 96 tiles: an eighth of a median planet's circumference (768
+  tiles), the horizon seen from about 0.41 planet radii up and the furthest the cube
+  geometry measures (half a face of a median planet); on smaller planets the reach
+  limit (half a face) caps it.
+- **Buildings by type and size.** One tile beyond the farthest-seeing ground unit of
+  the building's first age, plus half a tile per tile of footprint: a 2 × 2 sees one
+  tile more than its base, an 8 × 8 four.
+- **Armed buildings** see at least `ARMED_SIGHT_PCT` (150 %) of their weapon's
+  maximum range, so they spot what they can hit (towers, cities, forts 15 tiles; the
+  ground battery 21). An upgrade of their range carries a sight row of 150 % of it.
+
+| Units | Sight (tiles) |
+| --- | --- |
+| citizen, worker_drone | 4 |
+| spearman, hoplite, pikeman, medic, catapult, trebuchet, bombard, cannon, field_gun, howitzer, rocket_artillery, railgun_battery, supply_wagon, supply_truck, scholar, merchant, caravan, freight_wagon, lorry, cargo_drone, priest | 5 |
+| musketeer, fusilier, rifleman, infantry, assault_infantry, combat_robot, exo_trooper, marine, shock_marine, slinger, archer, crossbowman, arquebusier, light_infantry, machine_gunner, heavy_machine_gunner, repair_drone | 6 |
+| gun_drone, pulse_gunner, beam_trooper, anti_tank_rifleman, bazooka_team, missile_team, railgun_team, cataphract, knight, cuirassier, lancer, light_tank, tank, main_battle_tank, robot_tank, fusion_tank, grav_tank, flak_gun, missile_launcher, laser_battery | 7 |
+| horseman, light_cavalry, hussar, dragoon, armoured_car, scout_car, hovercraft, grav_skimmer, trireme, war_galley | 8 |
+| carrack, frigate, ironclad | 9 |
+| destroyer, missile_cruiser, drone_cruiser | 10 |
+| scout, hover_frigate | 11 |
+| ranger, biplane, fighter, jet_fighter, interceptor, bomber, strategic_bomber | 12 |
+| drone_fighter, drone_bomber | 13 |
+| recon_drone | 14 |
+| orbital_fighter, orbital_bomber | 16 |
+| corvette | 19 |
+| space_frigate, transport_ship, space_freighter | 22 |
+| space_cruiser | 25 |
+| survey_ship | 27 |
+| battleship, carrier | 28 |
+| satellite | 96 |
+
+| Building | Sight | Footprint | Weapon range | First age |
+| --- | --- | --- | --- | --- |
+| bld.barracks | 14 | 4×4 | 0 | ancient |
+| bld.dock | 14 | 4×4 | 0 | ancient |
+| bld.farm | 14 | 4×4 | 0 | ancient |
+| bld.granary | 14 | 4×4 | 0 | classical |
+| bld.library | 14 | 4×4 | 0 | ancient |
+| bld.lumber_mill | 14 | 4×4 | 0 | classical |
+| bld.market | 14 | 4×4 | 0 | ancient |
+| bld.mine | 14 | 4×4 | 0 | classical |
+| bld.oil_well | 14 | 2×2 | 0 | industrial |
+| bld.siege_workshop | 14 | 4×4 | 0 | classical |
+| bld.smelter | 14 | 4×4 | 0 | medieval |
+| bld.stable | 14 | 4×4 | 0 | classical |
+| bld.temple | 14 | 4×4 | 0 | classical |
+| bld.university | 14 | 4×4 | 0 | classical |
+| bld.woodcutter_camp | 14 | 4×4 | 0 | ancient |
+| bld.bastion | 15 | 2×2 | 10 | enlightenment |
+| bld.bunker | 15 | 2×2 | 10 | modern |
+| bld.factory | 15 | 4×4 | 0 | industrial |
+| bld.fort | 15 | 6×6 | 10 | medieval |
+| bld.refinery | 15 | 4×4 | 0 | industrial |
+| bld.tower | 15 | 2×2 | 10 | ancient |
+| bld.vehicle_plant | 15 | 4×4 | 0 | industrial |
+| bld.city | 15.5 | 7×7 | 10 | ancient |
+| bld.airfield | 16 | 6×6 | 0 | industrial |
+| bld.auto_oil_well | 16 | 2×2 | 0 | automation |
+| bld.defence_turret | 16 | 2×2 | 10 | automation |
+| bld.fortress | 16 | 6×6 | 10 | modern |
+| bld.star_fort | 16 | 6×6 | 10 | enlightenment |
+| bld.auto_farm | 17 | 4×4 | 0 | automation |
+| bld.auto_mine | 17 | 4×4 | 0 | automation |
+| bld.auto_university | 17 | 4×4 | 0 | automation |
+| bld.auto_woodcutter_camp | 17 | 4×4 | 0 | automation |
+| bld.fusion_plant | 17 | 4×4 | 0 | fusion |
+| bld.citadel | 18 | 6×6 | 10 | fusion |
+| bld.spaceport | 19 | 8×8 | 0 | starfaring |
+| bld.ground_battery | 21 | 3×3 | 14 | starfaring |
+
+**Sight technologies** (`SIGHT_TECHS`, ordinary `modifier` rows on `los`, all on
+existing technologies; none was added):
+
+| Technology | Age | Bonus |
+| --- | --- | --- |
+| Drill (`tech.military.2`) | classical | infantry +1 tile |
+| Mathematics (`tech.science.2`) | classical | towers and cities: range +1 tile, sight +1.5 tiles |
+| Astronomy (`tech.science.3`) | medieval | ships +2 tiles |
+| Optics (`tech.science.4`) | gunpowder | everything +15 % |
+| Electronics (`tech.science.7`) | modern | buildings +20 %, aircraft +20 % |
+| Network Warfare (`tech.military.8`) | information | military units +15 % |
+| Orbital Doctrine (`tech.military.10`) | fusion | starships +25 % |
+| Fortification, Bombardment, Strategic Reserves (fort) | medieval to modern | forts: range +1 tile (existing), sight +1.5 tiles (new) |
+
+The stat engine applies `los` modifiers when a technology completes
+(`refresh_entity_stats`), and the fog of war follows (test
+`sight_technologies_widen_the_fog_of_war`). A new tag `tower` marks the tower line
+(as `fort` marks forts) so range and sight rows can name it.
+
+**Defences fire while busy.** An armed entity that cannot move (a defence, a city)
+fires on its own whatever its order queue holds: it keeps its aim (`entity.aim`, new
+state, below) while the target is alive, visible and in range, takes the nearest
+visible enemy in range when it has none (every ten ticks, or at once when its target
+is lost), and fires when reloaded. It stays stand-ground; an explicit `attack` order
+aims it instead. The early weapons of the city, tower and fort shoot arrows: they have
+`et_weapon.projectile_speed` 25 tiles per second (the column existed), so hits land
+after their flight and the arrow is drawn in flight; the gun-age variants hit at once
+and draw a tracer. (The city's weapon is `pierce` in every age in the data, so a city
+shoots arrows in every age.)
+
+## Ships in orbit (task 68)
+
+- **Geosynchronous.** A ship or craft in a planet's orbit holds over one ground point
+  (`entity_orbit` keeps it); the drift of task 43 (`space.orbit_speed`) is gone.
+  `space.orbit_speed` is now only the speed of an orbiting entity without a movement
+  row.
+- **Moving within orbit.** `move`, `attack_move` and `patrol` to a point of the planet
+  a ship orbits move its ground point at the ship's own speed along the great circle
+  (steering at a point six tiles ahead, from the integer cube-sphere mapping; straight
+  within half a face). It never descends. A patrol circles the planet on the great
+  circle through its start (`order.home`) and its point, fighting like an attack-move,
+  until given another order. An ordered attack carries the ground point toward its
+  target until in range.
+- **Landing.** `land` to a point first moves the ship within its orbit above the
+  point, then comes straight down. The Land button lands on the point below.
+  `World::landing_problem` says why not (water, rough ground, a building, an enemy
+  city).
+- **Boarding only on the ground.** `enter` a ship in orbit and `unload` in orbit are
+  refused (`SimError::ShipNotLanded`); orbital craft keep boarding and launching from
+  carriers in orbit.
+- **Space freighter** (`unit.space_freighter`, spaceport, starfaring): a route trader
+  that flies (`et_trader.runs_routes`, wealth, 20 per arrival per `trade.route_unit`).
+  Its route joins an own city of the planet it stands on or orbits and an own or
+  allied city of another planet of the same star system; the length is the distance
+  between the two planets in the system plane. It runs the route as legs queued in
+  front of the `trade` order (lift off, fly into orbit above the next city, land beside
+  it, deliver within 14 tiles of it).
+- **Satellite** (`unit.satellite`, spaceport, starfaring): launched into orbit above
+  its spaceport, no weapon, 150 HP, sight 96 tiles. The new tag `orbit_bound` keeps it
+  there: only `stop`, `stance`, `disband`, `launch`, `attack` and moves within the
+  orbit are accepted (`SimError::BoundToOrbit`); it cannot land (only carriers and
+  route traders that fly can).
+
+Schema and save format (deliberate; both lint views stay empty, the seed loads):
+
+- **`entity.aim_id`** (save PART B, nullable): the enemy a defence keeps firing at.
+  Save format 4; format 3 saves are refused.
+- **`entity_orbit.facing`** may now be any heading 0–359 (it was a multiple of 90:
+  a ship moving within its orbit faces its way along the great circle).
+- Tags `tower` and `orbit_bound`; two units and their `et_view_scale` rows (freighter
+  300 / 35, satellite 220 / 20); sight modifier rows; arrow speed on three weapons.
+  No PART A column was added.
+
 ## Placement and resource discovery (task 41)
 
 Every building with an `in_city_radius` row also has an `in_own_territory`

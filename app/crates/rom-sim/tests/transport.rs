@@ -197,18 +197,30 @@ fn passengers(w: &mut World, citizens: u32, marines: u32) -> Vec<EntityId> {
     out
 }
 
+/// Units board only a landed ship (task 68): a ship in orbit comes down beside them first and
+/// lifts off again once they are aboard.
 fn board(w: &mut World, units: &[EntityId], ship: EntityId) {
+    let in_orbit = w.orbit(ship).is_some();
+    if in_orbit {
+        let near = w.entity(units[0]).unwrap().pos;
+        land(w, ship, near);
+    }
     for unit in units {
         order(w, *unit, "enter", Some(ship), None);
     }
     let count = units.len();
     run_until(w, 2000, |w| w.passengers(ship).len() == count);
+    if in_orbit {
+        order(w, ship, "lift", None, None);
+        run_until(w, 200, |w| w.orbit(ship).is_some());
+    }
 }
 
+/// Lands on open ground near `near`: the ship first moves within its orbit above the site.
 fn land(w: &mut World, ship: EntityId, near: Pos) -> Pos {
     let site = w.landing_site(ship, near).expect("open ground");
     order(w, ship, "land", None, Some(site));
-    run_until(w, 200, |w| w.is_landed(ship));
+    run_until(w, 4000, |w| w.is_landed(ship));
     site
 }
 
@@ -264,6 +276,11 @@ fn units_board_at_the_spaceport_land_on_another_planet_and_found_a_city() {
         let travelled = w.hash();
         // Landing: a descent of `space.land_ticks`, drawn by the altitude.
         let site = w.landing_site(ship, at(NEIGHBOUR, 40_500, 40_500)).unwrap();
+        // Within its orbit above the site, then straight down.
+        order(&mut w, ship, "move", None, Some(site));
+        run_until(&mut w, 2000, |w| {
+            w.orbit(ship).is_some_and(|o| o.pos == site)
+        });
         order(&mut w, ship, "land", None, Some(site));
         w.step();
         w.step();
@@ -440,7 +457,7 @@ fn passengers_cross_a_route_to_another_system() {
 }
 
 #[test]
-fn a_landed_ship_takes_units_aboard_lifts_off_and_unloads_at_a_spaceport() {
+fn a_landed_ship_takes_units_aboard_lifts_off_and_sets_them_down_only_on_the_ground() {
     let rules = rules();
     let play = || {
         let mut w = world(&rules);
@@ -497,16 +514,23 @@ fn a_landed_ship_takes_units_aboard_lifts_off_and_unloads_at_a_spaceport() {
             .find(|e| e.type_id == id(&w, "bld.spaceport"))
             .unwrap()
             .id;
-        // In orbit, only an own spaceport below takes passengers off.
+        // In orbit nobody gets off, not even at an own spaceport below (task 68).
         assert_eq!(
             w.submit(Command {
                 target_pos: Some(at(HOME, 30_000, 30_000)),
                 ..command(&w, ship, "unload")
             }),
-            Err(SimError::CannotUnload)
+            Err(SimError::ShipNotLanded)
         );
-        order(&mut w, ship, "unload", Some(port), None);
-        w.step();
+        assert_eq!(
+            w.submit(Command {
+                target_entity: Some(port),
+                ..command(&w, ship, "unload")
+            }),
+            Err(SimError::ShipNotLanded)
+        );
+        // Landing sets them down.
+        land(&mut w, ship, at(HOME, 30_500, 40_500));
         let e = w.entity(walkers[0]).unwrap();
         assert_eq!((e.container_id, e.pos.body), (None, HOME));
         w.hash()
@@ -526,6 +550,15 @@ fn capacity_and_who_may_board_come_from_the_rules() {
     assert_eq!(w.carry_capacity(corvette), 1);
     assert_eq!(w.carry_capacity(transport), 20);
     let units = passengers(&mut w, 2, 0);
+    // Aboard a ship in orbit: refused until it lands (task 68).
+    assert_eq!(
+        w.submit(Command {
+            target_entity: Some(corvette),
+            ..command(&w, units[0], "enter")
+        }),
+        Err(SimError::ShipNotLanded)
+    );
+    land(&mut w, corvette, at(HOME, 30_500, 42_500));
     order(&mut w, units[0], "enter", Some(corvette), None);
     run_until(&mut w, 2000, |w| w.passengers(corvette).len() == 1);
     assert_eq!(

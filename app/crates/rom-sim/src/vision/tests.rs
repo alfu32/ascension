@@ -93,7 +93,10 @@ fn check(w: &World) {
 
 #[test]
 fn unit_reveals_circle_and_explored_persists_after_it_leaves() {
-    let mut w = world("", 64);
+    let mut w = world(
+        "UPDATE entity_type SET los=2000 WHERE id=(SELECT id FROM def WHERE key='unit.citizen');",
+        64,
+    );
     let unit = spawn(&mut w, "unit.citizen", P1, at(10_500, 10_500));
     assert_eq!(w.entity(unit).unwrap().los, 2000);
     for (x, y, seen) in [
@@ -174,7 +177,7 @@ fn fog_scenario() -> u64 {
         w.step();
         check(&w);
     }
-    assert!(w.entities().any(|e| e.owner == P1 && e.los == 3000));
+    assert!(w.entities().any(|e| e.owner == P1 && e.los == 6000));
     w.hash()
 }
 

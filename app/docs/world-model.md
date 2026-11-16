@@ -111,8 +111,8 @@ ranks and range, never age or tier names.
 Training a space-only mover on a habitable planet queues a `launch` order
 against its producing spaceport. After `space.launch_ticks`, it enters that
 planet's orbit. An orbit has a body, current integer surface subpoint and
-facing. Its footprint advances across cube-face edges at
-`space.orbit_speed` milli-tiles per second. The system-plane position stays
+facing. Since task 68 the orbit is geosynchronous: the ship holds over its
+subpoint and moves only when ordered (below). The system-plane position stays
 at the body's marker for system interactions; the orbit record determines
 its actual location, ground visibility and combat footprint. Moving in
 system space or travelling leaves orbit; an orbit order to another habitable
@@ -127,9 +127,33 @@ the subpoint to the target footprint. The seeded corvette and later combat
 ships have a separate ground bombardment weapon. The survey ship does not.
 Select an orbital ship and right-click an enemy ground unit or building to
 attack; the attack hotkey followed by clicking that entity also works. The
-ship keeps orbiting and fires as targets pass within its footprint. A short
+ship moves within its orbit toward the target until it is in range, then fires. A short
 beam uses the actual shot's target position. Surface weapons reach an
 orbital ship only when they have an `orbit` target layer (task 58, below).
+
+### Ships in orbit (task 68)
+
+- **Geosynchronous.** A ship or craft in a planet's orbit stays above the same
+  ground point; turning the planet in the view carries it along.
+- **Right-click in orbit moves within orbit**: the ship goes to the orbit point above
+  the clicked ground point along the great circle, at its own speed, and never
+  descends. Attack-move works the same way.
+- **Patrol** (order panel, then a click): in orbit the ship circles the planet on the
+  great circle through where it is and the clicked point, fighting like an
+  attack-move, until given another order; the path is drawn while it is selected.
+- **Land** (order panel, for carriers, freighters and craft in orbit) comes straight
+  down onto the point below, or says why it cannot (water, rough ground, a building,
+  an enemy city). Lift off keeps its button.
+- **Boarding only on the ground**: troops board and leave a ship only once it has
+  landed; craft keep boarding and launching from a carrier in orbit.
+- **Space freighter** (spaceport, starfaring): right-click a city on another planet of
+  the system to run a route there; it lands beside each city in turn, and each
+  arrival pays wealth by the planets' distance in the system plane.
+- **Satellite** (spaceport, starfaring): launched into orbit above its spaceport,
+  unarmed, sees 96 tiles (an eighth of a median planet's circumference); it moves only
+  within its orbit and cannot land.
+- **Sight from orbit** grows with altitude and hull size (16 to 28 tiles, the survey
+  ship more); see `database.md`, "Sight".
 
 ### Orbital craft, carriers and ground batteries (task 58)
 
@@ -138,8 +162,9 @@ starfaring age. They take off beside the airfield like other aircraft;
 **Climb to orbit** (or `lift`) takes them up to their planet's orbit by
 themselves, drawn climbing. In orbit they sit beside the ships there: fighters
 engage ships and craft in orbit (and aircraft while in the air), bombers strike
-ships in orbit and, like a starship's bombardment, the ground below. Right-click
-open ground of their planet to bring them back down into the air above it. They
+ships in orbit and, like a starship's bombardment, the ground below. **Land**
+(since task 68; right-click moves them within the orbit) brings them back down
+into the air below them. They
 never leave that orbit on their own: the **carrier** (spaceport, starfaring)
 takes ten craft aboard — they board it in the orbit of their planet, climbing
 first if they are in the air — carries them between planets and systems, and
@@ -157,16 +182,15 @@ between craft and ships in orbit, are drawn as orange tracers.
 
 Starships carry ground units: the **transport ship** (starfaring age, unarmed)
 takes twenty population, every other starship one or two squads. Units board
-a ship that orbits their planet by walking into an own spaceport below it, or
-walk up to a ship that has landed. Selecting a carrier lists who is aboard
-(portraits, as workers inside a building) and its load ("Garrison 3 / 20");
-**Unload** sets them down beside a landed ship, or at the own spaceport below
-one in orbit.
+by walking up to a ship that has landed (since task 68 only then: a ship in
+orbit takes nobody aboard and sets nobody down). Selecting a carrier lists who
+is aboard (portraits, as workers inside a building) and its load ("Garrison 3 /
+20"); **Unload** sets them down beside a landed ship.
 
-To land, select a carrier in orbit and right-click open ground in that
-planet's view (the bombard gesture of task 43, on empty ground): any
-buildable ground tile without a building, outside every enemy city's economic
-radius. The ship descends for `space.land_ticks` (drawn coming down from its
+To land, select a carrier in orbit, move it within its orbit above open ground
+(right-click) and press **Land** (task 68; the right-click landing of task 54 is
+gone): any buildable ground tile without a building, outside every enemy city's
+economic radius. The ship descends for `space.land_ticks` (drawn coming down from its
 orbital height), lands, sets everyone down on free tiles around it and stays
 as a landing zone: units can walk up and board it, right-clicking ground with
 it selected sends its passengers there, and **Lift off** returns it to orbit.

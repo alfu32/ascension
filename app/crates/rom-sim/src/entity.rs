@@ -97,6 +97,9 @@ pub struct Entity {
     pub city_id: Option<EntityId>,
     /// Consecutive idle ticks since the last work search or accepted command.
     pub idle_ticks: u64,
+    /// The enemy an armed entity that cannot move (a defence, a city) keeps firing at, whatever
+    /// its order queue holds.
+    pub aim: Option<EntityId>,
     pub(crate) orders: VecDeque<Order>,
 }
 

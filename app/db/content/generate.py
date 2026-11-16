@@ -76,6 +76,66 @@ RESEARCH = [
     ('tower', 'attrition_dealt', 'militia_training:1:25|allegiance:2:25|patriotism:5:25|nationalism:7:25'),
     ('fort', '', 'fortification:2:0|bombardment:4:0|strategic_reserves:6:0'),
 ]
+# Sight (docs/database.md "Sight"). Tiles; the generator writes milli-tiles.
+ORBIT_ALTITUDE = 8      # tiles above the ground at which ships hold orbit (as drawn)
+ARMED_SIGHT_PCT = 150   # an armed building sees this share of its weapon's maximum range
+SATELLITE_SIGHT = 96
+ARROW_SPEED = 25000     # milli-tiles per second of a defence's arrows    # an eighth of a median planet's circumference (the measurable reach)
+# Hull size class of each spacecraft: its sight grows with it.
+SHIP_SIZE = {'survey_ship': 1, 'corvette': 1, 'space_frigate': 2, 'space_cruiser': 3, 'battleship': 4,
+             'transport_ship': 2, 'carrier': 4, 'space_freighter': 2, 'orbital_fighter': 0, 'orbital_bomber': 0}
+
+
+def ground_sight_cap(age):
+    """The farthest a ground unit sees in an age (the scout of that age)."""
+    return 11 if age < 4 else 12 if age < 7 else 14
+
+
+def ship_sight(key):
+    """Ships see from their orbital height: twice the altitude, three tiles per size class, a
+    survey ship eight more."""
+    return (2 * ORBIT_ALTITUDE + 3 * SHIP_SIZE[key] + (8 if key == 'survey_ship' else 0)) * 1000
+
+
+def unit_sight(line, key, age, reach):
+    """Base sight of a unit by its role (milli-tiles)."""
+    if line in ('starship', 'transport'):
+        return ship_sight(key)
+    tiles = {'civilian': 4, 'scholar': 5, 'merchant': 5, 'caravan': 5, 'priest': 5, 'medic': 5,
+             'repair': 6, 'supply': 5, 'light_mounted': 8, 'heavy_mounted': 7, 'siege': 5}.get(line)
+    if line == 'scout':
+        tiles = ground_sight_cap(age)
+    elif line == 'infantry':
+        tiles = 5 if reach == 0 else 6
+    elif line in ('ranged', 'anti_armour', 'anti_air'):
+        tiles = max(6, reach // 1000 + 1)
+    elif line == 'warship':
+        tiles = 8 + age // 3
+    elif line in ('fighter', 'bomber'):
+        tiles = 13 if 'drone' in key else 12
+    return tiles * 1000
+
+
+def building_sight(age, size, reach=0):
+    """Base sight of a building: one tile beyond any ground unit of its first age, half a tile per
+    tile of footprint, and for an armed building at least its weapon's reach times the ratio."""
+    return max((ground_sight_cap(age) + 1) * 1000 + size * 500, reach * ARMED_SIGHT_PCT // 100)
+
+
+# Existing technologies that extend sight, and the range (with sight) of towers and cities.
+SIGHT_TECHS = [
+    ('tech.military.2', 'los', 1000, 'add', 'infantry'),      # Drill: pickets and lookouts
+    ('tech.science.2', 'range', 1000, 'add', 'tower'),        # Mathematics: ballistics
+    ('tech.science.2', 'los', 1500, 'add', 'tower'),
+    ('tech.science.2', 'range', 1000, 'add', 'city'),
+    ('tech.science.2', 'los', 1500, 'add', 'city'),
+    ('tech.science.3', 'los', 2000, 'add', 'ship'),           # Astronomy: navigation
+    ('tech.science.4', 'los', 15, 'pct', None),               # Optics: spyglasses
+    ('tech.science.7', 'los', 20, 'pct', 'building'),         # Electronics: radar
+    ('tech.science.7', 'los', 20, 'pct', 'aircraft'),
+    ('tech.military.8', 'los', 15, 'pct', 'military'),        # Network Warfare: sensors
+    ('tech.military.10', 'los', 25, 'pct', 'starship'),       # Orbital Doctrine: orbital sensors
+]
 SITES = {'farm': ('food', 1, '', 0), 'woodcutter_camp': ('timber', 0, 'forest', 10),
          'mine': ('metal', 0, 'mountain', 10), 'oil_well': ('oil', 3, '', 0),
          'university': ('knowledge', 7, '', 0), 'fusion_plant': ('energy', 0, '', 0)}
@@ -161,6 +221,7 @@ def generate():
             clumps_min=1, clumps_max=2, size_min=4, size_max=6, start_min_dist=8, start_max_dist=14)
     row('tag', key='building', category='structure')
     row('tag', key='fort', category='structure')
+    row('tag', key='tower', category='structure')
     # All definitions precede components that reference other generated types.
     for key, name, *_ in BUILDINGS:
         definition('entity_type', 'bld.' + key, name)
@@ -179,7 +240,7 @@ def generate():
     for key, name, page, age, track, hp, timber, size, limit in BUILDINGS:
         full = 'bld.' + key
         row('entity_type', id=Ref(full), **{'class': 'building'}, ui_group=page, hp=hp * (10 + age) // 10,
-            armor=3, armor_class_id=Ref('structure', 'armor_class'), los=12000, footprint_w=size, footprint_h=size,
+            armor=3, armor_class_id=Ref('structure', 'armor_class'), los=building_sight(age, size, 10000 if key in ('city', 'tower', 'fort') else 0), footprint_w=size, footprint_h=size,
             build_ticks=150 + 25 * age, ramp_mode='per_type', limit_scope='per_city' if limit else 'none',
             limit_count=limit, first_age_id=Ref('age.' + AGES[age]))
         tag(full, 'building', 'mechanical')
@@ -200,13 +261,17 @@ def generate():
         row('placement_rule', entity_type_id=Ref(full), rule='on_terrain', ref_def_id=Ref('ter.oil' if key == 'oil_well' else 'ter.plain'))
         if key == 'dock':
             row('placement_rule', entity_type_id=Ref(full), rule='adjacent_terrain', ref_def_id=Ref('ter.coast'), distance=2000)
+        if key == 'tower':
+            tag(full, 'tower')
         if key in ('city', 'temple', 'fort', 'spaceport'):
             tag(full, key if key != 'spaceport' else 'production')
             row('et_territory', entity_type_id=Ref(full), is_city=int(key == 'city'),
                 border_radius={'city': 40000, 'temple': 2000, 'fort': 14000, 'spaceport': 12000}[key],
                 economic_radius=16000 if key == 'city' else 0, capturable=int(key == 'city'))
         if key in ('city', 'tower', 'fort'):
-            weapon(full, 8 + age * 2, 'pierce' if age < 3 else 'explosive', 10000, ['ground'])
+            # Arrows fly (drawn in flight); the gun-age variants below hit at once (tracers).
+            weapon(full, 8 + age * 2, 'pierce' if age < 3 else 'explosive', 10000, ['ground'],
+                   **({'projectile_speed': ARROW_SPEED} if age < 3 else {}))
         if key == 'temple':
             row('et_keeper', entity_type_id=Ref(full), capacity=5)
         if key == 'city':
@@ -235,10 +300,10 @@ def generate():
         for key, age in steps:
             new = 'bld.' + key
             row('entity_type', id=Ref(new), **{'class': 'building'}, ui_group='military', hp=1500 * (10 + age) // 10,
-                armor=5, armor_class_id=Ref('structure', 'armor_class'), los=14000,
+                armor=5, armor_class_id=Ref('structure', 'armor_class'), los=building_sight(age, 2 if base == 'tower' else 6, 10000),
                 footprint_w=2 if base == 'tower' else 6, footprint_h=2 if base == 'tower' else 6,
                 build_ticks=150 + age * 25, first_age_id=Ref('age.' + AGES[age]), upgrades_from_id=Ref(old))
-            tag(new, 'building', 'mechanical', *(['fort'] if base == 'fort' else []))
+            tag(new, 'building', 'mechanical', base)
             need(new, 'age.' + AGES[age])
             copy_components(old, new)
             weapon(new, 12 + age * 2, 'energy' if age >= 8 else 'explosive', 10000, ['ground', 'air'] if age >= 8 else ['ground'])
@@ -303,7 +368,7 @@ def generate():
             prices = {r: scale(n) for r, n in prices.items()}
             ticks = min(500, 150 + 25 * age)
             row('entity_type', id=Ref(full), **{'class': 'unit'}, ui_group=line, hp=hp if support else scale(hp), armor=2 if line == 'infantry' else age // 2,
-                armor_class_id=Ref(ac, 'armor_class'), los=2000 if line == 'civilian' else 5000 if line == 'infantry' else 9000 if line in ('scout', 'starship') else 6000,
+                armor_class_id=Ref(ac, 'armor_class'), los=unit_sight(line, key, age, reach),
                 pop_cost=2 if spacecraft else 1, build_ticks=ticks, ramp_mode='per_type', upgrades_from_id=Ref(old) if old else None,
                 first_age_id=Ref('age.' + AGES[age]))
             tag(full, 'mechanical' if mechanical else 'biological', 'civilian' if line in ('civilian', 'scholar', 'merchant', 'caravan', 'priest') else 'military')
@@ -372,6 +437,9 @@ def generate():
                 modifier(key, 'caravan_limit', 1, 'add')
             else:
                 modifier(key, 'research_time', -4)
+    # Sight upgrades (docs/database.md "Sight"): technology, stat, value, op, tag.
+    for key, stat, value, op, target in SIGHT_TECHS:
+        modifier(key, stat, value, op, target)
     for age in range(1, 14):
         key = 'tech.age.' + AGES[age]
         prices = {'food': 250 * age}
@@ -405,6 +473,8 @@ def generate():
             elif building == 'fort':
                 modifier(full, 'border_radius', 3000, 'add', 'fort')
                 modifier(full, 'range', 1000, 'add', 'fort')
+                # Sight grows with range, so the fort still spots what it can hit.
+                modifier(full, 'los', 1000 * ARMED_SIGHT_PCT // 100, 'add', 'fort')
             previous = full
     for site, (resource, slots, _, _) in SITES.items():
         if site == 'fusion_plant':
@@ -412,7 +482,7 @@ def generate():
         old, new = 'bld.' + site, 'bld.auto_' + site
         base = next(b for b in BUILDINGS if b[0] == site)
         row('entity_type', id=Ref(new), **{'class': 'building'}, ui_group='economic', hp=base[5] * 18 // 10,
-            armor=3, armor_class_id=Ref('structure', 'armor_class'), los=12000, footprint_w=base[7], footprint_h=base[7],
+            armor=3, armor_class_id=Ref('structure', 'armor_class'), los=building_sight(8, base[7]), footprint_w=base[7], footprint_h=base[7],
             build_ticks=350, limit_scope='per_city' if base[8] else 'none', limit_count=base[8],
             upgrades_from_id=Ref(old), first_age_id=Ref('age.automation'))
         tag(new, 'building', 'mechanical', 'gather')
@@ -426,6 +496,7 @@ def generate():
         tech('tech.' + key, key.replace('_', ' ').title(), age, 'library', ticks, {'knowledge': 1000}, 'project')
     row('tech_effect', tech_id=Ref('tech.unification'), effect='change_faction', target_def_id=Ref('race.human'))
     orbital_combat(definition, row, tag, need, produce, cost, weapon)
+    orbit_units(definition, row, tag, need, produce, cost)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -467,7 +538,7 @@ def orbital_combat(definition, row, tag, need, produce, cost, weapon):
     for key, name, hp, armor, speed, climb, ticks, prices in craft:
         full = 'unit.' + key
         row('entity_type', id=Ref(full), **{'class': 'unit'}, ui_group=key, hp=hp, armor=armor,
-            armor_class_id=Ref('vehicle', 'armor_class'), los=6000, pop_cost=1, build_ticks=ticks,
+            armor_class_id=Ref('vehicle', 'armor_class'), los=ship_sight(key), pop_cost=1, build_ticks=ticks,
             ramp_mode='per_type', first_age_id=Ref('age.starfaring'))
         tag(full, 'mechanical', 'military', 'aircraft', 'orbital_craft')
         row('et_movement', entity_type_id=Ref(full), movement_class_id=Ref('aircraft', 'movement_class'),
@@ -484,7 +555,7 @@ def orbital_combat(definition, row, tag, need, produce, cost, weapon):
         cost(full, prices, True)
     full = 'unit.carrier'
     row('entity_type', id=Ref(full), **{'class': 'unit'}, ui_group='carrier', hp=2000, armor=6,
-        armor_class_id=Ref('shield', 'armor_class'), los=9000, pop_cost=2, build_ticks=500,
+        armor_class_id=Ref('shield', 'armor_class'), los=ship_sight('carrier'), pop_cost=2, build_ticks=500,
         ramp_mode='per_type', first_age_id=Ref('age.starfaring'))
     tag(full, 'mechanical', 'military', 'starship')
     row('et_movement', entity_type_id=Ref(full), movement_class_id=Ref('starship', 'movement_class'), speed=2400)
@@ -497,7 +568,7 @@ def orbital_combat(definition, row, tag, need, produce, cost, weapon):
     cost(full, {'metal': 700, 'energy': 300}, True)
     full = 'bld.ground_battery'
     row('entity_type', id=Ref(full), **{'class': 'building'}, ui_group='military', hp=2400, armor=5,
-        armor_class_id=Ref('structure', 'armor_class'), los=16000, footprint_w=3, footprint_h=3,
+        armor_class_id=Ref('structure', 'armor_class'), los=building_sight(age, 3, 14000), footprint_w=3, footprint_h=3,
         build_ticks=150 + 25 * age, ramp_mode='per_type', first_age_id=Ref('age.starfaring'))
     tag(full, 'building', 'mechanical')
     need(full, 'age.starfaring')
@@ -508,6 +579,38 @@ def orbital_combat(definition, row, tag, need, produce, cost, weapon):
     row('placement_rule', entity_type_id=Ref(full), rule='on_terrain', ref_def_id=Ref('ter.plain'))
     # Fires on enemy ships and craft in the orbit above it, measured to their ground subpoint.
     weapon(full, 150, 'explosive', 14000, ['orbit'], 30)
+
+
+def orbit_units(definition, row, tag, need, produce, cost):
+    """Task 68: the space freighter that runs trade routes between cities of two planets, and
+    the satellite that watches a planet from the orbit it is launched into. Defined last so the
+    ids of earlier content stay stable."""
+    row('tag', key='orbit_bound', category='movement')
+    definition('entity_type', 'unit.space_freighter', 'Space Freighters')
+    definition('entity_type', 'unit.satellite', 'Satellites')
+    full = 'unit.space_freighter'
+    row('entity_type', id=Ref(full), **{'class': 'unit'}, ui_group='space_freighter', hp=500, armor=3,
+        armor_class_id=Ref('shield', 'armor_class'), los=ship_sight('space_freighter'), pop_cost=2,
+        build_ticks=450, ramp_mode='per_type', first_age_id=Ref('age.starfaring'))
+    tag(full, 'mechanical', 'civilian')
+    row('et_movement', entity_type_id=Ref(full), movement_class_id=Ref('starship', 'movement_class'), speed=2800)
+    # Like the caravan's route: income per arrival by route length, here measured in the system plane.
+    row('et_trader', entity_type_id=Ref(full), runs_routes=1, claims_nodes=0,
+        route_resource_id=Ref('res.wealth'), route_income=20)
+    need(full, 'age.starfaring')
+    produce('bld.spaceport', full, 'train', 'units')
+    cost(full, {'metal': 260, 'energy': 60}, True)
+    full = 'unit.satellite'
+    row('entity_type', id=Ref(full), **{'class': 'unit'}, ui_group='satellite', hp=150, armor=0,
+        armor_class_id=Ref('shield', 'armor_class'), los=SATELLITE_SIGHT * 1000, pop_cost=1,
+        build_ticks=300, ramp_mode='per_type', first_age_id=Ref('age.starfaring'))
+    tag(full, 'mechanical', 'orbit_bound')
+    row('et_movement', entity_type_id=Ref(full), movement_class_id=Ref('starship', 'movement_class'), speed=1500)
+    need(full, 'age.starfaring')
+    produce('bld.spaceport', full, 'train', 'units')
+    cost(full, {'metal': 150, 'energy': 100}, True)
+    for key, planet, system in (('unit.space_freighter', 300, 35), ('unit.satellite', 220, 25)):
+        row('et_view_scale', entity_type_id=Ref(key), planet_pct=planet, system_pct=system)
 
 
 def main():

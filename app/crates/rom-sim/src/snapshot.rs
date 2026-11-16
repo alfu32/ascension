@@ -189,6 +189,8 @@ pub struct EntitySnapshot {
     pub city_id: Option<EntityId>,
     /// Idle ticks.
     pub idle_ticks: u64,
+    /// The enemy a defence keeps firing at.
+    pub aim: Option<EntityId>,
     /// Orders from active to last.
     pub orders: Vec<OrderSnapshot>,
 }
@@ -697,6 +699,7 @@ fn entity_snapshot(e: &Entity) -> EntitySnapshot {
         container_id: e.container_id,
         city_id: e.city_id,
         idle_ticks: e.idle_ticks,
+        aim: e.aim,
         orders: e.orders.iter().map(order_snapshot).collect(),
     }
 }
@@ -727,6 +730,7 @@ fn entity_from(e: EntitySnapshot) -> Entity {
         container_id: e.container_id,
         city_id: e.city_id,
         idle_ticks: e.idle_ticks,
+        aim: e.aim,
         orders: e
             .orders
             .into_iter()

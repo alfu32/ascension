@@ -493,12 +493,12 @@ fn palette_lists_production_rows_for_selected_type() {
         .count();
     assert_eq!(palette.buttons.len(), train_rows);
     assert!(!palette.tabs[PaletteTab::Build.index()]);
-    // A unit with a weapon gets ORDER with stop, attack-move and the four stances.
+    // A unit with a weapon gets ORDER with stop, attack-move, patrol and the four stances.
     let armed = fx.spawn(fx.armed_other_than_builder(), 1, 20, 20);
     fx.click(armed, false);
     let palette = fx.hud_snapshot().palette.expect("palette");
     assert_eq!(palette.tab, PaletteTab::Order);
-    assert_eq!(palette.buttons.len(), 2 + STANCE_BEHAVIORS.len());
+    assert_eq!(palette.buttons.len(), 3 + STANCE_BEHAVIORS.len());
 }
 
 #[test]
@@ -2228,7 +2228,7 @@ fn colony_script_run() -> (crate::match_setup::Match, Controller, BodyId, u64) {
         system: Some(system),
         ..ViewCtx::default()
     });
-    for _ in 0..3800 {
+    for _ in 0..4100 {
         for action in script.due_actions(game.world.tick()) {
             match action {
                 ScriptAction::SelectResearchers => ctl.select_researchers(&game.world),
