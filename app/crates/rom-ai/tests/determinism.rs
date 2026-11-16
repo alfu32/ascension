@@ -95,7 +95,10 @@ fn at_war(seed: u64) -> (Arc<rom_rules::Rules>, World, Vec<Brain>) {
         .unwrap()
         .id;
     // Units that break buildings, so each side can take the other's city.
-    let city = world.entity(world.cities(rom_sim::PlayerId(1))[0]).unwrap().type_id;
+    let city = world
+        .entity(world.cities(rom_sim::PlayerId(1))[0])
+        .unwrap()
+        .type_id;
     let armour = &rules.entity_types[&city];
     let breaker = rules
         .entity_types
@@ -155,8 +158,14 @@ fn a_brain_restored_mid_war_issues_the_same_orders() {
         at += 200;
     }
     assert_eq!(world.hash(), twin_world.hash());
-    assert!(fighting(&brains), "no army is fighting at the restore point");
-    assert!(world.stats().kills.values().sum::<u64>() > 0, "nobody has fallen yet");
+    assert!(
+        fighting(&brains),
+        "no army is fighting at the restore point"
+    );
+    assert!(
+        world.stats().kills.values().sum::<u64>() > 0,
+        "nobody has fallen yet"
+    );
 
     let mut restored: Vec<Brain> = twin_brains
         .iter()
