@@ -357,9 +357,15 @@ fn an_attack_on_a_city_ends_the_opening_after_the_reaction_time() {
 
 #[test]
 fn an_income_bonus_is_an_ordinary_modifier() {
-    // The shipped rules hold no technology to carry the bonus.
-    assert_eq!(rom_ai::handicap_tech(&common::rules(), "toughest"), None);
-    assert_eq!(rom_ai::handicap_tech(&common::rules(), "moderate"), None);
+    // The shipped rules carry the bonus in the difficulty's handicap technology (task 64).
+    let shipped = common::rules();
+    let handicap = rom_ai::handicap_tech(&shipped, "toughest");
+    assert!(handicap.is_some());
+    assert_eq!(
+        handicap,
+        shipped.ai_difficulties["toughest"].handicap_tech_id
+    );
+    assert_eq!(rom_ai::handicap_tech(&shipped, "moderate"), None);
 
     // With one in the rules, the host grants it and income rises through the stat engine.
     let db = rom_rules::build_rules_db(
