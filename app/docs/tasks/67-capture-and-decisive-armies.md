@@ -4,7 +4,7 @@ Crates: `rom-sim` (capture rule), `rom-ai` (spending and attack waves),
 `rom-cli` (duel), schema and seed (the rule values and any new
 `ai_difficulty` columns, documented in `app/docs/database.md`), docs.
 No change to `rom-app`, `rom-render`, `rom-kit` (model cards run there).
-Starts after task 65 is merged. Implementer: Claude (Opus).
+Starts after task 68 is merged (0.0.63). Implementer: Claude (Opus).
 
 ## Why
 
@@ -50,6 +50,26 @@ and to make computer players spend their surplus.
    opponent standing in for a person (for example `--ai none` for player
    one in `rom ai-match`/`duel` with a fixed defence) shows when each level
    first attacks and with how many units; report the table.
+
+6. **Adopt task 68 in the computer players.** Task 68 (sight, defences that
+   fire, ships in orbit; `app/docs/database.md` "Sight (task 68)",
+   `app/docs/world-model.md`) changed what `rom-ai` must handle:
+   - ships in orbit now hold still over one point; computer players must
+     move them within orbit (move, attack-move, patrol to a point on the
+     planet), press Land (`World::landing_problem` gives refusals) before
+     boarding, and patrol in orbit. Boarding is refused in orbit
+     (`SimError::ShipNotLanded`);
+   - train and use the new `unit.space_freighter` (a route between cities on
+     two planets of one system) and `unit.satellite` (orbit-bound, very wide
+     sight) where they pay, decided from component rows and tags, not keys;
+   - cities, towers and forts now fire while training or researching, and
+     sight is wider by type: re-measure the defence a wave must beat;
+   - task 68 made two stop-gap changes in `rom-ai/src/fleet.rs` (the colony
+     transport lands near a home city before boarding and lifts off once
+     loaded; a builder busy constructing may be taken to board). Keep or
+     replace them deliberately.
+   Task 68's duel after its changes (seeds 1..20): moderate 8, easiest 3,
+   draws 9.
 
 Every simulation change gets run-twice-equal-hash tests and goes into the
 snapshot and `rom-save` (bump the save format if needed). Explain any change
