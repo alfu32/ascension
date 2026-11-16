@@ -34,7 +34,8 @@ void main() {
         }
     }
     vec3 bumped = patternBump(normal, m.a, fragWorld);
-    finalColor = vec4(albedo * fragTint * terrainLight(fragWorld, bumped), 1.0);
+    if (fragProgram == 18) finalColor = vec4(albedo * fragTint, 1.0);
+    else finalColor = vec4(albedo * fragTint * terrainLight(fragWorld, bumped), 1.0);
     // Decided last, so the derivatives above see the whole pixel quad.
     if (hash13(vec3(floor(gl_FragCoord.xy), 3.0)) > detail) discard;
 }

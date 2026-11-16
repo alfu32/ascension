@@ -317,7 +317,7 @@ ignores `coverage_pct` and retains its original rules.
 
 Every ground and fluid terrain has a `material_id`. `material.program` picks a
 shader of the material library (`grass`, `sand`, `stone`, `snow`,
-`forest_floor`, `water`, and for objects `foliage`, `bark`, `crop`); the
+`forest_floor`, `oil`, `water`, and for objects `foliage`, `bark`, `crop`); the
 renderer draws it up close and blends to the map colour across a band of camera
 distances. `material.params` is a flat JSON object:
 
@@ -331,6 +331,15 @@ distances. `material.params` is a flat JSON object:
 | `edge_objects` | mesh on tiles at the terrain's edge (else `objects`) |
 | `object_material` | material of those meshes (else the terrain's own) |
 | `snow_material` | material of object parts above the mesh's `snow_line` |
+
+The `oil` ground program makes black pools in dark soil with a wet sky reflection
+and a sun highlight. It uses the ordinary `colour`, `colour_alt` and `scale`
+parameters and the same near-to-map-colour blend as other terrain. Its declared
+`base_colour` also colours the minimap. Terrain unknown to the local player
+(`World::knows_terrain`, governed by resource `first_age_id`) uses plain land
+for material, map colour, minimap and baked-object visibility. Age changes
+refresh only chunk colour/material buffers touching changed tiles, including
+corners across cube seams; no terrain geometry or objects are generated in play.
 
 `mesh.generator` names a generator (`forest_centre`, `forest_edge`,
 `rock_massif`, `crop_rows`); its params (`variants`, `count`, `height`,
@@ -358,6 +367,13 @@ the owner's colour; `attach` names an earlier part, or a socket (`head`,
 `right_hand`, `left_hand`, `back` of a `figure`; `rider`, `back`, `head`,
 `chest` of a `quadruped`; written `socket` or `part.socket`), whose frame the
 part moves with. `params` is flat JSON.
+
+`material.program = 'emissive'` draws a part's `colour` and `colour_alt` without
+sunlight, night dimming, shadow-map occlusion or baked contact shade. Use it for
+furnace mouths, muzzle flashes, light strips, reactors and engines; ordinary
+`tint` and the attack-only `flash` animation still apply. It emits no light onto
+neighbouring surfaces and adds no bloom. The model materials `mat.glow` and
+`mat.flash` in `db/models/materials.sql` use it; geometry and joints are unchanged.
 
 Every part takes `x`, `y`, `z` (its base centre), `yaw` (degrees,
 counter-clockwise seen from above), `roll` and `pitch` (degrees, default 0: the
@@ -416,7 +432,7 @@ keep the models at rest.
 The loader refuses include cycles; the application reports an unknown shape
 or knob once on stderr and skips it. Object programs for parts are
 `plaster`, `brick` (also ashlar), `timber`, `roof_tile`, `thatch`, `metal`,
-`cloth`, plus `stone` and the plain colour; their `colour`, `colour_alt` and
+`cloth`, `emissive`, plus `stone` and the plain colour; their `colour`, `colour_alt` and
 `scale` work as for terrain materials.
 
 **Where the rows live (task 55).** Each composed model is its own file
@@ -651,12 +667,11 @@ placement preview return the discovery age; oil wells remain locked through
 their ordinary production prerequisites too.
 
 The app caches the current player's known tile identities by age and viewed
-body, marking undiscovered deposits as plain-land replacements. That cache
-is ready for a renderer tile-update interface; baked terrain and minimaps
-currently still show oil at every age. The existing land shader also lacks
-a glossy pool program: the `water` program is handled by the sea shader and
-falls back to a flat colour on land. No material-only substitution can
-produce the requested glossy black pools yet.
+body and publishes the unknown terrain kinds to the renderer (task 44).
+Undiscovered deposits use plain land on the surface and minimap; another
+player's age never reveals them. On discovery, only chunks touching changed
+tiles receive new colour/material buffers, and the minimap refreshes. The
+`oil` land program supplies glossy black pools; `water` remains a sea material.
 
 ## Saving a match (task 62)
 

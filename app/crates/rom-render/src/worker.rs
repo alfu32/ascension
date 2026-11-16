@@ -144,6 +144,7 @@ struct Shared {
     focus: Mutex<Option<[f32; 2]>>,
     focus_surface: Mutex<Option<SurfacePos>>,
     vision: Mutex<Option<Arc<VisionMap>>>,
+    hidden_terrain: Mutex<Option<Arc<Vec<crate::TileKind>>>>,
     start_markers: AtomicBool,
     graticule: AtomicBool,
     snapshot_wanted: AtomicBool,
@@ -363,6 +364,11 @@ impl RenderBridge {
         *lock(&self.shared.vision) = Some(vision);
     }
 
+    /// Conceals terrain kinds unknown to the local player as plain land, on every surface.
+    pub fn publish_hidden_terrain(&self, kinds: Arc<Vec<crate::TileKind>>) {
+        *lock(&self.shared.hidden_terrain) = Some(kinds);
+    }
+
     /// Takes the newest finished frame, if one arrived since the last call.
     ///
     /// The frame is rendered at the internal scale; the UI stretches it to the canvas.
@@ -466,6 +472,7 @@ impl Shared {
             focus: Mutex::new(None),
             focus_surface: Mutex::new(None),
             vision: Mutex::new(None),
+            hidden_terrain: Mutex::new(None),
             start_markers: AtomicBool::new(false),
             graticule: AtomicBool::new(true),
             snapshot_wanted: AtomicBool::new(false),
@@ -536,6 +543,8 @@ fn render_loop(shared: &Shared) {
     let mut orbit_controller = OrbitController::default();
     let mut globe: Option<Arc<Globe>> = None;
     let mut planet_scene: Option<Arc<PlanetScene>> = None;
+    let mut terrain_scene: Option<Arc<TerrainScene>> = None;
+    let mut hidden_terrain = Arc::new(Vec::new());
     let mut home_dir = [0.0, 0.0, 1.0];
     let mut sun_clock: Option<SunClock> = None;
     let mut pending_universe: Option<(Arc<UniverseScene>, UniverseSettings)> = None;
@@ -567,8 +576,11 @@ fn render_loop(shared: &Shared) {
             .min(0.1);
         last_frame = frame_start;
 
+        let mut knowledge_dirty = false;
         let published_planet = lock(&shared.planet).take();
         if let Some((planet, settings)) = published_planet {
+            knowledge_dirty = true;
+            terrain_scene = None;
             // A planet with a body, published while the zoom camera exists, is another globe for
             // the same camera.
             let swap = settings.body.is_some() && zoom.is_some();
@@ -678,6 +690,9 @@ fn render_loop(shared: &Shared) {
         }
         let published_terrain = lock(&shared.terrain).take();
         if let Some(terrain) = published_terrain {
+            knowledge_dirty = true;
+            planet_scene = None;
+            terrain_scene = Some(Arc::clone(&terrain));
             orbit = None;
             globe = None;
             zoom = None;
@@ -705,6 +720,41 @@ fn render_loop(shared: &Shared) {
                 terrain.width, terrain.height
             );
             shared.terrain_ready.store(true, Ordering::Release);
+        }
+        if let Some(hidden) = lock(&shared.hidden_terrain).take() {
+            knowledge_dirty |= *hidden != *hidden_terrain;
+            hidden_terrain = hidden;
+        }
+        if knowledge_dirty {
+            if let Some(updated) = scene.set_hidden_terrain(&hidden_terrain) {
+                globe = Some(updated);
+            }
+            // The same concealed kinds feed the terrain and minimap; fog and night are
+            // applied again by the usual update path below.
+            if let (Some(raw), Some(globe)) = (&planet_scene, &globe) {
+                let mut visible = (**raw).clone();
+                crate::vision::conceal_kinds(&mut visible.kinds, &hidden_terrain);
+                minimap = match MinimapGpu::load_planet(&mut rl, &thread, &visible, globe) {
+                    Ok(map) => Some(map),
+                    Err(error) => {
+                        eprintln!("rom-render: minimap: {error}");
+                        None
+                    }
+                };
+            } else if let Some(raw) = &terrain_scene {
+                let mut visible = (**raw).clone();
+                crate::vision::conceal_kinds(&mut visible.kinds, &hidden_terrain);
+                minimap = match MinimapGpu::load(&mut rl, &thread, &visible) {
+                    Ok(map) => Some(map),
+                    Err(error) => {
+                        eprintln!("rom-render: minimap: {error}");
+                        None
+                    }
+                };
+            }
+            if let Some(map) = &mut minimap {
+                map.apply_shades(&shades);
+            }
         }
         if let Some(published) = lock(&shared.review).take() {
             scene.set_review(published.light, published.near_only, published.anim_time);

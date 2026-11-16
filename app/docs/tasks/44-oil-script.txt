@@ -1,0 +1,5 @@
+# Sphere 192, seed 1, 2 players, --look-at ter.oil,16 --sun orbit, 1600x1000.
+# Turn east over the same deposit and stop the sun where the pools reflect it.
+0 speed 10000
+5 cam drag 800,400 486,400 rotate
+5000 speed 1

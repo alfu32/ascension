@@ -1,0 +1,6 @@
+# Sphere 192, seed 1, 2 players, --age 2 --sun midnight --no-hud --size 1280x800.
+# Pick the smelter in the initial view, focus it, then move the camera closer.
+0 place 1 bld.smelter @6,0
+5 cam click 770,398
+12 cam focus
+20 cam wheel 10 640,400
