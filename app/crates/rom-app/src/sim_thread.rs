@@ -17,6 +17,7 @@ use rom_render::{
 use rom_rules::{ActiveSources, EntityClass};
 use rom_sim::{BodyId, Command, Entity, OrderStatus, PlayerId, Pos, Sighting, Topology, World};
 
+use crate::computer::ComputerPlayers;
 use crate::demo::DemoDriver;
 use crate::match_setup::planet_surface;
 use crate::script::{Script, ScriptAction};
@@ -208,6 +209,11 @@ pub struct SimStats {
     entities: AtomicU32,
     rejected: AtomicU64,
     surfaces: AtomicU32,
+    computers: AtomicU32,
+    think_us_avg: AtomicU32,
+    think_us_max: AtomicU32,
+    computer_orders: AtomicU64,
+    computer_rejected: AtomicU64,
 }
 
 /// A reading of [`SimStats`].
@@ -223,6 +229,16 @@ pub struct SimReport {
     pub rejected: u64,
     /// Planet surfaces the world holds.
     pub surfaces: u32,
+    /// Computer players.
+    pub computers: u32,
+    /// Mean processor time of one computer player's thought over the last second, in µs.
+    pub think_us_avg: u32,
+    /// The longest thought over the last second, in µs.
+    pub think_us_max: u32,
+    /// Orders the computer players submitted.
+    pub computer_orders: u64,
+    /// Of those, refused by the world.
+    pub computer_rejected: u64,
 }
 
 /// What the UI keeps: a cloneable way to read stats, send commands and stop the thread.
@@ -270,6 +286,11 @@ impl SimLink {
             entities: self.stats.entities.load(Ordering::Relaxed),
             rejected: self.stats.rejected.load(Ordering::Relaxed),
             surfaces: self.stats.surfaces.load(Ordering::Relaxed),
+            computers: self.stats.computers.load(Ordering::Relaxed),
+            think_us_avg: self.stats.think_us_avg.load(Ordering::Relaxed),
+            think_us_max: self.stats.think_us_max.load(Ordering::Relaxed),
+            computer_orders: self.stats.computer_orders.load(Ordering::Relaxed),
+            computer_rejected: self.stats.computer_rejected.load(Ordering::Relaxed),
         }
     }
 
@@ -287,11 +308,12 @@ pub struct SimThread {
 }
 
 impl SimThread {
-    /// Moves `world` (and the optional demo driver) onto a new thread that publishes
-    /// snapshots to `bridge`.
+    /// Moves `world` (and the optional demo driver and computer players) onto a new thread
+    /// that publishes snapshots to `bridge`.
     pub fn spawn(
         world: World,
         driver: Option<DemoDriver>,
+        computers: Option<ComputerPlayers>,
         script: Option<Script>,
         speed_pct: u32,
         bridge: RenderBridge,
@@ -307,7 +329,18 @@ impl SimThread {
         let thread_link = link.clone();
         let thread = thread::Builder::new()
             .name("rom-sim".into())
-            .spawn(move || run(world, driver, script, host, &thread_link, &inbox, &bridge))?;
+            .spawn(move || {
+                run(
+                    world,
+                    driver,
+                    computers,
+                    script,
+                    host,
+                    &thread_link,
+                    &inbox,
+                    &bridge,
+                )
+            })?;
         Ok(Self {
             link,
             thread: Some(thread),
@@ -336,9 +369,11 @@ impl Drop for SimThread {
     }
 }
 
+#[allow(clippy::too_many_arguments)] // the thread's whole state, moved in once
 fn run(
     mut world: World,
     mut driver: Option<DemoDriver>,
+    mut computers: Option<ComputerPlayers>,
     mut script: Option<Script>,
     mut host: Option<UniverseHost>,
     link: &SimLink,
@@ -350,6 +385,11 @@ fn run(
     let mut last = Instant::now();
     let mut window_start = last;
     let mut window_ticks = 0_u32;
+    let mut thoughts = (0_u32, Duration::ZERO, Duration::ZERO);
+    link.stats.computers.store(
+        computers.as_ref().map_or(0, |c| c.len() as u32),
+        Ordering::Relaxed,
+    );
     let mut controller = Controller::new();
     let mut memory = Memory::default();
     let models = crate::looks::ModelBook::new(world.rules());
@@ -448,6 +488,18 @@ fn run(
                 let rejected = driver.drive(&mut world).len() as u64;
                 link.stats.rejected.fetch_add(rejected, Ordering::Relaxed);
             }
+            if let Some(computers) = computers.as_mut() {
+                let report = computers.step(&mut world);
+                thoughts.0 += report.thoughts;
+                thoughts.1 += report.think_time;
+                thoughts.2 = thoughts.2.max(report.longest);
+                link.stats
+                    .computer_orders
+                    .fetch_add(u64::from(report.orders), Ordering::Relaxed);
+                link.stats
+                    .computer_rejected
+                    .fetch_add(u64::from(report.rejected), Ordering::Relaxed);
+            }
             world.step();
             if world.tick().is_multiple_of(VISIT_INTERVAL)
                 && let Some(host) = host.as_mut()
@@ -487,6 +539,15 @@ fn run(
                 .store((rate * 10.0).round() as u32, Ordering::Relaxed);
             window_start = now;
             window_ticks = 0;
+            let (count, total, longest) = std::mem::take(&mut thoughts);
+            let micros = |d: Duration| d.as_micros().min(u128::from(u32::MAX)) as u32;
+            link.stats.think_us_avg.store(
+                micros(total.checked_div(count).unwrap_or_default()),
+                Ordering::Relaxed,
+            );
+            link.stats
+                .think_us_max
+                .store(micros(longest), Ordering::Relaxed);
         }
         if ticks == 0 {
             thread::sleep(step.until_next().min(MAX_SLEEP));
@@ -1430,8 +1491,16 @@ mod tests {
         let before = game.world.surfaces().len();
         let bridge = RenderBridge::detached();
         let host = UniverseHost::new(content.universe.clone(), home, home_system);
-        let mut thread = SimThread::spawn(game.world, None, None, 100, bridge.clone(), Some(host))
-            .expect("thread");
+        let mut thread = SimThread::spawn(
+            game.world,
+            None,
+            None,
+            None,
+            100,
+            bridge.clone(),
+            Some(host),
+        )
+        .expect("thread");
         let link = thread.link();
         let habitable_before = loop {
             let r = link.report();

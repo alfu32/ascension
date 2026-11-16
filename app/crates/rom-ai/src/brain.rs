@@ -2,9 +2,9 @@
 //! that turns what it perceives into orders.
 
 use crate::{
-    AiError, BrainStats, Summary, Weights,
+    AiError, Army, BrainStats, Role, Summary, Voyage, Weights, army,
     catalogue::Catalogue,
-    construction, economy,
+    construction, economy, fleet,
     memory::Memory,
     opening,
     plan::{Plan, RETRY_TICKS, Wish},
@@ -88,6 +88,11 @@ impl Brain {
             age_priority: weight(&rules, profile_key, "tech.age_priority")?.clamp(0, 100),
             army_share: weight(&rules, profile_key, "mil.army_share_pct")?.clamp(0, 100),
             defense_share: weight(&rules, profile_key, "mil.defense_share_pct")?.clamp(0, 100),
+            attack_ratio: weight(&rules, profile_key, "mil.attack_ratio_pct")?.max(0),
+            retreat_ratio: weight(&rules, profile_key, "mil.retreat_ratio_pct")?.max(0),
+            raid_share: weight(&rules, profile_key, "mil.raid_share_pct")?.clamp(0, 100),
+            scouts: weight(&rules, profile_key, "scout.units")?.clamp(0, 10),
+            claim: weight(&rules, profile_key, "space.claim_eagerness")?.clamp(0, 100),
         };
         let mut opening = rules
             .ai_opening_steps
@@ -153,6 +158,21 @@ impl Brain {
     /// Where new military units gather, once chosen.
     pub fn rally_point(&self) -> Option<rom_sim::Pos> {
         self.memory.rally
+    }
+
+    /// The brain's armies by role.
+    pub fn armies(&self) -> impl Iterator<Item = (Role, &Army)> {
+        self.memory.armies.iter().map(|(role, army)| (*role, army))
+    }
+
+    /// Cells of the map an own unit has stood in (or, for fighters, beside).
+    pub fn cells_looked_at(&self) -> usize {
+        self.memory.looked.len()
+    }
+
+    /// Ships on an errand (claiming a body, carrying a colony), by entity id.
+    pub fn voyages(&self) -> impl Iterator<Item = (u32, &Voyage)> {
+        self.memory.voyages.iter().map(|(id, v)| (*id, v))
     }
 
     /// The state to store in `player_ai_state`.
@@ -323,7 +343,7 @@ impl Brain {
         }
         memory.blocked.retain(|_, until| *until > tick);
 
-        let mut plan = Plan::new(view, allowed);
+        let mut plan = Plan::new(view, allowed, memory);
         let slip =
             |rng: &mut SimRng| d.mistake_pct > 0 && i64::from(rng.range(0, 100)) < d.mistake_pct;
 
@@ -343,6 +363,8 @@ impl Brain {
             slip(&mut rng),
             &mut wishes,
         );
+        army::wishes(&plan.view, &self.weights, memory, &mut wishes);
+        fleet::wishes(&plan.view, &self.weights, memory, &mut wishes);
         // Highest score first; equal scores keep the managers' order.
         wishes.sort_by_key(|w| std::cmp::Reverse(w.score));
         // A mistake of judgement: the runner-up is served before the best.
@@ -356,8 +378,23 @@ impl Brain {
             }
         }
         let paced = tick < memory.economy_tick || tick >= memory.economy_tick + economy::PACE_TICKS;
-        economy::assign(&mut plan, &mut eco, paced);
-        production::rally(&mut plan, memory);
+        let command = army::Command {
+            weights: &self.weights,
+            difficulty: d,
+            // `mistake_pct` per minute, not per thought: an army is not sent off every few
+            // seconds by a quick mind.
+            blunder: d.mistake_pct > 0
+                && i64::from(rng.range(0, 120_000)) < d.mistake_pct * d.think_interval_ticks.max(1),
+        };
+        // Under attack the armies take their orders before the workers do.
+        if alarmed {
+            army::command(&mut plan, memory, &command);
+            economy::assign(&mut plan, &mut eco, paced);
+        } else {
+            economy::assign(&mut plan, &mut eco, paced);
+            army::command(&mut plan, memory, &command);
+        }
+        fleet::command(&mut plan, memory, &self.weights);
         economy::update_demand(memory, &plan.shortfall, tick);
 
         let orders = plan.out.len() as i64;
@@ -368,20 +405,25 @@ impl Brain {
     }
 }
 
-/// Whether a city lost hit points since the last thought or an armed enemy stands inside
-/// a city's borders.
+/// Whether a city lost hit points since the last thought, or armed enemies inside the
+/// borders outweigh the own fighters standing there.
 fn attacked(view: &View<'_>, memory: &Memory) -> bool {
     let hurt = view.cities.iter().any(|c| {
         view.world.entity(c.id).is_some_and(|e| {
             operational(e) && memory.city_hp.get(&c.id.0).is_some_and(|hp| e.hp < *hp)
         })
     });
-    hurt || memory.enemies.values().any(|enemy| {
-        enemy.tick == view.tick
-            && view::strength(view.rules, enemy.type_id) > 0
-            && view.cities.iter().any(|c| {
-                c.pos.body == enemy.pos.body
-                    && view.distance(c.pos, enemy.pos) <= c.border.max(0) as u64
+    hurt || army::intruders(view, memory).is_some_and(|(_, strength)| {
+        let home: i64 = army::fighters(view)
+            .iter()
+            .filter(|e| {
+                view.cities.iter().any(|c| {
+                    c.pos.body == e.pos.body
+                        && view.distance(c.pos, e.pos) <= c.border.max(c.radius) as u64 + 4000
+                })
             })
+            .map(|e| army::power(view, e))
+            .sum();
+        strength > home
     })
 }

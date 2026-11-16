@@ -6,9 +6,9 @@ use crate::{
     sites::{Ground, Site, find_city_site, find_site},
     view::View,
 };
-use rom_rules::{DefId, LimitScope, ProductionMode};
+use rom_rules::{DefId, LimitScope, ProductionMode, ResourceKind};
 use rom_sim::{Command, Entity, EntityId, Pos};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Orders a producer may hold before more training is queued on it.
 const TRAIN_QUEUE: usize = 2;
@@ -75,10 +75,15 @@ pub(crate) struct Plan<'a> {
     reservations: usize,
     /// Constructions started in this thought.
     pub started: i64,
+    /// Amounts kept back from every purchase but the gather sites in `keep_for`: the price
+    /// of the first site of a resource that pays for its own site in that resource.
+    keep: BTreeMap<DefId, i64>,
+    /// The gather site types the kept amounts are for.
+    keep_for: BTreeSet<DefId>,
 }
 
 impl<'a> Plan<'a> {
-    pub fn new(view: View<'a>, orders_left: i64) -> Self {
+    pub fn new(view: View<'a>, orders_left: i64, memory: &Memory) -> Self {
         Self {
             view,
             ground: None,
@@ -88,7 +93,53 @@ impl<'a> Plan<'a> {
             shortfall: BTreeMap::new(),
             reservations: 0,
             started: 0,
+            keep: BTreeMap::new(),
+            keep_for: BTreeSet::new(),
         }
+        .with_first_sites(memory)
+    }
+
+    /// Keeps back the price of the first gather site of every base resource the player has
+    /// no site for yet (the cheapest site type it can build, unless a search for it just
+    /// failed): spending everything on other wishes would leave the resource unearned, and
+    /// a site paid in its own resource could never be bought again.
+    fn with_first_sites(mut self, memory: &Memory) -> Self {
+        let view = &self.view;
+        let situation = site_situation(view);
+        for resource in view.rules.resources.values() {
+            if resource.kind != ResourceKind::Base {
+                continue;
+            }
+            let sites = view
+                .cat
+                .gather_sites
+                .get(&resource.id)
+                .map(Vec::as_slice)
+                .unwrap_or_default();
+            if sites.iter().any(|s| view.line_count(*s) > 0) {
+                continue;
+            }
+            let cheapest = sites
+                .iter()
+                .copied()
+                .filter(|s| {
+                    view.unlocked(*s)
+                        && !view.obsolete(*s)
+                        && memory.no_site.get(&s.0) != Some(&situation)
+                })
+                .map(|s| {
+                    let price = view.price(s);
+                    (price.iter().map(|(_, a)| *a).sum::<i64>(), s, price)
+                })
+                .min_by_key(|(total, s, _)| (*total, *s));
+            if let Some((_, _, price)) = cheapest {
+                for (paid_in, amount) in price {
+                    *self.keep.entry(paid_in).or_default() += amount;
+                }
+                self.keep_for.extend(sites.iter().copied());
+            }
+        }
+        self
     }
 
     /// Writes an order if the budget allows; the executor is busy for the rest of the thought.
@@ -123,20 +174,33 @@ impl<'a> Plan<'a> {
         self.view.price(def)
     }
 
-    fn affordable(&self, price: &[(DefId, i64)]) -> bool {
+    pub fn affordable(&self, price: &[(DefId, i64)]) -> bool {
+        price.iter().all(|(resource, amount)| {
+            self.view.purse.get(resource).copied().unwrap_or(0)
+                - self.keep.get(resource).copied().unwrap_or(0)
+                >= *amount
+        })
+    }
+
+    /// Whether a building can be paid; the first gather site of a resource may spend what
+    /// is kept back for it.
+    fn affordable_site(&self, building: DefId, price: &[(DefId, i64)]) -> bool {
+        if !self.keep_for.contains(&building) {
+            return self.affordable(price);
+        }
         price.iter().all(|(resource, amount)| {
             self.view.purse.get(resource).copied().unwrap_or(0) >= *amount
         })
     }
 
-    fn pay(&mut self, price: &[(DefId, i64)]) {
+    pub fn pay(&mut self, price: &[(DefId, i64)]) {
         for (resource, amount) in price {
             *self.view.purse.entry(*resource).or_default() -= amount;
         }
     }
 
     /// Notes what a wish lacks and, when it is worth saving for, keeps its price aside.
-    fn lack(&mut self, price: &[(DefId, i64)], reserve: bool) {
+    pub fn lack(&mut self, price: &[(DefId, i64)], reserve: bool) {
         let reserve = reserve && self.reservations < RESERVATIONS;
         if reserve {
             self.reservations += 1;
@@ -306,7 +370,7 @@ impl<'a> Plan<'a> {
             return Outcome::Impossible;
         }
         let price = self.price(building);
-        if !self.affordable(&price) {
+        if !self.affordable_site(building, &price) {
             self.lack(&price, wish.reserve);
             return Outcome::Unaffordable;
         }
@@ -316,6 +380,10 @@ impl<'a> Plan<'a> {
         let ground = self
             .ground
             .get_or_insert_with(|| Ground::new(&self.view, &memory.enemies));
+        if !ground.reserved_done {
+            ground.reserved_done = true;
+            reserve_first_sites(&self.view, ground, building, memory, situation);
+        }
         let site = if is_city {
             find_city_site(&self.view, ground, building)
         } else {
@@ -349,6 +417,52 @@ impl<'a> Plan<'a> {
         self.view.note_planned(building);
         self.started += 1;
         Outcome::Ordered
+    }
+}
+
+/// Finds, for every base resource drawn from node terrain that the player has no site for
+/// yet, the spot its first site would take, and keeps it free for that site. Nothing is
+/// reserved while that very site is being placed, and a search that found nothing is not
+/// repeated until the situation changes.
+fn reserve_first_sites(
+    view: &View<'_>,
+    ground: &mut Ground,
+    building: DefId,
+    memory: &mut Memory,
+    situation: u64,
+) {
+    for (resource, sites) in &view.cat.gather_sites {
+        if sites.contains(&building)
+            || sites.iter().any(|s| view.line_count(*s) > 0)
+            || view
+                .rules
+                .resources
+                .get(resource)
+                .is_none_or(|r| r.kind != ResourceKind::Base)
+        {
+            continue;
+        }
+        let Some(site) = sites.iter().copied().find(|s| {
+            view.unlocked(*s)
+                && !view.obsolete(*s)
+                && view.rules.entity_types[s]
+                    .gather_site
+                    .as_ref()
+                    .is_some_and(|g| g.slots_per_node > 0 && g.needs_node_terrain_id.is_some())
+        }) else {
+            continue;
+        };
+        // A search that already failed in this situation is not repeated for a reservation.
+        if memory.no_site.get(&site.0) == Some(&situation) {
+            continue;
+        }
+        match find_site(view, ground, site) {
+            Site::At(pos) => ground.reserve(&view.rules.entity_types[&site], pos),
+            Site::Nowhere => {
+                memory.no_site.insert(site.0, situation);
+            }
+            Site::Later => {}
+        }
     }
 }
 

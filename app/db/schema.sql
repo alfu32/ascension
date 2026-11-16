@@ -445,7 +445,11 @@ CREATE TABLE prerequisite (
 
 CREATE TABLE tech (
   id      INTEGER PRIMARY KEY REFERENCES def(id),
-  kind    TEXT NOT NULL CHECK (kind IN ('age','track','upgrade','unit_upgrade','government','project','evolution')),
+  -- 'handicap': never researched; a host grants it to one player at match setup
+  -- (a difficulty's income bonus, see ai_difficulty.handicap_tech_id). Its
+  -- modifiers apply like any technology's; it has no production row, no
+  -- effects and is no prerequisite.
+  kind    TEXT NOT NULL CHECK (kind IN ('age','track','upgrade','unit_upgrade','government','project','evolution','handicap')),
   track   TEXT NOT NULL DEFAULT '',        -- military | civic | commerce | science | ''
   level   INTEGER NOT NULL DEFAULT 0,
   research_ticks INTEGER NOT NULL,
@@ -707,8 +711,11 @@ CREATE TABLE ai_difficulty (
   uses_formations      INTEGER NOT NULL DEFAULT 1,
   uses_abilities       INTEGER NOT NULL DEFAULT 1,
   retreats             INTEGER NOT NULL DEFAULT 1,
-  income_bonus_pct     INTEGER NOT NULL DEFAULT 0, -- applied as an ordinary modifier
-  sees_all             INTEGER NOT NULL DEFAULT 0  -- ignores fog of war
+  income_bonus_pct     INTEGER NOT NULL DEFAULT 0, -- applied as an ordinary modifier (below)
+  sees_all             INTEGER NOT NULL DEFAULT 0, -- ignores fog of war
+  -- The 'handicap' technology the host grants a player of this difficulty at
+  -- setup; its income.* modifiers must equal income_bonus_pct (validator).
+  handicap_tech_id     INTEGER REFERENCES tech(id)
 ) STRICT, WITHOUT ROWID;
 
 -- Order vocabulary. `needs` names the et_* component the executor must have.
@@ -918,6 +925,8 @@ CREATE TABLE player_ai_state (
   profile_key TEXT NOT NULL,             -- ai_profile.key
   difficulty_key TEXT NOT NULL,          -- ai_difficulty.key
   version    INTEGER NOT NULL,           -- format version of data, the AI crate's own
+  rng_state  INTEGER NOT NULL,           -- the computer player's own random generator
+  opening_seq INTEGER NOT NULL,          -- index of the current opening-book step
   data       BLOB NOT NULL
 ) STRICT;
 
@@ -1052,6 +1061,15 @@ CREATE TABLE entity_cooldown (          -- earliest tick each weapon can fire ag
   ready_tick INTEGER NOT NULL,
   PRIMARY KEY (entity_id, weapon_id)
 ) STRICT, WITHOUT ROWID;
+
+-- A producer's rally point (order `set_rally`): units it trains walk to the
+-- point, or to the entity (a harvester to a gather site it can work harvests there).
+CREATE TABLE entity_rally (
+  entity_id INTEGER PRIMARY KEY REFERENCES entity(id),
+  target_entity_id INTEGER,
+  x INTEGER, y INTEGER, face INTEGER, body INTEGER,
+  CHECK ((target_entity_id IS NULL) = (x IS NOT NULL AND y IS NOT NULL AND face IS NOT NULL AND body IS NOT NULL))
+) STRICT;
 
 -- Membership of the simulation's entity sets: 'landed' (ship standing on a
 -- planet), 'neutralised' and 'assimilating' (captured buildings), 'idle' and

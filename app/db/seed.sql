@@ -104,8 +104,8 @@ INSERT INTO order_kind(key,needs,target,note) VALUES
  ('land','movement','point','a carrier descends from orbit onto open ground of that planet, outside enemy cities; passengers come out and the carrier stays landed; an orbital craft comes down into the air above the point'),
  ('lift','movement','none','a landed carrier returns to orbit; an orbital craft climbs from its planet to that planet''s orbit'),
  ('train','producer','def',''), ('research','producer','def',''), ('morph','','def','upgrade in place'),
- ('ability','energy','entity_or_point','subject = ability'), ('set_rally','producer','entity_or_point',''),
- ('raze','','none','self-destruct building'), ('disband','','none',''),
+ ('ability','energy','entity_or_point','subject = ability'), ('set_rally','producer','entity_or_point','units it trains walk to the point or entity; applied at once, the queue stays'),
+ ('raze','','none','self-destruct building'), ('disband','movement','none','the unit leaves the match; no refund'),
  ('release','gather_site','none','every worker inside a gather building leaves it');
 
 -- ── defs ────────────────────────────────────────────────────────────────────
@@ -3957,5 +3957,18 @@ WITH v(k,planet,system) AS (VALUES
   ('unit.carrier',450,45), ('unit.orbital_fighter',300,25), ('unit.orbital_bomber',320,25))
 INSERT INTO et_view_scale(entity_type_id,planet_pct,system_pct)
  SELECT d.id, v.planet, v.system FROM v JOIN def d ON d.key=v.k;
+
+-- Task 64: the difficulty handicap. A 'handicap' technology is never researched;
+-- the host grants it at match setup to a computer player whose difficulty names
+-- it, so the income bonus is an ordinary modifier (docs/database.md).
+INSERT INTO def(kind,key,name,descr) VALUES
+ ('tech','tech.handicap.income_25','Income bonus +25 %','Granted at setup to the toughest computer players.');
+INSERT INTO tech(id,kind,research_ticks)
+ SELECT id,'handicap',0 FROM def WHERE key='tech.handicap.income_25';
+INSERT INTO modifier(source_def_id,stat_key,op,value)
+ SELECT d.id, s.key, 'pct', 25 FROM def d JOIN stat s ON s.key LIKE 'income.%'
+ WHERE d.key='tech.handicap.income_25' ORDER BY s.key;
+UPDATE ai_difficulty SET handicap_tech_id=(SELECT id FROM def WHERE key='tech.handicap.income_25')
+ WHERE income_bonus_pct=25;
 
 COMMIT;

@@ -1098,6 +1098,7 @@ fn load_ai_difficulty(conn: &Connection) -> Result<Vec<AiDifficulty>, RulesError
             retreats: boolean(row, "retreats", "ai_difficulty", &identity)?,
             income_bonus_pct: row.get("income_bonus_pct")?,
             sees_all: boolean(row, "sees_all", "ai_difficulty", &identity)?,
+            handicap_tech_id: row.get::<_, Option<u32>>("handicap_tech_id")?.map(DefId),
         })
     })
 }

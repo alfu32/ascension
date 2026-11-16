@@ -1047,6 +1047,23 @@ mod content_tests {
     }
 
     #[test]
+    fn derived_indexes_match_a_scan_through_the_ages() {
+        let mut audit = audit_at_pace(100);
+        while audit.world.rules.ages[&audit.world.players[&PlayerId(1)].age].ordinal < 4
+            && audit.world.tick() < 30_000
+        {
+            audit.step();
+            if audit.world.tick().is_multiple_of(50) {
+                audit.world.check_type_index();
+            }
+        }
+        audit.world.check_type_index();
+        let restored = World::restore(audit.world.rules.clone(), audit.world.snapshot()).unwrap();
+        restored.check_type_index();
+        assert_eq!(restored.hash(), audit.world.hash());
+    }
+
+    #[test]
     fn playthrough_is_deterministic() {
         let mut first = audit_at_pace(100);
         let mut second = audit_at_pace(100);

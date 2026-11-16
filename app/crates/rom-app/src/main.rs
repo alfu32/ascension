@@ -2,6 +2,7 @@
 
 mod args;
 mod bench;
+mod computer;
 mod demo;
 mod gallery;
 mod hud;

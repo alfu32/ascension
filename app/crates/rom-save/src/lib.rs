@@ -15,7 +15,7 @@ use std::{collections::BTreeMap, fmt::Write as _, path::Path, sync::Arc};
 use thiserror::Error;
 
 /// Layout version of the PART B tables this crate writes and reads.
-pub const FORMAT: i64 = 1;
+pub const FORMAT: i64 = 2;
 
 const PART_B: &str = include_str!("../../../db/schema.sql");
 
@@ -114,6 +114,10 @@ pub struct AiState {
     pub difficulty: String,
     /// Format version of `data`, the AI crate's own.
     pub version: u32,
+    /// State of the computer player's own random generator.
+    pub rng_state: u64,
+    /// Index of its current opening-book step.
+    pub opening_seq: i64,
     /// The opaque snapshot.
     pub data: Vec<u8>,
 }

@@ -66,23 +66,22 @@ impl World {
             .max_by_key(|age| (self.rules.ages[age].ordinal, *age))
     }
 
-    /// Entities, plus construction orders that have not created their site yet.
-    fn placed_and_queued(&self) -> impl Iterator<Item = Placed> + '_ {
-        self.entities().map(|e| (e.owner, e.type_id, e.pos)).chain(
-            self.all_orders()
-                .filter(|o| o.kind == "construct" && o.target_entity.is_none())
-                .map(|o| {
-                    (
-                        o.player,
-                        o.subject.expect("construction subject"),
-                        o.target_pos.expect("placement"),
-                    )
-                }),
-        )
+    /// Entities of the matching types, plus constructions of them that have not created
+    /// their site yet.
+    fn placed_and_queued<'a>(
+        &'a self,
+        types: impl Fn(DefId) -> bool + Copy + 'a,
+    ) -> impl Iterator<Item = Placed> + 'a {
+        self.entities_of_types(types)
+            .map(|e| (e.owner, e.type_id, e.pos))
+            .chain(
+                self.queued_constructions()
+                    .filter(move |(_, t, _)| types(*t)),
+            )
     }
 
     /// The player's cities: complete, sites and queued constructions.
-    pub(crate) fn city_count(&self, player: PlayerId) -> i64 {
+    pub fn city_count(&self, player: PlayerId) -> i64 {
         let standing = self
             .territory
             .cities
@@ -90,13 +89,8 @@ impl World {
             .filter(|id| self.entity(**id).is_some_and(|e| e.owner == player))
             .count();
         let queued = self
-            .all_orders()
-            .filter(|o| {
-                o.player == player
-                    && o.kind == "construct"
-                    && o.target_entity.is_none()
-                    && o.subject.is_some_and(|s| self.is_city_type(s))
-            })
+            .queued_constructions()
+            .filter(|(owner, subject, _)| *owner == player && self.is_city_type(*subject))
             .count();
         (standing + queued) as i64
     }
@@ -106,23 +100,19 @@ impl World {
         self.territory.cities.iter().any(|id| {
             self.entity(*id)
                 .is_some_and(|e| e.owner == player && e.pos.body == body)
-        }) || self.all_orders().any(|o| {
-            o.player == player
-                && o.kind == "construct"
-                && o.target_entity.is_none()
-                && o.subject.is_some_and(|s| self.is_city_type(s))
-                && o.target_pos.is_some_and(|p| p.body == body)
+        }) || self.queued_constructions().any(|(owner, subject, at)| {
+            owner == player && self.is_city_type(subject) && at.body == body
         })
     }
 
     /// How many cities the player may have, after modifiers.
-    pub(crate) fn city_limit(&self, player: PlayerId) -> i64 {
+    pub fn city_limit(&self, player: PlayerId) -> i64 {
         self.rules.player_stat(
             "city_limit",
             self.rules
                 .constant("player.city_limit.base")
                 .expect("validated city limit"),
-            &self.players[&player].active_sources(),
+            &self.active_sources(player),
         )
     }
 
@@ -150,18 +140,22 @@ impl World {
             id
         };
         let subject_root = root(subject);
-        let standing = self
-            .entities()
-            .filter(|e| e.owner == player && root(e.type_id) == subject_root && e.city_id == city)
-            .count();
+        let standing: usize = self
+            .types
+            .of(player)
+            .filter(|(type_id, _)| root(*type_id) == subject_root)
+            .map(|(type_id, _)| {
+                self.own_of_type(player, type_id)
+                    .filter(|e| e.city_id == city)
+                    .count()
+            })
+            .sum();
         let queued = self
-            .all_orders()
-            .filter(|o| {
-                o.player == player
-                    && o.kind == "construct"
-                    && o.target_entity.is_none()
-                    && o.subject.is_some_and(|id| root(id) == subject_root)
-                    && self.city_covering(player, o.target_pos.expect("placement")) == city
+            .queued_constructions()
+            .filter(|(owner, id, at)| {
+                *owner == player
+                    && root(*id) == subject_root
+                    && self.city_covering(player, *at) == city
             })
             .count();
         if (standing + queued) as i64 >= et.limit_count {
@@ -201,8 +195,8 @@ impl World {
                 .constant("city.spacing")
                 .expect("validated city spacing");
             if self
-                .placed_and_queued()
-                .any(|(_, t, p)| self.is_city_type(t) && closer(p, spacing))
+                .placed_and_queued(|t| self.is_city_type(t))
+                .any(|(_, _, p)| closer(p, spacing))
             {
                 return Err(SimError::CitiesTooClose);
             }
@@ -233,30 +227,26 @@ impl World {
                 PlacementKind::AdjacentTerrain => geo
                     .footprint_surroundings(pos.face, bounds, rule.distance)
                     .any(|index| rule.ref_def_id == Some(surface.map.terrain[index])),
-                PlacementKind::NearType => self.entities().any(|e| {
-                    e.owner == player
-                        && Some(e.type_id) == rule.ref_def_id
-                        && within(e.pos, rule.distance)
+                PlacementKind::NearType => rule.ref_def_id.is_some_and(|near| {
+                    self.own_of_type(player, near)
+                        .any(|e| within(e.pos, rule.distance))
                 }),
                 PlacementKind::MinDistanceType => !self
-                    .placed_and_queued()
-                    .any(|(_, t, p)| Some(t) == rule.ref_def_id && closer(p, rule.distance)),
-                PlacementKind::MinDistanceEnemyCity => {
-                    !self.placed_and_queued().any(|(owner, t, p)| {
-                        self.is_city_type(t)
-                            && self.enemies(player, owner)
-                            && closer(p, rule.distance)
-                    })
-                }
-                PlacementKind::OnNode => self.entities().any(|e| {
-                    Some(e.type_id) == rule.ref_def_id
-                        && geometry::footprint_contains(
+                    .placed_and_queued(|t| Some(t) == rule.ref_def_id)
+                    .any(|(_, _, p)| closer(p, rule.distance)),
+                PlacementKind::MinDistanceEnemyCity => !self
+                    .placed_and_queued(|t| self.is_city_type(t))
+                    .any(|(owner, _, p)| self.enemies(player, owner) && closer(p, rule.distance)),
+                PlacementKind::OnNode => self
+                    .entities_of_types(|t| Some(t) == rule.ref_def_id)
+                    .any(|e| {
+                        geometry::footprint_contains(
                             e.pos.body,
                             e.pos.face,
                             footprint(&self.rules.entity_types[&e.type_id], e.pos),
                             pos,
                         )
-                }),
+                    }),
                 PlacementKind::OnLayer => footprint_terrain().all(|terrain| {
                     terrain.is_some_and(|t| Some(self.rules.terrains[&t].layer) == rule.layer)
                 }),

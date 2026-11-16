@@ -3,7 +3,7 @@
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Instant};
 
 use rom_ai::Brain;
-use rom_mapgen::{MapRequest, UniverseRequest, generate, generate_universe};
+use rom_mapgen::{MapRequest, Universe, UniverseRequest, generate, generate_universe};
 use rom_rules::{DefId, ResourceKind, Rules};
 use rom_sim::{BodyId, MatchOptions, Player, PlayerId, Pos, World};
 
@@ -30,6 +30,10 @@ pub struct Request {
     pub universe: bool,
     /// Print every player's economy each this many ticks; 0 prints nothing.
     pub trace: u64,
+    /// Side of the flat map in tiles; 0 picks it from the number of players.
+    pub side: u32,
+    /// Seed of the map or universe when it differs from the match seed.
+    pub map_seed: Option<u64>,
 }
 
 /// One player's line of the result table.
@@ -94,7 +98,7 @@ pub struct MatchResult {
 
 /// Processor time this thread has used, in microseconds: the kernel's per-thread run time
 /// where it is offered, so a busy machine does not inflate the figures; wall time otherwise.
-fn cpu_micros() -> u128 {
+pub fn cpu_micros() -> u128 {
     static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
     std::fs::read_to_string("/proc/thread-self/schedstat")
         .ok()
@@ -232,15 +236,75 @@ fn place_start(world: &mut World, player: PlayerId, near: Pos) -> Result<(), Str
 }
 
 /// Builds the world of a match: a generated universe with each race at home, or one map
-/// shared by everyone. Victory rules are off: this half of the computer player does not
-/// fight, and the match runs its full length.
-pub fn build_world(rules: &Arc<Rules>, request: &Request) -> Result<World, String> {
+/// shared by everyone. Victory rules are off: the match runs its full length.
+pub fn build_world(
+    rules: &Arc<Rules>,
+    request: &Request,
+) -> Result<(World, Option<Universe>), String> {
     let factions = default_factions(rules, request.players.len())?;
-    let players = make_players(rules, &factions, request);
     let options = MatchOptions {
         victories: Default::default(),
         ..MatchOptions::default()
     };
+    build_world_with(rules, request, &factions, options)
+}
+
+/// Generates the planets ships are ordered to orbit and adds their surfaces, as the
+/// application does: a planet is made when it is first visited. Its terrain is known to the
+/// players whose ships are bound there.
+pub fn generate_visited(world: &mut World, universe: &Universe) -> Result<(), String> {
+    let waiting = world.ungenerated_bodies();
+    if waiting.is_empty() {
+        return Ok(());
+    }
+    let mut wanted: BTreeMap<BodyId, std::collections::BTreeSet<PlayerId>> = BTreeMap::new();
+    for e in world.entities() {
+        let Some(order) = e.orders().front().filter(|o| o.kind == "orbit") else {
+            continue;
+        };
+        let body = order.target_pos.map(|p| p.body).or_else(|| {
+            let marker = order.target_entity?;
+            waiting
+                .iter()
+                .copied()
+                .find(|b| world.body_marker(*b) == Some(marker))
+        });
+        if let Some(body) = body.filter(|b| waiting.contains(b)) {
+            wanted.entry(body).or_default().insert(e.owner);
+        }
+    }
+    let rules = Arc::clone(world.rules());
+    for (body, owners) in wanted {
+        let planet = universe
+            .expand(&rules, body.0)
+            .map_err(|e| format!("expanding body {}: {e}", body.0))?;
+        world
+            .add_surface(
+                body,
+                &rom_sim::PlanetSurface {
+                    surface: planet.surface,
+                    terrain: planet.terrain.clone(),
+                    nodes: planet.nodes.clone(),
+                },
+            )
+            .map_err(|e| format!("adding the surface of body {}: {e}", body.0))?;
+        for owner in owners {
+            world.reveal_terrain(owner, body);
+        }
+    }
+    Ok(())
+}
+
+/// Builds the world of a match with the given factions (one per player, in player order)
+/// and match options.
+pub fn build_world_with(
+    rules: &Arc<Rules>,
+    request: &Request,
+    factions: &[DefId],
+    options: MatchOptions,
+) -> Result<(World, Option<Universe>), String> {
+    let factions = factions.to_vec();
+    let players = make_players(rules, &factions, request);
     if request.universe {
         let style = rules
             .map_styles
@@ -256,7 +320,7 @@ pub fn build_world(rules: &Arc<Rules>, request: &Request) -> Result<World, Strin
             rules,
             &UniverseRequest {
                 style,
-                seed: request.seed,
+                seed: request.map_seed.unwrap_or(request.seed),
                 player_factions: factions.clone(),
             },
         )
@@ -281,7 +345,7 @@ pub fn build_world(rules: &Arc<Rules>, request: &Request) -> Result<World, Strin
             near.body = BodyId(*body);
             place_start(&mut world, PlayerId(i as u32 + 1), near)?;
         }
-        return Ok(world);
+        return Ok((world, Some(universe)));
     }
     let style = rules
         .map_styles
@@ -289,17 +353,18 @@ pub fn build_world(rules: &Arc<Rules>, request: &Request) -> Result<World, Strin
         .find(|s| s.planets == 1)
         .ok_or("the rules have no one-world map style")?
         .id;
-    let side = match request.players.len() {
-        0..=1 => 128,
-        2 => 160,
-        3..=4 => 192,
+    let side = match (request.side, request.players.len()) {
+        (side, _) if side > 0 => side,
+        (_, 0..=1) => 128,
+        (_, 2) => 160,
+        (_, 3..=4) => 192,
         _ => 256,
     };
     let map = generate(
         rules,
         &MapRequest {
             style,
-            seed: request.seed,
+            seed: request.map_seed.unwrap_or(request.seed),
             width: side,
             height: side,
             player_factions: factions,
@@ -317,14 +382,14 @@ pub fn build_world(rules: &Arc<Rules>, request: &Request) -> Result<World, Strin
     for (i, start) in map.starts.iter().enumerate() {
         place_start(&mut world, PlayerId(i as u32 + 1), *start)?;
     }
-    Ok(world)
+    Ok((world, None))
 }
 
 /// Runs a whole match: every player thinks every tick, its orders go through
 /// `World::submit`, and the world steps.
 pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, String> {
     let start = Instant::now();
-    let mut world = build_world(rules, request)?;
+    let (mut world, universe) = build_world(rules, request)?;
     let mut brains = request
         .players
         .iter()
@@ -386,6 +451,11 @@ pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, S
             }
         }
         world.step();
+        if let Some(universe) = &universe
+            && tick % SAMPLE_TICKS == 0
+        {
+            generate_visited(&mut world, universe)?;
+        }
         for (i, brain) in brains.iter().enumerate() {
             let Some(player) = world.players().find(|p| p.id == brain.player()) else {
                 continue;
@@ -483,7 +553,7 @@ pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, S
 }
 
 /// Parses `profile[:difficulty],...`.
-fn parse_players(value: &str) -> Result<Vec<(String, String)>, String> {
+pub fn parse_players(value: &str) -> Result<Vec<(String, String)>, String> {
     value
         .split(',')
         .map(|entry| {
@@ -497,6 +567,29 @@ fn parse_players(value: &str) -> Result<Vec<(String, String)>, String> {
             Ok((profile.to_string(), difficulty.to_string()))
         })
         .collect()
+}
+
+/// Checks that every profile and difficulty exists in the rules, naming the known ones.
+pub fn check_players(rules: &Rules, players: &[(String, String)]) -> Result<(), String> {
+    for (profile, difficulty) in players {
+        if !rules.ai_profiles.contains_key(profile) {
+            let known: Vec<&str> = rules.ai_profiles.keys().map(String::as_str).collect();
+            return Err(format!(
+                "unknown profile {profile}; known: {}",
+                known.join(", ")
+            ));
+        }
+        if !rules.ai_difficulties.contains_key(difficulty) {
+            let mut known: Vec<_> = rules.ai_difficulties.values().collect();
+            known.sort_by_key(|d| d.rank);
+            let known: Vec<&str> = known.iter().map(|d| d.key.as_str()).collect();
+            return Err(format!(
+                "unknown difficulty {difficulty}; known: {}",
+                known.join(", ")
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Runs the subcommand with the arguments after `ai-match`.
@@ -527,28 +620,15 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
         ticks: ticks.ok_or(USAGE)?,
         universe,
         trace,
+        side: 0,
+        map_seed: None,
     };
     let conn = rusqlite::Connection::open_with_flags(
         db.ok_or(USAGE)?,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
     )?;
     let rules = Arc::new(Rules::load(&conn)?);
-    for (profile, difficulty) in &request.players {
-        if !rules.ai_profiles.contains_key(profile) {
-            let known: Vec<&str> = rules.ai_profiles.keys().map(String::as_str).collect();
-            return Err(format!("unknown profile {profile}; known: {}", known.join(", ")).into());
-        }
-        if !rules.ai_difficulties.contains_key(difficulty) {
-            let mut known: Vec<_> = rules.ai_difficulties.values().collect();
-            known.sort_by_key(|d| d.rank);
-            let known: Vec<&str> = known.iter().map(|d| d.key.as_str()).collect();
-            return Err(format!(
-                "unknown difficulty {difficulty}; known: {}",
-                known.join(", ")
-            )
-            .into());
-        }
-    }
+    check_players(&rules, &request.players)?;
     let result = run_match(&rules, &request)?;
     for p in &result.players {
         let ages: Vec<String> = p.age_ticks.iter().map(u64::to_string).collect();
@@ -660,8 +740,10 @@ mod tests {
             ticks: 600,
             universe: false,
             trace: 0,
+            side: 0,
+            map_seed: None,
         };
-        let world = build_world(&rules, &request).unwrap();
+        let (world, _) = build_world(&rules, &request).unwrap();
         for player in [PlayerId(1), PlayerId(2)] {
             assert_eq!(world.cities(player).len(), 1);
             let units = world.entities().filter(|e| e.owner == player).count();

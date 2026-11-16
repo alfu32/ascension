@@ -11,7 +11,7 @@ impl World {
             return Err(SimError::AlreadyResearched);
         }
         let queued: Vec<_> = self
-            .all_orders()
+            .production_orders()
             .filter(|o| o.player == player && o.kind == "research")
             .filter_map(|o| o.subject)
             .collect();
@@ -87,8 +87,7 @@ impl World {
         subject: DefId,
         research: bool,
     ) -> u64 {
-        let sources =
-            self.players[&self.entity(executor).expect("executor").owner].active_sources();
+        let sources = self.active_sources(self.entity(executor).expect("executor").owner);
         let ticks = if research {
             self.rules.player_stat(
                 "research_time",

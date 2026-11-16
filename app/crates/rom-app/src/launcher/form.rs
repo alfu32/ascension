@@ -51,6 +51,8 @@ controls! {
     ("seed", 0, "1", "Map seed (unsigned integer). Random chooses a fresh seed.", false),
     ("players", 0, "4", "Number of players, at least 1; factions override this count.", false),
     ("factions", 0, "", "One faction per player, in selection order; blank uses the default mix.", false),
+    ("ai", 0, "", "Computer players 2, 3, …: profile:difficulty each; blank plays balanced:moderate; none leaves them idle.", false),
+    ("watch", 0, "false", "Player one is a computer player too (watch a match); --ai then starts with player one.", true),
     ("age", 0, "", "Starting age for every player; blank uses the first age.", false),
     ("speed", 0, "100", "Simulation speed, 1–10000 percent; normal is 20 ticks per second.", false),
     ("demo", 0, "false", "Run the scripted demo driver.", true),
@@ -146,6 +148,58 @@ impl Form {
             }
         }
         form
+    }
+}
+
+impl Form {
+    /// The player computer slot 0 plays: one when watching, else two.
+    pub fn first_computer(&self) -> usize {
+        if self.get("watch") == "true" { 1 } else { 2 }
+    }
+
+    /// Computer players: every player but the person (all of them when watching); the
+    /// faction count if factions are chosen, else `players`.
+    pub fn computer_slots(&self) -> usize {
+        let factions = self
+            .get("factions")
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .count();
+        let players = if factions > 0 {
+            factions
+        } else {
+            self.get("players").parse::<usize>().unwrap_or(1)
+        };
+        (players + 1).saturating_sub(self.first_computer()).min(16)
+    }
+
+    /// The `profile:difficulty` of computer slot `slot` (0 = player two).
+    pub fn computer(&self, slot: usize) -> (String, String) {
+        let (profile, difficulty) = crate::computer::DEFAULT_SPEC;
+        self.get("ai")
+            .split(',')
+            .nth(slot)
+            .filter(|s| !s.is_empty() && *s != "none")
+            .and_then(|s| crate::computer::Spec::parse(s).ok())
+            .map_or((profile.into(), difficulty.into()), |s| {
+                (s.profile, s.difficulty)
+            })
+    }
+
+    /// Sets one slot's profile and difficulty, writing every slot before it explicitly.
+    pub fn set_computer(&mut self, slot: usize, profile: &str, difficulty: &str) {
+        let count = self.computer_slots().max(slot + 1);
+        let entries: Vec<String> = (0..count)
+            .map(|i| {
+                let (p, d) = if i == slot {
+                    (profile.to_owned(), difficulty.to_owned())
+                } else {
+                    self.computer(i)
+                };
+                format!("{p}:{d}")
+            })
+            .collect();
+        self.set("ai", entries.join(","));
     }
 }
 
@@ -327,6 +381,8 @@ mod tests {
             ("seed", "44"),
             ("players", "2"),
             ("factions", "test.a,test.b"),
+            ("ai", "test.profile:test.difficulty"),
+            ("watch", "true"),
             ("age", "3"),
             ("speed", "250"),
             ("demo", "true"),
@@ -410,7 +466,29 @@ mod tests {
             );
         }
         assert!(CONTROLS.iter().any(|c| c.flag == "script"));
-        assert_eq!(CONTROLS.len(), 39);
+        assert_eq!(CONTROLS.len(), 41);
+    }
+
+    #[test]
+    fn computer_slots_follow_the_player_count() {
+        let mut form = Form::default();
+        assert_eq!(form.computer_slots(), 3);
+        assert_eq!(form.computer(2), ("balanced".into(), "moderate".into()));
+        form.set_computer(1, "builder", "tough");
+        assert_eq!(
+            form.get("ai"),
+            "balanced:moderate,builder:tough,balanced:moderate"
+        );
+        assert_eq!(form.computer(1), ("builder".into(), "tough".into()));
+        form.set("factions", "a,b");
+        assert_eq!(form.computer_slots(), 1);
+        form.set("ai", "none");
+        assert_eq!(form.computer(0), ("balanced".into(), "moderate".into()));
+        form.set("watch", "true");
+        assert_eq!((form.first_computer(), form.computer_slots()), (1, 2));
+        let mut form = Form::default();
+        form.set_computer(0, "rusher", "easy");
+        assert_eq!(form.validate().unwrap().ai[0].to_string(), "rusher:easy");
     }
 
     #[test]
