@@ -598,8 +598,9 @@ fn launch_orbit_and_bombardment_repeat_with_equal_hashes() {
         .unwrap();
         run(&mut w, 65);
         assert!(w.entity(ground).unwrap().hp < before);
+        // In range from the start, it holds over its launch point (task 68).
         let orbit = w.orbit(id).unwrap();
-        assert_ne!(orbit.pos, pos);
+        assert_eq!(orbit.pos, pos);
         assert_eq!(orbit.body, BodyId(2));
         let shot = orbit.last_shot.expect("orbital weapon fired");
         assert_eq!(shot.target, w.entity(ground).unwrap().pos);
@@ -711,10 +712,18 @@ fn interplanetary_ships_can_orbit_but_cannot_depart_the_system() {
     .unwrap();
     w.step();
     assert_eq!(w.orbit(id).unwrap().pos, subpoint);
-    let before = w.orbit(id).unwrap().pos;
+    // It holds over that point (task 68); ordered on, it crosses cube face edges in orbit.
+    run(&mut w, 200);
+    assert_eq!(w.orbit(id).unwrap().pos, subpoint);
+    let elsewhere = Pos::on(BodyId(2), 2, 32000, 32000);
+    w.submit(Command {
+        target_pos: Some(elsewhere),
+        ..command(&w, id, "move")
+    })
+    .unwrap();
     run(&mut w, 2000);
     let orbit = w.orbit(id).unwrap();
-    assert_ne!(orbit.pos.face, before.face, "orbit crosses cube face edges");
+    assert_eq!(orbit.pos, elsewhere, "orbit crosses cube face edges");
     assert_eq!(w.entity(id).unwrap().pos.body, BodyId(1));
 }
 

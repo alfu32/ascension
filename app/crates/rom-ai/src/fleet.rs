@@ -765,7 +765,22 @@ fn colonise(
         };
         match voyage.stage {
             0 => {
-                if !fly(plan, ship, home_body, 0) {
+                // Troops board only a landed ship (task 68): it comes down near a home city.
+                if !(plan.view.world.is_landed(ship.id) && ship.pos.body == home_body) {
+                    if !fly(plan, ship, home_body, 0) {
+                        continue;
+                    }
+                    if !ship.orders().front().is_some_and(|o| o.kind == "land")
+                        && !plan.view.busy.contains(&ship.id)
+                        && let Some(site) = plan
+                            .view
+                            .cities
+                            .iter()
+                            .find(|c| c.pos.body == home_body)
+                            .and_then(|c| landing(&plan.view, ship.id, c.pos))
+                    {
+                        plan.order(ship.id, "land", None, None, Some(site));
+                    }
                     continue;
                 }
                 let view = &plan.view;
@@ -782,6 +797,13 @@ fn colonise(
                 board(plan, memory, ship, home_body, has_builder, room, weights);
             }
             1 => {
+                // Loaded on the ground: up again first (task 68).
+                if plan.view.world.is_landed(ship.id) {
+                    if ship.orders().is_empty() && !plan.view.busy.contains(&ship.id) {
+                        plan.order(ship.id, "lift", None, None, None);
+                    }
+                    continue;
+                }
                 if fly(plan, ship, body, 0) {
                     next(memory, 2);
                 }
@@ -855,12 +877,16 @@ fn board(
                     && operational(e)
                     && e.container_id.is_none()
                     && !view.busy.contains(&e.id)
-                    && !e
-                        .orders()
-                        .iter()
-                        .any(|o| matches!(o.kind.as_str(), "construct" | "repair"))
             })
-            .min_by_key(|e| (!view.is_idle(e), e.id))
+            // An idle builder first; a busy one leaves its site once the ship waits landed
+            // (task 68: troops board only on the ground, so the ship cannot wait for long).
+            .min_by_key(|e| {
+                let building = e
+                    .orders()
+                    .iter()
+                    .any(|o| matches!(o.kind.as_str(), "construct" | "repair"));
+                (!view.is_idle(e), building, e.id)
+            })
     {
         riders.push(builder.id);
         room -= view.rules.entity_types[&builder.type_id].pop_cost.max(0);

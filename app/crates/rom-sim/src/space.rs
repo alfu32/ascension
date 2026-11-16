@@ -131,32 +131,6 @@ impl World {
         }
     }
 
-    pub(crate) fn advance_orbits(&mut self) {
-        let ids: Vec<_> = self.space.orbits.keys().copied().collect();
-        for id in ids {
-            // A descending ship keeps its footprint over the landing point.
-            if self.landing_progress(id).is_some() {
-                continue;
-            }
-            let orbit = &self.space.orbits[&id];
-            let numerator = orbit.move_remainder
-                + self
-                    .rules
-                    .constant("space.orbit_speed")
-                    .expect("orbit speed");
-            let distance = numerator / self.tick_rate;
-            let remainder = numerator % self.tick_rate;
-            let (dx, dy) = crate::geometry::rotate((distance, 0), (orbit.facing / 90) as u8);
-            let (pos, turns) = self.geo(orbit.body).offset(orbit.pos, dx, dy);
-            let facing = crate::geometry::turn_facing(orbit.facing, turns);
-            let orbit = self.space.orbits.get_mut(&id).expect("orbit ship");
-            orbit.pos = pos;
-            orbit.facing = facing;
-            orbit.move_remainder = remainder;
-            self.refresh_viewer(id);
-        }
-    }
-
     fn launch_site(&self, command: &Command) -> Result<Pos, SimError> {
         let ship = self.entity(command.executor).expect("executor");
         let port = command
@@ -461,6 +435,10 @@ impl World {
             });
         if orbit_body.is_some_and(|body| self.orbit(id).is_some_and(|o| o.body == body)) {
             order.movement = None;
+            // A leg of a freighter's route ends in orbit; a player's order keeps holding.
+            if order.automatic {
+                order.status = OrderStatus::Done;
+            }
             return;
         }
         self.leave_orbit(id);

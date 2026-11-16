@@ -1,0 +1,11 @@
+# Task 68, replayed by --script in universe mode: a space freighter runs a trade route between
+# the home city and a colony on the nearest other planet. Test-only setup lines first.
+0 grant-age age.expansion
+0 grant-tech tech.civic.1
+0 colony 1
+0 place-orbit 1 unit.space_freighter @0,6
+1 speed 400
+300 click trader1
+302 rclick city2
+# Out to the star system: it flies across to the colony's planet.
+600 cam wheel -24 640,400

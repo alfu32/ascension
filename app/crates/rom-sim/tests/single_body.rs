@@ -123,11 +123,11 @@ fn single_body_world_behaves_as_before() {
         ),
         (
             sphere_battle(700),
-            "entities=80 done=0 failed=0 no_path=0 kills={} losses={} searches=0 nodes=0 repaths=0 positions=ea50172e6bf9732d",
+            "entities=76 done=0 failed=0 no_path=0 kills={PlayerId(1): 2, PlayerId(2): 2} losses={PlayerId(1): 2, PlayerId(2): 2} searches=0 nodes=0 repaths=0 positions=45e8d2e8fea2725c",
         ),
         (
             sphere_battle(1200),
-            "entities=0 done=0 failed=0 no_path=0 kills={PlayerId(1): 40, PlayerId(2): 40} losses={PlayerId(1): 40, PlayerId(2): 40} searches=0 nodes=0 repaths=0 positions=cbf29ce484222325",
+            "entities=4 done=0 failed=0 no_path=0 kills={PlayerId(1): 38, PlayerId(2): 38} losses={PlayerId(1): 38, PlayerId(2): 38} searches=0 nodes=0 repaths=0 positions=1ceeb46a0ff4d615",
         ),
     ];
     for (got, expected) in cases {

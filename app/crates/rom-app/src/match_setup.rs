@@ -441,11 +441,59 @@ pub fn build_universe_match(
     setup
         .apply_space_placements(&mut world)
         .map_err(SetupError::Setup)?;
+    for owner in &setup.colonies {
+        found_colony(rules, universe, &mut world, PlayerId(*owner))?;
+    }
     Ok(Match {
         world,
         starts,
         builder_type: builder_id,
     })
+}
+
+/// Test setup (`colony`): a finished city of `owner` on the habitable planet of player one's
+/// home system nearest it, the planet generated first.
+fn found_colony(
+    rules: &Arc<Rules>,
+    universe: &Universe,
+    world: &mut World,
+    owner: PlayerId,
+) -> Result<(), SetupError> {
+    let fail = |what: &str| SetupError::Setup(format!("colony: {what}"));
+    let home = world
+        .home_body(PlayerId(1))
+        .ok_or_else(|| fail("no home"))?;
+    let (system, at) = world
+        .body(home)
+        .map(|b| b.system)
+        .zip(world.body_position(home))
+        .ok_or_else(|| fail("home planet not in a system"))?;
+    let body = world
+        .bodies()
+        .iter()
+        .filter(|b| b.system == system && b.kind == rom_rules::BodyKind::Habitable && b.id != home)
+        .filter_map(|b| Some((at.distance(world.body_position(b.id)?), b.id)))
+        .min()
+        .map(|(_, id)| id)
+        .ok_or_else(|| fail("no other planet"))?;
+    if world.surface(body).is_none() {
+        let planet = universe
+            .expand(rules, body.0)
+            .map_err(|e| fail(&e.to_string()))?;
+        world
+            .add_surface(body, &planet_surface(&planet))
+            .map_err(|e| fail(&e.to_string()))?;
+    }
+    world.reveal_terrain(PlayerId(1), body);
+    let n = world.body(body).and_then(|b| b.n).unwrap_or(192) as i32;
+    let city = world.city_type(owner).ok_or(SetupError::NoCity)?;
+    // Near the middle of the first face (of the four around the equator) with room for it.
+    let site = [0, 1, 2, 3, 4, 5]
+        .into_iter()
+        .find_map(|face| world.find_city_site(owner, body, Pos::on(body, face, n * 500, n * 500)))
+        .ok_or_else(|| fail("no room for a city"))?;
+    world.place_for_setup(city, owner, site)?;
+    Ok(())
 }
 
 /// Whether every tile under a building of type `et` centred at `pos` is buildable.

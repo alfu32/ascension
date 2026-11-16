@@ -88,6 +88,39 @@ pub struct Order {
     pub(crate) movement: Option<MoveState>,
 }
 
+impl Order {
+    /// An order the simulation makes for itself, outside every queue (it has no identity).
+    pub(crate) fn internal(
+        player: PlayerId,
+        executor: EntityId,
+        kind: &str,
+        target_entity: Option<EntityId>,
+        target_pos: Option<Pos>,
+    ) -> Self {
+        Self {
+            id: OrderId(0),
+            player,
+            executor,
+            kind: kind.into(),
+            subject: None,
+            target_entity,
+            target_pos,
+            status: OrderStatus::Active,
+            progress_ticks: 0,
+            issued_tick: 0,
+            total_ticks: None,
+            payment: Vec::new(),
+            build_remainder: 0,
+            automatic: true,
+            home: None,
+            pace: None,
+            engaged: None,
+            route: None,
+            movement: None,
+        }
+    }
+}
+
 /// An accepted order that failed while it ran, as its player is told of it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrderFailure {

@@ -1,0 +1,11 @@
+# Task 68, replayed by --script in universe mode: a corvette patrols in orbit on the great
+# circle through its point and a point thirty tiles east; selected, its path is drawn round the
+# planet. Test-only setup lines first.
+0 grant-age age.starfaring
+0 place-orbit 1 unit.corvette @0,0
+1 speed 400
+300 ships
+302 hud tab 1
+304 hud slot 7
+306 click @30,0
+310 cam wheel -12 640,400

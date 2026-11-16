@@ -246,6 +246,20 @@ pub fn build_overlays_on(
     out.lines.clear();
     out.tris.clear();
     let gold = [250, 214, 41, 255];
+    // Patrols: a dashed cyan path, all the way round the planet for a ship in orbit.
+    for patrol in &hud.patrols {
+        let span = patrol.span_milli as f32 / 1000.0;
+        let lift = (patrol.lift_milli as f32 / 1000.0).max(LIFT);
+        let steps = ((span * 48.0).ceil() as usize).clamp(8, 512);
+        for i in (0..steps).step_by(2) {
+            let t = |n: usize| n as f32 / steps as f32 * span;
+            out.line(
+                ground.route_point(patrol.from, patrol.to, t(i), lift),
+                ground.route_point(patrol.from, patrol.to, t(i + 1), lift),
+                [90, 220, 255, 230],
+            );
+        }
+    }
     for route in &hud.trade_routes {
         let steps = (route.length.div_ceil(500) as usize).clamp(2, 4096);
         for i in (0..steps).step_by(2) {
@@ -371,12 +385,13 @@ pub fn build_overlays_on(
         out.ring(impact, 0.8, [255, 190, 70, 255]);
         out.line(to, impact.at(0.0, 0.0, 2.0), [255, 235, 160, 255]);
     }
-    // Tracers of shots to or from what is aloft: batteries firing up, dogfights in orbit.
+    // Shots to or from what is aloft (batteries firing up, dogfights in orbit) and from
+    // defences: a tracer for what hits at once, an arrow in flight for a projectile.
     for view in views {
         let Some(target) = view
             .shot_at
             .and_then(|id| views.iter().find(|v| v.id == id))
-            .filter(|t| view.altitude > 0.0 || t.altitude > 0.0)
+            .filter(|t| view.altitude > 0.0 || t.altitude > 0.0 || view.building)
         else {
             continue;
         };
@@ -389,10 +404,49 @@ pub fn build_overlays_on(
             entity_frame(v, ground).at([0.0, height, 0.0])
         };
         let (from, to) = (centre(view), centre(target));
-        // Thin lines only: their width never follows the ship view scale. A bright streak
-        // marks the head of the shot.
         let along =
             |t: f32| -> [f32; 3] { std::array::from_fn(|i| from[i] + (to[i] - from[i]) * t) };
+        if let Some(flight) = view.shot_flight {
+            // An arrow: a short dark shaft on a shallow arc, its head bright.
+            let length = (0..3)
+                .map(|i| (to[i] - from[i]).powi(2))
+                .sum::<f32>()
+                .sqrt();
+            let up = ground.frame(view.face, view.x, view.y).up;
+            let arc = |t: f32| -> [f32; 3] {
+                let p = along(t);
+                let lift = 4.0 * t * (1.0 - t) * length * 0.06;
+                std::array::from_fn(|i| p[i] + up[i] * lift)
+            };
+            // A shaft of a tile and a half with flat sides across and up, so that it shows from
+            // above and from the side.
+            let (tail, head) = (arc((flight - 1.5 / length.max(1.0)).max(0.0)), arc(flight));
+            let d: [f32; 3] = std::array::from_fn(|i| head[i] - tail[i]);
+            let across = [
+                d[1] * up[2] - d[2] * up[1],
+                d[2] * up[0] - d[0] * up[2],
+                d[0] * up[1] - d[1] * up[0],
+            ];
+            let norm = across.iter().map(|v| v * v).sum::<f32>().sqrt().max(0.001);
+            for side in [across.map(|v| v / norm * 0.05), up.map(|v| v * 0.05)] {
+                let offset =
+                    |p: [f32; 3], sign: f32| std::array::from_fn(|i| p[i] + side[i] * sign);
+                out.quad(
+                    [
+                        offset(tail, -1.0),
+                        offset(tail, 1.0),
+                        offset(head, 1.0),
+                        offset(head, -1.0),
+                    ],
+                    [60, 40, 22, 255],
+                );
+            }
+            let tip = arc((flight - 0.3 / length.max(1.0)).max(0.0));
+            out.line(tip, head, [250, 240, 215, 255]);
+            continue;
+        }
+        // Thin lines only: their width never follows the ship view scale. A bright streak
+        // marks the head of the shot.
         out.line(from, to, [255, 150, 60, 200]);
         out.line(along(0.7), to, [255, 240, 200, 255]);
         let hit = Origin {
@@ -576,6 +630,7 @@ pub fn build_overlays_on(
             altitude: 0.0,
             beam_target: None,
             shot_at: None,
+            shot_flight: None,
             spacecraft: false,
             activity: Default::default(),
         };
@@ -617,6 +672,7 @@ mod tests {
             altitude: 0.0,
             beam_target: None,
             shot_at: None,
+            shot_flight: None,
             spacecraft: false,
             activity: Default::default(),
         }

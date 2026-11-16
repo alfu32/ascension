@@ -91,6 +91,9 @@ pub struct World {
     pub(crate) vision: Vision,
     /// Rally points of producers (`set_rally`), by producer.
     pub(crate) rallies: BTreeMap<EntityId, crate::rally::Rally>,
+    /// Legs of space trade routes queued this tick in front of their routes; empty between
+    /// ticks.
+    pub(crate) legs: Vec<Order>,
     /// Units whose queued `disband` came up this tick; empty between ticks.
     pub(crate) disbanded: Vec<EntityId>,
     /// Each player's latest failures of accepted orders, oldest first (a report, not hashed).
@@ -281,6 +284,7 @@ impl World {
             vision: Vision::default(),
             rallies: BTreeMap::new(),
             disbanded: Vec::new(),
+            legs: Vec::new(),
             failures: BTreeMap::new(),
             types: crate::index::TypeIndex::default(),
             max_footprint,
@@ -486,6 +490,7 @@ impl World {
             city_id: None,
             container_id: None,
             idle_ticks: 0,
+            aim: None,
             orders: VecDeque::new(),
         }));
         self.index_entity(owner, type_id, id, site);
@@ -717,9 +722,9 @@ impl World {
         if !target_matches(&command, kind.target) {
             return Err(SimError::WrongTargetShape);
         }
+        self.validate_craft(&command)?;
         self.validate_space_order(&command)?;
         self.validate_transport(&command)?;
-        self.validate_craft(&command)?;
         // Orbit can name a body's surface; an orbiting ship can attack that surface, and what
         // stands on a planet can attack what orbits it.
         let body = entity.pos.body;
@@ -727,11 +732,19 @@ impl World {
             && command
                 .target_entity
                 .is_some_and(|target| self.across_orbit(command.executor, target));
-        // Boarding, landing and unloading check their own bodies.
+        // Within the orbit it holds a ship moves, attack-moves and patrols over its planet.
+        let orbit_move = matches!(command.kind.as_str(), "move" | "attack_move" | "patrol")
+            && self.orbit(command.executor).is_some_and(|orbit| {
+                command
+                    .target_pos
+                    .is_some_and(|p| p.body == orbit.body && self.geo(orbit.body).contains(p))
+            });
+        // Boarding, landing, unloading and trade check their own bodies.
         let cross_body = matches!(
             command.kind.as_str(),
-            "travel" | "orbit" | "enter" | "land" | "unload"
-        ) || orbital_attack;
+            "travel" | "orbit" | "enter" | "land" | "unload" | "trade"
+        ) || orbital_attack
+            || orbit_move;
         if !cross_body
             && (command.target_pos.is_some_and(|pos| pos.body != body)
                 || command
@@ -824,7 +837,6 @@ impl World {
     /// they were when the order phase began, so the id order of updates cannot decide
     /// who strikes first.
     pub fn step(&mut self) {
-        self.advance_orbits();
         self.find_idle_work();
         self.acquire_idle();
         self.regenerate_energy();
@@ -895,6 +907,7 @@ impl World {
                 continue;
             }
             self.advance_executor(id);
+            self.fire_turret(id);
             self.heal_idle(id);
             let new = self.entity(id).expect("executor persists").pos;
             if old != new {

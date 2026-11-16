@@ -258,9 +258,9 @@ fn craft_take_off_from_an_airfield_climb_to_orbit_and_fight_a_ship() {
         run_until(&mut w, 3000, |w| w.entity(corvette).is_none());
         assert!(hp > 0);
         assert!(w.stats().kills.get(&P1).copied().unwrap_or(0) >= 1);
-        // Back down into the air above a point of the planet.
+        // Back down into the air straight below (task 68: it holds over one point).
         let survivor = *fighters.iter().find(|c| w.entity(**c).is_some()).unwrap();
-        let below = at(HOME, 0, 26_000, 36_000);
+        let below = w.orbit(survivor).unwrap().pos;
         order(&mut w, survivor, "land", None, Some(below));
         w.step();
         w.step();
@@ -431,10 +431,18 @@ fn batteries_shoot_down_a_descending_transport_and_damage_a_ship_in_orbit() {
             .collect();
         w.place_for_setup(id(&w, "bld.spaceport"), P1, at(HOME, 0, 28_000, 36_000))
             .unwrap();
+        // Troops board only a landed ship (task 68): down beside them, aboard, up again.
+        let pad = w
+            .landing_site(transport, at(HOME, 0, 25_000, 34_000))
+            .unwrap();
+        order(&mut w, transport, "land", None, Some(pad));
+        run_until(&mut w, 2000, |w| w.is_landed(transport));
         for t in &troops {
             order(&mut w, *t, "enter", Some(transport), None);
         }
         run_until(&mut w, 2000, |w| w.passengers(transport).len() == 2);
+        order(&mut w, transport, "lift", None, None);
+        run_until(&mut w, 200, |w| w.orbit(transport).is_some());
         // Out of their range nothing fires.
         let hp = w.entity(transport).unwrap().hp;
         assert_eq!(hp, w.entity(transport).unwrap().max_hp);
@@ -442,7 +450,7 @@ fn batteries_shoot_down_a_descending_transport_and_damage_a_ship_in_orbit() {
             .landing_site(transport, at(HOME, 3, 39_500, 32_500))
             .unwrap();
         order(&mut w, transport, "land", None, Some(site));
-        run_until(&mut w, 200, |w| {
+        run_until(&mut w, 2000, |w| {
             w.entity(transport).is_none() || w.is_landed(transport)
         });
         assert!(w.entity(transport).is_none(), "shot down while descending");

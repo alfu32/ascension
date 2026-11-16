@@ -16,6 +16,14 @@ impl World {
             return;
         }
         self.run_orders(id);
+        // A freighter's next leg runs before its route resumes.
+        for leg in std::mem::take(&mut self.legs) {
+            self.entities[id.0 as usize]
+                .as_mut()
+                .expect("executor")
+                .orders
+                .push_front(leg);
+        }
         if self.entities[id.0 as usize]
             .as_ref()
             .expect("executor")
@@ -79,10 +87,12 @@ impl World {
                         break;
                     }
                     worked = true;
+                    // Within the orbit of a planet a ship moves, attacks and patrols in orbit.
                     if matches!(
                         order.kind.as_str(),
                         "move" | "travel" | "attack_move" | "explore" | "patrol" | "guard"
-                    ) {
+                    ) && !self.orbit_order(id, &order)
+                    {
                         self.leave_orbit(id);
                     }
                     if matches!(order.kind.as_str(), "enter" | "land" | "lift" | "unload") {
@@ -105,6 +115,11 @@ impl World {
                         self.advance_guard(id, &mut order);
                     } else if order.kind == "heal" {
                         self.advance_heal(id, &mut order);
+                    } else if order.kind == "move" && self.orbit_order(id, &order) {
+                        order.progress_ticks += 1;
+                        if self.orbit_move(id, order.target_pos.expect("orbit point")) {
+                            order.status = OrderStatus::Done;
+                        }
                     } else if order.kind == "move" {
                         order.progress_ticks += 1;
                         let goal = order.target_pos.expect("point movement");

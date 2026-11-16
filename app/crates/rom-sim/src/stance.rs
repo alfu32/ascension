@@ -149,6 +149,7 @@ impl World {
                 // also gives reflected lines the same choice between neighbours.
                 let rank =
                     crate::rng::tie_rank(self.tick, dx.unsigned_abs() as u32, dy as i32 as u32);
+                // Two targets on one point are told apart by their hit points before their ids.
                 Some((
                     !preferred,
                     geo.rank_distance(origin, pos),
@@ -156,11 +157,12 @@ impl World {
                     pos.face,
                     pos.y,
                     pos.x,
+                    t.hp,
                     target,
                 ))
             })
             .min()
-            .map(|(_, _, _, _, _, _, id)| id)
+            .map(|(_, _, _, _, _, _, _, id)| id)
     }
 
     fn automatic_attack(&mut self, id: EntityId, target: EntityId, home: Option<Pos>) {
@@ -183,6 +185,54 @@ impl World {
         }
     }
 
+    /// Whether an entity's weapons fire by themselves whatever its queue holds: an armed type
+    /// that cannot move (a defence, a city). Firing stays stand-ground.
+    pub(crate) fn is_turret(&self, e: &crate::Entity) -> bool {
+        let et = &self.rules.entity_types[&e.type_id];
+        et.movement.is_none() && !et.weapons.is_empty()
+    }
+
+    /// One tick of a defence's weapon: it keeps its aim while it can hit it, takes the nearest
+    /// visible enemy in range when it has none, and fires when reloaded, while training,
+    /// researching or idle. An explicit attack order aims it instead.
+    pub(crate) fn fire_turret(&mut self, id: EntityId) {
+        let Some(e) = self.entity(id) else {
+            return;
+        };
+        if !self.is_turret(e) {
+            return;
+        }
+        let ready = e.hp > 0
+            && e.build_progress.is_none()
+            && !e.neutralised
+            && e.assimilation_until.is_none()
+            && e.container_id.is_none()
+            && self.player_status(e.owner) != Some(crate::PlayerStatus::Defeated)
+            && self.has_enemies()
+            && e.orders.front().is_none_or(|o| o.kind != "attack");
+        let (owner, old) = (e.owner, e.aim);
+        let mut aim = old.filter(|target| {
+            ready
+                && self.entity(*target).is_some_and(|t| {
+                    t.hp > 0
+                        && t.container_id.is_none()
+                        && self.enemies(owner, t.owner)
+                        && self.sees_entity(owner, t)
+                })
+                && self.can_fire_at(id, *target)
+        });
+        if ready && aim.is_none() && (old.is_some() || self.acquisition_due()) {
+            aim = self.acquire_target(id, "stand_ground");
+        }
+        if aim != old {
+            self.entities[id.0 as usize].as_mut().expect("turret").aim = aim;
+        }
+        if let Some(target) = aim {
+            let mut order = crate::Order::internal(owner, id, "attack", Some(target), None);
+            self.advance_combat(id, &mut order);
+        }
+    }
+
     pub(crate) fn acquire_idle(&mut self) {
         // The movement benchmark and peaceful worlds avoid spatial searches entirely.
         if !self.acquisition_due() || !self.has_enemies() {
@@ -194,6 +244,7 @@ impl World {
             .entities()
             .filter(|e| {
                 e.orders.is_empty()
+                    && !self.is_turret(e)
                     && e.build_progress.is_none()
                     && e.container_id.is_none()
                     && !pending.contains(&e.id)

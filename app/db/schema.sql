@@ -1023,7 +1023,8 @@ CREATE TABLE entity (
   work_site_id   INTEGER,                -- gather site this worker occupies
   container_id   INTEGER,                -- carried or kept inside
   city_id        INTEGER,                -- city whose economy this building belongs to
-  idle_ticks     INTEGER NOT NULL
+  idle_ticks     INTEGER NOT NULL,
+  aim_id         INTEGER                 -- enemy a defence keeps firing at (format 4)
 ) STRICT;
 CREATE INDEX entity_owner ON entity(owner_id, entity_type_id);
 CREATE INDEX entity_body  ON entity(body_id);
@@ -1045,7 +1046,7 @@ CREATE TABLE entity_orbit (
   face INTEGER NOT NULL CHECK (face BETWEEN 0 AND 5),
   x INTEGER NOT NULL,
   y INTEGER NOT NULL,
-  facing INTEGER NOT NULL CHECK (facing IN (0,90,180,270)),
+  facing INTEGER NOT NULL CHECK (facing BETWEEN 0 AND 359), -- degrees (format 4: any heading)
   move_remainder INTEGER NOT NULL DEFAULT 0,
   last_shot_tick INTEGER,
   last_shot_face INTEGER CHECK (last_shot_face BETWEEN 0 AND 5),
