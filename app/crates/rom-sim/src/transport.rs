@@ -88,11 +88,16 @@ impl World {
     }
 
     /// Height of a ship as a percentage of its orbital height: 100 in orbit, falling while it
-    /// lands and rising while it lifts off; `None` for anything on the ground or elsewhere.
+    /// lands and rising while it lifts off (an orbital craft also while it climbs to board a
+    /// carrier above); `None` for anything on the ground or elsewhere.
     pub fn altitude_pct(&self, id: EntityId) -> Option<i64> {
-        let front = self.entity(id)?.orders.front();
+        let e = self.entity(id)?;
+        let front = e.orders.front();
+        let craft = self.climb_ticks(e.type_id);
         let progress = |key: &str| {
-            let ticks = self.rules.constant(key).unwrap_or(1).max(1);
+            let ticks = craft
+                .map_or_else(|| self.rules.constant(key).unwrap_or(1), |t| t as i64)
+                .max(1);
             front
                 .map(|o| (o.progress_ticks.min(ticks as u64) as i64) * 100 / ticks)
                 .unwrap_or(0)
@@ -103,7 +108,14 @@ impl World {
                 None => 100,
             });
         }
-        (self.is_landed(id) && front.is_some_and(|o| o.kind == "lift" && o.progress_ticks > 0))
+        let climbing = front.is_some_and(|o| {
+            o.progress_ticks > 0
+                && (o.kind == "lift"
+                    || (o.kind == "enter"
+                        && o.target_entity
+                            .is_some_and(|ship| self.boards_in_orbit(id, ship))))
+        });
+        ((self.is_landed(id) || craft.is_some()) && climbing)
             .then(|| progress("space.launch_ticks"))
     }
 
@@ -276,15 +288,29 @@ impl World {
                 if !self.room_for(ship.id, e.type_id) {
                     return Err(SimError::NoRoomAboard);
                 }
-                self.boarding_point(e, ship).ok_or(SimError::CannotBoard)?;
+                if !self.boards_in_orbit(e.id, ship.id) {
+                    self.boarding_point(e, ship).ok_or(SimError::CannotBoard)?;
+                }
             }
             "land" => {
                 let at = command.target_pos.ok_or(SimError::WrongTargetShape)?;
-                self.check_landing(e.id, at)?;
+                if self.is_craft_type(e.type_id) {
+                    self.check_descent(e.id, at)?;
+                } else {
+                    self.check_landing(e.id, at)?;
+                }
             }
+            // A craft's climb is checked with its other orders.
+            "lift" if self.is_craft_type(e.type_id) => {}
             "lift" => {
                 if !self.is_landed(e.id) {
                     return Err(SimError::NotLanded);
+                }
+            }
+            // A launching carrier in orbit sends its craft out into that orbit.
+            "unload" if self.orbit(e.id).is_some() && self.launches_craft(e.id) => {
+                if self.passengers(e.id).is_empty() {
+                    return Err(SimError::CannotUnload);
                 }
             }
             "unload" => {
@@ -323,9 +349,12 @@ impl World {
 
     /// Advances one boarding, landing, lift-off or unloading order.
     pub(crate) fn advance_transport(&mut self, id: EntityId, order: &mut Order) {
+        let craft = self.is_craft_type(self.entity(id).expect("executor").type_id);
         match order.kind.as_str() {
             "enter" => self.advance_enter(id, order),
+            "land" if craft => self.advance_descent(id, order),
             "land" => self.advance_land(id, order),
+            "lift" if craft => self.advance_climb(id, order),
             "lift" => self.advance_lift(id, order),
             _ => self.advance_unload(id, order),
         }
@@ -338,6 +367,22 @@ impl World {
             return;
         };
         let ship_id = ship.id;
+        // A craft climbs to the carrier's orbit, if it is not there yet, and boards it there.
+        if self.boards_in_orbit(id, ship_id) {
+            let type_id = self.entity(id).expect("boarding craft").type_id;
+            let ticks = self.climb_ticks(type_id).expect("craft");
+            if !self.climb(id, order, ticks) {
+                return;
+            }
+            if !self.room_for(ship_id, type_id) {
+                order.status = OrderStatus::Failed("no_room".into());
+                return;
+            }
+            self.board_from_orbit(id, ship_id);
+            order.movement = None;
+            order.status = OrderStatus::Done;
+            return;
+        }
         let unit = self.entity(id).expect("boarding unit");
         let Some((at, bounds)) = self.boarding_point(unit, ship) else {
             order.status = OrderStatus::Failed("no_carrier".into());
@@ -361,7 +406,7 @@ impl World {
     }
 
     /// Takes a unit off the map into a carrier.
-    fn board(&mut self, unit: EntityId, carrier: EntityId) {
+    pub(crate) fn board(&mut self, unit: EntityId, carrier: EntityId) {
         self.set_work_site(unit, None);
         let e = self.entities[unit.0 as usize].as_mut().expect("passenger");
         let pos = e.pos;
@@ -528,6 +573,11 @@ impl World {
                     });
                 }
             }
+            order.status = OrderStatus::Done;
+            return;
+        }
+        if self.launches_craft(id) && self.orbit(id).is_some() {
+            self.launch_craft(id);
             order.status = OrderStatus::Done;
             return;
         }

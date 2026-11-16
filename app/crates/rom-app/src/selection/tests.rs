@@ -1373,6 +1373,7 @@ fn task_30_scripts_reach_the_capture_states_without_a_window() {
             for action in script.due_actions(game.world.tick()) {
                 match action {
                     ScriptAction::SelectResearchers => ctl.select_researchers(&game.world),
+                    ScriptAction::SelectCraft => ctl.select_own_craft(&game.world),
                     ScriptAction::SelectProducers => ctl.select_producers(&game.world),
                     ScriptAction::SelectShips => ctl.select_own_ships(&game.world),
                     ScriptAction::EntityPick {
@@ -1738,6 +1739,7 @@ fn wealth_screenshot_script_reaches_capture_without_a_window() {
         for action in script.due_actions(game.world.tick()) {
             match action {
                 ScriptAction::SelectResearchers => ctl.select_researchers(&game.world),
+                ScriptAction::SelectCraft => ctl.select_own_craft(&game.world),
                 ScriptAction::SelectProducers => ctl.select_producers(&game.world),
                 ScriptAction::SelectShips => ctl.select_own_ships(&game.world),
                 ScriptAction::EntityPick {
@@ -1933,6 +1935,7 @@ fn orbital_review_script_trains_launches_selects_and_bombards_through_picks() {
         for action in script.due_actions(game.world.tick()) {
             match action {
                 ScriptAction::SelectResearchers => ctl.select_researchers(&game.world),
+                ScriptAction::SelectCraft => ctl.select_own_craft(&game.world),
                 ScriptAction::SelectProducers => ctl.select_producers(&game.world),
                 ScriptAction::SelectShips => ctl.select_own_ships(&game.world),
                 ScriptAction::EntityPick {
@@ -2198,6 +2201,7 @@ fn colony_script_run() -> (crate::match_setup::Match, Controller, BodyId, u64) {
         for action in script.due_actions(game.world.tick()) {
             match action {
                 ScriptAction::SelectResearchers => ctl.select_researchers(&game.world),
+                ScriptAction::SelectCraft => ctl.select_own_craft(&game.world),
                 ScriptAction::SelectProducers => ctl.select_producers(&game.world),
                 ScriptAction::SelectShips => ctl.select_own_ships(&game.world),
                 ScriptAction::EntityPick {
@@ -2325,4 +2329,189 @@ fn a_carrier_lists_its_passengers_and_offers_unload_and_lift_off() {
         Some(colony),
         "back in orbit"
     );
+}
+
+/// Replays a task 58 review script on the universe its screenshot was taken in (seed 1, two
+/// players, planets of the default size) for `ticks` ticks, calling `each` after every step with
+/// the planet view's render snapshot.
+fn orbital_combat_script(
+    text: &str,
+    ticks: u64,
+    mut each: impl FnMut(&crate::match_setup::Match, &Controller, &rom_render::EntitySnapshot),
+) -> (crate::match_setup::Match, Controller) {
+    use crate::script::{Script, ScriptAction, ScriptContext, ScriptSetup};
+    let options = crate::args::Options {
+        players: 2,
+        ..crate::args::Options::default()
+    };
+    let content = crate::terrain::generate_universe_content(&options).unwrap();
+    let setup = ScriptSetup::scan(text).unwrap();
+    let mut game = crate::match_setup::build_universe_match(
+        &content.rules,
+        &content.universe,
+        &content.factions,
+        1,
+        None,
+        &setup,
+    )
+    .unwrap();
+    let home = game.world.home_body(PLAYER).unwrap();
+    let start = game.starts[0].clone();
+    let context = ScriptContext::of(&start);
+    let mut script = Script::parse(text, &context, &|dx, dy| {
+        surface_of(game.world.offset(start.city_pos, dx, dy))
+    })
+    .unwrap();
+    let mut ctl = Controller::new();
+    ctl.set_view(ViewCtx {
+        planet: home,
+        ..ViewCtx::default()
+    });
+    for _ in 0..ticks {
+        for action in script.due_actions(game.world.tick()) {
+            match action {
+                ScriptAction::SelectResearchers => ctl.select_researchers(&game.world),
+                ScriptAction::SelectCraft => ctl.select_own_craft(&game.world),
+                ScriptAction::SelectProducers => ctl.select_producers(&game.world),
+                ScriptAction::SelectShips => ctl.select_own_ships(&game.world),
+                ScriptAction::EntityPick {
+                    target,
+                    right,
+                    shift,
+                } => {
+                    let pick =
+                        crate::script::live_pick(&game.world, &target, right, shift).unwrap();
+                    ctl.handle(&mut game.world, pick);
+                }
+                ScriptAction::Speed(_) | ScriptAction::Input(_) => {}
+            }
+        }
+        for event in script.due(game.world.tick()) {
+            ctl.handle(&mut game.world, event);
+        }
+        game.world.step();
+        ctl.after_step(&mut game.world);
+        let snapshot = crate::sim_thread::snapshot_on(
+            &game.world,
+            home,
+            &game.world.visible_entities(PLAYER),
+            &crate::looks::ModelBook::default(),
+            &mut crate::sim_thread::Motions::default(),
+        );
+        each(&game, &ctl, &snapshot);
+    }
+    (game, ctl)
+}
+
+#[test]
+fn takeoff_script_climbs_orbital_fighters_through_the_order_palette() {
+    let text = include_str!("../../../../docs/tasks/58-takeoff-script.txt");
+    let mut halfway = false;
+    let (game, ctl) = orbital_combat_script(text, 120, |game, _, snapshot| {
+        if game.world.tick() == 50 {
+            let craft: Vec<_> = snapshot
+                .entities
+                .iter()
+                .filter(|v| v.spacecraft && !v.building)
+                .collect();
+            assert_eq!(craft.len(), 3);
+            halfway = craft.iter().all(|v| v.altitude > 2.0 && v.altitude < 6.0);
+        }
+    });
+    assert!(halfway, "drawn on their way up at tick 50");
+    let craft = ctl.selection().to_vec();
+    assert_eq!(craft.len(), 3);
+    for id in craft {
+        assert!(game.world.orbit(id).is_some(), "in orbit after the climb");
+    }
+}
+
+#[test]
+fn dogfight_script_shows_tracers_between_craft_in_orbit() {
+    let text = include_str!("../../../../docs/tasks/58-dogfight-script.txt");
+    let mut tracer_ticks = Vec::new();
+    let (game, _) = orbital_combat_script(text, 200, |game, _, snapshot| {
+        let aloft = |id: u32| {
+            snapshot
+                .entities
+                .iter()
+                .any(|v| v.id == id && v.altitude > 0.0)
+        };
+        if snapshot
+            .entities
+            .iter()
+            .any(|v| v.shot_at.is_some_and(aloft) && v.altitude > 0.0)
+        {
+            tracer_ticks.push(game.world.tick());
+        }
+    });
+    println!("dogfight tracers at ticks {tracer_ticks:?}");
+    assert!(tracer_ticks.contains(&171), "a volley at the review frame");
+    // Both sides took hits in orbit.
+    for player in [PLAYER, PlayerId(2)] {
+        let hit = game.world.stats().losses.get(&player).copied().unwrap_or(0) > 0
+            || game
+                .world
+                .entities()
+                .any(|e| e.owner == player && game.world.orbit(e.id).is_some() && e.hp < e.max_hp);
+        assert!(hit, "{player:?} was hit");
+    }
+}
+
+#[test]
+fn battery_script_fires_up_at_a_ship_in_orbit() {
+    let text = include_str!("../../../../docs/tasks/58-battery-script.txt");
+    let mut tracer_ticks = Vec::new();
+    // Two volleys, at ticks 10 and 40 (the third, at 70, brings the corvette down).
+    let (game, _) = orbital_combat_script(text, 50, |game, _, snapshot| {
+        let battery = |v: &rom_render::EntityView| v.building && v.altitude == 0.0;
+        if snapshot
+            .entities
+            .iter()
+            .any(|v| battery(v) && v.shot_at.is_some())
+        {
+            tracer_ticks.push(game.world.tick());
+        }
+    });
+    println!("battery tracers at ticks {tracer_ticks:?}");
+    assert!(!tracer_ticks.is_empty());
+    let corvette = game
+        .world
+        .entities()
+        .find(|e| e.owner == PlayerId(2) && game.world.orbit(e.id).is_some())
+        .expect("the corvette orbits above");
+    assert!(corvette.hp < corvette.max_hp);
+}
+
+#[test]
+fn carrier_script_boards_craft_and_offers_to_launch_them() {
+    let text = include_str!("../../../../docs/tasks/58-carrier-script.txt");
+    let (mut game, mut ctl) = orbital_combat_script(text, 172, |_, _, _| {});
+    let carrier = *ctl.selection().first().expect("the carrier is selected");
+    assert_eq!(game.world.passengers(carrier).len(), 3);
+    let mut hud = HudSnapshot::default();
+    ctl.fill(&game.world, &mut hud);
+    let HudSelection::Single(card) = &hud.selection else {
+        panic!("one card");
+    };
+    assert_eq!(card.inside.len(), 3);
+    assert_eq!(card.garrison.as_deref(), Some("3 / 10"));
+    let (palette, actions) = ctl.palette(&game.world).unwrap();
+    assert!(actions.contains(&(4, Action::Unload)));
+    assert!(palette.buttons.iter().any(|b| b.name == "Launch craft"));
+    // Launch: they come out into the carrier's orbit.
+    ctl.press_slot(&mut game.world, 4, false);
+    game.world.step();
+    assert!(game.world.passengers(carrier).is_empty());
+    let body = game.world.orbit(carrier).unwrap().body;
+    let craft: Vec<_> = game
+        .world
+        .entities()
+        .filter(|e| game.world.is_craft_type(e.type_id))
+        .map(|e| e.id)
+        .collect();
+    assert_eq!(craft.len(), 3);
+    for id in craft {
+        assert_eq!(game.world.orbit(id).map(|o| o.body), Some(body));
+    }
 }

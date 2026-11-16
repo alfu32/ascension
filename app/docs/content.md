@@ -143,6 +143,7 @@ per-city limits). Page = command-palette page.
 | Vehicle Plant | military | 5 | Military 5 | replaces the Stable's line (armour) |
 | Airfield | military | 5 | Military 6 | aircraft |
 | Spaceport | military | 10 | — | starships |
+| Ground Battery | military | 10 | — | fires on enemy ships and craft in the orbit above (14 tiles to their ground point) |
 
 City growth. Each Civic level multiplies the city's `border_radius` and
 `economic_radius` stats by 1.06 (the `mul` operation compounds). Buildings also
@@ -187,6 +188,8 @@ hit-point percentage. The first step of each line needs only its age and buildin
 | Bombers | Airfield | Bombers (6), Strategic Bombers (7), Drone Bombers (8) |
 | Starships | Spaceport | Survey Ship (10), Corvettes (10), Space Frigates (11), Space Cruisers (12), Battleships (13) |
 | Transport | Spaceport | Transport Ships (10): unarmed, carries 20 population; every other starship carries 1 (10) or 2 (11+) |
+| Orbital craft | Airfield | Orbital Fighters (10), Orbital Bombers (10): climb from the air to their planet's orbit by themselves and come back down; leave the planet only aboard a carrier |
+| Carrier | Spaceport | Carriers (10): carries 10 orbital craft and launches them into the orbit it holds |
 | Civilian | City | Citizens (0), Worker Drones (8) |
 | Scholar | University | Scholars (1) |
 | Merchant | Market | Merchants (0) |

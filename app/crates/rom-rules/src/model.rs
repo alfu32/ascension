@@ -1198,6 +1198,8 @@ pub struct Movement {
     pub packs: bool,
     /// The `pack_ticks` column.
     pub pack_ticks: i64,
+    /// Ticks an orbital craft takes to climb to its planet's orbit or come back down; 0 = never.
+    pub climb_ticks: i64,
 }
 /// One `et_weapon` row.
 #[derive(Debug, Clone)]

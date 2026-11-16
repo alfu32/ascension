@@ -617,12 +617,13 @@ fn launch_orbit_and_bombardment_repeat_with_equal_hashes() {
                 w.offset(pos, 5000, 0),
             )
             .unwrap();
+        // A tower's weapon does not reach orbit (only weapons with an `orbit` layer row do).
         assert_eq!(
             w.submit(Command {
                 target_entity: Some(id),
                 ..command(&w, defender, "attack")
             }),
-            Err(SimError::OtherBody)
+            Err(SimError::InvalidAttackTarget)
         );
         let hp = w.entity(id).unwrap().hp;
         run(&mut w, 40);

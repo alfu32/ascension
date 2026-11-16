@@ -1,0 +1,16 @@
+# Task 58, replayed by --script in --universe mode: three orbital fighters beside an airfield
+# climb to the orbit of their planet. Test-only setup lines first.
+0 grant-age age.starfaring
+0 place 1 bld.airfield @14,-4
+0 place 1 unit.orbital_fighter @8,1
+0 place 1 unit.orbital_fighter @9,3
+0 place 1 unit.orbital_fighter @10,1
+1 speed 100
+4 craft
+6 hud tab 1
+# Climb to orbit (order tab, slot 5); the climb takes 100 ticks.
+8 hud slot 5
+# Closer to the airfield.
+10 cam wheel 6 1060,345
+# Freeze about two fifths of the way up.
+50 speed 1

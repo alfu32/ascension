@@ -15,6 +15,7 @@ mod income;
 mod map;
 mod math;
 mod movement;
+mod orbital;
 mod order;
 mod pathing;
 mod placement;
@@ -268,6 +269,12 @@ pub enum SimError {
     /// Unloading needs passengers and a landed carrier, or one in orbit above an own spaceport.
     #[error("cannot unload here")]
     CannotUnload,
+    /// An orbital craft climbs only from a planet of a star system, and only when not in orbit.
+    #[error("cannot climb to orbit from here")]
+    CannotClimb,
+    /// An orbital craft in orbit can only fight there, board a carrier or come down.
+    #[error("an orbital craft cannot leave its orbit on its own")]
+    CraftInOrbit,
     /// The catalogue cannot supply the requested headless scenario.
     #[error("no eligible {0} for movement scenario")]
     ScenarioUnavailable(&'static str),

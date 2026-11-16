@@ -30,7 +30,10 @@
 //! `grant-age <age key>`, `grant <resource key> <amount>` for player one,
 //! `place <owner id> <entity key> @dx,dy` to place a test scene before tick one, and
 //! `place-space <owner id> <entity key> dx,dy` to place a ship in the plane of player one's home
-//! system, `dx`, `dy` tiles from its star.
+//! system, `dx`, `dy` tiles from its star, and `place-orbit <owner id> <entity key> @dx,dy` to
+//! put a ship into the orbit of player one's home planet above that point (an ordinary `orbit`
+//! order given before tick one; an orbital craft is placed there and ordered to climb). `craft` selects player one's orbital craft that are not
+//! aboard a carrier; `craftN` names the N-th of them for `click` and `rclick`.
 //!
 //! Camera commands replay input on the render thread exactly as the window would send it
 //! (positions in canvas pixels): `cam wheel <steps> [x,y]`, `cam drag x,y x,y [rotate]`
@@ -73,6 +76,9 @@ pub struct ScriptSetup {
     /// Test ships: owner, type key and milli-tile offsets from the star of player one's home
     /// system, in that system's plane.
     pub space_placements: Vec<(u32, String, i64, i64)>,
+    /// Test ships ordered into the orbit of player one's home planet: owner, type key and
+    /// milli-tile offsets from player one's city of the point they orbit above.
+    pub orbit_placements: Vec<(u32, String, i64, i64)>,
     /// Technologies player one starts with, by key.
     pub techs: Vec<String>,
 }
@@ -122,6 +128,50 @@ impl ScriptSetup {
             let pos = world.offset(origin, *dx, *dy);
             world
                 .place_for_setup(kind, rom_sim::PlayerId(*owner), pos)
+                .map_err(|e| e.to_string())?;
+        }
+        self.apply_orbit_placements(world, origin)
+    }
+
+    /// Puts the requested test ships beside the home planet and orders them into its orbit.
+    fn apply_orbit_placements(
+        &self,
+        world: &mut rom_sim::World,
+        origin: rom_sim::Pos,
+    ) -> Result<(), String> {
+        for (owner, key, dx, dy) in &self.orbit_placements {
+            let kind = world
+                .rules()
+                .id_of(key)
+                .filter(|id| world.rules().entity_types.contains_key(id))
+                .ok_or_else(|| format!("unknown entity type {key:?}"))?;
+            let marker = world
+                .body_position(origin.body)
+                .ok_or("place-orbit needs a universe match")?;
+            let owner = rom_sim::PlayerId(*owner);
+            let over = world.offset(origin, *dx, *dy);
+            // An orbital craft starts in the air at the point and climbs; a ship flies in.
+            let (ship, kind, target) = if world.is_craft_type(kind) {
+                let craft = world
+                    .place_for_setup(kind, owner, over)
+                    .map_err(|e| e.to_string())?;
+                (craft, "lift", None)
+            } else {
+                let ship = world
+                    .spawn(kind, owner, marker)
+                    .map_err(|e| e.to_string())?;
+                (ship, "orbit", Some(over))
+            };
+            world
+                .submit(rom_sim::Command {
+                    player: owner,
+                    executor: ship,
+                    kind: kind.into(),
+                    subject: None,
+                    target_entity: None,
+                    target_pos: target,
+                    queue: false,
+                })
                 .map_err(|e| e.to_string())?;
         }
         Ok(())
@@ -189,7 +239,7 @@ impl ScriptSetup {
                         .space_placements
                         .push((owner, (*key).to_owned(), parse(dx)?, parse(dy)?));
                 }
-                Some("place") => {
+                Some(command @ ("place" | "place-orbit")) => {
                     let (Some(owner), Some(key), Some(offset)) =
                         (words.get(2), words.get(3), words.get(4))
                     else {
@@ -209,9 +259,12 @@ impl ScriptSetup {
                             .and_then(|v| v.checked_mul(1000))
                             .ok_or_else(|| format!("{}: bad tile offset", at()))
                     };
-                    setup
-                        .placements
-                        .push((owner, (*key).to_owned(), parse(dx)?, parse(dy)?));
+                    let list = if command == "place" {
+                        &mut setup.placements
+                    } else {
+                        &mut setup.orbit_placements
+                    };
+                    list.push((owner, (*key).to_owned(), parse(dx)?, parse(dy)?));
                 }
                 Some("grant-tech") => {
                     setup.techs.push(
@@ -253,6 +306,8 @@ impl ScriptSetup {
 pub enum ScriptAction {
     /// Select all of player one's ships.
     SelectShips,
+    /// Select player one's orbital craft that are not aboard a carrier.
+    SelectCraft,
     /// Select player one's finished buildings that train units other than from a city.
     SelectProducers,
     /// Select finished producers that offer track research.
@@ -313,7 +368,13 @@ impl Script {
             let words: Vec<&str> = line.split_whitespace().collect();
             let tick = words.first().and_then(|t| t.parse::<u64>().ok());
             match (tick, words.get(1).copied()) {
-                (Some(_), Some("grant-age" | "grant" | "grant-tech" | "place" | "place-space")) => {
+                (
+                    Some(_),
+                    Some(
+                        "grant-age" | "grant" | "grant-tech" | "place" | "place-space"
+                        | "place-orbit",
+                    ),
+                ) => {
                     continue;
                 }
                 (Some(tick), Some("cam")) => {
@@ -324,6 +385,10 @@ impl Script {
                 }
                 (Some(tick), Some("ships")) => {
                     actions.push((tick, ScriptAction::SelectShips));
+                    continue;
+                }
+                (Some(tick), Some("craft")) => {
+                    actions.push((tick, ScriptAction::SelectCraft));
                     continue;
                 }
                 (Some(tick), Some("researchers")) => {
@@ -814,6 +879,7 @@ pub fn live_pick(
     }
     let (name, n) = [
         "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy", "gather",
+        "craft",
     ]
     .iter()
     .find_map(|name| {
@@ -860,6 +926,7 @@ pub fn live_pick(
                 }
                 match name {
                     "ship" => world.orbit(e.id).is_some(),
+                    "craft" => world.is_craft_type(e.type_id),
                     "temple" => et.keeper.is_some(),
                     "gather" => et.gather_site.is_some() && et.class == EntityClass::Building,
                     "market" => {
