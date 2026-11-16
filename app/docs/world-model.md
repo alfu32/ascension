@@ -220,8 +220,9 @@ the distance. Every level answers the same input:
 | Space / Shift + Space | fly to / follow the selection | the same, at the level it is seen at |
 
 - **No seams.** At the planet's hand-over the space camera takes the planet
-  camera's exact pose (carried into the system frame), so the cross-fade
-  shows one picture; above it the view eases to the plane's own pose
+  camera's exact pose (carried into the system frame), so the picture goes
+  on unbroken (since task 57 nothing is cross-faded at all: one camera, one
+  scene, below); above it the view eases to the plane's own pose
   (heading kept, no roll). The star map shares the system's heading and
   elevation, and the two frames meet exactly at their hand-over. Zooming
   out and back in without other input returns the planet camera to where it
@@ -250,12 +251,71 @@ the distance. Every level answers the same input:
 - The tier caps still bound everything: wheel, flights and focus requests
   (an interplanetary player cannot leave the home system's view).
 
+### One camera, one scene (task 57)
+
+Task 53's hand-overs swapped frames and cross-faded them; the owner saw a
+jump. Now there is one perspective camera from the street to the star map
+(`ZoomCamera::one_view`): the planet camera while it decides the picture,
+then the space camera that continues it exactly. The planet frame, the
+system frame and the star map only nest the coordinates; the same camera is
+expressed in each and everything is drawn into one picture with one
+projection. What changes with the distance is only what is drawn:
+
+- **The loaded globe** is the same mesh at every distance, at its true place
+  in its system; it is drawn as itself while it is more than 2.5 pixels in
+  radius, then as the small textured sphere of the system view.
+- **The sky from the surface.** The star and the other bodies stand in the
+  sky at their true directions as small discs (the star 7 px with its glow,
+  planets 3.5 px, rocks 2.5 px, each with a soft halo); they grow to their
+  places as the camera leaves the planet. The directional light that
+  represents the sun orbits the planet orb, and the star is where it comes
+  from. Other systems are faint points of light in their true directions, as
+  bright as the sky lets the stars be.
+- **Space around the planet** (orbit rings, claims and colony rings, ships on
+  the plane, names) fades in between the planet camera's range and the plane's
+  own pose; each system's own detail (bodies, rings, ships) goes with how wide
+  the system looks: all of it down to a quarter of the whole-system view, none
+  at a twelfth, so the system shrinks onto the star map and then its star's
+  glow swells into the map's halo. The same rule holds for every system, so
+  changing the anchored system never changes the picture. The map's routes,
+  names and ship marks fade in over three wheel steps past the whole system.
+- **Ships** are the same hull at every level. Above a planet they are drawn
+  two to five times their true size by class; on a system's plane a quarter
+  to a half of task 53's size; in between, a ship in orbit of the loaded
+  planet slides from its place above the ground to its place on the plane
+  while its size blends in log space. The sizes come from `et_view_scale`.
+- **Wheel steps.** The step is the ground's (a factor of 1/0.88) up to one
+  log unit below the planet camera's limit and grows smoothly to a factor of
+  1.5 by the planet's hand-over. On the test scale (a planet of 122 tiles)
+  street → whole globe takes 28 steps (was 30), street → whole system 38
+  (was 52), whole globe → whole system 10 (was 22) and whole system → whole
+  star map 10 (was 20).
+- **Zoom to the cursor on the planet too:** the point of the ground under the
+  cursor stays under it.
+- **Ready for a 3D star map (task 59).** Star-map distances, the system
+  nearest the focus and picking use all three coordinates; Shift + middle
+  drag up or down tilts the camera about the focus (10° to 89° above the
+  plane), so a map with systems at different heights can be seen from a low
+  angle.
+
+Screenshots: `img/camera-zoom-strip.png` (street to star map, four wheel
+steps apart), `img/camera-handovers.png` (the old hand-overs, two steps
+apart), `img/camera-sky.png` and `img/camera-sky-planet.png` (the star and a
+planet in the evening sky), `img/camera-ship-planet.png` and
+`img/camera-ship-system.png` (a transport above its spaceport, and on the
+system plane).
+
 ## Rendering notes
 
-- One scene per level with its own coordinate frame (surface/globe frame
-  centred on the planet, system frame, star-map frame). The camera works in
-  log-distance; crossing a threshold switches the active frame and
-  cross-fades, so 32-bit floats stay precise at every level.
+- One camera for every level; each frame keeps its own coordinates near its
+  origin (the planet frame centred on the planet, the system frame on its
+  star, the star map) and the camera is carried into each by the similarity
+  transforms that nest them, composed in doubles at draw time, so 32-bit
+  floats stay precise from a building to the whole map. The layers are drawn
+  far to near into one picture, each in its own depth range: the sky, the
+  star map (no depth test), each system in view (the anchored one split
+  around the loaded globe by distance, so bodies and ships in front of the
+  planet are drawn after it), the globe.
 - Level of detail: surface chunks near the camera → a coarse globe mesh →
   a shaded disc → a point of light.
 - The star of the current system is the sun light; the shadow map follows

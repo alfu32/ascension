@@ -3776,4 +3776,13 @@ INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,coold
 INSERT INTO et_weapon_target(weapon_id,layer)
  SELECT id,'ground' FROM et_weapon WHERE orbit_only=1;
 
+-- How large ships are drawn in the space views (task 57): above a planet two to five
+-- times their true size by class, on a system's plane a quarter to a half of the
+-- readable reference size.
+WITH v(k,planet,system) AS (VALUES
+  ('unit.survey_ship',200,25), ('unit.corvette',250,30), ('unit.space_frigate',300,35),
+  ('unit.space_cruiser',400,40), ('unit.battleship',500,50), ('unit.transport_ship',350,40))
+INSERT INTO et_view_scale(entity_type_id,planet_pct,system_pct)
+ SELECT d.id, v.planet, v.system FROM v JOIN def d ON d.key=v.k;
+
 COMMIT;

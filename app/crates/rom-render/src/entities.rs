@@ -762,50 +762,118 @@ fn push_unit(view: &EntityView, frame: &GroundFrame, out: &mut Vec<[f32; 16]>) -
 
 /// A compact hull, swept wings and twin engines for ships without a composed model.
 fn push_orbital_ship(view: &EntityView, frame: &GroundFrame, out: &mut Vec<[f32; 16]>) -> f32 {
-    let width = unit_width(view);
     let height = unit_height(view);
-    let forward = heading_of(frame, view.facing_deg);
-    let side = cross3(forward, frame.up);
-    let axes = [forward, frame.up, side];
-    let at = |along: f32, up: f32, across: f32| -> [f32; 3] {
-        std::array::from_fn(|i| {
-            frame.origin[i] + forward[i] * along + frame.up[i] * up + side[i] * across
-        })
+    let hull = Hull {
+        origin: frame.origin,
+        forward: heading_of(frame, view.facing_deg),
+        up: frame.up,
+        length: unit_width(view),
+        height,
     };
-    let team = owner_color(view.owner);
-    out.push(frame_box(
-        at(0.0, height * 0.5, 0.0),
-        axes,
-        [width, height * 0.55, width * 0.3],
-        [0.58, 0.64, 0.72],
-    ));
-    out.push(frame_box(
-        at(width * 0.25, height * 0.66, 0.0),
-        axes,
-        [width * 0.4, height * 0.45, width * 0.2],
-        team,
-    ));
-    out.push(frame_box(
-        at(-width * 0.18, height * 0.3, 0.0),
-        axes,
-        [width * 0.36, height * 0.18, width],
-        team,
-    ));
-    for sign in [-1.0, 1.0] {
-        out.push(frame_box(
-            at(-width * 0.31, height * 0.3, sign * width * 0.35),
-            axes,
-            [width * 0.35, height * 0.4, width * 0.18],
-            [0.22, 0.27, 0.34],
-        ));
-        out.push(frame_box(
-            at(-width * 0.5, height * 0.3, sign * width * 0.35),
-            axes,
-            [width * 0.035, height * 0.28, width * 0.12],
-            [0.2, 0.8, 1.0],
-        ));
-    }
+    hull.push(owner_color(view.owner), out);
     height
+}
+
+/// The hull of a ship without a composed model, placed in any frame: the same model above a
+/// planet and on a star system's plane; only its size differs.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Hull {
+    /// The point under the hull.
+    pub(crate) origin: [f32; 3],
+    /// Unit direction the bow points to.
+    pub(crate) forward: [f32; 3],
+    /// Unit up.
+    pub(crate) up: [f32; 3],
+    /// Length from stern to bow.
+    pub(crate) length: f32,
+    /// Height of the hull.
+    pub(crate) height: f32,
+}
+
+impl Hull {
+    /// Height of a hull of `length`, in the proportions it has above a planet.
+    pub(crate) fn height_of(length: f32) -> f32 {
+        length * 0.35
+    }
+
+    /// Pushes the hull's boxes, its trim in the owner's colour `team`.
+    pub(crate) fn push(&self, team: [f32; 3], out: &mut Vec<[f32; 16]>) {
+        let (width, height, forward, up) = (self.length, self.height, self.forward, self.up);
+        let side = cross3(forward, up);
+        let axes = [forward, up, side];
+        let at = |along: f32, rise: f32, across: f32| -> [f32; 3] {
+            std::array::from_fn(|i| {
+                self.origin[i] + forward[i] * along + up[i] * rise + side[i] * across
+            })
+        };
+        out.push(frame_box(
+            at(0.0, height * 0.5, 0.0),
+            axes,
+            [width, height * 0.55, width * 0.3],
+            [0.58, 0.64, 0.72],
+        ));
+        out.push(frame_box(
+            at(width * 0.25, height * 0.66, 0.0),
+            axes,
+            [width * 0.4, height * 0.45, width * 0.2],
+            team,
+        ));
+        out.push(frame_box(
+            at(-width * 0.18, height * 0.3, 0.0),
+            axes,
+            [width * 0.36, height * 0.18, width],
+            team,
+        ));
+        for sign in [-1.0, 1.0] {
+            out.push(frame_box(
+                at(-width * 0.31, height * 0.3, sign * width * 0.35),
+                axes,
+                [width * 0.35, height * 0.4, width * 0.18],
+                [0.22, 0.27, 0.34],
+            ));
+            out.push(frame_box(
+                at(-width * 0.5, height * 0.3, sign * width * 0.35),
+                axes,
+                [width * 0.035, height * 0.28, width * 0.12],
+                [0.2, 0.8, 1.0],
+            ));
+        }
+    }
+}
+
+/// Makes a ship drawn `factor` times its size: a ship without a composed model is drawn from
+/// its radius, so picking, its health bar and its hull all follow.
+pub(crate) fn scale_ship_view(view: &mut EntityView, factor: f32) {
+    if let Some(model) = &mut view.model {
+        model.size = model.size.map(|c| c * factor);
+    } else {
+        view.radius = unit_width(view) * factor / 3.2;
+    }
+}
+
+/// Whether `view` is a ship above the ground: in orbit, landing or lifting off.
+pub(crate) fn is_aloft_ship(view: &EntityView) -> bool {
+    view.spacecraft && view.altitude > 0.0
+}
+
+/// The hulls of the ships above the ground among `views`, where the globe `ground` draws them,
+/// with their entity ids.
+pub(crate) fn aloft_hulls(views: &[EntityView], ground: &dyn Footing) -> Vec<(u32, Hull)> {
+    views
+        .iter()
+        .filter(|v| is_aloft_ship(v))
+        .map(|view| {
+            let frame = entity_frame(view, ground);
+            let hull = Hull {
+                origin: frame.origin,
+                forward: heading_of(&frame, view.facing_deg),
+                up: frame.up,
+                length: unit_width(view),
+                height: unit_height(view),
+            };
+            (view.id, hull)
+        })
+        .collect()
 }
 
 /// Pushes a building body and roof; returns the height of its roof above the ground.

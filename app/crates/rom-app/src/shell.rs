@@ -273,6 +273,7 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
                 view: options.view,
             },
         );
+        bridge.publish_ship_scales(Arc::new(looks::ship_scales(&content.rules)));
         bridge.publish_looks(Arc::new(looks::scene_looks(
             &content.rules,
             options.seed,

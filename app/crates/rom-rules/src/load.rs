@@ -377,6 +377,7 @@ fn load_entity_type(conn: &Connection) -> Result<Vec<EntityType>, RulesError> {
             territory: None,
             energy: None,
             supply: None,
+            view_scale: None,
             weapons: Vec::new(),
             placement_rules: Vec::new(),
             completion_bonus: Vec::new(),
@@ -624,6 +625,19 @@ fn load_et_supply(conn: &Connection) -> Result<Vec<Supply>, RulesError> {
                 entity_type_id: DefId(row.get("entity_type_id")?),
                 radius: row.get("radius")?,
                 stock: row.get("stock")?,
+            })
+        },
+    )
+}
+fn load_et_view_scale(conn: &Connection) -> Result<Vec<ViewScale>, RulesError> {
+    read(
+        conn,
+        "SELECT * FROM et_view_scale ORDER BY entity_type_id",
+        |row| {
+            Ok(ViewScale {
+                entity_type_id: DefId(row.get("entity_type_id")?),
+                planet_pct: row.get("planet_pct")?,
+                system_pct: row.get("system_pct")?,
             })
         },
     )
@@ -1286,6 +1300,10 @@ impl Rules {
         for row in load_et_supply(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_supply")?;
             entity.supply = Some(row);
+        }
+        for row in load_et_view_scale(conn)? {
+            let entity = entity_mut(&mut rules, row.entity_type_id, "et_view_scale")?;
+            entity.view_scale = Some(row);
         }
         for row in load_placement_rule(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "placement_rule")?;
