@@ -38,6 +38,19 @@ and to make computer players spend their surplus.
    cannot open a large enough gap, add columns (for example an economy or
    skill multiplier) deliberately: lint views empty, seed loads, documented.
 
+5. **The easiest level must be beatable by a person learning the game.**
+   The owner (2026-11-16, version 0.0.59, universe match) was beaten
+   thoroughly by `easiest` and could not build what they wanted because its
+   army kept destroying their buildings. From `ai_difficulty` data (new
+   columns if needed, never names): a grace period with no attack on a
+   person's buildings for the first minutes (longest at `easiest`), small
+   first waves that grow slowly, slow reactions, and no raids on a person's
+   town early. Easier levels may keep their military small relative to the
+   person's; harder levels may not. Measure it: a scripted or idle
+   opponent standing in for a person (for example `--ai none` for player
+   one in `rom ai-match`/`duel` with a fixed defence) shows when each level
+   first attacks and with how many units; report the table.
+
 Every simulation change gets run-twice-equal-hash tests and goes into the
 snapshot and `rom-save` (bump the save format if needed). Explain any change
 to the playthrough hash.
@@ -49,7 +62,8 @@ Gate green (fmt, clippy `-D warnings`, `cargo test --workspace --locked
 complete; `rom duel --profiles balanced:moderate,balanced:easiest --seeds
 1..100`: moderate wins at least 90, at most 5 draws, each explained; the
 mirror duel `balanced:moderate,balanced:moderate` has at most 10 draws and
-each side wins about half; run times stated; duels deterministic. Commit on
+each side wins about half; the first-attack table shows `easiest` waiting
+longest with the smallest waves; run times stated; duels deterministic. Commit on
 the branch (stage by name), do not push or merge; final message with
 commands and real output, the tables, files changed, schema and save-format
 changes, deviations, anything not verified.
