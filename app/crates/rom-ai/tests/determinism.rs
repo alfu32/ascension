@@ -71,3 +71,106 @@ fn a_brain_restored_mid_match_issues_the_same_orders() {
         assert_eq!(a.save(), b.save());
     }
 }
+
+/// Both sides see everything and start with an army, so they are at war within a minute.
+fn at_war(seed: u64) -> (Arc<rom_rules::Rules>, World, Vec<Brain>) {
+    let mut rules = (*common::rules()).clone();
+    for d in rules.ai_difficulties.values_mut() {
+        d.sees_all = true;
+    }
+    let rules = Arc::new(rules);
+    let (mut world, brains) = common::plain(&rules, seed, &PLAYERS);
+    let soldier = rules
+        .entity_types
+        .values()
+        .find(|t| {
+            t.class == rom_rules::EntityClass::Unit
+                && !t.weapons.is_empty()
+                && t.harvester.is_empty()
+                && t.builder.is_none()
+                && t.container.is_none()
+                && t.movement.is_some()
+                && t.upgrades_from_id.is_none()
+        })
+        .unwrap()
+        .id;
+    // Units that break buildings, so each side can take the other's city.
+    let city = world.entity(world.cities(rom_sim::PlayerId(1))[0]).unwrap().type_id;
+    let armour = &rules.entity_types[&city];
+    let breaker = rules
+        .entity_types
+        .values()
+        .filter(|t| {
+            t.class == rom_rules::EntityClass::Unit
+                && !t.weapons.is_empty()
+                && t.harvester.is_empty()
+                && t.container.is_none()
+                && t.movement.is_some()
+        })
+        .max_by_key(|t| {
+            let damage: i64 = t
+                .weapons
+                .iter()
+                .map(|w| {
+                    let pct = armour
+                        .armor_class_id
+                        .map_or(100, |a| rules.damage_pct(w.damage_class_id, a));
+                    (w.damage * pct / 100 - armour.armor).max(1) * 100 / w.cooldown_ticks.max(1)
+                })
+                .sum();
+            (damage, std::cmp::Reverse(t.id))
+        })
+        .unwrap()
+        .id;
+    // Player one is the stronger: it attacks, the other answers.
+    for (player, x, y, count) in [(1, 56_500, 54_500, 28), (2, 72_500, 74_500, 10)] {
+        for n in 0..count {
+            let at = rom_sim::Pos::flat(x + (n % 5) * 1200, y + (n / 5) * 1200);
+            let unit = if n % 2 == 0 { soldier } else { breaker };
+            world.spawn(unit, rom_sim::PlayerId(player), at).unwrap();
+        }
+    }
+    (rules, world, brains)
+}
+
+#[test]
+fn a_brain_restored_mid_war_issues_the_same_orders() {
+    let (rules, mut world, mut brains) = at_war(7);
+    let (_, mut twin_world, mut twin_brains) = at_war(7);
+    // Run until an army is fighting and units have fallen; restore there.
+    let fighting = |brains: &[Brain]| {
+        brains.iter().any(|b| {
+            b.armies().any(|(_, a)| {
+                matches!(
+                    a.phase,
+                    rom_ai::Phase::Advance | rom_ai::Phase::Respond | rom_ai::Phase::Retreat
+                ) && !a.members.is_empty()
+            })
+        })
+    };
+    let mut at = 0;
+    while at < 6000 && !(fighting(&brains) && world.stats().kills.values().sum::<u64>() > 0) {
+        record(&mut world, &mut brains, at, at + 200);
+        record(&mut twin_world, &mut twin_brains, at, at + 200);
+        at += 200;
+    }
+    assert_eq!(world.hash(), twin_world.hash());
+    assert!(fighting(&brains), "no army is fighting at the restore point");
+    assert!(world.stats().kills.values().sum::<u64>() > 0, "nobody has fallen yet");
+
+    let mut restored: Vec<Brain> = twin_brains
+        .iter()
+        .map(|brain| Brain::restore(Arc::clone(&rules), brain.player(), &brain.save()).unwrap())
+        .collect();
+    let kept = record(&mut world, &mut brains, at, at + 2000);
+    let again = record(&mut twin_world, &mut restored, at, at + 2000);
+    assert!(
+        kept.iter().any(|c| c.kind == "attack_move"),
+        "no attack orders after the restore point"
+    );
+    assert_eq!(kept, again, "orders differ after a restore in mid-war");
+    assert_eq!(world.hash(), twin_world.hash());
+    for (a, b) in brains.iter().zip(&restored) {
+        assert_eq!(a.save(), b.save());
+    }
+}

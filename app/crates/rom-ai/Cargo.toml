@@ -12,3 +12,4 @@ thiserror.workspace = true
 
 [dev-dependencies]
 rom-mapgen = { path = "../rom-mapgen" }
+rom-geo = { path = "../rom-geo" }
