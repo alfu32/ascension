@@ -243,9 +243,17 @@ flies the camera down to that planet.
   distance; a second moon's ring is wide enough to clear the first. Rocks
   that would touch another body are turned along their ring (about the star,
   or a moon's about its planet) until 60 units apart: presentation only, the
-  simulation's positions and claim range do not change. Every body is at least 2.5 pixels in radius on screen and wears
-  a soft halo below 6 pixels, so it can still be seen, hovered and
-  double-clicked. Orbit rings are faint one-pixel lines: one per planet, one
+  simulation's positions and claim range do not change. On screen every body
+  has a floor by kind out in space: a star 12 pixels in radius, a habitable
+  planet 8, a resource body 65 % of the smallest planet drawn at that moment
+  (so at whole-system zoom a rock is a small body beside the planets, never a
+  dot); from the ground every body is a small disc of at least 2.5 pixels.
+  The layout keeps bodies apart at the size they are drawn at whole-system
+  zoom on a picture 720 pixels high (56 units a pixel, `PlacedBody::room`);
+  zoomed out farther a body is never drawn wider than that room, so it
+  shrinks with the system instead of running into its neighbours. Below 6
+  pixels a body also wears a soft halo. Hover, double-click and the claim,
+  colony and hover rings use the drawn size. Orbit rings are faint one-pixel lines: one per planet, one
   small ring per moon, one through the middle of the belt.
 - **Zoom.** The planet-to-system hand-over is unchanged (the planet is drawn
   with `HOME_PLANET_RADIUS`); the whole system now fits at 48 000 units of

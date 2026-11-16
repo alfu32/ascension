@@ -23,8 +23,8 @@ use crate::space::{
     map_colony_rings, map_mark_scale, map_ship_marks, ship_frame_pos, transit_at_rim,
 };
 use crate::universe::{
-    BodyViewKind, MAP_RADIUS, PlacedBody, SYSTEM_RADIUS, UniverseScene, planet_colour, ring_points,
-    rock_colour, uv_sphere,
+    BodyViewKind, MAP_RADIUS, PlacedBody, SYSTEM_RADIUS, UniverseScene, drawn_pixels, least_pixels,
+    planet_colour, ring_points, rock_colour, shown_pixels, uv_sphere,
 };
 use crate::zoom::{Target, ZoomCamera};
 
@@ -81,9 +81,8 @@ const CORE_SIZE: f32 = 650.0;
 const STAR_GLOW: f32 = 2600.0;
 const GLOW_SIDE: u32 = 128;
 const ORBIT_RING: Color = Color::new(120, 140, 185, 58);
-/// Smallest radius of a body on screen, in pixels, and the radius below which it also wears a
-/// soft halo so it can still be seen, hovered and double-clicked.
-const MIN_BODY_PIXELS: f32 = 2.5;
+/// The radius on screen below which a body also wears a soft halo so it can still be seen,
+/// hovered and double-clicked.
 const HALO_BELOW_PIXELS: f32 = 6.0;
 /// Diameter of a body's halo on screen, in pixels.
 const HALO_PIXELS: f32 = 22.0;
@@ -172,10 +171,10 @@ impl Part {
     }
 }
 
-/// The radius a body of true radius `radius` is drawn with, `per_pixel` units a pixel away:
-/// seen from the ground (`space` = 0) a small disc in the sky, growing to its true size as the
-/// camera leaves the planet, and never under a few pixels.
-fn shown_radius(kind: BodyViewKind, radius: f32, per_pixel: f32, space: f32) -> f32 {
+/// The radius in pixels a body of true radius `radius` is drawn with, `per_pixel` units a pixel
+/// away, before the floors of [`shown_pixels`]: seen from the ground (`space` = 0) a small disc
+/// in the sky, growing to its true size as the camera leaves the planet.
+fn sky_pixels(kind: BodyViewKind, radius: f32, per_pixel: f32, space: f32) -> f32 {
     let sky = match kind {
         BodyViewKind::Star => SKY_STAR_DISC,
         BodyViewKind::Habitable => SKY_PLANET_DISC,
@@ -183,12 +182,11 @@ fn shown_radius(kind: BodyViewKind, radius: f32, per_pixel: f32, space: f32) -> 
     };
     let per_pixel = per_pixel.max(1e-9);
     let pixels = radius / per_pixel;
-    let shown = if pixels > sky {
+    if pixels > sky {
         morph_size(sky, pixels, space)
     } else {
         pixels
-    };
-    shown.max(MIN_BODY_PIXELS) * per_pixel
+    }
 }
 
 /// A ship's hull on its way from above the loaded globe (`above`, planet frame) to its place on
@@ -486,7 +484,9 @@ impl Scene {
         let globe = match (&one.planet, &one.place) {
             (Some(view), Some(place)) if self.globe.is_some() => {
                 let pixels = view.sphere_pixels([0.0; 3], orbit.radius, height);
-                (pixels >= MIN_BODY_PIXELS).then(|| {
+                // Below a planet's floor the system's sphere, drawn at the floor, takes over.
+                let floor = least_pixels(BodyViewKind::Habitable, 0.0, one.fades.space);
+                (pixels >= floor).then(|| {
                     let eye = match &one.planet_camera {
                         Some(camera) => GlobeEye::of_orbit(camera),
                         None => GlobeEye::of_view(view, orbit.radius),
@@ -689,8 +689,38 @@ impl Scene {
                 }
             }
             let state = &self.space_state;
+            // Every body's radius as drawn, its kind's floor on screen included.
+            let per_pixels: Vec<f32> = bodies_placed
+                .iter()
+                .map(|p| view.per_pixel(p.pos, height).max(1e-9))
+                .collect();
+            let kinds: Vec<BodyViewKind> = bodies_placed
+                .iter()
+                .map(|p| universe.bodies[p.body].kind)
+                .collect();
+            let pixels: Vec<f32> = bodies_placed
+                .iter()
+                .zip(&kinds)
+                .zip(&per_pixels)
+                .map(|((p, &k), &per)| sky_pixels(k, p.radius, per, pass.space))
+                .collect();
+            let drawn: Vec<f32> = shown_pixels(&kinds, &pixels, pass.space)
+                .into_iter()
+                .zip(&per_pixels)
+                .zip(&bodies_placed)
+                .map(|((px, &per), p)| drawn_pixels(px, p.room, per) * per)
+                .collect();
+            // How much larger than true a body is drawn, for the rings about it.
+            let grown = |body: u32| -> f32 {
+                universe
+                    .body_index(body)
+                    .and_then(|index| bodies_placed.iter().position(|p| p.body == index))
+                    .map_or(1.0, |i| {
+                        (drawn[i] / bodies_placed[i].radius.max(1e-6)).max(1.0)
+                    })
+            };
             let mut halos: Vec<([f32; 3], f32)> = Vec::new();
-            for placed in &bodies_placed {
+            for (placed, &radius) in bodies_placed.iter().zip(&drawn) {
                 let body = &universe.bodies[placed.body];
                 if body.kind != BodyViewKind::Star && !known {
                     continue;
@@ -730,7 +760,6 @@ impl Scene {
                 space.shader.set_shader_value(emissive_at, emissive);
                 space.shader.set_shader_value(alpha_at, pass.detail);
                 let per_pixel = view.per_pixel(placed.pos, height);
-                let radius = shown_radius(body.kind, placed.radius, per_pixel, pass.space);
                 world.draw_mesh(mesh, material.clone(), ball(placed.pos, radius, axes));
                 // Never smaller than a few pixels, and a soft halo below that.
                 if body.kind != BodyViewKind::Star && radius < per_pixel * HALO_BELOW_PIXELS {
@@ -774,14 +803,14 @@ impl Scene {
                     let [r, g, b] = ring.colour;
                     overlay.tris.extend(annulus(
                         [ring.centre[0], 0.4, ring.centre[2]],
-                        ring.radius,
+                        ring.radius * grown(ring.body),
                         thickness,
                         [r, g, b, (235.0 * detail) as u8],
                         96,
                     ));
                 }
                 // Colonies: a ring in the owner's colour around each planet with its cities,
-                // never smaller on screen than a few pixels beyond the planet's least size.
+                // as much wider than true as the planet is drawn.
                 if known {
                     for ring in colony_rings(
                         &universe,
@@ -790,10 +819,9 @@ impl Scene {
                         system_id,
                     ) {
                         let [r, g, b] = ring.colour;
-                        let least = view.per_pixel(ring.centre, height) * (MIN_BODY_PIXELS + 6.0);
                         overlay.tris.extend(annulus(
                             [ring.centre[0], 0.4, ring.centre[2]],
-                            ring.radius.max(least),
+                            ring.radius * grown(ring.body),
                             thickness * 0.8,
                             [r, g, b, (240.0 * detail) as u8],
                             96,
@@ -957,11 +985,12 @@ impl Scene {
                 }
                 // The body under the pointer wears a ring.
                 if let Some(SpaceHover::Target(Target::Body(index))) = state.hover
-                    && let Some(at) = bodies_placed.iter().find(|p| p.body == index)
+                    && let Some(i) = bodies_placed.iter().position(|p| p.body == index)
                 {
+                    let at = &bodies_placed[i];
                     overlay.tris.extend(annulus(
                         [at.pos[0], 0.5, at.pos[2]],
-                        at.radius * 1.35 + thickness * 2.0,
+                        drawn[i] * 1.35 + thickness * 2.0,
                         thickness * 1.2,
                         [255, 230, 160, (230.0 * pass.detail) as u8],
                         64,

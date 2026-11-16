@@ -1910,14 +1910,29 @@ impl ZoomCamera {
         match self.level() {
             Level::System => {
                 let known = self.knows_system();
-                for p in &self.placed {
-                    if !known && self.scene.bodies[p.body].kind != BodyViewKind::Star {
-                        continue;
-                    }
-                    if let Some((x, y, depth)) = view.project(p.pos) {
-                        let on_screen = p.radius / depth * canvas.1 / (2.0 * view.tan());
-                        out.push((Target::Body(p.body), (x, y, on_screen)));
-                    }
+                // Each body as large as it is drawn, its kind's floor on screen included.
+                let seen: Vec<(&PlacedBody, BodyViewKind, (f32, f32, f32))> = self
+                    .placed
+                    .iter()
+                    .filter_map(|p| {
+                        let kind = self.scene.bodies[p.body].kind;
+                        if !known && kind != BodyViewKind::Star {
+                            return None;
+                        }
+                        Some((p, kind, view.project(p.pos)?))
+                    })
+                    .collect();
+                let kinds: Vec<BodyViewKind> = seen.iter().map(|s| s.1).collect();
+                let pixels: Vec<f32> = seen
+                    .iter()
+                    .map(|(p, _, (_, _, depth))| p.radius / depth * canvas.1 / (2.0 * view.tan()))
+                    .collect();
+                let space = self.fades().space;
+                let shown = crate::universe::shown_pixels(&kinds, &pixels, space);
+                for ((p, _, (x, y, depth)), on_screen) in seen.iter().zip(shown) {
+                    let per_pixel = depth * 2.0 * view.tan() / canvas.1;
+                    let on_screen = crate::universe::drawn_pixels(on_screen, p.room, per_pixel);
+                    out.push((Target::Body(p.body), (*x, *y, on_screen)));
                 }
             }
             Level::StarMap => {
