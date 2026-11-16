@@ -60,7 +60,7 @@ the right, the minimap to the bottom centre. Rectangles are `x, y, w, h`.
 | Title emblem | 700, 0, 270, 135 | static |
 | Research block | 990, 10, 325, 110 | up to three rows: icon, tech name, progress bar (cyan), percent; empty rows hidden |
 | Clock | 1352, 38, 62, 62 | game time `mm:ss` (or `h:mm:ss`) |
-| Buttons | 1432, 42, 50, 50 · 1486 · 1540 · 1594 (same size) | diplomacy, chat, menu, pause |
+| Buttons | 1432, 42, 50, 50 · 1486 · 1540 · 1594 (same size) | diplomacy, chat, menu, pause; menu opens the game menu (Esc too), pause holds or releases the simulation |
 
 ### Bottom left (x 0–612)
 
@@ -208,3 +208,11 @@ Script support adds `researchers` (select completed track-research producers)
 and `hud data 4` (open the research overview). Setup resource `grant` lines
 also apply to flat and single-sphere matches. The task 30 scripts use real
 construction and research orders, then slow the simulation for capture.
+
+## Game menu (task 63)
+
+The menu button and Esc open a GPUI overlay on the world view (resume, save game, load
+game, quit); the simulation is held while it is open. Save asks for a name (default: map,
+age, date). F5 quick saves, F9 loads the newest quick save. The pause button holds the
+simulation; the event line says Paused or Resumed. The overlay is not part of the raylib
+frame, so `--screenshot` does not show it (use `import -window root`, see `docs/launcher.md`).

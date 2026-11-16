@@ -28,8 +28,6 @@ const PLACEMENT_CHECK_TICKS: u64 = 3;
 const MESSAGE_TICKS: u64 = 100;
 /// Units trained by a Shift click.
 const SHIFT_BATCH: usize = 5;
-/// Widest distance, in milli-tiles, between a new unit and the producer whose rally it follows.
-const RALLY_REACH: i64 = 5000;
 /// Combat stance behaviours offered as buttons, in this order.
 const STANCE_BEHAVIORS: [&str; 4] = ["aggressive", "defensive", "stand_ground", "hold_fire"];
 
@@ -167,7 +165,6 @@ pub struct Controller {
     pending_research: BTreeMap<DefId, u64>,
     attack_move: bool,
     placement: Option<Placement>,
-    rally: BTreeMap<EntityId, Pos>,
     markers: Vec<Marker>,
     helpers: Vec<Helpers>,
     requeue: Vec<Requeue>,
@@ -176,7 +173,6 @@ pub struct Controller {
     message_about: Option<EntityId>,
     focus: Option<Pos>,
     ordered: bool,
-    seen_next_id: u32,
     view: ViewCtx,
 }
 
@@ -779,8 +775,13 @@ impl Controller {
                 }
                 _ => {
                     if et.producer.as_ref().is_some_and(|p| p.has_rally) {
-                        self.rally.insert(id, target);
-                        self.ordered = true;
+                        // A gather site becomes the rally target: new workers harvest there.
+                        let site = match &kind {
+                            Kind::Gather(site, _) if *site != id => Some(*site),
+                            _ => None,
+                        };
+                        let at = site.is_none().then_some(target);
+                        issued |= self.submit(world, id, "set_rally", None, site, at, false);
                     }
                 }
             }
@@ -1579,7 +1580,11 @@ impl Controller {
                         continue;
                     }
                     // With a rally point they walk to it; without one they stand beside the door.
-                    if let Some(&rally) = self.rally.get(&site) {
+                    let rally = world.rally(site).and_then(|r| match r {
+                        rom_sim::Rally::Point(pos) => Some(pos),
+                        rom_sim::Rally::Entity(id) => world.entity(id).map(|e| e.pos),
+                    });
+                    if let Some(rally) = rally {
                         for worker in workers {
                             self.submit(world, worker, "move", None, None, Some(rally), false);
                         }
@@ -1825,7 +1830,6 @@ impl Controller {
         if self.foreign.is_some_and(|id| present(world, id).is_none()) {
             self.foreign = None;
         }
-        self.rally.retain(|id, _| world.entity(*id).is_some());
         let tick = world.tick();
         self.pending_research.retain(|_, at| *at == tick);
         self.markers
@@ -1871,38 +1875,7 @@ impl Controller {
                 }
             }
         }
-        self.follow_rally(world);
         self.refresh_placement(world);
-    }
-
-    /// Sends units that just left a producer with a rally point to that point.
-    fn follow_rally(&mut self, world: &mut World) {
-        let first_new = self.seen_next_id;
-        self.seen_next_id = world.next_entity_id().0;
-        if self.rally.is_empty() || first_new == 0 {
-            return;
-        }
-        let rules = world.rules().clone();
-        let fresh: Vec<(EntityId, Pos)> = world
-            .entities()
-            .filter(|e| e.id.0 >= first_new && e.owner == PLAYER)
-            .filter(|e| rules.entity_types[&e.type_id].movement.is_some())
-            .map(|e| (e.id, e.pos))
-            .collect();
-        for (id, at) in fresh {
-            let nearest = self
-                .rally
-                .iter()
-                .filter_map(|(producer, rally)| {
-                    let p = world.entity(*producer)?;
-                    let d = distance(world, p.pos, at);
-                    (d <= RALLY_REACH as u64).then_some((d, *rally))
-                })
-                .min_by_key(|(d, _)| *d);
-            if let Some((_, rally)) = nearest {
-                self.submit(world, id, "move", None, None, Some(rally), false);
-            }
-        }
     }
 
     fn update_wealth(&mut self, world: &World) {
@@ -2063,6 +2036,16 @@ impl Controller {
         {
             hud.help =
                 "Right-click open ground to land; units board at your spaceport below".into();
+        }
+        if hud.help.is_empty()
+            && own.iter().any(|e| {
+                rules.entity_types[&e.type_id]
+                    .producer
+                    .as_ref()
+                    .is_some_and(|p| p.has_rally)
+            })
+        {
+            hud.help = "Right-click the ground or a resource site to set the rally point".into();
         }
         let mut selected: Vec<u32> = own.iter().map(|e| e.id.0).collect();
         selected.extend(
@@ -2241,18 +2224,30 @@ impl Controller {
                 y: m.pos.y,
                 kind: m.kind,
                 age_ticks: tick.saturating_sub(m.tick).min(MARKER_TICKS) as u32,
+                from: None,
             })
             .collect();
-        for (producer, at) in &self.rally {
-            if self.selection.contains(producer) {
-                hud.markers.push(HudMarker {
-                    face: at.face,
-                    x: at.x,
-                    y: at.y,
-                    kind: MarkerKind::Rally,
-                    age_ticks: 0,
-                });
+        for (producer, rally) in world.rallies() {
+            if !self.selection.contains(&producer) {
+                continue;
             }
+            let (Some(home), Some(at)) = (
+                world.entity(producer).map(|e| e.pos),
+                match rally {
+                    rom_sim::Rally::Point(pos) => Some(pos),
+                    rom_sim::Rally::Entity(id) => world.entity(id).map(|e| e.pos),
+                },
+            ) else {
+                continue;
+            };
+            hud.markers.push(HudMarker {
+                face: at.face,
+                x: at.x,
+                y: at.y,
+                kind: MarkerKind::Rally,
+                age_ticks: 0,
+                from: Some((home.face, home.x, home.y)),
+            });
         }
         if let Some(age) = self
             .placement

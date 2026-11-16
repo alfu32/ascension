@@ -1,0 +1,7 @@
+# Seed 7, single planet 128, three computer players. Run fast for a few game
+# minutes, write a named save, then open the save dialog (GPUI overlay; capture it
+# with `import -window root`, the raylib screenshot does not contain it).
+0 speed 800
+1500 save Rome at the river
+1510 quicksave
+1520 menu save

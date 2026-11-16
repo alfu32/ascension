@@ -114,9 +114,12 @@ impl ComputerPlayers {
         Ok(Self { brains })
     }
 
+    /// No computer players: a match nobody else plays in.
+    pub fn empty() -> Self {
+        Self { brains: Vec::new() }
+    }
+
     /// Brains restored from a save's `player_ai_state` rows.
-    // The save menus (task 63) call this; tested here.
-    #[allow(dead_code)]
     pub fn restore(rules: &Arc<Rules>, states: &AiStates) -> Result<Self, String> {
         let brains = states
             .iter()
@@ -174,8 +177,6 @@ impl ComputerPlayers {
     }
 
     /// The brains' memory for `rom_save::save`.
-    // The save menus (task 63) call this; tested here.
-    #[allow(dead_code)]
     pub fn ai_states(&self) -> AiStates {
         self.brains
             .iter()
@@ -202,8 +203,6 @@ impl ComputerPlayers {
     }
 
     /// Seats for a save: nature, the person, and a computer in every brain's slot.
-    // The save menus (task 63) call this; tested here.
-    #[allow(dead_code)]
     pub fn seats(&self, world: &World) -> Vec<Seat> {
         world
             .players()
@@ -229,8 +228,6 @@ impl ComputerPlayers {
 }
 
 /// Saves a match with its computer players. Call between ticks.
-// The save menus (task 63) call this; tested here.
-#[allow(dead_code)]
 pub fn save_match(
     path: &std::path::Path,
     world: &World,
@@ -245,8 +242,6 @@ pub fn save_match(
 }
 
 /// Loads a match saved by [`save_match`]: the world, the settings and the computer players.
-// The save menus (task 63) call this; tested here.
-#[allow(dead_code)]
 pub fn load_match(
     path: &std::path::Path,
     rules: &Arc<Rules>,

@@ -15,6 +15,9 @@ pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <f
 /// Default canvas size in pixels when `--size` is not given.
 pub const DEFAULT_SIZE: (u32, u32) = (1280, 800);
 
+/// Game minutes between autosaves unless `--autosave` says otherwise.
+pub const DEFAULT_AUTOSAVE_MINUTES: u32 = 5;
+
 /// Parsed command line.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Options {
@@ -108,6 +111,10 @@ pub struct Options {
     pub pose: rom_render::Activity,
     /// Seconds of motion the gallery shows, the same for every model; `None` lets it run.
     pub anim_time: Option<f32>,
+    /// Load this save instead of generating a match (hidden option; the save names the map).
+    pub load: Option<PathBuf>,
+    /// Autosave every this many game minutes; 0 turns it off (hidden option).
+    pub autosave_minutes: u32,
     /// Print usage and exit.
     pub help: bool,
 }
@@ -187,6 +194,8 @@ impl Default for Options {
             gallery_manifest: None,
             pose: rom_render::Activity::Idle,
             anim_time: None,
+            load: None,
+            autosave_minutes: DEFAULT_AUTOSAVE_MINUTES,
             help: false,
         }
     }
@@ -386,6 +395,10 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                         .ok_or_else(|| format!("--anim-time expects seconds, got {text:?}"))?,
                 );
             }
+            "--load" => options.load = Some(PathBuf::from(value("--load")?)),
+            "--autosave" => {
+                options.autosave_minutes = number("--autosave", &value("--autosave")?)?;
+            }
             "-h" | "--help" => options.help = true,
             other => return Err(format!("unknown argument {other:?}")),
         }
@@ -397,6 +410,54 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
         return Err("universe home planets require --sphere 64 to 512; use --single-planet for smaller spheres".into());
     }
     Ok(options)
+}
+
+/// The arguments that decide which map and match a save was made from, in the order given:
+/// what a save keeps so loading can regenerate the same terrain, planets and looks. Window,
+/// camera and automation options are left out.
+pub fn match_arguments(arguments: &[String]) -> Vec<String> {
+    const WITH_VALUE: [&str; 9] = [
+        "--style",
+        "--seed",
+        "--players",
+        "--factions",
+        "--ai",
+        "--map-size",
+        "--sphere",
+        "--age",
+        "--sun",
+    ];
+    const FLAGS: [&str; 3] = ["--single-planet", "--universe", "--watch"];
+    let mut kept = Vec::new();
+    let mut rest = arguments.iter();
+    while let Some(argument) = rest.next() {
+        if WITH_VALUE.contains(&argument.as_str()) {
+            if let Some(value) = rest.next() {
+                kept.extend([argument.clone(), value.clone()]);
+            }
+        } else if FLAGS.contains(&argument.as_str()) {
+            kept.push(argument.clone());
+        } else if !argument.starts_with("--") {
+            continue;
+        } else if ![
+            "--run",
+            "--demo",
+            "--stats",
+            "--no-hud",
+            "--zoom-out",
+            "--zoom-all",
+            "--start-markers",
+            "--parts",
+            "--help",
+            "-h",
+        ]
+        .contains(&argument.as_str())
+        {
+            // Every other option takes a value: skip it.
+            rest.next();
+        }
+    }
+    kept
 }
 
 fn number<T: std::str::FromStr>(name: &str, text: &str) -> Result<T, String> {
@@ -731,5 +792,48 @@ mod tests {
         assert!(parse(args(&["--scale", "40"])).is_err());
         assert!(parse(args(&["--bench"])).is_err());
         assert!(parse(args(&["--fast"])).is_err());
+    }
+
+    #[test]
+    fn a_save_keeps_only_the_arguments_that_make_the_map() {
+        let given: Vec<String> = [
+            "--seed",
+            "9",
+            "--size",
+            "900x600",
+            "--stats",
+            "--sphere",
+            "128",
+            "--universe",
+            "--ai",
+            "builder:tough",
+            "--screenshot",
+            "a.png",
+            "--after",
+            "2",
+            "--watch",
+        ]
+        .map(String::from)
+        .into();
+        assert_eq!(
+            match_arguments(&given),
+            [
+                "--seed",
+                "9",
+                "--sphere",
+                "128",
+                "--universe",
+                "--ai",
+                "builder:tough",
+                "--watch"
+            ]
+        );
+        let o = parse(args(&["--load", "x.rom", "--autosave", "0"])).unwrap();
+        assert_eq!(o.load, Some(PathBuf::from("x.rom")));
+        assert_eq!(o.autosave_minutes, 0);
+        assert_eq!(
+            parse(args(&[])).unwrap().autosave_minutes,
+            DEFAULT_AUTOSAVE_MINUTES
+        );
     }
 }

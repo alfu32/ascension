@@ -60,7 +60,32 @@ OVERVIEW6 = [
     ("unit.musketeer_gunpowder_attack_before", "Still open from round 5 — firing a long gun, before: one hand, from the hip"),
     ("unit.musketeer_gunpowder_attack", "Round 5 — after: from the shoulder, both hands (also the arquebusier and crossbowman)"),
 ]
-OVERVIEW = OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
+OVERVIEW7 = [
+    ("gallery_modern", "Modern age, game camera: <code>--gallery modern</code>"),
+    ("gallery_modern_close", "Modern age, close: <code>--gallery modern</code>"),
+    ("ages_bld.city", "One building through seven looks: the city, ancient to information"),
+    ("match_modern", "In a match in the modern age: the city, its farm and citizens"),
+    ("gallery_information_close", "Information age, close: <code>--gallery information</code>"),
+    ("match_information", "In a match in the information age: the glass city"),
+    ("gallery_units_close", "Every unit so far, close: <code>--gallery units</code>"),
+    ("unit.musketeer_gunpowder_attack_before", "Still open from round 5 — firing a long gun, before: one hand, from the hip"),
+    ("unit.musketeer_gunpowder_attack", "Round 5 — after: from the shoulder, both hands (also the arquebusier and crossbowman)"),
+]
+OVERVIEW8 = [
+    ("units_modern", "The eleven modern units at the game camera (each from its own <code>--model</code> view)"),
+    ("units_information", "The eleven information-age units at the game camera"),
+    ("gallery_modern_close", "Modern age, close: <code>--gallery modern</code> (buildings, then units)"),
+    ("gallery_information_close", "Information age, close: <code>--gallery information</code>"),
+    ("match_modern", "In a match in the modern age"),
+    ("match_information", "In a match in the information age"),
+    ("gallery_units_close", "Every unit so far, close: <code>--gallery units</code>"),
+    ("unit.main_battle_tank_information-attack", "A main battle tank firing: turret back on the target, the long gun recoils"),
+    ("unit.missile_launcher_information-attack", "A missile leaving its box with a flash and a short trail; the radar spins"),
+    ("unit.rocket_artillery_information-attack", "Rocket artillery firing a ripple salvo"),
+    ("unit.jet_fighter_information-move", "A jet fighter under way: higher than the propeller aircraft, banking"),
+    ("unit.recon_drone_information-move", "A recon drone hovering, its rotors spinning"),
+]
+OVERVIEW = OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
     ("gallery_ancient", "Ancient age, game camera: <code>--gallery ancient</code>"),
     ("gallery_classical", "Classical age, game camera: <code>--gallery classical</code>"),
     ("gallery_classical_close_team2", "Classical age, close, in player 2's blue to show where team colour sits"),
@@ -78,10 +103,13 @@ def fmt_params(params):
 
 def round_of(m):
     """Review round: 1 the samples, 2 early buildings, 3 early units, 4 medieval models and
-    gunpowder units, 5 early-modern buildings and enlightenment models, 6 industrial models."""
+    gunpowder units, 5 early-modern buildings and enlightenment models, 6 industrial models,
+    7 modern and information buildings, 8 modern and information units."""
     if m["id"] in ROUND1:
         return 1
     unit = m["entity"].startswith("unit.")
+    if m["age"] in ("age.modern", "age.information"):
+        return 8 if unit else 7
     if m["age"] == "age.industrial":
         return 6
     if m["age"] == "age.enlightenment" or (m["age"] == "age.gunpowder" and not unit):
@@ -122,7 +150,8 @@ for m in manifest["models"]:
         ],
     })
 
-AGES = ["ancient", "classical", "medieval", "gunpowder", "enlightenment", "industrial", "any"]
+AGES = ["ancient", "classical", "medieval", "gunpowder", "enlightenment", "industrial", "modern",
+        "information", "any"]
 models.sort(key=lambda m: (-m["round"], not m["id"].startswith("unit."), AGES.index(m["age"]) if m["age"] in AGES else 9, m["id"]))
 
 template = (here / "page.html").read_text()

@@ -8,16 +8,19 @@ use serde_json::{Value, json};
 use crate::args;
 
 /// Navigation labels in the same order as control group indices.
-pub(super) const GROUPS: [&str; 6] = [
+pub(super) const GROUPS: [&str; 7] = [
     "Game",
     "Window",
     "Camera and light",
     "Model review",
     "Automation",
     "Models",
+    "Saved games",
 ];
 /// The group of model tools (export to and import from Meshcraft), which has no options.
 pub(super) const MODELS_GROUP: usize = 5;
+/// The group listing saved games, which has no options either.
+pub(super) const SAVES_GROUP: usize = 6;
 
 /// One command-line option and its form presentation.
 pub(super) struct Control {

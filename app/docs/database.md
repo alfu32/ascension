@@ -867,3 +867,33 @@ back. No SQL runs in `rom-sim`.
   income rates (summed from `income_term`) and gather-slot occupants (from
   `entity.work_site_id`). The state hash after a load equals the hash before
   the save; the save tests also run both worlds on for several hundred ticks.
+
+### The save menus (task 63)
+
+The app writes saves on the simulation thread, between two ticks, and starts a game from
+one with `--load <file>` (a new process: the launcher's list and the in-match menu both
+use it). Files are in `$XDG_DATA_HOME/ascension/saves/` (else `~/.local/share/ascension/saves/`;
+`%APPDATA%` on Windows, `~/Library/Application Support` on macOS). A manual save is
+`save-<name>.rom`; quick saves rotate through `quicksave-1..3.rom`, autosaves (every 5 game
+minutes, `--autosave <minutes>`, 0 is off) through `autosave-1..3.rom`.
+
+**Stored beside the world** (`match_setting` rows and the match row, all read back by
+`read_header` without loading the rules):
+
+| Key | Meaning |
+| --- | --- |
+| `name`, `kind` | the player's name for it; `manual`, `quick` or `auto` |
+| `saved_at` | Unix seconds, for the date column and the newest-first order |
+| `age` | display name of player one's age at the save |
+| `args` | the launch arguments that decide the map (`--seed`, `--style`, `--sphere`, `--universe`, `--single-planet`, `--map-size`, `--players`, `--factions`, `--ai`, `--age`, `--sun`, `--watch`), one per line |
+| match `seed`, `map_style`, `speed_pct`; seats | the seed, the style key, the game speed; one seat per player (controller, AI profile) |
+
+**Rebuilt on load, not stored.** Loading regenerates the planet or map from `args` and the
+seed (the terrain pictures, the universe, the model looks, the sun), builds a throw-away
+fresh world for the starting data, and replaces its world with the restored one. Rebuilt too:
+fog of war and hidden-terrain views (from the restored vision), selection and control groups
+(empty), the camera (placed over player one's first city, on its planet), the viewed body
+(the home planet), the sun's phase, the event line, the computer players' memory comes from
+`player_ai_state`. Game speed comes from the match row. The game starts **paused**; Pause
+(HUD button) or Resume (menu) runs it. A save made with other rules (version or fingerprint)
+is listed with a refusal and cannot be loaded; `--load` of one exits with the same message.

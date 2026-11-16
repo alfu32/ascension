@@ -49,6 +49,8 @@ pub enum HudRegionKind {
     MinimapButton,
     /// One of the five data tabs.
     DataTab,
+    /// A button beside the clock: diplomacy, chat, menu, pause (0 to 3).
+    TopButton,
     /// Any other HUD surface; it consumes the press.
     Panel,
 }
@@ -466,6 +468,17 @@ pub fn hud_target(
     for i in 0..4 {
         if layout.minimap_button(i).contains(x, y) {
             return target(HudRegionKind::MinimapButton, i);
+        }
+    }
+    for i in 0..4 {
+        if layout
+            .map(
+                crate::hud_layout::Group::Top,
+                Rect::new(1432.0 + i as f32 * 54.0, 42.0, 50.0, 50.0),
+            )
+            .contains(x, y)
+        {
+            return target(HudRegionKind::TopButton, i);
         }
     }
     let view = layout.rect(Region::MinimapView);
