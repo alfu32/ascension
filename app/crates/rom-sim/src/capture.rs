@@ -94,6 +94,11 @@ impl World {
     pub(crate) fn change_owner(&mut self, id: EntityId, owner: PlayerId) {
         self.cancel_entity_orders(id);
         self.release_site_workers(id);
+        self.rallies.remove(&id);
+        let e = self.entity(id).expect("transferred entity");
+        let (old, type_id, site) = (e.owner, e.type_id, e.build_progress.is_some());
+        self.types.remove(old, type_id, id, site);
+        self.index_entity(owner, type_id, id, site);
         self.entities[id.0 as usize]
             .as_mut()
             .expect("transferred entity")

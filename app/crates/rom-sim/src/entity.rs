@@ -42,12 +42,7 @@ impl Player {
 
     /// Returns types of completed entities owned in the supplied world.
     pub fn owned_types(&self, world: &crate::World) -> rom_rules::Owned {
-        world
-            .entities()
-            .chain(world.transits().map(|t| &t.entity))
-            .filter(|e| e.owner == self.id && e.build_progress.is_none())
-            .map(|e| e.type_id)
-            .collect()
+        world.owned_types(self.id)
     }
 }
 

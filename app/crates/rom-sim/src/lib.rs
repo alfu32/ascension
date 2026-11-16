@@ -12,6 +12,7 @@ mod geometry;
 mod hash;
 mod healing;
 mod income;
+mod index;
 mod map;
 mod math;
 mod movement;
@@ -20,6 +21,7 @@ mod order;
 mod pathing;
 mod placement;
 mod production;
+mod rally;
 mod research;
 mod rng;
 mod scenario;
@@ -46,6 +48,7 @@ pub use math::{Pos, integer_sqrt};
 pub use order::{Command, Order, OrderId, OrderKindKey, OrderStatus};
 pub use pathing::PathStats;
 pub use placement::CITY_SITE_RADIUS;
+pub use rally::Rally;
 pub use rng::SimRng;
 pub use scenario::Playthrough;
 pub use snapshot::*;
@@ -275,6 +278,18 @@ pub enum SimError {
     /// An orbital craft in orbit can only fight there, board a carrier or come down.
     #[error("an orbital craft cannot leave its orbit on its own")]
     CraftInOrbit,
+    /// The producer's type has no rally point (`et_producer.has_rally`).
+    #[error("this producer has no rally point")]
+    NoRallyPoint,
+    /// A rally point names an entity that does not exist.
+    #[error("invalid rally target")]
+    InvalidRallyTarget,
+    /// A carrier cannot be disbanded with units aboard.
+    #[error("units are aboard")]
+    PassengersAboard,
+    /// Only a `handicap` technology can be granted, and only before the first tick.
+    #[error("not a handicap technology, or the match has started")]
+    NotAHandicap,
     /// The catalogue cannot supply the requested headless scenario.
     #[error("no eligible {0} for movement scenario")]
     ScenarioUnavailable(&'static str),

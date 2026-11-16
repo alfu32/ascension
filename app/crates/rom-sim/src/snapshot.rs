@@ -497,6 +497,8 @@ pub struct Snapshot {
     pub neutralised: Vec<EntityId>,
     /// Buildings being assimilated.
     pub assimilating: Vec<EntityId>,
+    /// Rally points of producers, by producer id.
+    pub rallies: Vec<(EntityId, crate::Rally)>,
 }
 
 const RULES: [VictoryRule; 8] = [
@@ -943,6 +945,7 @@ impl World {
             awake: self.avoid.awake.clone(),
             neutralised: self.capture.neutralised.iter().copied().collect(),
             assimilating: self.capture.assimilating.iter().copied().collect(),
+            rallies: self.rallies().collect(),
         }
     }
 
@@ -979,6 +982,7 @@ impl World {
             awake,
             neutralised,
             assimilating,
+            rallies,
         } = snapshot;
         let mut world = Self::empty(
             rules.clone(),
@@ -1295,6 +1299,8 @@ impl World {
             .into_iter()
             .map(|(o, append)| (order_from(o), append))
             .collect();
+        world.rallies = rallies.into_iter().collect();
+        world.rebuild_type_index();
         world.hits = hits.iter().map(hit_from).collect();
         world.shots = shots
             .iter()

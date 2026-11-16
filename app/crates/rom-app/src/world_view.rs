@@ -379,6 +379,16 @@ fn stats_overlay(
             "tick {}, {:.1} ticks/s, {} entities",
             sim.tick, sim.ticks_per_second, sim.entities
         ))
+        .children((sim.computers > 0).then(|| {
+            format!(
+                "{} computer players: think {:.2} ms avg, {:.2} ms max; {} orders, {} refused",
+                sim.computers,
+                f64::from(sim.think_us_avg) / 1000.0,
+                f64::from(sim.think_us_max) / 1000.0,
+                sim.computer_orders,
+                sim.computer_rejected
+            )
+        }))
         .child("PgUp/PgDn: render scale, +/-: sim speed")
 }
 

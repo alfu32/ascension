@@ -131,7 +131,8 @@ impl World {
         self.entity(id).and_then(|e| e.city_id)
     }
 
-    pub(crate) fn is_city_type(&self, type_id: rom_rules::DefId) -> bool {
+    /// Whether a type founds a city (`et_territory.is_city`).
+    pub fn is_city_type(&self, type_id: rom_rules::DefId) -> bool {
         self.rules.entity_types[&type_id]
             .territory
             .as_ref()
@@ -392,7 +393,7 @@ impl World {
     }
 
     /// The nearest complete city of `player` whose economic radius covers `pos`.
-    pub(crate) fn city_covering(&self, player: PlayerId, pos: Pos) -> Option<EntityId> {
+    pub fn city_covering(&self, player: PlayerId, pos: Pos) -> Option<EntityId> {
         self.territory
             .cities
             .iter()

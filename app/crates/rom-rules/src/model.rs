@@ -330,6 +330,8 @@ pub enum TechKind {
     Project,
     /// SQL value `evolution`.
     Evolution,
+    /// SQL value `handicap`: never researched, granted by the host at match setup.
+    Handicap,
 }
 impl crate::load::SqlEnum for TechKind {
     fn parse(value: &str) -> Option<Self> {
@@ -341,6 +343,7 @@ impl crate::load::SqlEnum for TechKind {
             "government" => Some(Self::Government),
             "project" => Some(Self::Project),
             "evolution" => Some(Self::Evolution),
+            "handicap" => Some(Self::Handicap),
             _ => None,
         }
     }
@@ -1872,6 +1875,8 @@ pub struct AiDifficulty {
     pub income_bonus_pct: i64,
     /// The `sees_all` column.
     pub sees_all: bool,
+    /// The `handicap_tech_id` column: the technology a host grants a player of this difficulty.
+    pub handicap_tech_id: Option<DefId>,
 }
 /// One `order_kind` row.
 #[derive(Debug, Clone)]

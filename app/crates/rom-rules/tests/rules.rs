@@ -1,6 +1,6 @@
 use rom_rules::{
     ActiveSources, ClaimMode, Condition, Context, DefId, Layer, ModifierOp, Owned, RegionKind,
-    Rules, RulesError, build_rules_db,
+    Rules, RulesError, TechKind, build_rules_db,
 };
 use rusqlite::Connection;
 
@@ -1164,4 +1164,47 @@ fn include_cycles_are_rejected() {
         ),
         Err(RulesError::InvalidValue { .. })
     ));
+}
+
+#[test]
+fn handicaps_are_granted_never_researched_and_match_the_difficulty() {
+    let rules = seed();
+    let toughest = &rules.ai_difficulties["toughest"];
+    let handicap = toughest.handicap_tech_id.expect("toughest has a handicap");
+    assert_eq!(rules.techs[&handicap].kind, TechKind::Handicap);
+    assert!(!rules.production_by_product.contains_key(&handicap));
+    assert!(
+        rules
+            .modifiers_from(handicap)
+            .iter()
+            .all(|m| m.stat_key.starts_with("income.") && m.value == toughest.income_bonus_pct)
+    );
+    let key = "tech.handicap.income_25";
+    assert_problem(
+        "INSERT INTO production(producer_type_id,mode,product_def_id)
+         SELECT p.id,'research',t.id FROM def p, def t WHERE p.key='bld.library' AND t.key='tech.handicap.income_25';",
+        "has a production row",
+        &[key],
+    );
+    assert_problem(
+        "INSERT INTO prerequisite SELECT a.id,b.id,0 FROM def a,def b
+         WHERE a.key='unit.priest' AND b.key='tech.handicap.income_25';",
+        "requires handicap",
+        &["unit.priest", key],
+    );
+    assert_problem(
+        "UPDATE ai_difficulty SET income_bonus_pct=30 WHERE key='toughest';",
+        "differ from income_bonus_pct",
+        &["toughest", key],
+    );
+    assert_problem(
+        "UPDATE ai_difficulty SET income_bonus_pct=10 WHERE key='tough';",
+        "without handicap_tech_id",
+        &["tough"],
+    );
+    assert_problem(
+        "UPDATE ai_difficulty SET handicap_tech_id=(SELECT id FROM def WHERE key='tech.religion') WHERE key='toughest';",
+        "is not a handicap",
+        &["toughest", "tech.religion"],
+    );
 }

@@ -3,7 +3,7 @@
 use crate::{AiStates, Controller, FORMAT, MatchInfo, SaveError, Seat, codec, part_b};
 use rom_sim::{
     Elimination, EntitySnapshot, HitSnapshot, OrderSnapshot, OrderStatus, Outcome, PlayerId,
-    PlayerStatus, Pos, Snapshot, ViewerSnapshot, World, victory_rule_key,
+    PlayerStatus, Pos, Rally, Snapshot, ViewerSnapshot, World, victory_rule_key,
 };
 use rusqlite::{Connection, Transaction, params};
 use std::path::Path;
@@ -373,12 +373,14 @@ fn write_players(
     }
     for (player, state) in ai {
         tx.execute(
-            "INSERT INTO player_ai_state VALUES (?,?,?,?,?)",
+            "INSERT INTO player_ai_state VALUES (?,?,?,?,?,?,?)",
             params![
                 player.0,
                 state.profile,
                 state.difficulty,
                 state.version,
+                w(state.rng_state),
+                state.opening_seq,
                 state.data
             ],
         )?;
@@ -570,6 +572,16 @@ fn write_entities(tx: &Transaction, s: &Snapshot) -> Result<(), SaveError> {
         for id in ids {
             tx.execute("INSERT INTO entity_flag VALUES (?,?)", params![id.0, flag])?;
         }
+    }
+    for (producer, rally) in &s.rallies {
+        let (target, at) = match rally {
+            Rally::Entity(target) => (Some(target.0), [None; 4]),
+            Rally::Point(at) => (None, opos(Some(*at))),
+        };
+        tx.execute(
+            "INSERT INTO entity_rally VALUES (?,?,?,?,?,?)",
+            params![producer.0, target, at[0], at[1], at[2], at[3]],
+        )?;
     }
     let hit = |h: &HitSnapshot| {
         (

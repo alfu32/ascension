@@ -203,6 +203,24 @@ impl World {
         for order in orders {
             hash.order(order);
         }
+        // Hashed only once used, so worlds without rally points keep their hashes.
+        if !self.rallies.is_empty() {
+            hash.bytes(b"rally");
+            hash.u64(self.rallies.len() as u64);
+            for (producer, rally) in &self.rallies {
+                hash.u32(producer.0);
+                match rally {
+                    crate::Rally::Point(pos) => {
+                        hash.bytes(&[0]);
+                        hash.pos(*pos);
+                    }
+                    crate::Rally::Entity(target) => {
+                        hash.bytes(&[1]);
+                        hash.u32(target.0);
+                    }
+                }
+            }
+        }
         hash.u64(self.pending.len() as u64);
         for (order, append) in &self.pending {
             hash.order(order);

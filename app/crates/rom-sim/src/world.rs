@@ -89,6 +89,14 @@ pub struct World {
     pub(crate) spent: Vec<EntityId>,
     pub(crate) territory: Territory,
     pub(crate) vision: Vision,
+    /// Rally points of producers (`set_rally`), by producer.
+    pub(crate) rallies: BTreeMap<EntityId, crate::rally::Rally>,
+    /// Units whose queued `disband` came up this tick; empty between ticks.
+    pub(crate) disbanded: Vec<EntityId>,
+    /// Entities by owner and type, sites and producers; derived, not hashed.
+    pub(crate) types: crate::index::TypeIndex,
+    /// The largest building footprint in the rules, in tiles across and down.
+    pub(crate) max_footprint: (i64, i64),
 }
 
 impl World {
@@ -235,6 +243,13 @@ impl World {
         let avoid = Avoidance::new(&rules);
         let tick_rate = rules.constant("sim.ticks_per_second").unwrap_or(1).max(1);
         let victory = crate::victory::VictoryState::new(&rules, &by_id)?;
+        let max_footprint = rules
+            .entity_types
+            .values()
+            .filter(|et| et.class == rom_rules::EntityClass::Building)
+            .fold((0, 0), |(w, h), et| {
+                (w.max(et.footprint_w.max(0)), h.max(et.footprint_h.max(0)))
+            });
         Ok(Self {
             victory,
             capture: crate::capture::CaptureState::default(),
@@ -262,6 +277,10 @@ impl World {
             income_remainders: BTreeMap::new(),
             territory: Territory::default(),
             vision: Vision::default(),
+            rallies: BTreeMap::new(),
+            disbanded: Vec::new(),
+            types: crate::index::TypeIndex::default(),
+            max_footprint,
         })
     }
 
@@ -466,6 +485,7 @@ impl World {
             idle_ticks: 0,
             orders: VecDeque::new(),
         }));
+        self.index_entity(owner, type_id, id, site);
         self.note_capital(id);
         self.refresh_entity_stats(id);
         self.next_entity_id = next;
@@ -493,6 +513,9 @@ impl World {
     pub(crate) fn retyped(&mut self, id: EntityId, old: DefId) {
         let entity = self.entity(id).expect("retyped entity");
         let (pos, new) = (entity.pos, entity.type_id);
+        let (owner, site) = (entity.owner, entity.build_progress.is_some());
+        self.types.remove(owner, old, id, site);
+        self.index_entity(owner, new, id, site);
         let slot = self.slot(pos.body);
         let pathing = &mut self.surfaces[slot].pathing;
         let before = &self.rules.entity_types[&old];
@@ -583,6 +606,14 @@ impl World {
             .get_mut(id.0 as usize)
             .and_then(Option::take)
             .ok_or(SimError::UnknownExecutor(id))?;
+        self.types.remove(
+            entity.owner,
+            entity.type_id,
+            id,
+            entity.build_progress.is_some(),
+        );
+        self.types.producers.remove(&id);
+        self.rallies.remove(&id);
         self.space.orbits.remove(&id);
         self.space.landed.remove(&id);
         self.capture.neutralised.remove(&id);
@@ -725,6 +756,7 @@ impl World {
             None
         };
         self.validate_combat_order(&command)?;
+        self.validate_rally_and_disband(&command)?;
         let payment = self.validate_economy_order(&mut command)?;
         let next = self
             .next_order_id
@@ -791,9 +823,24 @@ impl World {
         self.acquire_idle();
         self.regenerate_energy();
         for (mut order, append) in std::mem::take(&mut self.pending) {
+            // An executor disbanded earlier in this loop takes no more orders.
+            if self.entity(order.executor).is_none() {
+                self.stats.orders_cancelled += 1;
+                continue;
+            }
             // A passenger given an order steps out of its landed carrier to obey it.
             if !self.step_out(order.executor) {
                 self.stats.orders_cancelled += 1;
+                continue;
+            }
+            // A rally point is a setting: it does not replace or join the producer's queue.
+            if order.kind == "set_rally" {
+                self.apply_rally(&order);
+                continue;
+            }
+            if order.kind == "disband" && !append {
+                self.despawn(order.executor).expect("checked executor");
+                self.stats.orders_done += 1;
                 continue;
             }
             if order.kind == "construct" {
@@ -832,6 +879,10 @@ impl World {
                 self.relocate(id, old, new);
                 moved.push(id);
             }
+        }
+        if !self.disbanded.is_empty() {
+            self.remove_disbanded();
+            moved.retain(|id| self.entity(*id).is_some());
         }
         self.run_path_searches();
         self.separate_units(&moved);

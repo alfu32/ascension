@@ -168,6 +168,9 @@ impl World {
         {
             let e = &mut transit.entity;
             if let Some(owner) = capturer {
+                let site = e.build_progress.is_some();
+                self.types.remove(e.owner, e.type_id, e.id, site);
+                self.types.add(owner, e.type_id, e.id, site);
                 e.owner = owner;
             }
             for order in std::mem::take(&mut e.orders) {

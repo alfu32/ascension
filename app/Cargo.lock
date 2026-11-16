@@ -4877,10 +4877,12 @@ version = "0.0.55"
 dependencies = [
  "gpui",
  "gpui-component",
+ "rom-ai",
  "rom-mapgen",
  "rom-models",
  "rom-render",
  "rom-rules",
+ "rom-save",
  "rom-sim",
  "serde_json",
  "thiserror 2.0.21",
