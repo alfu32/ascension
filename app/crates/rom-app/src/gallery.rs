@@ -631,9 +631,14 @@ mod tests {
                 "unit.bomber@modern",
                 "unit.cannon@enlightenment",
                 "unit.carrier@starfaring",
+                "unit.combat_robot@automation",
                 "unit.cuirassier@gunpowder",
                 "unit.destroyer@modern",
                 "unit.dragoon@enlightenment",
+                "unit.drone_bomber@automation",
+                "unit.drone_cruiser@automation",
+                "unit.drone_fighter@automation",
+                "unit.exo_trooper@fusion",
                 "unit.field_gun@industrial",
                 "unit.fighter@modern",
                 "unit.flak_gun@modern",
@@ -641,6 +646,8 @@ mod tests {
                 "unit.fusilier@enlightenment",
                 "unit.gun_drone@information",
                 "unit.heavy_machine_gunner@modern",
+                "unit.hover_frigate@fusion",
+                "unit.hovercraft@automation",
                 "unit.howitzer@modern",
                 "unit.infantry@modern",
                 "unit.ironclad@industrial",
@@ -655,9 +662,12 @@ mod tests {
                 "unit.musketeer@gunpowder",
                 "unit.orbital_bomber@starfaring",
                 "unit.orbital_fighter@starfaring",
+                "unit.railgun_battery@fusion",
+                "unit.railgun_team@fusion",
                 "unit.ranger@enlightenment",
                 "unit.recon_drone@information",
                 "unit.rifleman@industrial",
+                "unit.robot_tank@automation",
                 "unit.rocket_artillery@information",
                 "unit.scout_car@modern",
                 "unit.strategic_bomber@information",
@@ -1235,7 +1245,12 @@ mod tests {
     fn modern_and_information_units_are_complete() {
         let (rules, book) = book();
         let ordinal = |key: &str| rules.ages[&rules.id_of(key).unwrap()].ordinal;
-        let eras = [ordinal("age.modern"), ordinal("age.information")];
+        let eras = [
+            ordinal("age.modern"),
+            ordinal("age.information"),
+            ordinal("age.automation"),
+            ordinal("age.fusion"),
+        ];
         let mut units = 0;
         for (&id, et) in &rules.entity_types {
             let Some(first) = et.first_age_id else {
@@ -1244,7 +1259,7 @@ mod tests {
             if et.class != EntityClass::Unit || !eras.contains(&rules.ages[&first].ordinal) {
                 continue;
             }
-            // Every unit of the modern and information ages has its first look.
+            // Every unit of the modern, information, automation and fusion ages has its first look.
             let has = book
                 .entries
                 .iter()
@@ -1256,7 +1271,7 @@ mod tests {
             );
             units += 1;
         }
-        assert!(units >= 22, "{units}");
+        assert!(units >= 38, "{units}");
     }
 
     #[test]
