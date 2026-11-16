@@ -46,7 +46,19 @@ ships in a system.
 4. **Resource bodies (optional, report if not done).** If cheap once 1–3
    exist: give `node.ore_asteroid`, `node.crystal_asteroid`, `node.tar_moon`
    a size rule and draw them as models; otherwise state what remains.
-5. **Frame rate.** Bench a system view with at least 40 ships
+5. **Bigger resource bodies (owner, 2026-11-16: "planetoids are a tad too
+   small, let's make them bigger in spite of the physical reality").** Moons,
+   asteroids and small planets are drawn at 15 × (1 + size) system units
+   (`body_radius` in `rom-render/src/universe.rs`), a tenth to a fifth of a
+   median planet (300). Draw them about three times larger, roughly a third
+   to a half of a median planet, but always smaller than the smallest
+   habitable planet (`HOME_PLANET_RADIUS` × 96 / 192), in the system view and
+   on the minimap. Keep them readable and
+   apart: moons must not touch their planet (widen their small ring as
+   needed), belt bodies must not overlap, and hover, double-click and the
+   claim ring still pick the right body. Presentation only: no change to
+   simulation positions or claim range. Screenshots before and after.
+6. **Frame rate.** Bench a system view with at least 40 ships
    (`--bench`, twice, with `uptime` load) before and after; the system view
    must not lose more than 10 % of frame rate on this machine.
 

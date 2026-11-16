@@ -2,8 +2,14 @@
 
 Crates: `rom-mapgen` (universe layout), `rom-sim` (route lengths, transit
 positions), `rom-render` and `rom-app` (star-map drawing and navigation),
-schema only if a system position is stored there, docs. Starts after tasks 57
-and 58 are merged (they touch the same crates). Implementer: Claude (Sonnet).
+schema only if a system position is stored there, docs. Starts after tasks 67
+and 69 are merged (they touch `rom-sim`, `rom-render` and `rom-app`).
+Implementer: Claude (Sonnet).
+
+The owner confirmed on 2026-11-16 that the network is 3D and that ships keep
+flying freely inside a system. Charged jumps and inhibitors on the routes
+between systems come next, in task 70: keep route departure and transit code
+easy to extend, but do not build them here.
 
 ## Why — the owner (2026-11-15)
 
