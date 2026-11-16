@@ -4,7 +4,8 @@ Crates: `rom-mapgen` (universe layout), `rom-sim` (route lengths, transit
 positions), `rom-render` and `rom-app` (star-map drawing and navigation),
 schema and seed for the star-name table (and a system position if stored), docs. Starts after tasks 67
 and 69 are merged (they touch `rom-sim`, `rom-render` and `rom-app`).
-Implementer: Claude (Sonnet).
+Implementer: Claude (Sonnet). Task 71 runs in parallel in `rom-ai`,
+`rom-cli` and unit stats in `generate.py`; it does not touch `rom-sim`.
 
 The owner confirmed on 2026-11-16 that the network is 3D and that ships keep
 flying freely inside a system. Charged jumps and inhibitors on the routes
