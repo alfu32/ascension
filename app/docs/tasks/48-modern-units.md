@@ -1,7 +1,8 @@
 # Task 48 — Models: Modern and information units
 
-Implementer: Codex (`gpt-6.1-sol`, high). Crates: seed (and `rom-render`
-part kit and motion, `rom-app` tests, only as needed). Review round 8.
+Implementer: Claude agent (moved off Codex by the owner, 2026-11-16). Model files in
+`db/models/` (and the `rom-kit` part kit and motion, `rom-app` tests, only as needed).
+Review round 8.
 
 **Read `model-card-common.md` first**: it holds the method, rules, review
 material, tests, the done-when list and how to finish. This card lists only
@@ -43,3 +44,22 @@ Information (`@information`):
 
 Motion: jets fly faster and higher than propeller aircraft, missiles launch
 with a flash and a short trail, rotors spin, drones hover and bob.
+
+## Done (task 48)
+
+- 22 unit looks in `db/models/unit.*@modern.sql` and `unit.*@information.sql`; materials
+  haze grey (warships, jets), dark green (information-age vehicles) and black composite
+  (carbines, sights, drones). The strategic bomber is anti-flash white.
+- No new shapes or motion knobs. Rotors and the missile launcher's and cruiser's search radars
+  are `propeller` parts pitched −90°. A missile, rocket or bomb shows only at the shot, on the
+  `flash` joint: a flash, the missile ahead of the tube and a smoke trail widening back
+  towards it (a burst of 4 for the rocket salvo, vertical from the cruiser's cells). Drones
+  carry their own height (recon 1.15, repair 1.55 tiles) and hover with a small `bank`.
+- Aircraft carry their own height: fighter 2.7, bomber 2.9, jet fighter 3.8, strategic
+  bomber 4.2 tiles; jets bank harder (24° against 18°). The rules give every aircraft the
+  same speed (`et_movement.speed` 4000), so "faster" is not shown; that is a rules change.
+- A gun's `recoil` stays within the drift the attached-parts test allows (0.15 tiles).
+- Figures keep to 300 triangles each: one six-sided helmet dome, a stock and receiver as one
+  box. Helmets of crew left out of the far version are left out with them.
+- Team colour 15–24 % on vehicles, ships and aircraft; 29–38 % on foot figures and crews
+  (tunics, partly covered by webbing and plate carriers).
