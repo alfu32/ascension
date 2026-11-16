@@ -1,0 +1,14 @@
+# Task 51, replayed by --script in universe mode: a spaceport beside the city in the starfaring
+# age, with marines, grav skimmers and a grav tank in front of it. Test-only setup lines first.
+0 grant-age age.galactic
+0 place 1 bld.spaceport @9,-1
+0 place 1 unit.marine @3,5
+0 place 1 unit.marine @4,5
+0 place 1 unit.marine @5,5
+0 place 1 unit.beam_trooper @3,6
+0 place 1 unit.shock_marine @4,6
+0 place 1 unit.grav_skimmer @7,6
+0 place 1 unit.grav_skimmer @8,6
+0 place 1 unit.grav_tank @10,6
+1 speed 100
+10 cam wheel 3 820,420

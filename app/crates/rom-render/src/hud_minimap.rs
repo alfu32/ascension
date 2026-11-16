@@ -530,7 +530,7 @@ pub fn space_marks(
             let body = &scene.bodies[placed.body];
             let (x, y) = to_area(placed.pos);
             match body.kind {
-                BodyViewKind::Star => marks.push(dot(x, y, 6.0, [255, 230, 150, 255])),
+                BodyViewKind::Star => marks.push(dot(x, y, 8.0, [255, 230, 150, 255])),
                 BodyViewKind::Habitable => {
                     marks.push(MapMark::Ring(
                         (cx, cy),
@@ -540,15 +540,17 @@ pub fn space_marks(
                     let rgb = body
                         .home_race_colour
                         .unwrap_or(crate::universe::planet_colour(body.id));
-                    marks.push(dot(x, y, 5.0, [rgb[0], rgb[1], rgb[2], 255]));
+                    marks.push(dot(x, y, 6.5, [rgb[0], rgb[1], rgb[2], 255]));
                 }
                 BodyViewKind::Resource => {
                     // Moons and belt bodies carry no ring of their own; the belt gets one below.
-                    // Each is a dot in the colour of its resource.
+                    // Each is a dot in the colour of its resource, by its drawn size and always
+                    // smaller than a planet's.
                     let rgb = space
                         .resource_body(body.id)
                         .map_or([170, 160, 140], |r| r.colour);
-                    marks.push(dot(x, y, 4.0, [rgb[0], rgb[1], rgb[2], 255]));
+                    let size = 3.0 + 2.5 * placed.radius / crate::universe::SMALLEST_PLANET_RADIUS;
+                    marks.push(dot(x, y, size, [rgb[0], rgb[1], rgb[2], 255]));
                 }
             }
         }

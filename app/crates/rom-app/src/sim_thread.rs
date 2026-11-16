@@ -24,7 +24,7 @@ use crate::match_setup::planet_surface;
 use crate::saves::{self, Kind, SaveRequest, SaveSetup, Saved};
 use crate::script::{Script, ScriptAction};
 use crate::selection::{Controller, PLAYER, ViewCtx};
-use crate::space_view::{Notices, SpaceFrame, space_snapshot};
+use crate::space_view::{Notices, SpaceFrame, dress_ships, space_snapshot};
 
 /// The universe the simulation thread expands planets from, and which planet is shown.
 pub struct UniverseHost {
@@ -845,7 +845,9 @@ fn publish(
     bridge.publish_snapshot(Arc::new(snapshot));
     if let Some(host) = host {
         let system = bridge.view_state().system.unwrap_or(host.home_system);
-        bridge.publish_space(Arc::new(space_snapshot(world, system, &sightings)));
+        let mut space = space_snapshot(world, system, &sightings);
+        dress_ships(&mut space, world, models);
+        bridge.publish_space(Arc::new(space));
     }
     publish_camera_limits(world, bridge);
     if world.tick().is_multiple_of(VISION_INTERVAL) {

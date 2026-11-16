@@ -1,0 +1,14 @@
+# Task 51, replayed by --script in universe mode: a corvette, a frigate, a cruiser and a battleship
+# in orbit bombard an enemy factory beside the city. Test-only setup lines first.
+0 grant-age age.galactic
+0 place 2 bld.factory @-14,2
+0 place-orbit 1 unit.corvette @-8,-6
+0 place-orbit 1 unit.space_frigate @-2,-8
+0 place-orbit 1 unit.space_cruiser @6,-7
+0 place-orbit 1 unit.battleship @-4,-18
+1 speed 100
+10 cam wheel 2 760,420
+200 ships
+204 rclick enemy1
+# Slow almost to a stop once they are firing, for a stable frame.
+330 speed 1

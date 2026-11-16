@@ -18,6 +18,29 @@ pub const STAR_CLEAR: f32 = 1200.0;
 pub const STAR_RADIUS: f32 = 600.0;
 /// Drawn radius of the home planet in system units (a planet 600 units wide).
 pub const HOME_PLANET_RADIUS: f32 = 300.0;
+/// Drawn radius of the smallest habitable planet (a face of 96 tiles), in system units.
+pub const SMALLEST_PLANET_RADIUS: f32 = HOME_PLANET_RADIUS * 96.0 / 192.0;
+/// Drawn radius of a resource body of size 0, and what each step of size adds, in system units:
+/// far larger than true, a third to a half of a median planet, always under the smallest one.
+pub const ROCK_RADIUS: f32 = 85.0;
+/// What each step of a resource body's size adds to its drawn radius, in system units.
+pub const ROCK_RADIUS_STEP: f32 = 20.0;
+/// Largest drawn radius of a resource body (size 3), in system units.
+pub const LARGEST_ROCK_RADIUS: f32 = ROCK_RADIUS + 3.0 * ROCK_RADIUS_STEP;
+/// Least drawn gap between two bodies, in system units.
+pub const BODY_GAP: f32 = 60.0;
+/// Smallest radius of any body on screen, in pixels (seen from the ground, every body).
+pub const MIN_BODY_PIXELS: f32 = 2.5;
+/// Smallest radius of a habitable planet on screen out in space, in pixels.
+pub const PLANET_MIN_PIXELS: f32 = 8.0;
+/// Smallest radius of a star on screen out in space, in pixels: above every planet's floor.
+pub const STAR_MIN_PIXELS: f32 = 12.0;
+/// Smallest radius of a resource body on screen out in space, as a share of the smallest
+/// habitable planet drawn at that moment: a small body beside the planets, never a dot.
+pub const ROCK_SHARE: f32 = 0.65;
+/// System units a pixel at whole-system zoom on a picture 720 pixels high: the layout keeps
+/// bodies apart at the size they are drawn there.
+pub const LAYOUT_UNITS_PER_PIXEL: f32 = 56.0;
 /// Radius in units of the disc that holds every system of the star map.
 pub const MAP_RADIUS: f32 = 40_000.0;
 
@@ -88,6 +111,9 @@ pub struct PlacedBody {
     pub pos: [f32; 3],
     /// Drawn radius in system units.
     pub radius: f32,
+    /// Radius it takes on screen at whole-system zoom ([`LAYOUT_UNITS_PER_PIXEL`]), floors
+    /// included, in system units: the layout keeps bodies this far apart.
+    pub room: f32,
     /// Radius of its orbit ring in system units, about the star or, for a moon, its planet.
     pub orbit: f32,
     /// The planet (an index into [`UniverseScene::bodies`]) a resource body circles as a moon.
@@ -150,11 +176,26 @@ impl UniverseScene {
                     body: index,
                     pos,
                     radius: body_radius(b),
+                    room: 0.0,
                     orbit,
                     moon_of: None,
                 }
             })
             .collect();
+        let kinds: Vec<BodyViewKind> = placed.iter().map(|p| self.bodies[p.body].kind).collect();
+        let pixels: Vec<f32> = placed
+            .iter()
+            .map(|p| p.radius / LAYOUT_UNITS_PER_PIXEL)
+            .collect();
+        for (p, shown) in placed.iter_mut().zip(shown_pixels(&kinds, &pixels, 1.0)) {
+            p.room = p.radius.max(shown * LAYOUT_UNITS_PER_PIXEL);
+        }
+        let rock_room = placed
+            .iter()
+            .zip(&kinds)
+            .filter(|(_, k)| **k == BodyViewKind::Resource)
+            .map(|(p, _)| p.room)
+            .fold(LARGEST_ROCK_RADIUS, f32::max);
         // A moon circles its planet at a small drawn distance instead of keeping the tiny gap
         // that its true orbit would give at this scale.
         let moons: Vec<(usize, usize)> = (0..placed.len())
@@ -166,7 +207,12 @@ impl UniverseScene {
             };
             let rank = placed.iter().filter(|p| p.moon_of == Some(parent)).count();
             let (centre, planet) = (placed[at].pos, placed[at].radius);
-            let orbit = planet * (2.6 + 1.1 * rank as f32) + placed[i].radius;
+            // Clear of the planet as both are drawn at whole-system zoom; each further moon
+            // takes a ring wide enough to clear the one inside it.
+            let first =
+                (planet * 2.6 + placed[i].radius).max(placed[at].room + placed[i].room + BODY_GAP);
+            let step = (planet * 1.1).max(2.0 * rock_room + BODY_GAP);
+            let orbit = first + step * rank as f32;
             let heading = (self.bodies[placed[i].body].id as f32 * 2.399_963).rem_euclid(TAU);
             placed[i].orbit = orbit;
             placed[i].moon_of = Some(parent);
@@ -176,6 +222,7 @@ impl UniverseScene {
                 centre[2] + orbit * heading.sin(),
             ];
         }
+        spread_rocks(&mut placed, |i| self.bodies[i].kind);
         placed
     }
 
@@ -252,6 +299,134 @@ pub fn frame_to_orbit(frame: f32, outermost: f32) -> f32 {
     ((frame - STAR_CLEAR) / (SYSTEM_RADIUS - STAR_CLEAR)).max(0.0) * outermost.max(1.0)
 }
 
+/// Turns resource bodies along their rings (about the star, or a moon's about its planet) until
+/// no two drawn bodies come closer than [`BODY_GAP`]: they are drawn far larger than true, so
+/// neighbours on the belt or a moon and its planet's other moons could touch. Stars and planets
+/// never move; the order of the bodies decides who gives way, so the layout is the same every
+/// time.
+fn spread_rocks(placed: &mut [PlacedBody], kind: impl Fn(usize) -> BodyViewKind) {
+    let rock = |p: &PlacedBody| kind(p.body) == BodyViewKind::Resource;
+    for _ in 0..64 {
+        let mut moved = false;
+        for i in 0..placed.len() {
+            for j in 0..placed.len() {
+                if i == j || !rock(&placed[i]) {
+                    continue;
+                }
+                // A pair of rocks is settled once, by the first of them.
+                if rock(&placed[j]) && j < i {
+                    continue;
+                }
+                let (a, b) = (placed[i].pos, placed[j].pos);
+                let apart = (a[0] - b[0]).hypot(a[2] - b[2]);
+                let least = placed[i].room + placed[j].room + BODY_GAP;
+                if apart >= least {
+                    continue;
+                }
+                // Both rocks give way half each; a rock beside a star or planet all of it.
+                let share = if rock(&placed[j]) { 0.5 } else { 1.0 };
+                let push = (least - apart) * share + 1.0;
+                let away = |p: &PlacedBody, from: [f32; 3]| -> f32 {
+                    // Which way along its ring takes `p` away from `from`.
+                    let centre = ring_centre(placed, p);
+                    let (dx, dz) = (p.pos[0] - centre[0], p.pos[2] - centre[2]);
+                    let along = [-dz, dx];
+                    let sign = along[0] * (p.pos[0] - from[0]) + along[1] * (p.pos[2] - from[2]);
+                    if sign >= 0.0 { 1.0 } else { -1.0 }
+                };
+                let turn_i = away(&placed[i], b);
+                let turn_j = away(&placed[j], a);
+                turn(placed, i, turn_i * push);
+                if share < 1.0 {
+                    turn(placed, j, turn_j * push);
+                }
+                moved = true;
+            }
+        }
+        if !moved {
+            break;
+        }
+    }
+}
+
+/// The smallest gap between the edges of two of `placed` as drawn at whole-system zoom (their
+/// [`PlacedBody::room`]), in system units (infinite for fewer than two bodies).
+pub fn closest_gap(placed: &[PlacedBody]) -> f32 {
+    let mut least = f32::INFINITY;
+    for (i, a) in placed.iter().enumerate() {
+        for b in &placed[i + 1..] {
+            let apart = (a.pos[0] - b.pos[0]).hypot(a.pos[2] - b.pos[2]);
+            least = least.min(apart - a.room - b.room);
+        }
+    }
+    least
+}
+
+/// The centre of the ring `p` is drawn on: its planet for a moon, the star otherwise.
+fn ring_centre(placed: &[PlacedBody], p: &PlacedBody) -> [f32; 3] {
+    p.moon_of
+        .and_then(|parent| placed.iter().find(|q| q.body == parent))
+        .map_or([0.0; 3], |q| q.pos)
+}
+
+/// Moves body `i` `by` units along its ring.
+fn turn(placed: &mut [PlacedBody], i: usize, by: f32) {
+    let centre = ring_centre(placed, &placed[i]);
+    let p = &mut placed[i];
+    let (dx, dz) = (p.pos[0] - centre[0], p.pos[2] - centre[2]);
+    let radius = dx.hypot(dz).max(1.0);
+    let angle = dz.atan2(dx) + by / radius;
+    p.pos = [
+        centre[0] + radius * angle.cos(),
+        p.pos[1],
+        centre[2] + radius * angle.sin(),
+    ];
+}
+
+/// The least radius on screen, in pixels, of a body of `kind` when the smallest habitable
+/// planet in view is drawn `smallest_planet` pixels wide in radius, `space` of the way from the
+/// ground (where every body is a small disc in the sky) out to space.
+pub fn least_pixels(kind: BodyViewKind, smallest_planet: f32, space: f32) -> f32 {
+    let out = match kind {
+        BodyViewKind::Star => STAR_MIN_PIXELS,
+        BodyViewKind::Habitable => PLANET_MIN_PIXELS,
+        BodyViewKind::Resource => ROCK_SHARE * smallest_planet,
+    }
+    .max(MIN_BODY_PIXELS);
+    MIN_BODY_PIXELS + (out - MIN_BODY_PIXELS) * space.clamp(0.0, 1.0)
+}
+
+/// The radii on screen, in pixels, of bodies of `kinds` that would be `pixels` wide in radius:
+/// every one at least its kind's floor ([`least_pixels`]), a resource body's taken from the
+/// smallest habitable planet among them as drawn (or the planet floor when there is none).
+pub fn shown_pixels(kinds: &[BodyViewKind], pixels: &[f32], space: f32) -> Vec<f32> {
+    let planet_floor = least_pixels(BodyViewKind::Habitable, 0.0, space);
+    let smallest = kinds
+        .iter()
+        .zip(pixels)
+        .filter(|(k, _)| **k == BodyViewKind::Habitable)
+        .map(|(_, p)| p.max(planet_floor))
+        .fold(f32::INFINITY, f32::min);
+    let smallest = if smallest.is_finite() {
+        smallest
+    } else {
+        planet_floor
+    };
+    kinds
+        .iter()
+        .zip(pixels)
+        .map(|(k, p)| p.max(least_pixels(*k, smallest, space)))
+        .collect()
+}
+
+/// The radius in pixels a body is drawn with, from its floored size `shown` ([`shown_pixels`]):
+/// never wider than its [`PlacedBody::room`] (`room` units, `per_pixel` units a pixel), so
+/// zoomed out past the whole system bodies shrink with it instead of running into each other
+/// (their halo still marks them).
+pub fn drawn_pixels(shown: f32, room: f32, per_pixel: f32) -> f32 {
+    shown.min(room / per_pixel.max(1e-9))
+}
+
 /// Drawn radius of a body in system units.
 pub fn body_radius(body: &BodyView) -> f32 {
     match body.kind {
@@ -260,7 +435,9 @@ pub fn body_radius(body: &BodyView) -> f32 {
         BodyViewKind::Habitable => {
             HOME_PLANET_RADIUS * body.n_or_size.clamp(96, 288) as f32 / 192.0
         }
-        BodyViewKind::Resource => 15.0 * (1 + body.n_or_size.clamp(1, 3)) as f32,
+        BodyViewKind::Resource => {
+            ROCK_RADIUS + ROCK_RADIUS_STEP * body.n_or_size.clamp(1, 3) as f32
+        }
     }
 }
 
@@ -485,6 +662,150 @@ mod tests {
         assert_eq!(body_radius(home) * 2.0, 2.0 * HOME_PLANET_RADIUS);
         assert!(body_radius(home) * 2.0 >= 200.0 && body_radius(home) * 2.0 <= 700.0);
         assert!(body_radius(&scene.bodies[2]) < body_radius(home));
+    }
+
+    #[test]
+    fn resource_bodies_are_drawn_large_but_under_every_planet() {
+        let scene = sample_scene();
+        let planet = |n| BodyView {
+            kind: BodyViewKind::Habitable,
+            n_or_size: n,
+            ..scene.bodies[1].clone()
+        };
+        let smallest = body_radius(&planet(1));
+        assert_eq!(smallest, SMALLEST_PLANET_RADIUS);
+        for size in 1..=3 {
+            let rock = BodyView {
+                kind: BodyViewKind::Resource,
+                n_or_size: size,
+                ..scene.bodies[2].clone()
+            };
+            let r = body_radius(&rock);
+            // About three times the old 15 × (1 + size), a third to a half of a median planet.
+            let old = 15.0 * (1 + size) as f32;
+            assert!((old * 2.3..=old * 3.6).contains(&r), "size {size}: {r}");
+            assert!(
+                (HOME_PLANET_RADIUS / 3.0..=HOME_PLANET_RADIUS / 2.0).contains(&r),
+                "{r}"
+            );
+            assert!(r < smallest && r <= LARGEST_ROCK_RADIUS, "{r}");
+        }
+    }
+
+    #[test]
+    fn at_whole_system_zoom_rocks_are_small_bodies_beside_the_planets() {
+        use BodyViewKind::{Habitable, Resource, Star};
+        let kinds = [
+            Star, Habitable, Habitable, Habitable, Resource, Resource, Resource,
+        ];
+        let radii = [
+            STAR_RADIUS,
+            SMALLEST_PLANET_RADIUS,
+            HOME_PLANET_RADIUS,
+            HOME_PLANET_RADIUS * 1.5,
+            ROCK_RADIUS + ROCK_RADIUS_STEP,
+            ROCK_RADIUS + 2.0 * ROCK_RADIUS_STEP,
+            LARGEST_ROCK_RADIUS,
+        ];
+        // Whole-system zoom and a little farther out.
+        for per_pixel in [LAYOUT_UNITS_PER_PIXEL, 2.0 * LAYOUT_UNITS_PER_PIXEL] {
+            let pixels: Vec<f32> = radii.iter().map(|r| r / per_pixel).collect();
+            let shown = shown_pixels(&kinds, &pixels, 1.0);
+            let smallest_planet = shown[1..4].iter().cloned().fold(f32::INFINITY, f32::min);
+            assert!(smallest_planet >= PLANET_MIN_PIXELS);
+            for rock in &shown[4..] {
+                let share = rock / smallest_planet;
+                assert!((0.55..=0.75).contains(&share), "{per_pixel}: {share}");
+                assert!(*rock >= 5.0, "{per_pixel}: {rock}");
+            }
+            assert!(shown[0] >= shown[1..4].iter().cloned().fold(0.0, f32::max) * 0.99);
+        }
+        // Close in, everything is drawn at its own size and no rock outgrows a planet.
+        let pixels: Vec<f32> = radii.iter().map(|r| r / 5.0).collect();
+        let shown = shown_pixels(&kinds, &pixels, 1.0);
+        assert_eq!(shown, pixels);
+        assert!(shown[4..].iter().all(|r| *r < shown[1]));
+        // From the ground every body keeps the small floor of the sky.
+        let far: Vec<f32> = radii.iter().map(|r| r / 10_000.0).collect();
+        assert!(
+            shown_pixels(&kinds, &far, 0.0)
+                .iter()
+                .all(|p| *p == MIN_BODY_PIXELS)
+        );
+    }
+
+    #[test]
+    fn zoomed_out_past_the_whole_system_bodies_keep_within_their_room() {
+        let scene = sample_scene();
+        let placed = scene.place_system(1);
+        let kinds: Vec<BodyViewKind> = placed.iter().map(|p| scene.bodies[p.body].kind).collect();
+        for per_pixel in [5.0, LAYOUT_UNITS_PER_PIXEL, 3.0 * LAYOUT_UNITS_PER_PIXEL] {
+            let pixels: Vec<f32> = placed.iter().map(|p| p.radius / per_pixel).collect();
+            for ((p, shown), kind) in placed
+                .iter()
+                .zip(shown_pixels(&kinds, &pixels, 1.0))
+                .zip(&kinds)
+            {
+                let drawn = drawn_pixels(shown, p.room, per_pixel) * per_pixel;
+                assert!(drawn >= p.radius - 1e-3, "{kind:?} at {per_pixel}");
+                assert!(drawn <= p.room + 1e-3, "{kind:?} at {per_pixel}");
+            }
+        }
+        // So bodies drawn apart at whole-system zoom stay apart farther out.
+        assert!(closest_gap(&placed) >= BODY_GAP - 1.0);
+    }
+
+    #[test]
+    fn crowded_rocks_and_moons_are_drawn_apart() {
+        let mut scene = sample_scene();
+        let rock = |id, orbit_radius, orbit_angle, size| BodyView {
+            id,
+            name: format!("B{id}"),
+            system: 1,
+            kind: BodyViewKind::Resource,
+            orbit_radius,
+            orbit_angle,
+            n_or_size: size,
+            home_race_colour: None,
+        };
+        // A tight belt: neighbours a degree apart on nearly the same ring.
+        for k in 0..8 {
+            scene
+                .bodies
+                .push(rock(100 + k, 3000 + k as i32, 120_000 + k as i32 * 1000, 3));
+        }
+        // Three more moons of the planet, on both sides of its orbit.
+        scene.bodies.push(rock(200, 1103, 400, 3));
+        scene.bodies.push(rock(201, 900, 359_500, 2));
+        scene.bodies.push(rock(202, 1097, 800, 3));
+        let placed = scene.place_system(1);
+        assert!(
+            closest_gap(&placed) >= BODY_GAP - 1.0,
+            "{}",
+            closest_gap(&placed)
+        );
+        let planet = scene.body_index(2).unwrap();
+        let moons: Vec<&PlacedBody> = placed
+            .iter()
+            .filter(|p| p.moon_of == Some(planet))
+            .collect();
+        assert_eq!(moons.len(), 4);
+        let at = placed.iter().find(|p| p.body == planet).unwrap();
+        for moon in moons {
+            // Still on its ring about the planet, clear of it.
+            let d = (moon.pos[0] - at.pos[0]).hypot(moon.pos[2] - at.pos[2]);
+            assert!((d - moon.orbit).abs() < 0.5, "{moon:?}");
+            assert!(d - moon.radius - at.radius >= at.radius, "{moon:?}");
+        }
+        // Belt rocks keep their distance from the star.
+        for p in placed
+            .iter()
+            .filter(|p| p.moon_of.is_none() && p.orbit > 0.0)
+        {
+            assert!((p.pos[0].hypot(p.pos[2]) - p.orbit).abs() < 0.5, "{p:?}");
+        }
+        // The same scene gives the same layout.
+        assert_eq!(placed, scene.place_system(1));
     }
 
     #[test]

@@ -234,12 +234,26 @@ flies the camera down to that planet.
   radii and angles differ.
 - **Proportions in the system view.** The disc holds 12 000 system units;
   the star is 600 and a median planet 300 units in radius (a thirtieth to a
-  fiftieth of the disc, instead of a tenth). Orbit radii keep their ratios
+  fiftieth of the disc, instead of a tenth). Resource bodies are drawn far
+  larger than true (owner, task 69): 85 + 20 × size units in radius (105 to
+  145, a third to a half of a median planet, always under the smallest
+  planet's 150). Orbit radii keep their ratios
   (linear map from the generator's units to the frame). A moon is drawn on a
   small ring about its planet, a few planet radii away, not at its true
-  distance. Every body is at least 2.5 pixels in radius on screen and wears
-  a soft halo below 6 pixels, so it can still be seen, hovered and
-  double-clicked. Orbit rings are faint one-pixel lines: one per planet, one
+  distance; a second moon's ring is wide enough to clear the first. Rocks
+  that would touch another body are turned along their ring (about the star,
+  or a moon's about its planet) until 60 units apart: presentation only, the
+  simulation's positions and claim range do not change. On screen every body
+  has a floor by kind out in space: a star 12 pixels in radius, a habitable
+  planet 8, a resource body 65 % of the smallest planet drawn at that moment
+  (so at whole-system zoom a rock is a small body beside the planets, never a
+  dot); from the ground every body is a small disc of at least 2.5 pixels.
+  The layout keeps bodies apart at the size they are drawn at whole-system
+  zoom on a picture 720 pixels high (56 units a pixel, `PlacedBody::room`);
+  zoomed out farther a body is never drawn wider than that room, so it
+  shrinks with the system instead of running into its neighbours. Below 6
+  pixels a body also wears a soft halo. Hover, double-click and the claim,
+  colony and hover rings use the drawn size. Orbit rings are faint one-pixel lines: one per planet, one
   small ring per moon, one through the middle of the belt.
 - **Zoom.** The planet-to-system hand-over is unchanged (the planet is drawn
   with `HOME_PLANET_RADIUS`); the whole system now fits at 48 000 units of
@@ -332,11 +346,18 @@ projection. What changes with the distance is only what is drawn:
   glow swells into the map's halo. The same rule holds for every system, so
   changing the anchored system never changes the picture. The map's routes,
   names and ship marks fade in over three wheel steps past the whole system.
-- **Ships** are the same hull at every level. Above a planet they are drawn
-  two to five times their true size by class; on a system's plane a quarter
-  to a half of task 53's size; in between, a ship in orbit of the loaded
-  planet slides from its place above the ground to its place on the plane
-  while its size blends in log space. The sizes come from `et_view_scale`.
+- **Ships** keep one look at every level. A ship with a composed model is
+  drawn as that model in the system view too (task 69: the model of its
+  owner's faction and age, near or far mesh by how large it looks, lit by the
+  star from its direction, in the loaded planet's shadow when behind it, with
+  a little light from above the plane out in space); a ship without one keeps
+  task 53's hull. Above a planet hulls are drawn two to five times their true
+  size by class (models at their own size); on a system's plane a quarter to
+  a half of task 53's size (a model 1.6 times that length, as it is slender);
+  in between, a ship in orbit of the loaded planet slides from its place
+  above the ground to its place on the plane while its size blends in log
+  space, starting from the size the globe drew. The sizes come from
+  `et_view_scale`.
 - **Wheel steps.** The step is the ground's (a factor of 1/0.88) up to one
   log unit below the planet camera's limit and grows smoothly to a factor of
   1.5 by the planet's hand-over. On the test scale (a planet of 122 tiles)

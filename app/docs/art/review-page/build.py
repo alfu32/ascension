@@ -95,7 +95,35 @@ OVERVIEW9 = [
     ("bld.citadel_fusion", "The citadel: domed keep, shield pylons with plasma emitters, energy gate"),
     ("gallery_units_close", "Every unit so far, close: <code>--gallery units</code>"),
 ]
-OVERVIEW = OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
+OVERVIEW10 = [
+    ("units_automation", "The eight automation-age units at the game camera (each from its own <code>--model</code> view)"),
+    ("units_fusion", "The eight fusion-age units at the game camera"),
+    ("gallery_automation_close", "Automation age, close: <code>--gallery automation</code> (buildings, then units)"),
+    ("gallery_fusion_close", "Fusion age, close: <code>--gallery fusion</code>"),
+    ("match_automation", "In a match in the automation age"),
+    ("match_fusion", "In a match in the fusion age"),
+    ("gallery_units_close", "Every unit so far, close: <code>--gallery units</code>"),
+    ("unit.laser_battery_fusion-attack", "A laser battery firing: a red beam for a moment from the emitter"),
+    ("unit.railgun_battery_fusion-attack", "A railgun battery firing: the rails recoil, a flash and a bright streak"),
+    ("unit.pulse_gunner_fusion-attack", "A pulse gunner firing a burst of plasma bolts"),
+    ("unit.fusion_tank_fusion-attack", "A fusion tank hovering on its lift pads, firing both plasma cannons"),
+    ("unit.worker_drone_automation-work", "A worker drone at work, swinging its tool arm"),
+]
+OVERVIEW11 = [
+    ("units_space", "The ten space-age models at the game camera (each from its own <code>--model</code> view)"),
+    ("starships", "The five starships, smallest to largest: survey ship, corvette, frigate, cruiser, battleship (each framed on its own; the orbit shots show their sizes)"),
+    ("orbit_planet_close", "In orbit above a city (planet view): survey ship, corvette, frigate, cruiser, battleship, with a carrier"),
+    ("orbit_planet", "The same ships with the game camera further out"),
+    ("orbit_bombard", "Starships bombarding an enemy building from orbit: turret flashes and plasma bolts"),
+    ("orbit_system_close", "The same ships in the system view: still drawn as generic hulls there (the system view does not draw models yet)"),
+    ("gallery_starfaring_close", "Starfaring age, close: <code>--gallery starfaring</code>"),
+    ("match_starfaring", "In a match in the starfaring age: the spaceport beside the city"),
+    ("unit.battleship_galactic-attack", "A battleship firing its spinal cannon"),
+    ("unit.grav_tank_expansion-attack", "A grav tank firing its beam lance"),
+    ("unit.beam_trooper_expansion-attack", "A beam trooper firing"),
+    ("gallery_units_close", "Every unit so far, close: <code>--gallery units</code>"),
+]
+OVERVIEW = OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
     ("gallery_ancient", "Ancient age, game camera: <code>--gallery ancient</code>"),
     ("gallery_classical", "Classical age, game camera: <code>--gallery classical</code>"),
     ("gallery_classical_close_team2", "Classical age, close, in player 2's blue to show where team colour sits"),
@@ -115,12 +143,13 @@ def round_of(m):
     """Review round: 1 the samples, 2 early buildings, 3 early units, 4 medieval models and
     gunpowder units, 5 early-modern buildings and enlightenment models, 6 industrial models,
     7 modern and information buildings, 8 modern and information units, 9 future buildings
-    (automation and fusion)."""
+    (automation and fusion), 10 future units (automation and fusion), 11 space-age models
+    (starfaring to galactic)."""
     if m["id"] in ROUND1:
         return 1
     unit = m["entity"].startswith("unit.")
-    if m["age"] in ("age.automation", "age.fusion") and not unit:
-        return 9
+    if m["age"] in ("age.automation", "age.fusion"):
+        return 10 if unit else 9
     if m["age"] in ("age.modern", "age.information"):
         return 8 if unit else 7
     if m["age"] == "age.industrial":
@@ -131,6 +160,13 @@ def round_of(m):
         return 4
     if m["id"] == "unit.transport_ship@starfaring":
         return 5
+    if m["id"] in ("unit.space_freighter@starfaring", "unit.satellite@starfaring"):
+        return 10  # first looks made with task 68, reviewed with the future units
+    if m["id"] in ("unit.carrier@starfaring", "unit.orbital_bomber@starfaring",
+                   "unit.orbital_fighter@starfaring", "bld.ground_battery@starfaring"):
+        return 6  # the task 58 craft, carrier and battery
+    if m["age"] in ("age.starfaring", "age.expansion", "age.abundance", "age.galactic"):
+        return 11
     if m["age"] not in ("age.ancient", "age.classical", None, ""):
         return 6  # later models built before their age's card: the task 58 craft, carrier, battery
     return 3 if unit else 2
@@ -164,8 +200,9 @@ for m in manifest["models"]:
     })
 
 AGES = ["ancient", "classical", "medieval", "gunpowder", "enlightenment", "industrial", "modern",
-        "information", "automation", "fusion", "any"]
-models.sort(key=lambda m: (-m["round"], not m["id"].startswith("unit."), AGES.index(m["age"]) if m["age"] in AGES else 9, m["id"]))
+        "information", "automation", "fusion", "starfaring", "expansion", "abundance", "galactic",
+        "any"]
+models.sort(key=lambda m: (-m["round"], not m["id"].startswith("unit."), AGES.index(m["age"]) if m["age"] in AGES else 99, m["id"]))
 
 template = (here / "page.html").read_text()
 page = (template
