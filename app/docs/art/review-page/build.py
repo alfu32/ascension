@@ -56,7 +56,16 @@ OVERVIEW6 = [
     ("unit.machine_gunner_industrial_attack", "A machine gun firing a burst"),
     ("unit.biplane_industrial_move", "A biplane under way: aloft, banking, its propeller spinning"),
 ]
-OVERVIEW = OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
+OVERVIEW7 = [
+    ("gallery_modern", "Modern age, game camera: <code>--gallery modern</code>"),
+    ("gallery_modern_close", "Modern age, close: <code>--gallery modern</code>"),
+    ("ages_bld.city", "One building through seven looks: the city, ancient to information"),
+    ("match_modern", "In a match in the modern age: the city, its farm and citizens"),
+    ("gallery_information_close", "Information age, close: <code>--gallery information</code>"),
+    ("match_information", "In a match in the information age: the glass city"),
+    ("gallery_units_close", "Every unit so far, close: <code>--gallery units</code>"),
+]
+OVERVIEW = OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
     ("gallery_ancient", "Ancient age, game camera: <code>--gallery ancient</code>"),
     ("gallery_classical", "Classical age, game camera: <code>--gallery classical</code>"),
     ("gallery_classical_close_team2", "Classical age, close, in player 2's blue to show where team colour sits"),
@@ -74,10 +83,13 @@ def fmt_params(params):
 
 def round_of(m):
     """Review round: 1 the samples, 2 early buildings, 3 early units, 4 medieval models and
-    gunpowder units, 5 early-modern buildings and enlightenment models, 6 industrial models."""
+    gunpowder units, 5 early-modern buildings and enlightenment models, 6 industrial models,
+    7 modern and information buildings."""
     if m["id"] in ROUND1:
         return 1
     unit = m["entity"].startswith("unit.")
+    if m["age"] in ("age.modern", "age.information") and not unit:
+        return 7
     if m["age"] == "age.industrial":
         return 6
     if m["age"] == "age.enlightenment" or (m["age"] == "age.gunpowder" and not unit):
@@ -116,7 +128,8 @@ for m in manifest["models"]:
         ],
     })
 
-AGES = ["ancient", "classical", "medieval", "gunpowder", "enlightenment", "industrial", "any"]
+AGES = ["ancient", "classical", "medieval", "gunpowder", "enlightenment", "industrial", "modern",
+        "information", "any"]
 models.sort(key=lambda m: (-m["round"], not m["id"].startswith("unit."), AGES.index(m["age"]) if m["age"] in AGES else 9, m["id"]))
 
 template = (here / "page.html").read_text()

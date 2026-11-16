@@ -100,6 +100,13 @@ model carries its own height: the biplane's fuselage is 2.7 tiles up and its
 shadow falls on the ground below. A medic bends over the wounded with both hands
 when it works. Funnels and chimneys do not smoke yet.
 
+Task 47 (modern and information buildings) adds no motion: buildings stand still (a test
+holds every building's rig to a single joint), so radar antennas, gun turrets and searchlights
+are fixed in place. Modern buildings wear concrete, precast panels, glass curtain walls (vertical
+mullions from the `timber` program in glass blue, with thin steel or precast floor bands as
+parts), ribbed steel cladding, flat roofs with team-coloured fascias, and red warning lights
+(`mat.signal_red`, self-lit) on masts and chimneys.
+
 ## Budgets
 
 | Model | Near | Far |
