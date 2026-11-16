@@ -35,6 +35,8 @@
 //! order given before tick one; an orbital craft is placed there and ordered to climb). `craft` selects player one's orbital craft that are not
 //! aboard a carrier; `craftN` names the N-th of them for `click` and `rclick`.
 //!
+//! `save <name>`, `quicksave` and `menu [main|save|load]` write a save or open the in-match menu.
+//!
 //! Camera commands replay input on the render thread exactly as the window would send it
 //! (positions in canvas pixels): `cam wheel <steps> [x,y]`, `cam drag x,y x,y [rotate]`
 //! (middle-button drag; `rotate` holds Shift), `cam dblclick x,y`, `cam click x,y`, `cam point
@@ -320,6 +322,12 @@ pub enum ScriptAction {
     },
     /// Set the game speed in percent.
     Speed(u32),
+    /// Write a named save.
+    Save(String),
+    /// Write a quick save.
+    QuickSave,
+    /// Open a page of the in-match menu.
+    Menu(crate::sim_thread::MenuPage),
     /// Input for the render thread, as the window would send it.
     Input(Vec<rom_render::InputEvent>),
 }
@@ -397,6 +405,31 @@ impl Script {
                 }
                 (Some(tick), Some("producers")) => {
                     actions.push((tick, ScriptAction::SelectProducers));
+                    continue;
+                }
+                (Some(tick), Some("save")) => {
+                    let name = words[2..].join(" ");
+                    actions.push((tick, ScriptAction::Save(name)));
+                    continue;
+                }
+                (Some(tick), Some("menu")) => {
+                    use crate::sim_thread::MenuPage;
+                    let page = match words.get(2).copied() {
+                        None | Some("main") => MenuPage::Main,
+                        Some("save") => MenuPage::Save,
+                        Some("load") => MenuPage::Load,
+                        Some(other) => {
+                            return Err(format!(
+                                "line {}: unknown menu page {other:?}",
+                                number + 1
+                            ));
+                        }
+                    };
+                    actions.push((tick, ScriptAction::Menu(page)));
+                    continue;
+                }
+                (Some(tick), Some("quicksave")) => {
+                    actions.push((tick, ScriptAction::QuickSave));
                     continue;
                 }
                 (Some(tick), Some("speed")) => {
@@ -601,6 +634,7 @@ fn parse_line(
             let region = match arg(0)? {
                 "tab" => HudRegionKind::PaletteTab,
                 "data" => HudRegionKind::DataTab,
+                "top" => HudRegionKind::TopButton,
                 "arrow" => HudRegionKind::PaletteArrow,
                 "slot" => HudRegionKind::CommandSlot,
                 "queue" => HudRegionKind::QueueItem,

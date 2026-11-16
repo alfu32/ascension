@@ -337,6 +337,25 @@ fn right_click_enemy_attacks_and_ground_moves() {
 }
 
 #[test]
+fn right_click_ground_with_a_producer_sets_its_rally_through_an_order() {
+    let mut fx = fixture();
+    let t = fx.producer_with(ProductionMode::Train);
+    let producer = fx.spawn(t, 1, 10, 10);
+    fx.click(producer, false);
+    fx.rclick(None, (20.5, 12.5), false);
+    fx.step(2);
+    assert!(fx.world.rally(producer).is_some());
+    let flags: Vec<_> = fx
+        .hud_snapshot()
+        .markers
+        .into_iter()
+        .filter(|m| m.kind == MarkerKind::Rally)
+        .collect();
+    assert_eq!(flags.len(), 1);
+    assert!(flags[0].from.is_some());
+}
+
+#[test]
 fn right_click_gather_site_harvests() {
     let mut fx = fixture();
     let worker_t = fx.find(|et| et.movement.is_some() && !et.harvester.is_empty());
@@ -1384,7 +1403,11 @@ fn task_30_scripts_reach_the_capture_states_without_a_window() {
                         Ok(pick) => ctl.handle(&mut game.world, pick),
                         Err(error) => ctl.notify(&game.world, error),
                     },
-                    ScriptAction::Speed(_) | ScriptAction::Input(_) => {}
+                    ScriptAction::Speed(_)
+                    | ScriptAction::Input(_)
+                    | ScriptAction::Save(_)
+                    | ScriptAction::QuickSave
+                    | ScriptAction::Menu(_) => {}
                 }
             }
             for event in script.due(game.world.tick()) {
@@ -1753,7 +1776,11 @@ fn wealth_screenshot_script_reaches_capture_without_a_window() {
                         });
                     ctl.handle(&mut game.world, pick);
                 }
-                ScriptAction::Speed(_) | ScriptAction::Input(_) => {}
+                ScriptAction::Speed(_)
+                | ScriptAction::Input(_)
+                | ScriptAction::Save(_)
+                | ScriptAction::QuickSave
+                | ScriptAction::Menu(_) => {}
             }
         }
         for pick in script.due(game.world.tick()) {
@@ -1954,7 +1981,11 @@ fn orbital_review_script_trains_launches_selects_and_bombards_through_picks() {
                         .find_map(|e| game.world.orbit(e.id).and_then(|o| o.last_shot));
                     println!("review capture tick={} shot={last:?}", game.world.tick());
                 }
-                ScriptAction::Speed(_) | ScriptAction::Input(_) => {}
+                ScriptAction::Speed(_)
+                | ScriptAction::Input(_)
+                | ScriptAction::Save(_)
+                | ScriptAction::QuickSave
+                | ScriptAction::Menu(_) => {}
             }
         }
         for event in script.due(game.world.tick()) {
@@ -2227,7 +2258,10 @@ fn colony_script_run() -> (crate::match_setup::Match, Controller, BodyId, u64) {
                         });
                     }
                 }
-                ScriptAction::Speed(_) => {}
+                ScriptAction::Speed(_)
+                | ScriptAction::Save(_)
+                | ScriptAction::QuickSave
+                | ScriptAction::Menu(_) => {}
             }
         }
         for event in script.due(game.world.tick()) {
@@ -2383,7 +2417,11 @@ fn orbital_combat_script(
                         crate::script::live_pick(&game.world, &target, right, shift).unwrap();
                     ctl.handle(&mut game.world, pick);
                 }
-                ScriptAction::Speed(_) | ScriptAction::Input(_) => {}
+                ScriptAction::Speed(_)
+                | ScriptAction::Input(_)
+                | ScriptAction::Save(_)
+                | ScriptAction::QuickSave
+                | ScriptAction::Menu(_) => {}
             }
         }
         for event in script.due(game.world.tick()) {

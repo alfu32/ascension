@@ -1,0 +1,409 @@
+//! The in-match menu: resume, save game, load game, quit. It is a GPUI overlay on the world
+//! view (the in-match HUD itself is drawn by raylib); opening it holds the simulation.
+
+use gpui::{
+    AnyElement, AppContext, Context, Entity, InteractiveElement, IntoElement, MouseButton,
+    ParentElement, SharedString, StatefulInteractiveElement, Styled, Subscription, Window, div, px,
+    rgb, rgba,
+};
+use gpui_component::{
+    Disableable, Sizable,
+    button::{Button, ButtonVariants},
+    input::{Input, InputEvent, InputState},
+};
+use rom_render::InputEvent as WorldInput;
+
+use super::WorldView;
+use crate::saves::{self, Entry, Kind};
+use crate::sim_thread::MenuPage;
+
+const GOLD: u32 = 0xe8c98a;
+const AMBER: u32 = 0xf0b030;
+const CYAN: u32 = 0x3fd0ff;
+const MUTED: u32 = 0x9fb0c3;
+
+/// Which page of the menu shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Page {
+    Main,
+    Save,
+    Load,
+}
+
+/// The open menu.
+pub(super) struct Menu {
+    page: Page,
+    /// Whether the simulation was held before the menu opened.
+    was_paused: bool,
+    status: Option<String>,
+    /// A save was asked for and its outcome is awaited.
+    pending: bool,
+    name: Option<Entity<InputState>>,
+    entries: Vec<Entry>,
+    _subscription: Option<Subscription>,
+}
+
+impl WorldView {
+    /// Whether the menu covers the world (input then goes to it, not to the renderer).
+    pub(super) fn menu_open(&self) -> bool {
+        self.menu.is_some()
+    }
+
+    /// Once per poll: opens the menu when the HUD asked for it and reads finished saves.
+    pub(super) fn pump(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(page) = self.sim.take_menu_request() {
+            self.open_menu(window, cx);
+            match page {
+                MenuPage::Main => {}
+                MenuPage::Save => self.show_save(window, cx),
+                MenuPage::Load => self.show_load(None, cx),
+            }
+        }
+        while let Some(outcome) = self.sim.take_save_outcome() {
+            let waiting = self.menu.as_ref().is_some_and(|m| m.pending);
+            if !waiting {
+                continue;
+            }
+            match outcome {
+                Ok(_) => self.close_menu(window, cx),
+                Err(error) => {
+                    if let Some(menu) = self.menu.as_mut() {
+                        menu.pending = false;
+                        menu.status = Some(format!("Could not save: {error}"));
+                    }
+                    cx.notify();
+                }
+            }
+        }
+    }
+
+    /// Opens the menu and holds the simulation until it closes.
+    pub(super) fn open_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.menu.is_some() {
+            return;
+        }
+        self.bridge.push_input(WorldInput::ReleaseAll);
+        self.menu = Some(Menu {
+            page: Page::Main,
+            was_paused: self.sim.paused(),
+            status: None,
+            pending: false,
+            name: None,
+            entries: Vec::new(),
+            _subscription: None,
+        });
+        self.sim.set_paused(true);
+        window.focus(&self.focus);
+        cx.notify();
+    }
+
+    /// Closes the menu and releases the simulation unless it was held before.
+    pub(super) fn close_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(menu) = self.menu.take() {
+            self.sim.set_paused(menu.was_paused);
+        }
+        window.focus(&self.focus);
+        cx.notify();
+    }
+
+    /// Escape: back to the main page, or close the menu from it.
+    pub(super) fn menu_back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        match self.menu.as_mut() {
+            Some(menu) if menu.page != Page::Main => {
+                menu.page = Page::Main;
+                menu.status = None;
+                menu.pending = false;
+                window.focus(&self.focus);
+                cx.notify();
+            }
+            Some(_) => self.close_menu(window, cx),
+            None => {}
+        }
+    }
+
+    fn show_save(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.sim.save_ui().is_none() {
+            self.menu_status("This match cannot be saved.", cx);
+            return;
+        }
+        let suggestion = self.sim.suggested_name();
+        let input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder("Name this save")
+                .default_value(suggestion)
+        });
+        let subscription =
+            cx.subscribe_in(&input, window, |view, _, event: &InputEvent, window, cx| {
+                if matches!(event, InputEvent::PressEnter { .. }) {
+                    view.submit_save(window, cx);
+                }
+            });
+        input.update(cx, |input, cx| input.focus(window, cx));
+        if let Some(menu) = self.menu.as_mut() {
+            menu.page = Page::Save;
+            menu.status = None;
+            menu.name = Some(input);
+            menu._subscription = Some(subscription);
+        }
+        cx.notify();
+    }
+
+    fn submit_save(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        let Some(menu) = self.menu.as_mut() else {
+            return;
+        };
+        if menu.pending {
+            return;
+        }
+        let name = menu
+            .name
+            .as_ref()
+            .map_or_else(String::new, |n| n.read(cx).value().trim().to_owned());
+        menu.pending = true;
+        menu.status = Some("Saving…".into());
+        self.sim.request_save(Kind::Manual, name);
+        cx.notify();
+    }
+
+    fn show_load(&mut self, status: Option<String>, cx: &mut Context<Self>) {
+        let entries = self
+            .sim
+            .save_ui()
+            .map(|ui| saves::list(&ui.folder, &ui.rules))
+            .unwrap_or_default();
+        if let Some(menu) = self.menu.as_mut() {
+            menu.page = Page::Load;
+            menu.status = status.or_else(|| {
+                entries
+                    .is_empty()
+                    .then(|| "There are no saved games yet.".into())
+            });
+            menu.entries = entries;
+        }
+        cx.notify();
+    }
+
+    fn menu_status(&mut self, text: &str, cx: &mut Context<Self>) {
+        if let Some(menu) = self.menu.as_mut() {
+            menu.status = Some(text.into());
+        }
+        cx.notify();
+    }
+
+    /// Continues the save at `path` in a fresh game process, then closes this one.
+    fn load_game(&mut self, path: &std::path::Path, cx: &mut Context<Self>) {
+        match saves::relaunch(path, &self.display_arguments) {
+            Ok(_) => {
+                self.sim.request_stop();
+                cx.quit();
+            }
+            Err(error) => self.menu_status(&error, cx),
+        }
+    }
+
+    /// F9: the newest quick save, or the load page when there is none.
+    pub(super) fn quick_load(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_menu(window, cx);
+        let newest = self.sim.save_ui().and_then(|ui| {
+            saves::list(&ui.folder, &ui.rules)
+                .into_iter()
+                .find(|e| e.kind == Kind::Quick && e.refusal.is_none())
+        });
+        match newest {
+            Some(entry) => self.load_game(&entry.path, cx),
+            None => self.show_load(Some("There is no quick save to load.".into()), cx),
+        }
+    }
+
+    /// The overlay, when the menu is open.
+    pub(super) fn render_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let menu = self.menu.as_ref()?;
+        let heading = |text: &str| {
+            div()
+                .text_xl()
+                .text_color(rgb(GOLD))
+                .child(SharedString::from(text.to_owned()))
+        };
+        let mut panel = div()
+            .id("game-menu")
+            .w(px(560.))
+            .max_h(px(560.))
+            .flex()
+            .flex_col()
+            .gap_3()
+            .p_5()
+            .bg(rgb(0x141b24))
+            .border_1()
+            .border_color(rgb(0xb88a45))
+            .rounded(px(6.))
+            .text_color(rgb(0xf2f2f2))
+            .text_size(px(14.));
+        match menu.page {
+            Page::Main => {
+                let saving = self.sim.save_ui().is_some();
+                panel = panel
+                    .child(heading("GAME MENU"))
+                    .child(
+                        Button::new("menu-resume")
+                            .primary()
+                            .label("Resume")
+                            .on_click(
+                                cx.listener(|view, _, window, cx| view.close_menu(window, cx)),
+                            ),
+                    )
+                    .child(
+                        Button::new("menu-save")
+                            .label("Save game")
+                            .disabled(!saving)
+                            .on_click(
+                                cx.listener(|view, _, window, cx| view.show_save(window, cx)),
+                            ),
+                    )
+                    .child(
+                        Button::new("menu-load")
+                            .label("Load game")
+                            .disabled(!saving)
+                            .on_click(cx.listener(|view, _, _, cx| view.show_load(None, cx))),
+                    )
+                    .child(
+                        Button::new("menu-quit")
+                            .label("Quit game")
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.sim.request_stop();
+                                cx.quit();
+                            })),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(MUTED))
+                            .child("F5 quick save · F9 quick load · Esc closes"),
+                    );
+            }
+            Page::Save => {
+                let folder = self
+                    .sim
+                    .save_ui()
+                    .map_or_else(String::new, |ui| ui.folder.display().to_string());
+                panel = panel
+                    .child(heading("SAVE GAME"))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(div().text_color(rgb(GOLD)).child("Name"))
+                            .children(menu.name.as_ref().map(Input::new)),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(MUTED))
+                            .child(format!("Saved in {folder}")),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .gap_2()
+                            .child(
+                                Button::new("save-confirm")
+                                    .primary()
+                                    .label("Save")
+                                    .disabled(menu.pending)
+                                    .on_click(cx.listener(|view, _, window, cx| {
+                                        view.submit_save(window, cx)
+                                    })),
+                            )
+                            .child(Button::new("save-back").label("Back").on_click(
+                                cx.listener(|view, _, window, cx| view.menu_back(window, cx)),
+                            )),
+                    );
+            }
+            Page::Load => {
+                let mut list = div()
+                    .id("load-list")
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .max_h(px(340.))
+                    .overflow_y_scroll();
+                for (index, entry) in menu.entries.iter().enumerate() {
+                    let path = entry.path.clone();
+                    let refused = entry.refusal.is_some();
+                    list = list.child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_3()
+                            .p_2()
+                            .bg(rgb(0x0a0e14))
+                            .rounded(px(4.))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .flex()
+                                    .flex_col()
+                                    .child(
+                                        div()
+                                            .text_color(rgb(if refused { MUTED } else { CYAN }))
+                                            .child(format!(
+                                                "{} ({})",
+                                                entry.name,
+                                                entry.kind.label()
+                                            )),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(rgb(MUTED))
+                                            .child(entry.summary()),
+                                    )
+                                    .children(entry.refusal.as_ref().map(|why| {
+                                        div().text_xs().text_color(rgb(AMBER)).child(why.clone())
+                                    })),
+                            )
+                            .child(
+                                Button::new(("load-entry", index))
+                                    .small()
+                                    .label("Load")
+                                    .disabled(refused)
+                                    .on_click(
+                                        cx.listener(move |view, _, _, cx| {
+                                            view.load_game(&path, cx)
+                                        }),
+                                    ),
+                            ),
+                    );
+                }
+                panel = panel.child(heading("LOAD GAME")).child(list).child(
+                    div().text_xs().text_color(rgb(MUTED)).child(
+                        "Loading starts the saved game in a new window, paused, and closes this one.",
+                    ),
+                ).child(
+                    Button::new("load-back")
+                        .label("Back")
+                        .on_click(cx.listener(|view, _, window, cx| view.menu_back(window, cx))),
+                );
+            }
+        }
+        if let Some(status) = &menu.status {
+            panel = panel.child(div().text_sm().text_color(rgb(AMBER)).child(status.clone()));
+        }
+        Some(
+            div()
+                .id("menu-backdrop")
+                .absolute()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(rgba(0x000000a8))
+                .occlude()
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
+                .child(panel)
+                .into_any_element(),
+        )
+    }
+}

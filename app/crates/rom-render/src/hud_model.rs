@@ -279,6 +279,8 @@ pub struct HudMarker {
     pub kind: MarkerKind,
     /// Ticks since the marker appeared; rally markers stay at zero.
     pub age_ticks: u32,
+    /// A rally marker's producer, `(face, x, y)`: a line is drawn from there to the flag.
+    pub from: Option<(u8, i32, i32)>,
 }
 
 /// The building footprint being placed.
