@@ -432,6 +432,7 @@ both arms, 2 tend: bent over, both hands reaching down to someone, a medic), `ho
 | `bow` | `h`, `bend` (towards +z), `w` (stave thickness); colour `string`; held at its middle (the origin) |
 | `track` | `l` (length along z), `h`, `t` (width across x), `wheels` (road wheels, 1–8), `segments` (sides of each rounded end); colour `wheel_colour`; a tank's track run resting on the ground: a belt open at its sides round road wheels that turn as its unit moves (task 46) |
 | `propeller` | `w` (diameter), `blades` (2–6), `chord` (blade width); colour `hub_colour`; faces +z with its axis through the origin and spins all the time, three turns a cycle; pitched −90° it is a rotor (task 46) |
+| `torus` | `w` (outside diameter), `t` (diameter of the tube; default a quarter of `w`), `segments` (faces round the ring, default 16), `sides` (faces round the tube, default 8); lies flat with its lowest edge on the ground, centred on its origin (a reactor torus; roll 90 stands it up as a ring; task 49) |
 | `include` | `mesh` (key of another composed mesh), `scale`; its parts without a material take the include's |
 | `custom` | `file` (its triangles: a `.mesh` file under `assets/models/`, usually `<model id>/<part>.mesh`; format in `docs/models-in-meshcraft.md`); faces name their own material, colour and team flag, `-` taking the part's material (task 55) |
 

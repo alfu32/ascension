@@ -60,7 +60,17 @@ INSERT INTO def(kind,key,name) VALUES
   ('material','mat.sandbag','Sandbags'),
   ('material','mat.haze_grey','Haze grey paint'),
   ('material','mat.nato_green','Dark green paint'),
-  ('material','mat.composite','Black composite');
+  ('material','mat.composite','Black composite'),
+  ('material','mat.white_composite','White composite'),
+  ('material','mat.composite_panel','Composite panels'),
+  ('material','mat.smart_glass','Smart glass'),
+  ('material','mat.solar_panel','Solar panels'),
+  ('material','mat.light_strip','Light strip'),
+  ('material','mat.grow_light','Grow light'),
+  ('material','mat.plasma','Plasma'),
+  ('material','mat.graphite','Graphite composite'),
+  ('material','mat.paving','Composite paving'),
+  ('material','mat.greens','Leafy crops');
 WITH v(k,prog,params) AS (VALUES
   ('mat.mud_plaster','plaster','{"colour":"#c4a27a","colour_alt":"#a3825c","scale":0.7}'),
   ('mat.mud_brick','brick','{"colour":"#b58a5e","colour_alt":"#8c6b4c","scale":0.32}'),
@@ -121,5 +131,15 @@ WITH v(k,prog,params) AS (VALUES
   ('mat.sandbag','cloth','{"colour":"#b5a27a","colour_alt":"#8c7b58","scale":0.18}'),
   ('mat.haze_grey','metal','{"colour":"#a2a9b0","colour_alt":"#737a82","scale":0.4}'),
   ('mat.nato_green','metal','{"colour":"#5b6448","colour_alt":"#3e4532","scale":0.4}'),
-  ('mat.composite','plaster','{"colour":"#3e4145","colour_alt":"#2c2e31","scale":0.3}'))
+  ('mat.composite','plaster','{"colour":"#3e4145","colour_alt":"#2c2e31","scale":0.3}'),
+  ('mat.white_composite','plaster','{"colour":"#eef0ef","colour_alt":"#dde1e0","scale":1.6}'),
+  ('mat.composite_panel','brick','{"colour":"#e9ecec","colour_alt":"#b8bfc0","scale":1.2}'),
+  ('mat.smart_glass','timber','{"colour":"#3f7d84","colour_alt":"#336a70","scale":0.45}'),
+  ('mat.solar_panel','brick','{"colour":"#2c4a7e","colour_alt":"#152340","scale":0.18}'),
+  ('mat.light_strip','emissive','{"colour":"#c4f8ff","colour_alt":"#58d6f2","scale":0.5}'),
+  ('mat.grow_light','emissive','{"colour":"#ff8ae0","colour_alt":"#c040b0","scale":0.5}'),
+  ('mat.plasma','emissive','{"colour":"#f4c4ff","colour_alt":"#8a52ff","scale":0.5}'),
+  ('mat.graphite','metal','{"colour":"#4d545c","colour_alt":"#30363c","scale":0.35}'),
+  ('mat.paving','brick','{"colour":"#c6cbca","colour_alt":"#a9afae","scale":0.9}'),
+  ('mat.greens','thatch','{"colour":"#6cae46","colour_alt":"#3a6e26","scale":0.1}'))
 INSERT INTO material(id,program,params) SELECT d.id, v.prog, v.params FROM v JOIN def d ON d.key=v.k;

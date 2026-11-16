@@ -1,7 +1,7 @@
 # Task 49 — Models: Future buildings: automation and fusion
 
-Implementer: Codex (`gpt-6.1-sol`, high). Crates: seed (and `rom-render`
-part kit and motion, `rom-app` tests, only as needed). Review round 9.
+Implementer: Claude agent (moved off Codex by the owner, 2026-11-16). Model files in
+`db/models/` (and the `rom-kit` part kit, `rom-app` tests, only as needed). Review round 9.
 
 **Read `model-card-common.md` first**: it holds the method, rules, review
 material, tests, the done-when list and how to finish. This card lists only
