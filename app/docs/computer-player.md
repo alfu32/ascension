@@ -425,8 +425,8 @@ Measured on the i7-6700HQ (`rom duel`, 100 seeds, 8 jobs, 108 000-tick limit):
 | Duel | Wins | Draws | Player 1 / 2 wins | Run time |
 | --- | --- | --- | --- | --- |
 | 0.0.63: moderate – easiest | 29 – 9 | 62 | 22 / 16 | 26.1 min (4 jobs) |
-| task 67: moderate – easiest | 86 – 2 | 12 | 43 / 45 | 6.9 min |
-| task 67: moderate – moderate | 36 – 37 | 27 | 33 / 40 | 9.2 min |
+| task 67: moderate – easiest | 85 – 3 | 12 | 44 / 44 | 4.6 min |
+| task 67: moderate – moderate | 37 – 36 | 27 | 33 / 40 | 6.8 min |
 
 **The targets (90 wins and at most 5 draws; at most 10 draws in the mirror) are not
 met.** What is left: armies of equal strength cannot break a defended city (cities,
