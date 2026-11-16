@@ -811,6 +811,35 @@ fn lead(
                     return;
                 }
             }
+            // A neutralised city is taken only when no armed enemy is left in its radius:
+            // the army clears what still stands there (a worker inside a gather site counts).
+            if let Some(id) = army.target
+                && let Some(seen) = memory.enemies.get(&id).filter(|e| e.tick == tick)
+                && plan
+                    .view
+                    .world
+                    .entity(EntityId(id))
+                    .is_some_and(|city| city.neutralised)
+            {
+                let radius = plan.view.world.city_economic_radius(EntityId(id)).max(0) as u64;
+                let from = front(&plan.view, units, Some(seen.pos)).unwrap_or(seen.pos);
+                let next = memory
+                    .enemies
+                    .iter()
+                    .filter(|(other, e)| {
+                        **other != id
+                            && e.pos.body == seen.pos.body
+                            && (e.building || e.tick + RECENT_TICKS >= tick)
+                            && plan.view.distance(e.pos, seen.pos) <= radius
+                    })
+                    .min_by_key(|(other, e)| (plan.view.distance(from, e.pos), **other))
+                    .map(|(_, e)| e.pos);
+                let goal = next.unwrap_or(seen.pos);
+                if army.goal != Some(goal) {
+                    army.goal = Some(goal);
+                    army.since = tick;
+                }
+            }
             // The target is gone, taken or forgotten: the next one, or home.
             let lost = army
                 .target

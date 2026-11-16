@@ -343,7 +343,7 @@ impl Brain {
         }
         memory.blocked.retain(|_, until| *until > tick);
 
-        let mut plan = Plan::new(view, allowed);
+        let mut plan = Plan::new(view, allowed, memory);
         let slip =
             |rng: &mut SimRng| d.mistake_pct > 0 && i64::from(rng.range(0, 100)) < d.mistake_pct;
 

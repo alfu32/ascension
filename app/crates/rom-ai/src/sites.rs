@@ -362,44 +362,49 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
                         .offset(city.pos, i64::from(*dx) * 1000, i64::from(*dy) * 1000)
                 });
             if let Some((terrain, site)) = node {
-                // The most node tiles in reach first, then the nearest to the city. A coarse
-                // lattice keeps the count of terrain scans small; a small clump of node
-                // terrain can fall between its points, so an empty pass is repeated on every
-                // tile.
-                let spots: Vec<Pos> = spots.collect();
+                // The most node tiles in reach first, then the nearest to the city. The node
+                // tiles around the city are found once; only spots near one are tried.
+                let radius = site.node_radius.max(0);
+                let scan = reach + (radius / 1000) as i32 + 3;
+                let node_tiles: Vec<Pos> = view
+                    .cat
+                    .spiral
+                    .iter()
+                    .take_while(|(dx, dy)| dx * dx + dy * dy <= scan * scan)
+                    .map(|(dx, dy)| {
+                        view.world
+                            .offset(city.pos, i64::from(*dx) * 1000, i64::from(*dy) * 1000)
+                    })
+                    .filter(|at| view.world.terrain_at(*at) == Some(terrain))
+                    .collect();
+                ground.spend((scan * scan * 3) as usize);
                 let mut ranked: Vec<(i64, usize, Pos)> = Vec::new();
-                let lattice =
-                    |at: &Pos| at.x.div_euclid(1000) % 2 == 0 && at.y.div_euclid(1000) % 2 == 0;
-                let passes: [&dyn Fn(&Pos) -> bool; 2] = [&lattice, &|at: &Pos| !lattice(at)];
-                for pass in passes {
-                    if !ranked.is_empty() {
+                for (order, at) in spots.enumerate() {
+                    if !ground.spend(0) {
                         break;
                     }
-                    for (order, at) in spots.iter().copied().enumerate() {
-                        if !ground.spend(0) {
-                            break;
-                        }
-                        if !pass(&at) {
-                            continue;
-                        }
-                        let Some(pos) = fits(view, ground, &needs, at, lane, needs.own_territory)
-                        else {
-                            continue;
-                        };
-                        if full(pos) {
-                            continue;
-                        }
-                        let nodes = count_terrain(view, pos, terrain, site.node_radius.max(0));
-                        ground.spend(120);
-                        let slots =
-                            (site.slots_base + site.slots_per_node * nodes).min(site.slots_max);
-                        if slots > 0 {
-                            ranked.push((-slots, order, pos));
-                        }
-                        if slots >= site.slots_max {
-                            // Nothing farther out can be better.
-                            break;
-                        }
+                    let near = node_tiles
+                        .iter()
+                        .any(|n| view.distance(at, *n) <= radius as u64 + 3000);
+                    if !near {
+                        continue;
+                    }
+                    let Some(pos) = fits(view, ground, &needs, at, lane, needs.own_territory)
+                    else {
+                        continue;
+                    };
+                    if full(pos) {
+                        continue;
+                    }
+                    let nodes = count_terrain(view, pos, terrain, radius);
+                    ground.spend(120);
+                    let slots = (site.slots_base + site.slots_per_node * nodes).min(site.slots_max);
+                    if slots > 0 {
+                        ranked.push((-slots, order, pos));
+                    }
+                    if slots >= site.slots_max {
+                        // Nothing farther out can be better.
+                        break;
                     }
                 }
                 ranked.sort_unstable_by_key(|(worth, order, _)| (*worth, *order));

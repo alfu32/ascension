@@ -83,7 +83,7 @@ pub(crate) struct Plan<'a> {
 }
 
 impl<'a> Plan<'a> {
-    pub fn new(view: View<'a>, orders_left: i64) -> Self {
+    pub fn new(view: View<'a>, orders_left: i64, memory: &Memory) -> Self {
         Self {
             view,
             ground: None,
@@ -96,14 +96,16 @@ impl<'a> Plan<'a> {
             keep: BTreeMap::new(),
             keep_for: BTreeSet::new(),
         }
-        .with_first_sites()
+        .with_first_sites(memory)
     }
 
     /// Keeps back the price of the first gather site of every base resource the player has
-    /// no site for yet, when that site is paid in its own resource: spending the last of it
-    /// on anything else would leave no way to earn it again.
-    fn with_first_sites(mut self) -> Self {
+    /// no site for yet (the cheapest site type it can build, unless a search for it just
+    /// failed): spending everything on other wishes would leave the resource unearned, and
+    /// a site paid in its own resource could never be bought again.
+    fn with_first_sites(mut self, memory: &Memory) -> Self {
         let view = &self.view;
+        let situation = site_situation(view);
         for resource in view.rules.resources.values() {
             if resource.kind != ResourceKind::Base {
                 continue;
@@ -120,18 +122,20 @@ impl<'a> Plan<'a> {
             let cheapest = sites
                 .iter()
                 .copied()
-                .filter(|s| view.unlocked(*s) && !view.obsolete(*s))
-                .filter_map(|s| {
-                    let own = view
-                        .price(s)
-                        .iter()
-                        .find(|(r, _)| *r == resource.id)
-                        .map(|(_, a)| *a)?;
-                    Some((own, s))
+                .filter(|s| {
+                    view.unlocked(*s)
+                        && !view.obsolete(*s)
+                        && memory.no_site.get(&s.0) != Some(&situation)
                 })
-                .min();
-            if let Some((amount, _)) = cheapest {
-                self.keep.insert(resource.id, amount);
+                .map(|s| {
+                    let price = view.price(s);
+                    (price.iter().map(|(_, a)| *a).sum::<i64>(), s, price)
+                })
+                .min_by_key(|(total, s, _)| (*total, *s));
+            if let Some((_, _, price)) = cheapest {
+                for (paid_in, amount) in price {
+                    *self.keep.entry(paid_in).or_default() += amount;
+                }
                 self.keep_for.extend(sites.iter().copied());
             }
         }
