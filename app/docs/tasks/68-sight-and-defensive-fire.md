@@ -1,13 +1,17 @@
-# Task 68 — Sight by type and size, and defences that fire
+# Task 68 — Sight, defences that fire, and ships in orbit
 
-Crates: `rom-sim` (target acquisition, sight from stats), the seed and its
-generator (`app/db/content/generate.py`; sight values and sight modifiers),
-`rom-render` (shots from buildings drawn), docs. Schema only if a needed
+Crates: `rom-sim` (target acquisition, sight from stats, orbit movement,
+landing, boarding, interplanetary trade), the seed and its generator
+(`app/db/content/generate.py`; sight values, sight modifiers, two new
+units), `rom-render` (shots from buildings, orbit drawing), `rom-app` (the
+Land button and right-click in orbit), the two new models in
+`app/db/models/`, `rom-save` for new state, docs. Schema only if a needed
 column or stat is missing (then deliberately: lint views empty, seed loads,
-documented in `app/docs/database.md`). No change to `rom-ai`, `rom-cli`,
-`rom-app` beyond test lines. Runs after task 65 merges and before task 67
-(67 tunes the computer players on top of these rules). Implementer: Claude
-(Opus).
+documented in `app/docs/database.md`). No change to `rom-ai`, `rom-cli`
+(task 67 adapts the computer players afterwards). Runs before task 67 (67
+tunes the computer players on top of these rules). Task 49 adds model files
+beside it and touches only test lines in `rom-app`. Implementer: Claude
+(Opus). Large card: commit each part as it is done.
 
 ## Why — the owner's rules (2026-11-16, after playing 0.0.59)
 
@@ -68,6 +72,52 @@ and hitting further; fog revealing with sight upgrades) and goes into the
 snapshot and `rom-save` if it adds state. Explain any change to the
 playthrough hash and to `rom duel` results (one 20-seed run before/after).
 
+
+## Part 2 — ships in orbit (the owner's rules, 2026-11-16)
+
+Read first: `app/docs/world-model.md`, tasks 53 (space navigation), 54
+(landing and colonies), 57 (one camera), 58 (orbital combat: the `orbit`
+layer, `et_movement.climb_ticks`, craft, carriers, batteries).
+
+5. **Geosynchronous orbit.** A ship or craft in a planet's orbit stays above
+   the same surface point; it does not drift around the planet. Rotating the
+   planet in the view carries the ships with it.
+6. **Right-click in orbit moves within orbit.** A ship in orbit ordered to
+   move (right-click on the planet or on the orbit) goes to the orbit point
+   above the clicked surface point and stays in orbit; it never descends.
+7. **Patrol in orbit.** A ship in orbit ordered to patrol circles the planet
+   on the great circle through its current point and the order point,
+   continuously, fighting like `attack_move` (task 65's `patrol`), until
+   given another order.
+8. **Land on the vertical.** A Land button (in the order panel for ships in
+   orbit that can land) brings the ship straight down to the surface point
+   below it, if that point is passable for it (a clear message and refusal
+   otherwise). Take-off keeps its existing button.
+9. **Boarding only on the ground.** Troops and personnel embark and
+   disembark only while the ship is landed; orders to board a ship in orbit
+   are refused with a reason. (Orbital craft and carriers from task 58 keep
+   their own launch and recovery in orbit.)
+10. **A trade vessel.** A new space freighter (starfaring age, from the
+    spaceport) runs a trade route between two of the player's (or allied)
+    cities on different planets, like the caravan's route on the ground:
+    income by distance from the existing trade stats, travelling by the
+    existing space travel, landing and taking off at each end. New unit rows
+    in the generator; its model as a first look following
+    `model-card-common.md` (it goes into a later review round).
+11. **Ship sight.** Ships see much further than ground units: base sight in
+    proportion to their altitude (orbit above ground) and their size.
+12. **Satellite.** A new space unit, the satellite: built at the spaceport,
+    launched straight into orbit above its planet, no weapon, small, very
+    large sight (most of the visible horizon — choose a number from the
+    planet's size, written down), moves only within orbit (items 6–7), cannot
+    land. Its model as a first look like the freighter's.
+
+Determinism tests for every new behaviour (an orbit hold over many ticks;
+moving between orbit points; an orbit patrol loop; landing on the vertical
+and refusal over water; boarding refused in orbit; a freighter round trip
+and its income; satellite sight), each run twice with equal hashes, new
+state saved and restored.
+
 ## Done when
 
 Gate green (fmt, clippy `-D warnings`, `cargo test --workspace --locked
@@ -76,7 +126,10 @@ complete; a table of base sight per unit type and per building type with
 footprint and weapon range, and the sight technologies with their bonus;
 screenshots you looked at (Read the PNG) in `app/docs/img/` with a `sight-`
 prefix: a tower, a city (while training) and a fort firing at intruders, and
-the fog with a unit's sight before and after an upgrade. Commit on the
+the fog with a unit's sight before and after an upgrade; and with an
+`orbit-` prefix: ships holding over one point after the planet turned, an
+orbit patrol path, a ship landing straight down, a freighter on its route,
+and a satellite's sight revealing the horizon. Commit on the
 branch (stage by name, WIP commits welcome), do not push or merge; final
 message with commands and real output, files changed, schema changes,
 deviations, anything not verified.
