@@ -1172,6 +1172,8 @@ pub struct EntityType {
     pub energy: Option<Energy>,
     /// Attached `et_supply` rows.
     pub supply: Option<Supply>,
+    /// Attached `et_view_scale` row: how large it is drawn in the space views.
+    pub view_scale: Option<ViewScale>,
     /// Attached `et_weapon` rows.
     pub weapons: Vec<Weapon>,
     /// Attached `placement_rule` rows.
@@ -1406,6 +1408,16 @@ pub struct Supply {
     pub radius: i64,
     /// The `stock` column.
     pub stock: Option<i64>,
+}
+/// One `et_view_scale` row (presentation only).
+#[derive(Debug, Clone)]
+pub struct ViewScale {
+    /// The `entity_type_id` column.
+    pub entity_type_id: DefId,
+    /// The `planet_pct` column: drawn size above a planet, percent of the true size.
+    pub planet_pct: i64,
+    /// The `system_pct` column: drawn size on a system's plane, percent of the reference size.
+    pub system_pct: i64,
 }
 /// One `placement_rule` row.
 #[derive(Debug, Clone)]
