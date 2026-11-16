@@ -129,6 +129,22 @@ corner towers and banners. Two more self-lit colours: pink grow lights in the au
 (`mat.plasma`). Dishes are a shallow dome facing the sky with a deeper one behind, so they read
 from both sides.
 
+Task 50 (future units, automation and fusion) adds one material and no shape or motion knob.
+Machines wear white composite and graphite with cyan light strips; fusion-age weapons glow
+violet (`mat.plasma`). Robots and armoured troops are figures: the worker drone and combat robot
+have grey limbs (`skin`, `legs`), a box head with a visor (cyan for the worker, red for the
+combat robot) and the team colour on the tunic; the combat robot's rifle arm is a gun held at
+arm's length (`attack` 6), the exo-trooper a figure of heavy build with a team-coloured shoulder
+yoke and a tall power pack. Hover units carry their own height and float on `bank`: the
+hovercraft on its skirt with ducted fans (`torus` rings round `propeller`s), the fusion tank on
+glowing lift pads (flat `wheel`s), the hover frigate on two pontoons with glowing undersides.
+Energy weapons fire on the `flash` joint like the missiles of task 48: a pulse gunner's and an
+interceptor's bolts (plasma cylinders ahead of the muzzle, bursts on alternate keyframes), the
+fusion tank's twin plasma bolts, a railgun's bright streak (`mat.light_strip`) beside a flash,
+and the laser battery's beam, a thin cylinder of the self-lit red `mat.laser`. Shot effects stay
+within about two and a half tiles of the muzzle, because a model's bounds give its selection and
+health-bar size.
+
 ## Budgets
 
 | Model | Near | Far |
