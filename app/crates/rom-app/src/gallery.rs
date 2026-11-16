@@ -619,6 +619,7 @@ mod tests {
                 "bld.smelter@industrial",
                 "bld.smelter@medieval",
                 "bld.smelter@modern",
+                "bld.spaceport@starfaring",
                 "bld.stable@industrial",
                 "bld.tower@industrial",
                 "bld.tower@modern",
@@ -626,6 +627,7 @@ mod tests {
                 "unit.armoured_car@industrial",
                 "unit.arquebusier@gunpowder",
                 "unit.assault_infantry@information",
+                "unit.battleship@galactic",
                 "unit.bazooka_team@modern",
                 "unit.biplane@industrial",
                 "unit.bombard@gunpowder",
@@ -633,6 +635,7 @@ mod tests {
                 "unit.cannon@enlightenment",
                 "unit.carrier@starfaring",
                 "unit.combat_robot@automation",
+                "unit.corvette@starfaring",
                 "unit.cuirassier@gunpowder",
                 "unit.destroyer@modern",
                 "unit.dragoon@enlightenment",
@@ -645,6 +648,7 @@ mod tests {
                 "unit.flak_gun@modern",
                 "unit.frigate@enlightenment",
                 "unit.fusilier@enlightenment",
+                "unit.grav_skimmer@starfaring",
                 "unit.gun_drone@information",
                 "unit.heavy_machine_gunner@modern",
                 "unit.hover_frigate@fusion",
@@ -657,6 +661,7 @@ mod tests {
                 "unit.light_tank@industrial",
                 "unit.machine_gunner@industrial",
                 "unit.main_battle_tank@information",
+                "unit.marine@starfaring",
                 "unit.missile_cruiser@information",
                 "unit.missile_launcher@information",
                 "unit.missile_team@information",
@@ -672,8 +677,11 @@ mod tests {
                 "unit.rocket_artillery@information",
                 "unit.satellite@starfaring",
                 "unit.scout_car@modern",
+                "unit.space_cruiser@abundance",
                 "unit.space_freighter@starfaring",
+                "unit.space_frigate@expansion",
                 "unit.strategic_bomber@information",
+                "unit.survey_ship@starfaring",
                 "unit.tank@modern",
                 "unit.transport_ship@starfaring"
             ]
@@ -1312,6 +1320,35 @@ mod tests {
             first_looks >= 8 && restyled >= 26,
             "{first_looks} {restyled}"
         );
+    }
+
+    #[test]
+    fn space_age_models_are_complete() {
+        let (rules, book) = book();
+        let starfaring = rules.ages[&rules.id_of("age.starfaring").unwrap()].ordinal;
+        let mut looks = 0;
+        for (&id, et) in &rules.entity_types {
+            let Some(first) = et.first_age_id else {
+                continue;
+            };
+            let space_age = rules.ages[&first].ordinal >= starfaring;
+            if !space_age || !matches!(et.class, EntityClass::Building | EntityClass::Unit) {
+                continue;
+            }
+            // Every building and unit of the starfaring age and later has its first look; the
+            // future look of earlier buildings lasts through the space ages.
+            let has = book
+                .entries
+                .iter()
+                .any(|e| e.entity == id && e.faction.is_none() && e.age == Some(first));
+            assert!(
+                has,
+                "{} has no composed look for its first age",
+                rules.key(id)
+            );
+            looks += 1;
+        }
+        assert!(looks >= 18, "{looks}");
     }
 
     #[test]
