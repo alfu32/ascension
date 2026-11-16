@@ -418,6 +418,7 @@ fn run(
                 for action in script.due_actions(world.tick()) {
                     match action {
                         ScriptAction::SelectShips => controller.select_own_ships(&world),
+                        ScriptAction::SelectCraft => controller.select_own_craft(&world),
                         ScriptAction::SelectProducers => controller.select_producers(&world),
                         ScriptAction::SelectResearchers => controller.select_researchers(&world),
                         ScriptAction::EntityPick {
@@ -781,7 +782,10 @@ pub fn snapshot_on(
         });
         let mut view = view_of(entity, et, under_construction, &clamp_u8);
         view.model = model_of(entity.owner, entity.type_id);
-        view.spacecraft = world.is_spacecraft_type(entity.type_id);
+        // Orbital craft are drawn like ships while they climb, orbit and come down.
+        view.spacecraft =
+            world.is_spacecraft_type(entity.type_id) || world.is_craft_type(entity.type_id);
+        view.shot_at = recent_shot(world, entity);
         // Orbit is eight tiles up; a ship landing or lifting off is drawn on its way.
         let altitude = world
             .altitude_pct(entity.id)
@@ -830,6 +834,7 @@ pub fn snapshot_on(
                 facing_deg: 0.0,
                 altitude: 0.0,
                 beam_target: None,
+                shot_at: None,
                 spacecraft: false,
                 hp_frac: 1.0,
                 building: true,
@@ -856,6 +861,29 @@ pub fn snapshot_on(
     }
 }
 
+/// The entity `entity` fired at in the last few ticks, when the shot went to or from orbit;
+/// shots from orbit at the ground have their own beam (`beam_target`).
+fn recent_shot(world: &World, entity: &Entity) -> Option<u32> {
+    let target = entity
+        .orders()
+        .front()
+        .filter(|o| matches!(o.kind.as_str(), "attack" | "attack_move"))?
+        .target_entity?;
+    if world.orbit(entity.id).is_none() && world.orbit(target).is_none() {
+        return None;
+    }
+    let fired = world.rules().entity_types[&entity.type_id]
+        .weapons
+        .iter()
+        .filter(|w| !w.orbit_only)
+        .filter_map(|w| {
+            let ready = entity.cooldowns.get(&w.id)?;
+            Some(ready.saturating_sub(w.cooldown_ticks.max(1) as u64))
+        })
+        .max()?;
+    (world.tick().saturating_sub(fired) <= 6).then_some(target.0)
+}
+
 fn view_of(
     entity: &Entity,
     et: &rom_rules::EntityType,
@@ -872,6 +900,7 @@ fn view_of(
         facing_deg: f32::from(entity.facing),
         altitude: 0.0,
         beam_target: None,
+        shot_at: None,
         spacecraft: false,
         hp_frac: (entity.hp as f32 / et.hp.max(1) as f32).clamp(0.0, 1.0),
         building: et.class == EntityClass::Building,

@@ -509,7 +509,8 @@ impl Notices {
                 .is_some_and(|b| b.kind == BodyKind::Star);
             if in_space && rules.entity_types[&e.type_id].movement.is_some() {
                 ships.insert(e.id);
-                if self.started && !self.ships.contains(&e.id) {
+                // Orbital craft come and go between the air and orbit: no notice for them.
+                if self.started && !self.ships.contains(&e.id) && !world.is_craft_type(e.type_id) {
                     lines.push(format!(
                         "New ship: {}",
                         rules.display_name(e.type_id, faction)

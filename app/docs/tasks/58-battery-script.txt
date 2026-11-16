@@ -1,0 +1,11 @@
+# Task 58, replayed by --script in --universe mode: three ground batteries fire on an enemy
+# corvette in the orbit above them. Test-only setup lines first.
+0 grant-age age.starfaring
+0 place 1 bld.ground_battery @9,0
+0 place 1 bld.ground_battery @12,5
+0 place 1 bld.ground_battery @6,7
+0 place-orbit 2 unit.corvette @7,4
+1 speed 100
+2 cam wheel 2 1000,330
+# The batteries open fire at tick 10 and every 30 ticks after; freeze just after a volley.
+41 speed 1

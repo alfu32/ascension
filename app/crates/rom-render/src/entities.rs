@@ -44,6 +44,8 @@ pub struct EntityView {
     pub altitude: f32,
     /// Ground target of a recent orbital shot, when its beam is visible.
     pub beam_target: Option<SurfacePos>,
+    /// Entity it shot at in the last few ticks, drawn as a tracer when either is aloft.
+    pub shot_at: Option<u32>,
     /// A ship that flies through space: drawn as a hull in orbit and when it has landed.
     pub spacecraft: bool,
     /// Facing in degrees, clockwise from the positive x axis.
@@ -1040,6 +1042,7 @@ mod tests {
             model: None,
             altitude: 0.0,
             beam_target: None,
+            shot_at: None,
             spacecraft: false,
             activity: Default::default(),
         }

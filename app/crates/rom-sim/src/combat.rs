@@ -75,8 +75,8 @@ impl World {
                 .and_then(|id| self.entity(id))
                 .filter(|target| self.enemies(command.player, target.owner))
                 .ok_or(SimError::InvalidAttackTarget)?;
-            if let Some(orbit) = self.orbit(command.executor)
-                && target.pos.body == orbit.body
+            // Between a planet's surface and its orbit only the weapons that reach there count.
+            if self.across_orbit(command.executor, target.id)
                 && !self.rules.entity_types
                     [&self.entity(command.executor).expect("attacker").type_id]
                     .weapons
@@ -106,10 +106,32 @@ impl World {
         self.seen.get(id.0 as usize).copied().unwrap_or(live)
     }
 
+    /// Whether `id` and `target` are a planet's surface and that planet's orbit, either way round.
+    pub(crate) fn across_orbit(&self, id: EntityId, target: EntityId) -> bool {
+        let (Some(a), Some(t)) = (self.entity(id), self.entity(target)) else {
+            return false;
+        };
+        match (self.orbit(id), self.orbit(target)) {
+            (Some(orbit), None) => t.pos.body == orbit.body,
+            (None, Some(orbit)) => a.pos.body == orbit.body,
+            _ => false,
+        }
+    }
+
+    /// Where `id` aims at `target`: the ground point below an orbiting target when `id` stands
+    /// on the planet it orbits, otherwise where the target was seen.
+    pub(crate) fn aim_pos(&self, id: EntityId, target: EntityId) -> Pos {
+        let from = self.entity(id).expect("attacker").pos;
+        match self.orbit(target) {
+            Some(orbit) if self.orbit(id).is_none() && orbit.body == from.body => orbit.pos,
+            _ => self.seen_pos(target),
+        }
+    }
+
     pub(crate) fn target_layer(&self, id: EntityId) -> Layer {
         let e = self.entity(id).expect("target");
         if self.orbit(id).is_some() {
-            return Layer::Space;
+            return Layer::Orbit;
         }
         let et = &self.rules.entity_types[&e.type_id];
         if et
@@ -125,11 +147,15 @@ impl World {
     }
 
     /// Distance from the attacker's centre to the target's rectangle or circle, with
-    /// the target where it was seen at the start of the order phase.
+    /// the target where it was seen at the start of the order phase; from the surface of a
+    /// planet to a target in its orbit, to the target's ground subpoint.
     pub(crate) fn target_distance(&self, from: Pos, target: EntityId) -> u64 {
         let e = self.entity(target).expect("target");
         let et = &self.rules.entity_types[&e.type_id];
-        let pos = self.seen_pos(target);
+        let pos = match self.orbit(target) {
+            Some(orbit) if orbit.body == from.body => orbit.pos,
+            _ => self.seen_pos(target),
+        };
         // Out of reach across a sphere or on another body counts as infinitely far.
         let geo = self.geo(pos.body);
         if et.class == EntityClass::Building {
@@ -176,6 +202,10 @@ impl World {
                         .entity(target)
                         .is_some_and(|t| t.pos.body == orbit.body)
             });
+        }
+        // From a planet's surface (or its air) up at what orbits that planet.
+        if self.orbit(id).is_none() && self.across_orbit(id, target) {
+            return true;
         }
         self.entity(id).expect("attacker").pos.body == self.entity(target).expect("target").pos.body
     }
@@ -236,7 +266,7 @@ impl World {
             return;
         }
         let target_id = target.id;
-        let target_pos = self.seen_pos(target_id);
+        let target_pos = self.aim_pos(id, target_id);
         if let Some(home) = order.home
             && self
                 .geo(home.body)
@@ -315,8 +345,17 @@ impl World {
             }
             let owner = attacker.owner;
             let damage = self.effective_stat(id, "attack", weapon.damage).max(0);
-            let accuracy = (i128::from(weapon.accuracy_pct)
+            // How well the weapon hits this layer scales its accuracy.
+            let layer = self.target_layer(target_id);
+            let hit_pct = weapon
+                .targets
+                .iter()
+                .find(|t| t.layer == layer)
+                .map_or(100, |t| t.hit_pct);
+            let accuracy = ((i128::from(weapon.accuracy_pct)
                 - i128::from(weapon.accuracy_falloff) * i128::from(distance) / 1000)
+                * i128::from(hit_pct)
+                / 100)
                 .clamp(5, 100) as u32;
             let origin = self.weapon_origin(id, &weapon);
             if weapon.orbit_only {

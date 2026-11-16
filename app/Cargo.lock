@@ -4862,7 +4862,7 @@ dependencies = [
 
 [[package]]
 name = "rom-ai"
-version = "0.0.52"
+version = "0.0.54"
 dependencies = [
  "rom-geo",
  "rom-mapgen",
@@ -4873,7 +4873,7 @@ dependencies = [
 
 [[package]]
 name = "rom-app"
-version = "0.0.52"
+version = "0.0.54"
 dependencies = [
  "gpui",
  "gpui-component",
@@ -4888,7 +4888,7 @@ dependencies = [
 
 [[package]]
 name = "rom-cli"
-version = "0.0.52"
+version = "0.0.54"
 dependencies = [
  "rom-ai",
  "rom-geo",
@@ -4901,15 +4901,15 @@ dependencies = [
 
 [[package]]
 name = "rom-geo"
-version = "0.0.52"
+version = "0.0.54"
 
 [[package]]
 name = "rom-kit"
-version = "0.0.52"
+version = "0.0.54"
 
 [[package]]
 name = "rom-mapgen"
-version = "0.0.52"
+version = "0.0.54"
 dependencies = [
  "rom-geo",
  "rom-rules",
@@ -4920,7 +4920,7 @@ dependencies = [
 
 [[package]]
 name = "rom-models"
-version = "0.0.52"
+version = "0.0.54"
 dependencies = [
  "rom-kit",
  "rom-rules",
@@ -4931,7 +4931,7 @@ dependencies = [
 
 [[package]]
 name = "rom-render"
-version = "0.0.52"
+version = "0.0.54"
 dependencies = [
  "fontdue",
  "image",
@@ -4943,7 +4943,7 @@ dependencies = [
 
 [[package]]
 name = "rom-rules"
-version = "0.0.52"
+version = "0.0.54"
 dependencies = [
  "rusqlite",
  "thiserror 2.0.21",
@@ -4951,7 +4951,7 @@ dependencies = [
 
 [[package]]
 name = "rom-save"
-version = "0.0.52"
+version = "0.0.54"
 dependencies = [
  "rom-geo",
  "rom-mapgen",
@@ -4963,7 +4963,7 @@ dependencies = [
 
 [[package]]
 name = "rom-sim"
-version = "0.0.52"
+version = "0.0.54"
 dependencies = [
  "rom-geo",
  "rom-rules",
