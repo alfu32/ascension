@@ -145,6 +145,28 @@ and the laser battery's beam, a thin cylinder of the self-lit red `mat.laser`. S
 within about two and a half tiles of the muzzle, because a model's bounds give its selection and
 health-bar size.
 
+Task 51 (space age: starfaring to galactic) adds no shape, motion knob or material. Starships
+share the look of the task 58 craft: blue-grey steel hulls, dark iron engine bells with the
+orange self-lit drives of task 44 (`mat.glow`) and team colour on wings, spines, deck stripes and
+bridge bands; weapons fire on the `flash` joint (a muzzle flash across a turret's barrels and a
+bolt ahead of each, cyan on the starfaring ships, violet plasma later). They grow with the ages
+and each has its own plan seen from above: the survey ship a thin hull under a large dish with a
+sensor boom and solar wings (2.5 tiles long), the corvette a narrow dart with one twin turret and
+canted fins (2.8), the frigate a hull between two outrigger engine nacelles on team-coloured
+pylons with two turrets (3.4), the cruiser a team-coloured hammerhead bow, a tall bridge tower,
+radiator wings and three triple turrets (3.9), the battleship a stepped wedge with a spinal
+plasma cannon along its bow, four turrets and five engines (5.1). Turrets swing onto the target
+(`traverse`); the battleship's cannon recoils. Ground units are future machines and armoured
+figures: the marine wears a round helmet with a gold visor and a life-support pack, the beam
+trooper a crested helmet and a capacitor ring on the back and fires a thin cyan beam, the shock
+marine is a figure of heavy build with a team-coloured breastplate, a tall shield and a plasma
+pistol firing bursts; the grav skimmer is a hover bike on two glowing lift discs (`wheel`s) with
+a seated rider, the grav tank a wide floating hull on cyan lift rings with a domed turret and a
+beam lance. The spaceport (8×8, the largest landmark) keeps a rocket on its pad beside a tall
+gantry as its signature, with vaulted hangars, two landing pads (a shuttle on one), a control
+tower and an operations block on white paving. Ships in orbit are the same models, drawn two to
+five times their size; the system view still draws every ship as the generic hull of task 53.
+
 ## Budgets
 
 | Model | Near | Far |

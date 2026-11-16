@@ -17,7 +17,7 @@ WITH v(name,shape,mat,team,attach,params) AS (VALUES
   ('window','box','mat.light_strip',0,'','{"y":1.73,"z":-0.45,"w":0.5,"d":0.02,"h":0.05,"far":0}'),
   ('mast','cylinder','mat.iron',0,'','{"y":1.81,"z":-0.7,"w":0.06,"h":0.6,"segments":4,"tint":"#7c8592","far":0}'),
   ('radar','dome','mat.white_metal',0,'','{"y":2.1,"z":-0.7,"w":0.4,"h":0.08,"segments":8,"pitch":20,"far":0}'),
-  ('spinal','cylinder','mat.iron',0,'','{"y":0.8,"z":1.25,"w":0.3,"h":1.7,"segments":8,"pitch":90,"recoil":0.18,"tint":"#4a5260"}'),
+  ('spinal','cylinder','mat.iron',0,'','{"y":0.8,"z":1.25,"w":0.3,"h":1.7,"segments":8,"pitch":90,"recoil":0.12,"tint":"#4a5260"}'),
   ('spinal_cradle','box','mat.steel',0,'','{"y":0.7,"z":1.6,"w":0.46,"d":0.9,"h":0.16,"tint":"#8e97a3","far":0}'),
   ('spinal_coils','cylinder','mat.plasma',0,'spinal','{"y":0.95,"w":0.38,"h":0.08,"segments":8,"far":0}'),
   ('spinal_coil_2','cylinder','mat.plasma',0,'spinal','{"y":1.3,"w":0.38,"h":0.08,"segments":8,"far":0}'),
