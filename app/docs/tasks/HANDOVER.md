@@ -35,7 +35,10 @@ pushed, tree clean). Read `CLAUDE.md` (it imports `AGENTS.md`), then
      `<id with @→_>[-parts|-ages|-move|-attack|-work].jpg`) beside a copy of
      both files, run `python3 -I build.py . <round> "version x.y.z"`, publish
      `model-review.html` with the Artifact tool to the same URL (pass the new
-     images in `files`; earlier ones are kept). `build.py` assigns rounds by
+     images in `files`; earlier ones are kept). A version may hold at most 512 files: `build.py` lists a
+     model's extra views only when their JPEGs are in the local `img/` folder, so copy the
+     still-open rounds' images there, and remove views no longer shown with `null` entries in
+     `files` (approved models keep only their main picture). `build.py` assigns rounds by
      model id and age and holds the overview captions; extend it per round.
    - The page keeps the owner's verdicts in its database (Artifact
      `ArtifactData` tool): collection `reviews`, doc id = model id with

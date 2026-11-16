@@ -560,14 +560,18 @@ mod tests {
         assert_eq!(
             changed,
             [
+                "bld.airfield@modern",
                 "bld.ground_battery@starfaring",
                 "bld.library@industrial",
                 "bld.refinery@industrial",
+                "bld.refinery@modern",
                 "bld.smelter@gunpowder",
                 "bld.smelter@industrial",
                 "bld.smelter@medieval",
+                "bld.smelter@modern",
                 "bld.stable@industrial",
                 "bld.tower@industrial",
+                "bld.tower@modern",
                 "unit.anti_tank_rifleman@industrial",
                 "unit.armoured_car@industrial",
                 "unit.arquebusier@gunpowder",
@@ -1119,6 +1123,46 @@ mod tests {
     }
 
     #[test]
+    fn modern_buildings_are_complete() {
+        let (rules, book) = book();
+        let modern_id = rules.id_of("age.modern").unwrap();
+        let modern = rules.ages[&modern_id].ordinal;
+        let (mut first_looks, mut restyled) = (0, 0);
+        for (&id, et) in &rules.entity_types {
+            let Some(first) = et.first_age_id else {
+                continue;
+            };
+            let Some(age) = rules.ages.get(&first).map(|a| a.ordinal) else {
+                continue;
+            };
+            let has = |age_id| {
+                book.entries
+                    .iter()
+                    .any(|e| e.entity == id && e.faction.is_none() && e.age == Some(age_id))
+            };
+            let key = rules.key(id);
+            match et.class {
+                // Every building of the modern age has its first look; every earlier building
+                // changes look when its owner reaches the modern age (the look lasts through the
+                // information age).
+                EntityClass::Building if age == modern => {
+                    assert!(has(first), "{key} has no composed look for its first age");
+                    first_looks += 1;
+                }
+                EntityClass::Building if age < modern => {
+                    assert!(has(modern_id), "{key} has no modern look");
+                    restyled += 1;
+                }
+                _ => {}
+            }
+        }
+        assert!(
+            first_looks >= 2 && restyled >= 24,
+            "{first_looks} {restyled}"
+        );
+    }
+
+    #[test]
     fn approved_models_are_unchanged() {
         let (_, book) = book();
         let changed = changed_models(&book, &approved(APPROVED));
@@ -1172,7 +1216,9 @@ mod tests {
                 "bld.city@classical",
                 "bld.city@medieval",
                 "bld.city@gunpowder",
-                "bld.city@industrial"
+                "bld.city@industrial",
+                "bld.city@modern",
+                "bld.city@information"
             ]
         );
         assert_eq!(ids("bld.library@ancient"), ["bld.library@ancient"]);
