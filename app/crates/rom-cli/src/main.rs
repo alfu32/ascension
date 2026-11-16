@@ -1,6 +1,7 @@
 mod ai_match_cmd;
 mod battle_cmd;
 mod duel_cmd;
+mod first_attack_cmd;
 mod mapgen_cmd;
 mod model_cmd;
 mod playthrough_cmd;
@@ -26,13 +27,16 @@ fn main() -> ExitCode {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = env::args().skip(1);
     let command = args.next().ok_or(
-        "usage: rom <build-rules|check-rules|run|battle|siege|mapgen|territory|universe|playthrough|ai-match|duel|wealth|model> [options]",
+        "usage: rom <build-rules|check-rules|run|battle|siege|mapgen|territory|universe|playthrough|ai-match|duel|first-attack|wealth|model> [options]",
     )?;
     if command == "ai-match" {
         return ai_match_cmd::run(args);
     }
     if command == "duel" {
         return duel_cmd::run_command(args);
+    }
+    if command == "first-attack" {
+        return first_attack_cmd::run_command(args);
     }
     if command == "wealth" {
         return wealth_cmd::run(args);

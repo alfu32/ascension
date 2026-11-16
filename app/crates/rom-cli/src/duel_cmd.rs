@@ -30,6 +30,10 @@ pub const DEFAULT_TICKS_LIMIT: u64 = 108_000;
 const MAP_TRIES: u64 = 16;
 /// The least land one start may hold, as a share of the other's.
 const LAND_BALANCE_PCT: i64 = 75;
+/// The least of each node terrain one capital may have in reach, as a share of the other's.
+const NODE_BALANCE_PCT: i64 = 60;
+/// Tiles beyond a capital's economic radius that count as in reach of its node terrain.
+const NODE_MARGIN: i64 = 6;
 
 /// What the command was asked to run.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,7 +76,7 @@ pub struct DuelResult {
 }
 
 /// The first race in id order with its playable start factions, one picked by the seed.
-fn duel_faction(rules: &Rules, seed: u64) -> Result<DefId, String> {
+pub(crate) fn duel_faction(rules: &Rules, seed: u64) -> Result<DefId, String> {
     let age = rules
         .ages
         .values()
@@ -93,9 +97,65 @@ fn duel_faction(rules: &Rules, seed: u64) -> Result<DefId, String> {
     Ok(factions[(seed % factions.len() as u64) as usize])
 }
 
-/// Whether the starts are fair: about equal land, and room for the gather sites.
-fn fair(world: &World) -> bool {
-    balanced_land(world) && gather_sites_fit(world)
+/// Whether the starts are fair: about equal land, room for the gather sites, and about as
+/// much of each node terrain (forest, rock) near every capital.
+pub(crate) fn fair(world: &World) -> bool {
+    balanced_land(world) && gather_sites_fit(world) && balanced_nodes(world)
+}
+
+/// Tiles of each node terrain (the terrain a gather site draws from) within reach of each
+/// player's capital: its economic radius and `NODE_MARGIN` tiles more.
+pub(crate) fn node_tiles(world: &World) -> BTreeMap<DefId, Vec<i64>> {
+    let rules = world.rules();
+    let nodes: BTreeSet<DefId> = rules
+        .entity_types
+        .values()
+        .filter_map(|et| et.gather_site.as_ref())
+        .filter(|s| s.slots_per_node > 0)
+        .filter_map(|s| s.needs_node_terrain_id)
+        .collect();
+    let mut counts: BTreeMap<DefId, Vec<i64>> = BTreeMap::new();
+    for player in world.players().filter(|p| p.id != PlayerId(0)) {
+        let Some(city) = world
+            .cities(player.id)
+            .first()
+            .and_then(|c| world.entity(*c))
+        else {
+            continue;
+        };
+        let reach = world.city_economic_radius(city.id) / 1000 + NODE_MARGIN;
+        let mut here: BTreeMap<DefId, i64> = BTreeMap::new();
+        for dy in -reach..=reach {
+            for dx in -reach..=reach {
+                if dx * dx + dy * dy > reach * reach {
+                    continue;
+                }
+                let at = world.offset(city.pos, dx * 1000, dy * 1000);
+                if let Some(t) = world.terrain_at(at).filter(|t| nodes.contains(t)) {
+                    *here.entry(t).or_default() += 1;
+                }
+            }
+        }
+        for node in &nodes {
+            counts
+                .entry(*node)
+                .or_default()
+                .push(here.get(node).copied().unwrap_or(0));
+        }
+    }
+    counts
+}
+
+/// Whether every capital has about as much of each node terrain in reach as the others:
+/// a start with a few trees of forest runs out of timber before its first age.
+fn balanced_nodes(world: &World) -> bool {
+    node_tiles(world).values().all(|counts| {
+        let (least, most) = (
+            counts.iter().copied().min().unwrap_or(0),
+            counts.iter().copied().max().unwrap_or(0),
+        );
+        least * 100 >= most * NODE_BALANCE_PCT
+    })
 }
 
 /// Whether the starting cities hold about as much land as each other: the smaller share is
@@ -236,6 +296,9 @@ pub fn play(rules: &Arc<Rules>, duel: &DuelRequest, seed: u64) -> Result<DuelRes
             _ => {}
         }
     };
+    if std::env::var("ROM_NODES").is_ok() {
+        eprintln!("nodes seed={seed} maps={maps} {:?}", node_tiles(&world));
+    }
     let mut brains = request
         .players
         .iter()
@@ -352,6 +415,80 @@ fn trace(world: &World, brain: &Brain, seed: u64) {
                         )
                     })
                     .collect()
+            } else if let Some(goal) = a.goal.filter(|_| a.phase == rom_ai::Phase::Advance) {
+                // How far the members are from the goal, in tiles, and what they are doing.
+                let mut far: Vec<u64> = a
+                    .members
+                    .iter()
+                    .filter_map(|id| world.entity(rom_sim::EntityId(*id)))
+                    .filter_map(|e| world.distance(e.pos, goal))
+                    .map(|d| d / 1000)
+                    .collect();
+                far.sort_unstable();
+                let mut doing: BTreeMap<String, usize> = BTreeMap::new();
+                for e in a
+                    .members
+                    .iter()
+                    .filter_map(|id| world.entity(rom_sim::EntityId(*id)))
+                {
+                    let kind = e.orders().front().map_or("-".to_string(), |o| {
+                        format!("{}{}", o.kind, if o.automatic { "*" } else { "" })
+                    });
+                    *doing.entry(kind).or_default() += 1;
+                }
+                let doing: Vec<String> = doing.iter().map(|(k, n)| format!("{k}={n}")).collect();
+                // Who stands around the members: enemies within 10 tiles of any, by type.
+                let mut around: BTreeMap<DefId, BTreeSet<u32>> = BTreeMap::new();
+                for e in a
+                    .members
+                    .iter()
+                    .filter_map(|id| world.entity(rom_sim::EntityId(*id)))
+                {
+                    for other in world.entities_in_radius(e.pos, 10_000) {
+                        if let Some(o) = world.entity(other)
+                            && o.owner != PlayerId(0)
+                            && (o.owner != brain.player()
+                                || world.rules().entity_types[&o.type_id].supply.is_some())
+                        {
+                            around.entry(o.type_id).or_default().insert(o.id.0);
+                        }
+                    }
+                }
+                let around: Vec<String> = around
+                    .iter()
+                    .map(|(t, ids)| {
+                        format!(
+                            "{}x{}",
+                            world.rules().key(*t).trim_start_matches("unit."),
+                            ids.len()
+                        )
+                    })
+                    .collect();
+                // Own supply units: tiles from the goal and what they do.
+                let wagons: Vec<String> = world
+                    .entities()
+                    .filter(|e| {
+                        e.owner == brain.player()
+                            && world.rules().entity_types[&e.type_id].supply.is_some()
+                    })
+                    .map(|e| {
+                        format!(
+                            "{}:{}",
+                            world.distance(e.pos, goal).map_or(0, |d| d / 1000),
+                            e.orders().front().map_or("-", |o| o.kind.as_str())
+                        )
+                    })
+                    .collect();
+                vec![format!(
+                    "[goal {},{} near={} mid={} {} supply={} vs {}]",
+                    goal.x / 1000,
+                    goal.y / 1000,
+                    far.first().copied().unwrap_or(0),
+                    far.get(far.len() / 2).copied().unwrap_or(0),
+                    doing.join(" "),
+                    wagons.join(","),
+                    around.join(" ")
+                )]
             } else {
                 Vec::new()
             };
@@ -413,12 +550,40 @@ fn trace(world: &World, brain: &Brain, seed: u64) {
                 )
             })
             .collect();
+        // The military by type, most numerous first.
+        let mut kinds: BTreeMap<DefId, usize> = BTreeMap::new();
+        for e in world.entities().filter(|e| e.owner == brain.player()) {
+            let et = &rules.entity_types[&e.type_id];
+            if et.class == rom_rules::EntityClass::Unit
+                && !et.weapons.is_empty()
+                && et.harvester.is_empty()
+                && et.builder.is_none()
+            {
+                *kinds.entry(e.type_id).or_default() += 1;
+            }
+        }
+        let mut kinds: Vec<(usize, DefId)> = kinds.into_iter().map(|(t, n)| (n, t)).collect();
+        kinds.sort_by_key(|(n, t)| (std::cmp::Reverse(*n), *t));
+        let kinds: Vec<String> = kinds
+            .iter()
+            .map(|(n, t)| format!("{}x{n}", rules.key(*t)))
+            .collect();
+        // Orders that failed lately, by kind and reason.
+        let mut failed: BTreeMap<String, usize> = BTreeMap::new();
+        for f in world.order_failures(brain.player()) {
+            *failed
+                .entry(format!("{}:{}", f.kind, f.reason))
+                .or_default() += 1;
+        }
+        let failed: Vec<String> = failed.iter().map(|(k, n)| format!("{k}={n}")).collect();
+        println!("  failed=[{}]", failed.join(" "));
         println!(
-            "  econ workers={} idle={} {} stats={:?}",
+            "  econ workers={} idle={} {} stats={:?} army=[{}]",
             s.workers,
             s.idle_workers,
             economy.join(" "),
-            brain.stats()
+            brain.stats(),
+            kinds.join(" ")
         );
     }
 }

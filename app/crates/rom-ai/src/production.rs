@@ -3,17 +3,19 @@
 
 use crate::{
     Weights,
-    economy::can_trade,
+    economy::{can_trade, can_trade_in_space},
     memory::{EnemySighting, Memory},
     plan::{Act, Wish},
     view::View,
 };
-use rom_rules::{DefId, EntityClass, Layer, ProductionMode, Rules};
+use rom_rules::{AiDifficulty, DefId, EntityClass, Layer, ProductionMode, Rules};
 use rom_sim::Pos;
 use std::collections::BTreeMap;
 
 /// Distance of the rally point from the capital, in milli-tiles.
 const RALLY_REACH: i64 = 9000;
+/// Tiles around the rally point that no building of the player takes.
+pub(crate) const RALLY_CLEAR: i32 = 3;
 
 /// Whether a type fights for a living: an armed, moving unit that neither works, builds,
 /// trades nor carries.
@@ -193,22 +195,77 @@ fn choice(view: &View<'_>, memory: &Memory, second_best: bool) -> Option<DefId> 
         .map(|(_, unit)| *unit)
 }
 
+/// The fewest population an army limited by the enemy it has seen may still hold.
+const ARMY_FLOOR: i64 = 8;
+/// The largest enemy army seen counts half after this long (ten game minutes).
+const PEAK_HALF_TICKS: u64 = 12_000;
+
+/// Population of the armed enemy units the brain remembers.
+fn enemy_army_pop(view: &View<'_>, memory: &Memory) -> i64 {
+    memory
+        .enemies
+        .values()
+        .filter(|e| !e.building && is_military(view.rules, e.type_id))
+        .map(|e| view.rules.entity_types[&e.type_id].pop_cost.max(0))
+        .sum()
+}
+
+/// The military population to keep: the profile's share of the cap; with a surplus in
+/// every store, whatever room the cap leaves; at an easy difficulty no more than its share
+/// of the enemy army seen.
+pub(crate) fn army_target(
+    view: &View<'_>,
+    weights: &Weights,
+    difficulty: &AiDifficulty,
+    memory: &Memory,
+) -> i64 {
+    let mut target = view.pop_cap * weights.army_share / 100;
+    if view.surplus() > 0 {
+        let others = view.pop_used + view.queued_pop - army_pop(view);
+        target = target.max(view.pop_cap - others.max(0));
+    }
+    if difficulty.army_vs_enemy_pct > 0 {
+        let seen = enemy_peak(view, memory) * difficulty.army_vs_enemy_pct / 100;
+        target = target.min(seen.max(ARMY_FLOOR));
+    }
+    target
+}
+
+/// The largest enemy army seen, halved for every `PEAK_HALF_TICKS` since.
+pub(crate) fn enemy_peak(view: &View<'_>, memory: &Memory) -> i64 {
+    let (pop, since) = memory.enemy_peak;
+    let now = enemy_army_pop(view, memory);
+    now.max(pop >> (view.tick.saturating_sub(since) / PEAK_HALF_TICKS).min(62))
+}
+
+/// Notes the enemy army seen now when it is the largest lately.
+pub(crate) fn note_enemy_peak(view: &View<'_>, memory: &mut Memory) {
+    let now = enemy_army_pop(view, memory);
+    if now >= enemy_peak(view, memory) {
+        memory.enemy_peak = (now, view.tick);
+    }
+}
+
 /// Wishes for military units and traders.
 pub(crate) fn wishes(
     view: &View<'_>,
     weights: &Weights,
+    difficulty: &AiDifficulty,
     memory: &Memory,
     alarmed: bool,
     second_best: bool,
     wishes: &mut Vec<Wish>,
 ) {
-    let target = view.pop_cap * weights.army_share / 100;
+    let target = army_target(view, weights, difficulty, memory);
     let army = army_pop(view);
     if army < target
         && let Some(unit) = choice(view, memory, second_best)
     {
+        // An army below half its target comes before other research and buildings.
         let score = if alarmed {
             880
+        } else if army * 2 < target {
+            700
         } else {
             440 + weights.army_share + ((target - army) * 4).min(160)
         };
@@ -221,32 +278,41 @@ pub(crate) fn wishes(
             });
         }
     }
-    // A trader for every free route once two cities stand far enough apart.
-    if can_trade(view) {
-        let have: i64 = view
-            .have
-            .iter()
-            .filter(|(t, _)| {
-                view.rules.entity_types[*t]
-                    .trader
+    // A trader for every free route once two cities stand far enough apart: one that walks
+    // for cities of one planet, one that flies (the space freighter) for cities on two
+    // planets of a star system.
+    let walking = can_trade(view);
+    let flying = can_trade_in_space(view);
+    if walking || flying {
+        let is_trader = |unit: &DefId| {
+            view.rules.entity_types.get(unit).is_some_and(|t| {
+                t.trader
                     .as_ref()
-                    .is_some_and(|t| t.runs_routes)
+                    .is_some_and(|t| t.runs_routes && t.route_resource_id.is_some())
             })
-            .map(|(_, n)| *n)
-            .sum();
-        if have < view.caravan_limit() {
-            let trader = view
-                .owned
+        };
+        let have = |flies: bool| -> i64 {
+            view.have
+                .iter()
+                .filter(|(t, _)| is_trader(t) && view.world.is_spacecraft_type(**t) == flies)
+                .map(|(_, n)| *n)
+                .sum()
+        };
+        let limit = view.caravan_limit();
+        let total = have(false) + have(true);
+        // Freighters take up to half the routes; the rest walk.
+        let want_flying = flying && total < limit && have(true) * 2 < limit.max(2);
+        let want_walking = walking && total < limit && !want_flying;
+        let pick = |flies: bool| {
+            view.owned
                 .iter()
                 .flat_map(|p| view.rules.production.get(p).into_iter().flatten())
                 .filter(|row| row.mode == ProductionMode::Train)
                 .map(|row| row.product_def_id)
                 .filter(|unit| {
-                    view.rules.entity_types.get(unit).is_some_and(|t| {
-                        t.trader
-                            .as_ref()
-                            .is_some_and(|t| t.runs_routes && t.route_resource_id.is_some())
-                    }) && view.unlocked(*unit)
+                    is_trader(unit)
+                        && view.world.is_spacecraft_type(*unit) == flies
+                        && view.unlocked(*unit)
                         && !view.obsolete(*unit)
                 })
                 .max_by_key(|unit| {
@@ -257,21 +323,29 @@ pub(crate) fn wishes(
                             .map_or(0, |t| t.route_income),
                         std::cmp::Reverse(*unit),
                     )
-                });
-            if let Some(trader) = trader {
-                wishes.push(Wish {
-                    score: 560,
-                    act: Act::Train(trader),
-                    reserve: false,
-                    opening: false,
-                });
-            }
+                })
+        };
+        let trader = if want_flying {
+            pick(true)
+        } else if want_walking {
+            pick(false)
+        } else {
+            None
+        };
+        if let Some(trader) = trader {
+            wishes.push(Wish {
+                score: 560,
+                act: Act::Train(trader),
+                reserve: false,
+                opening: false,
+            });
         }
     }
 }
 
-/// Chooses the rally point once: open ground of the player beside the capital.
-pub(crate) fn rally_point(view: &View<'_>) -> Option<Pos> {
+/// Chooses the rally point: open ground beside the capital, at the edge of the town where
+/// buildings do not box the army in. Each move (`moves`) tries the next direction.
+pub(crate) fn rally_point(view: &View<'_>, moves: u32) -> Option<Pos> {
     let capital = view.cities.first()?;
     let steps = [
         (1, 0),
@@ -283,8 +357,22 @@ pub(crate) fn rally_point(view: &View<'_>) -> Option<Pos> {
         (-1, -1),
         (1, -1),
     ];
+    let shift = moves as usize % steps.len();
+    // Somewhere the player's own walkers can get to over the terrain.
+    let walker = view
+        .own
+        .iter()
+        .find(|e| {
+            e.pos.body == capital.pos.body
+                && view.rules.entity_types[&e.type_id].movement.is_some()
+                && view.rules.entity_types[&e.type_id].class == EntityClass::Unit
+        })
+        .copied();
     steps
         .iter()
+        .cycle()
+        .skip(shift)
+        .take(steps.len())
         .map(|(dx, dy)| {
             view.world
                 .offset(capital.pos, dx * RALLY_REACH, dy * RALLY_REACH)
@@ -293,6 +381,6 @@ pub(crate) fn rally_point(view: &View<'_>) -> Option<Pos> {
             view.world.terrain_at(*at).is_some_and(|t| {
                 let terrain = &view.rules.terrains[&t];
                 terrain.buildable && terrain.layer == Layer::Ground
-            })
+            }) && walker.is_none_or(|w| view.world.reachable(w.type_id, w.pos, *at) != Some(false))
         })
 }

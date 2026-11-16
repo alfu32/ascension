@@ -365,7 +365,10 @@ impl StateHash {
             self.u32(*team);
             self.u64(*start);
         }
-        self.u64(c.sieges.len() as u64);
+        // Only while a city is held down, so worlds without one keep their hashes.
+        if !c.sieges.is_empty() {
+            self.u64(c.sieges.len() as u64);
+        }
         for (city, (team, start)) in &c.sieges {
             self.u32(city.0);
             self.u32(*team);

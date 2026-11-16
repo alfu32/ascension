@@ -43,6 +43,12 @@ const BUILDING_THREAT_PCT: i64 = 25;
 const LOOK_AGAIN_TICKS: u64 = 12_000;
 /// Cells the scouting search examines at most per scout.
 const SCOUT_CELLS: usize = 4096;
+/// How far a supply unit may stand from its place beside the army, in milli-tiles.
+const SUPPLY_SLACK: u64 = 3000;
+/// The most supply units a wave waits for before it sets off.
+const SUPPLY_GATE: usize = 3;
+/// Units of a wave per supply unit it takes along.
+const SUPPLY_PER: usize = 8;
 /// Score of the wish for a scout when none is out.
 const SCOUT_SCORE: i64 = 700;
 
@@ -85,6 +91,74 @@ fn threat_near(view: &View<'_>, memory: &Memory, pos: Pos, reach: u64) -> i64 {
         .filter(|e| {
             e.pos.body == pos.body
                 && (e.building || e.tick + RECENT_TICKS >= view.tick)
+                && view.distance(e.pos, pos) <= reach
+        })
+        .map(|e| enemy_power(view, e))
+        .sum()
+}
+
+/// The defence around an enemy city now: units seen lately and every remembered building,
+/// armed ones at full strength (cities, towers and forts fire on an army at their walls).
+fn defence_now(view: &View<'_>, memory: &Memory, at: Pos) -> i64 {
+    memory
+        .enemies
+        .values()
+        .filter(|e| {
+            e.pos.body == at.body
+                && (e.building || e.tick + RECENT_TICKS >= view.tick)
+                && view.distance(e.pos, at) <= THREAT_REACH
+        })
+        .map(|e| view::strength(view.rules, e.type_id))
+        .sum()
+}
+
+/// A measured defence counts half after this long without being matched again.
+const DEFENCE_HALF_TICKS: u64 = 24_000;
+
+/// Notes the strongest defence seen around every remembered enemy city: a wave holds
+/// until it clearly exceeds it. What is out of sight is assumed to stand there still.
+fn measure_defences(view: &View<'_>, memory: &mut Memory) {
+    let cities: Vec<(u32, Pos)> = memory
+        .enemies
+        .iter()
+        .filter(|(_, e)| e.building && is_city(view, e.type_id))
+        .map(|(id, e)| (*id, e.pos))
+        .collect();
+    memory
+        .defence
+        .retain(|id, _| cities.iter().any(|(city, _)| city == id));
+    for (id, at) in cities {
+        let now = defence_now(view, memory, at);
+        note_defence(memory, id, now, view.tick);
+    }
+}
+
+/// Raises the defence measured at a city to `strength` when it is more than the measure
+/// standing now.
+fn note_defence(memory: &mut Memory, city: u32, strength: i64, tick: u64) {
+    if strength > measured(memory, city, tick) {
+        memory.defence.insert(city, (strength, tick));
+    }
+}
+
+/// The defence a wave must beat at a target: the strongest measured there, halved for
+/// every `DEFENCE_HALF_TICKS` since. A wave that was beaten there counts in it with all
+/// the strength it set off with.
+fn measured(memory: &Memory, target: u32, tick: u64) -> i64 {
+    memory.defence.get(&target).map_or(0, |(strength, since)| {
+        strength >> (tick.saturating_sub(*since) / DEFENCE_HALF_TICKS).min(62)
+    })
+}
+
+/// Known strength of enemy units seen lately within `reach` of `pos`.
+fn unit_threat_near(view: &View<'_>, memory: &Memory, pos: Pos, reach: u64) -> i64 {
+    memory
+        .enemies
+        .values()
+        .filter(|e| {
+            !e.building
+                && e.pos.body == pos.body
+                && e.tick + RECENT_TICKS >= view.tick
                 && view.distance(e.pos, pos) <= reach
         })
         .map(|e| enemy_power(view, e))
@@ -184,10 +258,10 @@ fn choose_target(
                     .unreachable
                     .get(id)
                     .is_none_or(|until| *until <= view.tick)
-                // Across water or rock the army could never get there.
-                && units
-                    .first()
-                    .is_none_or(|u| view.world.reachable(u.type_id, u.pos, e.pos) != Some(false))
+                // Across water or rock the army could never get there: the target must be
+                // in reach of most of its kinds (a siege engine that cannot cross a forest
+                // does not hold back the rest).
+                && reachable_by_most(view, units, e.pos)
                 && if raid {
                     civilian(view, e)
                 } else {
@@ -219,6 +293,23 @@ fn choose_target(
         .map(|(_, id, e)| (id, e.pos))
 }
 
+/// Whether most of `units` (by their types, each type counted once) could walk to `to` over
+/// the terrain; true for no units.
+fn reachable_by_most(view: &View<'_>, units: &[&Entity], to: Pos) -> bool {
+    let mut kinds: BTreeMap<DefId, (Pos, usize)> = BTreeMap::new();
+    for u in units {
+        kinds.entry(u.type_id).or_insert((u.pos, 0)).1 += 1;
+    }
+    let (mut yes, mut all) = (0, 0);
+    for (type_id, (from, count)) in kinds {
+        all += count;
+        if view.world.reachable(type_id, from, to) != Some(false) {
+            yes += count;
+        }
+    }
+    all == 0 || yes * 2 > all
+}
+
 /// Whether an enemy team's territory victory timer runs: then every building that holds
 /// land is worth attacking, and the main army goes without waiting for the attack ratio.
 fn enemy_land_race(view: &View<'_>) -> bool {
@@ -234,6 +325,22 @@ fn enemy_land_race(view: &View<'_>) -> bool {
         .victory_timers()
         .keys()
         .any(|(_, other)| *other != team)
+}
+
+/// An own city that is still an enemy's capital: while the enemy plays, holding it is how
+/// the match is won, so the main army stays there.
+fn held_capital(view: &View<'_>) -> Option<Pos> {
+    view.world
+        .players()
+        .filter(|p| {
+            p.id != view.me
+                && p.id != rom_sim::PlayerId(0)
+                && view.world.player_status(p.id) == Some(rom_sim::PlayerStatus::Playing)
+        })
+        .filter_map(|p| view.world.capital(p.id))
+        .filter_map(|id| view.cities.iter().find(|c| c.id == id))
+        .map(|c| c.pos)
+        .next()
 }
 
 /// Whether a type emits territory.
@@ -302,8 +409,14 @@ fn passable(view: &View<'_>, type_id: DefId, pos: Pos) -> bool {
 
 /// The cell a unit should look at next: one nobody has looked at for the longest, nearest
 /// first, on ground its type can walk, away from known danger.
-fn next_look(view: &View<'_>, memory: &Memory, unit: &Entity, min_distance: u64) -> Option<Pos> {
-    let own = power(view, unit).max(1);
+fn next_look(
+    view: &View<'_>,
+    memory: &Memory,
+    unit: &Entity,
+    own: i64,
+    min_distance: u64,
+) -> Option<Pos> {
+    let own = own.max(1);
     body_cells(view, unit.pos.body)
         .into_iter()
         .take(SCOUT_CELLS)
@@ -320,8 +433,9 @@ fn next_look(view: &View<'_>, memory: &Memory, unit: &Entity, min_distance: u64)
             Some((looked, distance, cell, at))
         })
         .filter(|(_, _, _, at)| {
+            // Danger is what moves: walls and towers stand still and can be walked around.
             passable(view, unit.type_id, *at)
-                && threat_near(view, memory, *at, THREAT_REACH) <= own * 2
+                && unit_threat_near(view, memory, *at, THREAT_REACH) <= own * 2
         })
         .min_by_key(|(looked, distance, cell, _)| (*looked, *distance, *cell))
         .map(|(_, _, _, at)| at)
@@ -575,6 +689,26 @@ pub(crate) fn intruders(view: &View<'_>, memory: &Memory) -> Option<(Pos, i64)> 
     nearest.map(|(_, pos)| (pos, strength))
 }
 
+/// Ticks in a game hour.
+fn hour(view: &View<'_>) -> u64 {
+    view.rules
+        .constant("sim.ticks_per_second")
+        .unwrap_or(20)
+        .max(1) as u64
+        * 3600
+}
+
+/// The most units a wave of the main army or the raiders may hold now: the difficulty's
+/// first wave, grown by its hourly growth since the grace period ended; no limit without one.
+pub(crate) fn wave_limit(view: &View<'_>, difficulty: &AiDifficulty, tick: u64) -> usize {
+    if difficulty.first_wave_max <= 0 {
+        return usize::MAX;
+    }
+    let since = tick.saturating_sub(difficulty.grace_ticks.max(0) as u64);
+    let growth = (difficulty.wave_growth_per_hour.max(0) as u64).saturating_mul(since) / hour(view);
+    (difficulty.first_wave_max as u64).saturating_add(growth) as usize
+}
+
 /// Settings of one thought of the military manager.
 pub(crate) struct Command<'a> {
     pub weights: &'a Weights,
@@ -593,9 +727,10 @@ pub(crate) fn command(plan: &mut Plan<'_>, memory: &mut Memory, cmd: &Command<'_
             .first()
             .is_none_or(|c| c.pos.body != at.body)
     }) {
-        memory.rally = rally_point(&plan.view);
+        memory.rally = rally_point(&plan.view, memory.rally_moves);
     }
     look(&plan.view, memory);
+    measure_defences(&plan.view, memory);
     let tick = plan.view.tick;
     memory.unreachable.retain(|_, until| *until > tick);
     let units = fighters(&plan.view);
@@ -664,6 +799,8 @@ pub(crate) fn command(plan: &mut Plan<'_>, memory: &mut Memory, cmd: &Command<'_
         }
     }
 
+    // The supply units first: a few orders, and without them a wave melts in enemy land.
+    supply(plan, memory, rally);
     for role in [Role::Defend, Role::Attack, Role::Raid, Role::Scout] {
         let Some(mut army) = memory.armies.remove(&role) else {
             continue;
@@ -722,13 +859,133 @@ fn rally_producers(plan: &mut Plan<'_>, rally: Pos) {
     }
 }
 
+/// Units that keep supply (`et_supply`): own, standing and able to move.
+fn supplies<'a>(view: &View<'a>) -> Vec<&'a Entity> {
+    view.own
+        .iter()
+        .copied()
+        .filter(|e| {
+            let et = &view.rules.entity_types[&e.type_id];
+            et.supply.is_some()
+                && et.movement.is_some()
+                && et.class == EntityClass::Unit
+                && operational(e)
+                && e.hp > 0
+                && e.container_id.is_none()
+        })
+        .collect()
+}
+
+/// The supply unit the player can train now and that walks at home, the widest first.
+pub(crate) fn supply_type(view: &View<'_>, memory: &Memory) -> Option<DefId> {
+    let rules = view.rules;
+    view.owned
+        .iter()
+        .flat_map(|p| rules.production.get(p).into_iter().flatten())
+        .filter(|row| row.mode == ProductionMode::Train)
+        .map(|row| row.product_def_id)
+        .filter(|unit| {
+            rules.entity_types.get(unit).is_some_and(|t| {
+                t.supply.is_some() && t.movement.is_some() && t.class == EntityClass::Unit
+            }) && view.unlocked(*unit)
+                && !view.obsolete(*unit)
+                && crate::production::walks_at_home(view, *unit)
+                && memory
+                    .blocked
+                    .get(&unit.0)
+                    .is_none_or(|until| *until <= view.tick)
+        })
+        .max_by_key(|unit| {
+            (
+                rules.entity_types[unit]
+                    .supply
+                    .as_ref()
+                    .map_or(0, |s| s.radius),
+                std::cmp::Reverse(*unit),
+            )
+        })
+}
+
+/// Supply units a wave of `units` takes along: one for every `SUPPLY_PER`.
+fn supply_wanted(units: usize) -> usize {
+    units.div_ceil(SUPPLY_PER)
+}
+
+/// Own supply units near a point.
+fn supply_near(view: &View<'_>, at: Pos) -> usize {
+    supplies(view)
+        .iter()
+        .filter(|e| e.pos.body == at.body && view.distance(e.pos, at) <= 3 * SLACK)
+        .count()
+}
+
+/// Supply units go with the main army while it advances, each beside a member spread
+/// along the body of the army (stragglers left out), and wait at the rally point otherwise.
+fn supply(plan: &mut Plan<'_>, memory: &Memory, rally: Option<Pos>) {
+    let wagons = supplies(&plan.view);
+    if wagons.is_empty() {
+        return;
+    }
+    let view = &plan.view;
+    let army = memory
+        .armies
+        .get(&Role::Attack)
+        .filter(|a| a.phase == Phase::Advance);
+    // Members by their distance to the goal: the body of the army is around the median.
+    let mut body: Vec<(u64, Pos)> = army
+        .and_then(|a| a.goal.map(|goal| (a, goal)))
+        .map(|(a, goal)| {
+            a.members
+                .iter()
+                .filter_map(|id| view.world.entity(EntityId(*id)))
+                .filter(|e| e.pos.body == goal.body)
+                .map(|e| (view.distance(e.pos, goal), e.pos))
+                .collect()
+        })
+        .unwrap_or_default();
+    body.sort_by_key(|(d, p)| (*d, p.face, p.x, p.y));
+    if let Some(&(median, _)) = body.get(body.len() / 2) {
+        body.retain(|(d, _)| *d <= median + THREAT_REACH);
+    }
+    let n = wagons.len();
+    let mut orders: Vec<(EntityId, Pos)> = Vec::new();
+    for (i, wagon) in wagons.iter().enumerate() {
+        if view.busy.contains(&wagon.id)
+            || wagon.pos.body != rally.map_or(wagon.pos.body, |r| r.body)
+        {
+            continue;
+        }
+        let spot = if body.is_empty() {
+            rally
+        } else {
+            Some(body[((2 * i + 1) * body.len() / (2 * n)).min(body.len() - 1)].1)
+        };
+        let Some(spot) = spot else {
+            continue;
+        };
+        let heading = wagon
+            .orders()
+            .front()
+            .and_then(|o| o.target_pos)
+            .is_some_and(|p| view.distance(p, spot) <= SUPPLY_SLACK);
+        if view.distance(wagon.pos, spot) > SUPPLY_SLACK && !heading {
+            orders.push((wagon.id, spot));
+        }
+    }
+    for (wagon, spot) in orders {
+        if !plan.order(wagon, "move", None, None, Some(spot)) {
+            return;
+        }
+    }
+}
+
 /// Sends each idle scout to the next cell worth a look.
 fn scout(plan: &mut Plan<'_>, memory: &Memory, units: &[&Entity]) {
     for e in units {
         if !e.orders().is_empty() || plan.view.busy.contains(&e.id) {
             continue;
         }
-        let Some(at) = next_look(&plan.view, memory, e, 0) else {
+        let Some(at) = next_look(&plan.view, memory, e, power(&plan.view, e), 0) else {
             continue;
         };
         // Ground the player has never seen (a world whose map is not revealed) is left to
@@ -817,6 +1074,12 @@ fn lead(
 ) {
     let tick = plan.view.tick;
     if units.is_empty() {
+        // A wave lost to the last unit: the defence there was at least what it set off with.
+        if army.phase == Phase::Advance
+            && let Some(target) = army.target
+        {
+            note_defence(memory, target, army.peak, tick);
+        }
         if army.phase != Phase::Gather {
             *army = Army {
                 since: tick,
@@ -853,7 +1116,30 @@ fn lead(
             let Some(base) = rally.or_else(|| units.first().map(|e| e.pos)) else {
                 return;
             };
+            // A captured enemy capital is held until its owner falls.
+            if role == Role::Attack
+                && let Some(at) = held_capital(&plan.view)
+            {
+                *army = Army {
+                    phase: Phase::Advance,
+                    members: std::mem::take(&mut army.members),
+                    target: None,
+                    goal: Some(at),
+                    since: tick,
+                    peak: own,
+                };
+                advance(plan, memory, cmd, army, units);
+                return;
+            }
+            // A grace period: no attack or raid on enemy towns in the first minutes.
+            if tick < cmd.difficulty.grace_ticks.max(0) as u64 {
+                return;
+            }
             let raid = role == Role::Raid;
+            // The wave limit of the difficulty: the units that set off, by id; the rest stay
+            // home with the guard.
+            let limit = wave_limit(&plan.view, cmd.difficulty, tick);
+            let units = &units[..units.len().min(limit)];
             // The main army waits for half its share of the army target.
             let share = 100 - cmd.weights.defense_share - cmd.weights.raid_share;
             let wave = if raid {
@@ -864,7 +1150,16 @@ fn lead(
                 let target = plan.view.pop_cap * cmd.weights.army_share / 100 * share.max(0) / 100;
                 MIN_WAVE.max((target / 2).clamp(0, MAX_WAVE as i64) as usize)
             };
+            let wave = wave.min(limit);
             if units.len() < wave {
+                return;
+            }
+            // Enemy land wears an army down (attrition) except beside its own supply: a
+            // main army that can have supply waits for its wagons at the rally point.
+            if !raid
+                && supply_type(&plan.view, memory).is_some()
+                && supply_near(&plan.view, base) < supply_wanted(units.len()).min(SUPPLY_GATE)
+            {
                 return;
             }
             let target = choose_target(&plan.view, memory, base, units, raid).or_else(|| {
@@ -875,33 +1170,61 @@ fn lead(
             });
             let needed = match target {
                 Some((_, at)) if raid => threat_near(&plan.view, memory, at, THREAT_REACH),
-                Some((_, at)) => {
-                    known_army(&plan.view, memory)
-                        + threat_near(&plan.view, memory, at, THREAT_REACH)
-                }
+                // A decisive wave: it holds until it clearly exceeds the defence it has
+                // measured at the city, not only what it happens to see from home.
+                Some((id, at)) => (known_army(&plan.view, memory)
+                    + threat_near(&plan.view, memory, at, THREAT_REACH))
+                .max(measured(memory, id, tick)),
                 None => known_army(&plan.view, memory),
             };
-            if own * 100 < cmd.weights.attack_ratio * needed
-                && !enemy_land_race(&plan.view)
-                && !cmd.blunder
-            {
+            let own: i64 = units.iter().map(|e| power(&plan.view, e)).sum();
+            // A blunder is overconfidence: the army sets off as soon as it merely matches
+            // the defence, at a city it may not be able to take.
+            let ratio = if cmd.blunder {
+                cmd.weights.attack_ratio.min(100)
+            } else {
+                cmd.weights.attack_ratio
+            };
+            if own * 100 < ratio * needed && !enemy_land_race(&plan.view) {
                 return;
             }
             let goal = match target {
                 Some((_, at)) => Some(at),
-                // Nothing known to attack and no scout out: a strong main army goes looking.
+                // Nothing known to attack and no scout out, or no enemy city known at all: a
+                // strong main army goes looking.
                 None if !raid
                     && units.len() >= 2 * MIN_WAVE
-                    && memory
+                    && (memory
                         .armies
                         .get(&Role::Scout)
-                        .is_none_or(|a| a.members.is_empty()) =>
+                        .is_none_or(|a| a.members.is_empty())
+                        || !memory
+                            .enemies
+                            .values()
+                            .any(|e| is_city(&plan.view, e.type_id))) =>
                 {
-                    next_look(&plan.view, memory, units[0], 4 * CELL as u64)
+                    next_look(&plan.view, memory, units[0], own, 4 * CELL as u64)
                 }
                 None => None,
             };
             if let Some(goal) = goal {
+                // Those beyond the wave limit join the home guard.
+                let wave: BTreeSet<u32> = units.iter().map(|e| e.id.0).collect();
+                let stay: Vec<u32> = army
+                    .members
+                    .iter()
+                    .copied()
+                    .filter(|id| !wave.contains(id))
+                    .collect();
+                for id in stay {
+                    army.members.remove(&id);
+                    memory
+                        .armies
+                        .entry(Role::Defend)
+                        .or_default()
+                        .members
+                        .insert(id);
+                }
                 *army = Army {
                     phase: Phase::Advance,
                     members: std::mem::take(&mut army.members),
@@ -910,12 +1233,38 @@ fn lead(
                     since: tick,
                     peak: own,
                 };
-                advance(plan, cmd, army, units);
+                advance(plan, memory, cmd, army, units);
             }
         }
         Phase::Advance => {
-            // Retreat when the fight goes badly: half the army lost against a stronger
-            // enemy, or the target no longer within its means.
+            // Units that joined after the wave set off wait at the rally point for the next
+            // one: trickling out one by one, they only feed the defence.
+            let wave: Vec<&Entity> = units
+                .iter()
+                .copied()
+                .filter(|e| {
+                    !(e.orders().is_empty()
+                        && rally.is_some_and(|r| {
+                            e.pos.body == r.body && plan.view.distance(e.pos, r) <= 2 * SLACK
+                        }))
+                })
+                .collect();
+            if wave.is_empty() && role != Role::Raid {
+                army.phase = Phase::Gather;
+                army.target = None;
+                army.goal = None;
+                army.since = tick;
+                return;
+            }
+            let units: &[&Entity] = if wave.is_empty() { units } else { &wave };
+            let own: i64 = units.iter().map(|e| power(&plan.view, e)).sum();
+            let holding = army
+                .target
+                .and_then(|id| plan.view.world.entity(EntityId(id)))
+                .is_some_and(|city| city.neutralised);
+            // Retreat when the fight goes badly: half the wave lost while the target still
+            // stands (a city held at 0 hit points is held, not given up), or the target no
+            // longer within its means.
             if cmd.difficulty.retreats {
                 // The enemy strength around the most threatened member.
                 let local = units
@@ -923,16 +1272,24 @@ fn lead(
                     .map(|e| threat_near(&plan.view, memory, e.pos, THREAT_REACH))
                     .max()
                     .unwrap_or(0);
-                let beaten = own * 2 < army.peak && own * 100 < cmd.weights.retreat_ratio * local;
-                let hopeless = army
-                    .target
-                    .and_then(|id| memory.enemies.get(&id))
-                    .is_some_and(|target| !can_take(&plan.view, memory, units, target));
+                let beaten = own * 2 < army.peak
+                    && (!holding || own * 100 < cmd.weights.retreat_ratio * local);
+                // A wave that still has two thirds of its strength fights on: what it sees
+                // at the walls is no news, it set off having measured them.
+                let hopeless = own * 3 < army.peak * 2
+                    && !holding
+                    && army
+                        .target
+                        .and_then(|id| memory.enemies.get(&id))
+                        .is_some_and(|target| !can_take(&plan.view, memory, units, target));
                 if beaten || hopeless {
                     // The target is left alone for a while so the army comes back stronger
-                    // instead of turning round at once.
+                    // instead of turning round at once; what beat it was at least the wave.
                     if let Some(target) = army.target {
                         memory.unreachable.insert(target, tick + 2 * RETRY_TICKS);
+                        if own * 2 < army.peak {
+                            note_defence(memory, target, army.peak, tick);
+                        }
                     }
                     army.phase = Phase::Retreat;
                     army.since = tick;
@@ -1012,6 +1369,20 @@ fn lead(
                         .iter()
                         .all(|e| plan.view.distance(e.pos, goal) > THREAT_REACH)
                 });
+            // A captured enemy capital is held until its owner falls.
+            if role == Role::Attack
+                && (lost || arrived || army.target.is_none())
+                && let Some(at) = held_capital(&plan.view)
+            {
+                if army.goal != Some(at) || army.target.is_some() {
+                    army.target = None;
+                    army.goal = Some(at);
+                    army.since = tick;
+                }
+                advance(plan, memory, cmd, army, units);
+                focus(plan, memory, units);
+                return;
+            }
             if (stalled || overdue)
                 && let Some(target) = army.target
             {
@@ -1019,11 +1390,18 @@ fn lead(
             }
             if lost || arrived || stalled || overdue {
                 let from = front(&plan.view, units, army.goal).unwrap_or(units[0].pos);
+                // A wave that lost half its strength there learnt the defence the hard way.
+                if own * 2 < army.peak
+                    && let Some(target) = army.target
+                {
+                    note_defence(memory, target, army.peak, tick);
+                }
                 match choose_target(&plan.view, memory, from, units, role == Role::Raid) {
                     Some((id, at)) => {
                         army.target = Some(id);
                         army.goal = Some(at);
                         army.since = tick;
+                        army.peak = army.peak.max(own);
                     }
                     None => {
                         army.phase = Phase::Gather;
@@ -1034,7 +1412,8 @@ fn lead(
                     }
                 }
             }
-            advance(plan, cmd, army, units);
+            advance(plan, memory, cmd, army, units);
+            batter(plan, memory, army, units);
             focus(plan, memory, units);
         }
         Phase::Retreat => {
@@ -1051,6 +1430,75 @@ fn lead(
             } else if let Some(rally) = rally {
                 regroup(plan, units, rally);
             }
+        }
+    }
+}
+
+/// Siege: members that do more damage to the target building than to the enemies around
+/// it fire on the building once it is within their reach, instead of on whatever comes
+/// near. A city at 0 hit points is held, not battered.
+fn batter(plan: &mut Plan<'_>, memory: &Memory, army: &Army, units: &[&Entity]) {
+    let rules = plan.view.rules;
+    let Some((id, target)) = army
+        .target
+        .and_then(|t| memory.enemies.get(&t).map(|e| (EntityId(t), e)))
+        .filter(|(_, e)| e.building)
+    else {
+        return;
+    };
+    let Some(live) = plan.view.world.entity(id).filter(|e| e.hp > 0) else {
+        return;
+    };
+    let Some(et) = rules.entity_types.get(&target.type_id) else {
+        return;
+    };
+    // What the enemies seen near the building wear.
+    let near: Vec<&EnemySighting> = memory
+        .enemies
+        .values()
+        .filter(|e| {
+            !e.building
+                && e.tick + RECENT_TICKS >= plan.view.tick
+                && e.pos.body == target.pos.body
+                && plan.view.distance(e.pos, target.pos) <= THREAT_REACH
+        })
+        .collect();
+    let reach_of = |unit: &Entity| {
+        rules.entity_types[&unit.type_id]
+            .weapons
+            .iter()
+            .map(|w| w.range_max)
+            .max()
+            .unwrap_or(0)
+            .max(0) as u64
+    };
+    let extent = (et.footprint_w.max(et.footprint_h) * 500).max(0) as u64;
+    let mut orders = Vec::new();
+    for unit in units {
+        if plan.view.busy.contains(&unit.id)
+            || unit
+                .orders()
+                .front()
+                .is_some_and(|o| o.target_entity == Some(id))
+            || plan.view.distance(unit.pos, target.pos) > reach_of(unit) + extent + FOCUS_SLACK
+            || !plan.view.world.can_target(unit.id, live.id)
+        {
+            continue;
+        }
+        let on_building = dps_against(rules, unit.type_id, et.armor_class_id, et.armor);
+        let on_units = near
+            .iter()
+            .filter_map(|e| rules.entity_types.get(&e.type_id))
+            .map(|t| dps_against(rules, unit.type_id, t.armor_class_id, t.armor))
+            .max()
+            .unwrap_or(0);
+        if on_building > on_units {
+            orders.push(unit.id);
+        }
+    }
+    for unit in orders {
+        if !plan.order(unit, "attack", None, Some(id), None) {
+            return;
         }
     }
 }
@@ -1107,10 +1555,27 @@ fn focus(plan: &mut Plan<'_>, memory: &Memory, units: &[&Entity]) {
 }
 
 /// Orders every member of an advancing army that is not on its way yet.
-fn advance(plan: &mut Plan<'_>, cmd: &Command<'_>, army: &Army, units: &[&Entity]) {
+fn advance(
+    plan: &mut Plan<'_>,
+    memory: &Memory,
+    cmd: &Command<'_>,
+    army: &Army,
+    units: &[&Entity],
+) {
     let Some(goal) = army.goal else {
         return;
     };
+    // A building is approached at the edge of its footprint on the army's side: a point
+    // inside it has no path, and units sent there stand idle where they failed.
+    let far = units
+        .iter()
+        .max_by_key(|e| (plan.view.distance(e.pos, goal), e.id))
+        .map_or(goal, |e| e.pos);
+    let goal = army
+        .target
+        .and_then(|t| memory.enemies.get(&t))
+        .filter(|e| e.building && e.pos == goal)
+        .map_or(goal, |e| stand_off(&plan.view, e, far));
     let goals = if cmd.difficulty.uses_formations {
         let from = units
             .iter()
@@ -1155,7 +1620,30 @@ fn advance(plan: &mut Plan<'_>, cmd: &Command<'_>, army: &Army, units: &[&Entity
         .then(|| line_formation(plan.view.rules))
         .flatten()
         .filter(|f| plan.view.rules.formations[f].keeps_slowest);
+
     send_as(plan, &fresh, "attack_move", subject);
+}
+
+/// The point beside a building, toward `from`, just outside its footprint.
+fn stand_off(view: &View<'_>, building: &EnemySighting, from: Pos) -> Pos {
+    let goal = building.pos;
+    let Some(et) = view.rules.entity_types.get(&building.type_id) else {
+        return goal;
+    };
+    let reach = et.footprint_w.max(et.footprint_h) * 500 + 2000;
+    if from.body != goal.body || from.face != goal.face {
+        return goal;
+    }
+    let (dx, dy) = (
+        i64::from(from.x) - i64::from(goal.x),
+        i64::from(from.y) - i64::from(goal.y),
+    );
+    let length = integer_sqrt((dx * dx + dy * dy) as u128) as i64;
+    if length <= reach {
+        return goal;
+    }
+    view.world
+        .offset(goal, dx * reach / length, dy * reach / length)
 }
 
 /// The formation armies march in: the first line formation, or the first of any shape.
@@ -1239,6 +1727,26 @@ pub(crate) fn wishes(view: &View<'_>, weights: &Weights, memory: &Memory, wishes
             wishes.push(Wish {
                 score: SCOUT_SCORE,
                 act: Act::Train(scout),
+                reserve: false,
+                opening: false,
+            });
+        }
+    }
+    // Supply for the main army: one for every `SUPPLY_PER` of its units.
+    if let Some(main) = army(Role::Attack)
+        && main.members.len() >= MIN_WAVE
+        && let Some(wagon) = supply_type(view, memory)
+    {
+        let have: i64 = view
+            .have
+            .iter()
+            .filter(|(t, _)| rules.entity_types[*t].supply.is_some())
+            .map(|(_, n)| *n)
+            .sum();
+        if have < supply_wanted(main.members.len()) as i64 {
+            wishes.push(Wish {
+                score: 480 + weights.army_share,
+                act: Act::Train(wagon),
                 reserve: false,
                 opening: false,
             });

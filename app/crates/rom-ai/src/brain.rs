@@ -2,7 +2,7 @@
 //! that turns what it perceives into orders.
 
 use crate::{
-    AiError, Army, BrainStats, Role, Summary, Voyage, Weights, army,
+    AiError, Army, BrainStats, Phase, Role, Summary, Voyage, Weights, army,
     catalogue::Catalogue,
     construction, economy, fleet,
     memory::Memory,
@@ -13,10 +13,14 @@ use crate::{
 };
 use rom_rules::{AiDifficulty, AiOpeningStep, DefId, Rules};
 use rom_sim::{Command, PlayerId, SimError, SimRng, World};
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
 /// Mixed into the match seed so a brain's random stream differs from the simulation's.
 const STREAM: u64 = 0x6272_6169_6e5f_6169;
+/// Units failing to leave the rally point in one thought that make it move.
+const BOXED_UNITS: usize = 3;
+/// How near the rally point a unit counts as standing there, in milli-tiles.
+const BOXED_REACH: u64 = 4000;
 /// Ticks after the last sign of an attack before the alarm ends.
 const ALARM_TICKS: u64 = 2400;
 
@@ -89,7 +93,9 @@ impl Brain {
         let weights = Weights {
             worker_share: weight(&rules, profile_key, "econ.worker_share_pct")?.clamp(0, 100)
                 * (200 - careless)
-                / 200,
+                / 200
+                * difficulty.economy_pct.clamp(1, 100)
+                / 100,
             expand: weight(&rules, profile_key, "econ.expand_eagerness")?.clamp(0, 100),
             age_priority: weight(&rules, profile_key, "tech.age_priority")?.clamp(0, 100),
             army_share: (weight(&rules, profile_key, "mil.army_share_pct")?.clamp(0, 100)
@@ -330,6 +336,7 @@ impl Brain {
 
         // Perception of others: memory of enemies, and whether a city is under attack.
         view::remember(&mut memory.enemies, world, self.player, d.sees_all);
+        production::note_enemy_peak(&view, memory);
         let threatened = attacked(&view, memory);
         memory.city_hp = view
             .cities
@@ -381,6 +388,7 @@ impl Brain {
         production::wishes(
             &plan.view,
             &self.weights,
+            d,
             memory,
             alarmed,
             slip(&mut rng),
@@ -395,14 +403,6 @@ impl Brain {
         if wishes.len() > 1 && !wishes[0].opening && !wishes[0].reserve && slip(&mut rng) {
             wishes.swap(0, 1);
         }
-        for wish in &wishes {
-            let outcome = plan.serve(wish, memory);
-            if wish.opening {
-                opening::settle(&self.opening, memory, outcome, tick);
-            }
-        }
-        let pace = economy::pace(d);
-        let paced = tick < memory.economy_tick || tick >= memory.economy_tick + pace;
         let command = army::Command {
             weights: &self.weights,
             difficulty: d,
@@ -411,15 +411,40 @@ impl Brain {
             blunder: d.mistake_pct > 0
                 && i64::from(rng.range(0, 120_000)) < d.mistake_pct * d.think_interval_ticks.max(1),
         };
-        // Under attack the armies take their orders before the workers do.
-        if alarmed {
+        // Under attack, or with an army on the march, the armies take their orders first:
+        // a wave sent off a few units a thought arrives piecemeal and is lost. Marching takes
+        // at most two thirds of the budget, so training and the workers go on.
+        let marching = alarmed
+            || memory
+                .armies
+                .iter()
+                .any(|(role, a)| *role != Role::Escort && a.phase == Phase::Advance);
+        if marching {
+            let all = plan.orders_left;
+            let share = if alarmed { all } else { (all * 2 / 3).max(1) };
+            plan.orders_left = share;
             army::command(&mut plan, memory, &command);
-            economy::assign(&mut plan, &mut eco, paced);
-        } else {
-            economy::assign(&mut plan, &mut eco, paced);
+            plan.orders_left += all - share;
+        }
+        for wish in &wishes {
+            let outcome = plan.serve(wish, memory);
+            if wish.opening {
+                opening::settle(&self.opening, memory, outcome, tick);
+            }
+        }
+        let pace = economy::pace(d);
+        let paced = tick < memory.economy_tick || tick >= memory.economy_tick + pace;
+        let unreachable: BTreeSet<u32> = memory
+            .unreachable
+            .iter()
+            .filter(|(_, until)| **until > tick)
+            .map(|(id, _)| *id)
+            .collect();
+        economy::assign(&mut plan, &mut eco, paced, &unreachable);
+        if !marching {
             army::command(&mut plan, memory, &command);
         }
-        fleet::command(&mut plan, memory, &self.weights);
+        fleet::command(&mut plan, memory, &self.weights, d);
         economy::update_demand(memory, &plan.shortfall, tick, pace);
 
         let orders = plan.out.len() as i64;
@@ -435,6 +460,28 @@ impl Brain {
 /// builder could not get to, a target no path led to; each is left alone for a while
 /// instead of being ordered again thought after thought.
 fn heed_failures(world: &World, me: PlayerId, memory: &mut Memory, since: u64, tick: u64) {
+    // Units at the rally point that find no way out: the town has boxed it in.
+    let boxed = memory.rally.is_some_and(|rally| {
+        world
+            .order_failures(me)
+            .filter(|f| {
+                f.tick >= since
+                    && f.reason == "no_path"
+                    && matches!(f.kind.as_str(), "move" | "attack_move")
+            })
+            .filter_map(|f| world.entity(f.executor))
+            .filter(|e| {
+                world
+                    .distance(e.pos, rally)
+                    .is_some_and(|d| d <= BOXED_REACH)
+            })
+            .count()
+            >= BOXED_UNITS
+    });
+    if boxed {
+        memory.rally = None;
+        memory.rally_moves += 1;
+    }
     for failure in world.order_failures(me).filter(|f| f.tick >= since) {
         let reachless = matches!(failure.reason.as_str(), "no_path" | "no_slot");
         match failure.kind.as_str() {
@@ -451,6 +498,13 @@ fn heed_failures(world: &World, me: PlayerId, memory: &mut Memory, since: u64, t
             "attack" | "attack_move" | "guard" if failure.reason == "no_path" => {
                 if let Some(target) = failure.target_entity {
                     memory.unreachable.insert(target.0, tick + 2 * RETRY_TICKS);
+                }
+            }
+            // A place no path leads to counts as looked at: a scout is not sent there again
+            // and again.
+            "move" | "explore" if failure.reason == "no_path" => {
+                if let Some(at) = failure.target_pos {
+                    memory.looked.insert(crate::view::cell_of(at), tick);
                 }
             }
             _ => {}

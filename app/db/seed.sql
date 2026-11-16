@@ -347,13 +347,17 @@ INSERT INTO ai_profile_weight VALUES
  ('builder','econ.worker_share_pct',65), ('builder','mil.army_share_pct',25), ('builder','tech.age_priority',80),
  ('builder','econ.expand_eagerness',85), ('builder','mil.attack_ratio_pct',170),
  ('turtle','mil.defense_share_pct',70), ('turtle','mil.attack_ratio_pct',250), ('turtle','econ.expand_eagerness',30);
-INSERT INTO ai_difficulty(key,name,rank,think_interval_ticks,orders_per_minute,reaction_ticks,mistake_pct,uses_formations,uses_abilities,retreats,income_bonus_pct,sees_all) VALUES
- ('easiest','Easiest',0,100,20,200,30,0,0,0,0,0),
- ('easy','Easy',1,60,40,120,20,0,0,1,0,0),
- ('moderate','Moderate',2,40,80,60,10,1,1,1,0,0),
- ('tough','Tough',3,20,160,30,3,1,1,1,0,0),
- ('tougher','Tougher',4,10,300,10,0,1,1,1,0,0),
- ('toughest','Toughest',5,10,300,10,0,1,1,1,25,0);
+-- grace_ticks, first_wave_max, wave_growth_per_hour, army_vs_enemy_pct, economy_pct
+-- (task 67): the lowest levels leave a learner's town alone for the first minutes, come
+-- in small waves that grow slowly, keep their army below the one they have seen and keep
+-- fewer hands at work.
+INSERT INTO ai_difficulty(key,name,rank,think_interval_ticks,orders_per_minute,reaction_ticks,mistake_pct,uses_formations,uses_abilities,retreats,income_bonus_pct,sees_all,grace_ticks,first_wave_max,wave_growth_per_hour,army_vs_enemy_pct,economy_pct) VALUES
+ ('easiest','Easiest',0,100,20,600,30,0,0,0,0,0,12000,5,10,50,60),
+ ('easy','Easy',1,60,40,300,20,0,0,1,0,0,7200,8,20,80,80),
+ ('moderate','Moderate',2,40,80,60,10,1,1,1,0,0,3600,0,0,0,100),
+ ('tough','Tough',3,20,160,30,3,1,1,1,0,0,0,0,0,0,100),
+ ('tougher','Tougher',4,10,300,10,0,1,1,1,0,0,0,0,0,0,100),
+ ('toughest','Toughest',5,10,300,10,0,1,1,1,25,0,0,0,0,0,100);
 
 INSERT INTO def(kind,key,name) VALUES ('victory','win.conquest','Conquest'), ('victory','win.territory','Territory');
 INSERT INTO victory(id,rule,threshold,timer_ticks)

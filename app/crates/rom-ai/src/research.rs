@@ -96,8 +96,10 @@ fn worth(view: &View<'_>, weights: &Weights, eco: &Economy, tech: DefId) -> i64 
     for (from, _) in view.cat.upgrades.get(&tech).into_iter().flatten() {
         let owned = view.count(*from);
         let military = crate::production::is_military(rules, *from);
+        // The army is only as good as its line: an upgrade of what it fields pays for
+        // itself many times over.
         value += if military {
-            20 + owned.min(10) * weights.army_share / 10
+            60 + owned.min(40) * (4 + weights.army_share / 8)
         } else {
             40 + owned.min(10) * 8
         };
@@ -115,6 +117,8 @@ fn worth(view: &View<'_>, weights: &Weights, eco: &Economy, tech: DefId) -> i64 
     value - cost / 20
 }
 
+/// Technologies offered besides the best one when every store runs over.
+const SURPLUS_TECHS: i64 = 3;
 /// Ticks in an age after which the way to the next one starts to gain priority.
 const AGE_PATIENCE_TICKS: u64 = 4800;
 /// Priority the way to the next age gains per minute of waiting beyond the patience.
@@ -137,11 +141,16 @@ pub(crate) fn wishes(
     let path = age_path(view);
     let mut side: Vec<(i64, DefId)> = Vec::new();
     let mut seen = BTreeSet::new();
-    // Only producers with nothing to research take part: the rest cannot start anything.
+    // Only producers with room for a research take part (a research queues behind what a
+    // producer trains): the rest cannot start anything.
     let free: BTreeSet<DefId> = view
         .own
         .iter()
-        .filter(|e| operational(e) && !view.queue_len.contains_key(&e.id))
+        .filter(|e| {
+            operational(e)
+                && view.queue_len.get(&e.id).copied().unwrap_or(0) < 2
+                && !view.researching_at.contains(&e.id)
+        })
         .map(|e| e.type_id)
         .collect();
     for producer in &free {
@@ -179,7 +188,10 @@ pub(crate) fn wishes(
     }
     side.sort_unstable_by_key(|(value, tech)| (std::cmp::Reverse(*value), *tech));
     let pick = usize::from(second_best && side.len() > 1);
-    if let Some((value, tech)) = side.get(pick) {
+    // Two technologies at a time besides the way to the next age (they are researched at
+    // different buildings); a surplus in every store goes to more at once.
+    let more = view.surplus().clamp(0, SURPLUS_TECHS) as usize;
+    for (value, tech) in side.iter().skip(pick).take(2 + more) {
         wishes.push(Wish {
             score: 300 + (*value).clamp(0, 250),
             act: Act::Research(*tech),

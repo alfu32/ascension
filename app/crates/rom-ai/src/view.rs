@@ -8,6 +8,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// Side of a threat-map cell in milli-tiles (8×8 tiles).
 pub(crate) const CELL: i32 = 8000;
+/// A store this large of every earned resource is a surplus worth spending.
+pub(crate) const SURPLUS_STOCK: i64 = 1000;
 /// Ticks after which an enemy unit that was not seen again is forgotten.
 pub(crate) const UNIT_MEMORY_TICKS: u64 = 2400;
 
@@ -63,6 +65,8 @@ pub(crate) struct View<'a> {
     pub line_have: BTreeMap<DefId, i64>,
     /// Technologies in a research queue.
     pub researching: BTreeSet<DefId>,
+    /// Producers with a research in their queue.
+    pub researching_at: BTreeSet<EntityId>,
     /// Orders in each own producer's queue.
     pub queue_len: BTreeMap<EntityId, usize>,
     /// Unfinished own buildings a builder is assigned to.
@@ -92,6 +96,7 @@ impl<'a> View<'a> {
             .collect();
         let mut have: BTreeMap<DefId, i64> = BTreeMap::new();
         let mut researching = BTreeSet::new();
+        let mut researching_at = BTreeSet::new();
         let mut queue_len = BTreeMap::new();
         let mut tended = BTreeSet::new();
         let mut inbound: BTreeMap<EntityId, i64> = BTreeMap::new();
@@ -109,6 +114,7 @@ impl<'a> View<'a> {
                     }
                     ("research", Some(subject), _) => {
                         researching.insert(subject);
+                        researching_at.insert(e.id);
                     }
                     ("construct" | "repair", _, Some(site)) => {
                         tended.insert(site);
@@ -158,6 +164,7 @@ impl<'a> View<'a> {
             have,
             line_have,
             researching,
+            researching_at,
             queue_len,
             tended,
             inbound,
@@ -166,6 +173,21 @@ impl<'a> View<'a> {
     }
 
     /// Ordinal of the player's age.
+    /// How far the player's stores run over: the least store, in thousands, of the base
+    /// resources it earns (0 when any of them is short or none is earned).
+    pub fn surplus(&self) -> i64 {
+        self.rules
+            .resources
+            .values()
+            .filter(|r| {
+                r.kind == rom_rules::ResourceKind::Base
+                    && self.world.income(self.me, r.id).effective > 0
+            })
+            .map(|r| self.purse.get(&r.id).copied().unwrap_or(0).max(0) / SURPLUS_STOCK)
+            .min()
+            .unwrap_or(0)
+    }
+
     pub fn age_ordinal(&self) -> i64 {
         self.rules.ages.get(&self.age).map_or(0, |a| a.ordinal)
     }

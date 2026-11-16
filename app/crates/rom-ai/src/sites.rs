@@ -162,6 +162,18 @@ impl Ground {
         }
     }
 
+    /// Keeps a square of ground free of every building: where the army gathers.
+    pub fn keep_clear(&mut self, at: Pos, tiles: i32) {
+        let (cx, cy) = (at.x.div_euclid(1000), at.y.div_euclid(1000));
+        for y in cy - tiles..=cy + tiles {
+            for x in cx - tiles..=cx + tiles {
+                let tile = (at.body.0, at.face, x, y);
+                self.taken.insert(tile);
+                self.lanes.insert(tile);
+            }
+        }
+    }
+
     /// Keeps the footprint of a planned node gather site free of other buildings.
     pub fn reserve(&mut self, et: &EntityType, pos: Pos) {
         let (x0, y0, w, h) = footprint(et, pos);
