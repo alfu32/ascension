@@ -1621,15 +1621,23 @@ fn advance(
     };
     // A building is approached at the edge of its footprint on the army's side: a point
     // inside it has no path, and units sent there stand idle where they failed.
-    let far = units
-        .iter()
-        .max_by_key(|e| (plan.view.distance(e.pos, goal), e.id))
-        .map_or(goal, |e| e.pos);
+    // The side is the one the army comes from: its rally point, which stays put, so the
+    // point does not wander from one thought to the next.
+    let side = memory
+        .rally
+        .filter(|r| r.body == goal.body)
+        .or_else(|| {
+            units
+                .iter()
+                .max_by_key(|e| (plan.view.distance(e.pos, goal), e.id))
+                .map(|e| e.pos)
+        })
+        .unwrap_or(goal);
     let goal = army
         .target
         .and_then(|t| memory.enemies.get(&t))
         .filter(|e| e.building && e.pos == goal)
-        .map_or(goal, |e| stand_off(&plan.view, e, far));
+        .map_or(goal, |e| stand_off(&plan.view, e, side));
     let goals = if cmd.difficulty.uses_formations {
         let from = units
             .iter()
