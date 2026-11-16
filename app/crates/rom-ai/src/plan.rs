@@ -378,7 +378,7 @@ impl<'a> Plan<'a> {
             .get_or_insert_with(|| Ground::new(&self.view, &memory.enemies));
         if !ground.reserved_done {
             ground.reserved_done = true;
-            reserve_first_sites(&self.view, ground, building);
+            reserve_first_sites(&self.view, ground, building, memory, situation);
         }
         let site = if is_city {
             find_city_site(&self.view, ground, building)
@@ -418,8 +418,15 @@ impl<'a> Plan<'a> {
 
 /// Finds, for every base resource drawn from node terrain that the player has no site for
 /// yet, the spot its first site would take, and keeps it free for that site. Nothing is
-/// reserved while that very site is being placed.
-fn reserve_first_sites(view: &View<'_>, ground: &mut Ground, building: DefId) {
+/// reserved while that very site is being placed, and a search that found nothing is not
+/// repeated until the situation changes.
+fn reserve_first_sites(
+    view: &View<'_>,
+    ground: &mut Ground,
+    building: DefId,
+    memory: &mut Memory,
+    situation: u64,
+) {
     for (resource, sites) in &view.cat.gather_sites {
         if sites.contains(&building)
             || sites.iter().any(|s| view.line_count(*s) > 0)
@@ -441,8 +448,16 @@ fn reserve_first_sites(view: &View<'_>, ground: &mut Ground, building: DefId) {
         }) else {
             continue;
         };
-        if let Site::At(pos) = find_site(view, ground, site) {
-            ground.reserve(&view.rules.entity_types[&site], pos);
+        // A search that already failed in this situation is not repeated for a reservation.
+        if memory.no_site.get(&site.0) == Some(&situation) {
+            continue;
+        }
+        match find_site(view, ground, site) {
+            Site::At(pos) => ground.reserve(&view.rules.entity_types[&site], pos),
+            Site::Nowhere => {
+                memory.no_site.insert(site.0, situation);
+            }
+            Site::Later => {}
         }
     }
 }
