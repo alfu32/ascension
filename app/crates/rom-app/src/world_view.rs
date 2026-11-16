@@ -40,8 +40,9 @@ pub struct WorldView {
     recent_presents: VecDeque<Instant>,
     /// Canvas origin in window coordinates (logical pixels), measured during layout.
     origin: Rc<Cell<Point<Pixels>>>,
-    /// Whether the real pointer reaches the renderer; off for screenshot and benchmark runs,
-    /// where a pointer resting at the window edge would pan the camera.
+    /// Whether real mouse and keyboard input reaches the renderer; off for screenshot and
+    /// benchmark runs, where a pointer resting at the window edge would pan the camera and
+    /// keys would change the result.
     pointer_input: bool,
     /// The in-match menu while it is open.
     menu: Option<menu::Menu>,
@@ -50,7 +51,8 @@ pub struct WorldView {
 }
 
 impl WorldView {
-    /// Stops forwarding pointer moves to the renderer (automated screenshot and benchmark runs).
+    /// Stops forwarding mouse and keyboard input to the renderer and the simulation
+    /// (automated screenshot and benchmark runs, which end on their own).
     pub fn ignore_pointer(&mut self) {
         self.pointer_input = false;
     }
@@ -162,6 +164,9 @@ impl WorldView {
         modifiers: gpui::Modifiers,
         down: bool,
     ) {
+        if !self.pointer_input {
+            return;
+        }
         let button = match button {
             MouseButton::Left => PointerButton::Left,
             MouseButton::Right => PointerButton::Right,
@@ -182,6 +187,9 @@ impl WorldView {
     }
 
     fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.pointer_input {
+            return;
+        }
         if self.menu_open() {
             if event.keystroke.key == "escape" {
                 self.menu_back(window, cx);
@@ -306,7 +314,7 @@ impl Render for WorldView {
                 view.bridge.push_input(InputEvent::PointerMoved { x, y });
             }))
             .on_hover(cx.listener(|view, hovered: &bool, _, _| {
-                if !*hovered && !view.menu_open() {
+                if !*hovered && view.pointer_input && !view.menu_open() {
                     view.bridge.push_input(InputEvent::PointerLeft);
                 }
             }))
@@ -370,7 +378,7 @@ impl Render for WorldView {
                     ScrollDelta::Lines(delta) => delta.y,
                     ScrollDelta::Pixels(delta) => f32::from(delta.y) / PIXELS_PER_WHEEL_STEP,
                 };
-                if steps != 0.0 && !view.menu_open() {
+                if steps != 0.0 && view.pointer_input && !view.menu_open() {
                     view.bridge.push_input(InputEvent::Wheel { steps });
                 }
             }))
@@ -379,7 +387,7 @@ impl Render for WorldView {
                 cx.notify();
             }))
             .on_key_up(cx.listener(|view, event: &KeyUpEvent, _, _| {
-                if view.menu_open() {
+                if !view.pointer_input || view.menu_open() {
                     return;
                 }
                 if let Some(key) = Key::from_name(&event.keystroke.key) {

@@ -310,7 +310,14 @@ pub(crate) fn wealth_card(world: &World, entity: &rom_sim::Entity) -> Vec<String
             let label = |id| {
                 world.entity(id).map_or_else(
                     || "City lost".into(),
-                    |e| format!("{} {}", rules.display_name(e.type_id, faction), e.id.0),
+                    |e| {
+                        // Cities carry no names in the data: number them in id order.
+                        let number = world
+                            .entities()
+                            .filter(|c| c.type_id == e.type_id && c.id <= e.id)
+                            .count();
+                        format!("{} {number}", rules.display_name(e.type_id, faction))
+                    },
                 )
             };
             return vec![
