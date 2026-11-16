@@ -23,7 +23,7 @@ WITH v(name,shape,mat,team,attach,params) AS (VALUES
   ('ensign','box','mat.white_composite',1,'hull','{"x":-1.62,"y":0.8,"w":0.26,"d":0.015,"h":0.17,"far":0}'),
   ('ensign_staff','cylinder','mat.graphite',0,'hull','{"x":-1.5,"y":0.44,"w":0.03,"h":0.52,"segments":4,"far":0}'),
   ('spark','cone','mat.plasma',0,'rails','{"y":1.02,"w":0.16,"h":0.16,"segments":3,"flash":1,"far":0}'),
-  ('streak','cylinder','mat.light_strip',0,'spark','{"y":0.16,"w":0.05,"h":1.6,"segments":4,"far":0}'),
+  ('streak','cylinder','mat.light_strip',0,'spark','{"y":0.16,"w":0.05,"h":1,"segments":4,"far":0}'),
   ('flash','cone','mat.flash',0,'spark','{"y":0.36,"w":0.4,"h":0.36,"segments":6,"pitch":180,"far":0}'))
 INSERT INTO mesh_part(mesh_id,name,shape,material_id,team,attach,params)
  SELECT (SELECT id FROM def WHERE key='mesh.hover_frigate_fusion'), v.name, v.shape, (SELECT id FROM def WHERE key=v.mat), v.team, v.attach, v.params FROM v;
