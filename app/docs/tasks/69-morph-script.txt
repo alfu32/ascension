@@ -1,0 +1,13 @@
+# Task 69: task 51's orbit scene, then the camera leaves the planet; change the last line's
+# step count (12, 15, 18) for the three steps of the morph from orbit to the system plane.
+0 grant-age age.galactic
+0 place-orbit 1 unit.survey_ship @-14,-8
+0 place-orbit 1 unit.corvette @-6,-8
+0 place-orbit 1 unit.space_frigate @3,-8
+0 place-orbit 1 unit.space_cruiser @14,-8
+0 place-orbit 1 unit.battleship @-10,8
+0 place-orbit 1 unit.carrier @6,8
+0 place-orbit 1 unit.transport_ship @18,8
+1 speed 400
+390 cam wheel -15 640,400
+400 speed 1

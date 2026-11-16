@@ -2156,6 +2156,7 @@ mod tests {
             y: -500.0,
             facing_deg: 0.0,
             hp_frac: 1.0,
+            model: None,
         };
         let space = SpaceSnapshot {
             ships: vec![ship],

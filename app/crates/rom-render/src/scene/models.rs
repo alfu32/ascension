@@ -107,6 +107,15 @@ fn upload_poses(
     Some(texture)
 }
 
+/// How a model whose longest extent across or deep is `extent` model units, `scale` tiles a
+/// model unit in the planet view, is drawn `length` frame units long `distance` frame units
+/// from the eye: frame units per model unit, and the distance in tiles at which the planet view
+/// would show it as large (which picks its near or far mesh the way the planet view does).
+fn fit_model(extent: f32, scale: f32, length: f32, distance: f32) -> (f32, f32) {
+    let k = length / extent.max(1e-6);
+    (k, distance * scale / k.max(1e-12))
+}
+
 /// Binds the pose texture to its unit for the draws that follow, or unbinds it.
 fn bind_poses(texture: Option<u32>) {
     // SAFETY: the render thread has an active GL context; this only changes the texture bound to
@@ -184,6 +193,9 @@ struct ModelMeshes {
     reach: f32,
     /// Height of the model's top, in model units.
     top: f32,
+    /// Its longest extent across or deep (as [`crate::entities::unit_width`] reckons a
+    /// model's size), in model units.
+    extent: f32,
     /// Size factor of the model.
     scale: f32,
     /// Texel of its keyframes in the pose texture, if it moves.
@@ -243,11 +255,18 @@ impl ModelGpu {
                     .iter()
                     .map(|p| (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt())
                     .fold(0.0_f32, f32::max);
+                let [lo, hi] = baked.bounds();
+                let extent = 2.0
+                    * [0, 2]
+                        .map(|k| lo[k].abs().max(hi[k].abs()))
+                        .iter()
+                        .fold(0.0_f32, |a, b| a.max(*b));
                 Some(ModelMeshes {
                     near: upload_model(thread, &baked.near)?,
                     far: upload_model(thread, &baked.far)?,
                     reach,
-                    top: baked.bounds()[1][1],
+                    top: hi[1],
+                    extent,
                     scale: look.scale.max(0.01),
                     poses: origin.filter(|_| poses.is_some()),
                     periods: Activity::ALL.map(|a| baked.rig.period(a)),
@@ -362,6 +381,108 @@ impl ModelGpu {
         }
     }
 
+    /// The length in tiles model `index` is drawn with in the planet view: its longest extent
+    /// across or deep at its own size.
+    pub(super) fn planet_length(&self, index: u16) -> Option<f32> {
+        let model = self.models.get(usize::from(index))?.as_ref()?;
+        Some(model.extent * model.scale)
+    }
+
+    /// The instance of model `index` at `origin`, its front (+z) along `forward`, `length` long
+    /// (its longest extent across or deep), in the owner colour `team`, at `phase` of its idle
+    /// cycle; and whether it takes its near mesh, chosen as the planet view would for a model
+    /// that looks this large from `eye`. `None` when the model was not uploaded.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn instance_at(
+        &self,
+        index: u16,
+        origin: [f32; 3],
+        forward: [f32; 3],
+        up: [f32; 3],
+        length: f32,
+        team: [f32; 3],
+        phase: f32,
+        eye: [f32; 3],
+    ) -> Option<(Matrix, bool)> {
+        let model = self.models.get(usize::from(index))?.as_ref()?;
+        if model.extent <= 0.0 || length <= 0.0 {
+            return None;
+        }
+        let d = (0..3)
+            .map(|i| (origin[i] - eye[i]).powi(2))
+            .sum::<f32>()
+            .sqrt();
+        let (k, seen_from) = fit_model(model.extent, model.scale, length, d);
+        let x = [
+            up[1] * forward[2] - up[2] * forward[1],
+            up[2] * forward[0] - up[0] * forward[2],
+            up[0] * forward[1] - up[1] * forward[0],
+        ];
+        let near = self.near_only || seen_from < MODEL_NEAR_DISTANCE;
+        let phase = if self.lockstep { 0.0 } else { phase };
+        let transform = Matrix {
+            m0: x[0] * k,
+            m1: x[1] * k,
+            m2: x[2] * k,
+            m3: team[0],
+            m4: up[0] * k,
+            m5: up[1] * k,
+            m6: up[2] * k,
+            m7: team[1],
+            m8: forward[0] * k,
+            m9: forward[1] * k,
+            m10: forward[2] * k,
+            m11: team[2],
+            m12: origin[0],
+            m13: origin[1],
+            m14: origin[2],
+            m15: Activity::Idle.index() as f32 + phase.min(0.999),
+        };
+        Some((transform, near))
+    }
+
+    /// Draws `instances` (model index, near mesh, transform from [`ModelGpu::instance_at`])
+    /// with `material` (the model shader's), batched per model and mesh; `scratch` is reused.
+    pub(super) fn draw_instances(
+        &self,
+        world: &mut impl RaylibDraw3D,
+        shader: &mut Shader,
+        material: &WeakMaterial,
+        instances: &mut [(u16, bool, Matrix)],
+        scratch: &mut Vec<Matrix>,
+    ) {
+        if instances.is_empty() {
+            return;
+        }
+        instances.sort_by_key(|&(index, near, _)| (index, near));
+        let reveal = shader.get_shader_location("reveal");
+        shader.set_shader_value(reveal, REVEAL_ALL);
+        let time = shader.get_shader_location("poseTime");
+        shader.set_shader_value(time, self.time);
+        bind_poses(self.poses.as_ref().map(|t| t.id));
+        for group in instances.chunk_by(|a, b| (a.0, a.1) == (b.0, b.1)) {
+            let (index, near, _) = group[0];
+            let Some(Some(model)) = self.models.get(usize::from(index)) else {
+                continue;
+            };
+            self.set_poses(shader, model);
+            scratch.clear();
+            scratch.extend(group.iter().map(|g| g.2));
+            let mesh = if near { &model.near } else { &model.far };
+            world.draw_mesh_instanced(mesh, material.clone(), scratch);
+        }
+        bind_poses(None);
+    }
+
+    /// Points the model shader at the keyframes and cycle lengths of `model`.
+    fn set_poses(&self, shader: &mut Shader, model: &ModelMeshes) {
+        let origin = shader.get_shader_location("poseOrigin");
+        let periods = shader.get_shader_location("posePeriods");
+        let at = model.poses.map_or([-1, 0], |[x, y]| [x as i32, y as i32]);
+        shader.set_shader_value(origin, at);
+        shader.set_shader_value(periods, model.periods);
+    }
+
     /// Draws this frame's models with `material` (the model shader's).
     pub(super) fn draw(
         &self,
@@ -371,16 +492,9 @@ impl ModelGpu {
     ) {
         let reveal = shader.get_shader_location("reveal");
         shader.set_shader_value(reveal, REVEAL_ALL);
-        let origin = shader.get_shader_location("poseOrigin");
-        let periods = shader.get_shader_location("posePeriods");
         let time = shader.get_shader_location("poseTime");
         shader.set_shader_value(time, self.time);
         bind_poses(self.poses.as_ref().map(|t| t.id));
-        let set_poses = |shader: &mut Shader, model: &ModelMeshes| {
-            let at = model.poses.map_or([-1, 0], |[x, y]| [x as i32, y as i32]);
-            shader.set_shader_value(origin, at);
-            shader.set_shader_value(periods, model.periods);
-        };
         for (index, model) in self.models.iter().enumerate() {
             let Some(model) = model else {
                 continue;
@@ -388,7 +502,7 @@ impl ModelGpu {
             if self.near_lists[index].is_empty() && self.far_lists[index].is_empty() {
                 continue;
             }
-            set_poses(shader, model);
+            self.set_poses(shader, model);
             if !self.near_lists[index].is_empty() {
                 world.draw_mesh_instanced(&model.near, material.clone(), &self.near_lists[index]);
             }
@@ -403,7 +517,7 @@ impl ModelGpu {
                 continue;
             };
             shader.set_shader_value(reveal, model.top * progress);
-            set_poses(shader, model);
+            self.set_poses(shader, model);
             world.draw_mesh_instanced(&model.near, material.clone(), &[placed.transform]);
         }
         shader.set_shader_value(reveal, REVEAL_ALL);
@@ -498,6 +612,27 @@ mod tests {
         assert_eq!(origins[12], Some([0, 4 * POSE_SAMPLES]));
         assert_eq!(size, [POSE_WIDTH, 2 * 4 * POSE_SAMPLES]);
         assert_eq!(pack_poses(&[&still]).1, [0, 0]);
+    }
+
+    #[test]
+    fn a_model_fitted_to_the_system_plane_looks_as_the_planet_view_would_show_it() {
+        // A model 4 model units long at 0.75 tiles a unit: 3 tiles long on the planet.
+        let (extent, scale) = (4.0, 0.75);
+        // Where the planet frame meets the system frame, 2.5 system units a tile: the model is
+        // 7.5 units long, and an eye 100 units away is 40 tiles away.
+        let per_tile = 2.5;
+        let (k, seen) = fit_model(extent, scale, extent * scale * per_tile, 40.0 * per_tile);
+        assert!((k * extent - 7.5).abs() < 1e-4, "{k}");
+        assert!((seen - 40.0).abs() < 1e-3, "{seen}");
+        assert!(seen < MODEL_NEAR_DISTANCE);
+        // On the plane it is drawn far larger than true: seen from 20 000 units, 300 long, it
+        // looks as it would from about 200 tiles, so it takes its far mesh.
+        let (k, seen) = fit_model(extent, scale, 300.0, 20_000.0);
+        assert!((k * extent - 300.0).abs() < 1e-2);
+        assert!(
+            (seen - 200.0).abs() < 1e-1 && seen > MODEL_NEAR_DISTANCE,
+            "{seen}"
+        );
     }
 
     #[test]

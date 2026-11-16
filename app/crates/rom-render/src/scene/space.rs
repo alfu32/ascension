@@ -96,6 +96,12 @@ const SKY_PLANET_DISC: f32 = 3.5;
 const SKY_ROCK_DISC: f32 = 2.5;
 /// Diameter in pixels of another system's point of light seen from inside a system.
 const SKY_STAR_PIXELS: f32 = 3.0;
+/// A ship drawn as its model on the system plane is this many times the hull's length: the
+/// hull is as wide as it is long, a model is slender, and this keeps them as large on screen.
+const MODEL_ON_PLANE: f32 = 1.6;
+/// Light from above the system's plane on ships drawn as their models, out in space (none in
+/// the planet's orbit, where the globe lights them).
+const STAR_FILL: f32 = 0.35;
 
 /// What is in space and which ships are selected, kept for the next draw.
 #[derive(Default)]
@@ -609,6 +615,13 @@ impl Scene {
             false,
             None,
         );
+        // Ships drawn as their models move as they do on the planet, even with no globe drawn.
+        let time = self
+            .anim_time
+            .unwrap_or(self.clock.elapsed().as_secs_f32() % 3_600.0);
+        if let Some(models) = &mut self.models {
+            models.time = time;
+        }
         let Some(space) = &mut self.space else {
             return;
         };
@@ -791,6 +804,8 @@ impl Scene {
                 let right = unit_vector(cross3(forward, [0.0, 1.0, 0.0]));
                 let cam_up = cross3(right, forward);
                 let mut boxes: Vec<[f32; 16]> = Vec::with_capacity(state.snapshot.ships.len() * 8);
+                let mut model_ships: Vec<(u16, bool, Matrix)> = Vec::new();
+                let models = self.models.as_ref();
                 let loaded_id = loaded.map(|b| universe.bodies[b].id);
                 for ship in state
                     .snapshot
@@ -801,11 +816,16 @@ impl Scene {
                     let scale = state.scales.of(ship.kind);
                     let at = ship_frame_pos(&universe, &bodies_placed, outermost, ship);
                     let theta = ship.facing_deg.to_radians();
+                    // A ship whose model was uploaded is drawn as it; any other keeps the hull.
+                    let model = ship
+                        .model
+                        .filter(|m| models.is_some_and(|g| g.has(m.index)));
+                    let on_plane = if model.is_some() { MODEL_ON_PLANE } else { 1.0 };
                     let plane = Hull {
                         origin: [at[0], at[1] + unit * 0.4, at[2]],
                         forward: [theta.cos(), 0.0, theta.sin()],
                         up: [0.0, 1.0, 0.0],
-                        length: system_ship_length(scale, distance),
+                        length: system_ship_length(scale, distance) * on_plane,
                         height: 0.0,
                     };
                     // A ship in orbit of the loaded globe leaves its place above the ground
@@ -818,7 +838,15 @@ impl Scene {
                         .zip(pass.place);
                     let hull = match above {
                         Some(_) if pass.space <= 0.0 => continue,
-                        Some((o, place)) => morph_hull(&o.hull, &place, &plane, pass.space),
+                        Some((o, place)) => {
+                            // The globe draws a model at its own size, a hull at its planet
+                            // scale: the morph starts from what the globe drew.
+                            let length = model
+                                .and_then(|m| models?.planet_length(m.index))
+                                .unwrap_or(o.hull.length);
+                            let drawn = Hull { length, ..o.hull };
+                            morph_hull(&drawn, &place, &plane, pass.space)
+                        }
                         None => plane,
                     };
                     let hull = Hull {
@@ -829,7 +857,23 @@ impl Scene {
                     if !keeps(hull.origin) || hull.length <= 0.0 {
                         continue;
                     }
-                    hull.push(owner_color(ship.owner), &mut boxes);
+                    let instance = model.and_then(|m| {
+                        let (transform, near) = models?.instance_at(
+                            m.index,
+                            hull.origin,
+                            hull.forward,
+                            hull.up,
+                            hull.length,
+                            owner_color(ship.owner),
+                            super::models::phase_of(ship.id),
+                            view.eye,
+                        )?;
+                        Some((m.index, near, transform))
+                    });
+                    match instance {
+                        Some(instance) => model_ships.push(instance),
+                        None => hull.push(owner_color(ship.owner), &mut boxes),
+                    }
                     let selected = state.selected.binary_search(&ship.id).is_ok();
                     let mark = (255.0 * pass.detail * pass.space) as u8;
                     if selected {
@@ -881,6 +925,35 @@ impl Scene {
                         self.entity_material.clone(),
                         &matrices,
                     );
+                }
+                if let (Some(models), false) = (&self.models, model_ships.is_empty()) {
+                    // Lit by the star from its direction; the loaded planet shades what lies
+                    // in its shadow, as its night side does on the globe.
+                    let shade = bodies_placed
+                        .iter()
+                        .find(|b| Some(b.body) == loaded)
+                        .map_or([0.0; 4], |b| [b.pos[0], b.pos[1], b.pos[2], b.radius]);
+                    let shader = &mut self.model_shader;
+                    let at = shader.get_shader_location("starLight");
+                    shader.set_shader_value(at, 1_i32);
+                    let at = shader.get_shader_location("starShade");
+                    shader.set_shader_value(at, shade);
+                    let at = shader.get_shader_location("starFill");
+                    shader.set_shader_value(at, STAR_FILL * pass.space);
+                    let at = shader.get_shader_location("time");
+                    shader.set_shader_value(at, time);
+                    super::materials::bind_noise(self.noise.as_ref().map(|t| t.id));
+                    let mut scratch = Vec::new();
+                    models.draw_instances(
+                        &mut world,
+                        shader,
+                        &self.model_material,
+                        &mut model_ships,
+                        &mut scratch,
+                    );
+                    super::materials::bind_noise(None);
+                    let at = shader.get_shader_location("starLight");
+                    shader.set_shader_value(at, 0_i32);
                 }
                 // The body under the pointer wears a ring.
                 if let Some(SpaceHover::Target(Target::Body(index))) = state.hover

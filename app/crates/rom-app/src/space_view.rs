@@ -151,6 +151,7 @@ pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) ->
             y,
             facing_deg: f32::from(e.facing),
             hp_frac: (e.hp as f32 / et.hp.max(1) as f32).clamp(0.0, 1.0),
+            model: None,
         });
     }
     snapshot.ships.sort_by_key(|s| s.id);
@@ -211,6 +212,22 @@ pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) ->
     snapshot.known = Some(known_systems(world));
     snapshot.colonies = colonies(world);
     snapshot
+}
+
+/// Gives every ship of `snapshot` the composed model of its owner's faction and age from
+/// `models`, the one the planet view draws it with; a ship type without one keeps none.
+pub fn dress_ships(snapshot: &mut SpaceSnapshot, world: &World, models: &crate::looks::ModelBook) {
+    let looks: BTreeMap<u32, (rom_rules::DefId, rom_rules::DefId)> = world
+        .players()
+        .map(|p| (p.id.0, (p.faction, p.age)))
+        .collect();
+    for ship in &mut snapshot.ships {
+        ship.model = looks
+            .get(&u32::from(ship.owner))
+            .and_then(|&(faction, age)| {
+                models.resolve(rom_rules::DefId(u32::from(ship.kind)), faction, age)
+            });
+    }
 }
 
 /// The planets with cities that player one knows of: its own and its allies' everywhere, other
@@ -761,5 +778,58 @@ mod resource_body_tests {
             card,
             format!("Holds {}: {}", claimed.kind_name, claimed.yield_text())
         );
+    }
+}
+
+#[cfg(test)]
+mod model_tests {
+    use super::*;
+    use crate::looks::ModelBook;
+
+    /// Ships in space wear the model the planet view gives them (their owner's faction and
+    /// age), and in the galactic age the five starship classes each have one of their own.
+    #[test]
+    fn ships_in_space_wear_their_planet_models() {
+        let (_content, mut game) = crate::match_setup::universe_game_for_tests();
+        let world = &mut game.world;
+        let home = world.home_body(PLAYER).unwrap();
+        let system = world.body(home).unwrap().system;
+        let star = world.space_of(system).unwrap();
+        let classes = [
+            "unit.survey_ship",
+            "unit.corvette",
+            "unit.space_frigate",
+            "unit.space_cruiser",
+            "unit.battleship",
+        ];
+        for (i, key) in classes.iter().enumerate() {
+            let kind = world.rules().id_of(key).unwrap();
+            let mut at = world.body_position(star).unwrap();
+            at.x += 20_000 + 3_000 * i as i32;
+            world.spawn(kind, PLAYER, at).unwrap();
+        }
+        let models = ModelBook::new(world.rules());
+        let mut space = space_snapshot(world, system, &world.visible_entities(PLAYER));
+        dress_ships(&mut space, world, &models);
+        let player = world.players().find(|p| p.id == PLAYER).unwrap();
+        assert!(space.ships.len() >= classes.len());
+        for ship in &space.ships {
+            let kind = rom_rules::DefId(u32::from(ship.kind));
+            assert_eq!(ship.model, models.resolve(kind, player.faction, player.age));
+        }
+        let galactic = world.rules().id_of("age.galactic").unwrap();
+        let mut indices: Vec<u16> = classes
+            .iter()
+            .map(|key| {
+                let kind = world.rules().id_of(key).unwrap();
+                models
+                    .resolve(kind, player.faction, galactic)
+                    .unwrap_or_else(|| panic!("{key} has a model"))
+                    .index
+            })
+            .collect();
+        indices.sort_unstable();
+        indices.dedup();
+        assert_eq!(indices.len(), classes.len());
     }
 }

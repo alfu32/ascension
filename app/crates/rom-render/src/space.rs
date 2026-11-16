@@ -47,6 +47,9 @@ pub struct ShipView {
     pub facing_deg: f32,
     /// Health 0..=1.
     pub hp_frac: f32,
+    /// The composed model it is drawn with (its owner's faction and age); `None` keeps the
+    /// plain hull.
+    pub model: Option<crate::entities::ModelRef>,
 }
 
 /// A claimed resource body.
@@ -905,6 +908,7 @@ mod tests {
             y,
             facing_deg: 0.0,
             hp_frac: 1.0,
+            model: None,
         }
     }
 
