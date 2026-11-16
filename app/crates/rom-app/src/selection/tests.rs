@@ -337,6 +337,25 @@ fn right_click_enemy_attacks_and_ground_moves() {
 }
 
 #[test]
+fn right_click_ground_with_a_producer_sets_its_rally_through_an_order() {
+    let mut fx = fixture();
+    let t = fx.producer_with(ProductionMode::Train);
+    let producer = fx.spawn(t, 1, 10, 10);
+    fx.click(producer, false);
+    fx.rclick(None, (20.5, 12.5), false);
+    fx.step(2);
+    assert!(fx.world.rally(producer).is_some());
+    let flags: Vec<_> = fx
+        .hud_snapshot()
+        .markers
+        .into_iter()
+        .filter(|m| m.kind == MarkerKind::Rally)
+        .collect();
+    assert_eq!(flags.len(), 1);
+    assert!(flags[0].from.is_some());
+}
+
+#[test]
 fn right_click_gather_site_harvests() {
     let mut fx = fixture();
     let worker_t = fx.find(|et| et.movement.is_some() && !et.harvester.is_empty());

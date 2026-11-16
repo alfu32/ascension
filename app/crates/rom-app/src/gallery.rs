@@ -26,6 +26,12 @@ const GAME_PITCH: f32 = 60.0;
 const HALF_FOV: f32 = 22.5;
 /// Space between models in the gallery, in tiles.
 const GAP: f32 = 3.0;
+/// Label size on screen, in pixels: one character's width and one line's height. Labels do not
+/// shrink with the view, so the layout spaces models by how many tiles they cover on screen.
+const LABEL_CHAR_PX: f32 = 8.0;
+const LABEL_LINE_PX: f32 = 15.0;
+/// Width of the canvas the gallery is framed in, in pixels, as the layout assumes it.
+const LABEL_CANVAS_PX: f32 = 1300.0;
 /// Most models in one gallery row.
 const ROW_LENGTH: usize = 4;
 /// Facing of units in a gallery, degrees clockwise from east (90 faces the camera).
@@ -113,6 +119,32 @@ pub fn lay_out(
     team: u8,
     pose: rom_render::Activity,
 ) -> Layout {
+    // Labels have a fixed size on screen: lay out, see how many tiles a pixel covers in the
+    // framed result, and lay out again until the labels fit between their neighbours.
+    let mut tile_px = 10.0_f32;
+    let mut layout = place(book, rules, chosen, team, pose, tile_px);
+    for _ in 0..4 {
+        let next = LABEL_CANVAS_PX / layout.terrain.width.max(1) as f32;
+        if (next - tile_px).abs() < 0.05 * tile_px {
+            break;
+        }
+        tile_px = (tile_px + next) / 2.0;
+        layout = place(book, rules, chosen, team, pose, tile_px);
+    }
+    layout
+}
+
+/// One layout pass for labels drawn over `tile_px` pixels per tile.
+fn place(
+    book: &ModelBook,
+    rules: &Rules,
+    chosen: &[usize],
+    team: u8,
+    pose: rom_render::Activity,
+    tile_px: f32,
+) -> Layout {
+    let (label_char, label_line) = (LABEL_CHAR_PX / tile_px, LABEL_LINE_PX / tile_px);
+    let label_pad = 3.0 * label_char;
     let class = |i: usize| rules.entity_type(book.entries[i].entity).map(|t| t.class);
     let mut rows: Vec<Vec<usize>> = Vec::new();
     for &i in chosen {
@@ -131,14 +163,29 @@ pub fn lay_out(
             .map(|&i| footprint(rules, &book.entries[i]).1)
             .fold(0.0_f32, f32::max);
         let mut x = 0.0_f32;
+        // Right edge of the last label on each staggered line under the row.
+        let mut lines: Vec<f32> = Vec::new();
         for &i in row {
             let (w, _) = footprint(rules, &book.entries[i]);
-            placed.push((i, x + w / 2.0, z + depth / 2.0));
-            x += w + GAP;
+            let label = book.entries[i].id.chars().count() as f32 * label_char;
+            // A slot is as wide as the model or its label, whichever is wider.
+            let slot = w.max(label);
+            let centre = x + slot / 2.0;
+            let half = label / 2.0;
+            let line = lines
+                .iter()
+                .position(|&edge| edge + label_pad <= centre - half)
+                .unwrap_or(lines.len());
+            if line == lines.len() {
+                lines.push(0.0);
+            }
+            lines[line] = centre + half;
+            placed.push((i, centre, z + depth / 2.0, line));
+            x += slot + GAP;
             tallest = tallest.max(book.entries[i].size()[1]);
         }
         width = width.max(x - GAP);
-        z += depth + GAP + 1.0;
+        z += depth + GAP + 1.0 + lines.len().saturating_sub(1) as f32 * label_line;
     }
     let depth = (z - GAP - 1.0).max(1.0);
     let margin = 24.0_f32;
@@ -146,7 +193,7 @@ pub fn lay_out(
     let offset = [(side as f32 - width) / 2.0, (side as f32 - depth) / 2.0];
     let mut views = Vec::new();
     let mut labels = Vec::new();
-    for (n, &(i, x, z)) in placed.iter().enumerate() {
+    for (n, &(i, x, z, line)) in placed.iter().enumerate() {
         let entry = &book.entries[i];
         let et = rules.entity_type(entry.entity);
         let building = et.is_some_and(|t| t.class == EntityClass::Building);
@@ -186,7 +233,7 @@ pub fn lay_out(
             },
         });
         labels.push(WorldLabel {
-            at: [x, 0.0, z + size[2] / 2.0 + 0.9],
+            at: [x, 0.0, z + size[2] / 2.0 + 0.9 + line as f32 * label_line],
             text: entry.id.clone(),
             colour: LABEL,
         });

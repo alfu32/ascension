@@ -42,6 +42,9 @@ pub struct OverlayGeometry {
 const RING_SEGMENTS: usize = 28;
 const LIFT: f32 = 0.07;
 const MARKER_TICKS: f32 = 10.0;
+/// Narrowest and widest health bar of a unit, in tiles: the bars of enlarged ships stay readable.
+const MIN_BAR_WIDTH: f32 = 0.9;
+const MAX_BAR_WIDTH: f32 = 1.6;
 const GREEN: [u8; 4] = [70, 230, 90, 255];
 const RED: [u8; 4] = [240, 60, 50, 255];
 const CYAN: [u8; 4] = [63, 208, 255, 255];
@@ -386,25 +389,12 @@ pub fn build_overlays_on(
             entity_frame(v, ground).at([0.0, height, 0.0])
         };
         let (from, to) = (centre(view), centre(target));
-        let direction = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
-        let mut side = [
-            direction[1] * right[2] - direction[2] * right[1],
-            direction[2] * right[0] - direction[0] * right[2],
-            direction[0] * right[1] - direction[1] * right[0],
-        ];
-        let length = side.iter().map(|v| v * v).sum::<f32>().sqrt().max(0.001);
-        side = side.map(|v| v / length * 0.14);
-        let offset = |p: [f32; 3], sign: f32| std::array::from_fn(|i| p[i] + side[i] * sign);
-        out.quad(
-            [
-                offset(from, -1.0),
-                offset(from, 1.0),
-                offset(to, 1.0),
-                offset(to, -1.0),
-            ],
-            [255, 150, 60, 220],
-        );
-        out.line(from, to, [255, 235, 190, 255]);
+        // Thin lines only: their width never follows the ship view scale. A bright streak
+        // marks the head of the shot.
+        let along =
+            |t: f32| -> [f32; 3] { std::array::from_fn(|i| from[i] + (to[i] - from[i]) * t) };
+        out.line(from, to, [255, 150, 60, 200]);
+        out.line(along(0.7), to, [255, 240, 200, 255]);
         let hit = Origin {
             ground,
             face: target.face,
@@ -448,7 +438,7 @@ pub fn build_overlays_on(
             for extra in [0.0, 0.05, 0.1] {
                 out.ring(origin, radius + extra, colour);
             }
-            (radius * 2.0).max(0.9)
+            (radius * 2.0).clamp(MIN_BAR_WIDTH, MAX_BAR_WIDTH)
         };
         let fraction = (view.hp_frac).clamp(0.0, 1.0);
         let above_ground = {
@@ -518,6 +508,16 @@ pub fn build_overlays_on(
                 let step = |dx: f32, h: f32| -> [f32; 3] {
                     std::array::from_fn(|i| base[i] + frame.up[i] * h + frame.ex[i] * dx)
                 };
+                if let Some((face, fx, fy)) = marker.from {
+                    let home = Origin {
+                        ground,
+                        face,
+                        x: fx as f32 / 1000.0,
+                        y: fy as f32 / 1000.0,
+                        altitude: 0.0,
+                    };
+                    out.line(home.at(0.0, 0.0, LIFT), base, CYAN);
+                }
                 out.line(base, lifted(1.6), CYAN);
                 out.line(step(0.02, 0.0), step(0.02, 1.6), CYAN);
                 out.tri([lifted(1.6), step(0.9, 1.3), lifted(1.0)], CYAN);
@@ -909,6 +909,7 @@ mod tests {
             y: 5000,
             kind,
             age_ticks,
+            from: None,
         };
         let radius_of = |age| {
             let hud = HudSnapshot {
