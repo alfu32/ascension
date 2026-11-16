@@ -20,6 +20,9 @@ const GUARD_SLACK: u64 = 3000;
 /// How far around its ward a guard looks for enemies, in milli-tiles.
 const GUARD_WATCH: u64 = 8000;
 
+/// One formation: player, order kind, formation and tick of issue.
+type FormationKey = (PlayerId, String, DefId, u64);
+
 /// Tile offsets within `EXPLORE_TILES`, nearest first (ties in a fixed order).
 fn explore_offsets() -> &'static [(i32, i32)] {
     static OFFSETS: OnceLock<Vec<(i32, i32)>> = OnceLock::new();
@@ -95,18 +98,15 @@ impl World {
     pub(crate) fn validate_tactics(&self, command: &Command) -> Result<(), SimError> {
         let executor = self.entity(command.executor).expect("checked executor");
         match command.kind.as_str() {
-            "stance" => {
-                if !command.subject.is_some_and(|s| self.settable_stance(s)) {
-                    return Err(SimError::InvalidStance);
-                }
+            "stance" if !command.subject.is_some_and(|s| self.settable_stance(s)) => {
+                Err(SimError::InvalidStance)
             }
-            "raze" => {
-                let et = &self.rules.entity_types[&executor.type_id];
-                if et.class != EntityClass::Building
-                    || (executor.build_progress.is_none() && self.is_capturable(executor.type_id))
-                {
-                    return Err(SimError::CannotRaze);
-                }
+            "raze"
+                if self.rules.entity_types[&executor.type_id].class != EntityClass::Building
+                    || (executor.build_progress.is_none()
+                        && self.is_capturable(executor.type_id)) =>
+            {
+                Err(SimError::CannotRaze)
             }
             "guard" => {
                 let ward = command
@@ -116,18 +116,17 @@ impl World {
                 if ward.id == executor.id || self.enemies(command.player, ward.owner) {
                     return Err(SimError::InvalidGuardTarget);
                 }
+                Ok(())
             }
-            "move" | "attack_move" | "patrol" => {
+            "move" | "attack_move" | "patrol"
                 if command
                     .subject
-                    .is_some_and(|f| !self.rules.formations.contains_key(&f))
-                {
-                    return Err(SimError::UnknownFormation);
-                }
+                    .is_some_and(|f| !self.rules.formations.contains_key(&f)) =>
+            {
+                Err(SimError::UnknownFormation)
             }
-            _ => {}
+            _ => Ok(()),
         }
-        Ok(())
     }
 
     /// Applies a `stance` order as it leaves `pending`; the queue stays.
@@ -188,8 +187,7 @@ impl World {
     /// slowest member the pace of that member: orders of one player, kind, formation and
     /// tick of issue make one formation.
     pub(crate) fn pace_formations(&mut self, applied: &[(EntityId, crate::OrderId)]) {
-        let mut groups: BTreeMap<(PlayerId, String, DefId, u64), Vec<(EntityId, crate::OrderId)>> =
-            BTreeMap::new();
+        let mut groups: BTreeMap<FormationKey, Vec<(EntityId, crate::OrderId)>> = BTreeMap::new();
         for (executor, id) in applied {
             let Some(order) = self
                 .entity(*executor)

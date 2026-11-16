@@ -384,7 +384,8 @@ Two more simulation changes came out of the duels:
 
 ## Fair starts (task 65)
 
-`rom-mapgen` places the starts of players who share a planet so that each
+`rom_mapgen::generate_fair` (flat maps; `rom ai-match` and `rom duel` use it) and
+`generate_sphere` place the starts of players who share a planet so that each
 holds an even share of the land: of 48 sets of starts (the farthest-point
 construction on even attempts, a random candidate at least three quarters as
 far on odd ones), the set with every start on one landmass, the most even
@@ -394,8 +395,14 @@ the same is weighed with the land tiles nearest each start. A per-player
 feature (forest, mountain clumps) is rolled once for the first player and every
 other start gets the same clumps of the same sizes in the same distance band.
 One player per planet draws exactly as before, so universes whose home
-planets each hold one race keep their hashes; the pinned four-player flat map
-changed (`flat_generation_is_unchanged`). `rom duel` still checks each map and
+planets each hold one race keep their hashes. Plain `generate` keeps the old
+flat maps: the application's default map and the screenshot scripts written for
+it (task 30, task 32) depend on them, and `rom-app` was outside this task;
+switching the application to `generate_fair` means re-authoring those scripts.
+`GeneratedMap::start_land_shares` measures the shares (test
+`fair_maps_give_two_players_even_land_and_the_same_clumps`: of 30 two-player
+seeds at least 27 fair maps hold shares within 85 % of each other, more than
+plain `generate`). `rom duel` still checks each map and
 redraws an unfair one, which now happens rarely (`maps=` in the output).
 
 ## Duels

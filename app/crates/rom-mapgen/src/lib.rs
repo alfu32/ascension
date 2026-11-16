@@ -31,6 +31,8 @@ const FAIR_RADIUS: i64 = 12;
 const FAIR_ATTEMPTS: usize = 48;
 /// Land shares this close (the smaller as a percentage of the larger) count as even.
 const EVEN_LAND_PCT: i64 = 95;
+/// How a set of starts ranks: all on one landmass, evenness of the land shares, spread.
+type StartsKey = (bool, i64, i64);
 
 /// What to generate.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -386,6 +388,8 @@ struct Builder<'a> {
     start_regions: Vec<u16>,
     protected: Vec<bool>,
     occupied: Vec<bool>,
+    /// Even starts and mirrored per-player features (`generate_fair`).
+    fair: bool,
 }
 
 impl Builder<'_> {
@@ -528,7 +532,7 @@ impl Builder<'_> {
                 0
             }
         };
-        let mut best: Option<((bool, i64, i64), Vec<(i64, i64)>)> = None;
+        let mut best: Option<(StartsKey, Vec<(i64, i64)>)> = None;
         for attempt in 0..FAIR_ATTEMPTS {
             let first = candidates[self.rng.range(0, candidates.len() as u32) as usize];
             let mut chosen = vec![first];
@@ -618,7 +622,7 @@ impl Builder<'_> {
             }
             let min_sep = i64::from(home.w.min(home.h) / 4);
             let mut best: Option<Vec<(i64, i64)>> = None;
-            if players.len() > 1 {
+            if self.fair && players.len() > 1 {
                 best = self.balanced_starts(&home, &candidates, players.len(), min_sep);
             }
             for _attempt in 0..if best.is_some() { 0 } else { 24 } {
@@ -798,9 +802,10 @@ impl Builder<'_> {
             self.map.base.space
         };
         if row.pattern == FeaturePattern::PerPlayer {
-            // Every player gets what the first one got: the same clumps of the same sizes,
-            // each at the same distance band from its start (rolled once, so a map of one
-            // player is drawn exactly as before).
+            // On a fair map every player gets what the first one got: the same clumps of
+            // the same sizes, each at the same distance band from its start (rolled once,
+            // so a map of one player is drawn exactly as before). Otherwise each rolls its
+            // own.
             let mut sizes: Option<Vec<u32>> = None;
             for p in 0..self.start_tiles.len() {
                 let region = (row.region_kind == RegionKind::Planet).then(|| self.start_regions[p]);
@@ -815,7 +820,7 @@ impl Builder<'_> {
                                 }
                             }
                         }
-                        sizes = Some(placed);
+                        sizes = self.fair.then_some(placed);
                     }
                     Some(placed) => {
                         for size in placed.clone() {
@@ -852,6 +857,22 @@ impl Builder<'_> {
 
 /// Generates a map from the rules, a style and a seed.
 pub fn generate(rules: &Rules, request: &MapRequest) -> Result<GeneratedMap, MapGenError> {
+    generate_with(rules, request, false)
+}
+
+/// Generates a map whose players are fairly placed: players sharing a planet get starts
+/// with even shares of one landmass, and every start the same per-player features (see
+/// `docs/computer-player.md`, "Fair starts"). A map of one player per planet is the same as
+/// `generate`'s.
+pub fn generate_fair(rules: &Rules, request: &MapRequest) -> Result<GeneratedMap, MapGenError> {
+    generate_with(rules, request, true)
+}
+
+fn generate_with(
+    rules: &Rules,
+    request: &MapRequest,
+    fair: bool,
+) -> Result<GeneratedMap, MapGenError> {
     let style = rules
         .map_styles
         .get(&request.style)
@@ -924,6 +945,7 @@ pub fn generate(rules: &Rules, request: &MapRequest) -> Result<GeneratedMap, Map
         start_regions: Vec::new(),
         protected: vec![false; tiles],
         occupied: vec![false; tiles],
+        fair,
     };
     b.place_starts(&races, &player_races)?;
     let mut rows: Vec<&MapStyleFeature> = rules
@@ -993,6 +1015,69 @@ impl GeneratedMap {
             }
         }
         problems
+    }
+
+    /// Each start's share of the ground it can walk to: the land tiles (ground layer, of
+    /// any terrain) four-neighbour connected to its start tile and nearer to it than to any
+    /// other start on that landmass.
+    pub fn start_land_shares(&self, rules: &Rules) -> Vec<i64> {
+        let (w, h) = (i64::from(self.grid.width), i64::from(self.grid.height));
+        let ground = |i: usize| {
+            rules
+                .terrains
+                .get(&self.grid.terrain[i])
+                .is_some_and(|t| t.layer == Layer::Ground)
+        };
+        let mut labels = vec![0_u32; self.grid.terrain.len()];
+        let mut next = 0;
+        for start in 0..labels.len() {
+            if labels[start] != 0 || !ground(start) {
+                continue;
+            }
+            next += 1;
+            labels[start] = next;
+            let mut open = vec![start];
+            while let Some(i) = open.pop() {
+                let (x, y) = (i as i64 % w, i as i64 / w);
+                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    let (nx, ny) = (x + dx, y + dy);
+                    if nx < 0 || ny < 0 || nx >= w || ny >= h {
+                        continue;
+                    }
+                    let j = (ny * w + nx) as usize;
+                    if labels[j] == 0 && ground(j) {
+                        labels[j] = next;
+                        open.push(j);
+                    }
+                }
+            }
+        }
+        let tiles: Vec<(i64, i64)> = self.starts.iter().map(|s| tile_of(*s)).collect();
+        let label = |t: (i64, i64)| labels[(t.1 * w + t.0) as usize];
+        let mut shares = vec![0_i64; tiles.len()];
+        for (i, &l) in labels.iter().enumerate() {
+            if l == 0 {
+                continue;
+            }
+            let tile = (i as i64 % w, i as i64 / w);
+            let mut near: Option<(i64, usize)> = None;
+            let mut tie = false;
+            for (k, s) in tiles.iter().enumerate().filter(|(_, s)| label(**s) == l) {
+                let d = dist2(*s, tile);
+                match near {
+                    Some((best, _)) if d > best => {}
+                    Some((best, _)) if d == best => tie = true,
+                    _ => {
+                        near = Some((d, k));
+                        tie = false;
+                    }
+                }
+            }
+            if let Some((_, k)) = near.filter(|_| !tie) {
+                shares[k] += 1;
+            }
+        }
+        shares
     }
 
     /// FNV-1a 64 over terrain ids, heights, regions, starts and nodes.
