@@ -33,7 +33,16 @@ OVERVIEW4 = [
     ("match_medieval_town", "In a match in the medieval age: the city and citizens"),
     ("gallery_units_all_close", "Every unit so far, close: <code>--gallery units</code>"),
 ]
-OVERVIEW = OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
+OVERVIEW5 = [
+    ("gallery_gunpowder_close", "Early-modern buildings, close: <code>--gallery gunpowder</code>"),
+    ("gallery_enlightenment_close", "Enlightenment age, close: <code>--gallery enlightenment</code>"),
+    ("ages_bld.city", "One building through four ages: the city, ancient to early modern"),
+    ("match_enlightenment", "In a match in the enlightenment age: the city and its farm"),
+    ("unit.musketeer_gunpowder_attack_before", "Firing a long gun, before: one hand, from the hip"),
+    ("unit.musketeer_gunpowder_attack", "Firing a long gun, after: from the shoulder, both hands"),
+    ("gallery_units_close", "Every unit so far, close: <code>--gallery units</code>"),
+]
+OVERVIEW = OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
     ("gallery_ancient", "Ancient age, game camera: <code>--gallery ancient</code>"),
     ("gallery_classical", "Classical age, game camera: <code>--gallery classical</code>"),
     ("gallery_classical_close_team2", "Classical age, close, in player 2's blue to show where team colour sits"),
@@ -49,13 +58,25 @@ def fmt_params(params):
         out.append(f"{k}={v}")
     return " ".join(out)
 
+def round_of(m):
+    """Review round: 1 the samples, 2 early buildings, 3 early units, 4 medieval models and
+    gunpowder units, 5 early-modern buildings and enlightenment models."""
+    if m["id"] in ROUND1:
+        return 1
+    unit = m["entity"].startswith("unit.")
+    if m["age"] == "age.enlightenment" or (m["age"] == "age.gunpowder" and not unit):
+        return 5
+    if m["age"] in ("age.medieval", "age.gunpowder"):
+        return 4
+    return 3 if unit else 2
+
 models = []
 for m in manifest["models"]:
     size = [round(m["bounds"]["max"][i] - m["bounds"]["min"][i], 2) for i in range(3)]
     models.append({
         "id": m["id"],
         "name": name_of(m["entity"]),
-        "round": 1 if m["id"] in ROUND1 else 4 if m["age"] in ("age.medieval", "age.gunpowder") else (3 if m["entity"].startswith("unit.") else 2),
+        "round": round_of(m),
         "poses": [p for p in ("parts", "ages", "move", "attack", "work")
                   if (here / "img" / (m["id"].replace("@", "_") + "-" + p + ".jpg")).exists()],
         "age": m["age"].removeprefix("age.") if m["age"] else "any",
@@ -77,7 +98,7 @@ for m in manifest["models"]:
         ],
     })
 
-AGES = ["ancient", "classical", "medieval", "gunpowder", "any"]
+AGES = ["ancient", "classical", "medieval", "gunpowder", "enlightenment", "any"]
 models.sort(key=lambda m: (-m["round"], not m["id"].startswith("unit."), AGES.index(m["age"]) if m["age"] in AGES else 9, m["id"]))
 
 template = (here / "page.html").read_text()
