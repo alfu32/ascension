@@ -162,7 +162,7 @@ fn choice(view: &View<'_>, memory: &Memory, second_best: bool) -> Option<DefId> 
         if rules
             .entity_types
             .get(type_id)
-            .is_some_and(|t| !t.weapons.is_empty() && (t.class == EntityClass::Unit || std::env::var("ROM_X_SIEGE").is_ok()))
+            .is_some_and(|t| !t.weapons.is_empty() && t.class == EntityClass::Unit)
         {
             *seen.entry(*type_id).or_default() += 1;
         }

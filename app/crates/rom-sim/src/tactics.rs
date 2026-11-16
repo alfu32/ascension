@@ -164,9 +164,9 @@ impl World {
                 .rules
                 .constant("economy.cancel_refund_pct")
                 .expect("refund");
-            let price = self
-                .rules
-                .cost_of_ramped(type_id, &self.players[&owner].active_sources(), 0);
+            let price =
+                self.rules
+                    .cost_of_ramped(type_id, &self.players[&owner].active_sources(), 0);
             let player = self.players.get_mut(&owner).expect("owner");
             for (resource, amount) in price {
                 let back = (i128::from(amount) * i128::from(pct) / 100 * i128::from(left)
@@ -199,12 +199,21 @@ impl World {
             };
             let Some(formation) = order.subject.filter(|f| {
                 matches!(order.kind.as_str(), "move" | "attack_move" | "patrol")
-                    && self.rules.formations.get(f).is_some_and(|f| f.keeps_slowest)
+                    && self
+                        .rules
+                        .formations
+                        .get(f)
+                        .is_some_and(|f| f.keeps_slowest)
             }) else {
                 continue;
             };
             groups
-                .entry((order.player, order.kind.clone(), formation, order.issued_tick))
+                .entry((
+                    order.player,
+                    order.kind.clone(),
+                    formation,
+                    order.issued_tick,
+                ))
                 .or_default()
                 .push((*executor, *id));
         }
@@ -331,7 +340,15 @@ impl World {
                     && !(t.owner == PlayerId(0) && self.players[&t.owner].team == 0)
                     && self.sees_entity(owner, t)
                     && self.can_target(guard, target))
-                .then(|| (geo.rank_distance(ward, t.pos), t.pos.face, t.pos.y, t.pos.x, target))
+                .then(|| {
+                    (
+                        geo.rank_distance(ward, t.pos),
+                        t.pos.face,
+                        t.pos.y,
+                        t.pos.x,
+                        target,
+                    )
+                })
             })
             .min()
             .map(|(.., target)| target)

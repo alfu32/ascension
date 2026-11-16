@@ -695,11 +695,19 @@ fn rally_producers(plan: &mut Plan<'_>, rally: Pos) {
                     .producer
                     .as_ref()
                     .is_some_and(|p| p.has_rally)
-                && rules.production.get(&e.type_id).into_iter().flatten().any(|row| {
-                    row.mode == ProductionMode::Train && is_military(rules, row.product_def_id)
-                })
+                && rules
+                    .production
+                    .get(&e.type_id)
+                    .into_iter()
+                    .flatten()
+                    .any(|row| {
+                        row.mode == ProductionMode::Train && is_military(rules, row.product_def_id)
+                    })
                 && view.world.rally(e.id) != Some(rom_sim::Rally::Point(rally))
-                && !view.world.pending_orders().any(|o| o.executor == e.id && o.kind == "set_rally")
+                && !view
+                    .world
+                    .pending_orders()
+                    .any(|o| o.executor == e.id && o.kind == "set_rally")
         })
         .map(|e| e.id)
         .collect();
@@ -773,12 +781,12 @@ fn set_stance(plan: &mut Plan<'_>, units: &[&Entity], behavior: &str) {
 /// Puts the home guard beside the capital: the simulation's `guard` then fights off what
 /// comes near it without further orders.
 fn guard_capital(plan: &mut Plan<'_>, units: &[&Entity]) -> bool {
-    let Some(capital) = plan
-        .view
-        .world
-        .capital(plan.view.me)
-        .filter(|c| plan.view.cities.iter().any(|city| city.id == *c && city.complete))
-    else {
+    let Some(capital) = plan.view.world.capital(plan.view.me).filter(|c| {
+        plan.view
+            .cities
+            .iter()
+            .any(|city| city.id == *c && city.complete)
+    }) else {
         return false;
     };
     for e in units {
@@ -828,15 +836,15 @@ fn lead(
         }
         Phase::Gather => {
             if role == Role::Defend {
-                if std::env::var("ROM_X_NOGUARD").is_err() { set_stance(plan, units, "defensive"); }
-                if (std::env::var("ROM_X_NOGUARD").is_ok() || !guard_capital(plan, units))
+                set_stance(plan, units, "defensive");
+                if !guard_capital(plan, units)
                     && let Some(rally) = rally
                 {
                     regroup(plan, units, rally);
                 }
                 return;
             }
-            if role == Role::Raid && std::env::var("ROM_X_NOGUARD").is_err() {
+            if role == Role::Raid {
                 set_stance(plan, units, "raid");
             }
             if let Some(rally) = rally {
@@ -1051,9 +1059,6 @@ fn lead(
 /// their reach (unarmed ones when none is armed). Every order comes out of the budget, so a
 /// mind with few orders a minute leaves its units to pick their own targets.
 fn focus(plan: &mut Plan<'_>, memory: &Memory, units: &[&Entity]) {
-    if std::env::var("ROM_AI_NOFOCUS").is_ok() {
-        return;
-    }
     let view = &plan.view;
     let rules = view.rules;
     let mut orders: Vec<(EntityId, EntityId)> = Vec::new();

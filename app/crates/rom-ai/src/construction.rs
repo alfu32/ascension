@@ -97,7 +97,7 @@ pub(crate) fn wishes(
             // Cities are where the land, the farms and the food are: the main way to grow.
             if have < view.city_limit() && weights.expand > 0 {
                 wishes.push(Wish {
-                    score: if std::env::var("ROM_X_CITY").is_ok() { 300 } else { 450 } + weights.expand * 4,
+                    score: 450 + weights.expand * 4,
                     act: Act::Construct(building),
                     reserve: weights.expand >= 50,
                     opening: false,

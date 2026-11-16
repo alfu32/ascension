@@ -533,13 +533,8 @@ impl Builder<'_> {
             let first = candidates[self.rng.range(0, candidates.len() as u32) as usize];
             let mut chosen = vec![first];
             while chosen.len() < players {
-                let distance = |c: (i64, i64)| {
-                    chosen
-                        .iter()
-                        .map(|&s| dist2(s, c))
-                        .min()
-                        .unwrap_or(0)
-                };
+                let distance =
+                    |c: (i64, i64)| chosen.iter().map(|&s| dist2(s, c)).min().unwrap_or(0);
                 // Even attempts take the farthest candidate (the first of equals); odd ones
                 // a random candidate on the first start's landmass at least three quarters
                 // as far away.
@@ -552,8 +547,7 @@ impl Builder<'_> {
                         .copied()
                         .filter(|&c| distance(c) * 16 >= far * 9 && label(c) == label(first))
                         .collect();
-                    (!pool.is_empty())
-                        .then(|| pool[self.rng.range(0, pool.len() as u32) as usize])
+                    (!pool.is_empty()).then(|| pool[self.rng.range(0, pool.len() as u32) as usize])
                 };
                 match pick {
                     Some(pick) => chosen.push(pick),

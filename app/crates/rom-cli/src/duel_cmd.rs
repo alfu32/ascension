@@ -306,34 +306,6 @@ fn city_line(world: &World, c: &rom_sim::Entity) -> String {
             let entry = armed.entry(e.owner.0).or_default();
             entry.0 += 1;
             entry.1 += e.hp;
-            if std::env::var("ROM_TRACE_UNITS").ok().and_then(|v| v.parse::<u64>().ok()).is_some_and(|from| world.tick() >= from) {
-                eprintln!(
-                    "  unit p{} {} hp={} at={},{} on={} in={:?} site={:?} orders={:?}",
-                    e.owner.0,
-                    rules.key(e.type_id),
-                    e.hp,
-                    e.pos.x,
-                    e.pos.y,
-                    world.terrain_at(e.pos).map_or("-", |t| rules.key(t)),
-                    e.container_id,
-                    e.work_site,
-                    e.orders()
-                        .iter()
-                        .map(|o| format!(
-                            "{}:{:?}:{:?}:{:?}",
-                            o.kind,
-                            o.status,
-                            o.target_entity.and_then(|t| world.entity(t)).map(|t| (
-                                rules.key(t.type_id).to_string(),
-                                t.hp,
-                                t.pos.x,
-                                t.pos.y
-                            )),
-                            o.target_pos.map(|p| (p.x, p.y))
-                        ))
-                        .collect::<Vec<_>>()
-                );
-            }
         }
     }
     let armed: Vec<String> = armed

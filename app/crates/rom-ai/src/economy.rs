@@ -326,8 +326,7 @@ pub(crate) fn wishes(view: &View<'_>, eco: &Economy, late: bool, wishes: &mut Ve
             // The first site of a resource is always wished for: without it the resource
             // has no income at all, whatever the worker plan says.
             let nothing = g.slots == 0 && g.pending == 0;
-            if (nothing || (!late && g.slots + coming < g.desired)) && g.pending < pending_limit
-            {
+            if (nothing || (!late && g.slots + coming < g.desired)) && g.pending < pending_limit {
                 wishes.push(Wish {
                     score: if nothing {
                         880

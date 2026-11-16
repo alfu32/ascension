@@ -82,8 +82,9 @@ impl Brain {
             .get(difficulty_key)
             .ok_or_else(|| AiError::UnknownDifficulty(difficulty_key.into()))?
             .clone();
-        // A careless mind keeps fewer hands at work and fewer soldiers under arms than its
-        // profile asks for: half its `mistake_pct` fewer workers, `mistake_pct` fewer soldiers.
+        // A careless mind keeps fewer hands at work and more soldiers under arms than its
+        // profile asks for (half its `mistake_pct` fewer workers, twice it more soldiers):
+        // soldiers that fall in skirmishes instead of the growth and research that win wars.
         let careless = difficulty.mistake_pct.clamp(0, 100);
         let weights = Weights {
             worker_share: weight(&rules, profile_key, "econ.worker_share_pct")?.clamp(0, 100)
@@ -91,9 +92,10 @@ impl Brain {
                 / 200,
             expand: weight(&rules, profile_key, "econ.expand_eagerness")?.clamp(0, 100),
             age_priority: weight(&rules, profile_key, "tech.age_priority")?.clamp(0, 100),
-            army_share: weight(&rules, profile_key, "mil.army_share_pct")?.clamp(0, 100)
-                * (100 - careless)
-                / 100,
+            army_share: (weight(&rules, profile_key, "mil.army_share_pct")?.clamp(0, 100)
+                * (100 + 2 * careless)
+                / 100)
+                .min(100),
             defense_share: weight(&rules, profile_key, "mil.defense_share_pct")?.clamp(0, 100),
             attack_ratio: weight(&rules, profile_key, "mil.attack_ratio_pct")?.max(0),
             retreat_ratio: weight(&rules, profile_key, "mil.retreat_ratio_pct")?.max(0),
@@ -393,19 +395,8 @@ impl Brain {
         if wishes.len() > 1 && !wishes[0].opening && !wishes[0].reserve && slip(&mut rng) {
             wishes.swap(0, 1);
         }
-        let debug = std::env::var("ROM_AI_DEBUG").ok().and_then(|v| {
-            let (p, t) = v.split_once(':')?;
-            Some((p.parse::<u32>().ok()?, t.parse::<u64>().ok()?))
-        });
-        let debug = debug.is_some_and(|(p, t)| p == self.player.0 && tick >= t && tick % 600 < d.think_interval_ticks as u64);
-        if debug {
-            eprintln!("DBG p{} tick={} purse={:?} keep?", self.player.0, tick, plan.view.purse.iter().map(|(r, a)| format!("{}={a}", self.rules.key(*r))).collect::<Vec<_>>());
-        }
         for wish in &wishes {
             let outcome = plan.serve(wish, memory);
-            if debug {
-                eprintln!("  wish {} {:?} {} reserve={} -> {:?}", wish.score, match wish.act { crate::plan::Act::Train(_) => "train", crate::plan::Act::Research(_) => "research", crate::plan::Act::Construct(_) => "construct" }, self.rules.key(wish.act.subject()), wish.reserve, outcome);
-            }
             if wish.opening {
                 opening::settle(&self.opening, memory, outcome, tick);
             }

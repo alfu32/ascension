@@ -132,7 +132,11 @@ impl Ground {
                 let at = view
                     .world
                     .offset(city.pos, i64::from(*dx) * 1000, i64::from(*dy) * 1000);
-                if !view.world.terrain_at(at).is_some_and(|t| terrains.contains(&t)) {
+                if !view
+                    .world
+                    .terrain_at(at)
+                    .is_some_and(|t| terrains.contains(&t))
+                {
                     continue;
                 }
                 let (tx, ty) = (at.x.div_euclid(1000), at.y.div_euclid(1000));
@@ -450,22 +454,6 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
                     }
                     let Some(pos) = fits(view, ground, &needs, at, lane, needs.own_territory)
                     else {
-                        if std::env::var("ROM_AI_SITES").is_ok() && !lane {
-                            let et = needs.et;
-                            let p = Pos { x: snap(at.x, et.footprint_w.max(1)), y: snap(at.y, et.footprint_h.max(1)), ..at };
-                            let (x0, y0, w, h) = footprint(et, p);
-                            let mut why = String::new();
-                            for y in y0..y0 + h { for x in x0..x0 + w {
-                                let t = (p.body.0, p.face, x, y);
-                                if ground.taken.contains(&t) { why.push('B'); }
-                                else if ground.reserved.contains(&t) { why.push('R'); }
-                                else if !view.world.is_explored_on_body(view.me, p.body, p.face, x, y) { why.push('E'); }
-                                else if view.world.terrain_on_body(p.body, p.face, x, y) != Some(DefId(24)) { why.push('T'); }
-                                else if view.world.territory_owner_on_body(p.body, p.face, x, y) != Some(view.me) { why.push('O'); }
-                                else { why.push('.'); }
-                            }}
-                            eprintln!("  spot {},{} {}", p.x/1000, p.y/1000, why);
-                        }
                         continue;
                     };
                     if full(pos) {
@@ -483,9 +471,6 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
                     }
                 }
                 ranked.sort_unstable_by_key(|(worth, order, _)| (*worth, *order));
-                if std::env::var("ROM_AI_SITES").is_ok() {
-                    eprintln!("SITE p{} tick={} {} lane={lane} city={:?} reach={reach} node_tiles={} ranked={} lookups={} previews={}", view.me.0, view.tick, view.rules.key(subject), city.id, node_tiles.len(), ranked.len(), ground.lookups.get(), ground.previews.get());
-                }
                 for (_, _, pos) in ranked {
                     match ground.preview(view, subject, pos) {
                         Site::Nowhere => {}
@@ -515,7 +500,11 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
             }
         }
     }
-    if exhausted { Site::Later } else { Site::Nowhere }
+    if exhausted {
+        Site::Later
+    } else {
+        Site::Nowhere
+    }
 }
 
 /// A site for another city: inside the player's borders (or anywhere not foreign once
