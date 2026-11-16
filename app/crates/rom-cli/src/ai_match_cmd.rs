@@ -3,7 +3,7 @@
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Instant};
 
 use rom_ai::Brain;
-use rom_mapgen::{MapRequest, Universe, UniverseRequest, generate, generate_universe};
+use rom_mapgen::{MapRequest, Universe, UniverseRequest, generate_fair, generate_universe};
 use rom_rules::{DefId, ResourceKind, Rules};
 use rom_sim::{BodyId, MatchOptions, Player, PlayerId, Pos, World};
 
@@ -360,7 +360,7 @@ pub fn build_world_with(
         (_, 3..=4) => 192,
         _ => 256,
     };
-    let map = generate(
+    let map = generate_fair(
         rules,
         &MapRequest {
             style,

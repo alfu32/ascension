@@ -510,6 +510,16 @@ Notes from task 60:
   rewritten on that rule and now cover all four profiles (the old rows asked
   for a barracks before the technology that unlocks it).
 - **The income bonus is a granted handicap (task 64).** See "Handicaps" below.
+- **Order vocabulary (task 65).** `order_kind` gained `stance` (subject = a combat
+  stance; applied when it leaves `pending`, the queue stays), so a computer
+  player sets stances through orders like everything else. `explore`, `patrol`,
+  `guard` and `raze` (an own building; an unfinished one refunds
+  `economy.cancel_refund_pct` of its base price for the work not done; never a
+  finished city) now run. `move`, `attack_move` and `patrol` may name a
+  `formation` as subject: one tick's orders of a player, kind and formation
+  walk at the slowest member's speed when the formation `keeps_slowest`. No other
+  row was needed; the difficulty in the economy comes from the existing
+  `ai_difficulty` columns (see `docs/computer-player.md`).
 
 ### Handicaps: modifiers a player is granted (task 64)
 
@@ -827,6 +837,14 @@ back. No SQL runs in `rom-sim`.
 - **Rally points.** `entity_rally(entity_id, target_entity_id | x, y, face, body)`
   (task 64). Not part of the state hash while no producer has one, so worlds
   without rally points keep their hashes.
+- **Orders of task 65 (format 3).** `"order".pace` (a formation's walking speed
+  cap, milli-tiles per second) and `"order".engaged_id` (the enemy a `guard` is
+  fighting off), NULL otherwise; both enter the state hash only when set, so
+  existing worlds keep their hashes. `order_failure(player_id, seq, tick,
+  order_id, executor_id, kind, subject_def_id, target_entity_id, target_x..body,
+  reason)` keeps each player's latest 64 failures of accepted orders
+  (`World::order_failures`), oldest first; a report, not hashed. Format 2 saves
+  are refused.
 - **Encoding.** Positions are four columns; unsigned 64-bit values are stored as
   the same bits read as signed; terrain and territory grids are run-length
   encoded blobs; explored bits are raw words; `entity.move_remainder` is

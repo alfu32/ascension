@@ -4,7 +4,10 @@ use rom_geo::{CubeSurface, SPHERE_SCALE, SurfacePos, Tile, latitude_mdeg};
 use rom_rules::{DefId, FeaturePattern, Layer, MapStyleFeature, RegionKind, Rules};
 use rom_sim::SimRng;
 
-use crate::{BaseTerrains, FAIR_RADIUS, MapGenError, START_LAND_RADIUS, mix64, pick_base, smooth};
+use crate::{
+    BaseTerrains, EVEN_LAND_PCT, FAIR_RADIUS, MapGenError, START_LAND_RADIUS, mix64, pick_base,
+    smooth,
+};
 
 // Sphere starts reserve room for the city and its first buildings.
 const START_CLEAR_RADIUS: i64 = 6;
@@ -259,6 +262,19 @@ fn starts(
     }
     let mut best = Vec::new();
     let mut best_spread = i64::MAX;
+    // A small planet can have many candidates in one tiny land patch.
+    let min_chord = i64::from(SPHERE_SCALE) * 12 / i64::from(surface.n);
+    let mut best_key: Option<(bool, i64, i64)> = None;
+    let land: Vec<usize> = if players > 1 {
+        (0..terrain.len())
+            .filter(|&i| {
+                rules.terrains[&terrain[i]].layer == Layer::Ground
+                    && Some(terrain[i]) != style.polar_terrain_id
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
     // acos is monotonically decreasing: minimising the largest integer dot
     // product maximises the smallest great-circle angle, without approximating acos.
     for _ in 0..24 {
@@ -286,6 +302,23 @@ fn starts(
             })
             .max()
             .unwrap_or(i64::MIN);
+        if players > 1 {
+            // Several players share the planet: every attempt is weighed, the most even
+            // shares of the land first (within `EVEN_LAND_PCT` counts as even), then spread.
+            let enough = 2 * (i64::from(SPHERE_SCALE).pow(2) - spread) >= min_chord.pow(2);
+            let shares = land_shares(points, &land, &chosen);
+            let (least, most) = (
+                shares.iter().copied().min().unwrap_or(0),
+                shares.iter().copied().max().unwrap_or(0).max(1),
+            );
+            let key = (enough, (least * 100 / most).min(EVEN_LAND_PCT), -spread);
+            if best_key.is_none_or(|k| key > k) {
+                best_key = Some(key);
+                best_spread = spread;
+                best = chosen;
+            }
+            continue;
+        }
         if spread < best_spread {
             best_spread = spread;
             best = chosen;
@@ -294,12 +327,35 @@ fn starts(
             break;
         } // quarter circumference (90 degrees)
     }
-    // A small planet can have many candidates in one tiny land patch.
-    let min_chord = i64::from(SPHERE_SCALE) * 12 / i64::from(surface.n);
     if players > 1 && 2 * (i64::from(SPHERE_SCALE).pow(2) - best_spread) < min_chord.pow(2) {
         return Err(MapGenError::NoRoomForPlayers(players as u32));
     }
     Ok(best.into_iter().map(|i| surface.tile(i).into()).collect())
+}
+
+/// Each start's share of the land tiles: those nearer to it (by the largest dot product)
+/// than to any other start; ties count for nobody.
+fn land_shares(points: &[[i32; 3]], land: &[usize], chosen: &[usize]) -> Vec<i64> {
+    let mut shares = vec![0_i64; chosen.len()];
+    for &i in land {
+        let mut near: Option<(i64, usize)> = None;
+        let mut tie = false;
+        for (k, &s) in chosen.iter().enumerate() {
+            let d = dot(points[i], points[s]);
+            match near {
+                Some((best, _)) if d < best => {}
+                Some((best, _)) if d == best => tie = true,
+                _ => {
+                    near = Some((d, k));
+                    tie = false;
+                }
+            }
+        }
+        if let Some((_, k)) = near.filter(|_| !tie) {
+            shares[k] += 1;
+        }
+    }
+    shares
 }
 
 // A positive coverage_pct budgets non-ice land before feature placement.

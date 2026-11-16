@@ -25,28 +25,10 @@ impl World {
         if entity.owner != player {
             return Err(SimError::ForeignOwner(id));
         }
-        if self.rules.stances.get(&stance).is_none_or(|s| {
-            s.family != StanceFamily::Combat
-                || !matches!(
-                    s.behavior.as_str(),
-                    "aggressive" | "defensive" | "stand_ground" | "hold_fire" | "raid" | "raze"
-                )
-        }) {
+        if !self.settable_stance(stance) {
             return Err(SimError::InvalidStance);
         }
-        let entity = self.entities[id.0 as usize].as_mut().expect("owned entity");
-        entity.stance = stance;
-        let before = entity.orders.len();
-        entity.orders.retain(|o| !o.automatic);
-        self.stats.orders_cancelled += (before - entity.orders.len()) as u64;
-        self.pending.retain(|(o, _)| {
-            let remove = o.executor == id && o.automatic;
-            if remove {
-                self.stats.orders_cancelled += 1;
-            }
-            !remove
-        });
-        self.economy.dirty.insert(id);
+        self.put_stance(id, stance);
         Ok(())
     }
 
@@ -238,7 +220,7 @@ impl World {
             .entities()
             .filter(|e| {
                 e.orders.front().is_some_and(|o| {
-                    o.kind == "attack_move"
+                    matches!(o.kind.as_str(), "attack_move" | "patrol")
                         && o.target_entity
                             .is_none_or(|t| self.entity(t).is_none_or(|t| t.hp <= 0))
                 })

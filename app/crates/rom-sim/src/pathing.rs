@@ -139,6 +139,9 @@ pub(crate) struct Pathing {
     // Per-tick group registry, emptied at the end of every tick.
     spread: BTreeMap<(u8, i32, i32), u32>,
     shared: BTreeMap<(u32, u8, i32, i32, Tile), u64>,
+    /// Landmass labels per movement class over the terrain alone, made when first asked
+    /// for: derived from the map, which never changes, so not part of the state.
+    components: std::sync::Mutex<BTreeMap<u32, std::sync::Arc<Vec<u32>>>>,
 }
 
 impl Pathing {
@@ -229,7 +232,57 @@ impl Pathing {
             space,
             spread: BTreeMap::new(),
             shared: BTreeMap::new(),
+            components: std::sync::Mutex::new(BTreeMap::new()),
         }
+    }
+
+    /// Connected stretches of terrain a movement class can cross, labelled from 1 per tile
+    /// (0 where it cannot stand); buildings do not count. Flying classes have one stretch.
+    pub fn components(&self, class: u32) -> Option<std::sync::Arc<Vec<u32>>> {
+        let grid = self.classes.get(&class)?;
+        let mut cache = self.components.lock().expect("component cache");
+        if let Some(labels) = cache.get(&class) {
+            return Some(std::sync::Arc::clone(labels));
+        }
+        let tiles = grid.pct.len();
+        let mut labels = vec![0_u32; tiles];
+        const ORTHOGONAL: [(i32, i32); 8] = [
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+        ];
+        let mut next = 0;
+        let mut open = Vec::new();
+        for start in 0..tiles {
+            if labels[start] != 0 || grid.pct[start] == 0 {
+                continue;
+            }
+            next += 1;
+            labels[start] = next;
+            open.push(start);
+            while let Some(index) = open.pop() {
+                for neighbour in self.geo.neighbours(index, &ORTHOGONAL) {
+                    let n = neighbour as usize;
+                    if neighbour != u32::MAX && labels[n] == 0 && grid.pct[n] > 0 {
+                        labels[n] = next;
+                        open.push(n);
+                    }
+                }
+            }
+        }
+        let labels = std::sync::Arc::new(labels);
+        cache.insert(class, std::sync::Arc::clone(&labels));
+        Some(labels)
+    }
+
+    /// Whether a class flies.
+    pub fn flies(&self, class: u32) -> bool {
+        self.classes.get(&class).is_some_and(|grid| grid.flies)
     }
 
     /// Adds or removes one building footprint on a face from the occupancy layer.

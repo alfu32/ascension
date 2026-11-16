@@ -61,6 +61,15 @@ impl StateHash {
         }
         self.bytes(&[u8::from(order.automatic)]);
         self.optional(order.home, Self::pos);
+        // Fed only when set, so orders without them hash as before.
+        if let Some(pace) = order.pace {
+            self.bytes(&[6]);
+            self.bytes(&pace.to_le_bytes());
+        }
+        if let Some(engaged) = order.engaged {
+            self.bytes(&[7]);
+            self.u32(engaged.0);
+        }
         self.u64(order.progress_ticks);
         self.u64(order.issued_tick);
         self.optional(order.total_ticks, Self::u64);

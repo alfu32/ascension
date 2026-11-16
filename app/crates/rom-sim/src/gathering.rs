@@ -222,6 +222,11 @@ impl World {
                         && site.build_progress.is_none()
                         && !site.neutralised
                         && site.assimilation_until.is_none()
+                        // Nobody goes to work in a city that has been struck down.
+                        && site
+                            .city_id
+                            .and_then(|c| self.entity(c))
+                            .is_none_or(|c| !c.neutralised)
                         && site.gather_slots > 0
                         && self.rules.entity_types[&site.type_id]
                             .gather_site

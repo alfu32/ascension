@@ -93,7 +93,11 @@ impl World {
         if state.target().is_none() {
             return Walk::Arrived;
         }
-        let speed = self.effective_stat(id, "speed", motion.speed).max(0);
+        // A formation that keeps to its slowest member walks at that member's pace.
+        let speed = self
+            .effective_stat(id, "speed", motion.speed)
+            .max(0)
+            .min(order.pace.unwrap_or(i64::MAX));
         let denominator = i128::from(self.tick_rate) * 100;
         let entity = self.entities[id.0 as usize].as_mut().expect("walker");
         let surface = &mut self.surfaces[slot];

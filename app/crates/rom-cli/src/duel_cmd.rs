@@ -289,6 +289,41 @@ pub fn play(rules: &Arc<Rules>, duel: &DuelRequest, seed: u64) -> Result<DuelRes
     })
 }
 
+/// A building's place, owner, hit points and the armed units of each player inside its
+/// economic radius (what decides a capture).
+fn city_line(world: &World, c: &rom_sim::Entity) -> String {
+    let rules = world.rules();
+    let radius = world
+        .city_economic_radius(c.id)
+        .clamp(0, i64::from(u32::MAX)) as u32;
+    let mut armed: BTreeMap<u32, (usize, i64)> = BTreeMap::new();
+    for id in world.entities_in_radius(c.pos, radius) {
+        if let Some(e) = world.entity(id)
+            && e.hp > 0
+            && rules.entity_types[&e.type_id].class == rom_rules::EntityClass::Unit
+            && !rules.entity_types[&e.type_id].weapons.is_empty()
+        {
+            let entry = armed.entry(e.owner.0).or_default();
+            entry.0 += 1;
+            entry.1 += e.hp;
+        }
+    }
+    let armed: Vec<String> = armed
+        .iter()
+        .map(|(owner, (n, hp))| format!("p{owner}:{n}/{hp}"))
+        .collect();
+    format!(
+        "{},{}[p{} hp={}/{}{} armed={}]",
+        c.pos.x / 1000,
+        c.pos.y / 1000,
+        c.owner.0,
+        c.hp,
+        c.max_hp,
+        if c.neutralised { " neutral" } else { "" },
+        armed.join(",")
+    )
+}
+
 /// Two lines of a player's state: age, population, armies; then its economy.
 fn trace(world: &World, brain: &Brain, seed: u64) {
     let Some(s) = brain.summary(world) else {
@@ -303,25 +338,50 @@ fn trace(world: &World, brain: &Brain, seed: u64) {
     let armies: Vec<String> = brain
         .armies()
         .map(|(role, a)| {
+            // Where the scouts are and what they do.
+            let scouts: Vec<String> = if role == rom_ai::Role::Scout {
+                a.members
+                    .iter()
+                    .filter_map(|id| world.entity(rom_sim::EntityId(*id)))
+                    .map(|e| {
+                        format!(
+                            "[{},{} {}]",
+                            e.pos.x / 1000,
+                            e.pos.y / 1000,
+                            e.orders().front().map_or("-", |o| o.kind.as_str())
+                        )
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
             format!(
-                "{role:?}:{:?}:{}{}",
+                "{role:?}:{:?}:{}{}{}",
                 a.phase,
                 a.members.len(),
-                a.target.map_or(String::new(), |t| format!("@{t}"))
+                a.target.map_or(String::new(), |t| format!("@{t}")),
+                scouts.join("")
             )
         })
         .collect();
     let capital = world
         .capital(brain.player())
         .and_then(|c| world.entity(c))
-        .map_or(String::from("-"), |c| {
-            format!("{},{}", c.pos.x / 1000, c.pos.y / 1000)
+        .map_or(String::from("-"), |c| city_line(world, c));
+    // The main army's target as the world has it now.
+    let target = brain
+        .armies()
+        .find(|(role, _)| *role == rom_ai::Role::Attack)
+        .and_then(|(_, a)| a.target)
+        .and_then(|t| world.entity(rom_sim::EntityId(t)))
+        .map_or(String::from("-"), |t| {
+            format!("{}:{}", world.rules().key(t.type_id), city_line(world, t))
         });
     let rally = brain.rally_point().map_or(String::from("-"), |p| {
         format!("{},{}", p.x / 1000, p.y / 1000)
     });
     println!(
-        "trace seed={seed} tick={} capital={capital} rally={rally} player={} {}:{} age={} pop={}/{} military={} cities={} buildings={} kills={} known={} status={:?} armies={}",
+        "trace seed={seed} tick={} capital={capital} rally={rally} target={target} player={} {}:{} age={} pop={}/{} military={} cities={} buildings={} kills={} known={} status={:?} armies={}",
         world.tick(),
         brain.player().0,
         brain.profile_key(),

@@ -142,8 +142,36 @@ impl World {
             Layer::Air
         } else {
             let pos = self.seen_pos(id);
-            self.rules.terrains[&self.terrain_at(pos).expect("entity on map")].layer
+            let terrain = self.terrain_at(pos).expect("entity on map");
+            // A walker pushed onto ground it cannot enter (a soldier at the water's edge)
+            // still stands on the ground layer: it must not become untouchable there.
+            let stranded = et.movement.as_ref().is_some_and(|m| {
+                !self
+                    .rules
+                    .movement_class_terrain
+                    .get(&m.movement_class_id)
+                    .into_iter()
+                    .flatten()
+                    .any(|row| row.terrain_id == terrain && row.speed_pct > 0)
+            });
+            if stranded {
+                Layer::Ground
+            } else {
+                self.rules.terrains[&terrain].layer
+            }
         }
+    }
+
+    /// Whether any weapon of `attacker` can aim at `target` where it stands now (its layer,
+    /// body and orbit), whatever the distance: what a player sees before ordering an attack.
+    pub fn can_target(&self, attacker: EntityId, target: EntityId) -> bool {
+        let (Some(a), Some(_)) = (self.entity(attacker), self.entity(target)) else {
+            return false;
+        };
+        self.rules.entity_types[&a.type_id]
+            .weapons
+            .iter()
+            .any(|w| self.weapon_can_target(attacker, w, target))
     }
 
     /// Distance from the attacker's centre to the target's rectangle or circle, with
@@ -231,7 +259,12 @@ impl World {
 
     pub(crate) fn advance_combat(&mut self, id: EntityId, order: &mut Order) {
         order.progress_ticks += 1;
-        if order.kind == "attack_move" {
+        let patrol = order.kind == "patrol";
+        // A patrol walks between where it began and its point, fighting like an attack move.
+        if patrol && order.home.is_none() {
+            order.home = Some(self.entity(id).expect("patroller").pos);
+        }
+        if order.kind == "attack_move" || patrol {
             if order.target_entity.is_some_and(|target| {
                 self.entity(target)
                     .is_none_or(|e| e.hp <= 0 || e.container_id.is_some())
@@ -241,8 +274,15 @@ impl World {
             }
             if order.target_entity.is_none() {
                 let goal = order.target_pos.expect("attack move point");
-                if self.walk(id, order, goal, None, true) == Walk::Arrived {
-                    order.status = OrderStatus::Done;
+                if self.walk(id, order, goal, None, !patrol) == Walk::Arrived {
+                    match order.home.filter(|home| patrol && *home != goal) {
+                        Some(home) => {
+                            order.target_pos = Some(home);
+                            order.home = Some(goal);
+                            order.movement = None;
+                        }
+                        None => order.status = OrderStatus::Done,
+                    }
                 }
                 return;
             }
@@ -267,7 +307,7 @@ impl World {
         }
         let target_id = target.id;
         let target_pos = self.aim_pos(id, target_id);
-        if let Some(home) = order.home
+        if let Some(home) = order.home.filter(|_| !patrol)
             && self
                 .geo(home.body)
                 .distance(target_pos, home)
