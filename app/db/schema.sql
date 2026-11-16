@@ -707,176 +707,316 @@ CREATE TABLE order_kind (
 -- ════════════════════════════════════════════════════════════════════════════
 -- PART B — STATE (one database file per saved match)
 -- ════════════════════════════════════════════════════════════════════════════
+--
+-- A save file holds PART B only. Definition ids (`*_id` columns that name a
+-- definition) are the ids of the rules database named by `match.rules_version`
+-- and `match.rules_fingerprint`; the save does not repeat the rules, and a save
+-- from other rules is refused. The REFERENCES to PART A tables document that
+-- link; the writer connection does not enforce them.
+--
+-- Conventions:
+--   * a position is four columns `<p>_x, <p>_y, <p>_face, <p>_body` (milli-tiles,
+--     cube face, body id; NULL together when optional);
+--   * unsigned 64-bit simulation values (ticks, the random generator state, ids)
+--     are stored as the same 64 bits read as a signed integer;
+--   * grids (terrain, territory winners) are run-length encoded blobs of
+--     little-endian LEB128 (value, run) pairs; explored bits are raw u64 words;
+--   * `entity.move_remainder` is decimal text (a 128-bit integer).
+-- The tick loop never runs SQL; `rom-save` writes and reads these tables
+-- between ticks.
 
 CREATE TABLE match (
-  id            INTEGER PRIMARY KEY CHECK (id = 1),
-  rules_version TEXT NOT NULL,
-  seed          INTEGER NOT NULL,
-  map_style_id  INTEGER NOT NULL REFERENCES map_style(id),
-  width         INTEGER NOT NULL,      -- tiles, whole map including space
-  height        INTEGER NOT NULL,
-  speed_pct     INTEGER NOT NULL DEFAULT 100,  -- game speed: sim ticks run per real second = 20 × speed_pct / 100
-  tick          INTEGER NOT NULL DEFAULT 0,
-  next_entity_id INTEGER NOT NULL DEFAULT 1,
-  next_order_id  INTEGER NOT NULL DEFAULT 1
+  id               INTEGER PRIMARY KEY CHECK (id = 1),
+  format           INTEGER NOT NULL,         -- layout version of this part of the schema
+  rules_version    TEXT NOT NULL,            -- schema_meta 'rules_version' of the rules used
+  rules_fingerprint TEXT NOT NULL,           -- hex digest of the loaded rules; must match on load
+  seed             INTEGER NOT NULL,
+  map_style        TEXT NOT NULL DEFAULT '', -- map_style key, for display and a rebuild
+  speed_pct        INTEGER NOT NULL DEFAULT 100,  -- game speed: ticks per real second = 20 × speed_pct / 100
+  tick             INTEGER NOT NULL,
+  next_entity_id   INTEGER NOT NULL,
+  next_order_id    INTEGER NOT NULL,
+  rng_state        INTEGER NOT NULL,
+  transits_done    INTEGER NOT NULL,         -- completed route legs
+  ownable_tiles    INTEGER NOT NULL,         -- ground tiles eligible for the territory victory
+  viewer_slots     INTEGER NOT NULL,         -- length of the per-entity viewer list
+  elimination      TEXT NOT NULL CHECK (elimination IN ('conquest','capital','sudden_death')),
+  outcome_team     INTEGER,                  -- the first completed victory, all three or none
+  outcome_rule     TEXT,
+  outcome_tick     INTEGER,
+  stat_trade_trips INTEGER NOT NULL,
+  stat_cities_captured INTEGER NOT NULL,
+  stat_orders_done INTEGER NOT NULL,
+  stat_orders_failed INTEGER NOT NULL,
+  stat_orders_cancelled INTEGER NOT NULL,
+  stat_orders_no_path INTEGER NOT NULL,
+  stat_orders_unsupported INTEGER NOT NULL,
+  stat_orders_no_slot INTEGER NOT NULL,
+  stat_orders_target_gone INTEGER NOT NULL,
+  CHECK ((outcome_team IS NULL) = (outcome_rule IS NULL) AND (outcome_rule IS NULL) = (outcome_tick IS NULL))
 ) STRICT;
 
+-- The match setup the caller wants back on load (map size, number of players,
+-- options chosen on the setup screen); keys are the caller's.
 CREATE TABLE match_setting (
-  option_key TEXT PRIMARY KEY REFERENCES match_option(key),
+  option_key TEXT PRIMARY KEY,
   value      TEXT NOT NULL
 ) STRICT, WITHOUT ROWID;
 
--- The whole map is generated before the first tick (flat-map arrays; per-body
--- surface grids come with the universe simulation, world-model step 4b).
-CREATE TABLE map_grid (
-  grid TEXT PRIMARY KEY CHECK (grid IN ('terrain','height','territory','variant')),
-  cell_bytes INTEGER NOT NULL,         -- 1 or 2
-  data BLOB NOT NULL                   -- width*height*cell_bytes, row-major
+CREATE TABLE match_victory (            -- enabled victory rule families
+  rule TEXT PRIMARY KEY
 ) STRICT, WITHOUT ROWID;
 
 -- The universe (world-model.md): star systems on a star map, the bodies in
--- each system, and the routes between systems. Generated before the first tick.
+-- each system, and the routes between systems. Empty for a one-map match.
 CREATE TABLE star_system (
   id   INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
-  x    INTEGER NOT NULL,                -- star map position, abstract units (centre 0,0;
-  y    INTEGER NOT NULL                 -- within map_style.star_map_radius); display only
+  x    INTEGER NOT NULL,                -- star map position, abstract units; display only
+  y    INTEGER NOT NULL
 ) STRICT;
 
--- A star, habitable planet or resource body. The star sits at the system's
--- centre (orbit_radius 0); every other body has its own orbit.
 CREATE TABLE body (
   id               INTEGER PRIMARY KEY,
   system_id        INTEGER NOT NULL REFERENCES star_system(id),
   kind             TEXT NOT NULL REFERENCES body_kind(key),
   name             TEXT NOT NULL,
-  orbit_radius     INTEGER NOT NULL CHECK (orbit_radius >= 0),  -- system units from the star
+  orbit_radius     INTEGER NOT NULL CHECK (orbit_radius >= 0),
   orbit_angle_mdeg INTEGER NOT NULL CHECK (orbit_angle_mdeg BETWEEN 0 AND 359999),
-  n                INTEGER CHECK (n BETWEEN 16 AND 512),         -- habitable only: cube face size N
-  home_race_id     INTEGER REFERENCES faction(id),               -- habitable only: race whose players start here
-  node_entity_type_id INTEGER REFERENCES et_node(entity_type_id), -- resource only: what it yields
+  n                INTEGER CHECK (n >= 4),                       -- habitable only: cube face size N
+  home_race_id     INTEGER REFERENCES faction(id),               -- habitable only
+  node_entity_type_id INTEGER REFERENCES et_node(entity_type_id), -- resource only
   CHECK ((kind = 'habitable') = (n IS NOT NULL)),
   CHECK (home_race_id IS NULL OR kind = 'habitable'),
   CHECK ((kind = 'resource') = (node_entity_type_id IS NOT NULL))
 ) STRICT;
 CREATE INDEX body_by_system ON body(system_id);
 
--- A lane between two systems; travel time follows from the length.
 CREATE TABLE route (
   system_a INTEGER NOT NULL REFERENCES star_system(id),
   system_b INTEGER NOT NULL REFERENCES star_system(id),
-  length   INTEGER NOT NULL CHECK (length > 0),  -- star map units, integer distance
+  length   INTEGER NOT NULL CHECK (length > 0),
   PRIMARY KEY (system_a, system_b),
   CHECK (system_a < system_b)
 ) STRICT, WITHOUT ROWID;
 
+-- Every surface that has been generated: a planet's cube sphere, a system's
+-- flat plane, or the one flat map of a match without a universe. The grids are
+-- run-length encoded; the path-search state of the surface is in the path_* tables.
+CREATE TABLE surface (
+  body_id   INTEGER PRIMARY KEY,         -- body.id (0 for a one-map match)
+  shape     TEXT NOT NULL CHECK (shape IN ('flat','cube')),
+  width     INTEGER NOT NULL,            -- terrain storage, tiles
+  height    INTEGER NOT NULL,
+  n         INTEGER,                     -- cube: tiles along a face edge
+  terrain   BLOB NOT NULL,               -- one terrain definition id per tile, RLE
+  territory BLOB NOT NULL,               -- winning emitter entity id per tile (0 = none), RLE
+  path_next_request INTEGER NOT NULL,
+  path_generation   INTEGER NOT NULL,
+  path_searches INTEGER NOT NULL,
+  path_nodes    INTEGER NOT NULL,
+  path_repaths  INTEGER NOT NULL
+) STRICT;
+
+CREATE TABLE surface_touched (          -- tiles newly seen this tick, in order
+  body_id INTEGER NOT NULL,
+  seq     INTEGER NOT NULL,
+  tile    INTEGER NOT NULL,
+  PRIMARY KEY (body_id, seq)
+) STRICT, WITHOUT ROWID;
+
+CREATE TABLE path_request (             -- queued searches, front first
+  body_id INTEGER NOT NULL,
+  seq     INTEGER NOT NULL,
+  id      INTEGER NOT NULL,
+  class   INTEGER NOT NULL,              -- movement class id
+  start_face INTEGER NOT NULL, start_x INTEGER NOT NULL, start_y INTEGER NOT NULL,
+  goal_face  INTEGER NOT NULL, goal_x  INTEGER NOT NULL, goal_y  INTEGER NOT NULL,
+  PRIMARY KEY (body_id, seq)
+) STRICT, WITHOUT ROWID;
+
+CREATE TABLE path_waiter (              -- walkers waiting for a request
+  body_id INTEGER NOT NULL,
+  request_seq INTEGER NOT NULL,
+  seq     INTEGER NOT NULL,
+  entity_id INTEGER NOT NULL,
+  order_id  INTEGER NOT NULL,
+  PRIMARY KEY (body_id, request_seq, seq)
+) STRICT, WITHOUT ROWID;
+
+CREATE TABLE path_search (              -- the search in progress, if any
+  body_id INTEGER PRIMARY KEY,
+  request INTEGER NOT NULL,
+  target  INTEGER NOT NULL,
+  anchor_face INTEGER NOT NULL, anchor_x INTEGER NOT NULL, anchor_y INTEGER NOT NULL,
+  best_distance INTEGER NOT NULL,
+  best_tile INTEGER NOT NULL,
+  expanded  INTEGER NOT NULL,
+  generation INTEGER NOT NULL
+) STRICT;
+
+CREATE TABLE path_open (                -- open list, ascending
+  body_id INTEGER NOT NULL,
+  seq     INTEGER NOT NULL,
+  f       INTEGER NOT NULL,
+  g       INTEGER NOT NULL,
+  tile    INTEGER NOT NULL,
+  PRIMARY KEY (body_id, seq)
+) STRICT, WITHOUT ROWID;
+
+CREATE TABLE path_node (                -- visited tiles of the search
+  body_id INTEGER NOT NULL,
+  tile    INTEGER NOT NULL,
+  g       INTEGER NOT NULL,
+  parent  INTEGER NOT NULL,
+  h       INTEGER NOT NULL,
+  closed  INTEGER NOT NULL CHECK (closed IN (0,1)),
+  PRIMARY KEY (body_id, tile)
+) STRICT, WITHOUT ROWID;
+
 CREATE TABLE player (
-  id         INTEGER PRIMARY KEY,      -- 0 = nature / neutral
+  id         INTEGER PRIMARY KEY,        -- 0 = nature / neutral
   slot       INTEGER NOT NULL UNIQUE,
   name       TEXT NOT NULL,
   controller TEXT NOT NULL CHECK (controller IN ('human','ai','remote','nature')),
   ai_profile TEXT NOT NULL DEFAULT '',
-  team       INTEGER NOT NULL DEFAULT 0,
   color      INTEGER NOT NULL DEFAULT 0,
+  team       INTEGER NOT NULL DEFAULT 0,
   faction_id INTEGER NOT NULL REFERENCES faction(id),
   age_id     INTEGER NOT NULL REFERENCES age(id),
-  capital_entity_id INTEGER,
-  status     TEXT NOT NULL DEFAULT 'playing' CHECK (status IN ('playing','defeated','won','resigned'))
-) STRICT;
-
-CREATE TABLE player_explored (
-  player_id INTEGER PRIMARY KEY REFERENCES player(id),
-  data      BLOB NOT NULL              -- 1 bit per tile
+  home_body_id INTEGER,                  -- home planet; NULL = none recorded
+  capital_entity_id INTEGER,             -- first founded city
+  status     TEXT NOT NULL DEFAULT 'playing' CHECK (status IN ('playing','defeated','won')),
+  land_owned INTEGER,                    -- land tiles owned (territory victory)
+  owned_tiles INTEGER,                   -- tiles owned over all surfaces
+  hold_team  INTEGER,                    -- enemy team occupying the capital, and since when
+  hold_start INTEGER,
+  kills      INTEGER,                    -- enemy kills credited / combat deaths (match statistics)
+  losses     INTEGER,
+  CHECK ((hold_team IS NULL) = (hold_start IS NULL))
 ) STRICT;
 
 -- A computer player's memory (plans, known enemy positions, army groups),
--- serialised so a loaded game continues exactly as it would have.
+-- serialised by the computer-player crate; the save stores the bytes as given.
 CREATE TABLE player_ai_state (
   player_id  INTEGER PRIMARY KEY REFERENCES player(id),
-  profile_key TEXT NOT NULL REFERENCES ai_profile(key),
-  difficulty_key TEXT NOT NULL REFERENCES ai_difficulty(key),
-  rng_state  INTEGER NOT NULL,
-  opening_seq INTEGER NOT NULL DEFAULT 0,
-  data       BLOB NOT NULL             -- versioned binary snapshot
+  profile_key TEXT NOT NULL,             -- ai_profile.key
+  difficulty_key TEXT NOT NULL,          -- ai_difficulty.key
+  version    INTEGER NOT NULL,           -- format version of data, the AI crate's own
+  data       BLOB NOT NULL
 ) STRICT;
 
 CREATE TABLE player_resource (
   player_id   INTEGER NOT NULL REFERENCES player(id),
   resource_id INTEGER NOT NULL REFERENCES resource(id),
-  amount      INTEGER NOT NULL DEFAULT 0,
+  amount      INTEGER NOT NULL,
   PRIMARY KEY (player_id, resource_id)
 ) STRICT, WITHOUT ROWID;
 
 CREATE TABLE player_tech (
   player_id INTEGER NOT NULL REFERENCES player(id),
   tech_id   INTEGER NOT NULL REFERENCES tech(id),
-  times     INTEGER NOT NULL DEFAULT 1,
-  done_tick INTEGER NOT NULL,
+  times     INTEGER NOT NULL,
   PRIMARY KEY (player_id, tech_id)
 ) STRICT, WITHOUT ROWID;
 
-CREATE TABLE diplomacy (               -- a < b
-  player_a INTEGER NOT NULL REFERENCES player(id),
-  player_b INTEGER NOT NULL REFERENCES player(id),
-  relation TEXT NOT NULL CHECK (relation IN ('war','peace','alliance')),
-  met      INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (player_a, player_b),
-  CHECK (player_a < player_b)
+CREATE TABLE income_remainder (         -- fractional income carried between ticks
+  player_id   INTEGER NOT NULL REFERENCES player(id),
+  resource_id INTEGER NOT NULL REFERENCES resource(id),
+  remainder   INTEGER NOT NULL,
+  PRIMARY KEY (player_id, resource_id)
 ) STRICT, WITHOUT ROWID;
 
-CREATE TABLE market_price (
-  resource_id INTEGER PRIMARY KEY REFERENCES resource(id),
-  price       INTEGER NOT NULL
-) STRICT;
+CREATE TABLE victory_timer (            -- territory (and similar) timers per team
+  victory_id INTEGER NOT NULL REFERENCES victory(id),
+  team       INTEGER NOT NULL,
+  end_tick   INTEGER NOT NULL,
+  PRIMARY KEY (victory_id, team)
+) STRICT, WITHOUT ROWID;
 
-CREATE TABLE unit_group (              -- control groups and formation groups
-  id           INTEGER PRIMARY KEY,
-  player_id    INTEGER NOT NULL REFERENCES player(id),
-  hotkey       INTEGER,                -- 0-9, NULL = transient formation group
-  formation_id INTEGER REFERENCES formation(id),
-  facing       INTEGER NOT NULL DEFAULT 0     -- degrees
-) STRICT;
+-- Fog of war per surface and player: explored bits (one per tile, 64 per word,
+-- little-endian), remembered buildings, and the building index by tile.
+CREATE TABLE player_vision (
+  body_id   INTEGER NOT NULL,
+  player_id INTEGER NOT NULL,
+  explored  BLOB NOT NULL,
+  PRIMARY KEY (body_id, player_id)
+) STRICT, WITHOUT ROWID;
+
+CREATE TABLE vision_memory (
+  body_id   INTEGER NOT NULL,
+  player_id INTEGER NOT NULL,
+  tile      INTEGER NOT NULL,            -- position tile of the building
+  entity_id INTEGER NOT NULL,
+  entity_type_id INTEGER NOT NULL,
+  owner_id  INTEGER NOT NULL,
+  pos_x INTEGER NOT NULL, pos_y INTEGER NOT NULL, pos_face INTEGER NOT NULL, pos_body INTEGER NOT NULL,
+  PRIMARY KEY (body_id, player_id, tile, entity_id)
+) STRICT, WITHOUT ROWID;
+
+CREATE TABLE vision_building (
+  body_id   INTEGER NOT NULL,
+  tile      INTEGER NOT NULL,
+  entity_id INTEGER NOT NULL,
+  PRIMARY KEY (body_id, tile, entity_id)
+) STRICT, WITHOUT ROWID;
+
+-- What each entity currently reveals; the per-tile viewer counts are rebuilt from these.
+CREATE TABLE vision_viewer (
+  entity_id INTEGER NOT NULL,
+  orbit     INTEGER NOT NULL CHECK (orbit IN (0,1)),  -- 1: the footprint of an orbiting ship below it
+  body_id   INTEGER NOT NULL,
+  tile      INTEGER NOT NULL,
+  los       INTEGER NOT NULL,
+  owner_id  INTEGER NOT NULL,
+  PRIMARY KEY (entity_id, orbit)
+) STRICT, WITHOUT ROWID;
 
 CREATE TABLE entity (
   id             INTEGER PRIMARY KEY,
+  location       TEXT NOT NULL DEFAULT 'map' CHECK (location IN ('map','transit')),
   entity_type_id INTEGER NOT NULL REFERENCES entity_type(id),
   owner_id       INTEGER NOT NULL REFERENCES player(id),
-  -- Surface or system-plane position; NULL body_id = the legacy flat map.
-  -- entity_orbit classifies a ship at a system marker as orbiting that body.
-  body_id        INTEGER REFERENCES body(id),
-  face           INTEGER NOT NULL DEFAULT 0 CHECK (face BETWEEN 0 AND 5),  -- cube face; 0 on a flat map
-  x              INTEGER NOT NULL,     -- milli-tiles
+  body_id        INTEGER NOT NULL,       -- surface or system-plane position
+  face           INTEGER NOT NULL CHECK (face BETWEEN 0 AND 5),
+  x              INTEGER NOT NULL,       -- milli-tiles
   y              INTEGER NOT NULL,
-  z              INTEGER NOT NULL DEFAULT 0,
-  facing         INTEGER NOT NULL DEFAULT 0,
-  layer          TEXT NOT NULL REFERENCES layer(key),
+  facing         INTEGER NOT NULL,
   hp             INTEGER NOT NULL,
-  energy         INTEGER NOT NULL DEFAULT 0,
-  build_progress INTEGER NOT NULL DEFAULT -1,  -- ticks done; -1 = complete
-  state          TEXT NOT NULL DEFAULT 'idle',
-  stance_id      INTEGER REFERENCES stance(id),
-  group_id       INTEGER REFERENCES unit_group(id),
-  container_id   INTEGER REFERENCES entity(id),  -- garrisoned / carried inside
-  city_id        INTEGER REFERENCES entity(id),  -- city whose economy this building belongs to
-  work_site_id   INTEGER REFERENCES entity(id),  -- gather site this worker occupies
-  rally_x        INTEGER,
-  rally_y        INTEGER,
-  rally_entity_id INTEGER REFERENCES entity(id),
-  node_amount    INTEGER,              -- nodes: what is left
-  claimed_by_id  INTEGER REFERENCES entity(id), -- nodes: trader sitting on it
-  claim_owner_id INTEGER REFERENCES player(id), -- nodes: current claimant (presence or trader)
-  name           TEXT,                 -- cities, heroes
-  created_tick   INTEGER NOT NULL DEFAULT 0
+  max_hp         INTEGER NOT NULL,
+  los            INTEGER NOT NULL,
+  stance_id      INTEGER NOT NULL REFERENCES stance(id),
+  energy         INTEGER NOT NULL,
+  energy_remainder INTEGER NOT NULL,
+  heal_remainder INTEGER NOT NULL,
+  attrition_remainder INTEGER NOT NULL,
+  neutralised    INTEGER NOT NULL CHECK (neutralised IN (0,1)),
+  assimilation_until INTEGER,            -- tick a captured building finishes assimilation
+  killer_id      INTEGER,                -- player credited with the kill
+  build_progress INTEGER NOT NULL,       -- ticks done; -1 = complete
+  move_remainder TEXT NOT NULL,
+  gather_slots   INTEGER NOT NULL,
+  work_site_id   INTEGER,                -- gather site this worker occupies
+  container_id   INTEGER,                -- carried or kept inside
+  city_id        INTEGER,                -- city whose economy this building belongs to
+  idle_ticks     INTEGER NOT NULL
 ) STRICT;
-CREATE INDEX entity_owner     ON entity(owner_id, entity_type_id);
-CREATE INDEX entity_body      ON entity(body_id) WHERE body_id IS NOT NULL;
-CREATE INDEX entity_container ON entity(container_id) WHERE container_id IS NOT NULL;
-CREATE INDEX entity_city      ON entity(city_id) WHERE city_id IS NOT NULL;
+CREATE INDEX entity_owner ON entity(owner_id, entity_type_id);
+CREATE INDEX entity_body  ON entity(body_id);
+
+-- A ship in transit between systems (location 'transit'); it stands on no surface.
+CREATE TABLE entity_transit (
+  entity_id   INTEGER PRIMARY KEY REFERENCES entity(id),
+  origin      INTEGER NOT NULL,          -- system ids
+  destination INTEGER NOT NULL,
+  departed    INTEGER NOT NULL,
+  arrives     INTEGER NOT NULL
+) STRICT;
 
 -- A ship in orbit retains its system-plane position in entity; this row records
 -- its body and moving surface footprint. Shots retain the last fire-time target.
 CREATE TABLE entity_orbit (
-  entity_id INTEGER PRIMARY KEY REFERENCES entity(id) ON DELETE CASCADE,
+  entity_id INTEGER PRIMARY KEY REFERENCES entity(id),
   body_id INTEGER NOT NULL REFERENCES body(id),
   face INTEGER NOT NULL CHECK (face BETWEEN 0 AND 5),
   x INTEGER NOT NULL,
@@ -891,84 +1031,146 @@ CREATE TABLE entity_orbit (
       OR (last_shot_tick IS NOT NULL AND last_shot_face IS NOT NULL AND last_shot_x IS NOT NULL AND last_shot_y IS NOT NULL))
 ) STRICT;
 
-CREATE TABLE entity_cooldown (
-  entity_id  INTEGER NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
-  ability_id INTEGER NOT NULL REFERENCES ability(id),
+CREATE TABLE entity_cooldown (          -- earliest tick each weapon can fire again
+  entity_id INTEGER NOT NULL REFERENCES entity(id),
+  weapon_id INTEGER NOT NULL,            -- weapon.id of the entity's type
   ready_tick INTEGER NOT NULL,
-  PRIMARY KEY (entity_id, ability_id)
+  PRIMARY KEY (entity_id, weapon_id)
 ) STRICT, WITHOUT ROWID;
 
-CREATE TABLE entity_effect (           -- temporary modifiers currently applied
-  entity_id   INTEGER NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
-  modifier_id INTEGER NOT NULL REFERENCES modifier(id),
-  source_entity_id INTEGER,
-  end_tick    INTEGER NOT NULL,
-  PRIMARY KEY (entity_id, modifier_id)
+-- Membership of the simulation's entity sets: 'landed' (ship standing on a
+-- planet), 'neutralised' and 'assimilating' (captured buildings), 'idle' and
+-- 'dirty' (economy), 'awake' (units to check for separation next tick).
+CREATE TABLE entity_flag (
+  entity_id INTEGER NOT NULL,
+  flag      TEXT NOT NULL CHECK (flag IN ('landed','neutralised','assimilating','idle','dirty','awake')),
+  PRIMARY KEY (entity_id, flag)
+) STRICT, WITHOUT ROWID;
+
+-- Income contributed by an entity: its terms sum to the per-player rates.
+CREATE TABLE income_term (
+  entity_id   INTEGER NOT NULL,
+  seq         INTEGER NOT NULL,
+  player_id   INTEGER NOT NULL,
+  resource_id INTEGER NOT NULL,
+  amount      INTEGER NOT NULL,
+  PRIMARY KEY (entity_id, seq)
 ) STRICT, WITHOUT ROWID;
 
 -- THE ORDER BOOK. Everything a player (or AI) asks for is an order: a unit's
--- command queue and a building's production queue are the same table.
--- Costs are paid when the order is accepted and refunded on cancel.
+-- command queue and a building's production queue are the same table. Orders in
+-- `place` 'queue' belong to an executor's queue (seq 0 = active); orders in
+-- 'pending' were submitted and wait for the next tick boundary.
 CREATE TABLE "order" (
-  id            INTEGER PRIMARY KEY,
-  player_id     INTEGER NOT NULL REFERENCES player(id),
-  executor_id   INTEGER NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
+  ord           INTEGER PRIMARY KEY,     -- row number within this save; children refer to it
+  place         TEXT NOT NULL CHECK (place IN ('queue','pending')),
+  seq           INTEGER NOT NULL,        -- position in the queue
+  append        INTEGER NOT NULL DEFAULT 0 CHECK (append IN (0,1)),  -- pending: queue behind existing
+  id            INTEGER NOT NULL,        -- order id
+  player_id     INTEGER NOT NULL,
+  executor_id   INTEGER NOT NULL,
   kind          TEXT NOT NULL REFERENCES order_kind(key),
-  seq           INTEGER NOT NULL,      -- position in the executor's queue (0 = current)
-  status        TEXT NOT NULL DEFAULT 'queued'
-                  CHECK (status IN ('queued','active','blocked','done','cancelled','failed')),
-  block_reason  TEXT NOT NULL DEFAULT '',  -- 'pop_cap','no_path','no_slot','no_resources' …
-  subject_def_id INTEGER REFERENCES def(id),     -- what to train / research / construct / cast
-  target_entity_id INTEGER REFERENCES entity(id),
-  target_x      INTEGER,
-  target_y      INTEGER,
-  formation_id  INTEGER REFERENCES formation(id),
-  facing        INTEGER,
-  progress_ticks INTEGER NOT NULL DEFAULT 0,
-  total_ticks   INTEGER NOT NULL DEFAULT 0,
-  repeat        INTEGER NOT NULL DEFAULT 0,      -- infinite queue / patrol loop
+  status        TEXT NOT NULL CHECK (status IN ('queued','active','blocked','done','cancelled','failed')),
+  reason        TEXT NOT NULL DEFAULT '',  -- 'blocked' or 'failed' reason
+  subject_def_id INTEGER,
+  target_entity_id INTEGER,
+  target_x INTEGER, target_y INTEGER, target_face INTEGER, target_body INTEGER,
+  home_x INTEGER, home_y INTEGER, home_face INTEGER, home_body INTEGER,
+  progress_ticks INTEGER NOT NULL,
+  total_ticks   INTEGER,
   issued_tick   INTEGER NOT NULL,
-  UNIQUE (executor_id, seq)
+  build_remainder INTEGER NOT NULL,
+  automatic     INTEGER NOT NULL CHECK (automatic IN (0,1)),
+  -- a trade route in progress (all NULL otherwise)
+  route_trader INTEGER, route_home INTEGER, route_target INTEGER,
+  route_length INTEGER, route_income INTEGER, route_resource INTEGER,
+  route_to_target INTEGER, route_started INTEGER,
+  -- walking state (all NULL otherwise)
+  move_origin_x INTEGER, move_origin_y INTEGER, move_origin_face INTEGER, move_origin_body INTEGER,
+  move_goal_x INTEGER, move_goal_y INTEGER, move_goal_face INTEGER, move_goal_body INTEGER,
+  move_distance INTEGER, move_traveled INTEGER, move_index INTEGER,
+  move_request INTEGER, move_repaths INTEGER,
+  UNIQUE (place, executor_id, seq)
 ) STRICT;
 CREATE INDEX order_by_player ON "order"(player_id, status);
 
-CREATE TABLE order_payment (           -- what was actually charged (for refunds)
-  order_id    INTEGER NOT NULL REFERENCES "order"(id) ON DELETE CASCADE,
-  resource_id INTEGER NOT NULL REFERENCES resource(id),
+CREATE TABLE order_payment (            -- what was actually charged (for refunds)
+  ord         INTEGER NOT NULL REFERENCES "order"(ord),
+  seq         INTEGER NOT NULL,
+  resource_id INTEGER NOT NULL,
   amount      INTEGER NOT NULL,
-  PRIMARY KEY (order_id, resource_id)
+  PRIMARY KEY (ord, seq)
 ) STRICT, WITHOUT ROWID;
 
-CREATE TABLE trade_route (
-  trader_id   INTEGER PRIMARY KEY REFERENCES entity(id) ON DELETE CASCADE,
-  from_city_id INTEGER NOT NULL REFERENCES entity(id),
-  to_city_id   INTEGER NOT NULL REFERENCES entity(id),
-  income      INTEGER NOT NULL
+CREATE TABLE order_waypoint (           -- intermediate points of a smoothed path
+  ord  INTEGER NOT NULL REFERENCES "order"(ord),
+  seq  INTEGER NOT NULL,
+  x INTEGER NOT NULL, y INTEGER NOT NULL, face INTEGER NOT NULL, body INTEGER NOT NULL,
+  PRIMARY KEY (ord, seq)
+) STRICT, WITHOUT ROWID;
+
+-- Weapon hits in flight, and firing decisions not yet rolled.
+CREATE TABLE pending_hit (
+  seq INTEGER PRIMARY KEY,
+  land_tick INTEGER NOT NULL,
+  attacker_id INTEGER NOT NULL,
+  owner_id INTEGER NOT NULL,
+  source_type_id INTEGER NOT NULL,
+  weapon_id INTEGER NOT NULL,
+  target_id INTEGER NOT NULL,
+  damage INTEGER NOT NULL
 ) STRICT;
 
-CREATE TABLE diplomacy_offer (
-  id        INTEGER PRIMARY KEY,
-  from_player INTEGER NOT NULL REFERENCES player(id),
-  to_player   INTEGER NOT NULL REFERENCES player(id),
-  proposes  TEXT NOT NULL DEFAULT '' CHECK (proposes IN ('','war','peace','alliance','joint_attack')),
-  against_player INTEGER REFERENCES player(id),
-  status    TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','accepted','rejected','cancelled')),
-  tick      INTEGER NOT NULL
+CREATE TABLE pending_shot (
+  seq INTEGER PRIMARY KEY,
+  origin_x INTEGER NOT NULL, origin_y INTEGER NOT NULL, origin_face INTEGER NOT NULL, origin_body INTEGER NOT NULL,
+  target_x INTEGER NOT NULL, target_y INTEGER NOT NULL, target_face INTEGER NOT NULL, target_body INTEGER NOT NULL,
+  accuracy INTEGER NOT NULL,
+  land_tick INTEGER NOT NULL,
+  attacker_id INTEGER NOT NULL,
+  owner_id INTEGER NOT NULL,
+  source_type_id INTEGER NOT NULL,
+  weapon_id INTEGER NOT NULL,
+  target_id INTEGER NOT NULL,
+  damage INTEGER NOT NULL
 ) STRICT;
 
-CREATE TABLE diplomacy_offer_item (    -- positive = sender gives, negative = sender demands
-  offer_id    INTEGER NOT NULL REFERENCES diplomacy_offer(id) ON DELETE CASCADE,
-  resource_id INTEGER NOT NULL REFERENCES resource(id),
-  amount      INTEGER NOT NULL,
-  PRIMARY KEY (offer_id, resource_id)
-) STRICT, WITHOUT ROWID;
+-- System space: where each body sits on its system's plane, the neutral marker
+-- entity standing there, and who holds a resource body.
+CREATE TABLE body_position (
+  body_id INTEGER PRIMARY KEY,
+  x INTEGER NOT NULL, y INTEGER NOT NULL, face INTEGER NOT NULL, plane_body INTEGER NOT NULL
+) STRICT;
 
-CREATE TABLE victory_timer (
-  victory_id INTEGER NOT NULL REFERENCES victory(id),
-  team       INTEGER NOT NULL,
-  end_tick   INTEGER NOT NULL,
-  PRIMARY KEY (victory_id, team)
-) STRICT, WITHOUT ROWID;
+CREATE TABLE body_marker (
+  body_id   INTEGER PRIMARY KEY,
+  entity_id INTEGER NOT NULL
+) STRICT;
+
+CREATE TABLE body_claim (
+  body_id   INTEGER PRIMARY KEY,
+  player_id INTEGER NOT NULL
+) STRICT;
+
+-- Borders and cities.
+CREATE TABLE emitter (                  -- completed entities pushing borders
+  entity_id INTEGER PRIMARY KEY,
+  x INTEGER NOT NULL, y INTEGER NOT NULL, face INTEGER NOT NULL, body_id INTEGER NOT NULL,
+  radius    INTEGER NOT NULL,            -- milli-tiles
+  owner_id  INTEGER NOT NULL,
+  completed INTEGER NOT NULL             -- tick; earlier wins ties
+) STRICT;
+
+CREATE TABLE city (                     -- city entities, complete or sites
+  entity_id INTEGER PRIMARY KEY,
+  economic_radius INTEGER                -- milli-tiles; NULL when not computed
+) STRICT;
+
+CREATE TABLE city_widener (             -- completed non-city buildings that widen cities
+  entity_id INTEGER PRIMARY KEY,
+  owner_id  INTEGER NOT NULL,
+  x INTEGER NOT NULL, y INTEGER NOT NULL, face INTEGER NOT NULL, body_id INTEGER NOT NULL
+) STRICT;
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- VIEWS — data lint and convenience

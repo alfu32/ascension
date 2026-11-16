@@ -24,7 +24,7 @@ pub(crate) struct EconomyIndex {
     /// Raw rate per player and resource; zero sums are removed.
     pub rates: BTreeMap<(PlayerId, DefId), i128>,
     /// The terms each entity currently contributes to `rates`.
-    terms: BTreeMap<EntityId, Vec<Term>>,
+    pub(crate) terms: BTreeMap<EntityId, Vec<Term>>,
     /// Workers holding a slot, per site.
     pub occupants: BTreeMap<EntityId, BTreeSet<EntityId>>,
     /// Entities whose type has a gather-site component.
