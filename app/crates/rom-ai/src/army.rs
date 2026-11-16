@@ -184,6 +184,10 @@ fn choose_target(
                     .unreachable
                     .get(id)
                     .is_none_or(|until| *until <= view.tick)
+                // Across water or rock the army could never get there.
+                && units
+                    .first()
+                    .is_none_or(|u| view.world.reachable(u.type_id, u.pos, e.pos) != Some(false))
                 && if raid {
                     civilian(view, e)
                 } else {
@@ -498,6 +502,11 @@ fn formation(view: &View<'_>, units: &[&Entity], goal: Pos, from: Pos) -> Vec<(E
 
 /// Sends units to a goal with `kind`, skipping those already on their way or idle there.
 fn send(plan: &mut Plan<'_>, units: &[(EntityId, Pos)], kind: &str) {
+    send_as(plan, units, kind, None);
+}
+
+/// As `send`, naming a formation: the simulation keeps one batch to its slowest member.
+fn send_as(plan: &mut Plan<'_>, units: &[(EntityId, Pos)], kind: &str, formation: Option<DefId>) {
     for (id, goal) in units {
         let Some(e) = plan.view.world.entity(*id) else {
             continue;
@@ -508,7 +517,7 @@ fn send(plan: &mut Plan<'_>, units: &[(EntityId, Pos)], kind: &str) {
         {
             continue;
         }
-        if !plan.order(*id, kind, None, None, Some(*goal)) {
+        if !plan.order(*id, kind, formation, None, Some(*goal)) {
             return;
         }
     }
@@ -666,6 +675,43 @@ pub(crate) fn command(plan: &mut Plan<'_>, memory: &mut Memory, cmd: &Command<'_
         }
         memory.armies.insert(role, army);
     }
+    if let Some(rally) = rally {
+        rally_producers(plan, rally);
+    }
+}
+
+/// Points every own producer that trains fighters at the rally point, once: new units walk
+/// there by themselves (`set_rally`) instead of being sent one by one.
+fn rally_producers(plan: &mut Plan<'_>, rally: Pos) {
+    let view = &plan.view;
+    let rules = view.rules;
+    let producers: Vec<EntityId> = view
+        .own
+        .iter()
+        .filter(|e| {
+            operational(e)
+                && e.pos.body == rally.body
+                && rules.entity_types[&e.type_id]
+                    .producer
+                    .as_ref()
+                    .is_some_and(|p| p.has_rally)
+                && rules.production.get(&e.type_id).into_iter().flatten().any(|row| {
+                    row.mode == ProductionMode::Train && is_military(rules, row.product_def_id)
+                })
+                && view.world.rally(e.id) != Some(rom_sim::Rally::Point(rally))
+                && !view.world.pending_orders().any(|o| o.executor == e.id && o.kind == "set_rally")
+        })
+        .map(|e| e.id)
+        .collect();
+    for producer in producers {
+        let busy = plan.view.busy.contains(&producer);
+        if !plan.order(producer, "set_rally", None, None, Some(rally)) {
+            return;
+        }
+        if !busy {
+            plan.view.busy.remove(&producer);
+        }
+    }
 }
 
 /// Sends each idle scout to the next cell worth a look.
@@ -674,12 +720,81 @@ fn scout(plan: &mut Plan<'_>, memory: &Memory, units: &[&Entity]) {
         if !e.orders().is_empty() || plan.view.busy.contains(&e.id) {
             continue;
         }
-        if let Some(at) = next_look(&plan.view, memory, e, 0)
-            && !plan.order(e.id, "move", None, None, Some(at))
-        {
+        let Some(at) = next_look(&plan.view, memory, e, 0) else {
+            continue;
+        };
+        // Ground the player has never seen (a world whose map is not revealed) is left to
+        // the simulation's own exploring, which goes from one unseen patch to the next
+        // without further orders.
+        let fresh = !plan.view.world.is_explored_on_body(
+            plan.view.me,
+            at.body,
+            at.face,
+            at.x.div_euclid(1000),
+            at.y.div_euclid(1000),
+        );
+        let ordered = if fresh {
+            plan.order(e.id, "explore", None, None, None)
+        } else {
+            plan.order(e.id, "move", None, None, Some(at))
+        };
+        if !ordered {
             return;
         }
     }
+}
+
+/// Sets a combat stance (by its behaviour) on members that do not have it yet.
+fn set_stance(plan: &mut Plan<'_>, units: &[&Entity], behavior: &str) {
+    let Some(stance) = plan
+        .view
+        .rules
+        .stances
+        .values()
+        .find(|s| s.family == rom_rules::StanceFamily::Combat && s.behavior == behavior)
+        .map(|s| s.id)
+    else {
+        return;
+    };
+    for e in units {
+        if e.stance == stance || plan.view.busy.contains(&e.id) {
+            continue;
+        }
+        let busy = plan.view.busy.contains(&e.id);
+        if !plan.order(e.id, "stance", Some(stance), None, None) {
+            return;
+        }
+        if !busy {
+            plan.view.busy.remove(&e.id);
+        }
+    }
+}
+
+/// Puts the home guard beside the capital: the simulation's `guard` then fights off what
+/// comes near it without further orders.
+fn guard_capital(plan: &mut Plan<'_>, units: &[&Entity]) -> bool {
+    let Some(capital) = plan
+        .view
+        .world
+        .capital(plan.view.me)
+        .filter(|c| plan.view.cities.iter().any(|city| city.id == *c && city.complete))
+    else {
+        return false;
+    };
+    for e in units {
+        let guarding = e
+            .orders()
+            .front()
+            .is_some_and(|o| o.kind == "guard" && o.target_entity == Some(capital));
+        if guarding || plan.view.busy.contains(&e.id) || e.pos.body != plan.view.cities[0].pos.body
+        {
+            continue;
+        }
+        if !plan.order(e.id, "guard", None, Some(capital), None) {
+            break;
+        }
+    }
+    true
 }
 
 /// One ground army's thought.
@@ -712,11 +827,20 @@ fn lead(
             focus(plan, memory, units);
         }
         Phase::Gather => {
+            if role == Role::Defend {
+                if std::env::var("ROM_X_NOGUARD").is_err() { set_stance(plan, units, "defensive"); }
+                if (std::env::var("ROM_X_NOGUARD").is_ok() || !guard_capital(plan, units))
+                    && let Some(rally) = rally
+                {
+                    regroup(plan, units, rally);
+                }
+                return;
+            }
+            if role == Role::Raid && std::env::var("ROM_X_NOGUARD").is_err() {
+                set_stance(plan, units, "raid");
+            }
             if let Some(rally) = rally {
                 regroup(plan, units, rally);
-            }
-            if role == Role::Defend {
-                return;
             }
             let Some(base) = rally.or_else(|| units.first().map(|e| e.pos)) else {
                 return;
@@ -927,6 +1051,9 @@ fn lead(
 /// their reach (unarmed ones when none is armed). Every order comes out of the budget, so a
 /// mind with few orders a minute leaves its units to pick their own targets.
 fn focus(plan: &mut Plan<'_>, memory: &Memory, units: &[&Entity]) {
+    if std::env::var("ROM_AI_NOFOCUS").is_ok() {
+        return;
+    }
     let view = &plan.view;
     let rules = view.rules;
     let mut orders: Vec<(EntityId, EntityId)> = Vec::new();
@@ -949,7 +1076,7 @@ fn focus(plan: &mut Plan<'_>, memory: &Memory, units: &[&Entity]) {
             .filter_map(|(id, e)| {
                 let live = view.world.entity(EntityId(*id))?;
                 let d = view.distance(unit.pos, e.pos);
-                (d <= reach && live.hp > 0).then(|| {
+                (d <= reach && live.hp > 0 && view.world.can_target(unit.id, live.id)).then(|| {
                     let armed = view::strength(rules, e.type_id) > 0;
                     (!armed, live.hp, d, *id)
                 })
@@ -1016,7 +1143,24 @@ fn advance(plan: &mut Plan<'_>, cmd: &Command<'_>, army: &Army, units: &[&Entity
             })
         })
         .collect();
-    send(plan, &fresh, "attack_move");
+    // Marching in formation, the batch keeps to its slowest member when the rules say so.
+    let subject = cmd
+        .difficulty
+        .uses_formations
+        .then(|| line_formation(plan.view.rules))
+        .flatten()
+        .filter(|f| plan.view.rules.formations[f].keeps_slowest);
+    send_as(plan, &fresh, "attack_move", subject);
+}
+
+/// The formation armies march in: the first line formation, or the first of any shape.
+fn line_formation(rules: &rom_rules::Rules) -> Option<DefId> {
+    rules
+        .formations
+        .values()
+        .find(|f| f.shape == FormationShape::Line)
+        .or_else(|| rules.formations.values().next())
+        .map(|f| f.id)
 }
 
 /// The unit type that does most damage to a building of `target` per resource, among
@@ -1040,7 +1184,7 @@ fn siege_choice(view: &View<'_>, memory: &Memory, target: DefId) -> Option<DefId
             {
                 continue;
             }
-            let price: i64 = view.price(unit).iter().map(|(_, a)| *a).sum();
+            let price = crate::production::dearness(view, unit);
             let value = dps_against(rules, unit, armour.armor_class_id, armour.armor)
                 * rules.entity_types[&unit].hp
                 / price.max(1);

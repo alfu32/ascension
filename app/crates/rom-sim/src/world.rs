@@ -93,6 +93,8 @@ pub struct World {
     pub(crate) rallies: BTreeMap<EntityId, crate::rally::Rally>,
     /// Units whose queued `disband` came up this tick; empty between ticks.
     pub(crate) disbanded: Vec<EntityId>,
+    /// Each player's latest failures of accepted orders, oldest first (a report, not hashed).
+    pub(crate) failures: BTreeMap<PlayerId, std::collections::VecDeque<crate::OrderFailure>>,
     /// Entities by owner and type, sites and producers; derived, not hashed.
     pub(crate) types: crate::index::TypeIndex,
     /// The largest building footprint in the rules, in tiles across and down.
@@ -279,6 +281,7 @@ impl World {
             vision: Vision::default(),
             rallies: BTreeMap::new(),
             disbanded: Vec::new(),
+            failures: BTreeMap::new(),
             types: crate::index::TypeIndex::default(),
             max_footprint,
         })
@@ -757,6 +760,7 @@ impl World {
         };
         self.validate_combat_order(&command)?;
         self.validate_rally_and_disband(&command)?;
+        self.validate_tactics(&command)?;
         let payment = self.validate_economy_order(&mut command)?;
         let next = self
             .next_order_id
@@ -800,6 +804,8 @@ impl World {
                 issued_tick: self.tick,
                 automatic: false,
                 home: None,
+                pace: None,
+                engaged: None,
                 movement: None,
                 route: route.map(Box::new),
                 payment,
@@ -822,6 +828,7 @@ impl World {
         self.find_idle_work();
         self.acquire_idle();
         self.regenerate_energy();
+        let mut applied = Vec::new();
         for (mut order, append) in std::mem::take(&mut self.pending) {
             // An executor disbanded earlier in this loop takes no more orders.
             if self.entity(order.executor).is_none() {
@@ -838,6 +845,15 @@ impl World {
                 self.apply_rally(&order);
                 continue;
             }
+            // So are a combat stance and the order to pull down an own building.
+            if order.kind == "stance" {
+                self.apply_stance(&order);
+                continue;
+            }
+            if order.kind == "raze" {
+                self.apply_raze(&order);
+                continue;
+            }
             if order.kind == "disband" && !append {
                 self.despawn(order.executor).expect("checked executor");
                 self.stats.orders_done += 1;
@@ -851,11 +867,17 @@ impl World {
             } else {
                 self.interrupt_harvest(order.executor);
             }
+            if order.subject.is_some() {
+                applied.push((order.executor, order.id));
+            }
             self.entities[order.executor.0 as usize]
                 .as_mut()
                 .expect("despawn cancels pending orders")
                 .orders
                 .push_back(order);
+        }
+        if !applied.is_empty() {
+            self.pace_formations(&applied);
         }
         self.acquire_attack_moves();
         // `avoid.pos` mirrors every entity's position until the first move below.

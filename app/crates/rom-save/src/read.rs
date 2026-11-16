@@ -307,6 +307,8 @@ fn orders(conn: &Connection, place: &str) -> Result<Vec<(i64, bool, OrderSnapsho
                 issued_tick: u(int(row, 22)?),
                 build_remainder: int(row, 23)?,
                 automatic: int(row, 24)? != 0,
+                pace: oint(row, 46)?,
+                engaged: ouint(row, 47, "guard enemy")?.map(EntityId),
                 payment: payments.remove(&ord).unwrap_or_default(),
                 route,
                 movement,
@@ -1013,6 +1015,32 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
         awake: flags(conn, "awake")?,
         neutralised: flags(conn, "neutralised")?,
         assimilating: flags(conn, "assimilating")?,
+        failures: {
+            let rows = query_vec(
+                conn,
+                "SELECT player_id, tick, order_id, executor_id, kind, subject_def_id, target_entity_id, target_x, target_y, target_face, target_body, reason FROM order_failure ORDER BY player_id, seq",
+                |r| {
+                    Ok((
+                        PlayerId(uint(r, 0, "failure player")?),
+                        rom_sim::OrderFailure {
+                            tick: u(int(r, 1)?),
+                            order: OrderId(u(int(r, 2)?)),
+                            executor: EntityId(uint(r, 3, "failure executor")?),
+                            kind: text(r, 4)?,
+                            subject: ouint(r, 5, "failure subject")?.map(DefId),
+                            target_entity: ouint(r, 6, "failure target")?.map(EntityId),
+                            target_pos: opos_at(r, 7)?,
+                            reason: text(r, 11)?,
+                        },
+                    ))
+                },
+            )?;
+            let mut by_player: BTreeMap<PlayerId, Vec<rom_sim::OrderFailure>> = BTreeMap::new();
+            for (player, failure) in rows {
+                by_player.entry(player).or_default().push(failure);
+            }
+            by_player.into_iter().collect()
+        },
         rallies: query_vec(
             conn,
             "SELECT entity_id, target_entity_id, x, y, face, body FROM entity_rally ORDER BY entity_id",

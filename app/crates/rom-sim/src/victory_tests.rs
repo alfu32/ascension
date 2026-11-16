@@ -580,6 +580,8 @@ fn neutralisation_cancels_production_and_assimilation_pauses_queued_work() {
         issued_tick: w.tick(),
         automatic: false,
         home: None,
+        pace: None,
+        engaged: None,
         movement: None,
         route: None,
         payment: Vec::new(),

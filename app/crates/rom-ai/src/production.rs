@@ -104,6 +104,45 @@ fn value(view: &View<'_>, enemies: &BTreeMap<DefId, i64>, unit: DefId, price: i6
     damage * (et.hp + reach / 50) / price.max(1)
 }
 
+/// The price of a definition weighed by how scarce each resource is for the player: a
+/// resource it has little of and earns little of counts up to eight times its amount, an
+/// abundant one down to a quarter. Units are compared by this, so an army is not built of
+/// what the player cannot pay for (a metal-starved player trains bowmen, not pikemen).
+pub(crate) fn dearness(view: &View<'_>, def: DefId) -> i64 {
+    let price = view.price(def);
+    // What each resource of the price amounts to: the store and a few periods of income.
+    let supply: Vec<(i64, i64)> = price
+        .iter()
+        .map(|(resource, amount)| {
+            let stock = view.purse.get(resource).copied().unwrap_or(0).max(0);
+            let income = view.world.income(view.me, *resource).effective.max(0);
+            (*amount, stock + 4 * income + 1)
+        })
+        .collect();
+    let base: i64 = price.iter().map(|(_, a)| *a).sum::<i64>().max(1);
+    let supplies: Vec<i64> = view
+        .rules
+        .resources
+        .values()
+        // Resources the player earns: a starting store nobody works for says nothing.
+        .filter(|r| {
+            r.kind == rom_rules::ResourceKind::Base
+                && view.world.income(view.me, r.id).effective > 0
+        })
+        .map(|r| {
+            view.purse.get(&r.id).copied().unwrap_or(0).max(0)
+                + 4 * view.world.income(view.me, r.id).effective.max(0)
+                + 1
+        })
+        .collect();
+    let mean = supplies.iter().sum::<i64>() / supplies.len().max(1) as i64;
+    let weighed: i64 = supply
+        .iter()
+        .map(|(amount, have)| amount * (mean.max(1) * 100 / have).clamp(25, 800) / 100)
+        .sum();
+    weighed.max(base / 4).max(1)
+}
+
 /// Population of own military units, with those in training.
 pub(crate) fn army_pop(view: &View<'_>) -> i64 {
     view.have
@@ -116,12 +155,14 @@ pub(crate) fn army_pop(view: &View<'_>) -> i64 {
 /// The unit type to train next, best first; `second_best` takes the runner-up.
 fn choice(view: &View<'_>, memory: &Memory, second_best: bool) -> Option<DefId> {
     let rules = view.rules;
+    // Armed enemy units only: buildings are the siege wish's business, and counting them
+    // here turned whole armies into siege engines that could not clear a city.
     let mut seen: BTreeMap<DefId, i64> = BTreeMap::new();
     for EnemySighting { type_id, .. } in memory.enemies.values() {
         if rules
             .entity_types
             .get(type_id)
-            .is_some_and(|t| !t.weapons.is_empty())
+            .is_some_and(|t| !t.weapons.is_empty() && (t.class == EntityClass::Unit || std::env::var("ROM_X_SIEGE").is_ok()))
         {
             *seen.entry(*type_id).or_default() += 1;
         }
@@ -143,8 +184,7 @@ fn choice(view: &View<'_>, memory: &Memory, second_best: bool) -> Option<DefId> 
             {
                 continue;
             }
-            let price: i64 = view.price(unit).iter().map(|(_, a)| *a).sum();
-            ranked.push((value(view, &seen, unit, price), unit));
+            ranked.push((value(view, &seen, unit, dearness(view, unit)), unit));
         }
     }
     ranked.sort_unstable_by_key(|(value, unit)| (std::cmp::Reverse(*value), *unit));

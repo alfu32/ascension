@@ -82,11 +82,18 @@ impl Brain {
             .get(difficulty_key)
             .ok_or_else(|| AiError::UnknownDifficulty(difficulty_key.into()))?
             .clone();
+        // A careless mind keeps fewer hands at work and fewer soldiers under arms than its
+        // profile asks for: half its `mistake_pct` fewer workers, `mistake_pct` fewer soldiers.
+        let careless = difficulty.mistake_pct.clamp(0, 100);
         let weights = Weights {
-            worker_share: weight(&rules, profile_key, "econ.worker_share_pct")?.clamp(0, 100),
+            worker_share: weight(&rules, profile_key, "econ.worker_share_pct")?.clamp(0, 100)
+                * (200 - careless)
+                / 200,
             expand: weight(&rules, profile_key, "econ.expand_eagerness")?.clamp(0, 100),
             age_priority: weight(&rules, profile_key, "tech.age_priority")?.clamp(0, 100),
-            army_share: weight(&rules, profile_key, "mil.army_share_pct")?.clamp(0, 100),
+            army_share: weight(&rules, profile_key, "mil.army_share_pct")?.clamp(0, 100)
+                * (100 - careless)
+                / 100,
             defense_share: weight(&rules, profile_key, "mil.defense_share_pct")?.clamp(0, 100),
             attack_ratio: weight(&rules, profile_key, "mil.attack_ratio_pct")?.max(0),
             retreat_ratio: weight(&rules, profile_key, "mil.retreat_ratio_pct")?.max(0),
@@ -313,6 +320,7 @@ impl Brain {
             * 60)
             .max(1);
         let rate = d.orders_per_minute.max(0);
+        let last_thought = memory.credit_tick;
         let elapsed = tick.saturating_sub(memory.credit_tick) as i64;
         memory.credit = (memory.credit + rate * elapsed).min(rate * minute / 4 + minute);
         memory.credit_tick = tick;
@@ -342,6 +350,11 @@ impl Brain {
             memory.opening_done = true;
         }
         memory.blocked.retain(|_, until| *until > tick);
+        heed_failures(world, self.player, memory, last_thought, tick);
+        if memory.age != view.age.0 {
+            memory.age = view.age.0;
+            memory.age_since = tick;
+        }
 
         let mut plan = Plan::new(view, allowed, memory);
         let slip =
@@ -352,8 +365,16 @@ impl Brain {
         if let Some(wish) = opening::current(&plan.view, &self.opening, memory) {
             wishes.push(wish);
         }
-        economy::wishes(&plan.view, &eco, &mut wishes);
-        let needed = research::wishes(&plan.view, &self.weights, &eco, slip(&mut rng), &mut wishes);
+        economy::wishes(&plan.view, &eco, slip(&mut rng), &mut wishes);
+        let in_age = tick.saturating_sub(memory.age_since);
+        let needed = research::wishes(
+            &plan.view,
+            &self.weights,
+            &eco,
+            in_age,
+            slip(&mut rng),
+            &mut wishes,
+        );
         construction::wishes(&plan.view, &self.weights, &needed, &mut wishes);
         production::wishes(
             &plan.view,
@@ -367,17 +388,30 @@ impl Brain {
         fleet::wishes(&plan.view, &self.weights, memory, &mut wishes);
         // Highest score first; equal scores keep the managers' order.
         wishes.sort_by_key(|w| std::cmp::Reverse(w.score));
-        // A mistake of judgement: the runner-up is served before the best.
-        if wishes.len() > 1 && !wishes[0].opening && slip(&mut rng) {
+        // A mistake of judgement: the runner-up is served before the best. What the brain
+        // saves up for is not given away by a slip: that would starve it for good.
+        if wishes.len() > 1 && !wishes[0].opening && !wishes[0].reserve && slip(&mut rng) {
             wishes.swap(0, 1);
+        }
+        let debug = std::env::var("ROM_AI_DEBUG").ok().and_then(|v| {
+            let (p, t) = v.split_once(':')?;
+            Some((p.parse::<u32>().ok()?, t.parse::<u64>().ok()?))
+        });
+        let debug = debug.is_some_and(|(p, t)| p == self.player.0 && tick >= t && tick % 600 < d.think_interval_ticks as u64);
+        if debug {
+            eprintln!("DBG p{} tick={} purse={:?} keep?", self.player.0, tick, plan.view.purse.iter().map(|(r, a)| format!("{}={a}", self.rules.key(*r))).collect::<Vec<_>>());
         }
         for wish in &wishes {
             let outcome = plan.serve(wish, memory);
+            if debug {
+                eprintln!("  wish {} {:?} {} reserve={} -> {:?}", wish.score, match wish.act { crate::plan::Act::Train(_) => "train", crate::plan::Act::Research(_) => "research", crate::plan::Act::Construct(_) => "construct" }, self.rules.key(wish.act.subject()), wish.reserve, outcome);
+            }
             if wish.opening {
                 opening::settle(&self.opening, memory, outcome, tick);
             }
         }
-        let paced = tick < memory.economy_tick || tick >= memory.economy_tick + economy::PACE_TICKS;
+        let pace = economy::pace(d);
+        let paced = tick < memory.economy_tick || tick >= memory.economy_tick + pace;
         let command = army::Command {
             weights: &self.weights,
             difficulty: d,
@@ -395,13 +429,41 @@ impl Brain {
             army::command(&mut plan, memory, &command);
         }
         fleet::command(&mut plan, memory, &self.weights);
-        economy::update_demand(memory, &plan.shortfall, tick);
+        economy::update_demand(memory, &plan.shortfall, tick, pace);
 
         let orders = plan.out.len() as i64;
         memory.credit -= orders * minute;
         memory.stats.orders += orders as u64;
         memory.rng = rng.state();
         plan.out
+    }
+}
+
+/// Takes in what the simulation reported as failed since the last thought, as a person
+/// reads the interface: a gather site nobody could reach or find a slot in, a site a
+/// builder could not get to, a target no path led to; each is left alone for a while
+/// instead of being ordered again thought after thought.
+fn heed_failures(world: &World, me: PlayerId, memory: &mut Memory, since: u64, tick: u64) {
+    for failure in world.order_failures(me).filter(|f| f.tick >= since) {
+        let reachless = matches!(failure.reason.as_str(), "no_path" | "no_slot");
+        match failure.kind.as_str() {
+            "harvest" | "repair" if reachless => {
+                if let Some(site) = failure.target_entity {
+                    memory.unreachable.insert(site.0, tick + RETRY_TICKS);
+                }
+            }
+            "construct" if reachless => {
+                if let Some(building) = failure.subject {
+                    memory.blocked.insert(building.0, tick + RETRY_TICKS);
+                }
+            }
+            "attack" | "attack_move" | "guard" if failure.reason == "no_path" => {
+                if let Some(target) = failure.target_entity {
+                    memory.unreachable.insert(target.0, tick + 2 * RETRY_TICKS);
+                }
+            }
+            _ => {}
+        }
     }
 }
 

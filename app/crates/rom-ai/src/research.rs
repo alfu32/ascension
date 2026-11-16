@@ -81,7 +81,11 @@ fn worth(view: &View<'_>, weights: &Weights, eco: &Economy, tech: DefId) -> i64 
         let scope = rules.stats.get(&modifier.stat_key).map(|s| s.scope);
         value += match (modifier.stat_key.as_str(), scope) {
             ("pop_cap", _) => size * if crowded { 12 } else { 2 },
-            ("city_limit", _) => size * weights.expand,
+            // More cities matter most when every allowed city stands.
+            ("city_limit", _) => {
+                let full = view.cities.len() as i64 >= view.city_limit();
+                size * weights.expand * if full { 3 } else { 1 }
+            }
             ("commerce_cap", _) => size * if capped { 4 } else { 1 },
             ("caravan_limit", _) => size * 10,
             (key, _) if key.starts_with("income.") => size * 6,
@@ -111,11 +115,21 @@ fn worth(view: &View<'_>, weights: &Weights, eco: &Economy, tech: DefId) -> i64 
     value - cost / 20
 }
 
-/// Wishes for technologies; returns the buildings the age path needs.
+/// Ticks in an age after which the way to the next one starts to gain priority.
+const AGE_PATIENCE_TICKS: u64 = 4800;
+/// Priority the way to the next age gains per minute of waiting beyond the patience.
+const AGE_URGENCY_PER_MINUTE: i64 = 20;
+/// The most the way to the next age can gain.
+const AGE_URGENCY_MAX: i64 = 400;
+
+/// Wishes for technologies; returns the buildings the age path needs. `in_age` is how long
+/// the player has been in its age: an age that drags on moves the next one up the list,
+/// past even an alarm, so a long war cannot keep a player in one age for good.
 pub(crate) fn wishes(
     view: &View<'_>,
     weights: &Weights,
     eco: &Economy,
+    in_age: u64,
     second_best: bool,
     wishes: &mut Vec<Wish>,
 ) -> BTreeSet<DefId> {
@@ -147,8 +161,13 @@ pub(crate) fn wishes(
             }
             if path.contains(&tech) {
                 let age = Catalogue::is_age_tech(rules, tech);
+                let urgency = (in_age.saturating_sub(AGE_PATIENCE_TICKS) / 1200) as i64
+                    * AGE_URGENCY_PER_MINUTE;
                 wishes.push(Wish {
-                    score: 560 + weights.age_priority * 2 + i64::from(age),
+                    score: 560
+                        + weights.age_priority * 2
+                        + urgency.min(AGE_URGENCY_MAX)
+                        + i64::from(age),
                     act: Act::Research(tech),
                     reserve: true,
                     opening: false,

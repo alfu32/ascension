@@ -141,6 +141,49 @@ fn a_sphere_economy_with_work_in_progress() {
 }
 
 #[test]
+fn formations_patrols_guards_and_failure_reports() {
+    let rules = rules();
+    let mut w = sphere_economy(&rules);
+    let body = BodyId(0);
+    let citizen = id(&w, "unit.citizen");
+    let farm = w
+        .entities()
+        .find(|e| e.type_id == id(&w, "bld.farm") && e.build_progress.is_none())
+        .unwrap()
+        .id;
+    // The idle citizen is sent to the farm another one works: it finds no slot there,
+    // and its player is told.
+    let idle = w
+        .entities()
+        .filter(|e| e.type_id == citizen && e.orders().is_empty() && e.work_site.is_none())
+        .map(|e| e.id)
+        .last()
+        .unwrap();
+    ticks(&mut w, 120);
+    order(&mut w, idle, "harvest", Some(farm), None);
+    let spearman = id(&w, "unit.spearman");
+    let units: Vec<_> = (0..4)
+        .map(|n| w.spawn(spearman, P1, at(body, 20_000 + n * 1500, 27_000)).unwrap())
+        .collect();
+    let line = id(&w, "form.line");
+    for unit in &units[..2] {
+        w.submit(Command {
+            subject: Some(line),
+            target_pos: Some(at(body, 28_000, 28_000)),
+            ..command(&w, *unit, "attack_move")
+        })
+        .unwrap();
+    }
+    order(&mut w, units[2], "patrol", None, Some(at(body, 8_000, 27_000)));
+    order(&mut w, units[3], "guard", Some(units[0]), None);
+    w.spawn(spearman, P2, at(body, 24_000, 30_000)).unwrap();
+    ticks(&mut w, 300);
+    assert!(w.order_failures(P1).count() >= 1);
+    assert!(w.entities().any(|e| e.orders().iter().any(|o| o.pace.is_some())));
+    check("tactics", &rules, w, 400, |_| {});
+}
+
+#[test]
 fn borders_and_wealth() {
     let rules = rules();
     let mut w = World::wealth_scenario(rules.clone(), 1, true).unwrap();

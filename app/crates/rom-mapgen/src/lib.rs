@@ -27,6 +27,10 @@ const START_CLEAR_RADIUS: i64 = 3;
 const START_LAND_RADIUS: i64 = 5;
 /// Radius, in tiles, in which fairness is measured.
 const FAIR_RADIUS: i64 = 12;
+/// Sets of starts tried on a planet several players share before the most even is taken.
+const FAIR_ATTEMPTS: usize = 48;
+/// Land shares this close (the smaller as a percentage of the larger) count as even.
+const EVEN_LAND_PCT: i64 = 95;
 
 /// What to generate.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -443,6 +447,145 @@ impl Builder<'_> {
         good * 100 >= total * 70
     }
 
+    /// Labels the land tiles of a planet by landmass (four-neighbour connected), from 1;
+    /// 0 elsewhere.
+    fn land_labels(&self, home: &Region) -> Vec<u32> {
+        let mut labels = vec![0_u32; self.map.grid.terrain.len()];
+        let mut next = 0;
+        let land = |i: usize| self.map.grid.terrain[i] == self.map.base.land;
+        for y in i64::from(home.y)..i64::from(home.y + home.h) {
+            for x in i64::from(home.x)..i64::from(home.x + home.w) {
+                let Some(i) = self.idx(x, y) else { continue };
+                if labels[i] != 0 || !land(i) {
+                    continue;
+                }
+                next += 1;
+                labels[i] = next;
+                let mut open = vec![(x, y)];
+                while let Some((cx, cy)) = open.pop() {
+                    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                        let Some(j) = self.idx(cx + dx, cy + dy) else {
+                            continue;
+                        };
+                        if labels[j] == 0 && land(j) {
+                            labels[j] = next;
+                            open.push((cx + dx, cy + dy));
+                        }
+                    }
+                }
+            }
+        }
+        labels
+    }
+
+    /// Each start's share of the land: the tiles of its landmass nearer to it than to any
+    /// other start there.
+    fn land_shares(&self, labels: &[u32], chosen: &[(i64, i64)]) -> Vec<i64> {
+        let label = |t: (i64, i64)| self.idx(t.0, t.1).map_or(0, |i| labels[i]);
+        let mut shares = vec![0_i64; chosen.len()];
+        for (i, &l) in labels.iter().enumerate() {
+            if l == 0 {
+                continue;
+            }
+            let tile = (i as i64 % self.w(), i as i64 / self.w());
+            let mut ranked = chosen
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| label(**s) == l)
+                .map(|(k, s)| (dist2(*s, tile), k));
+            let Some(first) = ranked.next() else { continue };
+            let (mut near, mut tie) = (first, false);
+            for other in ranked {
+                if other.0 < near.0 {
+                    (near, tie) = (other, false);
+                } else if other.0 == near.0 {
+                    tie = true;
+                }
+            }
+            if !tie {
+                shares[near.1] += 1;
+            }
+        }
+        shares
+    }
+
+    /// Starts for several players on one planet: of `FAIR_ATTEMPTS` sets spread at least
+    /// `min_sep` apart, the one with all starts on one landmass and the most even shares of
+    /// it (shares within `EVEN_LAND_PCT` of each other count as even), then the widest.
+    fn balanced_starts(
+        &mut self,
+        home: &Region,
+        candidates: &[(i64, i64)],
+        players: usize,
+        min_sep: i64,
+    ) -> Option<Vec<(i64, i64)>> {
+        let labels = self.land_labels(home);
+        let (w, h) = (self.w(), self.h());
+        let label = |t: (i64, i64)| {
+            if t.0 >= 0 && t.1 >= 0 && t.0 < w && t.1 < h {
+                labels[(t.1 * w + t.0) as usize]
+            } else {
+                0
+            }
+        };
+        let mut best: Option<((bool, i64, i64), Vec<(i64, i64)>)> = None;
+        for attempt in 0..FAIR_ATTEMPTS {
+            let first = candidates[self.rng.range(0, candidates.len() as u32) as usize];
+            let mut chosen = vec![first];
+            while chosen.len() < players {
+                let distance = |c: (i64, i64)| {
+                    chosen
+                        .iter()
+                        .map(|&s| dist2(s, c))
+                        .min()
+                        .unwrap_or(0)
+                };
+                // Even attempts take the farthest candidate (the first of equals); odd ones
+                // a random candidate on the first start's landmass at least three quarters
+                // as far away.
+                let far = candidates.iter().map(|&c| distance(c)).max().unwrap_or(0);
+                let pick = if attempt % 2 == 0 {
+                    candidates.iter().copied().find(|&c| distance(c) == far)
+                } else {
+                    let pool: Vec<(i64, i64)> = candidates
+                        .iter()
+                        .copied()
+                        .filter(|&c| distance(c) * 16 >= far * 9 && label(c) == label(first))
+                        .collect();
+                    (!pool.is_empty())
+                        .then(|| pool[self.rng.range(0, pool.len() as u32) as usize])
+                };
+                match pick {
+                    Some(pick) => chosen.push(pick),
+                    None => break,
+                }
+            }
+            if chosen.len() < players {
+                continue;
+            }
+            let spread = chosen
+                .iter()
+                .enumerate()
+                .flat_map(|(i, a)| chosen[i + 1..].iter().map(move |b| dist2(*a, *b)))
+                .min()
+                .unwrap_or(i64::MAX);
+            if spread < min_sep * min_sep {
+                continue;
+            }
+            let shares = self.land_shares(&labels, &chosen);
+            let (least, most) = (
+                shares.iter().copied().min().unwrap_or(0),
+                shares.iter().copied().max().unwrap_or(0).max(1),
+            );
+            let together = chosen.iter().all(|&c| label(c) == label(first));
+            let key = (together, (least * 100 / most).min(EVEN_LAND_PCT), spread);
+            if best.as_ref().is_none_or(|(k, _)| key > *k) {
+                best = Some((key, chosen));
+            }
+        }
+        best.map(|(_, chosen)| chosen)
+    }
+
     /// Places every player's start on the home planet of that player's race.
     fn place_starts(&mut self, races: &[DefId], player_races: &[DefId]) -> Result<(), MapGenError> {
         let sums = self.row_sums();
@@ -481,7 +624,10 @@ impl Builder<'_> {
             }
             let min_sep = i64::from(home.w.min(home.h) / 4);
             let mut best: Option<Vec<(i64, i64)>> = None;
-            for _attempt in 0..24 {
+            if players.len() > 1 {
+                best = self.balanced_starts(&home, &candidates, players.len(), min_sep);
+            }
+            for _attempt in 0..if best.is_some() { 0 } else { 24 } {
                 let first = candidates[self.rng.range(0, candidates.len() as u32) as usize];
                 let mut chosen = vec![first];
                 while chosen.len() < players.len() {
@@ -577,10 +723,19 @@ impl Builder<'_> {
         Some(found[self.rng.range(0, found.len() as u32) as usize])
     }
 
-    fn apply_clump(&mut self, row: &MapStyleFeature, base: DefId, seed_tile: (i64, i64)) {
+    /// Paints a clump (or places a node) at `seed_tile`. A terrain clump's size is rolled
+    /// unless `size` gives it; the size used is returned.
+    fn apply_clump(
+        &mut self,
+        row: &MapStyleFeature,
+        base: DefId,
+        seed_tile: (i64, i64),
+        size: Option<u32>,
+    ) -> u32 {
         let first = self.idx(seed_tile.0, seed_tile.1).expect("seed in bounds");
         if self.rules.terrains.contains_key(&row.feature_def_id) {
-            let target = self.count(row.size_min, row.size_max).max(1) as usize;
+            let rolled = size.unwrap_or_else(|| self.count(row.size_min, row.size_max));
+            let target = rolled.max(1) as usize;
             let mut painted = vec![seed_tile];
             self.map.grid.terrain[first] = row.feature_def_id;
             let mut attempts = 0;
@@ -619,12 +774,14 @@ impl Builder<'_> {
                 self.map.grid.terrain[j] = row.feature_def_id;
                 painted.push((nx, ny));
             }
+            rolled
         } else {
             self.occupied[first] = true;
             self.map.nodes.push(NodePlacement {
                 entity_type: row.feature_def_id,
                 pos: centre_of(seed_tile.0, seed_tile.1),
             });
+            1
         }
     }
 
@@ -647,15 +804,31 @@ impl Builder<'_> {
             self.map.base.space
         };
         if row.pattern == FeaturePattern::PerPlayer {
+            // Every player gets what the first one got: the same clumps of the same sizes,
+            // each at the same distance band from its start (rolled once, so a map of one
+            // player is drawn exactly as before).
+            let mut sizes: Option<Vec<u32>> = None;
             for p in 0..self.start_tiles.len() {
-                if !self.roll(row.chance_pct) {
-                    continue;
-                }
                 let region = (row.region_kind == RegionKind::Planet).then(|| self.start_regions[p]);
-                for _ in 0..self.count(row.clumps_min, row.clumps_max) {
-                    let near = Some(self.start_tiles[p]);
-                    if let Some(t) = self.pick_seed_tile(base, near, region, row) {
-                        self.apply_clump(row, base, t);
+                let near = Some(self.start_tiles[p]);
+                match &sizes {
+                    None => {
+                        let mut placed = Vec::new();
+                        if self.roll(row.chance_pct) {
+                            for _ in 0..self.count(row.clumps_min, row.clumps_max) {
+                                if let Some(t) = self.pick_seed_tile(base, near, region, row) {
+                                    placed.push(self.apply_clump(row, base, t, None));
+                                }
+                            }
+                        }
+                        sizes = Some(placed);
+                    }
+                    Some(placed) => {
+                        for size in placed.clone() {
+                            if let Some(t) = self.pick_seed_tile(base, near, region, row) {
+                                self.apply_clump(row, base, t, Some(size));
+                            }
+                        }
                     }
                 }
             }
@@ -668,14 +841,14 @@ impl Builder<'_> {
                 }
                 for _ in 0..self.count(row.clumps_min, row.clumps_max) {
                     if let Some(t) = self.pick_seed_tile(base, None, Some(id), row) {
-                        self.apply_clump(row, base, t);
+                        self.apply_clump(row, base, t, None);
                     }
                 }
             }
         } else if self.roll(row.chance_pct) {
             for _ in 0..self.count(row.clumps_min, row.clumps_max) {
                 if let Some(t) = self.pick_seed_tile(base, None, None, row) {
-                    self.apply_clump(row, base, t);
+                    self.apply_clump(row, base, t, None);
                 }
             }
         }

@@ -126,8 +126,12 @@ pub struct OrderSnapshot {
     pub build_remainder: i64,
     /// Created by automatic acquisition.
     pub automatic: bool,
-    /// Position to return to.
+    /// Position to return to; a patrol's other end.
     pub home: Option<Pos>,
+    /// Formation pace: walking speed cap.
+    pub pace: Option<i64>,
+    /// The enemy a guard is fighting off.
+    pub engaged: Option<EntityId>,
     /// Trade route state.
     pub route: Option<RouteSnapshot>,
     /// Walking state.
@@ -499,6 +503,8 @@ pub struct Snapshot {
     pub assimilating: Vec<EntityId>,
     /// Rally points of producers, by producer id.
     pub rallies: Vec<(EntityId, crate::Rally)>,
+    /// Each player's latest order failures, oldest first, in player order.
+    pub failures: Vec<(PlayerId, Vec<crate::OrderFailure>)>,
 }
 
 const RULES: [VictoryRule; 8] = [
@@ -604,6 +610,8 @@ fn order_snapshot(o: &Order) -> OrderSnapshot {
         build_remainder: o.build_remainder,
         automatic: o.automatic,
         home: o.home,
+        pace: o.pace,
+        engaged: o.engaged,
         route: o.route.as_ref().map(|r| RouteSnapshot {
             info: r.info.clone(),
             resource: r.resource,
@@ -640,6 +648,8 @@ fn order_from(o: OrderSnapshot) -> Order {
         build_remainder: o.build_remainder,
         automatic: o.automatic,
         home: o.home,
+        pace: o.pace,
+        engaged: o.engaged,
         route: o.route.map(|r| {
             Box::new(RouteState {
                 info: r.info,
@@ -946,6 +956,11 @@ impl World {
             neutralised: self.capture.neutralised.iter().copied().collect(),
             assimilating: self.capture.assimilating.iter().copied().collect(),
             rallies: self.rallies().collect(),
+            failures: self
+                .failures
+                .iter()
+                .map(|(player, list)| (*player, list.iter().cloned().collect()))
+                .collect(),
         }
     }
 
@@ -983,6 +998,7 @@ impl World {
             neutralised,
             assimilating,
             rallies,
+            failures,
         } = snapshot;
         let mut world = Self::empty(
             rules.clone(),
@@ -1300,6 +1316,10 @@ impl World {
             .map(|(o, append)| (order_from(o), append))
             .collect();
         world.rallies = rallies.into_iter().collect();
+        world.failures = failures
+            .into_iter()
+            .map(|(player, list)| (player, list.into_iter().collect()))
+            .collect();
         world.rebuild_type_index();
         world.hits = hits.iter().map(hit_from).collect();
         world.shots = shots

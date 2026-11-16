@@ -17,6 +17,9 @@ const PREVIEWS: usize = 4;
 const LOOKUPS: usize = 60_000;
 /// Radius, in tiles, in which a new city's surroundings are valued.
 const CITY_VALUE_TILES: i32 = 10;
+/// Tiles around node terrain kept for the first gather site of its resource: room for a
+/// footprint beside the deposit.
+const MARGIN_TILES: i32 = 4;
 
 /// The result of a site search.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,6 +51,10 @@ pub(crate) struct Ground {
     reserved: BTreeSet<Tile>,
     /// Whether the reservations of this thought have been made.
     pub reserved_done: bool,
+    /// Ground near the node terrain of a resource the player has no gather site for yet
+    /// (rock before the first mine): other buildings keep off it, so the site still has a
+    /// place when its age comes.
+    margin: BTreeSet<Tile>,
     /// Placement previews asked of the simulation during this thought.
     previews: std::cell::Cell<usize>,
     /// Tile lookups spent on site searches during this thought.
@@ -88,7 +95,54 @@ impl Ground {
                 ground.occupy(et, enemy.pos);
             }
         }
+        ground.keep_margins(view);
         ground
+    }
+
+    /// Marks the ground within `MARGIN_TILES` of node terrain around each city, for every
+    /// node terrain whose resource has no gather site of the player yet.
+    fn keep_margins(&mut self, view: &View<'_>) {
+        let rules = view.rules;
+        let terrains: BTreeSet<DefId> = view
+            .cat
+            .gather_sites
+            .values()
+            .filter(|sites| sites.iter().all(|s| view.line_count(*s) == 0))
+            .flatten()
+            .filter(|s| rules.is_available(**s, view.faction))
+            .filter_map(|s| rules.entity_types[s].gather_site.as_ref())
+            .filter(|g| g.slots_per_node > 0)
+            .filter_map(|g| g.needs_node_terrain_id)
+            .collect();
+        if terrains.is_empty() {
+            return;
+        }
+        for city in &view.cities {
+            // Node sites stand inside the economic radius and draw from a few tiles beyond.
+            let reach = ((city.radius / 1000) as i32 + MARGIN_TILES + 3).clamp(0, SEARCH_TILES);
+            for (dx, dy) in view
+                .cat
+                .spiral
+                .iter()
+                .take_while(|(dx, dy)| dx * dx + dy * dy <= reach * reach)
+            {
+                if !self.spend(1) {
+                    return;
+                }
+                let at = view
+                    .world
+                    .offset(city.pos, i64::from(*dx) * 1000, i64::from(*dy) * 1000);
+                if !view.world.terrain_at(at).is_some_and(|t| terrains.contains(&t)) {
+                    continue;
+                }
+                let (tx, ty) = (at.x.div_euclid(1000), at.y.div_euclid(1000));
+                for my in -MARGIN_TILES..=MARGIN_TILES {
+                    for mx in -MARGIN_TILES..=MARGIN_TILES {
+                        self.margin.insert((at.body.0, at.face, tx + mx, ty + my));
+                    }
+                }
+            }
+        }
     }
 
     fn occupy(&mut self, et: &EntityType, pos: Pos) {
@@ -224,8 +278,10 @@ fn fits(
     for y in y0..y0 + h {
         for x in x0..x0 + w {
             ground.spend(1);
-            if obstacles.contains(&(pos.body.0, pos.face, x, y))
-                || (!needs.node_site && ground.reserved.contains(&(pos.body.0, pos.face, x, y)))
+            let tile = (pos.body.0, pos.face, x, y);
+            if obstacles.contains(&tile)
+                || (!needs.node_site
+                    && (ground.reserved.contains(&tile) || ground.margin.contains(&tile)))
             {
                 return None;
             }
@@ -336,6 +392,8 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
         .as_ref()
         .filter(|s| s.slots_per_node > 0)
         .and_then(|s| s.needs_node_terrain_id.map(|t| (t, s)));
+    // A search cut short by the lookup allowance is tried again later, not given up.
+    let mut exhausted = false;
     for lane in [true, false] {
         for city in view.cities.iter().filter(|c| c.complete) {
             if needs.et.limit_scope == LimitScope::PerCity
@@ -381,6 +439,7 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
                 let mut ranked: Vec<(i64, usize, Pos)> = Vec::new();
                 for (order, at) in spots.enumerate() {
                     if !ground.spend(0) {
+                        exhausted = true;
                         break;
                     }
                     let near = node_tiles
@@ -391,6 +450,22 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
                     }
                     let Some(pos) = fits(view, ground, &needs, at, lane, needs.own_territory)
                     else {
+                        if std::env::var("ROM_AI_SITES").is_ok() && !lane {
+                            let et = needs.et;
+                            let p = Pos { x: snap(at.x, et.footprint_w.max(1)), y: snap(at.y, et.footprint_h.max(1)), ..at };
+                            let (x0, y0, w, h) = footprint(et, p);
+                            let mut why = String::new();
+                            for y in y0..y0 + h { for x in x0..x0 + w {
+                                let t = (p.body.0, p.face, x, y);
+                                if ground.taken.contains(&t) { why.push('B'); }
+                                else if ground.reserved.contains(&t) { why.push('R'); }
+                                else if !view.world.is_explored_on_body(view.me, p.body, p.face, x, y) { why.push('E'); }
+                                else if view.world.terrain_on_body(p.body, p.face, x, y) != Some(DefId(24)) { why.push('T'); }
+                                else if view.world.territory_owner_on_body(p.body, p.face, x, y) != Some(view.me) { why.push('O'); }
+                                else { why.push('.'); }
+                            }}
+                            eprintln!("  spot {},{} {}", p.x/1000, p.y/1000, why);
+                        }
                         continue;
                     };
                     if full(pos) {
@@ -408,6 +483,9 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
                     }
                 }
                 ranked.sort_unstable_by_key(|(worth, order, _)| (*worth, *order));
+                if std::env::var("ROM_AI_SITES").is_ok() {
+                    eprintln!("SITE p{} tick={} {} lane={lane} city={:?} reach={reach} node_tiles={} ranked={} lookups={} previews={}", view.me.0, view.tick, view.rules.key(subject), city.id, node_tiles.len(), ranked.len(), ground.lookups.get(), ground.previews.get());
+                }
                 for (_, _, pos) in ranked {
                     match ground.preview(view, subject, pos) {
                         Site::Nowhere => {}
@@ -437,7 +515,7 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
             }
         }
     }
-    Site::Nowhere
+    if exhausted { Site::Later } else { Site::Nowhere }
 }
 
 /// A site for another city: inside the player's borders (or anywhere not foreign once

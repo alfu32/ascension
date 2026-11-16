@@ -134,7 +134,18 @@ pub(crate) fn assess(view: &View<'_>, weights: &Weights, memory: &Memory) -> Eco
                 g.slots += e.gather_slots;
                 let taken = view.world.occupants(e.id).len() as i64
                     + view.inbound.get(&e.id).copied().unwrap_or(0);
-                eco.free.insert(e.id, e.gather_slots - taken);
+                // A site workers could not reach or fit into lately is not offered, nor one
+                // of a city the enemy has struck down: workers there only keep the fight for
+                // it going and die.
+                let shunned = memory
+                    .unreachable
+                    .get(&e.id.0)
+                    .is_some_and(|until| *until > view.tick)
+                    || e.city_id
+                        .and_then(|c| view.world.entity(c))
+                        .is_some_and(|c| c.neutralised);
+                eco.free
+                    .insert(e.id, if shunned { 0 } else { e.gather_slots - taken });
             } else if e.build_progress.is_some() {
                 g.pending += 1;
             }
@@ -254,10 +265,21 @@ pub(crate) fn assess(view: &View<'_>, weights: &Weights, memory: &Memory) -> Eco
     eco
 }
 
-/// Every `PACE_TICKS`, keeps part of the old demand and adds what this thought could not
-/// pay. Returns whether this was such a thought; a worker may then change resource too.
-pub(crate) fn update_demand(memory: &mut Memory, shortfall: &BTreeMap<DefId, i64>, tick: u64) {
-    if tick < memory.economy_tick + PACE_TICKS && tick >= memory.economy_tick {
+/// The ticks between demand updates and worker moves for a difficulty: `PACE_TICKS`, or
+/// twice its reaction time when that is longer (a slow mind rebalances late).
+pub(crate) fn pace(difficulty: &rom_rules::AiDifficulty) -> u64 {
+    PACE_TICKS.max(2 * difficulty.reaction_ticks.max(0) as u64)
+}
+
+/// Every `pace` ticks, keeps part of the old demand and adds what this thought could not
+/// pay; a worker may then change resource too.
+pub(crate) fn update_demand(
+    memory: &mut Memory,
+    shortfall: &BTreeMap<DefId, i64>,
+    tick: u64,
+    pace: u64,
+) {
+    if tick < memory.economy_tick + pace && tick >= memory.economy_tick {
         return;
     }
     memory.economy_tick = tick;
@@ -280,8 +302,9 @@ fn worker_types(view: &View<'_>) -> Vec<(DefId, BTreeSet<DefId>)> {
         .collect()
 }
 
-/// Wishes for gather sites and workers.
-pub(crate) fn wishes(view: &View<'_>, eco: &Economy, wishes: &mut Vec<Wish>) {
+/// Wishes for gather sites and workers. A `late` thought (a slip of a mind that makes
+/// mistakes) notices only resources without any site: further sites wait for a later one.
+pub(crate) fn wishes(view: &View<'_>, eco: &Economy, late: bool, wishes: &mut Vec<Wish>) {
     let rules = view.rules;
     for g in eco.resources.values() {
         let Some(site) = g.site_type else {
@@ -300,8 +323,11 @@ pub(crate) fn wishes(view: &View<'_>, eco: &Economy, wishes: &mut Vec<Wish>) {
                 g.pending * g.desired
             };
             let pending_limit = if spec.slots_max <= 2 { 2 } else { 1 };
-            if g.slots + coming < g.desired && g.pending < pending_limit {
-                let nothing = g.slots == 0 && g.pending == 0;
+            // The first site of a resource is always wished for: without it the resource
+            // has no income at all, whatever the worker plan says.
+            let nothing = g.slots == 0 && g.pending == 0;
+            if (nothing || (!late && g.slots + coming < g.desired)) && g.pending < pending_limit
+            {
                 wishes.push(Wish {
                     score: if nothing {
                         880
@@ -460,7 +486,28 @@ pub(crate) fn assign(plan: &mut Plan<'_>, eco: &mut Economy, rebalance: bool) {
         }
     }
 
+    // Workers in a gather site of a city the enemy has struck down are called out of it,
+    // one site a thought: they go to work elsewhere instead of holding the city for him.
+    let struck = plan
+        .view
+        .own
+        .iter()
+        .find(|e| {
+            !plan.view.world.occupants(e.id).is_empty()
+                && e.city_id
+                    .and_then(|c| plan.view.world.entity(c))
+                    .is_some_and(|c| c.neutralised)
+        })
+        .map(|e| e.id);
+    if let Some(site) = struck
+        && !plan.order(site, "release", None, None, None)
+    {
+        return;
+    }
+
     // Idle workers go where the plan is shortest of hands.
+    let crowded = plan.view.pop_used + plan.view.queued_pop >= plan.view.pop_cap;
+    let mut disbanded = false;
     let idle: Vec<&Entity> = workers
         .iter()
         .copied()
@@ -482,6 +529,13 @@ pub(crate) fn assign(plan: &mut Plan<'_>, eco: &mut Economy, rebalance: bool) {
             }
             *eco.free.entry(site).or_default() -= 1;
             eco.resources.get_mut(&resource).expect("listed").on += 1;
+        } else if crowded && !disbanded && eco.workers > eco.worker_target {
+            // Nothing for it to do and no room for anyone else: it leaves the match and
+            // frees its place in the population for someone useful.
+            if !plan.order(worker.id, "disband", None, None, None) {
+                return;
+            }
+            disbanded = true;
         }
     }
 
