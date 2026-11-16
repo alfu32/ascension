@@ -118,6 +118,17 @@ own height and bob and sway with a small `bank`. Modern vehicles are olive drab,
 ones a darker green (`mat.nato_green`), warships and jets haze grey (`mat.haze_grey`), sights,
 drones and carbines black composite (`mat.composite`); the strategic bomber is anti-flash white.
 
+Task 49 (future buildings, from the automation age) adds one shape, `torus` (a ring of round
+tube lying flat: the fusion plant's reactor), and no motion. Future buildings are smooth white
+composite (`mat.white_composite`, panelled walls `mat.composite_panel`) with dark teal smart
+glass bands (`mat.smart_glass`), round forms (vaulted roofs are lying cylinders, domes, capsule
+ends), solar panels on roofs (`mat.solar_panel`) and thin cyan light strips (`mat.light_strip`,
+self-lit) along bases, roof edges and walls. Team colour sits on bands, fascias, crowns, domes of
+corner towers and banners. Two more self-lit colours: pink grow lights in the automated farm
+(`mat.grow_light`) and violet plasma in the fusion reactor, shield pylons and rail-gun muzzles
+(`mat.plasma`). Dishes are a shallow dome facing the sky with a deeper one behind, so they read
+from both sides.
+
 ## Budgets
 
 | Model | Near | Far |
