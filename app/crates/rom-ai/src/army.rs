@@ -560,6 +560,9 @@ pub(crate) fn intruders(view: &View<'_>, memory: &Memory) -> Option<(Pos, i64)> 
 pub(crate) struct Command<'a> {
     pub weights: &'a Weights,
     pub difficulty: &'a AiDifficulty,
+    /// A mistake of judgement this thought (`mistake_pct`): the main army sets off for a
+    /// city before it is strong enough to take it.
+    pub blunder: bool,
 }
 
 /// Leads the armies for one thought: enlists new units, answers intruders, advances,
@@ -709,7 +712,12 @@ fn lead(
             if units.len() < wave {
                 return;
             }
-            let target = choose_target(&plan.view, memory, base, units, raid);
+            let target = choose_target(&plan.view, memory, base, units, raid).or_else(|| {
+                // A blunder sends the army at a city it cannot take.
+                (cmd.blunder && !raid)
+                    .then(|| choose_target(&plan.view, memory, base, &[], false))
+                    .flatten()
+            });
             let needed = match target {
                 Some((_, at)) if raid => threat_near(&plan.view, memory, at, THREAT_REACH),
                 Some((_, at)) => {
@@ -718,7 +726,10 @@ fn lead(
                 }
                 None => known_army(&plan.view, memory),
             };
-            if own * 100 < cmd.weights.attack_ratio * needed && !enemy_land_race(&plan.view) {
+            if own * 100 < cmd.weights.attack_ratio * needed
+                && !enemy_land_race(&plan.view)
+                && !cmd.blunder
+            {
                 return;
             }
             let goal = match target {

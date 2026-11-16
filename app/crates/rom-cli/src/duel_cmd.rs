@@ -27,7 +27,9 @@ const USAGE: &str = "usage: rom duel --db <rules.db> --profiles <a[:difficulty]>
 /// One and a half game hours at 20 ticks per second.
 pub const DEFAULT_TICKS_LIMIT: u64 = 108_000;
 /// Maps drawn for one seed before an unfair start is accepted.
-const MAP_TRIES: u64 = 8;
+const MAP_TRIES: u64 = 16;
+/// The least land one start may hold, as a share of the other's.
+const LAND_BALANCE_PCT: i64 = 75;
 
 /// What the command was asked to run.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -91,9 +93,53 @@ fn duel_faction(rules: &Rules, seed: u64) -> Result<DefId, String> {
     Ok(factions[(seed % factions.len() as u64) as usize])
 }
 
+/// Whether the starts are fair: about equal land, and room for the gather sites.
+fn fair(world: &World) -> bool {
+    balanced_land(world) && gather_sites_fit(world)
+}
+
+/// Whether the starting cities hold about as much land as each other: the smaller share is
+/// at least `LAND_BALANCE_PCT` of the larger.
+fn balanced_land(world: &World) -> bool {
+    let rules = world.rules();
+    let mut land: BTreeMap<PlayerId, i64> = BTreeMap::new();
+    for surface in world.surfaces() {
+        let body = surface.body();
+        let (faces, width, height) = match surface.topology() {
+            rom_sim::Topology::Flat { width, height } => (1, width as i32, height as i32),
+            rom_sim::Topology::Cube(cube) => (6, cube.n as i32, cube.n as i32),
+        };
+        for face in 0..faces {
+            for y in 0..height {
+                for x in 0..width {
+                    let Some(owner) = world.territory_owner_on_body(body, face, x, y) else {
+                        continue;
+                    };
+                    let ground = world
+                        .terrain_on_body(body, face, x, y)
+                        .is_some_and(|t| rules.terrains[&t].layer == rom_rules::Layer::Ground);
+                    if ground && owner != PlayerId(0) {
+                        *land.entry(owner).or_default() += 1;
+                    }
+                }
+            }
+        }
+    }
+    let players: Vec<i64> = world
+        .players()
+        .filter(|p| p.id != PlayerId(0))
+        .map(|p| land.get(&p.id).copied().unwrap_or(0))
+        .collect();
+    let (least, most) = (
+        players.iter().copied().min().unwrap_or(0),
+        players.iter().copied().max().unwrap_or(0),
+    );
+    least * 100 >= most * LAND_BALANCE_PCT
+}
+
 /// Whether every player's capital can place a gather site on each node terrain that a site
 /// it may build at the start draws from, with some of that terrain in reach.
-fn fair(world: &World) -> bool {
+fn gather_sites_fit(world: &World) -> bool {
     let rules = world.rules();
     world
         .players()
@@ -169,8 +215,8 @@ pub fn play(rules: &Arc<Rules>, duel: &DuelRequest, seed: u64) -> Result<DuelRes
         map_seed: None,
     };
     let faction = duel_faction(rules, seed)?;
-    // A start without room for a gather site on a node terrain never earns that resource:
-    // another map of the same seed is drawn instead.
+    // An unfair start (much less land, or no room for a gather site on a node terrain) decides
+    // a duel before it begins: another map of the same seed is drawn instead.
     let mut maps: u64 = 0;
     let (mut world, universe) = loop {
         let request = Request {
@@ -181,10 +227,12 @@ pub fn play(rules: &Arc<Rules>, duel: &DuelRequest, seed: u64) -> Result<DuelRes
             victories: duel.victories.clone(),
             ..MatchOptions::default()
         };
-        let built = build_world_with(rules, &request, &[faction, faction], options)?;
         maps += 1;
-        if maps >= MAP_TRIES || fair(&built.0) {
-            break built;
+        // A drawn map may have no room for a start: that one is skipped too.
+        match build_world_with(rules, &request, &[faction, faction], options) {
+            Ok(built) if maps >= MAP_TRIES || fair(&built.0) => break built,
+            Err(error) if maps >= MAP_TRIES => return Err(error),
+            _ => {}
         }
     };
     let mut brains = request

@@ -381,6 +381,7 @@ impl Brain {
         let command = army::Command {
             weights: &self.weights,
             difficulty: d,
+            blunder: slip(&mut rng),
         };
         // Under attack the armies take their orders before the workers do.
         if alarmed {
