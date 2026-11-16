@@ -1,8 +1,9 @@
 # Task 63 — Save and load from the game
 
 Crates: `rom-app` (pause menu, launcher, simulation thread), `rom-cli` (two
-small commands), docs. Starts after task 58 (both change `rom-app`) and after
-task 60 (both change `rom-cli`). Implementer: Claude (Sonnet).
+small commands), docs. Starts after task 64 (both change `rom-app`; 64 puts
+the brains' state into saves) and task 61 (both change `rom-cli`).
+Implementer: Claude (Sonnet).
 
 ## Why
 
@@ -30,8 +31,8 @@ Plan step 11.4 (`app/docs/implementation-plan.md`): save and load, pause menu.
    needs that is not in the simulation (camera, selection, control groups,
    the viewed body, game speed) is either rebuilt or stored in
    `match_setting` rows; say which.
-4. **Computer players.** If task 61 has merged, its brains' blobs go into
-   `player_ai_state` and come back on load; otherwise leave the hook.
+4. **Computer players.** Task 64 already saves and restores the brains;
+   make sure the save dialog, quick save and autosave pass them.
 5. **CLI.** `rom save-info <file>` (header) and `rom resume <file> --ticks N`
    (load and run headless, print the hash) for tests and bug reports.
 

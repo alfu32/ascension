@@ -10,6 +10,12 @@ use rom_models::sql::{MeshRows, ModelRows, PartRow, VisualRow};
 use rom_models::{ModelError, files};
 use serde_json::{Value, json};
 
+/// The temple these edit tests use is approved, so they unlock it as an owner's edit would.
+const EDIT_LOCKED: ImportOptions = ImportOptions {
+    model: None,
+    unlock: true,
+};
+
 /// A fresh copy of the model files in a temporary folder.
 struct Scratch {
     root: PathBuf,
@@ -464,7 +470,7 @@ fn free_form_objects_become_custom_parts() {
     }));
     let file = scratch.root.join("edited.octd");
     std::fs::write(&file, doc.to_string()).unwrap();
-    let report = import(&lib, &file, &ImportOptions::default()).unwrap();
+    let report = import(&lib, &file, &EDIT_LOCKED).unwrap();
     assert_eq!(report.counts, [13, 1, 0]);
     let sql = read(&report.sql);
     assert!(
@@ -526,7 +532,7 @@ fn edited_properties_win_and_unknown_settings_are_refused() {
     roof["ifcProperties"]["Rise of Man"]["y"]["value"] = json!(3.6);
     let file = scratch.root.join("edited.octd");
     std::fs::write(&file, doc.to_string()).unwrap();
-    let report = import(&lib, &file, &ImportOptions::default()).unwrap();
+    let report = import(&lib, &file, &EDIT_LOCKED).unwrap();
     let sql = read(&report.sql);
     assert!(
         sql.contains(r#"('roof','gable_roof','mat.terracotta',0,'','{"y":3.6,"yaw":90,"w":2.95,"d":2.95,"pitch":35,"overhang":0.1,"t":0.1}')"#),
