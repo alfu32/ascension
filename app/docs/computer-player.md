@@ -327,6 +327,35 @@ What changed in the brain, and why (each found in traced duels):
 - **Struck-down cities.** The army's focus fire picks only targets its units
   can hit; workers leave sites of an own city that was struck down.
 
+Measured on the i7-6700HQ (`rom duel`, 100 seeds, 8 jobs, 108 000-tick limit):
+
+| Duel | Wins | Draws | Player 1 / 2 wins | Run time |
+| --- | --- | --- | --- | --- |
+| task 61: moderate – easiest | 27 – 16 | 57 | 36 / 7 | 34.6 min (4 jobs) |
+| task 65: moderate – easiest | 13 – 7 | 80 | 9 / 11 | 35.6 min |
+| task 65: moderate – moderate | 7 – 7 | 86 | 9 / 5 | 33.3 min |
+
+**The target (90 wins, no draws) is not met.** The starts are now even (98 of
+100 maps fair at the first draw; the first player no longer wins 36 of 43), the
+stalls the traces showed are gone (no metal, siege-only armies, untouchable
+wading citizens, a careless mind spending its age savings), and moderate beats
+easiest, but most matches end in a stand-off: with even land both economies run
+into the same commerce caps and farm limits, armies stay at 20–60 units, and an
+attack on a capital meets the city's guns, towers and dozens of armed citizens
+inside its radius; nobody can clear it to capture it. What would end them is
+for task 66: an army that grows past the defence before it marches (it is
+capped by `mil.army_share_pct` and food), a capture rule that unarmed-for-war
+citizens do not hold, or a bigger skill gap between the difficulties than the
+existing `ai_difficulty` columns give.
+
+Solo (`rom ai-match --seed 1 --players balanced:<difficulty> --ticks 72000`):
+
+| Difficulty | Age at 72 000 | Cities | Workers | Techs | Gathered |
+| --- | --- | --- | --- | --- | --- |
+| easiest | 4 | 6 | 83 | 43 | 56 884 |
+| moderate | 4 | 6 | 94 | 45 | 74 469 |
+| toughest | 6 | 6 | 101 | 66 | 93 192 |
+
 Memory layout version 3 adds the age clock (age and the tick it began);
 versions 1 and 2 still read.
 
@@ -414,7 +443,7 @@ rom duel --db target/rules.db --profiles balanced:moderate,balanced:easiest --se
 ```
 
 Two computer players of one race (races meet only in space) and the same
-faction, picked by the seed, start on one generated map with the victory rules
+faction, picked by the seed, start on one fair generated map (`generate_fair`) with the victory rules
 on (capital elimination, conquest by default). On odd seeds the second
 profile takes the first start. A drawn map whose starts are unfair — one holds
 less than three quarters of the other's land, or a capital has no room for a
