@@ -410,7 +410,7 @@ armies still did not finish a match, one cause after another:
   site.
 - **Difficulty that decides.** New `ai_difficulty` columns (`grace_ticks`,
   `first_wave_max`, `wave_growth_per_hour`, `army_vs_enemy_pct`, `economy_pct`; values
-  in `database.md`). `easiest` leaves an opponent's town alone for twenty minutes, sends at
+  in `database.md`). `easiest` leaves an opponent's town alone for thirty minutes, sends at
   most five units in its first wave (ten more per hour), keeps its army within 40 % of
   the largest enemy army it has seen and keeps half its profile's workers; `easy`
   ten minutes, eight units, 80 %, 80 %. Scouts hold their fire during the grace period:
