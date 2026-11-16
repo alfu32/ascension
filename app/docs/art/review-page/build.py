@@ -40,6 +40,10 @@ OVERVIEW5 = [
     ("match_enlightenment", "In a match in the enlightenment age: the city and its farm"),
     ("unit.musketeer_gunpowder_attack_before", "Firing a long gun, before: one hand, from the hip"),
     ("unit.musketeer_gunpowder_attack", "Firing a long gun, after: from the shoulder, both hands"),
+    ("unit.arquebusier_gunpowder_attack_before", "Arquebusier, before"),
+    ("unit.arquebusier_gunpowder_attack", "Arquebusier, after"),
+    ("unit.crossbowman_medieval_attack_before", "Crossbowman, before"),
+    ("unit.crossbowman_medieval_attack", "Crossbowman, after"),
     ("gallery_units_close", "Every unit so far, close: <code>--gallery units</code>"),
 ]
 OVERVIEW6 = [
@@ -80,6 +84,8 @@ def round_of(m):
         return 5
     if m["age"] in ("age.medieval", "age.gunpowder"):
         return 4
+    if m["age"] not in ("age.ancient", "age.classical", None, ""):
+        return 5  # later models not yet reviewed (the starfaring transport ship)
     return 3 if unit else 2
 
 models = []

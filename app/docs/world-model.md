@@ -128,8 +128,30 @@ ships have a separate ground bombardment weapon. The survey ship does not.
 Select an orbital ship and right-click an enemy ground unit or building to
 attack; the attack hotkey followed by clicking that entity also works. The
 ship keeps orbiting and fires as targets pass within its footprint. A short
-beam uses the actual shot's target position. Surface weapons cannot hit an
-orbital ship; anti-space batteries remain a later task.
+beam uses the actual shot's target position. Surface weapons reach an
+orbital ship only when they have an `orbit` target layer (task 58, below).
+
+### Orbital craft, carriers and ground batteries (task 58)
+
+The airfield trains **orbital fighters** and **orbital bombers** from the
+starfaring age. They take off beside the airfield like other aircraft;
+**Climb to orbit** (or `lift`) takes them up to their planet's orbit by
+themselves, drawn climbing. In orbit they sit beside the ships there: fighters
+engage ships and craft in orbit (and aircraft while in the air), bombers strike
+ships in orbit and, like a starship's bombardment, the ground below. Right-click
+open ground of their planet to bring them back down into the air above it. They
+never leave that orbit on their own: the **carrier** (spaceport, starfaring)
+takes ten craft aboard — they board it in the orbit of their planet, climbing
+first if they are in the air — carries them between planets and systems, and
+**Launch craft** sends them out into the orbit it holds. The transport and the
+other starships take ground units only; the carrier takes craft only (container
+tags).
+
+The **ground battery** (starfaring building) fires on enemy ships and craft
+orbiting above it within fourteen tiles of their ground point, so it shoots at
+a carrier descending onto ground near it all the way down; the laser battery
+fires up as well, less accurately. Shots between the ground and orbit, and
+between craft and ships in orbit, are drawn as orange tracers.
 
 ### Carrying, landing and colonies (task 54)
 

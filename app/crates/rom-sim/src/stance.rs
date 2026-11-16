@@ -118,6 +118,24 @@ impl World {
             candidates.extend(self.entities_in_radius(orbit.pos, radius));
             candidates.sort_unstable();
             candidates.dedup();
+        } else if et
+            .weapons
+            .iter()
+            .any(|w| w.targets.iter().any(|t| t.layer == rom_rules::Layer::Orbit))
+            && let Some(geo) = self.surface(e.pos.body).map(|s| &s.geo)
+        {
+            // What orbits this planet, by its ground subpoint, in id order.
+            candidates.extend(
+                self.space
+                    .orbits
+                    .iter()
+                    .filter(|(_, o)| {
+                        o.body == e.pos.body && geo.within(e.pos, o.pos, radius as i64)
+                    })
+                    .map(|(id, _)| *id),
+            );
+            candidates.sort_unstable();
+            candidates.dedup();
         }
         candidates
             .into_iter()
@@ -141,7 +159,7 @@ impl World {
                     "raze" => self.rules.entity_types[&t.type_id].class == EntityClass::Building,
                     _ => false,
                 };
-                let pos = self.seen_pos(target);
+                let pos = self.aim_pos(id, target);
                 let origin = self.attack_position(id, target);
                 let geo = self.geo(origin.body);
                 let (dx, dy) = geo.vector(origin, pos)?;

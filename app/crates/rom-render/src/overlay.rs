@@ -368,6 +368,52 @@ pub fn build_overlays_on(
         out.ring(impact, 0.8, [255, 190, 70, 255]);
         out.line(to, impact.at(0.0, 0.0, 2.0), [255, 235, 160, 255]);
     }
+    // Tracers of shots to or from what is aloft: batteries firing up, dogfights in orbit.
+    for view in views {
+        let Some(target) = view
+            .shot_at
+            .and_then(|id| views.iter().find(|v| v.id == id))
+            .filter(|t| view.altitude > 0.0 || t.altitude > 0.0)
+        else {
+            continue;
+        };
+        let centre = |v: &EntityView| {
+            let height = if v.building {
+                building_height(v) * 0.8
+            } else {
+                crate::entities::unit_height(v) * 0.5
+            };
+            entity_frame(v, ground).at([0.0, height, 0.0])
+        };
+        let (from, to) = (centre(view), centre(target));
+        let direction = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
+        let mut side = [
+            direction[1] * right[2] - direction[2] * right[1],
+            direction[2] * right[0] - direction[0] * right[2],
+            direction[0] * right[1] - direction[1] * right[0],
+        ];
+        let length = side.iter().map(|v| v * v).sum::<f32>().sqrt().max(0.001);
+        side = side.map(|v| v / length * 0.14);
+        let offset = |p: [f32; 3], sign: f32| std::array::from_fn(|i| p[i] + side[i] * sign);
+        out.quad(
+            [
+                offset(from, -1.0),
+                offset(from, 1.0),
+                offset(to, 1.0),
+                offset(to, -1.0),
+            ],
+            [255, 150, 60, 220],
+        );
+        out.line(from, to, [255, 235, 190, 255]);
+        let hit = Origin {
+            ground,
+            face: target.face,
+            x: target.x,
+            y: target.y,
+            altitude: target.altitude,
+        };
+        out.ring(hit, 0.6, [255, 200, 90, 255]);
+    }
     for id in &hud.selected {
         let Ok(index) = views.binary_search_by_key(id, |v| v.id) else {
             continue;
@@ -529,6 +575,7 @@ pub fn build_overlays_on(
             model: None,
             altitude: 0.0,
             beam_target: None,
+            shot_at: None,
             spacecraft: false,
             activity: Default::default(),
         };
@@ -569,6 +616,7 @@ mod tests {
             model: None,
             altitude: 0.0,
             beam_target: None,
+            shot_at: None,
             spacecraft: false,
             activity: Default::default(),
         }

@@ -131,11 +131,12 @@ def generate():
         need(key, 'age.' + AGES[age])
         research.append((building, age, len(research), key, kind, track))
         cost(key, prices)
-    def weapon(key, damage, dc, reach, layers, cooldown=30):
-        row('et_weapon', entity_type_id=Ref(key), damage=damage, damage_class_id=Ref(dc, 'damage_class'),
-            range_max=reach, cooldown_ticks=cooldown)
+    def weapon(key, damage, dc, reach, layers, cooldown=30, slot=0, **extra):
+        row('et_weapon', entity_type_id=Ref(key), **({'slot': slot} if slot else {}), damage=damage,
+            damage_class_id=Ref(dc, 'damage_class'), range_max=reach, cooldown_ticks=cooldown, **extra)
+        which = f'entity_type_id={val(Ref(key))}' + (f' AND slot={slot}' if slot else '')
         for layer in layers:
-            sql.append(f"INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id={val(Ref(key))}),{val(layer)});")
+            sql.append(f"INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE {which}),{val(layer)});")
     def upgrade(old, new, name, age, building, ticks, prices, kind='unit_upgrade'):
         key = 'tech.up.' + new.split('.', 1)[1]
         tech(key, 'Upgrade to ' + name, age, building, ticks * 2,
@@ -311,10 +312,13 @@ def generate():
                 tag(full, role)
             if 'drone' in key:
                 tag(full, 'drone')
+            if not spacecraft:
+                # Rides transports and starships between planets (orbital craft ride carriers).
+                tag(full, 'passenger')
             movement = 'starship' if spacecraft else 'ship' if line == 'warship' else 'aircraft' if aircraft or line == 'repair' else 'wheeled' if mechanical and not line in ('civilian', 'scout') else 'foot'
             row('et_movement', entity_type_id=Ref(full), movement_class_id=Ref(movement, 'movement_class'), speed=speed)
             if attack:
-                layers = ['air'] if line in ('fighter', 'anti_air') else ['fluid', 'ground'] if line == 'warship' else ['space'] if line == 'starship' else ['ground']
+                layers = ['air'] if line in ('fighter', 'anti_air') else ['fluid', 'ground'] if line == 'warship' else ['space', 'orbit'] if line == 'starship' else ['ground']
                 weapon(full, scale(attack), 'melee' if line == 'civilian' else dc, reach, layers, 40 if line == 'civilian' else 30)
             if line == 'civilian':
                 row('et_builder', entity_type_id=Ref(full))
@@ -341,7 +345,8 @@ def generate():
             if spacecraft:
                 # Carriers: a transport takes a company, every other starship one or two squads
                 # (population, one unit each).
-                row('et_container', entity_type_id=Ref(full), capacity=20 if line == 'transport' else 1 if age <= 10 else 2)
+                row('et_container', entity_type_id=Ref(full), capacity=20 if line == 'transport' else 1 if age <= 10 else 2,
+                    accept_tag_id=Ref('passenger', 'tag'))
             need(full, 'age.' + AGES[age])
             produce('bld.' + building, full, 'train', 'units')
             cost(full, prices, True)
@@ -420,6 +425,7 @@ def generate():
     for key, age, ticks in [('continental_union', 8, 3000), ('unification', 10, 4000)]:
         tech('tech.' + key, key.replace('_', ' ').title(), age, 'library', ticks, {'knowledge': 1000}, 'project')
     row('tech_effect', tech_id=Ref('tech.unification'), effect='change_faction', target_def_id=Ref('race.human'))
+    orbital_combat(definition, row, tag, need, produce, cost, weapon)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -444,6 +450,64 @@ def generate():
         row('prerequisite', def_id=Ref(key), requires_def_id=Ref(requirement), alt_group=group)
     sql.append(END)
     return '\n'.join(sql)
+
+
+def orbital_combat(definition, row, tag, need, produce, cost, weapon):
+    """Task 58: orbital craft trained at the airfield, the carrier that takes them between planets
+    and the ground battery that fires on ships in orbit. Defined after every other generated
+    definition so the ids of earlier content stay stable."""
+    age = AGES.index('starfaring')
+    # key, name, hp, armor, speed, climb ticks, build ticks, prices
+    craft = [('orbital_fighter', 'Orbital Fighters', 420, 4, 5000, 100, 400, {'metal': 220, 'energy': 80}),
+             ('orbital_bomber', 'Orbital Bombers', 520, 4, 4000, 120, 450, {'metal': 260, 'energy': 100})]
+    for key, name, *_ in craft:
+        definition('entity_type', 'unit.' + key, name)
+    definition('entity_type', 'unit.carrier', 'Carriers')
+    definition('entity_type', 'bld.ground_battery', 'Ground Battery')
+    for key, name, hp, armor, speed, climb, ticks, prices in craft:
+        full = 'unit.' + key
+        row('entity_type', id=Ref(full), **{'class': 'unit'}, ui_group=key, hp=hp, armor=armor,
+            armor_class_id=Ref('vehicle', 'armor_class'), los=6000, pop_cost=1, build_ticks=ticks,
+            ramp_mode='per_type', first_age_id=Ref('age.starfaring'))
+        tag(full, 'mechanical', 'military', 'aircraft', 'orbital_craft')
+        row('et_movement', entity_type_id=Ref(full), movement_class_id=Ref('aircraft', 'movement_class'),
+            speed=speed, climb_ticks=climb)
+        if key == 'orbital_fighter':
+            # Dogfights: air units in the atmosphere, ships and craft in orbit or in space.
+            weapon(full, 40, 'explosive', 5000, ['air', 'orbit', 'space'], 20)
+        else:
+            weapon(full, 30, 'explosive', 4000, ['orbit', 'space'], 40)
+            # Strikes the ground below its orbit, like a starship's bombardment.
+            weapon(full, 90, 'explosive', 8000, ['ground'], 60, slot=1, orbit_only=1)
+        need(full, 'age.starfaring')
+        produce('bld.airfield', full, 'train', 'units')
+        cost(full, prices, True)
+    full = 'unit.carrier'
+    row('entity_type', id=Ref(full), **{'class': 'unit'}, ui_group='carrier', hp=2000, armor=6,
+        armor_class_id=Ref('shield', 'armor_class'), los=9000, pop_cost=2, build_ticks=500,
+        ramp_mode='per_type', first_age_id=Ref('age.starfaring'))
+    tag(full, 'mechanical', 'military', 'starship')
+    row('et_movement', entity_type_id=Ref(full), movement_class_id=Ref('starship', 'movement_class'), speed=2400)
+    weapon(full, 25, 'energy', 6000, ['space', 'orbit'], 30)
+    # Ten craft in its hangar, launched into the orbit it holds.
+    row('et_container', entity_type_id=Ref(full), capacity=10, accept_tag_id=Ref('orbital_craft', 'tag'),
+        launches=1)
+    need(full, 'age.starfaring')
+    produce('bld.spaceport', full, 'train', 'units')
+    cost(full, {'metal': 700, 'energy': 300}, True)
+    full = 'bld.ground_battery'
+    row('entity_type', id=Ref(full), **{'class': 'building'}, ui_group='military', hp=2400, armor=5,
+        armor_class_id=Ref('structure', 'armor_class'), los=16000, footprint_w=3, footprint_h=3,
+        build_ticks=150 + 25 * age, ramp_mode='per_type', first_age_id=Ref('age.starfaring'))
+    tag(full, 'building', 'mechanical')
+    need(full, 'age.starfaring')
+    cost(full, {'metal': 400, 'energy': 200}, True)
+    for builder in ('citizen', 'worker_drone'):
+        produce('unit.' + builder, full, 'construct', 'military')
+    row('placement_rule', entity_type_id=Ref(full), rule='in_own_territory')
+    row('placement_rule', entity_type_id=Ref(full), rule='on_terrain', ref_def_id=Ref('ter.plain'))
+    # Fires on enemy ships and craft in the orbit above it, measured to their ground subpoint.
+    weapon(full, 150, 'explosive', 14000, ['orbit'], 30)
 
 
 def main():

@@ -225,7 +225,8 @@ The numeric ranks are the rules contract; code does not branch on the keys.
 `et_weapon.orbit_only INTEGER NOT NULL DEFAULT 0 CHECK (orbit_only IN (0,1))`
 marks weapons that require the attacker to orbit the target's body. Their
 `range_min`/`range_max` measure ground distance from the orbital subpoint to
-the target footprint. Ordinary weapons retain their usual layer/range rules.
+the target footprint. Ordinary weapons retain their usual layer/range rules
+(task 58 adds the `orbit` layer: ground → orbit and orbit → orbit).
 Corvettes, space frigates, space cruisers and battleships get slot 1 explosive
 bombardment weapons targeting `ground`; their original space weapons stay
 in slot 0. The hand-written rows follow the generated seed block.
@@ -674,11 +675,70 @@ No table or column was added: carrying uses the existing component and state.
   steps out first; aboard a carrier in space it refuses orders (`Aboard`).
 - **Landed ships** stand on the planet's surface (`entity.body_id` that planet,
   no `entity_orbit` row) and are listed in the simulation's landed set; they do
-  not walk. They are saved as the `landed` flag in `entity_flag`. Surface weapons can hit them; their own space weapons cannot fire.
+  not walk. They are saved as the `landed` flag in `entity_flag`. Surface weapons can hit them; their own space weapons cannot fire (since task 58 their `orbit` rows reach what orbits above).
 - **Colonies.** The first city a player founds on a planet may stand outside
   any border (never inside another player's territory), as free colonisation
   allows everywhere from the enlightenment age. Its borders, economy and
   production are those of any city.
+
+## Orbital craft, carriers and ground batteries (task 58)
+
+Schema changes, all deliberate (both lint views stay empty, the seed loads):
+
+- **`et_movement.climb_ticks`** (new, `INTEGER NOT NULL DEFAULT 0`, `>= 0`). A unit
+  whose movement row has `climb_ticks > 0` is an **orbital craft**: it flies in
+  its planet's air with its ordinary movement class (`aircraft` in the seed),
+  climbs from there to the orbit of that planet by itself in `climb_ticks`
+  (order `lift`), and comes back down into the air above a point of that planet
+  in the same time (order `land`). In orbit it stays with that planet: `move`,
+  `attack_move`, `patrol`, `guard`, `explore`, `orbit` and `travel` are refused
+  (`CraftInOrbit`); it can attack, board a carrier in the same orbit (`enter`;
+  from the air it climbs first) or come down. It leaves the planet only aboard
+  a carrier. `rom-rules` reads the column into `Movement::climb_ticks`.
+- **Weapon reach between layers is data**: `et_weapon_target.layer = 'orbit'`
+  (the `orbit` layer existed and was unused). An entity in a planet's orbit is
+  on the `orbit` layer (it was `space` before task 58). A weapon with an
+  `orbit` row hits it from the same orbit or from system space (the ordinary
+  same-plane rule), and **from that planet's surface or air**, its range
+  measured on the ground to the target's subpoint (ground → orbit). Orbit →
+  ground stays `et_weapon.orbit_only`; orbit → orbit and space → orbit are an
+  `orbit` row with an ordinary weapon. Starship weapons have both `space` and
+  `orbit` rows. Landed ships with such weapons can fire up at what orbits above.
+- **`et_weapon_target.hit_pct`** is now read: it scales the weapon's accuracy
+  against that layer (100 = unchanged; every row before task 58 is 100). The
+  laser battery's weapon gets an `orbit` row at 40 %: a weaker anti-orbit
+  attack.
+- **`order_kind`**: `land` now needs `movement` (it needed `container`), so a
+  craft can come down; `lift`, `enter` and `unload` keep their needs, with
+  notes for craft and launching carriers.
+- **Tags** `passenger` (every unit that rides transports and starships: all units
+  except spacecraft and orbital craft) and `orbital_craft`. Which carrier takes
+  which units is `et_container.accept_tag_id`: the transport and every other
+  starship accept `passenger`, the carrier accepts `orbital_craft`.
+- **`et_container.launches`** (existing column, now read): a carrier in orbit
+  whose container `launches` sends its craft out into that orbit with `unload`
+  (the button reads *Launch craft*); landed, it sets them down around itself
+  like any carrier. A carrier in free system space does not launch: craft have
+  nowhere to hold there.
+
+No simulation state was added: craft in orbit use `entity_orbit`, climbing and
+descending are the progress of their `lift` / `land` / `enter` order, and craft
+aboard a carrier are passengers (`container_id`), so saves (task 62) carry them
+unchanged.
+
+Content (generator, `orbital_combat()`, defined after every other generated
+definition so earlier ids stay stable):
+
+| Key | Where | Stats |
+| --- | --- | --- |
+| `unit.orbital_fighter` | airfield, starfaring | 420 HP, armour 4 vehicle, speed 5000 (aircraft), climb 100 ticks; 40 explosive, range 5 tiles, every 20 ticks, at `air`, `orbit`, `space`; 220 metal 80 energy, 400 ticks |
+| `unit.orbital_bomber` | airfield, starfaring | 520 HP, armour 4 vehicle, speed 4000, climb 120 ticks; slot 0: 30 explosive, 4 tiles, 40 ticks, at `orbit`, `space`; slot 1 (`orbit_only`): 90 explosive, 8 tiles, 60 ticks, at `ground`; 260 metal 100 energy, 450 ticks |
+| `unit.carrier` | spaceport, starfaring | 2000 HP, armour 6 shield, speed 2400 (starship), `pop_cost` 2; 25 energy, 6 tiles, at `space`, `orbit`; container 10 population, accepts `orbital_craft`, `launches`; 700 metal 300 energy, 500 ticks |
+| `bld.ground_battery` | built by citizens and worker drones, starfaring, military page, own territory, plain | 2400 HP, armour 5 structure, 3 × 3, sight 16 tiles; 150 explosive, 14 tiles to the subpoint, every 30 ticks, at `orbit`; 400 metal 200 energy |
+
+`et_view_scale` rows: carrier 450 / 45, fighter 300 / 25, bomber 320 / 25. A
+ground battery contests a landing: a carrier descending onto ground within its
+range is in orbit until it touches down, so it is shot at all the way down.
 
 ## Placement and resource discovery (task 41)
 

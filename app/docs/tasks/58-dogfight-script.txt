@@ -1,0 +1,20 @@
+# Task 58, replayed by --script in --universe mode: orbital fighters of both sides climb from
+# beside the city and fight in the orbit above it. Test-only setup
+# lines first (`place-orbit` of a craft places it and orders it to climb).
+0 grant-age age.starfaring
+0 place 1 bld.airfield @14,-4
+0 place 1 unit.orbital_fighter @5,8
+0 place 1 unit.orbital_fighter @7,9
+0 place 1 unit.orbital_fighter @9,8
+0 place 1 unit.orbital_fighter @7,7
+0 place-orbit 2 unit.orbital_fighter @2,9
+0 place-orbit 2 unit.orbital_fighter @4,11
+0 place-orbit 2 unit.orbital_fighter @3,7
+1 speed 100
+4 craft
+6 hud tab 1
+8 hud slot 5
+10 cam wheel 4 1100,300
+# In orbit from tick 108; fighters fire every 20 ticks.
+165 click @-14,16
+171 speed 1

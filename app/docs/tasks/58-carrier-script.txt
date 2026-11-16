@@ -1,0 +1,17 @@
+# Task 58, replayed by --script in --universe mode: three orbital fighters climb to a carrier
+# orbiting above the city and board it; the carrier's panel lists them and offers to launch.
+0 grant-age age.starfaring
+0 place-orbit 1 unit.carrier @4,0
+0 place 1 unit.orbital_fighter @6,5
+0 place 1 unit.orbital_fighter @7,6
+0 place 1 unit.orbital_fighter @8,5
+1 speed 200
+20 cam wheel 3 840,250
+4 craft
+6 rclick ship1
+# They climb for 100 ticks and board; then select the carrier and open its orders.
+160 ships
+164 hud tab 1
+# Point at the Launch craft button (slot T) so its name shows.
+168 cam point 325,770
+170 speed 1

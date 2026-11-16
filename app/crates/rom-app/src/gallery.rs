@@ -164,6 +164,7 @@ pub fn lay_out(
             facing_deg: 90.0,
             altitude: 0.0,
             beam_target: None,
+            shot_at: None,
             spacecraft: false,
             hp_frac: 1.0,
             building,
@@ -559,6 +560,7 @@ mod tests {
         assert_eq!(
             changed,
             [
+                "bld.ground_battery@starfaring",
                 "bld.library@industrial",
                 "bld.refinery@industrial",
                 "bld.smelter@gunpowder",
@@ -572,6 +574,7 @@ mod tests {
                 "unit.biplane@industrial",
                 "unit.bombard@gunpowder",
                 "unit.cannon@enlightenment",
+                "unit.carrier@starfaring",
                 "unit.cuirassier@gunpowder",
                 "unit.dragoon@enlightenment",
                 "unit.field_gun@industrial",
@@ -582,6 +585,8 @@ mod tests {
                 "unit.light_tank@industrial",
                 "unit.machine_gunner@industrial",
                 "unit.musketeer@gunpowder",
+                "unit.orbital_bomber@starfaring",
+                "unit.orbital_fighter@starfaring",
                 "unit.ranger@enlightenment",
                 "unit.rifleman@industrial",
                 "unit.transport_ship@starfaring"

@@ -259,7 +259,11 @@ CREATE TABLE et_movement (             -- "moves"
   turn_rate         INTEGER NOT NULL DEFAULT 360, -- degrees per second
   formation_spacing INTEGER NOT NULL DEFAULT 750,
   packs             INTEGER NOT NULL DEFAULT 0, -- must deploy to fire / pack to move
-  pack_ticks        INTEGER NOT NULL DEFAULT 0
+  pack_ticks        INTEGER NOT NULL DEFAULT 0,
+  climb_ticks       INTEGER NOT NULL DEFAULT 0 CHECK (climb_ticks >= 0)
+                                       -- orbital craft (task 58): ticks to climb from a planet's
+                                       -- surface to its orbit by itself, and to come back down;
+                                       -- 0 = cannot. Craft never leave that orbit on their own.
 ) STRICT;
 
 CREATE TABLE et_weapon (               -- "attacks" (0..n per type)
@@ -285,8 +289,9 @@ CREATE TABLE et_weapon (               -- "attacks" (0..n per type)
 
 CREATE TABLE et_weapon_target (        -- which layers a weapon can hit, and how well
   weapon_id INTEGER NOT NULL REFERENCES et_weapon(id) ON DELETE CASCADE,
-  layer     TEXT NOT NULL REFERENCES layer(key),
-  hit_pct   INTEGER NOT NULL DEFAULT 100,
+  layer     TEXT NOT NULL REFERENCES layer(key), -- 'orbit': entities orbiting a planet; from that
+                                       -- planet's surface the range is measured to their subpoint
+  hit_pct   INTEGER NOT NULL DEFAULT 100, -- accuracy against this layer, % of the weapon's
   PRIMARY KEY (weapon_id, layer)
 ) STRICT, WITHOUT ROWID;
 
@@ -358,7 +363,8 @@ CREATE TABLE et_container (            -- garrison, transport, carrier, hangar
   accept_tag_id  INTEGER REFERENCES tag(id),  -- NULL = anything
   heals          INTEGER NOT NULL DEFAULT 0,
   adds_firepower INTEGER NOT NULL DEFAULT 0,
-  launches       INTEGER NOT NULL DEFAULT 0   -- aircraft/drones sortie from here and return
+  launches       INTEGER NOT NULL DEFAULT 0   -- aircraft/drones sortie from here and return; a
+                                       -- carrier in orbit launches its craft into that orbit
 ) STRICT;
 
 CREATE TABLE et_producer (             -- "takes production and research orders"
