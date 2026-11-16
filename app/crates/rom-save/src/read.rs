@@ -1016,6 +1016,17 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
         awake: flags(conn, "awake")?,
         neutralised: flags(conn, "neutralised")?,
         assimilating: flags(conn, "assimilating")?,
+        sieges: query_vec(
+            conn,
+            "SELECT city_id, team, since FROM city_siege ORDER BY city_id",
+            |r| {
+                Ok((
+                    EntityId(uint(r, 0, "siege city")?),
+                    uint(r, 1, "siege team")?,
+                    u(int(r, 2)?),
+                ))
+            },
+        )?,
         failures: {
             let rows = query_vec(
                 conn,

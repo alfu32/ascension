@@ -57,6 +57,7 @@ pub use snapshot::*;
 pub use space::{BodyClaim, BodyYield, Orbit, OrbitalShot, Transit};
 pub use surface::Surface;
 pub use universe::{BodyId, BodyInfo, PlanetSurface, RouteInfo, SystemInfo, UniverseSetup};
+pub use capture::CaptureCountdown;
 pub use victory::{Elimination, MatchOptions, Outcome, PlayerStatus};
 pub use vision::{RememberedBuilding, Sighting};
 pub use wealth::TradeRoute;

@@ -204,6 +204,7 @@ impl World {
             ("combat.attrition_per_period", 0, i64::MAX),
             ("combat.attrition_floor_hp", 0, 1),
             ("city.assimilate_ticks", 0, i64::MAX),
+            ("city.capture_hold_ticks", 0, i64::MAX),
             ("victory.capital_hold_ticks", 0, i64::MAX),
             ("unit.respond_range", 0, i64::MAX),
             ("player.pop_cap.base", 0, i64::MAX),
@@ -626,6 +627,7 @@ impl World {
         self.space.landed.remove(&id);
         self.capture.neutralised.remove(&id);
         self.capture.assimilating.remove(&id);
+        self.capture.sieges.remove(&id);
         let slot = self.slot(entity.pos.body);
         let surface = &mut self.surfaces[slot];
         surface.spatial.remove(id, entity.pos);

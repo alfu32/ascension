@@ -26,6 +26,7 @@ INSERT INTO game_constant(key,value,unit,note) VALUES
  ('city.radius_per_building',400,'milli-tiles','economic radius a city gains per completed own building inside it'),
  ('city.radius_from_buildings_max',8000,'milli-tiles','cap on the economic radius gained from buildings'),
  ('city.assimilate_ticks',2400,'ticks','captured city becomes yours after this'),
+ ('city.capture_hold_ticks',2400,'ticks','a struck-down city held by attackers this long falls to them even with defenders left'),
  ('player.caravan_limit.base',2,'traders','before caravan_limit modifiers'),
  ('trade.route_unit',10000,'milli-tiles','route income length unit'),
  ('trade.min_route',20000,'milli-tiles','minimum route length; same as city.spacing'),

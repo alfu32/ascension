@@ -1081,6 +1081,14 @@ CREATE TABLE entity_flag (
   PRIMARY KEY (entity_id, flag)
 ) STRICT, WITHOUT ROWID;
 
+-- A struck-down city held by an attacking team (task 67): the team and the tick
+-- its hold began; the city falls to it after `city.capture_hold_ticks`.
+CREATE TABLE city_siege (
+  city_id INTEGER PRIMARY KEY REFERENCES entity(id),
+  team    INTEGER NOT NULL,
+  since   INTEGER NOT NULL
+) STRICT;
+
 -- Income contributed by an entity: its terms sum to the per-player rates.
 CREATE TABLE income_term (
   entity_id   INTEGER NOT NULL,

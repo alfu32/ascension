@@ -365,6 +365,12 @@ impl StateHash {
             self.u32(*team);
             self.u64(*start);
         }
+        self.u64(c.sieges.len() as u64);
+        for (city, (team, start)) in &c.sieges {
+            self.u32(city.0);
+            self.u32(*team);
+            self.u64(*start);
+        }
     }
 
     fn entity(&mut self, entity: &crate::Entity) {

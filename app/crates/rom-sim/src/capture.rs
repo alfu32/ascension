@@ -14,6 +14,20 @@ pub(crate) struct CaptureState {
     pub capitals: BTreeMap<PlayerId, EntityId>,
     /// Enemy team and first completed tick of its uninterrupted occupation.
     pub holds: BTreeMap<PlayerId, (u32, u64)>,
+    /// Neutralised cities with attackers in their radius: the attacking team and the tick
+    /// its hold began. The city falls to that team after `city.capture_hold_ticks`.
+    pub sieges: BTreeMap<EntityId, (u32, u64)>,
+}
+
+/// A neutralised city held down by an enemy team: who holds it and when it falls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CaptureCountdown {
+    /// The attacking team.
+    pub team: u32,
+    /// Tick the hold began.
+    pub since: u64,
+    /// Tick at which the city falls to the team if the hold lasts.
+    pub ends: u64,
 }
 
 impl World {
@@ -25,6 +39,41 @@ impl World {
     /// Current enemy team and start tick of an uninterrupted capital occupation.
     pub fn capital_hold(&self, player: PlayerId) -> Option<(u32, u64)> {
         self.capture.holds.get(&player).copied()
+    }
+
+    /// The countdown of a neutralised city held down by attackers, for its owner's display.
+    pub fn capture_countdown(&self, city: EntityId) -> Option<CaptureCountdown> {
+        let (team, since) = *self.capture.sieges.get(&city)?;
+        Some(CaptureCountdown {
+            team,
+            since,
+            ends: since.saturating_add(self.capture_hold_ticks()),
+        })
+    }
+
+    /// Every held-down city with its countdown, in id order.
+    pub fn capture_countdowns(&self) -> impl Iterator<Item = (EntityId, CaptureCountdown)> + '_ {
+        self.capture
+            .sieges
+            .keys()
+            .filter_map(|id| Some((*id, self.capture_countdown(*id)?)))
+    }
+
+    fn capture_hold_ticks(&self) -> u64 {
+        self.rules
+            .constant("city.capture_hold_ticks")
+            .expect("capture hold")
+            .max(0) as u64
+    }
+
+    /// Whether a unit type holds or contests a city: armed, and not a worker (a type that
+    /// gathers or builds). Workers still fight; they just do not keep a city.
+    pub fn holds_cities(&self, type_id: rom_rules::DefId) -> bool {
+        let et = &self.rules.entity_types[&type_id];
+        et.class == EntityClass::Unit
+            && !et.weapons.is_empty()
+            && et.harvester.is_empty()
+            && et.builder.is_none()
     }
 
     /// Whether a building type is disabled at zero hit points rather than destroyed.
@@ -140,6 +189,7 @@ impl World {
         e.assimilation_until = (captured && duration > 0)
             .then(|| self.tick.saturating_add(1).saturating_add(duration));
         self.capture.neutralised.remove(&id);
+        self.capture.sieges.remove(&id);
         if e.assimilation_until.is_some() {
             self.capture.assimilating.insert(id);
         } else {
@@ -186,18 +236,19 @@ impl World {
             self.refresh_territory(id);
         }
         let neutralised: Vec<_> = self.capture.neutralised.iter().copied().collect();
+        let hold = self.capture_hold_ticks();
         for id in neutralised {
             let city = self.entity(id).expect("neutralised city");
+            let (pos, city_owner) = (city.pos, city.owner);
             let radius = self.city_economic_radius(id);
+            // Armed units that are not workers, by team and player: hit points summed.
             let mut presence: BTreeMap<u32, BTreeMap<PlayerId, i128>> = BTreeMap::new();
             for unit in
-                self.entities_in_radius(city.pos, radius.clamp(0, i64::from(u32::MAX)) as u32)
+                self.entities_in_radius(pos, radius.clamp(0, i64::from(u32::MAX)) as u32)
             {
                 let e = self.entity(unit).expect("presence");
-                let et = &self.rules.entity_types[&e.type_id];
                 if e.hp > 0
-                    && et.class == EntityClass::Unit
-                    && !et.weapons.is_empty()
+                    && self.holds_cities(e.type_id)
                     && self.player_status(e.owner) != Some(crate::PlayerStatus::Defeated)
                 {
                     *presence
@@ -207,23 +258,44 @@ impl World {
                         .or_default() += i128::from(e.hp);
                 }
             }
-            // Different teams are enemies. Any competing armed presence contests the city,
-            // even if the leading team's HP sum is greater.
-            if presence.len() != 1 {
-                continue;
-            }
-            let (&team, players) = presence.first_key_value().expect("one team");
-            let own_team = self.players[&city.owner].team;
-            let owner = if team == own_team {
-                city.owner
-            } else {
+            let own_team = self.players[&city_owner].team;
+            let leader = |players: &BTreeMap<PlayerId, i128>| {
                 *players
                     .iter()
                     .max_by_key(|(player, hp)| (**hp, Reverse(**player)))
                     .expect("armed player")
                     .0
             };
-            self.restore_city(id, owner);
+            // One team alone in the radius takes the city (or its owner restores it).
+            if presence.len() == 1 {
+                let (&team, players) = presence.first_key_value().expect("one team");
+                let owner = if team == own_team {
+                    city_owner
+                } else {
+                    leader(players)
+                };
+                self.restore_city(id, owner);
+                continue;
+            }
+            // Contested: the strongest attacking team holds it down; kept long enough, the
+            // city falls to it even though defenders remain.
+            let attacker = presence
+                .iter()
+                .filter(|(team, _)| **team != own_team)
+                .map(|(team, players)| (players.values().sum::<i128>(), Reverse(*team), players))
+                .max_by_key(|(hp, team, _)| (*hp, *team))
+                .map(|(_, Reverse(team), players)| (team, leader(players)));
+            let Some((team, player)) = attacker else {
+                self.capture.sieges.remove(&id);
+                continue;
+            };
+            let siege = self.capture.sieges.entry(id).or_insert((team, self.tick));
+            if siege.0 != team {
+                *siege = (team, self.tick);
+            }
+            if self.tick.saturating_sub(siege.1) >= hold {
+                self.restore_city(id, player);
+            }
         }
     }
 }
