@@ -611,8 +611,10 @@ mod tests {
                 "bld.airfield@modern",
                 "bld.ground_battery@starfaring",
                 "bld.library@industrial",
+                "bld.refinery@automation",
                 "bld.refinery@industrial",
                 "bld.refinery@modern",
+                "bld.smelter@automation",
                 "bld.smelter@gunpowder",
                 "bld.smelter@industrial",
                 "bld.smelter@medieval",
@@ -1261,6 +1263,43 @@ mod tests {
     }
 
     #[test]
+    fn future_buildings_are_complete() {
+        let (rules, book) = book();
+        let ordinal = |key: &str| rules.ages[&rules.id_of(key).unwrap()].ordinal;
+        let (automation, fusion) = (ordinal("age.automation"), ordinal("age.fusion"));
+        let automation_id = rules.id_of("age.automation").unwrap();
+        let (mut first_looks, mut restyled) = (0, 0);
+        for (&id, et) in &rules.entity_types {
+            let Some(first) = et.first_age_id else {
+                continue;
+            };
+            if et.class != EntityClass::Building {
+                continue;
+            }
+            let age = rules.ages[&first].ordinal;
+            let has = |age_id| {
+                book.entries
+                    .iter()
+                    .any(|e| e.entity == id && e.faction.is_none() && e.age == Some(age_id))
+            };
+            let key = rules.key(id);
+            // Every building of the automation and fusion ages has its first look; every earlier
+            // building changes look when its owner reaches the automation age.
+            if age == automation || age == fusion {
+                assert!(has(first), "{key} has no composed look for its first age");
+                first_looks += 1;
+            } else if age < automation {
+                assert!(has(automation_id), "{key} has no future look");
+                restyled += 1;
+            }
+        }
+        assert!(
+            first_looks >= 8 && restyled >= 26,
+            "{first_looks} {restyled}"
+        );
+    }
+
+    #[test]
     fn approved_models_are_unchanged() {
         let (_, book) = book();
         let changed = changed_models(&book, &approved(APPROVED));
@@ -1316,7 +1355,8 @@ mod tests {
                 "bld.city@gunpowder",
                 "bld.city@industrial",
                 "bld.city@modern",
-                "bld.city@information"
+                "bld.city@information",
+                "bld.city@automation"
             ]
         );
         assert_eq!(ids("bld.library@ancient"), ["bld.library@ancient"]);

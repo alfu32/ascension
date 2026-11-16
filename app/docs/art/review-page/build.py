@@ -85,7 +85,17 @@ OVERVIEW8 = [
     ("unit.jet_fighter_information-move", "A jet fighter under way: higher than the propeller aircraft, banking"),
     ("unit.recon_drone_information-move", "A recon drone hovering, its rotors spinning"),
 ]
-OVERVIEW = OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
+OVERVIEW9 = [
+    ("gallery_automation", "Automation age, game camera: <code>--gallery automation</code>"),
+    ("gallery_automation_close", "Automation age, close: <code>--gallery automation</code>"),
+    ("gallery_fusion_close", "Fusion age, close: the fusion plant and the citadel"),
+    ("ages_bld.city", "One building through eight looks: the city, ancient to automation"),
+    ("match_automation", "In a match in the automation age: the white city, its farm and citizens"),
+    ("bld.fusion_plant_fusion", "The fusion plant: a reactor torus (the new <code>torus</code> shape) with plasma glow, coils and cooling towers"),
+    ("bld.citadel_fusion", "The citadel: domed keep, shield pylons with plasma emitters, energy gate"),
+    ("gallery_units_close", "Every unit so far, close: <code>--gallery units</code>"),
+]
+OVERVIEW = OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
     ("gallery_ancient", "Ancient age, game camera: <code>--gallery ancient</code>"),
     ("gallery_classical", "Classical age, game camera: <code>--gallery classical</code>"),
     ("gallery_classical_close_team2", "Classical age, close, in player 2's blue to show where team colour sits"),
@@ -104,10 +114,13 @@ def fmt_params(params):
 def round_of(m):
     """Review round: 1 the samples, 2 early buildings, 3 early units, 4 medieval models and
     gunpowder units, 5 early-modern buildings and enlightenment models, 6 industrial models,
-    7 modern and information buildings, 8 modern and information units."""
+    7 modern and information buildings, 8 modern and information units, 9 future buildings
+    (automation and fusion)."""
     if m["id"] in ROUND1:
         return 1
     unit = m["entity"].startswith("unit.")
+    if m["age"] in ("age.automation", "age.fusion") and not unit:
+        return 9
     if m["age"] in ("age.modern", "age.information"):
         return 8 if unit else 7
     if m["age"] == "age.industrial":
@@ -151,7 +164,7 @@ for m in manifest["models"]:
     })
 
 AGES = ["ancient", "classical", "medieval", "gunpowder", "enlightenment", "industrial", "modern",
-        "information", "any"]
+        "information", "automation", "fusion", "any"]
 models.sort(key=lambda m: (-m["round"], not m["id"].startswith("unit."), AGES.index(m["age"]) if m["age"] in AGES else 9, m["id"]))
 
 template = (here / "page.html").read_text()

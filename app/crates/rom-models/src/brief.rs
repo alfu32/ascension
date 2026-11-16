@@ -40,6 +40,7 @@ pub fn shape_meaning(shape: &str) -> &'static str {
         Some(Shape::Bow) => "a bow and its string",
         Some(Shape::Track) => "a track run with road wheels turning as the unit moves",
         Some(Shape::Propeller) => "a propeller or rotor, always spinning",
+        Some(Shape::Torus) => "a ring of round tube lying flat",
         Some(Shape::Include) => "a shared sub-assembly placed here",
         Some(Shape::Custom) => "free-form triangles modelled in Meshcraft",
         None => "an unknown shape",

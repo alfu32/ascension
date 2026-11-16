@@ -562,6 +562,7 @@ pub fn paint(part: &PartSpec, p: &mut Painter<'_>, fine: bool) -> Vec<Socket> {
         Shape::Bow => bow(&k, p, fine),
         Shape::Track => track(&k, p, fine),
         Shape::Propeller => propeller(&k, p, fine),
+        Shape::Torus => torus(&k, p, fine),
         Shape::Include => {}
         Shape::Custom => custom(part, &k, p, fine),
     }
@@ -1772,6 +1773,46 @@ fn propeller(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
     }
 }
 
+/// `torus`: a ring lying flat on the ground, `w` across its outside and `t` the diameter of its
+/// tube (default a quarter of `w`, at most half), its centre on the origin `t / 2` up;
+/// `segments` faces round the ring (default 16) and `sides` round the tube (default 8, from
+/// its lowest edge, which rests on the ground), each halved for the far version (at least 6
+/// and 4).
+fn torus(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
+    let outer = k.size("w", 1.0) / 2.0;
+    let r = (k.size("t", outer / 2.0) / 2.0).min(outer / 2.0);
+    let big = outer - r;
+    let n = segments(k, 16, fine, 6);
+    let sides = k.count("sides", 8, 24).max(3);
+    let m = if fine { sides } else { (sides / 2).max(4) };
+    let point = |i: usize, j: usize| {
+        let (a, b) = (
+            i as f32 / n as f32 * TAU,
+            j as f32 / m as f32 * TAU - FRAC_PI_2,
+        );
+        let ring = big + r * b.cos();
+        [ring * a.cos(), r + r * b.sin(), ring * a.sin()]
+    };
+    for i in 0..n {
+        for j in 0..m {
+            let (a, b) = (
+                (i as f32 + 0.5) / n as f32 * TAU,
+                (j as f32 + 0.5) / m as f32 * TAU - FRAC_PI_2,
+            );
+            let out = [b.cos() * a.cos(), b.sin(), b.cos() * a.sin()];
+            p.face(
+                &[
+                    point(i, j),
+                    point(i + 1, j),
+                    point(i + 1, j + 1),
+                    point(i, j + 1),
+                ],
+                out,
+            );
+        }
+    }
+}
+
 /// `oar_bank`: `count` oars a side along `w` (x), their locks `beam` apart across z, each
 /// `length` long and sloping `drop` degrees down into the water. Each oar sweeps on its own
 /// joint while its unit moves; far out each side is one plank.
@@ -2501,6 +2542,31 @@ mod tests {
         });
         assert_eq!(rotor.near.triangles(), 4 * 10 + 6);
         assert!(matches!(rotor.rig.joints[1].motion, Motion::Spin));
+    }
+
+    #[test]
+    fn a_torus_lies_flat_on_the_ground() {
+        // Sixteen faces round the ring, eight round the tube, two triangles each.
+        check(
+            Shape::Torus,
+            &[],
+            16 * 8 * 2,
+            [-0.5, 0.0, -0.5],
+            [0.5, 0.25, 0.5],
+        );
+        check(
+            Shape::Torus,
+            &[("w", 3.0), ("t", 0.4), ("segments", 24.0), ("sides", 12.0)],
+            24 * 12 * 2,
+            [-1.5, 0.0, -1.5],
+            [1.5, 0.4, 1.5],
+        );
+        // Far out: half the faces each way.
+        let ring = bake_model(&ModelSpec {
+            parts: vec![part(Shape::Torus, &[])],
+        });
+        assert_eq!(ring.far.triangles(), 8 * 4 * 2);
+        assert_eq!(ring.rig.joints.len(), 1);
     }
 
     #[test]
