@@ -4863,6 +4863,12 @@ dependencies = [
 [[package]]
 name = "rom-ai"
 version = "0.0.49"
+dependencies = [
+ "rom-mapgen",
+ "rom-rules",
+ "rom-sim",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "rom-app"
@@ -4883,6 +4889,7 @@ dependencies = [
 name = "rom-cli"
 version = "0.0.49"
 dependencies = [
+ "rom-ai",
  "rom-geo",
  "rom-mapgen",
  "rom-models",

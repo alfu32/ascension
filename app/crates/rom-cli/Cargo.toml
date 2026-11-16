@@ -14,5 +14,6 @@ rom-geo = { path = "../rom-geo" }
 rom-rules.workspace = true
 rom-models.workspace = true
 rom-sim = { path = "../rom-sim" }
+rom-ai = { path = "../rom-ai" }
 rom-mapgen = { path = "../rom-mapgen" }
 rusqlite.workspace = true

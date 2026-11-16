@@ -445,7 +445,26 @@ review loop (`--gallery`, `--model`, `--parts`, `--gallery-manifest`,
 list) and `ai_difficulty` (thinking speed, order budget, reaction time,
 mistakes). A computer player acts only by adding rows to `order`, like a
 human. Its memory is saved in `player_ai_state`. See
-`research/05-computer-opponents.md`.
+`research/05-computer-opponents.md` and, for what is built,
+`docs/computer-player.md`.
+
+Notes from task 60:
+
+- **Weights read so far:** `econ.worker_share_pct`, `econ.expand_eagerness`,
+  `tech.age_priority`, `mil.army_share_pct`, `mil.defense_share_pct`. No
+  weight key had to be added.
+- **Opening steps must be reachable in order.** A step whose subject is still
+  locked when its turn comes is waited for one minute and then skipped, so a
+  building's technology is a step of its own before it. The seed's books were
+  rewritten on that rule and now cover all four profiles (the old rows asked
+  for a barracks before the technology that unlocks it).
+- **`ai_difficulty.income_bonus_pct` has no carrier yet.** A modifier needs a
+  source among the player's technologies, age or faction. The computer player
+  looks for a technology with no `production` row whose modifiers are all
+  `income.*` percentages equal to the bonus, and the host grants it at setup;
+  the seed holds none because `rom check-rules` reports such a technology as
+  unreachable. Open decision: exempt granted technologies from that check, or
+  give the simulation a per-player modifier source.
 
 ## Content generator
 
