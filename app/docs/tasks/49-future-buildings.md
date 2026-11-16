@@ -28,3 +28,31 @@ domes, light strips, smooth curved forms.
 
 Glow: if task 44 (emissive material) is merged, use it for light strips and
 the reactor; otherwise bright lit colours, and say so.
+
+## Done (task 49)
+
+- 34 building looks: first looks `bld.auto_farm`, `bld.auto_woodcutter_camp`, `bld.auto_mine`,
+  `bld.auto_oil_well`, `bld.auto_university`, `bld.defence_turret` (`@automation`),
+  `bld.fusion_plant` and `bld.citadel` (`@fusion`), and the future look of the 26 earlier
+  buildings (`@automation`, applies through every later age). Shared `mesh.house_future`
+  (housing pod with a glass band, solar panel and roof pod) and `mesh.silo_future`.
+- Each automated building keeps its parent's signature in its automated form: the automated
+  farm is a tiered vertical farm under pink grow lights beside outdoor crop beds tended by a
+  gantry robot (the future farm keeps low crop beds under an irrigation gantry, a vaulted barn
+  and a silo); the automated woodcutter camp a vaulted saw hall, conveyor, log piles and a
+  gantry grab; the automated mine a drill derrick over its shaft, ore dome and a driverless
+  hauler (the future mine keeps the headframe and spoil heaps); the automated oil well a slim
+  derrick over a domed wellhead and capsule tanks (the future oil well keeps the beam pump); the
+  automated university a glass-domed hall, a dark computing core ringed with light, an
+  observatory dome and a dish.
+- Materials white composite, composite panels, smart glass (dark teal, mullions), solar
+  panels, graphite, composite paving, leafy crops, and three self-lit ones: cyan light strips,
+  pink grow lights and violet plasma. Glow uses the `emissive` program (task 44); the smelter
+  and the refinery keep `mat.glow` for molten metal and the flare.
+- New shape `torus` in `rom-kit` (bounds and triangle test) for the reactor; no new motion
+  (buildings stand still). Dishes are a shallow dome facing the sky over a deeper one behind it,
+  because a single dome pitched away from the camera shows only its culled inside.
+- The bastion and star fort reuse the modern earthworks as their own `.mesh` copies, in white
+  composite.
+- Team colour 14.5–26 % on every look (bands, fascias, roofs of round ends, domes of corner
+  towers, coils, crowns and banners).

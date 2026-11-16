@@ -1786,7 +1786,10 @@ fn torus(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
     let sides = k.count("sides", 8, 24).max(3);
     let m = if fine { sides } else { (sides / 2).max(4) };
     let point = |i: usize, j: usize| {
-        let (a, b) = (i as f32 / n as f32 * TAU, j as f32 / m as f32 * TAU - FRAC_PI_2);
+        let (a, b) = (
+            i as f32 / n as f32 * TAU,
+            j as f32 / m as f32 * TAU - FRAC_PI_2,
+        );
         let ring = big + r * b.cos();
         [ring * a.cos(), r + r * b.sin(), ring * a.sin()]
     };
@@ -1798,7 +1801,12 @@ fn torus(k: &Knobs<'_>, p: &mut Painter<'_>, fine: bool) {
             );
             let out = [b.cos() * a.cos(), b.sin(), b.cos() * a.sin()];
             p.face(
-                &[point(i, j), point(i + 1, j), point(i + 1, j + 1), point(i, j + 1)],
+                &[
+                    point(i, j),
+                    point(i + 1, j),
+                    point(i + 1, j + 1),
+                    point(i, j + 1),
+                ],
                 out,
             );
         }
