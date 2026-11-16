@@ -97,6 +97,8 @@ pub fn ai() -> AiStates {
             profile: "ai.test".into(),
             difficulty: "diff.test".into(),
             version: 3,
+            rng_state: u64::MAX - 5,
+            opening_seq: 4,
             data: vec![1, 2, 3, 250, 0, 255],
         },
     )])

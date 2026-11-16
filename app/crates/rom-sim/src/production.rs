@@ -57,6 +57,13 @@ impl World {
                     self.release_workers(id);
                     order.status = OrderStatus::Done;
                 }
+                // The unit leaves after this tick's movement; nothing behind it runs.
+                "disband" => {
+                    self.disbanded.push(id);
+                    order.status = OrderStatus::Done;
+                    self.finish_order(&order);
+                    break;
+                }
                 "move" if order.target_pos.is_none() => {
                     order.status = OrderStatus::Failed("unsupported".into());
                 }
@@ -259,6 +266,9 @@ impl World {
                     self.despawn(ship).expect("new ship");
                     OrderStatus::Blocked("launch_site".into())
                 } else {
+                    if !launch {
+                        self.send_to_rally(producer, ship);
+                    }
                     OrderStatus::Done
                 }
             }

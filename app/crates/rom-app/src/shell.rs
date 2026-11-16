@@ -17,6 +17,7 @@ use rom_sim::BodyId;
 
 use crate::args::Options;
 use crate::bench;
+use crate::computer::ComputerPlayers;
 use crate::demo::{DemoDriver, add_stress_units};
 use crate::looks;
 use crate::match_setup::{
@@ -393,10 +394,26 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
         let setup = ScriptSetup::scan(&text)?;
         setup.apply_grants(&mut game.world)?;
     }
+    // Every player no person plays is a computer player, unless `--ai none`.
+    let computers = if options.no_ai {
+        None
+    } else {
+        Some(ComputerPlayers::new(
+            &mut game.world,
+            &options.ai,
+            options.seed,
+            options.watch,
+        )?)
+    };
     let wanderers = add_stress_units(&mut game, options.stress_units, options.seed);
-    let driver = options
-        .demo
-        .then(|| DemoDriver::new(&game, options.seed, wanderers));
+    let driver = options.demo.then(|| {
+        let mut driver = DemoDriver::new(&game, options.seed, wanderers);
+        // The demo only moves what no brain plays.
+        for player in computers.iter().flat_map(ComputerPlayers::players) {
+            driver.release(player);
+        }
+        driver
+    });
     let script = match &options.script {
         Some(path) => Some(read_script(path, &game)?),
         None => None,
@@ -414,6 +431,7 @@ fn start_simulation(options: &Options, bridge: &RenderBridge) -> Result<SimThrea
     SimThread::spawn(
         game.world,
         driver,
+        computers,
         script,
         options.speed_pct,
         bridge.clone(),

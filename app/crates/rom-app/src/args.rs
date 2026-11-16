@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 /// Usage text printed for `--help` and after argument errors.
 pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <file.png>] \
-[--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] \
+[--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] [--ai <profile:difficulty,...|none>] [--watch] \
 [--map-size <width>x<height>] [--sphere <n>] [--single-planet] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
 [--universe] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-hud] [--hud-scale <percent>] [--stats] \
 [--sun <orbit|fixed|midnight>] [--graticule <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
@@ -34,6 +34,14 @@ pub struct Options {
     pub players: u32,
     /// Faction keys, one per player; `None` picks the default mix of races.
     pub factions: Option<Vec<String>>,
+    /// Computer players for players 2, 3, …: `profile:difficulty` each; missing slots play
+    /// balanced:moderate. `--ai none` leaves the other players without one.
+    pub ai: Vec<crate::computer::Spec>,
+    /// No computer players (`--ai none`).
+    pub no_ai: bool,
+    /// Player one is a computer player too, so a match can be watched; `--ai` then starts
+    /// with player one's choice.
+    pub watch: bool,
     /// Map size in tiles.
     pub map_size: (u32, u32),
     /// Home planet face size in a universe (64..=512), or a single sphere (16..=512).
@@ -144,6 +152,9 @@ impl Default for Options {
             seed: 1,
             players: 4,
             factions: None,
+            ai: Vec::new(),
+            no_ai: false,
+            watch: false,
             map_size: (256, 256),
             sphere: None,
             single_planet: false,
@@ -236,6 +247,18 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                 options.players = keys.len() as u32;
                 options.factions = Some(keys);
             }
+            "--ai" => {
+                let text = value("--ai")?;
+                options.no_ai = text == "none";
+                options.ai = if options.no_ai {
+                    Vec::new()
+                } else {
+                    text.split(',')
+                        .map(|spec| crate::computer::Spec::parse(spec.trim()))
+                        .collect::<Result<_, _>>()
+                        .map_err(|e| format!("--ai: {e}"))?
+                };
+            }
             "--map-size" => options.map_size = parse_map_size(&value("--map-size")?)?,
             "--sphere" => {
                 let text = value("--sphere")?;
@@ -250,6 +273,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             "--camera" => options.camera = Some(parse_camera(&value("--camera")?)?),
             "--boxes" => options.boxes = number("--boxes", &value("--boxes")?)?,
             "--demo" => options.demo = true,
+            "--watch" => options.watch = true,
             "--universe" => options.universe = true,
             "--single-planet" => options.single_planet = true,
             "--zoom-all" => options.zoom_all = true,
@@ -591,6 +615,21 @@ mod tests {
             ])
         );
         assert!(parse(args(&["--factions", "a,,b"])).is_err());
+    }
+
+    #[test]
+    fn parses_computer_players() {
+        let o = parse(args(&["--ai", "builder:tough, rusher"])).unwrap();
+        assert_eq!(
+            o.ai.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+            ["builder:tough", "rusher:moderate"]
+        );
+        assert!(!o.no_ai);
+        let o = parse(args(&["--ai", "none"])).unwrap();
+        assert!(o.no_ai && o.ai.is_empty());
+        assert!(parse(args(&["--watch"])).unwrap().watch);
+        assert!(parse(args(&["--ai", "a::b"])).is_err());
+        assert!(parse(args(&["--ai", "a,,b"])).is_err());
     }
 
     #[test]

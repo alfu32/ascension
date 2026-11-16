@@ -139,6 +139,14 @@ async fn measure(
         "bench-detail sim_tick={} sim_ticks_per_second={:.1} entities={}",
         report.tick, report.ticks_per_second, report.entities
     );
+    eprintln!(
+        "bench-detail computers={} think_ms_avg={:.2} think_ms_max={:.2} computer_orders={} computer_rejected={}",
+        report.computers,
+        f64::from(report.think_us_avg) / 1000.0,
+        f64::from(report.think_us_max) / 1000.0,
+        report.computer_orders,
+        report.computer_rejected
+    );
     Ok(format!(
         "bench size={}x{} scale={} frames={shown} fps={:.1} frame_ms_avg={:.2} frame_ms_max={:.2} readback_ms_avg={:.2} readback_ms_max={:.2}",
         layout.0,

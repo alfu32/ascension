@@ -99,6 +99,26 @@ fn sphere_economy(rules: &std::sync::Arc<rom_rules::Rules>) -> World {
         })
         .unwrap();
     }
+    // Rally points: trained spearmen walk to a point, new citizens to the farm.
+    order(
+        &mut w,
+        barracks,
+        "set_rally",
+        None,
+        Some(at(body, 25_000, 25_000)),
+    );
+    let city = w
+        .entities()
+        .find(|e| e.type_id == id(&w, "bld.city"))
+        .unwrap()
+        .id;
+    order(&mut w, city, "set_rally", Some(farm), None);
+    w.submit(Command {
+        subject: Some(id(&w, "unit.citizen")),
+        queue: true,
+        ..command(&w, city, "train")
+    })
+    .unwrap();
     w
 }
 
@@ -116,6 +136,7 @@ fn a_sphere_economy_with_work_in_progress() {
             .any(|e| e.orders().iter().any(|o| o.kind == "research")),
         "a research is under way"
     );
+    assert_eq!(w.rallies().count(), 2);
     check("sphere_economy", &rules, w, 500, |_| {});
 }
 

@@ -1,7 +1,7 @@
 //! Resource accounting, ramp counters, and submission checks.
 
 use crate::{Command, EntityId, Order, PlayerId, SimError, World};
-use rom_rules::{DefId, EntityClass, LimitScope, Owned, ProductionMode, RampMode};
+use rom_rules::{DefId, EntityClass, LimitScope, ProductionMode, RampMode};
 
 impl World {
     /// Grants a nonnegative resource amount for scenario setup.
@@ -26,24 +26,6 @@ impl World {
         Ok(())
     }
 
-    /// Returns a player's completed entity types, or an empty set for an unknown player.
-    pub fn owned_types(&self, player: PlayerId) -> Owned {
-        self.players
-            .get(&player)
-            .map_or_else(Owned::new, |p| p.owned_types(self))
-    }
-
-    /// Returns population occupied by units, including unfinished units.
-    pub fn population_used(&self, player: PlayerId) -> i64 {
-        self.entities()
-            .chain(self.space.transits.values().map(|t| &t.entity))
-            .filter(|e| e.owner == player)
-            .map(|e| &self.rules.entity_types[&e.type_id])
-            .filter(|et| et.class == EntityClass::Unit)
-            .map(|et| et.pop_cost)
-            .sum()
-    }
-
     /// Evaluates the player's current population cap.
     pub fn population_cap(&self, player: PlayerId) -> i64 {
         self.rules.player_stat(
@@ -51,13 +33,13 @@ impl World {
             self.rules
                 .constant("player.pop_cap.base")
                 .expect("validated population constant"),
-            &self.players[&player].active_sources(),
+            &self.active_sources(player),
         )
     }
 
     /// Prices a subject with owned and queued ramp counts before applying modifiers.
     pub fn price(&self, player: PlayerId, def: DefId) -> Vec<(DefId, i64)> {
-        let sources = self.players[&player].active_sources();
+        let sources = self.active_sources(player);
         let n = self.rules.entity_type(def).map_or(0, |et| {
             self.count_subjects(Some(player), |id| match et.ramp_mode {
                 RampMode::None => false,
@@ -77,23 +59,6 @@ impl World {
             .chain(self.space.transits.values().map(|t| &t.entity))
             .flat_map(|e| e.orders.iter())
             .chain(self.pending.iter().map(|(o, _)| o))
-    }
-
-    fn count_subjects(&self, player: Option<PlayerId>, matches: impl Fn(DefId) -> bool) -> i64 {
-        let owned = self
-            .entities()
-            .chain(self.space.transits.values().map(|t| &t.entity))
-            .filter(|e| player.is_none_or(|p| p == e.owner) && matches(e.type_id))
-            .count();
-        let queued = self
-            .all_orders()
-            .filter(|o| {
-                player.is_none_or(|p| p == o.player)
-                    && (o.kind == "train" || (o.kind == "construct" && o.target_entity.is_none()))
-                    && o.subject.is_some_and(&matches)
-            })
-            .count();
-        (owned + queued) as i64
     }
 
     pub(crate) fn validate_economy_order(
@@ -137,16 +102,19 @@ impl World {
         if !self.rules.is_available(subject, player.faction) {
             return Err(SimError::Unavailable);
         }
-        if !self
-            .rules
-            .is_unlocked(subject, &player.active_sources(), &player.owned_types(self))
-        {
+        if !self.rules.is_unlocked(
+            subject,
+            &player.active_sources(),
+            &self.owned_types(player.id),
+        ) {
             return Err(SimError::Locked);
         }
         if mode == ProductionMode::Train
-            && self
-                .rules
-                .is_obsolete(subject, &player.active_sources(), &player.owned_types(self))
+            && self.rules.is_obsolete(
+                subject,
+                &player.active_sources(),
+                &self.owned_types(player.id),
+            )
         {
             return Err(SimError::Obsolete);
         }
@@ -173,10 +141,14 @@ impl World {
                 .producer
                 .as_ref()
                 .ok_or_else(|| SimError::MissingComponent("producer".into()))?;
-            let queued = self
-                .all_orders()
-                .filter(|o| o.executor == command.executor)
-                .count() as i64;
+            // Constructions are queued on builders, not producers, so the executor's own
+            // queue and its pending orders are all there is.
+            let queued = (executor.orders.len()
+                + self
+                    .pending
+                    .iter()
+                    .filter(|(o, _)| o.executor == command.executor)
+                    .count()) as i64;
             if queued >= producer.queue_limit {
                 return Err(SimError::QueueFull);
             }

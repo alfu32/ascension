@@ -40,6 +40,9 @@ struct Catalog {
     lists: BTreeMap<&'static str, Vec<Choice>>,
     factions: Vec<Choice>,
     terrains: Vec<Choice>,
+    /// Computer player profiles and difficulties (by rank).
+    profiles: Vec<Choice>,
+    difficulties: Vec<Choice>,
 }
 
 impl Catalog {
@@ -126,6 +129,24 @@ impl Catalog {
             ]),
             factions: definitions(rules.factions.keys().copied().collect()),
             terrains: definitions(rules.terrains.keys().copied().collect()),
+            profiles: rules
+                .ai_profiles
+                .values()
+                .map(|p| Choice {
+                    key: p.key.clone(),
+                    label: p.name.clone(),
+                })
+                .collect(),
+            difficulties: {
+                let mut list: Vec<_> = rules.ai_difficulties.values().collect();
+                list.sort_by_key(|d| d.rank);
+                list.into_iter()
+                    .map(|d| Choice {
+                        key: d.key.clone(),
+                        label: d.name.clone(),
+                    })
+                    .collect()
+            },
         }
     }
 
@@ -258,6 +279,14 @@ mod tests {
         assert_eq!(catalog.factions.len(), rules.factions.len());
         assert_eq!(catalog.terrains.len(), rules.terrains.len());
         assert_eq!(catalog.lists["age"].len(), rules.ages.len());
+        assert_eq!(catalog.profiles.len(), rules.ai_profiles.len());
+        assert_eq!(catalog.difficulties.len(), rules.ai_difficulties.len());
+        assert!(
+            catalog
+                .profiles
+                .iter()
+                .any(|c| c.key == crate::computer::DEFAULT_SPEC.0)
+        );
         let book = crate::looks::ModelBook::new(&rules);
         assert_eq!(
             catalog.lists["model"]

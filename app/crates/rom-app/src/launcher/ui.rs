@@ -45,6 +45,7 @@ pub(super) struct Launcher {
     generation: u64,
     group: usize,
     factions_open: bool,
+    computers_open: bool,
     look_selects: Vec<ChoiceState>,
     distance: Option<Entity<InputState>>,
     preset_name: Entity<InputState>,
@@ -76,6 +77,7 @@ impl Launcher {
             generation: 0,
             group: 0,
             factions_open: false,
+            computers_open: false,
             look_selects: Vec::new(),
             distance: None,
             preset_name: cx
@@ -553,6 +555,59 @@ impl Launcher {
             .into_any_element()
     }
 
+    /// One line per computer slot: a button per profile and per difficulty.
+    fn computer_slots(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
+        let form = &self.config.form;
+        let mut list = div()
+            .id("computer-list")
+            .max_h(px(260.))
+            .overflow_y_scroll()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .p_2();
+        for slot in 0..form.computer_slots() {
+            let (profile, difficulty) = form.computer(slot);
+            let mut line = div().flex().flex_wrap().items_center().gap_1().child(
+                div()
+                    .w(px(70.))
+                    .text_color(rgb(0xe8c98a))
+                    .child(format!("Player {}", slot + form.first_computer())),
+            );
+            for (index, choice) in self.catalog.profiles.iter().enumerate() {
+                let (key, difficulty) = (choice.key.clone(), difficulty.clone());
+                line = line.child(
+                    Button::new(("ai-profile", slot * 64 + index))
+                        .small()
+                        .label(choice.label.clone())
+                        .selected(choice.key == profile)
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            let mut form = this.config.form.clone();
+                            form.set_computer(slot, &key, &difficulty);
+                            this.replace(form, window, cx);
+                        })),
+                );
+            }
+            line = line.child(div().w(px(12.)));
+            for (index, choice) in self.catalog.difficulties.iter().enumerate() {
+                let (key, profile) = (choice.key.clone(), profile.clone());
+                line = line.child(
+                    Button::new(("ai-difficulty", slot * 64 + index))
+                        .small()
+                        .label(choice.label.clone())
+                        .selected(choice.key == difficulty)
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            let mut form = this.config.form.clone();
+                            form.set_computer(slot, &profile, &key);
+                            this.replace(form, window, cx);
+                        })),
+                );
+            }
+            list = list.child(line);
+        }
+        list.into_any_element()
+    }
+
     fn row(&self, index: usize, cx: &mut Context<Self>) -> gpui::AnyElement {
         let control = &CONTROLS[index];
         let flag = control.flag;
@@ -614,6 +669,17 @@ impl Launcher {
                     }),
                 ));
             }
+            if flag == "ai" {
+                editor = editor.child(
+                    Button::new("choose-computers")
+                        .small()
+                        .label("Choose per slot…")
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.computers_open = !this.computers_open;
+                            cx.notify();
+                        })),
+                );
+            }
             if flag == "factions" {
                 editor = editor.child(
                     Button::new("choose-factions")
@@ -672,6 +738,9 @@ impl Launcher {
                 );
             }
             row = row.child(list);
+        }
+        if flag == "ai" && self.computers_open {
+            row = row.child(self.computer_slots(cx));
         }
         if flag == "look-at" {
             row = row.child(

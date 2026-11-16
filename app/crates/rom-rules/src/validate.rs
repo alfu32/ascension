@@ -4,7 +4,7 @@ use std::{collections::BTreeMap, fmt};
 
 use crate::{
     ClaimMode, DefId, DefKind, MapStyle, ProductionMode, RegionKind, Rules, StatScope,
-    TechEffectKind,
+    TechEffectKind, TechKind,
 };
 
 /// Cube face sizes a habitable planet may have.
@@ -187,8 +187,85 @@ impl Rules {
         for style in self.map_styles.values() {
             self.validate_universe_knobs(style, &mut problems);
         }
+        self.validate_handicaps(&mut problems);
         self.validate_reachability(&mut problems);
         problems
+    }
+
+    /// Handicap technologies are granted at setup: never produced, without effects (only
+    /// research applies effects), required by nothing. A difficulty's handicap must be one,
+    /// and its income modifiers must be the difficulty's `income_bonus_pct`.
+    fn validate_handicaps(&self, problems: &mut Vec<Problem>) {
+        let handicap = |id: DefId| {
+            self.techs
+                .get(&id)
+                .is_some_and(|t| t.kind == TechKind::Handicap)
+        };
+        let mut report = |message: String| problems.push(Problem { message });
+        for tech in self.techs.values().filter(|t| handicap(t.id)) {
+            let name = self.label(tech.id);
+            if self.production_by_product.contains_key(&tech.id) {
+                report(format!("handicap {name} has a production row"));
+            }
+            if self
+                .tech_effects
+                .get(&tech.id)
+                .is_some_and(|e| !e.is_empty())
+            {
+                report(format!("handicap {name} has effects"));
+            }
+            if self
+                .prerequisites
+                .get(&tech.id)
+                .is_some_and(|p| !p.is_empty())
+            {
+                report(format!("handicap {name} has prerequisites"));
+            }
+        }
+        for (def, rows) in &self.prerequisites {
+            for row in rows.iter().filter(|row| handicap(row.requires_def_id)) {
+                report(format!(
+                    "{} requires handicap {}",
+                    self.label(*def),
+                    self.label(row.requires_def_id)
+                ));
+            }
+        }
+        for difficulty in self.ai_difficulties.values() {
+            let key = &difficulty.key;
+            let Some(tech) = difficulty.handicap_tech_id else {
+                if difficulty.income_bonus_pct != 0 {
+                    report(format!(
+                        "ai_difficulty {key}: income_bonus_pct {} without handicap_tech_id",
+                        difficulty.income_bonus_pct
+                    ));
+                }
+                continue;
+            };
+            if !handicap(tech) {
+                report(format!(
+                    "ai_difficulty {key}: {} is not a handicap technology",
+                    self.label(tech)
+                ));
+                continue;
+            }
+            let income: Vec<_> = self
+                .modifiers_from(tech)
+                .iter()
+                .filter(|m| m.stat_key.starts_with("income."))
+                .collect();
+            if income.is_empty()
+                || income.iter().any(|m| {
+                    m.op != crate::ModifierOp::Pct || m.value != difficulty.income_bonus_pct
+                })
+            {
+                report(format!(
+                    "ai_difficulty {key}: income modifiers of {} differ from income_bonus_pct {}",
+                    self.label(tech),
+                    difficulty.income_bonus_pct
+                ));
+            }
+        }
     }
 
     fn validate_reachability(&self, problems: &mut Vec<Problem>) {
@@ -258,7 +335,8 @@ impl Rules {
                 });
             }
         }
-        for tech in self.techs.values() {
+        // A handicap is granted at setup, never researched.
+        for tech in self.techs.values().filter(|t| t.kind != TechKind::Handicap) {
             if !active.contains(&tech.id) {
                 problems.push(Problem {
                     message: format!("unreachable item {}", self.label(tech.id)),

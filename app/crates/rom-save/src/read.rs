@@ -6,10 +6,10 @@ use rom_sim::{
     BodyId, BodyInfo, Elimination, EmitterSnapshot, EntityId, EntitySnapshot, HitSnapshot,
     MatchOptions, MoveSnapshot, OrbitSnapshot, OrderId, OrderSnapshot, OrderStatus, Outcome,
     PathRequestSnapshot, PathSnapshot, Player, PlayerId, PlayerSnapshot, PlayerStatus,
-    PlayerVisionSnapshot, Pos, RememberedBuilding, RouteInfo, RouteSnapshot, SearchNodeSnapshot,
-    SearchSnapshot, ShotSnapshot, Snapshot, SpaceSnapshot, Stats, SurfaceShape, SurfaceSnapshot,
-    SystemInfo, TileRef, TradeRoute, TransitSnapshot, VictorySnapshot, ViewerSnapshot, World,
-    victory_rule_from_key,
+    PlayerVisionSnapshot, Pos, Rally, RememberedBuilding, RouteInfo, RouteSnapshot,
+    SearchNodeSnapshot, SearchSnapshot, ShotSnapshot, Snapshot, SpaceSnapshot, Stats, SurfaceShape,
+    SurfaceSnapshot, SystemInfo, TileRef, TradeRoute, TransitSnapshot, VictorySnapshot,
+    ViewerSnapshot, World, victory_rule_from_key,
 };
 use rusqlite::{Connection, OpenFlags, Row, params};
 use std::{collections::BTreeMap, path::Path, sync::Arc};
@@ -165,7 +165,7 @@ pub fn read(path: &Path, rules: &Arc<Rules>) -> Result<(World, MatchInfo, AiStat
 fn ai_states(conn: &Connection) -> Result<AiStates, SaveError> {
     let mut out = BTreeMap::new();
     let mut stmt = conn.prepare(
-        "SELECT player_id, profile_key, difficulty_key, version, data FROM player_ai_state",
+        "SELECT player_id, profile_key, difficulty_key, version, rng_state, opening_seq, data FROM player_ai_state",
     )?;
     let mut rows = stmt.query([])?;
     while let Some(row) = rows.next()? {
@@ -175,7 +175,9 @@ fn ai_states(conn: &Connection) -> Result<AiStates, SaveError> {
                 profile: text(row, 1)?,
                 difficulty: text(row, 2)?,
                 version: uint(row, 3, "ai version")?,
-                data: row.get(4)?,
+                rng_state: u(int(row, 4)?),
+                opening_seq: int(row, 5)?,
+                data: row.get(6)?,
             },
         );
     }
@@ -1011,5 +1013,16 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
         awake: flags(conn, "awake")?,
         neutralised: flags(conn, "neutralised")?,
         assimilating: flags(conn, "assimilating")?,
+        rallies: query_vec(
+            conn,
+            "SELECT entity_id, target_entity_id, x, y, face, body FROM entity_rally ORDER BY entity_id",
+            |r| {
+                let rally = match ouint(r, 1, "rally target")? {
+                    Some(target) => Rally::Entity(EntityId(target)),
+                    None => Rally::Point(pos_at(r, 2)?),
+                };
+                Ok((EntityId(uint(r, 0, "rally producer")?), rally))
+            },
+        )?,
     })
 }

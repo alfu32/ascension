@@ -127,23 +127,58 @@ technologies by their effects, modifiers and prerequisites.
 
 A thought costs about 1–2 ms of processor time on the i7-6700HQ; the worst
 measured in the match tables is 17 ms. Three limits keep it there: at most
-four placement previews per thought (each makes the simulation scan every entity), at most
+four placement previews per thought (each scanned every entity until task 64), at most
 60 000 tile lookups in site searches, and no second site search in a thought
 once one came back empty-handed. Prices are computed from the rules and the
 brain's own counts instead of `World::price`, which also scans every entity.
 
 ## Income bonus
 
-`ai_difficulty.income_bonus_pct` is meant to be an ordinary modifier. A
-modifier needs a source in the player's active sources (researched
-technologies, age, faction), so the only way without a simulation change is a
-technology nobody can research that a host grants at setup.
-`rom_ai::handicap_tech` finds it by data — no production row, only
-`income.*` percentage modifiers equal to the bonus — and `rom ai-match`
-grants it. The seed does not contain such a technology yet: `rom check-rules`
-reports an unresearchable technology as unreachable. Until that is decided,
-"toughest" plays without its bonus. A test builds the technology into a copy
-of the rules and checks the income.
+`ai_difficulty.income_bonus_pct` is an ordinary modifier carried by a
+technology of kind `handicap` that the difficulty names in `handicap_tech_id`
+(the seed: `tech.handicap.income_25` on "toughest"). The host grants it at setup
+with `World::grant_handicap` before the first tick; the validator keeps the
+handicap's `income.*` modifiers equal to the bonus (`docs/database.md`,
+"Handicaps"). `rom_ai::handicap_tech` still finds the same technology by its
+modifiers, so `rom ai-match` grants it as before.
+
+## In the application (task 64)
+
+Every player other than the person (player one) and nature is played by a
+brain (`crates/rom-app/src/computer.rs`). `--ai profile:difficulty,…` chooses
+per computer slot (players 2, 3, … in order; a missing slot plays
+`balanced:moderate`), `--ai none` leaves them idle; the launcher has the same
+choice per slot ("Choose per slot…" beside `--ai`). The brains live on the
+simulation thread: before every `World::step` each brain is asked for orders
+(it thinks only on its own ticks) and they go through `World::submit` like the
+person's, the brain hearing which were refused. With `--demo`, the demo driver
+only moves the person's units. Think time shows in the `--stats` overlay and in
+`--bench` output (`bench-detail computers=… think_ms_avg=… think_ms_max=…`).
+
+Saves: `computer::save_match` / `load_match` put `Brain::save()` into
+`player_ai_state` through `rom_save::save(…, ai_states)` and restore the brains
+on load; a loaded match continues with the same orders and hashes (test
+`a_save_with_brains_loads_and_continues_alike`).
+
+### Simulation queries a brain can use now
+
+- `World::price`, `World::check_placement`, `World::owned_types`,
+  `World::population_used` no longer scan every entity: entities are indexed by
+  owner and type, queued constructions live only in the pending orders, and
+  overlap uses the per-tile building index. `World::type_counts(player)` gives
+  what a player has of each type (sites and ships in transit included).
+- `World::city_count`, `city_limit`, `city_covering`, `is_city_type`,
+  `active_sources`, `pending_orders` (submitted, applied at the next step) and
+  `rally(producer)` are public.
+- Orders: `set_rally` (producer, point or entity; its own entity clears it) and
+  `disband` (any unit without passengers aboard).
+
+For task 61 (rom-ai, not changed here): replace the gather-point walking in
+`production::rally` with one `set_rally` per military producer; `disband`
+workers whose resource has no use (the "held back" share in the economy
+manager can then shrink); count with `type_counts` / `World::price` instead of
+the own scan where it is simpler; lift the four-previews-per-thought cap on
+`check_placement` if measurements agree.
 
 ## Headless matches
 

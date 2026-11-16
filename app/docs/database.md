@@ -118,6 +118,14 @@ production queue are the same table, ordered by `seq`. An order names its
 `kind` (from `order_kind`), its executor, and optionally a subject definition
 (what to train/research/construct/cast) and a target (entity or point).
 
+Two orders are settings rather than queue entries (task 64): `set_rally` on a
+producer whose `et_producer.has_rally` is set takes effect at the next tick
+boundary without replacing or joining the queue; units it trains then walk to the
+point, or to the entity (a harvester to a gather site it can work harvests
+there); the producer itself as the target clears it. `disband` (`needs`
+`movement`) removes a unit with no refund — at once, or after the orders before it
+when queued; a carrier with units aboard refuses it.
+
 Life cycle: `queued → active → done`, or `blocked` with a reason
 (`pop_cap`, `no_path`, `no_slot`), or `cancelled`. Costs are charged when the
 order is accepted and recorded in `order_payment`, so a cancel refunds exactly
@@ -492,13 +500,29 @@ Notes from task 60:
   building's technology is a step of its own before it. The seed's books were
   rewritten on that rule and now cover all four profiles (the old rows asked
   for a barracks before the technology that unlocks it).
-- **`ai_difficulty.income_bonus_pct` has no carrier yet.** A modifier needs a
-  source among the player's technologies, age or faction. The computer player
-  looks for a technology with no `production` row whose modifiers are all
-  `income.*` percentages equal to the bonus, and the host grants it at setup;
-  the seed holds none because `rom check-rules` reports such a technology as
-  unreachable. Open decision: exempt granted technologies from that check, or
-  give the simulation a per-player modifier source.
+- **The income bonus is a granted handicap (task 64).** See "Handicaps" below.
+
+### Handicaps: modifiers a player is granted (task 64)
+
+A difficulty's income bonus (and any other per-player handicap) is an ordinary
+`modifier` whose source is a technology of kind **`handicap`**. Such a
+technology is never researched: the host grants it to one player at match setup
+with `World::grant_handicap(player, tech)` (only before the first tick), which
+records it in the player's technologies like a researched one, so its modifiers
+apply, are saved (`player_tech`) and hashed with everything else.
+
+- `ai_difficulty.handicap_tech_id` names the technology a computer player of
+  that difficulty is granted. The seed has one, `tech.handicap.income_25`
+  (`income.*` `pct 25` on every income stat), on `toughest`.
+- The validator: a handicap has no `production` row, no `tech_effect` (effects
+  are applied by research only) and no prerequisites, and nothing requires it;
+  it is exempt from the reachability check. A difficulty with a non-zero
+  `income_bonus_pct` must name a handicap, and that handicap's `income.*`
+  modifiers must all be `pct` of exactly `income_bonus_pct` — the column stays
+  as the readable figure and the two cannot drift apart.
+- A different handicap (a cheaper army, a wider sight) is another `handicap`
+  technology with its modifier rows and a column or setup choice that names it;
+  no code changes.
 
 ## Content generator
 
@@ -788,8 +812,12 @@ back. No SQL runs in `rom-sim`.
   name, controller, AI profile, colour). Players without a seat get the next
   free slot.
 - **Computer players.** `player_ai_state(player_id, profile_key, difficulty_key,
-  version, data)` stores the opaque blob the AI crate hands in per player and
-  returns it unchanged.
+  version, rng_state, opening_seq, data)` stores what `rom_ai::Brain::save` hands
+  in per player and returns it unchanged (task 64 added the generator state and
+  opening step, which `Brain::restore` checks against the bytes; format 2).
+- **Rally points.** `entity_rally(entity_id, target_entity_id | x, y, face, body)`
+  (task 64). Not part of the state hash while no producer has one, so worlds
+  without rally points keep their hashes.
 - **Encoding.** Positions are four columns; unsigned 64-bit values are stored as
   the same bits read as signed; terrain and territory grids are run-length
   encoded blobs; explored bits are raw words; `entity.move_remainder` is

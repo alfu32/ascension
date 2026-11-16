@@ -117,32 +117,52 @@ impl World {
             }
         }
         // Footprints lie within one face, so only footprints on the same face can overlap.
-        if self.entities().any(|e| {
-            let other = &self.rules.entity_types[&e.type_id];
-            other.class == EntityClass::Building
-                && e.pos.face == pos.face
-                && e.pos.body == pos.body
-                && overlaps(bounds, footprint(other, e.pos))
-        }) || self
-            .all_orders()
-            .filter(|o| o.kind == "construct" && o.target_entity.is_none())
-            .any(|o| {
-                let at = o.target_pos.expect("placement");
+        if self.building_overlaps(pos, bounds)
+            || self.queued_constructions().any(|(_, other, at)| {
                 at.face == pos.face
                     && at.body == pos.body
-                    && overlaps(
-                        bounds,
-                        footprint(
-                            &self.rules.entity_types[&o.subject.expect("construction subject")],
-                            at,
-                        ),
-                    )
+                    && overlaps(bounds, footprint(&self.rules.entity_types[&other], at))
             })
         {
             return Err(SimError::PlacementOverlap);
         }
         self.check_placement_rules(player, subject, pos, bounds, ignore_territory)?;
         Ok(pos)
+    }
+
+    /// Whether a standing building's footprint overlaps `bounds` on the face of `pos`. Looks
+    /// only at the building index tiles a centre of an overlapping building could be on.
+    fn building_overlaps(&self, pos: Pos, bounds: [i64; 4]) -> bool {
+        let Some(surface) = self.surface(pos.body) else {
+            return false;
+        };
+        let (reach_x, reach_y) = (self.max_footprint.0 * 500, self.max_footprint.1 * 500);
+        let tiles = |low: i64, high: i64| {
+            ((low.div_euclid(1000)) as i32)..=((high.div_euclid(1000)) as i32)
+        };
+        let geo = &surface.geo;
+        let buildings = &surface.vision.buildings;
+        for y in tiles(bounds[1] - reach_y, bounds[3] + reach_y) {
+            for x in tiles(bounds[0] - reach_x, bounds[2] + reach_x) {
+                let Some(index) = geo.index_of(crate::geometry::Tile::new(pos.face, x, y)) else {
+                    continue;
+                };
+                let Some(ids) = buildings.get(&(index as u32)) else {
+                    continue;
+                };
+                if ids.iter().filter_map(|id| self.entity(*id)).any(|e| {
+                    e.pos.face == pos.face
+                        && e.pos.body == pos.body
+                        && overlaps(
+                            bounds,
+                            footprint(&self.rules.entity_types[&e.type_id], e.pos),
+                        )
+                }) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     /// The free tile of a movement class nearest `anchor` among the tiles within `reach`
@@ -282,6 +302,7 @@ impl World {
         if progress >= total {
             site.build_progress = None;
             site.hp = site.max_hp;
+            self.types.site_done(site.owner, site.type_id);
             for bonus in &et.completion_bonus {
                 let balance = self
                     .players
