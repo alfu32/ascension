@@ -969,8 +969,8 @@ Owner's choice (2026-11-16) after tasks 61 and 65 ended most duels in stand-offs
 
 | Difficulty | grace_ticks | first_wave_max | wave_growth_per_hour | army_vs_enemy_pct | economy_pct | reaction_ticks |
 | --- | --- | --- | --- | --- | --- | --- |
-| easiest | 12000 (10 min) | 5 | 10 | 40 | 50 | 600 (was 200) |
-| easy | 7200 (6 min) | 8 | 20 | 80 | 80 | 300 (was 120) |
+| easiest | 24000 (20 min) | 5 | 10 | 40 | 50 | 600 (was 200) |
+| easy | 12000 (10 min) | 8 | 20 | 80 | 80 | 300 (was 120) |
 | moderate | 3600 (3 min) | 0 | 0 | 0 | 100 | 60 |
 | tough, tougher, toughest | 0 | 0 | 0 | 0 | 100 | as before |
 

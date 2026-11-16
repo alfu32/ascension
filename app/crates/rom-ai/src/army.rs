@@ -840,7 +840,12 @@ pub(crate) fn command(plan: &mut Plan<'_>, memory: &mut Memory, cmd: &Command<'_
         };
         let units = members(&army, &by_id);
         match role {
-            Role::Scout => scout(plan, memory, &units),
+            Role::Scout => {
+                // During the grace period scouts only look: they strike no town.
+                let grace = tick < cmd.difficulty.grace_ticks.max(0) as u64;
+                set_stance(plan, &units, if grace { "hold_fire" } else { "aggressive" });
+                scout(plan, memory, &units);
+            }
             _ => lead(plan, memory, cmd, role, &mut army, &units, rally),
         }
         memory.armies.insert(role, army);

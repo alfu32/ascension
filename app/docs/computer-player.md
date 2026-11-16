@@ -410,10 +410,11 @@ armies still did not finish a match, one cause after another:
   site.
 - **Difficulty that decides.** New `ai_difficulty` columns (`grace_ticks`,
   `first_wave_max`, `wave_growth_per_hour`, `army_vs_enemy_pct`, `economy_pct`; values
-  in `database.md`). `easiest` leaves an opponent's town alone for ten minutes, sends at
+  in `database.md`). `easiest` leaves an opponent's town alone for twenty minutes, sends at
   most five units in its first wave (ten more per hour), keeps its army within 40 % of
   the largest enemy army it has seen and keeps half its profile's workers; `easy`
-  six minutes, eight units, 80 %, 80 %. The brain does not know which player is a
+  ten minutes, eight units, 80 %, 80 %. Scouts hold their fire during the grace period:
+  they look, and strike no town. The brain does not know which player is a
   person, so this holds against every opponent.
 - **Fair duel starts** (`rom duel`): besides land, the best gather site each start can
   place on each node terrain must work at least 60 % of the node tiles of the other's
@@ -531,6 +532,22 @@ match runs until a team wins or the tick limit; output is one line per seed
 Territory is off by default: on the two-player map the first city of a
 central start already holds half the land, so the territory timer decides
 the match before an army can.
+
+## First attack on a person (task 67)
+
+```sh
+rom first-attack --db target/rules.db --seeds 1..8 [--difficulties easiest,easy,...] \
+    [--profile balanced] [--ticks 72000] [--defenders 8] [--jobs 8]
+```
+
+Player one stands in for a person: no brain, its starting city and builders and a fixed
+defence (`--defenders` soldiers of the cheapest first-age fighter of its faction, in a
+ring beside the city, placed before the first tick). Player two is a computer of the
+difficulty under test on the duel's fair map. Each run stops when a building of the
+stand-in first loses hit points, or at the tick limit; the table gives, per difficulty,
+when the main army or the raiders first set off for one of the stand-in's buildings and
+with how many units, when a building was first hit and how many of the computer's
+fighters stood near the stand-in's capital then.
 
 ## Tests
 
