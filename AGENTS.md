@@ -98,6 +98,9 @@ not suppress them or relax the gate.
    never a queue.
 9. **Generated before play.** Maps, resource deposits and baked meshes are
    produced before the first tick. Nothing is generated during a match.
+   Edits made by orders during a match (an ascended player painting a
+   planet, task 77) are not generation: they are allowed, saved and
+   deterministic, and re-bake only what they touch (owner, 2026-11-17).
 
 ## Naming
 
