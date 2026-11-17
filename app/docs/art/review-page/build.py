@@ -123,7 +123,14 @@ OVERVIEW11 = [
     ("unit.beam_trooper_expansion-attack", "A beam trooper firing"),
     ("gallery_units_close", "Every unit so far, close: <code>--gallery units</code>"),
 ]
-OVERVIEW = OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
+OVERVIEW12 = [
+    ("lab_compare", "The Automated Research Lab: the approved look (left, as in play) and the alternative look offered with task 73 (right, a review candidate, never drawn in a match)"),
+    ("match_colony_sites", "An automated colony on the planet next to the home world with the 15 sites its governor built: 5 automated farms, 5 woodcutter camps, 5 research labs"),
+    ("match_colony_panel", "The colony's card: each kind against its cap, what the governor is doing or waiting for, and the pause switch"),
+    ("match_labs", "Research labs beside a city and in a colony's area (with the approved look)"),
+    ("match_inhibitor_map", "The jump inhibitor's effect on the star map: a red ring around the held system"),
+]
+OVERVIEW = OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
     ("gallery_ancient", "Ancient age, game camera: <code>--gallery ancient</code>"),
     ("gallery_classical", "Classical age, game camera: <code>--gallery classical</code>"),
     ("gallery_classical_close_team2", "Classical age, close, in player 2's blue to show where team colour sits"),
@@ -144,9 +151,13 @@ def round_of(m):
     gunpowder units, 5 early-modern buildings and enlightenment models, 6 industrial models,
     7 modern and information buildings, 8 modern and information units, 9 future buildings
     (automation and fusion), 10 future units (automation and fusion), 11 space-age models
-    (starfaring to galactic)."""
+    (starfaring to galactic), 12 the jump inhibitor, the automated colony and the
+    alternative Automated Research Lab look."""
     if m["id"] in ROUND1:
         return 1
+    if m["id"] in ("bld.jump_inhibitor@starfaring", "bld.auto_colony@abundance",
+                   "bld.auto_university@automation~lab"):
+        return 12  # first looks made with tasks 70 and 73
     unit = m["entity"].startswith("unit.")
     if m["age"] in ("age.automation", "age.fusion"):
         return 10 if unit else 9
