@@ -20,6 +20,24 @@ fn the_flat_battle() {
     check("flat_battle", &rules, w, 400, |_| {});
 }
 
+/// Task 80: a battle that has left stains on the ground saves and loads them unchanged, and both
+/// worlds fade them alike.
+#[test]
+fn a_battle_with_stains_on_the_ground() {
+    let rules = rules();
+    let mut w = World::battle_scenario(rules.clone(), 3, 24).unwrap();
+    while w.stains(BodyId(0)).count() < 10 {
+        w.step();
+    }
+    let path = temp_path("stains");
+    rom_save::save(&path, &w, &info(&w), &ai()).unwrap();
+    let (loaded, _, _) = rom_save::load(&path, &rules).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    assert!(loaded.stains(BodyId(0)).eq(w.stains(BodyId(0))));
+    assert_eq!(loaded.hash(), w.hash());
+    check("stains", &rules, w, 400, |_| {});
+}
+
 fn sphere_economy(rules: &std::sync::Arc<rom_rules::Rules>) -> World {
     let surface = CubeSurface { n: 32 };
     let plain = rules.id_of("ter.plain").unwrap();

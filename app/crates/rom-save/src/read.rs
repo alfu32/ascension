@@ -433,6 +433,7 @@ fn surfaces(conn: &Connection) -> Result<Vec<SurfaceSnapshot>, SaveError> {
             vision: Vec::new(),
             touched: Vec::new(),
             buildings: Vec::new(),
+            stains: Vec::new(),
         })
     })?;
     let mut by_body: BTreeMap<u32, SurfaceSnapshot> =
@@ -447,6 +448,35 @@ fn surfaces(conn: &Connection) -> Result<Vec<SurfaceSnapshot>, SaveError> {
             .ok_or(bad("touched tile of an unknown surface"))?
             .touched
             .push(tile);
+    }
+    for (body, stain) in query_vec(
+        conn,
+        "SELECT body_id, entity_id, type_id, owner_id, x, y, face, radius, tick FROM surface_stain ORDER BY body_id, seq",
+        |r| {
+            let body = uint::<u32>(r, 0, "body")?;
+            Ok((
+                body,
+                rom_sim::Stain {
+                    id: EntityId(uint(r, 1, "stain entity")?),
+                    type_id: DefId(uint(r, 2, "stain type")?),
+                    owner: PlayerId(uint(r, 3, "stain owner")?),
+                    pos: Pos {
+                        x: n(int(r, 4)?, "stain x")?,
+                        y: n(int(r, 5)?, "stain y")?,
+                        face: uint(r, 6, "stain face")?,
+                        body: BodyId(body),
+                    },
+                    radius: uint(r, 7, "stain radius")?,
+                    tick: u(int(r, 8)?),
+                },
+            ))
+        },
+    )? {
+        by_body
+            .get_mut(&body)
+            .ok_or(bad("stain of an unknown surface"))?
+            .stains
+            .push(stain);
     }
     let requests = query_vec(
         conn,

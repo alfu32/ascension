@@ -1,0 +1,19 @@
+# Task 80, replayed by --script in universe mode (--players 2 --ai none, seed 2, --sun fixed): on
+# seed 2 player one's city stands a few tiles from the sea to its west. A barracks, a farm and
+# soldiers of player one on the shore, and a space frigate of player two holding the orbit above
+# them, which fires on whatever comes into its reach. The game runs at four times the speed from
+# tick 100 and all but stops at tick 3000: the stains of what fell on the shore stop at the water.
+0 grant-age age.expansion
+0 place 1 bld.barracks @-9,-6
+0 place 1 bld.farm @-9,4
+0 place 1 unit.marine @-11,-1
+0 place 1 unit.marine @-11,8
+0 place 1 unit.marine @-11,-11
+0 place-orbit 1 unit.survey_ship @-16,0
+0 place-orbit 2 unit.space_frigate @-11,0
+60 click ship1
+62 cam focus
+90 cam focus
+92 cam wheel 3 800,450
+100 speed 400
+3000 speed 1

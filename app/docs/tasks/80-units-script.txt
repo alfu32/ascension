@@ -1,0 +1,22 @@
+# Task 80, replayed by --script in universe mode (--players 2 --ai none, seed 1, --sun fixed): a
+# city of player two forty tiles east of player one's city with two marines and two tanks
+# of player two side by side south of it, and a space frigate of player one that bombards the
+# city from tick 101 and then whatever stands in its reach. The game runs at four times the
+# speed from tick 110 and all but stops at tick 1600; the camera looks down on the row: the
+# soldiers' small stains beside the tanks' larger ones (a unit's mark is as wide as its model).
+0 grant-age age.expansion
+0 place 2 bld.city @40,0
+0 place 2 unit.marine @36,5
+0 place 2 unit.marine @38,5
+0 place 2 unit.tank @41,5
+0 place 2 unit.tank @44,5
+0 place-orbit 1 unit.survey_ship @40,6
+0 place-orbit 1 unit.space_frigate @40,-27
+60 click ship1
+62 cam focus
+90 cam focus
+92 cam wheel 4 800,450
+100 click ship2
+101 rclick foecity1
+110 speed 400
+1600 speed 1

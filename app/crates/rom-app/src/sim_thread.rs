@@ -818,6 +818,10 @@ impl TerrainKnowledge {
     }
 }
 
+/// A unit's stain reaches this share of its model's longest extent, if that is wider than the
+/// simulation's mark (task 80).
+const UNIT_STAIN_PER_EXTENT: f32 = 0.65;
+
 /// Ticks between two looks for planets that ships are bound for and that are not made yet.
 const VISIT_INTERVAL: u64 = 10;
 
@@ -865,6 +869,24 @@ fn publish(
             .and_then(|p| models.resolve(rom_rules::DefId(wreck.kind), p.faction, p.age));
         if let Some(model) = model {
             wreck.height = (model.size[1].max(0.2) * 1000.0) as i32;
+        }
+    }
+    // A building's debris wears the colours of the model it was drawn with, and a unit drawn
+    // wider than its collision radius leaves a mark as wide as its model (task 80).
+    for stain in &mut hud.stains {
+        let model = world
+            .stains(body)
+            .find(|s| s.id.0 == stain.id)
+            .and_then(|s| {
+                let p = world.players().find(|p| p.id == s.owner)?;
+                models.resolve(s.type_id, p.faction, p.age)
+            });
+        let Some(model) = model else { continue };
+        if stain.building {
+            stain.model = Some(model.index);
+        } else {
+            let drawn = model.size[0].max(model.size[2]) * UNIT_STAIN_PER_EXTENT * 1000.0;
+            stain.radius = stain.radius.max(drawn as i32);
         }
     }
     bridge.publish_hud(Arc::new(hud));

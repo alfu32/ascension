@@ -181,6 +181,30 @@ pub struct HudWreck {
     pub seed: u32,
 }
 
+/// A stain left on the ground where a building or unit was destroyed (task 80): soot, ash and
+/// churned earth, and a building's debris, fading over the stain's life.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HudStain {
+    /// The id the destroyed entity had; varies the look.
+    pub id: u32,
+    /// Surface face.
+    pub face: u8,
+    /// Centre in milli-tiles.
+    pub x: i32,
+    /// Centre in milli-tiles.
+    pub y: i32,
+    /// Radius in milli-tiles.
+    pub radius: i32,
+    /// Game tick it was destroyed at.
+    pub tick: u64,
+    /// A building's stain also shows its debris.
+    pub building: bool,
+    /// Its owner, whose colour some debris wears.
+    pub owner: u8,
+    /// The composed model it was drawn with, whose colours its debris takes.
+    pub model: Option<u16>,
+}
+
 /// One command button.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HudButton {

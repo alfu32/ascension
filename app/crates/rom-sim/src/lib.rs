@@ -33,6 +33,7 @@ mod space;
 mod spatial;
 #[cfg(test)]
 mod sphere_tests;
+mod stains;
 mod stance;
 mod surface;
 mod tactics;
@@ -62,6 +63,7 @@ pub use rng::SimRng;
 pub use scenario::Playthrough;
 pub use snapshot::*;
 pub use space::{BodyClaim, BodyYield, Orbit, OrbitalShot, Transit};
+pub use stains::{BUILDING_STAIN_PERMILLE, STAIN_FLOOR, Stain, UNIT_STAIN_PERMILLE};
 pub use surface::Surface;
 pub use universe::{BodyId, BodyInfo, PlanetSurface, RouteInfo, SystemInfo, UniverseSetup};
 pub use victory::{Elimination, MatchOptions, Outcome, PlayerStatus};

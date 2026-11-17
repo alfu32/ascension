@@ -515,6 +515,7 @@ def generate():
     big_ships_on_the_planet(row, tag, sql.append)
     automated_colonies(definition, row, tag, need, produce, cost, tech, sql.append)
     orbital_bombardment(weapon, sql.append)
+    ground_stains(row)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -827,6 +828,22 @@ def orbital_bombardment(weapon, emit):
          f"armor_class_id={val(Ref(BATTERY['armour'], 'armor_class'))} WHERE id={val(Ref(full))};")
     emit(f"UPDATE et_weapon SET damage={BATTERY['damage']},range_max={BATTERY['reach'] * 1000},"
          f"cooldown_ticks={BATTERY['reload']} WHERE entity_type_id={val(Ref(full))};")
+
+
+# Task 80: what is destroyed on a planet leaves a stain on the ground (owner, 2026-11-17;
+# docs/database.md "Ground stains"): it lasts STAIN_DAYS rotations of the planet
+# (`world.day_ticks` each) and a surface keeps at most STAIN_CAP of them, the oldest going first.
+STAIN_DAYS = 6
+STAIN_CAP = 2000
+
+
+def ground_stains(row):
+    """Task 80: how long the stain of a destroyed building or unit lasts and how many a surface
+    keeps. Presentation only: nothing in the simulation or the computer players reads them."""
+    row('game_constant', key='world.stain_days', value=STAIN_DAYS, unit='days',
+        note='a stain left where a building or unit was destroyed lasts this many world.day_ticks; presentation only')
+    row('game_constant', key='world.stain_cap', value=STAIN_CAP, unit='stains',
+        note='most stains a surface keeps; past it the oldest goes')
 
 
 # Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"

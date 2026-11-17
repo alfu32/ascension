@@ -35,6 +35,7 @@ mod scene;
 pub mod shadow;
 pub mod sky;
 pub mod space;
+mod stains;
 mod stats;
 pub mod sun;
 mod terrain;
@@ -90,8 +91,8 @@ pub use zoom::Level;
 pub use hud::{HudResearch, HudResource, HudSelection, HudSnapshot};
 pub use hud_model::{
     ButtonState, HudBlast, HudButton, HudCard, HudCityRadius, HudMarker, HudPalette, HudPatrol,
-    HudPlacement, HudQueue, HudQueueItem, HudTile, HudTradeRoute, HudWealth, HudWreck, MarkerKind,
-    PaletteTab, ResearchCell, ResearchOverview, ResearchTrack, SLOT_KEYS, slot_of_key,
+    HudPlacement, HudQueue, HudQueueItem, HudStain, HudTile, HudTradeRoute, HudWealth, HudWreck,
+    MarkerKind, PaletteTab, ResearchCell, ResearchOverview, ResearchTrack, SLOT_KEYS, slot_of_key,
 };
 pub use pick::{
     Ground, HudRegionKind, HudTarget, PickContext, PickController, PickEvent, View, flat_surface,

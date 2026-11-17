@@ -219,6 +219,25 @@ struct ModelMeshes {
     poses: Option<[usize; 2]>,
     /// Cycle lengths of its activities, seconds.
     periods: [f32; 4],
+    /// Its three most used colours, not counting the owner's (task 80: its debris).
+    palette: [[u8; 3]; 3],
+}
+
+/// The three colours covering the most triangles of `mesh`, leaving out owner-coloured faces;
+/// fewer distinct colours repeat the first ones.
+fn palette_of(mesh: &ModelMesh) -> Option<[[u8; 3]; 3]> {
+    let mut counts: std::collections::BTreeMap<[u8; 3], usize> = Default::default();
+    for triangle in mesh.indices.chunks(3) {
+        let c = mesh.colors[usize::from(triangle[0])];
+        if c[3] & rom_kit::models::TEAM_BIT == 0 {
+            *counts.entry([c[0], c[1], c[2]]).or_default() += 1;
+        }
+    }
+    let mut ranked: Vec<([u8; 3], usize)> = counts.into_iter().collect();
+    ranked.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    let first = ranked.first()?.0;
+    let pick = |i: usize| ranked.get(i).map_or(first, |c| c.0);
+    Some([first, pick(1), pick(2)])
 }
 
 /// One placed model this frame.
@@ -287,6 +306,7 @@ impl ModelGpu {
                     scale: look.scale.max(0.01),
                     poses: origin.filter(|_| poses.is_some()),
                     periods: Activity::ALL.map(|a| baked.rig.period(a)),
+                    palette: palette_of(&baked.far).unwrap_or(crate::stains::PLAIN_DEBRIS),
                 })
             })
             .collect();
@@ -302,6 +322,14 @@ impl ModelGpu {
             time: 0.0,
             lockstep: false,
         })
+    }
+
+    /// The colours of model `index`, if it was uploaded.
+    pub(super) fn palette(&self, index: u16) -> Option<[[u8; 3]; 3]> {
+        self.models
+            .get(usize::from(index))
+            .and_then(Option::as_ref)
+            .map(|m| m.palette)
     }
 
     /// Whether model `index` was uploaded.

@@ -278,6 +278,13 @@ impl World {
         for id in &self.spent {
             hash.u32(id.0);
         }
+        if !self.razed.is_empty() {
+            hash.bytes(b"razed");
+            hash.u64(self.razed.len() as u64);
+            for id in &self.razed {
+                hash.u32(id.0);
+            }
+        }
         hash.u64(self.shots.len() as u64);
         for shot in &self.shots {
             hash.pos(shot.origin);
@@ -589,6 +596,19 @@ impl StateHash {
             self.u64(ids.len() as u64);
             for id in ids {
                 self.u32(id.0);
+            }
+        }
+        // Hashed only once a surface has stains, so worlds without any keep their hashes.
+        if !surface.stains.is_empty() {
+            self.bytes(b"stain");
+            self.u64(surface.stains.len() as u64);
+            for stain in &surface.stains {
+                self.u32(stain.id.0);
+                self.u32(stain.type_id.0);
+                self.u32(stain.owner.0);
+                self.pos(stain.pos);
+                self.u32(stain.radius);
+                self.u64(stain.tick);
             }
         }
     }

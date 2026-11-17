@@ -219,6 +219,23 @@ fn write_surfaces(tx: &Transaction, s: &Snapshot) -> Result<(), SaveError> {
                 params![body, seq as i64, tile],
             )?;
         }
+        for (seq, stain) in surface.stains.iter().enumerate() {
+            tx.execute(
+                "INSERT INTO surface_stain VALUES (?,?,?,?,?,?,?,?,?,?)",
+                params![
+                    body,
+                    seq as i64,
+                    stain.id.0,
+                    stain.type_id.0,
+                    stain.owner.0,
+                    stain.pos.x,
+                    stain.pos.y,
+                    stain.pos.face,
+                    stain.radius,
+                    w(stain.tick),
+                ],
+            )?;
+        }
         for (seq, r) in p.queue.iter().enumerate() {
             tx.execute(
                 "INSERT INTO path_request VALUES (?,?,?,?,?,?,?,?,?,?)",

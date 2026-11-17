@@ -180,6 +180,8 @@ impl World {
             .expect("razed building");
         e.hp = 0;
         e.killer = None;
+        // Pulled down, not destroyed: it leaves no stain.
+        self.razed.push(order.executor);
         self.stats.orders_done += 1;
     }
 
