@@ -929,7 +929,12 @@ fn render_loop(shared: &Shared) {
                 if matches!(
                     event,
                     InputEvent::KeyDown(
-                        Key::PanForward | Key::PanBack | Key::PanLeft | Key::PanRight
+                        Key::PanForward
+                            | Key::PanBack
+                            | Key::PanLeft
+                            | Key::PanRight
+                            | Key::FlyUp
+                            | Key::FlyDown
                     ) | InputEvent::ButtonDown {
                         button: PointerButton::Middle,
                         ..
@@ -1612,7 +1617,11 @@ fn zoom_event(
             zoom.fly_home(orbit);
             true
         }
-        InputEvent::KeyDown(key) => match pan_index(key) {
+        InputEvent::KeyDown(Key::LevelView) if in_space => {
+            zoom.level_view();
+            true
+        }
+        InputEvent::KeyDown(key) => match space_key_index(key) {
             Some(index) if !zoom.pans_planet() => {
                 zoom.hold(index, true);
                 true
@@ -1620,13 +1629,15 @@ fn zoom_event(
             _ => false,
         },
         InputEvent::KeyUp(key) => {
-            if let Some(index) = pan_index(key) {
-                zoom.hold(index, false);
+            for key in std::iter::once(key).chain(key.released_with()) {
+                if let Some(index) = space_key_index(key) {
+                    zoom.hold(index, false);
+                }
             }
             false
         }
         InputEvent::ReleaseAll => {
-            (0..4).for_each(|index| zoom.hold(index, false));
+            (0..6).for_each(|index| zoom.hold(index, false));
             zoom.drag_end();
             zoom.set_pointer(None);
             picker.cancel();
@@ -1712,6 +1723,16 @@ fn zoom_event(
             true
         }
         _ => false,
+    }
+}
+
+/// The index of a held key in space ([`ZoomCamera::hold`]): the arrows, then Shift + up and
+/// Shift + down, which fly up and down the screen on the star map.
+fn space_key_index(key: Key) -> Option<usize> {
+    match key {
+        Key::FlyUp => Some(4),
+        Key::FlyDown => Some(5),
+        key => pan_index(key),
     }
 }
 

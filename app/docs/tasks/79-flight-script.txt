@@ -1,0 +1,13 @@
+# Task 79: a keyboard flight between two systems: five wheel notches in over Eta Hydrae (the
+# focus closes on it), then the up arrow held from tick 26: the camera flies forward along the
+# view, past Eta Hydrae and on toward the home system ahead, at half the distance to the focus
+# per second. Run with --view starmap and shoot at several --after times for the strip.
+0 grant-age age.galactic
+0 grant-tech tech.automated_route_survey
+2 cam wheel 1 695,407
+6 cam wheel 1 695,407
+10 cam wheel 1 695,407
+14 cam wheel 1 695,407
+18 cam wheel 1 695,407
+24 cam point 640,250
+26 cam key up down

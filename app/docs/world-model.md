@@ -138,9 +138,13 @@ order, "Vega II"; resource bodies "Vega belt" and "Vega II moon".
   turn the look; the constellation stick figures are drawn between the member
   stars that are in the match (F3 hides or shows them anywhere on the star
   map). Each constellation is named once, faintly, over its member systems.
-  The star map is an ordinary 3D scene: orbit with the heading and the tilt
-  (the tilt reaches 89 degrees below the plane, task 74), systems drop faint lines to
-  the equatorial plane's rings, distant ones fade.
+  The star map is an ordinary 3D scene with no plane in it (task 79, "A star
+  map you fly through" below): the camera flies through the stars as through
+  a point cloud; height and distance read from the stars themselves (nearer
+  ones larger, brighter and drawn over farther ones, the farthest a little
+  faded, names fading with distance) and from the parallax when turning. The
+  equatorial plane's rings and the drop lines of task 59 are gone: they were
+  mistaken for routes.
 
 ## Camera and visibility by age
 
@@ -397,22 +401,26 @@ One orbit-style camera serves the planet, the star system and the star map:
 a focus point, a heading, an elevation and the distance. Every level answers
 the same input (task 74):
 
-| Input | Planet | System and star map |
-| --- | --- | --- |
-| Wheel | zoom, one gliding step per notch | zoom toward the point under the cursor |
-| Middle drag | turn the globe under the camera | turn: orbit the camera about the focus (left–right the heading, up–down the elevation) |
-| Shift + middle drag | turn the heading | pan (the plane follows the pointer) |
-| Arrows, pointer at the edge | pan | pan, relative to the heading |
-| Double-click | — | fly to a planet, star or system |
-| Home | home view | fly back to the home planet |
-| Space / Shift + Space | fly to / follow the selection | the same, at the level it is seen at |
+| Input | Planet | System | Star map (task 79) |
+| --- | --- | --- | --- |
+| Wheel | zoom, one gliding step per notch | zoom toward the point under the cursor | dolly along the pointer's ray (toward the star under it) |
+| Middle drag | turn the globe under the camera | turn: orbit the camera about the focus (left–right the heading, up–down the elevation) | turn freely about the camera's own axes, all the way over |
+| Shift + middle drag | turn the heading | pan (the plane follows the pointer) | pan in the screen plane (the point under the pointer follows it) |
+| Arrows | pan | pan, relative to the heading | fly forward, back and sideways |
+| Shift + up / down | pan | pan | fly up and down the screen |
+| Pointer at the edge | pan | pan | fly sideways, up and down |
+| F4 | — | — | turn the camera upright again |
+| Double-click | — | fly to a planet, star or system | the same |
+| Home | home view | fly back to the home planet | the same |
+| Space / Shift + Space | fly to / follow the selection | the same, at the level it is seen at | the same |
 
 - **No seams.** At the planet's hand-over the space camera takes the planet
   camera's exact pose (carried into the system frame), so the picture goes
   on unbroken (since task 57 nothing is cross-faded at all: one camera, one
   scene, below); above it the view eases to the plane's own pose
-  (heading kept, no roll). The star map shares the system's heading and
-  elevation, and the two frames meet exactly at their hand-over. Zooming
+  (heading kept, no roll). The star map starts from the system camera's exact
+  pose, and the two frames meet exactly at their hand-over; from there the
+  star-map camera is free (task 79). Zooming
   out and back in without other input returns the planet camera to where it
   was; a turn made in space turns the planet camera about the planet's axis.
 - **Zooming in lands where you look.** Over a body, the wheel anchors on it
@@ -432,7 +440,7 @@ the same input (task 74):
   the sky (it follows the pointer both ways) and the arrows look the way they
   point.
 - **A low angle in space (task 74).** The space camera has one elevation for
-  the system view and the star map. The first hand-over from the planet eases
+  the system view (the star map starts from it, task 79). The first hand-over from the planet eases
   to `DEFAULT_ELEVATION`, 12 degrees above the plane (orbits as long ellipses,
   the star to the side); after that the elevation is the player's, kept for the
   match. It reaches 89 degrees above and below the plane; from below the
@@ -447,14 +455,9 @@ the same input (task 74):
   than four camera distances from the eye's foot, or misses it, stands for the
   point at that distance in its direction, so panning and zooming stop there
   instead of shooting off (the minimap's outline of the view is cut there too).
-  On the star map the focus lies on the map's reference plane (the sky's
-  equatorial plane through the Sun, which the rings and drop lines stand on),
-  except where it sits on a system: after a flight to a system or a ship, while
-  following, or after zooming out of a system. Any pan on the map (drag, keys,
-  edge, a minimap click) glides it back onto the reference plane; zooming into
-  a system glides it onto that system's plane; the wheel over a system of the
-  map zooms toward the system itself, wherever it lies in depth. This star-map
-  rule is provisional and lives in one place (`ZoomCamera::onto_reference_plane`).
+  Zooming into a system from the star map glides the focus onto that system's
+  plane. Task 74's provisional star-map rule (the focus kept on a reference
+  plane) is replaced by task 79's free focus below.
 - **Every change of place is a flight** of short legs (out of the planet, up
   to a star-map height that fits the way, across, down), interrupted by any
   input. The camera never cuts.
@@ -473,6 +476,65 @@ the same input (task 74):
   plane in view and glides there on a click.
 - The tier caps still bound everything: wheel, flights and focus requests
   (an interplanetary player cannot leave the home system's view).
+
+### A star map you fly through (task 79)
+
+The owner (2026-11-17): "In the galactic view there should be no plane. ... I
+should be able to simply navigate a point cloud as you would while flying."
+The solar plane stays exactly as task 74 made it, inside a system; outside a
+system nothing refers to a plane.
+
+- **Where it starts.** Zooming out of a system, the star map takes the system
+  camera's exact pose. Past the distance at which zooming in enters a system
+  (`ZoomCamera::flies_free`) the camera is free; the focus is a free point in
+  space.
+- **Turning** (middle drag, or as swapped in settings) orbits the camera about
+  the focus about the camera's own axes: a horizontal drag about its up, a
+  vertical drag about its right, so a drag does the same whatever the
+  orientation. No elevation limit and no poles: it goes all the way over. It
+  never rolls by itself; the orientation is kept orthonormal after every turn.
+  The invert settings apply.
+- **Panning** (Shift + middle drag) moves camera and focus together in the
+  screen plane at the focus's depth; the point under the cursor stays under it.
+- **The wheel** dollies along the pointer's ray, one gliding step per gesture:
+  the picture scales about the point under the cursor at the focus's depth, or
+  about the star under the cursor, so the focus closes on that star as the
+  camera comes in. Zooming in close to a system enters it at the same distance
+  as before.
+- **Flying.** The arrows fly forward and back along the view and sideways,
+  Shift + up and Shift + down fly up and down the screen, and the pointer at
+  the screen's edge moves sideways and up and down; the speed is half the
+  distance to the focus per second.
+- **Level the view.** F4 turns the camera upright again (its up back to the
+  map's north, the heading kept, the elevation within 89 degrees, no roll)
+  over 0.8 s (`LEVEL_SECONDS`), for a player who got lost.
+- **Entering a system** from any orientation, upside down included, eases the
+  same way to a pose of that system's plane, while the focus glides onto the
+  plane; the first frame does not move. Clicking or double-clicking a system,
+  flying to a system or a ship and following one work as before.
+- **The bound.** The focus stays inside the map's region: the sphere about the
+  middle of the match's systems that holds them all, with 10 000 map units to
+  spare (`ZoomCamera::map_region`, the one place for it; task 76 will widen it
+  for the celestial home).
+- **Only routes look like routes.** The routes (task 70's charted lines and
+  uncharted stubs) are the only solid lines between systems. Constellation
+  figures stay off by default (F3); shown, they are dashed, thin, in a warm
+  sand that no route style uses, and drawn under the routes. The marks around
+  systems and ships (colony rings, inhibitor rings, the hover ring, the charge
+  ring, the ship diamond) face the camera, so seen edge-on they never become
+  lines. F2 "Sky from the Sun" works as before.
+
+Screenshots (universe seed 1, `--ai none`, `--view starmap`, scripts
+`tasks/79-*-script.txt`): `img/star-map-79-before.png` and
+`img/star-map-79-after.png` (the same pose and script with 0.0.73 and with this
+task: the rings and drop lines gone, the colony ring facing the camera),
+`img/star-map-79-above.png` and `img/star-map-79-below.png` (the map seen from
+about 81 degrees above and 68 degrees below the old plane),
+`img/star-map-79-flight.png` (a keyboard flight from Eta Hydrae past Minchir and
+Rho Hydrae, six frames from separate runs ordered by progress) and
+`img/star-map-79-figures.png` (seed 2: Aquila's dashed figure between Altair and
+Alshain beside the blue route stubs, enlarged below; in seed 1 the only figure
+line runs along a route and lies hidden under it).
 
 ### One camera, one scene (task 57)
 
@@ -537,7 +599,8 @@ projection. What changes with the distance is only what is drawn:
   nearest the focus and picking use all three coordinates; Shift + middle
   drag up or down tilts the camera about the focus, so a map with systems at
   different heights can be seen from any angle (since task 74 the plain middle
-  drag turns, from 89 degrees above the plane to 89 below it). Task 59 fills the map with
+  drag turns, from 89 degrees above the plane to 89 below it; since task 79
+without a limit on the star map). Task 59 fills the map with
   real stars in 3D (see "The real sky").
 
 Screenshots: `img/camera-zoom-strip.png` (street to star map, four wheel

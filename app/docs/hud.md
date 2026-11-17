@@ -180,8 +180,12 @@ between levels"). Right-button drag also pans on a flat map when nothing is
 selected and no placement is active. The wheel zooms one gliding step per
 notch (one per gesture: a burst of notches within 80 ms counts once), arrow
 keys and the screen edges pan, End restores the starting view, and Home
-frames the map or globe. Existing selection, order and palette hotkeys are
-unchanged.
+frames the map or globe. On the star map there is no plane (task 79): the
+turning drag turns the camera freely about its own axes, the arrows fly
+forward, back and sideways, Shift + up and Shift + down fly up and down the
+screen, the screen edges move it sideways and up and down, and F4 turns the
+camera upright again; the help line lists them. Existing selection, order and
+palette hotkeys are unchanged.
 
 ## Palette states and research
 

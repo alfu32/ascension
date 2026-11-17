@@ -44,7 +44,9 @@
 //! the wheel does), `cam drag x,y x,y [shift]` (middle-button drag; `shift`, or the older
 //! `rotate`, holds Shift: since task 74 the plain drag turns the view in space and the Shift
 //! drag pans it), `cam dblclick x,y`, `cam click x,y`, `cam point
-//! x,y` (move the pointer only), `cam key <up|down|left|right> <down|up>`, `cam home`,
+//! x,y` (move the pointer only), `cam key <name> <down|up>` (a camera key by name: the arrows
+//! `up`, `down`, `left`, `right`, `shift+up` and `shift+down` to fly up and down the star
+//! map's screen, `f4` to level the star-map view, `end`, `home`, `f2`, `f3`), `cam home`,
 //! `cam focus` and `cam follow` (the focus and follow keys), `cam sky` (F2, the "Sky from the
 //! Sun" preset of the star map) and `cam lines` (F3, the constellation figures).
 
@@ -808,10 +810,9 @@ fn camera_input(words: &[&str]) -> Result<Vec<rom_render::InputEvent>, String> {
             ]
         }
         Some("key") => {
-            let key = words
-                .get(1)
-                .and_then(|w| Key::from_name(w))
-                .ok_or("cam key needs up, down, left or right")?;
+            let key = words.get(1).and_then(|w| Key::from_name(w)).ok_or(
+                "cam key needs a camera key: up, down, left, right, shift+up, shift+down, f4",
+            )?;
             match words.get(2).copied() {
                 Some("down") => vec![InputEvent::KeyDown(key)],
                 Some("up") => vec![InputEvent::KeyUp(key)],

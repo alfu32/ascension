@@ -1,0 +1,7 @@
+# Task 79: the star map seen from far above: a plain middle drag down of 300 pixels turns the
+# free camera 69 degrees about its own right axis, to about 81 degrees above the old plane.
+# Run with --view starmap.
+0 grant-age age.galactic
+0 grant-tech tech.automated_route_survey
+1 speed 400
+4 cam drag 640,200 640,500

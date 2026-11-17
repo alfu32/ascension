@@ -1,0 +1,7 @@
+# Task 79: the star map at its first look (12 degrees, from the system camera's pose), every
+# route revealed by Automated Route Survey. Run with --view starmap; the same script and pose
+# with the 0.0.73 binary gives the "before" picture (rings and drop lines), with this branch the
+# "after" one.
+0 grant-age age.galactic
+0 grant-tech tech.automated_route_survey
+1 speed 400

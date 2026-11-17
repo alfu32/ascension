@@ -1,0 +1,10 @@
+# Task 79: the constellation figures shown (F3) beside the routes: dashed, in a warm sand, under
+# the routes. Seed 2 (`--seed 2`): in seed 1 the only figure line runs along a route and is
+# hidden under it. Routes are left uncharted (faint stubs) so Aquila's figure shows between
+# Altair and Alshain; three wheel notches in over them. Run with --view starmap.
+0 grant-age age.galactic
+1 speed 400
+20 cam wheel 1 728,238
+36 cam wheel 1 728,238
+52 cam wheel 1 728,238
+70 cam lines

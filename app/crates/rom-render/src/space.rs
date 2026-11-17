@@ -250,6 +250,149 @@ pub fn route_sight(snapshot: &SpaceSnapshot, a: u32, b: u32) -> RouteSight {
     }
 }
 
+/// What a line of the star map stands for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MapLineKind {
+    /// A charted route: the whole line between two systems.
+    Route,
+    /// An uncharted route: a faint stub leaving a system the player has seen.
+    Stub,
+    /// A dash of a constellation's stick figure.
+    Figure,
+}
+
+/// A charted route of the star map.
+pub const ROUTE_LINE: [u8; 4] = [110, 140, 200, 110];
+/// A route the player has not charted: a faint stub leaving the systems it has seen.
+pub const ROUTE_STUB: [u8; 4] = [150, 175, 225, 120];
+/// A constellation's stick figure on the star map, and in the sky from the Sun: a warm sand
+/// that no route style uses, dashed, thin and under the routes.
+pub const FIGURE_LINE: [u8; 4] = [225, 180, 110, 160];
+pub const FIGURE_LINE_SKY: [u8; 4] = [230, 190, 120, 160];
+/// Length of a dash of a constellation figure (and of the gap after it) as a share of the camera
+/// distance: about ten pixels of a 720-pixel picture at the focus's depth.
+pub const FIGURE_DASH: f32 = 0.012;
+
+impl MapLineKind {
+    /// The line's colour before the depth fade; `from_sun` for the sky seen from the Sun.
+    pub fn colour(self, from_sun: bool) -> [u8; 4] {
+        match self {
+            Self::Route => ROUTE_LINE,
+            Self::Stub => ROUTE_STUB,
+            Self::Figure if from_sun => FIGURE_LINE_SKY,
+            Self::Figure => FIGURE_LINE,
+        }
+    }
+}
+
+/// A line of the star map, in the star-map frame.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MapLine {
+    /// One end.
+    pub a: [f32; 3],
+    /// The other end.
+    pub b: [f32; 3],
+    /// What it stands for.
+    pub kind: MapLineKind,
+    /// The point whose depth fades it.
+    pub at: [f32; 3],
+}
+
+/// Every line the star map draws between systems, in drawing order: the constellation figures
+/// first when `figures` is on (dashed, dashes and gaps `dash` map units long, so they never read
+/// as routes, and under them), then the routes as the player sees them (none from the Sun). Nothing else: the star map has no plane,
+/// no rings and no drop lines (task 79); height and distance read from the stars themselves.
+pub fn star_map_lines(
+    scene: &UniverseScene,
+    positions: &[[f32; 3]],
+    snapshot: &SpaceSnapshot,
+    figures: bool,
+    from_sun: bool,
+    dash: f32,
+) -> Vec<MapLine> {
+    let mut lines = Vec::new();
+    let place = |id: u32| {
+        scene
+            .system_index(id)
+            .and_then(|i| positions.get(i).copied())
+    };
+    if figures {
+        for &(a, b) in &scene.figure {
+            let (Some(pa), Some(pb)) = (place(a), place(b)) else {
+                continue;
+            };
+            let way = [0, 1, 2].map(|i| pb[i] - pa[i]);
+            let length = (way[0] * way[0] + way[1] * way[1] + way[2] * way[2]).sqrt();
+            let dashes = (length / (2.0 * dash.max(1e-3))).round().clamp(2.0, 400.0) as u32;
+            let point = |t: f32| [0, 1, 2].map(|i| pa[i] + way[i] * t);
+            for dash in 0..dashes {
+                let from = dash as f32 / dashes as f32;
+                let to = (dash as f32 + 0.5) / dashes as f32;
+                lines.push(MapLine {
+                    a: point(from),
+                    b: point(to),
+                    kind: MapLineKind::Figure,
+                    at: point(from),
+                });
+            }
+        }
+    }
+    if from_sun {
+        return lines;
+    }
+    for &(id_a, id_b) in &scene.routes {
+        let (Some(pa), Some(pb)) = (place(id_a), place(id_b)) else {
+            continue;
+        };
+        let along = |from: [f32; 3], to: [f32; 3]| {
+            [0, 1, 2].map(|i| from[i] + (to[i] - from[i]) * ROUTE_STUB_SHARE)
+        };
+        match route_sight(snapshot, id_a, id_b) {
+            RouteSight::Charted => lines.push(MapLine {
+                a: pa,
+                b: pb,
+                kind: MapLineKind::Route,
+                at: [0, 1, 2].map(|i| (pa[i] + pb[i]) / 2.0),
+            }),
+            RouteSight::Stub { from_a, from_b } => {
+                for (from, to, shown) in [(pa, pb, from_a), (pb, pa, from_b)] {
+                    if shown {
+                        lines.push(MapLine {
+                            a: from,
+                            b: along(from, to),
+                            kind: MapLineKind::Stub,
+                            at: from,
+                        });
+                    }
+                }
+            }
+            RouteSight::Hidden => {}
+        }
+    }
+    lines
+}
+
+/// Flat marks built in the plane `y = centre.y` about `centre` (rings, arcs, diamonds), turned
+/// to face a camera whose unit right and up are given: the plane's `x` becomes the screen's
+/// right and its `-z` the screen's up. The star map has no plane to lay them in, so its marks
+/// face the camera and never collapse into lines that could pass for routes.
+pub fn facing(tris: Vec<Tri3>, centre: [f32; 3], right: [f32; 3], up: [f32; 3]) -> Vec<Tri3> {
+    let toward = [
+        right[1] * up[2] - right[2] * up[1],
+        right[2] * up[0] - right[0] * up[2],
+        right[0] * up[1] - right[1] * up[0],
+    ];
+    tris.into_iter()
+        .map(|tri| Tri3 {
+            v: tri.v.map(|p| {
+                let d = [p[0] - centre[0], p[1] - centre[1], p[2] - centre[2]];
+                [0, 1, 2].map(|i| centre[i] + right[i] * d[0] + toward[i] * d[1] - up[i] * d[2])
+            }),
+            colour: tri.colour,
+        })
+        .collect()
+}
+
 /// An arc of a flat annulus in the plane `y = centre.y`: `fraction` of the turn from the
 /// direction `-z` (the top as the map is seen), clockwise seen from above.
 pub fn arc(
@@ -484,8 +627,15 @@ pub fn map_mark_scale(view: &crate::zoom::SpaceView, distance: f32) -> (f32, [f3
         view.target[2] - view.eye[2],
     ];
     let u = view.up;
-    let right = [f[1] * u[2] - f[2] * u[1], 0.0, f[0] * u[1] - f[1] * u[0]];
-    let length = right[0].hypot(right[2]).max(1e-6);
+    // The camera's own right: horizontal for an upright camera, turned with a free one.
+    let right = [
+        f[1] * u[2] - f[2] * u[1],
+        f[2] * u[0] - f[0] * u[2],
+        f[0] * u[1] - f[1] * u[0],
+    ];
+    let length = (right[0] * right[0] + right[1] * right[1] + right[2] * right[2])
+        .sqrt()
+        .max(1e-6);
     (icon, right.map(|c| c / length * icon * 4.5))
 }
 
@@ -732,7 +882,10 @@ pub fn level_help(
             "Star map: scroll in on a system, or double-click it, to enter · short stubs are \
              routes not yet charted: a first voyage charts them, slowly"
                 .to_owned(),
-            format!("{turn} turns and tilts · {pan} pans · Home: your planet"),
+            format!(
+                "{turn} turns freely · {pan} pans · arrows fly, Shift + up/down rise and sink · \
+                 F4 levels the view · Home: your planet"
+            ),
         )),
     }
 }
@@ -1145,6 +1298,143 @@ mod tests {
     use super::*;
     use crate::universe::{BodyViewKind, SYSTEM_RADIUS, sample_scene};
 
+    /// Distance from `p` to the segment from `a` to `b`.
+    fn off_segment(p: [f32; 3], a: [f32; 3], b: [f32; 3]) -> f32 {
+        let ab = [0, 1, 2].map(|i| b[i] - a[i]);
+        let ap = [0, 1, 2].map(|i| p[i] - a[i]);
+        let dot = |u: [f32; 3], v: [f32; 3]| u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+        let t = (dot(ap, ab) / dot(ab, ab).max(1e-9)).clamp(0.0, 1.0);
+        let d = [0, 1, 2].map(|i| ap[i] - ab[i] * t);
+        dot(d, d).sqrt()
+    }
+
+    /// Hue of a colour in degrees.
+    fn hue(c: [u8; 4]) -> f32 {
+        let [r, g, b] = [c[0], c[1], c[2]].map(|v| f32::from(v) / 255.0);
+        let (max, min) = (r.max(g).max(b), r.min(g).min(b));
+        let h = if max == r {
+            (g - b) / (max - min)
+        } else if max == g {
+            2.0 + (b - r) / (max - min)
+        } else {
+            4.0 + (r - g) / (max - min)
+        };
+        (h * 60.0).rem_euclid(360.0)
+    }
+
+    #[test]
+    fn the_star_map_draws_routes_and_dashed_figures_and_no_plane() {
+        let mut scene = sample_scene();
+        scene.figure = vec![(2, 3)];
+        // Systems at different heights: a plane's rings or drop lines would show.
+        let mut positions = scene.place_systems();
+        positions[1][1] += 9_000.0;
+        positions[2][1] -= 6_000.0;
+        let routes: Vec<([f32; 3], [f32; 3])> = scene
+            .routes
+            .iter()
+            .map(|&(a, b)| {
+                let at = |id| positions[scene.system_index(id).unwrap()];
+                (at(a), at(b))
+            })
+            .collect();
+        // Charted routes, uncharted stubs (only system 1 known, nothing charted), figures on and
+        // off, and from the Sun.
+        let charted = SpaceSnapshot::default();
+        let stubs = SpaceSnapshot {
+            known: Some(vec![1]),
+            charted: Some(vec![]),
+            ..SpaceSnapshot::default()
+        };
+        for snapshot in [&charted, &stubs] {
+            for figures in [false, true] {
+                for from_sun in [false, true] {
+                    let dash = 300.0;
+                    let lines =
+                        star_map_lines(&scene, &positions, snapshot, figures, from_sun, dash);
+                    let mut seen_route = false;
+                    for (i, line) in lines.iter().enumerate() {
+                        match line.kind {
+                            MapLineKind::Route | MapLineKind::Stub => {
+                                seen_route = true;
+                                // Every solid line runs along a route between two systems: no
+                                // reference rings, no drop lines, no feet.
+                                assert!(!from_sun);
+                                assert!(
+                                    routes.iter().any(|&(a, b)| {
+                                        off_segment(line.a, a, b) < 1.0
+                                            && off_segment(line.b, a, b) < 1.0
+                                    }),
+                                    "{line:?}"
+                                );
+                                // Figures lie under the routes: drawn before them.
+                                assert!(lines[i..].iter().all(|l| l.kind != MapLineKind::Figure));
+                            }
+                            MapLineKind::Figure => assert!(figures),
+                        }
+                    }
+                    assert_eq!(seen_route, !from_sun);
+                    let dashes: Vec<&MapLine> = lines
+                        .iter()
+                        .filter(|l| l.kind == MapLineKind::Figure)
+                        .collect();
+                    assert_eq!(dashes.is_empty(), !figures);
+                    if figures {
+                        // A figure is dashed: half its length drawn, in short pieces, along
+                        // the line between its stars.
+                        let (a, b) = (positions[1], positions[2]);
+                        let length = |p: [f32; 3], q: [f32; 3]| {
+                            [0, 1, 2]
+                                .map(|i| (p[i] - q[i]) * (p[i] - q[i]))
+                                .iter()
+                                .sum::<f32>()
+                                .sqrt()
+                        };
+                        let drawn: f32 = dashes.iter().map(|d| length(d.a, d.b)).sum();
+                        assert!((drawn / length(a, b) - 0.5).abs() < 0.01);
+                        assert!(dashes.len() >= 2);
+                        for d in &dashes {
+                            assert!(off_segment(d.a, a, b) < 1.0 && off_segment(d.b, a, b) < 1.0);
+                            assert!(length(d.a, d.b) <= 2.0 * dash);
+                        }
+                    }
+                }
+            }
+        }
+        // Figures take a hue that no route style uses.
+        for figure in [FIGURE_LINE, FIGURE_LINE_SKY] {
+            for route in [ROUTE_LINE, ROUTE_STUB] {
+                let apart = (hue(figure) - hue(route)).abs();
+                assert!(apart.min(360.0 - apart) > 60.0, "{figure:?} {route:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn star_map_marks_face_the_camera() {
+        // A ring built flat, turned to face a camera looking along +x with z up: it stands in
+        // the plane x = 1, and the map's -z (the arc's start) is the screen's up.
+        let centre = [1.0, 2.0, 3.0];
+        let ring = facing(
+            annulus(centre, 5.0, 1.0, [255; 4], 16),
+            centre,
+            [0.0, -1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        );
+        for tri in &ring {
+            for p in tri.v {
+                assert!((p[0] - 1.0).abs() < 1e-4, "{p:?}");
+            }
+        }
+        let start = facing(
+            arc(centre, 5.0, 1.0, 0.1, [255; 4], 16),
+            centre,
+            [0.0, -1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        );
+        assert!(start[0].v.iter().all(|p| p[2] > centre[2] + 3.0));
+    }
+
     fn ship(id: u32, body: Option<u32>, x: f32, y: f32) -> ShipView {
         ShipView {
             id,
@@ -1405,6 +1695,11 @@ mod tests {
                 .1
                 .starts_with("Shift + middle-drag turns")
         );
+        // On the star map the help names the flying keys and the level key (task 79).
+        let (_, keys) = level_help(Level::StarMap, Level::StarMap, false).unwrap();
+        for words in ["arrows fly", "Shift + up/down", "F4 levels the view"] {
+            assert!(keys.contains(words), "{keys}");
+        }
     }
 
     #[test]
