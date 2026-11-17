@@ -5,7 +5,7 @@ Crates: `rom-render` (`zoom.rs`, `camera.rs`, the star-map part of
 (`app/docs/world-model.md` "Moving between levels" and "The real sky",
 `app/docs/hud.md` or the help lines). No change to `rom-sim`, `rom-ai`,
 schema or seed. Starts after task 70 is merged (it draws the routes in the
-same files). Implementer: Claude (Opus).
+same files) and task 72 (owner 2026-11-17: the big ships go first). Implementer: Claude (Opus).
 
 ## Why — the owner (2026-11-17)
 
