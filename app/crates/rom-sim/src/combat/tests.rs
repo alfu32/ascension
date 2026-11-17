@@ -114,7 +114,8 @@ fn damage_matrix_and_armor_apply() {
     let initial = hp(&w, city);
     attack(&mut w, a, city);
     w.step();
-    assert_eq!(initial - hp(&w, city), 1); // floor(9 × 50 / 100) − 3.
+    // Task 71: melee does 150 % to structures (was 50 %): floor(9 × 150 / 100) − 3.
+    assert_eq!(initial - hp(&w, city), 10);
 }
 
 #[test]
