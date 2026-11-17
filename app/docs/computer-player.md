@@ -490,6 +490,48 @@ Everything is read from the rules (`crates/rom-cli/src/fight_matrix_cmd.rs`):
 - The command prints one row per strength and the roster of each age, and fails when a
   strength has no answer; the test `every_strength_has_an_answer` runs the whole matrix.
 
+### What changed in the data (details in `docs/database.md`, "Counters and siege")
+
+Siege is a `vehicle` with a 3-tile dead zone (`range_min`), melee does 150 % to
+structures, attrition is 30 hit points a period, the tower comes in the classical age, and
+woodcutter's camps and mines draw from 7 tiles. Before (0.0.67 rules) the matrix found 137
+strengths and 7 without an answer: the city and the tower of the first age (nothing of that
+age beat them at equal cost) and siege from the classical to the industrial age (it
+outranged and beat every unit of its age, cavalry included; in the industrial age only the
+biplane, which cannot hit the ground, was left to try). After: 136 strengths, none without
+an answer.
+
+### What changed in the computer players
+
+- **Siege goes with an escort.** A type with a dead zone (`range_min` > 0, read from the
+  weapon row) is never chosen as the bulk of an army; it comes only from the siege wish (a
+  quarter of the main army, the type with most damage per resource against the target's
+  armour), always joins the main army, and a gathered wave waits up to three minutes for
+  one siege engine per six units when its target is a building that siege serves best.
+  Formations put it behind the line.
+- **Defenders answer siege.** Focus fire takes enemy siege first among armed enemies in
+  reach; unit choice weighs each candidate by the exchange a fight would give against the
+  enemies seen: damage dealt × staying power ÷ damage suffered, where an enemy weapon that
+  cannot hit the candidate's layer, or whose dead zone is beyond the candidate's reach,
+  deals nothing (so fast melee is valued against siege, as the matrix measures).
+- **Lanes, not razing.** Buildings other than mines and woodcutter's camps (whose spot the
+  deposit decides) are placed only with a free tile around them; with no such spot they
+  wait. Razing to free boxed-in units stays as the last resort.
+- **First-age stalls.** Traced: a capital ringed by rock had no spot left for its library
+  and farms because the ground kept free near rock for a later mine took it all; the brain
+  then issued no order for the whole match (seeds 91 and 92 of the moderate–easiest duel).
+  That ground is now a preference: a second search ignores it. A town whose rock lay at the
+  edge of its radius never placed a mine (no metal all match: seeds 15, 38, 73, 77): node
+  sites draw from 7 tiles instead of 6, and new cities favour node terrain of a resource
+  the player has no site for.
+- **A defence during the grace period stays a defence.** Answering intruders before the
+  difficulty's `grace_ticks`, the responding units guard the own city nearest them instead
+  of following them to the other town (an easiest player's home guard chased a person's
+  sentries into their town and struck a building at 28:55, inside its 30-minute grace).
+- **Patience.** From 30 game minutes (was 40) the ratio a wave needs falls three points a
+  minute (was two), to 60 % (was 80 %): siege now breaks walls that are measured at full
+  strength.
+
 ## Simulation gaps found in part 2, and what task 65 did with them
 
 - **Closed: `explore`, `patrol`, `guard`.** `explore` walks to the nearest tile

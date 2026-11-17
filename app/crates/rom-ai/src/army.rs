@@ -125,12 +125,13 @@ fn defence_now(view: &View<'_>, memory: &Memory, at: Pos) -> i64 {
         .sum()
 }
 
-/// Ticks into a match after which a wave's required ratio starts to fall (40 minutes).
-const PATIENCE_TICKS: u64 = 48_000;
+/// Ticks into a match after which a wave's required ratio starts to fall (30 minutes).
+const PATIENCE_TICKS: u64 = 36_000;
 /// Percentage points the ratio falls per game minute after that.
-const PATIENCE_PCT_PER_MINUTE: i64 = 2;
-/// The lowest the ratio falls to.
-const PATIENCE_FLOOR_PCT: i64 = 80;
+const PATIENCE_PCT_PER_MINUTE: i64 = 3;
+/// The lowest the ratio falls to: below even, since siege now breaks walls that measured
+/// at full strength.
+const PATIENCE_FLOOR_PCT: i64 = 60;
 /// A measured defence counts half after this long without being matched again.
 const DEFENCE_HALF_TICKS: u64 = 24_000;
 
@@ -1138,9 +1139,38 @@ fn lead(
     let own: i64 = units.iter().map(|e| power(&plan.view, e)).sum();
     match army.phase {
         Phase::Respond => {
-            if let Some(goal) = army.goal {
-                let orders: Vec<_> = units.iter().map(|e| (e.id, goal)).collect();
-                send(plan, &orders, "attack_move");
+            // During the grace period an answer stays a defence: the units guard the own
+            // city nearest the intruders and fight what comes near it, instead of following
+            // them to the other side's town and striking it there.
+            let grace = tick < cmd.difficulty.grace_ticks.max(0) as u64;
+            let near = army.goal.and_then(|goal| {
+                plan.view
+                    .cities
+                    .iter()
+                    .filter(|c| c.complete && c.pos.body == goal.body)
+                    .min_by_key(|c| (plan.view.distance(c.pos, goal), c.id))
+                    .map(|c| c.id)
+            });
+            match (grace, near, army.goal) {
+                (true, Some(city), _) => {
+                    for e in units {
+                        let guarding = e
+                            .orders()
+                            .front()
+                            .is_some_and(|o| o.kind == "guard" && o.target_entity == Some(city));
+                        if guarding || plan.view.busy.contains(&e.id) {
+                            continue;
+                        }
+                        if !plan.order(e.id, "guard", None, Some(city), None) {
+                            break;
+                        }
+                    }
+                }
+                (_, _, Some(goal)) => {
+                    let orders: Vec<_> = units.iter().map(|e| (e.id, goal)).collect();
+                    send(plan, &orders, "attack_move");
+                }
+                _ => {}
             }
             focus(plan, memory, units);
         }

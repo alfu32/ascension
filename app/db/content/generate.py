@@ -139,10 +139,10 @@ SIGHT_TECHS = [
     ('tech.military.8', 'los', 15, 'pct', 'military'),        # Network Warfare: sensors
     ('tech.military.10', 'los', 25, 'pct', 'starship'),       # Orbital Doctrine: orbital sensors
 ]
-# How far a woodcutter's camp or a mine draws from its node terrain (milli-tiles). Eight
+# How far a woodcutter's camp or a mine draws from its node terrain (milli-tiles). Seven
 # tiles since task 71: at six, a town whose rock lay at the edge of its radius found no
 # place for a mine and had no metal for the whole match.
-NODE_REACH = 8000
+NODE_REACH = 7000
 SITES = {'farm': ('food', 1, '', 0), 'woodcutter_camp': ('timber', 0, 'forest', 10),
          'mine': ('metal', 0, 'mountain', 10), 'oil_well': ('oil', 3, '', 0),
          'university': ('knowledge', 7, '', 0), 'fusion_plant': ('energy', 0, '', 0)}
