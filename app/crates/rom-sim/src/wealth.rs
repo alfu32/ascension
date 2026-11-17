@@ -267,23 +267,32 @@ impl World {
             .filter(|e| {
                 let placed = if space {
                     e.pos.body != here.body
-                        && self
-                            .body(e.pos.body)
-                            .zip(self.body(here.body))
-                            .is_some_and(|(a, b)| a.system == b.system)
+                        && self.body(e.pos.body).is_some()
+                        && self.body(here.body).is_some()
                 } else {
                     e.pos.body == here.body
                 };
                 placed && self.completed_city(e) && !self.enemies(c.player, e.owner)
             })
             .ok_or(SimError::NotATradePartner)?;
-        // Between planets the length is measured in the plane of their star system.
-        let length = if space {
-            self.body_position(home.pos.body)
+        let systems = self
+            .body(home.pos.body)
+            .zip(self.body(target.pos.body))
+            .map(|(a, b)| (a.system, b.system));
+        // Between planets the length is measured in the plane of their star system; between
+        // systems it is the whole path, the routes counted at `trade.route_length_mtiles`.
+        let length = match systems {
+            Some((a, b)) if space && a != b => {
+                if !self.rule_enabled(c.player, crate::RULE_INTERSTELLAR_TRADE) {
+                    return Err(SimError::NeedsInterstellarTrade);
+                }
+                self.interstellar_length(c.player, home.pos.body, target.pos.body)
+            }
+            _ if space => self
+                .body_position(home.pos.body)
                 .zip(self.body_position(target.pos.body))
-                .and_then(|(a, b)| self.distance(a, b))
-        } else {
-            self.distance(home.pos, target.pos)
+                .and_then(|(a, b)| self.distance(a, b)),
+            _ => self.distance(home.pos, target.pos),
         }
         .ok_or(SimError::NotATradePartner)?;
         if home.id == target.id
@@ -324,6 +333,38 @@ impl World {
             to_target: false,
             started: false,
         })
+    }
+
+    /// The length an interstellar trade route counts between the planets `from` and `to`: the
+    /// distances flown in each system's plane (planet to route edge, edge to edge, edge to
+    /// planet) plus each route's length times `trade.route_length_mtiles`, along the path the
+    /// player's ships take.
+    pub(crate) fn interstellar_length(
+        &self,
+        player: PlayerId,
+        from: crate::BodyId,
+        to: crate::BodyId,
+    ) -> Option<u64> {
+        let (a, b) = (self.body(from)?.system, self.body(to)?.system);
+        let path = self.travel_path(player, a, b)?;
+        let per_unit = self
+            .rules
+            .constant("trade.route_length_mtiles")
+            .unwrap_or(0)
+            .max(0) as u64;
+        let mut length: u64 = 0;
+        let mut at = self.body_position(from)?;
+        for leg in path.windows(2) {
+            let edge = self.system_edge(leg[0], leg[1])?;
+            length = length.saturating_add(self.distance(at, edge)?);
+            let route = self.routes().iter().find(|r| {
+                (r.system_a, r.system_b) == (leg[0], leg[1])
+                    || (r.system_a, r.system_b) == (leg[1], leg[0])
+            })?;
+            length = length.saturating_add((route.length.max(0) as u64).saturating_mul(per_unit));
+            at = self.system_edge(leg[1], leg[0])?;
+        }
+        length.checked_add(self.distance(at, self.body_position(to)?)?)
     }
 
     pub(crate) fn refresh_trade_income(&mut self, id: EntityId) {
@@ -403,8 +444,9 @@ impl World {
         self.legs.push(leg);
     }
 
-    /// One tick of a space freighter's route: lift off, fly to the planet of the next city,
-    /// land beside it and deliver, in turn.
+    /// One tick of a space freighter's route: lift off, fly to the planet of the next city (along
+    /// the routes to its star system first, if it lies in another), land beside it and deliver,
+    /// in turn.
     fn advance_space_trade(&mut self, unit: EntityId, order: &mut Order) {
         let route = order.route.as_ref().expect("accepted trade route").clone();
         let cities = [route.info.home, route.info.target].map(|id| {
@@ -437,6 +479,32 @@ impl World {
                 Some(site) => self.trade_leg(unit, order, "land", Some(site)),
                 None => order.status = OrderStatus::Failed("no_landing".into()),
             }
+            return;
+        }
+        let here = self.entity(unit).expect("freighter").pos.body;
+        let (Some(origin), Some(there)) = (
+            self.system_space(here),
+            self.body(at.body).map(|b| b.system),
+        ) else {
+            order.status = OrderStatus::Failed("no_path".into());
+            return;
+        };
+        if origin != there {
+            let owner = self.entity(unit).expect("freighter").owner;
+            let Some(next) = self
+                .travel_path(owner, origin, there)
+                .and_then(|path| path.get(1).copied())
+            else {
+                order.status = OrderStatus::Failed("no_path".into());
+                return;
+            };
+            // An enemy inhibitor holds freighters like any ship.
+            if self.jump_refused(unit, origin, next) {
+                order.status = OrderStatus::Failed("inhibited".into());
+                return;
+            }
+            let star = self.space_of(there).and_then(|s| self.body_position(s));
+            self.trade_leg(unit, order, "travel", star);
             return;
         }
         self.trade_leg(unit, order, "orbit", Some(at));

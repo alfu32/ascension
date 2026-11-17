@@ -898,6 +898,28 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
         transits,
         transits_done,
         landed: flags(conn, "landed")?,
+        charted: query_vec(
+            conn,
+            "SELECT player_id, system_a, system_b FROM player_route \
+             ORDER BY player_id, system_a, system_b",
+            |r| {
+                Ok((
+                    PlayerId(uint(r, 0, "route player")?),
+                    uint(r, 1, "route system")?,
+                    uint(r, 2, "route system")?,
+                ))
+            },
+        )?,
+        arrivals: query_vec(
+            conn,
+            "SELECT entity_id, system_id FROM entity_arrival ORDER BY entity_id",
+            |r| {
+                Ok((
+                    EntityId(uint(r, 0, "arrival entity")?),
+                    uint(r, 1, "arrival system")?,
+                ))
+            },
+        )?,
     };
     let mut viewers = vec![None; viewer_slots];
     let mut orbit_viewers = Vec::new();

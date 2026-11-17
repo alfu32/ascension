@@ -77,6 +77,10 @@ pub(crate) struct Space {
     pub transits_done: u64,
     /// Ships standing on a planet's surface after landing, until they lift off.
     pub landed: BTreeSet<EntityId>,
+    /// Routes each player has charted or had revealed, as system pairs (lower id first).
+    pub charted: BTreeMap<PlayerId, BTreeSet<(u32, u32)>>,
+    /// The system each ship last arrived from along a route.
+    pub arrivals: BTreeMap<EntityId, u32>,
 }
 
 /// Sine in millionths using the integer Bhaskara approximation on a half turn.
@@ -323,7 +327,7 @@ impl World {
         }
         Ok(())
     }
-    fn system_space(&self, body: BodyId) -> Option<u32> {
+    pub(crate) fn system_space(&self, body: BodyId) -> Option<u32> {
         self.body(body)
             .filter(|b| b.kind == BodyKind::Star)
             .map(|b| b.system)
@@ -386,8 +390,13 @@ impl World {
                 .target_pos
                 .and_then(|p| self.system_space(p.body))
                 .ok_or(SimError::InvalidTravelTarget)?;
-            if origin == destination || self.route_path(origin, destination).is_none() {
-                return Err(SimError::InvalidTravelTarget);
+            let path = (origin != destination)
+                .then(|| self.travel_path(ship.owner, origin, destination))
+                .flatten()
+                .ok_or(SimError::InvalidTravelTarget)?;
+            // Held by an enemy inhibitor: only the way it came is open.
+            if !command.queue && self.jump_refused(ship.id, origin, path[1]) {
+                return Err(SimError::HeldByInhibitor);
             }
         } else if let Some(target) = command.target_entity {
             if !self.space.markers.values().any(|m| *m == target)
@@ -486,8 +495,21 @@ impl World {
         }
         // Holding stays active so a pushed ship returns within reach.
     }
-    /// Integer Dijkstra: settle equal distances by system id, retain first equal path.
+    /// Integer Dijkstra over the route lengths: settle equal distances by system id, retain
+    /// the first equal path.
+    #[cfg(test)]
     pub(crate) fn route_path(&self, origin: u32, destination: u32) -> Option<Vec<u32>> {
+        self.route_path_by(origin, destination, |_, _, length| length)
+    }
+
+    /// Integer Dijkstra with `cost(from, to, length)` for each route: settle equal distances by
+    /// system id, retain the first equal path.
+    pub(crate) fn route_path_by(
+        &self,
+        origin: u32,
+        destination: u32,
+        cost: impl Fn(u32, u32, u64) -> u64,
+    ) -> Option<Vec<u32>> {
         let mut distances = BTreeMap::from([(origin, 0_u64)]);
         let mut previous = BTreeMap::new();
         let mut open = BTreeSet::from([(0_u64, origin)]);
@@ -505,9 +527,9 @@ impl World {
                 .iter()
                 .filter_map(|r| {
                     if r.system_a == system {
-                        Some((r.system_b, r.length as u64))
+                        Some((r.system_b, cost(system, r.system_b, r.length as u64)))
                     } else if r.system_b == system {
-                        Some((r.system_a, r.length as u64))
+                        Some((r.system_a, cost(system, r.system_a, r.length as u64)))
                     } else {
                         None
                     }
@@ -570,36 +592,72 @@ impl World {
             order.status = OrderStatus::Done;
             return;
         }
-        let Some(path) = self.route_path(origin, destination) else {
+        let owner = ship.owner;
+        let Some(path) = self.travel_path(owner, origin, destination) else {
             order.status = OrderStatus::Failed("no_path".into());
             return;
         };
+        // An enemy inhibitor raised after the order was given ends it (and any charge).
+        if self.jump_refused(id, origin, path[1]) {
+            order.total_ticks = None;
+            order.progress_ticks = 0;
+            order.status = OrderStatus::Failed("inhibited".into());
+            return;
+        }
+        // At the edge the ship charges, unable to move or fire, until it may jump.
+        if order.total_ticks.is_some() {
+            self.advance_charge(id, order, origin);
+            return;
+        }
         let goal = self.system_edge(origin, path[1]).expect("route edge");
         if self.walk(id, order, goal, None, false) == Walk::Arrived {
-            order.status = OrderStatus::Blocked("depart".into());
+            self.advance_charge(id, order, origin);
         }
     }
     pub(crate) fn depart_ships(&mut self) {
         if self.systems().is_empty() {
             return;
         }
-        let ships: Vec<_> = self
+        // Ships ordered along a route together leave together, once the last has charged.
+        let travelling: Vec<_> = self
             .entities()
-            .filter(|e| {
-                e.hp > 0 && e.orders.front().is_some_and(|o| {
+            .filter(|e| e.hp > 0)
+            .filter_map(|e| {
+                let order = e.orders.front().filter(|o| {
                     o.kind == "travel"
-                        && matches!(&o.status, OrderStatus::Blocked(reason) if reason == "depart")
-                })
+                        && !matches!(&o.status, OrderStatus::Blocked(r) if r == "speed")
+                })?;
+                let origin = self.system_space(e.pos.body)?;
+                let ready = matches!(&order.status, OrderStatus::Blocked(r) if r == "depart");
+                Some((e.id, self.travel_group(order, origin), ready))
             })
-            .map(|e| e.id)
+            .collect();
+        let mut groups: BTreeMap<_, bool> = BTreeMap::new();
+        for (_, group, ready) in &travelling {
+            *groups.entry(*group).or_insert(true) &= *ready;
+        }
+        let ships: Vec<_> = travelling
+            .into_iter()
+            .filter(|(_, group, ready)| *ready && groups[group])
+            .map(|(id, _, _)| id)
             .collect();
         for id in ships {
             let ship = self.entity(id).expect("ship");
+            let owner = ship.owner;
             let origin = self.system_space(ship.pos.body).expect("origin");
             let destination = self
                 .system_space(ship.orders[0].target_pos.expect("target").body)
                 .expect("destination");
-            let next = self.route_path(origin, destination).expect("route")[1];
+            let next = self.travel_path(owner, origin, destination).expect("route")[1];
+            // A route the player does not know takes longer: the ship charts it.
+            let pct = if self.charting(owner, origin, next) {
+                self.rules
+                    .constant("space.charting_pct")
+                    .unwrap_or(100)
+                    .max(100) as u128
+            } else {
+                100
+            };
             let length = self
                 .routes()
                 .iter()
@@ -626,14 +684,17 @@ impl World {
                     .rules
                     .constant("space.route_ticks_per_unit")
                     .expect("route time") as u128
-                * 1000)
-                .div_ceil(speed as u128)
+                * 1000
+                * pct)
+                .div_ceil(speed as u128 * 100)
                 .max(1)
                 .min(u128::from(u64::MAX - self.tick - 1)) as u64;
             let mut entity = self.entities[id.0 as usize].take().expect("departing ship");
             let pos = entity.pos;
             entity.orders[0].movement = None;
             entity.orders[0].status = OrderStatus::Active;
+            entity.orders[0].total_ticks = None;
+            entity.orders[0].progress_ticks = 0;
             let slot = self.slot(pos.body);
             self.surfaces[slot].spatial.remove(id, pos);
             self.avoid.set(id, None, pos);
@@ -664,6 +725,9 @@ impl World {
             .collect();
         for id in due {
             let transit = self.space.transits.remove(&id).expect("due ship");
+            // The voyage charts the route for the ship's player and is the way back out.
+            self.chart(transit.entity.owner, transit.origin, transit.destination);
+            self.space.arrivals.insert(id, transit.origin);
             let mut entity = transit.entity;
             let pos = self
                 .system_edge(transit.destination, transit.origin)
@@ -858,6 +922,26 @@ mod tests {
         });
         changes(&mut w, |w| {
             w.space.landed.insert(EntityId(2));
+        });
+        changes(&mut w, |w| {
+            w.space
+                .charted
+                .entry(PlayerId(1))
+                .or_default()
+                .insert((1, 2));
+        });
+        changes(&mut w, |w| {
+            w.space
+                .charted
+                .entry(PlayerId(1))
+                .or_default()
+                .insert((2, 3));
+        });
+        changes(&mut w, |w| {
+            w.space.arrivals.insert(EntityId(1), 2);
+        });
+        changes(&mut w, |w| {
+            w.space.arrivals.insert(EntityId(1), 3);
         });
         changes(&mut w, |w| {
             w.space.transits.get_mut(&EntityId(1)).unwrap().origin += 1;

@@ -378,6 +378,7 @@ fn load_entity_type(conn: &Connection) -> Result<Vec<EntityType>, RulesError> {
             energy: None,
             supply: None,
             view_scale: None,
+            inhibitor: None,
             weapons: Vec::new(),
             placement_rules: Vec::new(),
             completion_bonus: Vec::new(),
@@ -399,6 +400,7 @@ fn load_et_movement(conn: &Connection) -> Result<Vec<Movement>, RulesError> {
                 packs: boolean(row, "packs", "et_movement", &identity)?,
                 pack_ticks: row.get("pack_ticks")?,
                 climb_ticks: row.get("climb_ticks")?,
+                jump_charge_ticks: row.get("jump_charge_ticks")?,
             })
         },
     )
@@ -626,6 +628,20 @@ fn load_et_supply(conn: &Connection) -> Result<Vec<Supply>, RulesError> {
                 entity_type_id: DefId(row.get("entity_type_id")?),
                 radius: row.get("radius")?,
                 stock: row.get("stock")?,
+            })
+        },
+    )
+}
+fn load_et_inhibitor(conn: &Connection) -> Result<Vec<Inhibitor>, RulesError> {
+    read(
+        conn,
+        "SELECT * FROM et_inhibitor ORDER BY entity_type_id",
+        |row| {
+            let identity = format!("entity_type_id={:?}", row.get::<_, i64>("entity_type_id")?);
+            Ok(Inhibitor {
+                entity_type_id: DefId(row.get("entity_type_id")?),
+                reach: enum_value(row, "reach", "et_inhibitor", &identity)?,
+                charge_pct: row.get("charge_pct")?,
             })
         },
     )
@@ -1353,6 +1369,10 @@ impl Rules {
         for row in load_et_supply(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_supply")?;
             entity.supply = Some(row);
+        }
+        for row in load_et_inhibitor(conn)? {
+            let entity = entity_mut(&mut rules, row.entity_type_id, "et_inhibitor")?;
+            entity.inhibitor = Some(row);
         }
         for row in load_et_view_scale(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_view_scale")?;

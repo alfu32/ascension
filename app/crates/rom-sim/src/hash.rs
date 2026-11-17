@@ -467,6 +467,26 @@ impl StateHash {
         for id in &space.landed {
             self.u32(id.0);
         }
+        // Charted routes and arrivals (task 70) only once there are some, so worlds without
+        // voyages keep their hashes.
+        if !space.charted.is_empty() {
+            self.u64(space.charted.len() as u64);
+            for (player, routes) in &space.charted {
+                self.u32(player.0);
+                self.u64(routes.len() as u64);
+                for (a, b) in routes {
+                    self.u32(*a);
+                    self.u32(*b);
+                }
+            }
+        }
+        if !space.arrivals.is_empty() {
+            self.u64(space.arrivals.len() as u64);
+            for (id, system) in &space.arrivals {
+                self.u32(id.0);
+                self.u32(*system);
+            }
+        }
     }
 
     /// Star systems, bodies and routes.

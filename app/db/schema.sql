@@ -260,10 +260,14 @@ CREATE TABLE et_movement (             -- "moves"
   formation_spacing INTEGER NOT NULL DEFAULT 750,
   packs             INTEGER NOT NULL DEFAULT 0, -- must deploy to fire / pack to move
   pack_ticks        INTEGER NOT NULL DEFAULT 0,
-  climb_ticks       INTEGER NOT NULL DEFAULT 0 CHECK (climb_ticks >= 0)
+  climb_ticks       INTEGER NOT NULL DEFAULT 0 CHECK (climb_ticks >= 0),
                                        -- orbital craft (task 58): ticks to climb from a planet's
                                        -- surface to its orbit by itself, and to come back down;
                                        -- 0 = cannot. Craft never leave that orbit on their own.
+  jump_charge_ticks INTEGER CHECK (jump_charge_ticks >= 0)
+                                       -- task 70: ticks a ship charges at its system's edge before
+                                       -- a jump along a route (stat `jump_charge`); NULL = the
+                                       -- rule default `space.jump_charge_ticks`
 ) STRICT;
 
 CREATE TABLE et_weapon (               -- "attacks" (0..n per type)
@@ -394,6 +398,17 @@ CREATE TABLE et_supply (               -- supply wagon / tender / fleet auxiliar
   stock          INTEGER             -- NULL = unlimited
 ) STRICT;
 
+CREATE TABLE et_inhibitor (            -- jump inhibitor (task 70): holds enemy ships where it stands
+  entity_type_id INTEGER PRIMARY KEY REFERENCES entity_type(id),
+  reach          TEXT NOT NULL DEFAULT 'system' CHECK (reach IN ('system')),
+                                       -- 'system': every enemy ship in the star system of the
+                                       -- planet it stands on may depart only back along the
+                                       -- route it arrived by
+  charge_pct     INTEGER NOT NULL DEFAULT 0 CHECK (charge_pct >= 0)
+                                       -- extra jump charge time of those ships, percent; several
+                                       -- inhibitors do not stack (the largest applies)
+) STRICT;
+
 -- Where something may be placed. All rows for a type must pass.
 CREATE TABLE placement_rule (
   id             INTEGER PRIMARY KEY,
@@ -467,6 +482,8 @@ CREATE TABLE tech_effect (
   target_def_id INTEGER REFERENCES def(id),  -- age / unlocked def / new type / ability / faction
   from_def_id   INTEGER REFERENCES def(id),  -- upgrade_type: the old type
   rule_key  TEXT NOT NULL DEFAULT '',        -- enable_rule: 'market_trading','sea_transport','ally_los' …
+                                             -- used (task 70): 'route_sensors', 'route_survey',
+                                             -- 'interstellar_trade' (database.md, "Routes and jumps")
   amount    INTEGER NOT NULL DEFAULT 0
 ) STRICT;
 CREATE INDEX tech_effect_by_tech ON tech_effect(tech_id);
@@ -1095,6 +1112,22 @@ CREATE TABLE entity_transit (
   destination INTEGER NOT NULL,
   departed    INTEGER NOT NULL,
   arrives     INTEGER NOT NULL
+) STRICT;
+
+-- Routes a player has charted or had revealed (task 70): a voyage along a route the
+-- player does not know is slowed by `space.charting_pct` and charts it on arrival.
+CREATE TABLE player_route (
+  player_id INTEGER NOT NULL REFERENCES player(id),
+  system_a  INTEGER NOT NULL,            -- system ids, system_a < system_b
+  system_b  INTEGER NOT NULL,
+  PRIMARY KEY (player_id, system_a, system_b)
+) STRICT, WITHOUT ROWID;
+
+-- The system a ship last arrived from (task 70): under an enemy jump inhibitor it may
+-- depart only back along that route.
+CREATE TABLE entity_arrival (
+  entity_id INTEGER PRIMARY KEY REFERENCES entity(id),
+  system_id INTEGER NOT NULL
 ) STRICT;
 
 -- A ship in orbit retains its system-plane position in entity; this row records

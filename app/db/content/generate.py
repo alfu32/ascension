@@ -509,6 +509,7 @@ def generate():
     row('tech_effect', tech_id=Ref('tech.unification'), effect='change_faction', target_def_id=Ref('race.human'))
     orbital_combat(definition, row, tag, need, produce, cost, weapon)
     orbit_units(definition, row, tag, need, produce, cost)
+    jumps_and_inhibitors(definition, row, tag, need, produce, cost, tech, sql.append)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -624,6 +625,50 @@ def orbit_units(definition, row, tag, need, produce, cost):
     cost(full, {'metal': 150, 'energy': 100}, True)
     for key, planet, system in (('unit.space_freighter', 300, 35), ('unit.satellite', 220, 25)):
         row('et_view_scale', entity_type_id=Ref(key), planet_pct=planet, system_pct=system)
+
+
+# Task 70: routes and jumps (docs/database.md "Routes and jumps").
+# Ticks a ship charges at its system's edge before a jump, by hull size class (6 to 12 s);
+# a type without a value takes `space.jump_charge_ticks`.
+JUMP_CHARGE = {1: 120, 2: 160, 3: 200, 4: 240}
+# How much longer an enemy jump inhibitor makes a ship's charge, percent.
+INHIBITOR_CHARGE_PCT = 50
+# Spaceport research: key, name, age, the rule it enables.
+ROUTE_RESEARCH = [
+    ('enhanced_sensors', 'Enhanced Sensors', 'expansion', 'route_sensors'),
+    ('interstellar_trade', 'Interstellar Trade', 'abundance', 'interstellar_trade'),
+    ('automated_route_survey', 'Automated Route Survey', 'galactic', 'route_survey'),
+]
+
+
+def jumps_and_inhibitors(definition, row, tag, need, produce, cost, tech, emit):
+    """Task 70: jump charge times of the ships, the jump inhibitor that holds enemy ships in its
+    star system, and the spaceport research that reveals routes and opens interstellar trade.
+    Defined last so the ids of earlier content stay stable."""
+    for key, size in SHIP_SIZE.items():
+        if size in JUMP_CHARGE:
+            emit(f"UPDATE et_movement SET jump_charge_ticks={JUMP_CHARGE[size]} WHERE entity_type_id={val(Ref('unit.' + key))};")
+    age = AGES.index('starfaring')
+    full = 'bld.jump_inhibitor'
+    definition('entity_type', full, 'Jump Inhibitor')
+    row('entity_type', id=Ref(full), **{'class': 'building'}, ui_group='military', hp=3000, armor=5,
+        armor_class_id=Ref('structure', 'armor_class'), los=building_sight(age, 3), footprint_w=3, footprint_h=3,
+        build_ticks=150 + 25 * age, ramp_mode='per_type', first_age_id=Ref('age.starfaring'))
+    tag(full, 'building', 'mechanical')
+    need(full, 'age.starfaring')
+    cost(full, {'metal': 500, 'energy': 300}, True)
+    for builder in ('citizen', 'worker_drone'):
+        produce('unit.' + builder, full, 'construct', 'military')
+    row('placement_rule', entity_type_id=Ref(full), rule='in_own_territory')
+    row('placement_rule', entity_type_id=Ref(full), rule='on_terrain', ref_def_id=Ref('ter.plain'))
+    # Its reach is the whole star system of the planet it stands on.
+    row('et_inhibitor', entity_type_id=Ref(full), reach='system', charge_pct=INHIBITOR_CHARGE_PCT)
+    for key, name, age_key, rule in ROUTE_RESEARCH:
+        age = AGES.index(age_key)
+        full = 'tech.' + key
+        tech(full, name, age, 'spaceport', 300 + age * 50,
+             {'wealth': 100 * (age + 1), 'knowledge': 50 * (age + 1)})
+        row('tech_effect', tech_id=Ref(full), effect='enable_rule', rule_key=rule)
 
 
 def main():

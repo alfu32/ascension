@@ -1,0 +1,11 @@
+# Task 70, replayed by --script in --universe mode (--ai none): a space freighter runs an
+# interstellar trade route between the home city and a colony on a planet of the nearest star
+# system one route away (age of abundance, Interstellar Trade researched). The route card names
+# the two systems and the jumps still to chart.
+0 grant-age age.abundance
+0 grant-tech tech.interstellar_trade
+0 colony-far 1
+0 place-orbit 1 unit.space_freighter @0,6
+1 speed 400
+300 click trader1
+302 rclick city2

@@ -1,0 +1,5 @@
+# Task 70: the star map with Enhanced Sensors (expansion age): every route leaving a system where
+# player one has a ship or a planet is revealed. Run with --view starmap.
+0 grant-age age.expansion
+0 grant-tech tech.enhanced_sensors
+1 speed 400

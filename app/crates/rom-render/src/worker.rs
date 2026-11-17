@@ -36,7 +36,8 @@ use crate::readback::{AsyncReadback, ReadyFrame};
 use crate::review::{Review, sheet_cell};
 use crate::scene::{BakeReport, OrbitalShip, Scene};
 use crate::space::{
-    SpaceContext, SpaceHover, SpacePicker, SpaceSnapshot, hover_help, level_help, ship_frame_pos,
+    SpaceContext, SpaceHover, SpacePicker, SpaceSnapshot, level_help, ship_frame_pos,
+    space_hover_help,
 };
 use crate::stats::{RenderStats, StatsWindow};
 use crate::sun::SunClock;
@@ -1182,13 +1183,12 @@ fn render_loop(shared: &Shared) {
                 if let (Some((hover, (x, y))), Some(_)) = (pointing, zoom.pointer()) {
                     let ratio = size.0 as f32 / layout.0.max(1) as f32;
                     let ships = !hud_snapshot.selected.is_empty();
-                    let (name, action) = hover_help(
+                    let (name, action) = space_hover_help(
                         zoom.scene(),
                         hover,
                         zoom.surface_body(),
                         ships,
-                        |id| space_snapshot.knows(id),
-                        |id| space_snapshot.resource_body(id).cloned(),
+                        &space_snapshot,
                     );
                     for (row, text) in [name, action].into_iter().enumerate() {
                         scene.push_space_label(crate::scene::SpaceLabel {
@@ -1260,15 +1260,22 @@ fn render_loop(shared: &Shared) {
                         now_ms: 0,
                     };
                     let world_help = zoom.as_ref().and_then(|zoom| match pointing {
-                        Some((hover, _)) => Some(hover_help(
+                        Some((hover, _)) => Some(space_hover_help(
                             zoom.scene(),
                             hover,
                             zoom.surface_body(),
                             !hud_snapshot.selected.is_empty(),
-                            |id| space_snapshot.knows(id),
-                            |id| space_snapshot.resource_body(id).cloned(),
+                            &space_snapshot,
                         )),
-                        None => level_help(zoom.level(), zoom.cap(), turn.middle_pans),
+                        // In a system a jump inhibitor holds, the help says so.
+                        None => match space_snapshot
+                            .system
+                            .filter(|_| zoom.level() == Level::System)
+                            .and_then(|id| space_snapshot.hold_of(id))
+                        {
+                            Some(hold) => Some(crate::space::hold_text(hold)),
+                            None => level_help(zoom.level(), zoom.cap(), turn.middle_pans),
+                        },
                     });
                     HudOverlay {
                         hover: picker.hover(&ctx),
@@ -2194,6 +2201,7 @@ mod tests {
                 from: 1,
                 to: 2,
                 progress: 0.5,
+                charting: false,
             }],
             ..SpaceSnapshot::default()
         };

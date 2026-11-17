@@ -91,6 +91,9 @@ pub struct ScriptSetup {
     /// Owners given a city on the nearest other habitable planet of player one's home system
     /// (`colony <owner id>`; the planet is generated before tick one).
     pub colonies: Vec<u32>,
+    /// Owners given a city on the nearest habitable planet of a star system one route from
+    /// player one's home system (`colony-far <owner id>`).
+    pub far_colonies: Vec<u32>,
 }
 
 impl ScriptSetup {
@@ -276,12 +279,16 @@ impl ScriptSetup {
                     };
                     list.push((owner, (*key).to_owned(), parse(dx)?, parse(dy)?));
                 }
-                Some("colony") => {
+                Some(kind @ ("colony" | "colony-far")) => {
                     let owner = words
                         .get(2)
                         .and_then(|o| o.parse().ok())
-                        .ok_or_else(|| format!("{}: colony needs an owner id", at()))?;
-                    setup.colonies.push(owner);
+                        .ok_or_else(|| format!("{}: {kind} needs an owner id", at()))?;
+                    if kind == "colony" {
+                        setup.colonies.push(owner);
+                    } else {
+                        setup.far_colonies.push(owner);
+                    }
                 }
                 Some("grant-tech") => {
                     setup.techs.push(
@@ -395,7 +402,7 @@ impl Script {
                     Some(_),
                     Some(
                         "grant-age" | "grant" | "grant-tech" | "place" | "place-space"
-                        | "place-orbit" | "colony",
+                        | "place-orbit" | "colony" | "colony-far",
                     ),
                 ) => {
                     continue;
