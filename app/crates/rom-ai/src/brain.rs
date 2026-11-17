@@ -454,6 +454,12 @@ impl Brain {
         }
         fleet::command(&mut plan, memory, &self.weights, d);
         economy::update_demand(memory, &plan.shortfall, tick, pace);
+        // The governors of its automated colonies stay on.
+        for colony in crate::governor::colonies(world, self.player) {
+            if world.governor_paused(colony) {
+                plan.order(colony, "resume_governor", None, None, None);
+            }
+        }
 
         let orders = plan.out.len() as i64;
         memory.credit -= orders * minute;

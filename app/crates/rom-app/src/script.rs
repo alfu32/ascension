@@ -34,7 +34,8 @@
 //! put a ship into the orbit of player one's home planet above that point (an ordinary `orbit`
 //! order given before tick one; an orbital craft is placed there and ordered to climb);
 //! `colony <owner id>` founds a city for that owner on the nearest other habitable planet of
-//! player one's home system, generating the planet first (task 68's freighter route). `craft` selects player one's orbital craft that are not
+//! player one's home system, generating the planet first (task 68's freighter route), and
+//! `auto-colony <owner id>` puts a finished automated colony there instead (task 73). `craft` selects player one's orbital craft that are not
 //! aboard a carrier; `craftN` names the N-th of them for `click` and `rclick`.
 //!
 //! `save <name>`, `quicksave` and `menu [main|save|load]` write a save or open the in-match menu.
@@ -96,6 +97,9 @@ pub struct ScriptSetup {
     /// Owners given a city on the nearest habitable planet of a star system one route from
     /// player one's home system (`colony-far <owner id>`).
     pub far_colonies: Vec<u32>,
+    /// Owners given a finished automated colony on the nearest other habitable planet of
+    /// player one's home system (`auto-colony <owner id>`).
+    pub auto_colonies: Vec<u32>,
 }
 
 impl ScriptSetup {
@@ -281,15 +285,15 @@ impl ScriptSetup {
                     };
                     list.push((owner, (*key).to_owned(), parse(dx)?, parse(dy)?));
                 }
-                Some(kind @ ("colony" | "colony-far")) => {
+                Some(kind @ ("colony" | "colony-far" | "auto-colony")) => {
                     let owner = words
                         .get(2)
                         .and_then(|o| o.parse().ok())
                         .ok_or_else(|| format!("{}: {kind} needs an owner id", at()))?;
-                    if kind == "colony" {
-                        setup.colonies.push(owner);
-                    } else {
-                        setup.far_colonies.push(owner);
+                    match kind {
+                        "colony" => setup.colonies.push(owner),
+                        "colony-far" => setup.far_colonies.push(owner),
+                        _ => setup.auto_colonies.push(owner),
                     }
                 }
                 Some("grant-tech") => {
@@ -404,7 +408,7 @@ impl Script {
                     Some(_),
                     Some(
                         "grant-age" | "grant" | "grant-tech" | "place" | "place-space"
-                        | "place-orbit" | "colony" | "colony-far",
+                        | "place-orbit" | "colony" | "colony-far" | "auto-colony",
                     ),
                 ) => {
                     continue;

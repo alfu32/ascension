@@ -96,6 +96,8 @@ enum Action {
     Patrol,
     /// The next city clicked becomes the selected traders' route partner.
     TradeRoute,
+    /// The governors of the selected automated colonies pause, or resume when all are paused.
+    Governor,
 }
 
 /// What the camera shows, as far as turning picks into orders needs it.
@@ -1501,9 +1503,12 @@ impl Controller {
         let has_workers = own
             .iter()
             .any(|e| e.owner == PLAYER && !world.occupants(e.id).is_empty());
+        let has_colony = own
+            .iter()
+            .any(|e| e.owner == PLAYER && world.is_colony_type(e.type_id));
         let tabs = [
             !build_pages.is_empty(),
-            can_move || has_workers,
+            can_move || has_workers || has_colony,
             !train_pages.is_empty(),
             !research_pages.is_empty(),
         ];
@@ -1554,6 +1559,9 @@ impl Controller {
                 actions.push((0, Action::Stop));
                 if has_workers {
                     actions.push((3, Action::Release));
+                }
+                if has_colony {
+                    actions.push((7, Action::Governor));
                 }
                 if own.iter().any(|e| !world.passengers(e.id).is_empty()) {
                     actions.push((4, Action::Unload));
@@ -1666,6 +1674,16 @@ impl Controller {
             Action::Release => {
                 button.name = "Release all workers".into();
                 button.icon = "icons/cmd_cancel".into();
+            }
+            Action::Governor => {
+                let running = own
+                    .iter()
+                    .any(|e| world.is_colony_type(e.type_id) && !world.governor_paused(e.id));
+                (button.name, button.icon) = if running {
+                    ("Pause governor".into(), "icons/cmd_hold".into())
+                } else {
+                    ("Resume governor".into(), "icons/cmd_guard".into())
+                };
             }
             Action::Unload => {
                 // A carrier in orbit launches its craft; anything else sets passengers down.
@@ -1821,6 +1839,23 @@ impl Controller {
                             self.submit(world, id, "land", None, None, Some(below), false);
                         }
                     }
+                }
+            }
+            Action::Governor => {
+                let colonies: Vec<(EntityId, bool)> = self
+                    .own_selected(world)
+                    .iter()
+                    .filter(|e| world.is_colony_type(e.type_id))
+                    .map(|e| (e.id, world.governor_paused(e.id)))
+                    .collect();
+                // Any running governor pauses them all; when all are paused they resume.
+                let kind = if colonies.iter().any(|(_, paused)| !paused) {
+                    "pause_governor"
+                } else {
+                    "resume_governor"
+                };
+                for (colony, _) in colonies {
+                    self.submit(world, colony, kind, None, None, None, false);
                 }
             }
             Action::Release => {
@@ -2415,6 +2450,9 @@ impl Controller {
                         ));
                     }
                     lines.extend(crate::space_view::holding_line(world, e));
+                    if !foreign {
+                        lines.extend(crate::hud::colony_lines(world, e));
+                    }
                     if !foreign {
                         lines.extend(crate::space_view::charge_line(world, e));
                     }

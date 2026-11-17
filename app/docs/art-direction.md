@@ -50,6 +50,7 @@ Each building has one **signature element** that names its job at a glance:
 | Stable | long low barn with a fenced paddock |
 | Mine | headframe over a shaft, spoil heap |
 | Smelter / factory | chimneys (smoke later) |
+| Automated colony | a glass-domed hub under a tall relay mast ringed with light, a drone on its pad |
 
 Units: silhouette by role — spear (long vertical line), bow (curve), shield
 (disc or rectangle), mount (horizontal body), siege (frame and wheels).
@@ -166,6 +167,18 @@ beam lance. The spaceport (8×8, the largest landmark) keeps a rocket on its pad
 gantry as its signature, with vaulted hangars, two landing pads (a shuttle on one), a control
 tower and an operations block on white paving. Ships in orbit are the same models, drawn two to
 five times their size; the system view still draws every ship as the generic hull of task 53.
+
+Task 73 adds two first looks for a later review round, with no new shape or material: the
+**automated colony** (`bld.auto_colony@abundance`, 5 × 5) on white paving, a glass-domed
+control hub with a team-coloured band, a tall relay mast with two light rings and a tilted dish,
+a quad-rotor drone on a lit pad, two storage tanks with team bands, a tilted solar array, a
+robot arm over crates and a flag; and an **alternative look for the Automated Research Lab**
+(`bld.auto_university@automation+npc.nature`): a long white lab hall with sawtooth skylights,
+a team band and fume stacks, a particle ring laid on the ground in front of it with team-coloured
+magnets, a glass greenhouse dome and a mast. The alternative is filed under the nature faction,
+which never owns a lab, so no match draws it; the approved look stays the default and stays
+locked. Adopting it is the owner's call (its row's faction set to NULL, the approved row
+retired).
 
 ## Budgets
 

@@ -513,3 +513,68 @@ fn a_late_game_state_in_the_galactic_age() {
         outcome.load_ms
     );
 }
+
+/// An automated colony (task 73) building a site of its area, with its governor paused: the
+/// switch and the colony's wealth survive the save.
+#[test]
+fn an_automated_colony_with_its_governor_paused() {
+    let rules = rules();
+    let surface = CubeSurface { n: 64 };
+    let plain = rules.id_of("ter.plain").unwrap();
+    let city_type = rules.id_of("bld.city").unwrap();
+    let research: BTreeMap<_, _> = rules
+        .production
+        .get(&city_type)
+        .into_iter()
+        .flatten()
+        .filter(|p| rules.techs.contains_key(&p.product_def_id))
+        .map(|p| (p.product_def_id, 1))
+        .collect();
+    let player = Player {
+        id: P1,
+        team: 1,
+        faction: rules.id_of("nation.romans").unwrap(),
+        age: rules.id_of("age.abundance").unwrap(),
+        resources: rules.resources.keys().map(|r| (*r, 100_000)).collect(),
+        techs: research,
+    };
+    let mut w = World::from_sphere(
+        rules.clone(),
+        surface,
+        vec![plain; surface.len()],
+        &[],
+        73,
+        vec![player],
+    )
+    .unwrap();
+    let body = BodyId(0);
+    w.place_for_setup(city_type, P1, at(body, 16_500, 32_500))
+        .unwrap();
+    let colony_type = rules
+        .entity_types
+        .values()
+        .find(|et| et.colony.is_some())
+        .unwrap()
+        .id;
+    let colony = w
+        .place_for_setup(colony_type, P1, at(body, 46_500, 32_500))
+        .unwrap();
+    let site = rules.entity_types[&colony_type]
+        .colony
+        .as_ref()
+        .unwrap()
+        .sites[0]
+        .site_type_id;
+    w.submit(Command {
+        subject: Some(site),
+        target_pos: Some(at(body, 46_000, 40_000)),
+        ..command(&w, colony, "construct")
+    })
+    .unwrap();
+    ticks(&mut w, 30);
+    order(&mut w, colony, "pause_governor", None, None);
+    ticks(&mut w, 2);
+    assert!(w.governor_paused(colony));
+    assert!(!w.colony_buildings(colony).is_empty());
+    check("automated_colony", &rules, w, 400, |_| {});
+}

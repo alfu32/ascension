@@ -450,6 +450,19 @@ pub fn build_universe_match(
     for owner in &setup.far_colonies {
         found_colony(rules, universe, &mut world, PlayerId(*owner), true)?;
     }
+    for owner in &setup.auto_colonies {
+        let colony = found_colony(rules, universe, &mut world, PlayerId(*owner), false)?;
+        // The same place, as an automated colony (the type with a colony component).
+        let pos = world.entity(colony).map(|e| e.pos).expect("founded");
+        world.despawn(colony)?;
+        let automated = rules
+            .entity_types
+            .values()
+            .find(|et| et.colony.is_some())
+            .ok_or_else(|| SetupError::Setup("auto-colony: no colony type".into()))?
+            .id;
+        world.place_for_setup(automated, PlayerId(*owner), pos)?;
+    }
     Ok(Match {
         world,
         starts,
@@ -466,7 +479,7 @@ fn found_colony(
     world: &mut World,
     owner: PlayerId,
     far: bool,
-) -> Result<(), SetupError> {
+) -> Result<rom_sim::EntityId, SetupError> {
     let fail = |what: &str| SetupError::Setup(format!("colony: {what}"));
     let home = world
         .home_body(PlayerId(1))
@@ -534,8 +547,7 @@ fn found_colony(
         .into_iter()
         .find_map(|face| world.find_city_site(owner, body, Pos::on(body, face, n * 500, n * 500)))
         .ok_or_else(|| fail("no room for a city"))?;
-    world.place_for_setup(city, owner, site)?;
-    Ok(())
+    Ok(world.place_for_setup(city, owner, site)?)
 }
 
 /// Whether every tile under a building of type `et` centred at `pos` is buildable.

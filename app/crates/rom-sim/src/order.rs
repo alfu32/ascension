@@ -187,6 +187,7 @@ pub(crate) fn has_component(entity: &EntityType, needs: &str) -> bool {
         "gather_site" => entity.gather_site.is_some(),
         "producer" => entity.producer.is_some(),
         "energy" => entity.energy.is_some(),
+        "colony" => entity.colony.is_some(),
         _ => false,
     }
 }

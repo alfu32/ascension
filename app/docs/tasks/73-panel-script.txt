@@ -1,0 +1,21 @@
+# Task 73: the colony panel while its governor works: each kind's count against its cap and what
+# the governor does ("building Camp"), with the Order tab open on the Pause governor switch. The
+# same start as 73-colony-script.txt, stopped early (universe seed 1, --ai none, --sun fixed).
+0 grant-age age.abundance
+0 grant-tech tech.auto_colonies
+0 auto-colony 1
+0 place-orbit 1 unit.survey_ship @0,0
+1 speed 1000
+200 ships
+202 orbit planet1
+2400 speed 100
+2402 ships
+2404 cam focus
+2500 click city2
+2504 cam focus
+2520 cam wheel 2 800,384
+2550 cam wheel 2 800,384
+2580 cam wheel 1 800,384
+2610 cam wheel 2 960,384
+2620 hud tab 1
+2630 speed 1

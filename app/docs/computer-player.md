@@ -868,6 +868,65 @@ had a raider strike a building in the first six minutes.
 `rom fight-matrix` (the owner's counter rule, unchanged data): 136 strengths, none without an
 answer (2.8 min, 2 jobs).
 
+## Automated colonies and their governors (task 73)
+
+An automated colony (abundance age, `docs/database.md` "Automated colonies") keeps the sites its
+type lists in `et_colony_site` standing in its area. The keeping is done by **the governor**,
+`rom_ai::governor`, which is not part of a brain:
+
+- **Every owner, people included.** Hosts call `rom_ai::run_governors(&mut world)` before every
+  `World::step` (the application's simulation thread, `rom ai-match`, `rom duel` and
+  `rom first-attack`); every `GOVERNOR_INTERVAL` ticks (40, two seconds) it asks each player's
+  colonies, in id order, for at most one order each and submits them. Refused orders are tried
+  again on a later round. It keeps no memory, so nothing of it is saved; what it reads is the
+  world (the colony's buildings, its queue, pending orders, prices, stores, the switch).
+- **Orders only, in the owner's name.** The colony is a builder that does not move: the governor
+  orders it to `construct` a site (`queue` off, one at a time) or to `repair` an unfinished one
+  nobody builds. The colony pays at submission like anyone; it builds at `build_pct` 200.
+- **Which site next.** The kinds below their caps, furthest below as a share of the cap first
+  (ties in the colony type's order): the first one the owner can build now (unlocked, paid for)
+  and that finds room is placed. So farms, camps and labs come up in turn, and a kind that
+  cannot be paid for does not hold up the others.
+- **Where.** Every tile of the colony's economic radius, nearest first, snapped as the
+  simulation snaps it; a spot must pass `World::check_placement`, be served by the colony itself
+  (`city_covering`, so a nearer city's area is left to that city) and keep a free tile round the
+  footprint. A site that draws from a node terrain (a woodcutter's camp, forest) goes to the spot
+  with the most of it within its `node_radius`, weighed over up to 48 spots spread over the area;
+  any other takes the nearest spot.
+- **Rebuilds.** Counts are of the line in the colony's area (unfinished included), so a site
+  destroyed is simply missing on the next round and placed again.
+- **The switch and the panel.** `rom_ai::colony_status(world, colony)` gives each kind's count
+  against its cap and what the governor waits for (`Waiting`: paused, the colony itself
+  unfinished or struck down, building a site, a kind locked, the resources the most needed kind
+  lacks, placing). The application shows it in the colony's card ("Farm 5/5 · Camp 3/5 · Lab
+  4/5", "Governor on: building Camp" or "needs 200 Metal") and its Order tab has **Pause
+  governor** / **Resume governor** (orders `pause_governor`, `resume_governor`).
+
+**Brains.** A brain treats a colony type (an `et_colony` row) apart from cities: it wishes one
+colony per town of its own (score 520, not reserved, so only when it pays) at a site found like
+a city's (`find_city_site`: inside its borders, a spacing from every city); colonies are not
+among the brain's towns (`View::cities`), so its own farms and workers stay out of their areas;
+builders without movement are never sent to build; and in every thought it resumes any of its
+colonies whose governor is paused. Nothing names a definition: colonies are found by the
+component, their sites by their rows.
+
+### Measured (task 73)
+
+`rom duel`, 100 seeds, 8 jobs, 108 000-tick limit, on the i7-6700HQ (other sessions' builds ran
+alongside, so run times are rough). No duel reaches the abundance age, so colonies play no part;
+what could change them is the survey ship's own line (the corvette no longer needs "Upgrade to
+Corvettes") and the definition ids after it moving down by one.
+
+| Duel | Wins | Draws | Draw seeds | Run time |
+| --- | --- | --- | --- | --- |
+| task 78 (0.0.72): moderate – easiest | 96 – 0 | 4 | 14, 29, 90, 91 | 7.3 min |
+| task 73: moderate – easiest | 96 – 0 | 4 | 14, 29, 90, 91 (the causes traced in task 78) | 6.5 min |
+| task 78 (0.0.72): moderate – moderate | 53 – 42 | 5 | | 14.0 min |
+| task 73: moderate – moderate | 53 – 42 | 5 | 36, 41, 43, 55, 68 | 6.8 min |
+
+Seeds 1–3 of the mirror run again alone gave the same hashes. `rom fight-matrix`: 136 strengths,
+`unanswered=0` (27 s).
+
 ## Simulation gaps found in part 2, and what task 65 did with them
 
 - **Closed: `explore`, `patrol`, `guard`.** `explore` walks to the nearest tile
@@ -997,6 +1056,9 @@ fighters stood near the stand-in's capital then.
   colony with a transport in a small universe, craft climbing to orbit and
   boarding a carrier, the space-age brain twice.
 - `crates/rom-cli/src/duel_cmd.rs` — a short duel twice with equal hashes.
+- `crates/rom-ai/tests/governor.rs` — a governor keeps fifteen sites in its colony's area and
+  rebuilds them, twice alike; paused it waits, without means it names the price; a brain in the
+  abundance age founds a colony and turns a paused governor back on (task 73).
 - `crates/rom-ai/tests/ages.rs` — the second age in the ordinary run; every
   profile to the third age on seeds 1–5 with
   `cargo test --release -p rom-ai --test ages -- --ignored`.

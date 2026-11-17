@@ -1,0 +1,13 @@
+# Task 73: the spaceport's training grid in the starfaring age: the survey ship keeps its slot
+# (Q) beside the corvette (W), its own line now and never superseded; one of each is queued, so
+# the queue names both, and the pointer rests on the survey ship's button. Universe seed 1,
+# --ai none, --sun fixed.
+0 grant-age age.starfaring
+0 grant res.metal 5000
+0 grant res.energy 5000
+0 place 1 bld.spaceport @14,0
+2 producers
+4 hud tab 2
+6 hud slot 0
+8 hud slot 1
+10 cam point 55,738

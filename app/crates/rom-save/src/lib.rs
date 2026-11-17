@@ -15,7 +15,7 @@ use std::{collections::BTreeMap, fmt::Write as _, path::Path, sync::Arc};
 use thiserror::Error;
 
 /// Layout version of the PART B tables this crate writes and reads.
-pub const FORMAT: i64 = 7;
+pub const FORMAT: i64 = 8;
 
 const PART_B: &str = include_str!("../../../db/schema.sql");
 

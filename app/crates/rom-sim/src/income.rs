@@ -81,6 +81,14 @@ impl World {
             && site.self_income != 0
         {
             terms.push(((entity.owner, site.resource_id), site.self_income));
+            // A site in an automated colony's area adds the colony's share of its income.
+            terms.extend(self.colony_share(id));
+        }
+        if entity.build_progress.is_none()
+            && let Some(colony) = &et.colony
+            && colony.income != 0
+        {
+            terms.push(((entity.owner, colony.resource_id), colony.income));
         }
         if let Some(site) = entity.work_site.and_then(|id| self.entity(id))
             && site.owner == entity.owner
@@ -133,6 +141,8 @@ impl World {
         for worker in workers {
             self.refresh_income(worker);
         }
+        // The sites of a colony earn its share only while it stands.
+        self.refresh_colony_sites(site);
     }
 
     /// Sets a worker's slot, keeping occupants, income and idle status current.

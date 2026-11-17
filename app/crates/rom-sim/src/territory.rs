@@ -428,10 +428,16 @@ impl World {
 
     /// Detaches every building from a city that is gone.
     pub(crate) fn release_city(&mut self, city: EntityId) {
+        let mut released = Vec::new();
         for e in self.entities.iter_mut().flatten() {
             if e.city_id == Some(city) {
                 e.city_id = None;
+                released.push(e.id);
             }
+        }
+        // A colony's share of their income goes with it.
+        for id in released {
+            self.refresh_income(id);
         }
     }
 }

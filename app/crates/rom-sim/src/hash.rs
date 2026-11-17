@@ -230,6 +230,14 @@ impl World {
                 }
             }
         }
+        // Hashed only once a governor is paused, so other worlds keep their hashes.
+        if !self.governors_paused.is_empty() {
+            hash.bytes(b"governor");
+            hash.u64(self.governors_paused.len() as u64);
+            for colony in &self.governors_paused {
+                hash.u32(colony.0);
+            }
+        }
         hash.u64(self.pending.len() as u64);
         for (order, append) in &self.pending {
             hash.order(order);

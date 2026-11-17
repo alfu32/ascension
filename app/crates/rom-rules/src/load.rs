@@ -379,6 +379,7 @@ fn load_entity_type(conn: &Connection) -> Result<Vec<EntityType>, RulesError> {
             supply: None,
             view_scale: None,
             inhibitor: None,
+            colony: None,
             weapons: Vec::new(),
             placement_rules: Vec::new(),
             completion_bonus: Vec::new(),
@@ -643,6 +644,36 @@ fn load_et_inhibitor(conn: &Connection) -> Result<Vec<Inhibitor>, RulesError> {
                 entity_type_id: DefId(row.get("entity_type_id")?),
                 reach: enum_value(row, "reach", "et_inhibitor", &identity)?,
                 charge_pct: row.get("charge_pct")?,
+            })
+        },
+    )
+}
+fn load_et_colony(conn: &Connection) -> Result<Vec<Colony>, RulesError> {
+    let mut sites = group(
+        read(
+            conn,
+            "SELECT * FROM et_colony_site ORDER BY colony_type_id, site_type_id",
+            |row| {
+                Ok(ColonySite {
+                    colony_type_id: DefId(row.get("colony_type_id")?),
+                    site_type_id: DefId(row.get("site_type_id")?),
+                    cap: row.get("cap")?,
+                })
+            },
+        )?,
+        |site| site.colony_type_id,
+    );
+    read(
+        conn,
+        "SELECT * FROM et_colony ORDER BY entity_type_id",
+        |row| {
+            let id = DefId(row.get("entity_type_id")?);
+            Ok(Colony {
+                entity_type_id: id,
+                resource_id: DefId(row.get("resource_id")?),
+                income: row.get("income")?,
+                site_share_pct: row.get("site_share_pct")?,
+                sites: sites.remove(&id).unwrap_or_default(),
             })
         },
     )
@@ -1374,6 +1405,10 @@ impl Rules {
         for row in load_et_inhibitor(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_inhibitor")?;
             entity.inhibitor = Some(row);
+        }
+        for row in load_et_colony(conn)? {
+            let entity = entity_mut(&mut rules, row.entity_type_id, "et_colony")?;
+            entity.colony = Some(row);
         }
         for row in load_et_view_scale(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_view_scale")?;

@@ -678,7 +678,8 @@ impl Playthrough {
                 let mut pos = None;
                 match p.mode {
                     ProductionMode::Construct => {
-                        let city = self.world.is_city_type(subject);
+                        // Cities are founded up to the limit; a colony (outside the limit) once.
+                        let city = self.world.counts_as_city(subject);
                         if !city
                             && (self.constructed.contains(&subject) || owned.contains(&subject))
                         {

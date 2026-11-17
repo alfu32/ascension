@@ -1,6 +1,6 @@
 # Game database
 
-Files: [`../db/schema.sql`](../db/schema.sql) (118 tables, 4 views),
+Files: [`../db/schema.sql`](../db/schema.sql) (120 tables, 4 views),
 [`../db/seed.sql`](../db/seed.sql) (the full generated content catalogue and hand-written
 world rules) and the model files in [`../db/models/`](../db/models/) (one per building or
 unit model, task 55; see §10a and `docs/models-in-meshcraft.md`), which load after the seed:
@@ -65,6 +65,7 @@ def ─┬─ age            ordinal, era, map scale
      │                 ├─ et_gather_site   farm, mine, camp, university
      │                 ├─ et_view_scale    drawn size in the space views (presentation)
      │                 ├─ et_inhibitor     jump inhibitor: holds enemy ships in its system
+     │                 ├─ et_colony        automated colony: wealth, the sites its governor keeps
      │                 └─ et_node          deposit placed by the map generator
      ├─ tech           age | track | upgrade | unit_upgrade | government | project | evolution
      ├─ ability        active abilities
@@ -864,6 +865,7 @@ reads a key. Rules of thumb, in tiles:
 | bld.auto_woodcutter_camp | 17 | 4×4 | 0 | automation |
 | bld.fusion_plant | 17 | 4×4 | 0 | fusion |
 | bld.citadel | 18 | 6×6 | 10 | fusion |
+| bld.auto_colony | 17.5 | 5×5 | 0 | abundance |
 | bld.spaceport | 19 | 8×8 | 0 | starfaring |
 | bld.ground_battery | 21 | 3×3 | 14 | starfaring |
 
@@ -1068,6 +1070,74 @@ Schema, all deliberate (both lint views stay empty, the seed loads): PART A colu
 `no_landing` with one `def_tag` row; et_view_scale rows changed. No PART B change: the save
 format stays at 7.
 
+## Automated colonies (task 73)
+
+Owner (2026-11-17): in the abundance age a city can be upgraded to an automated colony facility
+that gathers from a planet by itself, keeps up to five automated farms, five woodcutter camps and
+five automated labs, does not count towards the city limit, can be placed anywhere and adds to
+wealth; the automated university is renamed the Automated Research Lab; the survey ship stays
+buildable. Content in `automated_colonies()` of the generator (one call line), the survey line
+in `LINES`; both lint views stay empty and the seed loads.
+
+**Schema (deliberate).**
+
+- PART A table **`et_colony(entity_type_id, resource_id, income, site_share_pct)`**: a type with
+  this row is an automated colony. It must also be a city (`et_territory.is_city`) and have an
+  `et_builder` row (the validator checks both). Its owner earns `income` of `resource_id` each
+  income period while it stands complete and active, plus `site_share_pct` of the
+  `et_gather_site.self_income` of every complete site whose city is the colony
+  (`entity.city_id`, same owner); both are income terms of the colony and of each site.
+- PART A table **`et_colony_site(colony_type_id, site_type_id, cap)`**: what the colony's
+  governor keeps standing. The cap is per upgrade line, and it is also that line's per-city limit
+  inside the colony's area (`World::check_city_limit`): a colony holds five labs although a lab is
+  one per city elsewhere, and at most five camps, which have no limit elsewhere.
+- `order_kind` **`pause_governor`** and **`resume_governor`** (`needs = 'colony'`, a new value of
+  `needs`; target none): settings applied at once like `stance`; the colony's queue stays.
+- PART B: `entity_flag.flag` takes **`governor_paused`**. **Save format 8**; format 7 saves are
+  refused.
+
+**What the simulation does with it.**
+
+- **Outside the city limit.** `World::city_count` counts only cities that count
+  (`counts_as_city`: a city type without `et_colony`); construct orders of a colony skip the
+  `CityLimit` check. Spacing (`city.spacing`) and every other city rule still apply; as a city
+  type under free colonisation (abundance is past the enlightenment age) it may stand on any
+  plain land outside other players' borders, on any planet where a builder of its owner stands.
+  A player's first city is still the first of any kind (`has_any_city`).
+- **It builds its own sites.** A builder without movement works on a site whose footprint lies
+  within its own economic radius, where it stands (`World::approach`); anything else fails with
+  `out_of_reach`. The colony therefore takes ordinary `construct` and `repair` orders.
+- **The switch.** `World::governor_paused(colony)`; the set is hashed only while one is paused,
+  in the snapshot (`Snapshot::governors_paused`) and the save.
+- Queries: `is_colony_type`, `counts_as_city`, `line_root`, `colony_cap`, `colony_buildings`.
+
+**Data** (`db/content/generate.py`, `automated_colonies`):
+
+| Row | Value |
+| --- | --- |
+| `tech.auto_colonies` "Automated Colonies" | research at the city, abundance age, 1 300 wealth and 650 knowledge, 900 ticks |
+| `bld.auto_colony` "Automated Colony" | abundance age, needs the research; 5 × 5, 3 000 HP, armour 4 structure, sight 17.5 tiles, 450 ticks; 400 metal and 200 energy (ramped); built by citizens and worker drones on plain ground; tags `building`, `mechanical`, `city` |
+| its `et_territory` | city, border 24 tiles, economic radius 16 tiles (as a city's), capturable |
+| its `et_builder` | `build_pct` **200**: it builds its sites at twice a worker's pace |
+| its `et_colony` | **30 wealth** per income period (30 s), plus **10 %** of its sites' own income as wealth |
+| its `et_colony_site` | **5** `bld.auto_farm`, **5** `bld.auto_woodcutter_camp`, **5** `bld.auto_university` |
+| its `production` | construct those three; no train rows (no citizens) |
+| `prerequisite` | the research is an alternative (group 1) to each automated site's upgrade research, so the colony's sites can be built without a university or farm first |
+| `bld.auto_university` | renamed **Automated Research Lab** (its upgrade research "Upgrade to Automated Research Lab"); key, rules, upgrade from the university and income (70 knowledge a period) unchanged |
+| `unit.survey_ship` | a line of its own (`survey` in `LINES`), so the corvette no longer upgrades from it: "Upgrade to Corvettes" is gone, the corvette needs only the starfaring age, and survey ships stay trainable beside it; its stats, sight and role are unchanged |
+
+With everything of one colony standing (five farms at 10 food, five camps at 100 timber, five labs
+at 70 knowledge a period), the colony adds 30 + 10 % × 900 = 120 wealth a period. The automated
+sites have no price of their own in the seed (the upgrade research pays for them), and every
+price is zero from the abundance age's research on (`cost.all × 0`), so in the seed a governor
+never waits for resources; it still pays and waits as the data says (tested with a priced farm).
+
+Removing "Upgrade to Corvettes" moved the ids of every definition generated after it down by one
+(and shifted the spaceport's research grid); the new definitions come last.
+`rom playthrough --seed 1` now builds 33 buildings (the colony once; 32 before) with the same
+183 technologies (Automated Colonies in, Upgrade to Corvettes out): hash `be5aa51a1e931472`
+(was `853ceecaa69fcd4e`).
+
 ## Capture and difficulty (task 67)
 
 Owner's choice (2026-11-16) after tasks 61 and 65 ended most duels in stand-offs:
@@ -1195,6 +1265,8 @@ back. No SQL runs in `rom-sim`.
 - **Rally points.** `entity_rally(entity_id, target_entity_id | x, y, face, body)`
   (task 64). Not part of the state hash while no producer has one, so worlds
   without rally points keep their hashes.
+- **Paused governors of task 73 (format 8).** `entity_flag` rows `governor_paused`. Format 7
+  saves are refused.
 - **Held-down cities of task 67 (format 5).** `city_siege(city_id, team, since)`: a
   struck-down city's capture countdown. In the state hash only while a city is held
   down. Format 4 saves are refused.
