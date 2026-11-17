@@ -701,6 +701,65 @@ impl Controller {
         self.set_selection(next);
     }
 
+    /// Blasts of area weapons and fallen buildings the player sees on the planet shown, for
+    /// the bombardment effects (task 75).
+    fn bombardment(&self, world: &World, hud: &mut rom_render::HudSnapshot) {
+        let body = self.view.planet;
+        let tick = world.tick();
+        let sees = |pos: Pos| {
+            world.is_visible_on_body(
+                PLAYER,
+                pos.body,
+                pos.face,
+                pos.x.div_euclid(1000),
+                pos.y.div_euclid(1000),
+            )
+        };
+        let seed = |t: u64, pos: Pos| {
+            (t as u32)
+                .wrapping_mul(0x9E37_79B1)
+                .wrapping_add((pos.x as u32).wrapping_mul(31))
+                .wrapping_add(pos.y as u32)
+        };
+        hud.blasts = world
+            .blasts()
+            .iter()
+            .filter(|b| b.pos.body == body && sees(b.pos))
+            .map(|b| rom_render::HudBlast {
+                face: b.pos.face,
+                x: b.pos.x,
+                y: b.pos.y,
+                radius: b.radius.clamp(0, i64::from(i32::MAX)) as i32,
+                age_ticks: tick.saturating_sub(b.tick).min(u64::from(u32::MAX)) as u32,
+                seed: seed(b.tick, b.pos),
+            })
+            .collect();
+        let rules = world.rules();
+        hud.wrecks = world
+            .wrecks()
+            .iter()
+            .filter(|w| w.pos.body == body && sees(w.pos))
+            .filter_map(|w| {
+                let et = rules.entity_type(w.type_id)?;
+                let (fw, fh) = (et.footprint_w.clamp(1, 255), et.footprint_h.clamp(1, 255));
+                // The plain box height the views give a building of this footprint and kind; the
+                // simulation thread puts the height of its model in its place.
+                let height = 1000 + (w.type_id.0 % 4) as i64 * 400 + 150 * fw.max(fh);
+                Some(rom_render::HudWreck {
+                    face: w.pos.face,
+                    x: w.pos.x,
+                    y: w.pos.y,
+                    kind: w.type_id.0,
+                    footprint: (fw as u8, fh as u8),
+                    height: height as i32,
+                    owner: u8::try_from(w.owner.0).unwrap_or(u8::MAX),
+                    age_ticks: tick.saturating_sub(w.tick).min(u64::from(u32::MAX)) as u32,
+                    seed: seed(w.tick, w.pos),
+                })
+            })
+            .collect();
+    }
+
     /// The patrols of the selected units on the planet shown: between their ends on the ground,
     /// all the way round the great circle through them in orbit.
     fn patrols(&self, world: &World) -> Vec<rom_render::HudPatrol> {
@@ -2557,6 +2616,7 @@ impl Controller {
             .collect();
         hud.patrols = self.patrols(world);
         let tick = world.tick();
+        self.bombardment(world, hud);
         hud.markers = self
             .markers
             .iter()

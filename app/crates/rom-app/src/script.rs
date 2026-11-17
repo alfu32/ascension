@@ -19,7 +19,7 @@
 //! `templeN` = own completed keepers, `marketN` = own completed buildings training route
 //! traders, `cityN` = own completed cities, `carrierN` = own claim-tag units,
 //! `traderN` = own route traders, `gatherN` = own completed gather buildings, `shipN` = own orbiting ships, `landedN` = own landed ships, `enemyN` = enemy non-city buildings
-//! on the home planet. `click` and `rclick` support these names and Shift.
+//! on the home planet, `foecityN` = enemy cities there (task 75). `click` and `rclick` support these names and Shift.
 //! These component-based aliases replace a dependency on the last trained type.
 //!
 //! Space commands: `ships` selects every ship of player one, `producers` its finished
@@ -858,7 +858,7 @@ fn camera_input(words: &[&str]) -> Result<Vec<rom_render::InputEvent>, String> {
 fn dynamic_name(word: &str) -> bool {
     [
         "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy", "gather",
-        "landing", "colony", "landed",
+        "landing", "colony", "landed", "foecity",
     ]
     .iter()
     .any(|prefix| {
@@ -958,7 +958,7 @@ pub fn live_pick(
     }
     let (name, n) = [
         "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy", "gather",
-        "craft", "landed",
+        "craft", "landed", "foecity",
     ]
     .iter()
     .find_map(|name| {
@@ -986,11 +986,12 @@ pub fn live_pick(
                         .as_ref()
                         .is_some_and(|n| n.claim_mode == ClaimMode::Carry);
                 }
-                if name == "enemy" {
+                if name == "enemy" || name == "foecity" {
                     let own = world
                         .players()
                         .find(|p| p.id == crate::selection::PLAYER)
                         .map(|p| p.team);
+                    let city = et.territory.as_ref().is_some_and(|t| t.is_city);
                     return Some(e.pos.body) == world.home_body(crate::selection::PLAYER)
                         && e.owner != rom_sim::PlayerId(0)
                         && world
@@ -998,7 +999,7 @@ pub fn live_pick(
                             .find(|p| p.id == e.owner)
                             .is_some_and(|p| Some(p.team) != own)
                         && et.class == EntityClass::Building
-                        && et.territory.as_ref().is_none_or(|t| !t.is_city);
+                        && city == (name == "foecity");
                 }
                 if e.owner != crate::selection::PLAYER || e.build_progress.is_some() {
                     return false;

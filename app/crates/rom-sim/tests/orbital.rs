@@ -481,3 +481,98 @@ fn batteries_shoot_down_a_descending_transport_and_damage_a_ship_in_orbit() {
         "batteries_shoot_down_a_descending_transport_and_damage_a_ship_in_orbit hashes={first:016x?}"
     );
 }
+
+/// Task 75: a frigate's volley from orbit flattens what stands around the city it strikes,
+/// kills the soldiers near the centre and spares one at the edge of the blast, leaves an aircraft
+/// above it alone, and keeps the city down while it holds the orbit above it.
+#[test]
+fn a_frigate_bombards_a_town_with_an_area_volley() {
+    let rules = rules();
+    let play = || {
+        let mut w = world(&rules);
+        let city = w
+            .place_for_setup(id(&w, "bld.city"), P2, at(HOME, 2, 32_500, 32_500))
+            .unwrap();
+        let barracks = w
+            .place_for_setup(id(&w, "bld.barracks"), P2, at(HOME, 2, 38_000, 32_000))
+            .unwrap();
+        let near = w
+            .spawn(id(&w, "unit.marine"), P2, at(HOME, 2, 32_500, 37_000))
+            .unwrap();
+        let edge = w
+            .spawn(id(&w, "unit.marine"), P2, at(HOME, 2, 32_500, 44_000))
+            .unwrap();
+        let above = w
+            .spawn(id(&w, "unit.jet_fighter"), P2, at(HOME, 2, 30_500, 32_500))
+            .unwrap();
+        // Far out of the frigate's reach and its blasts, inside the city's economic radius
+        // (34 tiles with every civic research): it would restore the city.
+        let holder = w
+            .spawn(id(&w, "unit.marine"), P2, at(HOME, 2, 32_500, 61_000))
+            .unwrap();
+        let hold = w
+            .rules()
+            .stances
+            .values()
+            .find(|s| s.behavior == "hold_fire")
+            .unwrap()
+            .id;
+        for unit in [near, edge, above, holder] {
+            w.set_stance(P2, unit, hold).unwrap();
+        }
+        let frigate = ship_in_orbit(
+            &mut w,
+            "unit.space_frigate",
+            P1,
+            HOME,
+            Some(at(HOME, 2, 32_500, 32_500)),
+        );
+        let (edge_hp, above_hp) = (w.entity(edge).unwrap().hp, w.entity(above).unwrap().hp);
+        order(&mut w, frigate, "attack", Some(city), None);
+        run_until(&mut w, 400, |w| !w.blasts().is_empty());
+        let blast = w.blasts()[0];
+        assert_eq!(blast.owner, P1);
+        assert_eq!(blast.radius, 12_000);
+        assert_eq!(blast.pos, w.entity(city).unwrap().pos);
+        let struck = w.hash();
+        // The soldier beside the city is dead, the one at the edge hurt but alive, the aircraft
+        // above untouched (the volley hits the ground only); the barracks beside the city fell
+        // as a wreck the views show collapsing, and the city is down.
+        assert!(w.entity(near).is_none());
+        let left = w.entity(edge).unwrap().hp;
+        assert!(left > 0 && left < edge_hp, "{left} of {edge_hp}");
+        assert_eq!(w.entity(above).unwrap().hp, above_hp);
+        assert!(w.entity(barracks).is_none());
+        assert!(
+            w.wrecks()
+                .iter()
+                .any(|wreck| wreck.owner == P2 && wreck.tick == blast.tick)
+        );
+        assert!(w.entity(city).unwrap().neutralised);
+        // Its own soldier in its radius cannot restore it while the frigate holds the orbit
+        // above (task 75); without the frigate it would be back at once (task 67).
+        for _ in 0..200 {
+            w.step();
+        }
+        assert!(w.entity(city).unwrap().neutralised);
+        assert!(w.entity(holder).is_some_and(|e| e.hp > 0));
+        let held = w.hash();
+        order(
+            &mut w,
+            frigate,
+            "move",
+            None,
+            Some(at(HOME, 0, 32_500, 32_500)),
+        );
+        run_until(&mut w, 2000, |w| !w.entity(city).unwrap().neutralised);
+        // Blasts and wrecks are kept a minute for the views, then forgotten.
+        for _ in 0..rom_sim::BLAST_MEMORY_TICKS {
+            w.step();
+        }
+        assert!(w.blasts().is_empty() && w.wrecks().is_empty());
+        (struck, held, w.hash())
+    };
+    let first = play();
+    assert_eq!(first, play());
+    println!("a_frigate_bombards_a_town_with_an_area_volley hashes={first:016x?}");
+}

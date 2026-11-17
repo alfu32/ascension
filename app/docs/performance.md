@@ -429,3 +429,26 @@ Screenshots are unchanged in content: the top HUD bar of `--single-planet --sphe
 and of the task-35 library script is pixel-identical to the parent commit's
 capture, alpha is 255 everywhere, and the rest differs only by animated shading
 (372 and 13 pixels differ by more than 3 %).
+
+## Heavy bombardment (task 75)
+
+```sh
+env -u WAYLAND_DISPLAY target/release/rise-of-man --universe --players 2 --ai none --seed 1 \
+  --sun fixed --size 1280x800 --script docs/tasks/75-bench-script.txt --bench 15
+```
+
+Eight warships (four battleships, four frigates) hold the orbit over a town of fifteen buildings
+and twenty soldiers and fire on everything in reach from the first ticks; 0.0.75's binary runs the
+same script with its own weaker bombardment (no blasts, no ruins). Two runs each, alternating, on
+the i7-6700HQ:
+
+| Build | Load (`uptime`, 1 min) | Shown fps | Rendered fps | Frame ms (avg / max) | Entities at the end |
+| --- | --- | --- | --- | --- | --- |
+| 0.0.75 | 0.42 | 56.4 | 59.9 | 4.11 / 23.6 | 56 |
+| task 75 | 1.23 | 58.5 | 59.9 | 5.13 / 19.8 | 22 |
+| 0.0.75 | 1.40 | 58.0 | 59.9 | 3.85 / 20.4 | 56 |
+| task 75 | 1.41 | 57.4 | 59.9 | 5.40 / 20.3 | 22 |
+
+The effects (flashes, rings, smoke and fire, the minute of scorched ground and the ruins) cost
+about 1.3 ms of a frame here; the render thread keeps 60 frames and the simulation 20 ticks per
+second. The town is levelled in the run (22 entities left of 56).

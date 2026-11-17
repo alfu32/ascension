@@ -139,6 +139,48 @@ pub struct HudCityRadius {
     pub minimap: bool,
 }
 
+/// A blast of an area weapon on the shown surface (task 75): its flash, shockwave, debris and
+/// the scorched ground it leaves.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HudBlast {
+    /// Surface face.
+    pub face: u8,
+    /// Centre in milli-tiles.
+    pub x: i32,
+    /// Centre in milli-tiles.
+    pub y: i32,
+    /// Reach of the blast in milli-tiles.
+    pub radius: i32,
+    /// Game ticks since it struck.
+    pub age_ticks: u32,
+    /// Varies the debris, the secondary bursts and the flames.
+    pub seed: u32,
+}
+
+/// A building that fell lately on the shown surface (task 75): it collapses, then its ruin
+/// burns and smokes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HudWreck {
+    /// Surface face.
+    pub face: u8,
+    /// Centre in milli-tiles.
+    pub x: i32,
+    /// Centre in milli-tiles.
+    pub y: i32,
+    /// Its type id.
+    pub kind: u32,
+    /// Footprint in tiles.
+    pub footprint: (u8, u8),
+    /// Height it stood to, in milli-tiles.
+    pub height: i32,
+    /// Its owner.
+    pub owner: u8,
+    /// Game ticks since it fell.
+    pub age_ticks: u32,
+    /// Varies the rubble and the flames.
+    pub seed: u32,
+}
+
 /// One command button.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HudButton {

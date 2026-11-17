@@ -1,0 +1,54 @@
+# Task 75, the heavy-bombardment bench, replayed by --script in universe mode (--players 2
+# --ai none, seed 1, --sun fixed) with --bench: a town of player two of fifteen buildings and
+# twenty soldiers, forty tiles east of player one's city, and nine warships of player one (four
+# battleships, four frigates and a survey ship to hold the camera) holding the orbit above it.
+# From tick 60 they fire on everything in reach, volley after volley, for the rest of the run.
+0 grant-age age.galactic
+0 place 2 bld.city @40,0
+0 place 2 bld.barracks @32,-8
+0 place 2 bld.factory @48,-8
+0 place 2 bld.library @32,8
+0 place 2 bld.market @48,8
+0 place 2 bld.farm @40,-11
+0 place 2 bld.farm @40,11
+0 place 2 bld.temple @29,0
+0 place 2 bld.university @51,0
+0 place 2 bld.granary @26,-8
+0 place 2 bld.smelter @54,-8
+0 place 2 bld.stable @26,8
+0 place 2 bld.siege_workshop @54,8
+0 place 2 bld.farm @33,-15
+0 place 2 bld.farm @47,15
+0 place 2 unit.marine @37,-4
+0 place 2 unit.marine @43,4
+0 place 2 unit.marine @36,5
+0 place 2 unit.marine @44,-5
+0 place 2 unit.marine @50,6
+0 place 2 unit.marine @30,-6
+0 place 2 unit.marine @35,-13
+0 place 2 unit.marine @45,13
+0 place 2 unit.marine @28,12
+0 place 2 unit.marine @52,-12
+0 place 2 unit.marine @38,-2
+0 place 2 unit.marine @42,2
+0 place 2 unit.marine @31,3
+0 place 2 unit.marine @49,-3
+0 place 2 unit.marine @39,7
+0 place 2 unit.marine @41,-7
+0 place 2 unit.marine @27,-3
+0 place 2 unit.marine @53,3
+0 place 2 unit.marine @34,10
+0 place 2 unit.marine @46,-10
+0 place-orbit 1 unit.survey_ship @40,0
+0 place-orbit 1 unit.battleship @34,-4
+0 place-orbit 1 unit.battleship @46,-4
+0 place-orbit 1 unit.battleship @34,4
+0 place-orbit 1 unit.battleship @46,4
+0 place-orbit 1 unit.space_frigate @40,-6
+0 place-orbit 1 unit.space_frigate @40,6
+0 place-orbit 1 unit.space_frigate @30,0
+0 place-orbit 1 unit.space_frigate @50,0
+60 click ship1
+62 cam focus
+90 cam focus
+92 cam wheel 2 800,450

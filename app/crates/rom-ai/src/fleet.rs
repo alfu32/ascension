@@ -19,7 +19,7 @@ use crate::{
 };
 use rom_rules::{BodyKind, ClaimMode, DefId, ProductionMode};
 use rom_sim::{BodyClaim, BodyId, Entity, EntityId, Pos};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Score of the wish for a building that trains spacecraft when the player has none.
 const SPACEPORT_SCORE: i64 = 620;
@@ -37,6 +37,11 @@ const STRIKE_SHIPS: usize = 3;
 const PATROL_REACH: i64 = 40_000;
 /// How far from a point a ship in orbit counts as above it, in milli-tiles.
 const ORBIT_SLACK: u64 = 4000;
+/// Warships the escort adds to its strike for every enemy battery known on the target
+/// (task 75): fewer hold off.
+const SHIPS_PER_BATTERY: usize = 2;
+/// The most warships the escort asks for.
+const MAX_ESCORT: i64 = 12;
 /// Troops a transport takes along besides its builder when there is room.
 const ESCORT_TROOPS: usize = 4;
 
@@ -350,7 +355,8 @@ pub(crate) fn wishes(view: &View<'_>, weights: &Weights, memory: &Memory, wishes
         count(&|c| matches!(c, BodyClaim::Held(p) if *p != view.me) || *c == BodyClaim::Contested);
     // Eagerness decides how many of the free bodies are worth a ship.
     let claim_want = (held + (free * weights.claim + 99) / 100).min(held + free);
-    let escort_want = STRIKE_SHIPS as i64 + contested;
+    let escort_want =
+        (STRIKE_SHIPS as i64 + contested + enemy_batteries(view, memory, &systems)).min(MAX_ESCORT);
     let wish = if fleet < claim_want {
         ships
             .claimer
@@ -669,8 +675,28 @@ fn presence_reach(view: &View<'_>, body: BodyId) -> u64 {
         / 4
 }
 
+/// The most enemy batteries (buildings that fire up at the orbit) known on one habitable body
+/// in reach, times the ships each one asks for.
+fn enemy_batteries(view: &View<'_>, memory: &Memory, systems: &BTreeSet<u32>) -> i64 {
+    let mut per_body: BTreeMap<BodyId, i64> = BTreeMap::new();
+    for e in memory.enemies.values() {
+        if e.building
+            && view::guards_orbit(view.rules, e.type_id)
+            && view
+                .world
+                .body(e.pos.body)
+                .is_some_and(|b| systems.contains(&b.system))
+        {
+            *per_body.entry(e.pos.body).or_default() += 1;
+        }
+    }
+    per_body.into_values().max().unwrap_or(0) * SHIPS_PER_BATTERY as i64
+}
+
 /// Warships: contest enemy-held bodies, escort own claims, and with enough of them strike
-/// the orbit of a planet where enemy buildings are known.
+/// the orbit of a planet where enemy buildings are known. Enemy batteries known there ask for
+/// more ships before the strike sets off (task 75); over the target the ships fire on the
+/// batteries first, then on the cities, then on what is nearest.
 fn escort(
     plan: &mut Plan<'_>,
     memory: &mut Memory,
@@ -687,7 +713,7 @@ fn escort(
     }
     let view = &plan.view;
     let bodies = resource_bodies(view, systems);
-    // Where enemy buildings are known on a habitable body in reach.
+    // Where enemy buildings are known on a habitable body in reach, and the batteries there.
     let enemy_world = memory
         .enemies
         .values()
@@ -699,6 +725,15 @@ fn escort(
             })
         })
         .min();
+    let batteries = |body: BodyId| {
+        memory
+            .enemies
+            .values()
+            .filter(|e| {
+                e.building && e.pos.body == body && view::guards_orbit(view.rules, e.type_id)
+            })
+            .count()
+    };
     let contested = bodies
         .iter()
         .find(|(_, c)| {
@@ -710,7 +745,9 @@ fn escort(
         .find(|(_, c)| *c == BodyClaim::Held(view.me))
         .map(|(b, _)| *b);
     let target = match enemy_world {
-        Some(world) if ships.len() >= STRIKE_SHIPS => Some(world),
+        Some(world) if ships.len() >= STRIKE_SHIPS + SHIPS_PER_BATTERY * batteries(world) => {
+            Some(world)
+        }
         _ => contested.or(guarded),
     };
     army.target = target.map(|b| b.0);
@@ -739,7 +776,8 @@ fn escort(
             plan.order(ship.id, "unload", None, None, None);
             continue;
         }
-        // Over an enemy world: fire on the nearest building or unit seen there now.
+        // Over an enemy world: fire on the batteries first, then the cities, then the nearest
+        // building or unit seen there now.
         let Some(below) = plan
             .view
             .world
@@ -749,19 +787,55 @@ fn escort(
         else {
             continue;
         };
-        if !ship.orders().is_empty() || plan.view.busy.contains(&ship.id) {
+        let rank = |type_id: DefId| {
+            if view::guards_orbit(plan.view.rules, type_id) {
+                0
+            } else if plan.view.is_city(type_id) {
+                1
+            } else {
+                2
+            }
+        };
+        // A ship that fired by itself at what it met is turned to something that matters more.
+        let engaged = ship
+            .orders()
+            .front()
+            .filter(|o| o.automatic && o.kind == "attack" && ship.orders().len() == 1)
+            .and_then(|o| o.target_entity)
+            .and_then(|t| plan.view.world.entity(t))
+            .map(|t| rank(t.type_id));
+        // A ship told to hold the orbit is free to fire.
+        let holding =
+            ship.orders().len() == 1 && ship.orders().front().is_some_and(|o| o.kind == "orbit");
+        if (!ship.orders().is_empty() && engaged.is_none() && !holding)
+            || plan.view.busy.contains(&ship.id)
+        {
             continue;
         }
         let mark = memory
             .enemies
             .iter()
-            .filter(|(_, e)| e.pos.body == target && e.tick == plan.view.tick)
-            .min_by_key(|(id, e)| (plan.view.distance(below, e.pos), **id))
-            .map(|(id, _)| EntityId(*id));
-        if let Some(mark) = mark {
+            .filter(|(id, e)| {
+                e.pos.body == target
+                    && e.tick == plan.view.tick
+                    && plan
+                        .view
+                        .world
+                        .entity(EntityId(**id))
+                        .is_some_and(|live| live.hp > 0 && !live.neutralised)
+            })
+            .min_by_key(|(id, e)| (rank(e.type_id), plan.view.distance(below, e.pos), **id))
+            .map(|(id, e)| (EntityId(*id), rank(e.type_id)));
+        if let Some((mark, level)) = mark {
+            if engaged.is_some_and(|now| now <= level) {
+                continue;
+            }
             if !plan.order(ship.id, "attack", None, Some(mark), None) {
                 break;
             }
+            continue;
+        }
+        if engaged.is_some() {
             continue;
         }
         // Nothing in sight: a ship in orbit holds over one point (task 68), so it moves

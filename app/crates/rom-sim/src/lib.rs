@@ -45,6 +45,7 @@ mod wealth;
 mod world;
 
 pub use capture::CaptureCountdown;
+pub use combat::{BLAST_MEMORY_TICKS, Blast, Wreck};
 pub use entity::{Entity, EntityId, Player, PlayerId};
 pub use geometry::Topology;
 pub use income::Income;

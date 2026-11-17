@@ -10,6 +10,8 @@ use crate::entities::{
 };
 use crate::hud::{HudSnapshot, MarkerKind};
 
+mod effects;
+
 /// A coloured line segment.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Line3 {
@@ -368,6 +370,22 @@ pub fn build_overlays_on(
             direction[0] * right[1] - direction[1] * right[0],
         ];
         let length = side.iter().map(|v| v * v).sum::<f32>().sqrt().max(0.001);
+        // A wide glow round the shot from orbit (task 75), the hot core drawn over it.
+        for (half, colour) in [(0.6, [255, 170, 80, 60]), (0.25, [255, 220, 150, 140])] {
+            let glow = side.map(|v| v / length * half);
+            let offset = |p: [f32; 3], sign: f32| -> [f32; 3] {
+                std::array::from_fn(|i| p[i] + glow[i] * sign)
+            };
+            out.quad(
+                [
+                    offset(from, -1.0),
+                    offset(from, 1.0),
+                    offset(to, 1.0),
+                    offset(to, -1.0),
+                ],
+                colour,
+            );
+        }
         side = side.map(|v| v / length * 0.07);
         let offset = |p: [f32; 3], sign: f32| std::array::from_fn(|i| p[i] + side[i] * sign);
         out.quad(
@@ -390,6 +408,7 @@ pub fn build_overlays_on(
         out.ring(impact, 0.8, [255, 190, 70, 255]);
         out.line(to, impact.at(0.0, 0.0, 2.0), [255, 235, 160, 255]);
     }
+    effects::bombardment(out, ground, right, views, hud);
     // Shots to or from what is aloft (batteries firing up, dogfights in orbit) and from
     // defences: a tracer for what hits at once, an arrow in flight for a projectile.
     for view in views {

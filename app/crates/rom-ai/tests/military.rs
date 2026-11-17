@@ -53,9 +53,16 @@ fn breaker(rules: &Rules, target: DefId) -> DefId {
                 && t.movement.is_some()
         })
         .max_by_key(|t| {
+            // Weapons that strike a building where it stands (not from orbit, task 75).
             let damage: i64 = t
                 .weapons
                 .iter()
+                .filter(|w| {
+                    !w.orbit_only
+                        && w.targets
+                            .iter()
+                            .any(|l| l.layer == rom_rules::Layer::Ground)
+                })
                 .map(|w| {
                     let pct = armour
                         .armor_class_id

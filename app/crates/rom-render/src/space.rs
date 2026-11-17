@@ -156,6 +156,20 @@ pub struct HoldView {
     pub enemy: bool,
 }
 
+/// A blast of an area weapon on a planet, seen from space as a flash on its globe (task 75).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FlashView {
+    /// The planet's body id.
+    pub body: u32,
+    /// Unit direction from the planet's centre to the blast, in the render frame of its globe.
+    pub dir: [f32; 3],
+    /// Game ticks since it struck.
+    pub age_ticks: u32,
+}
+
+/// Game ticks a flash on a planet stays visible from space.
+pub const FLASH_TICKS: u32 = 40;
+
 /// What the render thread draws in space.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SpaceSnapshot {
@@ -182,6 +196,8 @@ pub struct SpaceSnapshot {
     pub charges: Vec<ChargeView>,
     /// Systems with a jump inhibitor the player knows of, ascending by system.
     pub holds: Vec<HoldView>,
+    /// Blasts on planets the player sees, newest last (task 75).
+    pub flashes: Vec<FlashView>,
 }
 
 impl SpaceSnapshot {

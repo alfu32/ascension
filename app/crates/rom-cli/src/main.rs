@@ -5,6 +5,7 @@ mod fight_matrix_cmd;
 mod first_attack_cmd;
 mod mapgen_cmd;
 mod model_cmd;
+mod orbit_matrix;
 mod playthrough_cmd;
 mod siege_cmd;
 mod territory_cmd;

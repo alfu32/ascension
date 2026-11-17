@@ -22,7 +22,7 @@ use std::{
 use rom_rules::{AppliesTo, DefId, EntityClass, Layer, Rules, TechKind};
 use rom_sim::{Command, MapGrid, MatchOptions, Player, PlayerId, Pos, World};
 
-const USAGE: &str = "usage: rom fight-matrix --db <rules.db> [--ages <first>..<last>] [--seeds <n>] [--jobs <n>] [--all]";
+const USAGE: &str = "usage: rom fight-matrix --db <rules.db> [--ages <first>..<last>] [--seeds <n>] [--jobs <n>] [--all] [--orbit-only] [--no-orbit] [--fight a,b | --orbit-fight a,b]";
 /// Each side spends this many times the dearer side's price.
 const BUDGET_UNITS: i64 = 3;
 /// The most of one type on a side.
@@ -641,6 +641,69 @@ pub fn measure(
         .collect()
 }
 
+/// Measures the orbit rows of the ages in `ages` that have an orbital attacker, on `jobs`
+/// threads, in age order.
+pub fn measure_orbit(
+    rules: &Arc<Rules>,
+    ages: (i64, i64),
+    seeds: u64,
+    jobs: usize,
+    all: bool,
+) -> Result<Vec<crate::orbit_matrix::OrbitMatrix>, String> {
+    let setup = setup(rules)?;
+    let Some(first) = crate::orbit_matrix::first_orbit_age(rules, &setup) else {
+        return Ok(Vec::new());
+    };
+    let list: Vec<i64> = (ages.0.max(first)..=ages.1).collect();
+    let next = AtomicUsize::new(0);
+    let results = Mutex::new(BTreeMap::new());
+    std::thread::scope(|scope| {
+        for _ in 0..jobs.max(1) {
+            scope.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(age) = list.get(i) else {
+                        break;
+                    };
+                    let result = crate::orbit_matrix::measure_age(rules, &setup, *age, seeds, all);
+                    results.lock().expect("results lock").insert(*age, result);
+                }
+            });
+        }
+    });
+    results
+        .into_inner()
+        .expect("results lock")
+        .into_values()
+        .collect()
+}
+
+/// The orbit rows of one age, as Markdown rows.
+pub fn orbit_table(
+    rules: &Rules,
+    matrix: &crate::orbit_matrix::OrbitMatrix,
+    seeds: u64,
+) -> Vec<String> {
+    let strengths: Vec<Strength> = matrix
+        .strengths
+        .iter()
+        .map(|s| Strength {
+            strong: s.strong,
+            beaten: s.beaten.clone(),
+            answer: s.answer,
+        })
+        .collect();
+    table(
+        rules,
+        &AgeMatrix {
+            age: matrix.age,
+            roster: matrix.roster.clone(),
+            strengths,
+        },
+        seeds,
+    )
+}
+
 /// A type's key without its kind prefix.
 fn short(rules: &Rules, id: DefId) -> &str {
     let key = rules.key(id);
@@ -698,10 +761,16 @@ pub fn run_command(
     let mut one: Option<(String, String)> = None;
     let mut seeds = SEEDS;
     let mut all = false;
+    let (mut orbit_only, mut no_orbit, mut orbit_fight) = (false, false, false);
     let mut jobs = std::thread::available_parallelism().map_or(1, |n| n.get().min(4));
     while let Some(flag) = args.next() {
-        if flag == "--all" {
-            all = true;
+        match flag.as_str() {
+            "--all" => all = true,
+            "--orbit-only" => orbit_only = true,
+            "--no-orbit" => no_orbit = true,
+            _ => {}
+        }
+        if matches!(flag.as_str(), "--all" | "--orbit-only" | "--no-orbit") {
             continue;
         }
         let value = args
@@ -712,9 +781,10 @@ pub fn run_command(
             "--ages" => ages = Some(parse_range(&value)?),
             "--seeds" => seeds = value.parse::<u64>()?.max(1),
             "--jobs" => jobs = value.parse::<usize>()?.max(1),
-            "--fight" => {
+            "--fight" | "--orbit-fight" => {
                 let (a, b) = value.split_once(',').ok_or("--fight a,b")?;
                 one = Some((a.to_string(), b.to_string()));
+                orbit_fight = flag == "--orbit-fight";
             }
             _ => return Err(format!("unknown argument: {flag}").into()),
         }
@@ -741,12 +811,25 @@ pub fn run_command(
             })
         };
         for seed in 1..=seeds {
-            let (x, y) = fight(&rules, &setup, ages.0, side(&a)?, side(&b)?, seed)?;
+            let (x, y) = if orbit_fight {
+                crate::orbit_matrix::fight(&rules, &setup, ages.0, side(&a)?, side(&b)?, seed)?
+            } else {
+                fight(&rules, &setup, ages.0, side(&a)?, side(&b)?, seed)?
+            };
             println!("fight seed={seed} {a}={x} {b}={y}");
         }
         return Ok(());
     }
-    let matrices = measure(&rules, ages, seeds, jobs, all)?;
+    let matrices = if orbit_only {
+        Vec::new()
+    } else {
+        measure(&rules, ages, seeds, jobs, all)?
+    };
+    let orbits = if no_orbit {
+        Vec::new()
+    } else {
+        measure_orbit(&rules, ages, seeds, jobs, all)?
+    };
     let mut missing = 0;
     println!(
         "| Age | Strength | Outranges and beats | Answer | Research | Answer's fights (won, value left) |"
@@ -766,9 +849,58 @@ pub fn run_command(
         let roster: Vec<&str> = matrix.roster.iter().map(|u| short(&rules, *u)).collect();
         println!("roster {}: {}", rules.key(matrix.age), roster.join(", "));
     }
+    if !orbits.is_empty() {
+        println!();
+        println!(
+            "| Age | Across the orbit | Outranges and beats | Answer | Research | Answer's fights (won, value left) |"
+        );
+        println!("| --- | --- | --- | --- | --- | --- |");
+        for matrix in &orbits {
+            for row in orbit_table(&rules, matrix, seeds) {
+                println!("{row}");
+            }
+            missing += matrix
+                .strengths
+                .iter()
+                .filter(|s| !s.answer.is_some_and(|(_, p)| p.first_wins()))
+                .count();
+        }
+        for matrix in &orbits {
+            let roster: Vec<&str> = matrix.roster.iter().map(|u| short(&rules, *u)).collect();
+            println!(
+                "orbit roster {}: {}",
+                rules.key(matrix.age),
+                roster.join(", ")
+            );
+        }
+        let setup = setup(&rules)?;
+        println!();
+        println!(
+            "| Age | Ship | Volleys to level the town | Volleys to the city | Buildings | Reach of the town (tiles) | Soldiers left |"
+        );
+        println!("| --- | --- | --- | --- | --- | --- | --- |");
+        for row in crate::orbit_matrix::levelling_table(&rules, &setup)?
+            .iter()
+            .filter(|r| (ages.0..=ages.1).contains(&rules.ages[&r.age].ordinal))
+        {
+            println!(
+                "| {} | {} | {} | {} | {} | {:.1} | {}/{} |",
+                rules.key(row.age),
+                short(&rules, row.ship),
+                row.volleys
+                    .map_or("not levelled".to_string(), |v| v.to_string()),
+                row.city_volleys.map_or("-".to_string(), |v| v.to_string()),
+                row.buildings,
+                row.spread as f64 / 1000.0,
+                row.units.1,
+                row.units.0
+            );
+        }
+    }
     println!(
         "fight-matrix strengths={} unanswered={missing}",
         matrices.iter().map(|m| m.strengths.len()).sum::<usize>()
+            + orbits.iter().map(|m| m.strengths.len()).sum::<usize>()
     );
     if missing > 0 {
         return Err(format!("{missing} strengths have no answer").into());

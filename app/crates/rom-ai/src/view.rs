@@ -401,6 +401,60 @@ pub(crate) fn remember(
     });
 }
 
+/// Whether a type has a weapon that strikes the ground from orbit (task 75).
+pub(crate) fn bombards(rules: &Rules, type_id: DefId) -> bool {
+    rules
+        .entity_types
+        .get(&type_id)
+        .is_some_and(|t| t.weapons.iter().any(|w| w.orbit_only))
+}
+
+/// Whether a type fires up at what orbits its planet: a weapon at the `orbit` layer that is
+/// not itself an orbital one (a ground battery).
+pub(crate) fn guards_orbit(rules: &Rules, type_id: DefId) -> bool {
+    rules.entity_types.get(&type_id).is_some_and(|t| {
+        t.weapons
+            .iter()
+            .any(|w| !w.orbit_only && w.targets.iter().any(|l| l.layer == rom_rules::Layer::Orbit))
+    })
+}
+
+/// Planets where the player has a city and sees an enemy that bombards from orbit over them,
+/// or a blast of an enemy's area weapon on its own ground (task 75).
+pub(crate) fn bombarded_bodies(view: &View<'_>) -> BTreeSet<rom_sim::BodyId> {
+    let mine: BTreeSet<rom_sim::BodyId> = view.cities.iter().map(|c| c.pos.body).collect();
+    let mut out = BTreeSet::new();
+    let sees = |pos: Pos| {
+        view.world.is_visible_on_body(
+            view.me,
+            pos.body,
+            pos.face,
+            pos.x.div_euclid(1000),
+            pos.y.div_euclid(1000),
+        )
+    };
+    for e in view.world.entities() {
+        if !bombards(view.rules, e.type_id) || !view.world.enemies(view.me, e.owner) {
+            continue;
+        }
+        if let Some(orbit) = view.world.orbit(e.id)
+            && mine.contains(&orbit.body)
+            && sees(orbit.pos)
+        {
+            out.insert(orbit.body);
+        }
+    }
+    for blast in view.world.blasts() {
+        if mine.contains(&blast.pos.body)
+            && view.world.enemies(view.me, blast.owner)
+            && sees(blast.pos)
+        {
+            out.insert(blast.pos.body);
+        }
+    }
+    out
+}
+
 /// Fighting strength of a type: hit points times damage per second, scaled down.
 pub(crate) fn strength(rules: &Rules, type_id: DefId) -> i64 {
     let Some(et) = rules.entity_types.get(&type_id) else {

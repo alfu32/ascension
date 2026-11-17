@@ -3152,6 +3152,22 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),(SELECT id FROM def WHERE key='res.timber'),100,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.auto_university'),(SELECT id FROM def WHERE key='res.metal'),300,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.auto_university'),(SELECT id FROM def WHERE key='res.knowledge'),150,0);
+INSERT INTO damage_class(key) VALUES ('kinetic');
+INSERT INTO damage_matrix VALUES ((SELECT id FROM damage_class WHERE key='kinetic'),(SELECT id FROM armor_class WHERE key='structure'),300);
+INSERT INTO damage_matrix VALUES ((SELECT id FROM damage_class WHERE key='kinetic'),(SELECT id FROM armor_class WHERE key='flesh'),50);
+INSERT INTO damage_matrix VALUES ((SELECT id FROM damage_class WHERE key='kinetic'),(SELECT id FROM armor_class WHERE key='plate'),50);
+INSERT INTO damage_matrix VALUES ((SELECT id FROM damage_class WHERE key='kinetic'),(SELECT id FROM armor_class WHERE key='vehicle'),40);
+INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks,orbit_only,splash_radius,splash_pct) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),1,60,(SELECT id FROM damage_class WHERE key='explosive'),10000,60,1,2000,50);
+INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.corvette') AND slot=1),'ground');
+INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks,orbit_only,splash_radius,splash_pct) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),1,2000,(SELECT id FROM damage_class WHERE key='kinetic'),12000,100,1,12000,100);
+INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.space_frigate') AND slot=1),'ground');
+INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks,orbit_only,splash_radius,splash_pct) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),1,2600,(SELECT id FROM damage_class WHERE key='kinetic'),13000,100,1,14000,100);
+INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.space_cruiser') AND slot=1),'ground');
+INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks,orbit_only,splash_radius,splash_pct) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),1,3200,(SELECT id FROM damage_class WHERE key='kinetic'),14000,80,1,16000,100);
+INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.battleship') AND slot=1),'ground');
+UPDATE et_weapon SET damage=300,damage_class_id=(SELECT id FROM damage_class WHERE key='kinetic'),range_max=8000,cooldown_ticks=80,splash_radius=4000,splash_pct=100 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.orbital_bomber') AND orbit_only=1;
+UPDATE entity_type SET hp=9000,los=30000,armor_class_id=(SELECT id FROM armor_class WHERE key='hull') WHERE id=(SELECT id FROM def WHERE key='bld.ground_battery');
+UPDATE et_weapon SET damage=520,range_max=20000,cooldown_ticks=40 WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.ground_battery');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.1'),'research','research',1,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.civic.1'),'research','research',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.commerce.1'),'research','research',3,0);
@@ -5023,15 +5039,8 @@ INSERT INTO entity_visual(entity_type_id,mesh_id,material_id)
 -- db/models/shared/, the materials models wear in db/models/materials.sql), loaded
 -- after this seed by `rom build-rules` and the game. See docs/models-in-meshcraft.md.
 
--- Orbital bombardment: separate ground-only slot, usable only in a body orbit.
-INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks,orbit_only)
- SELECT d.id,1,w.damage/2,c.id,12000,60,1
- FROM def d JOIN et_weapon w ON w.entity_type_id=d.id AND w.slot=0
- JOIN damage_class c ON c.key='explosive'
- WHERE d.key IN ('unit.corvette','unit.space_frigate','unit.space_cruiser','unit.battleship');
-INSERT INTO et_weapon_target(weapon_id,layer)
- SELECT w.id,'ground' FROM et_weapon w JOIN def d ON d.id=w.entity_type_id
- WHERE w.orbit_only=1 AND d.key IN ('unit.corvette','unit.space_frigate','unit.space_cruiser','unit.battleship');
+-- Orbital bombardment (tasks 43 and 75): generated, see orbital_bombardment() in
+-- db/content/generate.py.
 
 -- Task 58: the laser battery also fires on ships in the orbit above it, less accurately
 -- (`hit_pct`) than at aircraft.
