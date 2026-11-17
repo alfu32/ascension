@@ -4,13 +4,17 @@
 use crate::{
     Weights,
     catalogue::Catalogue,
-    economy::can_trade,
+    economy::{Economy, can_trade},
     plan::{Act, Wish},
     production::{army_pop, is_military},
     view::View,
 };
 use rom_rules::{DefId, EntityClass, LimitScope, ProductionMode};
 use std::collections::BTreeSet;
+
+/// Score of another city while a resource has no room for another gather site: above the
+/// way to the next age and every soldier, below the first site of a resource and workers.
+const STUCK_CITY_SCORE: i64 = 850;
 
 /// What a building type is good for, read from its component and production rows.
 struct Role {
@@ -83,6 +87,7 @@ fn constructible(view: &View<'_>) -> Vec<DefId> {
 pub(crate) fn wishes(
     view: &View<'_>,
     weights: &Weights,
+    eco: &Economy,
     needed: &BTreeSet<DefId>,
     wishes: &mut Vec<Wish>,
 ) {
@@ -95,11 +100,19 @@ pub(crate) fn wishes(
         let have = view.line_count(building);
         if view.is_city(building) {
             // Cities are where the land, the farms and the food are: the main way to grow.
-            if have < view.city_limit() && weights.expand > 0 {
+            // A resource whose sites are full with no room for another around the cities
+            // (a town by a small wood, five farms) waits for one: it is saved for ahead of
+            // soldiers and the next age, else a town lives on forty timber a period all match.
+            let stuck = eco.stuck();
+            if have < view.city_limit() && (weights.expand > 0 || stuck) {
                 wishes.push(Wish {
-                    score: 450 + weights.expand * 4,
+                    score: if stuck {
+                        STUCK_CITY_SCORE
+                    } else {
+                        450 + weights.expand * 4
+                    },
                     act: Act::Construct(building),
-                    reserve: weights.expand >= 50,
+                    reserve: stuck || weights.expand >= 50,
                     opening: false,
                 });
             }

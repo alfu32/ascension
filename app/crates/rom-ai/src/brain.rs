@@ -391,7 +391,8 @@ impl Brain {
             slip(&mut rng),
             &mut wishes,
         );
-        construction::wishes(&plan.view, &self.weights, &needed, &mut wishes);
+        construction::wishes(&plan.view, &self.weights, &eco, &needed, &mut wishes);
+        plan.city_terrains = eco.stuck_terrains(&plan.view);
         production::wishes(
             &plan.view,
             &self.weights,

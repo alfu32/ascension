@@ -3,7 +3,7 @@
 
 use crate::{
     memory::Memory,
-    sites::{Ground, Site, find_city_site, find_site},
+    sites::{Ground, Hold, Site, find_city_site, find_site, node_spot},
     view::View,
 };
 use rom_rules::{DefId, LimitScope, ProductionMode, ResourceKind};
@@ -80,6 +80,9 @@ pub(crate) struct Plan<'a> {
     keep: BTreeMap<DefId, i64>,
     /// The gather site types the kept amounts are for.
     keep_for: BTreeSet<DefId>,
+    /// Node terrains a new city should be near: those of resources with no room for another
+    /// site around the cities.
+    pub city_terrains: BTreeSet<DefId>,
 }
 
 impl<'a> Plan<'a> {
@@ -95,6 +98,7 @@ impl<'a> Plan<'a> {
             started: 0,
             keep: BTreeMap::new(),
             keep_for: BTreeSet::new(),
+            city_terrains: BTreeSet::new(),
         }
         .with_first_sites(memory)
     }
@@ -394,10 +398,10 @@ impl<'a> Plan<'a> {
         });
         if !ground.reserved_done {
             ground.reserved_done = true;
-            reserve_first_sites(&self.view, ground, building, memory, situation);
+            reserve_first_sites(&self.view, ground, memory, situation);
         }
         let site = if is_city {
-            find_city_site(&self.view, ground, building)
+            find_city_site(&self.view, ground, building, &self.city_terrains)
         } else {
             find_site(&self.view, ground, building)
         };
@@ -432,50 +436,112 @@ impl<'a> Plan<'a> {
     }
 }
 
-/// Finds, for every base resource drawn from node terrain that the player has no site for
-/// yet, the spot its first site would take, and keeps it free for that site. Nothing is
-/// reserved while that very site is being placed, and a search that found nothing is not
-/// repeated until the situation changes.
-fn reserve_first_sites(
-    view: &View<'_>,
-    ground: &mut Ground,
-    building: DefId,
-    memory: &mut Memory,
-    situation: u64,
-) {
+/// Keeps ground free for gather sites drawn from node terrain (forest, rock): for every base
+/// resource the player has no such site for — also one whose age has not come yet, so the
+/// only spot beside the rock is not given to a farm before mines are known — and for every
+/// resource whose sites hold fewer workers than twice its commerce cap pays for, the spot
+/// its next site would take is kept free of other buildings, also while that very site is
+/// being placed (else another node site takes its spot); nothing after a search for it
+/// found nothing in this situation.
+fn reserve_first_sites(view: &View<'_>, ground: &mut Ground, memory: &Memory, situation: u64) {
+    let rules = view.rules;
+    let cap = view.commerce_cap();
+    let mut wanted: Vec<(Hold, DefId)> = Vec::new();
     for (resource, sites) in &view.cat.gather_sites {
-        if sites.contains(&building)
-            || sites.iter().any(|s| view.line_count(*s) > 0)
-            || view
-                .rules
-                .resources
-                .get(resource)
-                .is_none_or(|r| r.kind != ResourceKind::Base)
-        {
+        let Some(row) = rules.resources.get(resource) else {
+            continue;
+        };
+        if row.kind != ResourceKind::Base {
             continue;
         }
-        let Some(site) = sites.iter().copied().find(|s| {
-            view.unlocked(*s)
+        let node_site = |s: &DefId| {
+            rules.is_available(*s, view.faction)
                 && !view.obsolete(*s)
-                && view.rules.entity_types[s]
+                && rules.entity_types[s]
                     .gather_site
                     .as_ref()
                     .is_some_and(|g| g.slots_per_node > 0 && g.needs_node_terrain_id.is_some())
-        }) else {
+        };
+        // The site the player can build now, else the first one still to come.
+        let Some(site) = sites
+            .iter()
+            .copied()
+            .filter(node_site)
+            .find(|s| view.unlocked(*s))
+            .or_else(|| sites.iter().copied().find(node_site))
+        else {
             continue;
         };
+        let first = !sites.iter().any(|s| view.line_count(*s) > 0);
+        if !first {
+            // Sites stand already: room is kept for another while they hold fewer workers
+            // than twice the commerce cap pays for.
+            let per_worker = view
+                .cat
+                .harvesters
+                .get(resource)
+                .into_iter()
+                .flatten()
+                .flat_map(|t| rules.entity_types[t].harvester.iter())
+                .filter(|h| h.resource_id == *resource)
+                .map(|h| h.amount)
+                .max()
+                .unwrap_or(0);
+            let slots: i64 = view
+                .own
+                .iter()
+                .filter(|e| sites.contains(&e.type_id))
+                .map(|e| {
+                    if e.build_progress.is_some() {
+                        crate::sites::site_slots(view, e.type_id, e.pos)
+                    } else {
+                        e.gather_slots
+                    }
+                })
+                .sum();
+            // Room is kept ahead of the cap: it rises with every commerce technology, and by
+            // then farms and barracks have taken the ground beside the wood.
+            if !row.rate_capped || per_worker <= 0 || slots * per_worker >= NEXT_SITE_CAP * cap {
+                continue;
+            }
+        }
         // A search that already failed in this situation is not repeated for a reservation.
         if memory.no_site.get(&site.0) == Some(&situation) {
             continue;
         }
-        match find_site(view, ground, site) {
-            Site::At(pos) => ground.reserve(&view.rules.entity_types[&site], pos),
-            Site::Nowhere => {
-                memory.no_site.insert(site.0, situation);
-            }
-            Site::Later => {}
+        // The first site of a resource the player can build now keeps its spot whatever
+        // else wants it; one whose age has not come only while other buildings find room
+        // elsewhere (a town on a small island had no room for a farm), and the next one
+        // gives way before it.
+        let hold = match (first, view.unlocked(site)) {
+            (true, true) => Hold::First,
+            (true, false) => Hold::Coming,
+            (false, _) => Hold::Next,
+        };
+        wanted.push((hold, site));
+    }
+    // The firmest first: a next woodcutter's camp must not take the spot of the first mine.
+    wanted.sort_by_key(|(hold, site)| (std::cmp::Reverse(*hold), *site));
+    for (hold, site) in wanted {
+        if let Some((pos, _)) = node_spot(view, ground, site) {
+            ground.reserve(&rules.entity_types[&site], pos, hold);
         }
     }
+}
+
+/// Node sites keep room for another until their slots pay this many times the commerce cap.
+const NEXT_SITE_CAP: i64 = 2;
+
+/// Whether the last search for a site of `building` came back empty with as many cities as
+/// now and in the same age: there is no room for it around them.
+pub(crate) fn no_room_for(view: &View<'_>, memory: &Memory, building: DefId) -> bool {
+    let now = site_situation(view);
+    // Cities and age, the bits of the situation that free ground.
+    let place = |s: u64| (s >> 24) & 0xffff;
+    memory
+        .no_site
+        .get(&building.0)
+        .is_some_and(|then| place(*then) == place(now))
 }
 
 /// A number that changes when a failed site search is worth repeating: a city was

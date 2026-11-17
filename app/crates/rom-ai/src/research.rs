@@ -81,10 +81,16 @@ fn worth(view: &View<'_>, weights: &Weights, eco: &Economy, tech: DefId) -> i64 
         let scope = rules.stats.get(&modifier.stat_key).map(|s| s.scope);
         value += match (modifier.stat_key.as_str(), scope) {
             ("pop_cap", _) => size * if crowded { 12 } else { 2 },
-            // More cities matter most when every allowed city stands.
+            // More cities matter most when every allowed city stands, and most of all when
+            // a resource has no room for another site around them.
             ("city_limit", _) => {
                 let full = view.cities.len() as i64 >= view.city_limit();
-                size * weights.expand * if full { 3 } else { 1 }
+                let eager = if full && eco.stuck() {
+                    weights.expand.max(100)
+                } else {
+                    weights.expand
+                };
+                size * eager * if full { 3 } else { 1 }
             }
             ("commerce_cap", _) => size * if capped { 4 } else { 1 },
             ("caravan_limit", _) => size * 10,
