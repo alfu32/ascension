@@ -237,6 +237,16 @@ pub fn model_id(
     id
 }
 
+/// The review id of a visual row: [`model_id`], with `~<name>` for a review candidate (task 73).
+pub fn visual_model_id(rules: &Rules, entity: DefId, visual: &rom_rules::EntityVisual) -> String {
+    let mut id = model_id(rules, entity, visual.age_id, visual.faction_id);
+    if let Some(candidate) = &visual.candidate {
+        id.push('~');
+        id.push_str(candidate);
+    }
+    id
+}
+
 /// One composed model of the rules: the visual row it comes from, and its bake.
 #[derive(Clone, Debug)]
 pub struct ModelEntry {
@@ -248,6 +258,8 @@ pub struct ModelEntry {
     pub faction: Option<DefId>,
     /// The age from which the row applies, if any.
     pub age: Option<DefId>,
+    /// A review candidate's name: shown by the gallery, never drawn in a match.
+    pub candidate: Option<String>,
     /// The composed mesh.
     pub mesh: DefId,
     /// The material of the visual row (the parts' default).
@@ -285,7 +297,7 @@ pub fn composed_models(rules: &Rules, files: &ModelFiles) -> Vec<ModelEntry> {
             }
             let default = visual.material_id.and_then(|m| material_look(rules, m));
             let spec = model_spec(rules, files, visual.mesh_id, default, false);
-            let id = model_id(rules, entity, visual.age_id, visual.faction_id);
+            let id = visual_model_id(rules, entity, visual);
             let look = ModelLook {
                 id: id.clone(),
                 spec: Arc::new(spec),
@@ -300,6 +312,7 @@ pub fn composed_models(rules: &Rules, files: &ModelFiles) -> Vec<ModelEntry> {
                 entity,
                 faction: visual.faction_id,
                 age: visual.age_id,
+                candidate: visual.candidate.clone(),
                 mesh: visual.mesh_id,
                 material: visual.material_id,
                 look,

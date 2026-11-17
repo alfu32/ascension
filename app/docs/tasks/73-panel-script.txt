@@ -1,6 +1,8 @@
-# Task 73: the colony panel while its governor works: each kind's count against its cap and what
-# the governor does ("building Camp"), with the Order tab open on the Pause governor switch. The
-# same start as 73-colony-script.txt, stopped early (universe seed 1, --ai none, --sun fixed).
+# Task 73: the colony panel when its owner cannot pay: the seed's own prices (an automated farm
+# or camp 200 metal and 100 timber, a lab 300 metal and 150 knowledge) and the start's 500 of
+# each resource, nothing granted. The governor builds a farm and a camp, then waits:
+# "Governor on: needs 200 Metal". The same start as 73-colony-script.txt otherwise
+# (universe seed 1, --ai none, --sun fixed).
 0 grant-age age.abundance
 0 grant-tech tech.auto_colonies
 0 auto-colony 1

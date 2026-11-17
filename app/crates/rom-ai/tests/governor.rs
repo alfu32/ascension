@@ -60,6 +60,11 @@ fn player(rules: &Rules, n: u32, stock: i64) -> Player {
 /// A plain planet with a wood east of the colony, player 1's city at the middle of face 0
 /// and a complete colony 40 tiles east of it.
 fn world(rules: &Arc<Rules>, stock: i64) -> (World, EntityId) {
+    world_with(rules, stock, None)
+}
+
+/// As `world`, with one resource's stock set apart.
+fn world_with(rules: &Arc<Rules>, stock: i64, special: Option<(DefId, i64)>) -> (World, EntityId) {
     let surface = CubeSurface { n: 256 };
     let plain = id(rules, "ter.plain");
     let forest = id(rules, "ter.forest");
@@ -75,7 +80,13 @@ fn world(rules: &Arc<Rules>, stock: i64) -> (World, EntityId) {
         terrain,
         &[],
         73,
-        vec![player(rules, 1, stock)],
+        vec![{
+            let mut p = player(rules, 1, stock);
+            if let Some((resource, amount)) = special {
+                p.resources.insert(resource, amount);
+            }
+            p
+        }],
     )
     .unwrap();
     w.place_for_setup(id(rules, "bld.city"), P1, at(128_500, 128_500))
@@ -163,31 +174,72 @@ fn a_paused_governor_waits_and_one_without_means_says_what_it_needs() {
     assert_eq!(colony_status(&w, colony).unwrap().waiting, Waiting::Paused);
     assert!(w.colony_buildings(colony).is_empty());
 
-    // The seed's automated sites cost nothing to build (an upgrade's research pays for them),
-    // so give the farm a price: with empty stores it places nothing and names the price.
+    // A farm priced out of reach: with full stores for everything else, the kinds it can pay for
+    // are built meanwhile, and the governor names what the farm lacks.
     let priced = {
         let db = rom_rules::build_rules_db(
             include_str!("../../../db/schema.sql"),
             &format!(
-                "{}\nINSERT INTO cost(def_id,resource_id,amount,ramp) VALUES \
-                 ((SELECT id FROM def WHERE key='bld.auto_farm'),\
-                 (SELECT id FROM def WHERE key='res.metal'),200,0);",
+                "{}\nUPDATE cost SET amount=1000000 WHERE resource_id=\
+                 (SELECT id FROM def WHERE key='res.metal') AND def_id=\
+                 (SELECT id FROM def WHERE key='bld.auto_farm');",
                 include_str!("../../../db/seed.sql")
             ),
         )
         .unwrap();
         Arc::new(Rules::load(&db).unwrap())
     };
-    // The free kinds are built meanwhile.
-    let (mut w, colony) = world(&priced, 0);
+    let (mut w, colony) = world(&priced, 100_000);
     run(&mut w, 4_000);
     assert_eq!(counts(&w, colony), vec![(0, 5), (5, 5), (5, 5)]);
     let Waiting::Resources(site, missing) = colony_status(&w, colony).unwrap().waiting else {
         panic!("waits for resources");
     };
     assert_eq!(site, priced.id_of("bld.auto_farm").unwrap());
-    assert_eq!(missing, w.price(P1, site));
-    assert!(!missing.is_empty());
+    let metal = priced.id_of("res.metal").unwrap();
+    let have = w.players().find(|p| p.id == P1).unwrap().resources[&metal];
+    assert_eq!(missing, vec![(metal, 1_000_000 - have)]);
+}
+
+/// With the seed's own prices and a little metal, the governor builds what it can pay for,
+/// one of each kind, then waits for the metal of the next farm; twice alike.
+#[test]
+fn with_the_seed_prices_a_governor_waits_for_metal() {
+    let rules = rules();
+    let run_once = || {
+        let (w, colony) = world(&rules, 10_000);
+        let metal = rules.id_of("res.metal").unwrap();
+        let kinds: Vec<DefId> = colony_status(&w, colony)
+            .unwrap()
+            .sites
+            .iter()
+            .map(|s| s.site_type)
+            .collect();
+        // Exactly enough metal for one of each kind.
+        let one_each: i64 = kinds
+            .iter()
+            .map(|k| {
+                w.price(P1, *k)
+                    .iter()
+                    .find(|(r, _)| *r == metal)
+                    .map_or(0, |(_, n)| *n)
+            })
+            .sum();
+        assert!(one_each > 0, "automated sites have a metal price");
+        // The same world, with exactly that much metal.
+        let (mut w, colony) = world_with(&rules, 10_000, Some((metal, one_each)));
+        run(&mut w, 2_000);
+        assert_eq!(counts(&w, colony), vec![(1, 5), (1, 5), (1, 5)]);
+        let Waiting::Resources(site, missing) = colony_status(&w, colony).unwrap().waiting else {
+            panic!("waits for metal");
+        };
+        assert_eq!(site, kinds[0]);
+        let price = w.price(P1, site);
+        let farm_metal = price.iter().find(|(r, _)| *r == metal).unwrap().1;
+        assert_eq!(missing, vec![(metal, farm_metal)]);
+        w.hash()
+    };
+    assert_eq!(run_once(), run_once());
 }
 
 /// A brain in the abundance age, with its city's research done, founds an automated colony

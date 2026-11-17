@@ -171,14 +171,14 @@ five times their size; the system view still draws every ship as the generic hul
 Task 73 adds two first looks for a later review round, with no new shape or material: the
 **automated colony** (`bld.auto_colony@abundance`, 5 × 5) on white paving, a glass-domed
 control hub with a team-coloured band, a tall relay mast with two light rings and a tilted dish,
-a quad-rotor drone on a lit pad, two storage tanks with team bands, a tilted solar array, a
-robot arm over crates and a flag; and an **alternative look for the Automated Research Lab**
-(`bld.auto_university@automation+npc.nature`): a long white lab hall with sawtooth skylights,
-a team band and fume stacks, a particle ring laid on the ground in front of it with team-coloured
-magnets, a glass greenhouse dome and a mast. The alternative is filed under the nature faction,
-which never owns a lab, so no match draws it; the approved look stays the default and stays
-locked. Adopting it is the owner's call (its row's faction set to NULL, the approved row
-retired).
+a quad-rotor drone on a lit pad, two storage tanks with team caps, a tilted solar array, a robot
+arm over crates and a flag; and an **alternative look for the Automated Research Lab**,
+`bld.auto_university@automation~lab`: a white lab hall with sawtooth skylights, a team band and
+fume stacks, a particle ring with a glowing detector laid on the ground in front of it, a glass
+greenhouse dome and a mast. The alternative is a **review candidate** (`entity_visual.candidate =
+'lab'`, `docs/database.md` §10a): the gallery, its manifest and the export show it under that id,
+no match draws it, and the approved look stays the default and stays locked. Adopting it is the
+owner's call: drop the `candidate` value in its file and retire the approved row.
 
 ## Budgets
 

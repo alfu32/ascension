@@ -1752,6 +1752,9 @@ pub struct EntityVisual {
     pub material_id: Option<DefId>,
     /// The `scale_pct` column.
     pub scale_pct: i64,
+    /// The `candidate` column: the name of a review candidate, which is never drawn in a
+    /// match (only the gallery shows it); None for a row in play.
+    pub candidate: Option<String>,
 }
 /// One `map_style` row.
 #[derive(Debug, Clone)]

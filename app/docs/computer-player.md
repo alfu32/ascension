@@ -920,11 +920,12 @@ Corvettes") and the definition ids after it moving down by one.
 | Duel | Wins | Draws | Draw seeds | Run time |
 | --- | --- | --- | --- | --- |
 | task 78 (0.0.72): moderate – easiest | 96 – 0 | 4 | 14, 29, 90, 91 | 7.3 min |
-| task 73: moderate – easiest | 96 – 0 | 4 | 14, 29, 90, 91 (the causes traced in task 78) | 6.5 min |
+| task 73: moderate – easiest | 96 – 0 | 4 | 14, 29, 90, 91 (the causes traced in task 78) | 6.5 min; 4.8 min with the sites' prices |
 | task 78 (0.0.72): moderate – moderate | 53 – 42 | 5 | | 14.0 min |
-| task 73: moderate – moderate | 53 – 42 | 5 | 36, 41, 43, 55, 68 | 6.8 min |
+| task 73: moderate – moderate | 53 – 42 | 5 | 36, 41, 43, 55, 68 | 6.8 min; 6.0 min with the sites' prices |
 
-Seeds 1–3 of the mirror run again alone gave the same hashes. `rom fight-matrix`: 136 strengths,
+Seeds 1–3 of the mirror run again alone gave the same hashes. The automated sites' prices (added
+after the owner's review) changed neither table: no duel reaches the automation age. `rom fight-matrix`: 136 strengths,
 `unanswered=0` (27 s).
 
 ## Simulation gaps found in part 2, and what task 65 did with them

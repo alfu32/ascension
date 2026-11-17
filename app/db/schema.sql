@@ -622,7 +622,11 @@ CREATE TABLE entity_visual (           -- most specific row wins (faction, then 
   age_id         INTEGER REFERENCES age(id),
   mesh_id        INTEGER NOT NULL REFERENCES mesh(id),
   material_id    INTEGER REFERENCES material(id),
-  scale_pct      INTEGER NOT NULL DEFAULT 100
+  scale_pct      INTEGER NOT NULL DEFAULT 100,
+  candidate      TEXT CHECK (candidate IS NULL OR candidate GLOB '[a-z]*')
+                                       -- task 73: a review candidate's name: shown by the gallery
+                                       -- and its manifest (model id `<entity>@<age>~<name>`),
+                                       -- never drawn in a match; NULL = in play
 ) STRICT;
 CREATE INDEX entity_visual_by_type ON entity_visual(entity_type_id);
 

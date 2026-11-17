@@ -1,4 +1,4 @@
--- bld.auto_university@automation+npc.nature: Automated Research Lab (alternative) (mesh.auto_university_lab_automation)
+-- bld.auto_university@automation~lab: Automated Research Lab (alternative) (mesh.auto_university_lab_automation)
 -- One composed model; loaded after seed.sql by `rom build-rules` and the game.
 -- Edit here or in Meshcraft: docs/models-in-meshcraft.md.
 INSERT INTO def(kind,key,name) VALUES ('mesh','mesh.auto_university_lab_automation','Automated Research Lab (alternative)');
@@ -26,5 +26,5 @@ WITH v(name,shape,mat,team,attach,params) AS (VALUES
   ('banner','banner','mat.cloth',1,'','{"x":-1.55,"y":0.1,"z":0.6,"h":2.2,"fw":0.45,"fh":0.62,"pole_colour":"#e8ecec"}'))
 INSERT INTO mesh_part(mesh_id,name,shape,material_id,team,attach,params)
  SELECT (SELECT id FROM def WHERE key='mesh.auto_university_lab_automation'), v.name, v.shape, (SELECT id FROM def WHERE key=v.mat), v.team, v.attach, v.params FROM v;
-INSERT INTO entity_visual(entity_type_id,faction_id,age_id,mesh_id,material_id,scale_pct) VALUES
- ((SELECT id FROM def WHERE key='bld.auto_university'), (SELECT id FROM def WHERE key='npc.nature'), (SELECT id FROM def WHERE key='age.automation'), (SELECT id FROM def WHERE key='mesh.auto_university_lab_automation'), (SELECT id FROM def WHERE key='mat.white_composite'), 100);
+INSERT INTO entity_visual(entity_type_id,faction_id,age_id,mesh_id,material_id,scale_pct,candidate) VALUES
+ ((SELECT id FROM def WHERE key='bld.auto_university'), NULL, (SELECT id FROM def WHERE key='age.automation'), (SELECT id FROM def WHERE key='mesh.auto_university_lab_automation'), (SELECT id FROM def WHERE key='mat.white_composite'), 100, 'lab');

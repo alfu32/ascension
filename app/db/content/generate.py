@@ -721,6 +721,13 @@ COLONY_SITE_SHARE_PCT = 10
 COLONY_SITES = [('auto_farm', 5), ('auto_woodcutter_camp', 5), ('auto_university', 5)]
 # How fast a colony builds its own sites, percent of a worker's pace.
 COLONY_BUILD_PCT = 200
+# What an automated site costs to build (owner, 2026-11-17: a governor must really wait when its
+# owner cannot pay). A university upgraded to a lab still pays through the upgrade research.
+AUTO_SITE_PRICES = {
+    'auto_farm': {'metal': 200, 'timber': 100},
+    'auto_woodcutter_camp': {'metal': 200, 'timber': 100},
+    'auto_university': {'metal': 300, 'knowledge': 150},
+}
 
 
 def automated_colonies(definition, row, tag, need, produce, cost, tech, emit):
@@ -766,6 +773,8 @@ def automated_colonies(definition, row, tag, need, produce, cost, tech, emit):
         produce(full, site, 'construct', 'economic')
         # The colony research also unlocks its automated sites, beside their upgrade research.
         need(site, research, 1)
+    for site, prices in AUTO_SITE_PRICES.items():
+        cost('bld.' + site, prices)
 
 
 def main():

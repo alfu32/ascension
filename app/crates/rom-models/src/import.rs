@@ -362,13 +362,22 @@ fn target(lib: &Library, id: &str) -> Result<Target, ModelError> {
             asset_dir: id.to_owned(),
         });
     }
-    // A new model: `<entity>@<age|any>[+<faction>]`.
+    // A new model: `<entity>@<age|any>[+<faction>][~<candidate>]`.
     let bad = || {
         ModelError::Invalid(format!(
             "{id:?} is not a model id (`<entity key>@<age>`, e.g. bld.temple@classical) nor a shared mesh"
         ))
     };
-    let (entity_key, rest) = id.split_once('@').ok_or_else(bad)?;
+    let (base, candidate) = match id.split_once('~') {
+        Some((base, name))
+            if !name.is_empty() && name.starts_with(|c: char| c.is_ascii_lowercase()) =>
+        {
+            (base, Some(name))
+        }
+        Some(_) => return Err(bad()),
+        None => (id, None),
+    };
+    let (entity_key, rest) = base.split_once('@').ok_or_else(bad)?;
     let (age_short, faction) = match rest.split_once('+') {
         Some((a, f)) => (a, Some(f)),
         None => (rest, None),
@@ -403,6 +412,10 @@ fn target(lib: &Library, id: &str) -> Result<Target, ModelError> {
         mesh_key.push('_');
         mesh_key.push_str(&f.replace('.', "_"));
     }
+    if let Some(c) = candidate {
+        mesh_key.push('_');
+        mesh_key.push_str(c);
+    }
     if rules.id_of(&mesh_key).is_some() {
         return Err(ModelError::Invalid(format!(
             "a definition {mesh_key} already exists; give the model another id"
@@ -422,6 +435,7 @@ fn target(lib: &Library, id: &str) -> Result<Target, ModelError> {
             age: age.map(|a| rules.key(a).to_owned()),
             material: None,
             scale_pct: 100,
+            candidate: candidate.map(str::to_owned),
         }],
         existing: None,
         asset_dir: id.to_owned(),

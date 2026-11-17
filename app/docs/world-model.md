@@ -297,7 +297,9 @@ same planet as the freighter"), `img/trade-route-card.png` (route, pay and next 
 - **Its governor.** Once it stands, the colony builds its own sites, where it stands, inside
   its economic radius: up to five automated farms, five automated woodcutter camps (by the forest)
   and five Automated Research Labs, one after another, paid from its owner's stores, rebuilt when
-  destroyed. The governor works for people and computer players alike, through ordinary orders
+  destroyed. An automated farm or camp costs 200 metal and 100 timber, a lab 300 metal and 150
+  knowledge; when the owner cannot pay, the governor waits and says so. The governor works for
+  people and computer players alike, through ordinary orders
   (`docs/computer-player.md`, "Automated colonies and their governors").
 - **Wealth.** 30 wealth a period (30 s), plus a tenth of what its sites produce by themselves:
   120 a period with all fifteen standing.
@@ -305,24 +307,26 @@ same planet as the freighter"), `img/trade-route-card.png` (route, pay and next 
   Lab 3/5") and the governor's state ("Governor on: building Lab", "needs 200 Metal", "Governor
   paused"); its Order tab has the **Pause governor** / **Resume governor** switch, and its Build
   tab lets the player place a site of the three kinds by hand.
-- **The lab.** The automated university is now called the **Automated Research Lab**; elsewhere
-  it still comes from a university's upgrade (one per city), in a colony's area the governor
-  builds five. **The survey ship** has a line of its own: the spaceport trains it beside the
+- **The lab.** The automated university is now called the **Automated Research Lab**. A
+  university still becomes one through the lab's upgrade research; and once Automated Colonies
+  is researched a lab may also be built directly beside any city, one per city (owner,
+  2026-11-17), while in a colony's area the governor builds five. **The survey ship** has a line of its own: the spaceport trains it beside the
   corvette in every age from starfaring on.
 
 Screenshots (universe seed 1, `--ai none`, `--sun fixed`, scripts `tasks/73-*-script.txt`):
 `img/auto-colony-sites.png` (an automated colony on Gamma Canis Minoris I, the planet next to
 the home world, with the fifteen sites its governor placed and built: labs, farms, and the camps
 by the forest; the card reads "Farm 5/5 · Camp 5/5 · Lab 5/5", "Governor on: every site
-stands"), `img/auto-colony-panel.png` (the same colony at work: "Lab 4/5", "Governor on:
-building Camp", the Order tab with the Pause governor switch in slot D),
+stands"), `img/auto-colony-panel.png` (the same colony with the seed's prices and only the start's 500 of
+each resource: a farm and a camp built, "Lab 0/5", "Governor on: needs 200 Metal", the Order tab
+with the Pause governor switch in slot D),
 `img/auto-lab-city-and-colony.png` (an Automated Research Lab beside the home city and, east of
 it, a colony on the home planet with the five labs its governor built) and
 `img/survey-ship-beside-corvette.png` (the spaceport's training grid in the starfaring age: the
 survey ship in slot Q beside the corvette in W, one trained and the corvette queued). Model
 sheets: `img/model-auto-colony.png` (`bld.auto_colony@abundance`) and
-`img/model-auto-lab-alternative.png` (`bld.auto_university@automation+npc.nature`, the
-alternative lab look for review).
+`img/model-auto-lab-alternative.png` (`bld.auto_university@automation~lab`, the alternative lab
+look, a review candidate no match draws).
 
 ### Orbital craft, carriers and ground batteries (task 58)
 

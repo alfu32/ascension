@@ -340,6 +340,7 @@ fn every_shape() -> ModelRows {
             age: Some("age.industrial".into()),
             material: Some("mat.limestone".into()),
             scale_pct: 100,
+            candidate: None,
         }],
     }
 }

@@ -3146,6 +3146,12 @@ INSERT INTO et_colony_site(colony_type_id,site_type_id,cap) VALUES ((SELECT id F
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.auto_colony'),(SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),'construct','economic',1,0);
 INSERT INTO et_colony_site(colony_type_id,site_type_id,cap) VALUES ((SELECT id FROM def WHERE key='bld.auto_colony'),(SELECT id FROM def WHERE key='bld.auto_university'),5);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.auto_colony'),(SELECT id FROM def WHERE key='bld.auto_university'),'construct','economic',2,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.auto_farm'),(SELECT id FROM def WHERE key='res.metal'),200,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.auto_farm'),(SELECT id FROM def WHERE key='res.timber'),100,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),(SELECT id FROM def WHERE key='res.metal'),200,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),(SELECT id FROM def WHERE key='res.timber'),100,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.auto_university'),(SELECT id FROM def WHERE key='res.metal'),300,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.auto_university'),(SELECT id FROM def WHERE key='res.knowledge'),150,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.1'),'research','research',1,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.civic.1'),'research','research',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.commerce.1'),'research','research',3,0);

@@ -6,6 +6,10 @@
 # Test-only setup lines first.
 0 grant-age age.abundance
 0 grant-tech tech.auto_colonies
+# Stores granted so every site can be paid for (each costs metal and timber or knowledge).
+0 grant res.metal 10000
+0 grant res.timber 5000
+0 grant res.knowledge 5000
 0 auto-colony 1
 0 place-orbit 1 unit.survey_ship @0,0
 1 speed 1000

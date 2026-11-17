@@ -996,6 +996,7 @@ fn load_entity_visual(conn: &Connection) -> Result<Vec<EntityVisual>, RulesError
             mesh_id: DefId(row.get("mesh_id")?),
             material_id: row.get::<_, Option<u32>>("material_id")?.map(DefId),
             scale_pct: row.get("scale_pct")?,
+            candidate: row.get("candidate")?,
         })
     })
 }
