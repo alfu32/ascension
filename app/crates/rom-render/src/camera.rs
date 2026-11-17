@@ -13,6 +13,9 @@ const PAN_RATE: f32 = 1.0;
 const ZOOM_STEP: f32 = 0.88;
 /// Radians of rotation per physical pixel of middle-button drag.
 const ROTATE_RATE: f32 = 0.005;
+/// Milliseconds after a wheel notch within which further notches belong to the same gesture
+/// and are dropped: a misfiring or free-spinning wheel moves the camera one step.
+pub const WHEEL_GESTURE_MS: u64 = 80;
 
 /// A camera looking at a point on the ground plane (y = 0) from `distance` away.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -110,6 +113,108 @@ impl Camera {
         self.target[0] = self.target[0].clamp(min_x, max_x.max(min_x));
         self.target[1] = 0.0;
         self.target[2] = self.target[2].clamp(min_z, max_z.max(min_z));
+    }
+}
+
+/// How the player likes the camera to turn (settings, not game state).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TurnSettings {
+    /// The middle button pans and Shift + middle turns, at every level; by default the middle
+    /// button turns the view (on the planet it turns the globe under the camera, in space it
+    /// orbits the focus) and Shift + middle does the other job.
+    pub middle_pans: bool,
+    /// Dragging right swings the camera right, the scene against the pointer.
+    pub invert_horizontal: bool,
+    /// Dragging up raises the camera, the scene against the pointer.
+    pub invert_vertical: bool,
+}
+
+impl TurnSettings {
+    /// A horizontal drag of `dx` pixels as the turn reads it.
+    pub fn horizontal(&self, dx: f32) -> f32 {
+        if self.invert_horizontal { -dx } else { dx }
+    }
+
+    /// A vertical drag of `dy` pixels as the turn reads it.
+    pub fn vertical(&self, dy: f32) -> f32 {
+        if self.invert_vertical { -dy } else { dy }
+    }
+
+    /// The event as the default mapping reads it: with [`TurnSettings::middle_pans`] the Shift
+    /// of a middle-button press or release is swapped, so the two jobs trade buttons everywhere.
+    pub fn map_event(&self, event: InputEvent) -> InputEvent {
+        let swap = |mods: Modifiers| Modifiers {
+            shift: !mods.shift,
+            ..mods
+        };
+        match event {
+            InputEvent::ButtonDown {
+                button: PointerButton::Middle,
+                x,
+                y,
+                mods,
+            } if self.middle_pans => InputEvent::ButtonDown {
+                button: PointerButton::Middle,
+                x,
+                y,
+                mods: swap(mods),
+            },
+            InputEvent::ButtonUp {
+                button: PointerButton::Middle,
+                x,
+                y,
+                mods,
+            } if self.middle_pans => InputEvent::ButtonUp {
+                button: PointerButton::Middle,
+                x,
+                y,
+                mods: swap(mods),
+            },
+            other => other,
+        }
+    }
+
+    /// Packs the settings into bits, for sharing between threads.
+    pub fn bits(&self) -> u8 {
+        u8::from(self.middle_pans)
+            | u8::from(self.invert_horizontal) << 1
+            | u8::from(self.invert_vertical) << 2
+    }
+
+    /// The settings packed by [`TurnSettings::bits`].
+    pub fn from_bits(bits: u8) -> Self {
+        Self {
+            middle_pans: bits & 1 != 0,
+            invert_horizontal: bits & 2 != 0,
+            invert_vertical: bits & 4 != 0,
+        }
+    }
+}
+
+/// Turns raw wheel movement into zoom steps: one step per gesture of a notched wheel, smooth
+/// scrolling (fractional notches, as a touchpad gives) passed on as it comes.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct WheelGate {
+    last_ms: Option<u64>,
+}
+
+impl WheelGate {
+    /// The zoom steps for `notches` of wheel movement at `now_ms` (positive zooms in). A whole
+    /// number of notches is a notched wheel: the first event of a gesture gives one step and
+    /// every event within [`WHEEL_GESTURE_MS`] of the one before belongs to the same gesture
+    /// and gives none. Fractional notches give themselves.
+    pub fn pass(&mut self, now_ms: u64, notches: f32) -> f32 {
+        if notches == 0.0 || !notches.is_finite() {
+            return 0.0;
+        }
+        if (notches - notches.round()).abs() > 1e-3 {
+            return notches;
+        }
+        let same_gesture = self
+            .last_ms
+            .is_some_and(|last| now_ms.saturating_sub(last) <= WHEEL_GESTURE_MS);
+        self.last_ms = Some(now_ms);
+        if same_gesture { 0.0 } else { notches.signum() }
     }
 }
 
@@ -259,9 +364,15 @@ pub struct CameraController {
     viewport: [f32; 2],
     home: Option<Camera>,
     overview: Option<Camera>,
+    turn: TurnSettings,
 }
 
 impl CameraController {
+    /// Sets the player's turning preferences.
+    pub fn set_turn(&mut self, turn: TurnSettings) {
+        self.turn = turn;
+    }
+
     /// Sets the canvas size in physical pixels, used for edge panning.
     pub fn set_viewport(&mut self, width: u32, height: u32) {
         self.viewport = [width as f32, height as f32];
@@ -280,7 +391,11 @@ impl CameraController {
                 if self.rotating
                     && let Some([last_x, last_y]) = self.pointer
                 {
-                    camera.rotate(-(x - last_x) * ROTATE_RATE, (y - last_y) * ROTATE_RATE);
+                    // The camera swings about its target so the scene follows the pointer.
+                    camera.rotate(
+                        -self.turn.horizontal(x - last_x) * ROTATE_RATE,
+                        self.turn.vertical(y - last_y) * ROTATE_RATE,
+                    );
                 }
                 self.pointer = Some([x, y]);
             }
@@ -389,6 +504,57 @@ mod tests {
             );
             controller.apply(&mut camera, InputEvent::PointerMoved { x: 450.0, y: 320.0 });
             assert_eq!(camera != before, shift);
+        }
+    }
+
+    #[test]
+    fn a_burst_of_wheel_events_is_one_step() {
+        let mut gate = WheelGate::default();
+        // Six notches fired within a few milliseconds of each other (a misfire or a free spin).
+        let burst: f32 = [0, 5, 12, 30, 70, 140]
+            .iter()
+            .map(|&t| gate.pass(1_000 + t, -1.0))
+            .sum();
+        assert_eq!(burst, -1.0);
+        // The next gesture, after a pause, is a step of its own, whatever the wheel reported.
+        assert_eq!(gate.pass(1_140 + WHEEL_GESTURE_MS + 1, 3.0), 1.0);
+        assert_eq!(gate.pass(1_300 + WHEEL_GESTURE_MS, 1.0), 1.0);
+        // Smooth scrolling (fractions of a notch) zooms continuously, never held back.
+        let mut gate = WheelGate::default();
+        let smooth: f32 = (0..10).map(|t| gate.pass(t, 0.25)).sum();
+        assert!((smooth - 2.5).abs() < 1e-6);
+        assert_eq!(gate.pass(20, 0.0), 0.0);
+    }
+
+    #[test]
+    fn the_middle_drag_setting_swaps_the_two_jobs() {
+        let press = |shift| InputEvent::ButtonDown {
+            button: PointerButton::Middle,
+            x: 1.0,
+            y: 2.0,
+            mods: Modifiers {
+                shift,
+                ..Modifiers::default()
+            },
+        };
+        let default = TurnSettings::default();
+        assert_eq!(default.map_event(press(false)), press(false));
+        let pans = TurnSettings {
+            middle_pans: true,
+            ..default
+        };
+        assert_eq!(pans.map_event(press(false)), press(true));
+        assert_eq!(pans.map_event(press(true)), press(false));
+        // Other buttons and events pass unchanged.
+        let left = InputEvent::ButtonDown {
+            button: PointerButton::Left,
+            x: 1.0,
+            y: 2.0,
+            mods: Modifiers::default(),
+        };
+        assert_eq!(pans.map_event(left), left);
+        for bits in 0..8 {
+            assert_eq!(TurnSettings::from_bits(bits).bits(), bits);
         }
     }
 

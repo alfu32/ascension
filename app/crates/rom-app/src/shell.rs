@@ -83,6 +83,11 @@ pub fn run(options: &Options, arguments: &[String]) -> ExitCode {
     }
     bridge.publish_box_count(options.boxes);
     bridge.publish_graticule(options.graticule);
+    bridge.publish_turn(rom_render::TurnSettings {
+        middle_pans: options.middle_drag_pans,
+        invert_horizontal: options.invert_horizontal_turn,
+        invert_vertical: options.invert_vertical_turn,
+    });
     bridge.publish_start_markers(options.start_markers);
     let shutdown = worker.shutdown_handle();
     let exit_code = Arc::new(AtomicU8::new(0));

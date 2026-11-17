@@ -40,8 +40,10 @@
 //! `save <name>`, `quicksave` and `menu [main|save|load]` write a save or open the in-match menu.
 //!
 //! Camera commands replay input on the render thread exactly as the window would send it
-//! (positions in canvas pixels): `cam wheel <steps> [x,y]`, `cam drag x,y x,y [rotate]`
-//! (middle-button drag; `rotate` holds Shift), `cam dblclick x,y`, `cam click x,y`, `cam point
+//! (positions in canvas pixels): `cam wheel <steps> [x,y]` (each step glides, as one notch of
+//! the wheel does), `cam drag x,y x,y [shift]` (middle-button drag; `shift`, or the older
+//! `rotate`, holds Shift: since task 74 the plain drag turns the view in space and the Shift
+//! drag pans it), `cam dblclick x,y`, `cam click x,y`, `cam point
 //! x,y` (move the pointer only), `cam key <up|down|left|right> <down|up>`, `cam home`,
 //! `cam focus` and `cam follow` (the focus and follow keys), `cam sky` (F2, the "Sky from the
 //! Sun" preset of the star map) and `cam lines` (F3, the constellation figures).
@@ -736,7 +738,7 @@ fn camera_input(words: &[&str]) -> Result<Vec<rom_render::InputEvent>, String> {
         Ok((parse(x)?, parse(y)?))
     };
     let shift = Modifiers {
-        shift: words.contains(&"rotate"),
+        shift: words.contains(&"shift") || words.contains(&"rotate"),
         ..Modifiers::default()
     };
     let at = |n: usize| {
