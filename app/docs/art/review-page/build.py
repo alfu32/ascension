@@ -124,7 +124,7 @@ OVERVIEW11 = [
     ("gallery_units_close", "Every unit so far, close: <code>--gallery units</code>"),
 ]
 OVERVIEW12 = [
-    ("lab_compare", "The Automated Research Lab: the approved look (left, as in play) and the alternative look offered with task 73 (right, a review candidate, never drawn in a match)"),
+    ("lab_compare", "The lab before round 12: the earlier look (left, now retired) and the alternative offered with task 73 (right), approved and now the Auto Lab's only look"),
     ("match_colony_sites", "An automated colony on the planet next to the home world with the 15 sites its governor built: 5 automated farms, 5 woodcutter camps, 5 research labs"),
     ("match_colony_panel", "The colony's card: each kind against its cap, what the governor is doing or waiting for, and the pause switch"),
     ("match_labs", "Research labs beside a city and in a colony's area (with the approved look)"),
@@ -152,12 +152,12 @@ def round_of(m):
     7 modern and information buildings, 8 modern and information units, 9 future buildings
     (automation and fusion), 10 future units (automation and fusion), 11 space-age models
     (starfaring to galactic), 12 the jump inhibitor, the automated colony and the
-    alternative Automated Research Lab look."""
+    alternative lab look (approved: now the Auto Lab, bld.auto_lab@automation)."""
     if m["id"] in ROUND1:
         return 1
     if m["id"] in ("bld.jump_inhibitor@starfaring", "bld.auto_colony@abundance",
-                   "bld.auto_university@automation~lab"):
-        return 12  # first looks made with tasks 70 and 73
+                   "bld.auto_university@automation~lab", "bld.auto_lab@automation"):
+        return 12  # first looks made with tasks 70 and 73; the lab's look adopted in round 12
     unit = m["entity"].startswith("unit.")
     if m["age"] in ("age.automation", "age.fusion"):
         return 10 if unit else 9

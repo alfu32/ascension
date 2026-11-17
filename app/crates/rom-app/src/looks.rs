@@ -310,9 +310,15 @@ mod tests {
 
     /// A review candidate (task 73) is in the book, so the gallery and its manifest show it,
     /// but no match draws it: whatever the faction and age, the approved look is resolved.
+    /// The test offers its own candidate, as the seed has none open.
     #[test]
     fn review_candidates_are_never_drawn_in_a_match() {
-        let rules = load_rules().expect("rules");
+        let extra = "INSERT INTO entity_visual(entity_type_id,faction_id,age_id,mesh_id,material_id,candidate) \
+             SELECT (SELECT id FROM def WHERE key='bld.auto_lab'), NULL, (SELECT id FROM def WHERE key='age.fusion'), \
+             (SELECT id FROM def WHERE key='mesh.library_ancient'), (SELECT id FROM def WHERE key='mat.mud_brick'), 'test';";
+        let seed = format!("{}\n{extra}", crate::terrain::seed_with_models());
+        let conn = rom_rules::build_rules_db(crate::terrain::SCHEMA, &seed).expect("rules db");
+        let rules = Rules::load(&conn).expect("rules");
         let book = ModelBook::new(&rules);
         let candidates: Vec<&ModelEntry> = book
             .entries

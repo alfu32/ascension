@@ -4,7 +4,7 @@ Crates: `rom-sim` (the stain list, kept and pruned in the tick), `rom-save`
 (stains saved), `rom-render` (drawing them on the terrain), `rom-app`
 (snapshot plumbing only), schema and seed (two constants), docs
 (`app/docs/world-model.md` or the terrain doc where ground drawing is
-described). Starts after task 75 is merged (it touches the same crates).
+described). Starts after task 75 is merged (it touches the same crates; see "Builds on task 75").
 Implementer: Claude (Opus).
 
 ## Why — the owner (2026-11-17)
@@ -16,6 +16,21 @@ dozen rotations)."
 A "rotation" is one day of the planet: one orbit of the light that
 represents the sun around the planet orb, `world.day_ticks` (6000 ticks, 5
 game minutes).
+
+## Builds on task 75
+
+Task 75 (0.0.76) added, for the views only (not hashed, not saved, kept one game minute):
+`World::blasts()` (where an area weapon struck) and `World::wrecks()` (buildings that fell,
+complete ones only), drawn in `rom-render/src/overlay/effects.rs` as a scorch on the ground for a
+minute, a collapsing and burning ruin, and debris pieces. This task makes the lasting mark:
+
+- The stain list of item 4 replaces the one-minute scorch as what remains on the ground; the
+  blast's flash, shockwave and fire stay as task 75 made them and hand over to the stain.
+- The debris pieces of task 75 (flat dark shards standing on the ground, which read as cards in
+  `docs/img/bombard-after.png`) become the building stain's debris of item 2: low, lying on the
+  ground, fading with the stain.
+- Use the destruction point task 75 already found for wrecks (`remove_dead`), extended to units
+  and to buildings under construction, rather than a second one.
 
 ## Read first
 

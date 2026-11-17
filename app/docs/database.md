@@ -477,8 +477,9 @@ lower-case name) marks a look offered for review and kept out of play: the game 
 manifest and the model export list it under its own id `<entity>@<age>[+<faction>]~<name>`, kept
 in its own file `db/models/<that id>.sql`. Adopting a candidate is one change in its file: drop
 `candidate` (the column and its value) and remove or re-date the row it replaces; the file name
-and id then lose `~<name>`. The first candidate is `bld.auto_university@automation~lab`, an
-alternative look for the Automated Research Lab.
+and id then lose `~<name>`. The first candidate was `bld.auto_university@automation~lab`, an
+alternative look for the lab; the owner approved it in review round 12 (2026-11-17) and it is
+now the lab's only look, `bld.auto_lab@automation`. No candidate is open.
 
 `entity_visual` picks a model per entity type: the most specific row wins —
 a row of the owner's faction (or its nearest ancestor) before a row for every
@@ -870,7 +871,7 @@ reads a key. Rules of thumb, in tiles:
 | bld.star_fort | 16 | 6×6 | 10 | enlightenment |
 | bld.auto_farm | 17 | 4×4 | 0 | automation |
 | bld.auto_mine | 17 | 4×4 | 0 | automation |
-| bld.auto_university | 17 | 4×4 | 0 | automation |
+| bld.auto_lab | 17 | 4×4 | 0 | automation |
 | bld.auto_woodcutter_camp | 17 | 4×4 | 0 | automation |
 | bld.fusion_plant | 17 | 4×4 | 0 | fusion |
 | bld.citadel | 18 | 6×6 | 10 | fusion |
@@ -1130,11 +1131,11 @@ in `LINES`; both lint views stay empty and the seed loads.
 | its `et_territory` | city, border 24 tiles, economic radius 16 tiles (as a city's), capturable |
 | its `et_builder` | `build_pct` **200**: it builds its sites at twice a worker's pace |
 | its `et_colony` | **30 wealth** per income period (30 s), plus **10 %** of its sites' own income as wealth |
-| its `et_colony_site` | **5** `bld.auto_farm`, **5** `bld.auto_woodcutter_camp`, **5** `bld.auto_university` |
+| its `et_colony_site` | **5** `bld.auto_farm`, **5** `bld.auto_woodcutter_camp`, **5** `bld.auto_lab` |
 | its `production` | construct those three; no train rows (no citizens) |
 | `prerequisite` | the research is an alternative (group 1) to each automated site's upgrade research, so the colony's sites can be built without a university or farm first. It applies everywhere (owner, 2026-11-17): after Automated Colonies a lab may also be built directly beside any city, one per city, without a university there first; a university is still upgraded to a lab by the lab's upgrade research |
 | `cost` of the automated sites (new, `AUTO_SITE_PRICES`) | **automated farm 200 metal and 100 timber, automated woodcutter camp 200 metal and 100 timber, Automated Research Lab 300 metal and 150 knowledge**, no ramp (owner, 2026-11-17: a governor must really wait when its owner cannot pay). Until task 73 they had no price of their own; a university, farm or camp upgraded in place still pays through its upgrade research only |
-| `bld.auto_university` | renamed **Automated Research Lab** (its upgrade research "Upgrade to Automated Research Lab"); key, rules, upgrade from the university and income (70 knowledge a period) unchanged |
+| `bld.auto_lab` (was `bld.auto_university`) | renamed **Automated Research Lab** with task 73, then **Auto Lab** with key `bld.auto_lab` (owner 2026-11-17; its upgrade research `tech.up.auto_lab`, "Upgrade to Auto Lab"; `AUTO_SITE_NAMES` in the generator, definition ids unchanged); rules, upgrade from the university and income (70 knowledge a period) unchanged |
 | `unit.survey_ship` | a line of its own (`survey` in `LINES`), so the corvette no longer upgrades from it: "Upgrade to Corvettes" is gone, the corvette needs only the starfaring age, and survey ships stay trainable beside it; its stats, sight and role are unchanged |
 
 With everything of one colony standing (five farms at 10 food, five camps at 100 timber, five labs
