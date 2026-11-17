@@ -1,0 +1,35 @@
+# Task 80, replayed by --script in universe mode (--players 2 --ai none, seed 1, --sun fixed): the
+# battlefield of 80-battle-script.txt, then a time skip: from tick 2000 the game runs at a
+# hundred times the speed and all but stops at tick 26000, about seven tenths of the way through
+# the stains' life of 36 000 ticks (6 days of 6000), the stains half faded and the debris
+# settling into the ground.
+0 grant-age age.expansion
+0 place 2 bld.city @40,0
+0 place 2 bld.barracks @32,-8
+0 place 2 bld.factory @48,-8
+0 place 2 bld.fort @31,9
+0 place 2 bld.market @48,8
+0 place 2 bld.farm @40,-11
+0 place 2 bld.farm @40,11
+0 place 2 bld.temple @29,0
+0 place 2 bld.university @51,0
+0 place 2 unit.marine @37,-4
+0 place 2 unit.marine @43,4
+0 place 2 unit.marine @36,5
+0 place 2 unit.marine @44,-5
+0 place 2 unit.grav_tank @38,-5
+0 place 2 unit.grav_tank @42,5
+0 place 2 unit.grav_tank @45,-4
+0 place 2 unit.marine @50,6
+0 place 2 unit.marine @30,-6
+0 place-orbit 1 unit.survey_ship @40,0
+0 place-orbit 1 unit.space_frigate @40,-27
+60 click ship1
+62 cam focus
+90 cam focus
+92 cam wheel 1 800,450
+100 click ship2
+101 rclick foecity1
+110 speed 400
+2000 speed 10000
+26000 speed 1

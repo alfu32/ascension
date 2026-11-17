@@ -1,10 +1,12 @@
 //! Bombardment effects (task 75), built into the overlay geometry from the HUD snapshot: the
-//! flash, light column, secondary bursts, shockwave, fireball and debris of a blast, the
-//! scorched ground it leaves for a minute, buildings that collapse when they fall instead of
-//! vanishing, and fire and smoke over ruins and badly damaged buildings.
+//! flash, light column, secondary bursts, shockwave, fireball and debris of a blast, a scorch
+//! that hands over to the stains of what it destroyed (task 80), buildings that collapse when
+//! they fall instead of vanishing, and fire and smoke over ruins and badly damaged buildings.
+//! What stays on the ground afterwards, soot and a building's rubble, is the stain's
+//! (`crate::stains`).
 
 use super::{LIFT, OverlayGeometry};
-use crate::entities::{EntityView, Footing, building_height, owner_color};
+use crate::entities::{EntityView, Footing, building_height};
 use crate::hud::HudSnapshot;
 use crate::{HudBlast, HudWreck};
 
@@ -16,8 +18,8 @@ const WAVE_SECS: f32 = 1.2;
 const FIREBALL_SECS: f32 = 2.5;
 /// Seconds debris flies.
 const DEBRIS_SECS: f32 = 2.2;
-/// Seconds the scorched ground takes to fade.
-const SCORCH_SECS: f32 = 60.0;
+/// Seconds the scorched ground of a blast takes to fade; the stains of what it destroyed stay.
+const SCORCH_SECS: f32 = 8.0;
 /// Seconds a falling building takes to sink into its foundations (the views cut its model lower
 /// over the same time).
 const COLLAPSE_SECS: f32 = 2.0;
@@ -200,7 +202,7 @@ fn draw_blast(
     let radius = (blast.radius as f32 / 1000.0).max(0.5);
     let frame = ground.frame(face, cx, cy);
     let at = |dx: f32, dy: f32, lift: f32| ground.point(face, cx, cy, (dx, dy), lift);
-    // Scorched ground: a dark disc, ragged at the rim, fading over a minute.
+    // Scorched ground: a dark disc, ragged at the rim, fading while the stains take over.
     if t < SCORCH_SECS {
         let fade = 1.0 - t / SCORCH_SECS;
         let scorch = radius * 0.75;
@@ -423,54 +425,9 @@ fn draw_wreck(
     );
     let full = (wreck.height as f32 / 1000.0).max(0.5);
     let at = |dx: f32, dy: f32, lift: f32| ground.point(face, cx, cy, (dx, dy), lift);
-    // The model itself sinks into its foundations (the views cut it lower as it falls); what
-    // stays is a ruin: rubble, a few broken walls, fire and smoke.
-    let k = (t / COLLAPSE_SECS).clamp(0.0, 1.0);
+    // The model itself sinks into its foundations (the views cut it lower as it falls) in a
+    // cloud of dust, then its ruin burns; the rubble lying there is its stain's (task 80).
     let height = full * 0.25;
-    let tint = owner_color(wreck.owner);
-    let char = |shade: f32| -> [u8; 4] {
-        let base = [0.33, 0.29, 0.26];
-        let rgb: [u8; 3] = std::array::from_fn(|i| {
-            ((base[i] * 0.85 + tint[i] * 0.1) * shade * 255.0).min(255.0) as u8
-        });
-        rgba(rgb, k)
-    };
-    // Broken stretches of wall along the footprint's edges.
-    for i in 0..6u32 {
-        let side = (noise(wreck.seed, 70 + i) * 4.0) as u32;
-        let along = noise(wreck.seed, 80 + i) * 1.6 - 0.8;
-        let (x0, y0, x1, y1) = match side {
-            0 => (along * hw - 0.6, -hh, along * hw + 0.6, -hh),
-            1 => (hw, along * hh - 0.6, hw, along * hh + 0.6),
-            2 => (along * hw - 0.6, hh, along * hw + 0.6, hh),
-            _ => (-hw, along * hh - 0.6, -hw, along * hh + 0.6),
-        };
-        let rise = height * (0.5 + noise(wreck.seed, 90 + i));
-        out.quad(
-            [
-                at(x0, y0, 0.0),
-                at(x1, y1, 0.0),
-                at(x1, y1, rise * 0.6),
-                at(x0, y0, rise),
-            ],
-            char(0.7 + 0.3 * noise(wreck.seed, 95 + i)),
-        );
-    }
-    // Rubble heaped over the footprint.
-    for i in 0..8u32 {
-        let dx = (noise(wreck.seed, 20 + i) - 0.5) * hw * 2.2;
-        let dy = (noise(wreck.seed, 30 + i) - 0.5) * hh * 2.2;
-        let size = 0.4 + 0.6 * noise(wreck.seed, 40 + i);
-        let rise = (0.3 + 0.5 * noise(wreck.seed, 50 + i)) * k;
-        out.tri(
-            [
-                at(dx - size, dy, 0.05),
-                at(dx + size, dy - size * 0.5, 0.05),
-                at(dx, dy + size * 0.3, rise),
-            ],
-            rgba([60, 52, 46], k),
-        );
-    }
     // A cloud of dust rolls out from the foot while it falls.
     if t < COLLAPSE_SECS + 1.5 {
         let d = t / (COLLAPSE_SECS + 1.5);
@@ -625,12 +582,12 @@ mod tests {
         out
     }
 
-    /// A fresh blast is drawn with its flash and shockwave; a minute later its scorch has faded
-    /// and nothing is left of it.
+    /// A fresh blast is drawn with its flash and shockwave; its scorch fades within seconds (the
+    /// stains of what it destroyed stay) and a minute later nothing is left of it.
     #[test]
     fn a_blast_flashes_spreads_and_fades() {
         let fresh = drawn(&hud(vec![blast(2)], Vec::new()));
-        let late = drawn(&hud(vec![blast(400)], Vec::new()));
+        let late = drawn(&hud(vec![blast(100)], Vec::new()));
         let gone = drawn(&hud(vec![blast(1200)], Vec::new()));
         assert!(
             fresh.tris.len() > late.tris.len(),
@@ -652,7 +609,7 @@ mod tests {
         assert!(reach(&wave) > 8.0, "{}", reach(&wave));
     }
 
-    /// A fallen building raises dust while it sinks, then its ruin stands and burns.
+    /// A fallen building raises dust while it sinks, then its ruin burns.
     #[test]
     fn a_wreck_collapses_and_burns() {
         let wreck = |age_ticks| HudWreck {
@@ -670,9 +627,10 @@ mod tests {
         let fallen = drawn(&hud(Vec::new(), vec![wreck(200)]));
         let dust = |o: &OverlayGeometry| o.tris.iter().any(|t| t.colour[..3] == [150, 135, 115]);
         assert!(dust(&falling) && !dust(&fallen));
-        // Broken walls, opaque once it has come down, and flames over them.
+        // No rubble stands on the ground any more (it lies there as the stain's debris); flames
+        // burn over the ruin.
         assert!(
-            fallen
+            !fallen
                 .tris
                 .iter()
                 .any(|t| t.colour[3] == 255 && t.colour[0] < 120)

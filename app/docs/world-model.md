@@ -358,8 +358,9 @@ that keep the ships at bay; and it must be spectacular.
 - **What is seen.** The volley's beam glows from orbit to the ground; the impact is a white dome
   of light with a column reaching back up, secondary bursts around it and a shockwave ring that
   runs out to the edge of the blast; a fireball rises into smoke and debris flies; the ground
-  is scorched black for a minute. A building that falls sinks into its foundations in a cloud of
-  dust and stays a burning ruin of broken walls; a knocked-out city stands as a ruin, its model
+  is scorched black for a few seconds, until the stains of what the volley destroyed take over
+  (task 80, below). A building that falls sinks into its foundations in a cloud of dust and its
+  ruin burns, its rubble lying on its stain; a knocked-out city stands as a ruin, its model
   cut low; badly damaged buildings burn and smoke. From the system view a volley is a flash on
   the planet's globe.
 - **Computer players** bombard the cities of other planets with their strike fleet, fire on
@@ -377,6 +378,56 @@ and burning on scorched ground, the city a ruin, the two soldiers at the edge st
 `img/bombard-battery.png` (two batteries firing up at three frigates sent against their city,
 two of them nearly down) and `img/bombard-system-flash.png` (the first volley seen from the star
 system: a flash on the home planet).
+
+### Stains on the ground (task 80)
+
+The owner (2026-11-17): destroyed buildings and units leave a stain on the ground proportional to
+their stature, which dissipates after a few rotations of the planet; only destroyed buildings,
+not demolished ones, leave a stain and debris.
+
+- **What leaves one.** A building or unit on a planet that lost its last hit points: in combat,
+  under bombardment, to attrition, or spent by its own attack. A building its owner pulls down,
+  an upgrade, boarding, a ship in orbit or in space, and the passengers of a carrier leave none;
+  a city is struck down and captured, never destroyed, so it leaves none either.
+- **How large.** A building's stain reaches 0.6 × its footprint diagonal (3.4 tiles for a farm or
+  barracks, 6.8 for a spaceport); a site under construction leaves that times how far it was
+  built. A unit's is 2.5 × its collision radius (0.625 tiles), a landed ship's its landing
+  radius; the views widen a unit's mark to 0.65 × the longest extent of its model, so a tank
+  marks more ground than a soldier.
+- **How long.** `world.stain_days` (6) rotations of `world.day_ticks`: 30 game minutes. It keeps
+  most of its strength for two thirds of that and fades out in the last third; a building's
+  debris weathers and settles into the ground with it. A surface keeps at most
+  `world.stain_cap` (2 000); past it the oldest goes.
+- **What is seen.** Soot darkest at the centre, ash flecks, churned earth towards a ragged rim
+  that differs from stain to stain; a building's stain is strewn with low broken pieces in the
+  colours of its model and a few in its owner's, some charred. The stain is laid on the ground
+  itself (it follows the relief and stops at the water), under units, buildings, trees and
+  shadows, and is lit by day and night like the ground. Overlapping stains darken the ground
+  towards the soot's colour, never black. A player sees a stain only where the player has vision
+  now.
+- **State.** Stains are part of the match: hashed (once there are any) and saved (save format
+  9), so a loaded match looks the same; nothing in the simulation or the computer players reads
+  them. Details in `database.md`, "Ground stains".
+
+Screenshots (scripts `tasks/80-*-script.txt`, `--universe --players 2 --ai none --sun fixed`,
+seed 1 unless named): `img/stains-battlefield.png` (the town of task 75 with a fort, bombarded by
+a frigate, 100 seconds in: the stains of the farms, barracks, factory, market and the soldiers
+and tanks that fell, the buildings' with their debris; the struck-down city and the fort out of
+reach still stand), `img/stains-soldiers-tanks.png` (two soldiers' small stains beside two tanks'
+larger ones), `img/stains-half-faded.png` (the same place at 21 game minutes, after a time skip
+at a hundred times the speed, about seven tenths through the stains' life: the soot pale, the
+debris weathered, low and fading with it: owner review, debris must not outlast its mark), `img/stains-gone.png` (at 32 minutes, past the life of the last
+stain: the ground clean), `img/stains-night.png` (the battlefield at night, `--sun midnight`),
+and `img/stains-shore.png` with its enlarged part `img/stains-shore-detail.png` (seed 2: a
+barracks of player one destroyed on the shore by a frigate of player two, its stain ending at
+the water, and the round marks of the citizens killed beside the city).
+
+Frame time (`--bench 40 --size 1600x900`, `tasks/80-bench-script.txt`: nine warships levelling a
+town of 15 buildings and 167 soldiers and tanks, about 180 stains on the ground while it
+measures; Intel HD 530): 0.0.76 47–48 fps presented, frame 7.7 ms; with the stains 40–42 fps,
+frame 7.1 ms (the frame time is the render thread's; the soot's fill on the GPU costs the
+presented frames). Rewriting the stain meshes when the stains in view change took 1.6–3.2 ms
+with 180 stains (two rewrites in the run).
 
 ### Orbital craft, carriers and ground batteries (task 58)
 

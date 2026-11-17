@@ -377,6 +377,11 @@ impl Globe {
         along(self.dirs[i], self.radius + self.heights[i])
     }
 
+    /// Unit normal of the corner (`vx`, `vy`) of `face`, as the land meshes carry it.
+    pub(crate) fn vertex_normal(&self, face: u8, vx: u32, vy: u32) -> [f32; 3] {
+        self.normals[self.vertex_index(face, vx, vy)]
+    }
+
     fn compute_tile_normal(&self, tile: Tile) -> [f32; 3] {
         let at = |dx, dy| self.vertex(tile.face, tile.x + dx, tile.y + dy);
         let (c00, c10, c01, c11) = (at(0, 0), at(1, 0), at(0, 1), at(1, 1));

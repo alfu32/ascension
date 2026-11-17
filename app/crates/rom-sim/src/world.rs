@@ -108,6 +108,10 @@ pub struct World {
     pub(crate) blasts: Vec<crate::combat::Blast>,
     /// Buildings that fell lately, for the views (task 75; not hashed, not saved).
     pub(crate) wrecks: Vec<crate::combat::Wreck>,
+    /// Stain lifetime and cap per surface, from the rules (task 80).
+    pub(crate) stain_rules: crate::stains::StainRules,
+    /// Buildings pulled down by their owners this tick (no stain); empty between ticks.
+    pub(crate) razed: Vec<EntityId>,
 }
 
 impl World {
@@ -225,6 +229,8 @@ impl World {
             ("trade.min_route", 1, i64::MAX),
             ("city.spacing", 0, i64::MAX),
             ("player.city_limit.base", 0, i64::MAX),
+            ("world.stain_days", 0, i64::MAX),
+            ("world.stain_cap", 0, i64::MAX),
         ] {
             if rules
                 .constant(key)
@@ -262,6 +268,7 @@ impl World {
             .fold((0, 0), |(w, h), et| {
                 (w.max(et.footprint_w.max(0)), h.max(et.footprint_h.max(0)))
             });
+        let stain_rules = crate::stains::StainRules::of(&rules);
         Ok(Self {
             victory,
             capture: crate::capture::CaptureState::default(),
@@ -298,6 +305,8 @@ impl World {
             max_footprint,
             blasts: Vec::new(),
             wrecks: Vec::new(),
+            stain_rules,
+            razed: Vec::new(),
         })
     }
 
@@ -945,6 +954,7 @@ impl World {
         self.land_projectiles();
         self.apply_attrition();
         self.remove_dead();
+        self.fade_stains();
         self.forget_blasts();
         self.update_captures();
         self.remember_touched();

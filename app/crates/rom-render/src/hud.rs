@@ -91,6 +91,11 @@ pub struct HudSnapshot {
     pub blasts: Vec<crate::HudBlast>,
     /// Buildings that fell lately on the shown surface (task 75).
     pub wrecks: Vec<crate::HudWreck>,
+    /// Stains left where buildings and units were destroyed, on the shown surface where the
+    /// player sees now (task 80).
+    pub stains: Vec<crate::HudStain>,
+    /// Ticks a stain lasts (`world.stain_days × world.day_ticks`).
+    pub stain_life_ticks: u64,
 }
 
 impl Default for HudSnapshot {
@@ -121,6 +126,8 @@ impl Default for HudSnapshot {
             patrols: Vec::new(),
             blasts: Vec::new(),
             wrecks: Vec::new(),
+            stains: Vec::new(),
+            stain_life_ticks: 0,
         }
     }
 }

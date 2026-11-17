@@ -355,6 +355,8 @@ pub struct SurfaceSnapshot {
     pub touched: Vec<u32>,
     /// Buildings by position tile.
     pub buildings: Vec<(u32, EntityId)>,
+    /// Stains of what was destroyed there, oldest first (task 80).
+    pub stains: Vec<crate::Stain>,
 }
 
 /// A viewer record.
@@ -850,6 +852,7 @@ impl World {
                         .iter()
                         .flat_map(|(tile, ids)| ids.iter().map(move |id| (*tile, *id)))
                         .collect(),
+                    stains: s.stains.iter().copied().collect(),
                 }
             })
             .collect();
@@ -1088,6 +1091,12 @@ impl World {
                 );
             }
             surface.vision.touched = s.touched;
+            if s.stains.iter().any(|stain| stain.pos.body != s.body)
+                || s.stains.windows(2).any(|w| w[0].tick > w[1].tick)
+            {
+                return Err(bad("stain list"));
+            }
+            surface.stains = s.stains.into();
             for (tile, id) in s.buildings {
                 surface.vision.buildings.entry(tile).or_default().insert(id);
             }

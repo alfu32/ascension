@@ -1221,12 +1221,67 @@ city, then at the standing building nearest its ground point.
 - `World::blasts()` (where an area weapon struck: tick, centre, radius, owner, type) and
   `World::wrecks()` (buildings that fell, not neutralised: id, tick, place, type, owner) are kept
   for a game minute for the views. They are a report: not hashed and not saved (save format
-  unchanged, 8); a loaded game shows no scorch from before the save.
+  unchanged, 8); a loaded game shows no scorch from before the save. (Task 80 adds the stains,
+  which are saved.)
 
 Effect on the playthrough (`rom playthrough --seed 1`): `hash=52f0f01b8fc09b6e` (was
 `be5aa51a1e931472`), the same buildings, units, techs and ticks; the code of 0.0.75 gives the same
 new hash on the new data, so the change is the data alone (the battery's hit points and the
 weapons' rows).
+
+## Ground stains (task 80)
+
+The owner (2026-11-17): destroyed buildings and units leave a stain on the ground proportional
+to their stature, which dissipates after a few rotations of the planet; only destroyed
+buildings, not demolished ones, leave a stain and debris.
+
+**Constants** (generated in `ground_stains()` of `db/content/generate.py`, no new tables in
+PART A): `world.stain_days` = 6 (days: a stain lasts `world.stain_days × world.day_ticks` =
+36 000 ticks, 30 game minutes at the default day) and `world.stain_cap` = 2 000 (stains kept
+per surface; past it the oldest goes). Both are required by `rom-sim` (0 or more); 0 days or a
+cap of 0 keeps no stains.
+
+**What leaves one** (`rom-sim`, `World::remove_dead`, the destruction point task 75 found for
+wrecks): a building or unit on a planet surface (a habitable body, or the only map of a world
+without a universe) that lost its last hit points: combat, splash, orbital bombardment,
+attrition, an attacker spent by its own attack. A building its owner pulls down (`raze`) is
+recorded at the order and leaves none; neither do boarding, garrisoning, upgrades (the entity
+is retyped, not removed), disbanding, ascension, ships in orbit or in space (they stand on the
+system's plane), or units that go down with their carrier (they are aboard). A complete city
+is struck down and captured (task 67), never destroyed, so it leaves no stain.
+
+**Size** (constants in `rom-sim/src/stains.rs`): a building's radius is 0.6 × its footprint
+diagonal (`BUILDING_STAIN_PERMILLE` 600; a 4 × 4 farm 3.39 tiles, a 7 × 7 city site 5.94,
+an 8 × 8 spaceport 6.79); a site under construction leaves that times its progress, at least
+`STAIN_FLOOR` (0.6 tiles). A unit's is 2.5 × its collision radius (`UNIT_STAIN_PERMILLE` 2500;
+every unit has 250, so 0.625 tiles), a landed ship's at least its `landing_radius`, never less
+than the floor. The views widen a unit's mark to 0.65 × its model's longest extent when that is
+larger (`rom-app`, `UNIT_STAIN_PER_EXTENT`), so a tank marks more ground than a soldier; the
+state keeps the simulation's radius.
+
+**State.** Each surface keeps its stains oldest first: the id the entity had, its type and
+owner, its position, the radius (milli-tiles) and the tick of destruction, appended in id order
+and dropped at the end of their life (`World::fade_stains`, each tick). They enter the state
+hash once a surface has any (worlds without stains keep their hashes) and are saved in the
+PART B table `surface_stain(body_id, seq, entity_id, type_id, owner_id, x, y, face, radius,
+tick)`: **save format 9**; format 8 saves are refused, as every older format is. Nothing in the
+simulation or the computer players reads them; `rom duel` results are unchanged.
+
+**Drawing** (`rom-render/src/stains.rs`, `scene/stains.rs`, `assets/shaders/stain.*`): the HUD
+snapshot carries the stains of the planet shown on tiles the player sees now. The renderer
+copies the terrain's own triangles of the land tiles under each stain (so it follows the relief
+and stops at the shore) into one soot mesh, and a building's debris (low broken pieces in its
+model's three main colours, a few in its owner's, some charred) into one debris mesh; both
+meshes are made before play with fixed room (43 690 and 21 845 triangles, newest stains first
+when full) and rewritten only when the stains in view change. The soot is drawn right after
+the land, nearer the eye along the view ray and without writing depth, so units, buildings,
+trees and shadows stay over it. The stain shader draws the ragged mark (soot at the centre, ash
+flecks, churned earth at the rim, varied by the stain's id), lit by the day, the night and the
+shadows like the ground (the soot per tile corner, the debris per pixel), and fades it from
+the game clock: 1 − 0.45 × age, times a smooth fall to nothing over the last 40 % of its life,
+so most of the fading comes in the last third; debris weathers and settles into the ground as
+it fades. Overlapping stains blend towards the soot colour and never past it. Task 75's
+minute-long scorch now fades in eight seconds, and its standing rubble is the stain's debris.
 
 ## Capture and difficulty (task 67)
 
@@ -1355,6 +1410,8 @@ back. No SQL runs in `rom-sim`.
 - **Rally points.** `entity_rally(entity_id, target_entity_id | x, y, face, body)`
   (task 64). Not part of the state hash while no producer has one, so worlds
   without rally points keep their hashes.
+- **Ground stains of task 80 (format 9).** `surface_stain` rows, oldest first per surface
+  (see "Ground stains"). Format 8 saves are refused.
 - **Paused governors of task 73 (format 8).** `entity_flag` rows `governor_paused`. Format 7
   saves are refused.
 - **Held-down cities of task 67 (format 5).** `city_siege(city_id, team, since)`: a

@@ -702,7 +702,7 @@ impl Controller {
     }
 
     /// Blasts of area weapons and fallen buildings the player sees on the planet shown, for
-    /// the bombardment effects (task 75).
+    /// the bombardment effects (task 75), and the stains of what was destroyed there (task 80).
     fn bombardment(&self, world: &World, hud: &mut rom_render::HudSnapshot) {
         let body = self.view.planet;
         let tick = world.tick();
@@ -756,6 +756,26 @@ impl Controller {
                     age_ticks: tick.saturating_sub(w.tick).min(u64::from(u32::MAX)) as u32,
                     seed: seed(w.tick, w.pos),
                 })
+            })
+            .collect();
+        // The stains where things were destroyed, where the player sees now (task 80).
+        hud.stain_life_ticks = world.stain_life();
+        hud.stains = world
+            .stains(body)
+            .filter(|s| sees(s.pos))
+            .map(|s| rom_render::HudStain {
+                id: s.id.0,
+                face: s.pos.face,
+                x: s.pos.x,
+                y: s.pos.y,
+                radius: i32::try_from(s.radius).unwrap_or(i32::MAX),
+                tick: s.tick,
+                building: rules
+                    .entity_type(s.type_id)
+                    .is_some_and(|et| et.class == rom_rules::EntityClass::Building),
+                owner: u8::try_from(s.owner.0).unwrap_or(u8::MAX),
+                // The simulation thread puts the model it was drawn with in.
+                model: None,
             })
             .collect();
     }

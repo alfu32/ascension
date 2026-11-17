@@ -720,6 +720,7 @@ impl World {
                 })
                 .collect()
         };
+        let razed = std::mem::take(&mut self.razed);
         let mut dead = collect(self);
         // Units aboard a carrier that died go down with it, before it.
         let carriers: Vec<_> = dead
@@ -739,6 +740,10 @@ impl World {
                 continue;
             }
             *self.stats.losses.entry(owner).or_default() += 1;
+            // What lost its last hit points marks the ground; what its owner pulled down not.
+            if !razed.contains(&id) {
+                self.leave_stain(id);
+            }
             if complete && self.rules.entity_types[&type_id].class == EntityClass::Building {
                 let pos = self.entity(id).expect("dead entity").pos;
                 self.wrecks.push(Wreck {

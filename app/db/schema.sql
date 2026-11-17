@@ -952,6 +952,18 @@ CREATE TABLE surface_touched (          -- tiles newly seen this tick, in order
   PRIMARY KEY (body_id, seq)
 ) STRICT, WITHOUT ROWID;
 
+CREATE TABLE surface_stain (            -- task 80: where buildings and units were destroyed, oldest first
+  body_id   INTEGER NOT NULL,
+  seq       INTEGER NOT NULL,
+  entity_id INTEGER NOT NULL,            -- the id the destroyed entity had
+  type_id   INTEGER NOT NULL,            -- entity_type.id
+  owner_id  INTEGER NOT NULL,            -- player.id
+  x INTEGER NOT NULL, y INTEGER NOT NULL, face INTEGER NOT NULL,
+  radius    INTEGER NOT NULL,            -- milli-tiles
+  tick      INTEGER NOT NULL,            -- destroyed at; gone world.stain_days x world.day_ticks later
+  PRIMARY KEY (body_id, seq)
+) STRICT, WITHOUT ROWID;
+
 CREATE TABLE path_request (             -- queued searches, front first
   body_id INTEGER NOT NULL,
   seq     INTEGER NOT NULL,

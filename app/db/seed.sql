@@ -3166,6 +3166,8 @@ INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon 
 UPDATE et_weapon SET damage=300,damage_class_id=(SELECT id FROM damage_class WHERE key='kinetic'),range_max=8000,cooldown_ticks=80,splash_radius=4000,splash_pct=100 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.orbital_bomber') AND orbit_only=1;
 UPDATE entity_type SET hp=9000,los=30000,armor_class_id=(SELECT id FROM armor_class WHERE key='hull') WHERE id=(SELECT id FROM def WHERE key='bld.ground_battery');
 UPDATE et_weapon SET damage=520,range_max=20000,cooldown_ticks=40 WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.ground_battery');
+INSERT INTO game_constant(key,value,unit,note) VALUES ('world.stain_days',6,'days','a stain left where a building or unit was destroyed lasts this many world.day_ticks; presentation only');
+INSERT INTO game_constant(key,value,unit,note) VALUES ('world.stain_cap',2000,'stains','most stains a surface keeps; past it the oldest goes');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.1'),'research','research',1,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.civic.1'),'research','research',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.commerce.1'),'research','research',3,0);

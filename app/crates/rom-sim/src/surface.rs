@@ -17,6 +17,8 @@ pub struct Surface {
     pub(crate) territory: TerritoryGrid,
     pub(crate) vision: SurfaceVision,
     pub(crate) cells: Cells,
+    /// Stains of what was destroyed here, oldest first (task 80).
+    pub(crate) stains: std::collections::VecDeque<crate::stains::Stain>,
 }
 
 impl Surface {
@@ -43,6 +45,7 @@ impl Surface {
             cells: Cells::new(&geo),
             spatial: SpatialGrid::default(),
             vision: SurfaceVision::default(),
+            stains: std::collections::VecDeque::new(),
             map,
             geo,
         })

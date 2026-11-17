@@ -37,6 +37,7 @@ mod models;
 mod shadow;
 mod sky;
 mod space;
+mod stains;
 use globe_eye::{GlobeEye, GlobeFrame};
 use globe_eye::{clear_depth, eye_clip_planes};
 pub(crate) use space::{OrbitalShip, SpaceLabel};
@@ -354,6 +355,8 @@ pub(crate) struct Scene {
     /// Chunk meshes (land, then sea) waiting to be recoloured.
     shade_queue: Vec<usize>,
     hidden_terrain: Vec<TileKind>,
+    /// Stains on the ground where things were destroyed (task 80).
+    stains: Option<stains::StainGpu>,
 }
 
 /// A chunk mesh whose vertex colours follow the player's fog of war and borders.
@@ -648,6 +651,7 @@ impl Scene {
         model_material.set_shader(&model_shader);
         let mut star_material = rl.load_material_default(thread);
         star_material.set_shader(&star_shader);
+        let stains = stains::StainGpu::load(rl, thread);
         let (star_positions, star_colors) = star_triangles(&star_field(STAR_COUNT));
         let star_mesh = upload(
             thread,
@@ -713,6 +717,7 @@ impl Scene {
             last_shades: Vec::new(),
             shade_queue: Vec::new(),
             hidden_terrain: Vec::new(),
+            stains,
         }
     }
 
@@ -731,7 +736,20 @@ impl Scene {
     ) {
         if let (Some(gpu), Some(orbit)) = (&self.globe, orbit) {
             build_overlays_on(views, &*gpu.globe, orbit.right(), hud, &mut self.overlay);
+            if let Some(stains) = &mut self.stains {
+                let models = &self.models;
+                stains.prepare(
+                    &gpu.globe,
+                    &gpu.planet.kinds,
+                    Arc::as_ptr(&gpu.planet) as usize,
+                    hud,
+                    &|index| models.as_ref().and_then(|m| m.palette(index)),
+                );
+            }
             return;
+        }
+        if let Some(stains) = &mut self.stains {
+            stains.clear();
         }
         match &self.terrain {
             Some(terrain) => {
@@ -884,6 +902,9 @@ impl Scene {
             &mut self.model_shader,
         ] {
             materials::set_frame(shader, eye, self.detail, time);
+        }
+        if let Some(stains) = &mut self.stains {
+            materials::set_frame(&mut stains.shader, eye, self.detail, time);
         }
 
         let location = self.object_shader.get_shader_location("planetRadius");
@@ -1093,13 +1114,16 @@ impl Scene {
         shadow: Option<shadow::ShadowUniforms>,
     ) {
         let [_, _, terrain, _, entity] = &mut self._shaders;
-        let shaders = [
+        let mut shaders = vec![
             terrain,
             entity,
             &mut self.sea_globe_shader,
             &mut self.object_shader,
             &mut self.model_shader,
         ];
+        if let Some(stains) = &mut self.stains {
+            shaders.push(&mut stains.shader);
+        }
         for shader in shaders {
             let at = |shader: &Shader, name: &str| shader.get_shader_location(name);
             let location = at(shader, "toSun");
@@ -1356,6 +1380,9 @@ impl Scene {
                         Matrix::identity(),
                     );
                 }
+            }
+            if let Some(stains) = &mut self.stains {
+                stains.draw(&mut world);
             }
             draw_features(
                 &mut world,
