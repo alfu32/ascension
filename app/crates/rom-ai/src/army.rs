@@ -10,7 +10,7 @@ use crate::{
     Weights,
     memory::{Army, EnemySighting, Memory, Phase, Role},
     plan::{Act, Plan, RETRY_TICKS, Wish},
-    production::{army_pop, dps_against, is_military, rally_point},
+    production::{army_pop, dps_against, is_military, needs_escort, rally_point},
     view::{self, CELL, Cell, View, cell_of, operational},
 };
 use rom_rules::{AiDifficulty, DefId, EntityClass, FormationShape, ProductionMode};
@@ -57,6 +57,11 @@ const SUPPLY_GATE: usize = 3;
 const SUPPLY_SCORE: i64 = 720;
 /// Units of a wave per supply unit it takes along.
 const SUPPLY_PER: usize = 8;
+/// The longest a gathered main army waits for the siege its target calls for (three
+/// game minutes).
+const SIEGE_WAIT_TICKS: u64 = 3600;
+/// Units of a wave per siege engine it waits for.
+const SIEGE_PER: usize = 6;
 /// Score of the wish for a scout when none is out.
 const SCOUT_SCORE: i64 = 700;
 
@@ -120,12 +125,13 @@ fn defence_now(view: &View<'_>, memory: &Memory, at: Pos) -> i64 {
         .sum()
 }
 
-/// Ticks into a match after which a wave's required ratio starts to fall (40 minutes).
-const PATIENCE_TICKS: u64 = 48_000;
+/// Ticks into a match after which a wave's required ratio starts to fall (30 minutes).
+const PATIENCE_TICKS: u64 = 36_000;
 /// Percentage points the ratio falls per game minute after that.
-const PATIENCE_PCT_PER_MINUTE: i64 = 2;
-/// The lowest the ratio falls to.
-const PATIENCE_FLOOR_PCT: i64 = 80;
+const PATIENCE_PCT_PER_MINUTE: i64 = 3;
+/// The lowest the ratio falls to: below even, since siege now breaks walls that measured
+/// at full strength.
+const PATIENCE_FLOOR_PCT: i64 = 60;
 /// A measured defence counts half after this long without being matched again.
 const DEFENCE_HALF_TICKS: u64 = 24_000;
 
@@ -526,7 +532,10 @@ fn enlist(view: &View<'_>, weights: &Weights, memory: &mut Memory, units: &[&Ent
         0
     };
     for e in fresh {
-        let role = if size(memory, Role::Defend) < defend {
+        // Siege cannot hold off what closes in on it: it marches with the main army.
+        let role = if needs_escort(view.rules, e.type_id) {
+            Role::Attack
+        } else if size(memory, Role::Defend) < defend {
             Role::Defend
         } else if size(memory, Role::Raid) < raid {
             Role::Raid
@@ -1130,9 +1139,38 @@ fn lead(
     let own: i64 = units.iter().map(|e| power(&plan.view, e)).sum();
     match army.phase {
         Phase::Respond => {
-            if let Some(goal) = army.goal {
-                let orders: Vec<_> = units.iter().map(|e| (e.id, goal)).collect();
-                send(plan, &orders, "attack_move");
+            // During the grace period an answer stays a defence: the units guard the own
+            // city nearest the intruders and fight what comes near it, instead of following
+            // them to the other side's town and striking it there.
+            let grace = tick < cmd.difficulty.grace_ticks.max(0) as u64;
+            let near = army.goal.and_then(|goal| {
+                plan.view
+                    .cities
+                    .iter()
+                    .filter(|c| c.complete && c.pos.body == goal.body)
+                    .min_by_key(|c| (plan.view.distance(c.pos, goal), c.id))
+                    .map(|c| c.id)
+            });
+            match (grace, near, army.goal) {
+                (true, Some(city), _) => {
+                    for e in units {
+                        let guarding = e
+                            .orders()
+                            .front()
+                            .is_some_and(|o| o.kind == "guard" && o.target_entity == Some(city));
+                        if guarding || plan.view.busy.contains(&e.id) {
+                            continue;
+                        }
+                        if !plan.order(e.id, "guard", None, Some(city), None) {
+                            break;
+                        }
+                    }
+                }
+                (_, _, Some(goal)) => {
+                    let orders: Vec<_> = units.iter().map(|e| (e.id, goal)).collect();
+                    send(plan, &orders, "attack_move");
+                }
+                _ => {}
             }
             focus(plan, memory, units);
         }
@@ -1209,6 +1247,22 @@ fn lead(
                     .then(|| choose_target(&plan.view, memory, base, &[], false))
                     .flatten()
             });
+            // A wave against a town takes its siege along: it waits a few minutes at most
+            // for the siege the target calls for.
+            if !raid
+                && tick < army.since + SIEGE_WAIT_TICKS
+                && let Some((id, _)) = target
+                && let Some(seen) = memory.enemies.get(&id).filter(|e| e.building)
+                && let Some(engine) = siege_choice(&plan.view, memory, seen.type_id)
+                && needs_escort(plan.view.rules, engine)
+                && units
+                    .iter()
+                    .filter(|e| needs_escort(plan.view.rules, e.type_id))
+                    .count()
+                    < (units.len() / SIEGE_PER).max(1)
+            {
+                return;
+            }
             let needed = match target {
                 Some((_, at)) if raid => threat_near(&plan.view, memory, at, THREAT_REACH),
                 // A decisive wave: it holds until it clearly exceeds the defence it has
@@ -1585,11 +1639,13 @@ fn focus(plan: &mut Plan<'_>, memory: &Memory, units: &[&Entity]) {
                 let d = view.distance(unit.pos, e.pos);
                 (d <= reach && live.hp > 0 && view.world.can_target(unit.id, live.id)).then(|| {
                     let armed = view::strength(rules, e.type_id) > 0;
-                    (!armed, live.hp, d, *id)
+                    // Siege first: it is what breaks the walls, and it cannot fight back
+                    // at close quarters.
+                    (!armed, !needs_escort(rules, e.type_id), live.hp, d, *id)
                 })
             })
             .min()
-            .map(|(_, _, _, id)| EntityId(id));
+            .map(|(_, _, _, _, id)| EntityId(id));
         let Some(target) = target else {
             continue;
         };

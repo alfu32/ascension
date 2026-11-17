@@ -134,7 +134,7 @@ per-city limits). Page = command-palette page.
 | Refinery | economic | 5 | Science 5 | oil upgrades |
 | Fusion Plant | economic | 9 | Science 9 | energy (fixed income) |
 | Barracks | military | 0 | Military 1 | foot units |
-| Tower | military | 0 | Military 1 | defends; attrition upgrades |
+| Tower | military | 1 | Military 1 | defends; attrition upgrades (classical since task 71: no siege answers it in the first age) |
 | Dock | military | 0 | Commerce 1, next to sea | ships |
 | Stable | military | 1 | Military 1 | mounted units |
 | Siege Workshop | military | 1 | Military 2 | siege, supply wagons |
@@ -246,7 +246,7 @@ Let *a* be the unit's age and *f(a) = 1 + 0.15 a*.
 | Ranged foot | 70 f | 7 f | 5 → 7 | 1200 | pierce → bullet from 3 → energy from 9 | flesh | 30 food + 30 timber ×f |
 | Anti-armour | 70 f | 14 f vs vehicle | 6 | 1100 | explosive | flesh | 40 food + 40 metal ×f |
 | Mounted / armour | 160 f | 12 f | melee → 4 from 5 | 2200 → 1600 from 5 | melee → bullet → explosive from 5 | plate → vehicle from 5 | 60 food + 40 metal ×f, oil from 5 |
-| Siege | 120 f | 30 f | 10 → 16 | 800 | explosive | structure | 60 timber + 60 metal ×f |
+| Siege | 120 f | 30 f | 10 → 16, nothing within 3 (task 71) | 800 | explosive | vehicle (task 71; was structure) | 60 timber + 60 metal ×f |
 | Warships | 300 f | 18 f | 7 | 1800 | pierce → explosive from 3 | hull | 80 timber + 40 metal ×f |
 | Aircraft | 150 f | 20 f | 5 | 4000 | bullet / explosive | vehicle | 80 metal + 40 oil ×f |
 | Starships | 400 f | 30 f | 8 | 3000 | energy | shield | 200 metal + 100 energy ×f |

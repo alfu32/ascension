@@ -64,6 +64,51 @@ pub(crate) fn walks_at_home(view: &View<'_>, type_id: DefId) -> bool {
         .any(|row| row.terrain_id == terrain && row.speed_pct > 0)
 }
 
+/// Whether a type cannot fire at what stands beside it (a weapon with a least range): siege.
+/// It goes with an escort and is trained by the siege wish, never as the bulk of an army.
+pub(crate) fn needs_escort(rules: &Rules, type_id: DefId) -> bool {
+    rules
+        .entity_types
+        .get(&type_id)
+        .is_some_and(|t| t.weapons.iter().any(|w| w.range_min > 0))
+}
+
+/// The farthest any weapon of a type reaches, in milli-tiles.
+fn reach_of(rules: &Rules, type_id: DefId) -> i64 {
+    rules.entity_types[&type_id]
+        .weapons
+        .iter()
+        .map(|w| w.range_max)
+        .max()
+        .unwrap_or(0)
+}
+
+/// Damage per second (× 100) `enemy` deals to `unit` in a fight: nothing when none of its
+/// weapons can hit the layer `unit` moves on, and nothing from a weapon whose least range
+/// is beyond `unit`'s own reach (it closes in under the guns).
+fn dps_suffered(rules: &Rules, enemy: DefId, unit: DefId) -> i64 {
+    let target = &rules.entity_types[&unit];
+    let flies = target
+        .movement
+        .as_ref()
+        .is_some_and(|m| rules.movement_classes[&m.movement_class_id].flies);
+    let layer = if flies { Layer::Air } else { Layer::Ground };
+    let reach = reach_of(rules, unit);
+    rules.entity_types[&enemy]
+        .weapons
+        .iter()
+        .filter(|w| !w.orbit_only && w.targets.iter().any(|t| t.layer == layer))
+        .filter(|w| w.range_min <= reach)
+        .map(|w| {
+            let pct = target
+                .armor_class_id
+                .map_or(100, |a| rules.damage_pct(w.damage_class_id, a));
+            let hit = (w.damage * pct / 100 - target.armor).max(1);
+            hit * w.shots.max(1) * 2000 / w.cooldown_ticks.max(1)
+        })
+        .sum()
+}
+
 /// Damage per second of `attacker` against an armour class, with the damage matrix.
 pub(crate) fn dps_against(
     rules: &Rules,
@@ -83,28 +128,40 @@ pub(crate) fn dps_against(
 }
 
 /// How good a unit type is for its price against the enemies seen, or against every
-/// armour class alike when none has been seen.
+/// armour class alike when none has been seen. Against each enemy type it counts the
+/// damage it deals and how long it lasts under that enemy's fire (an enemy that cannot hit
+/// it, or only from beyond its reach, hurts it little): the exchange a fight would give.
 fn value(view: &View<'_>, enemies: &BTreeMap<DefId, i64>, unit: DefId, price: i64) -> i64 {
     let rules = view.rules;
     let et = &rules.entity_types[&unit];
-    let mut damage = 0;
-    let mut weight = 0;
+    let reach = reach_of(rules, unit);
+    // Staying power and reach count as well as damage; all of it per resource spent.
+    let staying = et.hp + reach / 50;
     if enemies.is_empty() {
+        let mut damage = 0;
+        let mut weight = 0;
         for class in rules.armor_classes.keys() {
             damage += dps_against(rules, unit, Some(*class), 0);
             weight += 1;
         }
-    } else {
-        for (enemy, count) in enemies {
-            let target = &rules.entity_types[enemy];
-            damage += dps_against(rules, unit, target.armor_class_id, target.armor) * count;
-            weight += count;
-        }
+        return damage / weight.max(1) * staying / price.max(1);
     }
-    let reach = et.weapons.iter().map(|w| w.range_max).max().unwrap_or(0);
-    let damage = damage / weight.max(1);
-    // Staying power and reach count as well as damage; all of it per resource spent.
-    damage * (et.hp + reach / 50) / price.max(1)
+    let mut score: i128 = 0;
+    let mut weight = 0_i64;
+    for (enemy, count) in enemies {
+        let target = &rules.entity_types[enemy];
+        let dealt = dps_against(rules, unit, target.armor_class_id, target.armor);
+        // What the enemy deals, against an average of its kind: a floor keeps one that
+        // cannot hit back from counting without limit.
+        let suffered = dps_suffered(rules, *enemy, unit)
+            .max(dps_against(rules, *enemy, None, 0) / 4)
+            .max(50);
+        score += i128::from(dealt) * i128::from(staying) * 1000 / i128::from(suffered)
+            * i128::from(*count);
+        weight += count;
+    }
+    (score / i128::from(weight.max(1)) / i128::from(price.max(1))).clamp(0, i128::from(i64::MAX))
+        as i64
 }
 
 /// The price of a definition weighed by how scarce each resource is for the player: a
@@ -176,6 +233,7 @@ fn choice(view: &View<'_>, memory: &Memory, second_best: bool) -> Option<DefId> 
             let unit = row.product_def_id;
             if row.mode != ProductionMode::Train
                 || !is_military(rules, unit)
+                || needs_escort(rules, unit)
                 || ranked.iter().any(|(_, u)| *u == unit)
                 || !view.unlocked(unit)
                 || view.obsolete(unit)

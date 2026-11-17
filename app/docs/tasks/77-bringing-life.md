@@ -6,11 +6,10 @@ habitable planet), `rom-mapgen` (dormant surfaces made before play),
 render thread), `rom-save`, schema and seed as needed, docs. Starts after
 task 76 is merged. Implementer: Claude (Opus).
 
-**Needs the owner's confirmation of a hard-rule reading before it starts**
-(rule 9, "Generated before play: maps, resource deposits and baked meshes are
-produced before the first tick; nothing is generated during a match"). The
-proposal below keeps generation before play and treats painting as edits by
-orders; the owner must confirm that edits during a match are acceptable.
+**Hard rule 9, as the owner confirmed it (2026-11-17):** surfaces are made
+before play (rule 9 holds: nothing is generated during a match); painting is
+a series of edits made by orders, saved and repeatable, with only the
+touched terrain re-baked. That reading is now written into `AGENTS.md`.
 
 ## Why — the owner (2026-11-17)
 

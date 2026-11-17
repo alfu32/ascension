@@ -71,7 +71,8 @@ fn loads_seed() {
         .find(|row| row.key == "structure")
         .unwrap()
         .id;
-    assert_eq!(rules.damage_pct(melee, structure), 50);
+    // Task 71: melee does 150 % to structures (was 50 %).
+    assert_eq!(rules.damage_pct(melee, structure), 150);
     assert_eq!(rules.damage_pct(999, 999), 100);
     let priest = rules.id_of("unit.priest").unwrap();
     assert!(
