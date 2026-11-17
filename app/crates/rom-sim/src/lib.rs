@@ -3,6 +3,7 @@
 mod attrition;
 mod avoidance;
 mod capture;
+mod colony;
 mod combat;
 mod construction;
 mod economy;

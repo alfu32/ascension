@@ -1,0 +1,23 @@
+# Task 73: the colony panel when its owner cannot pay: the seed's own prices (an automated farm
+# or camp 200 metal and 100 timber, a lab 300 metal and 150 knowledge) and the start's 500 of
+# each resource, nothing granted. The governor builds a farm and a camp, then waits:
+# "Governor on: needs 200 Metal". The same start as 73-colony-script.txt otherwise
+# (universe seed 1, --ai none, --sun fixed).
+0 grant-age age.abundance
+0 grant-tech tech.auto_colonies
+0 auto-colony 1
+0 place-orbit 1 unit.survey_ship @0,0
+1 speed 1000
+200 ships
+202 orbit planet1
+2400 speed 100
+2402 ships
+2404 cam focus
+2500 click city2
+2504 cam focus
+2520 cam wheel 2 800,384
+2550 cam wheel 2 800,384
+2580 cam wheel 1 800,384
+2610 cam wheel 2 960,384
+2620 hud tab 1
+2630 speed 1

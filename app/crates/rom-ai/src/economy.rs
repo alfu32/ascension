@@ -532,6 +532,7 @@ pub(crate) fn assign(
             .iter()
             .filter(|w| {
                 plan.view.rules.entity_types[&w.type_id].builder.is_some()
+                    && plan.view.rules.entity_types[&w.type_id].movement.is_some()
                     && w.pos.body == site.pos.body
                     && !plan.view.busy.contains(&w.id)
                     && !w

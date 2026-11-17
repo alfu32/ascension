@@ -132,6 +132,35 @@ impl Rules {
                     message: format!("carry node {} requires claim_tag_id", self.label(entity.id)),
                 });
             }
+            if let Some(colony) = &entity.colony {
+                // A colony is a city whose governor builds its own sites with ordinary orders.
+                if !entity.territory.as_ref().is_some_and(|t| t.is_city) || entity.builder.is_none()
+                {
+                    problems.push(Problem {
+                        message: format!(
+                            "colony {} must be a city (et_territory.is_city) with et_builder",
+                            self.label(entity.id)
+                        ),
+                    });
+                }
+                for site in &colony.sites {
+                    let constructs = self.production.get(&entity.id).is_some_and(|rows| {
+                        rows.iter().any(|p| {
+                            p.mode == ProductionMode::Construct
+                                && p.product_def_id == site.site_type_id
+                        })
+                    });
+                    if !constructs {
+                        problems.push(Problem {
+                            message: format!(
+                                "colony {} keeps {} but has no production row constructing it",
+                                self.label(entity.id),
+                                self.label(site.site_type_id)
+                            ),
+                        });
+                    }
+                }
+            }
             if entity.keeper.as_ref().is_some_and(|k| k.capacity < 1) {
                 problems.push(Problem {
                     message: format!("keeper {} capacity must be positive", self.label(entity.id)),

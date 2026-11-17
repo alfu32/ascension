@@ -15,6 +15,8 @@ use std::collections::BTreeSet;
 /// Score of another city while a resource has no room for another gather site: above the
 /// way to the next age and every soldier, below the first site of a resource and workers.
 const STUCK_CITY_SCORE: i64 = 850;
+/// Score of an automated colony: below the next age and the economy, above most buildings.
+const COLONY_SCORE: i64 = 520;
 
 /// What a building type is good for, read from its component and production rows.
 struct Role {
@@ -98,6 +100,20 @@ pub(crate) fn wishes(
     for building in constructible(view) {
         let et = &rules.entity_types[&building];
         let have = view.line_count(building);
+        if view.is_colony(building) {
+            // An automated colony outside the city limit, one per town, while it pays: its
+            // governor then keeps its sites standing.
+            let towns = view.cities.iter().filter(|c| c.complete).count() as i64;
+            if have < towns {
+                wishes.push(Wish {
+                    score: COLONY_SCORE,
+                    act: Act::Construct(building),
+                    reserve: false,
+                    opening: false,
+                });
+            }
+            continue;
+        }
         if view.is_city(building) {
             // Cities are where the land, the farms and the food are: the main way to grow.
             // A resource whose sites are full with no room for another around the cities

@@ -516,6 +516,8 @@ pub struct Snapshot {
     pub rallies: Vec<(EntityId, crate::Rally)>,
     /// Each player's latest order failures, oldest first, in player order.
     pub failures: Vec<(PlayerId, Vec<crate::OrderFailure>)>,
+    /// Automated colonies whose governor is paused, in id order.
+    pub governors_paused: Vec<EntityId>,
 }
 
 const RULES: [VictoryRule; 8] = [
@@ -987,6 +989,7 @@ impl World {
                 .iter()
                 .map(|(player, list)| (*player, list.iter().cloned().collect()))
                 .collect(),
+            governors_paused: self.governors_paused.iter().copied().collect(),
         }
     }
 
@@ -1027,6 +1030,7 @@ impl World {
             sieges,
             rallies,
             failures,
+            governors_paused,
         } = snapshot;
         let mut world = Self::empty(
             rules.clone(),
@@ -1360,6 +1364,7 @@ impl World {
             .map(|(o, append)| (order_from(o), append))
             .collect();
         world.rallies = rallies.into_iter().collect();
+        world.governors_paused = governors_paused.into_iter().collect();
         world.failures = failures
             .into_iter()
             .map(|(player, list)| (player, list.into_iter().collect()))

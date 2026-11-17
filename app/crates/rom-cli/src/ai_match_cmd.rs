@@ -450,6 +450,7 @@ pub fn run_match(rules: &Arc<Rules>, request: &Request) -> Result<MatchResult, S
                 }
             }
         }
+        rom_ai::run_governors(&mut world);
         world.step();
         if let Some(universe) = &universe
             && tick % SAMPLE_TICKS == 0

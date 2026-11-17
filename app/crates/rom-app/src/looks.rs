@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use rom_mapgen::BaseTerrains;
 use rom_models::book::material_look;
 use rom_models::params::{Param, hex_colour, parse_params};
-pub use rom_models::{COMPOSED, ModelEntry, model_id};
+pub use rom_models::{COMPOSED, ModelEntry};
 use rom_render::layers::{ShipScale, ShipScales};
 use rom_render::{
     Generator, MaterialLook, ModelLook, ModelRef, ObjectLook, SceneLooks, SnowLook, TileKind,
@@ -171,10 +171,12 @@ pub fn scene_looks(rules: &Rules, seed: u64, base: BaseTerrains) -> SceneLooks {
     let mut buildings = BTreeMap::new();
     for (&kind, visuals) in &rules.entity_visuals {
         // The renderer draws one look per type: the row for every faction and age.
-        let Some(visual) = visuals
-            .iter()
+        // Review candidates are never drawn in a match.
+        let mut playing = visuals.iter().filter(|v| v.candidate.is_none());
+        let Some(visual) = playing
+            .clone()
             .find(|v| v.faction_id.is_none() && v.age_id.is_none())
-            .or_else(|| visuals.first())
+            .or_else(|| playing.next())
         else {
             continue;
         };
@@ -250,7 +252,7 @@ impl ModelBook {
 
     /// The model an entity of type `entity` owned by a player of `faction` in `age` is drawn
     /// with: the most specific row (its own faction or the nearest ancestor's before a row
-    /// for every faction, then the latest age not after `age`).
+    /// for every faction, then the latest age not after `age`); review candidates never.
     pub fn resolve(&self, entity: DefId, faction: DefId, age: DefId) -> Option<ModelRef> {
         let now = self.ordinals.get(&age).copied().unwrap_or(i64::MAX);
         let mut chain = Vec::new();
@@ -263,6 +265,10 @@ impl ModelBook {
             current = self.parents.get(&f).copied();
         }
         let rank = |entry: &ModelEntry| -> Option<(i64, i64)> {
+            // A review candidate (task 73) is shown by the gallery only.
+            if entry.candidate.is_some() {
+                return None;
+            }
             let faction_rank = match entry.faction {
                 None => 0,
                 Some(f) => 1_000 - chain.iter().position(|c| *c == f)? as i64,
@@ -301,6 +307,31 @@ mod tests {
     use crate::terrain::load_rules;
     use rom_render::Program;
     use rom_rules::Layer;
+
+    /// A review candidate (task 73) is in the book, so the gallery and its manifest show it,
+    /// but no match draws it: whatever the faction and age, the approved look is resolved.
+    #[test]
+    fn review_candidates_are_never_drawn_in_a_match() {
+        let rules = load_rules().expect("rules");
+        let book = ModelBook::new(&rules);
+        let candidates: Vec<&ModelEntry> = book
+            .entries
+            .iter()
+            .filter(|e| e.candidate.is_some())
+            .collect();
+        assert!(!candidates.is_empty(), "the seed offers a candidate");
+        for candidate in candidates {
+            assert!(candidate.id.contains('~'), "{}", candidate.id);
+            for faction in rules.factions.keys() {
+                for age in rules.ages.keys() {
+                    if let Some(m) = book.resolve(candidate.entity, *faction, *age) {
+                        let drawn = &book.entries[usize::from(m.index)];
+                        assert!(drawn.candidate.is_none(), "{} drawn", drawn.id);
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn looks_resolve_by_faction_then_age() {

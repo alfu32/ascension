@@ -20,7 +20,7 @@ use crate::{
 use rom_geo::{CubeSurface, SurfacePos};
 use rom_rules::{DefId, Rules};
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     sync::Arc,
 };
 
@@ -91,6 +91,8 @@ pub struct World {
     pub(crate) vision: Vision,
     /// Rally points of producers (`set_rally`), by producer.
     pub(crate) rallies: BTreeMap<EntityId, crate::rally::Rally>,
+    /// Automated colonies whose owner paused the governor (`pause_governor`).
+    pub(crate) governors_paused: BTreeSet<EntityId>,
     /// Legs of space trade routes queued this tick in front of their routes; empty between
     /// ticks.
     pub(crate) legs: Vec<Order>,
@@ -284,6 +286,7 @@ impl World {
             territory: Territory::default(),
             vision: Vision::default(),
             rallies: BTreeMap::new(),
+            governors_paused: BTreeSet::new(),
             disbanded: Vec::new(),
             legs: Vec::new(),
             failures: BTreeMap::new(),
@@ -623,6 +626,7 @@ impl World {
         );
         self.types.producers.remove(&id);
         self.rallies.remove(&id);
+        self.governors_paused.remove(&id);
         self.space.orbits.remove(&id);
         self.space.landed.remove(&id);
         self.space.arrivals.remove(&id);
@@ -867,6 +871,11 @@ impl World {
             }
             if order.kind == "raze" {
                 self.apply_raze(&order);
+                continue;
+            }
+            // A colony's governor switch is a setting too.
+            if matches!(order.kind.as_str(), "pause_governor" | "resume_governor") {
+                self.apply_governor(&order);
                 continue;
             }
             if order.kind == "disband" && !append {

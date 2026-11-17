@@ -609,6 +609,7 @@ pub fn run(
         for brain in brains.iter_mut() {
             brain.step(world);
         }
+        rom_ai::run_governors(world);
         world.step();
         if let Some(universe) = universe
             && world.tick().is_multiple_of(20)

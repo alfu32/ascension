@@ -359,6 +359,9 @@ pub fn brief(cx: &BriefContext<'_>, model: &Expected) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "# {} — `{}`\n", def.name, model.id);
     let status = match (entry, cx.approved.get(&model.id)) {
+        (Some(e), _) if e.candidate.is_some() => {
+            "a review candidate: shown by the gallery, never drawn in a match (`entity_visual.candidate`)"
+        }
         (Some(_), Some(_)) => "approved and **locked** (`docs/art/approved.toml`)",
         (Some(_), None) => "modelled, in review (not locked)",
         (None, _) => "**not modelled yet**: the `.octd` beside this file is a starter",

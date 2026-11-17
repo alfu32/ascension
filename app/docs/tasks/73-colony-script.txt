@@ -1,0 +1,26 @@
+# Task 73, replayed by --script in universe mode (--ai none, seed 1): a finished automated colony
+# of player one on the nearest other planet of the home system (abundance age, the colony
+# research granted, nothing else). Its governor places and builds its fifteen sites by itself:
+# five automated farms, five woodcutter camps and five research labs. A survey ship flies to
+# that planet so the camera can follow it there; then the colony is selected and focused.
+# Test-only setup lines first.
+0 grant-age age.abundance
+0 grant-tech tech.auto_colonies
+# Stores granted so every site can be paid for (each costs metal and timber or knowledge).
+0 grant res.metal 10000
+0 grant res.timber 5000
+0 grant res.knowledge 5000
+0 auto-colony 1
+0 place-orbit 1 unit.survey_ship @0,0
+1 speed 1000
+200 ships
+202 orbit planet1
+3800 speed 100
+3802 ships
+3804 cam focus
+3900 click city2
+3904 cam focus
+3920 cam wheel 2 800,384
+3950 cam wheel 2 800,384
+3980 cam wheel 1 800,384
+4010 cam wheel 2 960,384

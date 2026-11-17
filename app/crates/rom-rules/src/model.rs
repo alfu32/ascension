@@ -1193,6 +1193,8 @@ pub struct EntityType {
     pub view_scale: Option<ViewScale>,
     /// Attached `et_inhibitor` row: holds enemy ships in its star system.
     pub inhibitor: Option<Inhibitor>,
+    /// Attached `et_colony` row and its `et_colony_site` rows: an automated colony.
+    pub colony: Option<Colony>,
     /// Attached `et_weapon` rows.
     pub weapons: Vec<Weapon>,
     /// Attached `placement_rule` rows.
@@ -1443,6 +1445,31 @@ pub struct Inhibitor {
     pub reach: InhibitorReach,
     /// The `charge_pct` column: extra jump charge time of the enemy ships it holds.
     pub charge_pct: i64,
+}
+/// One `et_colony` row with its `et_colony_site` rows: an automated colony, a city outside
+/// the city limit whose governor keeps sites standing in its area.
+#[derive(Debug, Clone)]
+pub struct Colony {
+    /// The `entity_type_id` column.
+    pub entity_type_id: DefId,
+    /// The `resource_id` column: what the colony adds to.
+    pub resource_id: DefId,
+    /// The `income` column: per income period, while the colony stands complete.
+    pub income: i64,
+    /// The `site_share_pct` column: share of its sites' own income added as `resource_id`.
+    pub site_share_pct: i64,
+    /// What the governor keeps standing, in site type order.
+    pub sites: Vec<ColonySite>,
+}
+/// One `et_colony_site` row.
+#[derive(Debug, Clone)]
+pub struct ColonySite {
+    /// The `colony_type_id` column.
+    pub colony_type_id: DefId,
+    /// The `site_type_id` column.
+    pub site_type_id: DefId,
+    /// The `cap` column: most of the type's line in the colony's area.
+    pub cap: i64,
 }
 /// One `et_view_scale` row (presentation only).
 #[derive(Debug, Clone)]
@@ -1725,6 +1752,9 @@ pub struct EntityVisual {
     pub material_id: Option<DefId>,
     /// The `scale_pct` column.
     pub scale_pct: i64,
+    /// The `candidate` column: the name of a review candidate, which is never drawn in a
+    /// match (only the gallery shows it); None for a row in play.
+    pub candidate: Option<String>,
 }
 /// One `map_style` row.
 #[derive(Debug, Clone)]

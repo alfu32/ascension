@@ -130,10 +130,12 @@ impl<'a> View<'a> {
         for (type_id, count) in &have {
             *line_have.entry(cat.root_of(*type_id)).or_default() += count;
         }
+        // Automated colonies are their governors' business, not the brain's towns.
         let cities: Vec<City> = world
             .cities(me)
             .into_iter()
             .filter_map(|id| world.entity(id))
+            .filter(|e| !world.is_colony_type(e.type_id))
             .map(|e| City {
                 id: e.id,
                 pos: e.pos,
@@ -233,6 +235,11 @@ impl<'a> View<'a> {
             .get(&type_id)
             .and_then(|t| t.territory.as_ref())
             .is_some_and(|t| t.is_city)
+    }
+
+    /// Whether a type is an automated colony: a city outside the limit, with a governor.
+    pub fn is_colony(&self, type_id: DefId) -> bool {
+        self.world.is_colony_type(type_id)
     }
 
     /// Whether an entity type is a building.

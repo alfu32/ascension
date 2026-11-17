@@ -1044,6 +1044,7 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
         idle: flags(conn, "idle")?,
         dirty: flags(conn, "dirty")?,
         awake: flags(conn, "awake")?,
+        governors_paused: flags(conn, "governor_paused")?,
         neutralised: flags(conn, "neutralised")?,
         assimilating: flags(conn, "assimilating")?,
         sieges: query_vec(

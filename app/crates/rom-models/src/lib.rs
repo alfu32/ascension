@@ -17,7 +17,9 @@ use std::path::Path;
 
 use thiserror::Error;
 
-pub use book::{COMPOSED, ModelEntry, composed_models, material_look, model_id, model_spec};
+pub use book::{
+    COMPOSED, ModelEntry, composed_models, material_look, model_id, model_spec, visual_model_id,
+};
 pub use files::{ModelFiles, build_rules};
 
 /// Errors of the model tools.

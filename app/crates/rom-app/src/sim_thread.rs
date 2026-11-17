@@ -639,6 +639,8 @@ fn run(
                     .computer_rejected
                     .fetch_add(u64::from(report.rejected), Ordering::Relaxed);
             }
+            // The governors of automated colonies work for every owner, the person included.
+            rom_ai::run_governors(&mut world);
             world.step();
             if world.tick().is_multiple_of(VISIT_INTERVAL)
                 && let Some(host) = host.as_mut()

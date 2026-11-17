@@ -84,8 +84,7 @@ impl Catalog {
                     .get(&visual.mesh_id)
                     .is_some_and(|mesh| mesh.generator == crate::looks::COMPOSED)
                 {
-                    let id =
-                        crate::looks::model_id(rules, entity, visual.age_id, visual.faction_id);
+                    let id = rom_models::visual_model_id(rules, entity, visual);
                     models.push(Choice {
                         key: id.clone(),
                         label: id,

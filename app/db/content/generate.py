@@ -61,7 +61,9 @@ LINES = [
     ('warship', 'dock', 'trireme:Triremes:1|war_galley:War Galleys:2|carrack:Carracks:3|frigate:Frigates:4|ironclad:Ironclads:5|destroyer:Destroyers:6|missile_cruiser:Missile Cruisers:7|drone_cruiser:Drone Cruisers:8|hover_frigate:Hover Frigates:9'),
     ('fighter', 'airfield', 'biplane:Biplanes:5|fighter:Fighters:6|jet_fighter:Jet Fighters:7|drone_fighter:Drone Fighters:8|interceptor:Interceptors:9'),
     ('bomber', 'airfield', 'bomber:Bombers:6|strategic_bomber:Strategic Bombers:7|drone_bomber:Drone Bombers:8'),
-    ('starship', 'spaceport', 'survey_ship:Survey Ship:10|corvette:Corvettes:10|space_frigate:Space Frigates:11|space_cruiser:Space Cruisers:12|battleship:Battleships:13'),
+    # The survey ship has a line of its own, so the corvette never supersedes it (task 73).
+    ('survey', 'spaceport', 'survey_ship:Survey Ship:10'),
+    ('starship', 'spaceport', 'corvette:Corvettes:10|space_frigate:Space Frigates:11|space_cruiser:Space Cruisers:12|battleship:Battleships:13'),
     ('civilian', 'city', 'citizen:Citizens:0|worker_drone:Worker Drones:8'),
     ('scholar', 'university', 'scholar:Scholars:1'),
     ('merchant', 'market', 'merchant:Merchants:0'),
@@ -106,7 +108,7 @@ def ship_sight(key):
 
 def unit_sight(line, key, age, reach):
     """Base sight of a unit by its role (milli-tiles)."""
-    if line in ('starship', 'transport'):
+    if line in ('starship', 'survey', 'transport'):
         return ship_sight(key)
     tiles = {'civilian': 4, 'scholar': 5, 'merchant': 5, 'caravan': 5, 'priest': 5, 'medic': 5,
              'repair': 6, 'supply': 5, 'light_mounted': 8, 'heavy_mounted': 7, 'siege': 5}.get(line)
@@ -332,7 +334,7 @@ def generate():
             mounted = line in ('light_mounted', 'heavy_mounted')
             aircraft = line in ('fighter', 'bomber')
             support = line in ('civilian', 'scholar', 'merchant', 'caravan', 'priest', 'medic', 'repair', 'supply')
-            spacecraft = line in ('starship', 'transport')
+            spacecraft = line in ('starship', 'survey', 'transport')
             mechanical = (mounted and age >= 5) or line in ('caravan', 'siege', 'anti_air', 'repair', 'supply', 'warship') or spacecraft or aircraft or 'drone' in key or 'robot' in key
             hp, attack, reach, speed, dc, ac, prices = 70, 7, 5000, 1200, 'pierce', 'flesh', {'food': 30, 'timber': 30}
             if line == 'infantry':
@@ -359,7 +361,7 @@ def generate():
             elif aircraft:
                 hp, attack, reach, speed, dc, ac = 150, 20, 5000, 4000, 'explosive' if line == 'bomber' else 'bullet', 'vehicle'
                 prices = {'metal': 80, 'oil': 40}
-            elif line == 'starship':
+            elif line in ('starship', 'survey'):
                 hp, attack, reach, speed, dc, ac = 400, 30, 8000, 3000, 'energy', 'shield'
                 prices = {'metal': 200, 'energy': 100}
             elif line == 'transport':
@@ -394,7 +396,7 @@ def generate():
             movement = 'starship' if spacecraft else 'ship' if line == 'warship' else 'aircraft' if aircraft or line == 'repair' else 'wheeled' if mechanical and not line in ('civilian', 'scout') else 'foot'
             row('et_movement', entity_type_id=Ref(full), movement_class_id=Ref(movement, 'movement_class'), speed=speed)
             if attack:
-                layers = ['air'] if line in ('fighter', 'anti_air') else ['fluid', 'ground'] if line == 'warship' else ['space', 'orbit'] if line == 'starship' else ['ground']
+                layers = ['air'] if line in ('fighter', 'anti_air') else ['fluid', 'ground'] if line == 'warship' else ['space', 'orbit'] if line in ('starship', 'survey') else ['ground']
                 weapon(full, scale(attack), 'melee' if line == 'civilian' else dc, reach, layers, 40 if line == 'civilian' else 30,
                        **({'range_min': SIEGE_DEAD_ZONE} if line == 'siege' else {}))
             if line == 'civilian':
@@ -511,6 +513,7 @@ def generate():
     orbit_units(definition, row, tag, need, produce, cost)
     jumps_and_inhibitors(definition, row, tag, need, produce, cost, tech, sql.append)
     big_ships_on_the_planet(row, tag, sql.append)
+    automated_colonies(definition, row, tag, need, produce, cost, tech, sql.append)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -708,6 +711,70 @@ def big_ships_on_the_planet(row, tag, emit):
     for key, reach in HULL_REACH.items():
         radius = reach * VIEW_SCALE[key][0] // 100 // 100 * 100
         emit(f"UPDATE et_movement SET landing_radius={radius} WHERE entity_type_id={val(Ref('unit.' + key))};")
+
+
+# Task 73: automated colonies (docs/database.md "Automated colonies"). The colony's own wealth
+# per income period, the share of what its sites earn by themselves that it adds as wealth
+# (percent), and what its governor keeps standing in its area: site type and cap.
+COLONY_INCOME = 30
+COLONY_SITE_SHARE_PCT = 10
+COLONY_SITES = [('auto_farm', 5), ('auto_woodcutter_camp', 5), ('auto_university', 5)]
+# How fast a colony builds its own sites, percent of a worker's pace.
+COLONY_BUILD_PCT = 200
+# What an automated site costs to build (owner, 2026-11-17: a governor must really wait when its
+# owner cannot pay). A university upgraded to a lab still pays through the upgrade research.
+AUTO_SITE_PRICES = {
+    'auto_farm': {'metal': 200, 'timber': 100},
+    'auto_woodcutter_camp': {'metal': 200, 'timber': 100},
+    'auto_university': {'metal': 300, 'knowledge': 150},
+}
+
+
+def automated_colonies(definition, row, tag, need, produce, cost, tech, emit):
+    """Task 73: the automated colony of the abundance age, a city outside the city limit
+    whose governor (rom-ai) keeps automated farms, woodcutter camps and research labs standing
+    around it; the automated university renamed the Automated Research Lab; the orders that
+    pause and resume a governor. Defined last so the ids of earlier content stay stable."""
+    emit("INSERT INTO order_kind(key,needs,target,note) VALUES "
+         "('pause_governor','colony','none','an automated colony''s governor stops placing and paying for sites; applied at once, the queue stays'), "
+         "('resume_governor','colony','none','the governor of an automated colony works again; applied at once');")
+    emit(f"UPDATE def SET name='Automated Research Lab' WHERE key='bld.auto_university';")
+    emit(f"UPDATE def SET name='Upgrade to Automated Research Lab' WHERE key='tech.up.auto_university';")
+    age = AGES.index('abundance')
+    research = 'tech.auto_colonies'
+    tech(research, 'Automated Colonies', age, 'city', 300 + age * 50,
+         {'wealth': 100 * (age + 1), 'knowledge': 50 * (age + 1)})
+    full = 'bld.auto_colony'
+    size = 5
+    definition('entity_type', full, 'Automated Colony')
+    row('entity_type', id=Ref(full), **{'class': 'building'}, ui_group='economic', hp=3000, armor=4,
+        armor_class_id=Ref('structure', 'armor_class'), los=building_sight(age, size), footprint_w=size,
+        footprint_h=size, build_ticks=150 + 25 * age, ramp_mode='per_type', first_age_id=Ref('age.abundance'))
+    tag(full, 'building', 'mechanical', 'city')
+    need(full, 'age.abundance')
+    need(full, research, 1)
+    cost(full, {'metal': 400, 'energy': 200}, True)
+    for builder in ('citizen', 'worker_drone'):
+        produce('unit.' + builder, full, 'construct', 'economic')
+    # A city for borders, supply and the economic radius its sites stand in; capturable.
+    row('et_territory', entity_type_id=Ref(full), is_city=1, border_radius=24000,
+        economic_radius=16000, capturable=1)
+    row('et_producer', entity_type_id=Ref(full))
+    # It builds its own sites, where it stands (a builder without movement).
+    row('et_builder', entity_type_id=Ref(full), build_pct=COLONY_BUILD_PCT, repair_pct=100)
+    row('et_colony', entity_type_id=Ref(full), resource_id=Ref('res.wealth'), income=COLONY_INCOME,
+        site_share_pct=COLONY_SITE_SHARE_PCT)
+    # Anywhere on land outside other players' borders (a city type under free colonisation).
+    row('placement_rule', entity_type_id=Ref(full), rule='in_own_territory')
+    row('placement_rule', entity_type_id=Ref(full), rule='on_terrain', ref_def_id=Ref('ter.plain'))
+    for site, cap in COLONY_SITES:
+        site = 'bld.' + site
+        row('et_colony_site', colony_type_id=Ref(full), site_type_id=Ref(site), cap=cap)
+        produce(full, site, 'construct', 'economic')
+        # The colony research also unlocks its automated sites, beside their upgrade research.
+        need(site, research, 1)
+    for site, prices in AUTO_SITE_PRICES.items():
+        cost('bld.' + site, prices)
 
 
 def main():

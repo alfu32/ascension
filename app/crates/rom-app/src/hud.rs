@@ -380,6 +380,53 @@ pub(crate) fn next_leg(
     Some(format!("Next: {text}"))
 }
 
+/// An automated colony's panel: each kind of site against its cap, then whether its governor
+/// runs and what it waits for ("Needs 200 Metal"). Two lines; empty for anything else.
+pub(crate) fn colony_lines(world: &World, entity: &rom_sim::Entity) -> Vec<String> {
+    let Some(status) = rom_ai::colony_status(world, entity.id) else {
+        return Vec::new();
+    };
+    let rules = world.rules();
+    let faction = world
+        .players()
+        .find(|p| p.id == entity.owner)
+        .map_or(entity.type_id, |p| p.faction);
+    // The last word of a site's name is enough beside its count ("Farm 5/5").
+    let short = |def| {
+        let name = rules.display_name(def, faction);
+        name.rsplit(' ').next().unwrap_or(name).to_owned()
+    };
+    let counts = status
+        .sites
+        .iter()
+        .map(|s| format!("{} {}/{}", short(s.site_type), s.count, s.cap))
+        .collect::<Vec<_>>()
+        .join(" · ");
+    let resource = |id| rules.def(id).name.clone();
+    let doing = match &status.waiting {
+        rom_ai::Waiting::Nothing => "every site stands".to_owned(),
+        rom_ai::Waiting::Paused => String::new(),
+        rom_ai::Waiting::Colony => "waits for the colony".to_owned(),
+        rom_ai::Waiting::Building(def) => format!("building {}", short(*def)),
+        rom_ai::Waiting::Locked(def) => format!("{} not unlocked", short(*def)),
+        rom_ai::Waiting::Placing(def) => format!("placing {}", short(*def)),
+        rom_ai::Waiting::Resources(_, missing) => format!(
+            "needs {}",
+            missing
+                .iter()
+                .map(|(r, n)| format!("{n} {}", resource(*r)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    };
+    let state = if status.paused {
+        "Governor paused".to_owned()
+    } else {
+        format!("Governor on: {doing}")
+    };
+    vec![counts, state]
+}
+
 pub(crate) fn wealth_card(world: &World, entity: &rom_sim::Entity) -> Vec<String> {
     let rules = world.rules();
     let et = &rules.entity_types[&entity.type_id];
@@ -506,11 +553,8 @@ pub fn snapshot_of(world: &World) -> HudSnapshot {
         world
             .entities()
             .filter(|e| {
-                e.owner == player.id
-                    && rules.entity_types[&e.type_id]
-                        .territory
-                        .as_ref()
-                        .is_some_and(|t| t.is_city)
+                // Automated colonies stand outside the city limit, so they are not counted.
+                e.owner == player.id && world.counts_as_city(e.type_id)
             })
             .count() as i64,
         rules.player_stat(

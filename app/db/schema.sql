@@ -413,6 +413,27 @@ CREATE TABLE et_inhibitor (            -- jump inhibitor (task 70): holds enemy 
                                        -- inhibitors do not stack (the largest applies)
 ) STRICT;
 
+-- Automated colony (task 73): a city (et_territory.is_city) that does not count towards
+-- the city limit and keeps a governor. Its owner earns `income` of the resource each income
+-- period, plus `site_share_pct` of what the complete gather sites of its area (buildings
+-- whose city is the colony) earn by themselves (`et_gather_site.self_income`). A builder
+-- without movement (its own et_builder row) builds on sites within its economic radius.
+CREATE TABLE et_colony (
+  entity_type_id INTEGER PRIMARY KEY REFERENCES entity_type(id),
+  resource_id    INTEGER NOT NULL REFERENCES resource(id),
+  income         INTEGER NOT NULL DEFAULT 0 CHECK (income >= 0),
+  site_share_pct INTEGER NOT NULL DEFAULT 0 CHECK (site_share_pct BETWEEN 0 AND 100)
+) STRICT;
+
+-- What a colony's governor keeps standing in its area, by building type: at most `cap` of
+-- the type's upgrade line, which is also that line's per-city limit there (task 73).
+CREATE TABLE et_colony_site (
+  colony_type_id INTEGER NOT NULL REFERENCES et_colony(entity_type_id),
+  site_type_id   INTEGER NOT NULL REFERENCES entity_type(id),
+  cap            INTEGER NOT NULL CHECK (cap > 0),
+  PRIMARY KEY (colony_type_id, site_type_id)
+) STRICT, WITHOUT ROWID;
+
 -- Where something may be placed. All rows for a type must pass.
 CREATE TABLE placement_rule (
   id             INTEGER PRIMARY KEY,
@@ -601,7 +622,11 @@ CREATE TABLE entity_visual (           -- most specific row wins (faction, then 
   age_id         INTEGER REFERENCES age(id),
   mesh_id        INTEGER NOT NULL REFERENCES mesh(id),
   material_id    INTEGER REFERENCES material(id),
-  scale_pct      INTEGER NOT NULL DEFAULT 100
+  scale_pct      INTEGER NOT NULL DEFAULT 100,
+  candidate      TEXT CHECK (candidate IS NULL OR candidate GLOB '[a-z]*')
+                                       -- task 73: a review candidate's name: shown by the gallery
+                                       -- and its manifest (model id `<entity>@<age>~<name>`),
+                                       -- never drawn in a match; NULL = in play
 ) STRICT;
 CREATE INDEX entity_visual_by_type ON entity_visual(entity_type_id);
 
@@ -754,7 +779,7 @@ CREATE TABLE ai_difficulty (
 -- Order vocabulary. `needs` names the et_* component the executor must have.
 CREATE TABLE order_kind (
   key    TEXT PRIMARY KEY,
-  needs  TEXT NOT NULL DEFAULT '',     -- '', 'movement','weapon','builder','harvester','healer','trader','container','producer','energy','gather_site'
+  needs  TEXT NOT NULL DEFAULT '',     -- '', 'movement','weapon','builder','harvester','healer','trader','container','producer','energy','gather_site','colony'
   target TEXT NOT NULL CHECK (target IN ('none','point','entity','def','entity_or_point')),
   note   TEXT NOT NULL DEFAULT ''
 ) STRICT, WITHOUT ROWID;
@@ -1170,10 +1195,11 @@ CREATE TABLE entity_rally (
 
 -- Membership of the simulation's entity sets: 'landed' (ship standing on a
 -- planet), 'neutralised' and 'assimilating' (captured buildings), 'idle' and
--- 'dirty' (economy), 'awake' (units to check for separation next tick).
+-- 'dirty' (economy), 'awake' (units to check for separation next tick),
+-- 'governor_paused' (an automated colony whose governor its owner paused; task 73).
 CREATE TABLE entity_flag (
   entity_id INTEGER NOT NULL,
-  flag      TEXT NOT NULL CHECK (flag IN ('landed','neutralised','assimilating','idle','dirty','awake')),
+  flag      TEXT NOT NULL CHECK (flag IN ('landed','neutralised','assimilating','idle','dirty','awake','governor_paused')),
   PRIMARY KEY (entity_id, flag)
 ) STRICT, WITHOUT ROWID;
 

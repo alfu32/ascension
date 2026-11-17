@@ -10,6 +10,9 @@
 //! production), fights with armies (defence, attack, raids, scouting, siege, formations) and,
 //! from the starfaring ages, flies: survey ships claim resource bodies, warships escort and
 //! contest them and attack enemy orbits, transports carry armies and found colonies.
+//!
+//! The [`governor`] of an automated colony is separate from the brains: it runs for every
+//! owner, people included (`run_governors`), and keeps the colony's sites standing.
 
 mod army;
 mod brain;
@@ -18,6 +21,7 @@ mod catalogue;
 mod construction;
 mod economy;
 mod fleet;
+pub mod governor;
 mod memory;
 mod opening;
 mod plan;
@@ -27,6 +31,7 @@ mod sites;
 mod view;
 
 pub use brain::{Brain, SavedBrain};
+pub use governor::{ColonyStatus, SiteCount, Waiting, colony_status, run_governors};
 pub use memory::{Army, BrainStats, EnemySighting, Job, Phase, Role, Voyage};
 
 use rom_rules::{DefId, ModifierOp, Rules};

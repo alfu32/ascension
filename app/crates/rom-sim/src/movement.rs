@@ -216,10 +216,21 @@ impl World {
                     (centre, u128::MAX)
                 })
         };
-        let pos = self.entity(id).expect("walker").pos;
+        let walker = self.entity(id).expect("walker");
+        let pos = walker.pos;
         let (goal, squared) = closest(self, pos);
         if squared <= reach * reach {
             return true;
+        }
+        // A builder that does not move (an automated colony) works on what lies within its
+        // own economic radius, from where it stands.
+        if self.rules.entity_types[&walker.type_id].movement.is_none() {
+            let radius = self.city_economic_radius(id).max(0) as u128;
+            if body == pos.body && squared <= radius * radius {
+                return true;
+            }
+            order.status = crate::OrderStatus::Failed("out_of_reach".into());
+            return false;
         }
         let walk = self.walk(
             id,

@@ -59,6 +59,8 @@ pub struct VisualRow {
     pub material: Option<String>,
     /// Size factor in percent.
     pub scale_pct: i64,
+    /// A review candidate's name (`entity_visual.candidate`): never drawn in a match.
+    pub candidate: Option<String>,
 }
 
 /// The rows of one model file: a mesh and the visual rows that draw entities with it (none
@@ -111,6 +113,10 @@ pub fn visual_id(visual: &VisualRow) -> String {
     if let Some(faction) = &visual.faction {
         id.push('+');
         id.push_str(faction);
+    }
+    if let Some(candidate) = &visual.candidate {
+        id.push('~');
+        id.push_str(candidate);
     }
     id
 }
@@ -185,10 +191,17 @@ impl ModelRows {
             );
         }
         for v in &self.visuals {
+            // A review candidate names itself in one more column.
+            let (column, value) = v
+                .candidate
+                .as_deref()
+                .map_or((String::new(), String::new()), |c| {
+                    (",candidate".to_owned(), format!(", {}", quote(c)))
+                });
             let _ = writeln!(
                 out,
-                "INSERT INTO entity_visual(entity_type_id,faction_id,age_id,mesh_id,material_id,scale_pct) VALUES\n \
-                 ({}, {}, {}, {}, {}, {});",
+                "INSERT INTO entity_visual(entity_type_id,faction_id,age_id,mesh_id,material_id,scale_pct{column}) VALUES\n \
+                 ({}, {}, {}, {}, {}, {}{value});",
                 key_id(Some(&v.entity)),
                 key_id(v.faction.as_deref()),
                 key_id(v.age.as_deref()),
@@ -242,7 +255,7 @@ impl ModelRows {
             })?
             .collect::<Result<_, _>>()?;
         let mut stmt = conn.prepare(
-            "SELECT e.key, f.key, a.key, mt.key, v.scale_pct FROM entity_visual v \
+            "SELECT e.key, f.key, a.key, mt.key, v.scale_pct, v.candidate FROM entity_visual v \
              JOIN def e ON e.id = v.entity_type_id LEFT JOIN def f ON f.id = v.faction_id \
              LEFT JOIN def a ON a.id = v.age_id LEFT JOIN def mt ON mt.id = v.material_id \
              WHERE v.mesh_id = ?1 ORDER BY v.id",
@@ -255,6 +268,7 @@ impl ModelRows {
                     age: r.get(2)?,
                     material: r.get(3)?,
                     scale_pct: r.get(4)?,
+                    candidate: r.get(5)?,
                 })
             })?
             .collect::<Result<_, _>>()?;

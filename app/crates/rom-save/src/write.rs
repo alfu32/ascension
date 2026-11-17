@@ -573,13 +573,14 @@ fn write_entities(tx: &Transaction, s: &Snapshot) -> Result<(), SaveError> {
             )?;
         }
     }
-    let flags: [(&str, &Vec<rom_sim::EntityId>); 6] = [
+    let flags: [(&str, &Vec<rom_sim::EntityId>); 7] = [
         ("landed", &s.space.landed),
         ("neutralised", &s.neutralised),
         ("assimilating", &s.assimilating),
         ("idle", &s.idle),
         ("dirty", &s.dirty),
         ("awake", &s.awake),
+        ("governor_paused", &s.governors_paused),
     ];
     for (flag, ids) in flags {
         for id in ids {

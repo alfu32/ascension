@@ -80,19 +80,34 @@ impl World {
             )
     }
 
-    /// The player's cities: complete, sites and queued constructions.
+    /// The player's cities that count towards the city limit (automated colonies do not):
+    /// complete, sites and queued constructions.
     pub fn city_count(&self, player: PlayerId) -> i64 {
         let standing = self
             .territory
             .cities
             .iter()
-            .filter(|id| self.entity(**id).is_some_and(|e| e.owner == player))
+            .filter(|id| {
+                self.entity(**id)
+                    .is_some_and(|e| e.owner == player && self.counts_as_city(e.type_id))
+            })
             .count();
         let queued = self
             .queued_constructions()
-            .filter(|(owner, subject, _)| *owner == player && self.is_city_type(*subject))
+            .filter(|(owner, subject, _)| *owner == player && self.counts_as_city(*subject))
             .count();
         (standing + queued) as i64
+    }
+
+    /// Whether the player has any city at all, colonies, sites and queued ones included.
+    fn has_any_city(&self, player: PlayerId) -> bool {
+        self.territory
+            .cities
+            .iter()
+            .any(|id| self.entity(*id).is_some_and(|e| e.owner == player))
+            || self
+                .queued_constructions()
+                .any(|(owner, subject, _)| owner == player && self.is_city_type(subject))
     }
 
     /// Whether the player has a city, a city site or a queued city on `body`.
@@ -117,7 +132,8 @@ impl World {
     }
 
     /// Rejects a building whose city already holds its per-city limit, counting
-    /// complete buildings, sites and queued constructions.
+    /// complete buildings, sites and queued constructions. In an automated colony's area the
+    /// colony's cap for the line is the limit (`et_colony_site.cap`).
     pub(crate) fn check_city_limit(
         &self,
         player: PlayerId,
@@ -125,20 +141,16 @@ impl World {
         pos: Pos,
     ) -> Result<(), SimError> {
         let et = &self.rules.entity_types[&subject];
-        if et.limit_scope != LimitScope::PerCity {
+        let city = self.city_covering(player, pos);
+        let cap = city
+            .and_then(|id| self.entity(id))
+            .and_then(|c| self.colony_cap(c.type_id, subject));
+        if et.limit_scope != LimitScope::PerCity && cap.is_none() {
             return Ok(());
         }
-        let city = self.city_covering(player, pos);
+        let limit = cap.unwrap_or(et.limit_count);
         // Limits belong to the whole building line, including automated sites.
-        let root = |mut id| {
-            for _ in 0..self.rules.entity_types.len() {
-                let Some(previous) = self.rules.entity_types[&id].upgrades_from_id else {
-                    break;
-                };
-                id = previous;
-            }
-            id
-        };
+        let root = |id| self.line_root(id);
         let subject_root = root(subject);
         let standing: usize = self
             .types
@@ -158,7 +170,7 @@ impl World {
                     && self.city_covering(player, *at) == city
             })
             .count();
-        if (standing + queued) as i64 >= et.limit_count {
+        if (standing + queued) as i64 >= limit {
             return Err(SimError::LimitReached);
         }
         Ok(())
@@ -176,7 +188,7 @@ impl World {
         let et = &self.rules.entity_types[&subject];
         let is_city = self.is_city_type(subject);
         // A player without a city may found one outside any border.
-        let first_city = ignore_territory || (is_city && self.city_count(player) == 0);
+        let first_city = ignore_territory || (is_city && !self.has_any_city(player));
         // The first city on another planet may also stand outside any border, though never
         // inside another player's (as free colonisation allows everywhere).
         let free_colonisation = self.rules.ages[&self.players[&player].age].free_colonisation

@@ -130,7 +130,7 @@ impl World {
                 return Err(SimError::LimitReached);
             }
             if mode == ProductionMode::Construct
-                && self.is_city_type(subject)
+                && self.counts_as_city(subject)
                 && self.city_count(command.player) >= self.city_limit(command.player)
             {
                 return Err(SimError::CityLimit);

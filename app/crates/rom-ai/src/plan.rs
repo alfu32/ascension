@@ -350,13 +350,15 @@ impl<'a> Plan<'a> {
         Outcome::Ordered
     }
 
-    /// Own units that could start building `building` now: not already building.
+    /// Own units that could start building `building` now: not already building. A builder
+    /// that does not move (an automated colony) is left to its governor.
     fn builders(&self, building: DefId) -> Vec<&'a Entity> {
         self.view
             .producers(ProductionMode::Construct, building)
             .into_iter()
             .filter(|e| {
-                !self.view.busy.contains(&e.id)
+                self.view.rules.entity_types[&e.type_id].movement.is_some()
+                    && !self.view.busy.contains(&e.id)
                     && !e
                         .orders()
                         .iter()
@@ -374,7 +376,10 @@ impl<'a> Plan<'a> {
             return Outcome::Impossible;
         }
         let is_city = self.view.is_city(building);
-        if is_city && self.view.line_count(building) >= self.view.city_limit() {
+        if is_city
+            && !self.view.is_colony(building)
+            && self.view.line_count(building) >= self.view.city_limit()
+        {
             return Outcome::Impossible;
         }
         let builders = self.builders(building);
