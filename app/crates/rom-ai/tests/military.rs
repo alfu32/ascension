@@ -129,6 +129,83 @@ fn the_main_army_takes_a_city_it_knows() {
     );
 }
 
+/// A plain building of four tiles a side that does not fight: what a town is ringed with.
+fn wall_piece(rules: &Rules) -> DefId {
+    rules
+        .entity_types
+        .values()
+        .filter(|t| {
+            t.class == EntityClass::Building
+                && t.weapons.is_empty()
+                && t.territory.is_none()
+                && t.footprint_w == 4
+                && t.footprint_h == 4
+        })
+        .min_by_key(|t| t.id)
+        .unwrap()
+        .id
+}
+
+/// A town closed by a ring of its own buildings is broken into: the army strikes the ring
+/// (the march itself strikes what stands in its way; a wave left standing with no path
+/// strikes the building nearest it on the way, `army::breach`).
+#[test]
+fn an_army_with_no_way_in_breaks_through_the_ring_of_buildings() {
+    let rules = seeing("tougher", |_| {});
+    let players = [("balanced", "tougher"), ("balanced", "tougher")];
+    let (mut world, mut brains) = common::plain(&rules, 3, &players);
+    // The enemy town at tile 80,80 is closed by a square of buildings 20 tiles a side.
+    let piece = wall_piece(&rules);
+    let mut ring = Vec::new();
+    for i in 0..5 {
+        let along = 72_000 + i * 4000;
+        for (x, y) in [
+            (along, 70_000),
+            (along, 90_000),
+            (70_000, along),
+            (90_000, along),
+        ] {
+            if let Ok(id) = world.spawn(piece, THEM, Pos::flat(x, y)) {
+                ring.push(id);
+            }
+        }
+    }
+    for corner in [
+        (70_000, 70_000),
+        (90_000, 70_000),
+        (70_000, 90_000),
+        (90_000, 90_000),
+    ] {
+        if let Ok(id) = world.spawn(piece, THEM, Pos::flat(corner.0, corner.1)) {
+            ring.push(id);
+        }
+    }
+    assert!(ring.len() >= 20, "the ring was not built: {}", ring.len());
+    // Close fighters only: what reaches over the ring from outside would open it anyway.
+    spawn(
+        &mut world,
+        ME,
+        soldier(&rules),
+        30,
+        Pos::flat(55_500, 52_500),
+    );
+    let mut breached = false;
+    for _ in 0..60 {
+        run_first(&mut world, &mut brains, 200);
+        breached = ring
+            .iter()
+            .any(|id| world.entity(*id).is_none_or(|e| e.hp < e.max_hp));
+        if breached {
+            break;
+        }
+    }
+    assert!(
+        breached,
+        "no building of the ring was struck by tick {}",
+        world.tick()
+    );
+}
+
 #[test]
 fn the_army_waits_for_the_attack_ratio() {
     let rules = seeing("tougher", |_| {});

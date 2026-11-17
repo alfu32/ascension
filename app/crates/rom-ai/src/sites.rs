@@ -21,6 +21,10 @@ const CITY_VALUE_TILES: i32 = 10;
 /// footprint beside the deposit.
 const MARGIN_TILES: i32 = 4;
 
+/// Slots a node site hard by another building must gain over the best spot with a lane
+/// around it (or half as many again, if more) before it is preferred.
+const TIGHT_GAIN: i64 = 3;
+
 /// The result of a site search.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Site {
@@ -46,9 +50,9 @@ pub(crate) struct Ground {
     pub threat: BTreeMap<Cell, i64>,
     /// Buildings planned during this thought: line root and city.
     planned: Vec<(DefId, Option<EntityId>)>,
-    /// Footprints kept free for the first gather site of a resource drawn from a node
-    /// terrain: other buildings must not take the only spot such a site has.
-    reserved: BTreeSet<Tile>,
+    /// Footprints kept free for gather sites drawn from a node terrain, by tile: the site
+    /// type each is kept for, and how firmly (`Hold`).
+    reserved: BTreeMap<Tile, (DefId, Hold)>,
     /// Whether the reservations of this thought have been made.
     pub reserved_done: bool,
     /// Ground near the node terrain of a resource the player has no gather site for yet
@@ -175,11 +179,16 @@ impl Ground {
     }
 
     /// Keeps the footprint of a planned node gather site free of other buildings.
-    pub fn reserve(&mut self, et: &EntityType, pos: Pos) {
+    pub fn reserve(&mut self, et: &EntityType, pos: Pos, hold: Hold) {
         let (x0, y0, w, h) = footprint(et, pos);
         for y in y0..y0 + h {
             for x in x0..x0 + w {
-                self.reserved.insert((pos.body.0, pos.face, x, y));
+                let tile = (pos.body.0, pos.face, x, y);
+                let hold = self
+                    .reserved
+                    .get(&tile)
+                    .map_or(hold, |(_, held)| hold.max(*held));
+                self.reserved.insert(tile, (et.id, hold));
             }
         }
     }
@@ -236,7 +245,8 @@ fn covering_city(view: &View<'_>, pos: Pos) -> Option<EntityId> {
 /// What the placement rules of a type ask of the ground, read once per search.
 struct Needs<'a> {
     et: &'a EntityType,
-    /// A gather site whose slots come from node terrain: it may use reserved ground.
+    /// A gather site whose slots come from node terrain: it may use ground reserved for its
+    /// own type and the margins.
     node_site: bool,
     on_terrain: Vec<DefId>,
     adjacent: Vec<(DefId, i64)>,
@@ -272,6 +282,42 @@ impl<'a> Needs<'a> {
     }
 }
 
+/// How firmly a spot is kept for a node site, from the loosest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Hold {
+    /// The next site of a resource that has sites already.
+    Next,
+    /// The first site of a resource whose age has not come yet.
+    Coming,
+    /// The first site of a resource the player can build now: no other building takes it.
+    First,
+}
+
+/// What ground kept for later a search leaves free, from the strictest to none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Keep {
+    /// The ground near deposits with no site yet, and every spot kept for a node site.
+    All,
+    /// Every spot kept for a node site.
+    Spots,
+    /// The spots kept for first sites.
+    Firsts,
+    /// Only the spots of first sites the player can build now: a town with no other room
+    /// builds there rather than not at all. Node sites never take another's spot.
+    Nothing,
+}
+
+impl Keep {
+    /// Whether a spot held so firmly stays closed to other buildings.
+    fn keeps(self, hold: Hold) -> bool {
+        match self {
+            Keep::All | Keep::Spots => true,
+            Keep::Firsts => hold >= Hold::Coming,
+            Keep::Nothing => hold >= Hold::First,
+        }
+    }
+}
+
 /// The snapped centre for a building requested at `at`, if everything the player knows
 /// allows it: explored buildable ground of the required terrain, own territory when the
 /// type needs it, and no known building (or its lane) in the way.
@@ -282,7 +328,7 @@ fn fits(
     at: Pos,
     lane: bool,
     territory: bool,
-    margins: bool,
+    keep: Keep,
 ) -> Option<Pos> {
     let et = needs.et;
     let pos = Pos {
@@ -296,10 +342,18 @@ fn fits(
         for x in x0..x0 + w {
             ground.spend(1);
             let tile = (pos.body.0, pos.face, x, y);
+            // Ground kept for another node site is not taken: a woodcutter's camp on the
+            // spot kept beside the only rock left no room for a mine all match.
+            let kept = ground.reserved.get(&tile).is_some_and(|(for_type, hold)| {
+                if needs.node_site {
+                    *for_type != et.id
+                } else {
+                    keep.keeps(*hold)
+                }
+            });
             if obstacles.contains(&tile)
-                || (!needs.node_site
-                    && (ground.reserved.contains(&tile)
-                        || (margins && ground.margin.contains(&tile))))
+                || kept
+                || (!needs.node_site && keep == Keep::All && ground.margin.contains(&tile))
             {
                 return None;
             }
@@ -360,6 +414,18 @@ fn count_terrain(view: &View<'_>, centre: Pos, terrain: DefId, radius: i64) -> i
     count
 }
 
+/// The slots a gather site of `type_id` standing at `pos` will have, as the simulation counts
+/// them from the node terrain around it.
+pub(crate) fn site_slots(view: &View<'_>, type_id: DefId, pos: Pos) -> i64 {
+    let Some(site) = view.rules.entity_types[&type_id].gather_site.as_ref() else {
+        return 0;
+    };
+    let nodes = site.needs_node_terrain_id.map_or(0, |terrain| {
+        count_terrain(view, pos, terrain, site.node_radius.max(0))
+    });
+    (site.slots_base + site.slots_per_node * nodes).min(site.slots_max)
+}
+
 /// Buildings of a line a city already holds, with those planned in this thought.
 fn line_in_city(view: &View<'_>, ground: &Ground, root: DefId, city: EntityId) -> i64 {
     let standing = view
@@ -418,12 +484,18 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
     // The ground kept free near rock for a first mine is a preference too: a town hemmed in
     // by it builds there rather than not at all (a first age stalled for the whole match
     // with no room for a library or a farm).
-    let passes: &[(bool, bool)] = if node.is_some() {
-        &[(true, true), (false, true)]
+    // The spot kept for a node site still to come goes last of all.
+    let passes: &[(bool, Keep)] = if node.is_some() {
+        &[(true, Keep::All), (false, Keep::All)]
     } else {
-        &[(true, true), (true, false)]
+        &[
+            (true, Keep::All),
+            (true, Keep::Spots),
+            (true, Keep::Firsts),
+            (true, Keep::Nothing),
+        ]
     };
-    for &(lane, margins) in passes {
+    for &(lane, keep) in passes {
         for city in view.cities.iter().filter(|c| c.complete) {
             if needs.et.limit_scope == LimitScope::PerCity
                 && line_in_city(view, ground, root, city.id) >= needs.et.limit_count
@@ -449,55 +521,40 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
                         .offset(city.pos, i64::from(*dx) * 1000, i64::from(*dy) * 1000)
                 });
             if let Some((terrain, site)) = node {
-                // The most node tiles in reach first, then the nearest to the city. The node
-                // tiles around the city are found once; only spots near one are tried.
-                let radius = site.node_radius.max(0);
-                let scan = reach + (radius / 1000) as i32 + 3;
-                let node_tiles: Vec<Pos> = view
-                    .cat
-                    .spiral
-                    .iter()
-                    .take_while(|(dx, dy)| dx * dx + dy * dy <= scan * scan)
-                    .map(|(dx, dy)| {
-                        view.world
-                            .offset(city.pos, i64::from(*dx) * 1000, i64::from(*dy) * 1000)
-                    })
-                    .filter(|at| view.world.terrain_at(*at) == Some(terrain))
-                    .collect();
-                ground.spend((scan * scan * 3) as usize);
-                let mut ranked: Vec<(i64, usize, Pos)> = Vec::new();
-                for (order, at) in spots.enumerate() {
-                    if !ground.spend(0) {
-                        exhausted = true;
-                        break;
-                    }
-                    let near = node_tiles
-                        .iter()
-                        .any(|n| view.distance(at, *n) <= radius as u64 + 3000);
-                    if !near {
-                        continue;
-                    }
-                    let Some(pos) =
-                        fits(view, ground, &needs, at, lane, needs.own_territory, margins)
-                    else {
-                        continue;
-                    };
-                    if full(pos) {
-                        continue;
-                    }
-                    let nodes = count_terrain(view, pos, terrain, radius);
-                    ground.spend(120);
-                    let slots = (site.slots_base + site.slots_per_node * nodes).min(site.slots_max);
-                    if slots > 0 {
-                        ranked.push((-slots, order, pos));
-                    }
-                    if slots >= site.slots_max {
-                        // Nothing farther out can be better.
-                        break;
-                    }
+                if !lane {
+                    // Searched together with the first pass.
+                    continue;
                 }
-                ranked.sort_unstable_by_key(|(worth, order, _)| (*worth, *order));
-                for (_, _, pos) in ranked {
+                let (mut ranked, cut) = node_candidates(
+                    view,
+                    ground,
+                    &needs,
+                    city,
+                    (terrain, site),
+                    (true, keep),
+                    &full,
+                );
+                // A spot hard by another building is taken when it reaches clearly more of
+                // the deposit: a town whose wood lay beside its centre otherwise put its
+                // camp where it reached four trees of nine, and lived on that all match.
+                let best = ranked.first().map_or(0, |(slots, _, _)| -slots);
+                let (tight, cut_tight) = node_candidates(
+                    view,
+                    ground,
+                    &needs,
+                    city,
+                    (terrain, site),
+                    (false, keep),
+                    &full,
+                );
+                exhausted |= cut || cut_tight;
+                let mut tight: Vec<(i64, usize, Pos)> = tight
+                    .into_iter()
+                    .filter(|(slots, _, _)| -slots >= best + TIGHT_GAIN.max(best / 2))
+                    .filter(|(_, _, pos)| !cuts_a_way(view, ground, needs.et, *pos))
+                    .collect();
+                tight.append(&mut ranked);
+                for (_, _, pos) in tight {
                     match ground.preview(view, subject, pos) {
                         Site::Nowhere => {}
                         found => return found,
@@ -508,8 +565,7 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
                     if !ground.spend(0) {
                         return Site::Later;
                     }
-                    let Some(pos) =
-                        fits(view, ground, &needs, at, lane, needs.own_territory, margins)
+                    let Some(pos) = fits(view, ground, &needs, at, lane, needs.own_territory, keep)
                     else {
                         continue;
                     };
@@ -534,10 +590,214 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
     }
 }
 
+/// Whether a building at `pos` would cut a way through: the free tiles around its footprint
+/// (no building, ground the workers can walk) form more than one stretch, and more than one
+/// of the regions they lead to is more than a small pocket, without those regions meeting
+/// round the building within a few tiles. A camp hard by the town centre and the shore
+/// would shut the workers in.
+fn cuts_a_way(view: &View<'_>, ground: &Ground, et: &EntityType, pos: Pos) -> bool {
+    let rules = view.rules;
+    let classes: BTreeSet<u32> = rules
+        .entity_types
+        .values()
+        .filter(|t| !t.harvester.is_empty() && rules.is_available(t.id, view.faction))
+        .filter_map(|t| t.movement.as_ref().map(|m| m.movement_class_id))
+        .collect();
+    let (x0, y0, w, h) = footprint(et, pos);
+    let inside = |x: i32, y: i32| x >= x0 && x < x0 + w && y >= y0 && y < y0 + h;
+    let free = |x: i32, y: i32| {
+        !inside(x, y)
+            && !ground.taken.contains(&(pos.body.0, pos.face, x, y))
+            && view
+                .world
+                .terrain_on_body(pos.body, pos.face, x, y)
+                .is_some_and(|terrain| {
+                    classes.iter().any(|class| {
+                        rules
+                            .movement_class_terrain
+                            .get(class)
+                            .is_some_and(|rows| rows.iter().any(|r| r.terrain_id == terrain))
+                    })
+                })
+    };
+    // The ring of tiles around the footprint, in order round it.
+    let (left, right, top, bottom) = (x0 - 1, x0 + w, y0 - 1, y0 + h);
+    let mut ring: Vec<(i32, i32)> = Vec::new();
+    ring.extend((left..right).map(|x| (x, top)));
+    ring.extend((top..bottom).map(|y| (right, y)));
+    ring.extend((left + 1..=right).rev().map(|x| (x, bottom)));
+    ring.extend((top + 1..=bottom).rev().map(|y| (left, y)));
+    ground.spend(ring.len());
+    let open: Vec<bool> = ring.iter().map(|(x, y)| free(*x, *y)).collect();
+    let starts = (0..open.len())
+        .filter(|i| open[*i] && !open[(i + open.len() - 1) % open.len()])
+        .count();
+    if starts <= 1 {
+        return false;
+    }
+    // Several stretches: do they still meet round the building, close by? Ground they
+    // reach only as a small closed pocket (between the building, rock and water, with no
+    // other building beside it) does not count: nothing is cut off there.
+    let targets: Vec<(i32, i32)> = ring
+        .iter()
+        .zip(&open)
+        .filter(|(_, o)| **o)
+        .map(|(t, _)| *t)
+        .collect();
+    let (bx0, bx1, by0, by1) = (
+        left - CUT_REACH,
+        right + CUT_REACH,
+        top - CUT_REACH,
+        bottom + CUT_REACH,
+    );
+    let mut seen: BTreeSet<(i32, i32)> = BTreeSet::new();
+    let mut open_sides = 0;
+    for start in &targets {
+        if seen.contains(start) {
+            continue;
+        }
+        let mut queue = std::collections::VecDeque::from([*start]);
+        seen.insert(*start);
+        let (mut size, mut wide) = (0, false);
+        while let Some((x, y)) = queue.pop_front() {
+            size += 1;
+            for (nx, ny) in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)] {
+                if nx < bx0 || nx > bx1 || ny < by0 || ny > by1 {
+                    wide = true;
+                    continue;
+                }
+                // A pocket beside another building is that building's way out.
+                if !inside(nx, ny) && ground.taken.contains(&(pos.body.0, pos.face, nx, ny)) {
+                    wide = true;
+                }
+                if !seen.contains(&(nx, ny)) && free(nx, ny) {
+                    seen.insert((nx, ny));
+                    queue.push_back((nx, ny));
+                }
+            }
+        }
+        if wide || size >= POCKET_TILES {
+            open_sides += 1;
+        }
+    }
+    ground.spend(seen.len());
+    open_sides > 1
+}
+
+/// Free ground a building may close off without cutting a way: a pocket this small.
+const POCKET_TILES: usize = 40;
+
+/// Tiles beyond a building's ring within which its free neighbours must still meet.
+const CUT_REACH: i32 = 10;
+
+/// Spots for a gather site drawn from node terrain around one city, the most node tiles
+/// in reach first, then the nearest to the city: (minus slots, spiral order, centre). The
+/// node tiles around the city are found once; only spots near one are tried.
+/// The flag is set when the lookup allowance ran out before the search was done.
+fn node_candidates(
+    view: &View<'_>,
+    ground: &Ground,
+    needs: &Needs<'_>,
+    city: &City,
+    (terrain, site): (DefId, &rom_rules::GatherSite),
+    (lane, keep): (bool, Keep),
+    full: &dyn Fn(Pos) -> bool,
+) -> (Vec<(i64, usize, Pos)>, bool) {
+    let reach = search_radius(needs, city);
+    let radius = site.node_radius.max(0);
+    let scan = reach + (radius / 1000) as i32 + 3;
+    let node_tiles: Vec<Pos> = view
+        .cat
+        .spiral
+        .iter()
+        .take_while(|(dx, dy)| dx * dx + dy * dy <= scan * scan)
+        .map(|(dx, dy)| {
+            view.world
+                .offset(city.pos, i64::from(*dx) * 1000, i64::from(*dy) * 1000)
+        })
+        .filter(|at| view.world.terrain_at(*at) == Some(terrain))
+        .collect();
+    ground.spend((scan * scan * 3) as usize);
+    let mut ranked: Vec<(i64, usize, Pos)> = Vec::new();
+    if node_tiles.is_empty() {
+        return (ranked, !ground.spend(0));
+    }
+    let mut exhausted = false;
+    let spots = view
+        .cat
+        .spiral
+        .iter()
+        .take_while(|(dx, dy)| dx * dx + dy * dy <= reach * reach)
+        .map(|(dx, dy)| {
+            view.world
+                .offset(city.pos, i64::from(*dx) * 1000, i64::from(*dy) * 1000)
+        });
+    for (order, at) in spots.enumerate() {
+        if !ground.spend(0) {
+            exhausted = true;
+            break;
+        }
+        let near = node_tiles
+            .iter()
+            .any(|n| view.distance(at, *n) <= radius as u64 + 3000);
+        if !near {
+            continue;
+        }
+        let Some(pos) = fits(view, ground, needs, at, lane, needs.own_territory, keep) else {
+            continue;
+        };
+        if full(pos) {
+            continue;
+        }
+        let nodes = count_terrain(view, pos, terrain, radius);
+        ground.spend(120);
+        let slots = (site.slots_base + site.slots_per_node * nodes).min(site.slots_max);
+        if slots > 0 {
+            ranked.push((-slots, order, pos));
+        }
+        if slots >= site.slots_max {
+            // Nothing farther out can be better.
+            break;
+        }
+    }
+    ranked.sort_unstable_by_key(|(worth, order, _)| (*worth, *order));
+    (ranked, exhausted)
+}
+
+/// The spot the next gather site of a node-terrain type would take, and the slots it would
+/// have, judged only by what the player knows (no placement preview, no discovery check):
+/// the spot kept free for a site that is still to come.
+pub(crate) fn node_spot(view: &View<'_>, ground: &Ground, subject: DefId) -> Option<(Pos, i64)> {
+    let needs = Needs::of(view, subject)?;
+    let site = needs
+        .et
+        .gather_site
+        .as_ref()
+        .filter(|s| s.slots_per_node > 0)?;
+    let terrain = site.needs_node_terrain_id?;
+    for pass in [(true, Keep::All), (false, Keep::All)] {
+        for city in view.cities.iter().filter(|c| c.complete) {
+            let (found, _) =
+                node_candidates(view, ground, &needs, city, (terrain, site), pass, &|_| {
+                    false
+                });
+            if let Some((slots, _, pos)) = found.first() {
+                return Some((*pos, -slots));
+            }
+        }
+    }
+    None
+}
+
 /// A site for another city: inside the player's borders (or anywhere not foreign once
 /// the age allows free colonisation), at least the city spacing from every own city, and
 /// with the most resources and open ground around it.
-pub(crate) fn find_city_site(view: &View<'_>, ground: &Ground, city_type: DefId) -> Site {
+pub(crate) fn find_city_site(
+    view: &View<'_>,
+    ground: &Ground,
+    city_type: DefId,
+    starved: &BTreeSet<DefId>,
+) -> Site {
     let Some(needs) = Needs::of(view, city_type) else {
         return Site::Nowhere;
     };
@@ -554,9 +814,10 @@ pub(crate) fn find_city_site(view: &View<'_>, ground: &Ground, city_type: DefId)
         .copied()
         .filter(|t| view.world.knows_terrain(view.me, *t))
         .collect();
-    // Node terrain of a resource the player has no gather site for (rock with no mine yet):
-    // a town without metal for the whole match stays in its age, so a new city goes there.
-    let wanted: BTreeSet<DefId> = view
+    // Node terrain of a resource the player has no gather site for (rock with no mine yet),
+    // or whose sites are full with no room for another: a town without metal (or with forty
+    // timber a period) for the whole match stays in its age, so a new city goes there.
+    let mut wanted: BTreeSet<DefId> = view
         .cat
         .gather_sites
         .values()
@@ -568,6 +829,7 @@ pub(crate) fn find_city_site(view: &View<'_>, ground: &Ground, city_type: DefId)
         .filter_map(|g| g.needs_node_terrain_id)
         .filter(|t| node_terrains.contains(t))
         .collect();
+    wanted.extend(starved.iter().filter(|t| node_terrains.contains(t)));
     let mut ranked: Vec<(i64, usize, Pos)> = Vec::new();
     let mut order = 0;
     for city in view.cities.iter().filter(|c| c.complete) {
@@ -592,7 +854,7 @@ pub(crate) fn find_city_site(view: &View<'_>, ground: &Ground, city_type: DefId)
                 at,
                 true,
                 needs.own_territory && !free,
-                true,
+                Keep::All,
             ) else {
                 continue;
             };

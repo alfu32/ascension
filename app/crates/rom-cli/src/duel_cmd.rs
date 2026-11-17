@@ -74,6 +74,37 @@ pub struct DuelResult {
     pub elapsed_ms: u128,
     /// The age ordinal each side ended in, by side.
     pub ages: [i64; 2],
+    /// Each side's gather sites at the end, by side (see [`sites_line`]).
+    pub sites: [String; 2],
+}
+
+/// A player's finished gather sites per base resource: `<abbrev><sites>:<slots>/<workers>`
+/// (slot-less sites show their count only), e.g. `F5:5/5 T2:14/12 M1:6/6`.
+pub(crate) fn sites_line(world: &World, player: PlayerId) -> String {
+    let rules = world.rules();
+    let mut by: BTreeMap<DefId, (usize, i64, usize)> = BTreeMap::new();
+    for e in world
+        .entities()
+        .filter(|e| e.owner == player && e.build_progress.is_none() && e.hp > 0)
+    {
+        if let Some(site) = rules.entity_types[&e.type_id].gather_site.as_ref() {
+            let entry = by.entry(site.resource_id).or_default();
+            entry.0 += 1;
+            entry.1 += e.gather_slots;
+            entry.2 += world.occupants(e.id).len();
+        }
+    }
+    by.iter()
+        .filter_map(|(resource, (n, slots, on))| {
+            let row = rules.resources.get(resource)?;
+            Some(if *slots > 0 {
+                format!("{}{n}:{slots}/{on}", row.abbrev)
+            } else {
+                format!("{}{n}", row.abbrev)
+            })
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// The first race in id order with its playable start factions, one picked by the seed.
@@ -306,9 +337,11 @@ pub fn play(rules: &Arc<Rules>, duel: &DuelRequest, seed: u64) -> Result<DuelRes
         Outcome::Playing => (None, "draw".to_string(), world.tick()),
     };
     let mut ages = [0_i64; 2];
+    let mut sites = [String::new(), String::new()];
     for p in world.players().filter(|p| p.id != PlayerId(0)) {
         let side = order[(p.id.0 as usize).saturating_sub(1).min(1)];
         ages[side] = rules.ages.get(&p.age).map_or(0, |a| a.ordinal);
+        sites[side] = sites_line(&world, p.id);
     }
     Ok(DuelResult {
         seed,
@@ -320,6 +353,7 @@ pub fn play(rules: &Arc<Rules>, duel: &DuelRequest, seed: u64) -> Result<DuelRes
         maps,
         elapsed_ms: start.elapsed().as_millis(),
         ages,
+        sites,
     })
 }
 
@@ -547,7 +581,11 @@ fn trace(world: &World, brain: &Brain, seed: u64) {
                 .or_default() += 1;
         }
         let failed: Vec<String> = failed.iter().map(|(k, n)| format!("{k}={n}")).collect();
-        println!("  failed=[{}]", failed.join(" "));
+        println!(
+            "  failed=[{}] sites=[{}]",
+            failed.join(" "),
+            sites_line(world, brain.player())
+        );
         println!(
             "  econ workers={} idle={} {} stats={:?} army=[{}]",
             s.workers,
@@ -707,7 +745,7 @@ pub fn run_command(
     let mut decided_ticks = 0_u64;
     for r in &results {
         println!(
-            "duel seed={} maps={} player1={} player2={} winner={} winner_player={} rule={} tick={} ages={},{} hash={:016x}",
+            "duel seed={} maps={} player1={} player2={} winner={} winner_player={} rule={} tick={} ages={},{} hash={:016x} sites=[{}],[{}]",
             r.seed,
             r.maps,
             side_name(&duel, r.first),
@@ -718,7 +756,9 @@ pub fn run_command(
             r.tick,
             r.ages[r.first],
             r.ages[1 - r.first],
-            r.hash
+            r.hash,
+            r.sites[r.first],
+            r.sites[1 - r.first]
         );
         match r.winner {
             Some(side) => {
