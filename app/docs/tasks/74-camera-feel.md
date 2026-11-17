@@ -30,6 +30,10 @@ long ellipses. "It offers a more spectacular perspective."
    many events the wheel fires.
 4. "In the planet view we rotate with the middle button, in the system and
    star map with Shift + middle. It is confusing."
+6. "The target of the camera could always remain on the solar plane; that
+   would prevent weird panning or zooming when the target strays too far
+   from it. The player's focus is on the plane, and the planets' orbits all
+   lie on one common plane." (added the same day)
 5. "In the system and star map the left–right rotation is
    counter-intuitive: as if we rotate the target around the camera. I am
    used to rotating the camera position around the target."
@@ -84,7 +88,19 @@ the planet camera).
    most 3D strategy games and editors). Settings get "Invert horizontal
    turn" and "Invert vertical turn". Check the keyboard turn keys and the
    F2 "Sky from the Sun" look (task 59) keep their own sensible directions.
-5. **Tests.** Camera unit tests for: the first hand-over elevation, the
+5. **The focus stays on the plane.** In the system view the camera's focus
+   point always lies on the system plane: panning moves it within the plane
+   (ray from the pointer to the plane, also when looking from below), zoom
+   toward the pointer anchors on the plane point under the cursor (or on the
+   body under it, projected to the plane), turning orbits around that plane
+   point, and no input can lift the focus off the plane. Near the horizon
+   (pointer ray almost parallel to the plane) panning and zoom-to-pointer
+   are clamped to a sensible distance instead of shooting off. On the star
+   map (3D since task 59) the focus lies on the map's reference plane (the
+   one task 59 draws its rings and drop lines to), except while flying to or
+   following a system, when it sits on that system; any pan returns it to the
+   reference plane.
+6. **Tests.** Camera unit tests for: the first hand-over elevation, the
    remembered elevation, the ±89° clamp, wheel coalescing (a burst of 6
    events is one step), the animated zoom reaching its target, the round
    trip planet → system → planet returning the planet camera unchanged, and
