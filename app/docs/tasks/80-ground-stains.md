@@ -32,9 +32,9 @@ are drawn on the cube-sphere), `rom-render/src/sun.rs` (`day_ticks`);
 
 1. **What leaves a stain.** A building or unit on a planet surface that is
    destroyed: it lost its last hit points (combat, splash, orbital
-   bombardment, attrition, an attacker consumed by its own attack), or a
-   building was demolished by its owner. Nothing else that removes an
-   entity leaves a stain: boarding a transport, an upgrade that replaces a
+   bombardment, attrition, an attacker consumed by its own attack). Nothing
+   else that removes an entity leaves a stain: a building demolished by its
+   owner (owner 2026-11-17: only destroyed buildings), boarding a transport, an upgrade that replaces a
    building, a unit going into a garrison, a ship leaving for space,
    ascension (task 76), and units that go down with their carrier in space.
    A building still under construction leaves a stain scaled by how far it
@@ -51,11 +51,13 @@ are drawn on the cube-sphere), `rom-render/src/sun.rs` (`day_ticks`);
    - The factors live in one place in code, or as constants if you find
      they need tuning; say which.
    - Look: soot, ash and churned earth darkening the ground (darker in the
-     centre, ragged edge, a little variation per stain from its id). No
-     blood or gore. On water there is no stain; a stain overlapping the
+     centre, ragged edge, a little variation per stain from its id). A
+     building's stain also shows debris: scattered rubble and broken
+     material in its colours, drawn the same way as the stain (no mesh made
+     per stain), fading with it. No blood or gore. On water there is no stain; a stain overlapping the
      shore stops at the water.
-3. **Fading.** A stain lasts `world.stain_days` days (new constant, 36: three
-   dozen rotations, 3 game hours at the default day length) and fades out
+3. **Fading.** A stain lasts `world.stain_days` days (new constant, 6: the
+   owner's choice of 2026-11-17, 30 game minutes at the default day length) and fades out
    smoothly over its life, mostly in the last third. Lifetime in ticks =
    `world.stain_days × world.day_ticks`. Overlapping stains darken the ground
    more, up to a limit (no black holes where many units died).
@@ -78,14 +80,15 @@ are drawn on the cube-sphere), `rom-render/src/sun.rs` (`day_ticks`);
    shadows, and are lit by the day and night like the ground. Fog of war:
    a stain is drawn only where the viewing player currently has vision (it
    reveals that something died there).
-7. **Constants.** `world.stain_days` (36, days) and `world.stain_cap` (2000)
+7. **Constants.** `world.stain_days` (6, days) and `world.stain_cap` (2000)
    through `app/db/content/generate.py`, documented in
    `app/docs/database.md`; lint views empty.
 8. **Tests.**
    - A building and a unit destroyed by damage each leave one stain of the
      expected radius; a unit boarding a transport, an upgraded building and
      a ship destroyed in orbit leave none.
-   - A demolished building leaves a stain; a half-built one a smaller one.
+   - A demolished building leaves none; a half-built building destroyed by
+     damage leaves a smaller stain than a finished one.
    - A stain is gone after `stain_days × day_ticks` ticks; the cap drops
      the oldest.
    - Run a battle twice: equal hashes; save and load mid-battle: equal
@@ -100,7 +103,7 @@ stains enter the state hash: say so and show it run twice equal); `rom
 duel` subset unchanged in results (stains have no gameplay effect); frame
 time of a big battle with many stains, before and after; screenshots you
 looked at: a battlefield just after a fight (stains of a city centre,
-houses, soldiers and a tank side by side), the same place half faded and
+houses with their debris, soldiers and a tank side by side), the same place half faded and
 fully faded (scripted time skip), stains at night, a stain at a shore;
 commit on the branch (stage by name), do not push or merge; final message
 with commands and real output, files changed, schema and save-format
