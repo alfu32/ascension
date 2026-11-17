@@ -1520,6 +1520,9 @@ fn lead(
                     }
                 }
             }
+            if let Some(goal) = army.goal {
+                breach(plan, memory, units, goal);
+            }
             advance(plan, memory, cmd, army, units);
             batter(plan, memory, army, units);
             focus(plan, memory, units);
@@ -1541,6 +1544,85 @@ fn lead(
         }
     }
 }
+
+/// Breaks a way in: when members found no path to the goal lately (the simulation's
+/// order failures say so), the way is closed (a town walled in by its buildings, a gap
+/// built over); every member that can hit it strikes the enemy building nearest the army's
+/// front on the way to the goal. One that cannot be reached either is left alone for a
+/// while (its attack fails too) and the next is tried.
+fn breach(plan: &mut Plan<'_>, memory: &Memory, units: &[&Entity], goal: Pos) {
+    let view = &plan.view;
+    let tick = view.tick;
+    let ids: BTreeSet<EntityId> = units.iter().map(|e| e.id).collect();
+    let failed = view
+        .world
+        .order_failures(view.me)
+        .filter(|f| {
+            f.tick + BREACH_TICKS >= tick
+                && f.reason == "no_path"
+                && matches!(f.kind.as_str(), "attack_move" | "move")
+                && ids.contains(&f.executor)
+        })
+        .count();
+    if failed < BREACH_FAILURES {
+        return;
+    }
+    let Some(from) = front(view, units, Some(goal)) else {
+        return;
+    };
+    let way = view.distance(from, goal);
+    let blocker = memory
+        .enemies
+        .iter()
+        .filter(|(id, e)| {
+            e.building
+                && e.pos.body == goal.body
+                && memory
+                    .unreachable
+                    .get(id)
+                    .is_none_or(|until| *until <= tick)
+                && view.distance(e.pos, goal) < way
+                && view
+                    .world
+                    .entity(EntityId(**id))
+                    .is_some_and(|live| live.hp > 0 && live.owner == e.owner)
+        })
+        // Near the line from the front to the goal, the nearest to the front: what stands
+        // in the gap the army could not pass.
+        .filter(|(_, e)| {
+            view.distance(from, e.pos) + view.distance(e.pos, goal) <= way + BREACH_CORRIDOR
+        })
+        .min_by_key(|(id, e)| (view.distance(from, e.pos), **id))
+        .map(|(id, _)| EntityId(*id));
+    let Some(blocker) = blocker else {
+        return;
+    };
+    let strikers: Vec<EntityId> = units
+        .iter()
+        .filter(|e| {
+            !view.busy.contains(&e.id)
+                && !e
+                    .orders()
+                    .front()
+                    .is_some_and(|o| o.kind == "attack" && o.target_entity == Some(blocker))
+                && view.world.can_target(e.id, blocker)
+        })
+        .map(|e| e.id)
+        .collect();
+    for unit in strikers {
+        if !plan.order(unit, "attack", None, Some(blocker), None) {
+            return;
+        }
+    }
+}
+
+/// How far off the straight way (front to goal, in milli-tiles of detour) a building may
+/// stand and still be the one an army breaks through.
+const BREACH_CORRIDOR: u64 = 8000;
+/// The span over which members' failures to find a path count towards a breach, in ticks.
+const BREACH_TICKS: u64 = 1200;
+/// Failures to find a path within `BREACH_TICKS` that make an army break a way in.
+const BREACH_FAILURES: usize = 3;
 
 /// Siege: members that do more damage to the target building than to the enemies around
 /// it fire on the building once it is within their reach, instead of on whatever comes

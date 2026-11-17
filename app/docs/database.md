@@ -1047,13 +1047,21 @@ Owner's choice (2026-11-16) after tasks 61 and 65 ended most duels in stand-offs
 
 | Difficulty | grace_ticks | first_wave_max | wave_growth_per_hour | army_vs_enemy_pct | economy_pct | reaction_ticks |
 | --- | --- | --- | --- | --- | --- | --- |
-| easiest | 36000 (30 min) | 5 | 10 | 40 | 50 | 600 (was 200) |
-| easy | 12000 (10 min) | 8 | 20 | 80 | 80 | 300 (was 120) |
+| easiest | 57600 (48 min; 36000 until task 78) | 5 | 10 | 40 | 50 | 600 (was 200) |
+| easy | 54000 (45 min; 12000 until task 78) | 8 | 20 | 80 | 80 | 300 (was 120) |
 | moderate | 3600 (3 min) | 0 | 0 | 0 | 100 | 60 |
 | tough, tougher, toughest | 0 | 0 | 0 | 0 | 100 | as before |
 
   The brain does not know which player is a person, so the grace and the wave limit
   apply to every opponent.
+
+  Task 78 (the owner wants easy kept gentle, 2026-11-17): with a 10-minute grace the easy
+  level's first wave came at about 19 minutes from 0.0.69 on (about 44 in 0.0.67, held back
+  by the attack ratio rather than the grace). Task 78's economies no longer stall, so the
+  armies of the low levels are also ready sooner: with 30 minutes the easiest level's first
+  wave came at 36 minutes (42 in 0.0.69). `grace_ticks` is now 54000 (45 minutes) for easy
+  and 57600 (48 minutes) for easiest, so both come no earlier than in 0.0.67 and 0.0.69 and
+  easiest last; nothing else changed (`rom first-attack`, `docs/computer-player.md`).
 
 ## Counters and siege (task 71)
 

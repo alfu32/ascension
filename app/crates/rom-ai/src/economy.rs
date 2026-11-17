@@ -17,6 +17,9 @@ const BASE_WEIGHT: i64 = 100;
 const STOCK_EASE: i64 = 1500;
 /// Share of the remembered demand that is kept at each update, in percent.
 const DEMAND_KEEP_PCT: i64 = 70;
+/// Score of a site for a resource with fewer than half the slots its workers need, paid in
+/// that resource: above the way to the next age at its most urgent.
+const STARVED_SITE_SCORE: i64 = 1100;
 /// Ticks between demand updates and between workers moved from one resource to another, so
 /// that a brain that thinks often does not keep its workers walking.
 pub(crate) const PACE_TICKS: u64 = 100;
@@ -36,6 +39,9 @@ pub(crate) struct Gathering {
     pub expandable: bool,
     /// The site type to build next, if any.
     pub site_type: Option<DefId>,
+    /// Its sites are full, the commerce cap would pay for more hands and the plans lack it,
+    /// but no further site fits around the cities: the resource waits for another city.
+    pub stuck: bool,
 }
 
 /// The economy as assessed for one thought.
@@ -180,6 +186,7 @@ pub(crate) fn assess(view: &View<'_>, weights: &Weights, memory: &Memory) -> Eco
     // The most workers a resource can use: its commerce cap, or its sites when no more fit.
     let cap = view.commerce_cap();
     let mut most: BTreeMap<DefId, i64> = BTreeMap::new();
+    let mut stuck: BTreeMap<DefId, bool> = BTreeMap::new();
     for (resource, g) in &eco.resources {
         let row = &rules.resources[resource];
         let income = view.world.income(view.me, *resource);
@@ -209,6 +216,26 @@ pub(crate) fn assess(view: &View<'_>, weights: &Weights, memory: &Memory) -> Eco
             let room = (cap - income.effective).max(0) * 100;
             working + (room + per_worker * pct - 1) / (per_worker * pct)
         };
+        // A site type the player can build, but no room left for one around the cities: the
+        // resource waits for another city.
+        let crowded = view
+            .cat
+            .gather_sites
+            .get(resource)
+            .into_iter()
+            .flatten()
+            .filter(|site| {
+                view.unlocked(**site)
+                    && !view.obsolete(**site)
+                    && !view.producers(ProductionMode::Construct, **site).is_empty()
+            })
+            .any(|site| crate::plan::no_room_for(view, memory, *site));
+        stuck.insert(
+            *resource,
+            crowded
+                && limit > g.slots + g.pending
+                && memory.demand.get(&resource.0).is_some_and(|d| *d > 0),
+        );
         if !g.expandable {
             limit = limit.min(g.slots + g.pending);
         }
@@ -236,6 +263,7 @@ pub(crate) fn assess(view: &View<'_>, weights: &Weights, memory: &Memory) -> Eco
         wanted * STOCK_EASE / (STOCK_EASE + stock)
     };
     for (resource, g) in &mut eco.resources {
+        g.stuck = stuck.get(resource).copied().unwrap_or(false);
         g.desired = memory
             .floors
             .get(&resource.0)
@@ -263,6 +291,26 @@ pub(crate) fn assess(view: &View<'_>, weights: &Weights, memory: &Memory) -> Eco
         given += 1;
     }
     eco
+}
+
+impl Economy {
+    /// Node terrains (forest, rock) of resources that wait for room for another site: a new
+    /// city goes where they are.
+    pub fn stuck_terrains(&self, view: &View<'_>) -> BTreeSet<DefId> {
+        self.resources
+            .iter()
+            .filter(|(_, g)| g.stuck)
+            .flat_map(|(resource, _)| view.cat.gather_sites.get(resource).into_iter().flatten())
+            .filter_map(|site| view.rules.entity_types[site].gather_site.as_ref())
+            .filter(|g| g.slots_per_node > 0)
+            .filter_map(|g| g.needs_node_terrain_id)
+            .collect()
+    }
+
+    /// Whether any resource waits for room for another site.
+    pub fn stuck(&self) -> bool {
+        self.resources.values().any(|g| g.stuck)
+    }
 }
 
 /// The ticks between demand updates and worker moves for a difficulty: `PACE_TICKS`, or
@@ -327,8 +375,19 @@ pub(crate) fn wishes(view: &View<'_>, eco: &Economy, late: bool, wishes: &mut Ve
             // has no income at all, whatever the worker plan says.
             let nothing = g.slots == 0 && g.pending == 0;
             if (nothing || (!late && g.slots + coming < g.desired)) && g.pending < pending_limit {
+                // A starved resource whose site is paid in that very resource (a camp paid in
+                // timber, with timber trickling in from one tree) comes before everything that
+                // spends it, the way to the next age included: else each of them in turn holds
+                // the savings and the site is never bought.
+                let starved = g.slots * 2 < g.desired
+                    && view
+                        .price(site)
+                        .iter()
+                        .any(|(paid, _)| *paid == spec.resource_id);
                 wishes.push(Wish {
-                    score: if nothing {
+                    score: if starved {
+                        STARVED_SITE_SCORE
+                    } else if nothing {
                         880
                     } else {
                         760 + (g.desired - g.slots).clamp(0, 5) * 10

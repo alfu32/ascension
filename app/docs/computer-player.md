@@ -63,10 +63,12 @@ Scores (higher first):
 | Score | Wish |
 | --- | --- |
 | 2000 | current opening step |
+| 1100 | a gather site for a resource with fewer than half the slots its workers need, paid in that resource (task 78) |
 | 950 | the building the next age waits for (a library when there is none) |
 | 900 / 860 | worker for a free slot (first eight / later) |
 | 880 | first gather site of a resource |
 | 880 | military unit while a city is under attack |
+| 850 | another city while a resource has no room for another site around the cities (task 78) |
 | 760–810 | further gather sites; unattended sites while the cap has room |
 | 560 + 2 × `tech.age_priority` | technologies on the way to the next age |
 | 300 + 4 × `econ.expand_eagerness` | another city |
@@ -750,6 +752,122 @@ First attack on a person (`rom first-attack --seeds 1..8`):
 same (45:15, was 45:29) and every hit now comes after its 30-minute grace; the earliest is
 earlier than before (31:34, was 38:22) and one seed in eight saw no attack (was two).
 
+## Economies that do not stall; a gentle easy level (task 78)
+
+Task 71's remaining draws traced to the economy, not to combat. Traced again on 0.0.69 with
+the gather sites now printed by `rom duel` (`sites=` in the result line and the trace):
+
+- **One small woodcutter's camp all match** (seeds 21, 90): the start's wood lay hard by the
+  town centre and the shore. The opening placed its camp at tick 1 where it reached four trees
+  of nine (with a free tile kept round every building, the spot beside the centre was never
+  tried), and no second camp ever fitted. Timber stayed at +40 a period; the city that would
+  have reached other wood costs 300 timber and was never saved for, because the way to the
+  next age and the soldiers held the one reservation, so the town stayed alone until minute
+  65–75 with metal past 10 000.
+- **No mine all match** (seeds 15, 38): the only rock lay beside the capital and a farm or the
+  second woodcutter's camp took the one spot a mine could have had, minutes before mines were
+  known (the ground near rock was kept free only as a preference, and node sites ignored it).
+- **A camp of one slot** (seed 50 during this task): the opening camp was placed where it
+  reached one tree; the next camp, paid in timber, waited behind the way to the next age, which
+  held the savings, and timber came in at +10 a period for the whole match.
+- **No path into a town** (seed 23): the attack-moves failed 50 tiles out with nothing near
+  the units (terrain, not a wall); with the economy fixed the duel is won before that.
+
+What changed in `rom-ai`:
+
+- **Room for every node site.** In each thought that builds, the spot the first site of every
+  node resource would take is kept free (`Hold::First`), also for a resource whose age has not
+  come (`Hold::Coming`: rock before mines are known), and for a resource whose sites hold fewer
+  workers than twice the commerce cap pays for, the spot of its next site (`Hold::Next`). Other
+  buildings give up the next-site spots first, then the coming ones, and never the first site's
+  spot of a resource the player can build (`Keep` passes in `sites::find_site`; a town on a small
+  island still gets its farms). A node site never takes the spot kept for another type, and
+  the spots are kept also while a node site is being placed (else the next woodcutter's camp
+  took the only spot beside the rock while a mine was looked for). The firmest are kept
+  first. Spots are judged on what the player knows, without a placement preview
+  (`sites::node_spot`).
+- **Camps where the wood is.** A node site may stand hard by another building when that spot
+  reaches clearly more of the deposit (three slots or half as many again), unless it would cut a
+  way: the free tiles round it must still reach each other within ten tiles, or all but one of
+  the regions they lead to must be small closed pockets (`sites::cuts_a_way`; an early version
+  without the test shut a town's workers in, one without the pockets left a mine beside a
+  five-tile rock unbuilt).
+- **Starved sites first.** A site for a resource with fewer than half the slots its workers need,
+  paid in that very resource, is wished for at 1100, above the way to the next age at its most
+  urgent; it reserves its price.
+- **A city where the resource is.** A resource is *stuck* when the last search for its site came
+  back empty with as many cities and in the same age as now, its sites are full, the commerce
+  cap would pay for more hands and the plans lack it. Then another city is wished for at 850 with
+  its price reserved (ahead of soldiers and the next age), the city limit technology is valued as
+  by the most eager profile, and the new city goes where the node terrain of the stuck resource
+  is (as already for a resource with no site).
+- **Breaking a way in.** When members of an advancing army failed with `no_path` three times in a
+  minute (the simulation's order failures), every member that can hit it strikes the remembered
+  enemy building nearest the army's front within eight tiles of the straight way to the goal; one
+  that cannot be reached either fails too and is left alone, and the next is tried (`army::breach`).
+  The march itself already strikes buildings in its way (`attack_move`); in the traced duels the
+  remaining `no_path` failures were terrain.
+- **Market trade** of surplus is not possible: the rules have no order that sells a resource
+  (trade routes bring wealth only). Surplus goes into research and the army as before.
+
+Easy is gentle again (data only, `docs/database.md`): `grace_ticks` 54000 (45 minutes) for easy
+and 57600 (48 minutes) for easiest: with economies that no longer stall the low levels' armies
+are ready sooner (easiest's first wave came at 36 minutes with its old 30-minute grace).
+
+### Measured (task 78)
+
+On the i7-6700HQ, `rom duel`, 100 seeds, 8 jobs, 108 000-tick limit. The machine was shared
+with other tasks' builds and tests (load 15–25), so run times are rough.
+
+| Duel | Wins | Draws | Player 1 / 2 wins | Run time |
+| --- | --- | --- | --- | --- |
+| 0.0.69: moderate – easiest | 93 – 1 | 6 | 46 / 48 | 6.8 min (6 jobs) |
+| 0.0.69: moderate – moderate | 48 – 39 | 13 | 46 / 41 | 9.3 min (6 jobs) |
+| task 78: moderate – easiest | 96 – 0 | 4 | 48 / 48 | 7.3 min |
+| task 78: moderate – moderate | 53 – 42 | 5 | 46 / 49 (read from which side kept its sites) | 14.0 min |
+
+Single gather sites at the end (`sites=`; 0.0.69 did not print them): the moderate player ended
+7 of the 100 moderate – easiest matches with one woodcutter's camp or one mine (seeds 4, 5, 27,
+29, 31, 90, 91; in 4, 5, 27 and 31 it won anyway, with a site of 5–10 slots), and 2 of the
+mirror's winners with one mine (41, 77). Each is a start whose only wood or rock in reach
+holds one site. The card's measure (no single site of a spent resource) is therefore not met on
+those maps. Draws of moderate – easiest, traced (`--trace 12000`):
+
+- **seed 14**: the moderate player leads (age 5 against 4, 51 soldiers, 10 000 timber and
+  13 000 metal in store) but food is its cap (four cities, twenty farms, +180 a period) and its
+  armies spend the last half hour answering the easiest player's raiders inside its borders.
+- **seed 29**: the only rock in its land is five tiles beside the capital, in a pocket closed by
+  the town centre; a mine there would shut in what the town trains, so none is built and metal
+  stays at 9. An army of 85 without metal units answers raids and kills 18.
+- **seed 90**: the start's only wood is seven tiles beside the capital (one camp of seven
+  slots, timber +87); 18 attack-moves failed with `no_path` (terrain: the army stands with no
+  building in its way).
+- **seed 91**: an island capital with no rock in reach (metal +0), so three soldiers at the end.
+
+Of the causes task 71 traced, the single small camp of a town whose wood lay beside its centre
+(21), the missing mine (15, 38) and the stalled first ages no longer draw; seed 90 still has
+room for only one camp. Determinism: the four draws traced again (other jobs, stepped in trace
+chunks) and seeds 1–3 of the mirror run alone gave the hashes of the 100-seed runs.
+
+First attack on a person (`rom first-attack --seeds 1..8`, earliest / mean):
+
+| Difficulty | First wave 0.0.69 | First wave task 78 | First building hit 0.0.69 | First building hit task 78 |
+| --- | --- | --- | --- | --- |
+| easiest | 42:01 / 45:04, 7 units | 48:01 / 51:29, 5 units | 31:34 / 45:15 | 48:27 / 52:05 |
+| easy | 18:40 / 19:44, 10 units | 45:01 / 45:38, 8 units | 17:43 / 30:29 | 45:11 / 46:05 |
+| moderate | 21:07 / 23:42, 15 units | 17:51 / 22:27, 15 units | 5:05 / 23:37 | 18:03 / 23:18 |
+| tough | 21:25 / 23:44, 14 units | 21:26 / 23:52, 13 units | 5:21 / 22:07 | 23:08 / 26:29 |
+| tougher | 20:26 / 22:07, 13 units | 14:34 / 21:31, 14 units | 21:13 / 24:40 | 22:18 / 23:55 |
+| toughest | 19:49 / 20:35, 15 units | 18:54 / 21:39, 15 units | 16:40 / 22:08 | 18:25 / 22:23 |
+
+Easy is back where 0.0.67 had it (44:34 / 45:13) and easiest comes last. The hard levels are
+within a minute of 0.0.69: their first waves are as early or earlier except toughest's mean
+(a minute later) and tough's (eight seconds); their first building hit comes later where 0.0.69
+had a raider strike a building in the first six minutes.
+
+`rom fight-matrix` (the owner's counter rule, unchanged data): 136 strengths, none without an
+answer (2.8 min, 2 jobs).
+
 ## Simulation gaps found in part 2, and what task 65 did with them
 
 - **Closed: `explore`, `patrol`, `guard`.** `explore` walks to the nearest tile
@@ -841,8 +959,11 @@ less than three quarters of the other's land, or a capital has no room for a
 gather site on a node terrain its start sites draw from — is replaced by
 another map of the same seed (`maps=` in the output, at most sixteen). Each
 match runs until a team wins or the tick limit; output is one line per seed
-(players, winner, rule, tick, the age each side ended in, hash) and the win-rate table; matches run on
-`--jobs` threads (default: up to four), each deterministic on its own.
+(players, winner, rule, tick, the age each side ended in, hash, and each side's gather sites
+at the end) and the win-rate table; matches run on `--jobs` threads (default: up to four), each
+deterministic on its own. The sites read `F5:5/4 T2:14/12 M1:7/7 K1:7/7`: per resource
+(abbreviation) the finished gather sites, their slots and the workers in them; `--trace`
+prints the same for each player at every trace line.
 
 Territory is off by default: on the two-player map the first city of a
 central start already holds half the land, so the territory timer decides
