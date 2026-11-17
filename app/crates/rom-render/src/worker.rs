@@ -1578,6 +1578,14 @@ fn zoom_event(
             zoom.fly_home(orbit);
             true
         }
+        InputEvent::KeyDown(Key::SkyFromSun) if zoom.level() >= Level::System => {
+            zoom.toggle_sky();
+            true
+        }
+        InputEvent::KeyDown(Key::ToggleConstellations) if in_space => {
+            zoom.toggle_constellations();
+            true
+        }
         InputEvent::KeyDown(Key::ResetCamera) if in_space => {
             zoom.fly_home(orbit);
             true

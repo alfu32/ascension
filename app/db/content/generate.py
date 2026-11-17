@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Generate the content catalogue described in docs/content.md (stdlib only)."""
 import argparse
+import sys
 from collections import defaultdict
 from pathlib import Path
+
+sys.dont_write_bytecode = True  # the star table is a module beside this file: leave no __pycache__
+from stars import star_sql  # noqa: E402
 
 SEED = Path(__file__).resolve().parents[1] / 'seed.sql'
 BEGIN = '-- BEGIN GENERATED CONTENT'
@@ -527,6 +531,7 @@ def generate():
             sql.append(f"INSERT INTO production SELECT {val(Ref('bld.auto_' + site))},product_def_id,mode,ui_page,ui_col,ui_row FROM production WHERE producer_type_id={val(Ref('bld.' + site))};")
     for key, requirement, group in prerequisites:
         row('prerequisite', def_id=Ref(key), requires_def_id=Ref(requirement), alt_group=group)
+    sql.extend(star_sql(val))
     sql.append(END)
     return '\n'.join(sql)
 

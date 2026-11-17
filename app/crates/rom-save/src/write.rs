@@ -132,9 +132,19 @@ fn write_all(
     }
     for system in &s.systems {
         tx.execute(
-            "INSERT INTO star_system VALUES (?,?,?,?)",
-            params![system.id, system.name, system.x, system.y],
+            "INSERT INTO star_system(id,name,x,y,z,constellation) VALUES (?,?,?,?,?,?)",
+            params![
+                system.id,
+                system.name,
+                system.x,
+                system.y,
+                system.z,
+                system.constellation
+            ],
         )?;
+    }
+    for (a, b) in &s.figure {
+        tx.execute("INSERT INTO star_figure VALUES (?,?)", params![a, b])?;
     }
     for b in &s.bodies {
         tx.execute(

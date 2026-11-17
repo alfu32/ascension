@@ -73,7 +73,10 @@ fn universe(generated: &[u32]) -> World {
         node_type: None,
     };
     let setup = UniverseSetup {
+        figure: Vec::new(),
         systems: vec![SystemInfo {
+            z: 0,
+            constellation: String::new(),
             id: 1,
             name: "Testar".into(),
             x: 0,

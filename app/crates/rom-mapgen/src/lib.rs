@@ -6,8 +6,8 @@ mod universe;
 
 pub use sphere::{SpherePlanet, SphereRequest, expand_planet, generate_sphere};
 pub use universe::{
-    Body, FAIR_HOPS, FAIR_VALUE_PCT, HomeShare, Route, StarSystem, Universe, UniverseRequest,
-    generate_universe, plan_universe,
+    Body, FAIR_HOPS, FAIR_NEAR_PCT, FAIR_VALUE_PCT, HomeShare, Route, StarSystem, Universe,
+    UniverseRequest, generate_universe, plan_universe,
 };
 
 use rom_rules::{DefId, FeaturePattern, Layer, MapStyleFeature, Rules};

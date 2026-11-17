@@ -478,6 +478,13 @@ impl StateHash {
             self.text(&s.name);
             self.bytes(&s.x.to_le_bytes());
             self.bytes(&s.y.to_le_bytes());
+            self.bytes(&s.z.to_le_bytes());
+            self.text(&s.constellation);
+        }
+        self.u64(universe.figure.len() as u64);
+        for (a, b) in &universe.figure {
+            self.u32(*a);
+            self.u32(*b);
         }
         self.u64(universe.bodies.len() as u64);
         for b in &universe.bodies {

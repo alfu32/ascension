@@ -131,6 +131,8 @@ pub fn universe_setup(universe: &Universe) -> UniverseSetup {
                 name: s.name.clone(),
                 x: s.x,
                 y: s.y,
+                z: s.z,
+                constellation: s.constellation.clone(),
             })
             .collect(),
         bodies: universe
@@ -148,6 +150,7 @@ pub fn universe_setup(universe: &Universe) -> UniverseSetup {
                 node_type: b.node_entity_type,
             })
             .collect(),
+        figure: universe.figure.clone(),
         routes: universe
             .routes
             .iter()
@@ -596,12 +599,29 @@ impl Canvas {
 /// The star map: routes as lines, systems as discs coloured by home race (grey
 /// when neutral), and a row of small dots under each system, one per body:
 /// white for the home planet, blue for other habitable planets, yellow for resource bodies.
-fn star_map_ppm(universe: &Universe, radius: i64) -> Vec<u8> {
-    let radius = radius.max(1);
+fn star_map_ppm(universe: &Universe, _style_radius: i64) -> Vec<u8> {
+    // Seen from above the equatorial plane, centred on the middle of the systems and scaled to
+    // the farthest one: the systems are a region of the real sky, not a disc about the origin.
+    let n = universe.systems.len().max(1) as i64;
+    let mid = (
+        universe.systems.iter().map(|s| i64::from(s.x)).sum::<i64>() / n,
+        universe.systems.iter().map(|s| i64::from(s.y)).sum::<i64>() / n,
+    );
+    let radius = universe
+        .systems
+        .iter()
+        .map(|s| {
+            (i64::from(s.x) - mid.0)
+                .abs()
+                .max((i64::from(s.y) - mid.1).abs())
+        })
+        .max()
+        .unwrap_or(1)
+        .max(1);
     let px = |s: &rom_mapgen::StarSystem| {
         (
-            SIDE / 2 + i64::from(s.x) * RIM / radius,
-            SIDE / 2 + i64::from(s.y) * RIM / radius,
+            SIDE / 2 + (i64::from(s.x) - mid.0) * RIM / radius,
+            SIDE / 2 + (i64::from(s.y) - mid.1) * RIM / radius,
         )
     };
     let mut canvas = Canvas {

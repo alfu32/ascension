@@ -62,10 +62,15 @@ pub struct SystemView {
     pub id: u32,
     /// Name shown next to the system on the star map.
     pub name: String,
-    /// Star-map position in abstract units; the map is centred on 0, 0.
+    /// Star-map position in abstract units: the equatorial frame of the sky with the Sun at the
+    /// origin, `x` toward right ascension 0h, `y` toward 6h.
     pub x: i32,
     /// Star-map position in abstract units.
     pub y: i32,
+    /// Star-map position in abstract units, toward the north celestial pole.
+    pub z: i32,
+    /// The constellation of the star, labelled once over its member systems; may be empty.
+    pub constellation: String,
     /// Colour of the star.
     pub star_colour: [u8; 3],
 }
@@ -100,6 +105,8 @@ pub struct UniverseScene {
     pub bodies: Vec<BodyView>,
     /// Routes as pairs of system ids.
     pub routes: Vec<(u32, u32)>,
+    /// Constellation stick-figure lines as pairs of system ids.
+    pub figure: Vec<(u32, u32)>,
 }
 
 /// One body placed in its system frame.
@@ -267,25 +274,66 @@ impl UniverseScene {
             .max(1) as f32
     }
 
-    /// Star-map positions of the systems, indexed like [`Self::systems`], scaled so the farthest
-    /// system lies at [`MAP_RADIUS`] (a single system sits at the origin). The map's `y` runs
-    /// along the frame's `z`.
+    /// Star-map positions of the systems, indexed like [`Self::systems`], centred on the middle of
+    /// the systems and scaled so the farthest lies at [`MAP_RADIUS`] (a single system sits at the
+    /// origin). The sky's axes keep their handedness: the frame's `x` is the sky's `x`, its up
+    /// (`y`) the sky's north (`z`) and its `z` the sky's `-y`, so seen from the Sun the
+    /// constellations are not mirrored.
     pub fn place_systems(&self) -> Vec<[f32; 3]> {
+        let (centre, scale) = self.map_frame();
+        self.systems
+            .iter()
+            .map(|s| sky_to_frame([s.x as f32, s.y as f32, s.z as f32], centre, scale))
+            .collect()
+    }
+
+    /// Where the Sun (the origin of the sky's coordinates) lies in the star-map frame.
+    pub fn sun_position(&self) -> [f32; 3] {
+        let (centre, scale) = self.map_frame();
+        sky_to_frame([0.0; 3], centre, scale)
+    }
+
+    /// The sky position of the middle of the systems and the frame units per sky unit.
+    fn map_frame(&self) -> ([f32; 3], f32) {
+        if self.systems.len() < 2 {
+            let at = self
+                .systems
+                .first()
+                .map_or([0.0; 3], |s| [s.x as f32, s.y as f32, s.z as f32]);
+            return (at, 1.0);
+        }
+        let n = self.systems.len() as f32;
+        let mid =
+            |f: fn(&SystemView) -> i32| self.systems.iter().map(|s| f(s) as f32).sum::<f32>() / n;
+        let centre = [mid(|s| s.x), mid(|s| s.y), mid(|s| s.z)];
         let farthest = self
             .systems
             .iter()
-            .map(|s| (s.x as f32).hypot(s.y as f32))
+            .map(|s| {
+                let d = [
+                    s.x as f32 - centre[0],
+                    s.y as f32 - centre[1],
+                    s.z as f32 - centre[2],
+                ];
+                (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt()
+            })
             .fold(0.0_f32, f32::max);
-        let scale = if farthest > 0.0 {
-            MAP_RADIUS / farthest
-        } else {
-            0.0
-        };
-        self.systems
-            .iter()
-            .map(|s| [s.x as f32 * scale, 0.0, s.y as f32 * scale])
-            .collect()
+        (
+            centre,
+            if farthest > 0.0 {
+                MAP_RADIUS / farthest
+            } else {
+                1.0
+            },
+        )
     }
+}
+
+/// A sky position (x toward RA 0h, y toward 6h, z north) in the star-map frame (right-handed,
+/// y up), about `centre`, `scale` frame units per sky unit.
+fn sky_to_frame(p: [f32; 3], centre: [f32; 3], scale: f32) -> [f32; 3] {
+    let d = [p[0] - centre[0], p[1] - centre[1], p[2] - centre[2]];
+    [d[0] * scale, d[2] * scale, -d[1] * scale]
 }
 
 /// The distance from the star in the system frame of an orbit of radius `orbit` (the same units
@@ -524,6 +572,8 @@ pub(crate) fn sample_scene() -> UniverseScene {
         name: format!("S{id}"),
         x,
         y,
+        z: 0,
+        constellation: String::new(),
         star_colour: [255, 240, 200],
     };
     let body = |id, system, kind, orbit_radius, orbit_angle, n_or_size| BodyView {
@@ -541,7 +591,9 @@ pub(crate) fn sample_scene() -> UniverseScene {
         systems: vec![
             system(1, 0, 0),
             system(2, 90_000, -30_000),
-            system(3, -50, 70),
+            // The three lie about system 1, the home: the middle of the map is at the home, as the
+            // continuity test needs for exact frames (the real sky puts it anywhere).
+            system(3, -90_050, 30_070),
         ],
         bodies: vec![
             body(1, 1, Star, 0, 0, 0),
@@ -555,6 +607,7 @@ pub(crate) fn sample_scene() -> UniverseScene {
             body(8, 1, Resource, 1100, 600, 1),
         ],
         routes: vec![(1, 2), (1, 3)],
+        figure: vec![],
     }
 }
 
@@ -634,25 +687,62 @@ mod tests {
 
     #[test]
     fn star_map_layout_contains_every_system() {
-        let scene = sample_scene();
+        let mut scene = sample_scene();
+        scene.systems[2].z = 40_000;
         let positions = scene.place_systems();
         assert_eq!(positions.len(), scene.systems.len());
-        for p in &positions {
-            assert!(p[0].hypot(p[2]) <= MAP_RADIUS + 0.5, "{p:?}");
-            assert_eq!(p[1], 0.0);
-        }
-        let farthest = positions
-            .iter()
-            .map(|p| p[0].hypot(p[2]))
-            .fold(0.0, f32::max);
-        assert!((farthest - MAP_RADIUS).abs() < 1.0);
-        // Directions are kept: system 2 is east and north of the centre (map y toward +z).
-        assert!(positions[1][0] > 0.0 && positions[1][2] < 0.0);
+        let from_middle = |p: &[f32; 3]| {
+            let mid: [f32; 3] =
+                [0, 1, 2].map(|i| positions.iter().map(|q| q[i]).sum::<f32>() / 3.0);
+            (0..3).map(|i| (p[i] - mid[i]).powi(2)).sum::<f32>().sqrt()
+        };
+        let farthest = positions.iter().map(from_middle).fold(0.0, f32::max);
+        assert!((farthest - MAP_RADIUS).abs() < 1.0, "{farthest}");
+        // Heights are kept: the system with sky z 40 000 stands above the plane of the others.
+        assert!(positions[2][1] > positions[0][1] + 1000.0);
+        // Handedness is kept: sky y runs toward the frame's -z.
+        assert!(positions[1][0] > positions[0][0] && positions[1][2] > positions[0][2]);
+        // The Sun is where the sky's origin is: the origin of this sample.
+        let sun = scene.sun_position();
+        let d = [0, 1, 2].map(|i| (sun[i] - positions[0][i]).abs());
+        assert!(d[0] < 1.0 && d[1] < 1.0 && d[2] < 1.0, "{sun:?}");
         let single = UniverseScene {
             systems: vec![scene.systems[0].clone()],
             ..UniverseScene::default()
         };
         assert_eq!(single.place_systems(), vec![[0.0; 3]]);
+    }
+
+    #[test]
+    fn seen_from_the_sun_the_directions_are_the_skys() {
+        // Three stars at known sky positions: the angle between two, from the Sun, is the same in
+        // the star-map frame as in the sky coordinates.
+        let mut scene = sample_scene();
+        for (system, (x, y, z)) in
+            scene
+                .systems
+                .iter_mut()
+                .zip([(300, 0, 0), (0, 400, 0), (0, 0, 500)])
+        {
+            (system.x, system.y, system.z) = (x, y, z);
+        }
+        let (positions, sun) = (scene.place_systems(), scene.sun_position());
+        let from_sun = |i: usize| {
+            let d = [0, 1, 2].map(|k| positions[i][k] - sun[k]);
+            let l = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+            d.map(|c| c / l)
+        };
+        let dot = |a: [f32; 3], b: [f32; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        assert!(dot(from_sun(0), from_sun(1)).abs() < 1e-4);
+        assert!(dot(from_sun(0), from_sun(2)).abs() < 1e-4);
+        assert!(dot(from_sun(1), from_sun(2)).abs() < 1e-4);
+        // Right-handed: x cross y is z in the sky, so the same holds in the frame (y up, z = -sky y).
+        let cross = [
+            from_sun(0)[1] * from_sun(1)[2] - from_sun(0)[2] * from_sun(1)[1],
+            from_sun(0)[2] * from_sun(1)[0] - from_sun(0)[0] * from_sun(1)[2],
+            from_sun(0)[0] * from_sun(1)[1] - from_sun(0)[1] * from_sun(1)[0],
+        ];
+        assert!(dot(cross, from_sun(2)) > 0.999, "mirrored");
     }
 
     #[test]

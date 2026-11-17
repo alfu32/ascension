@@ -460,7 +460,12 @@ pub(crate) fn pan_index(key: Key) -> Option<usize> {
         Key::PanBack => Some(1),
         Key::PanLeft => Some(2),
         Key::PanRight => Some(3),
-        Key::ResetCamera | Key::FrameMap | Key::FocusSelection | Key::FollowSelection => None,
+        Key::ResetCamera
+        | Key::FrameMap
+        | Key::FocusSelection
+        | Key::FollowSelection
+        | Key::SkyFromSun
+        | Key::ToggleConstellations => None,
     }
 }
 

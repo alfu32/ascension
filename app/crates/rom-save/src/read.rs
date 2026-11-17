@@ -742,15 +742,22 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
     };
     let systems = query_vec(
         conn,
-        "SELECT id, name, x, y FROM star_system ORDER BY id",
+        "SELECT id, name, x, y, z, constellation FROM star_system ORDER BY id",
         |r| {
             Ok(SystemInfo {
                 id: uint(r, 0, "system id")?,
                 name: text(r, 1)?,
                 x: uint(r, 2, "system x")?,
                 y: uint(r, 3, "system y")?,
+                z: uint(r, 4, "system z")?,
+                constellation: text(r, 5)?,
             })
         },
+    )?;
+    let figure = query_vec(
+        conn,
+        "SELECT system_a, system_b FROM star_figure ORDER BY system_a, system_b",
+        |r| Ok((uint(r, 0, "figure a")?, uint(r, 1, "figure b")?)),
     )?;
     let bodies = query_vec(
         conn,
@@ -953,6 +960,7 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
         systems,
         bodies,
         routes,
+        figure,
         surfaces: surfaces(conn)?,
         entities: entities_on_map,
         pending: pending

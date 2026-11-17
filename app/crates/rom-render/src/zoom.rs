@@ -57,6 +57,15 @@ const SPACE_WHEEL_LOG: f32 = 0.405_465_1;
 const SPACE_WHEEL_RAMP: f32 = 1.0;
 /// Radians of elevation per pixel of Shift + middle-button drag up or down in space.
 const TILT_RATE: f32 = 0.004;
+/// Lowest elevation of the star-map camera, in degrees: negative, so the map can be seen from
+/// below its plane as well as from above.
+const MAP_MIN_ELEVATION: f32 = -85.0;
+/// Radians of the "Sky from the Sun" look per second of a held arrow key.
+const SKY_TURN_RATE: f32 = 0.6;
+/// Radians of the "Sky from the Sun" look per pixel of a drag.
+const SKY_DRAG_RATE: f32 = 0.002;
+/// Distance of the point looked at from the eye in the "Sky from the Sun" view, in map units.
+const SKY_TARGET_DISTANCE: f32 = 10_000.0;
 /// Lowest and highest elevation of the space camera above the plane, in degrees.
 const MIN_ELEVATION: f32 = 10.0;
 const MAX_ELEVATION: f32 = 89.0;
@@ -477,12 +486,29 @@ enum Drag {
     Rotate { x: f32, y: f32 },
 }
 
+/// Where the "Sky from the Sun" camera looks: the eye stays at the Sun, only the direction turns.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct SkyLook {
+    /// Heading in the horizontal plane of the star-map frame, radians from +x toward +z.
+    yaw: f32,
+    /// Elevation above that plane, radians.
+    pitch: f32,
+    /// The log-distance to return to when the preset ends.
+    back_to: f32,
+}
+
 /// The continuous-zoom camera above the planet camera.
 #[derive(Clone, Debug)]
 pub struct ZoomCamera {
     scene: Arc<UniverseScene>,
     scale: ZoomScale,
     map_positions: Vec<[f32; 3]>,
+    /// The Sun in the star-map frame: the sky's origin, where "Sky from the Sun" puts the eye.
+    sun: [f32; 3],
+    /// The "Sky from the Sun" preset, when it is on.
+    sky: Option<SkyLook>,
+    /// Whether the constellation stick figures are drawn on the star map.
+    constellations: bool,
     /// The system the view is anchored to (an index), with its bodies placed.
     system: usize,
     placed: Vec<PlacedBody>,
@@ -547,6 +573,7 @@ impl ZoomCamera {
             )
         });
         let map_positions = scene.place_systems();
+        let sun = scene.sun_position();
         let placed = scene
             .systems
             .get(system)
@@ -556,6 +583,9 @@ impl ZoomCamera {
             scene,
             scale,
             map_positions,
+            sun,
+            sky: None,
+            constellations: false,
             system,
             placed,
             body: home_body,
@@ -607,6 +637,74 @@ impl ZoomCamera {
     /// Star-map positions of the systems, indexed like the scene's systems.
     pub fn map_positions(&self) -> &[[f32; 3]] {
         &self.map_positions
+    }
+
+    /// The Sun in the star-map frame.
+    pub fn sun(&self) -> [f32; 3] {
+        self.sun
+    }
+
+    /// Whether the "Sky from the Sun" preset is on.
+    pub fn sky_active(&self) -> bool {
+        self.sky.is_some()
+    }
+
+    /// Whether constellation stick figures are drawn on the star map.
+    pub fn constellations(&self) -> bool {
+        self.constellations
+    }
+
+    /// Shows or hides the constellation stick figures.
+    pub fn toggle_constellations(&mut self) {
+        self.constellations = !self.constellations;
+    }
+
+    /// Switches the "Sky from the Sun" preset: the eye goes to the Sun, looking toward the middle
+    /// of the systems, with the figures on; again, it returns to the camera it left. Refused (and
+    /// `false`) while the age's zoom cap does not reach the star map.
+    pub fn toggle_sky(&mut self) -> bool {
+        self.interrupt();
+        if let Some(sky) = self.sky.take() {
+            self.l = sky.back_to.clamp(self.l_min(), self.l_cap());
+            return true;
+        }
+        if self.cap < Level::StarMap || self.scene.systems.is_empty() {
+            return false;
+        }
+        let toward = unit3(scale3(self.sun, -1.0)).unwrap_or([1.0, 0.0, 0.0]);
+        self.sky = Some(SkyLook {
+            yaw: toward[2].atan2(toward[0]),
+            pitch: toward[1].clamp(-1.0, 1.0).asin(),
+            back_to: self.l,
+        });
+        self.l = self.scale.l_cap(Level::StarMap).min(self.l_cap());
+        self.constellations = true;
+        true
+    }
+
+    /// The "Sky from the Sun" camera when the preset is on.
+    fn sky_view(&self) -> Option<SpaceView> {
+        let sky = self.sky?;
+        let dir = [
+            sky.pitch.cos() * sky.yaw.cos(),
+            sky.pitch.sin(),
+            sky.pitch.cos() * sky.yaw.sin(),
+        ];
+        Some(SpaceView {
+            eye: self.sun,
+            target: add3(self.sun, scale3(dir, SKY_TARGET_DISTANCE)),
+            up: UP,
+            near: 100.0,
+            far: length3(self.sun) + MAP_RADIUS * 3.0,
+        })
+    }
+
+    /// Turns the "Sky from the Sun" look by `yaw` and `pitch` radians; nothing when it is off.
+    pub fn turn_sky(&mut self, yaw: f32, pitch: f32) {
+        if let Some(sky) = &mut self.sky {
+            sky.yaw = (sky.yaw + yaw).rem_euclid(std::f32::consts::TAU);
+            sky.pitch = (sky.pitch + pitch).clamp(-1.55, 1.55);
+        }
     }
 
     /// The log-distance of the camera.
@@ -720,8 +818,16 @@ impl ZoomCamera {
             here: self.here(),
             per_unit: self.k(),
         };
+        let map = self.sky_view().map_or_else(
+            || system_place.to_map(&system),
+            |sky| FrameView {
+                eye: sky.eye,
+                target: sky.target,
+                up: sky.up,
+            },
+        );
         OneView {
-            map: system_place.to_map(&system),
+            map,
             system,
             planet,
             planet_camera,
@@ -946,6 +1052,9 @@ impl ZoomCamera {
         orbit: &mut OrbitCamera,
     ) {
         self.interrupt();
+        if self.sky.is_some() {
+            return;
+        }
         let level = self.level();
         if steps > 0.0
             && level == Level::System
@@ -1248,8 +1357,12 @@ impl ZoomCamera {
 
     /// Elevation of the plane's own pose now: the level's, tilted by the player.
     fn elevation(&self) -> f32 {
-        (self.elevation_at(self.l) + self.tilt)
-            .clamp(MIN_ELEVATION.to_radians(), MAX_ELEVATION.to_radians())
+        let low = if self.level() >= Level::StarMap {
+            MAP_MIN_ELEVATION
+        } else {
+            MIN_ELEVATION
+        };
+        (self.elevation_at(self.l) + self.tilt).clamp(low.to_radians(), MAX_ELEVATION.to_radians())
     }
 
     fn plane_pose(&self) -> Pose {
@@ -1327,6 +1440,9 @@ impl ZoomCamera {
 
     /// The star-map camera: the system camera seen at the star map's scale.
     pub fn map_view(&self, orbit: &OrbitCamera) -> SpaceView {
+        if let Some(sky) = self.sky_view() {
+            return sky;
+        }
         let target = self.map_target(orbit);
         space_view(
             target,
@@ -1365,6 +1481,11 @@ impl ZoomCamera {
         let base = self.elevation_at(self.l);
         let low = MIN_ELEVATION.to_radians() - base;
         let high = MAX_ELEVATION.to_radians() - base;
+        let low = if self.level() >= Level::StarMap {
+            MAP_MIN_ELEVATION.to_radians() - base
+        } else {
+            low
+        };
         self.tilt = (self.tilt + delta).clamp(low.min(0.0), high.max(0.0));
     }
 
@@ -1409,6 +1530,13 @@ impl ZoomCamera {
     /// Moves a pointer drag to `(x, y)`: the grabbed point of the plane stays under the pointer,
     /// or the heading turns.
     pub fn drag_to(&mut self, x: f32, y: f32, view: &View) {
+        if self.sky.is_some() {
+            if let Some(Drag::Pan { x: lx, y: ly } | Drag::Rotate { x: lx, y: ly }) = self.drag {
+                self.turn_sky(-(x - lx) * SKY_DRAG_RATE, -(y - ly) * SKY_DRAG_RATE);
+                self.drag = Some(Drag::Rotate { x, y });
+            }
+            return;
+        }
         match self.drag {
             Some(Drag::Pan { x: lx, y: ly }) => {
                 let map = self.level() >= Level::StarMap;
@@ -1445,6 +1573,14 @@ impl ZoomCamera {
             }
         }
         self.offset = scale3(self.offset, 1.0 - settle);
+        if self.sky.is_some() {
+            let [up, down, left, right] = self.held.map(f32::from);
+            self.turn_sky(
+                (right - left) * SKY_TURN_RATE * seconds,
+                (up - down) * SKY_TURN_RATE * seconds,
+            );
+            return;
+        }
         if self.pans_planet() || self.level() < Level::System {
             return;
         }
@@ -1833,6 +1969,9 @@ impl ZoomCamera {
     /// Returns to the home globe: out to the star map if the camera is in another system, across
     /// to the home system, then down to the home planet looking at the first start.
     pub fn fly_home(&mut self, orbit: &mut OrbitCamera) {
+        if let Some(sky) = self.sky.take() {
+            self.l = sky.back_to.clamp(self.l_min(), self.l_cap());
+        }
         let Some(home_body) = self.home_body else {
             return;
         };
@@ -2026,6 +2165,48 @@ mod tests {
 
     fn length(v: [f32; 3]) -> f32 {
         dot3(v, v).sqrt()
+    }
+
+    #[test]
+    fn sky_from_the_sun_puts_the_eye_at_the_sun_and_comes_back() {
+        let (mut zoom, mut orbit) = camera(Level::StarMap);
+        let l = zoom.l();
+        assert!(!zoom.sky_active() && !zoom.constellations());
+        assert!(zoom.toggle_sky());
+        assert!(zoom.sky_active() && zoom.constellations());
+        let view = zoom.map_view(&orbit);
+        assert_eq!(view.eye, zoom.sun());
+        // The eye looks toward the middle of the systems, the origin of the map frame.
+        let ahead = unit3(sub3(view.target, view.eye)).unwrap();
+        let middle = unit3(scale3(zoom.sun(), -1.0)).unwrap();
+        assert!(dot3(ahead, middle) > 0.999, "{ahead:?} {middle:?}");
+        assert_eq!(zoom.one_view(&orbit).map.eye, zoom.sun());
+        // Arrow keys turn the look; the eye stays.
+        zoom.hold(3, true);
+        run(&mut zoom, &mut orbit, 10);
+        zoom.hold(3, false);
+        let turned = zoom.map_view(&orbit);
+        assert_eq!(turned.eye, zoom.sun());
+        assert!(dot3(unit3(sub3(turned.target, turned.eye)).unwrap(), ahead) < 0.999);
+        assert!(zoom.toggle_sky());
+        assert!(!zoom.sky_active());
+        assert!((zoom.l() - l).abs() < 1e-3);
+    }
+
+    #[test]
+    fn sky_from_the_sun_needs_the_star_map_in_reach() {
+        let (mut zoom, _) = camera(Level::Globe);
+        assert!(!zoom.toggle_sky());
+        assert!(!zoom.sky_active());
+    }
+
+    #[test]
+    fn the_star_map_can_be_seen_from_below_its_plane() {
+        let (mut zoom, orbit) = camera(Level::StarMap);
+        zoom.set_l(zoom.l_cap());
+        zoom.tilt_by(-5.0);
+        let view = zoom.map_view(&orbit);
+        assert!(view.eye[1] < view.target[1], "{view:?}");
     }
 
     #[test]

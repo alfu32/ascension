@@ -603,7 +603,10 @@ pub fn space_marks(
             let rgb = tint.unwrap_or(system.star_colour);
             let size = if tint.is_some() { 5.0 } else { 3.0 };
             let (x, y) = to_area(positions[i]);
-            marks.push(dot(x, y, size, [rgb[0], rgb[1], rgb[2], 255]));
+            // Seen from above; a system's height shows as its brightness: lower is dimmer.
+            let height = (positions[i][1] / MAP_RADIUS).clamp(-1.0, 1.0);
+            let alpha = (255.0 * (0.72 + 0.28 * height)) as u8;
+            marks.push(dot(x, y, size, [rgb[0], rgb[1], rgb[2], alpha]));
         }
         let beside = [half * 0.05 / scale, 0.0, 0.0];
         for mark in crate::space::map_ship_marks(scene, positions, space, beside) {

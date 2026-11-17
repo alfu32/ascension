@@ -55,6 +55,8 @@ pub fn to_universe_scene(universe: &Universe, start_bodies: &[u32]) -> UniverseS
                 name: s.name.clone(),
                 x: s.x,
                 y: s.y,
+                z: s.z,
+                constellation: s.constellation.clone(),
                 star_colour: STAR_COLOURS[s.id as usize % STAR_COLOURS.len()],
             })
             .collect(),
@@ -83,6 +85,7 @@ pub fn to_universe_scene(universe: &Universe, start_bodies: &[u32]) -> UniverseS
             .iter()
             .map(|r| (r.system_a, r.system_b))
             .collect(),
+        figure: universe.figure.clone(),
     }
 }
 

@@ -78,7 +78,7 @@ skirmish maps and the existing scenarios.
 
 | Level | Contents | Coordinates |
 | --- | --- | --- |
-| Star map | star systems, routes between them | system positions (display only) |
+| Star map | star systems, routes between them | 3D system positions (real stars, integers) |
 | Star system | a star, habitable planets, resource bodies (moons, asteroids, small planets) | continuous integer plane per system |
 | Orbit | ships and stations near a body | body + slot |
 | Surface | tiles of one habitable planet | `(face, x, y)` |
@@ -93,6 +93,53 @@ skirmish maps and the existing scenarios.
   body, in a system's space, or in transit between systems. Moving between
   levels is an order (launch from a spaceport, land at a site, leave orbit,
   depart along a route), with a duration.
+
+### The real sky (task 59)
+
+The universe is a piece of the real sky in three dimensions. Every system is a
+real star (`star` table, `app/docs/database.md` "Star catalogue") at its real
+direction and distance from the Sun, with its real constellation and name
+("Vega", "Sirius", "Epsilon Eridani"). Its planets are named after it in orbit
+order, "Vega II"; resource bodies "Vega belt" and "Vega II moon".
+
+- **Frame.** x toward right ascension 0h, y toward 6h, z toward the north
+  celestial pole, the Sun at 0, 0, 0 (the equatorial frame; right-handed). The
+  renderer's frame has y up: it takes x, z and -y, so seen from the Sun the
+  constellations are not mirrored.
+- **Radial scale.** The real distances run from 4 to over 2 600 light-years.
+  The map radius of a star is `100 x sqrt(distance in light-years)`
+  (Proxima Centauri about 205, Sirius 293, Vega 500, Deneb 5 100). The square
+  root keeps the order of distances and keeps near neighbours apart; a
+  logarithm would crowd the nearest hundred stars into a shell, and a linear
+  scale would leave the nearby stars in one point. Directions are exact, so
+  every constellation keeps its true shape seen from the Sun. Neighbours in
+  the map are only approximately neighbours in space (the compression bends
+  distances along the line of sight, never across it).
+- **A match uses a region.** A seeded centre star and the nearest stars to it
+  (3D, in map units) until the match has its systems; the region must lie
+  within the style's `star_map_radius` of the centre. Routes join real
+  neighbours: a spanning tree of the nearest pairs, two routes for every home
+  system, then the shortest extra routes between true neighbours (a route is
+  refused when another system lies nearer to both its ends than they are to
+  each other, or when it passes within 40 units of a system). Route length is
+  the integer 3D distance; travel time follows from it as before.
+- **Fair homes.** Home systems are chosen among the region's stars whose local
+  density (the distances to their three nearest neighbours) is within 70 to
+  135 percent of the median, by the farthest-point rule, over 24 seeded
+  placements: the smallest spread of that density, then the widest gap, wins.
+  After the routes are drawn the universe must also pass: every system
+  reachable, two routes per home, equal habitable counts, resource-body value
+  within two routes at least 80 percent of the richest home's, and the two
+  shortest routes of the poorest home at least 70 percent of the richest
+  home's. Layouts failing this are redrawn (up to 64 centres).
+- **Seeing the sky.** F2 switches the "Sky from the Sun" preset: the eye
+  goes to the Sun and looks toward the middle of the systems; arrows or a drag
+  turn the look; the constellation stick figures are drawn between the member
+  stars that are in the match (F3 hides or shows them anywhere on the star
+  map). Each constellation is named once, faintly, over its member systems.
+  The star map is an ordinary 3D scene: orbit with the heading and the tilt
+  (the tilt reaches below the plane on the map), systems drop faint lines to
+  the equatorial plane's rings, distant ones fade.
 
 ## Camera and visibility by age
 
@@ -369,8 +416,9 @@ projection. What changes with the distance is only what is drawn:
 - **Ready for a 3D star map (task 59).** Star-map distances, the system
   nearest the focus and picking use all three coordinates; Shift + middle
   drag up or down tilts the camera about the focus (10° to 89° above the
-  plane), so a map with systems at different heights can be seen from a low
-  angle.
+  plane; on the star map down to 85° below it), so a map with systems at
+  different heights can be seen from any angle. Task 59 fills the map with
+  real stars in 3D (see "The real sky").
 
 Screenshots: `img/camera-zoom-strip.png` (street to star map, four wheel
 steps apart), `img/camera-handovers.png` (the old hand-overs, two steps

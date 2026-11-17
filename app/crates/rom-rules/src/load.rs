@@ -976,6 +976,46 @@ fn load_map_style(conn: &Connection) -> Result<Vec<MapStyle>, RulesError> {
         })
     })
 }
+fn load_constellation(conn: &Connection) -> Result<Vec<Constellation>, RulesError> {
+    read(conn, "SELECT * FROM constellation ORDER BY id", |row| {
+        Ok(Constellation {
+            id: row.get("id")?,
+            abbr: row.get("abbr")?,
+            name: row.get("name")?,
+            genitive: row.get("genitive")?,
+        })
+    })
+}
+fn load_star(conn: &Connection) -> Result<Vec<Star>, RulesError> {
+    read(conn, "SELECT * FROM star ORDER BY id", |row| {
+        Ok(Star {
+            id: row.get("id")?,
+            hip: row.get("hip")?,
+            name: row.get("name")?,
+            designation: row.get("designation")?,
+            constellation_id: row.get("constellation_id")?,
+            ra_mdeg: row.get("ra_mdeg")?,
+            dec_mdeg: row.get("dec_mdeg")?,
+            dist_cly: row.get("dist_cly")?,
+            x: row.get("x")?,
+            y: row.get("y")?,
+            z: row.get("z")?,
+        })
+    })
+}
+fn load_constellation_line(conn: &Connection) -> Result<Vec<ConstellationLine>, RulesError> {
+    read(
+        conn,
+        "SELECT * FROM constellation_line ORDER BY star_a, star_b",
+        |row| {
+            Ok(ConstellationLine {
+                constellation_id: row.get("constellation_id")?,
+                star_a: row.get("star_a")?,
+                star_b: row.get("star_b")?,
+            })
+        },
+    )
+}
 fn load_map_style_feature(conn: &Connection) -> Result<Vec<MapStyleFeature>, RulesError> {
     read(conn, "SELECT * FROM map_style_feature ORDER BY id", |row| {
         let identity = format!("id={:?}", row.get::<_, i64>("id")?);
@@ -1194,6 +1234,12 @@ impl Rules {
         rules.modifiers = group(load_modifier(conn)?, |r| r.source_def_id);
         rules.ability_grants = group(load_ability_grant(conn)?, |r| r.entity_type_id);
         rules.entity_visuals = group(load_entity_visual(conn)?, |r| r.entity_type_id);
+        rules.constellations = load_constellation(conn)?
+            .into_iter()
+            .map(|r| (r.id, r))
+            .collect();
+        rules.stars = load_star(conn)?.into_iter().map(|r| (r.id, r)).collect();
+        rules.constellation_lines = load_constellation_line(conn)?;
         rules.map_style_features = group(load_map_style_feature(conn)?, |r| r.map_style_id);
         rules.match_options = load_match_option(conn)?
             .into_iter()

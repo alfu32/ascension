@@ -73,9 +73,12 @@ fn world(rules: &Arc<Rules>) -> World {
         node_type: None,
     };
     let setup = UniverseSetup {
+        figure: Vec::new(),
         systems: [(1, 0, 0), (2, 100, 0)]
             .into_iter()
             .map(|(id, x, y)| SystemInfo {
+                z: 0,
+                constellation: String::new(),
                 id,
                 x,
                 y,
