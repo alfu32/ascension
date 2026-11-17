@@ -31,7 +31,7 @@ BUILDINGS = [
     ('refinery', 'Refinery', 'economic', 5, 'science.5', 1200, 160, 4, 1),
     ('fusion_plant', 'Fusion Plant', 'economic', 9, 'science.9', 1800, 200, 4, 1),
     ('barracks', 'Barracks', 'military', 0, 'military.1', 1000, 60, 4, 0),
-    ('tower', 'Tower', 'military', 0, 'military.1', 1000, 80, 2, 0),
+    ('tower', 'Tower', 'military', 1, 'military.1', 1000, 80, 2, 0),
     ('dock', 'Dock', 'military', 0, 'commerce.1', 1000, 100, 4, 0),
     ('stable', 'Stable', 'military', 1, 'military.1', 1000, 100, 4, 0),
     ('siege_workshop', 'Siege Workshop', 'military', 1, 'military.2', 1200, 120, 4, 0),
@@ -80,6 +80,9 @@ RESEARCH = [
 ORBIT_ALTITUDE = 8      # tiles above the ground at which ships hold orbit (as drawn)
 ARMED_SIGHT_PCT = 150   # an armed building sees this share of its weapon's maximum range
 SATELLITE_SIGHT = 96
+# Siege cannot depress its aim onto what stands beside it (task 71): units that close in are
+# safe from it, so cavalry and sallies answer siege.
+SIEGE_DEAD_ZONE = 3000
 ARROW_SPEED = 25000     # milli-tiles per second of a defence's arrows    # an eighth of a median planet's circumference (the measurable reach)
 # Hull size class of each spacecraft: its sight grows with it.
 SHIP_SIZE = {'survey_ship': 1, 'corvette': 1, 'space_frigate': 2, 'space_cruiser': 3, 'battleship': 4,
@@ -136,6 +139,10 @@ SIGHT_TECHS = [
     ('tech.military.8', 'los', 15, 'pct', 'military'),        # Network Warfare: sensors
     ('tech.military.10', 'los', 25, 'pct', 'starship'),       # Orbital Doctrine: orbital sensors
 ]
+# How far a woodcutter's camp or a mine draws from its node terrain (milli-tiles). Eight
+# tiles since task 71: at six, a town whose rock lay at the edge of its radius found no
+# place for a mine and had no metal for the whole match.
+NODE_REACH = 8000
 SITES = {'farm': ('food', 1, '', 0), 'woodcutter_camp': ('timber', 0, 'forest', 10),
          'mine': ('metal', 0, 'mountain', 10), 'oil_well': ('oil', 3, '', 0),
          'university': ('knowledge', 7, '', 0), 'fusion_plant': ('energy', 0, '', 0)}
@@ -279,7 +286,7 @@ def generate():
         if key in SITES:
             resource, slots, terrain, maximum = SITES[key]
             row('et_gather_site', entity_type_id=Ref(full), resource_id=Ref('res.' + resource), slots_base=slots,
-                slots_max=maximum or slots, slots_per_node=1 if terrain else 0, node_radius=6000 if terrain else 0,
+                slots_max=maximum or slots, slots_per_node=1 if terrain else 0, node_radius=NODE_REACH if terrain else 0,
                 needs_node_terrain_id=Ref('ter.' + terrain) if terrain else None,
                 self_income=40 if key == 'fusion_plant' else 0)
             tag(full, 'gather')
@@ -340,7 +347,7 @@ def generate():
                 if age >= 5:
                     prices['oil'] = 20
             elif line == 'siege':
-                hp, attack, reach, speed, dc, ac = 120, 30, (10 + age * 6 // 13) * 1000, 800, 'explosive', 'structure'
+                hp, attack, reach, speed, dc, ac = 120, 30, (10 + age * 6 // 13) * 1000, 800, 'explosive', 'vehicle'
                 prices = {'timber': 60, 'metal': 60}
             elif line == 'warship':
                 hp, attack, reach, speed, dc, ac = 300, 18, 7000, 1800, 'explosive' if age >= 3 else 'pierce', 'hull'
@@ -384,7 +391,8 @@ def generate():
             row('et_movement', entity_type_id=Ref(full), movement_class_id=Ref(movement, 'movement_class'), speed=speed)
             if attack:
                 layers = ['air'] if line in ('fighter', 'anti_air') else ['fluid', 'ground'] if line == 'warship' else ['space', 'orbit'] if line == 'starship' else ['ground']
-                weapon(full, scale(attack), 'melee' if line == 'civilian' else dc, reach, layers, 40 if line == 'civilian' else 30)
+                weapon(full, scale(attack), 'melee' if line == 'civilian' else dc, reach, layers, 40 if line == 'civilian' else 30,
+                       **({'range_min': SIEGE_DEAD_ZONE} if line == 'siege' else {}))
             if line == 'civilian':
                 row('et_builder', entity_type_id=Ref(full))
                 for resource in ('food', 'timber', 'metal', 'oil'):

@@ -313,7 +313,7 @@ finds more. Ring distances are plain tiles and do not grow with the planet
 19–34 tiles from a start on a 256 planet, outside a city's 16-tile economic
 radius, so no well could be built). Seed values keep the near ring within the
 economic radius: forest 3–13 tiles, mountain 6–14, oil 8–14 (a mine needs the
-mountain tiles within 6 tiles of it for its slots). Missing tiles are grown
+mountain tiles within 8 tiles of it for its slots; 6 before task 71). Missing tiles are grown
 from the clump already there, or a new patch when it is boxed in, exchanging
 low-ranked global tiles to preserve coverage; on very small planets start
 guarantees can exceed the budget. Seed coverage is forest 12 %, mountain 4 %
@@ -976,6 +976,25 @@ Owner's choice (2026-11-16) after tasks 61 and 65 ended most duels in stand-offs
 
   The brain does not know which player is a person, so the grace and the wave limit
   apply to every opponent.
+
+## Counters and siege (task 71)
+
+The owner's rule (2026-11-16): a unit or armed building that outranges and beats a target
+type has a countermeasure in the same age that is effective now or after one research.
+`rom fight-matrix` measures it (see `docs/computer-player.md`, "Every strength has an
+answer"). What the data needed to pass it, all ordinary rows and no schema change:
+
+| Change | Was | Now | Why |
+| --- | --- | --- | --- |
+| Siege armour class (generator, siege line) | `structure` | `vehicle` | Arrows did a fifth of their damage to siege, so nothing of the first ages could hurt it; engines and gun carriages are vehicles. |
+| Siege `et_weapon.range_min` (generator `SIEGE_DEAD_ZONE`) | 0 | 3000 | Siege outranged and beat every unit of its age. Units that close in now stand under its aim, so fast melee (scouts, cavalry) sallying out beats it. |
+| `damage_matrix` melee → structure | 50 % | 150 % | In the first age no siege exists; spearmen must be able to break a city of their age. |
+| `combat.attrition_per_period` | 60 hp | 30 hp | Attrition left any wave in enemy land at 1 hp within a minute, before supply exists (second age on); no first-age army could take a city. |
+| `et_gather_site.node_radius` of node sites (generator `NODE_REACH`) | 6000 | 8000 | A town whose rock lay at the edge of its economic radius found no place for a mine and had no metal for the whole match (traced duel draws). |
+| Tower first age (generator `BUILDINGS`) | ancient | classical | Nothing of the first age answers a tower at equal cost; from the classical age the catapult does. The `turtle` opening builds a barracks and six spearmen instead of two towers. |
+
+Siege with a weapon whose `range_min` is set is read by the computer players as "needs an
+escort" (`rom-ai`, by the column, not by name).
 
 ## Placement and resource discovery (task 41)
 

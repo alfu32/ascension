@@ -449,6 +449,47 @@ it cannot run). A satellite (the unarmed ship that sees farthest and neither cla
 carries nor trades) is wished for over every planet with a spaceport. Cities, towers and
 forts that fire count at full strength in the measured defence.
 
+## Every strength has an answer; armies that break a city (task 71)
+
+### The owner's rule and `rom fight-matrix`
+
+> "Even if one unit outranges and outbeats the direct target type (like cannons vs
+> buildings), its countermeasure should either be effective or be one upgrade away of being
+> effective." (owner, 2026-11-16)
+
+```sh
+rom fight-matrix --db target/rules.db [--ages 0..13] [--seeds 3] [--jobs 4] [--all]
+rom fight-matrix --db target/rules.db --ages 1 --fight unit.catapult,bld.city   # one pairing
+```
+
+Everything is read from the rules (`crates/rom-cli/src/fight_matrix_cmd.rs`):
+
+- **The fighters of an age**: armed types the faction can make whose first age is that one
+  or earlier, the newest of each upgrade line; units that only fight (no worker, builder,
+  trader or carrier) and buildings with a weapon; only what stands on plain ground or flies
+  (ships and orbital craft are left out: their fights need water or an orbit).
+- **Outranges**: the reach of A's weapons at B's layer, plus B's half footprint (weapons
+  measure to a building's edge), is more than B's reach at A's layer plus A's; a B with no
+  weapon for A's layer is outranged by any A that can hit it.
+- **A fight**: both sides spend three times the dearer side's price (a type's `cost`, or for
+  a building upgraded in place the price of what it is made from), at most 24 of a type,
+  on a 112 × 64 plain map, the sides 6 tiles beyond both reaches apart; every unit
+  attack-moves to the other side's middle (sent on again when idle, as a player would),
+  buildings fire on their own; both sides see the whole field (an unarmed observer of the
+  farthest-seeing type stands far off each side: a real army brings scouts, and siege sees
+  little by itself); no victory rules. It ends when one side has nothing armed left, or
+  after five game minutes. Each side's result is the share of its starting value it still
+  holds (price × hit points left; a captured city is lost).
+- **The measure (fixed)**: a side wins a seed when it holds a larger share than the other;
+  it wins the pairing when it wins most of three seeds.
+- **A strength**: A outranges B and wins the pairing against B. **Its answer**: a mobile
+  fighter C of the same age (a sally) that wins the pairing against A, with no research
+  beyond the age's units; failing that, with one research of the age (a technology whose
+  age requirement is met, not an age advance, project or handicap, with an owner modifier
+  on attack, range, hit points, armour or speed that applies to C).
+- The command prints one row per strength and the roster of each age, and fails when a
+  strength has no answer; the test `every_strength_has_an_answer` runs the whole matrix.
+
 ## Simulation gaps found in part 2, and what task 65 did with them
 
 - **Closed: `explore`, `patrol`, `guard`.** `explore` walks to the nearest tile
@@ -540,7 +581,7 @@ less than three quarters of the other's land, or a capital has no room for a
 gather site on a node terrain its start sites draw from — is replaced by
 another map of the same seed (`maps=` in the output, at most sixteen). Each
 match runs until a team wins or the tick limit; output is one line per seed
-(players, winner, rule, tick, hash) and the win-rate table; matches run on
+(players, winner, rule, tick, the age each side ended in, hash) and the win-rate table; matches run on
 `--jobs` threads (default: up to four), each deterministic on its own.
 
 Territory is off by default: on the two-player map the first city of a
