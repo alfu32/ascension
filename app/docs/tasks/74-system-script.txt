@@ -1,0 +1,9 @@
+# Task 74: player one's home system at the default 12 degrees above its plane, with ships of
+# two teams on the plane (task 69's models). Run with --view system.
+0 grant-age age.galactic
+0 place-space 1 unit.space_cruiser 64,0
+0 place-space 1 unit.battleship 56,6
+0 place-space 1 unit.corvette 48,-6
+0 place-space 2 unit.space_cruiser 84,0
+0 place-space 2 unit.battleship 92,6
+0 place-space 2 unit.corvette 100,-6

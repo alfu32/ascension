@@ -19,8 +19,9 @@ use crate::layers::{
     system_detail, system_ship_length,
 };
 use crate::space::{
-    SpaceHover, SpaceSnapshot, annulus, chevron, chevron3, claim_rings, colony_rings, diamond,
-    map_colony_rings, map_mark_scale, map_ship_marks, ship_frame_pos, transit_at_rim,
+    ROUTE_STUB_SHARE, RouteSight, SpaceHover, SpaceSnapshot, annulus, arc, chevron, chevron3,
+    claim_rings, colony_rings, diamond, map_colony_rings, map_mark_scale, map_ship_marks,
+    route_sight, ship_frame_pos, transit_at_rim,
 };
 use crate::universe::{
     BodyViewKind, MAP_RADIUS, PlacedBody, SYSTEM_RADIUS, UniverseScene, drawn_pixels, least_pixels,
@@ -87,6 +88,12 @@ const HALO_BELOW_PIXELS: f32 = 6.0;
 /// Diameter of a body's halo on screen, in pixels.
 const HALO_PIXELS: f32 = 22.0;
 const ROUTE_LINE: Color = Color::new(110, 140, 200, 110);
+/// A route the player has not charted: a faint stub leaving the systems it has seen.
+const ROUTE_STUB: Color = Color::new(150, 175, 225, 120);
+/// The ring that fills while a ship charges its jump.
+const CHARGE_RING: [u8; 3] = [255, 196, 64];
+/// A jump inhibitor holding a system: its mark on the star map and its boundary in the system.
+const HOLD_ENEMY: [u8; 3] = [255, 92, 72];
 /// The reference plane's rings and each system's drop line to it, which tell a system's height.
 const GRID_LINE: [u8; 4] = [120, 150, 210, 78];
 const DROP_LINE: [u8; 4] = [165, 185, 230, 120];
@@ -854,6 +861,23 @@ impl Scene {
                         ));
                     }
                 }
+                // A system a jump inhibitor holds: a faint boundary at its rim.
+                if let Some(hold) = state.snapshot.hold_of(system_id) {
+                    let [r, g, b] = if hold.enemy {
+                        HOLD_ENEMY
+                    } else {
+                        owner_rgb(hold.owner)
+                    };
+                    for (radius, alpha) in [(1.06, 120.0), (1.09, 60.0)] {
+                        overlay.tris.extend(annulus(
+                            [0.0, 0.3, 0.0],
+                            SYSTEM_RADIUS * radius,
+                            thickness * 1.6,
+                            [r, g, b, (alpha * detail) as u8],
+                            180,
+                        ));
+                    }
+                }
                 let forward = unit_vector(sub3(view.target, view.eye));
                 let right = unit_vector(cross3(forward, [0.0, 1.0, 0.0]));
                 let cam_up = cross3(right, forward);
@@ -930,6 +954,27 @@ impl Scene {
                     }
                     let selected = state.selected.binary_search(&ship.id).is_ok();
                     let mark = (255.0 * pass.detail * pass.space) as u8;
+                    // A ship charging its jump wears a ring that fills.
+                    if let Some(fraction) = state.snapshot.charge_of(ship.id) {
+                        let [r, g, b] = CHARGE_RING;
+                        let radius = unit * 3.1 * scale.system.sqrt();
+                        let width = (unit * 0.3).max(thickness * 0.8);
+                        overlay.tris.extend(annulus(
+                            [at[0], 0.7, at[2]],
+                            radius,
+                            width,
+                            [r, g, b, mark / 4],
+                            40,
+                        ));
+                        overlay.tris.extend(arc(
+                            [at[0], 0.8, at[2]],
+                            radius,
+                            width * 1.5,
+                            fraction,
+                            [r, g, b, mark],
+                            40,
+                        ));
+                    }
                     if selected {
                         let ring = annulus(
                             [at[0], 0.6, at[2]],
@@ -1206,16 +1251,36 @@ impl Scene {
                 ]
             };
             if detail > 0.004 {
-                for &(a, b) in universe.routes.iter().filter(|_| !from_sun) {
-                    if let (Some(a), Some(b)) = (universe.system_index(a), universe.system_index(b))
-                    {
-                        let (pa, pb) = (space.map_positions[a], space.map_positions[b]);
-                        let mid = [0, 1, 2].map(|i| (pa[i] + pb[i]) / 2.0);
-                        world.draw_line3D(
+                let snapshot = &self.space_state.snapshot;
+                for &(id_a, id_b) in universe.routes.iter().filter(|_| !from_sun) {
+                    let (Some(a), Some(b)) =
+                        (universe.system_index(id_a), universe.system_index(id_b))
+                    else {
+                        continue;
+                    };
+                    let (pa, pb) = (space.map_positions[a], space.map_positions[b]);
+                    let mid = [0, 1, 2].map(|i| (pa[i] + pb[i]) / 2.0);
+                    let along = |from: [f32; 3], to: [f32; 3]| {
+                        [0, 1, 2].map(|i| from[i] + (to[i] - from[i]) * ROUTE_STUB_SHARE)
+                    };
+                    match route_sight(snapshot, id_a, id_b) {
+                        RouteSight::Charted => world.draw_line3D(
                             vec3(pa),
                             vec3(pb),
                             fade(ROUTE_LINE, detail * (0.35 + 0.65 * depth(mid))),
-                        );
+                        ),
+                        RouteSight::Stub { from_a, from_b } => {
+                            for (from, to, shown) in [(pa, pb, from_a), (pb, pa, from_b)] {
+                                if shown {
+                                    world.draw_line3D(
+                                        vec3(from),
+                                        vec3(along(from, to)),
+                                        fade(ROUTE_STUB, detail * (0.35 + 0.65 * depth(from))),
+                                    );
+                                }
+                            }
+                        }
+                        RouteSight::Hidden => {}
                     }
                 }
                 if zoom.constellations() {
@@ -1388,6 +1453,21 @@ impl Scene {
                         28,
                     ));
                 }
+                // Ships charging a jump: a ring that fills as the least charged of them does.
+                if let Some(fraction) = mark.charge {
+                    let [r, g, b] = CHARGE_RING;
+                    overlay
+                        .tris
+                        .extend(annulus(at, icon * 2.6, icon * 0.32, [r, g, b, 70], 32));
+                    overlay.tris.extend(arc(
+                        at,
+                        icon * 2.6,
+                        icon * 0.45,
+                        fraction,
+                        [r, g, b, 255],
+                        32,
+                    ));
+                }
             }
             if detail > 0.004 {
                 // Colonies: a ring in each owner's colour around every system with its cities.
@@ -1402,6 +1482,25 @@ impl Scene {
                         [r, g, b, 230],
                         40,
                     ));
+                }
+                // Jump inhibitors: a six-sided ring round the system they hold, red for an
+                // enemy's, the owner's colour for one's own.
+                for hold in &self.space_state.snapshot.holds {
+                    let Some(index) = universe.system_index(hold.system) else {
+                        continue;
+                    };
+                    let [r, g, b] = if hold.enemy {
+                        HOLD_ENEMY
+                    } else {
+                        owner_rgb(hold.owner)
+                    };
+                    let at = space.map_positions[index];
+                    overlay
+                        .tris
+                        .extend(annulus(at, icon * 5.6, icon * 0.55, [r, g, b, 235], 6));
+                    overlay
+                        .tris
+                        .extend(annulus(at, icon * 6.3, icon * 0.2, [r, g, b, 150], 6));
                 }
                 if let Some(SpaceHover::Target(Target::System(index))) = self.space_state.hover
                     && let Some(&at) = space.map_positions.get(index)
@@ -1509,9 +1608,14 @@ impl Scene {
                 continue;
             };
             let text = match mark.bound_for {
+                Some(dest) if mark.charting => {
+                    format!("to {} (charting)", universe.systems[dest].name)
+                }
                 Some(dest) => format!("to {}", universe.systems[dest].name),
-                None if mark.ids.len() > 1 => format!("{} ships", mark.ids.len()),
-                None => "1 ship".to_owned(),
+                None if mark.charge.is_some() => {
+                    format!("{} charging a jump", plural_ships(mark.ids.len()))
+                }
+                None => plural_ships(mark.ids.len()),
             };
             let [r, g, b] = owner_rgb(mark.owner);
             let lighter = lerp_colour([r, g, b], 0.5).map(|c| (c * 255.0) as u8);
@@ -1524,6 +1628,15 @@ impl Scene {
                 priority: 0.9,
             });
         }
+    }
+}
+
+/// "1 ship" or "N ships".
+fn plural_ships(n: usize) -> String {
+    if n == 1 {
+        "1 ship".to_owned()
+    } else {
+        format!("{n} ships")
     }
 }
 

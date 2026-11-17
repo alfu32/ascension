@@ -12,7 +12,7 @@ editable. Reset to defaults restores the command-line defaults (including a flat
 map), while retaining named presets. Save up to twelve custom presets by name;
 saving an existing name replaces it, and its adjacent × button removes it.
 
-The five tabs expose all 39 game options, including the script path. Each row
+The tabs expose all 44 game options, including the script path. Each row
 shows its flag, help and default. Blank optional fields leave the option unset.
 Dropdowns offer rules-derived styles, age names, factions, terrain names, entities
 and composed model ids. The adjacent text fields also allow custom values; for

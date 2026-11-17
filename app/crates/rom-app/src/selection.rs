@@ -2162,6 +2162,11 @@ impl Controller {
             }
             .into();
         }
+        if hud.help.is_empty() && own.iter().any(|e| world.jump_charge(e.id).is_some()) {
+            hud.help = "Charging a jump: it cannot move or fire until it leaves; \
+                        any new order cancels the charge"
+                .into();
+        }
         if hud.help.is_empty()
             && own.iter().any(|e| {
                 rules.entity_types[&e.type_id]
@@ -2240,6 +2245,9 @@ impl Controller {
                 wealth: {
                     let mut lines = crate::hud::wealth_card(world, e);
                     lines.extend(crate::space_view::holding_line(world, e));
+                    if !foreign {
+                        lines.extend(crate::space_view::charge_line(world, e));
+                    }
                     lines
                 },
                 progress_pct: e.build_progress.map(|done| {
@@ -2495,6 +2503,14 @@ fn rejection_message(world: &World, error: &SimError, subject: Option<DefId>) ->
             "The ship must land first: troops board and leave it only on the ground".into()
         }
         SimError::BoundToOrbit => "A satellite moves only within its orbit".into(),
+        SimError::HeldByInhibitor => {
+            "An enemy jump inhibitor holds this system: leave the way you came, or destroy it"
+                .into()
+        }
+        SimError::NeedsInterstellarTrade => format!(
+            "Trade with another star system needs {} (spaceport research)",
+            crate::hud::rule_tech_name(world, rom_sim::RULE_INTERSTELLAR_TRADE)
+        ),
         SimError::NoRoomAboard => "No room aboard".into(),
         SimError::Aboard => "Aboard a ship in space: land it first".into(),
         SimError::CannotLand => "Cannot land there: open ground only, outside enemy cities".into(),

@@ -111,6 +111,13 @@ fn world_with(sql: &str, early: bool) -> World {
 fn world() -> World {
     world_with("", false)
 }
+/// Route time alone: no jump charge and no charting delay (task 70 tests those in `jumps.rs`).
+const NO_JUMP_DELAYS: &str = "UPDATE et_movement SET jump_charge_ticks=0; \
+    UPDATE game_constant SET value=0 WHERE key='space.jump_charge_ticks'; \
+    UPDATE game_constant SET value=100 WHERE key='space.charting_pct';";
+fn quick_world() -> World {
+    world_with(NO_JUMP_DELAYS, false)
+}
 fn command(w: &World, ship: EntityId, kind: &str) -> Command {
     Command {
         player: w.entity(ship).unwrap().owner,
@@ -342,7 +349,7 @@ fn claim_persists_when_the_ship_leaves_until_someone_else_claims() {
 
 #[test]
 fn travel_to_a_neighbour_takes_route_time() {
-    let mut w = world();
+    let mut w = quick_world();
     let edge = w.system_edge(1, 2).unwrap();
     let a = ship(&mut w, 1, edge);
     travel(&mut w, a, 2).unwrap();
@@ -364,7 +371,7 @@ fn travel_to_a_neighbour_takes_route_time() {
 
 #[test]
 fn travel_follows_the_shortest_route_path() {
-    let mut w = world();
+    let mut w = quick_world();
     let pos = w.system_edge(1, 2).unwrap();
     let a = ship(&mut w, 1, pos);
     travel(&mut w, a, 3).unwrap();
@@ -404,7 +411,9 @@ fn travel_to_an_unconnected_system_is_rejected() {
 #[test]
 fn ships_in_transit_are_untargetable() {
     let mut w = world_with(
-        "UPDATE et_weapon SET damage=9,range_max=10000,cooldown_ticks=1 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.survey_ship');",
+        &format!(
+            "UPDATE et_weapon SET damage=9,range_max=10000,cooldown_ticks=1 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.survey_ship'); {NO_JUMP_DELAYS}"
+        ),
         false,
     );
     let pos = w.system_edge(1, 2).unwrap();
@@ -504,7 +513,9 @@ fn spaceport_trains_and_launches_starships_into_planet_orbit() {
 #[test]
 fn route_duration_uses_configured_time_and_ship_speed() {
     let mut w = world_with(
-        "UPDATE game_constant SET value=3 WHERE key='space.route_ticks_per_unit'; UPDATE et_movement SET speed=4400 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.survey_ship');",
+        &format!(
+            "UPDATE game_constant SET value=3 WHERE key='space.route_ticks_per_unit'; UPDATE et_movement SET speed=4400 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.survey_ship'); {NO_JUMP_DELAYS}"
+        ),
         false,
     );
     let pos = w.system_edge(1, 2).unwrap();

@@ -45,7 +45,9 @@ pub mod zoom;
 
 pub use rom_kit::{kit, models, rig};
 
-pub use camera::{Camera, CameraController, InputEvent, Key, Modifiers, PointerButton};
+pub use camera::{
+    Camera, CameraController, InputEvent, Key, Modifiers, PointerButton, TurnSettings, WheelGate,
+};
 pub use entities::{
     EntitySnapshot, EntityView, FlatGround, Footing, GroundFrame, ModelRef, OWNER_COLORS,
     SnapshotPair, Surface, build_instances, build_instances_on, interpolate_on, owner_color,
@@ -69,7 +71,8 @@ pub use review::{Review, SheetView, WorldLabel};
 pub use rig::Activity;
 pub use rom_geo::SurfacePos;
 pub use space::{
-    ClaimState, ClaimView, ColonyView, ResourceBodyView, ShipView, SpaceSnapshot, TransitView,
+    ChargeView, ClaimState, ClaimView, ColonyView, HoldView, ResourceBodyView, ShipView,
+    SpaceSnapshot, TransitView,
 };
 pub use stats::RenderStats;
 pub use sun::{SunClock, SunSettings};

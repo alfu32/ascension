@@ -4,7 +4,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use rom_render::{
-    ClaimState, ClaimView, ColonyView, ResourceBodyView, ShipView, SpaceSnapshot, TransitView,
+    ChargeView, ClaimState, ClaimView, ColonyView, HoldView, ResourceBodyView, ShipView,
+    SpaceSnapshot, TransitView,
 };
 use rom_rules::{BodyKind, EntityClass};
 use rom_sim::{BodyClaim, BodyId, EntityId, PlayerId, Pos, Sighting, Topology, World};
@@ -211,7 +212,71 @@ pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) ->
     snapshot.transits = transits(world);
     snapshot.known = Some(known_systems(world));
     snapshot.colonies = colonies(world);
+    snapshot.charted = Some(world.known_routes(PLAYER));
+    snapshot.charges = charges(world, &snapshot.ships);
+    snapshot.holds = holds(world);
     snapshot
+}
+
+/// The ships of player one and its allies among `ships` that are charging a jump.
+pub fn charges(world: &World, ships: &[ShipView]) -> Vec<ChargeView> {
+    ships
+        .iter()
+        .filter(|s| allied(world, PLAYER, PlayerId(u32::from(s.owner))))
+        .filter_map(|s| {
+            let charge = world.jump_charge(EntityId(s.id))?;
+            Some(ChargeView {
+                id: s.id,
+                fraction: (charge.progress as f32 / charge.required.max(1) as f32).clamp(0.0, 1.0),
+            })
+        })
+        .collect()
+}
+
+/// The systems with a jump inhibitor that player one knows of: its own and its allies', and an
+/// enemy's that holds a ship of player one, or whose ground it has explored. By system.
+pub fn holds(world: &World) -> Vec<HoldView> {
+    let mut out: Vec<HoldView> = world
+        .jump_inhibitors()
+        .filter_map(|(e, _)| {
+            let system = world.body(e.pos.body)?.system;
+            let enemy = world.enemies(PLAYER, e.owner);
+            let known = !enemy
+                || world.is_explored_on_body(
+                    PLAYER,
+                    e.pos.body,
+                    e.pos.face,
+                    e.pos.x.div_euclid(1000),
+                    e.pos.y.div_euclid(1000),
+                )
+                || world.entities().any(|own| {
+                    own.owner == PLAYER
+                        && world
+                            .space_of(system)
+                            .is_some_and(|star| own.pos.body == star)
+                });
+            known.then(|| HoldView {
+                system,
+                owner: u8::try_from(e.owner.0).unwrap_or(u8::MAX),
+                enemy,
+            })
+        })
+        .collect();
+    out.sort_by_key(|h| (h.system, !h.enemy, h.owner));
+    out.dedup_by_key(|h| (h.system, h.enemy));
+    out
+}
+
+/// "Charging jump: 4 s" for a ship of player one that is charging, with where it is bound.
+pub fn charge_line(world: &World, ship: &rom_sim::Entity) -> Option<String> {
+    let charge = world.jump_charge(ship.id)?;
+    let seconds = charge.remaining().div_ceil(u64::from(TICKS_PER_SECOND));
+    let name = world
+        .systems()
+        .iter()
+        .find(|s| s.id == charge.toward)
+        .map_or_else(String::new, |s| format!(" to {}", s.name));
+    Some(format!("Charging jump{name}: {seconds} s"))
 }
 
 /// Gives every ship of `snapshot` the composed model of its owner's faction and age from
@@ -373,6 +438,7 @@ pub fn transits(world: &World) -> Vec<TransitView> {
             to: t.destination,
             progress: (world.tick().saturating_sub(t.departed)) as f32
                 / t.arrives.saturating_sub(t.departed).max(1) as f32,
+            charting: !world.knows_route(t.entity.owner, t.origin, t.destination),
         })
         .collect()
 }
@@ -411,6 +477,10 @@ pub struct Notices {
     travelling: BTreeMap<EntityId, u32>,
     /// The rank of player one's map scale, to explain each new reach once.
     reach: Option<i64>,
+    /// The routes player one knows.
+    charted: BTreeSet<(u32, u32)>,
+    /// Orders of player one that an enemy jump inhibitor ended, already told.
+    held: BTreeSet<rom_sim::OrderId>,
     started: bool,
 }
 
@@ -466,11 +536,17 @@ impl Notices {
         if self.started {
             for transit in world.transits().filter(|t| t.entity.owner == PLAYER) {
                 if !self.travelling.contains_key(&transit.entity.id) {
+                    let charting = !world.knows_route(PLAYER, transit.origin, transit.destination);
                     notices.push(Notice {
                         text: format!(
-                            "{} departed for {}",
+                            "{} departed for {}{}",
                             rules.display_name(transit.entity.type_id, faction),
-                            name_of(transit.destination)
+                            name_of(transit.destination),
+                            if charting {
+                                " (charting the route: a slower first voyage)"
+                            } else {
+                                ""
+                            }
                         ),
                         about: Some(transit.entity.id),
                     });
@@ -493,6 +569,37 @@ impl Notices {
             }
         }
         self.travelling = travelling;
+        let charted: BTreeSet<(u32, u32)> = world.known_routes(PLAYER).into_iter().collect();
+        if self.started {
+            let new: Vec<_> = charted.difference(&self.charted).copied().collect();
+            match new.as_slice() {
+                [] => {}
+                [(a, b)] => notices.push(Notice {
+                    text: format!("Route charted between {} and {}", name_of(*a), name_of(*b)),
+                    about: None,
+                }),
+                more => notices.push(Notice {
+                    text: format!("{} routes revealed on the star map", more.len()),
+                    about: None,
+                }),
+            }
+            for failure in world
+                .order_failures(PLAYER)
+                .filter(|f| f.reason == "inhibited" && !self.held.contains(&f.order))
+            {
+                notices.push(Notice {
+                    text: "Held by an enemy jump inhibitor: leave the way you came, or destroy it"
+                        .to_owned(),
+                    about: Some(failure.executor),
+                });
+            }
+        }
+        self.held = world
+            .order_failures(PLAYER)
+            .filter(|f| f.reason == "inhibited")
+            .map(|f| f.order)
+            .collect();
+        self.charted = charted;
         let reach = world.players().find(|p| p.id == PLAYER).and_then(|p| {
             let age = rules.ages.get(&p.age)?;
             Some(rules.map_scales.get(&age.map_scale)?.rank)
@@ -687,7 +794,15 @@ mod transit_tests {
                 .name
                 .clone()
         };
-        assert!(departed.text.ends_with(&name(other)), "{}", departed.text);
+        // A first voyage charts its route, and the line says so.
+        assert!(
+            departed.text.ends_with(&format!(
+                "{} (charting the route: a slower first voyage)",
+                name(other)
+            )),
+            "{}",
+            departed.text
+        );
         let arrived = arrived.expect("an arrival line");
         assert_eq!(arrived.about, Some(ship));
         // Its destination is known now: its bodies are drawn and named.
@@ -831,5 +946,119 @@ mod model_tests {
         indices.sort_unstable();
         indices.dedup();
         assert_eq!(indices.len(), classes.len());
+    }
+}
+
+#[cfg(test)]
+mod trade_tests {
+    use super::*;
+    use crate::script::ScriptSetup;
+    use rom_sim::Command;
+
+    /// A space freighter of player one between its home city and a colony (`far`: on a planet
+    /// of the nearest star system one route away, with interstellar trade; otherwise on the
+    /// nearest other planet of the home system). Returns the route's length in milli-tiles,
+    /// its income per arrival and the wealth it earns per game minute, measured over a whole
+    /// round trip once it runs (its first voyage, charting, left out).
+    fn trade_rate(far: bool) -> (u64, i64, i64) {
+        let options = crate::args::Options {
+            universe: true,
+            seed: 1,
+            ..crate::args::Options::default()
+        };
+        let content = crate::terrain::generate_universe_content(&options).expect("universe");
+        let setup = ScriptSetup {
+            age: Some("age.abundance".into()),
+            techs: vec!["tech.interstellar_trade".into()],
+            colonies: if far { vec![] } else { vec![1] },
+            far_colonies: if far { vec![1] } else { vec![] },
+            ..ScriptSetup::default()
+        };
+        let mut game = crate::match_setup::build_universe_match(
+            &content.rules,
+            &content.universe,
+            &content.factions,
+            1,
+            None,
+            &setup,
+        )
+        .expect("match");
+        let world = &mut game.world;
+        let home = world.home_body(PLAYER).unwrap();
+        let kind = world.rules().id_of("unit.space_freighter").unwrap();
+        let freighter = world
+            .spawn(kind, PLAYER, world.body_position(home).unwrap())
+            .unwrap();
+        let city = world.city_type(PLAYER).unwrap();
+        let colony = world
+            .entities()
+            .find(|e| e.owner == PLAYER && e.type_id == city && e.pos.body != home)
+            .unwrap()
+            .id;
+        let submit = |world: &mut World, kind: &str, target: Option<EntityId>| {
+            world
+                .submit(Command {
+                    player: PLAYER,
+                    executor: freighter,
+                    kind: kind.into(),
+                    subject: None,
+                    target_entity: target,
+                    target_pos: None,
+                    queue: false,
+                })
+                .unwrap();
+        };
+        let marker = world.body_marker(home);
+        submit(world, "orbit", marker);
+        for _ in 0..2000 {
+            if world.orbit(freighter).is_some() {
+                break;
+            }
+            world.step();
+        }
+        submit(world, "trade", Some(colony));
+        world.step();
+        let route = world.trade_routes(PLAYER).next().unwrap();
+        let mut paid = Vec::new();
+        let mut trips = world.stats().trade_trips;
+        for _ in 0..80_000 {
+            world.step();
+            if world.stats().trade_trips > trips {
+                trips = world.stats().trade_trips;
+                paid.push(world.tick());
+                if paid.len() == 3 {
+                    break;
+                }
+            }
+        }
+        assert_eq!(paid.len(), 3, "three deliveries");
+        let round_trip = paid[2] - paid[0];
+        let per_minute = 2 * route.per_trip_income * 1200 / round_trip as i64;
+        eprintln!(
+            "{}: length {} milli-tiles, +{} per trip, round trip {} s, {} wealth per minute",
+            if far {
+                "interstellar"
+            } else {
+                "between planets"
+            },
+            route.length,
+            route.per_trip_income,
+            round_trip / 20,
+            per_minute
+        );
+        (route.length, route.per_trip_income, per_minute)
+    }
+
+    /// An interstellar route pays more per arrival than a route between the planets of one
+    /// system, and is worth the longer trip: more wealth per minute.
+    #[test]
+    fn interstellar_trade_is_worth_the_longer_trip() {
+        let (near_length, near_trip, near_rate) = trade_rate(false);
+        let (far_length, far_trip, far_rate) = trade_rate(true);
+        assert!(far_length > near_length && far_trip > near_trip);
+        assert!(
+            far_rate > near_rate,
+            "interstellar {far_rate} per minute against {near_rate}"
+        );
     }
 }

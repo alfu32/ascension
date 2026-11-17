@@ -383,6 +383,20 @@ impl crate::load::SqlEnum for TechEffectKind {
         }
     }
 }
+/// Where a jump inhibitor's effect reaches (`et_inhibitor.reach`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum InhibitorReach {
+    /// SQL value `system`: the whole star system of the planet it stands on.
+    System,
+}
+impl crate::load::SqlEnum for InhibitorReach {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "system" => Some(Self::System),
+            _ => None,
+        }
+    }
+}
 /// Closed rules vocabulary for StatScope.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StatScope {
@@ -1177,6 +1191,8 @@ pub struct EntityType {
     pub supply: Option<Supply>,
     /// Attached `et_view_scale` row: how large it is drawn in the space views.
     pub view_scale: Option<ViewScale>,
+    /// Attached `et_inhibitor` row: holds enemy ships in its star system.
+    pub inhibitor: Option<Inhibitor>,
     /// Attached `et_weapon` rows.
     pub weapons: Vec<Weapon>,
     /// Attached `placement_rule` rows.
@@ -1203,6 +1219,8 @@ pub struct Movement {
     pub pack_ticks: i64,
     /// Ticks an orbital craft takes to climb to its planet's orbit or come back down; 0 = never.
     pub climb_ticks: i64,
+    /// Ticks a ship charges before a jump along a route; `None` = `space.jump_charge_ticks`.
+    pub jump_charge_ticks: Option<i64>,
 }
 /// One `et_weapon` row.
 #[derive(Debug, Clone)]
@@ -1413,6 +1431,16 @@ pub struct Supply {
     pub radius: i64,
     /// The `stock` column.
     pub stock: Option<i64>,
+}
+/// One `et_inhibitor` row: a jump inhibitor.
+#[derive(Debug, Clone)]
+pub struct Inhibitor {
+    /// The `entity_type_id` column.
+    pub entity_type_id: DefId,
+    /// The `reach` column.
+    pub reach: InhibitorReach,
+    /// The `charge_pct` column: extra jump charge time of the enemy ships it holds.
+    pub charge_pct: i64,
 }
 /// One `et_view_scale` row (presentation only).
 #[derive(Debug, Clone)]

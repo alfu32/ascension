@@ -615,6 +615,18 @@ fn write_entities(tx: &Transaction, s: &Snapshot) -> Result<(), SaveError> {
             params![city.0, team, w(*since)],
         )?;
     }
+    for (player, a, b) in &s.space.charted {
+        tx.execute(
+            "INSERT INTO player_route VALUES (?,?,?)",
+            params![player.0, a, b],
+        )?;
+    }
+    for (ship, system) in &s.space.arrivals {
+        tx.execute(
+            "INSERT INTO entity_arrival VALUES (?,?)",
+            params![ship.0, system],
+        )?;
+    }
     for (producer, rally) in &s.rallies {
         let (target, at) = match rally {
             Rally::Entity(target) => (Some(target.0), [None; 4]),

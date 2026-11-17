@@ -1,6 +1,6 @@
 # Game database
 
-Files: [`../db/schema.sql`](../db/schema.sql) (90 tables, 4 views),
+Files: [`../db/schema.sql`](../db/schema.sql) (118 tables, 4 views),
 [`../db/seed.sql`](../db/seed.sql) (the full generated content catalogue and hand-written
 world rules) and the model files in [`../db/models/`](../db/models/) (one per building or
 unit model, task 55; see §10a and `docs/models-in-meshcraft.md`), which load after the seed:
@@ -64,6 +64,7 @@ def ─┬─ age            ordinal, era, map scale
      │                 ├─ et_supply        supply radius
      │                 ├─ et_gather_site   farm, mine, camp, university
      │                 ├─ et_view_scale    drawn size in the space views (presentation)
+     │                 ├─ et_inhibitor     jump inhibitor: holds enemy ships in its system
      │                 └─ et_node          deposit placed by the map generator
      ├─ tech           age | track | upgrade | unit_upgrade | government | project | evolution
      ├─ ability        active abilities
@@ -941,6 +942,81 @@ Schema and save format (deliberate; both lint views stay empty, the seed loads):
 - Tags `tower` and `orbit_bound`; two units and their `et_view_scale` rows (freighter
   300 / 35, satellite 220 / 20); sight modifier rows; arrow speed on three weapons.
   No PART A column was added.
+
+## Routes and jumps (task 70)
+
+Owner's choice (2026-11-16, 2026-11-17): ships keep flying freely inside a star system; the
+routes between systems are charted, jumps along them are charged first, and jump inhibitors hold
+enemy ships in a system. Ordinary rows plus the deliberate schema changes below; both lint
+views stay empty and the seed loads.
+
+**Charting.** A player knows a route once one of its ships has completed a voyage along it, or
+a research revealed it (`World::knows_route`, `known_routes`). A voyage along a route its player
+does not know takes `space.charting_pct` (500: five times) of the usual transit and charts the
+route on arrival; a ship lost on the way charts nothing. A ship's path (`World::travel_path`) is
+the shortest by time, so an uncharted route counts five times its length. Known routes are per
+player, in the state hash (only once there are some), the snapshot and the save.
+
+**Research** (spaceport, data only: `tech_effect.effect = 'enable_rule'` with these rule keys;
+code looks for the key, never the technology):
+
+| Technology | Age | `rule_key` | Effect |
+| --- | --- | --- | --- |
+| `tech.enhanced_sensors` Enhanced Sensors | expansion | `route_sensors` | once a second, charts every route leaving a system where the player has a ship or a planet; no voyage of the player is slowed by charting |
+| `tech.interstellar_trade` Interstellar Trade | abundance | `interstellar_trade` | a space freighter may run a route to an own or allied city in another star system |
+| `tech.automated_route_survey` Automated Route Survey | galactic | `route_survey` | every route is known |
+
+**Charging a jump.** A ship ordered along a route flies to the edge of its system toward the
+next system and charges there for its stat `jump_charge` (new entity stat): the new nullable
+column `et_movement.jump_charge_ticks`, or the rule default `space.jump_charge_ticks` (160 ticks,
+8 s) where a type has none. By hull size class: survey ship and corvette 120 ticks (6 s); space
+frigate, transport and space freighter 160 (8 s); space cruiser 200 (10 s); battleship and carrier
+240 (12 s). While charging it does not move or fire and can be hit; any new order (not a queued
+one) cancels the charge. The charge lives in the travel order: `total_ticks` the ticks it needs
+now, `progress_ticks` the ticks charged, status `blocked: charging`, then `blocked: depart`
+(`World::jump_charge`). Ships whose travel orders were given in the same tick by the same player
+from one system to one destination form a group; the group departs on the tick its last member
+has charged (orders the simulation makes itself, a freighter's legs, travel alone). Transit time
+still follows the route's length.
+
+**Jump inhibitor** (`bld.jump_inhibitor`, starfaring, 3 × 3, 3 000 hp, 500 metal and 300 energy,
+built by citizens and worker drones in own territory on plain ground; no weapon). New component
+table `et_inhibitor(entity_type_id, reach, charge_pct)`: `reach = 'system'` (the only value)
+covers the whole star system of the planet it stands on; `charge_pct` 50. While a complete,
+active one stands, ships of its owner's enemies in that system may depart only back along the
+route they arrived by (the new PART B table `entity_arrival` records it; a ship built there may
+not leave at all) and charge `charge_pct` longer. Several do not stack (the largest applies).
+Own and allied ships are free. A refused route is `SimError::HeldByInhibitor` at submission; a
+queued or running travel order ends `failed: inhibited` (a freighter's trade order likewise).
+Destroying it lifts the effect on the next tick; it has hit points like any building, so
+bombardment from orbit or troops on the ground answer it (task 71's rule: it has no weapon, so
+it is no strength that needs a counter).
+
+**Interstellar trade.** With `interstellar_trade`, `validate_trade` accepts a space freighter's
+target city in another star system (`SimError::NeedsInterstellarTrade` before the research).
+The route's length is the path its ships take: the distances in each system's plane (home
+planet to the route's edge, edge to edge through a system passed, edge to the target planet)
+plus each route's length times `trade.route_length_mtiles` (1 000: a unit of route length counts as
+one tile). The
+freighter flies it as legs: lift off, a `travel` leg (to the edge, charge, jump, charting at the
+slow rate the first time, cross), orbit the target planet, land, deliver; then back. Income per
+arrival is `et_trader.route_income` (8) per `trade.route_unit` of that length. Measured by
+`space_view::trade_tests` (universe seed 1, abundance age, a freighter's round trip once its
+route is charted): to the nearest other planet of the home system the route is 339 tiles, pays
+271 per arrival and takes 249 s there and back, **130 wealth per minute**; to the nearest planet
+one jump away it is 846 tiles (477 flown in the two planes, 369 route units), pays 676 per
+arrival and takes 377 s, **214 wealth per minute** (1.65 times). The first trip out, charting
+the route, takes longer.
+
+Schema and save format (deliberate):
+
+- **PART A.** `et_movement.jump_charge_ticks` (nullable); table `et_inhibitor`; stat
+  `jump_charge`; constants `space.jump_charge_ticks`, `space.charting_pct`,
+  `trade.route_length_mtiles`; the three rule keys above documented on `tech_effect.rule_key`.
+- **PART B, save format 7** (format 6 saves are refused): `player_route(player_id, system_a,
+  system_b)` the routes each player knows; `entity_arrival(entity_id, system_id)` the system each
+  ship last arrived from. A charge needs no table: it is the travel order's `progress_ticks`,
+  `total_ticks` and status, which the save already keeps.
 
 ## Capture and difficulty (task 67)
 

@@ -1,0 +1,9 @@
+# Task 70, replayed by --script in --universe mode (--ai none, seed 1) with --view system,home:
+# one survey ship charging its jump at the edge of the home system; its card says "Charging
+# jump to Tarf: N s" and the help line what charging means.
+0 grant-age age.expansion
+0 place-space 1 unit.survey_ship -238,-164
+2 ships
+4 cam focus
+60 cam wheel 10 640,360
+120 travel system1

@@ -40,8 +40,10 @@
 //! `save <name>`, `quicksave` and `menu [main|save|load]` write a save or open the in-match menu.
 //!
 //! Camera commands replay input on the render thread exactly as the window would send it
-//! (positions in canvas pixels): `cam wheel <steps> [x,y]`, `cam drag x,y x,y [rotate]`
-//! (middle-button drag; `rotate` holds Shift), `cam dblclick x,y`, `cam click x,y`, `cam point
+//! (positions in canvas pixels): `cam wheel <steps> [x,y]` (each step glides, as one notch of
+//! the wheel does), `cam drag x,y x,y [shift]` (middle-button drag; `shift`, or the older
+//! `rotate`, holds Shift: since task 74 the plain drag turns the view in space and the Shift
+//! drag pans it), `cam dblclick x,y`, `cam click x,y`, `cam point
 //! x,y` (move the pointer only), `cam key <up|down|left|right> <down|up>`, `cam home`,
 //! `cam focus` and `cam follow` (the focus and follow keys), `cam sky` (F2, the "Sky from the
 //! Sun" preset of the star map) and `cam lines` (F3, the constellation figures).
@@ -89,6 +91,9 @@ pub struct ScriptSetup {
     /// Owners given a city on the nearest other habitable planet of player one's home system
     /// (`colony <owner id>`; the planet is generated before tick one).
     pub colonies: Vec<u32>,
+    /// Owners given a city on the nearest habitable planet of a star system one route from
+    /// player one's home system (`colony-far <owner id>`).
+    pub far_colonies: Vec<u32>,
 }
 
 impl ScriptSetup {
@@ -274,12 +279,16 @@ impl ScriptSetup {
                     };
                     list.push((owner, (*key).to_owned(), parse(dx)?, parse(dy)?));
                 }
-                Some("colony") => {
+                Some(kind @ ("colony" | "colony-far")) => {
                     let owner = words
                         .get(2)
                         .and_then(|o| o.parse().ok())
-                        .ok_or_else(|| format!("{}: colony needs an owner id", at()))?;
-                    setup.colonies.push(owner);
+                        .ok_or_else(|| format!("{}: {kind} needs an owner id", at()))?;
+                    if kind == "colony" {
+                        setup.colonies.push(owner);
+                    } else {
+                        setup.far_colonies.push(owner);
+                    }
                 }
                 Some("grant-tech") => {
                     setup.techs.push(
@@ -393,7 +402,7 @@ impl Script {
                     Some(_),
                     Some(
                         "grant-age" | "grant" | "grant-tech" | "place" | "place-space"
-                        | "place-orbit" | "colony",
+                        | "place-orbit" | "colony" | "colony-far",
                     ),
                 ) => {
                     continue;
@@ -736,7 +745,7 @@ fn camera_input(words: &[&str]) -> Result<Vec<rom_render::InputEvent>, String> {
         Ok((parse(x)?, parse(y)?))
     };
     let shift = Modifiers {
-        shift: words.contains(&"rotate"),
+        shift: words.contains(&"shift") || words.contains(&"rotate"),
         ..Modifiers::default()
     };
     let at = |n: usize| {

@@ -13,6 +13,7 @@ mod hash;
 mod healing;
 mod income;
 mod index;
+mod jumps;
 mod map;
 mod math;
 mod movement;
@@ -46,6 +47,9 @@ pub use capture::CaptureCountdown;
 pub use entity::{Entity, EntityId, Player, PlayerId};
 pub use geometry::Topology;
 pub use income::Income;
+pub use jumps::{
+    Inhibition, JumpCharge, RULE_INTERSTELLAR_TRADE, RULE_ROUTE_SENSORS, RULE_ROUTE_SURVEY,
+};
 pub use map::MapGrid;
 pub use math::{Pos, integer_sqrt};
 pub use order::{Command, Order, OrderFailure, OrderId, OrderKindKey, OrderStatus};
@@ -311,6 +315,14 @@ pub enum SimError {
     /// `guard` takes an own or allied entity other than the guard itself.
     #[error("invalid guard target")]
     InvalidGuardTarget,
+    /// An enemy jump inhibitor holds the ship in its system: it may leave only back along the
+    /// route it arrived by.
+    #[error("an enemy jump inhibitor holds this ship: it may leave only the way it came")]
+    HeldByInhibitor,
+    /// A space freighter trades with another star system only after the research that
+    /// enables interstellar trade.
+    #[error("trade with another star system needs interstellar trade")]
+    NeedsInterstellarTrade,
 }
 
 #[cfg(test)]

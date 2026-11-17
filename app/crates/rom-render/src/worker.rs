@@ -14,7 +14,7 @@ use raylib::prelude::{
     RaylibRenderTexture2D, RaylibTexture2D, RaylibTextureModeExt, RenderTexture2D, TraceLogLevel,
 };
 
-use crate::camera::{Camera, CameraController, InputEvent, Key, PointerButton};
+use crate::camera::{Camera, CameraController, InputEvent, Key, PointerButton, TurnSettings};
 use crate::entities::{
     EntitySnapshot, EntityView, SnapshotPair, aloft_hulls, is_aloft_ship, scale_ship_view,
 };
@@ -36,7 +36,8 @@ use crate::readback::{AsyncReadback, ReadyFrame};
 use crate::review::{Review, sheet_cell};
 use crate::scene::{BakeReport, OrbitalShip, Scene};
 use crate::space::{
-    SpaceContext, SpaceHover, SpacePicker, SpaceSnapshot, hover_help, level_help, ship_frame_pos,
+    SpaceContext, SpaceHover, SpacePicker, SpaceSnapshot, level_help, ship_frame_pos,
+    space_hover_help,
 };
 use crate::stats::{RenderStats, StatsWindow};
 use crate::sun::SunClock;
@@ -151,6 +152,8 @@ struct Shared {
     hidden_terrain: Mutex<Option<Arc<Vec<crate::TileKind>>>>,
     start_markers: AtomicBool,
     graticule: AtomicBool,
+    /// The player's turning preferences, packed by [`TurnSettings::bits`].
+    turn: AtomicU8,
     snapshot_wanted: AtomicBool,
     snapshot: Mutex<Option<Arc<FramePixels>>>,
     review: Mutex<Option<Arc<Review>>>,
@@ -310,6 +313,12 @@ impl RenderBridge {
     /// `G` key toggles them when the command palette leaves it free; Shift+G always toggles).
     pub fn publish_graticule(&self, visible: bool) {
         self.shared.graticule.store(visible, Ordering::Relaxed);
+    }
+
+    /// Sets the player's turning preferences: which middle drag turns and which pans, and
+    /// inverted turning drags.
+    pub fn publish_turn(&self, turn: TurnSettings) {
+        self.shared.turn.store(turn.bits(), Ordering::Relaxed);
     }
 
     /// Whether the latitude and longitude lines are shown.
@@ -485,6 +494,7 @@ impl Shared {
             hidden_terrain: Mutex::new(None),
             start_markers: AtomicBool::new(false),
             graticule: AtomicBool::new(true),
+            turn: AtomicU8::new(0),
             snapshot_wanted: AtomicBool::new(false),
             snapshot: Mutex::new(None),
             review: Mutex::new(None),
@@ -854,11 +864,19 @@ fn render_loop(shared: &Shared) {
             }
         }
         let events = std::mem::take(&mut *lock(&shared.input));
+        let turn = TurnSettings::from_bits(shared.turn.load(Ordering::Relaxed));
+        controller.set_turn(turn);
+        orbit_controller.set_turn(turn);
+        if let Some(zoom) = zoom.as_mut() {
+            zoom.set_turn(turn);
+        }
         {
             let surface = scene.surface();
             let ground = |x: f32, y: f32| surface.map_or(0.0, |s| s.height(x, y));
             let now_ms = frame_start.duration_since(started).as_millis() as u64;
             for event in events {
+                // With "middle drag: pan" the two middle-button jobs trade places everywhere.
+                let event = turn.map_event(event);
                 let mut ask = camera_request(event, &canvas, hud_visible, &hud_snapshot);
                 if let InputEvent::ButtonDown {
                     button: PointerButton::Left,
@@ -1041,6 +1059,7 @@ fn render_loop(shared: &Shared) {
                     // A camera reset by the planet controller moves the log-distance with it.
                     zoom.adopt_orbit(orbit);
                     zoom.advance(seconds);
+                    zoom.glide_wheel(seconds, orbit);
                     zoom.sync_orbit(orbit);
                     if zoom.pans_planet() {
                         orbit_controller.advance(orbit, seconds);
@@ -1164,13 +1183,12 @@ fn render_loop(shared: &Shared) {
                 if let (Some((hover, (x, y))), Some(_)) = (pointing, zoom.pointer()) {
                     let ratio = size.0 as f32 / layout.0.max(1) as f32;
                     let ships = !hud_snapshot.selected.is_empty();
-                    let (name, action) = hover_help(
+                    let (name, action) = space_hover_help(
                         zoom.scene(),
                         hover,
                         zoom.surface_body(),
                         ships,
-                        |id| space_snapshot.knows(id),
-                        |id| space_snapshot.resource_body(id).cloned(),
+                        &space_snapshot,
                     );
                     for (row, text) in [name, action].into_iter().enumerate() {
                         scene.push_space_label(crate::scene::SpaceLabel {
@@ -1242,15 +1260,22 @@ fn render_loop(shared: &Shared) {
                         now_ms: 0,
                     };
                     let world_help = zoom.as_ref().and_then(|zoom| match pointing {
-                        Some((hover, _)) => Some(hover_help(
+                        Some((hover, _)) => Some(space_hover_help(
                             zoom.scene(),
                             hover,
                             zoom.surface_body(),
                             !hud_snapshot.selected.is_empty(),
-                            |id| space_snapshot.knows(id),
-                            |id| space_snapshot.resource_body(id).cloned(),
+                            &space_snapshot,
                         )),
-                        None => level_help(zoom.level(), zoom.cap()),
+                        // In a system a jump inhibitor holds, the help says so.
+                        None => match space_snapshot
+                            .system
+                            .filter(|_| zoom.level() == Level::System)
+                            .and_then(|id| space_snapshot.hold_of(id))
+                        {
+                            Some(hold) => Some(crate::space::hold_text(hold)),
+                            None => level_help(zoom.level(), zoom.cap(), turn.middle_pans),
+                        },
                     });
                     HudOverlay {
                         hover: picker.hover(&ctx),
@@ -1569,9 +1594,8 @@ fn zoom_event(
     let centre_y = centre_of(canvas, hud_visible);
     match event {
         InputEvent::Wheel { steps } if !over_hud => {
-            let cursor = zoom.pointer();
-            zoom.wheel_at(steps, cursor, size, centre_y, orbit);
-            zoom.sync_orbit(orbit);
+            // Each step eases the distance over a fifth of a second (`glide_wheel` per frame).
+            zoom.wheel_glide(steps, zoom.pointer(), size, centre_y);
             true
         }
         InputEvent::KeyDown(Key::FrameMap) => {
@@ -1636,7 +1660,9 @@ fn zoom_event(
             y,
             mods,
         } if on_world(x, y) => {
-            zoom.drag_start(x, y, mods.shift);
+            // The middle button turns the view, Shift + middle pans (swapped by the setting
+            // before this point), as on the planet.
+            zoom.drag_start(x, y, !mods.shift);
             true
         }
         InputEvent::ButtonUp {
@@ -2175,6 +2201,7 @@ mod tests {
                 from: 1,
                 to: 2,
                 progress: 0.5,
+                charting: false,
             }],
             ..SpaceSnapshot::default()
         };

@@ -167,13 +167,21 @@ attack-move when slot A is empty. Hidden `--script <file>` replays pick events (
 
 ## Controls
 
-Middle-button drag pans at ground speed. On a flat map the point under the
-cursor stays under it; on a globe the view follows a great circle.
-Right-button drag also pans on a flat map when nothing is selected and no
-placement is active. Shift+middle-button drag rotates the view. The wheel
-zooms, arrow keys and the screen edges pan, End restores the starting view,
-and Home frames the map or globe. Existing selection, order and palette
-hotkeys are unchanged.
+Middle-button drag turns the view at every level: on a globe it turns the
+globe under the camera (the point under the cursor stays under it, along a
+great circle), on a flat map it moves the ground the same way, and in a star
+system or on the star map it orbits the camera about the focus.
+Shift+middle-button drag does the other job: it turns the heading on a globe
+or a flat map and pans in space. The setting "Middle drag: turn / pan"
+(`--middle-drag pan`) swaps the two everywhere; "Invert horizontal turn" and
+"Invert vertical turn" reverse the turning drags, which by default swing the
+camera so the scene follows the pointer (`app/docs/world-model.md`, "Moving
+between levels"). Right-button drag also pans on a flat map when nothing is
+selected and no placement is active. The wheel zooms one gliding step per
+notch (one per gesture: a burst of notches within 80 ms counts once), arrow
+keys and the screen edges pan, End restores the starting view, and Home
+frames the map or globe. Existing selection, order and palette hotkeys are
+unchanged.
 
 ## Palette states and research
 

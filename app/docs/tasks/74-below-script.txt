@@ -1,0 +1,10 @@
+# Task 74: the same system seen from below its plane: a plain middle drag up (the turn) lowers
+# the eye through the plane to about 45 degrees below it. Run with --view system.
+0 grant-age age.galactic
+0 place-space 1 unit.space_cruiser 64,0
+0 place-space 1 unit.battleship 56,6
+0 place-space 1 unit.corvette 48,-6
+0 place-space 2 unit.space_cruiser 84,0
+0 place-space 2 unit.battleship 92,6
+0 place-space 2 unit.corvette 100,-6
+4 cam drag 640,430 640,190

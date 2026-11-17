@@ -92,7 +92,8 @@ skirmish maps and the existing scenarios.
 - An entity has exactly one **location**: on a surface, in orbit around a
   body, in a system's space, or in transit between systems. Moving between
   levels is an order (launch from a spaceport, land at a site, leave orbit,
-  depart along a route), with a duration.
+  depart along a route), with a duration. A route is charted by its first voyage and a jump
+  along it is charged first (task 70, "Routes, jumps and inhibitors").
 
 ### The real sky (task 59)
 
@@ -138,7 +139,7 @@ order, "Vega II"; resource bodies "Vega belt" and "Vega II moon".
   stars that are in the match (F3 hides or shows them anywhere on the star
   map). Each constellation is named once, faintly, over its member systems.
   The star map is an ordinary 3D scene: orbit with the heading and the tilt
-  (the tilt reaches below the plane on the map), systems drop faint lines to
+  (the tilt reaches 89 degrees below the plane, task 74), systems drop faint lines to
   the equatorial plane's rings, distant ones fade.
 
 ## Camera and visibility by age
@@ -208,6 +209,40 @@ Screenshots (scripts `tasks/68-*-script.txt`): `img/orbit-hold-before-turn.png` 
 `img/orbit-landing.png` (a transport coming straight down), `img/orbit-freighter-route.png`
 (a freighter between the home planet and the colony), `img/orbit-satellite-sight.png` and
 `img/orbit-satellite-before-after.png` (the fog before and after a satellite goes up).
+
+### Routes, jumps and inhibitors (task 70)
+
+Ships fly freely inside a star system. Between systems they follow the routes, and three things
+shape that (values and tables in `database.md`, "Routes and jumps"):
+
+- **Charting.** A player knows a route once its ship has flown it. The first voyage along a route
+  takes five times as long, charting it; the next is quick. Unknown routes are not drawn on the
+  player's star map: a faint stub leaves each system it has seen. In the expansion age the
+  spaceport's **Enhanced Sensors** reveal every route leaving a system where the player has a ship
+  or a planet and remove the delay; in the galactic age **Automated Route Survey** reveals them all.
+- **Charging a jump.** A ship sent along a route flies to the edge of its system and charges (6 s
+  for a corvette to 12 s for a battleship); it cannot move or fire meanwhile and can be hit, and a
+  new order cancels the charge. Ships sent together leave together, when the slowest has charged.
+  A charging ship wears a ring that fills, in the system and on the star map; its card says
+  "Charging jump to Sirius: 4 s".
+- **Jump inhibitors.** A building of the space age, on a planet: enemy ships in its star system
+  may leave only back the way they came, charge half as long again, and are told why when another
+  route is refused. Several do not stack; destroying the building frees them at once. A system so
+  held shows a six-sided ring on the star map and a faint boundary at its rim; hovering it explains.
+- **Interstellar trade.** From the age of abundance (**Interstellar Trade**), a space freighter
+  runs a route to an own or allied city in another star system: lift off, cross to the edge,
+  charge, jump, cross, land, deliver, and back; it pays by the whole path's length.
+
+Screenshots (scripts `tasks/70-*-script.txt`, universe seed 1, `--ai none`):
+`img/jump-fleet-charging.png` (a fleet at the edge, amber charge rings filling),
+`img/jump-charge-card.png` (one ship: "Charging jump to Tarf: 3 s"), `img/jump-fleet-in-transit.png`
+(the fleet on its way after the charge), `img/jump-chart-before.png` and `img/jump-chart-after.png`
+(a first voyage: the minimap's stub becomes a route, "Route charted between ..."),
+`img/jump-routes-sensors.png` and `img/jump-routes-survey.png` (the star map with Enhanced Sensors
+and with Automated Route Survey), `img/jump-interstellar-trade.png` (a freighter's route card:
+"Gamma Canis Minoris → Tarf, 1 jump (1 to chart)"), `img/jump-inhibitor-refused.png` (a route
+refused under an enemy inhibitor, the boundary at the rim, the help line) and
+`img/jump-inhibitor-star-map.png` (its mark), `img/jump-inhibitor-model.png` (the first-look model).
 
 ### Orbital craft, carriers and ground batteries (task 58)
 
@@ -320,14 +355,14 @@ flies the camera down to that planet.
 ### Moving between levels (task 53)
 
 One orbit-style camera serves the planet, the star system and the star map:
-a focus point, a heading, an elevation that rises with the distance, and
-the distance. Every level answers the same input:
+a focus point, a heading, an elevation and the distance. Every level answers
+the same input (task 74):
 
 | Input | Planet | System and star map |
 | --- | --- | --- |
-| Wheel | zoom | zoom toward the point under the cursor |
-| Middle drag | pan | pan (the plane follows the pointer) |
-| Shift + middle drag | turn the heading | turn the heading about the focus |
+| Wheel | zoom, one gliding step per notch | zoom toward the point under the cursor |
+| Middle drag | turn the globe under the camera | turn: orbit the camera about the focus (left–right the heading, up–down the elevation) |
+| Shift + middle drag | turn the heading | pan (the plane follows the pointer) |
 | Arrows, pointer at the edge | pan | pan, relative to the heading |
 | Double-click | — | fly to a planet, star or system |
 | Home | home view | fly back to the home planet |
@@ -346,6 +381,41 @@ the distance. Every level answers the same input:
   another habitable planet is asked for and entered once its globe is
   loaded. Past the star map's hand-over the wheel enters the system nearest
   the focus. Visiting another system is: zoom out, pan, zoom in.
+- **One way to turn (task 74).** The middle button turns the view at every
+  level and Shift + middle does the other job. The setting "Middle drag: turn /
+  pan" (`--middle-drag pan`, launcher "Camera and light") swaps the two
+  everywhere. Turning moves the eye about the focus, never the focus about the
+  eye: dragging right swings the camera so the scene follows the pointer (near
+  side right), dragging up lowers the eye toward the plane. "Invert horizontal
+  turn" and "Invert vertical turn" (`--invert-horizontal-turn`,
+  `--invert-vertical-turn`) reverse either direction. The flat test camera and
+  the planet's heading turn follow the same rule. From the Sun (F2) a drag grabs
+  the sky (it follows the pointer both ways) and the arrows look the way they
+  point.
+- **A low angle in space (task 74).** The space camera has one elevation for
+  the system view and the star map. The first hand-over from the planet eases
+  to `DEFAULT_ELEVATION`, 12 degrees above the plane (orbits as long ellipses,
+  the star to the side); after that the elevation is the player's, kept for the
+  match. It reaches 89 degrees above and below the plane; from below the
+  picture keeps its up (the plane's normal points up the screen), so names and
+  marks are never upside down, and picking and orders on the plane work from
+  either side.
+- **The focus stays on the plane (task 74).** In a system the focus always
+  lies on the system plane: panning moves it within the plane (the ray from the
+  pointer to the plane, from above or below), zoom to the pointer holds the
+  plane point under the cursor (or anchors on the body under it), turning
+  orbits about it. Near the horizon a pointer ray that meets the plane farther
+  than four camera distances from the eye's foot, or misses it, stands for the
+  point at that distance in its direction, so panning and zooming stop there
+  instead of shooting off (the minimap's outline of the view is cut there too).
+  On the star map the focus lies on the map's reference plane (the sky's
+  equatorial plane through the Sun, which the rings and drop lines stand on),
+  except where it sits on a system: after a flight to a system or a ship, while
+  following, or after zooming out of a system. Any pan on the map (drag, keys,
+  edge, a minimap click) glides it back onto the reference plane; zooming into
+  a system glides it onto that system's plane; the wheel over a system of the
+  map zooms toward the system itself, wherever it lies in depth. This star-map
+  rule is provisional and lives in one place (`ZoomCamera::onto_reference_plane`).
 - **Every change of place is a flight** of short legs (out of the planet, up
   to a star-map height that fits the way, across, down), interrupted by any
   input. The camera never cuts.
@@ -405,19 +475,30 @@ projection. What changes with the distance is only what is drawn:
   above the ground to its place on the plane while its size blends in log
   space, starting from the size the globe drew. The sizes come from
   `et_view_scale`.
-- **Wheel steps.** The step is the ground's (a factor of 1/0.88) up to one
-  log unit below the planet camera's limit and grows smoothly to a factor of
-  1.5 by the planet's hand-over. On the test scale (a planet of 122 tiles)
-  street → whole globe takes 28 steps (was 30), street → whole system 38
-  (was 52), whole globe → whole system 10 (was 22) and whole system → whole
-  star map 10 (was 20).
+- **Wheel steps (task 74).** One notch of the wheel is one step: the window
+  used to send three steps per notch (the toolkit reports three lines), so a
+  notch left the low orbit, crossed the system or reached the star map. Notches
+  within 80 ms of the one before (`WHEEL_GESTURE_MS`) belong to the same gesture
+  and are dropped, so a misfiring or free-spinning wheel moves one step;
+  fractional notches (touchpad, smooth scrolling) zoom continuously. Each step
+  glides: the distance eases to its goal, 95 percent of the way in 0.2 s
+  (`WHEEL_GLIDE_SECONDS`), and a step during the glide moves the goal on (or,
+  turning back, starts from where the camera is); the point under the cursor is
+  held frame by frame. The step is a factor of 1.2 near the ground, growing
+  smoothly from one log unit below the planet camera's limit to a factor of 1.4
+  by the planet's hand-over. On the test scale (a planet of 122 tiles) street →
+  whole globe takes 21 notches (was 9: 28 steps of three per notch), street →
+  whole system 32 (was 13), whole globe → whole system 12 (was 3 or 4) and
+  whole system → whole star map 12 (was 3 or 4). The levels change at the same
+  distances as before; the minimap names the level and the help line says
+  where the camera is and how to turn and pan there.
 - **Zoom to the cursor on the planet too:** the point of the ground under the
   cursor stays under it.
 - **Ready for a 3D star map (task 59).** Star-map distances, the system
   nearest the focus and picking use all three coordinates; Shift + middle
-  drag up or down tilts the camera about the focus (10° to 89° above the
-  plane; on the star map down to 85° below it), so a map with systems at
-  different heights can be seen from any angle. Task 59 fills the map with
+  drag up or down tilts the camera about the focus, so a map with systems at
+  different heights can be seen from any angle (since task 74 the plain middle
+  drag turns, from 89 degrees above the plane to 89 below it). Task 59 fills the map with
   real stars in 3D (see "The real sky").
 
 Screenshots: `img/camera-zoom-strip.png` (street to star map, four wheel
@@ -425,7 +506,14 @@ steps apart), `img/camera-handovers.png` (the old hand-overs, two steps
 apart), `img/camera-sky.png` and `img/camera-sky-planet.png` (the star and a
 planet in the evening sky), `img/camera-ship-planet.png` and
 `img/camera-ship-system.png` (a transport above its spaceport, and on the
-system plane).
+system plane). Task 74: `img/camera-system-12deg.png` (the home system at the
+default 12 degrees, `tasks/74-system-script.txt`, `--view system`),
+`img/camera-system-below.png` (the same from about 43 degrees below the plane,
+`tasks/74-below-script.txt`), `img/camera-star-map-12deg.png` (the star map at
+the default angle, `--view starmap`), `img/camera-wheel-steps.png` (six
+consecutive notches out of orbit from `--view globe`) and
+`img/camera-wheel-to-map.png` (0, 5, 10, 15, 20 and 24 notches: low orbit to the
+star map).
 
 ## Rendering notes
 

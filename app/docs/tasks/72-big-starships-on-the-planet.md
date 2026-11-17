@@ -24,15 +24,27 @@ interstellar) commerce vessels work."
    `ModelGpu::place` never reads). The hand-over to the system view
    (task 69's morph) must stay smooth at the new size.
 2. **Landing a big ship.** A landed carrier, transport or freighter at this
-   size covers many tiles. Landing must find clear ground for the drawn
-   footprint: a landing clearance per ship type from data (a stat, not the
-   view scale; the simulation must not read presentation rows), used by
-   `World::landing_problem` and the freighter's landing legs. Deterministic,
-   tested twice with equal hashes, saved if state is added.
-3. **Orbit spacing.** Ships holding over the same point must not overlap
-   into one blob at the new size: spread their hold points by size
-   (presentation, or simulation if the hold point is simulation state; say
-   which).
+   size covers many tiles. Landing checks the drawn footprint (a landing
+   footprint per ship type from data: a stat, not the view scale; the
+   simulation must not read presentation rows), used by
+   `World::landing_problem` and the freighter's landing legs. The owner's
+   rule (2026-11-17):
+   - the footprint may not cover a **building** or a **mountain**;
+   - it **may** cover forest (trees stay; the ship stands on them);
+   - it **may** cover water in part, as long as a small share of the
+     footprint is land (a constant from data, about 20 %; state the value).
+   Anything else on the ground is handled as today. Deterministic, tested
+   twice with equal hashes (one test per rule above), saved if state is
+   added.
+3. **Hover altitude by size.** Ships holding over the planet hover at an
+   altitude that grows with their size (owner, 2026-11-17: bigger ships
+   higher, smaller ones lower), so a mixed fleet over one point stacks in
+   height instead of merging into one blob: altitude from data per ship type
+   or from its size, in size order. Ships of one class over the same point
+   still spread sideways by size. Say whether altitude is presentation only
+   or simulation state (ground fire and batteries, task 75, will care); if
+   it is simulation state, it is integer, hashed and saved. The hand-over to
+   the system view stays smooth from every altitude.
 4. **Freighters explain themselves.** A "Trade route" button on a selected
    freighter (and on caravans), with a hint: "Pick a city on another planet
    of this system". While picking, valid target cities are ringed; invalid
@@ -50,8 +62,8 @@ Gate green (fmt, clippy `-D warnings`, `cargo test --workspace --locked
 --no-fail-fast`, generator check, database lint, release build,
 build-rules/check-rules); playthrough complete (explain any hash change);
 `approved_models_are_unchanged` green; screenshots you looked at: ships of
-every class in orbit over a city at the new size, a landed transport and
-freighter beside a city, the zoom from orbit to system view at three steps,
+every class in orbit over a city at the new size (stacked by altitude), a
+landed transport on forest and a freighter partly over water beside a city, the zoom from orbit to system view at three steps,
 the freighter's Trade route button, hint and route card; bench of a planet
 view with 20 ships in orbit (before and after, with `uptime` load). Commit
 on the branch (stage by name), do not push or merge; final message with

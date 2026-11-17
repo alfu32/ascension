@@ -1,0 +1,5 @@
+# Task 70: the star map with Automated Route Survey (galactic age): every route is revealed. Run
+# with --view starmap.
+0 grant-age age.galactic
+0 grant-tech tech.automated_route_survey
+1 speed 400

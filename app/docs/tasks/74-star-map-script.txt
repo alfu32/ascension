@@ -1,0 +1,3 @@
+# Task 74: the star map at the default low angle (12 degrees above its reference plane), as
+# the first look at it shows it. Run with --view starmap.
+0 grant-age age.galactic

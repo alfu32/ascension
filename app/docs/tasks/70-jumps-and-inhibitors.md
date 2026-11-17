@@ -5,8 +5,10 @@ Crates: `rom-sim` (departure, transit), schema and seed via
 component rows, documented in `app/docs/database.md`), `rom-save` (charge
 state), `rom-render` and `rom-app` (showing a charge, the inhibitor's reach,
 refusal messages), one first-look model file for the new building, docs.
-`rom-ai` only as far as charting needs (a later card teaches computer
-players to use inhibitors). Starts after tasks 59 and 74 are merged
+**no change to `rom-ai`** (task 78 works there in parallel): computer
+players keep working with the slow first voyage; teaching them to chart,
+use inhibitors and run interstellar routes is a later card. If a `rom-ai`
+test breaks, fix the test minimally and say so. Starts after tasks 59 and 74 are merged
 (they touch `rom-sim`, `rom-render` and `rom-app`). Implementer: Claude (Opus).
 
 ## Why — the owner (2026-11-16)
@@ -55,8 +57,6 @@ the `"depart"` blocked status, `space.route_ticks_per_unit`, transits);
    - **Automated route survey** (galactic age): reveals every route in the
      universe.
    Known routes are per player, in the state hash, snapshot and save.
-   Computer players chart routes too (a minimal change in `rom-ai` so they
-   still reach other systems; the full use of inhibitors is a later card).
 2. **Charging a jump.** A ship ordered along a route first charges at the
    edge of its system for a time taken from data (a stat on the entity type,
    larger ships longer; a rule default where a type has none). While charging
@@ -87,7 +87,6 @@ the `"depart"` blocked status, `space.route_ticks_per_unit`, transits);
      against a typical route between planets.
    - Enemy inhibitors apply to freighters like any ship; a freighter that is
      destroyed delivers nothing. Pirating is not added.
-   - Computer players use it when they own cities in two systems.
 5. **Determinism and save.** Integers only, iteration in id order; the charge
    state goes into the state hash, the snapshot and `rom-save` (bump the save
    format). Scenarios run twice with equal hashes: a first voyage charting a
