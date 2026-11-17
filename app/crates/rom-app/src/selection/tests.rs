@@ -1593,7 +1593,11 @@ fn right_click_city_with_trader_issues_trade() {
         ["No route"]
     );
     fx.ctl.hovered = Some(target);
-    assert_eq!(fx.hud_snapshot().help, "Trade route");
+    let offer = fx.world.trade_offer(PLAYER, trader, target).unwrap();
+    assert_eq!(
+        fx.hud_snapshot().help,
+        format!("Trade route to City 2: +{} per trip", offer.per_trip_income)
+    );
     fx.rclick(Some(target), (50.5, 20.5), false);
     fx.step(1);
     let route = fx.world.trade_routes(PLAYER).next().unwrap();
@@ -1612,11 +1616,14 @@ fn right_click_city_with_trader_issues_trade() {
     let HudSelection::Single(card) = hud.selection else {
         panic!("trader card")
     };
-    assert!(card.wealth[0].contains('→'));
     assert_eq!(
-        card.wealth[1],
-        format!("+{} per trip", route.per_trip_income)
+        card.wealth[0],
+        format!(
+            "Route: City 1 → City 2, +{} per trip",
+            route.per_trip_income
+        )
     );
+    assert_eq!(card.wealth[1], "Next: walk to City 2");
     // The direction changes on arrival, with no dependency on path detours.
     for _ in 0..1200 {
         fx.step(1);
@@ -1634,6 +1641,62 @@ fn right_click_city_with_trader_issues_trade() {
     let at = fx.ctl.message.as_ref().unwrap().1;
     fx.step(2);
     assert_eq!(fx.ctl.message.as_ref().unwrap().1, at);
+}
+
+/// Task 72: the Trade route button arms a pick; the help line says what to pick, valid
+/// partners are ringed, any other city says why not, and clicking a valid one runs the route.
+#[test]
+fn trade_route_button_picks_a_partner_city() {
+    let mut fx = wealth_fixture();
+    let (_, _, trader) = wealth_units(&mut fx);
+    let (home, target) = wealth_cities(&mut fx);
+    // A city too near the home city for a route.
+    let city = fx.find(|et| et.territory.as_ref().is_some_and(|t| t.is_city));
+    let near = fx.spawn(city, 1, 28, 20);
+    fx.click(trader, false);
+    fx.ctl.tab = PaletteTab::Order;
+    let palette = fx.hud_snapshot().palette.unwrap();
+    let button = palette
+        .buttons
+        .iter()
+        .find(|b| b.name == "Trade route")
+        .expect("a Trade route button");
+    assert!(!button.armed);
+    let slot = button.slot;
+    assert!(
+        fx.hud_snapshot()
+            .help
+            .starts_with("Trade route, then another city;")
+    );
+    fx.hud(HudRegionKind::CommandSlot, slot, PointerButton::Left, false);
+    let hud = fx.hud_snapshot();
+    assert!(
+        hud.palette
+            .unwrap()
+            .buttons
+            .iter()
+            .any(|b| b.slot == slot && b.armed)
+    );
+    assert_eq!(
+        hud.help,
+        "Pick another city of yours or an ally's for the trade route"
+    );
+    assert_eq!(hud.trade_targets, vec![target.0]);
+    fx.ctl.hovered = Some(near);
+    let help = fx.hud_snapshot().help;
+    assert!(
+        help.starts_with("No trade route to City 3: too close for a trade route"),
+        "{help}"
+    );
+    // A click on the ground keeps the pick open; a click on the city takes the route.
+    fx.ground_click();
+    assert!(fx.ctl.trade_pick);
+    fx.click(target, false);
+    assert!(!fx.ctl.trade_pick);
+    fx.step(1);
+    let route = fx.world.trade_routes(PLAYER).next().unwrap();
+    assert_eq!((route.home, route.target), (home, target));
+    assert!(fx.hud_snapshot().trade_targets.is_empty());
 }
 
 #[test]

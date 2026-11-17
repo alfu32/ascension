@@ -1,0 +1,18 @@
+# Task 72, replayed by --script in universe mode (--ai none, seed 1): every starship class in
+# orbit over the city at the new size (two to three times), a second survey ship and a second
+# corvette with them. Bigger ships hold higher, so they stack in height over the city; the two
+# of one class spread sideways. Test-only setup lines first.
+0 grant-age age.galactic
+0 place-orbit 1 unit.survey_ship @0,0
+0 place-orbit 1 unit.survey_ship @0,0
+0 place-orbit 1 unit.corvette @0,0
+0 place-orbit 1 unit.corvette @0,0
+0 place-orbit 1 unit.space_frigate @0,0
+0 place-orbit 1 unit.space_freighter @0,0
+0 place-orbit 1 unit.transport_ship @0,0
+0 place-orbit 1 unit.space_cruiser @0,0
+0 place-orbit 1 unit.carrier @0,0
+0 place-orbit 1 unit.battleship @0,0
+1 speed 400
+10 cam wheel -4 640,400
+400 speed 1

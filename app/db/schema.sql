@@ -264,10 +264,14 @@ CREATE TABLE et_movement (             -- "moves"
                                        -- orbital craft (task 58): ticks to climb from a planet's
                                        -- surface to its orbit by itself, and to come back down;
                                        -- 0 = cannot. Craft never leave that orbit on their own.
-  jump_charge_ticks INTEGER CHECK (jump_charge_ticks >= 0)
+  jump_charge_ticks INTEGER CHECK (jump_charge_ticks >= 0),
                                        -- task 70: ticks a ship charges at its system's edge before
                                        -- a jump along a route (stat `jump_charge`); NULL = the
                                        -- rule default `space.jump_charge_ticks`
+  landing_radius    INTEGER CHECK (landing_radius >= 0)
+                                       -- task 72: milli-tiles; a landed ship covers the tiles whose
+                                       -- centres lie within this radius of the tile it stands on
+                                       -- (stat `landing_radius`); NULL = that tile only
 ) STRICT;
 
 CREATE TABLE et_weapon (               -- "attacks" (0..n per type)

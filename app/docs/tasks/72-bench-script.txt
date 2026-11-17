@@ -1,0 +1,26 @@
+# Task 72: twenty starships in orbit over the city (the planet view bench), four of each
+# warship class spread over the sky north of it. Test-only setup lines first.
+0 grant-age age.galactic
+0 place-orbit 1 unit.survey_ship @-40,-30
+0 place-orbit 1 unit.survey_ship @-20,-30
+0 place-orbit 1 unit.survey_ship @0,-30
+0 place-orbit 1 unit.survey_ship @20,-30
+0 place-orbit 1 unit.corvette @-40,-50
+0 place-orbit 1 unit.corvette @-20,-50
+0 place-orbit 1 unit.corvette @0,-50
+0 place-orbit 1 unit.corvette @20,-50
+0 place-orbit 1 unit.space_frigate @-40,-70
+0 place-orbit 1 unit.space_frigate @-20,-70
+0 place-orbit 1 unit.space_frigate @0,-70
+0 place-orbit 1 unit.space_frigate @20,-70
+0 place-orbit 1 unit.space_cruiser @-40,-10
+0 place-orbit 1 unit.space_cruiser @-20,-10
+0 place-orbit 1 unit.space_cruiser @0,-10
+0 place-orbit 1 unit.space_cruiser @20,-10
+0 place-orbit 1 unit.battleship @-40,10
+0 place-orbit 1 unit.battleship @-20,10
+0 place-orbit 1 unit.battleship @0,10
+0 place-orbit 1 unit.battleship @20,10
+1 speed 400
+10 cam wheel -6 640,400
+400 speed 100

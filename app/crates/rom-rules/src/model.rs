@@ -1221,6 +1221,8 @@ pub struct Movement {
     pub climb_ticks: i64,
     /// Ticks a ship charges before a jump along a route; `None` = `space.jump_charge_ticks`.
     pub jump_charge_ticks: Option<i64>,
+    /// Radius in milli-tiles of the ground a landed ship covers; `None` = the tile below only.
+    pub landing_radius: Option<i64>,
 }
 /// One `et_weapon` row.
 #[derive(Debug, Clone)]

@@ -5,7 +5,7 @@ use rom_render::{
     ResearchTrack,
 };
 use rom_rules::{DefId, ResourceKind, Rules, TechEffectKind, TechKind};
-use rom_sim::{OrderStatus, PlayerId, World};
+use rom_sim::{OrderStatus, PlayerId, TradeRoute, World};
 
 /// Resource artwork is presentation metadata keyed by the database abbreviation.
 pub(crate) fn resource_icon(rules: &Rules, id: DefId) -> String {
@@ -283,7 +283,8 @@ pub(crate) fn rule_tech_name(world: &World, key: &str) -> String {
         )
 }
 
-/// "Vega → Sirius, 2 jumps (1 to chart)" for a trade route between cities of two star systems.
+/// "Path: Vega → Tarf → Sirius, 2 jumps (1 to chart)" for a trade route between cities of two
+/// star systems: every system the freighter passes, in order.
 fn interstellar_line(
     world: &World,
     player: rom_sim::PlayerId,
@@ -301,22 +302,15 @@ fn interstellar_line(
         return None;
     }
     let path = world.travel_path(player, a, b)?;
-    let name = |id: u32| {
-        world
-            .systems()
-            .iter()
-            .find(|s| s.id == id)
-            .map_or_else(|| format!("system {id}"), |s| s.name.clone())
-    };
     let jumps = path.len() - 1;
     let unknown = path
         .windows(2)
         .filter(|leg| world.charting(player, leg[0], leg[1]))
         .count();
+    let names: Vec<String> = path.iter().map(|id| system_name(world, *id)).collect();
     Some(format!(
-        "{} → {}, {jumps} jump{}{}",
-        name(a),
-        name(b),
+        "Path: {}, {jumps} jump{}{}",
+        names.join(" → "),
         if jumps == 1 { "" } else { "s" },
         if unknown > 0 {
             format!(" ({unknown} to chart)")
@@ -324,6 +318,66 @@ fn interstellar_line(
             String::new()
         }
     ))
+}
+
+/// The name of star system `id`.
+fn system_name(world: &World, id: u32) -> String {
+    world
+        .systems()
+        .iter()
+        .find(|s| s.id == id)
+        .map_or_else(|| format!("system {id}"), |s| s.name.clone())
+}
+
+/// "City 3": cities carry no names in the data, so they are numbered by type in id order;
+/// "City lost" when it is gone.
+pub(crate) fn city_label(world: &World, id: rom_sim::EntityId) -> String {
+    let rules = world.rules();
+    world.entity(id).map_or_else(
+        || "City lost".into(),
+        |e| {
+            let faction = world
+                .players()
+                .find(|p| p.id == e.owner)
+                .map_or(DefId(0), |p| p.faction);
+            let number = world
+                .entities()
+                .filter(|c| c.type_id == e.type_id && c.id <= e.id)
+                .count();
+            format!("{} {number}", rules.display_name(e.type_id, faction))
+        },
+    )
+}
+
+/// What a space freighter on its route does next, from the leg in front of its trade order:
+/// "Next: land beside City 3", "Next: jump toward Tarf" and so on.
+pub(crate) fn next_leg(
+    world: &World,
+    entity: &rom_sim::Entity,
+    route: &TradeRoute,
+) -> Option<String> {
+    let leg = entity.orders().front()?;
+    let city_on = |body: rom_sim::BodyId| {
+        [route.target, route.home]
+            .into_iter()
+            .find(|c| world.entity(*c).is_some_and(|e| e.pos.body == body))
+    };
+    let at = leg.target_pos;
+    let text = match leg.kind.as_str() {
+        "lift" => "lift off".to_owned(),
+        "travel" => {
+            let system = at.and_then(|p| world.body(p.body)).map(|b| b.system)?;
+            format!("jump toward {}", system_name(world, system))
+        }
+        "orbit" => format!(
+            "fly to the planet of {}",
+            city_label(world, city_on(at?.body)?)
+        ),
+        "land" => format!("land beside {}", city_label(world, city_on(at?.body)?)),
+        "trade" if world.is_landed(entity.id) => "lift off".to_owned(),
+        _ => return None,
+    };
+    Some(format!("Next: {text}"))
 }
 
 pub(crate) fn wealth_card(world: &World, entity: &rom_sim::Entity) -> Vec<String> {
@@ -364,33 +418,19 @@ pub(crate) fn wealth_card(world: &World, entity: &rom_sim::Entity) -> Vec<String
             .trade_routes(entity.owner)
             .find(|r| r.trader == entity.id)
         {
-            let faction = world
-                .players()
-                .find(|p| p.id == entity.owner)
-                .map_or(DefId(0), |p| p.faction);
-            let label = |id| {
-                world.entity(id).map_or_else(
-                    || "City lost".into(),
-                    |e| {
-                        // Cities carry no names in the data: number them in id order.
-                        let number = world
-                            .entities()
-                            .filter(|c| c.type_id == e.type_id && c.id <= e.id)
-                            .count();
-                        format!("{} {number}", rules.display_name(e.type_id, faction))
-                    },
-                )
-            };
-            let mut lines = vec![
-                format!("Route: {} → {}", label(route.home), label(route.target)),
-                format!("+{} per trip", route.per_trip_income),
-            ];
+            let mut lines = vec![format!(
+                "Route: {} → {}, +{} per trip",
+                city_label(world, route.home),
+                city_label(world, route.target),
+                route.per_trip_income
+            )];
             lines.extend(interstellar_line(
                 world,
                 entity.owner,
                 route.home,
                 route.target,
             ));
+            lines.extend(next_leg(world, entity, &route));
             return lines;
         }
         return vec!["No route".into()];

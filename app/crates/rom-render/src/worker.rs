@@ -16,7 +16,7 @@ use raylib::prelude::{
 
 use crate::camera::{Camera, CameraController, InputEvent, Key, PointerButton, TurnSettings};
 use crate::entities::{
-    EntitySnapshot, EntityView, SnapshotPair, aloft_hulls, is_aloft_ship, scale_ship_view,
+    EntitySnapshot, EntityView, SnapshotPair, aloft_hulls, dress_ships, is_aloft_ship,
 };
 use crate::globe::{Globe, PlanetScene};
 use crate::hud::{HudOverlay, HudSnapshot};
@@ -24,7 +24,7 @@ use crate::hud_gpu::{HudGpu, MinimapGpu, MinimapOverlays, draw_level_pips, draw_
 use crate::hud_layout::HudLayout;
 use crate::hud_layout::Rect;
 use crate::hud_minimap::{GLOBE_MINIMAP_SIZE, ndc_centre_y};
-use crate::layers::{ShipScales, planet_factor};
+use crate::layers::ShipScales;
 use crate::looks::SceneLooks;
 use crate::mailbox::{Frame, FrameMailbox, FramePixels};
 use crate::orbit::{
@@ -841,13 +841,11 @@ fn render_loop(shared: &Shared) {
         let space_snapshot = Arc::clone(&lock(&shared.space));
         let pair = lock(&shared.snapshots).clone();
         pair.blend_at_on(frame_start, globe.as_deref(), &mut blended);
-        // Ships above the planet are drawn larger than true, by their type's scale.
+        // Ships on and above the planet are drawn larger than true, by their type's scale, and
+        // hold higher the bigger they are.
         let ship_scales = Arc::clone(&lock(&shared.ship_scales));
-        if globe.is_some() {
-            for view in blended.iter_mut().filter(|v| is_aloft_ship(v)) {
-                let factor = planet_factor(ship_scales.of(view.kind), view.altitude);
-                scale_ship_view(view, factor);
-            }
+        if let Some(globe) = globe.as_deref() {
+            dress_ships(&mut blended, &ship_scales, globe);
         }
         if let Some(clock) = &sun_clock {
             // Simulation time drives the light, so it follows game speed and pause.

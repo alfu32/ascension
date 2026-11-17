@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use rom_geo::SurfacePos;
 
 use crate::globe::Globe;
+use crate::layers::{ORBIT_ALTITUDE, ShipScales, hover_altitude, planet_factor};
 use crate::rig::Activity;
 use crate::terrain::{Shape, TerrainScene, vertex_height};
 
@@ -456,6 +457,11 @@ impl Footing for FlatGround<'_> {
     }
 }
 
+fn normalize3(v: [f32; 3]) -> [f32; 3] {
+    let length = dot3(v, v).sqrt().max(1e-9);
+    v.map(|c| c / length)
+}
+
 fn dot3(a: [f32; 3], b: [f32; 3]) -> f32 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
@@ -575,11 +581,10 @@ pub fn pick_frame(view: &EntityView, ground: &dyn Footing) -> ([f32; 3], [[f32; 
 /// The surface frame for a ground entity or a constant-radius frame for an orbital one.
 pub(crate) fn entity_frame(view: &EntityView, ground: &dyn Footing) -> GroundFrame {
     let frame = ground.frame(view.face, view.x, view.y);
-    if view.altitude > 0.0 {
-        // A descending ship never sinks below the ground it lands on.
-        let height = view
-            .altitude
-            .max(ground.height_at(view.face, view.x, view.y));
+    if view.altitude > 0.0 || (view.spacecraft && !view.building) {
+        // A ship never sinks below the ground it lands on; a big one stands on the highest
+        // ground under its hull.
+        let height = view.altitude.max(ship_floor(view, ground));
         GroundFrame {
             origin: ground.datum_point(view.face, view.x, view.y, (0.0, 0.0), height),
             ..frame
@@ -587,6 +592,22 @@ pub(crate) fn entity_frame(view: &EntityView, ground: &dyn Footing) -> GroundFra
     } else {
         frame
     }
+}
+
+/// The highest ground under a ship's hull: at its point and on a ring of its half length.
+fn ship_floor(view: &EntityView, ground: &dyn Footing) -> f32 {
+    let here = ground.height_at(view.face, view.x, view.y);
+    let reach = unit_width(view) * 0.5;
+    if !view.spacecraft || reach < 1.0 {
+        return here;
+    }
+    (0..8)
+        .flat_map(|k| {
+            let (sin, cos) = (k as f32 * std::f32::consts::FRAC_PI_4).sin_cos();
+            [0.5, 1.0].map(|r| (cos * reach * r, sin * reach * r))
+        })
+        .map(|(dx, dy)| ground.height_at(view.face, view.x + dx, view.y + dy))
+        .fold(here, f32::max)
 }
 
 /// The eight corners of a box from [`pick_box`].
@@ -847,8 +868,9 @@ impl Hull {
     }
 }
 
-/// Makes a ship drawn `factor` times its size: a ship without a composed model is drawn from
-/// its radius, so picking, its health bar and its hull all follow.
+/// Makes a ship drawn `factor` times its size: a composed model is drawn at its `size` (see
+/// `ModelGpu::place`), a ship without one from its radius, so the drawn ship, picking, its
+/// health bar and its hull length all follow.
 pub(crate) fn scale_ship_view(view: &mut EntityView, factor: f32) {
     if let Some(model) = &mut view.model {
         model.size = model.size.map(|c| c * factor);
@@ -856,6 +878,166 @@ pub(crate) fn scale_ship_view(view: &mut EntityView, factor: f32) {
         view.radius = unit_width(view) * factor / 3.2;
     }
 }
+
+/// Dresses the ships among `views` (ascending by id) for the globe `globe` (task 72): each is
+/// drawn at its type's planet scale (in orbit and, for a starship, on the ground), holds at the
+/// height its drawn length gives it ([`hover_altitude`], bigger ships higher), raised further
+/// where a smaller ship of another class holds under it, and ships that would still overlap
+/// (of one class over one point) are spread sideways by their size. Presentation only.
+pub(crate) fn dress_ships(views: &mut [EntityView], scales: &ShipScales, globe: &Globe) {
+    let mut aloft = Vec::new();
+    for (i, view) in views.iter_mut().enumerate() {
+        if !view.spacecraft {
+            continue;
+        }
+        let nominal = view.altitude;
+        scale_ship_view(view, planet_factor(scales.of(view.kind), nominal));
+        if nominal > 0.0 {
+            aloft.push((i, (nominal / ORBIT_ALTITUDE).clamp(0.0, 1.0), nominal));
+        }
+    }
+    if aloft.is_empty() {
+        return;
+    }
+    let radius = globe.radius();
+    let points: Vec<[f32; 3]> = aloft
+        .iter()
+        .map(|&(i, _, _)| {
+            let v = &views[i];
+            let pos = SurfacePos {
+                face: v.face,
+                x: (v.x * 1000.0).round() as i64,
+                y: (v.y * 1000.0).round() as i64,
+            };
+            globe.dir_of(pos).map(|c| c * radius)
+        })
+        .collect();
+    let heights = stack_by_size(views, &aloft, &points);
+    for (n, &(i, rise, nominal)) in aloft.iter().enumerate() {
+        views[i].altitude = (rise * heights[n]).max(nominal.min(0.05));
+    }
+    spread_aloft(views, &aloft, &points, globe);
+}
+
+/// The hold heights of the ships `aloft` over the points `points`: each its
+/// [`hover_altitude`], taken smallest first, raised above any smaller ship of another class
+/// whose hull it would meet (nearer than [`SPREAD_SPACING`] of their mean length, overlapping
+/// in height), so a mixed fleet over one point stacks bigger above smaller.
+fn stack_by_size(
+    views: &[EntityView],
+    aloft: &[(usize, f32, f32)],
+    points: &[[f32; 3]],
+) -> Vec<f32> {
+    const GAP: f32 = 0.5;
+    let sizes: Vec<(f32, f32)> = aloft
+        .iter()
+        .map(|&(i, _, _)| (unit_width(&views[i]), unit_height(&views[i])))
+        .collect();
+    let mut heights: Vec<f32> = sizes.iter().map(|(w, _)| hover_altitude(*w)).collect();
+    let mut order: Vec<usize> = (0..aloft.len()).collect();
+    order.sort_by(|a, b| sizes[*a].0.total_cmp(&sizes[*b].0).then(a.cmp(b)));
+    for (rank, &a) in order.iter().enumerate() {
+        // Each raise can meet another ship lower down the order: settle in a few rounds.
+        for _ in 0..rank {
+            let mut raised = false;
+            for &b in &order[..rank] {
+                let ((wa, ha), (wb, hb)) = (sizes[a], sizes[b]);
+                let d: [f32; 3] = std::array::from_fn(|k| points[a][k] - points[b][k]);
+                let near = dot3(d, d).sqrt() < (wa + wb) * 0.5 * SPREAD_SPACING;
+                let (za, zb) = (heights[a], heights[b]);
+                let meets = za < zb + hb && zb < za + ha;
+                if views[aloft[a].0].kind != views[aloft[b].0].kind && near && meets {
+                    heights[a] = zb + hb + GAP;
+                    raised = true;
+                }
+            }
+            if !raised {
+                break;
+            }
+        }
+    }
+    heights
+}
+
+/// Pushes apart the ships `aloft` (indices into `views`, over `points`) whose hulls would still
+/// overlap: two ships nearer than [`SPREAD_SPACING`] of the mean of their lengths, at heights
+/// that meet, each move half the overlap away from the other, a few rounds over (ships over the
+/// very same point first part along directions of their own, by their order in `aloft`). The
+/// push fades to nothing as they part.
+fn spread_aloft(
+    views: &mut [EntityView],
+    aloft: &[(usize, f32, f32)],
+    start: &[[f32; 3]],
+    globe: &Globe,
+) {
+    const GOLDEN: f32 = 2.399_963;
+    const ROUNDS: usize = 4;
+    if aloft.len() < 2 {
+        return;
+    }
+    let radius = globe.radius();
+    let mut points = start.to_vec();
+    let sizes: Vec<(f32, f32, f32)> = aloft
+        .iter()
+        .map(|&(i, _, _)| {
+            let v = &views[i];
+            (unit_width(v), unit_height(v), v.altitude)
+        })
+        .collect();
+    for _ in 0..ROUNDS {
+        let mut pushes = vec![[0.0_f32; 3]; aloft.len()];
+        let mut moved = false;
+        for a in 0..aloft.len() {
+            for b in 0..aloft.len() {
+                let ((wa, ha, za), (wb, hb, zb)) = (sizes[a], sizes[b]);
+                if a == b || za >= zb + hb || zb >= za + ha {
+                    continue;
+                }
+                let apart = (wa + wb) * 0.5 * SPREAD_SPACING;
+                let d: [f32; 3] = std::array::from_fn(|k| points[a][k] - points[b][k]);
+                let distance = dot3(d, d).sqrt();
+                if distance >= apart {
+                    continue;
+                }
+                let away = if distance > apart * 0.02 {
+                    d.map(|c| c / distance)
+                } else {
+                    // Over the same point: a direction of its own along the ground.
+                    let v = &views[aloft[a].0];
+                    let frame = globe.ground_frame(v.face, v.x, v.y);
+                    let (sin, cos) = (a as f32 * GOLDEN).sin_cos();
+                    std::array::from_fn(|k| frame.ex[k] * cos + frame.ey[k] * sin)
+                };
+                let by = (apart - distance) * 0.5;
+                for k in 0..3 {
+                    pushes[a][k] += away[k] * by;
+                }
+                moved = true;
+            }
+        }
+        if !moved {
+            break;
+        }
+        for (point, push) in points.iter_mut().zip(&pushes) {
+            let p: [f32; 3] = std::array::from_fn(|k| point[k] + push[k]);
+            *point = normalize3(p).map(|c| c * radius);
+        }
+    }
+    for (n, &(i, _, _)) in aloft.iter().enumerate() {
+        if points[n] == start[n] {
+            continue;
+        }
+        let pos = globe.pos_of(normalize3(points[n]));
+        let view = &mut views[i];
+        view.face = pos.face;
+        view.x = pos.x as f32 / 1000.0;
+        view.y = pos.y as f32 / 1000.0;
+    }
+}
+
+/// How far apart ships at one height are kept, as a share of the mean of their lengths (they are
+/// slender: about two fifths as wide as long).
+const SPREAD_SPACING: f32 = 0.45;
 
 /// Whether `view` is a ship above the ground: in orbit, landing or lifting off.
 pub(crate) fn is_aloft_ship(view: &EntityView) -> bool {
@@ -1294,6 +1476,94 @@ mod tests {
                 "all hull pieces clear the orbit's base"
             );
         }
+    }
+
+    /// A ship of `kind` with a composed model `length` tiles long, `altitude` up (of the
+    /// snapshots' orbit).
+    fn ship(id: u32, kind: u16, length: f32, altitude: f32) -> EntityView {
+        EntityView {
+            kind,
+            spacecraft: true,
+            altitude,
+            model: Some(ModelRef {
+                index: 0,
+                size: [length * 0.4, length * 0.3, length],
+            }),
+            ..view(id, 32.5, 32.5, 0.0)
+        }
+    }
+
+    #[test]
+    fn ships_are_drawn_big_hover_by_size_and_spread_sideways() {
+        use crate::layers::{ShipScale, ShipScales};
+        let globe = Globe::new(&hilly_planet(64));
+        let scales = ShipScales(
+            [
+                (1, ShipScale::from_pct(700, 25)),
+                (2, ShipScale::from_pct(1000, 50)),
+                (3, ShipScale::from_pct(300, 25).true_size_on_the_ground()),
+                (4, ShipScale::from_pct(750, 30)),
+            ]
+            .into_iter()
+            .collect(),
+        );
+        // A small and a big ship over one point, two more small ones there, a landed big one
+        // and a landed craft.
+        let mut views = vec![
+            ship(1, 1, 3.0, ORBIT_ALTITUDE),
+            ship(2, 2, 5.0, ORBIT_ALTITUDE),
+            ship(3, 1, 3.0, ORBIT_ALTITUDE),
+            ship(4, 1, 3.0, ORBIT_ALTITUDE),
+            EntityView {
+                x: 10.5,
+                ..ship(5, 2, 5.0, 0.0)
+            },
+            EntityView {
+                x: 50.5,
+                ..ship(6, 3, 2.0, 0.0)
+            },
+            ship(7, 4, 3.0, ORBIT_ALTITUDE),
+        ];
+        dress_ships(&mut views, &scales, &globe);
+        // A ship of another class a little bigger than the small ones holds just above them.
+        let small_top = views[0].altitude + unit_height(&views[0]);
+        assert!(views[6].altitude >= small_top, "{}", views[6].altitude);
+        assert!(views[6].altitude > hover_altitude(22.5));
+        assert_eq!((views[6].x, views[6].y), (32.5, 32.5));
+        // Seven and ten times their size, in orbit and (a starship) on the ground; a craft
+        // comes down at its own size.
+        assert!((unit_width(&views[0]) - 21.0).abs() < 1e-3);
+        assert!((unit_width(&views[1]) - 50.0).abs() < 1e-3);
+        assert!((unit_width(&views[4]) - 50.0).abs() < 1e-3);
+        assert!((unit_width(&views[5]) - 2.0).abs() < 1e-3);
+        assert_eq!((views[4].altitude, views[5].altitude), (0.0, 0.0));
+        // The bigger ship holds higher, clear of the smaller one's top.
+        assert_eq!(views[0].altitude, hover_altitude(21.0));
+        assert_eq!(views[1].altitude, hover_altitude(50.0));
+        assert!(views[1].altitude > views[0].altitude + unit_height(&views[0]));
+        // The big one keeps its point; the three small ones spread apart by their size.
+        assert_eq!((views[1].x, views[1].y), (32.5, 32.5));
+        let at = |v: &EntityView| {
+            globe.dir_of(SurfacePos {
+                face: v.face,
+                x: (v.x * 1000.0) as i64,
+                y: (v.y * 1000.0) as i64,
+            })
+        };
+        for (a, b) in [(0, 2), (0, 3), (2, 3)] {
+            let d: [f32; 3] = std::array::from_fn(|k| at(&views[a])[k] - at(&views[b])[k]);
+            let tiles = dot3(d, d).sqrt() * globe.radius();
+            assert!(tiles > 21.0 * 0.3, "{a} and {b}: {tiles} tiles apart");
+        }
+        // Dressing is a pure function of the views: the same every frame.
+        let mut again = vec![
+            ship(1, 1, 3.0, ORBIT_ALTITUDE),
+            ship(2, 2, 5.0, ORBIT_ALTITUDE),
+            ship(3, 1, 3.0, ORBIT_ALTITUDE),
+            ship(4, 1, 3.0, ORBIT_ALTITUDE),
+        ];
+        dress_ships(&mut again, &scales, &globe);
+        assert_eq!(again[..], views[..4]);
     }
 
     #[test]

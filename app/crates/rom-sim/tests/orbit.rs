@@ -295,7 +295,7 @@ fn a_ship_lands_straight_down_and_is_refused_over_water() {
         let ship = in_orbit(&mut w, "unit.transport_ship", HOME, sea);
         assert_eq!(
             w.landing_problem(ship, sea),
-            Some("the ground below is water")
+            Some("too little ground below: the ship would stand in water")
         );
         assert_eq!(
             submit(&mut w, ship, "land", Some(sea)),

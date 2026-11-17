@@ -83,6 +83,8 @@ pub struct HudSnapshot {
     pub trade_routes: Vec<crate::HudTradeRoute>,
     /// Selected units' patrols on the current surface.
     pub patrols: Vec<crate::HudPatrol>,
+    /// Cities the selected trader could run a route to, ringed while a partner is picked.
+    pub trade_targets: Vec<u32>,
     /// The building footprint being placed.
     pub placement: Option<HudPlacement>,
 }
@@ -109,6 +111,7 @@ impl Default for HudSnapshot {
             data_tab: 0,
             overview: ResearchOverview::default(),
             city_radii: Vec::new(),
+            trade_targets: Vec::new(),
             wealth: Default::default(),
             trade_routes: Vec::new(),
             patrols: Vec::new(),

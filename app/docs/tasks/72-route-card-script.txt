@@ -1,0 +1,14 @@
+# Task 72, replayed by --script in universe mode (--ai none, seed 1): a space freighter over the
+# home city takes a route to a colony on the nearest other planet of the system (right-click on
+# the colony's city); its card shows the route, the pay per trip and the next leg. Test-only
+# setup lines first.
+0 grant-age age.expansion
+0 grant-tech tech.civic.1
+0 colony 1
+0 place-orbit 1 unit.space_freighter @40,30
+1 speed 400
+300 click trader1
+302 rclick city2
+304 hud tab 1
+306 speed 100
+400 speed 1

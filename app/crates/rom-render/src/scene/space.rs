@@ -916,15 +916,9 @@ impl Scene {
                         .zip(pass.place);
                     let hull = match above {
                         Some(_) if pass.space <= 0.0 => continue,
-                        Some((o, place)) => {
-                            // The globe draws a model at its own size, a hull at its planet
-                            // scale: the morph starts from what the globe drew.
-                            let length = model
-                                .and_then(|m| models?.planet_length(m.index))
-                                .unwrap_or(o.hull.length);
-                            let drawn = Hull { length, ..o.hull };
-                            morph_hull(&drawn, &place, &plane, pass.space)
-                        }
+                        // The globe draws a model and a hull alike at its planet scale and its
+                        // hover height: the morph starts from what the globe drew.
+                        Some((o, place)) => morph_hull(&o.hull, &place, &plane, pass.space),
                         None => plane,
                     };
                     let hull = Hull {

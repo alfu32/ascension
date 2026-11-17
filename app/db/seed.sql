@@ -3101,6 +3101,28 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.automated_route_survey'),(SELECT id FROM def WHERE key='res.wealth'),1400,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.automated_route_survey'),(SELECT id FROM def WHERE key='res.knowledge'),700,0);
 INSERT INTO tech_effect(tech_id,effect,rule_key) VALUES ((SELECT id FROM def WHERE key='tech.automated_route_survey'),'enable_rule','route_survey');
+INSERT INTO game_constant(key,value,unit,note) VALUES ('space.landing_land_pct',20,'%','least share of the tiles under a landed ship that must be ground; the rest may be water');
+INSERT INTO stat(key,scope,note) VALUES ('landing_radius','entity','milli-tiles of ground a landed ship covers around its tile');
+INSERT INTO tag(key,category) VALUES ('no_landing','terrain');
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='ter.mountain'),(SELECT id FROM tag WHERE key='no_landing'));
+INSERT INTO et_view_scale(entity_type_id,planet_pct,system_pct) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),200,25);
+INSERT INTO et_view_scale(entity_type_id,planet_pct,system_pct) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),210,30);
+INSERT INTO et_view_scale(entity_type_id,planet_pct,system_pct) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),230,35);
+UPDATE et_view_scale SET planet_pct=230,system_pct=35 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.space_freighter');
+INSERT INTO et_view_scale(entity_type_id,planet_pct,system_pct) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),240,40);
+INSERT INTO et_view_scale(entity_type_id,planet_pct,system_pct) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),260,40);
+INSERT INTO et_view_scale(entity_type_id,planet_pct,system_pct) VALUES ((SELECT id FROM def WHERE key='unit.carrier'),280,45);
+INSERT INTO et_view_scale(entity_type_id,planet_pct,system_pct) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),300,50);
+INSERT INTO et_view_scale(entity_type_id,planet_pct,system_pct) VALUES ((SELECT id FROM def WHERE key='unit.orbital_fighter'),300,25);
+INSERT INTO et_view_scale(entity_type_id,planet_pct,system_pct) VALUES ((SELECT id FROM def WHERE key='unit.orbital_bomber'),320,25);
+UPDATE et_movement SET landing_radius=3100 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.survey_ship');
+UPDATE et_movement SET landing_radius=3900 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.corvette');
+UPDATE et_movement SET landing_radius=4900 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.space_frigate');
+UPDATE et_movement SET landing_radius=4600 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.space_freighter');
+UPDATE et_movement SET landing_radius=4600 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.transport_ship');
+UPDATE et_movement SET landing_radius=7800 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.space_cruiser');
+UPDATE et_movement SET landing_radius=6600 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.carrier');
+UPDATE et_movement SET landing_radius=14600 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.battleship');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.1'),'research','research',1,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.civic.1'),'research','research',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.commerce.1'),'research','research',3,0);
@@ -4985,15 +5007,8 @@ INSERT INTO et_weapon_target(weapon_id,layer,hit_pct)
  SELECT w.id,'orbit',40 FROM et_weapon w JOIN def d ON d.id=w.entity_type_id
  WHERE d.key='unit.laser_battery' AND w.slot=0;
 
--- How large ships are drawn in the space views (task 57): above a planet two to five
--- times their true size by class, on a system's plane a quarter to a half of the
--- readable reference size.
-WITH v(k,planet,system) AS (VALUES
-  ('unit.survey_ship',200,25), ('unit.corvette',250,30), ('unit.space_frigate',300,35),
-  ('unit.space_cruiser',400,40), ('unit.battleship',500,50), ('unit.transport_ship',350,40),
-  ('unit.carrier',450,45), ('unit.orbital_fighter',300,25), ('unit.orbital_bomber',320,25))
-INSERT INTO et_view_scale(entity_type_id,planet_pct,system_pct)
- SELECT d.id, v.planet, v.system FROM v JOIN def d ON d.key=v.k;
+-- How large ships are drawn in the space views (tasks 57 and 72): generated, see
+-- VIEW_SCALE in db/content/generate.py.
 
 -- Task 64: the difficulty handicap. A 'handicap' technology is never researched;
 -- the host grants it at match setup to a computer player whose difficulty names

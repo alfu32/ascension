@@ -1,0 +1,11 @@
+# Task 72: task 70's interstellar route (a colony one jump away, Interstellar Trade
+# researched); the card shows the route, every system on the path and the next leg.
+0 grant-age age.abundance
+0 grant-tech tech.interstellar_trade
+0 colony-far 1
+0 place-orbit 1 unit.space_freighter @0,6
+1 speed 400
+300 click trader1
+302 rclick city2
+320 speed 100
+400 speed 1

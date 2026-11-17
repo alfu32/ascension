@@ -486,13 +486,15 @@ planet as a percentage of its true size (in orbit; it eases back to its true
 size as the ship comes down to land), and `system_pct`, its size on a star
 system's plane as a percentage of the readable reference size there (the
 size task 53 drew every ship at, which keeps its size on screen). No row
-means 100 and 100. The seed gives the starships two to five times their size
-above a planet and a quarter to a half of the reference on the plane, by
-class (survey ship smallest, battleship largest); the rows are appended after
-the generated content, keyed by definition key, so no id moves. The renderer
-takes them through `rom-app`'s `looks::ship_scales` and never looks at a key.
-The same hull is drawn at every level; between the planet and the plane its
-size and place blend smoothly with the camera's distance.
+means 100 and 100. Since task 72 the seed gives the starships two to three
+times their size above a planet, in orbit and landed (orbital craft three
+times in orbit, their own size once down in the air), and a quarter to a half
+of the reference on the plane, by class (survey ship smallest, battleship
+largest); the rows are generated (`VIEW_SCALE` in `db/content/generate.py`).
+The renderer takes them through `rom-app`'s `looks::ship_scales` and never
+looks at a key. The same model is drawn at every level; between the planet
+and the plane its size and place blend smoothly with the camera's distance.
+See "Big starships on the planet (task 72)" for the ground a landed ship covers.
 
 ### 11. Computer opponents are data too
 
@@ -916,7 +918,7 @@ Screenshots (scripts `tasks/68-*-script.txt`): `img/sight-tower-firing.png`,
 - **Landing.** `land` to a point first moves the ship within its orbit above the
   point, then comes straight down. The Land button lands on the point below.
   `World::landing_problem` says why not (water, rough ground, a building, an enemy
-  city).
+  city; since task 72 for the whole ground under the hull, below).
 - **Boarding only on the ground.** `enter` a ship in orbit and `unload` in orbit are
   refused (`SimError::ShipNotLanded`); orbital craft keep boarding and launching from
   carriers in orbit.
@@ -1017,6 +1019,54 @@ Schema and save format (deliberate):
   system_b)` the routes each player knows; `entity_arrival(entity_id, system_id)` the system each
   ship last arrived from. A charge needs no table: it is the travel order's `progress_ticks`,
   `total_ticks` and status, which the save already keeps.
+
+## Big starships on the planet (task 72)
+
+Owner (2026-11-17): the starships are drawn 2-3 times their size in the planet view, in
+orbit and landed (a first try at 7-10 times was too big); a landed ship avoids only buildings
+and mountains, may stand on forest and partly over water; bigger ships hover higher. Until
+task 72 a model was drawn at its own size whatever `planet_pct` said (only its pick box and
+health bar grew); now the model, pick box, health bar and hull length share one size.
+
+- **View scales** (`et_view_scale.planet_pct`, presentation): survey ship 200, corvette 210,
+  space frigate and space freighter 230, transport 240, space cruiser 260, carrier 280,
+  battleship 300 (task 57's class order); orbital fighter 300 and bomber 320 and the
+  satellite 220 unchanged. The rows are generated (`VIEW_SCALE`); the hand-written block
+  that held most of them since task 57 is gone. A starship keeps its planet scale when it
+  lands; a type with `et_movement.climb_ticks > 0` (an orbital craft) eases to its own size.
+- **The ground a landed ship covers** is simulation data, never the view scale:
+  **`et_movement.landing_radius`** (new nullable column, milli-tiles; stat `landing_radius`,
+  new) — the tiles whose centres lie within it of the tile the ship stands on. NULL covers
+  that tile only. The generator sets it to the model's reach from its centre (`HULL_REACH`)
+  times its planet scale, so it is the hull the planet view draws; rom-app's test
+  `landing_radius_is_the_drawn_hull` checks the two agree within 1 % and 100 milli-tiles.
+  Values: survey ship 3 100, corvette 3 900, space freighter and transport 4 600, space frigate
+  4 900, carrier 6 600, space cruiser 7 800, battleship 14 600 (only the transport, the
+  carrier and the freighter land).
+- **The rule** (`World::landing_problem`, used by the Land button, `land` orders, and a
+  freighter's landing legs through `landing_site`): no tile under the hull may hold a
+  building, nor have a terrain with the new tag **`no_landing`** (on `ter.mountain`); forest
+  and every other ground terrain (ice included) are fine; water is fine as long as at least
+  **`space.landing_land_pct`** (new constant, **20**) of the tiles are ground (layer
+  `ground`). Not inside an enemy city's economic radius, as before.
+- **Around the hull.** Passengers come out on free tiles just outside it, and troops board at
+  its edge (`landed_bounds`). A freighter's landing search reaches twelve tiles past its hull
+  and it delivers when its centre is within fourteen tiles plus its landing radius of the
+  city.
+- **Hover height** is presentation only (the simulation keeps no altitude; ground fire is
+  measured to the ground point): `rom-render`'s `layers::hover_altitude` holds a ship
+  8 + 0.6 × its drawn length tiles above sea level, so bigger ships hold higher; a bigger ship
+  over a smaller one of another class rises clear of it (`entities::stack_by_size`), and ships
+  whose hulls still overlap at one height (one class over one point) are pushed apart sideways
+  by their size (`entities::spread_aloft`).
+- **Freighters explain themselves.** `World::trade_offer` (read-only) answers whether a trader
+  could run a route to a city and what it would pay, the check `submit` makes; the interface
+  rings valid partners and names the reason for the others.
+
+Schema, all deliberate (both lint views stay empty, the seed loads): PART A column
+`et_movement.landing_radius`; stat `landing_radius`; constant `space.landing_land_pct`; tag
+`no_landing` with one `def_tag` row; et_view_scale rows changed. No PART B change: the save
+format stays at 7.
 
 ## Capture and difficulty (task 67)
 

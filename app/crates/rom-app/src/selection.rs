@@ -94,6 +94,8 @@ enum Action {
     Land,
     /// The next point clicked is patrolled: walked to and from, or in orbit circled.
     Patrol,
+    /// The next city clicked becomes the selected traders' route partner.
+    TradeRoute,
 }
 
 /// What the camera shows, as far as turning picks into orders needs it.
@@ -170,6 +172,8 @@ pub struct Controller {
     attack_move: bool,
     /// The next right-click (or click) on the ground orders a patrol there.
     patrol: bool,
+    /// The next city clicked becomes the selected traders' route partner (task 72).
+    trade_pick: bool,
     placement: Option<Placement>,
     markers: Vec<Marker>,
     helpers: Vec<Helpers>,
@@ -206,6 +210,24 @@ fn climbs(world: &World, entity: &Entity) -> bool {
         && world.orbit(entity.id).is_none()
         && entity.container_id.is_none()
         && !in_space(world, entity)
+}
+
+/// Whether units of this type run trade routes (caravans, space freighters).
+fn runs_routes(world: &World, type_id: DefId) -> bool {
+    world.rules().entity_types[&type_id]
+        .trader
+        .as_ref()
+        .is_some_and(|t| t.runs_routes)
+}
+
+/// Whether the entity is a finished city of a player (not a neutral one).
+fn is_city(world: &World, entity: &Entity) -> bool {
+    entity.owner != PlayerId(0)
+        && entity.build_progress.is_none()
+        && world.rules().entity_types[&entity.type_id]
+            .territory
+            .as_ref()
+            .is_some_and(|t| t.is_city)
 }
 
 /// Whether the entity orbits a planet and can come down onto it (a carrier, a freighter or an
@@ -560,6 +582,7 @@ impl Controller {
                 self.placement = None;
                 self.attack_move = false;
                 self.patrol = false;
+                self.trade_pick = false;
             }
         }
     }
@@ -575,6 +598,12 @@ impl Controller {
     ) {
         if self.placement.is_some() {
             self.place(world, at, mods.shift);
+            return;
+        }
+        // The pick ends once no trader is selected any more.
+        self.trade_pick &= !self.selected_traders(world).is_empty();
+        if self.trade_pick {
+            self.pick_trade_partner(world, entity.map(EntityId), mods.shift);
             return;
         }
         if self.patrol {
@@ -707,6 +736,7 @@ impl Controller {
                     to: surface(to),
                     span_milli: span,
                     lift_milli: if orbit { ORBIT_LIFT_MILLI } else { 0 },
+                    entity: e.id.0,
                 })
             })
             .collect()
@@ -879,7 +909,94 @@ impl Controller {
             self.marker(world, at, kind);
             self.attack_move = false;
             self.patrol = false;
+            self.trade_pick = false;
         }
+    }
+
+    /// The own selected units that run trade routes (caravans, space freighters).
+    fn selected_traders(&self, world: &World) -> Vec<EntityId> {
+        self.own_selected(world)
+            .iter()
+            .filter(|e| runs_routes(world, e.type_id))
+            .map(|e| e.id)
+            .collect()
+    }
+
+    /// The click while picking a trade partner: a city takes the selected traders' route;
+    /// anything else says what to pick and keeps the pick open.
+    fn pick_trade_partner(&mut self, world: &mut World, entity: Option<EntityId>, shift: bool) {
+        let city = entity
+            .and_then(|id| world.entity(id))
+            .filter(|e| is_city(world, e))
+            .map(|e| (e.id, e.pos));
+        let Some((city, at)) = city else {
+            let hint = self.trade_hint(world);
+            self.say(world, hint);
+            return;
+        };
+        let mut issued = false;
+        for id in self.selected_traders(world) {
+            issued |= self.submit(world, id, "trade", None, Some(city), None, shift);
+        }
+        if issued {
+            self.marker(world, at, MarkerKind::Move);
+        }
+        self.trade_pick = false;
+    }
+
+    /// What to pick for a trade route: for a space freighter a city on another planet of its
+    /// system (or of another system once interstellar trade is researched), for a caravan another
+    /// city of its world.
+    fn trade_hint(&self, world: &World) -> String {
+        let freighter = self
+            .selected_traders(world)
+            .into_iter()
+            .filter_map(|id| world.entity(id))
+            .any(|e| world.is_spacecraft_type(e.type_id));
+        if !freighter {
+            return "Pick another city of yours or an ally's for the trade route".into();
+        }
+        if world.rule_enabled(PLAYER, rom_sim::RULE_INTERSTELLAR_TRADE) {
+            "Pick a city on another planet of this system, or in another star system".into()
+        } else {
+            "Pick a city on another planet of this system".into()
+        }
+    }
+
+    /// Why `trader` cannot run a route to `city`, in words for the player.
+    fn trade_refusal(world: &World, trader: &Entity, city: &Entity, error: &SimError) -> String {
+        let space = world.is_spacecraft_type(trader.type_id);
+        let here = world.orbit(trader.id).map_or(trader.pos.body, |o| o.body);
+        match error {
+            SimError::NotATradePartner if space && city.pos.body == here => {
+                "the same planet as the freighter".into()
+            }
+            SimError::NoHomeCity if space => "no city of yours where the freighter is".into(),
+            _ => {
+                let mut words = rejection_message(world, error, None);
+                if let Some(first) = words.get_mut(..1) {
+                    first.make_ascii_lowercase();
+                }
+                words
+            }
+        }
+    }
+
+    /// The cities on the planet shown that the selected trader could run a route to, while a
+    /// trade partner is being picked.
+    fn trade_targets(&self, world: &World) -> Vec<u32> {
+        let Some(trader) = self.selected_traders(world).first().copied() else {
+            return Vec::new();
+        };
+        if !self.trade_pick || self.view.in_space {
+            return Vec::new();
+        }
+        world
+            .entities()
+            .filter(|e| e.pos.body == self.view.planet && is_city(world, e))
+            .filter(|e| world.trade_offer(PLAYER, trader, e.id).is_ok())
+            .map(|e| e.id.0)
+            .collect()
     }
 
     /// Own ships selected, in space (not between systems) and able to move.
@@ -1453,6 +1570,12 @@ impl Controller {
                 if armed_mover || own.iter().any(|e| world.orbit(e.id).is_some()) {
                     actions.push((7, Action::Patrol));
                 }
+                if own
+                    .iter()
+                    .any(|e| e.owner == PLAYER && runs_routes(world, e.type_id))
+                {
+                    actions.push((8, Action::TradeRoute));
+                }
                 if own.iter().any(|e| {
                     in_space(world, e)
                         && rules.entity_types[&e.type_id].movement.is_some()
@@ -1570,6 +1693,11 @@ impl Controller {
                 button.icon = "icons/cmd_attack_move".into();
                 button.armed = self.patrol;
             }
+            Action::TradeRoute => {
+                button.name = "Trade route".into();
+                button.icon = "icons/cmd_rally".into();
+                button.armed = self.trade_pick;
+            }
             Action::Orbit => {
                 button.name = "Orbit".into();
                 button.icon = "icons/cmd_guard".into();
@@ -1664,6 +1792,12 @@ impl Controller {
             Action::AttackMove => self.attack_move = !self.attack_move,
             Action::Patrol => {
                 self.patrol = !self.patrol;
+                self.attack_move = false;
+                self.trade_pick = false;
+            }
+            Action::TradeRoute => {
+                self.trade_pick = !self.trade_pick;
+                self.patrol = false;
                 self.attack_move = false;
             }
             Action::Land => {
@@ -2100,17 +2234,11 @@ impl Controller {
                 rules.display_name(keeper.id, faction).to_lowercase()
             ));
         }
-        if et.territory.as_ref().is_some_and(|t| t.is_city)
-            && target.build_progress.is_none()
-            && !Self::is_enemy(world, target)
-            && target.owner != PlayerId(0)
-            && selected.iter().any(|e| {
-                rules.entity_types[&e.type_id]
-                    .trader
-                    .as_ref()
-                    .is_some_and(|t| t.runs_routes)
-            })
-        {
+        let trader = selected
+            .iter()
+            .find(|e| runs_routes(world, e.type_id))
+            .copied();
+        if let Some(trader) = trader.filter(|_| is_city(world, target)) {
             let income: i64 = world
                 .trade_routes(PLAYER)
                 .filter(|r| {
@@ -2119,10 +2247,20 @@ impl Controller {
                 })
                 .map(|r| r.per_trip_income)
                 .sum();
-            return Some(if income > 0 {
-                format!("Trade route: +{income} per trip")
-            } else {
-                "Trade route".into()
+            if income > 0 {
+                return Some(format!("Trade route: +{income} per trip"));
+            }
+            return Some(match world.trade_offer(PLAYER, trader.id, target.id) {
+                Ok(route) => format!(
+                    "Trade route to {}: +{} per trip",
+                    crate::hud::city_label(world, target.id),
+                    route.per_trip_income
+                ),
+                Err(error) => format!(
+                    "No trade route to {}: {}",
+                    crate::hud::city_label(world, target.id),
+                    Self::trade_refusal(world, trader, target, &error)
+                ),
             });
         }
         None
@@ -2135,6 +2273,10 @@ impl Controller {
         let rules = world.rules();
         hud.data_tab = self.data_tab;
         hud.help = self.wealth_help(world).unwrap_or_default();
+        if hud.help.is_empty() && self.trade_pick && !self.selected_traders(world).is_empty() {
+            hud.help = self.trade_hint(world);
+        }
+        hud.trade_targets = self.trade_targets(world);
         let pending: Vec<_> = self
             .pending_research
             .iter()
@@ -2147,6 +2289,17 @@ impl Controller {
             .find(|p| p.id == PLAYER)
             .map_or(DefId(0), |p| p.faction);
         let own = self.own_selected(world);
+        if hud.help.is_empty()
+            && !own.is_empty()
+            && own.iter().all(|e| runs_routes(world, e.type_id))
+        {
+            hud.help = if own.iter().any(|e| world.is_spacecraft_type(e.type_id)) {
+                "Trade route, then a city on another planet; paid on each arrival"
+            } else {
+                "Trade route, then another city; paid on each arrival"
+            }
+            .into();
+        }
         if hud.help.is_empty()
             && !self.view.in_space
             && own.iter().any(|e| {
@@ -2244,6 +2397,23 @@ impl Controller {
                 },
                 wealth: {
                     let mut lines = crate::hud::wealth_card(world, e);
+                    // A caravan's next leg: the city it walks to (a freighter's comes from its
+                    // legs, in the card itself).
+                    if let Some(view) = self
+                        .routes
+                        .get(&e.id)
+                        .filter(|_| !foreign && !world.is_spacecraft_type(e.type_id))
+                    {
+                        let city = if view.to_target {
+                            view.target
+                        } else {
+                            view.home
+                        };
+                        lines.push(format!(
+                            "Next: walk to {}",
+                            crate::hud::city_label(world, city)
+                        ));
+                    }
                     lines.extend(crate::space_view::holding_line(world, e));
                     if !foreign {
                         lines.extend(crate::space_view::charge_line(world, e));

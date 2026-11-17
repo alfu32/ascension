@@ -1,0 +1,14 @@
+# Task 72: task 69's morph scene at the new sizes: the five warship classes and a carrier and a
+# transport in orbit above the city, then the camera leaves the planet; change the last wheel
+# line's step count (10, 12, 14) for three steps of the hand-over from orbit to the system.
+0 grant-age age.galactic
+0 place-orbit 1 unit.survey_ship @-14,-8
+0 place-orbit 1 unit.corvette @-6,-8
+0 place-orbit 1 unit.space_frigate @3,-8
+0 place-orbit 1 unit.space_cruiser @14,-8
+0 place-orbit 1 unit.battleship @-10,8
+0 place-orbit 1 unit.carrier @6,8
+0 place-orbit 1 unit.transport_ship @18,8
+1 speed 400
+390 cam wheel -10 640,400
+400 speed 1

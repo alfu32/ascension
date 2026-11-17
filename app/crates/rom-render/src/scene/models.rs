@@ -130,6 +130,23 @@ fn bind_poses(texture: Option<u32>) {
     }
 }
 
+/// The scale a placed model's transform draws it at (a ship above a planet larger than its
+/// own size).
+fn placed_scale(t: &Matrix) -> f32 {
+    (t.m0 * t.m0 + t.m1 * t.m1 + t.m2 * t.m2).sqrt()
+}
+
+/// How many times its own size a model whose longest extent across or deep is `own` tiles is
+/// drawn when its view gives it the extent `size` (`ModelRef::size`); 1 when either is empty.
+pub(crate) fn drawn_factor(own: f32, size: [f32; 3]) -> f32 {
+    let drawn = size[0].max(size[2]);
+    if own > 0.0 && drawn > 0.0 && (drawn - own).abs() > own * 1e-4 {
+        drawn / own
+    } else {
+        1.0
+    }
+}
+
 /// The phase (0..1) of an entity's motion: spread by its id so a group does not move as one.
 pub(super) fn phase_of(id: u32) -> f32 {
     let mixed = id.wrapping_mul(0x9e37_79b9) >> 16;
@@ -323,7 +340,9 @@ impl ModelGpu {
                 ];
                 (x, h)
             };
-            let s = meshes.scale;
+            // Drawn at the size the view gives it: a ship above a planet is drawn larger than
+            // true (`scale_ship_view`), and its pick box, health bar and hull use that size too.
+            let s = meshes.scale * drawn_factor(meshes.extent * meshes.scale, model.size);
             let owner = crate::entities::owner_color(view.owner);
             let o = frame.origin;
             let mut transform = Matrix {
@@ -379,13 +398,6 @@ impl ModelGpu {
             };
             lists[placed.model].push(placed.transform);
         }
-    }
-
-    /// The length in tiles model `index` is drawn with in the planet view: its longest extent
-    /// across or deep at its own size.
-    pub(super) fn planet_length(&self, index: u16) -> Option<f32> {
-        let model = self.models.get(usize::from(index))?.as_ref()?;
-        Some(model.extent * model.scale)
     }
 
     /// The instance of model `index` at `origin`, its front (+z) along `forward`, `length` long
@@ -530,11 +542,9 @@ impl ModelGpu {
             .iter()
             .enumerate()
             .flat_map(move |(index, list)| {
-                let (reach, scale) = self.models[index]
-                    .as_ref()
-                    .map_or((0.0, 1.0), |m| (m.reach, m.scale));
+                let reach = self.models[index].as_ref().map_or(0.0, |m| m.reach);
                 list.iter()
-                    .map(move |t| ([t.m12, t.m13, t.m14], reach * scale))
+                    .map(move |t| ([t.m12, t.m13, t.m14], reach * placed_scale(t)))
             })
     }
 
@@ -570,7 +580,7 @@ impl ModelGpu {
                 let centre = [t.m12, t.m13, t.m14];
                 let d2 = (0..3).map(|k| (centre[k] - eye[k]).powi(2)).sum::<f32>();
                 d2 < MODEL_SHADOW_DISTANCE * MODEL_SHADOW_DISTANCE
-                    && touches(centre, model.reach * model.scale)
+                    && touches(centre, model.reach * placed_scale(t))
             }));
             if !scratch.is_empty() {
                 pass.draw_mesh_instanced(&model.far, depth.clone(), scratch);
