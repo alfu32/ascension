@@ -37,7 +37,10 @@ interstellar) commerce vessels work."
    freighter (and on caravans), with a hint: "Pick a city on another planet
    of this system". While picking, valid target cities are ringed; invalid
    ones say why on hover (same planet, no city of yours where the freighter
-   is, another system). The selection card shows the route ("City 1 → City 3,
+   is, another system before the abundance-age research Interstellar trade
+   from task 70). If task 70 is merged first, cities in other systems are
+   valid targets once that research is done, and the route card shows the
+   whole path. The selection card shows the route ("City 1 → City 3,
    +188 per trip") and the next leg. The help line and
    `app/docs/world-model.md` describe it in one short paragraph.
 
