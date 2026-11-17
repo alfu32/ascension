@@ -106,7 +106,8 @@ fn attrition_hurts_units_in_enemy_territory_only() {
         .map(|id| w.entity(id).unwrap().hp)
         .into();
     ticks(&mut w, 20);
-    assert_eq!(w.entity(enemy).unwrap().hp, before[0] - 2);
+    // Task 71: attrition is 30 hp a period (was 60), 1 hp in 20 ticks.
+    assert_eq!(w.entity(enemy).unwrap().hp, before[0] - 1);
     for (n, id) in [own, outside, building].iter().enumerate() {
         assert_eq!(w.entity(*id).unwrap().hp, before[n + 1]);
     }
@@ -123,15 +124,17 @@ fn supply_prevents_attrition() {
     ticks(&mut w, 20);
     assert_eq!(
         w.entity(unit).unwrap().hp,
-        38,
+        // Task 71: attrition is 30 hp a period (was 60): 40 - 1.
+        39,
         "allied supply is not own supply"
     );
     w.change_owner(supply, P1);
     ticks(&mut w, 40);
-    assert_eq!(w.entity(unit).unwrap().hp, 38);
+    // Task 71: attrition is 30 hp a period (was 60), 1 hp in 20 ticks.
+    assert_eq!(w.entity(unit).unwrap().hp, 39);
     w.despawn(supply).unwrap();
     ticks(&mut w, 20);
-    assert_eq!(w.entity(unit).unwrap().hp, 36);
+    assert_eq!(w.entity(unit).unwrap().hp, 38);
 }
 
 #[test]

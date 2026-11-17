@@ -282,6 +282,7 @@ fn fits(
     at: Pos,
     lane: bool,
     territory: bool,
+    margins: bool,
 ) -> Option<Pos> {
     let et = needs.et;
     let pos = Pos {
@@ -297,7 +298,8 @@ fn fits(
             let tile = (pos.body.0, pos.face, x, y);
             if obstacles.contains(&tile)
                 || (!needs.node_site
-                    && (ground.reserved.contains(&tile) || ground.margin.contains(&tile)))
+                    && (ground.reserved.contains(&tile)
+                        || (margins && ground.margin.contains(&tile))))
             {
                 return None;
             }
@@ -410,7 +412,18 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
         .and_then(|s| s.needs_node_terrain_id.map(|t| (t, s)));
     // A search cut short by the lookup allowance is tried again later, not given up.
     let mut exhausted = false;
-    for lane in [true, false] {
+    // A lane of a tile is kept around every building so units and workers keep a way out.
+    // Only a gather site drawn to node terrain, whose spot the deposit decides, may close
+    // one when there is no other room.
+    // The ground kept free near rock for a first mine is a preference too: a town hemmed in
+    // by it builds there rather than not at all (a first age stalled for the whole match
+    // with no room for a library or a farm).
+    let passes: &[(bool, bool)] = if node.is_some() {
+        &[(true, true), (false, true)]
+    } else {
+        &[(true, true), (true, false)]
+    };
+    for &(lane, margins) in passes {
         for city in view.cities.iter().filter(|c| c.complete) {
             if needs.et.limit_scope == LimitScope::PerCity
                 && line_in_city(view, ground, root, city.id) >= needs.et.limit_count
@@ -464,7 +477,8 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
                     if !near {
                         continue;
                     }
-                    let Some(pos) = fits(view, ground, &needs, at, lane, needs.own_territory)
+                    let Some(pos) =
+                        fits(view, ground, &needs, at, lane, needs.own_territory, margins)
                     else {
                         continue;
                     };
@@ -494,7 +508,8 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
                     if !ground.spend(0) {
                         return Site::Later;
                     }
-                    let Some(pos) = fits(view, ground, &needs, at, lane, needs.own_territory)
+                    let Some(pos) =
+                        fits(view, ground, &needs, at, lane, needs.own_territory, margins)
                     else {
                         continue;
                     };
@@ -539,6 +554,20 @@ pub(crate) fn find_city_site(view: &View<'_>, ground: &Ground, city_type: DefId)
         .copied()
         .filter(|t| view.world.knows_terrain(view.me, *t))
         .collect();
+    // Node terrain of a resource the player has no gather site for (rock with no mine yet):
+    // a town without metal for the whole match stays in its age, so a new city goes there.
+    let wanted: BTreeSet<DefId> = view
+        .cat
+        .gather_sites
+        .values()
+        .filter(|sites| sites.iter().all(|s| view.line_count(*s) == 0))
+        .flatten()
+        .filter(|s| view.rules.is_available(**s, view.faction))
+        .filter_map(|s| view.rules.entity_types[s].gather_site.as_ref())
+        .filter(|g| g.slots_per_node > 0)
+        .filter_map(|g| g.needs_node_terrain_id)
+        .filter(|t| node_terrains.contains(t))
+        .collect();
     let mut ranked: Vec<(i64, usize, Pos)> = Vec::new();
     let mut order = 0;
     for city in view.cities.iter().filter(|c| c.complete) {
@@ -556,8 +585,15 @@ pub(crate) fn find_city_site(view: &View<'_>, ground: &Ground, city_type: DefId)
             let at = view
                 .world
                 .offset(city.pos, i64::from(*dx) * 1000, i64::from(*dy) * 1000);
-            let Some(pos) = fits(view, ground, &needs, at, true, needs.own_territory && !free)
-            else {
+            let Some(pos) = fits(
+                view,
+                ground,
+                &needs,
+                at,
+                true,
+                needs.own_territory && !free,
+                true,
+            ) else {
                 continue;
             };
             if view.cities.iter().any(|c| {
@@ -585,7 +621,9 @@ pub(crate) fn find_city_site(view: &View<'_>, ground: &Ground, city_type: DefId)
                     let Some(terrain) = view.world.terrain_at(at) else {
                         continue;
                     };
-                    if node_terrains.contains(&terrain) {
+                    if wanted.contains(&terrain) {
+                        value += 12;
+                    } else if node_terrains.contains(&terrain) {
                         value += 3;
                     } else if needs.on_terrain.contains(&terrain) {
                         value += 1;
