@@ -416,7 +416,7 @@ and tanks that fell, the buildings' with their debris; the struck-down city and 
 reach still stand), `img/stains-soldiers-tanks.png` (two soldiers' small stains beside two tanks'
 larger ones), `img/stains-half-faded.png` (the same place at 21 game minutes, after a time skip
 at a hundred times the speed, about seven tenths through the stains' life: the soot pale, the
-debris weathered, low and fading with it: owner review, debris must not outlast its mark), `img/stains-gone.png` (at 32 minutes, past the life of the last
+debris weathered, low and fading with it, so the debris never outlasts its mark), `img/stains-gone.png` (at 32 minutes, past the life of the last
 stain: the ground clean), `img/stains-night.png` (the battlefield at night, `--sun midnight`),
 and `img/stains-shore.png` with its enlarged part `img/stains-shore-detail.png` (seed 2: a
 barracks of player one destroyed on the shore by a frigate of player two, its stain ending at
