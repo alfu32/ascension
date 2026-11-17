@@ -490,6 +490,176 @@ Everything is read from the rules (`crates/rom-cli/src/fight_matrix_cmd.rs`):
 - The command prints one row per strength and the roster of each age, and fails when a
   strength has no answer; the test `every_strength_has_an_answer` runs the whole matrix.
 
+### The matrix (task 71 rules, 3 seeds)
+
+| Age | Strength | Outranges and beats | Answer | Research | Answer's fights (won, value left) |
+| --- | --- | --- | --- | --- | --- |
+| age.ancient | city | slinger | spearman | - | 3/3 (61‰ left vs 0‰) |
+| age.ancient | slinger | scout | spearman | - | 3/3 (488‰ left vs 0‰) |
+| age.classical | city | archer | catapult | - | 3/3 (683‰ left vs 0‰) |
+| age.classical | tower | hoplite | catapult | - | 3/3 (1000‰ left vs 0‰) |
+| age.classical | archer | scout | catapult | - | 3/3 (890‰ left vs 0‰) |
+| age.classical | catapult | city | scout | - | 3/3 (536‰ left vs 0‰) |
+| age.medieval | city | crossbowman | trebuchet | - | 3/3 (679‰ left vs 0‰) |
+| age.medieval | tower | pikeman | trebuchet | - | 3/3 (1000‰ left vs 0‰) |
+| age.medieval | fort | pikeman | trebuchet | - | 3/3 (865‰ left vs 0‰) |
+| age.medieval | crossbowman | scout | trebuchet | - | 3/3 (777‰ left vs 0‰) |
+| age.medieval | trebuchet | city | scout | - | 3/3 (547‰ left vs 0‰) |
+| age.gunpowder | city | scout | bombard | - | 3/3 (718‰ left vs 0‰) |
+| age.gunpowder | tower | musketeer | bombard | - | 3/3 (1000‰ left vs 0‰) |
+| age.gunpowder | fort | musketeer | bombard | - | 3/3 (940‰ left vs 0‰) |
+| age.gunpowder | musketeer | scout | bombard | - | 3/3 (915‰ left vs 0‰) |
+| age.gunpowder | arquebusier | scout | bombard | - | 3/3 (946‰ left vs 0‰) |
+| age.gunpowder | bombard | city | scout | - | 3/3 (544‰ left vs 0‰) |
+| age.enlightenment | city | ranger | cannon | - | 3/3 (776‰ left vs 0‰) |
+| age.enlightenment | bastion | fusilier | cannon | - | 3/3 (1000‰ left vs 0‰) |
+| age.enlightenment | star_fort | fusilier | cannon | - | 3/3 (958‰ left vs 0‰) |
+| age.enlightenment | fusilier | ranger | cannon | - | 3/3 (942‰ left vs 0‰) |
+| age.enlightenment | light_infantry | ranger | cannon | - | 3/3 (967‰ left vs 0‰) |
+| age.enlightenment | cannon | city | ranger | - | 3/3 (596‰ left vs 0‰) |
+| age.industrial | city | ranger | field_gun | - | 3/3 (790‰ left vs 0‰) |
+| age.industrial | bastion | rifleman | field_gun | - | 3/3 (1000‰ left vs 0‰) |
+| age.industrial | star_fort | rifleman | field_gun | - | 3/3 (1000‰ left vs 0‰) |
+| age.industrial | rifleman | ranger | field_gun | - | 3/3 (940‰ left vs 0‰) |
+| age.industrial | machine_gunner | ranger | field_gun | - | 3/3 (970‰ left vs 0‰) |
+| age.industrial | anti_tank_rifleman | machine_gunner | field_gun | - | 3/3 (883‰ left vs 0‰) |
+| age.industrial | armoured_car | ranger | field_gun | - | 3/3 (859‰ left vs 0‰) |
+| age.industrial | light_tank | ranger | field_gun | - | 3/3 (859‰ left vs 0‰) |
+| age.industrial | field_gun | city | ranger | - | 3/3 (513‰ left vs 0‰) |
+| age.modern | city | ranger | howitzer | - | 3/3 (811‰ left vs 0‰) |
+| age.modern | bunker | infantry | howitzer | - | 3/3 (1000‰ left vs 0‰) |
+| age.modern | fortress | infantry | howitzer | - | 3/3 (1000‰ left vs 0‰) |
+| age.modern | infantry | ranger | bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.modern | heavy_machine_gunner | ranger | bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.modern | bazooka_team | heavy_machine_gunner | bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.modern | ranger | flak_gun | bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.modern | scout_car | ranger | bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.modern | tank | ranger | bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.modern | howitzer | city | bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.modern | flak_gun | fighter | infantry | - | 3/3 (1000‰ left vs 0‰) |
+| age.modern | fighter | bomber | flak_gun | - | 3/3 (1000‰ left vs 0‰) |
+| age.modern | bomber | city | fighter | - | 3/3 (1000‰ left vs 0‰) |
+| age.information | city | recon_drone | rocket_artillery | - | 3/3 (826‰ left vs 0‰) |
+| age.information | bunker | assault_infantry | rocket_artillery | - | 3/3 (1000‰ left vs 0‰) |
+| age.information | fortress | assault_infantry | rocket_artillery | - | 3/3 (1000‰ left vs 0‰) |
+| age.information | assault_infantry | recon_drone | strategic_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.information | gun_drone | recon_drone | strategic_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.information | missile_team | recon_drone | strategic_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.information | recon_drone | missile_launcher | strategic_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.information | scout_car | recon_drone | strategic_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.information | main_battle_tank | recon_drone | strategic_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.information | rocket_artillery | city | strategic_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.information | missile_launcher | jet_fighter | assault_infantry | - | 3/3 (1000‰ left vs 0‰) |
+| age.information | jet_fighter | strategic_bomber | missile_launcher | - | 3/3 (1000‰ left vs 0‰) |
+| age.information | strategic_bomber | city | jet_fighter | - | 3/3 (1000‰ left vs 0‰) |
+| age.automation | city | recon_drone | rocket_artillery | - | 3/3 (826‰ left vs 0‰) |
+| age.automation | defence_turret | combat_robot | rocket_artillery | - | 3/3 (1000‰ left vs 0‰) |
+| age.automation | fortress | combat_robot | rocket_artillery | - | 3/3 (1000‰ left vs 0‰) |
+| age.automation | combat_robot | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.automation | gun_drone | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.automation | missile_team | combat_robot | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.automation | recon_drone | missile_launcher | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.automation | hovercraft | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.automation | robot_tank | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.automation | rocket_artillery | city | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.automation | missile_launcher | drone_fighter | combat_robot | - | 3/3 (1000‰ left vs 0‰) |
+| age.automation | drone_fighter | drone_bomber | missile_launcher | - | 3/3 (1000‰ left vs 0‰) |
+| age.automation | drone_bomber | city | drone_fighter | - | 3/3 (1000‰ left vs 0‰) |
+| age.fusion | city | recon_drone | railgun_battery | - | 3/3 (855‰ left vs 0‰) |
+| age.fusion | defence_turret | exo_trooper | railgun_battery | - | 3/3 (1000‰ left vs 0‰) |
+| age.fusion | citadel | exo_trooper | railgun_battery | - | 3/3 (1000‰ left vs 0‰) |
+| age.fusion | exo_trooper | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.fusion | pulse_gunner | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.fusion | railgun_team | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.fusion | recon_drone | laser_battery | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.fusion | hovercraft | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.fusion | fusion_tank | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.fusion | railgun_battery | city | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.fusion | laser_battery | interceptor | exo_trooper | - | 3/3 (1000‰ left vs 0‰) |
+| age.fusion | interceptor | drone_bomber | laser_battery | - | 3/3 (1000‰ left vs 0‰) |
+| age.fusion | drone_bomber | city | interceptor | - | 3/3 (1000‰ left vs 0‰) |
+| age.starfaring | city | recon_drone | railgun_battery | - | 3/3 (855‰ left vs 0‰) |
+| age.starfaring | defence_turret | marine | railgun_battery | - | 3/3 (1000‰ left vs 0‰) |
+| age.starfaring | citadel | marine | railgun_battery | - | 3/3 (1000‰ left vs 0‰) |
+| age.starfaring | marine | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.starfaring | pulse_gunner | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.starfaring | railgun_team | marine | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.starfaring | recon_drone | laser_battery | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.starfaring | grav_skimmer | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.starfaring | fusion_tank | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.starfaring | railgun_battery | city | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.starfaring | laser_battery | interceptor | marine | - | 3/3 (1000‰ left vs 0‰) |
+| age.starfaring | interceptor | drone_bomber | laser_battery | - | 3/3 (1000‰ left vs 0‰) |
+| age.starfaring | drone_bomber | city | interceptor | - | 3/3 (1000‰ left vs 0‰) |
+| age.expansion | city | recon_drone | railgun_battery | - | 3/3 (855‰ left vs 0‰) |
+| age.expansion | defence_turret | marine | railgun_battery | - | 3/3 (1000‰ left vs 0‰) |
+| age.expansion | citadel | marine | railgun_battery | - | 3/3 (1000‰ left vs 0‰) |
+| age.expansion | marine | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.expansion | beam_trooper | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.expansion | railgun_team | marine | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.expansion | recon_drone | laser_battery | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.expansion | grav_skimmer | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.expansion | grav_tank | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.expansion | railgun_battery | city | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.expansion | laser_battery | interceptor | marine | - | 3/3 (1000‰ left vs 0‰) |
+| age.expansion | interceptor | drone_bomber | laser_battery | - | 3/3 (1000‰ left vs 0‰) |
+| age.expansion | drone_bomber | city | interceptor | - | 3/3 (1000‰ left vs 0‰) |
+| age.abundance | city | recon_drone | railgun_battery | - | 3/3 (855‰ left vs 0‰) |
+| age.abundance | defence_turret | shock_marine | railgun_battery | - | 3/3 (1000‰ left vs 0‰) |
+| age.abundance | citadel | shock_marine | railgun_battery | - | 3/3 (1000‰ left vs 0‰) |
+| age.abundance | shock_marine | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.abundance | beam_trooper | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.abundance | railgun_team | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.abundance | recon_drone | laser_battery | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.abundance | grav_skimmer | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.abundance | grav_tank | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.abundance | railgun_battery | city | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.abundance | laser_battery | interceptor | shock_marine | - | 3/3 (1000‰ left vs 0‰) |
+| age.abundance | interceptor | drone_bomber | laser_battery | - | 3/3 (1000‰ left vs 0‰) |
+| age.abundance | drone_bomber | city | interceptor | - | 3/3 (1000‰ left vs 0‰) |
+| age.galactic | city | recon_drone | railgun_battery | - | 3/3 (855‰ left vs 0‰) |
+| age.galactic | defence_turret | shock_marine | railgun_battery | - | 3/3 (1000‰ left vs 0‰) |
+| age.galactic | citadel | shock_marine | railgun_battery | - | 3/3 (1000‰ left vs 0‰) |
+| age.galactic | shock_marine | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.galactic | beam_trooper | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.galactic | railgun_team | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.galactic | recon_drone | laser_battery | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.galactic | grav_skimmer | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.galactic | grav_tank | recon_drone | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.galactic | railgun_battery | city | drone_bomber | - | 3/3 (1000‰ left vs 0‰) |
+| age.galactic | laser_battery | interceptor | shock_marine | - | 3/3 (1000‰ left vs 0‰) |
+| age.galactic | interceptor | drone_bomber | laser_battery | - | 3/3 (1000‰ left vs 0‰) |
+| age.galactic | drone_bomber | city | interceptor | - | 3/3 (1000‰ left vs 0‰) |
+
+The fighters of each age:
+
+- age.ancient: city, spearman, slinger, scout
+- age.classical: city, tower, hoplite, archer, scout, horseman, cataphract, catapult
+- age.medieval: city, tower, fort, pikeman, crossbowman, scout, light_cavalry, knight, trebuchet
+- age.gunpowder: city, tower, fort, musketeer, arquebusier, scout, hussar, cuirassier, bombard
+- age.enlightenment: city, bastion, star_fort, fusilier, light_infantry, ranger, dragoon, lancer, cannon
+- age.industrial: city, bastion, star_fort, rifleman, machine_gunner, anti_tank_rifleman, ranger, armoured_car, light_tank, field_gun, biplane
+- age.modern: city, bunker, fortress, infantry, heavy_machine_gunner, bazooka_team, ranger, scout_car, tank, howitzer, flak_gun, fighter, bomber
+- age.information: city, bunker, fortress, assault_infantry, gun_drone, missile_team, recon_drone, scout_car, main_battle_tank, rocket_artillery, missile_launcher, jet_fighter, strategic_bomber
+- age.automation: city, defence_turret, fortress, combat_robot, gun_drone, missile_team, recon_drone, hovercraft, robot_tank, rocket_artillery, missile_launcher, drone_fighter, drone_bomber
+- age.fusion: city, defence_turret, citadel, exo_trooper, pulse_gunner, railgun_team, recon_drone, hovercraft, fusion_tank, railgun_battery, laser_battery, interceptor, drone_bomber
+- age.starfaring: city, defence_turret, citadel, marine, pulse_gunner, railgun_team, recon_drone, grav_skimmer, fusion_tank, railgun_battery, laser_battery, interceptor, drone_bomber
+- age.expansion: city, defence_turret, citadel, marine, beam_trooper, railgun_team, recon_drone, grav_skimmer, grav_tank, railgun_battery, laser_battery, interceptor, drone_bomber
+- age.abundance: city, defence_turret, citadel, shock_marine, beam_trooper, railgun_team, recon_drone, grav_skimmer, grav_tank, railgun_battery, laser_battery, interceptor, drone_bomber
+- age.galactic: city, defence_turret, citadel, shock_marine, beam_trooper, railgun_team, recon_drone, grav_skimmer, grav_tank, railgun_battery, laser_battery, interceptor, drone_bomber
+
+Without an answer on the 0.0.67 rules (same command):
+
+| Age | Strength | Outranges and beats | Best try | Research | Its fights |
+| --- | --- | --- | --- | --- | --- |
+| age.ancient | city | spearman | spearman | - | 0/3 (0‰ left vs 924‰) NO ANSWER |
+| age.ancient | tower | spearman | spearman | - | 0/3 (0‰ left vs 981‰) NO ANSWER |
+| age.classical | catapult | city | horseman | - | 0/3 (0‰ left vs 946‰) NO ANSWER |
+| age.medieval | trebuchet | city | light_cavalry | - | 0/3 (0‰ left vs 952‰) NO ANSWER |
+| age.gunpowder | bombard | city | musketeer | - | 0/3 (0‰ left vs 754‰) NO ANSWER |
+| age.enlightenment | cannon | city | fusilier | - | 0/3 (0‰ left vs 777‰) NO ANSWER |
+| age.industrial | field_gun | city | biplane | - | 0/3 (1000‰ left vs 1000‰) NO ANSWER |
+
 ### What changed in the data (details in `docs/database.md`, "Counters and siege")
 
 Siege is a `vehicle` with a 3-tile dead zone (`range_min`), melee does 150 % to
@@ -531,6 +701,54 @@ an answer.
 - **Patience.** From 30 game minutes (was 40) the ratio a wave needs falls three points a
   minute (was two), to 60 % (was 80 %): siege now breaks walls that are measured at full
   strength.
+
+### Measured (task 71)
+
+On the i7-6700HQ, `rom duel`, 100 seeds, 8 jobs, 108 000-tick limit (the machine was
+shared with another task's builds, so run times are rough):
+
+| Duel | Wins | Draws | Player 1 / 2 wins | Run time |
+| --- | --- | --- | --- | --- |
+| 0.0.67: moderate – easiest | 85 – 3 | 12 | 44 / 44 | 6.2 min |
+| 0.0.67: moderate – moderate | 37 – 36 | 27 | 33 / 40 | 20.0 min (shared) |
+| task 71: moderate – easiest | 93 – 1 | 6 | 46 / 48 | 3.9 min |
+| task 71: moderate – moderate | 48 – 39 | 13 | 46 / 41 | 7.0 min |
+
+Draws of moderate – easiest (seeds 14, 15, 21, 23, 38, 90), traced: in 21 and 90 the
+moderate player had one woodcutter's camp of four slots all match (timber +40 a period, one
+or two cities, ages 2–3 against the easiest player's 4–6) while metal piled up past 10 000;
+in 23 it reached the automation age with 72 units and seven cities, but the easiest
+player's single town had no path in (46 `attack_move` orders failed `no_path`; the raiders
+stood 48–64 tiles off); in 14 it had the larger economy but lost its waves at the easiest
+player's walls, ending an age behind with 3 units; 15 and 38 were metal-starved in earlier
+traces of nearly the same code (no mine placed).
+Seed 8 is the one
+easiest win (moderate ended in the medieval age). The mirror draws all end in the
+enlightenment age with both capitals untouched: armies of 2–20 units trade raiders and
+responses all match and no wave masses (traced seeds 16, 42, 61).
+
+**The targets are not all met.** Moderate wins 93 (target 90) but draws 6 (target 5); the
+mirror has 13 draws (target 10). The runs during the task show how much the result moves
+with one change: with woodcutter's camps and mines drawing from 8 tiles instead of 7 the
+moderate – easiest duel was 96 – 0 with 4 draws but the mirror had 11–12; with 6 tiles the
+mirror had 7 draws but moderate – easiest 7–8. A half-way table and the traced causes are
+in the task report; what is left is economy (food and timber cap every army while metal and
+knowledge pile up in the thousands) rather than combat.
+
+First attack on a person (`rom first-attack --seeds 1..8`):
+
+| Difficulty | First wave 0.0.67 | First wave task 71 | First building hit 0.0.67 | First building hit task 71 |
+| --- | --- | --- | --- | --- |
+| easiest | 36:46 / 46:41, 7 units | 42:01 / 45:04, 7 units | 38:22 / 45:29 | 31:34 / 45:15 |
+| easy | 44:34 / 45:13, 16 units | 18:40 / 19:44, 10 units | 31:58 / 44:53 | 17:43 / 30:29 |
+| moderate | 22:07 / 23:46, 16 units | 21:07 / 23:42, 15 units | 23:37 / 25:50 | 5:05 / 23:37 |
+| tough | 22:16 / 25:02, 13 units | 21:25 / 23:44, 14 units | 23:10 / 25:29 | 5:21 / 22:07 |
+| tougher | 22:22 / 23:56, 15 units | 20:26 / 22:07, 13 units | 22:36 / 25:01 | 21:13 / 24:40 |
+| toughest | 20:39 / 22:14, 16 units | 19:49 / 20:35, 15 units | 20:40 / 23:27 | 16:40 / 22:08 |
+
+(earliest / mean). The hard levels are no gentler. At easiest the mean first hit is the
+same (45:15, was 45:29) and every hit now comes after its 30-minute grace; the earliest is
+earlier than before (31:34, was 38:22) and one seed in eight saw no attack (was two).
 
 ## Simulation gaps found in part 2, and what task 65 did with them
 
