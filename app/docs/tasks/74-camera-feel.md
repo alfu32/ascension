@@ -99,7 +99,8 @@ the planet camera).
    map (3D since task 59) the focus lies on the map's reference plane (the
    one task 59 draws its rings and drop lines to), except while flying to or
    following a system, when it sits on that system; any pan returns it to the
-   reference plane.
+   reference plane. This star-map rule is provisional: the owner will refine
+   it once this task is in place, so keep it simple and in one place.
 6. **Tests.** Camera unit tests for: the first hand-over elevation, the
    remembered elevation, the ±89° clamp, wheel coalescing (a burst of 6
    events is one step), the animated zoom reaching its target, the round
