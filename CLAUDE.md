@@ -31,7 +31,10 @@ The current state of every task is in `app/docs/tasks/STATUS.md`.
   united humanity (10+).
 - A player picks a race before the match and keeps it. Races start on
   separate home worlds with equivalent technology and meet only in space.
-- The game ends at age 13. Travel between galaxies is parked.
+- Age 13 is the last age. A player who has researched everything at the
+  library may ascend (task 76, decided 2026-11-17); matches have no end
+  condition, but a player must complete the ascension before being defeated.
+  Travel between galaxies is parked.
 - The directional light that represents the sun orbits the planet orb by
   default (day and night for everyone); night stays playable. Presentation
   only for now. Say it this way: the star does not orbit the planet.
