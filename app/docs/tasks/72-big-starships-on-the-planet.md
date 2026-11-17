@@ -3,8 +3,8 @@
 Crates: `rom-render` (planet-view ship drawing, picking), `rom-app` (orders
 panel, hints), `et_view_scale` rows through `app/db/content/generate.py`,
 `rom-sim` only for item 2 (landing clearance), docs. No model file changes
-(all models are locked). Starts after task 59 is merged (it works in
-`rom-render` and `rom-app`). Implementer: Claude (Opus).
+(all models are locked). Starts after tasks 59, 74 and 70 are merged
+(they work in `rom-render` and `rom-app`). Implementer: Claude (Opus).
 
 ## Why — the owner (2026-11-17)
 

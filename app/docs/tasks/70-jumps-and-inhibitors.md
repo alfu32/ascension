@@ -6,8 +6,8 @@ component rows, documented in `app/docs/database.md`), `rom-save` (charge
 state), `rom-render` and `rom-app` (showing a charge, the inhibitor's reach,
 refusal messages), one first-look model file for the new building, docs.
 `rom-ai` only as far as charting needs (a later card teaches computer
-players to use inhibitors). Starts after tasks 59 and 67 are merged
-(they touch `rom-sim`). Implementer: Claude (Opus).
+players to use inhibitors). Starts after tasks 59 and 74 are merged
+(they touch `rom-sim`, `rom-render` and `rom-app`). Implementer: Claude (Opus).
 
 ## Why — the owner (2026-11-16)
 
