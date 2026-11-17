@@ -26,7 +26,7 @@ use rom_geo::CubeSurface;
 use rom_rules::{DefId, Rules, VictoryRule};
 use std::{
     cmp::Reverse,
-    collections::{BTreeMap, BinaryHeap, VecDeque},
+    collections::{BTreeMap, BTreeSet, BinaryHeap, VecDeque},
     sync::Arc,
 };
 
@@ -244,6 +244,11 @@ pub struct SpaceSnapshot {
     pub transits_done: u64,
     /// Landed ships.
     pub landed: Vec<EntityId>,
+    /// Routes each player has charted or had revealed: player, then the two systems (lower
+    /// id first), ascending.
+    pub charted: Vec<(PlayerId, u32, u32)>,
+    /// The system each ship last arrived from, by ship id.
+    pub arrivals: Vec<(EntityId, u32)>,
 }
 
 /// An in-flight path request.
@@ -916,6 +921,12 @@ impl World {
                     .collect(),
                 transits_done: space.transits_done,
                 landed: space.landed.iter().copied().collect(),
+                charted: space
+                    .charted
+                    .iter()
+                    .flat_map(|(player, routes)| routes.iter().map(|(a, b)| (*player, *a, *b)))
+                    .collect(),
+                arrivals: space.arrivals.iter().map(|(id, s)| (*id, *s)).collect(),
             },
             viewers: self
                 .vision
@@ -1167,6 +1178,17 @@ impl World {
                 .collect(),
             transits_done: space.transits_done,
             landed: space.landed.into_iter().collect(),
+            charted: space.charted.into_iter().fold(
+                BTreeMap::new(),
+                |mut charted, (player, a, b)| {
+                    charted
+                        .entry(player)
+                        .or_insert_with(BTreeSet::new)
+                        .insert(crate::jumps::route_key(a, b));
+                    charted
+                },
+            ),
+            arrivals: space.arrivals.into_iter().collect(),
         };
         let slots = next_entity_id as usize;
         world.entities = vec![None; slots];

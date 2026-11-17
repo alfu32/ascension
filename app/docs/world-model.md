@@ -92,7 +92,8 @@ skirmish maps and the existing scenarios.
 - An entity has exactly one **location**: on a surface, in orbit around a
   body, in a system's space, or in transit between systems. Moving between
   levels is an order (launch from a spaceport, land at a site, leave orbit,
-  depart along a route), with a duration.
+  depart along a route), with a duration. A route is charted by its first voyage and a jump
+  along it is charged first (task 70, "Routes, jumps and inhibitors").
 
 ### The real sky (task 59)
 
@@ -208,6 +209,40 @@ Screenshots (scripts `tasks/68-*-script.txt`): `img/orbit-hold-before-turn.png` 
 `img/orbit-landing.png` (a transport coming straight down), `img/orbit-freighter-route.png`
 (a freighter between the home planet and the colony), `img/orbit-satellite-sight.png` and
 `img/orbit-satellite-before-after.png` (the fog before and after a satellite goes up).
+
+### Routes, jumps and inhibitors (task 70)
+
+Ships fly freely inside a star system. Between systems they follow the routes, and three things
+shape that (values and tables in `database.md`, "Routes and jumps"):
+
+- **Charting.** A player knows a route once its ship has flown it. The first voyage along a route
+  takes five times as long, charting it; the next is quick. Unknown routes are not drawn on the
+  player's star map: a faint stub leaves each system it has seen. In the expansion age the
+  spaceport's **Enhanced Sensors** reveal every route leaving a system where the player has a ship
+  or a planet and remove the delay; in the galactic age **Automated Route Survey** reveals them all.
+- **Charging a jump.** A ship sent along a route flies to the edge of its system and charges (6 s
+  for a corvette to 12 s for a battleship); it cannot move or fire meanwhile and can be hit, and a
+  new order cancels the charge. Ships sent together leave together, when the slowest has charged.
+  A charging ship wears a ring that fills, in the system and on the star map; its card says
+  "Charging jump to Sirius: 4 s".
+- **Jump inhibitors.** A building of the space age, on a planet: enemy ships in its star system
+  may leave only back the way they came, charge half as long again, and are told why when another
+  route is refused. Several do not stack; destroying the building frees them at once. A system so
+  held shows a six-sided ring on the star map and a faint boundary at its rim; hovering it explains.
+- **Interstellar trade.** From the age of abundance (**Interstellar Trade**), a space freighter
+  runs a route to an own or allied city in another star system: lift off, cross to the edge,
+  charge, jump, cross, land, deliver, and back; it pays by the whole path's length.
+
+Screenshots (scripts `tasks/70-*-script.txt`, universe seed 1, `--ai none`):
+`img/jump-fleet-charging.png` (a fleet at the edge, amber charge rings filling),
+`img/jump-charge-card.png` (one ship: "Charging jump to Tarf: 3 s"), `img/jump-fleet-in-transit.png`
+(the fleet on its way after the charge), `img/jump-chart-before.png` and `img/jump-chart-after.png`
+(a first voyage: the minimap's stub becomes a route, "Route charted between ..."),
+`img/jump-routes-sensors.png` and `img/jump-routes-survey.png` (the star map with Enhanced Sensors
+and with Automated Route Survey), `img/jump-interstellar-trade.png` (a freighter's route card:
+"Gamma Canis Minoris → Tarf, 1 jump (1 to chart)"), `img/jump-inhibitor-refused.png` (a route
+refused under an enemy inhibitor, the boundary at the rim, the help line) and
+`img/jump-inhibitor-star-map.png` (its mark), `img/jump-inhibitor-model.png` (the first-look model).
 
 ### Orbital craft, carriers and ground batteries (task 58)
 

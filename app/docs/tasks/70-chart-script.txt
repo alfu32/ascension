@@ -1,0 +1,10 @@
+# Task 70, replayed by --script in --universe mode (--ai none, seed 1) with --view starmap:
+# before the voyage the routes are faint stubs leaving the home system; a survey ship's first
+# voyage to the nearest neighbour (Tarf) charts its route (five times the usual transit), drawn
+# whole once it has arrived. Shoot early for "before", after tick 1000 for "after".
+0 grant-age age.expansion
+0 place-space 1 unit.survey_ship -238,-164
+2 ships
+3 cam wheel 10 650,310
+200 travel system1
+300 speed 400

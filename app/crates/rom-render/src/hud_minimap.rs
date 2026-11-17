@@ -585,13 +585,35 @@ pub fn space_marks(
         }
     } else {
         let positions = zoom.map_positions();
-        for &(a, b) in &scene.routes {
-            if let (Some(a), Some(b)) = (scene.system_index(a), scene.system_index(b)) {
-                marks.push(MapMark::Segment(
-                    to_area(positions[a]),
-                    to_area(positions[b]),
-                    [70, 90, 130, 255],
-                ));
+        // Charted routes whole; an uncharted one as a stub leaving each end the player has seen.
+        for &(id_a, id_b) in &scene.routes {
+            let (Some(a), Some(b)) = (scene.system_index(id_a), scene.system_index(id_b)) else {
+                continue;
+            };
+            let (pa, pb) = (positions[a], positions[b]);
+            let stub = |from: [f32; 3], to: [f32; 3]| {
+                [0, 1, 2].map(|i| from[i] + (to[i] - from[i]) * crate::space::ROUTE_STUB_SHARE)
+            };
+            match crate::space::route_sight(space, id_a, id_b) {
+                crate::space::RouteSight::Charted => {
+                    marks.push(MapMark::Segment(
+                        to_area(pa),
+                        to_area(pb),
+                        [70, 90, 130, 255],
+                    ));
+                }
+                crate::space::RouteSight::Stub { from_a, from_b } => {
+                    for (from, to, shown) in [(pa, pb, from_a), (pb, pa, from_b)] {
+                        if shown {
+                            marks.push(MapMark::Segment(
+                                to_area(from),
+                                to_area(stub(from, to)),
+                                [60, 75, 105, 200],
+                            ));
+                        }
+                    }
+                }
+                crate::space::RouteSight::Hidden => {}
             }
         }
         for (i, system) in scene.systems.iter().enumerate() {

@@ -71,7 +71,8 @@ pub use review::{Review, SheetView, WorldLabel};
 pub use rig::Activity;
 pub use rom_geo::SurfacePos;
 pub use space::{
-    ClaimState, ClaimView, ColonyView, ResourceBodyView, ShipView, SpaceSnapshot, TransitView,
+    ChargeView, ClaimState, ClaimView, ColonyView, HoldView, ResourceBodyView, ShipView,
+    SpaceSnapshot, TransitView,
 };
 pub use stats::RenderStats;
 pub use sun::{SunClock, SunSettings};

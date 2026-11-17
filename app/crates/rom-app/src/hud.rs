@@ -265,6 +265,67 @@ pub(crate) fn caravan_limit(world: &World, player: PlayerId) -> i64 {
 }
 
 /// Keeper income shares or the trader's accepted city names and payment.
+/// The name of the technology that enables the rule `key` (`tech_effect.rule_key`), for help
+/// and refusal lines; "a research" when no technology does.
+pub(crate) fn rule_tech_name(world: &World, key: &str) -> String {
+    let rules = world.rules();
+    rules
+        .tech_effects
+        .iter()
+        .find(|(_, effects)| {
+            effects
+                .iter()
+                .any(|e| e.effect == rom_rules::TechEffectKind::EnableRule && e.rule_key == key)
+        })
+        .map_or_else(
+            || "a research".to_owned(),
+            |(tech, _)| rules.def(*tech).name.clone(),
+        )
+}
+
+/// "Vega → Sirius, 2 jumps (1 to chart)" for a trade route between cities of two star systems.
+fn interstellar_line(
+    world: &World,
+    player: rom_sim::PlayerId,
+    home: rom_sim::EntityId,
+    target: rom_sim::EntityId,
+) -> Option<String> {
+    let system = |id| {
+        world
+            .entity(id)
+            .and_then(|e| world.body(e.pos.body))
+            .map(|b| b.system)
+    };
+    let (a, b) = (system(home)?, system(target)?);
+    if a == b {
+        return None;
+    }
+    let path = world.travel_path(player, a, b)?;
+    let name = |id: u32| {
+        world
+            .systems()
+            .iter()
+            .find(|s| s.id == id)
+            .map_or_else(|| format!("system {id}"), |s| s.name.clone())
+    };
+    let jumps = path.len() - 1;
+    let unknown = path
+        .windows(2)
+        .filter(|leg| world.charting(player, leg[0], leg[1]))
+        .count();
+    Some(format!(
+        "{} → {}, {jumps} jump{}{}",
+        name(a),
+        name(b),
+        if jumps == 1 { "" } else { "s" },
+        if unknown > 0 {
+            format!(" ({unknown} to chart)")
+        } else {
+            String::new()
+        }
+    ))
+}
+
 pub(crate) fn wealth_card(world: &World, entity: &rom_sim::Entity) -> Vec<String> {
     let rules = world.rules();
     let et = &rules.entity_types[&entity.type_id];
@@ -320,10 +381,17 @@ pub(crate) fn wealth_card(world: &World, entity: &rom_sim::Entity) -> Vec<String
                     },
                 )
             };
-            return vec![
+            let mut lines = vec![
                 format!("Route: {} → {}", label(route.home), label(route.target)),
                 format!("+{} per trip", route.per_trip_income),
             ];
+            lines.extend(interstellar_line(
+                world,
+                entity.owner,
+                route.home,
+                route.target,
+            ));
+            return lines;
         }
         return vec!["No route".into()];
     }

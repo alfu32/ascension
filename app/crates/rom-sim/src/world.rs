@@ -625,6 +625,7 @@ impl World {
         self.rallies.remove(&id);
         self.space.orbits.remove(&id);
         self.space.landed.remove(&id);
+        self.space.arrivals.remove(&id);
         self.capture.neutralised.remove(&id);
         self.capture.assimilating.remove(&id);
         self.capture.sieges.remove(&id);
@@ -932,6 +933,7 @@ impl World {
         self.update_captures();
         self.remember_touched();
         self.update_claims();
+        self.reveal_routes();
         self.pay_income();
         for surface in &mut self.surfaces {
             surface.pathing.end_tick();

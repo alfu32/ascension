@@ -1,0 +1,14 @@
+# Task 70, replayed by --script in --universe mode (--ai none, seed 1): player two's jump
+# inhibitor on player one's home planet holds player one's ships in the home system. Sending
+# them to a neighbour is refused with the reason; the system shows a red boundary at its rim,
+# the help line explains, and the star map marks the system (zoom out for it).
+0 grant-age age.expansion
+0 place 2 bld.jump_inhibitor @30,10
+0 place-space 1 unit.corvette -238,-166
+0 place-space 1 unit.corvette -238,-162
+0 place-space 1 unit.space_frigate -230,-164
+2 ships
+4 cam focus
+60 cam wheel 4 640,360
+200 travel system1
+300 cam wheel -32 640,360

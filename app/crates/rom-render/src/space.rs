@@ -131,6 +131,29 @@ pub struct TransitView {
     pub to: u32,
     /// Fraction of the leg flown, 0..=1.
     pub progress: f32,
+    /// Whether the voyage is charting a route its player did not know (it takes longer).
+    pub charting: bool,
+}
+
+/// A ship of player one or an ally charging its jump at the edge of its system.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ChargeView {
+    /// Entity id.
+    pub id: u32,
+    /// Fraction of the charge done, 0..=1.
+    pub fraction: f32,
+}
+
+/// A star system where a jump inhibitor stands that player one knows of.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HoldView {
+    /// The system.
+    pub system: u32,
+    /// The inhibitor's owner.
+    pub owner: u8,
+    /// Whether it holds player one's ships (an enemy's); otherwise it is player one's or an
+    /// ally's and holds their enemies.
+    pub enemy: bool,
 }
 
 /// What the render thread draws in space.
@@ -152,6 +175,13 @@ pub struct SpaceSnapshot {
     pub colonies: Vec<ColonyView>,
     /// The systems the player knows, ascending ids; `None` before the first report (all shown).
     pub known: Option<Vec<u32>>,
+    /// The routes the player has charted, as system pairs (lower id first), ascending; `None`
+    /// before the first report (all drawn).
+    pub charted: Option<Vec<(u32, u32)>>,
+    /// Ships of the player and its allies charging a jump, ascending by id.
+    pub charges: Vec<ChargeView>,
+    /// Systems with a jump inhibitor the player knows of, ascending by system.
+    pub holds: Vec<HoldView>,
 }
 
 impl SpaceSnapshot {
@@ -165,6 +195,152 @@ impl SpaceSnapshot {
         self.known
             .as_ref()
             .is_none_or(|known| known.binary_search(&id).is_ok())
+    }
+
+    /// Whether the player has charted the route between systems `a` and `b`.
+    pub fn charts(&self, a: u32, b: u32) -> bool {
+        self.charted
+            .as_ref()
+            .is_none_or(|known| known.binary_search(&(a.min(b), a.max(b))).is_ok())
+    }
+
+    /// How far the ship `id` has charged its jump, if it is charging.
+    pub fn charge_of(&self, id: u32) -> Option<f32> {
+        self.charges.iter().find(|c| c.id == id).map(|c| c.fraction)
+    }
+
+    /// The jump inhibitor the player knows of in system `id`: an enemy's first.
+    pub fn hold_of(&self, id: u32) -> Option<&HoldView> {
+        self.holds
+            .iter()
+            .filter(|h| h.system == id)
+            .max_by_key(|h| h.enemy)
+    }
+}
+
+/// How a route of the star map is drawn for the player.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum RouteSight {
+    /// Charted: the whole line.
+    Charted,
+    /// Not charted: a faint stub leaving each end the player has seen, this share of the way.
+    Stub {
+        /// A stub leaves the first system.
+        from_a: bool,
+        /// A stub leaves the second system.
+        from_b: bool,
+    },
+    /// Neither charted nor leaving a system the player has seen: not drawn.
+    Hidden,
+}
+
+/// Share of an uncharted route's length its stub covers.
+pub const ROUTE_STUB_SHARE: f32 = 0.33;
+
+/// How the route between systems `a` and `b` is shown in `snapshot`.
+pub fn route_sight(snapshot: &SpaceSnapshot, a: u32, b: u32) -> RouteSight {
+    if snapshot.charts(a, b) {
+        return RouteSight::Charted;
+    }
+    let (from_a, from_b) = (snapshot.knows(a), snapshot.knows(b));
+    if from_a || from_b {
+        RouteSight::Stub { from_a, from_b }
+    } else {
+        RouteSight::Hidden
+    }
+}
+
+/// An arc of a flat annulus in the plane `y = centre.y`: `fraction` of the turn from the
+/// direction `-z` (the top as the map is seen), clockwise seen from above.
+pub fn arc(
+    centre: [f32; 3],
+    radius: f32,
+    thickness: f32,
+    fraction: f32,
+    colour: [u8; 4],
+    segments: u32,
+) -> Vec<Tri3> {
+    let steps = ((segments as f32 * fraction.clamp(0.0, 1.0)).ceil() as u32).max(1);
+    let (inner, outer) = (radius - thickness / 2.0, radius + thickness / 2.0);
+    let span = fraction.clamp(0.0, 1.0) * std::f32::consts::TAU;
+    let point = |i: u32, r: f32| {
+        let a = -std::f32::consts::FRAC_PI_2 + span * i as f32 / steps as f32;
+        [centre[0] + r * a.cos(), centre[1], centre[2] + r * a.sin()]
+    };
+    if fraction <= 0.0 {
+        return Vec::new();
+    }
+    (0..steps)
+        .flat_map(|i| {
+            let (a, b, c, d) = (
+                point(i, inner),
+                point(i, outer),
+                point(i + 1, outer),
+                point(i + 1, inner),
+            );
+            [
+                Tri3 {
+                    v: [a, b, c],
+                    colour,
+                },
+                Tri3 {
+                    v: [a, c, d],
+                    colour,
+                },
+            ]
+        })
+        .collect()
+}
+
+/// The words for a system's jump inhibitor in the pointer's tooltip, if it has one.
+pub fn hold_text(hold: &HoldView) -> (String, String) {
+    if hold.enemy {
+        (
+            format!("Held by a jump inhibitor of player {}", hold.owner),
+            "Your ships here may leave only the way they came, after a longer charge · \
+             destroy or capture it to free them"
+                .to_owned(),
+        )
+    } else {
+        (
+            "Your jump inhibitor holds this system".to_owned(),
+            "Enemy ships here may leave only the way they came, after a longer charge".to_owned(),
+        )
+    }
+}
+
+/// [`hover_help`] with what the snapshot adds: a system with a jump inhibitor, or a star in
+/// one, says what it does.
+pub fn space_hover_help(
+    scene: &UniverseScene,
+    hover: SpaceHover,
+    loaded: Option<usize>,
+    ships: bool,
+    snapshot: &SpaceSnapshot,
+) -> (String, String) {
+    let help = hover_help(
+        scene,
+        hover,
+        loaded,
+        ships,
+        |id| snapshot.knows(id),
+        |id| snapshot.resource_body(id).cloned(),
+    );
+    let system = match hover {
+        SpaceHover::Target(Target::System(i)) => scene.systems.get(i).map(|s| s.id),
+        SpaceHover::Target(Target::Body(i)) => scene
+            .bodies
+            .get(i)
+            .filter(|b| b.kind == crate::universe::BodyViewKind::Star)
+            .map(|b| b.system),
+        _ => None,
+    };
+    match system.and_then(|id| snapshot.hold_of(id)) {
+        Some(hold) => {
+            let (held, what) = hold_text(hold);
+            (format!("{} · {held}", help.0), what)
+        }
+        None => help,
     }
 }
 
@@ -225,6 +401,10 @@ pub struct MapShipMark {
     pub bound_for: Option<usize>,
     /// The system it is in (an index), for ships in a system's space.
     pub system: Option<usize>,
+    /// For a ship in transit, whether it is charting its route.
+    pub charting: bool,
+    /// How far the least charged of its ships charging a jump has charged, if any is.
+    pub charge: Option<f32>,
 }
 
 /// The ship marks of the star map: every ship in transit at its place on its lane, heading for
@@ -254,6 +434,8 @@ pub fn map_ship_marks(
             heading: (length > 1e-3).then(|| way.map(|c| c / length)),
             bound_for: Some(b),
             system: None,
+            charting: transit.charting,
+            charge: None,
         });
     }
     let mut groups: std::collections::BTreeMap<(usize, u8), Vec<u32>> = Default::default();
@@ -272,6 +454,10 @@ pub fn map_ship_marks(
         let step = 1.0 + *n;
         *n += 1.0;
         let base = positions[system];
+        let charge = ids
+            .iter()
+            .filter_map(|id| snapshot.charge_of(*id))
+            .min_by(f32::total_cmp);
         marks.push(MapShipMark {
             ids,
             owner,
@@ -279,6 +465,8 @@ pub fn map_ship_marks(
             heading: None,
             bound_for: None,
             system: Some(system),
+            charting: false,
+            charge,
         });
     }
     marks
@@ -541,7 +729,9 @@ pub fn level_help(
             ),
         )),
         Level::StarMap => Some((
-            "Star map: scroll in on a system, or double-click it, to enter".to_owned(),
+            "Star map: scroll in on a system, or double-click it, to enter · short stubs are \
+             routes not yet charted: a first voyage charts them, slowly"
+                .to_owned(),
             format!("{turn} turns and tilts · {pan} pans · Home: your planet"),
         )),
     }
@@ -1008,6 +1198,7 @@ mod tests {
             from,
             to,
             progress,
+            charting: false,
         }
     }
 
@@ -1406,6 +1597,110 @@ mod tests {
                 ..
             }]
         ));
+    }
+
+    #[test]
+    fn uncharted_routes_are_stubs_from_the_systems_seen() {
+        let snapshot = SpaceSnapshot {
+            known: Some(vec![1, 2]),
+            charted: Some(vec![(1, 2)]),
+            ..SpaceSnapshot::default()
+        };
+        assert_eq!(route_sight(&snapshot, 2, 1), RouteSight::Charted);
+        assert_eq!(
+            route_sight(&snapshot, 2, 3),
+            RouteSight::Stub {
+                from_a: true,
+                from_b: false
+            }
+        );
+        assert_eq!(route_sight(&snapshot, 3, 4), RouteSight::Hidden);
+        // Before the first report every route is drawn.
+        assert_eq!(
+            route_sight(&SpaceSnapshot::default(), 3, 4),
+            RouteSight::Charted
+        );
+    }
+
+    #[test]
+    fn a_charge_ring_fills_with_the_charge() {
+        let empty = arc([0.0; 3], 10.0, 1.0, 0.0, [255; 4], 40);
+        let half = arc([0.0; 3], 10.0, 1.0, 0.5, [255; 4], 40);
+        let full = arc([0.0; 3], 10.0, 1.0, 1.0, [255; 4], 40);
+        assert!(empty.is_empty());
+        assert_eq!(half.len() * 2, full.len());
+        // It starts at the top (-z) and runs clockwise seen from above.
+        let first = half[0].v[0];
+        assert!(first[0].abs() < 1e-3 && first[2] < 0.0);
+    }
+
+    #[test]
+    fn a_held_system_says_what_its_inhibitor_does() {
+        let scene = sample_scene();
+        let id = scene.systems[1].id;
+        let snapshot = SpaceSnapshot {
+            holds: vec![HoldView {
+                system: id,
+                owner: 2,
+                enemy: true,
+            }],
+            ..SpaceSnapshot::default()
+        };
+        let (name, action) = space_hover_help(
+            &scene,
+            SpaceHover::Target(Target::System(1)),
+            None,
+            true,
+            &snapshot,
+        );
+        assert!(name.starts_with("S2 (star system)") && name.contains("jump inhibitor"));
+        assert!(action.contains("only the way they came"));
+        let (_, plain) = space_hover_help(
+            &scene,
+            SpaceHover::Target(Target::System(0)),
+            None,
+            true,
+            &snapshot,
+        );
+        assert!(!plain.contains("inhibitor"));
+    }
+
+    #[test]
+    fn star_map_marks_show_the_least_charged_ship_and_a_charting_voyage() {
+        let scene = sample_scene();
+        let positions: Vec<[f32; 3]> = scene
+            .systems
+            .iter()
+            .enumerate()
+            .map(|(i, _)| [i as f32 * 100.0, 0.0, 0.0])
+            .collect();
+        let (s1, s2) = (scene.systems[0].id, scene.systems[1].id);
+        let snapshot = SpaceSnapshot {
+            ships: vec![ship(1, None, 0.0, 0.0), ship(2, None, 1.0, 0.0)]
+                .into_iter()
+                .map(|s| ShipView { system: s1, ..s })
+                .collect(),
+            charges: vec![
+                ChargeView {
+                    id: 1,
+                    fraction: 0.75,
+                },
+                ChargeView {
+                    id: 2,
+                    fraction: 0.25,
+                },
+            ],
+            transits: vec![TransitView {
+                charting: true,
+                ..transit(9, s1, s2, 0.5)
+            }],
+            ..SpaceSnapshot::default()
+        };
+        let marks = map_ship_marks(&scene, &positions, &snapshot, [1.0, 0.0, 0.0]);
+        let fleet = marks.iter().find(|m| m.system == Some(0)).unwrap();
+        assert_eq!(fleet.charge, Some(0.25));
+        let voyage = marks.iter().find(|m| m.bound_for.is_some()).unwrap();
+        assert!(voyage.charting && voyage.charge.is_none());
     }
 
     #[test]

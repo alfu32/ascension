@@ -230,6 +230,35 @@ fn a_universe_match_with_a_ship_on_a_route() {
     assert!(outcome.tick > 0);
 }
 
+#[test]
+fn a_save_during_a_jump_charge() {
+    let rules = rules();
+    let mut w = universe(&rules);
+    let edge = w.system_edge(1, 2).unwrap();
+    let ship = w.spawn(id(&w, "unit.corvette"), P1, edge).unwrap();
+    let star = |w: &World, system| Pos {
+        body: w.space_of(system).unwrap(),
+        ..Pos::default()
+    };
+    // Out to system 2 and back: the way back starts with a charge at system 2's edge.
+    let to = star(&w, 2);
+    order(&mut w, ship, "travel", None, Some(to));
+    run_until(&mut w, 4000, |w| {
+        w.entity(ship)
+            .is_some_and(|e| e.pos.body == star(w, 2).body)
+    });
+    let back = star(&w, 1);
+    order(&mut w, ship, "travel", None, Some(back));
+    run_until(&mut w, 4000, |w| {
+        w.jump_charge(ship).is_some_and(|c| c.progress >= 20)
+    });
+    assert_eq!(w.arrived_from(ship), Some(1));
+    assert!(!w.known_routes(P1).is_empty());
+    let charge = w.jump_charge(ship).unwrap();
+    assert!(charge.progress < charge.required);
+    check("jump_charge", &rules, w, charge.required + 200, |_| {});
+}
+
 /// Two transports at another planet: one landed with its units out, one descending with
 /// its units still aboard.
 fn landing_world(

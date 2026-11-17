@@ -445,7 +445,10 @@ pub fn build_universe_match(
         .apply_space_placements(&mut world)
         .map_err(SetupError::Setup)?;
     for owner in &setup.colonies {
-        found_colony(rules, universe, &mut world, PlayerId(*owner))?;
+        found_colony(rules, universe, &mut world, PlayerId(*owner), false)?;
+    }
+    for owner in &setup.far_colonies {
+        found_colony(rules, universe, &mut world, PlayerId(*owner), true)?;
     }
     Ok(Match {
         world,
@@ -455,12 +458,14 @@ pub fn build_universe_match(
 }
 
 /// Test setup (`colony`): a finished city of `owner` on the habitable planet of player one's
-/// home system nearest it, the planet generated first.
+/// home system nearest it, the planet generated first. With `far` (`colony-far`), on the
+/// habitable planet nearest its star of the system one route from home whose star is nearest.
 fn found_colony(
     rules: &Arc<Rules>,
     universe: &Universe,
     world: &mut World,
     owner: PlayerId,
+    far: bool,
 ) -> Result<(), SetupError> {
     let fail = |what: &str| SetupError::Setup(format!("colony: {what}"));
     let home = world
@@ -471,10 +476,44 @@ fn found_colony(
         .map(|b| b.system)
         .zip(world.body_position(home))
         .ok_or_else(|| fail("home planet not in a system"))?;
+    let (system, at) = if far {
+        let neighbour = world
+            .routes()
+            .iter()
+            .filter_map(|r| {
+                let other = if r.system_a == system {
+                    r.system_b
+                } else if r.system_b == system {
+                    r.system_a
+                } else {
+                    return None;
+                };
+                world
+                    .bodies()
+                    .iter()
+                    .any(|b| {
+                        b.system == other
+                            && b.kind == rom_rules::BodyKind::Habitable
+                            && b.home_race.is_none()
+                    })
+                    .then_some((r.length, other))
+            })
+            .min()
+            .map(|(_, other)| other)
+            .ok_or_else(|| fail("no neighbouring system with a planet"))?;
+        let star = world
+            .space_of(neighbour)
+            .and_then(|s| world.body_position(s))
+            .ok_or_else(|| fail("no star"))?;
+        (neighbour, star)
+    } else {
+        (system, at)
+    };
     let body = world
         .bodies()
         .iter()
         .filter(|b| b.system == system && b.kind == rom_rules::BodyKind::Habitable && b.id != home)
+        .filter(|b| !far || b.home_race.is_none())
         .filter_map(|b| Some((at.distance(world.body_position(b.id)?), b.id)))
         .min()
         .map(|(_, id)| id)
