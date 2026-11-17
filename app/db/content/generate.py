@@ -245,7 +245,7 @@ def generate():
             definition('entity_type', 'bld.' + key, key.replace('_', ' ').title())
     for site in SITES:
         if site != 'fusion_plant':
-            definition('entity_type', 'bld.auto_' + site, 'Automated ' + site.replace('_', ' ').title())
+            definition('entity_type', auto_key(site), auto_name(site))
     for _, _, steps in sorted(LINES, key=lambda line: line[0] != 'civilian'):
         for step in steps.split('|'):
             key, name, _ = step.split(':')
@@ -493,7 +493,7 @@ def generate():
     for site, (resource, slots, _, _) in SITES.items():
         if site == 'fusion_plant':
             continue
-        old, new = 'bld.' + site, 'bld.auto_' + site
+        old, new = 'bld.' + site, auto_key(site)
         base = next(b for b in BUILDINGS if b[0] == site)
         row('entity_type', id=Ref(new), **{'class': 'building'}, ui_group='economic', hp=base[5] * 18 // 10,
             armor=3, armor_class_id=Ref('structure', 'armor_class'), los=building_sight(8, base[7]), footprint_w=base[7], footprint_h=base[7],
@@ -502,7 +502,7 @@ def generate():
         tag(new, 'building', 'mechanical', 'gather')
         copy_components(old, new)
         sql.append(f'UPDATE et_gather_site SET slots_base=0,slots_max=0,slots_per_node=0,self_income={10 * (slots or 10)} WHERE entity_type_id={val(Ref(new))};')
-        upgrade(old, new, 'Automated ' + site.replace('_', ' ').title(), 8, site, 350, {'metal': 200, 'knowledge': 200}, 'upgrade')
+        upgrade(old, new, auto_name(site), 8, site, 350, {'metal': 200, 'knowledge': 200}, 'upgrade')
         need(new, 'age.automation')
         for builder in ('citizen', 'worker_drone'):
             produce('unit.' + builder, new, 'construct', 'economic')
@@ -534,7 +534,7 @@ def generate():
                 sql.append(f"INSERT OR IGNORE INTO production SELECT {val(Ref('bld.' + later))},product_def_id,mode,ui_page,ui_col,ui_row FROM production WHERE producer_type_id={val(Ref('bld.' + key))};")
     for site in SITES:
         if site != 'fusion_plant':
-            sql.append(f"INSERT INTO production SELECT {val(Ref('bld.auto_' + site))},product_def_id,mode,ui_page,ui_col,ui_row FROM production WHERE producer_type_id={val(Ref('bld.' + site))};")
+            sql.append(f"INSERT INTO production SELECT {val(Ref(auto_key(site)))},product_def_id,mode,ui_page,ui_col,ui_row FROM production WHERE producer_type_id={val(Ref('bld.' + site))};")
     for key, requirement, group in prerequisites:
         row('prerequisite', def_id=Ref(key), requires_def_id=Ref(requirement), alt_group=group)
     sql.extend(star_sql(val))
@@ -719,7 +719,7 @@ def big_ships_on_the_planet(row, tag, emit):
 # (percent), and what its governor keeps standing in its area: site type and cap.
 COLONY_INCOME = 30
 COLONY_SITE_SHARE_PCT = 10
-COLONY_SITES = [('auto_farm', 5), ('auto_woodcutter_camp', 5), ('auto_university', 5)]
+COLONY_SITES = [('auto_farm', 5), ('auto_woodcutter_camp', 5), ('auto_lab', 5)]
 # How fast a colony builds its own sites, percent of a worker's pace.
 COLONY_BUILD_PCT = 200
 # What an automated site costs to build (owner, 2026-11-17: a governor must really wait when its
@@ -727,20 +727,18 @@ COLONY_BUILD_PCT = 200
 AUTO_SITE_PRICES = {
     'auto_farm': {'metal': 200, 'timber': 100},
     'auto_woodcutter_camp': {'metal': 200, 'timber': 100},
-    'auto_university': {'metal': 300, 'knowledge': 150},
+    'auto_lab': {'metal': 300, 'knowledge': 150},
 }
 
 
 def automated_colonies(definition, row, tag, need, produce, cost, tech, emit):
     """Task 73: the automated colony of the abundance age, a city outside the city limit
     whose governor (rom-ai) keeps automated farms, woodcutter camps and research labs standing
-    around it; the automated university renamed the Automated Research Lab; the orders that
+    around it; the automated university is the Auto Lab; the orders that
     pause and resume a governor. Defined last so the ids of earlier content stay stable."""
     emit("INSERT INTO order_kind(key,needs,target,note) VALUES "
          "('pause_governor','colony','none','an automated colony''s governor stops placing and paying for sites; applied at once, the queue stays'), "
          "('resume_governor','colony','none','the governor of an automated colony works again; applied at once');")
-    emit(f"UPDATE def SET name='Automated Research Lab' WHERE key='bld.auto_university';")
-    emit(f"UPDATE def SET name='Upgrade to Automated Research Lab' WHERE key='tech.up.auto_university';")
     age = AGES.index('abundance')
     research = 'tech.auto_colonies'
     tech(research, 'Automated Colonies', age, 'city', 300 + age * 50,
@@ -829,6 +827,21 @@ def orbital_bombardment(weapon, emit):
          f"armor_class_id={val(Ref(BATTERY['armour'], 'armor_class'))} WHERE id={val(Ref(full))};")
     emit(f"UPDATE et_weapon SET damage={BATTERY['damage']},range_max={BATTERY['reach'] * 1000},"
          f"cooldown_ticks={BATTERY['reload']} WHERE entity_type_id={val(Ref(full))};")
+
+
+# Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"
+# (owner 2026-11-17: the automated university is the Auto Lab).
+AUTO_SITE_NAMES = {'university': ('auto_lab', 'Auto Lab')}
+
+
+def auto_key(site):
+    """Definition key of the automated version of a gather site."""
+    return 'bld.' + AUTO_SITE_NAMES.get(site, ('auto_' + site,))[0]
+
+
+def auto_name(site):
+    """Display name of the automated version of a gather site."""
+    return AUTO_SITE_NAMES.get(site, (None, 'Automated ' + site.replace('_', ' ').title()))[1]
 
 
 def main():

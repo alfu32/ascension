@@ -307,7 +307,8 @@ same planet as the freighter"), `img/trade-route-card.png` (route, pay and next 
   Lab 3/5") and the governor's state ("Governor on: building Lab", "needs 200 Metal", "Governor
   paused"); its Order tab has the **Pause governor** / **Resume governor** switch, and its Build
   tab lets the player place a site of the three kinds by hand.
-- **The lab.** The automated university is now called the **Automated Research Lab**. A
+- **The lab.** The automated university is now the **Auto Lab** (`bld.auto_lab`; named the
+  Automated Research Lab with task 73, renamed by the owner on 2026-11-17). A
   university still becomes one through the lab's upgrade research; and once Automated Colonies
   is researched a lab may also be built directly beside any city, one per city (owner,
   2026-11-17), while in a colony's area the governor builds five. **The survey ship** has a line of its own: the spaceport trains it beside the

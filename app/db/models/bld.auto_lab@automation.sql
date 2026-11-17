@@ -1,8 +1,8 @@
--- bld.auto_university@automation~lab: Automated Research Lab (alternative) (mesh.auto_university_lab_automation)
+-- bld.auto_lab@automation: Auto Lab (mesh.auto_lab_automation)
 -- One composed model; loaded after seed.sql by `rom build-rules` and the game.
 -- Edit here or in Meshcraft: docs/models-in-meshcraft.md.
-INSERT INTO def(kind,key,name) VALUES ('mesh','mesh.auto_university_lab_automation','Automated Research Lab (alternative)');
-INSERT INTO mesh(id,generator,params,baked) SELECT id,'composed','{}',1 FROM def WHERE key='mesh.auto_university_lab_automation';
+INSERT INTO def(kind,key,name) VALUES ('mesh','mesh.auto_lab_automation','Auto Lab');
+INSERT INTO mesh(id,generator,params,baked) SELECT id,'composed','{}',1 FROM def WHERE key='mesh.auto_lab_automation';
 WITH v(name,shape,mat,team,attach,params) AS (VALUES
   ('base','plinth','mat.paving',0,'','{"w":3.7,"d":3.7,"h":0.1,"steps":1}'),
   ('hall','box','mat.white_composite',0,'','{"x":-0.45,"y":0.1,"z":-0.95,"w":2.5,"d":1.6,"h":1.4,"windows":4,"window_w":0.34,"window_h":0.5,"window_y":0.55,"side_windows":2,"opening":"#3a5a68"}'),
@@ -25,6 +25,6 @@ WITH v(name,shape,mat,team,attach,params) AS (VALUES
   ('mast_light','box','mat.signal_red',0,'','{"x":1.55,"y":2.0,"z":0.3,"w":0.08,"d":0.08,"h":0.08,"far":0}'),
   ('banner','banner','mat.cloth',1,'','{"x":-1.55,"y":0.1,"z":0.6,"h":2.2,"fw":0.45,"fh":0.62,"pole_colour":"#e8ecec"}'))
 INSERT INTO mesh_part(mesh_id,name,shape,material_id,team,attach,params)
- SELECT (SELECT id FROM def WHERE key='mesh.auto_university_lab_automation'), v.name, v.shape, (SELECT id FROM def WHERE key=v.mat), v.team, v.attach, v.params FROM v;
-INSERT INTO entity_visual(entity_type_id,faction_id,age_id,mesh_id,material_id,scale_pct,candidate) VALUES
- ((SELECT id FROM def WHERE key='bld.auto_university'), NULL, (SELECT id FROM def WHERE key='age.automation'), (SELECT id FROM def WHERE key='mesh.auto_university_lab_automation'), (SELECT id FROM def WHERE key='mat.white_composite'), 100, 'lab');
+ SELECT (SELECT id FROM def WHERE key='mesh.auto_lab_automation'), v.name, v.shape, (SELECT id FROM def WHERE key=v.mat), v.team, v.attach, v.params FROM v;
+INSERT INTO entity_visual(entity_type_id,faction_id,age_id,mesh_id,material_id,scale_pct) VALUES
+ ((SELECT id FROM def WHERE key='bld.auto_lab'), NULL, (SELECT id FROM def WHERE key='age.automation'), (SELECT id FROM def WHERE key='mesh.auto_lab_automation'), (SELECT id FROM def WHERE key='mat.white_composite'), 100);

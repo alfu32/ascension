@@ -177,8 +177,10 @@ arm over crates and a flag; and an **alternative look for the Automated Research
 fume stacks, a particle ring with a glowing detector laid on the ground in front of it, a glass
 greenhouse dome and a mast. The alternative is a **review candidate** (`entity_visual.candidate =
 'lab'`, `docs/database.md` §10a): the gallery, its manifest and the export show it under that id,
-no match draws it, and the approved look stays the default and stays locked. Adopting it is the
-owner's call: drop the `candidate` value in its file and retire the approved row.
+no match draws it, and the approved look stays the default and stays locked. The owner approved
+it in review round 12 (2026-11-17): it is now the lab's only look, `bld.auto_lab@automation`
+(the building was renamed the Auto Lab the same day), locked in `approved.toml`; the earlier
+look was retired.
 
 ## Budgets
 
