@@ -16,8 +16,8 @@ interstellar) commerce vessels work."
 
 1. **Size in the planet view.** Every starship class (survey ship, corvette,
    frigate, cruiser, battleship, carrier, transport, freighter; not orbital
-   craft or the satellite) is drawn 7–10 times its present size in the
-   planet view, in orbit and landed, through `et_view_scale.planet_pct`
+   craft or the satellite) is drawn 2–3 times its 0.0.71 size in the
+   planet view (owner 2026-11-17, after seeing 7–10×: too big), in orbit and landed, through `et_view_scale.planet_pct`
    (data). Keep the classes in size order. Fix the existing mismatch task 69
    found: the drawn model, its pick box, health bar and hull length must all
    use the same size (`scale_ship_view` scales `ModelRef.size`, which
