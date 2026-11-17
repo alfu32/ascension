@@ -134,7 +134,9 @@ fn tile_kind(id: DefId, base: BaseTerrains) -> TileKind {
 }
 
 /// How large each ship type is drawn in the space views, from the `et_view_scale` rows, by
-/// entity type (the `kind` of the renderer's entity and ship views).
+/// entity type (the `kind` of the renderer's entity and ship views). A starship keeps its
+/// planet size when it lands (task 72); an orbital craft (`et_movement.climb_ticks`) comes
+/// down into the air at its true size.
 pub fn ship_scales(rules: &Rules) -> ShipScales {
     ShipScales(
         rules
@@ -143,7 +145,16 @@ pub fn ship_scales(rules: &Rules) -> ShipScales {
             .filter_map(|(id, et)| {
                 let row = et.view_scale.as_ref()?;
                 let kind = u16::try_from(id.0).ok()?;
-                Some((kind, ShipScale::from_pct(row.planet_pct, row.system_pct)))
+                let scale = ShipScale::from_pct(row.planet_pct, row.system_pct);
+                let craft = et.movement.as_ref().is_some_and(|m| m.climb_ticks > 0);
+                Some((
+                    kind,
+                    if craft {
+                        scale.true_size_on_the_ground()
+                    } else {
+                        scale
+                    },
+                ))
             })
             .collect(),
     )
@@ -447,10 +458,20 @@ mod tests {
         for (kind, scale) in &scales.0 {
             let et = &rules.entity_types[&DefId(u32::from(*kind))];
             assert!(et.movement.is_some(), "{kind}");
-            // Two to five times their true size above a planet, a quarter to a half of the
-            // reference size on a system's plane.
-            assert!((2.0..=5.0).contains(&scale.planet), "{kind}: {scale:?}");
+            // Two to three times their true size above a planet (task 72: the starships as
+            // large on the ground; orbital craft come down at their own size), a quarter to a
+            // half of the reference size on a system's plane.
+            assert!((2.0..=3.2).contains(&scale.planet), "{kind}: {scale:?}");
             assert!((0.25..=0.5).contains(&scale.system), "{kind}: {scale:?}");
+            let craft = et.movement.as_ref().is_some_and(|m| m.climb_ticks > 0);
+            if et
+                .movement
+                .as_ref()
+                .is_some_and(|m| m.landing_radius.is_some())
+            {
+                assert!((2.0..=3.0).contains(&scale.planet), "{kind}: {scale:?}");
+            }
+            assert_eq!(scale.landed, if craft { 1.0 } else { scale.planet });
         }
         // The sizes differ by ship class, and a type without a row keeps the default.
         let mut sizes: Vec<i64> = scales
@@ -462,5 +483,35 @@ mod tests {
         sizes.dedup();
         assert!(sizes.len() >= 3, "{sizes:?}");
         assert_eq!(scales.of(u16::MAX), ShipScale::default());
+    }
+
+    /// The ground a landed ship covers in the simulation (`et_movement.landing_radius`) is the
+    /// hull the planet view draws: half its model's extent across or along at its planet scale.
+    #[test]
+    fn landing_radius_is_the_drawn_hull() {
+        let rules = load_rules().expect("rules");
+        let book = ModelBook::new(&rules);
+        let scales = ship_scales(&rules);
+        let mut checked = 0;
+        for (id, et) in &rules.entity_types {
+            let Some(radius) = et.movement.as_ref().and_then(|m| m.landing_radius) else {
+                continue;
+            };
+            let entry = book
+                .entries
+                .iter()
+                .find(|e| e.entity == *id)
+                .unwrap_or_else(|| panic!("{id:?} has a landing radius and no model"));
+            let size = entry.size();
+            let scale = scales.of(u16::try_from(id.0).unwrap());
+            let drawn = size[0].max(size[2]) / 2.0 * scale.landed * 1000.0;
+            assert!(
+                (radius as f32 - drawn).abs() <= drawn * 0.01 + 100.0,
+                "{}: landing radius {radius}, drawn {drawn}",
+                entry.id
+            );
+            checked += 1;
+        }
+        assert!(checked >= 3, "the ships that land have a landing radius");
     }
 }

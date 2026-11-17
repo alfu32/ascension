@@ -1,0 +1,12 @@
+# Task 72: as 72-trade-button-script.txt, with the pointer on the home city: it is no partner,
+# and the help line says why.
+0 grant-age age.expansion
+0 grant-tech tech.civic.1
+0 colony 1
+0 place-orbit 1 unit.space_freighter @40,30
+1 speed 400
+300 click trader1
+302 hud tab 1
+304 hud slot 8
+306 cam point 640,240
+310 speed 1

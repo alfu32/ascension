@@ -167,8 +167,9 @@ system space or travelling leaves orbit; an orbit order to another habitable
 body enters its orbit when the ship arrives. Resource-body orbit orders
 continue holding the ship near the resource marker.
 
-The planet view places these ships eight tiles above their subpoint, with
-raised hulls, selection rings and hit boxes. The ship's ground sight follows
+The planet view places these ships above their subpoint, with raised hulls,
+selection rings and hit boxes: eight tiles at first, since task 72 higher the
+bigger the ship (below). The ship's ground sight follows
 that subpoint. `et_weapon.orbit_only` weapons can hit their declared surface
 layers only while orbiting that same body; their ranges are measured from
 the subpoint to the target footprint. The seeded corvette and later combat
@@ -190,8 +191,8 @@ orbital ship only when they have an `orbit` target layer (task 58, below).
   great circle through where it is and the clicked point, fighting like an
   attack-move, until given another order; the path is drawn while it is selected.
 - **Land** (order panel, for carriers, freighters and craft in orbit) comes straight
-  down onto the point below, or says why it cannot (water, rough ground, a building,
-  an enemy city). Lift off keeps its button.
+  down onto the point below, or says why it cannot (a building or a mountain under the
+  hull, too much water, an enemy city; task 72). Lift off keeps its button.
 - **Boarding only on the ground**: troops board and leave a ship only once it has
   landed; craft keep boarding and launching from a carrier in orbit.
 - **Space freighter** (spaceport, starfaring): right-click a city on another planet of
@@ -243,6 +244,44 @@ and with Automated Route Survey), `img/jump-interstellar-trade.png` (a freighter
 "Gamma Canis Minoris → Tarf, 1 jump (1 to chart)"), `img/jump-inhibitor-refused.png` (a route
 refused under an enemy inhibitor, the boundary at the rim, the help line) and
 `img/jump-inhibitor-star-map.png` (its mark), `img/jump-inhibitor-model.png` (the first-look model).
+
+### Big starships on the planet (task 72)
+
+- **Size.** In the planet view every starship is drawn two to three times its own size, in
+  orbit and landed (survey ship 2×, corvette 2.1×, frigate and freighter 2.3×, transport
+  2.4×, cruiser 2.6×, carrier 2.8×, battleship 3×): a landed transport is about 8 tiles long,
+  a battleship in orbit about 22. Its pick box, ring, health bar and the hand-over to the
+  system view all use that size. Orbital craft stay three times their size in orbit.
+- **Landing.** A landed ship covers the ground under its hull (a disc of its drawn half
+  length). That ground may not hold a building or a mountain; it may be forest (the ship stands
+  on the trees) and it may be water in part, as long as a fifth of it is ground. Troops come
+  out round the hull and board at its edge.
+- **Hover height.** Ships hold over a planet at 8 tiles plus 0.6 of their drawn length (a
+  survey ship about 12 tiles up, a battleship about 26); where a smaller ship of another class
+  holds under a bigger one, the bigger one rises above it, so a mixed fleet over one point
+  stacks in height, smallest lowest; ships of one class over one point spread sideways by their
+  size. Presentation only: the simulation keeps the ground point, and ground fire is measured
+  to it.
+- **Freighters.** Select a space freighter (or a caravan) and press **Trade route**: the help
+  line says what to pick ("Pick a city on another planet of this system", or also another star
+  system once Interstellar Trade is researched), the cities it could trade with are ringed in
+  gold, and hovering any other city says why not (the same planet, no city of yours where the
+  freighter is, another system before Interstellar Trade). Click the city. The card then shows
+  the route ("Route: City 1 → City 3, +188 per trip"), every system on an interstellar path,
+  and the next leg ("Next: land beside City 3"). The freighter lifts off, flies to the other
+  planet (charging and jumping along the routes if it lies in another system), lands beside
+  the city and is paid on arrival, then goes back.
+
+Screenshots (scripts `tasks/72-*-script.txt`, universe seed 1, `--ai none`):
+`img/big-ships-over-city.png` (every class over the city, stacked smallest lowest),
+`img/big-ships-stack.png` (the same fleet at the globe's edge, seen from the side),
+`img/big-ships-landed-forest.png` (a landed transport standing on forest),
+`img/big-ships-freighter-coast.png` (a freighter landed half over the sea beside a coastal city),
+`img/big-ships-morph.png` (the hand-over from orbit to the system view at 10, 12 and 14 wheel
+steps), `img/trade-route-button.png` (the armed Trade route button and its hint),
+`img/trade-route-refused.png` (the pointer on the home city: "No trade route to City 1: the
+same planet as the freighter"), `img/trade-route-card.png` (route, pay and next leg) and
+`img/trade-route-path.png` (an interstellar route: every system on the path).
 
 ### Orbital craft, carriers and ground batteries (task 58)
 

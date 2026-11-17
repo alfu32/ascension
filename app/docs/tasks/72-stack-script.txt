@@ -1,0 +1,16 @@
+# Task 72: the same fleet over a point 60 tiles east of the city, at the edge of the globe as
+# the camera looks at the city: the stack seen from the side, small ships low, big ones high.
+0 grant-age age.galactic
+0 place-orbit 1 unit.survey_ship @60,0
+0 place-orbit 1 unit.survey_ship @60,0
+0 place-orbit 1 unit.corvette @60,0
+0 place-orbit 1 unit.corvette @60,0
+0 place-orbit 1 unit.space_frigate @60,0
+0 place-orbit 1 unit.space_freighter @60,0
+0 place-orbit 1 unit.transport_ship @60,0
+0 place-orbit 1 unit.space_cruiser @60,0
+0 place-orbit 1 unit.carrier @60,0
+0 place-orbit 1 unit.battleship @60,0
+1 speed 400
+10 cam wheel -6 640,400
+400 speed 1

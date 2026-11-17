@@ -295,11 +295,15 @@ fn units_board_at_the_spaceport_land_on_another_planet_and_found_a_city() {
         assert_eq!(w.altitude_pct(ship), None);
         assert!(w.passengers(ship).is_empty());
         let landed = w.hash();
+        // They come out around the hull (task 72), not under it.
+        let hull = w.landing_radius(ship) as u64;
+        assert!(hull > 0);
         for unit in &units {
             let e = w.entity(*unit).unwrap();
             assert_eq!(e.container_id, None);
             assert_eq!(e.pos.body, NEIGHBOUR);
-            assert!(w.distance(e.pos, site).unwrap() <= 7_500);
+            let d = w.distance(e.pos, site).unwrap();
+            assert!(d > hull && d <= hull + 7_500, "{d}");
         }
         // Every passenger has its own tile.
         let mut tiles: Vec<_> = units
@@ -380,14 +384,14 @@ fn landed_troops_fight_and_take_a_city_on_another_planet() {
             w.check_landing(ship, at(NEIGHBOUR, 24_500, 32_500)),
             Err(SimError::CannotLand)
         );
-        // So is water and forest.
+        // So is open water; forest is not (task 72: the ship stands on the trees).
         let water = Pos {
             face: 1,
             ..at(NEIGHBOUR, 32_500, 32_500)
         };
         assert_eq!(w.check_landing(ship, water), Err(SimError::CannotLand));
         let forest = Pos { face: 2, ..water };
-        assert_eq!(w.check_landing(ship, forest), Err(SimError::CannotLand));
+        assert!(w.check_landing(ship, forest).is_ok());
         let site = land(&mut w, ship, at(NEIGHBOUR, 45_500, 32_500));
         assert!(
             w.distance(site, at(NEIGHBOUR, 20_500, 32_500))

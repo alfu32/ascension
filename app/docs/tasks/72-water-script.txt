@@ -1,0 +1,14 @@
+# Task 72, replayed by --script in universe mode (--ai none, seed 1): a city on the coast west
+# of the home city, and a space freighter that comes down beside it partly over the sea (about
+# half its footprint water; at least a fifth must be ground). Test-only setup lines
+# first.
+0 grant-age age.starfaring
+0 place 1 bld.city @-30,30
+0 place-orbit 1 unit.space_freighter @-55,28
+1 speed 400
+300 ships
+302 hud tab 1
+304 hud slot 6
+306 cam focus
+400 cam wheel 1 640,400
+500 speed 1

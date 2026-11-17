@@ -245,6 +245,34 @@ impl World {
         self.orbit(unit.id).map(|orbit| orbit.pos)
     }
 
+    /// The route a `trade` order of `player`'s `trader` to `city` would run, or why `submit`
+    /// would refuse it: the same check, without an order (for the interface's target hints).
+    pub fn trade_offer(
+        &self,
+        player: PlayerId,
+        trader: EntityId,
+        city: EntityId,
+    ) -> Result<TradeRoute, SimError> {
+        let unit = self
+            .entity(trader)
+            .ok_or(SimError::UnknownExecutor(trader))?;
+        if unit.owner != player {
+            return Err(SimError::ForeignOwner(trader));
+        }
+        let route = self.validate_trade(&Command {
+            player,
+            executor: trader,
+            kind: "trade".into(),
+            subject: None,
+            target_entity: Some(city),
+            target_pos: None,
+            queue: false,
+        })?;
+        let mut info = route.info;
+        info.per_trip_income = self.delivery_income(player, route.resource, info.per_trip_income);
+        Ok(info)
+    }
+
     pub(crate) fn validate_trade(&self, c: &Command) -> Result<RouteState, SimError> {
         let unit = self.entity(c.executor).expect("executor");
         let trader = self.rules.entity_types[&unit.type_id]
@@ -462,7 +490,9 @@ impl World {
         order.progress_ticks = order.progress_ticks.saturating_add(1);
         if self.is_landed(unit) {
             let here = self.entity(unit).expect("freighter").pos;
-            if here.body == at.body && self.geo(at.body).within(here, at, DOCK_REACH) {
+            // A big ship lands with its hull's edge near the city, its centre farther out.
+            let reach = DOCK_REACH + self.landing_radius(unit);
+            if here.body == at.body && self.geo(at.body).within(here, at, reach) {
                 if route.started {
                     self.pay_delivery(order, &route, partner);
                 }

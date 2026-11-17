@@ -154,7 +154,41 @@ impl World {
                     .is_some_and(|t| t.runs_routes))
     }
 
+    /// Radius in milli-tiles of the ground a landed ship covers (task 72): its stat
+    /// `landing_radius`, from `et_movement.landing_radius`; 0, the tile below only, for a type
+    /// without one.
+    pub fn landing_radius(&self, ship: EntityId) -> i64 {
+        let Some(e) = self.entity(ship) else {
+            return 0;
+        };
+        let base = self.rules.entity_types[&e.type_id]
+            .movement
+            .as_ref()
+            .and_then(|m| m.landing_radius)
+            .unwrap_or(0);
+        self.effective_stat(ship, "landing_radius", base).max(0)
+    }
+
+    /// The square around a landed ship's landing disc: where its passengers come out and where
+    /// troops board it (at least its own footprint).
+    pub(crate) fn landed_bounds(&self, ship: &Entity) -> [i64; 4] {
+        let own = footprint(&self.rules.entity_types[&ship.type_id], ship.pos);
+        let r = self.landing_radius(ship.id);
+        let (x, y) = (i64::from(ship.pos.x), i64::from(ship.pos.y));
+        [
+            own[0].min(x - r),
+            own[1].min(y - r),
+            own[2].max(x + r),
+            own[3].max(y + r),
+        ]
+    }
+
     /// Why `ship` cannot come down at `at`, in words for its player; `None` when it can.
+    ///
+    /// The ship covers the tiles whose centres lie within its [`World::landing_radius`] of the
+    /// centre of the tile below `at` (owner, 2026-11-17): none may hold a building or have a
+    /// terrain tagged `no_landing` (mountains); forest is fine; water is fine as long as at least
+    /// `space.landing_land_pct` of the tiles are ground. Not inside an enemy city's radius.
     pub fn landing_problem(&self, ship: EntityId, at: Pos) -> Option<&'static str> {
         let Some(e) = self.entity(ship) else {
             return Some("that ship is gone");
@@ -171,17 +205,38 @@ impl World {
         else {
             return Some("there is no ground there");
         };
-        let terrain = &self.rules.terrains[&surface.map.terrain[index]];
-        if terrain.layer != Layer::Ground {
-            return Some("the ground below is water");
-        }
-        if !terrain.buildable {
-            return Some("the ground below is too rough to land on");
-        }
-        if surface.pathing.occupancy[index] != 0 {
-            return Some("a building stands below");
-        }
         let centre = surface.geo.index_centre(index);
+        let rough = self
+            .rules
+            .tags
+            .values()
+            .find(|t| t.key == "no_landing")
+            .map(|t| t.id);
+        let (mut tiles, mut ground) = (0_i64, 0_i64);
+        for i in surface
+            .geo
+            .disc(centre, self.landing_radius(ship))
+            .flatten()
+        {
+            let terrain_id = surface.map.terrain[i];
+            let terrain = &self.rules.terrains[&terrain_id];
+            if surface.pathing.occupancy[i] != 0 {
+                return Some("a building stands below");
+            }
+            if rough.is_some_and(|tag| self.rules.has_tag(terrain_id, tag)) {
+                return Some("the ground below is too rough to land on");
+            }
+            match terrain.layer {
+                Layer::Ground => ground += 1,
+                Layer::Fluid => {}
+                _ => return Some("there is no ground there"),
+            }
+            tiles += 1;
+        }
+        let share = self.rules.constant("space.landing_land_pct").unwrap_or(100);
+        if tiles == 0 || ground * 100 < share * tiles {
+            return Some("too little ground below: the ship would stand in water");
+        }
         let hostile = self.territory.cities.iter().any(|id| {
             self.entity(*id).is_some_and(|city| {
                 city.pos.body == orbit.body
@@ -208,12 +263,13 @@ impl World {
     }
 
     /// The landing point for `ship` nearest `near` on the planet it orbits, ties to the lower
-    /// tile index; `None` when nothing within twelve tiles is open.
+    /// tile index; `None` when nothing within twelve tiles of the edge of its landing disc is
+    /// open.
     pub fn landing_site(&self, ship: EntityId, near: Pos) -> Option<Pos> {
         let surface = self.surface(near.body)?;
         let geo = &surface.geo;
         let mut candidates: Vec<(u128, usize)> = geo
-            .disc(near, LANDING_SEARCH)
+            .disc(near, LANDING_SEARCH + self.landing_radius(ship))
             .flatten()
             .filter_map(|i| Some((geo.distance_squared(near, geo.index_centre(i))?, i)))
             .collect();
@@ -275,12 +331,11 @@ impl World {
     }
 
     /// Where `unit` boards `ship`: beside the ship when it has landed on the unit's planet, or
-    /// at the nearest own spaceport below it when it orbits that planet. Position and footprint.
+    /// at the nearest own spaceport below it when it orbits that planet. Position and footprint
+    /// (a landed ship's whole landing disc: troops walk up to its edge).
     fn boarding_point(&self, unit: &Entity, ship: &Entity) -> Option<(Pos, [i64; 4])> {
-        (self.is_landed(ship.id) && ship.pos.body == unit.pos.body).then(|| {
-            let et = &self.rules.entity_types[&ship.type_id];
-            (ship.pos, footprint(et, ship.pos))
-        })
+        (self.is_landed(ship.id) && ship.pos.body == unit.pos.body)
+            .then(|| (ship.pos, self.landed_bounds(ship)))
     }
 
     fn room_for(&self, ship: EntityId, unit: DefId) -> bool {
@@ -461,10 +516,12 @@ impl World {
                 .map(|m| m.movement_class_id);
             let surface = self.surf(at.body);
             let geo = &surface.geo;
-            // Open ground first, then any tile the unit can stand on (a forest), nearest first.
+            // Open ground first, then any tile the unit can stand on (a forest), nearest first;
+            // never under the ship's hull.
             let tile = class.and_then(|class| {
                 geo.footprint_surroundings(at.face, bounds, UNLOAD_REACH)
                     .filter(|i| !used.contains(i))
+                    .filter(|i| !self.under_hull(carrier, at, *i))
                     .filter(|i| surface.pathing.passable(class, geo.tile_at(*i), None))
                     .map(|i| {
                         let open = self.rules.terrains[&surface.map.terrain[i]].buildable;
@@ -498,19 +555,36 @@ impl World {
             return false;
         }
         let ship = self.entity(carrier).expect("landed carrier");
-        let (at, bounds) = (
-            ship.pos,
-            footprint(&self.rules.entity_types[&ship.type_id], ship.pos),
-        );
+        let (at, bounds) = (ship.pos, self.landed_bounds(ship));
         let class = self.rules.entity_types[&e.type_id]
             .movement
             .as_ref()
             .map(|m| m.movement_class_id);
         let pos = class
-            .and_then(|class| self.free_tile_beside(class, at, bounds, at, UNLOAD_REACH))
+            .and_then(|class| {
+                let surface = self.surf(at.body);
+                let geo = &surface.geo;
+                geo.footprint_surroundings(at.face, bounds, UNLOAD_REACH)
+                    .filter(|&i| surface.pathing.passable(class, geo.tile_at(i), None))
+                    .filter(|&i| !self.under_hull(carrier, at, i))
+                    .map(|i| (geo.rank_distance(at, geo.index_centre(i)), i))
+                    .min()
+                    .map(|(_, i)| geo.index_centre(i))
+            })
             .unwrap_or(at);
         self.disembark(unit, pos);
         true
+    }
+
+    /// Whether tile `index` lies under the hull of `ship` landed at `at`: within its landing
+    /// radius (never for a ship without one, which covers only its own tile).
+    fn under_hull(&self, ship: EntityId, at: Pos, index: usize) -> bool {
+        let r = self.landing_radius(ship);
+        let geo = &self.surf(at.body).geo;
+        r > 0
+            && geo
+                .distance_squared(at, geo.index_centre(index))
+                .is_some_and(|d| d <= (r as u128).pow(2))
     }
 
     fn advance_land(&mut self, id: EntityId, order: &mut Order) {
@@ -540,7 +614,7 @@ impl World {
         let e = self.entities[id.0 as usize].as_mut().expect("landing ship");
         e.pos = at;
         e.facing = facing;
-        let bounds = footprint(&self.rules.entity_types[&e.type_id], at);
+        let bounds = self.landed_bounds(self.entity(id).expect("landed ship"));
         // The step moves the ship between surfaces; its passengers come out around it.
         self.unload_around(id, at, bounds);
         order.status = OrderStatus::Done;
@@ -568,10 +642,7 @@ impl World {
     fn advance_unload(&mut self, id: EntityId, order: &mut Order) {
         if self.is_landed(id) {
             let ship = self.entity(id).expect("carrier");
-            let (at, bounds) = (
-                ship.pos,
-                footprint(&self.rules.entity_types[&ship.type_id], ship.pos),
-            );
+            let (at, bounds) = (ship.pos, self.landed_bounds(ship));
             let out = self.unload_around(id, at, bounds);
             // Sent to a point, they walk there from the ship.
             if let Some(goal) = order.target_pos.filter(|p| *p != at) {

@@ -249,7 +249,12 @@ pub fn build_overlays_on(
     // Patrols: a dashed cyan path, all the way round the planet for a ship in orbit.
     for patrol in &hud.patrols {
         let span = patrol.span_milli as f32 / 1000.0;
-        let lift = (patrol.lift_milli as f32 / 1000.0).max(LIFT);
+        let drawn = views
+            .binary_search_by_key(&patrol.entity, |v| v.id)
+            .ok()
+            .map(|i| views[i].altitude)
+            .filter(|a| *a > 0.0 && patrol.lift_milli > 0);
+        let lift = drawn.unwrap_or(patrol.lift_milli as f32 / 1000.0).max(LIFT);
         let steps = ((span * 48.0).ceil() as usize).clamp(8, 512);
         for i in (0..steps).step_by(2) {
             let t = |n: usize| n as f32 / steps as f32 * span;
@@ -521,6 +526,27 @@ pub fn build_overlays_on(
         bar(out, 0.0, 1.0, 0.04, [8, 10, 14, 235]);
         if fraction > 0.0 {
             bar(out, 0.0, fraction, 0.0, health_colour(fraction));
+        }
+    }
+    // Cities a trader could run a route to, while one is picked: gold rings round them.
+    for id in &hud.trade_targets {
+        let Ok(index) = views.binary_search_by_key(id, |v| v.id) else {
+            continue;
+        };
+        let view = &views[index];
+        let origin = Origin {
+            ground,
+            face: view.face,
+            x: view.x,
+            y: view.y,
+            altitude: 0.0,
+        };
+        let (w, h) = (
+            f32::from(view.footprint.0.max(1)) / 2.0,
+            f32::from(view.footprint.1.max(1)) / 2.0,
+        );
+        for pad in [0.6, 0.75, 0.9] {
+            out.rect_outline(origin, (-w - pad, -h - pad), (w + pad, h + pad), gold);
         }
     }
     for marker in &hud.markers {

@@ -510,6 +510,7 @@ def generate():
     orbital_combat(definition, row, tag, need, produce, cost, weapon)
     orbit_units(definition, row, tag, need, produce, cost)
     jumps_and_inhibitors(definition, row, tag, need, produce, cost, tech, sql.append)
+    big_ships_on_the_planet(row, tag, sql.append)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -669,6 +670,44 @@ def jumps_and_inhibitors(definition, row, tag, need, produce, cost, tech, emit):
         tech(full, name, age, 'spaceport', 300 + age * 50,
              {'wealth': 100 * (age + 1), 'knowledge': 50 * (age + 1)})
         row('tech_effect', tech_id=Ref(full), effect='enable_rule', rule_key=rule)
+
+
+# Task 72: starships 2-3 times their size in the planet view, in orbit and landed (owner,
+# 2026-11-17; docs/database.md "Big starships on the planet"). Planet and system view scales
+# (percent) by ship, in task 57's class order; orbital craft unchanged.
+VIEW_SCALE = {
+    'survey_ship': (200, 25), 'corvette': (210, 30), 'space_frigate': (230, 35),
+    'space_freighter': (230, 35), 'transport_ship': (240, 40), 'space_cruiser': (260, 40),
+    'carrier': (280, 45), 'battleship': (300, 50),
+    'orbital_fighter': (300, 25), 'orbital_bomber': (320, 25),
+}
+# How far each starship's model reaches from its centre across or along, milli-tiles at its own
+# size (checked against the models by rom-app's `landing_radius_is_the_drawn_hull`).
+HULL_REACH = {
+    'survey_ship': 1570, 'corvette': 1876, 'space_frigate': 2168, 'space_freighter': 2010,
+    'transport_ship': 1940, 'space_cruiser': 3000, 'carrier': 2360, 'battleship': 4870,
+}
+# Share of a landed ship's footprint that must be ground (the rest may be water), percent.
+LANDING_LAND_PCT = 20
+
+
+def big_ships_on_the_planet(row, tag, emit):
+    """Task 72: the planet view draws the starships 2-3 times their size; a landed ship covers
+    the ground under its drawn hull (`et_movement.landing_radius`), which may not hold a building
+    or a mountain (tag `no_landing`) and must be at least LANDING_LAND_PCT ground."""
+    row('game_constant', key='space.landing_land_pct', value=LANDING_LAND_PCT, unit='%',
+        note='least share of the tiles under a landed ship that must be ground; the rest may be water')
+    row('stat', key='landing_radius', scope='entity', note='milli-tiles of ground a landed ship covers around its tile')
+    row('tag', key='no_landing', category='terrain')
+    tag('ter.mountain', 'no_landing')
+    for key, (planet, system) in VIEW_SCALE.items():
+        if key == 'space_freighter':
+            emit(f"UPDATE et_view_scale SET planet_pct={planet},system_pct={system} WHERE entity_type_id={val(Ref('unit.' + key))};")
+        else:
+            row('et_view_scale', entity_type_id=Ref('unit.' + key), planet_pct=planet, system_pct=system)
+    for key, reach in HULL_REACH.items():
+        radius = reach * VIEW_SCALE[key][0] // 100 // 100 * 100
+        emit(f"UPDATE et_movement SET landing_radius={radius} WHERE entity_type_id={val(Ref('unit.' + key))};")
 
 
 def main():

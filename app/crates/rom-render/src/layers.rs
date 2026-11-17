@@ -219,6 +219,9 @@ pub struct ShipScale {
     pub planet: f32,
     /// On a system's plane: times the readable reference size.
     pub system: f32,
+    /// Standing on a planet's ground: times its true size (a starship keeps its planet size
+    /// when it lands; an orbital craft comes down to its true size).
+    pub landed: f32,
 }
 
 impl Default for ShipScale {
@@ -226,16 +229,28 @@ impl Default for ShipScale {
         Self {
             planet: 1.0,
             system: 1.0,
+            landed: 1.0,
         }
     }
 }
 
 impl ShipScale {
-    /// The scale of a `et_view_scale` row's percentages.
+    /// The scale of a `et_view_scale` row's percentages; drawn at its planet size on the ground
+    /// as well.
     pub fn from_pct(planet_pct: i64, system_pct: i64) -> Self {
+        let planet = planet_pct.max(1) as f32 / 100.0;
         Self {
-            planet: planet_pct.max(1) as f32 / 100.0,
+            planet,
             system: system_pct.max(1) as f32 / 100.0,
+            landed: planet,
+        }
+    }
+
+    /// The same scale, drawn at its true size once on the ground.
+    pub fn true_size_on_the_ground(self) -> Self {
+        Self {
+            landed: 1.0,
+            ..self
         }
     }
 }
@@ -252,15 +267,26 @@ impl ShipScales {
     }
 }
 
-/// Height of an orbit above the ground in the planet view, in tiles.
+/// Height of an orbit above the ground in the planet view, in tiles, as the snapshots give it:
+/// a ship's altitude there is this times how far up it is (0 on the ground, 1 in orbit). The
+/// drawn height is [`hover_altitude`].
 pub const ORBIT_ALTITUDE: f32 = 8.0;
 /// Length of a ship on the system plane at scale 1, in units of [`plane_unit`].
 pub const SHIP_LENGTH_UNITS: f32 = 3.2;
+/// How much higher a ship holds over a planet per tile of its drawn length (task 72).
+pub const HOVER_PER_TILE: f32 = 0.6;
 
-/// The size factor of a ship `altitude` tiles above the ground: its planet scale in orbit,
-/// easing to its true size as it comes down to land.
+/// The size factor of a ship `altitude` tiles above the ground (of [`ORBIT_ALTITUDE`]): its
+/// planet scale in orbit, easing to its scale on the ground as it comes down to land.
 pub fn planet_factor(scale: ShipScale, altitude: f32) -> f32 {
-    1.0 + (scale.planet - 1.0) * smoothstep(altitude / ORBIT_ALTITUDE)
+    scale.landed + (scale.planet - scale.landed) * smoothstep(altitude / ORBIT_ALTITUDE)
+}
+
+/// The height above sea level, in tiles, at which a ship drawn `length` tiles long holds over a
+/// planet (owner, 2026-11-17: bigger ships higher, smaller ones lower, so a mixed fleet over
+/// one point stacks in height): the orbit of the snapshots plus [`HOVER_PER_TILE`] a tile.
+pub fn hover_altitude(length: f32) -> f32 {
+    ORBIT_ALTITUDE + HOVER_PER_TILE * length.max(0.0)
 }
 
 /// The unit that keeps marks readable on the system plane at camera distance `distance`
@@ -323,7 +349,11 @@ mod tests {
 
     #[test]
     fn ship_sizes_change_smoothly() {
-        let scale = ShipScale::from_pct(400, 40);
+        // A starship keeps its planet size down to the ground; a craft eases to its own.
+        let ship = ShipScale::from_pct(900, 40);
+        assert_eq!(planet_factor(ship, ORBIT_ALTITUDE), 9.0);
+        assert_eq!(planet_factor(ship, 0.0), 9.0);
+        let scale = ShipScale::from_pct(400, 40).true_size_on_the_ground();
         assert_eq!(planet_factor(scale, ORBIT_ALTITUDE), 4.0);
         assert_eq!(planet_factor(scale, 0.0), 1.0);
         let mut last = planet_factor(scale, 0.0);
@@ -338,5 +368,16 @@ mod tests {
             system_ship_length(scale, 48_000.0)
                 < system_ship_length(ShipScale::default(), 48_000.0) * 0.5
         );
+    }
+
+    #[test]
+    fn bigger_ships_hover_higher() {
+        assert_eq!(hover_altitude(0.0), ORBIT_ALTITUDE);
+        let mut last = 0.0;
+        for length in [2.0, 14.0, 20.0, 30.0, 54.0] {
+            let height = hover_altitude(length);
+            assert!(height > last, "{length}: {height}");
+            last = height;
+        }
     }
 }

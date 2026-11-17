@@ -328,8 +328,11 @@ pub struct HudPatrol {
     /// How far along the circle to draw, in thousandths: 1000 between the ends; a full turn
     /// of it in orbit.
     pub span_milli: u32,
-    /// Height above the ground in milli-tiles: the orbit's for a ship in orbit.
+    /// Height above the ground in milli-tiles: the orbit's for a ship in orbit (the world view
+    /// draws it at the height the patrolling ship is drawn at, which grows with its size).
     pub lift_milli: u32,
+    /// The patrolling entity.
+    pub entity: u32,
 }
 
 /// A selected trader's route on the currently viewed surface.
