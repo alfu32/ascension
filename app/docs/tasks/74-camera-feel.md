@@ -30,13 +30,13 @@ long ellipses. "It offers a more spectacular perspective."
    many events the wheel fires.
 4. "In the planet view we rotate with the middle button, in the system and
    star map with Shift + middle. It is confusing."
+5. "In the system and star map the left–right rotation is
+   counter-intuitive: as if we rotate the target around the camera. I am
+   used to rotating the camera position around the target."
 6. "The target of the camera could always remain on the solar plane; that
    would prevent weird panning or zooming when the target strays too far
    from it. The player's focus is on the plane, and the planets' orbits all
    lie on one common plane." (added the same day)
-5. "In the system and star map the left–right rotation is
-   counter-intuitive: as if we rotate the target around the camera. I am
-   used to rotating the camera position around the target."
 
 ## Read first
 
