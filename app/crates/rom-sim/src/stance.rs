@@ -233,6 +233,16 @@ impl World {
         }
     }
 
+    /// Whether an entity's only order is to hold the orbit it is in: it fires on what comes
+    /// into reach like an idle one (task 75), and the attack replaces the hold.
+    fn holds_orbit(&self, e: &crate::Entity) -> bool {
+        e.orders.len() == 1
+            && e.orders
+                .front()
+                .is_some_and(|o| o.kind == "orbit" && !o.automatic)
+            && self.orbit(e.id).is_some()
+    }
+
     pub(crate) fn acquire_idle(&mut self) {
         // The movement benchmark and peaceful worlds avoid spatial searches entirely.
         if !self.acquisition_due() || !self.has_enemies() {
@@ -243,7 +253,7 @@ impl World {
         let ids: Vec<_> = self
             .entities()
             .filter(|e| {
-                e.orders.is_empty()
+                (e.orders.is_empty() || self.holds_orbit(e))
                     && !self.is_turret(e)
                     && e.build_progress.is_none()
                     && e.container_id.is_none()

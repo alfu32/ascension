@@ -235,3 +235,114 @@ fn orbital_craft_climb_to_orbit_and_board_a_carrier() {
         "the craft did not board the carrier"
     );
 }
+
+/// A ship of `owner` sent into the orbit of `body` above `over`, run until it is there.
+fn into_orbit(w: &mut World, key: &str, owner: PlayerId, over: Pos) -> rom_sim::EntityId {
+    let marker = w.body_position(over.body).unwrap();
+    let ship = w
+        .spawn(
+            w.rules().id_of(key).unwrap(),
+            owner,
+            Pos {
+                x: marker.x + 1000,
+                ..marker
+            },
+        )
+        .unwrap();
+    w.submit(rom_sim::Command {
+        player: owner,
+        executor: ship,
+        kind: "orbit".into(),
+        subject: None,
+        target_entity: None,
+        target_pos: Some(over),
+        queue: false,
+    })
+    .unwrap();
+    for _ in 0..4000 {
+        if w.orbit(ship).is_some_and(|o| o.body == over.body) {
+            return ship;
+        }
+        w.step();
+    }
+    panic!("{key} did not reach orbit");
+}
+
+/// Task 75: an enemy ship bombarding the home planet from orbit makes the player build
+/// ground batteries there.
+#[test]
+fn a_bombarded_player_builds_ground_batteries() {
+    let rules = common::rules();
+    let battery = rules.id_of("bld.ground_battery").unwrap();
+    let batteries = |w: &World| {
+        w.entities()
+            .filter(|e| e.owner == ME && e.type_id == battery)
+            .count()
+    };
+    // Unthreatened, the same player builds none in that time.
+    let mut calm = world(&rules);
+    let mut brain = Brain::new(Arc::clone(&rules), ME, "balanced", "tougher", 61).unwrap();
+    run(&mut calm, &mut brain, 4000);
+    assert_eq!(batteries(&calm), 0, "a battery without a threat");
+    let mut w = world(&rules);
+    // A light raider over the west of the city: it strikes the city, not the builders.
+    into_orbit(
+        &mut w,
+        "unit.corvette",
+        PlayerId(2),
+        Pos::on(HOME, 0, 9_500, 32_500),
+    );
+    let mut brain = Brain::new(Arc::clone(&rules), ME, "balanced", "tougher", 61).unwrap();
+    let mut built = false;
+    for _ in 0..40 {
+        run(&mut w, &mut brain, 100);
+        built = batteries(&w) > 0;
+        if built {
+            break;
+        }
+    }
+    assert!(built, "no ground battery by tick {}", w.tick());
+}
+
+/// Task 75: a strike fleet over an enemy world fires on the batteries there before the city.
+#[test]
+fn a_strike_fleet_fires_on_the_batteries_first() {
+    let rules = common::rules();
+    let mut w = world(&rules);
+    let foe = PlayerId(2);
+    let at = |x, y| Pos::on(NEIGHBOUR, 0, x, y);
+    let city = w
+        .place_for_setup(rules.id_of("bld.city").unwrap(), foe, at(24_500, 24_500))
+        .unwrap();
+    let battery = w
+        .place_for_setup(
+            rules.id_of("bld.ground_battery").unwrap(),
+            foe,
+            at(33_500, 24_500),
+        )
+        .unwrap();
+    // More frigates than the strike needs with one battery known, over the city.
+    let frigates: Vec<_> = (0..8)
+        .map(|_| into_orbit(&mut w, "unit.space_frigate", ME, at(22_500, 24_500)))
+        .collect();
+    let mut brain = Brain::new(Arc::clone(&rules), ME, "balanced", "tougher", 61).unwrap();
+    let mut first = None;
+    for _ in 0..1200 {
+        brain.step(&mut w);
+        w.step();
+        if first.is_none() {
+            first = frigates
+                .iter()
+                .filter_map(|f| w.entity(*f))
+                .flat_map(|f| f.orders().iter())
+                .find(|o| o.kind == "attack" && !o.automatic)
+                .and_then(|o| o.target_entity);
+        }
+        if w.entity(battery).is_none() {
+            break;
+        }
+    }
+    assert_eq!(first, Some(battery), "the first ordered target");
+    assert!(w.entity(battery).is_none(), "the battery still stands");
+    assert!(w.entity(city).is_some());
+}

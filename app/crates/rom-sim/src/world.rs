@@ -104,6 +104,10 @@ pub struct World {
     pub(crate) types: crate::index::TypeIndex,
     /// The largest building footprint in the rules, in tiles across and down.
     pub(crate) max_footprint: (i64, i64),
+    /// Recent blasts of area weapons, for the views (task 75; not hashed, not saved).
+    pub(crate) blasts: Vec<crate::combat::Blast>,
+    /// Buildings that fell lately, for the views (task 75; not hashed, not saved).
+    pub(crate) wrecks: Vec<crate::combat::Wreck>,
 }
 
 impl World {
@@ -292,6 +296,8 @@ impl World {
             failures: BTreeMap::new(),
             types: crate::index::TypeIndex::default(),
             max_footprint,
+            blasts: Vec::new(),
+            wrecks: Vec::new(),
         })
     }
 
@@ -939,6 +945,7 @@ impl World {
         self.land_projectiles();
         self.apply_attrition();
         self.remove_dead();
+        self.forget_blasts();
         self.update_captures();
         self.remember_touched();
         self.update_claims();

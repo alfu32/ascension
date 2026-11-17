@@ -855,7 +855,19 @@ fn publish(
     if world.tick().is_multiple_of(VISION_INTERVAL) {
         bridge.publish_vision(Arc::new(memory.fog.build_on(world, body)));
     }
-    publish_hud(world, controller, bridge);
+    let mut hud = crate::hud::snapshot_of(world);
+    controller.fill(world, &mut hud);
+    // A fallen building collapses from the height of the model it was drawn with (task 75).
+    for wreck in &mut hud.wrecks {
+        let model = world
+            .players()
+            .find(|p| p.id.0 == u32::from(wreck.owner))
+            .and_then(|p| models.resolve(rom_rules::DefId(wreck.kind), p.faction, p.age));
+        if let Some(model) = model {
+            wreck.height = (model.size[1].max(0.2) * 1000.0) as i32;
+        }
+    }
+    bridge.publish_hud(Arc::new(hud));
 }
 
 /// Sends the current player's limits before camera setup and after every simulation update.
@@ -906,6 +918,12 @@ pub fn snapshot_of(world: &World) -> EntitySnapshot {
 
 /// Height of an orbit above the planet in the planet view, in tiles.
 const ORBIT_HEIGHT: f32 = 8.0;
+
+/// Ticks a fallen building takes to sink into its foundations (task 75).
+const COLLAPSE_TICKS: u64 = 40;
+
+/// Share of its model's height a knocked-out building is drawn to (task 75).
+const RUIN_HEIGHT: f32 = 0.4;
 
 /// Ticks after its last step during which a unit still counts as moving (a path search or a
 /// push can hold a walker for a tick or two).
@@ -1065,6 +1083,9 @@ pub fn snapshot_on(
             let total = rules.build_ticks(entity.type_id, sources).max(1) as f32;
             (done as f32 / total).clamp(0.0, 1.0)
         });
+        // A building knocked out (a city at no hit points) stands as a ruin, its model cut low
+        // (task 75), until it is restored or taken.
+        let under_construction = under_construction.or(entity.neutralised.then_some(RUIN_HEIGHT));
         let mut view = view_of(entity, et, under_construction, &clamp_u8);
         view.model = model_of(entity.owner, entity.type_id);
         // Orbital craft are drawn like ships while they climb, orbit and come down.
@@ -1139,7 +1160,56 @@ pub fn snapshot_on(
             });
         }
     }
-    if remembered {
+    // A building that fell sinks into its foundations: its model cut lower tick by tick, as a
+    // site is raised in reverse (task 75); the overlay adds the dust, the rubble and the fire.
+    let mut fallen = false;
+    for wreck in world.wrecks() {
+        let age = world.tick().saturating_sub(wreck.tick);
+        if wreck.pos.body != body
+            || age >= COLLAPSE_TICKS
+            || !world.is_visible_on_body(
+                PLAYER,
+                body,
+                wreck.pos.face,
+                wreck.pos.x.div_euclid(1000),
+                wreck.pos.y.div_euclid(1000),
+            )
+        {
+            continue;
+        }
+        let Some(et) = rules.entity_type(wreck.type_id) else {
+            continue;
+        };
+        fallen = true;
+        let left = 1.0 - age as f32 / COLLAPSE_TICKS as f32;
+        views.push(EntityView {
+            id: wreck.id.0,
+            kind: u16::try_from(wreck.type_id.0).unwrap_or(u16::MAX),
+            owner: u8::try_from(wreck.owner.0).unwrap_or(u8::MAX),
+            face: wreck.pos.face,
+            x: wreck.pos.x as f32 / 1000.0,
+            y: wreck.pos.y as f32 / 1000.0,
+            facing_deg: 0.0,
+            altitude: 0.0,
+            beam_target: None,
+            shot_at: None,
+            shot_flight: None,
+            spacecraft: false,
+            // No health bar over what is no longer there.
+            hp_frac: 1.0,
+            building: true,
+            footprint: (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h)),
+            radius: et.radius as f32 / 1000.0,
+            carrying: false,
+            kept: 0,
+            capacity: 0,
+            carry_node: false,
+            under_construction: Some((left * left).max(0.02)),
+            model: model_of(wreck.owner, wreck.type_id),
+            activity: Default::default(),
+        });
+    }
+    if remembered || fallen {
         views.sort_by_key(|view| view.id);
         views.dedup_by_key(|view| view.id);
     }

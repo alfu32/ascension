@@ -329,6 +329,55 @@ sheets: `img/model-auto-colony.png` (`bld.auto_colony@abundance`) and
 `img/model-auto-lab-alternative.png` (`bld.auto_university@automation~lab`, the alternative lab
 look, a review candidate no match draws).
 
+### Orbital bombardment and ground batteries (task 75)
+
+The owner (2026-11-17): a few rounds from a frigate, cruiser or battleship flatten a city and
+its surroundings, units included, though some may survive; the defender has ground batteries
+that keep the ships at bay; and it must be spectacular.
+
+- **Area volleys.** From the frigate up a starship's bombardment is a kinetic strike with a wide
+  blast: the struck target takes the full hit and everything of the enemy within the blast on
+  the ground takes a share falling from the full hit at its centre to nothing at its edge
+  (measured to a building's footprint and a unit's edge). Kinetic damage breaks buildings (three
+  times as hard) and spares what is small and moves (half against people and plate, four tenths
+  against vehicles): soldiers near the centre die, those at the edge, or in vehicles, can
+  survive. Aircraft above the blast are untouched. The corvette stays light; the orbital
+  bomber, which the carrier takes along, strikes a smaller blast; the survey ship has none.
+  Numbers in `database.md`, "Orbital bombardment".
+- **A town levelled.** One frigate or cruiser levels a whole town of its age (the city and one
+  of every building around it, 25 buildings over 18 tiles) in five volleys, the battleship in
+  three; the first volley knocks out the city. While an enemy that bombards holds the orbit over
+  a city's radius, its owner cannot restore it; ships alone never take it.
+- **Ground batteries keep ships at bay.** The battery reaches 20 tiles up to a ship's ground
+  point, farther than any bombardment (14 at most), hits a ship for half its hit points and
+  stands four direct volleys of a frigate: two batteries brought down all three frigates sent
+  against their city before these could level it (`tasks/75-battery-script.txt`). What answers a battery is on the ground: it cannot
+  fire at troops, so a landing out of its reach takes it.
+- **Ships in orbit fight back.** A ship told to hold an orbit now fires on what comes into its
+  reach, as an idle one does.
+- **What is seen.** The volley's beam glows from orbit to the ground; the impact is a white dome
+  of light with a column reaching back up, secondary bursts around it and a shockwave ring that
+  runs out to the edge of the blast; a fireball rises into smoke and debris flies; the ground
+  is scorched black for a minute. A building that falls sinks into its foundations in a cloud of
+  dust and stays a burning ruin of broken walls; a knocked-out city stands as a ruin, its model
+  cut low; badly damaged buildings burn and smoke. From the system view a volley is a flash on
+  the planet's globe.
+- **Computer players** bombard the cities of other planets with their strike fleet, fire on
+  batteries first, then cities, then what is nearest; wait for two more warships per known
+  battery before striking; and build two batteries per city of a planet they see bombarded
+  (`computer-player.md`, "Bombardment and batteries").
+
+Screenshots (scripts `tasks/75-*-script.txt`, `--universe --players 2 --ai none --seed 1
+--sun fixed`): `img/bombard-before.png` (the town forty tiles east of player one's city, a survey
+ship above it), `img/bombard-impact.png` (half a second after one frigate's first volley: the city
+knocked out, the shockwave ring running out, the flash, the buildings around sinking and burning),
+`img/bombard-survivors.png` (three and a half seconds later: every building in the blast fallen
+and burning on scorched ground, the city a ruin, the two soldiers at the edge still standing),
+`img/bombard-after.png` (36 seconds later: the levelled town, the scorch fading),
+`img/bombard-battery.png` (two batteries firing up at three frigates sent against their city,
+two of them nearly down) and `img/bombard-system-flash.png` (the first volley seen from the star
+system: a flash on the home planet).
+
 ### Orbital craft, carriers and ground batteries (task 58)
 
 The airfield trains **orbital fighters** and **orbital bombers** from the
@@ -347,7 +396,7 @@ other starships take ground units only; the carrier takes craft only (container
 tags).
 
 The **ground battery** (starfaring building) fires on enemy ships and craft
-orbiting above it within fourteen tiles of their ground point, so it shoots at
+orbiting above it within fourteen tiles of their ground point (twenty since task 75), so it shoots at
 a carrier descending onto ground near it all the way down; the laser battery
 fires up as well, less accurately. Shots between the ground and orbit, and
 between craft and ships in orbit, are drawn as orange tracers.

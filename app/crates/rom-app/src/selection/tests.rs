@@ -2570,7 +2570,8 @@ fn dogfight_script_shows_tracers_between_craft_in_orbit() {
 fn battery_script_fires_up_at_a_ship_in_orbit() {
     let text = include_str!("../../../../docs/tasks/58-battery-script.txt");
     let mut tracer_ticks = Vec::new();
-    // Two volleys, at ticks 10 and 40 (the third, at 70, brings the corvette down).
+    // Since task 75 a battery hits a ship of its age for half its hit points: the first volley,
+    // at tick 10, brings the corvette down.
     let (game, _) = orbital_combat_script(text, 50, |game, _, snapshot| {
         let battery = |v: &rom_render::EntityView| v.building && v.altitude == 0.0;
         if snapshot
@@ -2583,12 +2584,14 @@ fn battery_script_fires_up_at_a_ship_in_orbit() {
     });
     println!("battery tracers at ticks {tracer_ticks:?}");
     assert!(!tracer_ticks.is_empty());
-    let corvette = game
-        .world
-        .entities()
-        .find(|e| e.owner == PlayerId(2) && game.world.orbit(e.id).is_some())
-        .expect("the corvette orbits above");
-    assert!(corvette.hp < corvette.max_hp);
+    assert!(
+        !game
+            .world
+            .entities()
+            .any(|e| e.owner == PlayerId(2) && game.world.orbit(e.id).is_some()),
+        "the corvette still orbits above"
+    );
+    assert_eq!(game.world.stats().losses.get(&PlayerId(2)), Some(&1));
 }
 
 #[test]
@@ -2622,4 +2625,76 @@ fn carrier_script_boards_craft_and_offers_to_launch_them() {
     for id in craft {
         assert_eq!(game.world.orbit(id).map(|o| o.body), Some(body));
     }
+}
+
+#[test]
+fn bombard_script_strikes_the_town_and_leaves_ruins() {
+    let text = include_str!("../../../../docs/tasks/75-impact-script.txt");
+    let mut blast_ticks = Vec::new();
+    let mut ruins = false;
+    let mut flashes = 0;
+    let (game, _) = orbital_combat_script(text, 400, |game, ctl, _| {
+        let home = game.world.home_body(PLAYER).unwrap();
+        let system = game.world.body(home).unwrap().system;
+        let sightings = game.world.visible_entities(PLAYER);
+        flashes += crate::space_view::space_snapshot(&game.world, system, &sightings)
+            .flashes
+            .len();
+        if game
+            .world
+            .blasts()
+            .last()
+            .is_some_and(|b| b.tick + 1 == game.world.tick())
+        {
+            blast_ticks.push(game.world.tick() - 1);
+        }
+        let mut hud = HudSnapshot::default();
+        ctl.fill(&game.world, &mut hud);
+        ruins |= !hud.wrecks.is_empty() && !hud.blasts.is_empty();
+    });
+    println!("bombard blasts at ticks {blast_ticks:?}");
+    assert!(!blast_ticks.is_empty(), "the frigate never fired");
+    assert!(ruins, "no ruins were shown");
+    assert!(flashes > 0, "no flash on the planet in the system view");
+    // The town's city is down and buildings around it fell.
+    let foe = PlayerId(2);
+    assert!(
+        game.world
+            .entities()
+            .any(|e| e.owner == foe && e.neutralised)
+    );
+    assert!(game.world.wrecks().iter().any(|w| w.owner == foe));
+}
+
+#[test]
+fn battery_script_holds_the_frigates_off() {
+    let text = include_str!("../../../../docs/tasks/75-battery-script.txt");
+    let mut tracer_ticks = Vec::new();
+    let (game, _) = orbital_combat_script(text, 600, |game, _, snapshot| {
+        let battery = |v: &rom_render::EntityView| v.building && v.altitude == 0.0;
+        if snapshot
+            .entities
+            .iter()
+            .any(|v| battery(v) && v.shot_at.is_some())
+        {
+            tracer_ticks.push(game.world.tick());
+        }
+    });
+    println!("battery tracers at ticks {tracer_ticks:?}");
+    assert!(!tracer_ticks.is_empty());
+    // The batteries stand; the frigates that came for the city did not.
+    let foe = PlayerId(2);
+    let rules = game.world.rules();
+    let batteries = game
+        .world
+        .entities()
+        .filter(|e| e.owner == foe && rules.key(e.type_id) == "bld.ground_battery")
+        .count();
+    let ships = game
+        .world
+        .entities()
+        .filter(|e| e.owner == PLAYER && game.world.orbit(e.id).is_some())
+        .count();
+    assert_eq!(batteries, 2);
+    assert!(ships < 3, "{ships} frigates left");
 }

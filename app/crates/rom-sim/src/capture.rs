@@ -215,6 +215,24 @@ impl World {
         self.refresh_territory(id);
     }
 
+    /// Whether an enemy of `owner` with a weapon that strikes the ground from orbit orbits the
+    /// planet of `pos` with its ground point within `radius` of it.
+    fn bombarded(&self, pos: crate::Pos, radius: i64, owner: PlayerId) -> bool {
+        let geo = self.geo(pos.body);
+        self.space.orbits.iter().any(|(id, orbit)| {
+            orbit.body == pos.body
+                && geo.within(orbit.pos, pos, radius)
+                && self.entity(*id).is_some_and(|e| {
+                    e.hp > 0
+                        && self.enemies(owner, e.owner)
+                        && self.rules.entity_types[&e.type_id]
+                            .weapons
+                            .iter()
+                            .any(|w| w.orbit_only)
+                })
+        })
+    }
+
     pub(crate) fn update_captures(&mut self) {
         let finished: Vec<_> = self
             .capture
@@ -264,9 +282,15 @@ impl World {
                     .expect("armed player")
                     .0
             };
-            // One team alone in the radius takes the city (or its owner restores it).
+            // One team alone in the radius takes the city (or its owner restores it). While an
+            // enemy that bombards from orbit holds the sky over the radius, its owner cannot
+            // restore it (task 75); ships alone never take it.
             if presence.len() == 1 {
                 let (&team, players) = presence.first_key_value().expect("one team");
+                if team == own_team && self.bombarded(pos, radius, city_owner) {
+                    self.capture.sieges.remove(&id);
+                    continue;
+                }
                 let owner = if team == own_team {
                     city_owner
                 } else {

@@ -214,7 +214,8 @@ systems:
   planet's orbit and defend it; a **launching carrier** (`et_container.launches`)
   waits at home while craft there board it, then joins the escort and
   launches them over its target; craft are trained to fill the carriers.
-  Ground batteries are ordinary defensive buildings.
+  Ground batteries are ordinary defensive buildings, and more than that on a
+  planet the player sees bombarded (task 75, below).
 
 Headless hosts generate a planet when a ship is first ordered into its orbit,
 as the application does (`ai_match_cmd::generate_visited`).
@@ -928,6 +929,77 @@ Seeds 1–3 of the mirror run again alone gave the same hashes. The automated si
 after the owner's review) changed neither table: no duel reaches the automation age. `rom fight-matrix`: 136 strengths,
 `unanswered=0` (27 s).
 
+## Bombardment and batteries (task 75)
+
+**Using bombardment.** The strike fleet (the escort, three warships or more) goes for the orbit
+of a planet in reach where enemy buildings are known. Over it a ship fires on the batteries seen
+there first (a type with a weapon at the `orbit` layer that is not itself orbital), then the
+cities (a territory row with `is_city`), then what is nearest; a ship that fired by itself at
+something less important is turned to the better mark, and a ship that only holds its orbit
+counts as free to fire. With the frigate's area volleys this levels the cities of other
+planets, which the computer players cannot reach on the ground. **Escorting it:** the strike sets
+off only with two more warships for every enemy battery known on that planet, and the escort
+asks for that many (at most twelve), so a planet defended by batteries is held off until the
+fleet can take them; the carrier still launches its craft over the target.
+
+**Answering it.** A planet is bombarded for a player when it sees an enemy with a weapon that
+strikes the ground from orbit (`orbit_only`) holding the orbit over it, or a blast of an
+enemy's area weapon on its ground (`World::blasts()`), and has a city there. The construction
+manager then wishes for two ground batteries (by the weapon's layer, not by name) per city on
+such a planet, at score 780 and reserved: above soldiers and most buildings, below the age path.
+The battery is placed like other buildings, around the player's cities in order.
+
+Nothing names a definition: the rank comes from weapons and territory rows.
+
+### Measured (task 75)
+
+`rom fight-matrix` across the orbit (`crates/rom-cli/src/orbit_matrix.rs`; fights on a planet of
+plain ground in a star system of its own, at equal cost as on the ground, 3 seeds, the ships
+entering the orbit beyond both reaches and ordered at the nearest enemy they can aim at; the
+volleys of one ship against a town as in `database.md`, "Orbital bombardment"):
+
+| Age | Across the orbit | Outranges and beats | Answer | Research | Answer's fights (won, value left) |
+| --- | --- | --- | --- | --- | --- |
+| age.starfaring | corvette | city | ground_battery | - | 3/3 (999‰ left vs 0‰) |
+| age.starfaring | orbital_bomber | city | ground_battery | - | 3/3 (966‰ left vs 0‰) |
+| age.starfaring | laser_battery | orbital_fighter | marine | - | 3/3 (1000‰ left vs 0‰) |
+| age.starfaring | ground_battery | corvette | marine | - | 3/3 (1000‰ left vs 0‰) |
+| age.expansion | space_frigate | city | ground_battery | - | 3/3 (703‰ left vs 0‰) |
+| age.expansion | orbital_bomber | city | ground_battery | - | 3/3 (966‰ left vs 0‰) |
+| age.expansion | laser_battery | orbital_fighter | marine | - | 3/3 (1000‰ left vs 0‰) |
+| age.expansion | ground_battery | space_frigate | marine | - | 3/3 (1000‰ left vs 0‰) |
+| age.abundance | space_cruiser | city | ground_battery | - | 3/3 (373‰ left vs 0‰) |
+| age.abundance | orbital_bomber | city | ground_battery | - | 3/3 (966‰ left vs 0‰) |
+| age.abundance | laser_battery | orbital_fighter | shock_marine | - | 3/3 (1000‰ left vs 0‰) |
+| age.abundance | ground_battery | space_cruiser | shock_marine | - | 3/3 (1000‰ left vs 0‰) |
+| age.galactic | battleship | city | ground_battery | - | 3/3 (192‰ left vs 0‰) |
+| age.galactic | orbital_bomber | city | ground_battery | - | 3/3 (966‰ left vs 0‰) |
+| age.galactic | laser_battery | orbital_fighter | shock_marine | - | 3/3 (1000‰ left vs 0‰) |
+| age.galactic | ground_battery | battleship | shock_marine | - | 3/3 (1000‰ left vs 0‰) |
+
+Every ship that bombards beats the city of its age at equal cost and is answered by the ground
+battery without research; the battery outranges and beats the ships of its age and is answered
+by the age's infantry, which it cannot fire at (troops landed out of its reach). The test
+`every_orbit_strength_has_an_answer` fails when one of these has no answer, and
+`a_frigate_or_cruiser_levels_a_town_in_three_to_five_volleys` holds the owner's target.
+
+`rom duel`, 100 seeds, 4 jobs, 108 000-tick limit (a test suite and the other duel ran alongside,
+so run times are rough). No duel leaves its planet, so neither bombardment nor batteries play a
+part; the duels are the same match for match as 0.0.75 (seeds 1–3 of the mirror run again alone
+gave the same hashes). A first version gave the battery an armour class of its own and moved
+the first duel to 94–0 with 6 draws: computer players weigh units against enemies not yet seen
+by an average over every armour class, so the battery now wears an existing one (`hull`).
+
+| Duel | Wins | Draws | Draw seeds | Run time |
+| --- | --- | --- | --- | --- |
+| 0.0.75: moderate – easiest | 96 – 0 | 4 | 14, 29, 90, 91 | |
+| task 75: moderate – easiest | 96 – 0 | 4 | 14, 29, 90, 91 | 11.9 min |
+| 0.0.75: moderate – moderate | 53 – 42 | 5 | 36, 41, 43, 55, 68 | |
+| task 75: moderate – moderate | 53 – 42 | 5 | 36, 41, 43, 55, 68 | 19.5 min |
+
+`rom fight-matrix`: 152 strengths (136 on the ground, the same rows as 0.0.75, and 16 across the
+orbit), `unanswered=0` (46 s).
+
 ## Simulation gaps found in part 2, and what task 65 did with them
 
 - **Closed: `explore`, `patrol`, `guard`.** `explore` walks to the nearest tile
@@ -1055,7 +1127,8 @@ fighters stood near the stand-in's capital then.
   scouting, formations.
 - `crates/rom-ai/tests/space.rs` — claiming resource bodies and founding a
   colony with a transport in a small universe, craft climbing to orbit and
-  boarding a carrier, the space-age brain twice.
+  boarding a carrier, the space-age brain twice; a bombarded player builds
+  ground batteries, a strike fleet fires on the batteries first (task 75).
 - `crates/rom-cli/src/duel_cmd.rs` — a short duel twice with equal hashes.
 - `crates/rom-ai/tests/governor.rs` — a governor keeps fifteen sites in its colony's area and
   rebuilds them, twice alike; paused it waits, without means it names the price; a brain in the

@@ -209,7 +209,9 @@ fn splash_hits_neighbours_but_not_friends() {
     attack(&mut w, a, b);
     w.step();
     assert_eq!(hp(&w, b), 31);
-    assert_eq!(hp(&w, neighbor), 97); // (9 − 2) × 50 / 100.
+    // (9 − 2) × 50 % at the centre, falling linearly to nothing at the edge (task 75): the
+    // neighbour's edge is 750 of the 2000 radius out, so 7 × 50 × 1250 / 200000 = 2.
+    assert_eq!(hp(&w, neighbor), 98);
     assert_eq!(hp(&w, friend), 40);
     assert_eq!(hp(&w, far), 40);
 }
@@ -740,5 +742,7 @@ fn projectile_splash_uses_the_targets_position_when_it_lands() {
     ticks(&mut w, 40);
     assert_eq!(hp(&w, b), 31);
     assert_eq!(hp(&w, old_neighbor), 40);
-    assert_eq!(hp(&w, new_neighbor), 31);
+    // Struck where `b` was when the shot landed, still on its way: the new neighbour stands
+    // a little off the centre of the blast, so the falling splash does 7 of the 9 (task 75).
+    assert_eq!(hp(&w, new_neighbor), 33);
 }

@@ -17,6 +17,11 @@ use std::collections::BTreeSet;
 const STUCK_CITY_SCORE: i64 = 850;
 /// Score of an automated colony: below the next age and the economy, above most buildings.
 const COLONY_SCORE: i64 = 520;
+/// Score of a ground battery while an enemy bombards a planet of the player's cities (task
+/// 75): above soldiers and most buildings, below the age path.
+const BATTERY_SCORE: i64 = 780;
+/// Ground batteries wanted per city on a bombarded planet.
+const BATTERIES_PER_CITY: i64 = 2;
 
 /// What a building type is good for, read from its component and production rows.
 struct Role {
@@ -97,9 +102,28 @@ pub(crate) fn wishes(
     let cities = view.cities.iter().filter(|c| c.complete).count() as i64;
     let army_target = view.pop_cap * weights.army_share / 100;
     let army = army_pop(view);
+    let bombarded = crate::view::bombarded_bodies(view);
+    let threatened = view
+        .cities
+        .iter()
+        .filter(|c| c.complete && bombarded.contains(&c.pos.body))
+        .count() as i64;
     for building in constructible(view) {
         let et = &rules.entity_types[&building];
         let have = view.line_count(building);
+        // Batteries that fire up at the orbit answer a bombardment (task 75).
+        if threatened > 0
+            && crate::view::guards_orbit(rules, building)
+            && have < threatened * BATTERIES_PER_CITY
+        {
+            wishes.push(Wish {
+                score: BATTERY_SCORE,
+                act: Act::Construct(building),
+                reserve: true,
+                opening: false,
+            });
+            continue;
+        }
         if view.is_colony(building) {
             // An automated colony outside the city limit, one per town, while it pays: its
             // governor then keeps its sites standing.

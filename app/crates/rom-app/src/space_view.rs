@@ -78,6 +78,39 @@ pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) ->
         system: Some(system),
         ..SpaceSnapshot::default()
     };
+    // Blasts on planets the player sees flash on their globes (task 75).
+    snapshot.flashes = world
+        .blasts()
+        .iter()
+        .filter(|b| world.tick().saturating_sub(b.tick) < u64::from(rom_render::FLASH_TICKS))
+        .filter(|b| {
+            world.is_visible_on_body(
+                crate::selection::PLAYER,
+                b.pos.body,
+                b.pos.face,
+                b.pos.x.div_euclid(1000),
+                b.pos.y.div_euclid(1000),
+            )
+        })
+        .filter_map(|b| {
+            let Some(Topology::Cube(cube)) = world.surface(b.pos.body).map(|s| s.topology()) else {
+                return None;
+            };
+            let p = cube
+                .sphere_point(rom_render::SurfacePos {
+                    face: b.pos.face,
+                    x: i64::from(b.pos.x),
+                    y: i64::from(b.pos.y),
+                })
+                .map(|c| c as f32);
+            let length = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt().max(1.0);
+            Some(rom_render::FlashView {
+                body: b.pos.body.0,
+                dir: rom_render::to_render(p.map(|c| c / length)),
+                age_ticks: world.tick().saturating_sub(b.tick) as u32,
+            })
+        })
+        .collect();
     let Some(reach) = rules.constant("space.orbit_reach") else {
         return snapshot;
     };

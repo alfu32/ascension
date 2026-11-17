@@ -743,10 +743,41 @@ impl Scene {
                     })
             };
             let mut halos: Vec<([f32; 3], f32)> = Vec::new();
+            let mut flashes: Vec<([f32; 3], f32, f32)> = Vec::new();
             for (placed, &radius) in bodies_placed.iter().zip(&drawn) {
                 let body = &universe.bodies[placed.body];
                 if body.kind != BodyViewKind::Star && !known {
                     continue;
+                }
+                // Blasts on the planet flash on its globe (task 75), the loaded globe included;
+                // drawn over the atmosphere.
+                // The loaded planet's globe may be drawn by a pass of its own: its flashes are
+                // drawn here whichever part holds it, on the side facing the camera only.
+                let globe_here = Some(placed.body) == loaded;
+                if known && (keeps(placed.pos) || globe_here) {
+                    let per_pixel = view.per_pixel(placed.pos, height);
+                    let mut axes = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+                    if Some(placed.body) == loaded {
+                        axes = axes.map(|axis| zoom.planet_to_system(axis));
+                    }
+                    for flash in state.snapshot.flashes.iter().filter(|f| f.body == body.id) {
+                        let k = flash.age_ticks as f32 / crate::space::FLASH_TICKS as f32;
+                        if k >= 1.0 {
+                            continue;
+                        }
+                        let d = flash.dir;
+                        let dir: [f32; 3] = std::array::from_fn(|i| {
+                            axes[0][i] * d[0] + axes[1][i] * d[1] + axes[2][i] * d[2]
+                        });
+                        let at: [f32; 3] =
+                            std::array::from_fn(|i| placed.pos[i] + dir[i] * radius * 1.03);
+                        let toward: f32 = (0..3).map(|i| dir[i] * (view.eye[i] - at[i])).sum();
+                        if globe_here && toward <= 0.0 {
+                            continue;
+                        }
+                        let size = (radius * 0.5 * (0.5 + k)).max(per_pixel * 90.0);
+                        flashes.push((at, size, 1.0 - k));
+                    }
                 }
                 if (pass.globe && Some(placed.body) == loaded) || !keeps(placed.pos) {
                     continue;
@@ -812,6 +843,21 @@ impl Scene {
                     self.sky
                         .set_halo(pos, radius, thickness, view.eye, toward, pass.detail);
                     self.sky.draw_halo(&mut world, pos, radius, thickness);
+                }
+            }
+            for (at, size, strength) in flashes {
+                for (scale, colour, alpha) in
+                    [(1.0, [255, 160, 70], 220.0), (0.45, [255, 245, 220], 255.0)]
+                {
+                    sprite(
+                        &mut world,
+                        camera,
+                        &space.glow,
+                        at,
+                        size * scale,
+                        colour,
+                        (strength * alpha * pass.detail) as u8,
+                    );
                 }
             }
             let system_id = universe.systems.get(pass.index).map(|s| s.id);

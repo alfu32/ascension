@@ -1,0 +1,29 @@
+# Task 75, replayed by --script in universe mode (--players 2 --ai none, seed 1, --sun fixed): the
+# bombardment of 75-impact-script.txt at full speed, held still at tick 250, three and a half
+# seconds after the first volley struck the city: the city down, the buildings around it fallen and
+# burning, the soldiers near the centre gone and the two at the edge of the blast still standing.
+0 grant-age age.expansion
+0 place 2 bld.city @40,0
+0 place 2 bld.barracks @32,-8
+0 place 2 bld.factory @48,-8
+0 place 2 bld.library @32,8
+0 place 2 bld.market @48,8
+0 place 2 bld.farm @40,-11
+0 place 2 bld.farm @40,11
+0 place 2 bld.temple @29,0
+0 place 2 bld.university @51,0
+0 place 2 unit.marine @37,-4
+0 place 2 unit.marine @43,4
+0 place 2 unit.marine @36,5
+0 place 2 unit.marine @44,-5
+0 place 2 unit.marine @50,6
+0 place 2 unit.marine @30,-6
+0 place-orbit 1 unit.survey_ship @40,0
+0 place-orbit 1 unit.space_frigate @40,-27
+60 click ship1
+62 cam focus
+90 cam focus
+92 cam wheel 2 800,450
+100 click ship2
+101 rclick foecity1
+250 speed 1

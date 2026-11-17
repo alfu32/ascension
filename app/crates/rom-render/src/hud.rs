@@ -87,6 +87,10 @@ pub struct HudSnapshot {
     pub trade_targets: Vec<u32>,
     /// The building footprint being placed.
     pub placement: Option<HudPlacement>,
+    /// Recent blasts of area weapons on the shown surface (task 75).
+    pub blasts: Vec<crate::HudBlast>,
+    /// Buildings that fell lately on the shown surface (task 75).
+    pub wrecks: Vec<crate::HudWreck>,
 }
 
 impl Default for HudSnapshot {
@@ -115,6 +119,8 @@ impl Default for HudSnapshot {
             wealth: Default::default(),
             trade_routes: Vec::new(),
             patrols: Vec::new(),
+            blasts: Vec::new(),
+            wrecks: Vec::new(),
         }
     }
 }

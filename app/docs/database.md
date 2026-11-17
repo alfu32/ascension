@@ -241,7 +241,8 @@ the target footprint. Ordinary weapons retain their usual layer/range rules
 (task 58 adds the `orbit` layer: ground → orbit and orbit → orbit).
 Corvettes, space frigates, space cruisers and battleships get slot 1 explosive
 bombardment weapons targeting `ground`; their original space weapons stay
-in slot 0. The hand-written rows follow the generated seed block.
+in slot 0. Since task 75 these rows are generated (`orbital_bombardment()`, see
+"Orbital bombardment" below) and the frigate's and later ones are kinetic area strikes.
 
 `entity_orbit` records an orbiting entity's body, integer surface subpoint,
 facing, movement remainder and last orbital shot for deterministic state and
@@ -783,9 +784,9 @@ definition so earlier ids stay stable):
 | Key | Where | Stats |
 | --- | --- | --- |
 | `unit.orbital_fighter` | airfield, starfaring | 420 HP, armour 4 vehicle, speed 5000 (aircraft), climb 100 ticks; 40 explosive, range 5 tiles, every 20 ticks, at `air`, `orbit`, `space`; 220 metal 80 energy, 400 ticks |
-| `unit.orbital_bomber` | airfield, starfaring | 520 HP, armour 4 vehicle, speed 4000, climb 120 ticks; slot 0: 30 explosive, 4 tiles, 40 ticks, at `orbit`, `space`; slot 1 (`orbit_only`): 90 explosive, 8 tiles, 60 ticks, at `ground`; 260 metal 100 energy, 450 ticks |
+| `unit.orbital_bomber` | airfield, starfaring | 520 HP, armour 4 vehicle, speed 4000, climb 120 ticks; slot 0: 30 explosive, 4 tiles, 40 ticks, at `orbit`, `space`; slot 1 (`orbit_only`): 90 explosive, 8 tiles, 60 ticks, at `ground` (task 75: 300 kinetic, 80 ticks, a 4-tile blast); 260 metal 100 energy, 450 ticks |
 | `unit.carrier` | spaceport, starfaring | 2000 HP, armour 6 shield, speed 2400 (starship), `pop_cost` 2; 25 energy, 6 tiles, at `space`, `orbit`; container 10 population, accepts `orbital_craft`, `launches`; 700 metal 300 energy, 500 ticks |
-| `bld.ground_battery` | built by citizens and worker drones, starfaring, military page, own territory, plain | 2400 HP, armour 5 structure, 3 × 3, sight 16 tiles; 150 explosive, 14 tiles to the subpoint, every 30 ticks, at `orbit`; 400 metal 200 energy |
+| `bld.ground_battery` | built by citizens and worker drones, starfaring, military page, own territory, plain | 2400 HP, armour 5 structure, 3 × 3, sight 16 tiles; 150 explosive, 14 tiles to the subpoint, every 30 ticks, at `orbit`; 400 metal 200 energy (task 75: 9 000 HP, armour class `hull`, 520 explosive, 20 tiles, 40 ticks; see "Orbital bombardment") |
 
 `et_view_scale` rows: carrier 450 / 45, fighter 300 / 25, bomber 320 / 25. A
 ground battery contests a landing: a carrier descending onto ground within its
@@ -1152,6 +1153,80 @@ Removing "Upgrade to Corvettes" moved the ids of every definition generated afte
 183 technologies (Automated Colonies in, Upgrade to Corvettes out): hash `be5aa51a1e931472`
 (was `853ceecaa69fcd4e`). The automated sites' prices left it unchanged (measured): the playthrough
 never pays one, whether it upgrades its sites or builds them after the abundance research.
+
+## Orbital bombardment (task 75)
+
+The owner (2026-11-17): a few volleys of a frigate, cruiser or battleship flatten a city and
+its surroundings; some units survive; ground batteries keep the ships at bay. No schema change;
+the data is generated in `orbital_bombardment()` of `db/content/generate.py` (the starships'
+bombardment rows were hand-written after the generated block until now and are removed there).
+
+**`et_weapon.splash_pct` now falls off** (simulation, `World::splash`). Every other enemy within
+`splash_radius` of the impact, on a layer the weapon targets, takes `splash_pct` % of what the
+hit would do to it at the centre of the blast, falling linearly to nothing at the edge;
+distance is measured to a building's footprint and a unit's edge (it was the units' centres at a
+flat share). Neutralised entities, passengers, entities in orbit and the neutral player are
+never hit. No weapon had a splash before task 75, so nothing else changed. The struck target
+takes the full hit as before.
+
+**New rows, no new columns:** damage class `kinetic` (bombardment from orbit) and its
+`damage_matrix` rows: structure 300 %, flesh 50 %, plate 50 %, vehicle 40 % (every other armour
+class 100 %). The ground battery wears the existing armour class `hull` (kinetic and explosive
+damage 100 %). A new armour class for it was tried and dropped: computer players weigh units
+against enemies not yet seen by an average over every armour class, so a new class changed
+their armies in the first ages and with them the duels (moderate–easiest 94–0, 6 draws).
+
+**Bombardment** (slot 1, `orbit_only`, target layer `ground`; reach in tiles of ground from the
+ship's subpoint):
+
+| Ship | Age | Damage | Reach | Reload | Splash radius, share at the centre | Was |
+| --- | --- | --- | --- | --- | --- | --- |
+| corvette | starfaring | 60 explosive | 10 tiles | 60 ticks (3 s) | 2 tiles, 50 % | 37 explosive, 12 tiles, 60 ticks, no splash |
+| space frigate | expansion | 2 000 kinetic | 12 tiles | 100 ticks (5 s) | 12 tiles, 100 % | 39 explosive, 12, 60, none |
+| space cruiser | abundance | 2 600 kinetic | 13 tiles | 100 ticks | 14 tiles, 100 % | 42 explosive, 12, 60, none |
+| battleship | galactic | 3 200 kinetic | 14 tiles | 80 ticks (4 s) | 16 tiles, 100 % | 44 explosive, 12, 60, none |
+| orbital bomber | starfaring | 300 kinetic | 8 tiles | 80 ticks | 4 tiles, 100 % | 90 explosive, 8, 60, none |
+
+The survey ship has no bombardment; the carrier bombards through the bombers it carries.
+
+**Ground battery:** 9 000 HP (was 2 400), armour 5 `hull` (was `structure`); its weapon at
+the `orbit` layer 520 explosive (was 150), 20 tiles to a ship's subpoint (was 14), every 40
+ticks (was 30); sight 30 tiles (its weapon's reach × 1.5). It outranges every bombardment and
+hits a ship of any age for about half its hit points.
+
+**Measured** with `rom fight-matrix` (`crates/rom-cli/src/orbit_matrix.rs`): one ship against an
+undefended town of its age, the city and one of every other building its builders raise (the
+newest of each line; 25 buildings reaching 17.7 tiles from the city's centre; every research of
+the age), twenty soldiers of the age on four rings out to the town's edge; the ship aims at the
+city, then at the standing building nearest its ground point.
+
+| Age | Ship | Volleys to level the town | To knock out the city | Soldiers left |
+| --- | --- | --- | --- | --- |
+| starfaring – galactic | corvette | not levelled in 10 min | 14 | 20/20 |
+| starfaring – galactic | orbital bomber | 54 (a carrier holds ten) | 2 | 19/20 |
+| expansion – galactic | space frigate | 5 | 1 | 5/20 |
+| abundance – galactic | space cruiser | 5 | 1 | 4/20 |
+| galactic | battleship | 3 | 1 | 6/20 |
+
+**Simulation rules that came with it** (`rom-sim`):
+
+- A neutralised city under an enemy that bombards from orbit (a ship with an `orbit_only`
+  weapon whose ground point lies within the city's economic radius) is not restored by its
+  owner's units in the radius (task 67's rule); ships alone never take it. Without this a single
+  soldier left alive anywhere in the radius put the city back at a quarter of its hit points
+  after every volley.
+- A ship whose only order is to hold the orbit it is in acquires targets like an idle one (the
+  attack replaces the hold); before, a ship sent into an orbit sat under enemy fire without
+  firing back.
+- `World::blasts()` (where an area weapon struck: tick, centre, radius, owner, type) and
+  `World::wrecks()` (buildings that fell, not neutralised: id, tick, place, type, owner) are kept
+  for a game minute for the views. They are a report: not hashed and not saved (save format
+  unchanged, 8); a loaded game shows no scorch from before the save.
+
+Effect on the playthrough (`rom playthrough --seed 1`): `hash=52f0f01b8fc09b6e` (was
+`be5aa51a1e931472`), the same buildings, units, techs and ticks; the code of 0.0.75 gives the same
+new hash on the new data, so the change is the data alone (the battery's hit points and the
+weapons' rows).
 
 ## Capture and difficulty (task 67)
 

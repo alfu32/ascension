@@ -514,6 +514,7 @@ def generate():
     jumps_and_inhibitors(definition, row, tag, need, produce, cost, tech, sql.append)
     big_ships_on_the_planet(row, tag, sql.append)
     automated_colonies(definition, row, tag, need, produce, cost, tech, sql.append)
+    orbital_bombardment(weapon, sql.append)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -773,6 +774,59 @@ def automated_colonies(definition, row, tag, need, produce, cost, tech, emit):
         need(site, research, 1)
     for site, prices in AUTO_SITE_PRICES.items():
         cost('bld.' + site, prices)
+
+
+# Task 75: orbital bombardment that flattens a town, and ground batteries that hold the ships
+# off (owner, 2026-11-17; docs/database.md "Orbital bombardment"). Bombardment from orbit does
+# kinetic damage: it breaks buildings and spares what is small and moves (percent of damage by
+# armour class; a class not listed takes 100). The ground battery is armoured like a warship's
+# hull, not like a building: kinetic and explosive damage do it no more than to anything else.
+# (A new armour class would have changed how computer players weigh units against unseen
+# enemies, an average over every armour class, and with it the duels of the early ages.)
+KINETIC = {'structure': 300, 'flesh': 50, 'plate': 50, 'vehicle': 40}
+# Each bombarding type's slot-1 weapon, from orbit onto the ground below (`orbit_only`): damage
+# class, damage, reach (tiles of ground from its subpoint), reload (ticks), splash radius (tiles)
+# and the share of the hit the splash does at its centre (percent, falling to nothing at the
+# edge). The corvette stays light; the survey ship has none.
+BOMBARDMENT = {
+    'corvette': ('explosive', 60, 10, 60, 2, 50),
+    'space_frigate': ('kinetic', 2000, 12, 100, 12, 100),
+    'space_cruiser': ('kinetic', 2600, 13, 100, 14, 100),
+    'battleship': ('kinetic', 3200, 14, 80, 16, 100),
+    'orbital_bomber': ('kinetic', 300, 8, 80, 4, 100),
+}
+# The ground battery: hit points, armour class, and its weapon at the orbit above it: damage,
+# reach (tiles of ground to a ship's subpoint) and reload (ticks). It outranges every
+# bombardment of its age and the later ones.
+BATTERY = {'hp': 9000, 'armour': 'hull', 'damage': 520, 'reach': 20, 'reload': 40}
+
+
+def orbital_bombardment(weapon, emit):
+    """Task 75: area bombardment from orbit (`splash_radius`, `splash_pct`) for the starships
+    from the frigate up and the orbital bomber, a light one for the corvette, and the ground
+    battery that outranges and outdamages them. The starships' bombardment rows were
+    hand-written after the generated block until task 75. Defined last so the ids of earlier
+    content stay stable."""
+    emit("INSERT INTO damage_class(key) VALUES ('kinetic');")
+    for armour, pct in KINETIC.items():
+        emit(f"INSERT INTO damage_matrix VALUES ({val(Ref('kinetic', 'damage_class'))},"
+             f"{val(Ref(armour, 'armor_class'))},{pct});")
+    for key, (dc, damage, reach, reload, radius, pct) in BOMBARDMENT.items():
+        full = 'unit.' + key
+        if key == 'orbital_bomber':
+            emit(f"UPDATE et_weapon SET damage={damage},damage_class_id={val(Ref(dc, 'damage_class'))},"
+                 f"range_max={reach * 1000},cooldown_ticks={reload},"
+                 f"splash_radius={radius * 1000},splash_pct={pct} "
+                 f"WHERE entity_type_id={val(Ref(full))} AND orbit_only=1;")
+        else:
+            weapon(full, damage, dc, reach * 1000, ['ground'], reload, slot=1, orbit_only=1,
+                   splash_radius=radius * 1000, splash_pct=pct)
+    full = 'bld.ground_battery'
+    sight = building_sight(AGES.index('starfaring'), 3, BATTERY['reach'] * 1000)
+    emit(f"UPDATE entity_type SET hp={BATTERY['hp']},los={sight},"
+         f"armor_class_id={val(Ref(BATTERY['armour'], 'armor_class'))} WHERE id={val(Ref(full))};")
+    emit(f"UPDATE et_weapon SET damage={BATTERY['damage']},range_max={BATTERY['reach'] * 1000},"
+         f"cooldown_ticks={BATTERY['reload']} WHERE entity_type_id={val(Ref(full))};")
 
 
 # Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"

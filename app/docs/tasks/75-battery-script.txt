@@ -1,0 +1,29 @@
+# Task 75, replayed by --script in universe mode (--players 2 --ai none, seed 1, --sun fixed): a city
+# of player two forty tiles east of player one's city, guarded by two ground batteries, and three
+# space frigates of player one holding the orbit north of it, out of every reach. At tick 100 the
+# frigates are sent against the city: the batteries outrange them and open fire while they close
+# in, and bring all three down before they level the city (seed 1: volleys at ticks 151, 191, 231
+# and 271). A survey ship south of the city, out of the batteries' reach, keeps the city in sight.
+# The camera looks from behind the city at the middle frigate. The game slows down from tick 150
+# and all but stops at the second volley, tracers in the air.
+0 grant-age age.expansion
+0 place 2 bld.city @40,0
+0 place 2 bld.ground_battery @35,-7
+0 place 2 bld.ground_battery @45,-7
+0 place 2 bld.barracks @32,6
+0 place 2 bld.market @48,6
+0 place-orbit 1 unit.survey_ship @40,24
+0 place-orbit 1 unit.space_frigate @36,-33
+0 place-orbit 1 unit.space_frigate @40,-33
+0 place-orbit 1 unit.space_frigate @44,-33
+60 click ship3
+62 cam focus
+90 cam focus
+92 cam wheel -3 800,450
+96 cam drag 800,520 800,330
+100 click ship2
+100 click ship3 shift
+100 click ship4 shift
+101 rclick foecity1
+150 speed 25
+193 speed 1

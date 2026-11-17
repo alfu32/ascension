@@ -15,6 +15,41 @@ pub(crate) struct PendingHit {
     pub damage: i64,
 }
 
+/// How long a blast or a fallen building is kept for the views, in ticks (one game minute).
+pub const BLAST_MEMORY_TICKS: u64 = 1200;
+
+/// Where an area weapon struck (task 75), kept `BLAST_MEMORY_TICKS` for the views: the flash,
+/// the shockwave and the scorched ground. A report, not hashed and not saved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Blast {
+    /// The tick it struck.
+    pub tick: u64,
+    /// Its centre: the struck target's position.
+    pub pos: Pos,
+    /// The reach of its splash, milli-tiles.
+    pub radius: i64,
+    /// Who fired it.
+    pub owner: PlayerId,
+    /// The type that fired it.
+    pub source_type: rom_rules::DefId,
+}
+
+/// A building that fell (destroyed, not neutralised), kept `BLAST_MEMORY_TICKS` so the views
+/// can show it collapse and burn. A report, not hashed and not saved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Wreck {
+    /// The id it had.
+    pub id: EntityId,
+    /// The tick it fell.
+    pub tick: u64,
+    /// Where it stood.
+    pub pos: Pos,
+    /// Its type.
+    pub type_id: rom_rules::DefId,
+    /// Its owner.
+    pub owner: PlayerId,
+}
+
 /// A firing decision, rolled after all executors have advanced.
 #[derive(Debug, Clone)]
 pub(crate) struct PendingShot {
@@ -539,21 +574,96 @@ impl World {
         let damage = self.hit_damage(hit, &weapon, hit.target);
         self.damage_entity(hit.target, damage, hit);
         if weapon.splash_radius > 0 {
-            for target in self
-                .entities_in_radius(impact, weapon.splash_radius.min(i64::from(u32::MAX)) as u32)
-            {
-                if target == hit.target
-                    || !self.enemies(hit.owner, self.entity(target).expect("splash").owner)
-                {
-                    continue;
-                }
-                let damage = (i128::from(self.hit_damage(hit, &weapon, target))
-                    * i128::from(weapon.splash_pct)
-                    / 100)
-                    .clamp(0, i128::from(i64::MAX)) as i64;
-                self.damage_entity(target, damage, hit);
-            }
+            self.splash(hit, &weapon, impact);
         }
+    }
+
+    /// The area of a weapon with `splash_radius` (task 75): every other enemy within the radius
+    /// of the impact, on a layer the weapon hits, takes `splash_pct` of what the hit would do
+    /// to it, falling linearly from the centre to nothing at the edge. Distance is measured to
+    /// a building's footprint and to a unit's edge. Targets in id order.
+    fn splash(&mut self, hit: &PendingHit, weapon: &Weapon, impact: Pos) {
+        let radius = weapon.splash_radius.clamp(1, i64::from(u32::MAX / 2));
+        self.blasts.push(Blast {
+            tick: self.tick,
+            pos: impact,
+            radius,
+            owner: hit.owner,
+            source_type: hit.source_type,
+        });
+        // Buildings are found by their centre: reach as far as the largest half footprint.
+        let reach = radius
+            + (self.max_footprint.0 + self.max_footprint.1).max(0) * 500
+            + self
+                .rules
+                .entity_types
+                .values()
+                .map(|t| t.radius)
+                .max()
+                .unwrap_or(0)
+                .max(0);
+        let reach = reach.min(i64::from(u32::MAX)) as u32;
+        for target in self.entities_in_radius(impact, reach) {
+            let Some(t) = self.entity(target) else {
+                continue;
+            };
+            if target == hit.target
+                || t.hp <= 0
+                || t.neutralised
+                || t.container_id.is_some()
+                || (t.owner == PlayerId(0) && self.players[&t.owner].team == 0)
+                || !self.enemies(hit.owner, t.owner)
+                || self.orbit(target).is_some()
+                || !weapon
+                    .targets
+                    .iter()
+                    .any(|layer| layer.layer == self.target_layer(target))
+            {
+                continue;
+            }
+            let distance = self.edge_distance(impact, target);
+            if distance > radius as u64 {
+                continue;
+            }
+            let damage = i128::from(self.hit_damage(hit, weapon, target))
+                * i128::from(weapon.splash_pct)
+                * i128::from(radius as u64 - distance)
+                / (100 * i128::from(radius));
+            self.damage_entity(target, damage.clamp(0, i128::from(i64::MAX)) as i64, hit);
+        }
+    }
+
+    /// Distance from `from` to an entity's footprint (a building) or edge (a unit), in
+    /// milli-tiles; `u64::MAX` when out of reach.
+    fn edge_distance(&self, from: Pos, id: EntityId) -> u64 {
+        let e = self.entity(id).expect("measured entity");
+        let et = &self.rules.entity_types[&e.type_id];
+        let geo = self.geo(e.pos.body);
+        if et.class == EntityClass::Building {
+            geo.closest_in_bounds(e.pos.face, footprint(et, e.pos), from)
+                .map_or(u64::MAX, |(_, squared)| crate::integer_sqrt(squared))
+        } else {
+            geo.distance(from, e.pos)
+                .map_or(u64::MAX, |d| d.saturating_sub(et.radius.max(0) as u64))
+        }
+    }
+
+    /// Recent blasts of area weapons, oldest first (task 75; for the views).
+    pub fn blasts(&self) -> &[Blast] {
+        &self.blasts
+    }
+
+    /// Buildings that fell lately, oldest first (task 75; for the views).
+    pub fn wrecks(&self) -> &[Wreck] {
+        &self.wrecks
+    }
+
+    /// Drops blasts and wrecks older than `BLAST_MEMORY_TICKS`.
+    pub(crate) fn forget_blasts(&mut self) {
+        let tick = self.tick;
+        let fresh = |at: u64| tick.saturating_sub(at) <= BLAST_MEMORY_TICKS;
+        self.blasts.retain(|b| fresh(b.tick));
+        self.wrecks.retain(|w| fresh(w.tick));
     }
 
     fn damage_entity(&mut self, target: EntityId, damage: i64, hit: &PendingHit) {
@@ -629,6 +739,16 @@ impl World {
                 continue;
             }
             *self.stats.losses.entry(owner).or_default() += 1;
+            if complete && self.rules.entity_types[&type_id].class == EntityClass::Building {
+                let pos = self.entity(id).expect("dead entity").pos;
+                self.wrecks.push(Wreck {
+                    id,
+                    tick: self.tick,
+                    pos,
+                    type_id,
+                    owner,
+                });
+            }
             if let Some(killer) = killer {
                 *self.stats.kills.entry(killer).or_default() += 1;
                 let pct = self.rules.entity_types[&type_id].plunder_pct;
