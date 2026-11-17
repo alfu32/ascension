@@ -1,0 +1,2 @@
+# Task 59: zoom out from the home system to the 3D map: 0 wheel steps.
+0 grant-age age.galactic

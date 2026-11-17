@@ -19,7 +19,7 @@ use crate::layers::{
     system_detail, system_ship_length,
 };
 use crate::space::{
-    SpaceHover, SpaceSnapshot, annulus, chevron, claim_rings, colony_rings, diamond,
+    SpaceHover, SpaceSnapshot, annulus, chevron, chevron3, claim_rings, colony_rings, diamond,
     map_colony_rings, map_mark_scale, map_ship_marks, ship_frame_pos, transit_at_rim,
 };
 use crate::universe::{
@@ -87,6 +87,18 @@ const HALO_BELOW_PIXELS: f32 = 6.0;
 /// Diameter of a body's halo on screen, in pixels.
 const HALO_PIXELS: f32 = 22.0;
 const ROUTE_LINE: Color = Color::new(110, 140, 200, 110);
+/// The reference plane's rings and each system's drop line to it, which tell a system's height.
+const GRID_LINE: [u8; 4] = [120, 150, 210, 78];
+const DROP_LINE: [u8; 4] = [165, 185, 230, 120];
+/// A constellation's stick figure on the star map, and in the sky from the Sun.
+const FIGURE_LINE: [u8; 4] = [120, 165, 235, 84];
+const FIGURE_LINE_SKY: [u8; 4] = [130, 175, 245, 150];
+/// Share of its brightness that a system keeps at the far edge of the map, and of the depth range
+/// (map radii either side of the focus) it fades over.
+const FAR_FADE: f32 = 0.32;
+/// Diameters in pixels of a system's halo and core seen from the Sun.
+const SKY_HALO_PIXELS: f32 = 20.0;
+const SKY_CORE_PIXELS: f32 = 8.0;
 /// Widest the star's glow is drawn on screen, in pixels.
 const STAR_GLOW_PIXELS: f32 = 140.0;
 /// Radius in pixels, seen from the ground, of the star and of the other bodies in the sky.
@@ -260,6 +272,12 @@ pub(super) struct SpaceGpu {
     universe: Arc<UniverseScene>,
     home_body: Option<usize>,
     map_positions: Vec<[f32; 3]>,
+    /// Height of the sky's equatorial plane (the Sun's) in the star-map frame: the reference
+    /// plane the depth cues stand on.
+    plane_y: f32,
+    /// The median distance from a system to its nearest neighbour, map units: halos never grow
+    /// past it, so a crowded map stays readable.
+    gap: f32,
     /// The bodies of every system placed in its frame, indexed like the systems.
     placed: Vec<Vec<PlacedBody>>,
     tints: Vec<Option<[u8; 3]>>,
@@ -402,6 +420,8 @@ impl Scene {
             universe: Arc::clone(universe),
             home_body: home_body.and_then(|id| universe.body_index(id)),
             map_positions: universe.place_systems(),
+            plane_y: universe.sun_position()[1],
+            gap: nearest_gap(&universe.place_systems()),
             placed: universe
                 .systems
                 .iter()
@@ -501,12 +521,17 @@ impl Scene {
             None => None,
         };
         if frame.is_none() {
-            self.space_backdrop(rl, thread, target, &one.system);
+            // From the Sun only the real stars show: the backdrop's made-up ones would mislead.
+            self.space_backdrop(rl, thread, target, &one.system, !zoom.sky_active());
         }
         let stars = frame.as_ref().map_or(1.0, |f| f.stars);
         self.draw_map_layer(rl, thread, target, zoom, orbit, &one, stars);
         let drawn = globe.is_some() && frame.is_some();
-        let mut passes = self.system_passes(zoom, &one, drawn);
+        let mut passes = if zoom.sky_active() {
+            Vec::new()
+        } else {
+            self.system_passes(zoom, &one, drawn)
+        };
         // The farthest system first; the anchored one last, around the globe it holds.
         passes.sort_by(|a, b| {
             (a.index == zoom.system())
@@ -580,8 +605,9 @@ impl Scene {
         thread: &RaylibThread,
         target: &mut RenderTexture2D,
         view: &FrameView,
+        stars_on: bool,
     ) {
-        self.set_star_fade(1.0);
+        self.set_star_fade(if stars_on { 1.0 } else { 0.0 });
         let mut drawing = rl.begin_texture_mode(thread, target);
         drawing.clear_background(SPACE);
         if let Some(stars) = &self.star_mesh {
@@ -1158,15 +1184,93 @@ impl Scene {
                 raylib::ffi::rlDrawRenderBatchActive();
                 raylib::ffi::rlDisableDepthTest();
             }
+            let from_sun = zoom.sky_active();
+            // The depth of a point seen from this camera: 1 at the near side of the map, down to
+            // `FAR_FADE` at the far side, so near systems read as near.
+            let depth = |p: [f32; 3]| {
+                let t = ((view.distance_to(p) - view.distance()) / (2.0 * MAP_RADIUS) + 0.5)
+                    .clamp(0.0, 1.0);
+                if from_sun {
+                    1.0
+                } else {
+                    1.0 - (1.0 - FAR_FADE) * t
+                }
+            };
+            let mut overlay = OverlayGeometry::default();
+            let tinted = |colour: [u8; 4], p: [f32; 3]| {
+                [
+                    colour[0],
+                    colour[1],
+                    colour[2],
+                    (f32::from(colour[3]) * depth(p)) as u8,
+                ]
+            };
             if detail > 0.004 {
-                for &(a, b) in &universe.routes {
+                for &(a, b) in universe.routes.iter().filter(|_| !from_sun) {
                     if let (Some(a), Some(b)) = (universe.system_index(a), universe.system_index(b))
                     {
+                        let (pa, pb) = (space.map_positions[a], space.map_positions[b]);
+                        let mid = [0, 1, 2].map(|i| (pa[i] + pb[i]) / 2.0);
                         world.draw_line3D(
-                            vec3(space.map_positions[a]),
-                            vec3(space.map_positions[b]),
-                            fade(ROUTE_LINE, detail),
+                            vec3(pa),
+                            vec3(pb),
+                            fade(ROUTE_LINE, detail * (0.35 + 0.65 * depth(mid))),
                         );
+                    }
+                }
+                if zoom.constellations() {
+                    let colour = if from_sun {
+                        FIGURE_LINE_SKY
+                    } else {
+                        FIGURE_LINE
+                    };
+                    for &(a, b) in &universe.figure {
+                        if let (Some(a), Some(b)) =
+                            (universe.system_index(a), universe.system_index(b))
+                        {
+                            let (pa, pb) = (space.map_positions[a], space.map_positions[b]);
+                            overlay.lines.push(crate::overlay::Line3 {
+                                a: pa,
+                                b: pb,
+                                colour: tinted(colour, pa),
+                            });
+                        }
+                    }
+                }
+                if !from_sun {
+                    // The sky's equatorial plane as faint rings, and a line from every system
+                    // down (or up) to it ending in a small ring: the height of each system.
+                    let y = space.plane_y;
+                    for step in 1..=4 {
+                        let r = MAP_RADIUS * step as f32 / 4.0;
+                        let ring: Vec<[f32; 3]> = (0..=64)
+                            .map(|i| {
+                                let a = i as f32 / 64.0 * std::f32::consts::TAU;
+                                [r * a.cos(), y, r * a.sin()]
+                            })
+                            .collect();
+                        for pair in ring.windows(2) {
+                            overlay.lines.push(crate::overlay::Line3 {
+                                a: pair[0],
+                                b: pair[1],
+                                colour: tinted(GRID_LINE, pair[0]),
+                            });
+                        }
+                    }
+                    for pos in &space.map_positions {
+                        let foot = [pos[0], y, pos[2]];
+                        overlay.lines.push(crate::overlay::Line3 {
+                            a: *pos,
+                            b: foot,
+                            colour: tinted(DROP_LINE, *pos),
+                        });
+                        overlay.tris.extend(annulus(
+                            foot,
+                            icon * 1.1,
+                            icon * 0.22,
+                            tinted(DROP_LINE, foot),
+                            20,
+                        ));
                     }
                 }
             }
@@ -1186,22 +1290,33 @@ impl Scene {
                 });
                 let known = self.space_state.snapshot.knows(system.id);
                 // An unexplored system is a faint marker.
-                let (halo_size, halo_alpha) = if known {
+                let (halo_size, halo_alpha) = if known || from_sun {
                     (HALO_SIZE.max(grow), 230.0)
                 } else {
                     (HALO_SIZE.max(grow) * 0.5, 90.0)
                 };
-                let core_size = CORE_SIZE.max(grow * 0.3);
+                let halo_size = halo_size.min(space.gap * 0.8);
+                let core_size = CORE_SIZE.max(grow * 0.3).min(space.gap * 0.25);
                 // From inside a system the others are points of light in the sky, as bright
                 // as the sky lets them be; out on the map they are halos.
                 let point = view.per_pixel(pos, height) * SKY_STAR_PIXELS;
                 let sky = (stars * 0.75).clamp(0.0, 1.0);
                 let seen = sky + (1.0 - sky) * detail;
                 let star = STAR_GLOW * k;
-                let halo_size = morph_size(star, morph_size(point * 2.5, halo_size, detail), swell);
-                let core_size = morph_size(star * 0.4, morph_size(point, core_size, detail), swell);
-                let halo_alpha = halo_alpha * seen * swell;
-                let core_alpha = 255.0 * seen * swell;
+                let (halo_size, core_size, seen) = if from_sun {
+                    // From the Sun every star is a point of light of the same size on screen.
+                    let pixel = view.per_pixel(pos, height);
+                    (pixel * SKY_HALO_PIXELS, pixel * SKY_CORE_PIXELS, 1.0)
+                } else {
+                    (
+                        morph_size(star, morph_size(point * 2.5, halo_size, detail), swell),
+                        morph_size(star * 0.4, morph_size(point, core_size, detail), swell),
+                        seen,
+                    )
+                };
+                let near = depth(pos);
+                let halo_alpha = halo_alpha * seen * swell * near;
+                let core_alpha = 255.0 * seen * swell * (0.5 + 0.5 * near);
                 if halo_alpha < 1.0 {
                     continue;
                 }
@@ -1226,7 +1341,6 @@ impl Scene {
             }
             // Ships: a mark beside each system that has ships, an arrowhead on the lane for each
             // ship between systems, its lane ahead lit and its destination ringed.
-            let mut overlay = OverlayGeometry::default();
             for mark in &marks {
                 let [r, g, b] = owner_rgb(mark.owner);
                 let chosen = mark
@@ -1251,10 +1365,10 @@ impl Scene {
                         ));
                         overlay
                             .tris
-                            .extend(chevron(at, dir, icon * 2.9, [255, 255, 255, 255]));
+                            .extend(chevron3(at, dir, icon * 2.9, [255, 255, 255, 255]));
                         overlay
                             .tris
-                            .extend(chevron(at, dir, icon * 2.2, [r, g, b, 255]));
+                            .extend(chevron3(at, dir, icon * 2.2, [r, g, b, 255]));
                     }
                     _ => {
                         overlay
@@ -1335,7 +1449,7 @@ impl Scene {
             };
             space.labels.push(SpaceLabel {
                 icon: None,
-                text: if known {
+                text: if known || zoom.sky_active() {
                     system.name.clone()
                 } else {
                     format!("{} (unexplored)", system.name)
@@ -1350,6 +1464,46 @@ impl Scene {
                 },
             });
         }
+        // Each constellation once, faintly, over the middle of its member systems.
+        let mut members: std::collections::BTreeMap<&str, Vec<[f32; 3]>> = Default::default();
+        for (i, system) in universe.systems.iter().enumerate() {
+            if !system.constellation.is_empty() {
+                members
+                    .entry(system.constellation.as_str())
+                    .or_default()
+                    .push(space.map_positions[i]);
+            }
+        }
+        for (name, at) in members {
+            let mid = [0, 1, 2].map(|i| at.iter().map(|p| p[i]).sum::<f32>() / at.len() as f32);
+            let Some((x, y, _)) = look.project(mid) else {
+                continue;
+            };
+            if x < 0.0 || y < 0.0 || x > width || y > height {
+                continue;
+            }
+            let text = name.to_uppercase();
+            space.labels.push(SpaceLabel {
+                x: x - text.len() as f32 * 3.4,
+                y: y - 22.0,
+                text,
+                icon: None,
+                colour: [140, 175, 235, (130.0 * detail) as u8],
+                priority: 3.0,
+            });
+        }
+        space.labels.push(SpaceLabel {
+            icon: None,
+            text: if zoom.sky_active() {
+                "Sky from the Sun   F2 back   F3 figures   arrows or drag to look".to_owned()
+            } else {
+                "F2 sky from the Sun   F3 constellation figures".to_owned()
+            },
+            x: 16.0,
+            y: 112.0,
+            colour: [150, 165, 195, (170.0 * detail) as u8],
+            priority: -2.0,
+        });
         for mark in &marks {
             let Some((x, y, _)) = look.project(mark.at) else {
                 continue;
@@ -1384,6 +1538,28 @@ fn cross3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
 fn unit_vector(v: [f32; 3]) -> [f32; 3] {
     let length = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-6);
     v.map(|c| c / length)
+}
+
+/// The median distance from a point to its nearest neighbour; the whole map's size for fewer
+/// than two points.
+fn nearest_gap(points: &[[f32; 3]]) -> f32 {
+    if points.len() < 2 {
+        return MAP_RADIUS * 2.0;
+    }
+    let mut nearest: Vec<f32> = points
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            points
+                .iter()
+                .enumerate()
+                .filter(|&(j, _)| j != i)
+                .map(|(_, q)| (0..3).map(|k| (p[k] - q[k]).powi(2)).sum::<f32>().sqrt())
+                .fold(f32::MAX, f32::min)
+        })
+        .collect();
+    nearest.sort_by(f32::total_cmp);
+    nearest[nearest.len() / 2]
 }
 
 /// An additive billboard of `size` units at `pos`; it does not write depth.

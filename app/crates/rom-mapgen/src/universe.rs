@@ -1,13 +1,14 @@
 //! A universe: star systems on a star map, the bodies on their orbits and the
-//! routes between systems. Integer arithmetic only; the same request always
-//! yields the same universe.
+//! routes between systems. The systems are a connected region of the real star
+//! catalogue (`rom_rules::Star`), in 3D. Integer arithmetic only; the same request
+//! always yields the same universe.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use rom_geo::SurfacePos;
 use rom_rules::{
     BodyKind, DefId, FeaturePattern, MAX_STAR_MAP_RADIUS, MapStyle, MapStyleFeature,
-    PLANET_N_RANGE, RegionKind, Rules,
+    PLANET_N_RANGE, RegionKind, Rules, Star,
 };
 use rom_sim::SimRng;
 
@@ -28,15 +29,15 @@ pub const FAIR_VALUE_PCT: i64 = 80;
 const MAX_NEUTRAL_SYSTEMS: i64 = 192;
 /// Most bodies orbiting one star.
 const MAX_ORBITS: i64 = 64;
-/// Invented syllables for system names: an onset and a coda make a name.
-const ONSETS: [&str; 22] = [
-    "Bra", "Cel", "Dov", "Ern", "Fol", "Grim", "Hal", "Isk", "Jun", "Kor", "Lun", "Mav", "Nor",
-    "Ost", "Pel", "Quil", "Rud", "Teg", "Tam", "Ulv", "Vor", "Wyn",
-];
-const CODAS: [&str; 15] = [
-    "ad", "ber", "dis", "en", "gar", "holm", "ik", "mar", "nel", "ost", "rin", "sk", "tal", "ven",
-    "wick",
-];
+/// Home-system candidates are stars whose local density is within this band of the region's median,
+/// in percent, so no player starts in an outlier.
+const HOME_BAND_PCT: (i64, i64) = (70, 135);
+/// Placements of the home systems tried; the fairest, then the widest apart, is kept.
+const HOME_TRIALS: usize = 24;
+/// The two shortest routes of the poorest home system must reach this share of the richest one's.
+pub const FAIR_NEAR_PCT: i64 = 70;
+/// A route passes at least this far (map units) from every other system.
+const ROUTE_CLEARANCE: i64 = 40;
 
 /// What to generate.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,12 +55,18 @@ pub struct UniverseRequest {
 pub struct StarSystem {
     /// Id, 1-based; equals the index in [`Universe::systems`] plus one.
     pub id: u32,
-    /// Invented name.
+    /// The star's name from the catalogue.
     pub name: String,
-    /// Star map position, abstract units; the map is a disc centred on 0,0.
+    /// Star map position, abstract units: equatorial frame with the Sun at 0,0,0.
     pub x: i32,
     /// Star map position, abstract units.
     pub y: i32,
+    /// Star map position, abstract units; toward the north celestial pole.
+    pub z: i32,
+    /// The catalogue star (`star.id`) this system is.
+    pub star: u32,
+    /// The star's constellation, for labels.
+    pub constellation: String,
 }
 
 /// A star, habitable planet or resource body (`body` row).
@@ -71,7 +78,8 @@ pub struct Body {
     pub system_id: u32,
     /// Star, habitable or resource.
     pub kind: BodyKind,
-    /// Invented name.
+    /// Name: the star's, "<star> II" for a planet, "<star> belt" or "<planet> moon" for a
+    /// resource body.
     pub name: String,
     /// Distance from the star in system units; 0 for the star.
     pub orbit_radius: i32,
@@ -111,6 +119,8 @@ pub struct Universe {
     pub bodies: Vec<Body>,
     /// Routes ordered by `(system_a, system_b)`.
     pub routes: Vec<Route>,
+    /// Constellation stick-figure lines between systems of this match, `a < b`, in order.
+    pub figure: Vec<(u32, u32)>,
     /// The sphere request of every habitable body, keyed by body id.
     pub recipes: BTreeMap<u32, SphereRequest>,
     /// Generated planets keyed by body id: the home planets.
@@ -131,62 +141,46 @@ pub struct HomeShare {
     /// Summed `et_node.income` of resource bodies within [`FAIR_HOPS`] routes,
     /// not counting other races' home systems.
     pub value: i64,
+    /// Summed length of the home system's two shortest routes, map units.
+    pub near: i64,
 }
 
-type Point = (i64, i64);
+type Point = (i64, i64, i64);
+/// How good a home placement is, smaller is better: spread of local reach in tens of percent,
+/// then the gap between homes, widest first.
+type HomeKey = (i64, std::cmp::Reverse<i64>);
 
 fn pick(rng: &mut SimRng, lo: i64, hi: i64) -> i64 {
     lo + i64::from(rng.range(0, (hi - lo + 1) as u32))
 }
 
 fn dist2(a: Point, b: Point) -> i64 {
-    (a.0 - b.0).pow(2) + (a.1 - b.1).pow(2)
+    (a.0 - b.0).pow(2) + (a.1 - b.1).pow(2) + (a.2 - b.2).pow(2)
 }
 
 fn isqrt(v: i64) -> i64 {
     (v.max(0) as u64).isqrt() as i64
 }
 
-fn cross(o: Point, a: Point, b: Point) -> i128 {
-    i128::from(a.0 - o.0) * i128::from(b.1 - o.1) - i128::from(a.1 - o.1) * i128::from(b.0 - o.0)
-}
-
-fn on_segment(a: Point, b: Point, c: Point) -> bool {
-    c.0 >= a.0.min(b.0) && c.0 <= a.0.max(b.0) && c.1 >= a.1.min(b.1) && c.1 <= a.1.max(b.1)
-}
-
-/// True when segments `ab` and `cd` meet anywhere except at a shared endpoint.
-pub(crate) fn segments_cross(a: Point, b: Point, c: Point, d: Point) -> bool {
-    let shared = [(a, b, c, d), (a, b, d, c), (b, a, c, d), (b, a, d, c)]
-        .into_iter()
-        .find(|(p, _, s, _)| p == s);
-    if let Some((p, q, _, r)) = shared {
-        // Two segments from one point overlap only when they leave it in the same direction.
-        let dot = (q.0 - p.0) * (r.0 - p.0) + (q.1 - p.1) * (r.1 - p.1);
-        return cross(p, q, r) == 0 && dot > 0;
-    }
-    let (o1, o2) = (cross(a, b, c).signum(), cross(a, b, d).signum());
-    let (o3, o4) = (cross(c, d, a).signum(), cross(c, d, b).signum());
-    if o1 * o2 < 0 && o3 * o4 < 0 {
-        return true;
-    }
-    (o1 == 0 && on_segment(a, b, c))
-        || (o2 == 0 && on_segment(a, b, d))
-        || (o3 == 0 && on_segment(c, d, a))
-        || (o4 == 0 && on_segment(c, d, b))
-}
-
 /// Squared distance from `c` to the segment `ab`.
 fn segment_dist2(a: Point, b: Point, c: Point) -> i64 {
     let len2 = dist2(a, b);
-    let t = (c.0 - a.0) * (b.0 - a.0) + (c.1 - a.1) * (b.1 - a.1);
+    let (ab, ac) = (
+        [b.0 - a.0, b.1 - a.1, b.2 - a.2],
+        [c.0 - a.0, c.1 - a.1, c.2 - a.2],
+    );
+    let t = ab[0] * ac[0] + ab[1] * ac[1] + ab[2] * ac[2];
     if len2 == 0 || t <= 0 {
         dist2(a, c)
     } else if t >= len2 {
         dist2(b, c)
     } else {
-        let x = cross(a, b, c);
-        (x * x / i128::from(len2)) as i64
+        let x = [
+            i128::from(ab[1]) * i128::from(ac[2]) - i128::from(ab[2]) * i128::from(ac[1]),
+            i128::from(ab[2]) * i128::from(ac[0]) - i128::from(ab[0]) * i128::from(ac[2]),
+            i128::from(ab[0]) * i128::from(ac[1]) - i128::from(ab[1]) * i128::from(ac[0]),
+        ];
+        ((x[0] * x[0] + x[1] * x[1] + x[2] * x[2]) / i128::from(len2)) as i64
     }
 }
 
@@ -214,90 +208,103 @@ fn knobs_ok(style: &MapStyle) -> bool {
         && (1..=MAX_STAR_MAP_RADIUS).contains(&style.star_map_radius)
 }
 
-/// Uniform integer points in the star map disc.
-fn sample_disc(rng: &mut SimRng, radius: i64, count: usize) -> Vec<Point> {
-    let mut out = Vec::with_capacity(count);
-    while out.len() < count {
-        let x = pick(rng, -radius, radius);
-        let y = pick(rng, -radius, radius);
-        if x * x + y * y <= radius * radius {
-            out.push((x, y));
-        }
-    }
-    out
+fn star_point(s: &Star) -> Point {
+    (s.x, s.y, s.z)
 }
 
-/// Home positions as far apart as practical: farthest-point selection from
-/// several random first picks, keeping the layout with the widest closest pair.
-fn place_homes(rng: &mut SimRng, pool: &[Point], homes: usize) -> Vec<Point> {
-    if homes == 1 {
-        return vec![pool[rng.range(0, pool.len() as u32) as usize]];
+/// A connected region of the catalogue: `count` stars nearest a seeded centre star (ties by
+/// id), none farther from the centre than `radius`. `None` when the catalogue cannot supply it.
+fn choose_region<'a>(
+    rng: &mut SimRng,
+    rules: &'a Rules,
+    count: usize,
+    radius: i64,
+) -> Option<Vec<&'a Star>> {
+    let all: Vec<&Star> = rules.stars.values().collect();
+    if all.len() < count || count == 0 {
+        return None;
     }
-    let mut best = Vec::new();
-    let mut best_gap = -1;
-    for _ in 0..16 {
+    let centre = star_point(all[rng.range(0, all.len() as u32) as usize]);
+    let mut ranked: Vec<(i64, u32, &Star)> = all
+        .iter()
+        .map(|&s| (dist2(star_point(s), centre), s.id, s))
+        .collect();
+    ranked.sort_unstable_by_key(|&(d, id, _)| (d, id));
+    ranked.truncate(count);
+    (ranked[count - 1].0 <= radius * radius).then(|| ranked.into_iter().map(|r| r.2).collect())
+}
+
+/// Sum of the distances from each point to its three nearest neighbours: how crowded its
+/// surroundings are.
+fn local_reach(pts: &[Point]) -> Vec<i64> {
+    pts.iter()
+        .enumerate()
+        .map(|(i, &p)| {
+            let mut d: Vec<i64> = pts
+                .iter()
+                .enumerate()
+                .filter(|&(j, _)| j != i)
+                .map(|(_, &q)| isqrt(dist2(p, q)))
+                .collect();
+            d.sort_unstable();
+            d.iter().take(3).sum()
+        })
+        .collect()
+}
+
+/// Home systems among the region's stars so every player starts with a comparable
+/// neighbourhood: candidates are stars whose local reach is near the region's median, and of
+/// several farthest-point placements the one with the smallest spread of reach, then the widest
+/// gap between homes, wins. Returns region indices in increasing order.
+fn place_homes(rng: &mut SimRng, pts: &[Point], homes: usize) -> Vec<usize> {
+    let reach = local_reach(pts);
+    let mut sorted = reach.clone();
+    sorted.sort_unstable();
+    let median = sorted[sorted.len() / 2];
+    let mut pool: Vec<usize> = (0..pts.len())
+        .filter(|&i| {
+            reach[i] * 100 >= median * HOME_BAND_PCT.0 && reach[i] * 100 <= median * HOME_BAND_PCT.1
+        })
+        .collect();
+    if pool.len() < homes {
+        pool = (0..pts.len()).collect();
+    }
+    let mut best: Option<(HomeKey, Vec<usize>)> = None;
+    for _ in 0..HOME_TRIALS {
         let mut chosen = vec![pool[rng.range(0, pool.len() as u32) as usize]];
         while chosen.len() < homes {
             let next = pool
                 .iter()
                 .copied()
-                .enumerate()
-                .max_by_key(|&(i, p)| {
-                    let near = chosen.iter().map(|&c| dist2(c, p)).min().unwrap_or(0);
+                .filter(|i| !chosen.contains(i))
+                .max_by_key(|&i| {
+                    let near = chosen
+                        .iter()
+                        .map(|&c| dist2(pts[c], pts[i]))
+                        .min()
+                        .unwrap_or(0);
                     (near, std::cmp::Reverse(i))
                 })
-                .map(|(_, p)| p)
-                .expect("pool is not empty");
+                .expect("the pool holds at least as many stars as homes");
             chosen.push(next);
         }
+        chosen.sort_unstable();
+        let low = chosen.iter().map(|&i| reach[i]).min().unwrap_or(0);
+        let high = chosen.iter().map(|&i| reach[i]).max().unwrap_or(0);
+        let spread = (high - low) * 100 / high.max(1);
         let gap = chosen
             .iter()
             .enumerate()
-            .flat_map(|(i, &a)| chosen[i + 1..].iter().map(move |&b| dist2(a, b)))
+            .flat_map(|(a, &i)| chosen[a + 1..].iter().map(move |&j| (i, j)))
+            .map(|(i, j)| dist2(pts[i], pts[j]))
             .min()
             .unwrap_or(0);
-        if gap > best_gap {
-            best_gap = gap;
-            best = chosen;
+        let key = (spread / 10, std::cmp::Reverse(gap));
+        if best.as_ref().is_none_or(|(k, _)| key < *k) {
+            best = Some((key, chosen));
         }
     }
-    best
-}
-
-/// Neutral positions keeping a minimum separation (Poisson-disc style dart
-/// throwing over a shuffled pool), relaxing the separation when the pool runs out.
-fn place_neutrals(
-    rng: &mut SimRng,
-    pool: &[Point],
-    homes: &[Point],
-    count: usize,
-    sep: i64,
-) -> Vec<Point> {
-    let mut order: Vec<usize> = (0..pool.len()).collect();
-    for i in (1..order.len()).rev() {
-        order.swap(i, rng.range(0, i as u32 + 1) as usize);
-    }
-    let mut sep = sep;
-    loop {
-        let mut placed: Vec<Point> = Vec::with_capacity(count);
-        for &i in &order {
-            if placed.len() == count {
-                break;
-            }
-            let p = pool[i];
-            if homes
-                .iter()
-                .chain(&placed)
-                .all(|&q| dist2(p, q) >= sep * sep)
-            {
-                placed.push(p);
-            }
-        }
-        if placed.len() == count || sep <= 1 {
-            return placed;
-        }
-        sep = sep * 9 / 10;
-    }
+    best.map(|(_, c)| c).unwrap_or_default()
 }
 
 fn weighted_kind(rng: &mut SimRng, rows: &[&MapStyleFeature]) -> DefId {
@@ -539,22 +546,34 @@ struct Layout {
     systems: Vec<StarSystem>,
     bodies: Vec<Body>,
     routes: Vec<Route>,
+    figure: Vec<(u32, u32)>,
 }
 
-fn can_add(edges: &BTreeSet<(u32, u32)>, pos: &[Point], a: u32, b: u32, clearance: i64) -> bool {
+/// May the route `a`-`b` join the map? It passes clear of every other system and, unless
+/// `lune` is false, no system lies nearer to both ends than they are to each other (the relative
+/// neighbourhood rule: only real neighbours are joined).
+fn can_add(
+    edges: &BTreeSet<(u32, u32)>,
+    pos: &[Point],
+    a: u32,
+    b: u32,
+    clearance: i64,
+    lune: bool,
+) -> bool {
     let (pa, pb) = (pos[a as usize - 1], pos[b as usize - 1]);
+    let ab = dist2(pa, pb);
     !edges.contains(&(a.min(b), a.max(b)))
-        && edges
-            .iter()
-            .all(|&(c, d)| !segments_cross(pa, pb, pos[c as usize - 1], pos[d as usize - 1]))
         && pos.iter().enumerate().all(|(i, &p)| {
             let id = i as u32 + 1;
-            id == a || id == b || segment_dist2(pa, pb, p) >= clearance * clearance
+            id == a
+                || id == b
+                || (segment_dist2(pa, pb, p) >= clearance * clearance
+                    && !(lune && dist2(pa, p).max(dist2(pb, p)) < ab))
         })
 }
 
-/// A spanning tree, then routes so every home system has two (with more than
-/// two systems), then the shortest non-crossing extras.
+/// A spanning tree of the nearest pairs, then routes so every home system has two (with more
+/// than two systems), then the shortest extra routes between real neighbours.
 fn connect(pos: &[Point], homes: usize, extra_pct: i64, clearance: i64) -> Option<Vec<Route>> {
     let k = pos.len() as u32;
     let mut candidates: Vec<(i64, u32, u32)> = Vec::new();
@@ -590,7 +609,7 @@ fn connect(pos: &[Point], homes: usize, extra_pct: i64, clearance: i64) -> Optio
                 let next = candidates
                     .iter()
                     .filter(|&&(_, a, b)| a == home || b == home)
-                    .find(|&&(_, a, b)| can_add(&edges, pos, a, b, clearance))?;
+                    .find(|&&(_, a, b)| can_add(&edges, pos, a, b, clearance, false))?;
                 edges.insert((next.1, next.2));
             }
         }
@@ -600,7 +619,7 @@ fn connect(pos: &[Point], homes: usize, extra_pct: i64, clearance: i64) -> Optio
         if (edges.len() - tree) as i64 >= target {
             break;
         }
-        if can_add(&edges, pos, a, b, clearance) {
+        if can_add(&edges, pos, a, b, clearance, true) {
             edges.insert((a, b));
         }
     }
@@ -616,21 +635,65 @@ fn connect(pos: &[Point], homes: usize, extra_pct: i64, clearance: i64) -> Optio
     )
 }
 
-fn names(rng: &mut SimRng, count: usize) -> Vec<String> {
-    // Joins that double a letter ("Ostost", "Isksk") read badly and are left out.
-    let mut pool: Vec<String> = ONSETS
-        .iter()
-        .flat_map(|o| CODAS.iter().map(move |c| (o, c)))
-        .filter(|(o, c)| !o.to_lowercase().ends_with(&c[..1]))
-        .map(|(o, c)| format!("{o}{c}"))
-        .collect();
-    (0..count)
-        .map(|_| pool.swap_remove(rng.range(0, pool.len() as u32) as usize))
-        .collect()
+/// Roman numeral of a small positive number: the planets of a system in orbit order.
+fn roman(mut n: u32) -> String {
+    const DIGITS: [(u32, &str); 13] = [
+        (1000, "M"),
+        (900, "CM"),
+        (500, "D"),
+        (400, "CD"),
+        (100, "C"),
+        (90, "XC"),
+        (50, "L"),
+        (40, "XL"),
+        (10, "X"),
+        (9, "IX"),
+        (5, "V"),
+        (4, "IV"),
+        (1, "I"),
+    ];
+    let mut out = String::new();
+    for (value, text) in DIGITS {
+        while n >= value {
+            out.push_str(text);
+            n -= value;
+        }
+    }
+    out
+}
+
+/// Names the bodies of one system, in orbit order: planets "<star> II", resource bodies
+/// "<star> belt" or, beside a planet, "<planet> moon"; a second of a kind gets a letter.
+fn name_bodies(star: &str, bodies: &mut [Body]) {
+    let mut planets: Vec<(i32, i32, String)> = Vec::new();
+    let mut numeral = 0;
+    for b in bodies.iter_mut().filter(|b| b.kind == BodyKind::Habitable) {
+        numeral += 1;
+        b.name = format!("{star} {}", roman(numeral));
+        planets.push((b.orbit_radius, b.orbit_angle_mdeg, b.name.clone()));
+    }
+    let mut counts: BTreeMap<String, u32> = BTreeMap::new();
+    for b in bodies.iter_mut().filter(|b| b.kind == BodyKind::Resource) {
+        let host = planets.iter().find(|(_, angle, _)| {
+            let d = (b.orbit_angle_mdeg - angle).rem_euclid(TURN_MDEG as i32);
+            d.min(TURN_MDEG as i32 - d) <= MOON_ANGLE_MDEG as i32
+        });
+        let base = match host {
+            Some((_, _, planet)) => format!("{planet} moon"),
+            None => format!("{star} belt"),
+        };
+        let seen = counts.entry(base.clone()).or_insert(0);
+        b.name = match *seen {
+            0 => base,
+            n => format!("{base} {}", char::from(b'a' + n as u8)),
+        };
+        *seen += 1;
+    }
 }
 
 fn layout(
     rng: &mut SimRng,
+    rules: &Rules,
     style: &MapStyle,
     races: &[DefId],
     rows: &[&MapStyleFeature],
@@ -638,26 +701,48 @@ fn layout(
     let homes = races.len();
     let neutral = pick(rng, style.neutral_systems_min, style.neutral_systems_max) as usize;
     let k = homes + neutral;
-    let radius = style.star_map_radius;
-    let sep = (radius * 1000 / isqrt(k as i64 * 1_000_000)).max(1);
-    let pool = sample_disc(rng, radius, 48 * k);
-    let mut pos = place_homes(rng, &pool, homes);
-    let neutrals = place_neutrals(rng, &pool, &pos, neutral, sep);
-    if neutrals.len() < neutral {
+    let region = choose_region(rng, rules, k, style.star_map_radius)?;
+    let pts: Vec<Point> = region.iter().map(|s| star_point(s)).collect();
+    let chosen = place_homes(rng, &pts, homes);
+    if chosen.len() != homes {
         return None;
     }
-    pos.extend(neutrals);
-    let routes = connect(&pos, homes, style.route_extra_pct, sep / 4)?;
-    let systems: Vec<StarSystem> = names(rng, k)
-        .into_iter()
-        .zip(&pos)
+    // Homes first, then the other stars, each group by catalogue id.
+    let mut order: Vec<usize> = chosen.clone();
+    order.sort_by_key(|&i| region[i].id);
+    let mut rest: Vec<usize> = (0..k).filter(|i| !chosen.contains(i)).collect();
+    rest.sort_by_key(|&i| region[i].id);
+    order.extend(rest);
+    let stars: Vec<&Star> = order.iter().map(|&i| region[i]).collect();
+    let pos: Vec<Point> = stars.iter().map(|s| star_point(s)).collect();
+    let routes = connect(&pos, homes, style.route_extra_pct, ROUTE_CLEARANCE)?;
+    let systems: Vec<StarSystem> = stars
+        .iter()
         .enumerate()
-        .map(|(i, (name, &(x, y)))| StarSystem {
+        .map(|(i, s)| StarSystem {
             id: i as u32 + 1,
-            name,
-            x: x as i32,
-            y: y as i32,
+            name: s.name.clone(),
+            x: s.x as i32,
+            y: s.y as i32,
+            z: s.z as i32,
+            star: s.id,
+            constellation: rules
+                .constellations
+                .get(&s.constellation_id)
+                .map(|c| c.name.clone())
+                .unwrap_or_default(),
         })
+        .collect();
+    let system_of: BTreeMap<u32, u32> = systems.iter().map(|s| (s.star, s.id)).collect();
+    let figure: Vec<(u32, u32)> = rules
+        .constellation_lines
+        .iter()
+        .filter_map(|l| {
+            let (a, b) = (system_of.get(&l.star_a)?, system_of.get(&l.star_b)?);
+            Some((*a.min(b), *a.max(b)))
+        })
+        .collect::<BTreeSet<_>>()
+        .into_iter()
         .collect();
 
     // Every home system gets the same contents and the same arrangement (planets by size,
@@ -698,10 +783,11 @@ fn layout(
             home_race: None,
             node_entity_type: None,
         });
-        for (i, mut body) in plan.orbits(rng, race).into_iter().enumerate() {
+        let mut orbits = plan.orbits(rng, race);
+        name_bodies(&system.name, &mut orbits);
+        for mut body in orbits {
             body.id = bodies.len() as u32 + 1;
             body.system_id = system.id;
-            body.name = format!("{} {}", system.name, i + 1);
             bodies.push(body);
         }
     }
@@ -709,6 +795,7 @@ fn layout(
         systems,
         bodies,
         routes,
+        figure,
     })
 }
 
@@ -796,7 +883,7 @@ fn plan(c: &Checked, request: &UniverseRequest) -> Result<Universe, MapGenError>
         let mut rng = SimRng::new(mix64(
             request.seed ^ attempt.wrapping_mul(0xd1b5_4a32_d192_ed03),
         ));
-        let Some(layout) = layout(&mut rng, c.style, &c.races, &c.rows) else {
+        let Some(layout) = layout(&mut rng, c.rules, c.style, &c.races, &c.rows) else {
             continue;
         };
         let mut universe = Universe {
@@ -804,6 +891,7 @@ fn plan(c: &Checked, request: &UniverseRequest) -> Result<Universe, MapGenError>
             systems: layout.systems,
             bodies: layout.bodies,
             routes: layout.routes,
+            figure: layout.figure,
             recipes: BTreeMap::new(),
             planets: BTreeMap::new(),
             starts: Vec::new(),
@@ -955,11 +1043,20 @@ impl Universe {
                     .filter_map(|d| rules.entity_types.get(&d)?.node.as_ref())
                     .map(|node| node.income)
                     .sum();
+                let mut lengths: Vec<i64> = self
+                    .routes
+                    .iter()
+                    .filter(|r| r.system_a == system || r.system_b == system)
+                    .map(|r| i64::from(r.length))
+                    .collect();
+                lengths.sort_unstable();
+                let near = lengths.iter().take(2).sum();
                 HomeShare {
                     race,
                     system,
                     habitable,
                     value,
+                    near,
                 }
             })
             .collect()
@@ -993,6 +1090,13 @@ impl Universe {
         if low * 100 < high * FAIR_VALUE_PCT {
             problems.push(format!(
                 "resource-body value within {FAIR_HOPS} routes ranges {low} to {high}"
+            ));
+        }
+        let low = shares.iter().map(|s| s.near).min().unwrap_or(0);
+        let high = shares.iter().map(|s| s.near).max().unwrap_or(0);
+        if low * 100 < high * FAIR_NEAR_PCT {
+            problems.push(format!(
+                "the two shortest routes of a home system total {low} to {high}"
             ));
         }
         problems
@@ -1034,6 +1138,10 @@ impl Universe {
             feed(s.name.as_bytes());
             feed(&s.x.to_le_bytes());
             feed(&s.y.to_le_bytes());
+            feed(&s.z.to_le_bytes());
+            feed(&s.star.to_le_bytes());
+            feed(&(s.constellation.len() as u64).to_le_bytes());
+            feed(s.constellation.as_bytes());
         }
         feed(&(self.bodies.len() as u64).to_le_bytes());
         for b in &self.bodies {
@@ -1053,6 +1161,11 @@ impl Universe {
             feed(&r.system_a.to_le_bytes());
             feed(&r.system_b.to_le_bytes());
             feed(&r.length.to_le_bytes());
+        }
+        feed(&(self.figure.len() as u64).to_le_bytes());
+        for (a, b) in &self.figure {
+            feed(&a.to_le_bytes());
+            feed(&b.to_le_bytes());
         }
         for (id, r) in &self.recipes {
             feed(&id.to_le_bytes());
@@ -1079,16 +1192,20 @@ impl Universe {
 
 #[cfg(test)]
 mod tests {
-    use super::segments_cross;
+    use super::{roman, segment_dist2};
 
     #[test]
-    fn crossing_rules() {
-        assert!(segments_cross((0, 0), (10, 10), (0, 10), (10, 0)));
-        assert!(!segments_cross((0, 0), (10, 0), (0, 5), (10, 5)));
-        // Sharing an endpoint is not a crossing, unless the segments overlap.
-        assert!(!segments_cross((0, 0), (10, 0), (0, 0), (0, 10)));
-        assert!(segments_cross((0, 0), (10, 0), (0, 0), (5, 0)));
-        // A touching endpoint in the middle of the other segment is a crossing.
-        assert!(segments_cross((0, 0), (10, 0), (5, 0), (5, 5)));
+    fn distance_to_a_segment_in_3d() {
+        // Beside the middle, beyond either end, and on the segment.
+        assert_eq!(segment_dist2((0, 0, 0), (10, 0, 0), (5, 3, 4)), 25);
+        assert_eq!(segment_dist2((0, 0, 0), (10, 0, 0), (-3, 4, 0)), 25);
+        assert_eq!(segment_dist2((0, 0, 0), (10, 0, 0), (13, 0, 4)), 25);
+        assert_eq!(segment_dist2((0, 0, 0), (10, 0, 0), (4, 0, 0)), 0);
+    }
+
+    #[test]
+    fn planets_take_roman_numerals() {
+        let all: Vec<String> = [1, 2, 3, 4, 9, 14, 40].map(roman).into();
+        assert_eq!(all, ["I", "II", "III", "IV", "IX", "XIV", "XL"]);
     }
 }

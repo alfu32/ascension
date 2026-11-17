@@ -1,0 +1,8 @@
+# Task 59: the "Sky from the Sun" preset (F2) with the constellation figures, turned down to the
+# south toward Orion. The shot in docs/img was taken on a wide sky: seed 26 with the many-worlds style
+# set to 150 neutral systems and star_map_radius 6000 (a temporary change to db/seed.sql), so most
+# of each constellation is in the match; with the shipped style only a few stars are.
+0 grant-age age.galactic
+4 cam sky
+6 cam key down down
+36 cam key down up

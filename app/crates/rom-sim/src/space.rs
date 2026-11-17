@@ -809,6 +809,8 @@ mod tests {
             name: "Test".into(),
             x: 0,
             y: 0,
+            z: 0,
+            constellation: String::new(),
         });
         w
     }

@@ -219,7 +219,7 @@ pub struct MapShipMark {
     pub owner: u8,
     /// Place on the star map.
     pub at: [f32; 3],
-    /// Unit direction of travel along the lane, for a ship in transit.
+    /// Unit direction of travel along the lane in 3D, for a ship in transit.
     pub heading: Option<[f32; 3]>,
     /// The system it is bound for (an index of the scene's systems), for a ship in transit.
     pub bound_for: Option<usize>,
@@ -245,8 +245,8 @@ pub fn map_ship_marks(
             continue;
         };
         let (from, to) = (positions[a], positions[b]);
-        let way = [to[0] - from[0], 0.0, to[2] - from[2]];
-        let length = way[0].hypot(way[2]);
+        let way = [0, 1, 2].map(|i| to[i] - from[i]);
+        let length = (way[0] * way[0] + way[1] * way[1] + way[2] * way[2]).sqrt();
         marks.push(MapShipMark {
             ids: vec![transit.id],
             owner: transit.owner,
@@ -357,6 +357,48 @@ pub fn chevron(at: [f32; 3], dir: [f32; 3], size: f32, colour: [u8; 4]) -> Vec<T
             colour,
         },
     ]
+}
+
+/// An arrowhead pointing along the 3D direction `dir`: two flat heads crossed at right angles
+/// (one in the plane of `dir` and the horizontal, one perpendicular to it), so a ship climbing
+/// between systems reads from above and from the side.
+pub fn chevron3(at: [f32; 3], dir: [f32; 3], size: f32, colour: [u8; 4]) -> Vec<Tri3> {
+    let cross = |a: [f32; 3], b: [f32; 3]| {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    };
+    let unit = |v: [f32; 3]| {
+        let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt().max(1e-6);
+        v.map(|c| c / l)
+    };
+    let dir = unit(dir);
+    let reference = if dir[1].abs() < 0.95 {
+        [0.0, 1.0, 0.0]
+    } else {
+        [1.0, 0.0, 0.0]
+    };
+    let side = unit(cross(reference, dir));
+    let normal = unit(cross(dir, side));
+    let mut out = Vec::new();
+    for across in [side, normal] {
+        let point = |along: f32, wide: f32| {
+            [0, 1, 2].map(|i| at[i] + (dir[i] * along + across[i] * wide) * size)
+        };
+        let (tip, notch) = (point(0.75, 0.0), point(-0.2, 0.0));
+        let (left, right) = (point(-0.6, -0.6), point(-0.6, 0.6));
+        out.push(Tri3 {
+            v: [tip, left, notch],
+            colour,
+        });
+        out.push(Tri3 {
+            v: [tip, notch, right],
+            colour,
+        });
+    }
+    out
 }
 
 /// A flat diamond of half-diagonal `size` in the plane `y = at.y`.
@@ -951,6 +993,32 @@ mod tests {
             to,
             progress,
         }
+    }
+
+    #[test]
+    fn a_ship_on_a_climbing_lane_heads_up_along_it() {
+        let mut scene = sample_scene();
+        scene.systems[1].z = 90_000;
+        let positions = scene.place_systems();
+        let snapshot = SpaceSnapshot {
+            transits: vec![transit(20, 1, 2, 0.5)],
+            ..SpaceSnapshot::default()
+        };
+        let marks = map_ship_marks(&scene, &positions, &snapshot, [0.0; 3]);
+        let heading = marks[0].heading.unwrap();
+        let way: Vec<f32> = (0..3).map(|i| positions[1][i] - positions[0][i]).collect();
+        let length = way.iter().map(|c| c * c).sum::<f32>().sqrt();
+        assert!(heading[1] > 0.3, "{heading:?}");
+        for i in 0..3 {
+            assert!((heading[i] - way[i] / length).abs() < 1e-4);
+        }
+        // Its arrowhead has a point on the lane ahead and lies along the heading.
+        let tris = chevron3(marks[0].at, heading, 100.0, [1, 2, 3, 4]);
+        assert_eq!(tris.len(), 4);
+        let tip = tris[0].v[0];
+        let ahead: Vec<f32> = (0..3).map(|i| tip[i] - marks[0].at[i]).collect();
+        let dot: f32 = (0..3).map(|i| ahead[i] * heading[i]).sum();
+        assert!(dot > 70.0, "{dot}");
     }
 
     #[test]

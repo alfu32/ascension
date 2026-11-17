@@ -154,6 +154,10 @@ pub enum Key {
     FocusSelection,
     /// Keep the selection centred until the key is pressed again (Shift + Space).
     FollowSelection,
+    /// Switch the "Sky from the Sun" preset of the star map (F2).
+    SkyFromSun,
+    /// Show or hide the constellation figures on the star map (F3).
+    ToggleConstellations,
 }
 
 impl Key {
@@ -168,6 +172,8 @@ impl Key {
             "end" => Some(Self::ResetCamera),
             "home" => Some(Self::FrameMap),
             "space" => Some(Self::FocusSelection),
+            "f2" => Some(Self::SkyFromSun),
+            "f3" => Some(Self::ToggleConstellations),
             _ => None,
         }
     }
@@ -178,9 +184,12 @@ impl Key {
             Self::PanBack => Some(1),
             Self::PanLeft => Some(2),
             Self::PanRight => Some(3),
-            Self::ResetCamera | Self::FrameMap | Self::FocusSelection | Self::FollowSelection => {
-                None
-            }
+            Self::ResetCamera
+            | Self::FrameMap
+            | Self::FocusSelection
+            | Self::FollowSelection
+            | Self::SkyFromSun
+            | Self::ToggleConstellations => None,
         }
     }
 }
@@ -352,6 +361,12 @@ mod tests {
 
     fn close(a: f32, b: f32) -> bool {
         (a - b).abs() < 1e-4
+    }
+
+    #[test]
+    fn the_star_map_presets_are_on_function_keys() {
+        assert_eq!(Key::from_name("F2"), Some(Key::SkyFromSun));
+        assert_eq!(Key::from_name("f3"), Some(Key::ToggleConstellations));
     }
 
     #[test]

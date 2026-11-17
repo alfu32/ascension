@@ -322,6 +322,8 @@ pub fn universe_setup(universe: &Universe) -> UniverseSetup {
                 name: s.name.clone(),
                 x: s.x,
                 y: s.y,
+                z: s.z,
+                constellation: s.constellation.clone(),
             })
             .collect(),
         bodies: universe
@@ -339,6 +341,7 @@ pub fn universe_setup(universe: &Universe) -> UniverseSetup {
                 node_type: b.node_entity_type,
             })
             .collect(),
+        figure: universe.figure.clone(),
         routes: universe
             .routes
             .iter()

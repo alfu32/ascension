@@ -274,9 +274,13 @@ pub fn universe(rules: &Arc<Rules>) -> World {
         node_type: None,
     };
     let setup = UniverseSetup {
+        // A figure line, heights and a constellation, so a save round trip covers them.
+        figure: vec![(1, 2)],
         systems: [(1, 0, 0), (2, 100, 0)]
             .into_iter()
             .map(|(id, x, y)| SystemInfo {
+                z: 40 * id as i32 - 60,
+                constellation: "Lyra".to_owned(),
                 id,
                 x,
                 y,

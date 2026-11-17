@@ -1,0 +1,10 @@
+# Task 59, replayed by --script in --universe mode: a survey ship leaves the home system for a
+# neighbour along its route (the lane climbs or falls with the two stars' heights) while the
+# camera is on the star map, tilted to a low angle. Test-only setup lines first.
+0 grant-age age.galactic
+0 place-space 1 unit.survey_ship 40,0
+4 ships
+6 travel system1
+8 cam drag 900,430 900,300 rotate
+1 speed 1000
+2255 speed 3

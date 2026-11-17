@@ -19,10 +19,14 @@ pub struct SystemInfo {
     pub id: u32,
     /// Display name.
     pub name: String,
-    /// Star map position, abstract units.
+    /// Star map position, abstract units (equatorial frame, the Sun at 0, 0, 0).
     pub x: i32,
     /// Star map position, abstract units.
     pub y: i32,
+    /// Star map position, abstract units; toward the north celestial pole.
+    pub z: i32,
+    /// Constellation of the system's star, for labels; empty when unknown.
+    pub constellation: String,
 }
 
 /// A star, habitable planet or resource body.
@@ -82,6 +86,8 @@ pub struct UniverseSetup {
     pub routes: Vec<RouteInfo>,
     /// The planets generated before the match, by body.
     pub planets: BTreeMap<BodyId, PlanetSurface>,
+    /// Constellation stick-figure lines between systems, `a < b`. Display only.
+    pub figure: Vec<(u32, u32)>,
 }
 
 /// Stored universe facts, shared by planetary surfaces and system space.
@@ -91,6 +97,8 @@ pub(crate) struct UniverseData {
     /// Bodies in id order.
     pub bodies: Vec<BodyInfo>,
     pub routes: Vec<RouteInfo>,
+    /// Constellation figure lines between systems, `a < b`.
+    pub figure: Vec<(u32, u32)>,
 }
 
 impl World {
@@ -110,10 +118,13 @@ impl World {
             mut bodies,
             mut routes,
             planets,
+            mut figure,
         } = setup;
         bodies.sort_by_key(|b| b.id);
         systems.sort_by_key(|s| s.id);
         routes.sort();
+        figure.sort_unstable();
+        figure.dedup();
         if planets.is_empty() && systems.is_empty() {
             return Err(SimError::InvalidUniverse("no surface"));
         }
@@ -149,6 +160,7 @@ impl World {
             systems,
             bodies,
             routes,
+            figure,
         };
         for (body, planet) in &planets {
             world.check_planet(*body, planet)?;
@@ -371,12 +383,16 @@ mod tests {
                     name: "A".into(),
                     x: 0,
                     y: 0,
+                    z: 0,
+                    constellation: String::new(),
                 },
                 SystemInfo {
                     id: 2,
                     name: "B".into(),
                     x: 9,
                     y: 9,
+                    z: 4,
+                    constellation: "Test".into(),
                 },
             ],
             bodies: vec![
@@ -394,6 +410,7 @@ mod tests {
                 length: 12,
             }],
             planets: BTreeMap::from([(BodyId(2), planet.clone()), (BodyId(3), planet)]),
+            figure: vec![(1, 2)],
         };
         let player = Player {
             id: PlayerId(1),
@@ -417,6 +434,8 @@ mod tests {
     fn hash_covers_bodies_systems_routes_homes_and_every_surface() {
         let mut w = world();
         changes(&mut w, |w| w.universe.systems[1].x += 1);
+        changes(&mut w, |w| w.universe.systems[1].z += 1);
+        changes(&mut w, |w| w.universe.figure.clear());
         changes(&mut w, |w| w.universe.systems[0].name.push('x'));
         changes(&mut w, |w| w.universe.bodies[1].orbit_angle_mdeg += 1);
         changes(&mut w, |w| w.universe.bodies[2].system = 2);

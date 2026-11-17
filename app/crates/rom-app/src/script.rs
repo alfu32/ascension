@@ -43,7 +43,8 @@
 //! (positions in canvas pixels): `cam wheel <steps> [x,y]`, `cam drag x,y x,y [rotate]`
 //! (middle-button drag; `rotate` holds Shift), `cam dblclick x,y`, `cam click x,y`, `cam point
 //! x,y` (move the pointer only), `cam key <up|down|left|right> <down|up>`, `cam home`,
-//! `cam focus` and `cam follow` (the focus and follow keys).
+//! `cam focus` and `cam follow` (the focus and follow keys), `cam sky` (F2, the "Sky from the
+//! Sun" preset of the star map) and `cam lines` (F3, the constellation figures).
 
 use rom_render::{HudRegionKind, Modifiers, PickEvent, PointerButton, SurfacePos};
 
@@ -834,6 +835,8 @@ fn camera_input(words: &[&str]) -> Result<Vec<rom_render::InputEvent>, String> {
         Some("home") => vec![InputEvent::KeyDown(Key::FrameMap)],
         Some("focus") => vec![InputEvent::KeyDown(Key::FocusSelection)],
         Some("follow") => vec![InputEvent::KeyDown(Key::FollowSelection)],
+        Some("sky") => vec![InputEvent::KeyDown(Key::SkyFromSun)],
+        Some("lines") => vec![InputEvent::KeyDown(Key::ToggleConstellations)],
         other => return Err(format!("unknown camera command {other:?}")),
     })
 }

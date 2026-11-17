@@ -41,38 +41,13 @@ fn plan(rules: &Rules, style: &str, seed: u64, factions: &[&str]) -> Universe {
     plan_universe(rules, &request(rules, style, seed, factions)).unwrap()
 }
 
-fn pos(u: &Universe, system: u32) -> (i64, i64) {
+fn pos(u: &Universe, system: u32) -> (i64, i64, i64) {
     let s = &u.systems[system as usize - 1];
-    (i64::from(s.x), i64::from(s.y))
+    (i64::from(s.x), i64::from(s.y), i64::from(s.z))
 }
 
-fn cross(o: (i64, i64), a: (i64, i64), b: (i64, i64)) -> i64 {
-    (a.0 - o.0) * (b.1 - o.1) - (a.1 - o.1) * (b.0 - o.0)
-}
-
-fn within(a: (i64, i64), b: (i64, i64), c: (i64, i64)) -> bool {
-    (a.0.min(b.0)..=a.0.max(b.0)).contains(&c.0) && (a.1.min(b.1)..=a.1.max(b.1)).contains(&c.1)
-}
-
-/// Independent check: two routes meet somewhere other than a shared end.
-fn routes_meet(a: (i64, i64), b: (i64, i64), c: (i64, i64), d: (i64, i64)) -> bool {
-    let shared = [a, b].iter().filter(|p| **p == c || **p == d).count();
-    if shared == 1 {
-        let p = if a == c || a == d { a } else { b };
-        let q = if p == a { b } else { a };
-        let r = if p == c { d } else { c };
-        let dot = (q.0 - p.0) * (r.0 - p.0) + (q.1 - p.1) * (r.1 - p.1);
-        return cross(p, q, r) == 0 && dot > 0;
-    }
-    let (d1, d2) = (cross(a, b, c), cross(a, b, d));
-    let (d3, d4) = (cross(c, d, a), cross(c, d, b));
-    if d1.signum() * d2.signum() < 0 && d3.signum() * d4.signum() < 0 {
-        return true;
-    }
-    (d1 == 0 && within(a, b, c))
-        || (d2 == 0 && within(a, b, d))
-        || (d3 == 0 && within(c, d, a))
-        || (d4 == 0 && within(c, d, b))
+fn dist2(a: (i64, i64, i64), b: (i64, i64, i64)) -> i64 {
+    (a.0 - b.0).pow(2) + (a.1 - b.1).pow(2) + (a.2 - b.2).pow(2)
 }
 
 #[test]
@@ -149,53 +124,103 @@ fn every_system_is_reachable() {
         assert!(u.routes.len() >= u.systems.len() - 1);
         for route in &u.routes {
             assert!(route.system_a < route.system_b);
-            let d2 = {
-                let (a, b) = (pos(&u, route.system_a), pos(&u, route.system_b));
-                (a.0 - b.0).pow(2) + (a.1 - b.1).pow(2)
-            };
+            let d2 = dist2(pos(&u, route.system_a), pos(&u, route.system_b));
             assert_eq!(i64::from(route.length), (d2 as u64).isqrt() as i64);
         }
     }
 }
 
 #[test]
-fn home_systems_are_far_apart() {
+fn systems_are_real_stars_at_their_real_places() {
     let r = rules();
-    for factions in [&FOUR[..], &FOUR[1..3]] {
-        for seed in 0..20 {
-            let u = plan(&r, "map.many_worlds", seed, factions);
-            let radius = r.map_styles[&u.style].star_map_radius;
-            let homes = u.home_systems();
-            for (i, a) in homes.iter().enumerate() {
-                for b in &homes[i + 1..] {
-                    let (pa, pb) = (pos(&u, a.1), pos(&u, b.1));
-                    let d2 = (pa.0 - pb.0).pow(2) + (pa.1 - pb.1).pow(2);
-                    assert!(d2 >= radius * radius, "seed {seed}: homes {d2} apart");
-                }
+    for seed in 0..20 {
+        let u = plan(&r, "map.many_worlds", seed, &FOUR);
+        let radius = r.map_styles[&u.style].star_map_radius;
+        for (i, s) in u.systems.iter().enumerate() {
+            let star = &r.stars[&s.star];
+            assert_eq!(
+                (
+                    s.name.as_str(),
+                    i64::from(s.x),
+                    i64::from(s.y),
+                    i64::from(s.z)
+                ),
+                (star.name.as_str(), star.x, star.y, star.z)
+            );
+            assert_eq!(
+                s.constellation,
+                r.constellations[&star.constellation_id].name
+            );
+            assert!(u.systems[i + 1..].iter().all(|t| t.star != s.star));
+            // The region is a ball around some catalogue star: every pair is within a diameter.
+            for t in &u.systems[i + 1..] {
+                assert!(dist2(pos(&u, s.id), pos(&u, t.id)) <= 4 * radius * radius);
             }
-            for (i, s) in u.systems.iter().enumerate() {
-                assert!(i64::from(s.x).pow(2) + i64::from(s.y).pow(2) <= radius * radius);
-                assert!(u.systems[i + 1..].iter().all(|t| (t.x, t.y) != (s.x, s.y)));
-            }
+        }
+        // Figure lines join systems of one constellation, both in this match.
+        for &(a, b) in &u.figure {
+            assert!(a < b);
+            assert_eq!(
+                u.systems[a as usize - 1].constellation,
+                u.systems[b as usize - 1].constellation
+            );
         }
     }
 }
 
 #[test]
-fn routes_do_not_cross() {
+fn home_systems_are_apart_and_comparable() {
+    let r = rules();
+    for factions in [&FOUR[..], &FOUR[1..3]] {
+        for seed in 0..20 {
+            let u = plan(&r, "map.many_worlds", seed, factions);
+            let homes = u.home_systems();
+            for (i, a) in homes.iter().enumerate() {
+                for b in &homes[i + 1..] {
+                    assert_ne!(a.1, b.1);
+                    let d2 = dist2(pos(&u, a.1), pos(&u, b.1));
+                    assert!(d2 >= 40 * 40, "seed {seed}: homes {d2} apart");
+                }
+            }
+            let shares = u.home_shares(&r);
+            let low = shares.iter().map(|s| s.near).min().unwrap();
+            let high = shares.iter().map(|s| s.near).max().unwrap();
+            assert!(
+                low * 100 >= high * rom_mapgen::FAIR_NEAR_PCT,
+                "seed {seed}: {low} {high}"
+            );
+        }
+    }
+}
+
+#[test]
+fn routes_join_neighbours_and_keep_clear_of_other_systems() {
     let r = rules();
     for seed in 0..20 {
         let u = plan(&r, "map.many_worlds", seed, &FOUR);
-        for (i, a) in u.routes.iter().enumerate() {
-            for b in &u.routes[i + 1..] {
+        for route in &u.routes {
+            let (a, b) = (pos(&u, route.system_a), pos(&u, route.system_b));
+            let len2 = dist2(a, b);
+            for s in &u.systems {
+                if s.id == route.system_a || s.id == route.system_b {
+                    continue;
+                }
+                let c = (i64::from(s.x), i64::from(s.y), i64::from(s.z));
+                // Independent check: the point of the segment nearest `c`, by projection in f64.
+                let (ab, ac) = (
+                    [(b.0 - a.0) as f64, (b.1 - a.1) as f64, (b.2 - a.2) as f64],
+                    [(c.0 - a.0) as f64, (c.1 - a.1) as f64, (c.2 - a.2) as f64],
+                );
+                let t =
+                    ((ab[0] * ac[0] + ab[1] * ac[1] + ab[2] * ac[2]) / len2 as f64).clamp(0.0, 1.0);
+                let near: f64 = (0..3)
+                    .map(|i| (ac[i] - ab[i] * t).powi(2))
+                    .sum::<f64>()
+                    .sqrt();
                 assert!(
-                    !routes_meet(
-                        pos(&u, a.system_a),
-                        pos(&u, a.system_b),
-                        pos(&u, b.system_a),
-                        pos(&u, b.system_b)
-                    ),
-                    "seed {seed}: {a:?} crosses {b:?}"
+                    near >= 39.0,
+                    "seed {seed}: route {route:?} passes {near} from {}",
+                    s.name
                 );
             }
         }
@@ -354,8 +379,8 @@ fn universe_rows_fit_the_state_schema() {
     let u = plan(&r, "map.many_worlds", 9, &FOUR);
     for s in &u.systems {
         conn.execute(
-            "INSERT INTO star_system(id,name,x,y) VALUES (?1,?2,?3,?4)",
-            rusqlite::params![s.id, s.name, s.x, s.y],
+            "INSERT INTO star_system(id,name,x,y,z,star_id,constellation) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            rusqlite::params![s.id, s.name, s.x, s.y, s.z, s.star, s.constellation],
         )
         .unwrap();
     }
@@ -373,6 +398,13 @@ fn universe_rows_fit_the_state_schema() {
                 b.home_race.map(|d| d.0),
                 b.node_entity_type.map(|d| d.0)
             ],
+        )
+        .unwrap();
+    }
+    for (a, b) in &u.figure {
+        conn.execute(
+            "INSERT INTO star_figure VALUES (?1,?2)",
+            rusqlite::params![a, b],
         )
         .unwrap();
     }

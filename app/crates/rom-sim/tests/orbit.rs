@@ -72,7 +72,10 @@ fn world(rules: &Arc<Rules>) -> World {
         node_type: None,
     };
     let setup = UniverseSetup {
+        figure: Vec::new(),
         systems: vec![SystemInfo {
+            z: 0,
+            constellation: String::new(),
             id: 1,
             x: 0,
             y: 0,

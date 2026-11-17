@@ -467,6 +467,8 @@ pub struct Snapshot {
     pub bodies: Vec<BodyInfo>,
     /// Routes.
     pub routes: Vec<RouteInfo>,
+    /// Constellation figure lines between systems.
+    pub figure: Vec<(u32, u32)>,
     /// Surfaces in body order.
     pub surfaces: Vec<SurfaceSnapshot>,
     /// Entities standing on a surface, in id order.
@@ -866,6 +868,7 @@ impl World {
             systems: self.universe.systems.clone(),
             bodies: self.universe.bodies.clone(),
             routes: self.universe.routes.clone(),
+            figure: self.universe.figure.clone(),
             surfaces,
             entities: self.entities().map(entity_snapshot).collect(),
             pending: self
@@ -991,6 +994,7 @@ impl World {
             systems,
             bodies,
             routes,
+            figure,
             surfaces,
             entities,
             pending,
@@ -1028,6 +1032,7 @@ impl World {
             systems,
             bodies,
             routes,
+            figure,
         };
         for p in &players {
             if let Some(home) = p.home {

@@ -1735,8 +1735,57 @@ pub struct MapStyle {
     pub planet_n_max: i64,
     /// Extra routes beyond a spanning tree, as a percentage of its edge count.
     pub route_extra_pct: i64,
-    /// Radius of the star map disc, in abstract units.
+    /// Widest region of the star catalogue one universe may span, in map units: systems are
+    /// taken nearest first from a centre star and none lies farther from it than this.
     pub star_map_radius: i64,
+}
+/// One `constellation` row.
+#[derive(Debug, Clone)]
+pub struct Constellation {
+    /// The `id` column.
+    pub id: u32,
+    /// IAU three-letter abbreviation.
+    pub abbr: String,
+    /// IAU name.
+    pub name: String,
+    /// Latin genitive used in Bayer designations.
+    pub genitive: String,
+}
+/// One `star` row: a real star and its integer map position (the Sun at the origin).
+#[derive(Debug, Clone)]
+pub struct Star {
+    /// The `id` column.
+    pub id: u32,
+    /// Hipparcos catalogue number.
+    pub hip: u32,
+    /// Proper, Bayer or catalogue name shown on the star map.
+    pub name: String,
+    /// Bayer designation or catalogue number.
+    pub designation: String,
+    /// The `constellation_id` column.
+    pub constellation_id: u32,
+    /// Right ascension, milli-degrees (published value).
+    pub ra_mdeg: i64,
+    /// Declination, milli-degrees (published value).
+    pub dec_mdeg: i64,
+    /// Distance from the Sun in hundredths of a light-year (published value).
+    pub dist_cly: i64,
+    /// Map position computed from the three values above, abstract units.
+    pub x: i64,
+    /// Map position, abstract units.
+    pub y: i64,
+    /// Map position toward the north celestial pole, abstract units.
+    pub z: i64,
+}
+/// One `constellation_line` row: a stick-figure line, `star_a < star_b`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ConstellationLine {
+    /// The `constellation_id` column.
+    pub constellation_id: u32,
+    /// Lower star id.
+    pub star_a: u32,
+    /// Higher star id.
+    pub star_b: u32,
 }
 /// One `map_style_feature` row.
 #[derive(Debug, Clone)]
@@ -1959,6 +2008,12 @@ pub struct Rules {
     pub ability_grants: BTreeMap<DefId, Vec<AbilityGrant>>,
     /// Loaded `entity_visual` rows, keyed by their owning id or key.
     pub entity_visuals: BTreeMap<DefId, Vec<EntityVisual>>,
+    /// Loaded `constellation` rows, keyed by id.
+    pub constellations: BTreeMap<u32, Constellation>,
+    /// Loaded `star` rows, keyed by id: the real star catalogue.
+    pub stars: BTreeMap<u32, Star>,
+    /// Loaded `constellation_line` rows in star order.
+    pub constellation_lines: Vec<ConstellationLine>,
     /// Loaded `map_style_feature` rows, keyed by their owning id or key.
     pub map_style_features: BTreeMap<DefId, Vec<MapStyleFeature>>,
     /// Loaded `match_option` rows, keyed by primary key.

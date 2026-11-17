@@ -1925,6 +1925,8 @@ fn orbital_review_script_trains_launches_selects_and_bombards_through_picks() {
     let options = crate::args::Options {
         sphere: Some(64),
         players: 2,
+        // Seed 2: the home planet of seed 1 puts these scripts' buildings across a face edge.
+        seed: 2,
         ..crate::args::Options::default()
     };
     let content = crate::terrain::generate_universe_content(&options).unwrap();
@@ -2189,6 +2191,8 @@ fn colony_script_run() -> (crate::match_setup::Match, Controller, BodyId, u64) {
     let options = crate::args::Options {
         sphere: Some(64),
         players: 2,
+        // Seed 2: the home planet of seed 1 puts these scripts' buildings across a face edge.
+        seed: 2,
         ..crate::args::Options::default()
     };
     let content = crate::terrain::generate_universe_content(&options).unwrap();
@@ -2365,9 +2369,9 @@ fn a_carrier_lists_its_passengers_and_offers_unload_and_lift_off() {
     );
 }
 
-/// Replays a task 58 review script on the universe its screenshot was taken in (seed 1, two
-/// players, planets of the default size) for `ticks` ticks, calling `each` after every step with
-/// the planet view's render snapshot.
+/// Replays a task 58 review script on a universe of two players with planets of the default
+/// size for `ticks` ticks, calling `each` after every step with the planet view's render
+/// snapshot.
 fn orbital_combat_script(
     text: &str,
     ticks: u64,
@@ -2376,6 +2380,9 @@ fn orbital_combat_script(
     use crate::script::{Script, ScriptAction, ScriptContext, ScriptSetup};
     let options = crate::args::Options {
         players: 2,
+        // Seed 2: with the real-sky universe (task 59) the home planet of seed 1 puts the
+        // scripts' buildings across a face edge.
+        seed: 2,
         ..crate::args::Options::default()
     };
     let content = crate::terrain::generate_universe_content(&options).unwrap();
