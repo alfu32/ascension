@@ -118,3 +118,16 @@ routes with constellation figures shown; commit on the branch (stage by
 name), do not push or merge; final message with commands and real output,
 files changed, keys added, deviations, anything not verified (live mouse and
 keyboard feel cannot be scripted: say so).
+
+## Screenshots (looked at)
+
+Universe, `--ai none`, `--view starmap`, 1280x720, scripts `79-*-script.txt`:
+
+- `img/star-map-79-before.png` / `img/star-map-79-after.png`: seed 1, `79-star-map-script.txt`,
+  the same pose with the 0.0.73 binary and with this task (rings and drop lines gone).
+- `img/star-map-79-above.png`: `79-above-script.txt`, about 81 degrees above the old plane.
+- `img/star-map-79-below.png`: `79-below-script.txt`, about 68 degrees below it.
+- `img/star-map-79-flight.png`: `79-flight-script.txt`, a keyboard flight from Eta Hydrae past
+  Minchir and Rho Hydrae (six runs shot at 1.2 to 2.7 s, ordered by progress).
+- `img/star-map-79-figures.png`: seed 2, `79-figures-script.txt`, Aquila's dashed figure beside
+  the route stubs (enlarged below).

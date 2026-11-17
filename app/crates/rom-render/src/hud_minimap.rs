@@ -637,7 +637,8 @@ pub fn space_marks(
         }
     }
     // The part of the plane in view, a trapezoid for a tilted camera (cut off where the view
-    // reaches toward the horizon), and the focus.
+    // reaches toward the horizon; none on the free star map, which has no plane), and the
+    // focus.
     let canvas = (layout.width, layout.height);
     let world = layout.world_area();
     let centre_y = ndc_centre_y(world, layout.height);

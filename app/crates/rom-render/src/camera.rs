@@ -263,6 +263,12 @@ pub enum Key {
     SkyFromSun,
     /// Show or hide the constellation figures on the star map (F3).
     ToggleConstellations,
+    /// Fly up the screen on the star map (Shift + up arrow); elsewhere as the up arrow.
+    FlyUp,
+    /// Fly down the screen on the star map (Shift + down arrow); elsewhere as the down arrow.
+    FlyDown,
+    /// Turn the star-map camera upright again (F4).
+    LevelView,
 }
 
 impl Key {
@@ -279,14 +285,39 @@ impl Key {
             "space" => Some(Self::FocusSelection),
             "f2" => Some(Self::SkyFromSun),
             "f3" => Some(Self::ToggleConstellations),
+            "f4" => Some(Self::LevelView),
+            "shift+up" => Some(Self::FlyUp),
+            "shift+down" => Some(Self::FlyDown),
+            _ => None,
+        }
+    }
+
+    /// The camera key of a key press named `name` with Shift held or not: Shift + the up and
+    /// down arrows fly up and down the screen on the star map, other keys ignore Shift.
+    pub fn from_keystroke(name: &str, shift: bool) -> Option<Self> {
+        match Self::from_name(name)? {
+            Self::PanForward if shift => Some(Self::FlyUp),
+            Self::PanBack if shift => Some(Self::FlyDown),
+            key => Some(key),
+        }
+    }
+
+    /// The other key a release of this one ends too: Shift may be let go before the arrow, so
+    /// releasing an arrow also releases its Shift form, and the other way round.
+    pub fn released_with(self) -> Option<Self> {
+        match self {
+            Self::PanForward => Some(Self::FlyUp),
+            Self::PanBack => Some(Self::FlyDown),
+            Self::FlyUp => Some(Self::PanForward),
+            Self::FlyDown => Some(Self::PanBack),
             _ => None,
         }
     }
 
     fn held_index(self) -> Option<usize> {
         match self {
-            Self::PanForward => Some(0),
-            Self::PanBack => Some(1),
+            Self::PanForward | Self::FlyUp => Some(0),
+            Self::PanBack | Self::FlyDown => Some(1),
             Self::PanLeft => Some(2),
             Self::PanRight => Some(3),
             Self::ResetCamera
@@ -294,7 +325,8 @@ impl Key {
             | Self::FocusSelection
             | Self::FollowSelection
             | Self::SkyFromSun
-            | Self::ToggleConstellations => None,
+            | Self::ToggleConstellations
+            | Self::LevelView => None,
         }
     }
 }
@@ -482,6 +514,27 @@ mod tests {
     fn the_star_map_presets_are_on_function_keys() {
         assert_eq!(Key::from_name("F2"), Some(Key::SkyFromSun));
         assert_eq!(Key::from_name("f3"), Some(Key::ToggleConstellations));
+        assert_eq!(Key::from_name("f4"), Some(Key::LevelView));
+    }
+
+    #[test]
+    fn shift_and_the_vertical_arrows_fly_up_and_down() {
+        assert_eq!(Key::from_keystroke("up", true), Some(Key::FlyUp));
+        assert_eq!(Key::from_keystroke("down", true), Some(Key::FlyDown));
+        assert_eq!(Key::from_keystroke("up", false), Some(Key::PanForward));
+        assert_eq!(Key::from_keystroke("left", true), Some(Key::PanLeft));
+        assert_eq!(Key::from_name("shift+up"), Some(Key::FlyUp));
+        // Releasing the arrow ends both forms, whichever was let go first.
+        assert_eq!(Key::PanForward.released_with(), Some(Key::FlyUp));
+        assert_eq!(Key::FlyDown.released_with(), Some(Key::PanBack));
+        assert_eq!(Key::LevelView.released_with(), None);
+        // Off the star map the Shift forms pan as the arrows do.
+        let mut camera = Camera::default();
+        let before = camera.target;
+        let mut controller = CameraController::default();
+        controller.apply(&mut camera, InputEvent::KeyDown(Key::FlyUp));
+        controller.advance(&mut camera, 0.1);
+        assert_ne!(camera.target, before);
     }
 
     #[test]

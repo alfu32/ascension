@@ -464,8 +464,8 @@ impl OrbitController {
 
 pub(crate) fn pan_index(key: Key) -> Option<usize> {
     match key {
-        Key::PanForward => Some(0),
-        Key::PanBack => Some(1),
+        Key::PanForward | Key::FlyUp => Some(0),
+        Key::PanBack | Key::FlyDown => Some(1),
         Key::PanLeft => Some(2),
         Key::PanRight => Some(3),
         Key::ResetCamera
@@ -473,7 +473,8 @@ pub(crate) fn pan_index(key: Key) -> Option<usize> {
         | Key::FocusSelection
         | Key::FollowSelection
         | Key::SkyFromSun
-        | Key::ToggleConstellations => None,
+        | Key::ToggleConstellations
+        | Key::LevelView => None,
     }
 }
 

@@ -259,6 +259,11 @@ impl View {
         self.eye
     }
 
+    /// Unit direction the camera looks along.
+    pub fn forward(&self) -> [f32; 3] {
+        self.forward
+    }
+
     /// Unit direction of the ray through canvas pixel (`px`, `py`).
     pub fn ray(&self, px: f32, py: f32) -> [f32; 3] {
         let nx = 2.0 * px / self.size.0.max(1.0) - 1.0;

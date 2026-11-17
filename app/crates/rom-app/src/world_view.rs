@@ -238,7 +238,7 @@ impl WorldView {
                 .bridge
                 .push_input(InputEvent::KeyDown(Key::FollowSelection)),
             name => {
-                if let Some(key) = Key::from_name(name) {
+                if let Some(key) = Key::from_keystroke(name, event.keystroke.modifiers.shift) {
                     self.bridge.push_input(InputEvent::KeyDown(key));
                 } else if let (Some(ch), None) = (name.chars().next(), name.chars().nth(1))
                     && ch.is_ascii_alphanumeric()
