@@ -75,6 +75,9 @@ controls! {
     ("look-at", 2, "", "Terrain, optional nearby terrain and positive distance in tiles.", false),
     ("sun", 2, "orbit", "Sun light: orbit, fixed over the first view, or midnight.", false),
     ("graticule", 2, "on", "Draw latitude and longitude lines on spheres.", false),
+    ("middle-drag", 2, "turn", "Middle drag: turn the view (Shift pans) or pan (Shift turns), at every level.", false),
+    ("invert-horizontal-turn", 2, "false", "Turning drags right swing the camera right (the scene against the pointer).", true),
+    ("invert-vertical-turn", 2, "false", "Turning drags up raise the camera (the scene against the pointer).", true),
     ("gallery", 3, "", "Review all models, units, an age, entity key or composed model id.", false),
     ("gallery-view", 3, "game", "Gallery camera: game, front, side, top or close.", false),
     ("team", 3, "1", "Model owner colour, 1–8.", false),
@@ -405,6 +408,9 @@ mod tests {
             ("look-at", "test.terrain+test.near,12"),
             ("sun", "night"),
             ("graticule", "off"),
+            ("middle-drag", "pan"),
+            ("invert-horizontal-turn", "true"),
+            ("invert-vertical-turn", "true"),
             ("gallery", "units"),
             ("gallery-view", "side"),
             ("team", "4"),
@@ -469,7 +475,7 @@ mod tests {
             );
         }
         assert!(CONTROLS.iter().any(|c| c.flag == "script"));
-        assert_eq!(CONTROLS.len(), 41);
+        assert_eq!(CONTROLS.len(), 44);
     }
 
     #[test]

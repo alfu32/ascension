@@ -17,7 +17,9 @@ use gpui::{
     StatefulInteractiveElement, Styled, StyledImage, Timer, Window, canvas, div, img, px, rgb,
     rgba,
 };
-use rom_render::{Frame, InputEvent, Key, Modifiers, PointerButton, RenderBridge, RenderStats};
+use rom_render::{
+    Frame, InputEvent, Key, Modifiers, PointerButton, RenderBridge, RenderStats, WheelGate,
+};
 
 /// How often the mailbox is checked for a new frame. Half a 60 Hz frame: at 16 ms the poll
 /// drifted against the render clock and lost up to a fifth of the frames (docs/performance.md).
@@ -26,6 +28,8 @@ const POLL_INTERVAL: Duration = Duration::from_millis(8);
 const SCALE_STEP: u32 = 10;
 /// Pixels of smooth scrolling that count as one wheel step.
 const PIXELS_PER_WHEEL_STEP: f32 = 80.0;
+/// Lines GPUI reports for one notch of a mouse wheel on Linux (its `SCROLL_LINES`).
+const LINES_PER_NOTCH: f32 = 3.0;
 
 /// Full-window canvas showing the latest frame, with a stats overlay on top.
 pub struct WorldView {
@@ -48,6 +52,10 @@ pub struct WorldView {
     menu: Option<menu::Menu>,
     /// This window's own options (size, scale, HUD) that a loaded game keeps.
     display_arguments: Vec<String>,
+    /// One zoom step per wheel gesture, whatever the wheel fires.
+    wheel_gate: WheelGate,
+    /// When the view was made: the clock of the wheel gate.
+    created: Instant,
 }
 
 impl WorldView {
@@ -114,6 +122,8 @@ impl WorldView {
             pointer_input: true,
             menu: None,
             display_arguments,
+            wheel_gate: WheelGate::default(),
+            created: Instant::now(),
         }
     }
 
@@ -374,11 +384,17 @@ impl Render for WorldView {
                 }),
             )
             .on_scroll_wheel(cx.listener(|view, event: &ScrollWheelEvent, _, _| {
-                let steps = match event.delta {
-                    ScrollDelta::Lines(delta) => delta.y,
+                let notches = match event.delta {
+                    ScrollDelta::Lines(delta) => delta.y / LINES_PER_NOTCH,
                     ScrollDelta::Pixels(delta) => f32::from(delta.y) / PIXELS_PER_WHEEL_STEP,
                 };
-                if steps != 0.0 && view.pointer_input && !view.menu_open() {
+                if notches == 0.0 || !view.pointer_input || view.menu_open() {
+                    return;
+                }
+                // A notched wheel moves one step per gesture; smooth scrolling passes as it comes.
+                let now_ms = view.created.elapsed().as_millis() as u64;
+                let steps = view.wheel_gate.pass(now_ms, notches);
+                if steps != 0.0 {
                     view.bridge.push_input(InputEvent::Wheel { steps });
                 }
             }))

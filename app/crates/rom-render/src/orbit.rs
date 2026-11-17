@@ -5,7 +5,7 @@
 //! eye-to-target distance. Zoom is logarithmic; the tilt eases from a low street-level angle
 //! to straight down as the camera moves out, so at the largest distance it looks at the centre.
 
-use crate::camera::{InputEvent, Key, PointerButton};
+use crate::camera::{InputEvent, Key, PointerButton, TurnSettings};
 use crate::terrain::{cross, normalize};
 
 /// Closest zoom: eye-to-target distance in tiles.
@@ -359,9 +359,15 @@ pub struct OrbitController {
     rotating: bool,
     viewport: [f32; 2],
     home: Option<OrbitCamera>,
+    turn: TurnSettings,
 }
 
 impl OrbitController {
+    /// Sets the player's turning preferences.
+    pub fn set_turn(&mut self, turn: TurnSettings) {
+        self.turn = turn;
+    }
+
     /// Sets the canvas size in physical pixels, used for edge panning.
     pub fn set_viewport(&mut self, width: u32, height: u32) {
         self.viewport = [width as f32, height as f32];
@@ -379,7 +385,9 @@ impl OrbitController {
                 if self.rotating
                     && let Some([last_x, _]) = self.pointer
                 {
-                    camera.rotate(-(x - last_x) * ROTATE_RATE);
+                    // Dragging right swings the eye to the left about the point looked at, so
+                    // the scene follows the pointer, as in space.
+                    camera.rotate(self.turn.horizontal(x - last_x) * ROTATE_RATE);
                 }
                 self.pointer = Some([x, y]);
             }

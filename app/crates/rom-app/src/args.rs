@@ -8,6 +8,7 @@ pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <f
 [--map-size <width>x<height>] [--sphere <n>] [--single-planet] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
 [--universe] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-hud] [--hud-scale <percent>] [--stats] \
 [--sun <orbit|fixed|midnight>] [--graticule <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
+[--middle-drag <turn|pan>] [--invert-horizontal-turn] [--invert-vertical-turn] \
 [--gallery <all|units|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
 [--model <model id>] [--parts] [--pose <idle|move|attack|work>] [--anim-time <seconds>] \
 [--gallery-manifest <file.json>]\n\n--sphere N builds a universe with home face size N (64..=512).\n--single-planet preserves an isolated sphere (16..=512; default 192).";
@@ -92,6 +93,13 @@ pub struct Options {
     pub age: Option<i64>,
     /// Draw the latitude and longitude lines of a sphere planet.
     pub graticule: bool,
+    /// The middle button pans and Shift + middle turns (`--middle-drag pan`); by default the
+    /// middle button turns the view at every level.
+    pub middle_drag_pans: bool,
+    /// Dragging right swings the camera right instead of making the scene follow the pointer.
+    pub invert_horizontal_turn: bool,
+    /// Dragging up raises the camera instead of making the scene follow the pointer.
+    pub invert_vertical_turn: bool,
     /// On a sphere, start the camera over the nearest edge tile of a terrain (optionally one
     /// near a second terrain, which the camera then faces), at this distance.
     pub look_at: Option<LookAt>,
@@ -185,6 +193,9 @@ impl Default for Options {
             zoom_out: false,
             age: None,
             graticule: true,
+            middle_drag_pans: false,
+            invert_horizontal_turn: false,
+            invert_vertical_turn: false,
             look_at: None,
             gallery: None,
             gallery_view: GalleryView::Game,
@@ -327,6 +338,16 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                     _ => return Err(format!("--graticule expects on or off, got {text:?}")),
                 };
             }
+            "--middle-drag" => {
+                let text = value("--middle-drag")?;
+                options.middle_drag_pans = match text.to_ascii_lowercase().as_str() {
+                    "turn" => false,
+                    "pan" => true,
+                    _ => return Err(format!("--middle-drag expects turn or pan, got {text:?}")),
+                };
+            }
+            "--invert-horizontal-turn" => options.invert_horizontal_turn = true,
+            "--invert-vertical-turn" => options.invert_vertical_turn = true,
             "--look-at" => options.look_at = Some(parse_look_at(&value("--look-at")?)?),
             "--no-hud" => options.no_hud = true,
             "--stats" => options.stats = true,
@@ -446,6 +467,8 @@ pub fn match_arguments(arguments: &[String]) -> Vec<String> {
             "--no-hud",
             "--zoom-out",
             "--zoom-all",
+            "--invert-horizontal-turn",
+            "--invert-vertical-turn",
             "--start-markers",
             "--parts",
             "--help",
@@ -658,7 +681,25 @@ mod tests {
         let o = parse(args(&["--sun", "night"])).unwrap();
         assert!(o.sun_fixed && o.sun_midnight);
         assert_eq!(parse(args(&["--sun", "midnight"])).unwrap(), o);
-        for bad in [["--sun", "still"], ["--graticule", "maybe"]] {
+        let o = parse(args(&[
+            "--middle-drag",
+            "pan",
+            "--invert-horizontal-turn",
+            "--invert-vertical-turn",
+        ]))
+        .unwrap();
+        assert!(o.middle_drag_pans && o.invert_horizontal_turn && o.invert_vertical_turn);
+        assert!(!defaults.middle_drag_pans && !defaults.invert_horizontal_turn);
+        assert!(
+            !parse(args(&["--middle-drag", "turn"]))
+                .unwrap()
+                .middle_drag_pans
+        );
+        for bad in [
+            ["--sun", "still"],
+            ["--graticule", "maybe"],
+            ["--middle-drag", "spin"],
+        ] {
             assert!(parse(args(&bad)).is_err(), "{bad:?}");
         }
         assert!(USAGE.contains("--sun") && USAGE.contains("--graticule"));

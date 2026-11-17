@@ -503,21 +503,36 @@ pub fn claim_text(claim: ClaimState) -> String {
     }
 }
 
-/// The help lines of a level when the pointer rests on nothing: how to move about and between
-/// levels. `cap` is the farthest level the player may reach.
-pub fn level_help(level: crate::zoom::Level, cap: crate::zoom::Level) -> Option<(String, String)> {
+/// The help lines of a level when the pointer rests on nothing: where the camera is and how to
+/// move about and between levels. `cap` is the farthest level the player may reach;
+/// `middle_pans` is the setting that gives the middle button the pan and Shift + middle the turn.
+pub fn level_help(
+    level: crate::zoom::Level,
+    cap: crate::zoom::Level,
+    middle_pans: bool,
+) -> Option<(String, String)> {
     use crate::zoom::Level;
-    let lines = |a: &str, b: &str| Some((a.to_owned(), b.to_owned()));
+    let (turn, pan) = if middle_pans {
+        ("Shift + middle-drag", "middle-drag")
+    } else {
+        ("Middle-drag", "Shift + middle-drag")
+    };
     match level {
-        Level::Surface | Level::Globe if cap >= Level::System => lines(
-            "Scroll out past the globe to see the star system",
-            "Home comes back to your planet",
-        ),
+        Level::Surface | Level::Globe if cap >= Level::System => Some((
+            "Planet: scroll out past the globe to see the star system".to_owned(),
+            if middle_pans {
+                "Middle-drag moves over the globe · Shift + middle-drag turns · Home: your planet"
+                    .to_owned()
+            } else {
+                "Middle-drag turns the globe · Shift + middle-drag turns the view · Home: your planet"
+                    .to_owned()
+            },
+        )),
         Level::Surface | Level::Globe => None,
         Level::System => Some((
             "Star system: scroll zooms to the cursor; double-click a planet to land".to_owned(),
             format!(
-                "Middle-drag pans · Shift + middle-drag turns and tilts · Home: your planet{}",
+                "{turn} turns and tilts · {pan} pans · Home: your planet{}",
                 if cap >= Level::StarMap {
                     " · scroll out: star map"
                 } else {
@@ -525,10 +540,10 @@ pub fn level_help(level: crate::zoom::Level, cap: crate::zoom::Level) -> Option<
                 }
             ),
         )),
-        Level::StarMap => lines(
-            "Star map: scroll in on a system, or double-click it, to enter",
-            "Middle-drag pans · Shift + middle-drag turns and tilts · Home: your planet",
-        ),
+        Level::StarMap => Some((
+            "Star map: scroll in on a system, or double-click it, to enter".to_owned(),
+            format!("{turn} turns and tilts · {pan} pans · Home: your planet"),
+        )),
     }
 }
 
@@ -656,11 +671,12 @@ pub fn annulus(
         .collect()
 }
 
-/// Where the ray through pixel (`px`, `py`) meets the system plane `y = 0`.
+/// Where the ray through pixel (`px`, `py`) meets the system plane `y = 0`, seen from above or
+/// below it.
 pub fn plane_point(view: &View, px: f32, py: f32) -> Option<[f32; 3]> {
     let dir = view.ray(px, py);
     let eye = view.eye();
-    if dir[1] >= -1e-5 {
+    if dir[1].abs() <= 1e-5 {
         return None;
     }
     let t = -eye[1] / dir[1];
@@ -1156,30 +1172,47 @@ mod tests {
             assert!(action.starts_with(words), "{action}");
             assert!(action.contains("orbit and claim it"));
         }
-        assert!(level_help(Level::Globe, Level::Globe).is_none());
+        assert!(level_help(Level::Globe, Level::Globe, false).is_none());
         assert!(
-            level_help(Level::Globe, Level::System)
+            level_help(Level::Globe, Level::System, false)
                 .unwrap()
                 .0
-                .contains("Scroll out")
+                .contains("scroll out")
         );
         assert!(
-            !level_help(Level::System, Level::System)
+            !level_help(Level::System, Level::System, false)
                 .unwrap()
                 .1
                 .contains("star map")
         );
         assert!(
-            level_help(Level::System, Level::StarMap)
+            level_help(Level::System, Level::StarMap, false)
                 .unwrap()
                 .1
                 .contains("star map")
         );
         assert!(
-            level_help(Level::StarMap, Level::StarMap)
+            level_help(Level::StarMap, Level::StarMap, false)
                 .unwrap()
                 .0
                 .contains("enter")
+        );
+        // The help names the level and follows the middle-button setting.
+        for level in [Level::Globe, Level::System, Level::StarMap] {
+            let (first, _) = level_help(level, Level::StarMap, false).unwrap();
+            assert!(first.contains(':'), "{first}");
+        }
+        assert!(
+            level_help(Level::System, Level::StarMap, false)
+                .unwrap()
+                .1
+                .starts_with("Middle-drag turns")
+        );
+        assert!(
+            level_help(Level::StarMap, Level::StarMap, true)
+                .unwrap()
+                .1
+                .starts_with("Shift + middle-drag turns")
         );
     }
 

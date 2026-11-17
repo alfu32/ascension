@@ -614,7 +614,8 @@ pub fn space_marks(
             marks.push(dot(x, y, 4.0, owner(mark.owner)));
         }
     }
-    // The part of the plane in view, a trapezoid for a tilted camera, and the focus.
+    // The part of the plane in view, a trapezoid for a tilted camera (cut off where the view
+    // reaches toward the horizon), and the focus.
     let canvas = (layout.width, layout.height);
     let world = layout.world_area();
     let centre_y = ndc_centre_y(world, layout.height);
@@ -625,7 +626,7 @@ pub fn space_marks(
         (canvas.0, world.bottom()),
         (0.0, world.bottom()),
     ]
-    .map(|(x, y)| crate::space::plane_point(&view, x, y).map(to_area));
+    .map(|(x, y)| zoom.plane_under(&view, x, y).map(to_area));
     if corners.iter().all(Option::is_some) {
         let corners = corners.map(|c| c.unwrap_or_default());
         for i in 0..4 {
