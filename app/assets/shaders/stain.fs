@@ -23,9 +23,10 @@ const float DEEPEST = 0.86;
 void main() {
     vec3 n = normalize(fragNormal);
     if (fragDebris > 0.5) {
-        // Weathered towards the earth as it settles, gone with the stain.
-        vec3 weathered = mix(fragColour.rgb, EARTH * 1.5, (1.0 - fragFade) * 0.6);
-        finalColor = vec4(weathered * terrainLight(fragWorld, n), smoothstep(0.0, 0.35, fragFade));
+        // Weathered towards the earth as it settles, fading with the soot (owner review: debris
+        // must not outlast the mark it lies in).
+        vec3 weathered = mix(fragColour.rgb, EARTH * 1.5, (1.0 - fragFade) * 0.8);
+        finalColor = vec4(weathered * terrainLight(fragWorld, n), fragFade);
         return;
     }
     // Outside the farthest rim nothing is drawn; most of a stain's tiles end here, cheaply.
