@@ -1,6 +1,6 @@
 use rom_rules::{
     ActiveSources, ClaimMode, Condition, Context, DefId, Layer, ModifierOp, Owned, RegionKind,
-    Rules, RulesError, TechKind, build_rules_db,
+    Rules, RulesError, StarRegion, TechKind, build_rules_db,
 };
 use rusqlite::Connection;
 
@@ -756,6 +756,32 @@ fn universe_knobs_load_and_validate() {
             assert_eq!(rules.tags[&tag].key, "starship");
         }
     }
+    // Task 89: the region each style takes, and the start placement option.
+    for (key, region) in [
+        ("map.one_world", StarRegion::Nearest),
+        ("map.many_worlds", StarRegion::Nearest),
+        ("map.solar", StarRegion::Single),
+        ("map.quadrant", StarRegion::Quadrant),
+        ("map.galaxy", StarRegion::All),
+    ] {
+        let style = &rules.map_styles[&rules.id_of(key).unwrap()];
+        assert_eq!(style.star_region, region, "{key}");
+        assert_eq!(
+            rules.map_style_features[&style.id].len(),
+            rules.map_style_features[&many.id].len(),
+            "{key}"
+        );
+    }
+    assert_eq!(rules.def(many.id).name, "Cluster");
+    assert_eq!(
+        rules.match_options["start_placement"].default_value,
+        "separate"
+    );
+    let choices: Vec<_> = rules.match_option_choices["start_placement"]
+        .iter()
+        .map(|c| c.value.as_str())
+        .collect();
+    assert_eq!(choices, ["separate", "together"]);
 }
 
 #[test]

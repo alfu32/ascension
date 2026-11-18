@@ -19,11 +19,11 @@ use crate::ai_match_cmd::{
     Request, build_world_with, check_players, generate_visited, parse_players,
 };
 use rom_ai::Brain;
-use rom_mapgen::Universe;
+use rom_mapgen::{StartPlacement, Universe};
 use rom_rules::{DefId, Rules, VictoryRule};
 use rom_sim::{MatchOptions, Outcome, PlayerId, World};
 
-const USAGE: &str = "usage: rom duel --db <rules.db> --profiles <a[:difficulty]>,<b[:difficulty]> --seeds <first>..<last> [--ticks-limit <n>] [--universe] [--victories conquest[,territory]] [--side <tiles>] [--jobs <n>] [--trace <ticks>]";
+const USAGE: &str = "usage: rom duel --db <rules.db> --profiles <a[:difficulty]>,<b[:difficulty]> --seeds <first>..<last> [--ticks-limit <n>] [--universe [--style <map style key>] [--start-placement separate|together]] [--victories conquest[,territory]] [--side <tiles>] [--jobs <n>] [--trace <ticks>]";
 /// One and a half game hours at 20 ticks per second.
 pub const DEFAULT_TICKS_LIMIT: u64 = 108_000;
 /// Maps drawn for one seed before an unfair start is accepted.
@@ -51,6 +51,10 @@ pub struct DuelRequest {
     pub side: u32,
     /// The victory rules in force.
     pub victories: BTreeSet<VictoryRule>,
+    /// Map style key of the universe; `None` picks the one with the most neutral systems.
+    pub style: Option<String>,
+    /// Where the players start in the universe; `None` takes the rules' default.
+    pub start_placement: Option<StartPlacement>,
 }
 
 /// How one match ended.
@@ -267,6 +271,8 @@ pub fn play(rules: &Arc<Rules>, duel: &DuelRequest, seed: u64) -> Result<DuelRes
         trace: 0,
         side: duel.side,
         map_seed: None,
+        universe_style: duel.style.clone(),
+        start_placement: duel.start_placement,
     };
     let faction = duel_faction(rules, seed)?;
     // An unfair start (much less land, or no room for a gather site on a node terrain) decides
@@ -689,6 +695,7 @@ pub fn run_command(
     let mut trace = 0;
     let mut side = 0;
     let mut victories: BTreeSet<VictoryRule> = [VictoryRule::Conquest].into();
+    let (mut style, mut start_placement) = (None, None);
     let mut jobs = std::thread::available_parallelism().map_or(1, |n| n.get().min(4));
     while let Some(flag) = args.next() {
         if flag == "--universe" {
@@ -712,6 +719,13 @@ pub fn run_command(
             "--jobs" => jobs = value.parse::<usize>()?.max(1),
             "--trace" => trace = value.parse::<u64>()?,
             "--side" => side = value.parse::<u32>()?,
+            "--style" => style = Some(value),
+            "--start-placement" => {
+                start_placement = Some(
+                    StartPlacement::parse(&value)
+                        .ok_or_else(|| format!("unknown start placement {value}"))?,
+                )
+            }
             "--victories" => {
                 victories = value
                     .split(',')
@@ -732,6 +746,8 @@ pub fn run_command(
         trace,
         side,
         victories,
+        style,
+        start_placement,
     };
     let conn = rusqlite::Connection::open_with_flags(
         db.ok_or(USAGE)?,
@@ -834,6 +850,8 @@ mod tests {
             trace: 0,
             side: 0,
             victories: [VictoryRule::Conquest, VictoryRule::Territory].into(),
+            style: None,
+            start_placement: None,
         };
         let (first, second) = (
             play(&rules, &duel, 3).unwrap(),
@@ -851,6 +869,8 @@ mod tests {
             trace: 0,
             side: 0,
             map_seed: None,
+            universe_style: None,
+            start_placement: None,
         };
         let faction = duel_faction(&rules, 3).unwrap();
         let (world, _) = build_world_with(

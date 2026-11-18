@@ -1002,6 +1002,7 @@ fn load_entity_visual(conn: &Connection) -> Result<Vec<EntityVisual>, RulesError
 }
 fn load_map_style(conn: &Connection) -> Result<Vec<MapStyle>, RulesError> {
     read(conn, "SELECT * FROM map_style ORDER BY id", |row| {
+        let identity = format!("id={:?}", row.get::<_, i64>("id")?);
         Ok(MapStyle {
             id: DefId(row.get("id")?),
             planets: row.get("planets")?,
@@ -1022,6 +1023,7 @@ fn load_map_style(conn: &Connection) -> Result<Vec<MapStyle>, RulesError> {
             planet_n_max: row.get("planet_n_max")?,
             route_extra_pct: row.get("route_extra_pct")?,
             star_map_radius: row.get("star_map_radius")?,
+            star_region: enum_value(row, "star_region", "map_style", &identity)?,
             life_n: row.get("life_n")?,
             life_terrain_id: row.get::<_, Option<u32>>("life_terrain_id")?.map(DefId),
         })
@@ -1051,6 +1053,7 @@ fn load_star(conn: &Connection) -> Result<Vec<Star>, RulesError> {
             x: row.get("x")?,
             y: row.get("y")?,
             z: row.get("z")?,
+            glon_mdeg: row.get("glon_mdeg")?,
         })
     })
 }

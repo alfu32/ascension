@@ -180,11 +180,11 @@ planets belong to star systems, and systems are joined by routes.
 | Table | Half | Holds |
 | --- | --- | --- |
 | `body_kind` | rules | the vocabulary `star`, `habitable`, `resource`, and `black_hole` and `celestial` for the celestial home (task 76) |
-| `map_style` (universe knobs) | rules | neutral systems, habitable planets and resource bodies per system (each a `_min`/`_max` pair), planet face size `planet_n_min/median/max` (64..=512), `route_extra_pct`, `star_map_radius` |
+| `map_style` (universe knobs) | rules | `star_region` (which catalogue stars a match takes, task 89: `nearest`, `single`, `quadrant`, `all`), neutral systems, habitable planets and resource bodies per system (each a `_min`/`_max` pair), planet face size `planet_n_min/median/max` (64..=512), `route_extra_pct`, `star_map_radius` |
 | `map_style_feature` with `region_kind = 'resource_body'` | rules | what resource bodies yield: a `node` type with `claim_mode = 'presence'`; `chance_pct` weights the kinds, and a `per_player` row puts `clumps_min` bodies of its kind in every home system |
 | `star_system` | state | the star's name, 3D star-map position (x, y, z integers), catalogue star and constellation |
 | `star_figure` | state | constellation stick-figure lines between this match's systems (display only) |
-| `constellation`, `star`, `constellation_line` | rules | the real star catalogue: 745 stars in 86 constellations with published position, computed map coordinates and stick figures ("Star catalogue") |
+| `constellation`, `star`, `constellation_line` | rules | the real star catalogue: 745 stars in 86 constellations with published position, computed map coordinates and galactic longitude, and stick figures ("Star catalogue") |
 | `body` | state | the star (orbit radius 0), habitable planets (`n`, `home_race_id`) and resource bodies (`node_entity_type_id`), each on its own orbit (radius, angle in millidegrees) |
 | `route` | state | a lane between two systems (`system_a < system_b`) and its integer length |
 | `entity.body_id`, `entity.face` | state | an entity's surface or system-plane position at `(face, x, y)`; no body = the flat map; `entity_orbit` classifies ships orbiting a body |
@@ -220,6 +220,40 @@ camera is bound to the home planet: 60,000 in the first age, 320,000 in the
 Information Age, 450,000 in Automation, and zero from Fusion on. These are
 the ground limits passed to the camera; task 41 supersedes the earlier
 separate whole-globe-only age.
+
+**Map styles (task 89).** `map_style.star_region` says which catalogue stars a
+universe takes; everything else about a system (habitable planets, resource
+bodies, routes) stays in the per-system knobs. The code reads the region kind,
+never a style key.
+
+| Style (key) | `star_region` | Systems |
+| --- | --- | --- |
+| One World (`map.one_world`) | `nearest` | one home system per race, nothing else: a quick match |
+| Cluster (`map.many_worlds`) | `nearest` | a seeded star and its nearest neighbours: the homes plus `neutral_systems_min..max` (2 to 4), within `star_map_radius` (the key stays: saves and scripts name it) |
+| Solar (`map.solar`) | `single` | one seeded catalogue star whose system holds every home planet (with separate worlds, each race its own planet), `habitable_per_system_min..max` − 1 more planets, and the resource bodies; no routes |
+| Quadrant (`map.quadrant`) | `quadrant` | every catalogue star in one galactic quadrant (`star.glon_mdeg` / 90 000; the seed chooses it and keeps it through the layout's retries) |
+| Galaxy (`map.galaxy`) | `all` | every catalogue star: 745 systems |
+
+`neutral_systems_*` and `star_map_radius` bound the `nearest` region only (the
+other rows carry 0 and the catalogue's extent, 8 300). In Quadrant and Galaxy the
+systems beyond the homes are mostly empty: 0 to 2 habitable planets and 2 to 6
+resource bodies each. `habitable_per_system_min` may therefore be 0; a home
+system always holds its home planet. In Solar every home planet has the
+`per_player` resource bodies as its own moons (one ore asteroid each in the seed).
+In Quadrant and Galaxy a home candidate's density is measured over its eight
+nearest neighbours (three in the nearest region) and up to 256 layouts are tried.
+
+**Start placement (task 89).** `match_option` `start_placement`, choices
+`separate` (default: each race on its own home planet, as before) and `together`
+(players of different races on as few home planets as fairness allows: all on one
+planet, else dealt over two, three and so on). `rom-mapgen` reads the option's
+default (`StartPlacement::of_rules`) or the choice it is given
+(`generate_universe_placed`); a home planet is marked with the race of its first
+player. Ordinary rows, no schema change.
+
+Schema change: `map_style.star_region` (default `nearest`, so the earlier rows
+keep their behaviour) and `star.glon_mdeg`; `habitable_per_system_min` may be 0
+(the validator no longer asks for 1). Both lint views stay empty.
 
 A flat rectangular map remains for tests and skirmish maps: `map_style.planets`
 and `space_pct` and the `planet`/`space` feature rows drive it, and `map_grid`
@@ -1581,6 +1615,17 @@ values from primary catalogues, never invented:
   `x = r cos(dec) cos(ra)`, `y = r cos(dec) sin(ra)`, `z = r sin(dec)`,
   rounded to integers. The map generator and the simulation read the integers
   only.
+- **Galactic longitude** (task 89). Computed once in the generator, in
+  `galactic_longitude()`, from the stored right ascension and declination in the
+  IAU 1958 galactic frame (J2000: north galactic pole at RA 192.859, Dec +27.128;
+  galactic longitude of the north celestial pole 122.932):
+  `l = 122.932 - atan2(cos(dec) sin(ra - 192.859), sin(dec) cos(27.128) -
+  cos(dec) sin(27.128) cos(ra - 192.859))`, in `glon_mdeg` (milli-degrees,
+  0..359 999). It numbers the galactic quadrants as astronomers do: I 0-90,
+  II 90-180, III 180-270, IV 270-360 degrees (173, 163, 184 and 225 stars). Hand
+  checks against the published galactic coordinates: Sirius 227.230 (published
+  l = 227.23), Vega 67.449 (67.45), Deneb 84.285 (84.28); and the galactic
+  centre's own position, RA 266.405 Dec -28.936, gives 0.000.
 - **Hand checks** (positions against the Bright Star Catalogue's own J2000
   coordinates and the IAU list's; parallaxes against the Bright Star
   Catalogue's older trigonometric values):

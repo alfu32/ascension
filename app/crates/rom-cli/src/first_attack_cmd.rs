@@ -101,6 +101,8 @@ pub fn measure(
         trace: 0,
         side: 0,
         map_seed: None,
+        universe_style: None,
+        start_placement: None,
     };
     let faction = duel_faction(rules, seed)?;
     let options = MatchOptions {

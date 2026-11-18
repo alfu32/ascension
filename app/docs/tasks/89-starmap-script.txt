@@ -1,0 +1,7 @@
+# Task 89: the star map of a map style zoomed out, routes known. Run with --universe --style <key>
+# --zoom-all --view starmap: the galactic age and Automated Route Survey show every route, and the
+# wheel backs the camera out until the whole region is in view.
+0 grant-age age.galactic
+0 grant-tech tech.automated_route_survey
+1 speed 100
+3 cam wheel -40 640,400
