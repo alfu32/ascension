@@ -542,9 +542,12 @@ impl Playthrough {
                     ("construct", self.constructed.contains(&row.product_def_id))
                 }
                 ProductionMode::Train => ("train", self.trained.contains(&row.product_def_id)),
-                ProductionMode::Research => {
-                    ("research", player.techs.contains_key(&row.product_def_id))
-                }
+                // The ascension is exercised after the audit (`ascend_and_descend`).
+                ProductionMode::Research => (
+                    "research",
+                    player.techs.contains_key(&row.product_def_id)
+                        || self.world.rules.ascends(row.product_def_id),
+                ),
                 ProductionMode::Morph => continue,
             };
             if !done {
@@ -571,7 +574,10 @@ impl Playthrough {
             match row.mode {
                 ProductionMode::Construct => self.constructed.contains(&row.product_def_id),
                 ProductionMode::Train => self.trained.contains(&row.product_def_id),
-                ProductionMode::Research => player.techs.contains_key(&row.product_def_id),
+                ProductionMode::Research => {
+                    player.techs.contains_key(&row.product_def_id)
+                        || self.world.rules.ascends(row.product_def_id)
+                }
                 ProductionMode::Morph => true,
             }
         }) && !self
@@ -645,6 +651,7 @@ impl Playthrough {
                 .iter()
                 .filter(|p| {
                     !queued.contains(&p.product_def_id)
+                        && !rules.ascends(p.product_def_id)
                         && rules.is_available(p.product_def_id, faction)
                         && rules.is_unlocked(p.product_def_id, &active, &owned)
                 })
@@ -754,6 +761,68 @@ impl Playthrough {
                 }
             }
         }
+    }
+
+    /// After the audit (task 76): the ascension researched at a library, then a descent onto
+    /// the site of the first city. Returns the tick the player ascended and the tick it stood
+    /// on the ground again.
+    pub fn ascend_and_descend(&mut self) -> Result<(u64, u64), SimError> {
+        let player = PlayerId(1);
+        let rules = self.world.rules.clone();
+        let (library, tech) = self
+            .world
+            .entities()
+            .filter(|e| e.owner == player && e.build_progress.is_none())
+            .find_map(|e| {
+                rules
+                    .production
+                    .get(&e.type_id)?
+                    .iter()
+                    .find(|p| rules.ascends(p.product_def_id))
+                    .map(|p| (e.id, p.product_def_id))
+            })
+            .ok_or(SimError::ScenarioUnavailable("library"))?;
+        let home = self
+            .world
+            .capital(player)
+            .and_then(|id| self.world.entity(id))
+            .map(|e| e.pos)
+            .ok_or(SimError::ScenarioUnavailable("capital"))?;
+        self.world.submit(Command {
+            player,
+            executor: library,
+            kind: "research".into(),
+            subject: Some(tech),
+            target_entity: None,
+            target_pos: None,
+            queue: false,
+        })?;
+        let limit = self.world.tick() + self.world.ascension_duration(player, tech) + 100;
+        while !self.world.is_ascended(player) {
+            if self.world.tick() >= limit {
+                return Err(SimError::ScenarioUnavailable("ascension"));
+            }
+            self.world.step();
+        }
+        let ascended = self.world.tick();
+        let site = self
+            .world
+            .find_city_site(player, home.body, home)
+            .ok_or(SimError::ScenarioUnavailable("descent site"))?;
+        self.world.submit(Command {
+            player,
+            executor: crate::EntityId(0),
+            kind: "descend".into(),
+            subject: None,
+            target_entity: None,
+            target_pos: Some(site),
+            queue: false,
+        })?;
+        self.world.step();
+        if self.world.is_ascended(player) {
+            return Err(SimError::ScenarioUnavailable("descent"));
+        }
+        Ok((ascended, self.world.tick()))
     }
 
     /// A site for `subject`: first with a free lane around it, then, for a deposit that has

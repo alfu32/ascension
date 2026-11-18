@@ -53,6 +53,9 @@ pub enum BodyViewKind {
     Habitable,
     /// A resource body: a small rock or moon.
     Resource,
+    /// The mythical planet of the celestial home (task 76): no surface; the residences of the
+    /// ascended players stand on it.
+    Celestial,
 }
 
 /// One star system on the star map.
@@ -73,6 +76,9 @@ pub struct SystemView {
     pub constellation: String,
     /// Colour of the star.
     pub star_colour: [u8; 3],
+    /// The celestial home (task 76): its star is a black hole with a glowing accretion disc,
+    /// it is joined to nothing and lies outside the region the star map is framed on.
+    pub celestial: bool,
 }
 
 /// One body of a system.
@@ -293,21 +299,21 @@ impl UniverseScene {
         sky_to_frame([0.0; 3], centre, scale)
     }
 
-    /// The sky position of the middle of the systems and the frame units per sky unit.
+    /// The sky position of the middle of the systems and the frame units per sky unit. The
+    /// celestial home is left out (task 76): it lies beyond the match's systems and is placed
+    /// by the same frame, farther out.
     fn map_frame(&self) -> ([f32; 3], f32) {
-        if self.systems.len() < 2 {
-            let at = self
-                .systems
+        let material: Vec<&SystemView> = self.systems.iter().filter(|s| !s.celestial).collect();
+        if material.len() < 2 {
+            let at = material
                 .first()
                 .map_or([0.0; 3], |s| [s.x as f32, s.y as f32, s.z as f32]);
             return (at, 1.0);
         }
-        let n = self.systems.len() as f32;
-        let mid =
-            |f: fn(&SystemView) -> i32| self.systems.iter().map(|s| f(s) as f32).sum::<f32>() / n;
+        let n = material.len() as f32;
+        let mid = |f: fn(&SystemView) -> i32| material.iter().map(|s| f(s) as f32).sum::<f32>() / n;
         let centre = [mid(|s| s.x), mid(|s| s.y), mid(|s| s.z)];
-        let farthest = self
-            .systems
+        let farthest = material
             .iter()
             .map(|s| {
                 let d = [
@@ -437,7 +443,7 @@ fn turn(placed: &mut [PlacedBody], i: usize, by: f32) {
 pub fn least_pixels(kind: BodyViewKind, smallest_planet: f32, space: f32) -> f32 {
     let out = match kind {
         BodyViewKind::Star => STAR_MIN_PIXELS,
-        BodyViewKind::Habitable => PLANET_MIN_PIXELS,
+        BodyViewKind::Habitable | BodyViewKind::Celestial => PLANET_MIN_PIXELS,
         BodyViewKind::Resource => ROCK_SHARE * smallest_planet,
     }
     .max(MIN_BODY_PIXELS);
@@ -486,6 +492,7 @@ pub fn body_radius(body: &BodyView) -> f32 {
         BodyViewKind::Resource => {
             ROCK_RADIUS + ROCK_RADIUS_STEP * body.n_or_size.clamp(1, 3) as f32
         }
+        BodyViewKind::Celestial => HOME_PLANET_RADIUS * 1.2,
     }
 }
 
@@ -503,6 +510,13 @@ const ROCK_PALETTE: [[u8; 3]; 4] = [
     [170, 150, 120],
     [135, 125, 110],
 ];
+
+/// The pale gold of the celestial home's mythical planet (task 76).
+pub const CELESTIAL_RGB: [u8; 3] = [236, 222, 180];
+/// [`CELESTIAL_RGB`] opaque.
+pub const CELESTIAL_RGBA: [u8; 4] = [236, 222, 180, 255];
+/// The glow of the black hole's accretion disc, from its hot inner edge outwards.
+pub const ACCRETION_RGB: [[u8; 3]; 3] = [[255, 244, 220], [255, 170, 70], [200, 70, 30]];
 
 /// The neutral colour of a planet that has no generated surface.
 pub fn planet_colour(body_id: u32) -> [u8; 3] {
@@ -575,6 +589,7 @@ pub(crate) fn sample_scene() -> UniverseScene {
         z: 0,
         constellation: String::new(),
         star_colour: [255, 240, 200],
+        celestial: false,
     };
     let body = |id, system, kind, orbit_radius, orbit_angle, n_or_size| BodyView {
         id,
@@ -614,6 +629,53 @@ pub(crate) fn sample_scene() -> UniverseScene {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Task 76: the celestial home lies outside the frame of the match's systems: adding it far
+    /// away moves none of them, and it is placed farther out along its own direction.
+    #[test]
+    fn the_celestial_home_does_not_reframe_the_star_map() {
+        let scene = sample_scene();
+        let before = scene.place_systems();
+        let mut with = scene.clone();
+        with.systems.push(SystemView {
+            id: 9,
+            name: "Galactic Centre".into(),
+            x: 0,
+            y: -400_000,
+            z: 0,
+            constellation: String::new(),
+            star_colour: ACCRETION_RGB[1],
+            celestial: true,
+        });
+        with.bodies.push(BodyView {
+            id: 20,
+            name: "Sagittarius A*".into(),
+            system: 9,
+            kind: BodyViewKind::Star,
+            orbit_radius: 0,
+            orbit_angle: 0,
+            n_or_size: 0,
+            home_race_colour: None,
+        });
+        with.bodies.push(BodyView {
+            id: 21,
+            name: "Empyrean".into(),
+            system: 9,
+            kind: BodyViewKind::Celestial,
+            orbit_radius: 6000,
+            orbit_angle: 40_000,
+            n_or_size: 0,
+            home_race_colour: None,
+        });
+        assert!(with.is_valid());
+        let after = with.place_systems();
+        assert_eq!(&after[..before.len()], &before[..]);
+        let far = after[before.len()];
+        assert!((far[0] * far[0] + far[1] * far[1] + far[2] * far[2]).sqrt() > MAP_RADIUS * 2.0);
+        let placed = with.place_system(9);
+        assert_eq!(placed.len(), 2);
+        assert!(placed.iter().any(|p| p.orbit > STAR_CLEAR));
+    }
 
     #[test]
     fn system_layout_fits_every_orbit() {

@@ -311,10 +311,25 @@ impl Brain {
         }
         let d = &self.difficulty;
         self.memory.next_think = tick + d.think_interval_ticks.max(1) as u64;
-        if world.player_status(self.player) != Some(rom_sim::PlayerStatus::Playing)
-            || *world.outcome() != rom_sim::Outcome::Playing
-        {
-            return Vec::new();
+        // An ascended player has nothing material to run; it descends after a while and starts
+        // again from its opening book (task 76). The match goes on after a victory.
+        match world.player_status(self.player) {
+            Some(rom_sim::PlayerStatus::Ascended) => {
+                let m = &self.memory;
+                self.memory = Memory {
+                    rng: m.rng,
+                    next_think: m.next_think,
+                    credit: m.credit,
+                    credit_tick: m.credit_tick,
+                    stats: m.stats,
+                    ..Memory::default()
+                };
+                return crate::ascension::descend(world, self.player)
+                    .into_iter()
+                    .collect();
+            }
+            Some(rom_sim::PlayerStatus::Playing | rom_sim::PlayerStatus::Won) => {}
+            _ => return Vec::new(),
         }
         let Some(view) = View::new(world, &self.catalogue, self.player) else {
             return Vec::new();
@@ -373,6 +388,7 @@ impl Brain {
         if let Some(at) = boxed_at {
             unbox(&mut plan, at);
         }
+        crate::ascension::ascend(&mut plan, memory);
         let slip =
             |rng: &mut SimRng| d.mistake_pct > 0 && i64::from(rng.range(0, 100)) < d.mistake_pct;
 

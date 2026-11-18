@@ -38,6 +38,10 @@ impl World {
 
     /// Whether the player's current age reveals a terrain's resource deposit.
     pub fn knows_terrain(&self, player: PlayerId, terrain: DefId) -> bool {
+        // An ascended player sees every deposit (task 76).
+        if self.is_ascended(player) {
+            return true;
+        }
         self.players.get(&player).is_some_and(|p| {
             self.terrain_discovery_age(terrain)
                 .is_none_or(|age| self.rules.ages[&p.age].ordinal >= self.rules.ages[&age].ordinal)

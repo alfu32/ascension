@@ -503,7 +503,10 @@ CREATE TABLE tech_effect (
   tech_id   INTEGER NOT NULL REFERENCES tech(id) ON DELETE CASCADE,
   effect    TEXT NOT NULL CHECK (effect IN (
               'set_age','unlock','upgrade_type','grant_ability','reveal_map',
-              'change_faction','spawn','enable_rule')),
+              'change_faction','spawn','enable_rule','ascend')),
+              -- 'ascend' (task 76): completing the tech takes its player out of the material
+              -- plane (docs/ascension.md); it may be researched only once every other
+              -- technology its producer offers is researched.
   target_def_id INTEGER REFERENCES def(id),  -- age / unlocked def / new type / ability / faction
   from_def_id   INTEGER REFERENCES def(id),  -- upgrade_type: the old type
   rule_key  TEXT NOT NULL DEFAULT '',        -- enable_rule: 'market_trading','sea_transport','ally_los' …
@@ -1025,14 +1028,20 @@ CREATE TABLE player (
   age_id     INTEGER NOT NULL REFERENCES age(id),
   home_body_id INTEGER,                  -- home planet; NULL = none recorded
   capital_entity_id INTEGER,             -- first founded city
-  status     TEXT NOT NULL DEFAULT 'playing' CHECK (status IN ('playing','defeated','won')),
+  status     TEXT NOT NULL DEFAULT 'playing' CHECK (status IN ('playing','defeated','won','ascended')),
   land_owned INTEGER,                    -- land tiles owned (territory victory)
   owned_tiles INTEGER,                   -- tiles owned over all surfaces
   hold_team  INTEGER,                    -- enemy team occupying the capital, and since when
   hold_start INTEGER,
   kills      INTEGER,                    -- enemy kills credited / combat deaths (match statistics)
   losses     INTEGER,
-  CHECK ((hold_team IS NULL) = (hold_start IS NULL))
+  -- Task 76: the faction the player started with (restored on descent), the tick of its
+  -- current ascension (NULL while it is material) and how many times it has ascended.
+  origin_faction_id INTEGER REFERENCES faction(id),
+  ascended_tick INTEGER,
+  ascensions INTEGER NOT NULL DEFAULT 0 CHECK (ascensions >= 0),
+  CHECK ((hold_team IS NULL) = (hold_start IS NULL)),
+  CHECK ((status = 'ascended') = (ascended_tick IS NOT NULL))
 ) STRICT;
 
 -- A computer player's memory (plans, known enemy positions, army groups),

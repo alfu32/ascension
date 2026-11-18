@@ -1407,7 +1407,9 @@ fn task_30_scripts_reach_the_capture_states_without_a_window() {
                     | ScriptAction::Input(_)
                     | ScriptAction::Save(_)
                     | ScriptAction::QuickSave
-                    | ScriptAction::Menu(_) => {}
+                    | ScriptAction::Menu(_)
+                    | ScriptAction::Ascend(_)
+                    | ScriptAction::Chat(_) => {}
                 }
             }
             for event in script.due(game.world.tick()) {
@@ -1843,7 +1845,9 @@ fn wealth_screenshot_script_reaches_capture_without_a_window() {
                 | ScriptAction::Input(_)
                 | ScriptAction::Save(_)
                 | ScriptAction::QuickSave
-                | ScriptAction::Menu(_) => {}
+                | ScriptAction::Menu(_)
+                | ScriptAction::Ascend(_)
+                | ScriptAction::Chat(_) => {}
             }
         }
         for pick in script.due(game.world.tick()) {
@@ -2050,7 +2054,9 @@ fn orbital_review_script_trains_launches_selects_and_bombards_through_picks() {
                 | ScriptAction::Input(_)
                 | ScriptAction::Save(_)
                 | ScriptAction::QuickSave
-                | ScriptAction::Menu(_) => {}
+                | ScriptAction::Menu(_)
+                | ScriptAction::Ascend(_)
+                | ScriptAction::Chat(_) => {}
             }
         }
         for event in script.due(game.world.tick()) {
@@ -2328,7 +2334,9 @@ fn colony_script_run() -> (crate::match_setup::Match, Controller, BodyId, u64) {
                 ScriptAction::Speed(_)
                 | ScriptAction::Save(_)
                 | ScriptAction::QuickSave
-                | ScriptAction::Menu(_) => {}
+                | ScriptAction::Menu(_)
+                | ScriptAction::Ascend(_)
+                | ScriptAction::Chat(_) => {}
             }
         }
         for event in script.due(game.world.tick()) {
@@ -2491,7 +2499,9 @@ fn orbital_combat_script(
                 | ScriptAction::Input(_)
                 | ScriptAction::Save(_)
                 | ScriptAction::QuickSave
-                | ScriptAction::Menu(_) => {}
+                | ScriptAction::Menu(_)
+                | ScriptAction::Ascend(_)
+                | ScriptAction::Chat(_) => {}
             }
         }
         for event in script.due(game.world.tick()) {

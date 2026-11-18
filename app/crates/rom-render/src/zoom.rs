@@ -1900,7 +1900,7 @@ impl ZoomCamera {
     }
 
     /// The region of the star map the focus stays in: one place for the bound, computed from
-    /// the systems shown (task 76 will widen it for the celestial home).
+    /// the systems shown, the celestial home beyond the match's stars included (task 76).
     pub fn map_region(&self) -> MapRegion {
         MapRegion::around(&self.map_positions)
     }

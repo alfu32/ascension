@@ -339,7 +339,30 @@ impl StateHash {
                 crate::PlayerStatus::Playing => 0,
                 crate::PlayerStatus::Defeated => 1,
                 crate::PlayerStatus::Won => 2,
+                crate::PlayerStatus::Ascended => 3,
             }]);
+        }
+        // Only once a player has ascended, so other worlds keep their hashes (task 76).
+        let a = &world.ascension;
+        if !a.times.is_empty() {
+            self.bytes(b"ascension");
+            for map in [&a.ascended] {
+                self.u64(map.len() as u64);
+                for (player, tick) in map {
+                    self.u32(player.0);
+                    self.u64(*tick);
+                }
+            }
+            self.u64(a.times.len() as u64);
+            for (player, times) in &a.times {
+                self.u32(player.0);
+                self.u32(*times);
+            }
+            self.u64(a.origins.len() as u64);
+            for (player, faction) in &a.origins {
+                self.u32(player.0);
+                self.u32(faction.0);
+            }
         }
         self.u64(v.ownable_tiles);
         self.u64(v.land_owned.len() as u64);

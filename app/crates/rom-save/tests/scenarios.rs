@@ -596,3 +596,75 @@ fn an_automated_colony_with_its_governor_paused() {
     assert!(!w.colony_buildings(colony).is_empty());
     check("automated_colony", &rules, w, 400, |_| {});
 }
+
+/// Task 76: a match with the ascension project half done, then the same match with player
+/// one ascended; the second carries on with its descent after the load.
+#[test]
+fn an_ascension_under_way_then_an_ascended_player_descending() {
+    let rules = rules();
+    let plain = rules.id_of("ter.plain").unwrap();
+    let galactic = rules.id_of("age.galactic").unwrap();
+    let ancient = rules.id_of("age.ancient").unwrap();
+    let players = (1..=2)
+        .map(|n| Player {
+            id: PlayerId(n),
+            team: n,
+            faction: rules.id_of("nation.romans").unwrap(),
+            age: if n == 1 { galactic } else { ancient },
+            resources: rules.resources.keys().map(|r| (*r, 100_000)).collect(),
+            techs: if n == 1 {
+                rules
+                    .ascension_requirements()
+                    .into_iter()
+                    .map(|t| (t, 1))
+                    .collect()
+            } else {
+                BTreeMap::new()
+            },
+        })
+        .collect();
+    let mut w = World::new(
+        rules.clone(),
+        MapGrid::new(96, 96, vec![plain; 96 * 96]).unwrap(),
+        5,
+        players,
+    )
+    .unwrap();
+    w.place_for_setup(id(&w, "bld.city"), P1, Pos::flat(30_500, 30_500))
+        .unwrap();
+    let library = w
+        .place_for_setup(id(&w, "bld.library"), P1, Pos::flat(40_000, 30_000))
+        .unwrap();
+    w.place_for_setup(id(&w, "bld.city"), P2, Pos::flat(80_500, 80_500))
+        .unwrap();
+    let tech = id(&w, "tech.ascension");
+    w.submit(Command {
+        player: P1,
+        executor: library,
+        kind: "research".into(),
+        subject: Some(tech),
+        target_entity: None,
+        target_pos: None,
+        queue: false,
+    })
+    .unwrap();
+    ticks(&mut w, 100);
+    assert_eq!(w.ascension_projects().len(), 1);
+    let mut later = World::restore(rules.clone(), w.snapshot()).unwrap();
+    check("ascension_under_way", &rules, w, 50, |_| {});
+    while !later.is_ascended(P1) {
+        later.step();
+    }
+    check("ascended", &rules, later, 200, |w| {
+        w.submit(Command {
+            player: P1,
+            executor: rom_sim::EntityId(0),
+            kind: "descend".into(),
+            subject: None,
+            target_entity: None,
+            target_pos: Some(Pos::flat(30_500, 30_500)),
+            queue: false,
+        })
+        .unwrap();
+    });
+}

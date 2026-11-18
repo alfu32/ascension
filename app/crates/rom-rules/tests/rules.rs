@@ -703,7 +703,8 @@ fn alias_on_a_faction_is_reported() {
 fn universe_knobs_load_and_validate() {
     let rules = seed();
     assert_eq!(rules.validate(), vec![]);
-    assert_eq!(rules.body_kinds.len(), 3);
+    // Star, habitable, resource, and the celestial home's black hole and planet (task 76).
+    assert_eq!(rules.body_kinds.len(), 5);
     let one = &rules.map_styles[&rules.id_of("map.one_world").unwrap()];
     assert_eq!(
         (one.neutral_systems_min, one.neutral_systems_max),

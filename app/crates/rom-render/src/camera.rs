@@ -269,6 +269,9 @@ pub enum Key {
     FlyDown,
     /// Turn the star-map camera upright again (F4).
     LevelView,
+    /// Fly to the celestial home at the galactic centre (F6, task 76), where the star map
+    /// reaches that far.
+    CelestialHome,
 }
 
 impl Key {
@@ -286,6 +289,7 @@ impl Key {
             "f2" => Some(Self::SkyFromSun),
             "f3" => Some(Self::ToggleConstellations),
             "f4" => Some(Self::LevelView),
+            "f6" => Some(Self::CelestialHome),
             "shift+up" => Some(Self::FlyUp),
             "shift+down" => Some(Self::FlyDown),
             _ => None,
@@ -326,7 +330,8 @@ impl Key {
             | Self::FollowSelection
             | Self::SkyFromSun
             | Self::ToggleConstellations
-            | Self::LevelView => None,
+            | Self::LevelView
+            | Self::CelestialHome => None,
         }
     }
 }

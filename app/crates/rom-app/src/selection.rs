@@ -98,6 +98,8 @@ enum Action {
     TradeRoute,
     /// The governors of the selected automated colonies pause, or resume when all are paused.
     Governor,
+    /// An ascended player picks open land of a habitable planet to descend onto (task 76).
+    Descend,
 }
 
 /// What the camera shows, as far as turning picks into orders needs it.
@@ -176,6 +178,8 @@ pub struct Controller {
     patrol: bool,
     /// The next city clicked becomes the selected traders' route partner (task 72).
     trade_pick: bool,
+    /// The next click on a planet's ground is where the ascended player descends (task 76).
+    descend_pick: bool,
     placement: Option<Placement>,
     markers: Vec<Marker>,
     helpers: Vec<Helpers>,
@@ -582,6 +586,7 @@ impl Controller {
             PickEvent::Hotkey { ch, modifiers } => self.hotkey(world, ch, modifiers),
             PickEvent::Escape => {
                 self.placement = None;
+                self.descend_pick = false;
                 self.attack_move = false;
                 self.patrol = false;
                 self.trade_pick = false;
@@ -600,6 +605,10 @@ impl Controller {
     ) {
         if self.placement.is_some() {
             self.place(world, at, mods.shift);
+            return;
+        }
+        if self.descend_pick && !self.view.in_space {
+            self.descend(world, at);
             return;
         }
         // The pick ends once no trader is selected any more.
@@ -675,6 +684,31 @@ impl Controller {
             next = vec![id];
         }
         self.set_selection(next);
+    }
+
+    /// Descends where the player clicked (task 76), or says why it cannot.
+    fn descend(&mut self, world: &mut World, at: Pos) {
+        let command = Command {
+            player: PLAYER,
+            executor: EntityId(0),
+            kind: "descend".into(),
+            subject: None,
+            target_entity: None,
+            target_pos: Some(at),
+            queue: false,
+        };
+        match world.submit(command) {
+            Ok(_) => {
+                self.descend_pick = false;
+                self.ordered = true;
+                self.marker(world, at, MarkerKind::Move);
+                self.say(world, "Descending: a city and its citizens take shape");
+            }
+            Err(error) => {
+                let text = rejection_message(world, &error, None);
+                self.say(world, text);
+            }
+        }
     }
 
     fn box_select(&mut self, world: &World, entities: &[u32], mods: Modifiers) {
@@ -1425,6 +1459,18 @@ impl Controller {
 
     /// The palette of the current selection, with the action behind each slot.
     fn palette(&self, world: &World) -> Option<(HudPalette, Vec<(usize, Action)>)> {
+        // An ascended player commands nothing material: it may only descend (task 76).
+        if world.is_ascended(PLAYER) {
+            let actions = vec![(0, Action::Descend)];
+            let palette = HudPalette {
+                tab: PaletteTab::Order,
+                tabs: [false, true, false, false],
+                pages: 1,
+                buttons: vec![self.button(world, world.rules(), 0, Action::Descend, &[])],
+                ..HudPalette::default()
+            };
+            return Some((palette, actions));
+        }
         let own = self.own_selected(world);
         if own.is_empty() {
             return None;
@@ -1750,6 +1796,11 @@ impl Controller {
                 button.name = "Stop".into();
                 button.icon = "icons/cmd_stop".into();
             }
+            Action::Descend => {
+                button.name = "Descend: a city on open land".into();
+                button.icon = "icons/cmd_rally".into();
+                button.armed = self.descend_pick;
+            }
             Action::Release => {
                 button.name = "Release all workers".into();
                 button.icon = "icons/cmd_cancel".into();
@@ -1840,6 +1891,15 @@ impl Controller {
         }
         let rules = world.rules().clone();
         match action {
+            Action::Descend => {
+                self.descend_pick = !self.descend_pick;
+                if self.descend_pick {
+                    self.say(
+                        world,
+                        "Click open land of a habitable planet to descend there with a city",
+                    );
+                }
+            }
             Action::Construct(def) => {
                 let et = &rules.entity_types[&def];
                 self.placement = Some(Placement {
@@ -2783,6 +2843,10 @@ fn rejection_message(world: &World, error: &SimError, subject: Option<DefId>) ->
             format!("Deposit revealed in {}", world.rules().def(*age).name)
         }
         SimError::NotInOwnTerritory => "Outside your borders".into(),
+        SimError::CannotDescend => "Choose open land of a habitable planet".into(),
+        SimError::OrdersClosed if world.is_ascended(PLAYER) => {
+            "Ascended: you command nothing on the ground until you descend".into()
+        }
         SimError::InForeignTerritory => "Another nation's territory".into(),
         SimError::OtherBody => "No selected builder can reach this site (another planet)".into(),
         SimError::NotInCityRadius => "Outside a city's economic radius".into(),

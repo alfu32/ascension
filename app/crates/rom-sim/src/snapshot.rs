@@ -402,6 +402,12 @@ pub struct PlayerSnapshot {
     pub capital: Option<EntityId>,
     /// Enemy team and start tick of a capital occupation.
     pub hold: Option<(u32, u64)>,
+    /// The faction the player started with (task 76); a descent restores it.
+    pub origin: Option<DefId>,
+    /// The tick the player ascended, while it is ascended.
+    pub ascended: Option<u64>,
+    /// How many times the player has ascended.
+    pub ascensions: u32,
 }
 
 /// A weapon hit waiting to land.
@@ -771,6 +777,9 @@ impl World {
                 owned_tiles: self.territory.owned.get(&p.id).copied(),
                 capital: self.capture.capitals.get(&p.id).copied(),
                 hold: self.capture.holds.get(&p.id).copied(),
+                origin: self.ascension.origins.get(&p.id).copied(),
+                ascended: self.ascension.ascended.get(&p.id).copied(),
+                ascensions: self.ascensions(p.id),
             })
             .collect();
         let surfaces = self
@@ -1368,6 +1377,28 @@ impl World {
                 .filter_map(|p| p.land_owned.map(|n| (p.player.id, n)))
                 .collect(),
         };
+        world.ascension = crate::ascension::AscensionState {
+            origins: players
+                .iter()
+                .map(|p| (p.player.id, p.origin.unwrap_or(p.player.faction)))
+                .collect(),
+            ascended: players
+                .iter()
+                .filter_map(|p| p.ascended.map(|t| (p.player.id, t)))
+                .collect(),
+            times: players
+                .iter()
+                .filter(|p| p.ascensions > 0)
+                .map(|p| (p.player.id, p.ascensions))
+                .collect(),
+            completing: Vec::new(),
+        };
+        if players
+            .iter()
+            .any(|p| (p.status == PlayerStatus::Ascended) != p.ascended.is_some())
+        {
+            return Err(bad("ascended status without its tick"));
+        }
         world.pending = pending
             .into_iter()
             .map(|(o, append)| (order_from(o), append))

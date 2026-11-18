@@ -1,0 +1,22 @@
+# Task 76, replayed by --script in universe mode (--players 2 --ai none, seed 1, --sun fixed):
+# as 76-ascend-script.txt, then the descent: at tick 3 640 the person presses Descend (Q, the one
+# button an ascended player has) and at tick 3 650 clicks the ground where its first city stood
+# (the ruins do not stand in the way). The order is applied at the next tick: a city, five
+# citizens, the first age, no technologies and the descent's resources (see the top bar). The
+# game all but stops at tick 3 700.
+0 grant-age age.galactic
+0 ascension-ready 1
+0 place 1 bld.library @12,0
+0 place 1 bld.farm @0,12
+0 place 1 bld.farm @-10,8
+0 place 1 bld.barracks @-12,-4
+0 place 1 unit.marine @5,-6
+0 place 2 bld.city @64,0
+0 place 2 bld.farm @64,12
+0 place 2 unit.marine @58,4
+5 ascend 1
+6 speed 1000
+3560 speed 100
+3640 key q
+3650 click @2,2
+3700 speed 1

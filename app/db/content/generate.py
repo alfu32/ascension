@@ -516,6 +516,8 @@ def generate():
     automated_colonies(definition, row, tag, need, produce, cost, tech, sql.append)
     orbital_bombardment(weapon, sql.append)
     ground_stains(row)
+    # Last: its definition takes the next id, so every earlier id (and existing hashes) stays.
+    ascension(row, tech)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -844,6 +846,52 @@ def ground_stains(row):
         note='a stain left where a building or unit was destroyed lasts this many world.day_ticks; presentation only')
     row('game_constant', key='world.stain_cap', value=STAIN_CAP, unit='stains',
         note='most stains a surface keeps; past it the oldest goes')
+
+
+# Task 76: the ascension (owner, 2026-11-17; docs/ascension.md). Researched at the library once
+# everything else there is; it lasts ASCENSION_DURATION_PCT of the player's last age advance.
+ASCENSION_COST = {'knowledge': 10000, 'wealth': 10000}
+ASCENSION_NOMINAL_TICKS = 7500          # 250 % of the last age advance (3 000 ticks) before modifiers
+ASCENSION_DURATION_PCT = 250
+DESCENT_RESEARCH_PCT = 90               # of the library's research costs, per resource it uses
+DESCENT_OTHER_PCT = 15                  # of all library research costs, per other base resource
+DESCENT_CITIZENS = 5                    # as many builders as a match starts with
+AI_DESCEND_TICKS = 12000                # an ascended computer player comes back after ten minutes
+# The galactic centre (Sagittarius A*, ICRS J2000): right ascension 17h45m40.04s, declination
+# -29d00m28.1s. The celestial home lies in this direction from the middle of the match's stars,
+# CELESTIAL_DISTANCE_PCT of the region's radius away (beyond it; distances on the star map are
+# compressed anyway).
+GALACTIC_CENTRE_RA_DEG = 266.416837
+GALACTIC_CENTRE_DEC_DEG = -29.007810
+CELESTIAL_DISTANCE_PCT = 150
+CELESTIAL_PLANET_ORBIT = 6000           # system units from the black hole
+
+
+def ascension(row, tech):
+    """Task 76: the ascension project at the library, the descent order, the bodies of the
+    celestial home and their rule values."""
+    import math
+    tech('tech.ascension', 'Ascension', 13, 'library', ASCENSION_NOMINAL_TICKS, ASCENSION_COST, 'project')
+    row('tech_effect', tech_id=Ref('tech.ascension'), effect='ascend')
+    row('order_kind', key='descend', needs='', target='point',
+        note='an ascended player takes a city on open land of a habitable planet; no executor')
+    row('body_kind', key='black_hole', note='the centre of the celestial home (task 76): no surface, no routes')
+    row('body_kind', key='celestial', note='the mythical planet of the celestial home where ascended players live; no surface')
+    ra, dec = math.radians(GALACTIC_CENTRE_RA_DEG), math.radians(GALACTIC_CENTRE_DEC_DEG)
+    direction = (math.cos(dec) * math.cos(ra), math.cos(dec) * math.sin(ra), math.sin(dec))
+    for key, value, unit, note in [
+        ('ascension.duration_pct', ASCENSION_DURATION_PCT, '%', 'the ascension lasts this share of the research time of the age advance that brought the player its current age'),
+        ('ascension.descent_research_pct', DESCENT_RESEARCH_PCT, '%', 'on descent, of each resource the library research costs, this share of the sum of those costs'),
+        ('ascension.descent_other_pct', DESCENT_OTHER_PCT, '%', 'on descent, of each other base resource, this share of the sum of all library research costs'),
+        ('ascension.descent_citizens', DESCENT_CITIZENS, 'units', 'builders that come with the city on descent'),
+        ('ascension.ai_descend_ticks', AI_DESCEND_TICKS, 'ticks', 'an ascended computer player descends this long after it ascended'),
+        ('celestial.dir_x', round(direction[0] * 1_000_000), 'millionths', 'unit vector to the galactic centre, equatorial frame (x toward RA 0h)'),
+        ('celestial.dir_y', round(direction[1] * 1_000_000), 'millionths', 'y toward RA 6h'),
+        ('celestial.dir_z', round(direction[2] * 1_000_000), 'millionths', 'z toward the north celestial pole'),
+        ('celestial.distance_pct', CELESTIAL_DISTANCE_PCT, '%', "the celestial home lies this share of the match region's radius from its middle"),
+        ('celestial.planet_orbit', CELESTIAL_PLANET_ORBIT, 'system units', 'orbit radius of the mythical planet about the black hole'),
+    ]:
+        row('game_constant', key=key, value=value, unit=unit, note=note)
 
 
 # Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"

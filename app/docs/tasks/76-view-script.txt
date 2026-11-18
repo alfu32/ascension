@@ -1,0 +1,29 @@
+# Task 76, the ascended view: as 76-ascend-script.txt, then the camera backs off to the whole
+# globe at tick 3 645: no fog anywhere, player two's town in view, the Descend button.
+# Task 76, replayed by --script in universe mode (--players 2 --ai none, seed 1, --sun fixed):
+# player one's town (a city, a library, farms, a barracks, soldiers) and player two's town 64
+# tiles away, on player one's home planet. Player one orders the Ascension at tick 5 and the game
+# runs ten times faster until it is nearly done (3 600 ticks with the seed's research times).
+# At its completion everything of player one leaves the material plane: its buildings leave
+# ruins that fade like stains, its units vanish, nothing passes to player two. The game all but
+# stops at tick 3 640: the camera looks at the ruins; with no fog any more, player two's town
+# lies in full view (the ascended view).
+0 grant-age age.galactic
+0 ascension-ready 1
+0 place 1 bld.library @12,0
+0 place 1 bld.farm @0,12
+0 place 1 bld.farm @-10,8
+0 place 1 bld.barracks @-12,-4
+0 place 1 unit.marine @5,-6
+0 place 1 unit.marine @7,-6
+0 place 1 unit.marine @9,-6
+0 place 2 bld.city @64,0
+0 place 2 bld.farm @64,12
+0 place 2 bld.barracks @52,-8
+0 place 2 unit.marine @58,4
+0 place 2 unit.marine @60,4
+5 ascend 1
+6 speed 1000
+3560 speed 100
+3645 cam wheel -5 836,400
+3700 speed 1
