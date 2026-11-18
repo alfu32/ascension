@@ -505,7 +505,9 @@ impl Scene {
         zoom: &ZoomCamera,
         orbit: &OrbitCamera,
     ) {
+        crate::prof::mark("pre_draw");
         let one = zoom.one_view(orbit);
+        crate::prof::mark("z0_one_view");
         if let Some(space) = &mut self.space {
             space.labels.clear();
         }
@@ -536,8 +538,10 @@ impl Scene {
             // From the Sun only the real stars show: the backdrop's made-up ones would mislead.
             self.space_backdrop(rl, thread, target, &one.system, !zoom.sky_active());
         }
+        crate::prof::mark("z1_backdrop");
         let stars = frame.as_ref().map_or(1.0, |f| f.stars);
         self.draw_map_layer(rl, thread, target, zoom, orbit, &one, stars);
+        crate::prof::mark("z2_map_layer");
         let drawn = globe.is_some() && frame.is_some();
         let mut passes = if zoom.sky_active() {
             Vec::new()
@@ -550,6 +554,8 @@ impl Scene {
                 .cmp(&(b.index == zoom.system()))
                 .then(b.distance.total_cmp(&a.distance))
         });
+        crate::prof::mark("z3_passes_sort");
+        crate::prof::count("passes", passes.len());
         let mut globe_left = drawn;
         for pass in passes {
             match (&globe, &frame) {
@@ -564,6 +570,7 @@ impl Scene {
                 _ => self.draw_system_layer(rl, thread, target, zoom, &pass, Part::All),
             }
         }
+        crate::prof::mark("z4_system_layers");
         if let (true, Some((eye, _)), Some(frame)) = (globe_left, &globe, &frame) {
             self.globe_world(rl, thread, target, orbit, eye, frame);
         }
@@ -1339,6 +1346,7 @@ impl Scene {
         } else {
             Vec::new()
         };
+        crate::prof::mark("m0_marks");
         let mut drawing = rl.begin_texture_mode(thread, target);
         let far = view.distance_to([0.0; 3]) + MAP_RADIUS * 3.0;
         let near = (view.distance() * 0.01).clamp(1e-4, far * 1e-3);
@@ -1398,6 +1406,7 @@ impl Scene {
                     );
                 }
             }
+            crate::prof::mark("m1_lines");
             let grow = view.distance() * 0.1;
             let k = one.system_place.per_unit;
             // Far systems first, so the near ones are drawn over them.
@@ -1406,6 +1415,8 @@ impl Scene {
                 let distance = |i: usize| view.distance_to(space.map_positions[i]);
                 distance(b).total_cmp(&distance(a)).then(a.cmp(&b))
             });
+            crate::prof::mark("m2_sort");
+            begin_sprite_run();
             for i in order {
                 let system = &universe.systems[i];
                 let pos = space.map_positions[i];
@@ -1457,7 +1468,7 @@ impl Scene {
                 if halo_alpha < 1.0 {
                     continue;
                 }
-                sprite(
+                sprite_in_run(
                     &mut world,
                     camera,
                     &space.glow,
@@ -1466,7 +1477,7 @@ impl Scene {
                     halo,
                     halo_alpha as u8,
                 );
-                sprite(
+                sprite_in_run(
                     &mut world,
                     camera,
                     &space.glow,
@@ -1476,6 +1487,8 @@ impl Scene {
                     core_alpha as u8,
                 );
             }
+            end_sprite_run();
+            crate::prof::mark("m3_sprites");
             // Ships: a mark beside each system that has ships, an arrowhead on the lane for each
             // ship between systems, its lane ahead lit and its destination ringed.
             for mark in &marks {
@@ -1590,6 +1603,7 @@ impl Scene {
                     ));
                 }
             }
+            crate::prof::mark("m4_overlay_build");
             fade_overlay(&mut overlay, detail);
             super::draw_overlay(&mut world, &overlay);
             // SAFETY: as above; the batch is flushed before depth testing is restored.
@@ -1600,6 +1614,7 @@ impl Scene {
         }
         set_clip_planes(DEFAULT_NEAR, DEFAULT_FAR);
         drop(drawing);
+        crate::prof::mark("m5_flush");
         if detail <= 0.004 {
             return;
         }
@@ -1790,8 +1805,30 @@ fn nearest_gap(points: &[[f32; 3]]) -> f32 {
     nearest[nearest.len() / 2]
 }
 
-/// An additive billboard of `size` units at `pos`; it does not write depth.
-fn sprite(
+/// Flushes what is queued and switches to additive blending without depth writes, for a run of
+/// [`sprite_in_run`] draws that [`end_sprite_run`] closes: one draw call for the whole run.
+fn begin_sprite_run() {
+    // SAFETY: the render thread has an active GL context; these calls only flip the depth mask
+    // and blend mode around billboard draws.
+    unsafe {
+        raylib::ffi::rlDrawRenderBatchActive();
+        raylib::ffi::rlDisableDepthMask();
+        raylib::ffi::BeginBlendMode(BlendMode::BLEND_ADDITIVE as i32);
+    }
+}
+
+/// Draws the queued sprites and restores blending and the depth mask.
+fn end_sprite_run() {
+    // SAFETY: as above; the batch is flushed so the sprites are drawn with the settings above.
+    unsafe {
+        raylib::ffi::rlDrawRenderBatchActive();
+        raylib::ffi::EndBlendMode();
+        raylib::ffi::rlEnableDepthMask();
+    }
+}
+
+/// Queues an additive billboard of `size` units at `pos` inside a sprite run.
+fn sprite_in_run(
     world: &mut impl RaylibDraw3D,
     camera: Camera3D,
     texture: &Texture2D,
@@ -1800,13 +1837,6 @@ fn sprite(
     colour: [u8; 3],
     alpha: u8,
 ) {
-    // SAFETY: the render thread has an active GL context; these calls only flip the depth mask
-    // and blend mode around a billboard draw.
-    unsafe {
-        raylib::ffi::rlDrawRenderBatchActive();
-        raylib::ffi::rlDisableDepthMask();
-        raylib::ffi::BeginBlendMode(BlendMode::BLEND_ADDITIVE as i32);
-    }
     // The quad faces the camera with the camera's own up, so it stays round seen from above.
     let side = texture.width as f32;
     world.draw_billboard_pro(
@@ -1820,12 +1850,21 @@ fn sprite(
         0.0,
         Color::new(colour[0], colour[1], colour[2], alpha),
     );
-    // SAFETY: as above; the batch is flushed so the sprite is drawn with the settings above.
-    unsafe {
-        raylib::ffi::rlDrawRenderBatchActive();
-        raylib::ffi::EndBlendMode();
-        raylib::ffi::rlEnableDepthMask();
-    }
+}
+
+/// An additive billboard of `size` units at `pos`; it does not write depth.
+fn sprite(
+    world: &mut impl RaylibDraw3D,
+    camera: Camera3D,
+    texture: &Texture2D,
+    pos: [f32; 3],
+    size: f32,
+    colour: [u8; 3],
+    alpha: u8,
+) {
+    begin_sprite_run();
+    sprite_in_run(world, camera, texture, pos, size, colour, alpha);
+    end_sprite_run();
 }
 
 /// Where the `k`-th of `n` residences stands on the celestial planet centred at `centre` with

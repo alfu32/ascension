@@ -59,3 +59,13 @@ pub fn end() {
         }
     });
 }
+
+/// Adds `n` to the counter `name`.
+pub fn count(name: &'static str, n: usize) {
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        if s.on {
+            *s.sums.entry(name).or_default() += n as f64;
+        }
+    });
+}
