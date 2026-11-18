@@ -29,8 +29,10 @@ The current state of every task is in `app/docs/tasks/STATUS.md`.
   terrains host buildings and ground battles.
 - Identity ladder: historical nation (ages 0–7) → continental bloc (8–9) →
   united humanity (10+).
-- A player picks a race before the match and keeps it. Races start on
-  separate home worlds with equivalent technology and meet only in space.
+- A player picks a race before the match and keeps it. By default races start
+  on separate home worlds with equivalent technology and meet only in space;
+  a setup option (owner, 2026-11-18, task 89) can instead put players of
+  different races together on the same planet, in any map style.
 - Age 13 is the last age. A player who has researched everything at the
   library may ascend (task 76, decided 2026-11-17); matches have no end
   condition, but a player must complete the ascension before being defeated.
