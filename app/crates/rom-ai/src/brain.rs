@@ -6,7 +6,7 @@ use crate::{
     catalogue::Catalogue,
     construction, economy, fleet,
     memory::Memory,
-    opening,
+    navy, opening,
     plan::{Plan, RETRY_TICKS, Wish},
     production, research,
     view::{self, View, operational},
@@ -112,6 +112,8 @@ impl Brain {
             raid_share: weight(&rules, profile_key, "mil.raid_share_pct")?.clamp(0, 100),
             scouts: weight(&rules, profile_key, "scout.units")?.clamp(0, 10),
             claim: weight(&rules, profile_key, "space.claim_eagerness")?.clamp(0, 100),
+            sea_share: weight(&rules, profile_key, "sea.navy_share_pct")?.clamp(0, 100),
+            sea_min_rank: weight(&rules, profile_key, "sea.min_difficulty_rank")?,
         };
         let mut opening = rules
             .ai_opening_steps
@@ -378,7 +380,14 @@ impl Brain {
             memory.opening_done = true;
         }
         memory.blocked.retain(|_, until| *until > tick);
-        let boxed_at = heed_failures(world, self.player, memory, last_thought, tick);
+        let boxed_at = heed_failures(
+            world,
+            &self.catalogue,
+            self.player,
+            memory,
+            last_thought,
+            tick,
+        );
         if memory.age != view.age.0 {
             memory.age = view.age.0;
             memory.age_since = tick;
@@ -409,16 +418,19 @@ impl Brain {
         );
         construction::wishes(&plan.view, &self.weights, &eco, &needed, &mut wishes);
         plan.city_terrains = eco.stuck_terrains(&plan.view);
+        let sea = navy::Sea::new(&plan.view, memory, &self.weights, d);
         production::wishes(
             &plan.view,
             &self.weights,
             d,
             memory,
+            &sea,
             alarmed,
             slip(&mut rng),
             &mut wishes,
         );
         army::wishes(&plan.view, &self.weights, memory, &mut wishes);
+        navy::wishes(&plan.view, &self.weights, &sea, &mut wishes);
         fleet::wishes(&plan.view, &self.weights, memory, &mut wishes);
         // Highest score first; equal scores keep the managers' order.
         wishes.sort_by_key(|w| std::cmp::Reverse(w.score));
@@ -439,10 +451,9 @@ impl Brain {
         // a wave sent off a few units a thought arrives piecemeal and is lost. Marching takes
         // at most two thirds of the budget, so training and the workers go on.
         let marching = alarmed
-            || memory
-                .armies
-                .iter()
-                .any(|(role, a)| *role != Role::Escort && a.phase == Phase::Advance);
+            || memory.armies.iter().any(|(role, a)| {
+                !matches!(role, Role::Escort | Role::Navy) && a.phase == Phase::Advance
+            });
         if marching {
             let all = plan.orders_left;
             let share = if alarmed { all } else { (all * 2 / 3).max(1) };
@@ -468,6 +479,7 @@ impl Brain {
         if !marching {
             army::command(&mut plan, memory, &command);
         }
+        navy::command(&mut plan, memory, &sea, &self.weights, d);
         fleet::command(&mut plan, memory, &self.weights, d);
         economy::update_demand(memory, &plan.shortfall, tick, pace);
         // The governors of its automated colonies stay on.
@@ -514,6 +526,7 @@ fn unbox(plan: &mut Plan<'_>, at: rom_sim::Pos) {
 /// boxed in at the rally point, if they were (the rally point moves).
 fn heed_failures(
     world: &World,
+    cat: &Catalogue,
     me: PlayerId,
     memory: &mut Memory,
     since: u64,
@@ -530,6 +543,8 @@ fn heed_failures(
                 && matches!(f.kind.as_str(), "move" | "attack_move")
         })
         .filter_map(|f| world.entity(f.executor))
+        // Ships are never boxed in by buildings.
+        .filter(|e| !cat.is_sea_unit(e.type_id))
         .map(|e| e.pos)
         .collect();
     let near =

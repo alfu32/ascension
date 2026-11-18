@@ -599,6 +599,7 @@ def generate():
     # Task 92 after it: the late warships, then the building upgrades and the line ships' refits.
     sql.extend(late)
     unit_series(row, tag, tech, modifier, upgrade, sql.append)
+    naval_manager(sql.append)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -1019,6 +1020,20 @@ def unit_series(row, tag, tech, modifier, upgrade, emit):
         full = 'tech.' + key
         tech(full, name, age, 'dock', 300 + age * 50, {'wealth': 100 * (age + 1), 'knowledge': 50 * (age + 1)})
         modifier(full, stat, value, op, 'line_ship')
+
+
+# Task 97: the computer players' naval manager reads these weights (docs/computer-player.md,
+# "At sea"): key, default, note. Profiles may override them in ai_profile_weight.
+NAVAL_WEIGHTS = [
+    ('sea.navy_share_pct', 20, 'share of the military target kept at sea while an enemy can be reached by water'),
+    ('sea.min_difficulty_rank', 1, 'difficulties of a lower rank stay ashore'),
+]
+
+
+def naval_manager(emit):
+    """Task 97: the naval manager's weights, as rows of ai_weight_key (no definitions)."""
+    values = ', '.join(f"('{key}',{default},'{note}')" for key, default, note in NAVAL_WEIGHTS)
+    emit(f'INSERT INTO ai_weight_key VALUES {values};')
 
 
 # Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"
