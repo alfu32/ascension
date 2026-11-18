@@ -1,0 +1,5 @@
+# Task 100: the Quadrant star map at its widest zoom. Run with --universe --style map.quadrant --zoom-all --view starmap --ai none.
+0 grant-age age.galactic
+0 grant-tech tech.automated_route_survey
+1 speed 100
+3 cam wheel -24 640,400

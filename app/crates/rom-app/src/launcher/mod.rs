@@ -113,6 +113,23 @@ impl Catalog {
                     "style",
                     definitions(rules.map_styles.keys().copied().collect()),
                 ),
+                (
+                    "start-placement",
+                    rules
+                        .match_option_choices
+                        .get(rom_mapgen::StartPlacement::OPTION)
+                        .map(|rows| {
+                            let mut rows: Vec<_> = rows.iter().collect();
+                            rows.sort_by_key(|row| row.sort);
+                            rows.into_iter()
+                                .map(|row| Choice {
+                                    key: row.value.clone(),
+                                    label: row.name.clone(),
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                ),
                 ("age", age_choices),
                 ("gallery", gallery),
                 ("model", models),

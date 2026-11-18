@@ -1,0 +1,4 @@
+# Task 100: a Solar match with --start-placement together (race.human, race.reptilian, race.avian on one planet).
+# Starts (seed 1): player 1 face 5 (188.5,177.5), player 2 face 4 (3.5,177.5) exactly opposite on the sphere, player 3 face 5 (2.5,81.5) 90 degrees from player 1.
+# Run with --universe --style map.solar --start-placement together --factions race.human,race.reptilian,race.avian --view globe --start-markers --ai none.
+1 speed 100
