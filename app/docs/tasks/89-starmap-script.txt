@@ -4,4 +4,4 @@
 0 grant-age age.galactic
 0 grant-tech tech.automated_route_survey
 1 speed 100
-3 cam wheel -40 640,400
+3 cam wheel -24 640,400

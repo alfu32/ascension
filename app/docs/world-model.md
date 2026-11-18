@@ -191,6 +191,26 @@ on the same planet"), the `match_option` `start_placement`:
 `rom duel --universe` take `--start-placement separate|together`. The launchers do not offer it
 yet.
 
+#### Scale (measured 2026-11-18, release build, two players)
+
+| Style | Systems | Generation | Building the match world | Save | Star map, 1280×800 |
+| --- | --- | --- | --- | --- | --- |
+| Cluster | 5–7 | 0.6 s | 1.8 s, 119 MB | 1.1 MB | 57 fps |
+| Quadrant | 163–225 | 0.6 s | 12.5 s, 2.3 GB | 18.5 MB | 50 fps |
+| Galaxy | 745 | 1.0 s | over 8.4 GB: killed for want of memory | — | not run |
+
+Generation (`rom-mapgen`) is quick at every size. What does not scale is the simulation's world:
+`rom-sim` makes a flat space map of about 512 × 512 tiles for every star system when the match
+starts (`build_space`), and the world's memory grows by about 12 MB a system. A 20 000-tick Quadrant duel
+of computer players took 35 s and 2.1 GB; the same on the Galaxy took 395 s and 7.4 GB. Until a
+system's space is made only when someone first goes there (as planets are), the Galaxy is not
+playable; this is reported to the owner with task 89.
+
+Screenshots (scripts `tasks/89-*-script.txt`, seed 1, `--ai none`): `img/starmap-style-cluster.png`,
+`img/starmap-style-quadrant.png` (quadrant III, the star map at its widest) and
+`img/starmap-style-solar.png` (one system; the celestial home's ring beside it), and
+`img/solar-system-homes.png` (the Solar system Zavijava with the home planets of three races).
+
 ## Camera and visibility by age
 
 | Tier rank | Camera and reach | First seeded age |

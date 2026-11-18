@@ -2,4 +2,3 @@
 # star. Run with --universe --style map.solar --zoom-all --view system,home.
 0 grant-age age.galactic
 1 speed 100
-3 cam wheel -6 640,400
