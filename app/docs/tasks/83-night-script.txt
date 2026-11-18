@@ -1,0 +1,9 @@
+# Task 83: the scene of 83-close-script.txt at midnight (--sun midnight instead of --sun fixed):
+# the blades take the night light as the ground does.
+0 place 1 unit.spearman @-2,6
+0 place 1 unit.spearman @0,7
+0 place 1 unit.spearman @2,6
+0 place 1 unit.slinger @-1,9
+0 place 1 unit.slinger @1,9
+0 place 1 unit.scout @4,9
+20 cam wheel 5 836,520

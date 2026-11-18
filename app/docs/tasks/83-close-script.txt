@@ -1,0 +1,12 @@
+# Task 83, replayed by --script in universe mode (--sphere 192 --players 2 --ai none --seed 1
+# --sun fixed --size 1672x941 --after 5): three spearmen, two slingers and a scout of player one
+# in the meadow south of the home city; the wheel brings the camera to 19.3 tiles from the
+# ground in front of them. Grass blades stand around the units; the city's footprint keeps the
+# plain ground.
+0 place 1 unit.spearman @-2,6
+0 place 1 unit.spearman @0,7
+0 place 1 unit.spearman @2,6
+0 place 1 unit.slinger @-1,9
+0 place 1 unit.slinger @1,9
+0 place 1 unit.scout @4,9
+20 cam wheel 5 836,520

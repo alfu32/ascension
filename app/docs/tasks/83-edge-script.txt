@@ -1,0 +1,10 @@
+# Task 83: the scene of 83-close-script.txt seen from 40 tiles (one wheel step): the ground
+# around the camera's target lies where the blades thin and shrink into the plain grass
+# material (32 to 42 tiles from the eye), with no line where they stop.
+0 place 1 unit.spearman @-2,6
+0 place 1 unit.spearman @0,7
+0 place 1 unit.spearman @2,6
+0 place 1 unit.slinger @-1,9
+0 place 1 unit.slinger @1,9
+0 place 1 unit.scout @4,9
+20 cam wheel 1 836,520

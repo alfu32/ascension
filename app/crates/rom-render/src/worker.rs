@@ -152,6 +152,8 @@ struct Shared {
     hidden_terrain: Mutex<Option<Arc<Vec<crate::TileKind>>>>,
     start_markers: AtomicBool,
     graticule: AtomicBool,
+    /// Whether grass blades are drawn near the camera (the graphics setting).
+    grass: AtomicBool,
     /// The player's turning preferences, packed by [`TurnSettings::bits`].
     turn: AtomicU8,
     snapshot_wanted: AtomicBool,
@@ -313,6 +315,11 @@ impl RenderBridge {
     /// `G` key toggles them when the command palette leaves it free; Shift+G always toggles).
     pub fn publish_graticule(&self, visible: bool) {
         self.shared.graticule.store(visible, Ordering::Relaxed);
+    }
+
+    /// Turns the grass blades near the camera on or off (on by default).
+    pub fn publish_grass(&self, shown: bool) {
+        self.shared.grass.store(shown, Ordering::Relaxed);
     }
 
     /// Sets the player's turning preferences: which middle drag turns and which pans, and
@@ -494,6 +501,7 @@ impl Shared {
             hidden_terrain: Mutex::new(None),
             start_markers: AtomicBool::new(false),
             graticule: AtomicBool::new(true),
+            grass: AtomicBool::new(true),
             turn: AtomicU8::new(0),
             snapshot_wanted: AtomicBool::new(false),
             snapshot: Mutex::new(None),
@@ -1179,6 +1187,7 @@ fn render_loop(shared: &Shared) {
         );
         let graticule = shared.graticule.load(Ordering::Relaxed);
         scene.show_graticule = graticule;
+        scene.show_grass = shared.grass.load(Ordering::Relaxed);
         match (&orbit, &zoom) {
             (Some(orbit), Some(zoom)) if scene.has_space() => {
                 scene.draw_zoomed(&mut rl, &thread, texture, zoom, orbit);

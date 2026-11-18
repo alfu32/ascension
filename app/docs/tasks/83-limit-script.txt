@@ -1,0 +1,11 @@
+# Task 83: the scene of 83-close-script.txt seen from 33.3 tiles (two wheel steps from the
+# 48-tile home view), the distance of the owner's farthest-detail picture: about 36 pixels per
+# tile at the city at 1672x941. Blades keep their full height up to 32 tiles from the eye and
+# thin out to none at 42.
+0 place 1 unit.spearman @-2,6
+0 place 1 unit.spearman @0,7
+0 place 1 unit.spearman @2,6
+0 place 1 unit.slinger @-1,9
+0 place 1 unit.slinger @1,9
+0 place 1 unit.scout @4,9
+20 cam wheel 2 836,520

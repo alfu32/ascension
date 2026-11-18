@@ -33,6 +33,7 @@ use crate::terrain::{
 use crate::vision::{ChunkSpec, shade_chunk};
 
 mod globe_eye;
+mod grass;
 mod materials;
 mod models;
 mod shadow;
@@ -55,6 +56,8 @@ const MARKER_GROWTH: f32 = 2.5;
 const MARKER_NEAR: f32 = 60.0;
 const SKY: Color = Color::new(146, 178, 204, 255);
 const SPACE: Color = Color::new(1, 2, 5, 255);
+/// A fragment's footprint (the length of `fwidth` of its position) per pixel width.
+const GRASS_FOOTPRINT: f32 = 1.4;
 /// Height of a player-start pillar, in tiles.
 const PILLAR_HEIGHT: f32 = 8.0;
 const PLAYER_COLORS: [Color; 8] = [
@@ -364,6 +367,10 @@ pub(crate) struct Scene {
     hidden_terrain: Vec<TileKind>,
     /// Stains on the ground where things were destroyed (task 80).
     stains: Option<stains::StainGpu>,
+    /// Grass blades near the camera (task 83).
+    grass: Option<grass::GrassGpu>,
+    /// Whether the grass blades are drawn (the graphics setting).
+    pub(crate) show_grass: bool,
 }
 
 /// A chunk mesh whose vertex colours follow the player's fog of war and borders.
@@ -659,6 +666,7 @@ impl Scene {
         let mut star_material = rl.load_material_default(thread);
         star_material.set_shader(&star_shader);
         let stains = stains::StainGpu::load(rl, thread);
+        let grass = grass::GrassGpu::load(rl, thread);
         let (star_positions, star_colors) = star_triangles(&star_field(STAR_COUNT));
         let star_mesh = upload(
             thread,
@@ -728,6 +736,8 @@ impl Scene {
             shade_queue: Vec::new(),
             hidden_terrain: Vec::new(),
             stains,
+            grass,
+            show_grass: true,
         }
     }
 
@@ -755,6 +765,9 @@ impl Scene {
                     hud,
                     &|index| models.as_ref().and_then(|m| m.palette(index)),
                 );
+            }
+            if let Some(grass) = &mut self.grass {
+                grass.set_stains(&gpu.globe, &hud.stains);
             }
             return;
         }
@@ -831,6 +844,11 @@ impl Scene {
         if let Some(features) = &mut self.features {
             features.apply_shades(shades);
         }
+        if let Some(grass) = &mut self.grass
+            && changed.iter().any(|&c| c)
+        {
+            grass.shades_changed();
+        }
         self.last_shades.clear();
         self.last_shades.extend_from_slice(shades);
     }
@@ -861,6 +879,9 @@ impl Scene {
                 }
                 gpu.globe = Arc::clone(&globe);
                 updated_globe = Some(globe);
+                if let Some(grass) = &mut self.grass {
+                    grass.set_slots(&slots);
+                }
             }
             if let Some(features) = &mut self.features {
                 features.conceal(&raw.kinds, hidden);
@@ -915,6 +936,9 @@ impl Scene {
         }
         if let Some(stains) = &mut self.stains {
             materials::set_frame(&mut stains.shader, eye, self.detail, time);
+        }
+        if let Some(grass) = &mut self.grass {
+            materials::set_frame(&mut grass.shader, eye, self.detail, time);
         }
 
         let location = self.object_shader.get_shader_location("planetRadius");
@@ -1003,6 +1027,9 @@ impl Scene {
         self.shade_queue.clear();
         self.graticule.clear();
         self.sun = LIGHT_DIRECTION;
+        if let Some(grass) = &mut self.grass {
+            grass.clear();
+        }
         if let Some(shadow) = &mut self.shadow {
             shadow.invalidate();
         }
@@ -1134,6 +1161,9 @@ impl Scene {
         if let Some(stains) = &mut self.stains {
             shaders.push(&mut stains.shader);
         }
+        if let Some(grass) = &mut self.grass {
+            shaders.push(&mut grass.shader);
+        }
         for shader in shaders {
             let at = |shader: &Shader, name: &str| shader.get_shader_location(name);
             let location = at(shader, "toSun");
@@ -1229,6 +1259,10 @@ impl Scene {
         let count = land.len() + sea.len();
         let baked = crate::features::bake_planet(globe, looks);
         let report = self.adopt_looks(thread, looks, &slots, &baked, uploaded);
+        if let Some(grass) = &mut self.grass {
+            grass.clear();
+            grass.set_slots(&slots);
+        }
         self.globe = Some(GlobeGpu {
             land,
             sea,
@@ -1377,6 +1411,12 @@ impl Scene {
         let eye = eye.eye;
         let vector = |v: [f32; 3]| Vector3::new(v[0], v[1], v[2]);
         let view = Camera3D::perspective(vector(eye), vector(target_point), vector(up), 45.0);
+        if let Some(grass) = &mut self.grass {
+            let shown = self.show_grass && self.detail > 0.0;
+            grass.prepare(&gpu.globe, &self.last_shades, cull, shown);
+        }
+        // Width of a pixel per tile of distance (45° field of view), as a fragment's footprint.
+        let pixel_angle = 2.0 * 22.5_f32.to_radians().tan() / size.1.max(1.0) * GRASS_FOOTPRINT;
         let mut drawing = rl.begin_texture_mode(thread, target);
         clear_depth();
         let radius = orbit.radius;
@@ -1398,6 +1438,9 @@ impl Scene {
             }
             if let Some(stains) = &mut self.stains {
                 stains.draw(&mut world);
+            }
+            if let Some(grass) = &mut self.grass {
+                grass.draw(pixel_angle);
             }
             draw_features(
                 &mut world,
@@ -1511,6 +1554,9 @@ impl Scene {
         };
         if let Some(models) = &mut self.models {
             models.place(views, ground);
+        }
+        if let (Some(grass), Some(gpu), Some(_)) = (&mut self.grass, &self.globe, orbit) {
+            grass.set_buildings(&gpu.globe, views);
         }
         let looks = &self.looks;
         let objects = self.features.as_ref().map(|f| &f.buildings);

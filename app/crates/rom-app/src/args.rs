@@ -7,7 +7,7 @@ pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <f
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] [--ai <profile:difficulty,...|none>] [--watch] \
 [--map-size <width>x<height>] [--sphere <n>] [--single-planet] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
 [--universe] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-hud] [--hud-scale <percent>] [--stats] \
-[--sun <orbit|fixed|midnight>] [--graticule <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
+[--sun <orbit|fixed|midnight>] [--graticule <on|off>] [--grass <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
 [--middle-drag <turn|pan>] [--invert-horizontal-turn] [--invert-vertical-turn] \
 [--gallery <all|units|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
 [--model <model id>] [--parts] [--pose <idle|move|attack|work>] [--anim-time <seconds>] \
@@ -93,6 +93,8 @@ pub struct Options {
     pub age: Option<i64>,
     /// Draw the latitude and longitude lines of a sphere planet.
     pub graticule: bool,
+    /// Draw grass blades on the ground near the camera.
+    pub grass: bool,
     /// The middle button pans and Shift + middle turns (`--middle-drag pan`); by default the
     /// middle button turns the view at every level.
     pub middle_drag_pans: bool,
@@ -193,6 +195,7 @@ impl Default for Options {
             zoom_out: false,
             age: None,
             graticule: true,
+            grass: true,
             middle_drag_pans: false,
             invert_horizontal_turn: false,
             invert_vertical_turn: false,
@@ -336,6 +339,14 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                     "on" => true,
                     "off" => false,
                     _ => return Err(format!("--graticule expects on or off, got {text:?}")),
+                };
+            }
+            "--grass" => {
+                let text = value("--grass")?;
+                options.grass = match text.to_ascii_lowercase().as_str() {
+                    "on" => true,
+                    "off" => false,
+                    _ => return Err(format!("--grass expects on or off, got {text:?}")),
                 };
             }
             "--middle-drag" => {
@@ -703,6 +714,9 @@ mod tests {
             assert!(parse(args(&bad)).is_err(), "{bad:?}");
         }
         assert!(USAGE.contains("--sun") && USAGE.contains("--graticule"));
+        assert!(defaults.grass && !parse(args(&["--grass", "off"])).unwrap().grass);
+        assert!(parse(args(&["--grass", "On"])).unwrap().grass);
+        assert!(parse(args(&["--grass", "maybe"])).is_err());
     }
 
     #[test]

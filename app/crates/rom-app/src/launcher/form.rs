@@ -64,6 +64,7 @@ controls! {
     ("boxes", 0, "0", "Number of moving stress-test boxes.", false),
     ("size", 1, "1280x800", "Canvas width × height in physical pixels (1–16384 each).", false),
     ("scale", 1, "100", "Internal render resolution, 50–100 percent.", false),
+    ("grass", 1, "on", "Grass detail: blades on the ground near the camera, on or off.", false),
     ("hud-scale", 1, "", "HUD scale, 25–200 percent; blank uses automatic scaling.", false),
     ("no-hud", 1, "false", "Hide the match HUD.", true),
     ("stats", 1, "false", "Show diagnostic frame and simulation counters.", true),
@@ -397,6 +398,7 @@ mod tests {
             ("boxes", "15"),
             ("size", "900x600"),
             ("scale", "75"),
+            ("grass", "off"),
             ("hud-scale", "85"),
             ("no-hud", "true"),
             ("stats", "true"),
@@ -475,7 +477,7 @@ mod tests {
             );
         }
         assert!(CONTROLS.iter().any(|c| c.flag == "script"));
-        assert_eq!(CONTROLS.len(), 44);
+        assert_eq!(CONTROLS.len(), 45);
     }
 
     #[test]
