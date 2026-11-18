@@ -52,6 +52,13 @@ Report and stop. The orchestrator shows it to the owner; phase 2 starts on the o
 
 ## Phase 2 — build what the owner approved
 
+The owner's answers are section 10 of `app/docs/unit-series.md`; build sections 3–6 with them.
+Phase 2 adds crates `rom-cli` (the fight matrix at sea and ship against ship in space),
+`rom-rules` (the superseded-building test) and the build check in `rom-sim` (refuse to construct
+a superseded building that is not a manned gather site, with a test). The build palette in
+`rom-app` is wired by the orchestrator after merge (tasks 90 and 91 change that crate): expose
+the test as one public `Rules` function and say its name in the report.
+
 - The data changes in `generate.py` (generated seed, never hand-edited), the counter rule
   holding (`rom fight-matrix` unanswered=0), the computer players choosing among parallel
   classes by their counter logic (data-driven, rule 2), building upgrades working with queues.
@@ -68,7 +75,8 @@ Read first: `AGENTS.md`, `CLAUDE.md`, `app/docs/database.md`, `research/01-refer
 - Fight matrix unanswered=0; playthrough reaches the last age (its hash will change: report the
   new one and why); both 100-seed duels run and reported against 0.0.83's (96–0 with 4 draws;
   53–42 with 5 draws); a change is explained.
-- Tests: after the frigate's age an ironclad's research does not retire frigates; space classes
+- Tests: after the frigate's age neither the ironclad's nor the destroyer's research retires
+  frigates; a stable cannot be built once its upgrade is researched, a farm can; space classes
   coexist; Stable → Vehicle Plant and Siege Workshop → Factory upgrade existing buildings with
   their queues; repeat → same hash.
 

@@ -377,3 +377,28 @@ The check: does any upgrade retire a unit of a different function?
 - **Model looks** for the model review loop: Dreadnoughts and Ships of the Line (new); the space
   frigate, cruiser and battleship in their earlier ages (no new look needed unless the owner wants
   one per age).
+
+## 10. The owner's answers (2026-11-18)
+
+1. **Frigates keep their own class to the end.** The owner wants to keep building frigates, so
+   the destroyer does not retire them: **Frigates** (`frigate`): Triremes → War Galleys →
+   Frigates → Hover Frigates; **Destroyers** (`destroyer`) head a fourth class from the modern
+   age, the anti-air escort. Line ships and strike ships as in section 3.
+2. **Both new sea members**: Ships of the Line (enlightenment) and Dreadnoughts (modern). Their
+   looks go to the model review loop.
+3. **The fight matrix fights at sea and ship against ship in space**, as part of task 92
+   (`rom-cli`).
+4. **Shore defences, artillery and bombers hit ships** (`fluid` target rows).
+5. **Space classes one age earlier**: frigate at starfaring, cruiser at expansion, battleship at
+   abundance.
+6. **Superseded buildings leave the build menu, except manned production sites.** Once a
+   building's upgrade is researched, the old type is no longer offered for construction. A
+   building worked by people stays on the menu beside its automated successor. The test is data:
+   the old type is a gather site with worker slots (`et_gather_site.slots_max > 0`): farm,
+   woodcutter's camp, mine, oil well, university stay; stable, siege workshop, tower, bastion,
+   bunker, fort, star fort, fortress leave. One function in `rom-rules`; the build palette and
+   the simulation's construction check both use it.
+7. **Orbital craft**: option 1 now; option 2 (launch in open system space on a leash) as its own
+   card (98).
+8. **Computer players at sea**: a naval manager is its own card (97), after task 92. Phase 2
+   only makes them choose among the space classes.
