@@ -14,6 +14,7 @@ use raylib::prelude::{
 
 use std::sync::Arc;
 
+use crate::bars::{self, BarAnchor, ScreenBar};
 use crate::camera::Camera;
 use crate::entities::{EntityView, Footing, Surface, build_instances_with_casters_on};
 use crate::features::{BakedFeatures, crop_instances};
@@ -281,6 +282,12 @@ pub(crate) fn mover_transform(mover: &Mover, seconds: f32) -> Matrix {
 /// GPU resources of the proof scene. Create, draw and drop on the render thread only.
 pub(crate) struct Scene {
     pub(crate) projection_centre_y: f32,
+    /// HUD scale rounded to whole pixels: the size of a health bar's pixel.
+    pub(crate) bar_scale: f32,
+    /// Where each entity's health bar hangs, from the last `prepare_entities`.
+    bar_anchors: Vec<BarAnchor>,
+    /// The bars placed on the last picture, in render-target pixels, for the 2D batch.
+    screen_bars: Vec<ScreenBar>,
     box_mesh: Mesh,
     ground_mesh: Mesh,
     star_mesh: Option<Mesh>,
@@ -342,7 +349,7 @@ pub(crate) struct Scene {
     /// What is in space, and which ships are selected, for the next draw.
     space_state: space::SpaceState,
     entity_transforms: Vec<Matrix>,
-    /// Entity bodies only; camera-facing health bars never cast shadows.
+    /// Entity bodies only; health bars are not instances and never cast shadows.
     entity_casters: Vec<Matrix>,
     caster_ranges: Vec<std::ops::Range<usize>>,
     instances: Vec<[f32; 16]>,
@@ -664,6 +671,9 @@ impl Scene {
         );
         Self {
             projection_centre_y: 0.0,
+            bar_scale: 1.0,
+            bar_anchors: Vec::new(),
+            screen_bars: Vec::new(),
             box_mesh: Mesh::gen_mesh_cube(thread, 1.0, 1.0, 1.0),
             ground_mesh: Mesh::gen_mesh_plane(thread, GROUND_TILES, GROUND_TILES, 1, 1),
             star_mesh,
@@ -1242,6 +1252,7 @@ impl Scene {
         target: &mut RenderTexture2D,
         orbit: &OrbitCamera,
     ) {
+        self.screen_bars.clear();
         let eye = GlobeEye::of_orbit(orbit);
         if let Some(frame) = self.globe_backdrop(rl, thread, target, orbit, &eye) {
             self.globe_world(rl, thread, target, orbit, &eye, &frame);
@@ -1338,6 +1349,10 @@ impl Scene {
         eye: &GlobeEye,
         frame: &GlobeFrame,
     ) {
+        let size = (target.texture.width as f32, target.texture.height as f32);
+        let look =
+            crate::pick::View::looking(eye.eye, eye.target, eye.up, size, self.projection_centre_y);
+        self.collect_bars(&look);
         // Other layers may have lit their own things since the backdrop.
         self.set_lighting(frame.toward, true, frame.shadow);
         self.sky.set_halo(
@@ -1437,11 +1452,29 @@ impl Scene {
         set_clip_planes(DEFAULT_NEAR, DEFAULT_FAR);
     }
 
+    /// Places the health bars of damaged and selected entities on the picture `view` sees:
+    /// hidden behind the camera, off the picture and behind the planet.
+    pub(crate) fn collect_bars(&mut self, view: &crate::pick::View) {
+        let selected = &self.space_state.selected;
+        let wanted = |a: &BarAnchor| a.frac < 1.0 || selected.binary_search(&a.id).is_ok();
+        bars::project(
+            &self.bar_anchors,
+            &wanted,
+            view,
+            self.bar_scale,
+            &mut self.screen_bars,
+        );
+    }
+
+    /// Draws the bars of the last picture as one batch of rectangles over it, in pixels.
+    pub(crate) fn draw_bars(&self, d: &mut impl RaylibDraw) {
+        bars::draw(d, &self.screen_bars, self.bar_scale);
+    }
+
     /// Turns `views` into instance transforms for the next draw; without a terrain nothing is drawn.
     pub(crate) fn prepare_entities(
         &mut self,
         views: &[EntityView],
-        camera_yaw: f32,
         start_markers: bool,
         orbit: Option<&OrbitCamera>,
     ) {
@@ -1449,15 +1482,15 @@ impl Scene {
         self.entity_transforms.clear();
         self.entity_casters.clear();
         let mut instances = std::mem::take(&mut self.instances);
-        let (ground, right): (&dyn Footing, [f32; 3]) =
-            if let (Some(gpu), Some(orbit)) = (&self.globe, orbit) {
-                (&*gpu.globe, orbit.right())
-            } else if let Some(terrain) = &self.terrain {
-                (&terrain.surface, [camera_yaw.cos(), 0.0, -camera_yaw.sin()])
-            } else {
-                self.instances = instances;
-                return;
-            };
+        self.bar_anchors.clear();
+        let ground: &dyn Footing = if let (Some(gpu), Some(_)) = (&self.globe, orbit) {
+            &*gpu.globe
+        } else if let Some(terrain) = &self.terrain {
+            &terrain.surface
+        } else {
+            self.instances = instances;
+            return;
+        };
         // An entity whose model did not bake keeps its boxes.
         let missing = |v: &EntityView| {
             v.model
@@ -1487,9 +1520,9 @@ impl Scene {
         build_instances_with_casters_on(
             views,
             ground,
-            right,
             &mut instances,
             &mut self.caster_ranges,
+            &mut self.bar_anchors,
             &drawn_as_objects,
         );
         if let Some(features) = &mut self.features {
@@ -1545,6 +1578,11 @@ impl Scene {
             transform
         }));
         let size = (target.texture.width as f32, target.texture.height as f32);
+        self.screen_bars.clear();
+        if self.terrain.is_some() {
+            let look = crate::pick::View::new(camera, size, self.projection_centre_y);
+            self.collect_bars(&look);
+        }
         let eye = camera.position();
         self.set_material_frame(eye, camera.distance);
         if let Some(features) = &mut self.features {

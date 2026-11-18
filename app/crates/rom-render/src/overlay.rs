@@ -1,12 +1,10 @@
-//! Geometry for the world overlays: selection rings and outlines, health bars of selected
-//! entities, order markers and the building placement footprint. Plain lines and triangles in
+//! Geometry for the world overlays: selection rings and outlines, order markers and the building placement footprint. Plain lines and triangles in
 //! world space, built from snapshots; the scene draws them after the entities. They stand on
 //! any [`Footing`], a flat map or a sphere, so rings, outlines and the placement grid follow
 //! the curvature.
 
 use crate::entities::{
-    EntityView, FlatGround, Footing, building_height, entity_frame, owner_color, pick_frame,
-    side_of, unit_width,
+    EntityView, FlatGround, Footing, building_height, entity_frame, owner_color, unit_width,
 };
 use crate::hud::{HudSnapshot, MarkerKind};
 
@@ -37,16 +35,13 @@ pub struct Tri3 {
 pub struct OverlayGeometry {
     /// Rings, outlines, marker strokes.
     pub lines: Vec<Line3>,
-    /// Health bars and the placement fill.
+    /// The placement fill and other flat shapes.
     pub tris: Vec<Tri3>,
 }
 
 const RING_SEGMENTS: usize = 28;
 const LIFT: f32 = 0.07;
 const MARKER_TICKS: f32 = 10.0;
-/// Narrowest and widest health bar of a unit, in tiles: the bars of enlarged ships stay readable.
-const MIN_BAR_WIDTH: f32 = 0.9;
-const MAX_BAR_WIDTH: f32 = 1.6;
 const GREEN: [u8; 4] = [70, 230, 90, 255];
 const RED: [u8; 4] = [240, 60, 50, 255];
 const CYAN: [u8; 4] = [63, 208, 255, 255];
@@ -208,17 +203,7 @@ impl OverlayGeometry {
     }
 }
 
-fn health_colour(fraction: f32) -> [u8; 4] {
-    if fraction > 0.5 {
-        [64, 217, 77, 255]
-    } else if fraction > 0.25 {
-        [242, 191, 51, 255]
-    } else {
-        [230, 51, 38, 255]
-    }
-}
-
-/// Builds the overlay geometry for one frame on a flat map. `camera_yaw` (radians) turns bars to
+/// Builds the overlay geometry for one frame on a flat map. `camera_yaw` (radians) turns beams to
 /// the camera.
 pub fn build_overlays(
     views: &[EntityView],
@@ -237,7 +222,7 @@ pub fn build_overlays(
 }
 
 /// Builds the overlay geometry for one frame on any ground; `right` is the camera's right
-/// vector, which turns the health bars to the viewer.
+/// vector, which turns the bombardment beams to the viewer.
 pub fn build_overlays_on(
     views: &[EntityView],
     ground: &dyn Footing,
@@ -495,9 +480,7 @@ pub fn build_overlays_on(
             y: view.y,
             altitude: view.altitude,
         };
-        let frame = ground.frame(view.face, view.x, view.y);
-        let (centre, _, size) = pick_frame(view, ground);
-        let width = if view.building {
+        if view.building {
             let (w, h) = (
                 f32::from(view.footprint.0.max(1)),
                 f32::from(view.footprint.1.max(1)),
@@ -510,41 +493,11 @@ pub fn build_overlays_on(
                     colour,
                 );
             }
-            w.max(h)
         } else {
             let radius = unit_width(view) * 0.75;
             for extra in [0.0, 0.05, 0.1] {
                 out.ring(origin, radius + extra, colour);
             }
-            (radius * 2.0).clamp(MIN_BAR_WIDTH, MAX_BAR_WIDTH)
-        };
-        let fraction = (view.hp_frac).clamp(0.0, 1.0);
-        let above_ground = {
-            let to_centre: [f32; 3] = std::array::from_fn(|i| centre[i] - frame.origin[i]);
-            to_centre[0] * frame.up[0] + to_centre[1] * frame.up[1] + to_centre[2] * frame.up[2]
-        };
-        let height = above_ground + size[1] / 2.0 + 0.45;
-        let side = side_of(right, frame.up);
-        let bar = |out: &mut OverlayGeometry, from: f32, to: f32, pad: f32, colour: [u8; 4]| {
-            let (a, b) = (from * 2.0 - 1.0, to * 2.0 - 1.0);
-            let corner = |across: f32, lift: f32| -> [f32; 3] {
-                let p = frame.at([0.0, lift, 0.0]);
-                std::array::from_fn(|i| p[i] + side[i] * across)
-            };
-            let half = width / 2.0;
-            out.quad(
-                [
-                    corner(half * a - pad, height - 0.08 - pad),
-                    corner(half * b + pad, height - 0.08 - pad),
-                    corner(half * b + pad, height + 0.08 + pad),
-                    corner(half * a - pad, height + 0.08 + pad),
-                ],
-                colour,
-            );
-        };
-        bar(out, 0.0, 1.0, 0.04, [8, 10, 14, 235]);
-        if fraction > 0.0 {
-            bar(out, 0.0, fraction, 0.0, health_colour(fraction));
         }
     }
     // Cities a trader could run a route to, while one is picked: gold rings round them.
@@ -927,7 +880,7 @@ mod tests {
     }
 
     #[test]
-    fn selected_unit_gets_a_ring_and_a_health_bar() {
+    fn selected_unit_gets_a_ring_and_no_3d_health_bar() {
         let hud = HudSnapshot {
             selected: vec![1],
             ..HudSnapshot::default()
@@ -935,8 +888,8 @@ mod tests {
         let mut out = OverlayGeometry::default();
         build_overlays(&[unit(1), unit(2)], &|_, _| 0.0, &hud, 0.0, &mut out);
         assert_eq!(out.lines.len(), RING_SEGMENTS * 3);
-        // Background and fill, two triangles each.
-        assert_eq!(out.tris.len(), 4);
+        // The health bar is drawn on the 2D batch, not here.
+        assert!(out.tris.is_empty());
         assert!(out.lines.iter().all(|l| l.colour == rgba(owner_color(1))));
         // An unselected unit draws nothing.
         build_overlays(&[unit(2)], &|_, _| 0.0, &hud, 0.0, &mut out);

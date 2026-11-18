@@ -1144,7 +1144,6 @@ fn render_loop(shared: &Shared) {
         };
         scene.prepare_entities(
             drawn,
-            camera.yaw,
             shared.start_markers.load(Ordering::Relaxed),
             orbit.as_ref(),
         );
@@ -1154,6 +1153,7 @@ fn render_loop(shared: &Shared) {
         if percent > 0 {
             hud_layout.scale = percent as f32 / 100.0 * size.0 as f32 / layout.0 as f32;
         }
+        scene.bar_scale = hud_layout.scale.round().max(1.0);
         scene.projection_centre_y = if hud_visible {
             crate::hud_minimap::ndc_centre_y(hud_layout.world_area(), size.1 as f32)
         } else {
@@ -1314,6 +1314,8 @@ fn render_loop(shared: &Shared) {
                         }
                     }
                 }
+                // Health bars lie on the picture, under the HUD and the names.
+                scene.draw_bars(&mut drawing);
                 if zoom.is_some() {
                     // Each label carries the weight of the frame it belongs to.
                     hud.draw_labels(&mut drawing, &hud_layout, scene.space_labels(), 1.0);
@@ -1334,6 +1336,11 @@ fn render_loop(shared: &Shared) {
                     hud.draw_labels_in(&mut drawing, &hud_layout, &[label], 1.0, false);
                 }
             }
+        }
+
+        if !hud_visible && review.is_none() {
+            let mut drawing = rl.begin_texture_mode(&thread, texture);
+            scene.draw_bars(&mut drawing);
         }
 
         let readback_start = Instant::now();

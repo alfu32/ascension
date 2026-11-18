@@ -1,0 +1,42 @@
+# Task 81: the fight of 80-battle-script.txt, and on the far side of the planet (35 tiles west of the
+# meridian, nearly opposite) a second town bombarded by a second frigate. The camera is pulled back
+# to a view of the first town: the damaged soldiers, tanks and buildings of the second town lie
+# past the horizon and have no bars on the globe; the first town's bars are in view.
+0 grant-age age.expansion
+0 place 2 bld.city @40,0
+0 place 2 bld.barracks @32,-8
+0 place 2 bld.factory @48,-8
+0 place 2 bld.fort @31,9
+0 place 2 bld.market @48,8
+0 place 2 bld.farm @40,-11
+0 place 2 bld.farm @40,11
+0 place 2 bld.temple @29,0
+0 place 2 bld.university @51,0
+0 place 2 unit.marine @37,-4
+0 place 2 unit.marine @43,4
+0 place 2 unit.marine @36,5
+0 place 2 unit.marine @44,-5
+0 place 2 unit.grav_tank @38,-5
+0 place 2 unit.grav_tank @42,5
+0 place 2 unit.grav_tank @45,-4
+0 place 2 unit.marine @50,6
+0 place 2 unit.marine @30,-6
+0 place-orbit 1 unit.survey_ship @40,0
+0 place-orbit 1 unit.space_frigate @40,-27
+0 place 2 bld.city @-35,0
+0 place 2 bld.barracks @-43,-8
+0 place 2 bld.factory @-27,-8
+0 place 2 unit.marine @-38,-4
+0 place 2 unit.grav_tank @-33,5
+0 place 2 unit.marine @-30,-5
+0 place-orbit 1 unit.space_frigate @-35,-27
+60 click ship2
+62 cam focus
+100 click ship2
+101 rclick foecity1
+102 click ship3
+103 rclick foecity2
+110 speed 400
+120 click ship2
+400 cam wheel -6 836,400
+2000 speed 1
