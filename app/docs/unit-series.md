@@ -1,4 +1,4 @@
-# Unit series (task 92, phase 1: proposal)
+# Unit series (task 92)
 
 The owner (2026-11-18): infantry, scouts, fighters, bombers and the light and heavy mounted lines
 are series whose later member does the same job better, so an upgrade rightly retires the
@@ -6,8 +6,8 @@ obsolete unit. Ships and spaceships are not one series: frigates, ironclads and 
 categories of ships stay buildable side by side, and so do the classes of spaceships. The stable
 evolves into the vehicle plant ("autoplant") and the siege workshop into the factory.
 
-This document is the proposal. Nothing in code or data has changed yet; phase 2 builds what the
-owner approves. Section 8 lists the questions for the owner.
+Sections 1–9 are the proposal (phase 1); section 10 holds the owner's answers and section 11 what
+phase 2 built. Section 8 lists the questions that were put to the owner.
 
 ## 1. How a series works today
 
@@ -402,3 +402,111 @@ The check: does any upgrade retire a unit of a different function?
    card (98).
 8. **Computer players at sea**: a naval manager is its own card (97), after task 92. Phase 2
    only makes them choose among the space classes.
+
+## 11. As built (phase 2)
+
+What changed from sections 3 to 6 with the owner's answers, and where the measure made the build
+differ from the proposal.
+
+### Sea classes
+
+Four classes at the dock, each a series of its own (`ui_group`, `upgrades_from_id`), so a later
+member retires only its own class. Base values before the age scale are in `SEA_CLASSES`
+(`db/content/generate.py`); as built:
+
+| Class | Members (first age) | Hit points | Gun (damage, reach, reload) | Speed | Price |
+| --- | --- | --- | --- | --- | --- |
+| Frigates (`frigate`) | Triremes (1), War Galleys (2), Frigates (4), Hover Frigates (9) | 276 – 564 | 20 – 42, 5 tiles, 20 ticks | 2400 | 64 / 32 – 131 / 65 timber / metal |
+| Destroyers (`destroyer`) | Destroyers (6) | 456 | 34, 5 tiles; anti-air 38, 6 tiles, at `air` | 2400 | 106 / 53 |
+| Line ships (`line_ship`) | Carracks (3), **Ships of the Line (4)**, Ironclads (5), **Dreadnoughts (6)** | 870 – 1140 | 52 – 68, 12 / 12 / 13 / 14 tiles, dead zone 3, 40 ticks | 1400 | 232 / 116 – 304 / 152 |
+| Strike ships (`strike_ship`) | Missile Cruisers (7), Drone Cruisers (8) | 738, 792 | 82, 88, 15 / 16 tiles, dead zone 4, 40 ticks | 1800 | 246 / 246, 264 / 264 |
+
+- The upgrade researches between classes are gone: `tech.up.carrack`, `tech.up.destroyer` and
+  `tech.up.missile_cruiser`. New: `tech.up.ship_of_the_line`, `tech.up.dreadnought`.
+  `tech.up.frigate` now upgrades war galleys, `tech.up.hover_frigate` frigates,
+  `tech.up.ironclad` ships of the line.
+- Line-ship refits at the dock, `modifier` rows on the new tag `line_ship`: **Fire Control**
+  (information, reach +2 tiles) and **Armour Belts** (fusion, hit points +25 %).
+- A warship sees at least as far as it shoots (line and strike ships 12 – 16 tiles).
+- Shore defences (the city, the tower and fort lines), the siege line and the bomber line have
+  a `fluid` target row; fighters, infantry and tanks still cannot hit ships.
+
+### Space classes
+
+`SPACE_CLASSES`, as built (no age scale), each a series of its own:
+
+| Class | First age | Hit points, armour | Gun | Speed | Price (metal, energy) | Population | Squads |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Corvettes | starfaring (10) | 800, 3 | kinetic 45, 6 tiles, 15 ticks | 3600 | 300, 150 | 1 | 1 |
+| Space Frigates | starfaring (10, was 11) | 1300, 5 | energy 40, 7 tiles, 10 ticks | 3200 | 450, 200 | 2 | 2 |
+| Space Cruisers | expansion (11, was 12) | 2000, 6 | kinetic 120, 10 tiles, 40 ticks | 2600 | 700, 300 | 2 | 2 |
+| Battleships | abundance (12, was 13) | 3600, 8 | kinetic 260, 13 tiles, 60 ticks | 2000 | 1200, 500 | 3 | 2 |
+
+Differences from section 4, both from the measure (`rom fight-matrix`, ship against ship):
+
+- **The corvette's gun is kinetic, not explosive.** With an explosive gun the corvette beat the
+  orbital fighter and nothing of the starfaring age beat the corvette; with the frigate made the
+  corvette's answer, nothing of that age beat the frigate. As built the starfaring age is a
+  circle: the corvette (anti-ship gun) beats the frigate, the frigate (point defence) beats the
+  craft, the craft beat the corvette and, from the expansion age, the cruiser and battleship,
+  whose kinetic guns do 40 % to them.
+- **No dead zone on the battleship.** Two ships in one orbit are measured to each other where
+  they hold it, at the planet's marker in system space, so every ship there stood inside a
+  dead zone and the battleship never fired. A dead zone in orbit would need a simulation change
+  (ships measured by their ground points); not part of this task.
+- Bombardment is unchanged (section 4 proposed halving the frigate's): the owner's levelling
+  target of three to five volleys for the frigate and cruiser (task 75) still holds with the
+  frigate in the starfaring age.
+
+### Buildings
+
+- `tech.up.vehicle_plant` (at the stable) and `tech.up.factory` (at the siege workshop): industrial
+  age, 200 timber and 100 metal, 274 ticks; `upgrades_from_id` on the new building. Every stable
+  becomes a vehicle plant in place, its queue and rally point kept (test
+  `rom-sim/tests/unit_series.rs`). Vehicle plants and factories stay buildable directly with
+  Professional Army.
+- The vehicle plant takes the stable's whole palette after its own, the factory the siege
+  workshop's (generator: `BUILDING_SUCCESSORS`).
+- **Superseded buildings leave the build menu**: `Rules::is_superseded_building(def, active)`
+  is true for a building that a researched `upgrade_type` effect upgrades in place, unless it is
+  a gather site with worker slots (`et_gather_site.slots_max > 0`). The simulation refuses to
+  construct it (`SimError::Superseded`); the scenario driver skips it. The `rom-app` build palette
+  is wired by the orchestrator.
+
+### Measuring sea and space
+
+- `rom fight-matrix` has **sea rows** (`rom-cli/src/sea_matrix.rs`): a warship is a unit whose
+  movement crosses open water and not the shore; a fight is the ground fight on a field whose
+  halves are each side's ground (water for a warship, the plain shore for anything else). A row is
+  a strength a warship takes part in; its answer may be any mobile type of the age and, for a
+  warship, a building ashore. `--no-sea` skips them, `--sea-fight a,b` plays one.
+- **Ship against ship** rows (`orbit_matrix::measure_space_age`): every armed ship and craft of
+  the age (the newest of each class) in one orbit, answers among them.
+
+### Computer players
+
+The space manager picks its warship among the classes by the exchange it gives against the enemy
+ships and craft it has seen (`fleet::space_value`, the production manager's measure with the
+`space` and `orbit` layers), or, before it has seen any, against one of every armed ship and craft
+it could train itself. No key is named. The naval manager is card 97.
+
+### Ids and hashes
+
+Six upgrade researches between classes are gone and eight definitions are new, so every
+definition after them in the generated block, and every hand-written one after the block, has
+another id. Playthrough and duel hashes change; the Cluster universes of task 89 are the same
+universes with node type ids two higher (with the two refits left out the hashes are 0.0.83's
+again), and `rom-mapgen`'s `cluster_gives_the_many_worlds_universes` pins the new hashes.
+
+### Models for the review loop
+
+New looks, placeholders copied from the nearest ship with the drive glow and muzzle flashes in
+plain metal (`mat.glow` → `mat.copper`, `mat.flash` → `mat.brass`), not in `approved.toml`:
+
+| Model | Copied from |
+| --- | --- |
+| `unit.ship_of_the_line@enlightenment` | `unit.frigate@enlightenment` |
+| `unit.dreadnought@modern` | `unit.destroyer@modern` |
+| `unit.space_frigate@starfaring` | `unit.space_frigate@expansion` |
+| `unit.space_cruiser@expansion` | `unit.space_cruiser@abundance` |
+| `unit.battleship@abundance` | `unit.battleship@galactic` |

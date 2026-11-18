@@ -283,7 +283,9 @@ fn a_bombarded_player_builds_ground_batteries() {
     // Unthreatened, the same player builds none in that time.
     let mut calm = world(&rules);
     let mut brain = Brain::new(Arc::clone(&rules), ME, "balanced", "tougher", 61).unwrap();
-    run(&mut calm, &mut brain, 4000);
+    // (Later, with a colony as a second city, batteries count among its ordinary defences:
+    // since task 92 it founds that colony before tick 3500.)
+    run(&mut calm, &mut brain, 3000);
     assert_eq!(batteries(&calm), 0, "a battery without a threat");
     let mut w = world(&rules);
     // A light raider over the west of the city: it strikes the city, not the builders.
@@ -346,4 +348,74 @@ fn a_strike_fleet_fires_on_the_batteries_first() {
     assert_eq!(first, Some(battery), "the first ordered target");
     assert!(w.entity(battery).is_none(), "the battery still stands");
     assert!(w.entity(city).is_some());
+}
+
+/// Task 92: the warship classes coexist and the space manager picks among them by what they
+/// counter. With enemy craft over the home planet it trains the frigate (point defence), with
+/// enemy cruisers there a ship with the anti-ship gun.
+#[test]
+fn the_warship_class_follows_the_enemy_ships_seen() {
+    let rules = common::rules();
+    // The survey ship is trained for the claims first; the escort is the pick.
+    let survey = rules.id_of("unit.survey_ship").unwrap();
+    let warships = |w: &World| -> BTreeMap<rom_rules::DefId, usize> {
+        let mut out = BTreeMap::new();
+        for e in w.entities().filter(|e| e.owner == ME) {
+            let et = &rules.entity_types[&e.type_id];
+            if w.is_spacecraft_type(e.type_id)
+                && et.container.as_ref().is_none_or(|c| !c.launches)
+                && !et.weapons.is_empty()
+                && e.type_id != survey
+            {
+                *out.entry(e.type_id).or_default() += 1;
+            }
+        }
+        out
+    };
+    let pick = |enemy: &str| {
+        let mut w = world(&rules);
+        let over = Pos::on(HOME, 0, 40_500, 8_500);
+        let kind = rules.id_of(enemy).unwrap();
+        for n in 0..3 {
+            if w.is_craft_type(kind) {
+                // Craft climb from the ground into the orbit above it.
+                let craft = w
+                    .spawn(
+                        kind,
+                        PlayerId(2),
+                        Pos {
+                            x: over.x + n * 1500,
+                            ..over
+                        },
+                    )
+                    .unwrap();
+                w.submit(rom_sim::Command {
+                    player: PlayerId(2),
+                    executor: craft,
+                    kind: "lift".into(),
+                    subject: None,
+                    target_entity: None,
+                    target_pos: None,
+                    queue: false,
+                })
+                .unwrap();
+            } else {
+                into_orbit(&mut w, enemy, PlayerId(2), over);
+            }
+        }
+        let mut brain = Brain::new(Arc::clone(&rules), ME, "balanced", "tougher", 61).unwrap();
+        for _ in 0..80 {
+            run(&mut w, &mut brain, 100);
+            if let Some((t, _)) = warships(&w).into_iter().max_by_key(|(t, n)| (*n, *t)) {
+                return rules.key(t).to_string();
+            }
+        }
+        panic!("no warship against {enemy} by tick {}", w.tick());
+    };
+    let against_craft = pick("unit.orbital_fighter");
+    let against_cruisers = pick("unit.space_cruiser");
+    assert_ne!(against_craft, against_cruisers);
+    assert_eq!(against_craft, "unit.space_frigate");
+    // Against shields the kinetic gun: the cruiser outranges and outlasts the ships it meets.
+    assert_eq!(against_cruisers, "unit.space_cruiser");
 }

@@ -17,7 +17,7 @@ use crate::{
     plan::{Act, Plan, Wish},
     view::{self, View, operational},
 };
-use rom_rules::{BodyKind, ClaimMode, DefId, ProductionMode};
+use rom_rules::{BodyKind, ClaimMode, DefId, Layer, ProductionMode, Rules};
 use rom_sim::{BodyClaim, BodyId, Entity, EntityId, Pos};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -60,7 +60,9 @@ pub(crate) fn rank(view: &View<'_>) -> i64 {
 pub(crate) struct Ships {
     /// The cheapest type that claims presence bodies.
     pub claimer: Option<DefId>,
-    /// The armed type with the most strength per resource (it may be the claimer).
+    /// The armed type that fights best for its price against the enemy ships and craft seen,
+    /// or, before any is seen, against what the player could field itself (it may be the
+    /// claimer). Warship classes coexist (task 92): this picks among them by their counters.
     pub warship: Option<DefId>,
     /// The carrier with the most room.
     pub transport: Option<DefId>,
@@ -120,9 +122,88 @@ fn kind(view: &View<'_>, tags: &BTreeSet<u32>, type_id: DefId) -> Kind {
     }
 }
 
+/// The farthest a type's weapons reach in a fight between ships and craft (the `space` and
+/// `orbit` layers), in milli-tiles.
+fn space_reach(rules: &Rules, type_id: DefId) -> i64 {
+    rules.entity_types[&type_id]
+        .weapons
+        .iter()
+        .filter(|w| {
+            !w.orbit_only
+                && w.targets
+                    .iter()
+                    .any(|t| matches!(t.layer, Layer::Space | Layer::Orbit))
+        })
+        .map(|w| w.range_max)
+        .max()
+        .unwrap_or(0)
+}
+
+/// Damage per second (× 100) `attacker` deals to `target` between ships and craft: weapons
+/// that reach space or orbit, with the damage matrix and armour, none from a weapon whose
+/// least range is beyond the target's own reach (it closes in under the guns).
+fn space_dps(rules: &Rules, attacker: DefId, target: DefId) -> i64 {
+    let t = &rules.entity_types[&target];
+    let reach = space_reach(rules, target);
+    rules.entity_types[&attacker]
+        .weapons
+        .iter()
+        .filter(|w| {
+            !w.orbit_only
+                && w.range_min <= reach
+                && w.targets
+                    .iter()
+                    .any(|l| matches!(l.layer, Layer::Space | Layer::Orbit))
+        })
+        .map(|w| {
+            let pct = t
+                .armor_class_id
+                .map_or(100, |a| rules.damage_pct(w.damage_class_id, a));
+            let hit = (w.damage * pct / 100 - t.armor).max(1);
+            hit * w.shots.max(1) * 2000 / w.cooldown_ticks.max(1)
+        })
+        .sum()
+}
+
+/// How good a warship type is for its price against `enemies` (type and count): against each
+/// it counts the damage it deals and how long it lasts under that enemy's fire, the exchange a
+/// fight would give (as the production manager weighs ground units).
+fn space_value(view: &View<'_>, enemies: &BTreeMap<DefId, i64>, unit: DefId) -> i64 {
+    let rules = view.rules;
+    let staying = rules.entity_types[&unit].hp + space_reach(rules, unit) / 50;
+    let mut score: i128 = 0;
+    let mut weight = 0_i64;
+    for (enemy, count) in enemies {
+        let dealt = space_dps(rules, unit, *enemy);
+        // A floor keeps an enemy that cannot hit back from counting without limit.
+        let suffered = space_dps(rules, *enemy, unit).max(50);
+        score += i128::from(dealt) * i128::from(staying) * 1000 / i128::from(suffered)
+            * i128::from(*count);
+        weight += count;
+    }
+    let price = crate::production::dearness(view, unit);
+    (score / i128::from(weight.max(1)) / i128::from(price.max(1))).clamp(0, i128::from(i64::MAX))
+        as i64
+}
+
+/// Armed enemy ships and craft the brain remembers, by type.
+fn enemy_ships(view: &View<'_>, memory: &Memory) -> BTreeMap<DefId, i64> {
+    let mut seen = BTreeMap::new();
+    for enemy in memory.enemies.values() {
+        let t = enemy.type_id;
+        if (view.world.is_spacecraft_type(t) || view.world.is_craft_type(t))
+            && space_reach(view.rules, t) > 0
+        {
+            *seen.entry(t).or_default() += 1;
+        }
+    }
+    seen
+}
+
 impl Ships {
-    /// Reads the trainable spacecraft from the producers the player owns.
-    pub fn new(view: &View<'_>) -> Self {
+    /// Reads the trainable spacecraft from the producers the player owns; the warship is
+    /// chosen against the enemy ships and craft in `memory`.
+    pub fn new(view: &View<'_>, memory: &Memory) -> Self {
         let rules = view.rules;
         let tags = claim_tags(view);
         let mut types: Vec<DefId> = view
@@ -146,20 +227,44 @@ impl Ships {
                 .filter(|t| kind(view, &tags, *t) == k)
                 .collect()
         };
+        let mut craft: Vec<DefId> = view
+            .owned
+            .iter()
+            .flat_map(|p| rules.production.get(p).into_iter().flatten())
+            .filter(|row| row.mode == ProductionMode::Train)
+            .map(|row| row.product_def_id)
+            .filter(|unit| {
+                view.world.is_craft_type(*unit) && view.unlocked(*unit) && !view.obsolete(*unit)
+            })
+            .collect();
+        craft.sort_unstable();
+        craft.dedup();
         Ships {
             claimer: of_kind(Kind::Ship)
                 .into_iter()
                 .filter(|t| claims(view, &tags, *t))
                 .min_by_key(|t| (price_sum(view, *t), *t)),
-            warship: of_kind(Kind::Ship)
-                .into_iter()
-                .filter(|t| !rules.entity_types[t].weapons.is_empty())
-                .max_by_key(|t| {
-                    (
-                        view::strength(rules, *t) * 100 / price_sum(view, *t),
-                        std::cmp::Reverse(*t),
-                    )
-                }),
+            warship: {
+                let armed: Vec<DefId> = of_kind(Kind::Ship)
+                    .into_iter()
+                    .filter(|t| space_reach(rules, *t) > 0)
+                    .collect();
+                // Before any enemy ship is seen, the enemy is taken to field what the player
+                // could itself: one of every armed ship and craft it can train.
+                let mut enemies = enemy_ships(view, memory);
+                if enemies.is_empty() {
+                    enemies = types
+                        .iter()
+                        .copied()
+                        .chain(craft.iter().copied())
+                        .filter(|t| space_reach(rules, *t) > 0)
+                        .map(|t| (t, 1))
+                        .collect();
+                }
+                armed
+                    .into_iter()
+                    .max_by_key(|t| (space_value(view, &enemies, *t), std::cmp::Reverse(*t)))
+            },
             transport: of_kind(Kind::Transport).into_iter().max_by_key(|t| {
                 (
                     rules.entity_types[t]
@@ -183,21 +288,12 @@ impl Ships {
                 .into_iter()
                 .filter(|t| rules.entity_types[t].trader.is_none())
                 .max_by_key(|t| (rules.entity_types[t].los, std::cmp::Reverse(*t))),
-            craft: view
-                .owned
-                .iter()
-                .flat_map(|p| rules.production.get(p).into_iter().flatten())
-                .filter(|row| row.mode == ProductionMode::Train)
-                .map(|row| row.product_def_id)
-                .filter(|unit| {
-                    view.world.is_craft_type(*unit) && view.unlocked(*unit) && !view.obsolete(*unit)
-                })
-                .max_by_key(|t| {
-                    (
-                        view::strength(rules, *t) * 100 / price_sum(view, *t),
-                        std::cmp::Reverse(*t),
-                    )
-                }),
+            craft: craft.iter().copied().max_by_key(|t| {
+                (
+                    view::strength(rules, *t) * 100 / price_sum(view, *t),
+                    std::cmp::Reverse(*t),
+                )
+            }),
         }
     }
 }
@@ -324,7 +420,7 @@ pub(crate) fn wishes(view: &View<'_>, weights: &Weights, memory: &Memory, wishes
     if rank(view) < 1 || view.world.systems().is_empty() {
         return;
     }
-    let ships = Ships::new(view);
+    let ships = Ships::new(view, memory);
     if ships == Ships::default() {
         // Nothing to fly yet: the building that trains spacecraft.
         if let Some(port) = spaceport(view) {

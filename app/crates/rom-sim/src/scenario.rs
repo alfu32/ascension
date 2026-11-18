@@ -688,7 +688,9 @@ impl Playthrough {
                         // Cities are founded up to the limit; a colony (outside the limit) once.
                         let city = self.world.counts_as_city(subject);
                         if !city
-                            && (self.constructed.contains(&subject) || owned.contains(&subject))
+                            && (self.constructed.contains(&subject)
+                                || owned.contains(&subject)
+                                || rules.is_superseded_building(subject, &active))
                         {
                             continue;
                         }
