@@ -36,7 +36,7 @@ Read first: `AGENTS.md`, `CLAUDE.md`, `app/docs/world-model.md`, task 89's card 
 
 ## Done when
 
-- Gate green from `app/`; playthrough hashes unchanged (52f0f01b8fc09b6e, e7482acbc241dee1);
+- Gate green from `app/`; playthrough hashes unchanged (at 0.0.87: 2b4a0812188cd904, ascension a252236eec91a838);
   20-seed duel identical; save round trip on a Quadrant match.
 - The measurement table before and after.
 
