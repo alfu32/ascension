@@ -16,7 +16,14 @@ pub(crate) struct HudGpu {
     artwork: Texture2D,
     greyscale: Texture2D,
     glyphs: Texture2D,
+    /// Models the scene could not draw: not tried again.
+    no_picture: std::collections::BTreeSet<u16>,
+    /// When the batch of pictures on its way back was drawn, and how long drawing took.
+    icon_batch: Option<(std::time::Instant, std::time::Duration)>,
 }
+
+/// Most model pictures rendered in one frame: a full palette page.
+const ICONS_PER_FRAME: usize = 15;
 
 pub(crate) fn upload(
     _rl: &mut RaylibHandle,
@@ -63,7 +70,91 @@ impl HudGpu {
             artwork,
             greyscale,
             glyphs,
+            no_picture: Default::default(),
+            icon_batch: None,
         })
+    }
+
+    /// Renders the pictures of the models `snapshot` shows that have none yet (task 91), at
+    /// most a page at a time, and puts them in the atlas textures once read back.
+    pub(crate) fn bake_model_icons(
+        &mut self,
+        rl: &mut RaylibHandle,
+        thread: &RaylibThread,
+        scene: &mut crate::scene::Scene,
+        snapshot: &HudSnapshot,
+    ) {
+        if let Some(done) = scene.take_model_icons() {
+            self.store_model_icons(done, snapshot);
+        }
+        if scene.model_icons_busy() || !scene.has_models() {
+            return;
+        }
+        let batch: Vec<u16> = self
+            .painter
+            .missing_models(snapshot)
+            .into_iter()
+            .filter(|m| !self.no_picture.contains(m))
+            .take(ICONS_PER_FRAME)
+            .collect();
+        if batch.is_empty() {
+            return;
+        }
+        let started = std::time::Instant::now();
+        let edge = self.painter.artwork.model_icon_edge();
+        let factor = crate::hud_icons::supersample(edge);
+        let done = scene.render_model_icons(rl, thread, &batch, edge * factor);
+        self.icon_batch = Some((started, started.elapsed()));
+        if let Some(done) = done {
+            self.store_model_icons(done, snapshot);
+        }
+    }
+
+    /// Filters read-back pictures down, outlines them and writes them into the atlas textures.
+    fn store_model_icons(&mut self, done: crate::scene::ModelPictures, snapshot: &HudSnapshot) {
+        let finishing = std::time::Instant::now();
+        let edge = self.painter.artwork.model_icon_edge();
+        let factor = crate::hud_icons::supersample(edge);
+        if done.edge != edge * factor {
+            // Drawn for another HUD scale: drawn again at this one.
+            return;
+        }
+        let scale = self.painter.artwork.scale;
+        let mut stored = 0;
+        for (model, picture) in done.pictures {
+            let Some(raw) = picture else {
+                self.no_picture.insert(model);
+                continue;
+            };
+            let pixels = crate::hud_icons::finish(&raw, edge, factor, scale);
+            let Some(rect) = self.painter.store_model_icon(model, &pixels, snapshot) else {
+                continue;
+            };
+            let at = Rectangle::new(rect.x as f32, rect.y as f32, rect.w as f32, rect.h as f32);
+            let grey = crate::hud_atlas::greyscale(&pixels);
+            if let Err(error) = self
+                .artwork
+                .update_texture_rec(at, &pixels)
+                .and_then(|()| self.greyscale.update_texture_rec(at, &grey))
+            {
+                eprintln!("rom-render: model icon: {error}");
+            }
+            stored += 1;
+        }
+        let (started, draw) = self
+            .icon_batch
+            .take()
+            .unwrap_or((finishing, std::time::Duration::ZERO));
+        eprintln!(
+            "rom-render: {stored} model icons ({edge} px, drawn at {}): draw {:.1} ms, \
+             finish {:.1} ms, ready {:.1} ms after the draw; atlas {}×{}",
+            edge * factor,
+            draw.as_secs_f32() * 1_000.0,
+            finishing.elapsed().as_secs_f32() * 1_000.0,
+            (finishing - started).as_secs_f32() * 1_000.0,
+            self.painter.artwork.width,
+            self.painter.artwork.height,
+        );
     }
     /// Draws review tags in the HUD font, centred on their points with a dark shadow; none is
     /// dropped.

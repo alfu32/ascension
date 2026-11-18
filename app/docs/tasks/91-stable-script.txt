@@ -1,0 +1,13 @@
+# Task 91: the TRAIN page of a stable in the classical age. Use:
+# env -u WAYLAND_DISPLAY target/release/rise-of-man --seed 1 --age 1 --size 1280x800 \
+#   --script docs/tasks/91-stable-script.txt --screenshot docs/img/91-train-stable.png --after 4
+0 grant res.food 100000
+0 grant res.timber 100000
+0 grant res.metal 100000
+0 grant res.wealth 100000
+0 grant res.knowledge 100000
+0 grant res.oil 100000
+0 grant res.energy 100000
+0 place 1 bld.stable @9,0
+5 producers
+6 hud tab 2

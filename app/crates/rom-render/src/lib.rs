@@ -18,6 +18,7 @@ pub mod graticule;
 pub mod hud;
 pub mod hud_atlas;
 mod hud_gpu;
+pub mod hud_icons;
 pub mod hud_layout;
 pub mod hud_minimap;
 pub mod hud_model;
@@ -94,7 +95,8 @@ pub use hud::{HudPanel, HudResearch, HudResource, HudSelection, HudSnapshot};
 pub use hud_model::{
     ButtonState, HudBlast, HudButton, HudCard, HudCityRadius, HudMarker, HudPalette, HudPatrol,
     HudPlacement, HudQueue, HudQueueItem, HudStain, HudTile, HudTradeRoute, HudWealth, HudWreck,
-    MarkerKind, PaletteTab, ResearchCell, ResearchOverview, ResearchTrack, SLOT_KEYS, slot_of_key,
+    IconMark, MarkerKind, PaletteTab, ResearchCell, ResearchOverview, ResearchTrack, SLOT_KEYS,
+    slot_of_key,
 };
 pub use pick::{
     Ground, HudRegionKind, HudTarget, PickContext, PickController, PickEvent, View, flat_surface,

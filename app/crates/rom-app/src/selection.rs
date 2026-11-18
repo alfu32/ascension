@@ -14,6 +14,7 @@ use rom_render::{
 use rom_rules::{DefId, EntityClass, EntityType, ProductionMode, Rules, StanceFamily};
 use rom_sim::{BodyId, Command, Entity, EntityId, PlayerId, Pos, SimError, Topology, World};
 
+use crate::palette_icons::generic_icon as icon_of;
 use crate::space_view::SpaceFrame;
 
 /// The player this interface commands.
@@ -198,6 +199,8 @@ pub struct Controller {
     focus: Option<Pos>,
     ordered: bool,
     view: ViewCtx,
+    /// The composed models, for the palette's pictures (task 91); generic pictograms without.
+    models: Option<std::sync::Arc<crate::looks::ModelBook>>,
 }
 
 /// Distance in milli-tiles between two positions; positions beyond reach (or on faces that do
@@ -293,16 +296,6 @@ fn snap(coordinate: i32, size: i64) -> i32 {
     ((i64::from(coordinate) - size * 500 + 500).div_euclid(1000) * 1000 + size * 500) as i32
 }
 
-fn icon_of(et: &EntityType) -> &'static str {
-    match (et.class, et.ui_group.as_str()) {
-        (EntityClass::Building, "wonder") => "icons/pic_wonder",
-        (EntityClass::Building, "military") => "icons/pic_tower",
-        (EntityClass::Building, _) => "icons/pic_house",
-        (EntityClass::Unit, "military" | "foot" | "mounted") => "icons/pic_shield",
-        _ => "icons/pic_person",
-    }
-}
-
 /// A blocked production order's reason in player-facing words.
 fn blocked_reason(reason: &str) -> String {
     match reason {
@@ -376,6 +369,11 @@ impl Controller {
     /// An empty controller.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Gives the controller the composed models, so palette buttons show their pictures.
+    pub fn set_models(&mut self, models: std::sync::Arc<crate::looks::ModelBook>) {
+        self.models = Some(models);
     }
 
     /// Tells the controller what the camera shows, so picks become positions on the right body.
@@ -1932,6 +1930,8 @@ impl Controller {
         let mut button = HudButton {
             slot,
             icon: String::new(),
+            model: None,
+            mark: rom_render::IconMark::None,
             name: String::new(),
             price: String::new(),
             state: ButtonState::Ready,
@@ -1940,10 +1940,14 @@ impl Controller {
         match action {
             Action::Construct(def) | Action::Train(def) | Action::Research(def) => {
                 button.name = rules.display_name(def, faction).to_owned();
-                button.icon = rules
-                    .entity_type(def)
-                    .map_or("icons/pic_scroll", icon_of)
-                    .to_owned();
+                let icon = crate::palette_icons::product_icon(
+                    rules,
+                    self.models.as_deref(),
+                    faction,
+                    player.age,
+                    def,
+                );
+                (button.icon, button.model, button.mark) = (icon.art, icon.model, icon.mark);
                 let price = world.price(PLAYER, def);
                 button.price = price
                     .iter()
@@ -2661,10 +2665,10 @@ impl Controller {
             .map(|(id, _)| *id)
             .collect();
         hud.overview = crate::hud::research_overview(world, &pending);
-        let faction = world
+        let (faction, age) = world
             .players()
             .find(|p| p.id == PLAYER)
-            .map_or(DefId(0), |p| p.faction);
+            .map_or((DefId(0), DefId(0)), |p| (p.faction, p.age));
         let own = self.own_selected(world);
         if hud.help.is_empty()
             && !own.is_empty()
@@ -2851,11 +2855,17 @@ impl Controller {
                     .filter_map(|o| {
                         let def = o.subject?;
                         let total = o.total_ticks.unwrap_or(0);
+                        let icon = crate::palette_icons::product_icon(
+                            rules,
+                            self.models.as_deref(),
+                            faction,
+                            age,
+                            def,
+                        );
                         Some(HudQueueItem {
-                            icon: rules
-                                .entity_type(def)
-                                .map_or("icons/pic_scroll", icon_of)
-                                .to_owned(),
+                            icon: icon.art,
+                            model: icon.model,
+                            mark: icon.mark,
                             name: rules.display_name(def, faction).to_owned(),
                             progress_pct: (o.progress_ticks * 100)
                                 .checked_div(total)

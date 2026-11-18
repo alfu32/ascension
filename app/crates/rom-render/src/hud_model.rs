@@ -205,13 +205,30 @@ pub struct HudStain {
     pub model: Option<u16>,
 }
 
+/// A small mark drawn over a palette picture (task 91).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum IconMark {
+    /// Nothing.
+    #[default]
+    None,
+    /// An upgrade of a type: an upward chevron.
+    Upgrade,
+    /// A level of a research track, drawn as that many pips.
+    Level(u8),
+}
+
 /// One command button.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HudButton {
     /// Slot in the 5 × 3 grid, 0 to 14, row by row.
     pub slot: usize,
-    /// Atlas icon name.
+    /// Atlas icon name; stands in for the model picture until it is rendered.
     pub icon: String,
+    /// The composed model (an index of [`crate::SceneLooks::models`]) whose rendered picture
+    /// the button shows.
+    pub model: Option<u16>,
+    /// The mark drawn over the picture.
+    pub mark: IconMark,
     /// Display name shown in the help line.
     pub name: String,
     /// Price line, empty when free.
@@ -242,8 +259,12 @@ pub struct HudPalette {
 /// One entry of the production queue.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HudQueueItem {
-    /// Atlas icon name.
+    /// Atlas icon name; stands in for the model picture until it is rendered.
     pub icon: String,
+    /// The composed model whose rendered picture the row shows.
+    pub model: Option<u16>,
+    /// The mark drawn over the picture.
+    pub mark: IconMark,
     /// Display name.
     pub name: String,
     /// Completion percentage, 0 to 100.

@@ -1,0 +1,14 @@
+# Task 91: the RESEARCH page of a library. Use, in the classical age (--age 1) and the
+# industrial age (--age 5), and at the smallest HUD scale (--hud-scale 25):
+# env -u WAYLAND_DISPLAY target/release/rise-of-man --seed 1 --age 1 --size 1280x800 \
+#   --script docs/tasks/91-library-script.txt --screenshot docs/img/91-research-classical.png --after 4
+0 grant res.food 100000
+0 grant res.timber 100000
+0 grant res.metal 100000
+0 grant res.wealth 100000
+0 grant res.knowledge 100000
+0 grant res.oil 100000
+0 grant res.energy 100000
+0 place 1 bld.library @9,0
+5 researchers
+6 hud tab 3

@@ -1,0 +1,9 @@
+# Task 91: the BUILD page of a classical city's builders. Use:
+# env -u WAYLAND_DISPLAY target/release/rise-of-man --seed 1 --age 1 --size 1280x800 \
+#   --script docs/tasks/91-build-script.txt --screenshot docs/img/91-build-classical.png --after 4
+0 grant res.food 100000
+0 grant res.timber 100000
+0 grant res.metal 100000
+0 grant res.wealth 100000
+1 box builders
+2 hud tab 0
