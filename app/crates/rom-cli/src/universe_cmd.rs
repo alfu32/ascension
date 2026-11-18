@@ -647,7 +647,7 @@ fn star_map_ppm(universe: &Universe, _style_radius: i64) -> Vec<u8> {
             .iter()
             .filter(|b| b.system_id == system.id)
             .filter_map(|b| match b.kind {
-                BodyKind::Star => None,
+                BodyKind::Star | BodyKind::BlackHole | BodyKind::Celestial => None,
                 BodyKind::Habitable if b.home_race.is_some() => Some(HOME_PLANET),
                 BodyKind::Habitable => Some(HABITABLE),
                 BodyKind::Resource => Some(RESOURCE),
@@ -686,9 +686,10 @@ mod tests {
         let world =
             simulate_universe(Arc::new(rules), &universe, &factions, 3, ticks, false).unwrap();
         // Every home planet has a surface, and each player's start is on its home planet.
+        // Every system but the celestial home (task 76) has its space.
         assert_eq!(
             world.surfaces().len(),
-            universe.planets.len() + universe.systems.len()
+            universe.planets.len() + universe.systems.len() - 1
         );
         for player in [PlayerId(1), PlayerId(2)] {
             let home = world.home_body(player).unwrap();

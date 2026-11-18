@@ -1,0 +1,26 @@
+# Task 76, the residences close up: as 76-celestial-script.txt, then a double click on the
+# planet at tick 3 720 flies the camera to it and it backs off a little.
+# Task 76, replayed by --script in universe mode (--players 2 --ai balanced:moderate, seed 1,
+# --sun fixed): both players start with everything the library offers and a library; at tick 5
+# both order the Ascension (player two is a computer player; the script orders it as the button
+# would). After both have ascended the camera flies to the celestial home (F6) at the galactic
+# centre: the black hole in its glowing accretion disc and the mythical planet Empyrean with the
+# two residences in their owners' colours (a double click at tick 3 720 flies to the planet).
+# The panel lists the residents and the chat: the computer player's lines and the person's at
+# tick 3 700 with the computer's answer.
+0 grant-age age.galactic
+0 ascension-ready 1
+0 ascension-ready 2
+0 place 1 bld.library @12,0
+0 place 2 bld.library @-12,0
+5 ascend 1
+5 ascend 2
+6 speed 1000
+3560 speed 100
+3640 cam key f6 down
+3642 cam key f6 up
+3700 chat Greetings from the galactic centre
+3720 cam dblclick 1253,477
+3790 cam wheel -2 836,400
+3795 cam point 1500,250
+3800 speed 1

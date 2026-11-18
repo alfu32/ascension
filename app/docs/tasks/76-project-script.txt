@@ -1,0 +1,11 @@
+# Task 76, replayed by --script in universe mode (--players 2 --ai none, seed 1, --sun fixed,
+# --view starmap): player one starts with every technology the library offers (the last age,
+# the price of the project) and a library beside its city; at tick 5 it orders the Ascension.
+# Everyone is told: the event line, the countdown in the top bar, beside its home system on the
+# star map, and in the diplomacy tab (opened at tick 20). The game all but stops at tick 400.
+0 grant-age age.galactic
+0 ascension-ready 1
+0 place 1 bld.library @12,0
+5 ascend 1
+20 hud data 3
+400 speed 1

@@ -405,6 +405,19 @@ pub fn build_universe_match(
             player.techs.insert(tech, 1);
         }
     }
+    // Task 76: everything at the library, and the price of the ascension.
+    for owner in &setup.ascension_ready {
+        if let Some(player) = players.iter_mut().find(|p| p.id == PlayerId(*owner)) {
+            for tech in rules.ascension_requirements() {
+                player.techs.insert(tech, 1);
+            }
+            for tech in rules.techs.keys().filter(|t| rules.ascends(**t)) {
+                for cost in rules.costs.get(tech).into_iter().flatten() {
+                    *player.resources.entry(cost.resource_id).or_default() += cost.amount;
+                }
+            }
+        }
+    }
     let homes: BTreeMap<PlayerId, BodyId> = universe
         .starts
         .iter()

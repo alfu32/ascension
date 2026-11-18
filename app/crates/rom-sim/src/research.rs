@@ -18,6 +18,10 @@ impl World {
         if queued.contains(&subject) {
             return Err(SimError::ResearchQueued);
         }
+        // The ascension waits until everything else at the library is researched (task 76).
+        if self.rules.ascends(subject) && !self.ascension_ready(player) {
+            return Err(SimError::Locked);
+        }
         if !tech.exclusive_group.is_empty()
             && researched
                 .iter()
@@ -43,6 +47,10 @@ impl World {
             .or_default() += 1;
         let rules = self.rules.clone();
         for effect in rules.tech_effects.get(&subject).into_iter().flatten() {
+            if effect.effect == TechEffectKind::Ascend {
+                self.ascension.completing.push(player);
+                continue;
+            }
             let Some(target) = effect.target_def_id else {
                 continue;
             };
@@ -88,6 +96,10 @@ impl World {
         research: bool,
     ) -> u64 {
         let sources = self.active_sources(self.entity(executor).expect("executor").owner);
+        let owner = self.entity(executor).expect("executor").owner;
+        if research && self.rules.ascends(subject) {
+            return self.ascension_duration(owner, subject);
+        }
         let ticks = if research {
             self.rules.player_stat(
                 "research_time",

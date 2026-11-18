@@ -26,6 +26,8 @@ use rom_render::{
 const POLL_INTERVAL: Duration = Duration::from_millis(8);
 /// Step for changing the render scale with Page Up / Page Down, in percent.
 const SCALE_STEP: u32 = 10;
+/// Longest line the celestial home's chat takes, in characters (task 76).
+const CHAT_LENGTH: usize = 80;
 /// Pixels of smooth scrolling that count as one wheel step.
 const PIXELS_PER_WHEEL_STEP: f32 = 80.0;
 /// Lines GPUI reports for one notch of a mouse wheel on Linux (its `SCROLL_LINES`).
@@ -196,6 +198,41 @@ impl WorldView {
         });
     }
 
+    /// The celestial home's chat (task 76): while the person's player is ascended, Enter opens
+    /// a line, typing fills it, Backspace takes back, Enter sends and Escape drops it. Returns
+    /// whether the key went to the chat.
+    fn chat_key(&mut self, event: &KeyDownEvent) -> bool {
+        let Some(mut draft) = self.sim.chat_draft() else {
+            if event.keystroke.key == "enter" && self.sim.chat_allowed() {
+                self.sim.set_chat_draft(Some(String::new()));
+                return true;
+            }
+            return false;
+        };
+        match event.keystroke.key.as_str() {
+            "enter" => {
+                if !draft.trim().is_empty() {
+                    self.sim.send_chat(draft);
+                }
+                self.sim.set_chat_draft(None);
+            }
+            "escape" => self.sim.set_chat_draft(None),
+            "backspace" => {
+                draft.pop();
+                self.sim.set_chat_draft(Some(draft));
+            }
+            _ => {
+                if let Some(text) = &event.keystroke.key_char
+                    && draft.chars().count() < CHAT_LENGTH
+                {
+                    draft.extend(text.chars().filter(|c| !c.is_control()));
+                    self.sim.set_chat_draft(Some(draft));
+                }
+            }
+        }
+        true
+    }
+
     fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         if !self.pointer_input {
             return;
@@ -204,6 +241,9 @@ impl WorldView {
             if event.keystroke.key == "escape" {
                 self.menu_back(window, cx);
             }
+            return;
+        }
+        if self.chat_key(event) {
             return;
         }
         match event.keystroke.key.as_str() {

@@ -120,8 +120,13 @@ fn every_system_is_reachable() {
     let r = rules();
     for seed in 0..20 {
         let u = plan(&r, "map.many_worlds", seed, &FOUR);
-        assert!(u.hops_from(1).iter().all(Option::is_some), "seed {seed}");
-        assert!(u.routes.len() >= u.systems.len() - 1);
+        // Every system but the celestial home, which no route joins (task 76).
+        let celestial = u.celestial_system().expect("celestial home");
+        let hops = u.hops_from(1);
+        for (i, hop) in hops.iter().enumerate() {
+            assert_eq!(hop.is_some(), i as u32 + 1 != celestial, "seed {seed}");
+        }
+        assert!(u.routes.len() >= u.systems.len() - 2);
         for route in &u.routes {
             assert!(route.system_a < route.system_b);
             let d2 = dist2(pos(&u, route.system_a), pos(&u, route.system_b));
@@ -137,7 +142,11 @@ fn systems_are_real_stars_at_their_real_places() {
         let u = plan(&r, "map.many_worlds", seed, &FOUR);
         let radius = r.map_styles[&u.style].star_map_radius;
         for (i, s) in u.systems.iter().enumerate() {
-            let star = &r.stars[&s.star];
+            let Some(star) = s.star else {
+                assert_eq!(Some(s.id), u.celestial_system());
+                continue;
+            };
+            let star = &r.stars[&star];
             assert_eq!(
                 (
                     s.name.as_str(),
@@ -235,7 +244,11 @@ fn bodies_have_distinct_orbits() {
     let r = rules();
     for seed in 0..10 {
         let u = plan(&r, "map.many_worlds", seed, &FOUR);
-        for s in &u.systems {
+        for s in u
+            .systems
+            .iter()
+            .filter(|s| Some(s.id) != u.celestial_system())
+        {
             let bodies: Vec<_> = u.bodies.iter().filter(|b| b.system_id == s.id).collect();
             let stars: Vec<_> = bodies.iter().filter(|b| b.kind == BodyKind::Star).collect();
             assert_eq!(stars.len(), 1);
@@ -265,7 +278,8 @@ fn habitable_planets_are_within_size_bounds() {
     for seed in 0..10 {
         let u = plan(&r, "map.many_worlds", seed, &FOUR);
         assert!(in_range(
-            u.systems.len() - 3,
+            // Less the three homes and the celestial home (task 76).
+            u.systems.len() - 4,
             style.neutral_systems_min,
             style.neutral_systems_max
         ));
@@ -285,7 +299,7 @@ fn habitable_planets_are_within_size_bounds() {
                 .filter(|b| b.kind == BodyKind::Habitable)
                 .count()
         );
-        for s in &u.systems {
+        for s in u.systems.iter().filter(|s| s.star.is_some()) {
             let count = |k| {
                 u.bodies
                     .iter()
@@ -324,9 +338,10 @@ fn one_world_style_makes_a_single_system_per_race() {
     let r = rules();
     for seed in 0..5 {
         let u = plan(&r, "map.one_world", seed, &FOUR);
-        assert_eq!(u.systems.len(), 3);
+        // Three homes and the celestial home (task 76).
+        assert_eq!(u.systems.len(), 4);
         assert_eq!(u.home_systems().len(), 3);
-        for s in &u.systems {
+        for s in u.systems.iter().filter(|s| s.star.is_some()) {
             let habitable = u
                 .bodies
                 .iter()
@@ -342,7 +357,7 @@ fn one_world_style_makes_a_single_system_per_race() {
         assert!(u.fairness(&r).is_empty());
     }
     let u = plan(&r, "map.one_world", 1, &FOUR[..2]);
-    assert_eq!((u.systems.len(), u.routes.len()), (1, 0));
+    assert_eq!((u.systems.len(), u.routes.len()), (2, 0));
 }
 
 #[test]
@@ -570,5 +585,57 @@ fn home_systems_hold_the_same_things() {
         for pair in homes.windows(2) {
             assert_eq!(contents(pair[0]), contents(pair[1]), "seed {seed}");
         }
+    }
+}
+
+/// Task 76: the celestial home lies toward the galactic centre (Sagittarius) from the middle of
+/// the match's stars, beyond all of them, with a black hole and one mythical planet and no
+/// route.
+#[test]
+fn the_celestial_home_lies_toward_sagittarius_beyond_the_region() {
+    let r = rules();
+    let dir = ["celestial.dir_x", "celestial.dir_y", "celestial.dir_z"]
+        .map(|k| r.constant(k).unwrap() as f64 / 1e6);
+    for seed in 0..10 {
+        let u = plan(&r, "map.many_worlds", seed, &FOUR);
+        let id = u.celestial_system().unwrap();
+        assert_eq!(id, u.systems.len() as u32, "added last");
+        assert_eq!(u.degree(id), 0);
+        let kinds: Vec<_> = u
+            .bodies
+            .iter()
+            .filter(|b| b.system_id == id)
+            .map(|b| b.kind)
+            .collect();
+        assert_eq!(kinds, [BodyKind::BlackHole, BodyKind::Celestial]);
+        let others: Vec<_> = u.systems.iter().filter(|s| s.id != id).collect();
+        let n = others.len() as f64;
+        let mid = [
+            others.iter().map(|s| f64::from(s.x)).sum::<f64>() / n,
+            others.iter().map(|s| f64::from(s.y)).sum::<f64>() / n,
+            others.iter().map(|s| f64::from(s.z)).sum::<f64>() / n,
+        ];
+        let home = &u.systems[id as usize - 1];
+        let away = [
+            f64::from(home.x) - mid[0],
+            f64::from(home.y) - mid[1],
+            f64::from(home.z) - mid[2],
+        ];
+        let length = away.iter().map(|v| v * v).sum::<f64>().sqrt();
+        let cos = (0..3).map(|i| away[i] * dir[i]).sum::<f64>() / length;
+        assert!(cos > 0.999, "seed {seed}: toward Sagittarius ({cos})");
+        let farthest = others
+            .iter()
+            .map(|s| {
+                let d = [
+                    f64::from(s.x) - mid[0],
+                    f64::from(s.y) - mid[1],
+                    f64::from(s.z) - mid[2],
+                ];
+                d.iter().map(|v| v * v).sum::<f64>().sqrt()
+            })
+            .fold(0.0, f64::max);
+        assert!(length > farthest, "seed {seed}: beyond the region");
+        assert!(u.fairness(&r).is_empty() || seed > 0);
     }
 }

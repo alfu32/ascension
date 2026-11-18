@@ -81,7 +81,8 @@ impl World {
 
     /// The routes `player` knows, as system pairs (lower id first), ascending.
     pub fn known_routes(&self, player: PlayerId) -> Vec<(u32, u32)> {
-        if self.rule_enabled(player, RULE_ROUTE_SURVEY) {
+        // An ascended player sees the whole universe (task 76).
+        if self.is_ascended(player) || self.rule_enabled(player, RULE_ROUTE_SURVEY) {
             let mut all: Vec<_> = self
                 .routes()
                 .iter()

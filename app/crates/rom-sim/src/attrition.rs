@@ -105,9 +105,12 @@ impl World {
     }
 
     pub(crate) fn check_orders_open(&self, player: PlayerId) -> Result<(), crate::SimError> {
-        if self.outcome() != &crate::Outcome::Playing
-            || self.player_status(player) == Some(crate::PlayerStatus::Defeated)
-        {
+        // A victory is a notice, not an end: the match goes on (task 76). The defeated give no
+        // orders, nor do the ascended to anything material.
+        if matches!(
+            self.player_status(player),
+            Some(crate::PlayerStatus::Defeated | crate::PlayerStatus::Ascended)
+        ) {
             return Err(crate::SimError::OrdersClosed);
         }
         Ok(())

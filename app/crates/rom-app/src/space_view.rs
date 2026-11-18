@@ -244,6 +244,8 @@ pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) ->
     }
     snapshot.transits = transits(world);
     snapshot.known = Some(known_systems(world));
+    snapshot.countdowns = crate::ascension_view::countdowns(world);
+    snapshot.residences = crate::ascension_view::residences(world);
     snapshot.colonies = colonies(world);
     snapshot.charted = Some(world.known_routes(PLAYER));
     snapshot.charges = charges(world, &snapshot.ships);
@@ -413,11 +415,17 @@ pub fn holding_line(world: &World, ship: &rom_sim::Entity) -> Option<String> {
 /// The systems player one knows, ascending: its home system, any system it has ships in or
 /// bound for, and any whose star or bodies its team has seen.
 pub fn known_systems(world: &World) -> Vec<u32> {
+    // An ascended player sees every system (task 76).
+    if world.is_ascended(PLAYER) {
+        return world.systems().iter().map(|s| s.id).collect();
+    }
     let home = world
         .home_body(PLAYER)
         .and_then(|b| world.body(b))
         .map(|b| b.system);
     let mut known: BTreeSet<u32> = home.into_iter().collect();
+    // Everyone may look at the celestial home on the star map (task 76).
+    known.extend(crate::ascension_view::celestial_system(world));
     for t in world
         .transits()
         .filter(|t| allied(world, PLAYER, t.entity.owner))

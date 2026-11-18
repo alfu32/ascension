@@ -1621,6 +1621,12 @@ fn zoom_event(
             zoom.level_view();
             true
         }
+        InputEvent::KeyDown(Key::CelestialHome) if zoom.cap() >= Level::StarMap => {
+            if let Some(index) = zoom.scene().systems.iter().position(|s| s.celestial) {
+                zoom.fly_to_target(crate::zoom::Target::System(index), orbit);
+            }
+            true
+        }
         InputEvent::KeyDown(key) => match space_key_index(key) {
             Some(index) if !zoom.pans_planet() => {
                 zoom.hold(index, true);

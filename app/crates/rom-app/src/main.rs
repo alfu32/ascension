@@ -1,6 +1,7 @@
 //! Rise of Man desktop shell: a GPUI window that shows the offscreen world view.
 
 mod args;
+mod ascension_view;
 mod bench;
 mod computer;
 mod demo;

@@ -45,6 +45,7 @@ pub fn status_key(status: PlayerStatus) -> &'static str {
         PlayerStatus::Playing => "playing",
         PlayerStatus::Defeated => "defeated",
         PlayerStatus::Won => "won",
+        PlayerStatus::Ascended => "ascended",
     }
 }
 
@@ -363,7 +364,7 @@ fn write_players(
                 color: 0,
             });
         tx.execute(
-            "INSERT INTO player VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO player VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             params![
                 id.0,
                 seat.slot,
@@ -383,6 +384,9 @@ fn write_players(
                 p.hold.map(|(_, start)| w(start)),
                 s.stats.kills.get(&id).copied().map(w),
                 s.stats.losses.get(&id).copied().map(w),
+                p.origin.map(|f| f.0),
+                p.ascended.map(w),
+                p.ascensions,
             ],
         )?;
         for (resource, amount) in &p.player.resources {
