@@ -25,7 +25,7 @@ use crate::match_setup::planet_surface;
 use crate::saves::{self, Kind, SaveRequest, SaveSetup, Saved};
 use crate::script::{Script, ScriptAction};
 use crate::selection::{Controller, PLAYER, ViewCtx};
-use crate::space_view::{Notices, SpaceFrame, dress_ships, space_snapshot};
+use crate::space_view::{Notices, SpaceFrame, SystemIndex, dress_ships, space_snapshot_with};
 
 /// The universe the simulation thread expands planets from, and which planet is shown.
 pub struct UniverseHost {
@@ -915,6 +915,8 @@ struct Memory {
     fog: FogPublisher,
     motions: Motions,
     terrain: Option<TerrainKnowledge>,
+    /// The bodies of each system, indexed on the first publish.
+    systems: Option<SystemIndex>,
 }
 
 /// A per-player view of resource terrain, refreshed on age and planet changes.
@@ -969,12 +971,14 @@ fn publish(
     models: &crate::looks::ModelBook,
     ascension: &AscensionView,
 ) {
+    let t0 = Instant::now();
     let sightings = world.visible_entities(PLAYER);
     let body = host.map_or_else(|| world.surfaces()[0].body(), |h| h.viewed);
     if TerrainKnowledge::refresh(&mut memory.terrain, world, body) {
         let hidden = crate::terrain::hidden_terrain(world, PLAYER);
         bridge.publish_hidden_terrain(Arc::new(hidden));
     }
+    let t1 = Instant::now();
     let snapshot = snapshot_on(world, body, &sightings, models, &mut memory.motions);
     link.stats.tick.store(snapshot.tick, Ordering::Relaxed);
     link.stats
@@ -983,9 +987,14 @@ fn publish(
     bridge.publish_snapshot(Arc::new(snapshot));
     if let Some(host) = host {
         let system = bridge.view_state().system.unwrap_or(host.home_system);
-        let mut space = space_snapshot(world, system, &sightings);
+        let t2 = Instant::now();
+        let index = memory.systems.get_or_insert_with(|| SystemIndex::new(world));
+        let mut space = space_snapshot_with(world, index, system, &sightings);
         dress_ships(&mut space, world, models);
         bridge.publish_space(Arc::new(space));
+        if std::env::var_os("ROM_PROFILE").is_some() && world.tick() % 40 == 0 {
+            eprintln!("simprof sightings+terrain={:?} snapshot={:?} space={:?}", t1 - t0, t2 - t1, t2.elapsed());
+        }
     }
     publish_camera_limits(world, bridge);
     if world.tick().is_multiple_of(VISION_INTERVAL) {

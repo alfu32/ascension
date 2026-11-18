@@ -38,6 +38,11 @@ impl SpaceFrame {
             .map(|b| i64::from(b.orbit_radius))
             .max()
             .unwrap_or(0);
+        Self::build(world, body, outer)
+    }
+
+    /// The frame of the system whose star is `body` and whose outermost orbit is `outer`.
+    fn build(world: &World, body: BodyId, outer: i64) -> Option<Self> {
         let Topology::Flat { width, .. } = world.surface(body)?.topology() else {
             return None;
         };
@@ -64,6 +69,73 @@ impl SpaceFrame {
     }
 }
 
+/// The bodies of every system, found once per match: bodies never move between systems, so the
+/// per-tick snapshot looks a system up instead of scanning every body of the universe.
+#[derive(Clone, Debug, Default)]
+pub struct SystemIndex {
+    entries: BTreeMap<u32, SystemEntry>,
+}
+
+/// One system of a [`SystemIndex`].
+#[derive(Clone, Debug, Default)]
+struct SystemEntry {
+    /// The first star body of the system, as [`World::space_of`] finds it.
+    star: Option<BodyId>,
+    /// Every body of the system in body order, the star included.
+    bodies: Vec<BodyId>,
+    /// The plane of the system.
+    frame: Option<SpaceFrame>,
+}
+
+impl SystemIndex {
+    /// Indexes every body of `world` by its system, in one pass.
+    pub fn new(world: &World) -> Self {
+        let mut outer: BTreeMap<u32, i64> = BTreeMap::new();
+        let mut entries: BTreeMap<u32, SystemEntry> = world
+            .systems()
+            .iter()
+            .map(|s| (s.id, SystemEntry::default()))
+            .collect();
+        for body in world.bodies() {
+            let entry = entries.entry(body.system).or_default();
+            entry.bodies.push(body.id);
+            if body.kind == BodyKind::Star && entry.star.is_none() {
+                entry.star = Some(body.id);
+            }
+            let furthest = outer.entry(body.system).or_insert(0);
+            *furthest = (*furthest).max(i64::from(body.orbit_radius));
+        }
+        for (system, entry) in &mut entries {
+            entry.frame = entry
+                .star
+                .and_then(|star| SpaceFrame::build(world, star, outer.get(system).copied()?));
+        }
+        Self { entries }
+    }
+
+    /// The bodies of `system` in body order.
+    pub fn bodies(&self, system: u32) -> &[BodyId] {
+        self.entries.get(&system).map_or(&[], |e| &e.bodies)
+    }
+
+    /// The star whose plane holds the system's ships.
+    pub fn star(&self, system: u32) -> Option<BodyId> {
+        self.entries.get(&system)?.star
+    }
+
+    /// The plane of `system`.
+    pub fn frame(&self, system: u32) -> Option<SpaceFrame> {
+        self.entries.get(&system)?.frame
+    }
+
+    /// Every system with a plane, with its frame, in system order.
+    pub fn frames(&self) -> impl Iterator<Item = (u32, SpaceFrame)> + '_ {
+        self.entries
+            .iter()
+            .filter_map(|(&system, e)| Some((system, e.frame?)))
+    }
+}
+
 fn allied(world: &World, a: PlayerId, b: PlayerId) -> bool {
     let team = |id: PlayerId| world.players().find(|p| p.id == id).map(|p| p.team);
     a == b || (team(a).is_some() && team(a) == team(b))
@@ -71,7 +143,18 @@ fn allied(world: &World, a: PlayerId, b: PlayerId) -> bool {
 
 /// What player one sees in space: the ships in the plane of every system, the claims of
 /// `system` and the ships in transit.
+#[cfg(test)]
 pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) -> SpaceSnapshot {
+    space_snapshot_with(world, &SystemIndex::new(world), system, sightings)
+}
+
+/// [`space_snapshot`] with the match's system index, built once by the caller.
+pub fn space_snapshot_with(
+    world: &World,
+    index: &SystemIndex,
+    system: u32,
+    sightings: &[Sighting<'_>],
+) -> SpaceSnapshot {
     let rules = world.rules();
     let mut snapshot = SpaceSnapshot {
         tick: world.tick(),
@@ -114,19 +197,9 @@ pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) ->
     let Some(reach) = rules.constant("space.orbit_reach") else {
         return snapshot;
     };
-    let planes: BTreeMap<BodyId, (u32, SpaceFrame)> = world
-        .systems()
-        .iter()
-        .filter_map(|s| {
-            let frame = SpaceFrame::of(world, s.id)?;
-            Some((frame.body, (s.id, frame)))
-        })
-        .collect();
-    let bodies: Vec<(u32, u32, Pos)> = world
-        .bodies()
-        .iter()
-        .filter(|b| b.kind != BodyKind::Star)
-        .filter_map(|b| Some((b.system, b.id.0, world.body_position(b.id)?)))
+    let planes: BTreeMap<BodyId, (u32, SpaceFrame)> = index
+        .frames()
+        .map(|(id, frame)| (frame.body, (id, frame)))
         .collect();
     for sighting in sightings {
         let Sighting::Live(e) = sighting else {
@@ -141,10 +214,12 @@ pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) ->
         if et.class == EntityClass::Node {
             continue;
         }
-        let held = bodies
+        let held = index
+            .bodies(in_system)
             .iter()
-            .filter(|(s, _, _)| *s == in_system)
-            .map(|(_, id, at)| (e.pos.distance(*at) as i64, *id, *at))
+            .filter(|id| world.body(**id).is_some_and(|b| b.kind != BodyKind::Star))
+            .filter_map(|id| Some((id.0, world.body_position(*id)?)))
+            .map(|(id, at)| (e.pos.distance(at) as i64, id, at))
             .filter(|(d, _, _)| *d <= reach * 3 / 2)
             .min_by_key(|(d, id, _)| (*d, *id));
         let (body, x, y) = if let Some(orbit) = world.orbit(e.id) {
@@ -189,7 +264,7 @@ pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) ->
         });
     }
     snapshot.ships.sort_by_key(|s| s.id);
-    if let Some(frame) = SpaceFrame::of(world, system) {
+    if let Some(frame) = index.frame(system) {
         for (body, owner) in world.claims() {
             let Some(info) = world.body(body).filter(|b| b.system == system) else {
                 continue;
@@ -220,10 +295,11 @@ pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) ->
                 at.y.div_euclid(1000),
             )
         };
-        for info in world
-            .bodies()
+        for info in index
+            .bodies(system)
             .iter()
-            .filter(|b| b.system == system && b.kind == BodyKind::Resource)
+            .filter_map(|id| world.body(*id))
+            .filter(|b| b.kind == BodyKind::Resource)
         {
             let Some(mut view) = resource_view(world, info.id) else {
                 continue;
@@ -243,13 +319,13 @@ pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) ->
         }
     }
     snapshot.transits = transits(world);
-    snapshot.known = Some(known_systems(world));
+    snapshot.known = Some(known_systems_with(world, index));
     snapshot.countdowns = crate::ascension_view::countdowns(world);
     snapshot.residences = crate::ascension_view::residences(world);
     snapshot.colonies = colonies(world);
     snapshot.charted = Some(world.known_routes(PLAYER));
     snapshot.charges = charges(world, &snapshot.ships);
-    snapshot.holds = holds(world);
+    snapshot.holds = holds_with(world, index);
     snapshot
 }
 
@@ -270,7 +346,13 @@ pub fn charges(world: &World, ships: &[ShipView]) -> Vec<ChargeView> {
 
 /// The systems with a jump inhibitor that player one knows of: its own and its allies', and an
 /// enemy's that holds a ship of player one, or whose ground it has explored. By system.
+#[cfg(test)]
 pub fn holds(world: &World) -> Vec<HoldView> {
+    holds_with(world, &SystemIndex::new(world))
+}
+
+/// [`holds`] with the match's system index.
+pub fn holds_with(world: &World, index: &SystemIndex) -> Vec<HoldView> {
     let mut out: Vec<HoldView> = world
         .jump_inhibitors()
         .filter_map(|(e, _)| {
@@ -286,8 +368,8 @@ pub fn holds(world: &World) -> Vec<HoldView> {
                 )
                 || world.entities().any(|own| {
                     own.owner == PLAYER
-                        && world
-                            .space_of(system)
+                        && index
+                            .star(system)
                             .is_some_and(|star| own.pos.body == star)
                 });
             known.then(|| HoldView {
@@ -414,7 +496,13 @@ pub fn holding_line(world: &World, ship: &rom_sim::Entity) -> Option<String> {
 
 /// The systems player one knows, ascending: its home system, any system it has ships in or
 /// bound for, and any whose star or bodies its team has seen.
+#[cfg(test)]
 pub fn known_systems(world: &World) -> Vec<u32> {
+    known_systems_with(world, &SystemIndex::new(world))
+}
+
+/// [`known_systems`] with the match's system index.
+pub fn known_systems_with(world: &World, index: &SystemIndex) -> Vec<u32> {
     // An ascended player sees every system (task 76).
     if world.is_ascended(PLAYER) {
         return world.systems().iter().map(|s| s.id).collect();
@@ -439,7 +527,7 @@ pub fn known_systems(world: &World) -> Vec<u32> {
         .map(|e| e.pos.body)
         .collect();
     for system in world.systems() {
-        let Some(star) = world.space_of(system.id) else {
+        let Some(star) = index.star(system.id) else {
             continue;
         };
         let seen = |at: Pos| {
@@ -451,11 +539,10 @@ pub fn known_systems(world: &World) -> Vec<u32> {
                 at.y.div_euclid(1000),
             )
         };
-        let bodies = world
-            .bodies()
+        let bodies = index
+            .bodies(system.id)
             .iter()
-            .filter(|b| b.system == system.id)
-            .filter_map(|b| world.body_position(b.id));
+            .filter_map(|id| world.body_position(*id));
         if crowded.contains(&star)
             || world.body_position(star).is_some_and(seen)
             || bodies.into_iter().any(seen)
