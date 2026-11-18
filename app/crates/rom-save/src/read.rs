@@ -727,7 +727,7 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
             techs.entry(p).or_default().insert(t, times);
         }
         let mut stmt = conn.prepare(
-            "SELECT id, team, faction_id, age_id, home_body_id, capital_entity_id, status, land_owned, owned_tiles, hold_team, hold_start, kills, losses FROM player ORDER BY id",
+            "SELECT id, team, faction_id, age_id, home_body_id, capital_entity_id, status, land_owned, owned_tiles, hold_team, hold_start, kills, losses, origin_faction_id, ascended_tick, ascensions FROM player ORDER BY id",
         )?;
         let mut rows = stmt.query([])?;
         while let Some(row) = rows.next()? {
@@ -753,6 +753,7 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
                     "playing" => PlayerStatus::Playing,
                     "defeated" => PlayerStatus::Defeated,
                     "won" => PlayerStatus::Won,
+                    "ascended" => PlayerStatus::Ascended,
                     _ => return Err(bad("player status")),
                 },
                 land_owned: oint(row, 7)?.map(u),
@@ -761,6 +762,9 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
                     (Some(team), Some(start)) => Some((team, u(start))),
                     _ => None,
                 },
+                origin: ouint(row, 13, "origin faction")?.map(DefId),
+                ascended: oint(row, 14)?.map(u),
+                ascensions: uint(row, 15, "ascensions")?,
             });
         }
     }
@@ -768,6 +772,8 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
         "star" => Ok(BodyKind::Star),
         "habitable" => Ok(BodyKind::Habitable),
         "resource" => Ok(BodyKind::Resource),
+        "black_hole" => Ok(BodyKind::BlackHole),
+        "celestial" => Ok(BodyKind::Celestial),
         _ => Err(bad("body kind")),
     };
     let systems = query_vec(

@@ -100,6 +100,9 @@ pub struct ScriptSetup {
     /// Owners given a finished automated colony on the nearest other habitable planet of
     /// player one's home system (`auto-colony <owner id>`).
     pub auto_colonies: Vec<u32>,
+    /// Players that start with every technology the library offers and the price of the
+    /// ascension (`ascension-ready <owner id>`, task 76).
+    pub ascension_ready: Vec<u32>,
 }
 
 impl ScriptSetup {
@@ -285,6 +288,13 @@ impl ScriptSetup {
                     };
                     list.push((owner, (*key).to_owned(), parse(dx)?, parse(dy)?));
                 }
+                Some("ascension-ready") => {
+                    let owner = words
+                        .get(2)
+                        .and_then(|o| o.parse().ok())
+                        .ok_or_else(|| format!("{}: ascension-ready needs an owner id", at()))?;
+                    setup.ascension_ready.push(owner);
+                }
                 Some(kind @ ("colony" | "colony-far" | "auto-colony")) => {
                     let owner = words
                         .get(2)
@@ -358,6 +368,40 @@ pub enum ScriptAction {
     Menu(crate::sim_thread::MenuPage),
     /// Input for the render thread, as the window would send it.
     Input(Vec<rom_render::InputEvent>),
+    /// The player orders the ascension at its library (task 76).
+    Ascend(rom_sim::PlayerId),
+    /// The person writes a line to the celestial home's channel (task 76).
+    Chat(String),
+}
+
+/// Orders the ascension at a finished library of `player` (task 76): what pressing the button
+/// does.
+pub fn ascend(world: &mut rom_sim::World, player: rom_sim::PlayerId) -> Result<(), String> {
+    let rules = std::sync::Arc::clone(world.rules());
+    let (library, tech) = world
+        .entities()
+        .filter(|e| e.owner == player && e.build_progress.is_none())
+        .find_map(|e| {
+            let row = rules
+                .production
+                .get(&e.type_id)?
+                .iter()
+                .find(|p| rules.ascends(p.product_def_id))?;
+            Some((e.id, row.product_def_id))
+        })
+        .ok_or("ascend: the player has no library")?;
+    world
+        .submit(rom_sim::Command {
+            player,
+            executor: library,
+            kind: "research".into(),
+            subject: Some(tech),
+            target_entity: None,
+            target_pos: None,
+            queue: false,
+        })
+        .map(|_| ())
+        .map_err(|e| format!("ascend: {e}"))
 }
 
 impl ScriptContext {
@@ -408,7 +452,8 @@ impl Script {
                     Some(_),
                     Some(
                         "grant-age" | "grant" | "grant-tech" | "place" | "place-space"
-                        | "place-orbit" | "colony" | "colony-far" | "auto-colony",
+                        | "place-orbit" | "colony" | "colony-far" | "auto-colony"
+                        | "ascension-ready",
                     ),
                 ) => {
                     continue;
@@ -454,6 +499,18 @@ impl Script {
                         }
                     };
                     actions.push((tick, ScriptAction::Menu(page)));
+                    continue;
+                }
+                (Some(tick), Some("ascend")) => {
+                    let player = words
+                        .get(2)
+                        .and_then(|p| p.parse::<u32>().ok())
+                        .ok_or_else(|| format!("line {}: ascend needs a player id", number + 1))?;
+                    actions.push((tick, ScriptAction::Ascend(rom_sim::PlayerId(player))));
+                    continue;
+                }
+                (Some(tick), Some("chat")) => {
+                    actions.push((tick, ScriptAction::Chat(words[2..].join(" "))));
                     continue;
                 }
                 (Some(tick), Some("quicksave")) => {

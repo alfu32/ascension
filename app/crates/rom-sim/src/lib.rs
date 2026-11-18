@@ -1,5 +1,6 @@
 //! Deterministic game simulation.
 
+mod ascension;
 mod attrition;
 mod avoidance;
 mod capture;
@@ -45,6 +46,7 @@ mod vision;
 mod wealth;
 mod world;
 
+pub use ascension::AscensionProject;
 pub use capture::CaptureCountdown;
 pub use combat::{BLAST_MEMORY_TICKS, Blast, Wreck};
 pub use entity::{Entity, EntityId, Player, PlayerId};
@@ -327,7 +329,12 @@ pub enum SimError {
     /// enables interstellar trade.
     #[error("trade with another star system needs interstellar trade")]
     NeedsInterstellarTrade,
+    /// A descent needs open land of a habitable planet (task 76).
+    #[error("cannot descend there: choose open land of a habitable planet")]
+    CannotDescend,
 }
 
+#[cfg(test)]
+mod ascension_tests;
 #[cfg(test)]
 mod victory_tests;

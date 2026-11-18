@@ -127,6 +127,9 @@ impl World {
         tile_x: i32,
         tile_y: i32,
     ) -> bool {
+        if self.is_ascended(player) {
+            return self.surface(body).is_some();
+        }
         self.surface(body).is_some_and(|surface| {
             surface
                 .geo
@@ -149,6 +152,10 @@ impl World {
         };
         let surface = &self.surfaces[slot];
         let tiles = surface.tiles();
+        // An ascended player sees the whole universe (task 76).
+        if self.is_ascended(player) {
+            return vec![2; tiles];
+        }
         let mut out = vec![0_u8; tiles];
         if let Some(own) = surface.vision.players.get(&player) {
             for (index, tile) in out.iter_mut().enumerate() {
@@ -245,6 +252,9 @@ impl World {
         let Some(team) = self.players.get(&player).map(|p| p.team) else {
             return false;
         };
+        if self.is_ascended(player) {
+            return true;
+        }
         let vision = &self.surfaces[slot].vision;
         self.players.values().any(|q| {
             q.team == team

@@ -367,6 +367,9 @@ pub enum TechEffectKind {
     Spawn,
     /// SQL value `enable_rule`.
     EnableRule,
+    /// SQL value `ascend` (task 76): completing the tech takes its player out of the material
+    /// plane.
+    Ascend,
 }
 impl crate::load::SqlEnum for TechEffectKind {
     fn parse(value: &str) -> Option<Self> {
@@ -379,6 +382,7 @@ impl crate::load::SqlEnum for TechEffectKind {
             "change_faction" => Some(Self::ChangeFaction),
             "spawn" => Some(Self::Spawn),
             "enable_rule" => Some(Self::EnableRule),
+            "ascend" => Some(Self::Ascend),
             _ => None,
         }
     }
@@ -687,6 +691,11 @@ pub enum BodyKind {
     Habitable,
     /// SQL value `resource`: a small body claimed by presence.
     Resource,
+    /// SQL value `black_hole`: the centre of the celestial home (task 76).
+    BlackHole,
+    /// SQL value `celestial`: the mythical planet of the celestial home, where ascended players
+    /// live; no surface.
+    Celestial,
 }
 impl crate::load::SqlEnum for BodyKind {
     fn parse(value: &str) -> Option<Self> {
@@ -694,6 +703,8 @@ impl crate::load::SqlEnum for BodyKind {
             "star" => Some(Self::Star),
             "habitable" => Some(Self::Habitable),
             "resource" => Some(Self::Resource),
+            "black_hole" => Some(Self::BlackHole),
+            "celestial" => Some(Self::Celestial),
             _ => None,
         }
     }
@@ -705,6 +716,8 @@ impl BodyKind {
             Self::Star => "star",
             Self::Habitable => "habitable",
             Self::Resource => "resource",
+            Self::BlackHole => "black_hole",
+            Self::Celestial => "celestial",
         }
     }
 }

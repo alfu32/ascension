@@ -50,14 +50,23 @@ pub fn to_universe_scene(universe: &Universe, start_bodies: &[u32]) -> UniverseS
         systems: universe
             .systems
             .iter()
-            .map(|s| SystemView {
-                id: s.id,
-                name: s.name.clone(),
-                x: s.x,
-                y: s.y,
-                z: s.z,
-                constellation: s.constellation.clone(),
-                star_colour: STAR_COLOURS[s.id as usize % STAR_COLOURS.len()],
+            .map(|s| {
+                let celestial = Some(s.id) == universe.celestial_system();
+                SystemView {
+                    id: s.id,
+                    name: s.name.clone(),
+                    x: s.x,
+                    y: s.y,
+                    z: s.z,
+                    constellation: s.constellation.clone(),
+                    // The celestial home glows with its black hole's accretion disc.
+                    star_colour: if celestial {
+                        rom_render::universe::ACCRETION_RGB[1]
+                    } else {
+                        STAR_COLOURS[s.id as usize % STAR_COLOURS.len()]
+                    },
+                    celestial,
+                }
             })
             .collect(),
         bodies: universe
@@ -68,9 +77,11 @@ pub fn to_universe_scene(universe: &Universe, start_bodies: &[u32]) -> UniverseS
                 name: b.name.clone(),
                 system: b.system_id,
                 kind: match b.kind {
-                    BodyKind::Star => BodyViewKind::Star,
+                    // The celestial home's black hole stands where a star would (task 76).
+                    BodyKind::Star | BodyKind::BlackHole => BodyViewKind::Star,
                     BodyKind::Habitable => BodyViewKind::Habitable,
                     BodyKind::Resource => BodyViewKind::Resource,
+                    BodyKind::Celestial => BodyViewKind::Celestial,
                 },
                 orbit_radius: b.orbit_radius,
                 orbit_angle: b.orbit_angle_mdeg,

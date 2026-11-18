@@ -18,6 +18,7 @@ use rom_render::{HudRegionKind, PickEvent, PointerButton};
 use rom_rules::{ActiveSources, EntityClass};
 use rom_sim::{BodyId, Command, Entity, OrderStatus, PlayerId, Pos, Sighting, Topology, World};
 
+use crate::ascension_view::AscensionView;
 use crate::computer::ComputerPlayers;
 use crate::demo::DemoDriver;
 use crate::match_setup::planet_surface;
@@ -276,9 +277,51 @@ pub struct SimLink {
     stats: Arc<SimStats>,
     speed: Arc<AtomicU32>,
     stop: Arc<AtomicBool>,
+    /// The celestial home's chat (task 76): the line being typed and the lines sent.
+    chat: Arc<Mutex<ChatBox>>,
+    /// Whether the person's player is ascended: only then is there a channel to write to.
+    ascended: Arc<AtomicBool>,
+}
+
+/// The chat line the window is typing and the lines it sent, for the simulation thread.
+#[derive(Debug, Default)]
+struct ChatBox {
+    draft: Option<String>,
+    sent: Vec<String>,
 }
 
 impl SimLink {
+    /// Whether the person may write to the celestial home's channel (its player is ascended).
+    pub fn chat_allowed(&self) -> bool {
+        self.ascended.load(Ordering::Acquire)
+    }
+
+    /// The line being typed, or `None` when no line is open.
+    pub fn chat_draft(&self) -> Option<String> {
+        self.chat.lock().ok()?.draft.clone()
+    }
+
+    /// Opens, changes or (with `None`) closes the line being typed.
+    pub fn set_chat_draft(&self, draft: Option<String>) {
+        if let Ok(mut chat) = self.chat.lock() {
+            chat.draft = draft;
+        }
+    }
+
+    /// Sends a line to the channel.
+    pub fn send_chat(&self, line: String) {
+        if let Ok(mut chat) = self.chat.lock() {
+            chat.sent.push(line);
+        }
+    }
+
+    fn take_chat(&self) -> Vec<String> {
+        self.chat
+            .lock()
+            .map(|mut chat| std::mem::take(&mut chat.sent))
+            .unwrap_or_default()
+    }
+
     /// A link with no simulation behind it: counters stay zero and commands are dropped.
     pub fn idle() -> Self {
         Self {
@@ -292,6 +335,8 @@ impl SimLink {
             stats: Arc::new(SimStats::default()),
             speed: Arc::new(AtomicU32::new(100)),
             stop: Arc::new(AtomicBool::new(false)),
+            chat: Arc::default(),
+            ascended: Arc::default(),
         }
     }
 
@@ -431,6 +476,8 @@ impl SimThread {
             stats: Arc::new(SimStats::default()),
             speed: Arc::new(AtomicU32::new(speed_pct.max(1))),
             stop: Arc::new(AtomicBool::new(false)),
+            chat: Arc::default(),
+            ascended: Arc::default(),
         };
         let thread_link = link.clone();
         let thread = thread::Builder::new()
@@ -516,6 +563,13 @@ fn run(
     let mut notices = Notices::default();
     let mut frames: BTreeMap<u32, Option<SpaceFrame>> = BTreeMap::new();
     notices.update(&world);
+    let mut ascension = AscensionView::new(
+        computers
+            .as_ref()
+            .map(|c| c.players().collect())
+            .unwrap_or_default(),
+    );
+    ascension.update(&world);
     publish(
         &world,
         &controller,
@@ -524,6 +578,7 @@ fn run(
         &mut memory,
         host.as_ref(),
         &models,
+        &ascension,
     );
     while !link.stop.load(Ordering::Acquire) {
         let now = Instant::now();
@@ -548,8 +603,15 @@ fn run(
                 &request,
             );
             controller.notify(&world, text);
-            publish_hud(&world, &controller, bridge);
+            publish_hud(&world, &controller, bridge, &ascension);
         }
+        // The celestial home's chat (task 76).
+        for line in link.take_chat() {
+            ascension.say(&world, &line);
+        }
+        let draft = link.chat_draft();
+        let typing = draft != ascension.draft;
+        ascension.draft = draft;
         if let Some(host) = host.as_mut() {
             if let Some(body) = bridge.take_surface_request()
                 && let Err(error) = host.show(&mut world, BodyId(body), bridge)
@@ -586,8 +648,8 @@ fn run(
             handle_pick(&mut controller, &mut world, link, pick);
         }
         focus_camera(&world, &mut controller, bridge);
-        if interacted && ticks == 0 {
-            publish_hud(&world, &controller, bridge);
+        if (interacted || typing) && ticks == 0 {
+            publish_hud(&world, &controller, bridge, &ascension);
         }
         for _ in 0..ticks {
             if let Some(script) = script.as_mut() {
@@ -609,6 +671,12 @@ fn run(
                         ScriptAction::Save(name) => link.request_save(Kind::Manual, name),
                         ScriptAction::QuickSave => link.request_save(Kind::Quick, ""),
                         ScriptAction::Menu(page) => link.request_menu(page),
+                        ScriptAction::Ascend(player) => {
+                            if let Err(error) = crate::script::ascend(&mut world, player) {
+                                controller.notify(&world, error);
+                            }
+                        }
+                        ScriptAction::Chat(line) => ascension.say(&world, &line),
                         ScriptAction::Input(events) => {
                             for event in events {
                                 bridge.push_input(event);
@@ -655,6 +723,11 @@ fn run(
                     None => controller.notify(&world, notice.text),
                 }
             }
+            for line in ascension.update(&world) {
+                controller.notify(&world, line);
+            }
+            link.ascended
+                .store(world.is_ascended(PLAYER), Ordering::Release);
             focus_camera(&world, &mut controller, bridge);
             if let Some(every) = autosave_every
                 && world.tick().is_multiple_of(every)
@@ -684,6 +757,7 @@ fn run(
                 &mut memory,
                 host.as_ref(),
                 &models,
+                &ascension,
             );
             while let Ok(command) = inbox.try_recv() {
                 if world.submit(command).is_err() {
@@ -828,6 +902,7 @@ const VISIT_INTERVAL: u64 = 10;
 /// Ticks between two visibility maps sent to the render thread.
 const VISION_INTERVAL: u64 = 5;
 
+#[allow(clippy::too_many_arguments)] // what one published frame is made of
 fn publish(
     world: &World,
     controller: &Controller,
@@ -836,6 +911,7 @@ fn publish(
     memory: &mut Memory,
     host: Option<&UniverseHost>,
     models: &crate::looks::ModelBook,
+    ascension: &AscensionView,
 ) {
     let sightings = world.visible_entities(PLAYER);
     let body = host.map_or_else(|| world.surfaces()[0].body(), |h| h.viewed);
@@ -861,6 +937,7 @@ fn publish(
     }
     let mut hud = crate::hud::snapshot_of(world);
     controller.fill(world, &mut hud);
+    ascension.fill(world, &mut hud, celestial_in_view(world, bridge));
     // A fallen building collapses from the height of the model it was drawn with (task 75).
     for wreck in &mut hud.wrecks {
         let model = world
@@ -895,6 +972,12 @@ fn publish(
 /// Sends the current player's limits before camera setup and after every simulation update.
 pub(crate) fn publish_camera_limits(world: &World, bridge: &RenderBridge) {
     if let Some(player) = world.players().find(|p| p.id == crate::selection::PLAYER) {
+        // An ascended player moves freely at every level, planet to star map (task 76).
+        if world.is_ascended(player.id) {
+            bridge.publish_zoom_cap(Level::StarMap);
+            bridge.publish_view_range(0);
+            return;
+        }
         bridge.publish_zoom_cap(crate::universe_view::max_level(world.rules(), player.age));
         bridge.publish_view_range(crate::universe_view::view_range(world.rules(), player.age));
     }
@@ -918,10 +1001,24 @@ fn focus_camera(world: &World, controller: &mut Controller, bridge: &RenderBridg
     }
 }
 
-fn publish_hud(world: &World, controller: &Controller, bridge: &RenderBridge) {
+fn publish_hud(
+    world: &World,
+    controller: &Controller,
+    bridge: &RenderBridge,
+    ascension: &AscensionView,
+) {
     let mut hud = crate::hud::snapshot_of(world);
     controller.fill(world, &mut hud);
+    ascension.fill(world, &mut hud, celestial_in_view(world, bridge));
     bridge.publish_hud(Arc::new(hud));
+}
+
+/// Whether the camera is in the celestial home's system, at the system level (task 76).
+fn celestial_in_view(world: &World, bridge: &RenderBridge) -> bool {
+    let view = bridge.view_state();
+    view.level >= Level::System
+        && view.system.is_some()
+        && view.system == crate::ascension_view::celestial_system(world)
 }
 
 /// What the render thread may draw for the player: own and allied entities, everything on tiles

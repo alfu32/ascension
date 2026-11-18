@@ -91,7 +91,9 @@ the right, the minimap to the bottom centre. Rectangles are `x, y, w, h`.
 | Sub-slots | 998, 860, 48 × 46; pitch 55; six | garrisoned units / abilities |
 | Multi-selection grid | 1000, 716, 78 × 60 tiles; pitch 83 × 65; 4 × 3 | type tile, health bar under it, `×n` badge when stacked |
 | Data tabs | 1350, 695, 132, 38; pitch 42; five | political, military, economy, diplomacy, wonders |
-| Data view | 1485, 695, 160, 205 | content of the active data tab |
+| Data view | 1485, 695, 160, 205 | content of the active data tab; the diplomacy tab lists every player and its standing: playing, ascending with its countdown, ascended, defeated (task 76) |
+| Ascension banner | 586, 142, 500 × 24 a line, top group | every ascension under way and its countdown, in the player's colour (task 76) |
+| Side panel | 16, above the chat line, 380 wide | the celestial home's residents and chat while the camera is in its system (task 76) |
 
 Adjustments allowed by the owner: spacing and proportions may be tuned for
 readability, as long as the arrangement and the chrome style are kept.

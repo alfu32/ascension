@@ -96,6 +96,24 @@ pub struct HudSnapshot {
     pub stains: Vec<crate::HudStain>,
     /// Ticks a stain lasts (`world.stain_days × world.day_ticks`).
     pub stain_life_ticks: u64,
+    /// Ascensions under way, for the panel at the top of the screen (task 76): one line each,
+    /// in the ascending player's colour.
+    pub banner: Vec<(String, [u8; 4])>,
+    /// The diplomacy tab: one line per player, its standing and any ascension countdown.
+    pub diplomacy: Vec<(String, [u8; 4])>,
+    /// A panel over the world at the left: the celestial home's residents and chat (task 76).
+    pub panel: Option<HudPanel>,
+    /// The chat channel's name beside the message line, and the line being typed, if any.
+    pub chat: (String, Option<String>),
+}
+
+/// A panel of lines drawn over the world at the left, above the chat line (task 76).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HudPanel {
+    /// Its title.
+    pub title: String,
+    /// Its lines, oldest first, each in its colour.
+    pub lines: Vec<(String, [u8; 4])>,
 }
 
 impl Default for HudSnapshot {
@@ -128,6 +146,10 @@ impl Default for HudSnapshot {
             wrecks: Vec::new(),
             stains: Vec::new(),
             stain_life_ticks: 0,
+            banner: Vec::new(),
+            diplomacy: Vec::new(),
+            panel: None,
+            chat: ("[Allies]".to_owned(), None),
         }
     }
 }
@@ -853,6 +875,40 @@ impl HudPainter {
         }
     }
 
+    /// A dark panel of lines over the world at the left, its bottom just above the chat line.
+    fn side_panel(&mut self, l: &HudLayout, panel: &HudPanel) {
+        use Group::BottomLeft as L;
+        let rows = panel.lines.len().min(14) as f32 + 1.0;
+        let height = rows * 21.0 + 16.0;
+        let top = 572.0 - height;
+        self.solid(
+            l.map(L, Rect::new(16.0, top, 380.0, height)),
+            [8, 11, 18, 205],
+        );
+        self.frame(
+            l.map(L, Rect::new(16.0, top, 380.0, height)),
+            l.scale.max(1.0),
+            [232, 201, 138, 160],
+        );
+        self.caption(
+            l,
+            L,
+            &panel.title,
+            Rect::new(28.0, top + 8.0, 356.0, 17.0),
+            GOLD,
+        );
+        let skip = panel.lines.len().saturating_sub(14);
+        for (i, (line, colour)) in panel.lines.iter().skip(skip).enumerate() {
+            self.caption(
+                l,
+                L,
+                line,
+                Rect::new(28.0, top + 29.0 + i as f32 * 21.0, 356.0, 17.0),
+                *colour,
+            );
+        }
+    }
+
     fn research_overview(&mut self, l: &HudLayout, overview: &ResearchOverview) {
         use Group::BottomRight as R;
         let cell = |this: &mut Self, rect: Rect, state: ResearchCell| {
@@ -1086,14 +1142,47 @@ impl HudPainter {
             );
         }
         self.art("icons/chat", l.map(L, Rect::new(24.0, 585.0, 18.0, 18.0)));
-        self.caption(l, L, "[Allies]", Rect::new(50.0, 584.0, 58.0, 17.0), CYAN);
-        self.caption(
-            l,
-            L,
-            "Message...",
-            Rect::new(112.0, 584.0, 251.0, 17.0),
-            MUTED,
-        );
+        let (channel, draft) = &h.chat;
+        self.caption(l, L, channel, Rect::new(50.0, 584.0, 92.0, 17.0), CYAN);
+        match draft {
+            Some(text) => self.caption(
+                l,
+                L,
+                &format!("{text}_"),
+                Rect::new(146.0, 584.0, 217.0, 17.0),
+                WHITE,
+            ),
+            None => self.caption(
+                l,
+                L,
+                "Message...",
+                Rect::new(146.0, 584.0, 217.0, 17.0),
+                MUTED,
+            ),
+        }
+        if let Some(panel) = &h.panel {
+            self.side_panel(l, panel);
+        }
+        // Ascensions under way, under the title, for everyone to see.
+        let shown = h.banner.len().min(3);
+        if shown > 0 {
+            self.solid(
+                l.map(
+                    T,
+                    Rect::new(586.0, 142.0, 500.0, 10.0 + 24.0 * shown as f32),
+                ),
+                [8, 11, 18, 200],
+            );
+        }
+        for (i, (line, colour)) in h.banner.iter().take(shown).enumerate() {
+            self.text(
+                line,
+                l.map(T, Rect::new(596.0, 147.0 + i as f32 * 24.0, 480.0, 19.0)),
+                TextSize::Small,
+                Align::Centre,
+                *colour,
+            );
+        }
         self.art("icons/event", l.map(L, Rect::new(24.0, 612.0, 18.0, 18.0)));
         if let Some(event) = h.events.last() {
             self.caption(l, L, event, Rect::new(50.0, 612.0, 312.0, 17.0), GOLD);
@@ -1176,6 +1265,17 @@ impl HudPainter {
                     line,
                     Rect::new(1492.0, 709.0 + i as f32 * 26.0, 148.0, 19.0),
                     GOLD,
+                );
+            }
+        }
+        if h.data_tab == 3 {
+            for (i, (line, colour)) in h.diplomacy.iter().take(9).enumerate() {
+                self.caption(
+                    l,
+                    R,
+                    line,
+                    Rect::new(1492.0, 700.0 + i as f32 * 21.0, 150.0, 17.0),
+                    *colour,
                 );
             }
         }

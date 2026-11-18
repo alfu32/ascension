@@ -474,7 +474,8 @@ pub(crate) fn pan_index(key: Key) -> Option<usize> {
         | Key::FollowSelection
         | Key::SkyFromSun
         | Key::ToggleConstellations
-        | Key::LevelView => None,
+        | Key::LevelView
+        | Key::CelestialHome => None,
     }
 }
 

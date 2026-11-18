@@ -168,7 +168,9 @@ pub(crate) fn wishes(
             let Some(info) = rules.techs.get(&tech) else {
                 continue;
             };
+            // The ascension is the ascension manager's (task 76).
             if (view.researched(tech) && !info.repeatable)
+                || rules.ascends(tech)
                 || view.researching.contains(&tech)
                 || !view.unlocked(tech)
             {

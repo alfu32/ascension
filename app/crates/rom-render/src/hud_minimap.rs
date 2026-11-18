@@ -530,7 +530,24 @@ pub fn space_marks(
             let body = &scene.bodies[placed.body];
             let (x, y) = to_area(placed.pos);
             match body.kind {
+                BodyViewKind::Star
+                    if scene
+                        .systems
+                        .iter()
+                        .any(|s| s.id == body.system && s.celestial) =>
+                {
+                    marks.push(dot(x, y, 9.0, [255, 150, 60, 255]));
+                    marks.push(dot(x, y, 5.0, [0, 0, 0, 255]));
+                }
                 BodyViewKind::Star => marks.push(dot(x, y, 8.0, [255, 230, 150, 255])),
+                BodyViewKind::Celestial => {
+                    marks.push(MapMark::Ring(
+                        (cx, cy),
+                        placed.orbit * scale,
+                        [150, 130, 90, 255],
+                    ));
+                    marks.push(dot(x, y, 7.0, crate::universe::CELESTIAL_RGBA));
+                }
                 BodyViewKind::Habitable => {
                     marks.push(MapMark::Ring(
                         (cx, cy),

@@ -24,8 +24,9 @@ use crate::space::{
     ship_frame_pos, star_map_lines, transit_at_rim,
 };
 use crate::universe::{
-    BodyViewKind, MAP_RADIUS, PlacedBody, SYSTEM_RADIUS, UniverseScene, drawn_pixels, least_pixels,
-    planet_colour, ring_points, rock_colour, shown_pixels, uv_sphere,
+    ACCRETION_RGB, BodyViewKind, CELESTIAL_RGB, MAP_RADIUS, PlacedBody, SYSTEM_RADIUS,
+    UniverseScene, drawn_pixels, least_pixels, planet_colour, ring_points, rock_colour,
+    shown_pixels, uv_sphere,
 };
 use crate::zoom::{Target, ZoomCamera};
 
@@ -190,7 +191,7 @@ impl Part {
 fn sky_pixels(kind: BodyViewKind, radius: f32, per_pixel: f32, space: f32) -> f32 {
     let sky = match kind {
         BodyViewKind::Star => SKY_STAR_DISC,
-        BodyViewKind::Habitable => SKY_PLANET_DISC,
+        BodyViewKind::Habitable | BodyViewKind::Celestial => SKY_PLANET_DISC,
         BodyViewKind::Resource => SKY_ROCK_DISC,
     };
     let per_pixel = per_pixel.max(1e-9);
@@ -657,6 +658,13 @@ impl Scene {
             .systems
             .get(pass.index)
             .map_or([255, 244, 214], |s| s.star_colour);
+        // The celestial home (task 76): a black hole in a glowing disc, and the residences of
+        // the ascended players on its mythical planet.
+        let celestial = universe
+            .systems
+            .get(pass.index)
+            .is_some_and(|s| s.celestial);
+        let mut residence_labels: Vec<([f32; 3], String, [u8; 3])> = Vec::new();
         let tint_at = space.shader.get_shader_location("tint");
         let emissive_at = space.shader.get_shader_location("emissive");
         let alpha_at = space.shader.get_shader_location("alpha");
@@ -697,7 +705,7 @@ impl Scene {
                 let mut belt = Vec::new();
                 for placed in &bodies_placed {
                     match (universe.bodies[placed.body].kind, placed.moon_of) {
-                        (BodyViewKind::Habitable, _) => {
+                        (BodyViewKind::Habitable | BodyViewKind::Celestial, _) => {
                             draw_ring(&mut world, [0.0; 3], placed.orbit, colour, &ring_keeps)
                         }
                         (BodyViewKind::Resource, Some(parent)) => {
@@ -787,8 +795,10 @@ impl Scene {
                 }
                 let held = state.snapshot.resource_body(body.id);
                 let (colour, emissive) = match body.kind {
+                    BodyViewKind::Star if celestial => ([4, 3, 3], 1.0),
                     BodyViewKind::Star => (star_colour, 1.0),
                     BodyViewKind::Habitable => (planet_colour(body.id), 0.0),
+                    BodyViewKind::Celestial => (CELESTIAL_RGB, 0.35),
                     BodyViewKind::Resource => {
                         // A resource body wears its resource's colour over the grey of the rock.
                         let rock = rock_colour(body.id);
@@ -831,8 +841,29 @@ impl Scene {
                         (((120.0 * faint) + 30.0) * pass.detail) as u8,
                     );
                 }
-                if body.kind == BodyViewKind::Habitable {
+                if matches!(body.kind, BodyViewKind::Habitable | BodyViewKind::Celestial) {
                     halos.push((placed.pos, radius));
+                }
+                // Each ascended player's residence: a small dome in its colour on the planet.
+                if body.kind == BodyViewKind::Celestial {
+                    let homes = &state.snapshot.residences;
+                    let toward = unit_vector(sub3(view.eye, placed.pos));
+                    for (k, home) in homes.iter().enumerate() {
+                        let at = residence_point(placed.pos, radius, toward, k, homes.len());
+                        let [r, g, b] = owner_rgb(home.owner);
+                        space.shader.set_shader_value(tint_at, colour3([r, g, b]));
+                        space.shader.set_shader_value(emissive_at, 0.55_f32);
+                        world.draw_mesh(
+                            &space.sphere,
+                            space.material.clone(),
+                            ball(
+                                at,
+                                radius * 0.08,
+                                [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                            ),
+                        );
+                        residence_labels.push((at, home.name.clone(), [r, g, b]));
+                    }
                 }
                 if let Some(r) = held {
                     icons.push((placed.pos, radius, r.icon.clone(), per_pixel));
@@ -871,6 +902,38 @@ impl Scene {
                 let rings = claim_rings(&universe, &bodies_placed, &state.snapshot.claims);
                 let thickness = (distance * 0.004).max(5.0);
                 let mut overlay = OverlayGeometry::default();
+                // The accretion disc: hot and white at its inner edge, orange, then a dim red
+                // rim, in the plane of the system about the black hole.
+                if celestial
+                    && let Some(hole) = bodies_placed
+                        .iter()
+                        .zip(&drawn)
+                        .find(|(p, _)| universe.bodies[p.body].kind == BodyViewKind::Star)
+                {
+                    let core = *hole.1;
+                    let steps = 18;
+                    for step in 0..steps {
+                        let t = step as f32 / steps as f32;
+                        let width = core * 2.6 / steps as f32;
+                        let radius = core * 1.35 + core * 2.6 * t + width * 0.5;
+                        let (a, b, u) = if t < 0.3 {
+                            (ACCRETION_RGB[0], ACCRETION_RGB[1], t / 0.3)
+                        } else {
+                            (ACCRETION_RGB[1], ACCRETION_RGB[2], (t - 0.3) / 0.7)
+                        };
+                        let rgb = [0, 1, 2].map(|i| {
+                            (f32::from(a[i]) + (f32::from(b[i]) - f32::from(a[i])) * u) as u8
+                        });
+                        let alpha = 245.0 * (1.0 - t * t) * pass.detail;
+                        overlay.tris.extend(annulus(
+                            [0.0, 0.2, 0.0],
+                            radius,
+                            width * 1.05,
+                            [rgb[0], rgb[1], rgb[2], alpha as u8],
+                            120,
+                        ));
+                    }
+                }
                 for ring in &rings {
                     let [r, g, b] = ring.colour;
                     overlay.tris.extend(annulus(
@@ -1135,6 +1198,13 @@ impl Scene {
                 let per_pixel = view.per_pixel(star.pos, height);
                 let glow = STAR_GLOW.min(per_pixel * STAR_GLOW_PIXELS);
                 let a = |v: f32| (v * pass.detail) as u8;
+                // A black hole gives no light of its own: the glow is its disc's, wide and
+                // orange, with no white core.
+                let (glow, core) = if celestial {
+                    (glow * 1.6, 0.0)
+                } else {
+                    (glow, 200.0)
+                };
                 sprite(
                     &mut world,
                     camera,
@@ -1151,7 +1221,7 @@ impl Scene {
                     star.pos,
                     glow * 0.4,
                     [255, 255, 255],
-                    a(200.0),
+                    a(core),
                 );
             }
         }
@@ -1176,6 +1246,20 @@ impl Scene {
                 y: y + 4.0,
                 colour: [255, 255, 255, (255.0 * detail) as u8],
                 priority: -1.0,
+            });
+        }
+        for (at, name, [r, g, b]) in residence_labels {
+            let Some((x, y, _)) = look.project(at) else {
+                continue;
+            };
+            let lighter = lerp_colour([r, g, b], 0.45).map(|c| (c * 255.0) as u8);
+            space.labels.push(SpaceLabel {
+                icon: None,
+                text: name,
+                x: x + 10.0,
+                y: y - 6.0,
+                colour: [lighter[0], lighter[1], lighter[2], (240.0 * detail) as u8],
+                priority: -3.0,
             });
         }
         for (at, from, to, progress) in rim_labels {
@@ -1469,6 +1553,21 @@ impl Scene {
                         at,
                     ));
                 }
+                // The celestial home: its disc as a tilted orange ring about the point of light.
+                for (index, system) in universe.systems.iter().enumerate() {
+                    if !system.celestial {
+                        continue;
+                    }
+                    let at = space.map_positions[index];
+                    for (radius, width, rgba) in [
+                        (icon * 2.6, icon * 0.9, [255, 170, 70, 210]),
+                        (icon * 3.6, icon * 0.6, [200, 80, 35, 150]),
+                    ] {
+                        overlay
+                            .tris
+                            .extend(face(annulus(at, radius, width, rgba, 48), at));
+                    }
+                }
                 if let Some(SpaceHover::Target(Target::System(index))) = self.space_state.hover
                     && let Some(&at) = space.map_positions.get(index)
                 {
@@ -1510,9 +1609,29 @@ impl Scene {
                 (Some(tint), true) => tint,
                 (None, true) => [200, 215, 235],
             };
+            // An ascension under way there (task 76): everyone sees its countdown.
+            for (row, countdown) in self
+                .space_state
+                .snapshot
+                .countdowns
+                .iter()
+                .filter(|c| c.system == system.id)
+                .enumerate()
+            {
+                let [r, g, b] = owner_rgb(countdown.owner);
+                let lighter = lerp_colour([r, g, b], 0.5).map(|c| (c * 255.0) as u8);
+                space.labels.push(SpaceLabel {
+                    icon: None,
+                    text: countdown.text.clone(),
+                    x: x + halo_pixels.max(8.0) * 0.5,
+                    y: y + halo_pixels.max(8.0) * 0.4 + 17.0 * (row + 1) as f32,
+                    colour: [lighter[0], lighter[1], lighter[2], (250.0 * detail) as u8],
+                    priority: -4.0,
+                });
+            }
             space.labels.push(SpaceLabel {
                 icon: None,
-                text: if known || zoom.sky_active() {
+                text: if known || zoom.sky_active() || system.celestial {
                     system.name.clone()
                 } else {
                     format!("{} (unexplored)", system.name)
@@ -1694,4 +1813,31 @@ fn sprite(
         raylib::ffi::EndBlendMode();
         raylib::ffi::rlEnableDepthMask();
     }
+}
+
+/// Where the `k`-th of `n` residences stands on the celestial planet centred at `centre` with
+/// drawn radius `radius`: on a ring about the point of the planet facing the eye (`toward`, a
+/// unit vector), so every residence shows whichever way the planet is seen; one alone stands
+/// in the middle.
+fn residence_point(
+    centre: [f32; 3],
+    radius: f32,
+    toward: [f32; 3],
+    k: usize,
+    n: usize,
+) -> [f32; 3] {
+    let side = if toward[1].abs() < 0.9 {
+        [0.0, 1.0, 0.0]
+    } else {
+        [1.0, 0.0, 0.0]
+    };
+    let u = unit_vector(cross3(toward, side));
+    let v = cross3(toward, u);
+    let tilt: f32 = if n > 1 { 0.6 } else { 0.0 };
+    let turn = std::f32::consts::TAU * k as f32 / n.max(1) as f32 + 0.4;
+    let r = radius * 1.01;
+    std::array::from_fn(|i| {
+        centre[i]
+            + r * (tilt.cos() * toward[i] + tilt.sin() * (turn.cos() * u[i] + turn.sin() * v[i]))
+    })
 }

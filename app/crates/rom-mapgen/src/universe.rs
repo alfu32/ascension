@@ -63,8 +63,8 @@ pub struct StarSystem {
     pub y: i32,
     /// Star map position, abstract units; toward the north celestial pole.
     pub z: i32,
-    /// The catalogue star (`star.id`) this system is.
-    pub star: u32,
+    /// The catalogue star (`star.id`) this system is; `None` for the celestial home.
+    pub star: Option<u32>,
     /// The star's constellation, for labels.
     pub constellation: String,
 }
@@ -725,7 +725,7 @@ fn layout(
             x: s.x as i32,
             y: s.y as i32,
             z: s.z as i32,
-            star: s.id,
+            star: Some(s.id),
             constellation: rules
                 .constellations
                 .get(&s.constellation_id)
@@ -733,7 +733,10 @@ fn layout(
                 .unwrap_or_default(),
         })
         .collect();
-    let system_of: BTreeMap<u32, u32> = systems.iter().map(|s| (s.star, s.id)).collect();
+    let system_of: BTreeMap<u32, u32> = systems
+        .iter()
+        .filter_map(|s| Some((s.star?, s.id)))
+        .collect();
     let figure: Vec<(u32, u32)> = rules
         .constellation_lines
         .iter()
@@ -922,15 +925,102 @@ fn plan(c: &Checked, request: &UniverseRequest) -> Result<Universe, MapGenError>
         let score = if high == 0 { 1000 } else { low * 1000 / high };
         let fair = universe.layout_problems(c.rules).is_empty();
         if fair {
+            add_celestial_home(&mut universe, c.rules);
             return Ok(universe);
         }
         if best.as_ref().is_none_or(|(s, _)| score > *s) {
             best = Some((score, universe));
         }
     }
-    best.map(|(_, u)| u).ok_or(MapGenError::StarMap(
+    best.map(|(_, mut u)| {
+        add_celestial_home(&mut u, c.rules);
+        u
+    })
+    .ok_or(MapGenError::StarMap(
         c.races.len() as u32 + c.style.neutral_systems_max as u32,
     ))
+}
+
+/// Name of the celestial home's system (task 76).
+pub const CELESTIAL_SYSTEM_NAME: &str = "Galactic Centre";
+/// Name of the black hole at its centre.
+pub const BLACK_HOLE_NAME: &str = "Sagittarius A*";
+/// Name of the mythical planet where ascended players live (invented for this project).
+pub const CELESTIAL_PLANET_NAME: &str = "Empyrean";
+/// The constellation the galactic centre lies in, for its label.
+const CELESTIAL_CONSTELLATION: &str = "Sagittarius";
+/// Where the mythical planet stands on its orbit, millidegrees.
+const CELESTIAL_PLANET_ANGLE: i32 = 40_000;
+
+/// Adds the celestial home (task 76) after the match's systems: a system at the galactic
+/// centre's direction from the middle of the match's stars, `celestial.distance_pct` of their
+/// radius away (beyond them), joined to nothing by routes, with a black hole at its centre and
+/// one mythical planet without a surface. Integers only; without the `celestial.*` constants
+/// the universe has none.
+fn add_celestial_home(universe: &mut Universe, rules: &Rules) {
+    let constant = |key| rules.constant(key);
+    let (Some(dx), Some(dy), Some(dz), Some(pct), Some(orbit)) = (
+        constant("celestial.dir_x"),
+        constant("celestial.dir_y"),
+        constant("celestial.dir_z"),
+        constant("celestial.distance_pct"),
+        constant("celestial.planet_orbit"),
+    ) else {
+        return;
+    };
+    if universe.systems.is_empty() || universe.celestial_system().is_some() {
+        return;
+    }
+    let n = universe.systems.len() as i64;
+    let mean = |f: fn(&StarSystem) -> i32| {
+        universe
+            .systems
+            .iter()
+            .map(|s| i64::from(f(s)))
+            .sum::<i64>()
+            / n
+    };
+    let centre = (mean(|s| s.x), mean(|s| s.y), mean(|s| s.z));
+    let radius = universe
+        .systems
+        .iter()
+        .map(|s| isqrt(dist2((s.x.into(), s.y.into(), s.z.into()), centre)))
+        .max()
+        .unwrap_or(0)
+        .max(100);
+    let reach = radius * pct.max(100) / 100;
+    let at = |c: i64, d: i64| (c + d * reach / 1_000_000) as i32;
+    let id = universe.systems.len() as u32 + 1;
+    universe.systems.push(StarSystem {
+        id,
+        name: CELESTIAL_SYSTEM_NAME.to_owned(),
+        x: at(centre.0, dx),
+        y: at(centre.1, dy),
+        z: at(centre.2, dz),
+        star: None,
+        constellation: CELESTIAL_CONSTELLATION.to_owned(),
+    });
+    for (kind, name, orbit_radius, angle) in [
+        (BodyKind::BlackHole, BLACK_HOLE_NAME, 0, 0),
+        (
+            BodyKind::Celestial,
+            CELESTIAL_PLANET_NAME,
+            orbit.clamp(1, i64::from(i32::MAX)) as i32,
+            CELESTIAL_PLANET_ANGLE,
+        ),
+    ] {
+        universe.bodies.push(Body {
+            id: universe.bodies.len() as u32 + 1,
+            system_id: id,
+            kind,
+            name: name.to_owned(),
+            orbit_radius,
+            orbit_angle_mdeg: angle,
+            n: None,
+            home_race: None,
+            node_entity_type: None,
+        });
+    }
 }
 
 /// Generates a universe: the star map, bodies and routes, then every home
@@ -974,6 +1064,14 @@ impl Universe {
             .get(&body)
             .ok_or(MapGenError::InvalidRequest("not a habitable body"))?;
         expand_planet(rules, recipe)
+    }
+
+    /// The celestial home's system (task 76): the one with a black hole at its centre.
+    pub fn celestial_system(&self) -> Option<u32> {
+        self.bodies
+            .iter()
+            .find(|b| b.kind == BodyKind::BlackHole)
+            .map(|b| b.system_id)
     }
 
     /// Home systems as `(race, system id)`, ordered by race.
@@ -1064,8 +1162,14 @@ impl Universe {
 
     fn layout_problems(&self, rules: &Rules) -> Vec<String> {
         let mut problems = Vec::new();
+        // The celestial home is joined to nothing (task 76).
+        let celestial = self.celestial_system();
         if let Some(first) = self.systems.first()
-            && self.hops_from(first.id).iter().any(Option::is_none)
+            && self
+                .hops_from(first.id)
+                .iter()
+                .enumerate()
+                .any(|(i, h)| h.is_none() && Some(i as u32 + 1) != celestial)
         {
             problems.push("not every system is reachable".to_owned());
         }
@@ -1139,7 +1243,7 @@ impl Universe {
             feed(&s.x.to_le_bytes());
             feed(&s.y.to_le_bytes());
             feed(&s.z.to_le_bytes());
-            feed(&s.star.to_le_bytes());
+            feed(&opt(s.star));
             feed(&(s.constellation.len() as u64).to_le_bytes());
             feed(s.constellation.as_bytes());
         }

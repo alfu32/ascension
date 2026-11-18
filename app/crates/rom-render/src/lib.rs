@@ -73,8 +73,8 @@ pub use review::{Review, SheetView, WorldLabel};
 pub use rig::Activity;
 pub use rom_geo::SurfacePos;
 pub use space::{
-    ChargeView, ClaimState, ClaimView, ColonyView, FLASH_TICKS, FlashView, HoldView,
-    ResourceBodyView, ShipView, SpaceSnapshot, TransitView,
+    ChargeView, ClaimState, ClaimView, ColonyView, CountdownView, FLASH_TICKS, FlashView, HoldView,
+    ResidenceView, ResourceBodyView, ShipView, SpaceSnapshot, TransitView,
 };
 pub use stats::RenderStats;
 pub use sun::{SunClock, SunSettings};
@@ -89,7 +89,7 @@ pub use worker::{
 };
 pub use zoom::Level;
 
-pub use hud::{HudResearch, HudResource, HudSelection, HudSnapshot};
+pub use hud::{HudPanel, HudResearch, HudResource, HudSelection, HudSnapshot};
 pub use hud_model::{
     ButtonState, HudBlast, HudButton, HudCard, HudCityRadius, HudMarker, HudPalette, HudPatrol,
     HudPlacement, HudQueue, HudQueueItem, HudStain, HudTile, HudTradeRoute, HudWealth, HudWreck,

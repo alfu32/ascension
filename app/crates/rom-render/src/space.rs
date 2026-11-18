@@ -167,6 +167,26 @@ pub struct FlashView {
     pub age_ticks: u32,
 }
 
+/// An ascension under way (task 76), shown to every player beside the system it runs in.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CountdownView {
+    /// The system of the player's library.
+    pub system: u32,
+    /// The player ascending.
+    pub owner: u8,
+    /// "Ascension of Rome 04:10".
+    pub text: String,
+}
+
+/// An ascended player's residence on the celestial home's planet (task 76).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResidenceView {
+    /// The player; its colour marks the residence.
+    pub owner: u8,
+    /// Its name.
+    pub name: String,
+}
+
 /// Game ticks a flash on a planet stays visible from space.
 pub const FLASH_TICKS: u32 = 40;
 
@@ -198,6 +218,10 @@ pub struct SpaceSnapshot {
     pub holds: Vec<HoldView>,
     /// Blasts on planets the player sees, newest last (task 75).
     pub flashes: Vec<FlashView>,
+    /// Ascensions under way anywhere, by player (task 76).
+    pub countdowns: Vec<CountdownView>,
+    /// The ascended players living on the celestial home, by player (task 76).
+    pub residences: Vec<ResidenceView>,
 }
 
 impl SpaceSnapshot {
@@ -816,9 +840,24 @@ pub fn hover_help(
                 return Default::default();
             };
             match body.kind {
+                crate::universe::BodyViewKind::Star
+                    if scene
+                        .systems
+                        .iter()
+                        .any(|s| s.id == body.system && s.celestial) =>
+                {
+                    (
+                        format!("{} (black hole at the galactic centre)", body.name),
+                        "Double-click to centre the view on it".to_owned(),
+                    )
+                }
                 crate::universe::BodyViewKind::Star => (
                     format!("{} (star)", body.name),
                     "Double-click to centre the view on the star".to_owned(),
+                ),
+                crate::universe::BodyViewKind::Celestial => (
+                    format!("{} (the celestial home)", body.name),
+                    "Ascended players live here; no ship can reach it".to_owned(),
                 ),
                 crate::universe::BodyViewKind::Habitable => (
                     format!("{} (planet)", body.name),

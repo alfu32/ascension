@@ -15,6 +15,7 @@
 //! owner, people included (`run_governors`), and keeps the colony's sites standing.
 
 mod army;
+mod ascension;
 mod brain;
 mod bytes;
 mod catalogue;
@@ -30,6 +31,7 @@ mod research;
 mod sites;
 mod view;
 
+pub use ascension::{ChatTopic, chat_line, descend};
 pub use brain::{Brain, SavedBrain};
 pub use governor::{ColonyStatus, SiteCount, Waiting, colony_status, run_governors};
 pub use memory::{Army, BrainStats, EnemySighting, Job, Phase, Role, Voyage};
