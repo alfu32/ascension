@@ -1,0 +1,4 @@
+# Task 100: a Solar match with --start-placement together, seen from above the shared home planet.
+# Run with --universe --style map.solar --start-placement together --factions <three races> --view globe --ai none.
+1 speed 100
+3 cam wheel 3 640,400

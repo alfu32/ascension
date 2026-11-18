@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use rom_mapgen::{
-    BaseTerrains, GeneratedMap, MapRequest, SpherePlanet, SphereRequest, Universe, UniverseRequest,
-    generate, generate_sphere, generate_universe,
+    BaseTerrains, GeneratedMap, MapRequest, SpherePlanet, SphereRequest, StartPlacement, Universe,
+    UniverseRequest, generate, generate_sphere, generate_universe_placed,
 };
 use rom_render::{
     PlanetScene, SunSettings, SurfacePos, TerrainScene, TileKind, lon_lat_of, to_render,
@@ -171,13 +171,19 @@ pub fn generate_universe_content(options: &Options) -> Result<UniverseContent, S
         recipe.planet_n_min = recipe.planet_n_min.min(i64::from(n));
         recipe.planet_n_max = recipe.planet_n_max.max(i64::from(n));
     }
-    let universe = generate_universe(
+    let placement = match options.start_placement {
+        Some(placement) => placement,
+        None => StartPlacement::of_rules(&rules)
+            .map_err(|error| format!("generating the universe: {error}"))?,
+    };
+    let universe = generate_universe_placed(
         &rules,
         &UniverseRequest {
             style,
             seed: options.seed,
             player_factions: factions.clone(),
         },
+        placement,
     )
     .map_err(|error| format!("generating the universe: {error}"))?;
     Ok(UniverseContent {
@@ -640,5 +646,44 @@ mod deposit_tests {
             )
             .is_some()
         );
+    }
+}
+
+#[cfg(test)]
+mod placement_tests {
+    use super::*;
+    use rom_mapgen::{StartPlacement, UniverseRequest, generate_universe_placed};
+
+    fn options(placement: Option<StartPlacement>) -> Options {
+        Options {
+            universe: true,
+            style: Some("map.solar".into()),
+            seed: 7,
+            players: 3,
+            start_placement: placement,
+            ..Options::default()
+        }
+    }
+
+    #[test]
+    fn together_gives_the_universe_the_generator_gives() {
+        let together = generate_universe_content(&options(Some(StartPlacement::Together))).unwrap();
+        let rules = &together.rules;
+        let style = rules.id_of("map.solar").unwrap();
+        let direct = generate_universe_placed(
+            rules,
+            &UniverseRequest {
+                style,
+                seed: 7,
+                player_factions: together.factions.clone(),
+            },
+            StartPlacement::Together,
+        )
+        .unwrap();
+        assert_eq!(together.universe.hash(), direct.hash());
+        let separate = generate_universe_content(&options(None)).unwrap();
+        let explicit = generate_universe_content(&options(Some(StartPlacement::Separate))).unwrap();
+        assert_eq!(separate.universe.hash(), explicit.universe.hash());
+        assert_ne!(separate.universe.hash(), together.universe.hash());
     }
 }
