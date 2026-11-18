@@ -43,9 +43,15 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    if options.version {
+        println!("rise-of-man {}", args::VERSION);
+        return ExitCode::SUCCESS;
+    }
     if options.help {
-        println!("rise-of-man {}\n{}", env!("CARGO_PKG_VERSION"), args::USAGE);
-        println!("\nNo arguments or --launcher opens the launcher. --run starts a default game.");
+        println!("rise-of-man {}\n{}", args::VERSION, args::USAGE);
+        println!(
+            "\nNo arguments or --launcher opens the launcher. --run starts a default game. --version prints the version."
+        );
         println!(
             "--load <file> continues a saved game, paused; --autosave <minutes> sets the autosave interval (default {}, 0 is off).",
             args::DEFAULT_AUTOSAVE_MINUTES

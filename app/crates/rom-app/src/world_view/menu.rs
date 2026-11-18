@@ -244,6 +244,12 @@ impl WorldView {
                 panel = panel
                     .child(heading("GAME MENU"))
                     .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(MUTED))
+                            .child(format!("Ascension — Rise of Man {}", crate::args::VERSION)),
+                    )
+                    .child(
                         Button::new("menu-resume")
                             .primary()
                             .label("Resume")
