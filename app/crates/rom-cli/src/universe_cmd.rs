@@ -2,7 +2,7 @@
 
 use std::{collections::BTreeMap, fs, path::PathBuf, sync::Arc};
 
-use rom_mapgen::{BodyKind, Universe, UniverseRequest, generate_universe};
+use rom_mapgen::{BodyKind, StartPlacement, Universe, UniverseRequest, generate_universe_placed};
 use rom_rules::{DefId, Rules};
 use rom_sim::{
     BodyId, BodyInfo, Command, EntityId, PlanetSurface, Player, PlayerId, Pos, RouteInfo, SimRng,
@@ -11,7 +11,7 @@ use rom_sim::{
 
 use crate::mapgen_cmd::ppm;
 
-const USAGE: &str = "usage: rom universe --db <rules.db> --style <key> --seed <n> --factions <key,key,...> [--ppm <file>] [--simulate <ticks>] [--space]";
+const USAGE: &str = "usage: rom universe --db <rules.db> --style <key> --seed <n> --factions <key,key,...> [--start-placement separate|together] [--ppm <file>] [--simulate <ticks>] [--space]";
 /// Builders placed around each starting city.
 const BUILDERS: usize = 3;
 /// Ticks between rounds of random move orders for idle units.
@@ -47,6 +47,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
     let (mut db, mut style, mut seed, mut factions, mut ppm_path) = (None, None, None, None, None);
     let mut simulate = None;
     let mut space = false;
+    let mut placement = None;
     while let Some(flag) = args.next() {
         if flag == "--space" {
             space = true;
@@ -62,6 +63,12 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
             "--factions" => factions = Some(value),
             "--ppm" => ppm_path = Some(PathBuf::from(value)),
             "--simulate" => simulate = Some(value.parse::<u64>()?),
+            "--start-placement" => {
+                placement = Some(
+                    StartPlacement::parse(&value)
+                        .ok_or_else(|| format!("unknown start placement {value}"))?,
+                )
+            }
             _ => return Err(format!("unknown argument: {flag}").into()),
         }
     }
@@ -87,13 +94,18 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
                 .ok_or_else(|| format!("unknown faction {key}"))
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let universe = generate_universe(
+    let placement = match placement {
+        Some(placement) => placement,
+        None => StartPlacement::of_rules(&rules)?,
+    };
+    let universe = generate_universe_placed(
         &rules,
         &UniverseRequest {
             style: style_id,
             seed,
             player_factions: player_factions.clone(),
         },
+        placement,
     )?;
     println!("{}", summary(&rules, &universe));
     for problem in universe.fairness(&rules) {
@@ -670,6 +682,7 @@ fn star_map_ppm(universe: &Universe, _style_radius: i64) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rom_mapgen::generate_universe;
 
     fn run(ticks: u64) -> String {
         let conn = rom_rules::build_rules_db(

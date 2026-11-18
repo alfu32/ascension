@@ -16,13 +16,20 @@ Sources (primary; acknowledgements in docs/database.md):
 
 The map position is computed here, once, into integers: the direction is exact and the distance
 is compressed by `RADIAL_SCALE * sqrt(distance in light-years)`, so constellations keep their
-true shapes seen from the Sun and the order of distances is kept. The simulation and map
+true shapes seen from the Sun and the order of distances is kept. The galactic longitude (which
+galactic quadrant a star lies in, task 89) is computed here too. The simulation and map
 generator read integers only.
 """
 import math
 
 # Map units per sqrt(light-year): Proxima Centauri (4.2 ly) lies at about 205, Deneb (2600 ly) at 5100.
 RADIAL_SCALE = 100
+
+# The galactic frame (IAU 1958, in J2000 coordinates): right ascension and declination of the north
+# galactic pole, and the galactic longitude of the north celestial pole (task 89).
+GALACTIC_POLE_RA_DEG = 192.859
+GALACTIC_POLE_DEC_DEG = 27.128
+GALACTIC_NCP_LON_DEG = 122.932
 
 # IAU abbreviation: (name, genitive)
 CONSTELLATIONS = {
@@ -900,6 +907,17 @@ def position(ra_mdeg, dec_mdeg, dist_cly):
             round(radius * math.sin(dec)))
 
 
+def galactic_longitude(ra_mdeg, dec_mdeg):
+    """Galactic longitude seen from the Sun in integer milli-degrees, 0..359999 (task 89): the
+    quadrant a star lies in (I 0-90, II 90-180, III 180-270, IV 270-360 degrees)."""
+    pole_ra, pole_dec = math.radians(GALACTIC_POLE_RA_DEG), math.radians(GALACTIC_POLE_DEC_DEG)
+    ra, dec = math.radians(ra_mdeg / 1000), math.radians(dec_mdeg / 1000)
+    across = math.cos(dec) * math.sin(ra - pole_ra)
+    up = math.sin(dec) * math.cos(pole_dec) - math.cos(dec) * math.sin(pole_dec) * math.cos(ra - pole_ra)
+    lon = (GALACTIC_NCP_LON_DEG - math.degrees(math.atan2(across, up))) % 360
+    return round(lon * 1000) % 360000
+
+
 def star_sql(val):
     """INSERT statements for constellation, star and constellation_line; `val` quotes a value."""
     used = sorted({s[3] for s in STARS})
@@ -912,8 +930,9 @@ def star_sql(val):
     for i, (hip, name, designation, abbr, ra, dec, dist) in enumerate(sorted(STARS)):
         star_id[hip] = i + 1
         x, y, z = position(ra, dec, dist)
-        sql.append("INSERT INTO star(id,hip,name,designation,constellation_id,ra_mdeg,dec_mdeg,dist_cly,x,y,z) VALUES "
-                   f"({i + 1},{hip},{val(name)},{val(designation)},{ids[abbr]},{ra},{dec},{dist},{x},{y},{z});")
+        glon = galactic_longitude(ra, dec)
+        sql.append("INSERT INTO star(id,hip,name,designation,constellation_id,ra_mdeg,dec_mdeg,dist_cly,x,y,z,glon_mdeg) VALUES "
+                   f"({i + 1},{hip},{val(name)},{val(designation)},{ids[abbr]},{ra},{dec},{dist},{x},{y},{z},{glon});")
     for abbr in sorted(FIGURES):
         for a, b in sorted(tuple(sorted(e)) for e in FIGURES[abbr]):
             sql.append(f"INSERT INTO constellation_line(constellation_id,star_a,star_b) VALUES ({ids[abbr]},{star_id[a]},{star_id[b]});")
