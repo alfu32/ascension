@@ -51,6 +51,7 @@ controls! {
     ("single-planet", 0, "false", "Isolated sphere; defaults to face size 192. Excludes universe.", true),
     ("universe", 0, "false", "Generate star systems; also implied by sphere unless isolated.", true),
     ("style", 0, "", "Map style from the rules; blank selects the first in id order.", false),
+    ("start-placement", 0, "", "Where players start in a universe: separate home worlds (default), or players of different races together on as few home planets as fairness allows. Ignored on flat maps and single planets.", false),
     ("seed", 0, "1", "Map seed (unsigned integer). Random chooses a fresh seed.", false),
     ("players", 0, "4", "Number of players, at least 1; factions override this count.", false),
     ("factions", 0, "", "One faction per player, in selection order; blank uses the default mix.", false),
@@ -386,6 +387,7 @@ mod tests {
             ("map-size", "300x200"),
             ("universe", "true"),
             ("style", "test.style"),
+            ("start-placement", "together"),
             ("seed", "44"),
             ("players", "2"),
             ("factions", "test.a,test.b"),
@@ -479,7 +481,7 @@ mod tests {
             );
         }
         assert!(CONTROLS.iter().any(|c| c.flag == "script"));
-        assert_eq!(CONTROLS.len(), 46);
+        assert_eq!(CONTROLS.len(), 47);
     }
 
     #[test]

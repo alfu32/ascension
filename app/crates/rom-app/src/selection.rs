@@ -1678,6 +1678,10 @@ impl Controller {
                 {
                     continue;
                 }
+                if mode == ProductionMode::Construct && rules.is_superseded_building(def, &sources)
+                {
+                    continue;
+                }
                 if mode == ProductionMode::Research
                     && !(grid && is_grid_tech(rules, def))
                     && !crate::hud::next_research(world, def)

@@ -170,6 +170,9 @@ pub struct ZoomScale {
     pub l_system_map: f32,
     /// `l` at which the whole star map fits.
     pub l_end: f32,
+    /// Star-map camera distance at `l_end`, in map units: [`MAP_MAX_DISTANCE`] or, for a wider
+    /// universe, the distance that fits it.
+    pub map_max: f32,
     /// System camera distance at the globe-to-system hand-over.
     pub system_min: f32,
 }
@@ -189,8 +192,28 @@ impl ZoomScale {
             l_globe_system,
             l_system_map,
             l_end,
+            map_max: MAP_MAX_DISTANCE,
             system_min,
         }
+    }
+
+    /// The scale with the star map's widest zoom following the universe: `reach` is the radius in
+    /// map units of the region the systems fill (margin included). The cap keeps the ratio
+    /// [`MAP_MAX_DISTANCE`] has to [`MAP_RADIUS`] and is never less than [`MAP_MAX_DISTANCE`].
+    pub fn fitted_to(self, reach: f32) -> Self {
+        let wanted = reach * (MAP_MAX_DISTANCE / MAP_RADIUS);
+        self.with_map_max(if wanted.is_finite() {
+            wanted.max(MAP_MAX_DISTANCE)
+        } else {
+            MAP_MAX_DISTANCE
+        })
+    }
+
+    /// The scale with the star map's widest zoom at `map_max` map units.
+    pub fn with_map_max(mut self, map_max: f32) -> Self {
+        self.map_max = map_max.max(MAP_MAX_DISTANCE);
+        self.l_end = self.l_system_map + (self.map_max / MAP_MIN_DISTANCE).ln();
+        self
     }
 
     /// Smallest `l`: the closest planet camera.
@@ -732,6 +755,17 @@ impl ZoomCamera {
             )
         });
         let map_positions = scene.place_systems();
+        // The widest star-map zoom takes in every system of the match: the farthest from the middle
+        // of them. The celestial home lies beyond them by design and is left out.
+        let material: Vec<[f32; 3]> = scene
+            .systems
+            .iter()
+            .zip(&map_positions)
+            .filter(|(system, _)| !system.celestial)
+            .map(|(_, at)| *at)
+            .collect();
+        let region = MapRegion::around(&material);
+        let scale = scale.fitted_to(region.radius - REGION_MARGIN);
         let sun = scene.sun_position();
         let placed = scene
             .systems
@@ -1119,7 +1153,8 @@ impl ZoomCamera {
         self.scale = ZoomScale::new(
             globe_radius * HOME_PLANET_RADIUS / drawn.max(1.0),
             max_distance,
-        );
+        )
+        .with_map_max(self.scale.map_max);
         self.surface_body = Some(index);
         if self.want_surface == Some(body) {
             self.want_surface = None;
@@ -2739,6 +2774,27 @@ mod tests {
         assert!((s.system_distance(s.l_system_map) - SYSTEM_MAX_DISTANCE).abs() < 1.0);
         assert!((s.map_distance(s.l_system_map) - MAP_MIN_DISTANCE).abs() < 1e-2);
         assert!((s.map_distance(s.l_end) - MAP_MAX_DISTANCE).abs() < 1.0);
+    }
+
+    #[test]
+    fn the_widest_star_map_zoom_follows_the_universe() {
+        // A universe no wider than the default frame keeps today's cap.
+        let (zoom, _) = camera(Level::StarMap);
+        assert!(zoom.scale().map_max >= MAP_MAX_DISTANCE);
+        let region = zoom.map_region();
+        assert!(
+            zoom.scale().map_max
+                >= (region.radius - REGION_MARGIN) * MAP_MAX_DISTANCE / MAP_RADIUS - 1.0
+        );
+        // A wider one raises it so that the farthest system still fits, and never lowers it.
+        let reach = 3.0 * MAP_RADIUS;
+        let wide = scale().fitted_to(reach);
+        assert!(wide.map_max > MAP_MAX_DISTANCE);
+        assert!(wide.l_end > scale().l_end);
+        assert!((wide.map_distance(wide.l_end) - wide.map_max).abs() < 1.0);
+        assert!(wide.map_max / reach >= MAP_MAX_DISTANCE / MAP_RADIUS - 1e-3);
+        assert_eq!(scale().fitted_to(1.0).map_max, MAP_MAX_DISTANCE);
+        assert_eq!(wide.with_map_max(1.0).map_max, MAP_MAX_DISTANCE);
     }
 
     #[test]
