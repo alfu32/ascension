@@ -12,7 +12,9 @@ afford a higher polygon budget."
 
 1. Rebuild the looks of every ship that flies in space (survey ship, corvette, space frigate,
    space cruiser, battleship, transport, carrier, space freighter, satellite, orbital fighter and
-   bomber, and any class task 92 adds) with a **near budget about four times today's** (state
+   bomber, and the looks task 92 added as placeholders: the space frigate at starfaring, the space cruiser at
+   expansion, the battleship at abundance; plus the two new sea ships of task 92, Ships of the Line
+   (enlightenment) and Dreadnoughts (modern), at today's land and sea budget) with a **near budget about four times today's** (state
    each model's triangles before and after) and a far version that keeps today's cost.
    Detail that reads at the system view's distance: hull plating breaks, bridge and
    superstructure, engine bells with glow, turrets that face their arcs, hangar mouths on the

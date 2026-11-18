@@ -205,6 +205,9 @@ systems:
 - **warships** (the escort, in the brain's armies) contest enemy-held
   bodies, guard own claims and, three or more, strike the orbit of a planet
   where enemy buildings are known, firing on what is seen below;
+  the warship trained is the class (task 92) that gives the best exchange
+  for its price against the enemy ships and craft seen, or, before any is
+  seen, against one of every armed ship and craft the player could train;
 - a **transport** loads a builder and some of the main army's troops at an
   own spaceport, flies (and travels) to a habitable planet without an own
   city — free planets first — lands on open ground, founds a city with the
@@ -492,6 +495,13 @@ Everything is read from the rules (`crates/rom-cli/src/fight_matrix_cmd.rs`):
   on attack, range, hit points, armour or speed that applies to C).
 - The command prints one row per strength and the roster of each age, and fails when a
   strength has no answer; the test `every_strength_has_an_answer` runs the whole matrix.
+- **At sea and between ships (task 92).** Sea rows (`sea_matrix.rs`): warships (units that
+  cross open water and not the shore, the newest of each class) fight on a field whose halves
+  are each side's ground, water beside the plain shore; a row is a strength a warship takes
+  part in, answered by any mobile type of the age or, for a warship, a building ashore. Ship
+  against ship rows (`orbit_matrix::measure_space_age`): the armed ships and craft of an age in
+  one orbit. Tests `every_sea_strength_has_an_answer` and
+  `every_ship_against_ship_strength_has_an_answer`; `--no-sea`, `--sea-fight a,b`.
 
 ### The matrix (task 71 rules, 3 seeds)
 

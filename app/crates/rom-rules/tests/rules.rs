@@ -1013,6 +1013,97 @@ fn obsolete_when_successor_unlocked() {
     assert!(r.is_obsolete(old, &active, &Owned::new()));
 }
 
+/// Task 92: warship and starship classes coexist. With every research of the last age, no
+/// class retires another: only a later member of the same class makes a ship obsolete.
+#[test]
+fn ship_classes_coexist() {
+    let r = seed();
+    let mut active = sources(&r, &["age.galactic"]);
+    active.extend(
+        r.techs
+            .keys()
+            .filter(|t| r.key(**t).starts_with("tech.up."))
+            .copied(),
+    );
+    let current = [
+        "unit.hover_frigate",
+        "unit.destroyer",
+        "unit.dreadnought",
+        "unit.drone_cruiser",
+        "unit.corvette",
+        "unit.space_frigate",
+        "unit.space_cruiser",
+        "unit.battleship",
+    ];
+    for key in current {
+        let id = r.id_of(key).unwrap();
+        assert!(!r.is_obsolete(id, &active, &Owned::new()), "{key}");
+    }
+    for key in ["unit.frigate", "unit.ironclad", "unit.missile_cruiser"] {
+        assert!(
+            r.is_obsolete(r.id_of(key).unwrap(), &active, &Owned::new()),
+            "{key}"
+        );
+    }
+    // In the modern age, the ironclad's and the dreadnought's research and the destroyer leave
+    // the frigate in service.
+    let modern = sources(
+        &r,
+        &[
+            "age.modern",
+            "tech.up.frigate",
+            "tech.up.ship_of_the_line",
+            "tech.up.ironclad",
+            "tech.up.dreadnought",
+        ],
+    );
+    let frigate = r.id_of("unit.frigate").unwrap();
+    assert!(r.is_unlocked(frigate, &modern, &Owned::new()));
+    assert!(!r.is_obsolete(frigate, &modern, &Owned::new()));
+    // The four space classes are all in service from the abundance age.
+    let abundance = sources(&r, &["age.abundance"]);
+    for key in &current[4..] {
+        let id = r.id_of(key).unwrap();
+        assert!(r.is_unlocked(id, &abundance, &Owned::new()), "{key}");
+    }
+}
+
+/// Task 92: a building upgraded in place leaves the build menu once the research is done,
+/// unless people work it (a gather site with worker slots).
+#[test]
+fn superseded_buildings_are_those_upgraded_and_unmanned() {
+    let r = seed();
+    let is = |building: &str, techs: &[&str]| {
+        let active = sources(&r, techs);
+        r.is_superseded_building(r.id_of(building).unwrap(), &active)
+    };
+    assert!(!is("bld.stable", &["age.industrial"]));
+    assert!(is(
+        "bld.stable",
+        &["age.industrial", "tech.up.vehicle_plant"]
+    ));
+    assert!(is(
+        "bld.siege_workshop",
+        &["age.industrial", "tech.up.factory"]
+    ));
+    assert!(is("bld.tower", &["age.enlightenment", "tech.up.bastion"]));
+    assert!(is("bld.fort", &["age.enlightenment", "tech.up.star_fort"]));
+    for (site, upgrade) in [
+        ("bld.farm", "tech.up.auto_farm"),
+        ("bld.woodcutter_camp", "tech.up.auto_woodcutter_camp"),
+        ("bld.mine", "tech.up.auto_mine"),
+        ("bld.oil_well", "tech.up.auto_oil_well"),
+        ("bld.university", "tech.up.auto_lab"),
+    ] {
+        assert!(!is(site, &["age.automation", upgrade]), "{site}");
+    }
+    // The successor itself stays on the menu.
+    assert!(!is(
+        "bld.vehicle_plant",
+        &["age.industrial", "tech.up.vehicle_plant"]
+    ));
+}
+
 #[test]
 fn unreachable_item_is_reported() {
     assert_problem("INSERT INTO def(kind,key,name) VALUES ('tech','tech.unreachable','Unreachable');
@@ -1033,8 +1124,9 @@ fn every_line_has_one_first_step_and_continuous_ages() {
     {
         lines.entry(&unit.ui_group).or_default().push(unit);
     }
-    // 27 since task 73 gave the survey ship a line of its own.
-    assert_eq!(lines.len(), 27);
+    // 27 since task 73 gave the survey ship a line of its own; 33 since task 92 made four
+    // classes of the warships and four of the starships.
+    assert_eq!(lines.len(), 33);
     for (line, steps) in lines {
         let roots: Vec<_> = steps
             .iter()

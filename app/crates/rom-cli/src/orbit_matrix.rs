@@ -751,6 +751,66 @@ pub fn measure_age(
     })
 }
 
+/// Ships and craft of an age that fight one another in orbit (task 92): units that fly into
+/// the orbit or climb to it, armed with a weapon at the orbit, the newest of their series. The
+/// warship classes coexist, so every class of the age is here.
+pub fn space_fighters(rules: &Rules, setup: &Setup, age: i64, world: &World) -> Vec<DefId> {
+    newest(rules, setup, age, |u| {
+        rules.entity_types[&u].class == EntityClass::Unit
+            && place_of(world, u) != Place::Ground
+            && reaches_orbit(rules, u)
+    })
+}
+
+/// Measures ship against ship in one age (task 92): every ship or craft that outranges and
+/// beats another in orbit, and the best answer among the age's ships and craft.
+pub fn measure_space_age(
+    rules: &Arc<Rules>,
+    setup: &Setup,
+    age: i64,
+    seeds: u64,
+    all: bool,
+) -> Result<OrbitMatrix, String> {
+    let age_id = rules
+        .ages
+        .values()
+        .find(|a| a.ordinal == age)
+        .ok_or("no such age")?
+        .id;
+    let probe = planet_world(rules, setup, age, [Vec::new(), Vec::new()], 1)?;
+    let fleet = space_fighters(rules, setup, age, &probe);
+    let plain = |unit| Side { unit, tech: None };
+    let mut strengths = Vec::new();
+    for &strong in &fleet {
+        let mut beaten = Vec::new();
+        for &target in &fleet {
+            if target == strong || reach(&probe, strong, target) <= reach(&probe, target, strong) {
+                continue;
+            }
+            if pairing(rules, setup, age, plain(strong), plain(target), seeds)?.first_wins() {
+                beaten.push(target);
+                if !all {
+                    break;
+                }
+            }
+        }
+        if beaten.is_empty() {
+            continue;
+        }
+        let answer = best_answer(rules, setup, age, strong, &fleet, seeds)?;
+        strengths.push(OrbitStrength {
+            strong,
+            beaten,
+            answer,
+        });
+    }
+    Ok(OrbitMatrix {
+        age: age_id,
+        roster: fleet,
+        strengths,
+    })
+}
+
 /// Researches a player of `age` has when its town stands for that age: every research whose
 /// ages are reached, upgrades, tracks and building research alike (no age advance, project or
 /// handicap).
@@ -1104,6 +1164,39 @@ mod tests {
                     assert!(reaches_orbit(&rules, side.unit), "{}", rules.key(s.strong));
                 }
             }
+        }
+    }
+
+    /// The owner's rule between ships (task 92): every ship or craft that outranges and beats
+    /// another in orbit has an answer among the age's ships and craft; the warship classes all
+    /// take part.
+    #[test]
+    fn every_ship_against_ship_strength_has_an_answer() {
+        let rules = rules();
+        let last = rules.ages.values().map(|a| a.ordinal).max().unwrap();
+        let jobs = std::thread::available_parallelism().map_or(1, |n| n.get());
+        let matrices =
+            crate::fight_matrix_cmd::measure_space(&rules, (0, last), SEEDS, jobs, false).unwrap();
+        assert!(!matrices.is_empty());
+        let unanswered: Vec<String> = matrices
+            .iter()
+            .flat_map(|m| {
+                m.strengths
+                    .iter()
+                    .filter(|s| !s.answer.is_some_and(|(_, p)| p.first_wins()))
+                    .map(|s| format!("{}: {}", rules.key(m.age), rules.key(s.strong)))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        assert!(unanswered.is_empty(), "{unanswered:?}");
+        let last_roster = &matrices.last().unwrap().roster;
+        for key in [
+            "unit.corvette",
+            "unit.space_frigate",
+            "unit.space_cruiser",
+            "unit.battleship",
+        ] {
+            assert!(last_roster.contains(&rules.id_of(key).unwrap()), "{key}");
         }
     }
 

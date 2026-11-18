@@ -58,12 +58,15 @@ LINES = [
     ('anti_air', 'factory', 'flak_gun:Flak Guns:6|missile_launcher:Missile Launchers:7|laser_battery:Laser Batteries:9'),
     ('supply', 'siege_workshop,factory', 'supply_wagon:Supply Wagons:2|supply_truck:Supply Trucks:5'),
     ('repair', 'factory', 'repair_drone:Repair Drones:7'),
-    ('warship', 'dock', 'trireme:Triremes:1|war_galley:War Galleys:2|carrack:Carracks:3|frigate:Frigates:4|ironclad:Ironclads:5|destroyer:Destroyers:6|missile_cruiser:Missile Cruisers:7|drone_cruiser:Drone Cruisers:8|hover_frigate:Hover Frigates:9'),
+    # Warships and starships are classes that coexist (task 92, SHIP_CLASSES): each member
+    # upgrades from the one before it in its own class only. Members marked `late` are defined
+    # after every other generated definition, so the ids of earlier content stay stable.
+    ('warship', 'dock', 'trireme:Triremes:1|war_galley:War Galleys:2|carrack:Carracks:3|frigate:Frigates:4|ship_of_the_line:Ships of the Line:4:late|ironclad:Ironclads:5|destroyer:Destroyers:6|dreadnought:Dreadnoughts:6:late|missile_cruiser:Missile Cruisers:7|drone_cruiser:Drone Cruisers:8|hover_frigate:Hover Frigates:9'),
     ('fighter', 'airfield', 'biplane:Biplanes:5|fighter:Fighters:6|jet_fighter:Jet Fighters:7|drone_fighter:Drone Fighters:8|interceptor:Interceptors:9'),
     ('bomber', 'airfield', 'bomber:Bombers:6|strategic_bomber:Strategic Bombers:7|drone_bomber:Drone Bombers:8'),
     # The survey ship has a line of its own, so the corvette never supersedes it (task 73).
     ('survey', 'spaceport', 'survey_ship:Survey Ship:10'),
-    ('starship', 'spaceport', 'corvette:Corvettes:10|space_frigate:Space Frigates:11|space_cruiser:Space Cruisers:12|battleship:Battleships:13'),
+    ('starship', 'spaceport', 'corvette:Corvettes:10|space_frigate:Space Frigates:10|space_cruiser:Space Cruisers:11|battleship:Battleships:12'),
     ('civilian', 'city', 'citizen:Citizens:0|worker_drone:Worker Drones:8'),
     ('scholar', 'university', 'scholar:Scholars:1'),
     ('merchant', 'market', 'merchant:Merchants:0'),
@@ -71,6 +74,44 @@ LINES = [
     ('priest', 'temple', 'priest:Priests:1'),
     ('transport', 'spaceport', 'transport_ship:Transport Ships:10'),
 ]
+# Task 92 (owner, 2026-11-18; docs/unit-series.md): the class of each warship and starship.
+# A class is a series of its own (its `ui_group`): a later member retires only the members
+# of its class, so frigates, line ships and the others are built side by side.
+SHIP_CLASSES = {
+    'trireme': 'frigate', 'war_galley': 'frigate', 'frigate': 'frigate', 'hover_frigate': 'frigate',
+    'destroyer': 'destroyer',
+    'carrack': 'line_ship', 'ship_of_the_line': 'line_ship', 'ironclad': 'line_ship', 'dreadnought': 'line_ship',
+    'missile_cruiser': 'strike_ship', 'drone_cruiser': 'strike_ship',
+    'corvette': 'corvette', 'space_frigate': 'space_frigate', 'space_cruiser': 'space_cruiser',
+    'battleship': 'battleship',
+}
+# Sea classes, base values before the age scale: hit points, damage, reload (ticks), reach and
+# dead zone (tiles), speed, price. Frigates are the fast, cheap escorts that fight close in;
+# destroyers the same with a gun against aircraft (DESTROYER_AA); line ships carry heavy guns at
+# long reach with a dead zone; strike ships reach farthest and are fragile.
+SEA_CLASSES = {
+    'frigate': (240, 18, 20, 5, 0, 2400, {'timber': 56, 'metal': 28}),
+    'destroyer': (240, 18, 20, 5, 0, 2400, {'timber': 56, 'metal': 28}),
+    'line_ship': (600, 36, 40, 12, 3, 1400, {'timber': 160, 'metal': 80}),
+    'strike_ship': (360, 40, 40, 15, 4, 1800, {'timber': 120, 'metal': 120}),
+}
+# Reach (tiles) of members that shoot farther than their class's first.
+SEA_REACH = {'ironclad': 13, 'dreadnought': 14, 'drone_cruiser': 16}
+# The destroyer's second gun, at aircraft: damage, reach (tiles), reload (ticks), before the scale.
+DESTROYER_AA = (20, 6, 20)
+# Space classes as built (no age scale): hit points, armour, main weapon (damage class, damage,
+# reach and dead zone in tiles, reload), speed, price, population, squads carried. Kinetic is the
+# anti-ship gun (full against shields, 40 % against craft), energy the point defence (full
+# against craft, half against shields). The corvette carries a light kinetic gun: it beats the
+# frigate, the frigate's point defence beats the orbital craft, and the craft beat the corvette
+# and the big ships, whose kinetic guns do little to them. No class has a dead zone: in orbit two
+# ships are measured to each other where they hold the orbit, at the planet's marker.
+SPACE_CLASSES = {
+    'corvette': (800, 3, ('kinetic', 45, 6, 0, 15), 3600, {'metal': 300, 'energy': 150}, 1, 1),
+    'space_frigate': (1300, 5, ('energy', 40, 7, 0, 10), 3200, {'metal': 450, 'energy': 200}, 2, 2),
+    'space_cruiser': (2000, 6, ('kinetic', 120, 10, 0, 40), 2600, {'metal': 700, 'energy': 300}, 2, 2),
+    'battleship': (3600, 8, ('kinetic', 260, 13, 0, 60), 2000, {'metal': 1200, 'energy': 500}, 3, 2),
+}
 RESEARCH = [
     ('granary', 'income.food', 'agriculture:1:10|crop_rotation:3:15|food_processing:5:20'),
     ('lumber_mill', 'income.timber', 'carpentry:1:10|architecture:3:15|engineering:5:20'),
@@ -119,7 +160,8 @@ def unit_sight(line, key, age, reach):
     elif line in ('ranged', 'anti_armour', 'anti_air'):
         tiles = max(6, reach // 1000 + 1)
     elif line == 'warship':
-        tiles = 8 + age // 3
+        # A warship sees at least as far as it shoots.
+        tiles = max(8 + age // 3, reach // 1000)
     elif line in ('fighter', 'bomber'):
         tiles = 13 if 'drone' in key else 12
     return tiles * 1000
@@ -173,8 +215,12 @@ def generate():
     sql = [BEGIN, '-- Generated by db/content/generate.py; edit its tables, then regenerate.']
     positions = defaultdict(dict)
     prerequisites = []
+    # Rows go to the top of `out`: the block itself, or `late` (written after every other
+    # definition, task 92) while a late unit is generated.
+    late, late_keys = [], set()
+    out = [sql]
     def row(table, **columns):
-        sql.append(f"INSERT INTO {table}({','.join(columns)}) VALUES ({','.join(val(v) for v in columns.values())});")
+        out[-1].append(f"INSERT INTO {table}({','.join(columns)}) VALUES ({','.join(val(v) for v in columns.values())});")
     def definition(kind, key, name):
         row('def', kind=kind, key=key, name=name)
     def tag(key, *tags):
@@ -182,8 +228,10 @@ def generate():
             row('def_tag', def_id=Ref(key), tag_id=Ref(t, 'tag'))
     def need(key, requirement, group=0):
         prerequisites.append((key, requirement, group))
+    produced = []
     def produce(producer, product, mode, page=''):
         # Stable five-column grids keep every authored palette position distinct.
+        produced.append((producer, product, mode, page))
         slots = positions[producer, page]
         slot = slots.setdefault(product, len(slots))
         palette_page = page if slot < 15 else f'{page}_{slot // 15 + 1}'
@@ -209,7 +257,7 @@ def generate():
             damage_class_id=Ref(dc, 'damage_class'), range_max=reach, cooldown_ticks=cooldown, **extra)
         which = f'entity_type_id={val(Ref(key))}' + (f' AND slot={slot}' if slot else '')
         for layer in layers:
-            sql.append(f"INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE {which}),{val(layer)});")
+            out[-1].append(f"INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE {which}),{val(layer)});")
     def upgrade(old, new, name, age, building, ticks, prices, kind='unit_upgrade'):
         key = 'tech.up.' + new.split('.', 1)[1]
         tech(key, 'Upgrade to ' + name, age, building, ticks * 2,
@@ -232,6 +280,8 @@ def generate():
         row('map_style_feature', map_style_id=Ref('map.' + style), feature_def_id=Ref('ter.oil'),
             region_kind='planet', pattern='per_player', coverage_pct=1,
             clumps_min=1, clumps_max=2, size_min=4, size_max=6, start_min_dist=8, start_max_dist=14)
+    # Kinetic damage (task 75) is defined first: the cruiser's and battleship's guns use it.
+    kinetic_damage(sql.append)
     row('tag', key='building', category='structure')
     row('tag', key='fort', category='structure')
     row('tag', key='tower', category='structure')
@@ -248,8 +298,9 @@ def generate():
             definition('entity_type', auto_key(site), auto_name(site))
     for _, _, steps in sorted(LINES, key=lambda line: line[0] != 'civilian'):
         for step in steps.split('|'):
-            key, name, _ = step.split(':')
-            definition('entity_type', 'unit.' + key, name)
+            key, name, _, *flags = step.split(':')
+            if 'late' not in flags:
+                definition('entity_type', 'unit.' + key, name)
     for key, name, page, age, track, hp, timber, size, limit in BUILDINGS:
         full = 'bld.' + key
         row('entity_type', id=Ref(full), **{'class': 'building'}, ui_group=page, hp=hp * (10 + age) // 10,
@@ -283,7 +334,7 @@ def generate():
                 economic_radius=16000 if key == 'city' else 0, capturable=int(key == 'city'))
         if key in ('city', 'tower', 'fort'):
             # Arrows fly (drawn in flight); the gun-age variants below hit at once (tracers).
-            weapon(full, 8 + age * 2, 'pierce' if age < 3 else 'explosive', 10000, ['ground'],
+            weapon(full, 8 + age * 2, 'pierce' if age < 3 else 'explosive', 10000, ['ground', 'fluid'],
                    **({'projectile_speed': ARROW_SPEED} if age < 3 else {}))
         if key == 'temple':
             row('et_keeper', entity_type_id=Ref(full), capacity=5)
@@ -319,17 +370,27 @@ def generate():
             tag(new, 'building', 'mechanical', base)
             need(new, 'age.' + AGES[age])
             copy_components(old, new)
-            weapon(new, 12 + age * 2, 'energy' if age >= 8 else 'explosive', 10000, ['ground', 'air'] if age >= 8 else ['ground'])
+            weapon(new, 12 + age * 2, 'energy' if age >= 8 else 'explosive', 10000, ['ground', 'fluid', 'air'] if age >= 8 else ['ground', 'fluid'])
             upgrade(old, new, key.replace('_', ' ').title(), age, old[4:], 150 + age * 25, {'timber': 150, 'metal': 75}, 'upgrade')
             for builder in ('citizen', 'worker_drone'):
                 produce('unit.' + builder, new, 'construct', 'military')
             old = new
     for line, producer, steps in LINES:
-        old = None
+        last = {}
         for step in steps.split('|'):
-            key, name, age = step.split(':')
+            key, name, age, *flags = step.split(':')
             age = int(age)
             full = 'unit.' + key
+            # The series is the ship's class, or the line itself.
+            series = SHIP_CLASSES.get(key, line)
+            old = last.get(series)
+            # A late member, and the member that upgrades from one, are written after every
+            # other definition (its rows reference the late definition).
+            late_step = 'late' in flags or old in late_keys
+            out.append(late if late_step else sql)
+            if 'late' in flags:
+                late_keys.add(full)
+                definition('entity_type', full, name)
             building = producer.split(',')[-1 if age >= 5 else 0]
             mounted = line in ('light_mounted', 'heavy_mounted')
             aircraft = line in ('fighter', 'bomber')
@@ -337,6 +398,9 @@ def generate():
             spacecraft = line in ('starship', 'survey', 'transport')
             mechanical = (mounted and age >= 5) or line in ('caravan', 'siege', 'anti_air', 'repair', 'supply', 'warship') or spacecraft or aircraft or 'drone' in key or 'robot' in key
             hp, attack, reach, speed, dc, ac, prices = 70, 7, 5000, 1200, 'pierce', 'flesh', {'food': 30, 'timber': 30}
+            cooldown, dead_zone, armour, pop, squads = 30, 0, None, 2 if spacecraft else 1, 1 if age <= 10 else 2
+            # Starship classes are given as built; everything else scales with its age.
+            fixed = line == 'starship'
             if line == 'infantry':
                 hp, attack, reach, speed = 100, 9, 0 if age <= 2 else 5000, 1250
                 dc, ac = ('energy' if age >= 10 else 'bullet' if age >= 3 else 'melee'), 'plate' if age >= 1 else 'flesh'
@@ -355,13 +419,18 @@ def generate():
             elif line == 'siege':
                 hp, attack, reach, speed, dc, ac = 120, 30, (10 + age * 6 // 13) * 1000, 800, 'explosive', 'vehicle'
                 prices = {'timber': 60, 'metal': 60}
+                dead_zone = SIEGE_DEAD_ZONE
             elif line == 'warship':
-                hp, attack, reach, speed, dc, ac = 300, 18, 7000, 1800, 'explosive' if age >= 3 else 'pierce', 'hull'
-                prices = {'timber': 80, 'metal': 40}
+                hp, attack, cooldown, tiles, dead, speed, prices = SEA_CLASSES[series]
+                reach, dead_zone = SEA_REACH.get(key, tiles) * 1000, dead * 1000
+                dc, ac = 'explosive' if age >= 3 else 'pierce', 'hull'
             elif aircraft:
                 hp, attack, reach, speed, dc, ac = 150, 20, 5000, 4000, 'explosive' if line == 'bomber' else 'bullet', 'vehicle'
                 prices = {'metal': 80, 'oil': 40}
-            elif line in ('starship', 'survey'):
+            elif line == 'starship':
+                hp, armour, (dc, attack, tiles, dead, cooldown), speed, prices, pop, squads = SPACE_CLASSES[series]
+                reach, dead_zone, ac = tiles * 1000, dead * 1000, 'shield'
+            elif line == 'survey':
                 hp, attack, reach, speed, dc, ac = 400, 30, 8000, 3000, 'energy', 'shield'
                 prices = {'metal': 200, 'energy': 100}
             elif line == 'transport':
@@ -377,12 +446,14 @@ def generate():
                 prices = {'food': 20} if line == 'civilian' else {'wealth': 40}
             elif line == 'scout':
                 speed, reach = 2200, 0
-            scale = lambda n: n * (100 + 15 * age) // 100
+            scale = (lambda n: n) if fixed else lambda n: n * (100 + 15 * age) // 100
             prices = {r: scale(n) for r, n in prices.items()}
             ticks = min(500, 150 + 25 * age)
-            row('entity_type', id=Ref(full), **{'class': 'unit'}, ui_group=line, hp=hp if support else scale(hp), armor=2 if line == 'infantry' else age // 2,
+            if armour is None:
+                armour = 2 if line == 'infantry' else age // 2
+            row('entity_type', id=Ref(full), **{'class': 'unit'}, ui_group=series, hp=hp if support else scale(hp), armor=armour,
                 armor_class_id=Ref(ac, 'armor_class'), los=unit_sight(line, key, age, reach),
-                pop_cost=2 if spacecraft else 1, build_ticks=ticks, ramp_mode='per_type', upgrades_from_id=Ref(old) if old else None,
+                pop_cost=pop, build_ticks=ticks, ramp_mode='per_type', upgrades_from_id=Ref(old) if old else None,
                 first_age_id=Ref('age.' + AGES[age]))
             tag(full, 'mechanical' if mechanical else 'biological', 'civilian' if line in ('civilian', 'scholar', 'merchant', 'caravan', 'priest') else 'military')
             role = 'vehicle' if mounted and age >= 5 else 'mounted' if mounted else 'aircraft' if aircraft else 'ship' if line == 'warship' else 'starship' if spacecraft else 'siege' if line == 'siege' else 'infantry' if not support else None
@@ -396,9 +467,15 @@ def generate():
             movement = 'starship' if spacecraft else 'ship' if line == 'warship' else 'aircraft' if aircraft or line == 'repair' else 'wheeled' if mechanical and not line in ('civilian', 'scout') else 'foot'
             row('et_movement', entity_type_id=Ref(full), movement_class_id=Ref(movement, 'movement_class'), speed=speed)
             if attack:
-                layers = ['air'] if line in ('fighter', 'anti_air') else ['fluid', 'ground'] if line == 'warship' else ['space', 'orbit'] if line in ('starship', 'survey') else ['ground']
-                weapon(full, scale(attack), 'melee' if line == 'civilian' else dc, reach, layers, 40 if line == 'civilian' else 30,
-                       **({'range_min': SIEGE_DEAD_ZONE} if line == 'siege' else {}))
+                # Shore guns, artillery and bombers hit ships on the water too (task 92).
+                layers = (['air'] if line in ('fighter', 'anti_air') else ['fluid', 'ground'] if line == 'warship'
+                          else ['space', 'orbit'] if line in ('starship', 'survey')
+                          else ['ground', 'fluid'] if line in ('siege', 'bomber') else ['ground'])
+                weapon(full, scale(attack), 'melee' if line == 'civilian' else dc, reach, layers, 40 if line == 'civilian' else cooldown,
+                       **({'range_min': dead_zone} if dead_zone else {}))
+            if series == 'destroyer':
+                damage, tiles, reload = DESTROYER_AA
+                weapon(full, scale(damage), 'explosive', tiles * 1000, ['air'], reload, slot=1)
             if line == 'civilian':
                 row('et_builder', entity_type_id=Ref(full))
                 for resource in ('food', 'timber', 'metal', 'oil'):
@@ -424,14 +501,15 @@ def generate():
             if spacecraft:
                 # Carriers: a transport takes a company, every other starship one or two squads
                 # (population, one unit each).
-                row('et_container', entity_type_id=Ref(full), capacity=20 if line == 'transport' else 1 if age <= 10 else 2,
+                row('et_container', entity_type_id=Ref(full), capacity=20 if line == 'transport' else squads,
                     accept_tag_id=Ref('passenger', 'tag'))
             need(full, 'age.' + AGES[age])
             produce('bld.' + building, full, 'train', 'units')
             cost(full, prices, True)
             if old:
                 upgrade(old, full, name, age, building, ticks, prices)
-            old = full
+            last[series] = full
+            out.pop()
     for track, names in TRACKS.items():
         for level, name in enumerate(names.split('|'), 1):
             key = f'tech.{track}.{level}'
@@ -518,6 +596,9 @@ def generate():
     ground_stains(row)
     # Last: its definition takes the next id, so every earlier id (and existing hashes) stays.
     ascension(row, tech)
+    # Task 92 after it: the late warships, then the building upgrades and the line ships' refits.
+    sql.extend(late)
+    unit_series(row, tag, tech, modifier, upgrade, sql.append)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -535,6 +616,14 @@ def generate():
         for i, (key, _) in enumerate(steps):
             for later, _ in steps[i + 1:]:
                 sql.append(f"INSERT OR IGNORE INTO production SELECT {val(Ref('bld.' + later))},product_def_id,mode,ui_page,ui_col,ui_row FROM production WHERE producer_type_id={val(Ref('bld.' + key))};")
+    # A successor building takes its predecessor's whole palette after its own (task 92): what
+    # the old building trained and researched stays available to a player who skipped it.
+    for old, new, *_ in BUILDING_SUCCESSORS:
+        own = {product for producer, product, _, _ in produced if producer == 'bld.' + new}
+        for producer, product, mode, page in list(produced):
+            if producer == 'bld.' + old and product not in own and product != 'tech.up.' + new:
+                own.add(product)
+                produce('bld.' + new, product, mode, page)
     for site in SITES:
         if site != 'fusion_plant':
             sql.append(f"INSERT INTO production SELECT {val(Ref(auto_key(site)))},product_def_id,mode,ui_page,ui_col,ui_row FROM production WHERE producer_type_id={val(Ref('bld.' + site))};")
@@ -804,16 +893,20 @@ BOMBARDMENT = {
 BATTERY = {'hp': 9000, 'armour': 'hull', 'damage': 520, 'reach': 20, 'reload': 40}
 
 
+def kinetic_damage(emit):
+    """Task 75: the kinetic damage class and how much of it each armour class takes."""
+    emit("INSERT INTO damage_class(key) VALUES ('kinetic');")
+    for armour, pct in KINETIC.items():
+        emit(f"INSERT INTO damage_matrix VALUES ({val(Ref('kinetic', 'damage_class'))},"
+             f"{val(Ref(armour, 'armor_class'))},{pct});")
+
+
 def orbital_bombardment(weapon, emit):
     """Task 75: area bombardment from orbit (`splash_radius`, `splash_pct`) for the starships
     from the frigate up and the orbital bomber, a light one for the corvette, and the ground
     battery that outranges and outdamages them. The starships' bombardment rows were
     hand-written after the generated block until task 75. Defined last so the ids of earlier
     content stay stable."""
-    emit("INSERT INTO damage_class(key) VALUES ('kinetic');")
-    for armour, pct in KINETIC.items():
-        emit(f"INSERT INTO damage_matrix VALUES ({val(Ref('kinetic', 'damage_class'))},"
-             f"{val(Ref(armour, 'armor_class'))},{pct});")
     for key, (dc, damage, reach, reload, radius, pct) in BOMBARDMENT.items():
         full = 'unit.' + key
         if key == 'orbital_bomber':
@@ -892,6 +985,40 @@ def ascension(row, tech):
         ('celestial.planet_orbit', CELESTIAL_PLANET_ORBIT, 'system units', 'orbit radius of the mythical planet about the black hole'),
     ]:
         row('game_constant', key=key, value=value, unit=unit, note=note)
+
+
+# Task 92 (owner, 2026-11-18; docs/unit-series.md section 6): buildings upgraded in place, like
+# Farm -> Automated Farm. Old type, new type; the research costs what the new building costs to
+# build and takes as long, at the new building's first age.
+BUILDING_SUCCESSORS = [('stable', 'vehicle_plant'), ('siege_workshop', 'factory')]
+# Refits of the line ships at the dock (the class has no hull after the dreadnought): key, name,
+# age, stat, value, operation.
+LINE_SHIP_REFITS = [
+    ('fire_control', 'Fire Control', 'information', 'range', 2000, 'add'),
+    ('armour_belts', 'Armour Belts', 'fusion', 'hp', 25, 'pct'),
+]
+
+
+def unit_series(row, tag, tech, modifier, upgrade, emit):
+    """Task 92: the stable becomes the vehicle plant and the siege workshop the factory by a
+    research at the old building, and the line ships are refitted at the dock. Defined after
+    every other generated definition so the ids of earlier content stay stable."""
+    for old, new in BUILDING_SUCCESSORS:
+        base = next(b for b in BUILDINGS if b[0] == new)
+        _, name, _, age, _, _, timber, _, _ = base
+        emit(f"UPDATE entity_type SET upgrades_from_id={val(Ref('bld.' + old))} WHERE id={val(Ref('bld.' + new))};")
+        # The helper doubles a unit upgrade's price and time; a building upgrade costs the build.
+        upgrade('bld.' + old, 'bld.' + new, name, age, old, (150 + 25 * age) // 2,
+                {'timber': timber // 2, 'metal': timber // 4}, 'upgrade')
+    row('tag', key='line_ship', category='role')
+    for key, series in SHIP_CLASSES.items():
+        if series == 'line_ship':
+            tag('unit.' + key, 'line_ship')
+    for key, name, age_key, stat, value, op in LINE_SHIP_REFITS:
+        age = AGES.index(age_key)
+        full = 'tech.' + key
+        tech(full, name, age, 'dock', 300 + age * 50, {'wealth': 100 * (age + 1), 'knowledge': 50 * (age + 1)})
+        modifier(full, stat, value, op, 'line_ship')
 
 
 # Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"

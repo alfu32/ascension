@@ -680,16 +680,18 @@ fn star_systems(u: &Universe) -> Vec<&rom_mapgen::StarSystem> {
 }
 
 /// Task 89: Cluster is the earlier Many Worlds under another name: the same seeds give the same
-/// universes as release 0.0.83 (hashes printed by `rom universe` there).
+/// universes as release 0.0.83 (hashes printed by `rom universe` there). Task 92 wrote two more
+/// definitions in the generated block, which moves the ids of the node types defined after it
+/// that the hash reads; with those two left out the hashes are 0.0.83's again.
 #[test]
 fn cluster_gives_the_many_worlds_universes() {
     let r = rules();
     let style = r.id_of("map.many_worlds").unwrap();
     assert_eq!(r.def(style).name, "Cluster");
     for (seed, four, two) in [
-        (0, 0x72fb_f359_98ab_8443_u64, 0x44f8_19ea_83fa_0907_u64),
-        (1, 0xa855_d9aa_569d_3e3f, 0x706f_4b1d_3754_f836),
-        (2, 0xe29f_d8e1_72cb_500a, 0x0678_073c_f4cb_427f),
+        (0, 0x1834_1b5b_a05d_171d_u64, 0x1967_36a8_f476_1e0b_u64),
+        (1, 0xc1b0_6df2_eec7_b97d, 0xbd0f_8d66_3cac_3dc4),
+        (2, 0x1b6f_bb64_46cb_1f6e, 0x0d56_8230_dd16_5bf7),
     ] {
         let u = generate_universe(&r, &request(&r, "map.many_worlds", seed, &FOUR)).unwrap();
         assert_eq!(u.hash(), four, "seed {seed}, four players");

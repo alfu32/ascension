@@ -118,6 +118,13 @@ impl World {
         {
             return Err(SimError::Obsolete);
         }
+        if mode == ProductionMode::Construct
+            && self
+                .rules
+                .is_superseded_building(subject, &player.active_sources())
+        {
+            return Err(SimError::Superseded);
+        }
         if let Some(et) = self.rules.entity_type(subject) {
             let owner = match et.limit_scope {
                 LimitScope::PerPlayer => Some(Some(command.player)),

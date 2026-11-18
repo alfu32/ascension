@@ -177,6 +177,10 @@ pub enum SimError {
     /// A successor in the subject's upgrade line is already unlocked.
     #[error("entity type is obsolete")]
     Obsolete,
+    /// The building has been upgraded in place by a research and left the build menu
+    /// (`Rules::is_superseded_building`).
+    #[error("building is superseded by its upgrade")]
+    Superseded,
     /// An entity limit has been reached.
     #[error("entity limit reached")]
     LimitReached,
