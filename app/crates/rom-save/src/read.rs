@@ -420,7 +420,12 @@ fn surfaces(conn: &Connection) -> Result<Vec<SurfaceSnapshot>, SaveError> {
                 .into_iter()
                 .map(DefId)
                 .collect(),
-            winner: codec::decode_runs(&territory, tiles)?,
+            // Format 12 (task 99): no runs when no tile is owned.
+            winner: if territory.is_empty() {
+                Vec::new()
+            } else {
+                codec::decode_runs(&territory, tiles)?
+            },
             path: PathSnapshot {
                 next_request: u(int(row, 7)?),
                 generation: uint(row, 8, "generation")?,

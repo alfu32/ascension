@@ -1,8 +1,9 @@
 //! Movement-class cost grids, line-of-sight checks, and integer A* spread over ticks.
 
 use crate::geometry::{Geometry, Tile};
+use crate::tiles::Tiles;
 use crate::{EntityId, MapGrid, OrderId, Pos, integer_sqrt};
-use rom_rules::{EntityClass, EntityType, Rules};
+use rom_rules::{DefId, EntityClass, EntityType, Rules};
 use std::{
     cmp::Reverse,
     collections::{BTreeMap, BinaryHeap, VecDeque},
@@ -74,10 +75,11 @@ impl TileRect {
 #[derive(Debug)]
 struct ClassGrid {
     flies: bool,
-    /// Speed percentage per tile; zero means impassable terrain.
-    pct: Vec<u32>,
+    /// Speed percentage per tile; zero means impassable terrain. One value on a map of one
+    /// terrain (system space) and for flyers.
+    pct: Tiles<u32>,
     /// Step weight per tile; zero when impassable.
-    weight: Vec<u32>,
+    weight: Tiles<u32>,
     min_weight: u64,
 }
 
@@ -117,8 +119,8 @@ pub(crate) struct Found {
 pub(crate) struct Pathing {
     pub geo: Geometry,
     classes: BTreeMap<u32, ClassGrid>,
-    /// Number of building footprints covering each tile.
-    pub occupancy: Vec<u32>,
+    /// Number of building footprints covering each tile; one value until a building stands.
+    pub occupancy: Tiles<u32>,
     pub queue: VecDeque<PathRequest>,
     pub search: Option<Search>,
     pub next_request: u64,
@@ -126,7 +128,8 @@ pub(crate) struct Pathing {
     /// Lattice spacing for spreading a group around a shared goal.
     pub spacing: i64,
     pub stats: PathStats,
-    // Search workspace; entries are live only where `stamp` equals the search generation.
+    // Search workspace, sized at the surface's first search (`workspace`); entries are live
+    // only where `stamp` equals the search generation.
     pub g: Vec<u64>,
     pub parent: Vec<u32>,
     pub stamp: Vec<u32>,
@@ -158,34 +161,41 @@ fn class_grids(rules: &Rules, map: &MapGrid) -> BTreeMap<u32, ClassGrid> {
         }
         let flies = rules.movement_classes.get(&class).is_some_and(|c| c.flies);
         let rows = rules.movement_class_terrain.get(&class);
-        let pct: Vec<u32> = map
+        let speed = |terrain: &DefId| {
+            if flies {
+                return 100;
+            }
+            rows.into_iter()
+                .flatten()
+                .find(|row| row.terrain_id == *terrain)
+                .map_or(0, |row| row.speed_pct.clamp(0, i64::from(u32::MAX)) as u32)
+        };
+        let step = |p: u32| {
+            if p == 0 {
+                0
+            } else {
+                (WEIGHT_SCALE / u64::from(p)).max(1) as u32
+            }
+        };
+        // A map of one terrain (system space) and every flyer keep one value for all tiles.
+        let tiles = map.terrain.len();
+        let uniform = map
             .terrain
-            .iter()
-            .map(|terrain| {
-                if flies {
-                    return 100;
-                }
-                rows.into_iter()
-                    .flatten()
-                    .find(|row| row.terrain_id == *terrain)
-                    .map_or(0, |row| row.speed_pct.clamp(0, i64::from(u32::MAX)) as u32)
-            })
-            .collect();
-        let weight: Vec<u32> = pct
-            .iter()
-            .map(|p| {
-                if *p == 0 {
-                    0
-                } else {
-                    (WEIGHT_SCALE / u64::from(*p)).max(1) as u32
-                }
-            })
-            .collect();
-        let min_weight = weight
-            .iter()
-            .filter(|w| **w > 0)
-            .min()
-            .map_or(1, |w| u64::from(*w));
+            .first()
+            .filter(|first| map.terrain.iter().all(|t| t == *first));
+        let (pct, weight) = match uniform {
+            Some(terrain) if !flies => {
+                let p = speed(terrain);
+                (Tiles::uniform(p, tiles), Tiles::uniform(step(p), tiles))
+            }
+            _ if flies => (Tiles::uniform(100, tiles), Tiles::uniform(step(100), tiles)),
+            _ => {
+                let pct: Vec<u32> = map.terrain.iter().map(speed).collect();
+                let weight = pct.iter().map(|p| step(*p)).collect();
+                (Tiles::from_vec(pct), Tiles::from_vec(weight))
+            }
+        };
+        let min_weight = weight.iter().filter(|w| *w > 0).min().map_or(1, u64::from);
         classes.insert(
             class,
             ClassGrid {
@@ -220,7 +230,7 @@ impl Pathing {
         Self {
             geo,
             classes,
-            occupancy: vec![0; tiles],
+            occupancy: Tiles::uniform(0, tiles),
             queue: VecDeque::new(),
             search: None,
             next_request: 1,
@@ -229,16 +239,29 @@ impl Pathing {
                 .map_or(DEFAULT_NODES_PER_TICK, |v| v.max(1) as u64),
             spacing: radius.saturating_mul(2).saturating_add(100),
             stats: PathStats::default(),
-            g: vec![0; tiles],
-            parent: vec![0; tiles],
-            stamp: vec![0; tiles],
-            closed: vec![0; tiles],
-            h: vec![0; tiles],
+            g: Vec::new(),
+            parent: Vec::new(),
+            stamp: Vec::new(),
+            closed: Vec::new(),
+            h: Vec::new(),
             generation: 0,
             space,
             spread: BTreeMap::new(),
             shared: BTreeMap::new(),
             components: std::sync::Mutex::new(BTreeMap::new()),
+        }
+    }
+
+    /// Sizes the search workspace on the surface's first search; until then it holds nothing,
+    /// as a surface nobody searches (most of system space) needs none.
+    pub fn workspace(&mut self) {
+        let tiles = self.occupancy.len();
+        if self.stamp.len() != tiles {
+            self.g = vec![0; tiles];
+            self.parent = vec![0; tiles];
+            self.stamp = vec![0; tiles];
+            self.closed = vec![0; tiles];
+            self.h = vec![0; tiles];
         }
     }
 
@@ -614,6 +637,7 @@ impl Pathing {
         } else {
             self.nearest_open(class, anchor, start).unwrap_or(start)
         };
+        self.workspace();
         self.generation = self.generation.wrapping_add(1);
         if self.generation == 0 {
             self.stamp.fill(0);

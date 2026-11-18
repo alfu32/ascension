@@ -1,4 +1,4 @@
-//! Little-endian LEB128 run-length coding for grids and raw words for bit sets.
+//! Little-endian LEB128 run-length coding for grids and bit sets.
 
 use crate::SaveError;
 
@@ -74,22 +74,34 @@ pub fn decode_runs(bytes: &[u8], expected: usize) -> Result<Vec<u32>, SaveError>
     Ok(out)
 }
 
-/// Words as little-endian bytes.
+/// Words of a bit set as (word, run length) pairs (format 12, task 99: the fog of system
+/// space is mostly empty); no words give no bytes.
 pub fn encode_words(words: &[u64]) -> Vec<u8> {
-    words.iter().flat_map(|w| w.to_le_bytes()).collect()
+    let mut out = Vec::new();
+    let mut at = 0;
+    while at < words.len() {
+        let run = words[at..].iter().take_while(|w| **w == words[at]).count();
+        put(&mut out, words[at]);
+        put(&mut out, run as u64);
+        at += run;
+    }
+    out
 }
 
-/// Little-endian bytes as words.
+/// Run-length pairs as words; the caller checks the count.
 pub fn decode_words(bytes: &[u8]) -> Result<Vec<u64>, SaveError> {
-    if !bytes.len().is_multiple_of(8) {
-        return Err(SaveError::Corrupt("bit set length"));
+    let mut out = Vec::new();
+    let mut at = 0;
+    while at < bytes.len() {
+        let word = take(bytes, &mut at)?;
+        let run = usize::try_from(take(bytes, &mut at)?)
+            .map_err(|_| SaveError::Corrupt("bit set run out of range"))?;
+        if run == 0 || run > (1 << 26) - out.len() {
+            return Err(SaveError::Corrupt("bit set run length"));
+        }
+        out.resize(out.len() + run, word);
     }
-    Ok(bytes
-        .as_chunks::<8>()
-        .0
-        .iter()
-        .map(|c| u64::from_le_bytes(*c))
-        .collect())
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -110,8 +122,12 @@ mod tests {
 
     #[test]
     fn words_round_trip() {
-        let words = vec![1, u64::MAX, 0x0123_4567_89ab_cdef];
-        assert_eq!(decode_words(&encode_words(&words)).unwrap(), words);
-        assert!(decode_words(&[1, 2, 3]).is_err());
+        let words = [vec![1, u64::MAX, 0x0123_4567_89ab_cdef], vec![0; 5000]].concat();
+        let bytes = encode_words(&words);
+        assert!(bytes.len() < 32);
+        assert_eq!(decode_words(&bytes).unwrap(), words);
+        assert_eq!(decode_words(&[]).unwrap(), Vec::<u64>::new());
+        assert!(decode_words(&bytes[..bytes.len() - 1]).is_err());
+        assert!(decode_words(&[1, 0]).is_err());
     }
 }

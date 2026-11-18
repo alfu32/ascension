@@ -232,7 +232,7 @@ never a style key.
 | Cluster (`map.many_worlds`) | `nearest` | a seeded star and its nearest neighbours: the homes plus `neutral_systems_min..max` (2 to 4), within `star_map_radius` (the key stays: saves and scripts name it) |
 | Solar (`map.solar`) | `single` | one seeded catalogue star whose system holds every home planet (with separate worlds, each race its own planet), `habitable_per_system_min..max` − 1 more planets, and the resource bodies; no routes |
 | Quadrant (`map.quadrant`) | `quadrant` | every catalogue star in one galactic quadrant (`star.glon_mdeg` / 90 000; the seed chooses it and keeps it through the layout's retries) |
-| Galaxy (held back) | `all` | every catalogue star: 745 systems. The seed has no row for it until the simulation makes a system's space on first visit: the match world grows by about 12 MB a system and was killed at 8.4 GB (`world-model.md` "Scale"). The `all` region and its tests stay; the tests make the row themselves (a copy of Quadrant's) |
+| Galaxy (`map.galaxy`) | `all` | every catalogue star: 745 systems. Held back by task 89 (the match world grew by about 12 MB a system and was killed at 8.4 GB) and put back by task 99, appended last as before: system space now costs little until it is used (`world-model.md` "Scale") |
 
 `neutral_systems_*` and `star_map_radius` bound the `nearest` region only (the
 other rows carry 0 and the catalogue's extent, 8 300). In Quadrant (and Galaxy) the
@@ -1524,6 +1524,10 @@ back. No SQL runs in `rom-sim`.
 - **Rally points.** `entity_rally(entity_id, target_entity_id | x, y, face, body)`
   (task 64). Not part of the state hash while no producer has one, so worlds
   without rally points keep their hashes.
+- **Light system space of task 99 (format 12).** `player_vision.explored` holds (word, run)
+  pairs in LEB128 instead of raw words, and is empty when nothing is explored;
+  `surface.territory` is empty when no tile is owned. An untouched star system writes its
+  terrain as one run and almost nothing else. Format 11 saves are refused.
 - **Bringing life of task 77 (format 11).** `body_dormant` and `body_life` rows (see
   "Bringing life"). Format 10 saves are refused.
 - **Ascension of task 76 (format 10).** `player.origin_faction_id`, `ascended_tick`,

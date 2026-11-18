@@ -105,10 +105,10 @@ fn check_territory(w: &World) {
         w.tick
     );
     let mut owned: BTreeMap<PlayerId, u64> = BTreeMap::new();
-    for winner in &w.surfaces[0].territory.winner {
-        if *winner != 0 {
+    for winner in w.surfaces[0].territory.winner.iter() {
+        if winner != 0 {
             *owned
-                .entry(w.territory.emitters[&EntityId(*winner)].owner)
+                .entry(w.territory.emitters[&EntityId(winner)].owner)
                 .or_default() += 1;
         }
     }

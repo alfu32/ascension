@@ -5239,27 +5239,25 @@ DROP TABLE deposit;
 
 -- Task 89: map styles from the star catalogue (docs/world-model.md "Map styles"). Many Worlds is
 -- shown as Cluster; its key stays, since saves and scripts name it. Solar puts every race's home
--- planet in one system; Quadrant takes every catalogue star in one galactic quadrant. Defined last
--- so every earlier definition id stays. Galaxy (star_region 'all', every star) is held back until
--- the simulation makes a system's space on first visit: with 745 systems the world does not fit
--- in memory (docs/world-model.md "Scale").
+-- planet in one system; Quadrant takes every catalogue star in one galactic quadrant, Galaxy every
+-- star. Defined last so every earlier definition id stays.
 UPDATE def SET name='Cluster' WHERE key='map.many_worlds';
 INSERT INTO def(kind,key,name) VALUES
- ('map_style','map.solar','Solar'), ('map_style','map.quadrant','Quadrant');
+ ('map_style','map.solar','Solar'), ('map_style','map.quadrant','Quadrant'), ('map_style','map.galaxy','Galaxy');
 INSERT INTO map_style(id,planets,fluid_pct,space_pct,polar_cap_pct,start_latitude_max_mdeg,polar_terrain_id,params,
   planet_n_min,planet_n_median,planet_n_max,route_extra_pct,life_n,life_terrain_id)
  SELECT d.id, m.planets, m.fluid_pct, m.space_pct, m.polar_cap_pct, m.start_latitude_max_mdeg, m.polar_terrain_id, m.params,
   m.planet_n_min, m.planet_n_median, m.planet_n_max, m.route_extra_pct, m.life_n, m.life_terrain_id
  FROM def d, map_style m JOIN def md ON md.id=m.id AND md.key='map.many_worlds'
- WHERE d.key IN ('map.solar','map.quadrant') ORDER BY d.id;
+ WHERE d.key IN ('map.solar','map.quadrant','map.galaxy') ORDER BY d.id;
 -- Solar: every home planet and 1..3 more planets in one system (habitable counts the home, as in a
--- home system of the other styles), and a richer set of resource bodies. Quadrant: the systems
--- beyond the homes are mostly empty: up to two planets and a few resource bodies.
--- star_map_radius bounds the nearest region only; a quadrant spans the catalogue's depth (Nu Cephei
--- at 8 243).
+-- home system of the other styles), and a richer set of resource bodies. Quadrant and Galaxy:
+-- the systems beyond the homes are mostly empty: up to two planets and a few resource bodies.
+-- star_map_radius bounds the nearest region only; the others span the catalogue (Nu Cephei at 8 243).
 WITH v(k,region,h0,h1,r0,r1,radius) AS (VALUES
   ('map.solar',    'single',   2,4, 6,12, 1000),
-  ('map.quadrant', 'quadrant', 0,2, 2,6,  8300))
+  ('map.quadrant', 'quadrant', 0,2, 2,6,  8300),
+  ('map.galaxy',   'all',      0,2, 2,6,  8300))
 UPDATE map_style SET star_region=v.region, neutral_systems_min=0, neutral_systems_max=0,
   habitable_per_system_min=v.h0, habitable_per_system_max=v.h1,
   resource_bodies_per_system_min=v.r0, resource_bodies_per_system_max=v.r1, star_map_radius=v.radius
@@ -5269,7 +5267,7 @@ INSERT INTO map_style_feature(map_style_id,feature_def_id,region_kind,pattern,ch
  SELECT d.id, f.feature_def_id, f.region_kind, f.pattern, f.chance_pct, f.coverage_pct, f.clumps_min, f.clumps_max,
   f.size_min, f.size_max, f.start_min_dist, f.start_max_dist
  FROM def d, map_style_feature f JOIN def md ON md.id=f.map_style_id AND md.key='map.many_worlds'
- WHERE d.key IN ('map.solar','map.quadrant') ORDER BY d.id, f.id;
+ WHERE d.key IN ('map.solar','map.quadrant','map.galaxy') ORDER BY d.id, f.id;
 
 -- Start placement, a setup option for every map style (owner, 2026-11-18): each race on its own
 -- home planet (separate, the default), or players of different races together on as few home

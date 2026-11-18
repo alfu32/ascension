@@ -163,7 +163,7 @@ system (habitable planets, resource bodies, routes) stay as they are.
 | Solar | one star system for everyone: a catalogue star chosen by the seed, whose system holds every player's home, one to three more planets and the resource bodies. With separate worlds each race has its own planet of the system. Travel is within the system only |
 | Cluster | the earlier Many Worlds (the key `map.many_worlds` stays): a seeded star and its nearest neighbours, the homes plus two to four more systems; same seeds, same universes |
 | Quadrant | every catalogue star in one galactic quadrant as astronomers number them (galactic longitude seen from the Sun: I 0-90, II 90-180, III 180-270, IV 270-360 degrees; 163 to 225 stars); the seed chooses the quadrant |
-| Galaxy | every catalogue star: 745 systems. **Held back**: not in the seed, so the launchers do not offer it, until the simulation makes a system's space on first visit ("Scale" below) |
+| Galaxy | every catalogue star: 745 systems. Held back by task 89 for want of memory and offered again since task 99, which made system space cost little until it is used ("Scale" below) |
 
 In Quadrant (and Galaxy) most systems are empty of people: beyond the homes each holds up to two
 planets and a few resource bodies. The homes are placed and checked as in a Cluster (density band,
@@ -191,27 +191,41 @@ on the same planet"), the `match_option` `start_placement`:
 `rom duel --universe` take `--start-placement separate|together`. The launchers do not offer it
 yet.
 
-#### Scale (measured 2026-11-18, release build, two players)
+#### Scale (measured 2026-11-18, release build, two players, seed 1)
 
-| Style | Systems | Generation | Building the match world | Save | Star map, 1280×800 |
-| --- | --- | --- | --- | --- | --- |
-| Cluster | 5–7 | 0.6 s | 1.8 s, 119 MB | 1.1 MB | 57 fps |
-| Quadrant | 163–225 | 0.6 s | 12.5 s, 2.3 GB | 18.5 MB | 50 fps |
-| Galaxy (held back) | 745 | 1.0 s | over 8.4 GB: killed for want of memory | — | not run |
+Task 89 measured the styles and held the Galaxy back; task 99 made system space cheap. Each cell
+reads before → after task 99; memory is the peak resident size, every run under a 6 GB cap.
 
-Generation (`rom-mapgen`) is quick at every size. What does not scale is the simulation's world:
-`rom-sim` makes a flat space map of about 512 × 512 tiles for every star system when the match
-starts (`build_space`), and the world's memory grows by about 12 MB a system. A 20 000-tick Quadrant duel
-of computer players took 35 s and 2.1 GB; the same on the Galaxy took 395 s and 7.4 GB, and
-building a Galaxy world for a match was killed at 8.4 GB. So the Galaxy is held back: the
-`all` region stays in `rom-mapgen` with its tests (which make the style themselves), but the seed
-has no `map.galaxy` row until a system's space is made only when someone first goes there, as
-planets are (a card of its own).
+| Style | Systems | Building the match world | 20 000-tick duel of computer players | 20 000 ticks with ships in space | Save | Star map, 1280×800 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Cluster | 5–7 | 0.95 s, 119 MB → 0.73 s, 41 MB | 2.5 s, 86 MB → 2.3 s, 32 MB | 7.3 s, 131 MB → 6.8 s, 50 MB (seed 2) | 1.1 MB → 0.3 MB | 57 → 56 fps |
+| Quadrant | 163–225 | 6.6 s, 2.3 GB → 1.4 s, 220 MB | 10.3 s, 2.1 GB → 5.3 s, 211 MB | 16.9 s, 2.3 GB → 10.7 s, 228 MB | 18.5 MB → 0.55 MB | 50 → 47 fps |
+| Galaxy | 745 | killed at 8.4 GB → 4.0 s, 784 MB | 395 s, 7.4 GB → 15.9 s, 775 MB | not run → 19.1 s, 790 MB | — → 1.2 MB | not run → 13 fps |
+
+Generation (`rom-mapgen`) is quick at every size (1.7 s for the Galaxy). The world used to grow
+by about 12 MB a system: `build_space` gives every star system a flat map of up to 512 × 512
+tiles, and every per-tile layer of it was stored whole: the movement grids of each movement
+class, building occupancy, the path search workspace, the border grid and each player's viewer
+counts and explored bits. Task 99 keeps the maps (bodies, markers and positions are unchanged, so
+are the state hashes) but stores those layers as one value plus the 1 024-tile chunks someone
+has written (`rom-sim` `Tiles`): a map of one terrain keeps one speed per movement class, and
+the search workspace is made at a surface's first search. What remains is the terrain itself,
+4 bytes a tile (about 730 MB of the Galaxy's 784 MB), which `Surface::terrain()` hands to the
+app as a slice. Nothing is generated during the match: the maps exist from the first tick, only
+their storage is light. A save writes an untouched system's terrain as one run and its fog as
+empty (save format 12). The durations are with the machine otherwise busy; the before figures
+for the Galaxy are task 89's.
+
+The Galaxy star map draws at 13 fps (the system view too), the Quadrant's at 47: the per-frame
+cost grows with the universe in the app, not in the simulation's tick (open, see task 99's
+report).
 
 Screenshots (scripts `tasks/89-*-script.txt`, seed 1, `--ai none`): `img/starmap-style-cluster.png`,
 `img/starmap-style-quadrant.png` (quadrant III, the star map at its widest) and
 `img/starmap-style-solar.png` (one system; the celestial home's ring beside it), and
-`img/solar-system-homes.png` (the Solar system Zavijava with the home planets of three races).
+`img/solar-system-homes.png` (the Solar system Zavijava with the home planets of three races);
+`img/starmap-style-galaxy.png` (task 99, the Galaxy at the star map's widest zoom, script
+`tasks/100-quadrant-script.txt` with `--style map.galaxy`).
 
 ## Camera and visibility by age
 

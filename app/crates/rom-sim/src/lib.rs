@@ -40,6 +40,7 @@ mod stance;
 mod surface;
 mod tactics;
 mod territory;
+mod tiles;
 mod transport;
 mod universe;
 mod victory;

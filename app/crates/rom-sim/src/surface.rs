@@ -34,9 +34,14 @@ impl Surface {
         if geo.tiles() != map.terrain.len() {
             return Err(SimError::InvalidMap);
         }
+        // Runs of one terrain (all of system space) are looked up once.
+        let mut checked = None;
         for terrain in &map.terrain {
-            if !rules.terrains.contains_key(terrain) {
-                return Err(SimError::UnknownTerrain(*terrain));
+            if checked != Some(terrain) {
+                if !rules.terrains.contains_key(terrain) {
+                    return Err(SimError::UnknownTerrain(*terrain));
+                }
+                checked = Some(terrain);
             }
         }
         Ok(Self {
