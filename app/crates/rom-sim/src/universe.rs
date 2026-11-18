@@ -261,11 +261,19 @@ impl World {
             return Err(SimError::UnknownBody(body));
         }
         let surface = Surface::new(&self.rules, body, map, topology)?;
+        let mut last = None;
         self.victory.ownable_tiles += surface
             .map
             .terrain
             .iter()
-            .filter(|terrain| self.rules.terrains[terrain].layer == rom_rules::Layer::Ground)
+            .filter(|terrain| {
+                // Runs of one terrain (all of system space) are looked up once.
+                if last.is_none_or(|(t, _)| t != **terrain) {
+                    let ground = self.rules.terrains[terrain].layer == rom_rules::Layer::Ground;
+                    last = Some((**terrain, ground));
+                }
+                last.is_some_and(|(_, ground)| ground)
+            })
             .count() as u64;
         let at = self.surfaces.partition_point(|s| s.body() < body);
         self.surfaces.insert(at, surface);
@@ -491,6 +499,38 @@ mod tests {
                     .insert(EntityId(9));
             });
         }
+    }
+
+    /// Task 99: system space costs one value per layer until it is used, and every layer
+    /// hashes the same whether it is stored as one value or one per tile, so the state hash is
+    /// the one the dense layers gave before.
+    #[test]
+    fn untouched_space_holds_one_value_per_layer_and_hashes_as_dense_layers() {
+        let mut w = world();
+        for _ in 0..5 {
+            w.step();
+        }
+        let space = w.slot(w.space_of(2).unwrap());
+        let s = &w.surfaces[space];
+        assert_eq!(s.pathing.occupancy.uniform_value(), Some(0));
+        assert_eq!(s.territory.winner.uniform_value(), Some(0));
+        assert_eq!(s.territory.space.uniform_value(), Some(true));
+        assert!(s.pathing.stamp.is_empty());
+        for v in s.vision.players.values() {
+            assert_eq!(v.count.uniform_value(), Some(0));
+            assert_eq!(v.explored.uniform_value(), Some(0));
+        }
+        let lazy = w.hash();
+        for s in &mut w.surfaces {
+            s.pathing.occupancy.store_all();
+            s.pathing.workspace();
+            s.territory.winner.store_all();
+            for v in s.vision.players.values_mut() {
+                v.count.store_all();
+                v.explored.store_all();
+            }
+        }
+        assert_eq!(w.hash(), lazy);
     }
 
     #[test]

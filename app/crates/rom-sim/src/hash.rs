@@ -1,14 +1,56 @@
 //! Stable field-by-field FNV-1a state serialization.
 
-use crate::{Order, OrderStatus, Pos, Surface, Topology, World, geometry::Tile, pathing::Pathing};
+use crate::{
+    Order, OrderStatus, Pos, Surface, Topology, World, geometry::Tile, pathing::Pathing,
+    tiles::Tiles,
+};
 use std::cmp::Reverse;
 
 struct StateHash(u64);
 
+const PRIME: u64 = 0x100000001b3;
+
 impl StateHash {
     fn bytes(&mut self, bytes: &[u8]) {
         for byte in bytes {
-            self.0 = (self.0 ^ u64::from(*byte)).wrapping_mul(0x100000001b3);
+            self.0 = (self.0 ^ u64::from(*byte)).wrapping_mul(PRIME);
+        }
+    }
+
+    /// Feeds `count` zero bytes at once: XOR with zero leaves the state, so each zero byte
+    /// only multiplies by the prime (task 99: untouched layers of system space).
+    fn zeros(&mut self, mut count: u64) {
+        let mut factor = PRIME;
+        while count > 0 {
+            if count & 1 == 1 {
+                self.0 = self.0.wrapping_mul(factor);
+            }
+            factor = factor.wrapping_mul(factor);
+            count >>= 1;
+        }
+    }
+
+    /// A layer of `u32` tiles, as the same bytes however much of it is stored.
+    fn u32_tiles(&mut self, tiles: &Tiles<u32>) {
+        let (value, chunks) = tiles.chunks();
+        for (len, stored) in chunks {
+            match stored {
+                Some(run) => run.iter().for_each(|v| self.u32(*v)),
+                None if value == 0 => self.zeros(4 * len as u64),
+                None => (0..len).for_each(|_| self.u32(value)),
+            }
+        }
+    }
+
+    /// A layer of `u64` words, as the same bytes however much of it is stored.
+    fn u64_tiles(&mut self, words: &Tiles<u64>) {
+        let (value, chunks) = words.chunks();
+        for (len, stored) in chunks {
+            match stored {
+                Some(run) => run.iter().for_each(|v| self.u64(*v)),
+                None if value == 0 => self.zeros(8 * len as u64),
+                None => (0..len).for_each(|_| self.u64(value)),
+            }
         }
     }
 
@@ -147,9 +189,7 @@ impl StateHash {
             }
         });
         self.u64(pathing.occupancy.len() as u64);
-        for count in &pathing.occupancy {
-            self.u32(*count);
-        }
+        self.u32_tiles(&pathing.occupancy);
         self.u64(pathing.stats.searches);
         self.u64(pathing.stats.nodes);
         self.u64(pathing.stats.repaths);
@@ -607,20 +647,14 @@ impl StateHash {
         }
         self.pathing(&surface.pathing);
         self.u64(surface.territory.winner.len() as u64);
-        for winner in &surface.territory.winner {
-            self.u32(*winner);
-        }
+        self.u32_tiles(&surface.territory.winner);
         let vision = &surface.vision;
         self.u64(vision.players.len() as u64);
         for (player, v) in &vision.players {
             self.u32(player.0);
             self.u64(v.count.len() as u64);
-            for count in &v.count {
-                self.u32(*count);
-            }
-            for bits in &v.explored {
-                self.u64(*bits);
-            }
+            self.u32_tiles(&v.count);
+            self.u64_tiles(&v.explored);
             self.u64(v.memory.len() as u64);
             for ((tile, _), b) in &v.memory {
                 self.u32(*tile);

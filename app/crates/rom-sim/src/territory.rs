@@ -1,6 +1,7 @@
 //! National borders from territory emitters, and city membership of buildings.
 
 use crate::geometry::{Geometry, Tile};
+use crate::tiles::Tiles;
 use crate::{BodyId, EntityId, PlayerId, Pos, World};
 use rom_rules::{EntityClass, Layer};
 use std::cmp::Reverse;
@@ -33,24 +34,30 @@ pub(crate) struct Territory {
 }
 
 /// One surface's incrementally maintained border grid.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct TerritoryGrid {
-    /// Winning emitter per tile; 0 means unowned.
-    pub winner: Vec<u32>,
-    /// Tiles of the space layer, which are never owned; derived from the terrain.
-    pub space: Vec<bool>,
+    /// Winning emitter per tile; 0 means unowned. One value until a tile is owned.
+    pub winner: Tiles<u32>,
+    /// Tiles of the space layer, which are never owned; derived from the terrain. One value
+    /// on a map that is all space or all not.
+    pub space: Tiles<bool>,
 }
 
 impl TerritoryGrid {
     /// An empty border grid for a map.
     pub fn new(rules: &rom_rules::Rules, map: &crate::MapGrid) -> Self {
+        let tiles = map.terrain.len();
+        let space = |t: &rom_rules::DefId| rules.terrains[t].layer == Layer::Space;
+        let uniform = map
+            .terrain
+            .first()
+            .filter(|first| map.terrain.iter().all(|t| t == *first));
         Self {
-            winner: vec![0; map.terrain.len()],
-            space: map
-                .terrain
-                .iter()
-                .map(|t| rules.terrains[t].layer == Layer::Space)
-                .collect(),
+            winner: Tiles::uniform(0, tiles),
+            space: match uniform {
+                Some(terrain) => Tiles::uniform(space(terrain), tiles),
+                None => Tiles::from_vec(map.terrain.iter().map(space).collect()),
+            },
         }
     }
 }
@@ -113,8 +120,8 @@ impl World {
             .winner
             .iter()
             .map(|winner| {
-                if *winner != owner.0 {
-                    owner = (*winner, self.owner_of(*winner).map_or(0, |p| p.0));
+                if winner != owner.0 {
+                    owner = (winner, self.owner_of(winner).map_or(0, |p| p.0));
                 }
                 owner.1
             })

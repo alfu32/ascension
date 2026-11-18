@@ -2,6 +2,7 @@
 //! surface: what a player sees or remembers on one body says nothing about another.
 
 use crate::geometry::Tile;
+use crate::tiles::Tiles;
 use crate::{BodyId, Entity, EntityId, PlayerId, Pos, World};
 use rom_rules::{DefId, EntityClass};
 use std::collections::{BTreeMap, BTreeSet};
@@ -40,10 +41,11 @@ pub enum Sighting<'a> {
 /// One player's viewer counts, explored tiles and memory on one surface.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PlayerVision {
-    /// Own entities seeing each tile.
-    pub count: Vec<u32>,
-    /// One bit per tile, set once the tile has been visible to this player.
-    pub explored: Vec<u64>,
+    /// Own entities seeing each tile; one value until something of the player's looks here.
+    pub count: Tiles<u32>,
+    /// One bit per tile, set once the tile has been visible to this player; one value until
+    /// a tile is seen.
+    pub explored: Tiles<u64>,
     /// Buildings last seen, by position tile and id.
     pub memory: BTreeMap<(u32, EntityId), RememberedBuilding>,
 }
@@ -68,11 +70,11 @@ pub(crate) struct Vision {
     scratch: Vec<u32>,
 }
 
-fn set_bit(bits: &mut [u64], index: usize) {
+fn set_bit(bits: &mut Tiles<u64>, index: usize) {
     bits[index / 64] |= 1 << (index % 64);
 }
 
-fn bit(bits: &[u64], index: usize) -> bool {
+fn bit(bits: &Tiles<u64>, index: usize) -> bool {
     bits[index / 64] & (1 << (index % 64)) != 0
 }
 
@@ -163,8 +165,11 @@ impl World {
             }
         }
         for team in self.team_vision(player, slot) {
-            for (tile, count) in out.iter_mut().zip(&team.count) {
-                if *count > 0 {
+            if team.count.uniform_value() == Some(0) {
+                continue;
+            }
+            for (tile, count) in out.iter_mut().zip(team.count.iter()) {
+                if count > 0 {
                     *tile = 2;
                 }
             }
@@ -275,12 +280,12 @@ impl World {
         self.ensure_vision_on(slot, player);
         let tiles = self.surfaces[slot].tiles();
         if let Some(vision) = self.surfaces[slot].vision.players.get_mut(&player) {
-            vision.explored.fill(u64::MAX);
-            let spare = vision.explored.len() * 64 - tiles;
-            if spare > 0
-                && let Some(last) = vision.explored.last_mut()
-            {
-                *last >>= spare;
+            let explored = &mut vision.explored;
+            explored.set_all(u64::MAX);
+            let spare = explored.len() * 64 - tiles;
+            if spare > 0 {
+                let last = explored.len() - 1;
+                explored[last] >>= spare;
             }
         }
     }
@@ -293,8 +298,8 @@ impl World {
             .players
             .entry(player)
             .or_insert_with(|| PlayerVision {
-                count: vec![0; tiles],
-                explored: vec![0; tiles.div_ceil(64)],
+                count: Tiles::uniform(0, tiles),
+                explored: Tiles::uniform(0, tiles.div_ceil(64)),
                 memory: BTreeMap::new(),
             });
     }
@@ -371,19 +376,16 @@ impl World {
             .expect("ensured vision")
             .count;
         for run in surface.geo.disc(centre, viewer.los) {
-            let first = *run.start();
-            let slice = &mut counts[run];
+            let range = *run.start()..*run.end() + 1;
             if add {
-                for (offset, count) in slice.iter_mut().enumerate() {
+                counts.update(range, |index, count| {
                     if *count == 0 {
-                        fresh.push((first + offset) as u32);
+                        fresh.push(index as u32);
                     }
                     *count += 1;
-                }
+                });
             } else {
-                for count in slice {
-                    *count -= 1;
-                }
+                counts.update(range, |_, count| *count -= 1);
             }
         }
         if !fresh.is_empty() {

@@ -22,6 +22,7 @@ use crate::{
     vision::{PlayerVision, Viewer, Vision},
     wealth::RouteState,
 };
+use crate::tiles::Tiles;
 use rom_geo::CubeSurface;
 use rom_rules::{DefId, Rules, VictoryRule};
 use std::{
@@ -326,7 +327,7 @@ pub struct PathSnapshot {
 pub struct PlayerVisionSnapshot {
     /// The player.
     pub player: PlayerId,
-    /// One bit per tile.
+    /// One bit per tile; empty when no tile is explored (task 99).
     pub explored: Vec<u64>,
     /// Remembered buildings by position tile.
     pub memory: Vec<(u32, RememberedBuilding)>,
@@ -345,7 +346,7 @@ pub struct SurfaceSnapshot {
     pub height: u32,
     /// Terrain per tile.
     pub terrain: Vec<DefId>,
-    /// Winning emitter per tile.
+    /// Winning emitter per tile; empty when no tile is owned (task 99).
     pub winner: Vec<u32>,
     /// Path search state.
     pub path: PathSnapshot,
@@ -828,7 +829,10 @@ impl World {
                     width: s.map.width,
                     height: s.map.height,
                     terrain: s.map.terrain.clone(),
-                    winner: s.territory.winner.clone(),
+                    winner: match s.territory.winner.uniform_value() {
+                        Some(0) => Vec::new(),
+                        _ => s.territory.winner.to_vec(),
+                    },
                     path: PathSnapshot {
                         next_request: pathing.next_request,
                         generation: pathing.generation,
@@ -854,7 +858,10 @@ impl World {
                         .iter()
                         .map(|(player, v)| PlayerVisionSnapshot {
                             player: *player,
-                            explored: v.explored.clone(),
+                            explored: match v.explored.uniform_value() {
+                                Some(0) => Vec::new(),
+                                _ => v.explored.to_vec(),
+                            },
                             memory: v.memory.iter().map(|((tile, _), b)| (*tile, *b)).collect(),
                         })
                         .collect(),
@@ -1090,20 +1097,27 @@ impl World {
             let slot = world.slot(s.body);
             let surface = &mut world.surfaces[slot];
             let tiles = surface.map.terrain.len();
-            if s.winner.len() != tiles {
-                return Err(bad("territory grid length"));
+            if !s.winner.is_empty() {
+                if s.winner.len() != tiles {
+                    return Err(bad("territory grid length"));
+                }
+                surface.territory.winner = Tiles::from_vec(s.winner);
             }
-            surface.territory.winner = s.winner;
             surface.vision.players.clear();
             for v in s.vision {
-                if v.explored.len() != tiles.div_ceil(64) {
+                let words = tiles.div_ceil(64);
+                let explored = if v.explored.is_empty() {
+                    Tiles::uniform(0, words)
+                } else if v.explored.len() == words {
+                    Tiles::from_vec(v.explored)
+                } else {
                     return Err(bad("explored length"));
-                }
+                };
                 surface.vision.players.insert(
                     v.player,
                     PlayerVision {
-                        count: vec![0; tiles],
-                        explored: v.explored,
+                        count: Tiles::uniform(0, tiles),
+                        explored,
                         memory: v
                             .memory
                             .into_iter()
@@ -1144,6 +1158,7 @@ impl World {
                 .collect();
             pathing.search = None;
             if let Some(search) = s.path.search {
+                pathing.workspace();
                 for node in &search.nodes {
                     let index = node.tile as usize;
                     if index >= tiles {
@@ -1332,9 +1347,7 @@ impl World {
                 .ok_or(bad("viewer without vision"))?
                 .count;
             for run in surface.geo.disc(centre, viewer.los) {
-                for count in &mut counts[run] {
-                    *count += 1;
-                }
+                counts.update(*run.start()..*run.end() + 1, |_, count| *count += 1);
             }
         }
         world.territory = Territory {
