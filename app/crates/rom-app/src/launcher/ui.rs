@@ -1107,12 +1107,10 @@ impl Render for Launcher {
                     .gap_3()
                     .p_4()
                     .flex_shrink_0()
-                    .child(
-                        div()
-                            .text_xl()
-                            .text_color(rgb(0xe8c98a))
-                            .child("RISE OF MAN  /  LAUNCHER"),
-                    )
+                    .child(div().text_xl().text_color(rgb(0xe8c98a)).child(format!(
+                        "RISE OF MAN  /  LAUNCHER  {}",
+                        crate::args::VERSION
+                    )))
                     .child(presets)
                     .child(custom.flex_wrap())
                     .child(tabs),

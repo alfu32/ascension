@@ -7,8 +7,9 @@ mod universe;
 pub use sphere::{SpherePlanet, SphereRequest, expand_planet, generate_sphere};
 pub use universe::{
     BLACK_HOLE_NAME, Body, CELESTIAL_PLANET_NAME, CELESTIAL_SYSTEM_NAME, DormantSurface, FAIR_HOPS,
-    FAIR_NEAR_PCT, FAIR_VALUE_PCT, HomeShare, Route, StarSystem, Universe, UniverseRequest,
-    generate_universe, plan_universe,
+    FAIR_NEAR_PCT, FAIR_VALUE_PCT, HomeShare, Route, StarSystem, StartPlacement, Universe,
+    UniverseRequest, generate_universe, generate_universe_placed, plan_universe,
+    plan_universe_placed, seed_quadrant,
 };
 
 use rom_rules::{DefId, FeaturePattern, Layer, MapStyleFeature, Rules};
@@ -157,6 +158,9 @@ pub enum MapGenError {
     /// No attempt produced a star map whose home systems have enough routes.
     #[error("no valid star map layout for {0} systems")]
     StarMap(u32),
+    /// A home planet shared by several players has no fair starts for them (task 89, together).
+    #[error("a shared home planet has no fair starts")]
+    UnfairHome,
 }
 
 fn mix64(mut z: u64) -> u64 {

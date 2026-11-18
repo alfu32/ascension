@@ -639,3 +639,238 @@ fn the_celestial_home_lies_toward_sagittarius_beyond_the_region() {
         assert!(u.fairness(&r).is_empty() || seed > 0);
     }
 }
+
+/// Task 89: every universe map style; `map.galaxy` exists only in [`galaxy_rules`].
+const STYLES: [&str; 5] = [
+    "map.one_world",
+    "map.many_worlds",
+    "map.solar",
+    "map.quadrant",
+    "map.galaxy",
+];
+
+/// The seed plus a Galaxy style made here (task 89): the seed holds it back until the simulation
+/// makes a system's space on first visit, so the test copies the Quadrant row with
+/// `star_region = 'all'`.
+fn galaxy_rules() -> Rules {
+    let conn = build_rules_db(SCHEMA, SEED).unwrap();
+    conn.execute_batch(
+        "INSERT INTO def(kind,key,name) VALUES ('map_style','map.galaxy','Galaxy');
+         CREATE TEMP TABLE galaxy AS SELECT * FROM map_style
+          WHERE id=(SELECT id FROM def WHERE key='map.quadrant');
+         UPDATE galaxy SET id=(SELECT id FROM def WHERE key='map.galaxy'), star_region='all';
+         INSERT INTO map_style SELECT * FROM galaxy;
+         INSERT INTO map_style_feature(map_style_id,feature_def_id,region_kind,pattern,chance_pct,
+           coverage_pct,clumps_min,clumps_max,size_min,size_max,start_min_dist,start_max_dist)
+          SELECT (SELECT id FROM def WHERE key='map.galaxy'), feature_def_id, region_kind, pattern,
+           chance_pct, coverage_pct, clumps_min, clumps_max, size_min, size_max, start_min_dist,
+           start_max_dist
+          FROM map_style_feature WHERE map_style_id=(SELECT id FROM def WHERE key='map.quadrant')
+          ORDER BY id;",
+    )
+    .unwrap();
+    let rules = Rules::load(&conn).unwrap();
+    assert_eq!(rules.validate(), vec![]);
+    rules
+}
+
+/// Systems other than the celestial home.
+fn star_systems(u: &Universe) -> Vec<&rom_mapgen::StarSystem> {
+    u.systems.iter().filter(|s| s.star.is_some()).collect()
+}
+
+/// Task 89: Cluster is the earlier Many Worlds under another name: the same seeds give the same
+/// universes as release 0.0.83 (hashes printed by `rom universe` there).
+#[test]
+fn cluster_gives_the_many_worlds_universes() {
+    let r = rules();
+    let style = r.id_of("map.many_worlds").unwrap();
+    assert_eq!(r.def(style).name, "Cluster");
+    for (seed, four, two) in [
+        (0, 0x72fb_f359_98ab_8443_u64, 0x44f8_19ea_83fa_0907_u64),
+        (1, 0xa855_d9aa_569d_3e3f, 0x706f_4b1d_3754_f836),
+        (2, 0xe29f_d8e1_72cb_500a, 0x0678_073c_f4cb_427f),
+    ] {
+        let u = generate_universe(&r, &request(&r, "map.many_worlds", seed, &FOUR)).unwrap();
+        assert_eq!(u.hash(), four, "seed {seed}, four players");
+        let u = generate_universe(&r, &request(&r, "map.many_worlds", seed, &FOUR[1..3])).unwrap();
+        assert_eq!(u.hash(), two, "seed {seed}, two players");
+    }
+}
+
+#[test]
+fn every_style_is_connected_and_fair_on_20_seeds() {
+    let r = galaxy_rules();
+    assert!(
+        rules().id_of("map.galaxy").is_none(),
+        "the seed holds Galaxy back"
+    );
+    for style in STYLES {
+        for factions in [&FOUR[..], &FOUR[1..3]] {
+            let races: BTreeSet<DefId> = factions
+                .iter()
+                .map(|k| r.race_of(r.id_of(k).unwrap()))
+                .collect();
+            for seed in 0..20 {
+                let u = plan(&r, style, seed, factions);
+                assert_eq!(u.fairness(&r), Vec::<String>::new(), "{style} seed {seed}");
+                let celestial = u.celestial_system().expect("celestial home");
+                for (i, hop) in u.hops_from(1).iter().enumerate() {
+                    assert_eq!(
+                        hop.is_some(),
+                        i as u32 + 1 != celestial,
+                        "{style} seed {seed}"
+                    );
+                }
+                let homes = u.home_systems();
+                assert_eq!(
+                    homes.iter().map(|h| h.0).collect::<BTreeSet<_>>(),
+                    races,
+                    "{style} seed {seed}"
+                );
+                let names: BTreeSet<_> = u.bodies.iter().map(|b| &b.name).collect();
+                assert_eq!(names.len(), u.bodies.len(), "{style} seed {seed}");
+            }
+            let again = plan(&r, style, 7, factions);
+            assert_eq!(plan(&r, style, 7, factions).hash(), again.hash(), "{style}");
+            assert_ne!(plan(&r, style, 8, factions).hash(), again.hash(), "{style}");
+        }
+    }
+}
+
+#[test]
+fn solar_holds_every_home_in_one_system() {
+    let r = rules();
+    let style = &r.map_styles[&r.id_of("map.solar").unwrap()];
+    let ore = r.id_of("node.ore_asteroid").unwrap();
+    for seed in 0..20 {
+        let u = plan(&r, "map.solar", seed, &FOUR);
+        let stars = star_systems(&u);
+        assert_eq!(stars.len(), 1, "seed {seed}");
+        assert!(u.routes.is_empty());
+        let homes = u.home_systems();
+        assert_eq!(homes.len(), 3);
+        assert!(homes.iter().all(|&(_, s)| s == stars[0].id));
+        let planets: Vec<_> = u
+            .bodies
+            .iter()
+            .filter(|b| b.kind == BodyKind::Habitable)
+            .collect();
+        let home_planets: Vec<_> = planets.iter().filter(|b| b.home_race.is_some()).collect();
+        assert_eq!(home_planets.len(), 3, "each race on its own planet");
+        assert!(
+            home_planets
+                .iter()
+                .all(|b| b.n == Some(style.planet_n_median as u32))
+        );
+        let others = (planets.len() - 3) as i64;
+        assert!(
+            (style.habitable_per_system_min - 1..style.habitable_per_system_max).contains(&others)
+        );
+        // Every home planet has the per-player ore asteroid as its own moon.
+        for home in &home_planets {
+            let moon = format!("{} moon", home.name);
+            assert!(
+                u.bodies
+                    .iter()
+                    .any(|b| b.name.starts_with(&moon) && b.node_entity_type == Some(ore)),
+                "seed {seed}: {moon}"
+            );
+        }
+    }
+    // Two players of one race share their planet; the other race has its own.
+    let small = small_planet_rules();
+    let u = generate_universe(&small, &request(&small, "map.solar", 2, &FOUR)).unwrap();
+    assert_eq!(u.starts[0].0, u.starts[1].0);
+    assert_ne!(u.starts[0].0, u.starts[2].0);
+    assert_ne!(u.starts[2].0, u.starts[3].0);
+    assert_eq!(u.fairness(&small), Vec::<String>::new());
+}
+
+#[test]
+fn quadrant_takes_every_star_of_one_galactic_quadrant() {
+    let r = rules();
+    let mut seen = BTreeSet::new();
+    for seed in 0..20 {
+        let u = plan(&r, "map.quadrant", seed, &FOUR[1..3]);
+        let quadrant = i64::from(rom_mapgen::seed_quadrant(seed));
+        seen.insert(quadrant);
+        let in_quadrant: BTreeSet<u32> = r
+            .stars
+            .values()
+            .filter(|s| s.glon_mdeg / 90_000 == quadrant)
+            .map(|s| s.id)
+            .collect();
+        let systems: BTreeSet<u32> = star_systems(&u).iter().filter_map(|s| s.star).collect();
+        assert_eq!(systems, in_quadrant, "seed {seed}");
+    }
+    assert_eq!(seen.len(), 4, "the seeds choose every quadrant");
+}
+
+#[test]
+fn galaxy_takes_every_catalogue_star() {
+    let r = galaxy_rules();
+    let all: BTreeSet<u32> = r.stars.keys().copied().collect();
+    assert_eq!(all.len(), 745);
+    for seed in 0..3 {
+        let u = plan(&r, "map.galaxy", seed, &FOUR);
+        let systems: BTreeSet<u32> = star_systems(&u).iter().filter_map(|s| s.star).collect();
+        assert_eq!(systems, all, "seed {seed}");
+        assert!(u.routes.len() >= all.len() - 1);
+    }
+}
+
+/// The galactic longitude agrees with the published galactic coordinates (task 89).
+#[test]
+fn stars_carry_their_galactic_longitude() {
+    let r = rules();
+    for (name, published) in [
+        ("Sirius", 227_230),
+        ("Vega", 67_450),
+        ("Deneb", 84_280),
+        ("Betelgeuse", 199_790),
+    ] {
+        let star = r.stars.values().find(|s| s.name == name).unwrap();
+        assert!(
+            (star.glon_mdeg - published).abs() <= 10,
+            "{name}: {}",
+            star.glon_mdeg
+        );
+    }
+}
+
+/// Task 89: the start placement. Together puts players of different races on one planet,
+/// spaced and fair; separate is the rules' default and gives the universes it gave before.
+#[test]
+fn together_puts_players_of_different_races_on_one_planet() {
+    use rom_mapgen::{StartPlacement, generate_universe_placed};
+    let r = small_planet_rules();
+    assert_eq!(StartPlacement::of_rules(&r), Ok(StartPlacement::Separate));
+    for style in ["map.many_worlds", "map.solar", "map.quadrant"] {
+        let req = request(&r, style, 4, &FOUR[1..3]);
+        let separate = generate_universe_placed(&r, &req, StartPlacement::Separate).unwrap();
+        assert_eq!(separate, generate_universe(&r, &req).unwrap(), "{style}");
+        assert_ne!(separate.starts[0].0, separate.starts[1].0, "{style}");
+        let together = generate_universe_placed(&r, &req, StartPlacement::Together).unwrap();
+        assert_eq!(together.starts[0].0, together.starts[1].0, "{style}");
+        assert_eq!(together.planets.len(), 1, "{style}: one home planet");
+        assert_eq!(together.fairness(&r), Vec::<String>::new(), "{style}");
+        let planet = &together.planets[&together.starts[0].0];
+        let [a, b] = [0, 1].map(|p| {
+            let v = planet.surface.sphere_point(together.starts[p].1);
+            let v = v.map(f64::from);
+            let len = v.iter().map(|x| x * x).sum::<f64>().sqrt();
+            v.map(|x| x / len)
+        });
+        let angle = (0..3).map(|i| a[i] * b[i]).sum::<f64>().acos().to_degrees();
+        assert!(angle > 45.0, "{style}: starts {angle} degrees apart");
+        let again = generate_universe_placed(&r, &req, StartPlacement::Together).unwrap();
+        assert_eq!(again.hash(), together.hash(), "{style}");
+    }
+    // Four players of three races: one planet for all of them on a median planet.
+    let full = rules();
+    let req = request(&full, "map.solar", 5, &FOUR);
+    let u = generate_universe_placed(&full, &req, StartPlacement::Together).unwrap();
+    assert!(u.starts.iter().all(|s| s.0 == u.starts[0].0));
+    assert_eq!(u.fairness(&full), Vec::<String>::new());
+}

@@ -1,0 +1,4 @@
+# Task 89: a Solar match seen in its one star system: every race's home planet orbits the same
+# star. Run with --universe --style map.solar --zoom-all --view system,home.
+0 grant-age age.galactic
+1 speed 100

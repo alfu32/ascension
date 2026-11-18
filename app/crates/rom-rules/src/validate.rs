@@ -460,9 +460,6 @@ impl Rules {
                 ));
             }
         }
-        if style.habitable_per_system_min < 1 {
-            report("habitable_per_system_min must be at least 1 (home planets)".into());
-        }
         let (lo, mid, hi) = (
             style.planet_n_min,
             style.planet_n_median,

@@ -685,6 +685,30 @@ impl crate::load::SqlEnum for RegionKind {
         }
     }
 }
+/// Which stars of the catalogue a universe takes (`map_style.star_region`, task 89).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum StarRegion {
+    /// SQL value `nearest`: a seeded star and its nearest neighbours, one system per race plus
+    /// the neutral systems, within `star_map_radius`.
+    Nearest,
+    /// SQL value `single`: one seeded star whose system holds every race's home planet.
+    Single,
+    /// SQL value `quadrant`: every star in one seeded galactic quadrant.
+    Quadrant,
+    /// SQL value `all`: every star of the catalogue.
+    All,
+}
+impl crate::load::SqlEnum for StarRegion {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "nearest" => Some(Self::Nearest),
+            "single" => Some(Self::Single),
+            "quadrant" => Some(Self::Quadrant),
+            "all" => Some(Self::All),
+            _ => None,
+        }
+    }
+}
 /// Closed rules vocabulary for BodyKind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BodyKind {
@@ -1812,8 +1836,11 @@ pub struct MapStyle {
     /// Extra routes beyond a spanning tree, as a percentage of its edge count.
     pub route_extra_pct: i64,
     /// Widest region of the star catalogue one universe may span, in map units: systems are
-    /// taken nearest first from a centre star and none lies farther from it than this.
+    /// taken nearest first from a centre star and none lies farther from it than this
+    /// ([`StarRegion::Nearest`] only).
     pub star_map_radius: i64,
+    /// Which catalogue stars a universe takes (task 89).
+    pub star_region: StarRegion,
     /// Cube face size of the dormant surface every resource body gets before play (task 77).
     pub life_n: i64,
     /// The barren ground of a dormant surface; `None`: resource bodies get none.
@@ -1923,6 +1950,9 @@ pub struct Star {
     pub y: i64,
     /// Map position toward the north celestial pole, abstract units.
     pub z: i64,
+    /// Galactic longitude seen from the Sun, milli-degrees 0..360000, computed from the
+    /// right ascension and declination (task 89: `glon_mdeg / 90000` is the quadrant, 0 for I).
+    pub glon_mdeg: i64,
 }
 /// One `constellation_line` row: a stick-figure line, `star_a < star_b`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

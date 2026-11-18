@@ -6,12 +6,20 @@ use std::path::PathBuf;
 pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <file.png>] \
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] [--ai <profile:difficulty,...|none>] [--watch] \
 [--map-size <width>x<height>] [--sphere <n>] [--single-planet] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
-[--universe] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-hud] [--hud-scale <percent>] [--stats] \
+[--universe] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-chrome] [--no-hud] [--hud-scale <percent>] [--stats] \
 [--sun <orbit|fixed|midnight>] [--graticule <on|off>] [--grass <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
 [--middle-drag <turn|pan>] [--invert-horizontal-turn] [--invert-vertical-turn] \
 [--gallery <all|units|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
 [--model <model id>] [--parts] [--pose <idle|move|attack|work>] [--anim-time <seconds>] \
 [--gallery-manifest <file.json>]\n\n--sphere N builds a universe with home face size N (64..=512).\n--single-planet preserves an isolated sphere (16..=512; default 192).";
+
+/// The workspace version, shown in titles, menus and the HUD.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// The title of the game window: the game, its subtitle and the version.
+pub fn window_title() -> String {
+    format!("Ascension — Rise of Man {VERSION}")
+}
 
 /// Default canvas size in pixels when `--size` is not given.
 pub const DEFAULT_SIZE: (u32, u32) = (1280, 800);
@@ -125,6 +133,10 @@ pub struct Options {
     pub load: Option<PathBuf>,
     /// Autosave every this many game minutes; 0 turns it off (hidden option).
     pub autosave_minutes: u32,
+    /// Open the window without the desktop's title bar and borders.
+    pub no_chrome: bool,
+    /// Print the version and exit.
+    pub version: bool,
     /// Print usage and exit.
     pub help: bool,
 }
@@ -210,6 +222,8 @@ impl Default for Options {
             anim_time: None,
             load: None,
             autosave_minutes: DEFAULT_AUTOSAVE_MINUTES,
+            no_chrome: false,
+            version: false,
             help: false,
         }
     }
@@ -361,6 +375,8 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             "--invert-vertical-turn" => options.invert_vertical_turn = true,
             "--look-at" => options.look_at = Some(parse_look_at(&value("--look-at")?)?),
             "--no-hud" => options.no_hud = true,
+            "--no-chrome" => options.no_chrome = true,
+            "--version" | "-V" => options.version = true,
             "--stats" => options.stats = true,
             "--hud-scale" => {
                 let text = value("--hud-scale")?;
@@ -476,6 +492,8 @@ pub fn match_arguments(arguments: &[String]) -> Vec<String> {
             "--demo",
             "--stats",
             "--no-hud",
+            "--no-chrome",
+            "--version",
             "--zoom-out",
             "--zoom-all",
             "--invert-horizontal-turn",
@@ -772,6 +790,13 @@ mod tests {
     fn parses_hud_options() {
         let o = parse(args(&["--no-hud", "--hud-scale", "85", "--stats"])).unwrap();
         assert!(o.no_hud && o.stats);
+        assert!(!o.no_chrome && !o.version);
+        assert!(parse(args(&["--no-chrome"])).unwrap().no_chrome);
+        assert!(parse(args(&["--version"])).unwrap().version);
+        assert_eq!(
+            window_title(),
+            format!("Ascension — Rise of Man {}", env!("CARGO_PKG_VERSION"))
+        );
         assert_eq!(o.hud_scale, Some(85));
         for value in ["0", "201", "bad"] {
             assert!(parse(args(&["--hud-scale", value])).is_err());
