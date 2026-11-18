@@ -32,7 +32,7 @@ WITH v(name,shape,mat,team,attach,params) AS (VALUES
   ('missiles_outer','cylinder','mat.iron',0,'','{"x":-0.98,"y":0.18,"z":-0.4,"w":0.06,"h":0.36,"segments":6,"pitch":90,"repeat":2,"dx":1.96,"tint":"#e2e5e8","far":0}'),
   ('missile_tips_outer','cone','mat.iron',0,'','{"x":-0.98,"y":0.18,"z":-0.04,"w":0.06,"h":0.07,"segments":6,"pitch":90,"repeat":2,"dx":1.96,"tint":"#c3533a","far":0}'),
   ('missile_pylons_outer','box','mat.steel',0,'','{"x":-0.98,"y":0.22,"z":-0.25,"w":0.03,"d":0.18,"h":0.06,"repeat":2,"dx":1.96,"tint":"#4a5260","far":0}'),
-  ('probe','cylinder','mat.iron',0,'','{"y":0.42,"z":1.3,"w":0.03,"h":0.3,"segments":4,"pitch":90,"tint":"#4a5260","far":0}'),
+  ('probe','cylinder','mat.iron',0,'','{"y":0.42,"z":1.3,"w":0.03,"h":0.12,"segments":4,"pitch":90,"tint":"#4a5260","far":0}'),
   ('side_windows','box','mat.light_strip',0,'','{"x":-0.16,"y":0.55,"z":0.85,"w":0.02,"d":0.2,"h":0.04,"repeat":2,"dx":0.32,"far":0}'),
   ('whips','cylinder','mat.iron',0,'','{"x":-0.06,"y":0.7,"z":-0.5,"w":0.015,"h":0.2,"segments":3,"repeat":2,"dx":0.12,"far":0}'),
   ('bay_glow','box','mat.glow',0,'','{"y":0.12,"z":0.1,"w":0.18,"d":0.9,"h":0.02,"far":0}'),

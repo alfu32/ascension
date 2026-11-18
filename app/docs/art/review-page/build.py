@@ -12,6 +12,16 @@ VERSION = sys.argv[3] if len(sys.argv) > 3 else ""
 
 ROUND1 = {"bld.city@ancient", "bld.city@classical", "bld.barracks@ancient",
           "bld.library@ancient", "unit.citizen@any"}
+# Task 93: every starship and orbital craft rebuilt at four times the near triangles, the looks
+# task 92 added, and its two new line ships.
+ROUND14 = {"unit.survey_ship@starfaring", "unit.corvette@starfaring",
+           "unit.space_frigate@starfaring", "unit.space_frigate@expansion",
+           "unit.space_cruiser@expansion", "unit.space_cruiser@abundance",
+           "unit.battleship@abundance", "unit.battleship@galactic",
+           "unit.transport_ship@starfaring", "unit.carrier@starfaring",
+           "unit.space_freighter@starfaring", "unit.satellite@starfaring",
+           "unit.orbital_fighter@starfaring", "unit.orbital_bomber@starfaring",
+           "unit.ship_of_the_line@enlightenment", "unit.dreadnought@modern"}
 NAMES = {"bld.city": "City", "bld.woodcutter_camp": "Woodcutter's camp", "node.relics": "Relic site"}
 
 def name_of(entity):
@@ -133,7 +143,15 @@ OVERVIEW12 = [
 OVERVIEW13 = [
     ("relic-site", "In a match: a relic site in the grass beside an ancient town (placed there for the picture; generated sites lie farther out)"),
 ]
-OVERVIEW = OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
+OVERVIEW14 = [
+    ("93-before-after", "Every ship of this round, before (left) and after (right), close (<code>--gallery &lt;id&gt; --gallery-view close</code>, player 2's blue)"),
+    ("93-starships", "The starships, smallest to largest, near versions: survey ship, corvette, frigate, cruiser, battleship; transport, freighter, carrier"),
+    ("93-generations", "The three classes task 92 moved an age earlier, first look (left) and later look (right): frigate, cruiser, battleship"),
+    ("93-system-close", "System view, zoomed in: a mixed fleet of 60 ships on the plane of the home system (near versions)"),
+    ("93-system-fleet", "System view at the bench framing: the same 60 ships at the distance where they take their far versions"),
+    ("93-sea", "The two new line ships at sea level beside their neighbours: frigate and ship of the line; destroyer and dreadnought"),
+]
+OVERVIEW = OVERVIEW14 if ROUND == "14" else OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
     ("gallery_ancient", "Ancient age, game camera: <code>--gallery ancient</code>"),
     ("gallery_classical", "Classical age, game camera: <code>--gallery classical</code>"),
     ("gallery_classical_close_team2", "Classical age, close, in player 2's blue to show where team colour sits"),
@@ -156,9 +174,12 @@ def round_of(m):
     (automation and fusion), 10 future units (automation and fusion), 11 space-age models
     (starfaring to galactic), 12 the jump inhibitor, the automated colony and the
     alternative lab look (approved: now the Auto Lab, bld.auto_lab@automation), 13 the relic
-    site (task 82)."""
+    site (task 82), 14 the higher-definition spaceships and the two line ships of task 92
+    (task 93)."""
     if m["id"] in ROUND1:
         return 1
+    if m["id"] in ROUND14:
+        return 14
     if m["id"] == "node.relics@any":
         return 13  # task 82
     if m["id"] in ("bld.jump_inhibitor@starfaring", "bld.auto_colony@abundance",

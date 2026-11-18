@@ -30,13 +30,12 @@ WITH v(name,shape,mat,team,attach,params) AS (VALUES
   ('radiators','box','mat.white_metal',0,'','{"x":-0.36,"y":0.6,"z":-1.6,"w":0.03,"d":0.25,"h":0.4,"repeat":2,"dx":0.72,"far":0}'),
   ('fin_light_port','box','mat.signal_red',0,'','{"x":-0.93,"y":0.32,"z":-1.3,"w":0.05,"d":0.06,"h":0.04,"far":0}'),
   ('fin_light_stbd','box','mat.light_strip',0,'','{"x":0.93,"y":0.32,"z":-1.3,"w":0.05,"d":0.06,"h":0.04,"far":0}'),
-  ('engine','cylinder','mat.iron',0,'','{"x":-0.3,"y":0.32,"z":-1.72,"w":0.32,"h":0.4,"segments":8,"pitch":90,"repeat":2,"dx":0.6,"tint":"#4a5260","far":0}'),
-  ('drive','wheel','mat.glow',0,'','{"x":-0.3,"y":0.32,"z":-1.74,"yaw":90,"w":0.26,"t":0.05,"spokes":3,"segments":8,"repeat":2,"dx":0.6,"far":0}'),
-  ('engine_bell','cylinder','mat.cast_iron',0,'','{"x":-0.3,"y":0.32,"z":-1.78,"w":0.371,"h":0.12,"segments":10,"pitch":90,"taper":0.2,"repeat":2,"dx":0.6,"far":0}'),
-  ('engine_band','cylinder','mat.steel',0,'','{"x":-0.3,"y":0.32,"z":-1.48,"w":0.339,"h":0.05,"segments":10,"pitch":90,"repeat":2,"dx":0.6,"tint":"#9aa4b2","far":0}'),
-  ('engine_throat','cylinder','mat.glow',0,'','{"x":-0.3,"y":0.32,"z":-1.795,"w":0.288,"h":0.012,"segments":10,"pitch":90,"repeat":2,"dx":0.6,"far":0}'),
-  ('engine_plume','cone','mat.glow',0,'','{"x":-0.3,"y":0.32,"z":-1.79,"w":0.224,"h":0.144,"segments":10,"pitch":-90,"repeat":2,"dx":0.6,"far":0}'),
-  ('engine_mounts','box','mat.steel',0,'','{"x":-0.3,"y":0.2,"z":-1.45,"w":0.16,"d":0.25,"h":0.12,"repeat":2,"dx":0.6,"tint":"#8e97a3","far":0}'))
+  ('engine','cylinder','mat.iron',0,'','{"x":-0.3,"y":0.32,"z":-1.93,"w":0.32,"h":0.4,"segments":8,"pitch":90,"repeat":2,"dx":0.6,"tint":"#4a5260","far":0}'),
+  ('drive','wheel','mat.glow',0,'','{"x":-0.3,"y":0.32,"z":-1.95,"yaw":90,"w":0.26,"t":0.05,"spokes":3,"segments":8,"repeat":2,"dx":0.6,"far":0}'),
+  ('engine_bell','cylinder','mat.cast_iron',0,'','{"x":-0.3,"y":0.32,"z":-1.99,"w":0.371,"h":0.12,"segments":10,"pitch":90,"taper":0.2,"repeat":2,"dx":0.6,"far":0}'),
+  ('engine_band','cylinder','mat.steel',0,'','{"x":-0.3,"y":0.32,"z":-1.69,"w":0.339,"h":0.05,"segments":10,"pitch":90,"repeat":2,"dx":0.6,"tint":"#9aa4b2","far":0}'),
+  ('engine_throat','cylinder','mat.glow',0,'','{"x":-0.3,"y":0.32,"z":-2.005,"w":0.288,"h":0.012,"segments":10,"pitch":90,"repeat":2,"dx":0.6,"far":0}'),
+  ('engine_mounts','box','mat.steel',0,'','{"x":-0.3,"y":0.2,"z":-1.62,"w":0.16,"d":0.3,"h":0.12,"repeat":2,"dx":0.6,"tint":"#8e97a3","far":0}'))
 INSERT INTO mesh_part(mesh_id,name,shape,material_id,team,attach,params)
  SELECT (SELECT id FROM def WHERE key='mesh.space_freighter_starfaring'), v.name, v.shape, (SELECT id FROM def WHERE key=v.mat), v.team, v.attach, v.params FROM v;
 INSERT INTO entity_visual(entity_type_id,faction_id,age_id,mesh_id,material_id,scale_pct) VALUES
