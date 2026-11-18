@@ -24,7 +24,11 @@ Meshcraft's units there are tiles, the same as the game's (`Rectangle: X 1.500 â
 
 ## Build
 
-1. **Port the blades from Meshcraft**, do not re-derive them:
+1. **Take Meshcraft's parametric grass shader as it is** (owner, 2026-11-18: "you can just take
+   the parametric grass shader from within meshcraft"): its vertex and fragment source, its
+   parameters with the values in `grass-editor.png`, its candidate scheme and its LOD. Change
+   only what the game's frame needs: the inputs (surface triangles, light, camera, fog), the
+   grass-share weight and the far fade below. Do not write a new grass shader. Sources:
    - `../meshcraft/crates/meshcraft-core/src/document/procedural.rs`: `grass_program()` and its
      parameters;
    - `../meshcraft/apps/desktop/src/gpui_procedural.rs`: GPU candidates, one instanced draw,
