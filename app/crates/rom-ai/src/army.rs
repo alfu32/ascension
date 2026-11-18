@@ -65,7 +65,8 @@ const SIEGE_PER: usize = 6;
 /// Score of the wish for a scout when none is out.
 const SCOUT_SCORE: i64 = 700;
 
-/// Own ground fighters that can take orders now, in id order: no ships, no orbital craft.
+/// Own ground fighters that can take orders now, in id order: no spacecraft, no orbital
+/// craft, no warships (the naval manager's).
 pub(crate) fn fighters<'a>(view: &View<'a>) -> Vec<&'a Entity> {
     view.own
         .iter()
@@ -77,6 +78,7 @@ pub(crate) fn fighters<'a>(view: &View<'a>) -> Vec<&'a Entity> {
                 && e.container_id.is_none()
                 && !view.world.is_spacecraft_type(e.type_id)
                 && !view.world.is_craft_type(e.type_id)
+                && !view.cat.is_sea_unit(e.type_id)
         })
         .collect()
 }
@@ -681,7 +683,12 @@ pub(crate) fn intruders(view: &View<'_>, memory: &Memory) -> Option<(Pos, i64)> 
     let mut strength = 0;
     for e in memory.enemies.values() {
         let value = view::strength(view.rules, e.type_id);
-        if e.building || e.tick + RECENT_TICKS < view.tick || value <= 0 {
+        // Ships off the coast are the naval manager's: soldiers cannot reach them.
+        if e.building
+            || e.tick + RECENT_TICKS < view.tick
+            || value <= 0
+            || view.cat.is_sea_unit(e.type_id)
+        {
             continue;
         }
         // Inside own territory or a city's economic radius.
@@ -901,7 +908,9 @@ fn rally_producers(plan: &mut Plan<'_>, rally: Pos) {
                     .into_iter()
                     .flatten()
                     .any(|row| {
-                        row.mode == ProductionMode::Train && is_military(rules, row.product_def_id)
+                        row.mode == ProductionMode::Train
+                            && is_military(rules, row.product_def_id)
+                            && !view.cat.is_sea_unit(row.product_def_id)
                     })
                 && view.world.rally(e.id) != Some(rom_sim::Rally::Point(rally))
                 && !view

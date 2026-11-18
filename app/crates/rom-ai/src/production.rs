@@ -305,18 +305,21 @@ pub(crate) fn note_enemy_peak(view: &View<'_>, memory: &mut Memory) {
     }
 }
 
-/// Wishes for military units and traders.
+/// Wishes for military units and traders. The navy's share of the target (`sea`, task 97)
+/// is left to the naval manager.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn wishes(
     view: &View<'_>,
     weights: &Weights,
     difficulty: &AiDifficulty,
     memory: &Memory,
+    sea: &crate::navy::Sea,
     alarmed: bool,
     second_best: bool,
     wishes: &mut Vec<Wish>,
 ) {
-    let target = army_target(view, weights, difficulty, memory);
-    let army = army_pop(view);
+    let target = army_target(view, weights, difficulty, memory) - sea.target;
+    let army = army_pop(view) - sea.pop;
     if army < target
         && let Some(unit) = choice(view, memory, second_best)
     {
