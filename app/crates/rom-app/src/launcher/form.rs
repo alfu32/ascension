@@ -477,7 +477,7 @@ mod tests {
             );
         }
         assert!(CONTROLS.iter().any(|c| c.flag == "script"));
-        assert_eq!(CONTROLS.len(), 44);
+        assert_eq!(CONTROLS.len(), 45);
     }
 
     #[test]
