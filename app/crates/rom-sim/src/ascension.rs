@@ -99,7 +99,7 @@ impl World {
         matches!(
             self.player_status(player),
             Some(PlayerStatus::Playing | PlayerStatus::Won)
-        ) && self.rules.ascension_ready(p.faction, &p.techs)
+        ) && self.rules.ascension_ready(p.faction, p.age, &p.techs)
     }
 
     /// How long the ascension takes `player`: `ascension.duration_pct` of the research time

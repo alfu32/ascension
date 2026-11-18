@@ -921,4 +921,64 @@ mod tests {
         let nodes = world.entities().filter(|e| e.owner == NEUTRAL).count();
         assert_eq!(nodes, content.planet.nodes.len());
     }
+
+    /// Task 84: the last-age rich start leaves player one ready to ascend, in that age, rich;
+    /// every age's script scans.
+    #[test]
+    fn the_last_age_rich_start_is_ready_to_ascend() {
+        for age in [
+            "00-ancient",
+            "01-classical",
+            "02-medieval",
+            "03-gunpowder",
+            "04-enlightenment",
+            "05-industrial",
+            "06-modern",
+            "07-information",
+            "08-automation",
+            "09-fusion",
+            "10-starfaring",
+            "11-expansion",
+            "12-abundance",
+        ] {
+            let path = format!(
+                "{}/../../docs/tasks/rich-start-{age}-script.txt",
+                env!("CARGO_MANIFEST_DIR")
+            );
+            let text = std::fs::read_to_string(&path).expect("script");
+            let setup = ScriptSetup::scan(&text).expect("scan");
+            assert_eq!(setup.research_all, vec![1], "{path}");
+        }
+        let setup = ScriptSetup::scan(include_str!(
+            "../../../docs/tasks/rich-start-13-galactic-script.txt"
+        ))
+        .expect("scan");
+        let options = crate::args::Options {
+            universe: true,
+            seed: 1,
+            ..crate::args::Options::default()
+        };
+        let content = crate::terrain::generate_universe_content(&options).expect("universe");
+        let mut game = build_universe_match(
+            &content.rules,
+            &content.universe,
+            &content.factions,
+            1,
+            None,
+            &setup,
+        )
+        .expect("match");
+        let me = crate::selection::PLAYER;
+        assert!(!game.world.ascension_ready(me));
+        setup.apply_grants(&mut game.world).expect("grants");
+        assert!(game.world.ascension_ready(me));
+        let p = game
+            .world
+            .players()
+            .find(|p| p.id == me)
+            .expect("player one");
+        assert_eq!(Some(p.age), content.rules.id_of("age.galactic"));
+        let food = content.rules.id_of("res.food").unwrap();
+        assert!(p.resources[&food] >= 100_000);
+    }
 }

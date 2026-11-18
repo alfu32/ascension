@@ -103,11 +103,20 @@ pub struct ScriptSetup {
     /// Players that start with every technology the library offers and the price of the
     /// ascension (`ascension-ready <owner id>`, task 76).
     pub ascension_ready: Vec<u32>,
+    /// Players that start with every technology they could research in their start age
+    /// already researched (`research-all <owner id>`; ascensions and later age advances
+    /// excluded).
+    pub research_all: Vec<u32>,
 }
 
 impl ScriptSetup {
     /// Applies parsed resource grants before the first simulation tick.
     pub fn apply_grants(&self, world: &mut rom_sim::World) -> Result<(), String> {
+        for owner in &self.research_all {
+            world
+                .complete_research_for_setup(rom_sim::PlayerId(*owner))
+                .map_err(|e| e.to_string())?;
+        }
         for (key, amount) in &self.grants {
             let resource = world
                 .rules()
@@ -295,6 +304,13 @@ impl ScriptSetup {
                         .ok_or_else(|| format!("{}: ascension-ready needs an owner id", at()))?;
                     setup.ascension_ready.push(owner);
                 }
+                Some("research-all") => {
+                    let owner = words
+                        .get(2)
+                        .and_then(|o| o.parse().ok())
+                        .ok_or_else(|| format!("{}: research-all needs an owner id", at()))?;
+                    setup.research_all.push(owner);
+                }
                 Some(kind @ ("colony" | "colony-far" | "auto-colony")) => {
                     let owner = words
                         .get(2)
@@ -457,7 +473,7 @@ impl Script {
                     Some(
                         "grant-age" | "grant" | "grant-tech" | "place" | "place-space"
                         | "place-orbit" | "colony" | "colony-far" | "auto-colony"
-                        | "ascension-ready",
+                        | "ascension-ready" | "research-all",
                     ),
                 ) => {
                     continue;

@@ -1,0 +1,16 @@
+# Test start: the Fusion Age (age 9), everything researchable in it already researched, and plenty
+# of every resource for player one (all applied before the first tick).
+# Use: env -u WAYLAND_DISPLAY target/release/rise-of-man <your usual options> --script docs/tasks/rich-start-09-fusion-script.txt
+# Researched: every technology unlocked by this age at any building, the age advances up to it,
+# and their effects (unit and building upgrades, a change of identity). Not researched: later
+# age advances and the ascension. Only player one gets the research and resources; every other
+# player starts in the same age with nothing researched.
+0 grant-age age.fusion
+0 research-all 1
+0 grant res.food 100000
+0 grant res.timber 100000
+0 grant res.metal 100000
+0 grant res.wealth 100000
+0 grant res.knowledge 100000
+0 grant res.oil 100000
+0 grant res.energy 100000

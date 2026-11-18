@@ -1,6 +1,7 @@
 # Test start: plenty of every resource for player one (applied before the first tick).
 # Use: env -u WAYLAND_DISPLAY target/release/rise-of-man <your usual options> --script docs/tasks/rich-start-script.txt
-# Add a line "0 grant-age <age key>" (for example age.industrial) to start further along.
+# Add a line "0 grant-age <age key>" (for example age.industrial) to start further along, or use
+# rich-start-NN-<age>-script.txt, which also starts with everything in that age researched.
 0 grant res.food 100000
 0 grant res.timber 100000
 0 grant res.metal 100000
