@@ -647,6 +647,13 @@ to their owner's ordinary, modified and capped periodic income. The new role
 tag `clergy` authorizes priests. Relics now yield wealth; the obsolete rare
 resource, its resource-yield rows and research modifier have been removed.
 
+A node is drawn with a composed model when its type has an `entity_visual` row, as buildings
+are (task 82): the relic site wears `node.relics@any` (`db/models/node.relics@any.sql`, a
+weathered platform, a trilithon and a gilded reliquary; new material `mat.gold`). Nodes are
+owned by the neutral player, whose faction and age pick the row like any owner's; a node type
+without a row keeps the marker the renderer draws. Each relic site is one relic: a priest
+carries the whole site away, and a dropped relic stands as a whole site again.
+
 `et_trader.route_income` is a delivery amount per `trade.route_unit` of the
 accepted city-centre distance, paid at arrivals rather than per income period.
 `trade.route_unit` is 10000 milli-tiles; `trade.min_route` is 20000 (the value
