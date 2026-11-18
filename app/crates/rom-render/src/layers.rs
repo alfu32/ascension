@@ -55,6 +55,26 @@ impl FrameView {
         View::looking(self.eye, self.target, self.up, size, centre_y)
     }
 
+    /// Whether a sphere of `radius` at `centre` can reach the picture of a canvas with the
+    /// width over height `aspect`: a cone test against the picture's diagonal, with a margin for
+    /// the picture's off-centre projection. Never false for a sphere the eye is inside.
+    pub fn sees_sphere(&self, centre: [f32; 3], radius: f32, aspect: f32) -> bool {
+        const MARGIN: f32 = 0.25;
+        let to = sub(centre, self.eye);
+        let distance = length(to);
+        if distance <= radius * 1.001 {
+            return true;
+        }
+        let ahead = sub(self.target, self.eye);
+        let ahead_length = length(ahead).max(1e-9);
+        let cos = ((0..3).map(|i| to[i] * ahead[i]).sum::<f32>() / (distance * ahead_length))
+            .clamp(-1.0, 1.0);
+        let tan = (FOV_DEGREES.to_radians() / 2.0).tan();
+        let half_diagonal = (tan * (1.0 + aspect * aspect).sqrt()).atan();
+        let reach = half_diagonal + (radius / distance).asin() + MARGIN;
+        cos.acos() <= reach
+    }
+
     /// Distance from the eye to `point`.
     pub fn distance_to(&self, point: [f32; 3]) -> f32 {
         length(sub(point, self.eye))
@@ -310,6 +330,23 @@ pub fn morph_size(planet: f32, system: f32, t: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_sphere_behind_or_far_aside_is_out_of_the_picture() {
+        let view = FrameView {
+            eye: [0.0, 0.0, 100.0],
+            target: [0.0, 0.0, 0.0],
+            up: [0.0, 1.0, 0.0],
+        };
+        let aspect = 1.6;
+        assert!(view.sees_sphere([0.0, 0.0, 0.0], 10.0, aspect));
+        assert!(view.sees_sphere([20.0, 5.0, 0.0], 10.0, aspect));
+        // Behind the eye, and far off to the side.
+        assert!(!view.sees_sphere([0.0, 0.0, 500.0], 10.0, aspect));
+        assert!(!view.sees_sphere([5000.0, 0.0, 0.0], 10.0, aspect));
+        // The eye inside the sphere: always seen.
+        assert!(view.sees_sphere([0.0, 0.0, 130.0], 50.0, aspect));
+    }
 
     #[test]
     fn frames_nest_and_round_trip() {

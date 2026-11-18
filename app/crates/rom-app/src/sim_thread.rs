@@ -25,7 +25,7 @@ use crate::match_setup::planet_surface;
 use crate::saves::{self, Kind, SaveRequest, SaveSetup, Saved};
 use crate::script::{Script, ScriptAction};
 use crate::selection::{Controller, PLAYER, ViewCtx};
-use crate::space_view::{Notices, SpaceFrame, dress_ships, space_snapshot};
+use crate::space_view::{Notices, SpaceFrame, SystemIndex, dress_ships, space_snapshot_with};
 
 /// The universe the simulation thread expands planets from, and which planet is shown.
 pub struct UniverseHost {
@@ -915,6 +915,8 @@ struct Memory {
     fog: FogPublisher,
     motions: Motions,
     terrain: Option<TerrainKnowledge>,
+    /// The bodies of each system, indexed on the first publish.
+    systems: Option<SystemIndex>,
 }
 
 /// A per-player view of resource terrain, refreshed on age and planet changes.
@@ -983,7 +985,10 @@ fn publish(
     bridge.publish_snapshot(Arc::new(snapshot));
     if let Some(host) = host {
         let system = bridge.view_state().system.unwrap_or(host.home_system);
-        let mut space = space_snapshot(world, system, &sightings);
+        let index = memory
+            .systems
+            .get_or_insert_with(|| SystemIndex::new(world));
+        let mut space = space_snapshot_with(world, index, system, &sightings);
         dress_ships(&mut space, world, models);
         bridge.publish_space(Arc::new(space));
     }
@@ -1548,6 +1553,7 @@ mod tests {
     use super::*;
     use crate::args::Options;
     use crate::match_setup::build_match;
+    use crate::space_view::space_snapshot;
     use crate::terrain::generate_content;
     use rom_sim::EntityId;
 
