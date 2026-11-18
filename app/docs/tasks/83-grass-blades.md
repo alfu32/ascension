@@ -28,7 +28,12 @@ Meshcraft's units there are tiles, the same as the game's (`Rectangle: X 1.500 â
    the parametric grass shader from within meshcraft"): its vertex and fragment source, its
    parameters with the values in `grass-editor.png`, its candidate scheme and its LOD. Change
    only what the game's frame needs: the inputs (surface triangles, light, camera, fog), the
-   grass-share weight and the far fade below. Do not write a new grass shader. Sources:
+   grass-share weight and the far fade below. Do not write a new grass shader.
+   **Simplify where the game does not need something** (owner, same day: "maybe no mat colour
+   uniform or LOD or budget is needed"): drop the material-colour uniform if blades can take
+   the ground colour from the terrain's own blend; drop Meshcraft's LOD and candidate budget if
+   the game's far fade and a fixed patch around the camera already bound the work. Say what
+   you dropped and why. Sources:
    - `../meshcraft/crates/meshcraft-core/src/document/procedural.rs`: `grass_program()` and its
      parameters;
    - `../meshcraft/apps/desktop/src/gpui_procedural.rs`: GPU candidates, one instanced draw,
@@ -60,7 +65,7 @@ Meshcraft's units there are tiles, the same as the game's (`Rectangle: X 1.500 â
 5. **A setting.** Grass detail Off / On in the graphics settings (default On), next to the
    existing graphics settings. With Off, nothing changes from today.
 6. **Budget.** This machine's Intel HD 530 is the floor: `--bench` drops at most 10 % with
-   blades On, against the same build with Off. Keep a candidate budget like Meshcraft's.
+   blades On, against the same build with Off. Bound the work (a budget like Meshcraft's, or the fixed patch and fade if that is enough).
 
 Read first: `AGENTS.md`, `CLAUDE.md`, `research/02-rendering-ui-stack.md` (render thread,
 shaders, baking), `app/docs/world-model.md` (the planet surface), `app/docs/art-direction.md`,
@@ -78,7 +83,7 @@ the terrain shader and materials code, and the Meshcraft files above.
 - Tests:
   - placement is the same for the same seed and frame;
   - no candidates past the far distance, and none where the grass share is zero;
-  - the budget is never exceeded;
+  - the work stays bounded (the budget, or the patch size);
   - the setting Off draws nothing.
 - The playthrough hash is unchanged.
 - Screenshots you looked at, 1672Ã—941, in `app/docs/img/`, with scripts in
