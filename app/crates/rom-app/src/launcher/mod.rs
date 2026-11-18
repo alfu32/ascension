@@ -222,13 +222,14 @@ pub(crate) fn run(arguments: &[String]) -> ExitCode {
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::centered(size(px(1100.), px(850.)), cx)),
             titlebar: Some(TitlebarOptions {
-                title: Some("Rise of Man · Launcher".into()),
+                title: Some(format!("Rise of Man · Launcher {}", crate::args::VERSION).into()),
                 ..Default::default()
             }),
             app_id: Some("rise-of-man-launcher".into()),
             ..Default::default()
         };
         let opened = cx.open_window(options, move |window, cx| {
+            window.set_window_title(&format!("Rise of Man · Launcher {}", crate::args::VERSION));
             let view = cx.new(|cx| {
                 ui::Launcher::new(config, catalog, path, executable, warning, window, cx)
             });

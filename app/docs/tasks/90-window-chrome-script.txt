@@ -1,0 +1,9 @@
+# Screenshots of task 90 (run from app/ after `cargo build --release --locked`).
+# Window captures use ImageMagick `import -window <id>` on the id read from `xwininfo -root -tree`
+# (the frame window "mutter-x11-frames" for the title bar; the client window for --no-chrome).
+# window-chrome.png      1330x887: whole window with the desktop title bar, client area 1280x800
+env -u WAYLAND_DISPLAY target/release/rise-of-man --single-planet --sphere 64 --seed 1 --size 1280x800 --after 12 --screenshot target/shot-chrome.png
+# window-no-chrome.png   1280x800: same with --no-chrome
+env -u WAYLAND_DISPLAY target/release/rise-of-man --single-planet --sphere 64 --seed 1 --size 1280x800 --after 12 --no-chrome --screenshot target/shot-nochrome.png
+# hud-version.png: bottom right corner of shot-chrome.png, 260x80 at +1020+720, enlarged 4x
+convert target/shot-chrome.png -crop 260x80+1020+720 +repage -filter point -resize 400% docs/img/hud-version.png

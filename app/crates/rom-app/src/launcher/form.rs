@@ -66,6 +66,7 @@ controls! {
     ("scale", 1, "100", "Internal render resolution, 50–100 percent.", false),
     ("grass", 1, "on", "Grass detail: blades on the ground near the camera, on or off.", false),
     ("hud-scale", 1, "", "HUD scale, 25–200 percent; blank uses automatic scaling.", false),
+    ("no-chrome", 1, "false", "Open the game window without the desktop title bar and borders (default: with them).", true),
     ("no-hud", 1, "false", "Hide the match HUD.", true),
     ("stats", 1, "false", "Show diagnostic frame and simulation counters.", true),
     ("view", 2, "", "Initial view over home: surface, globe, system or star map.", false),
@@ -400,6 +401,7 @@ mod tests {
             ("scale", "75"),
             ("grass", "off"),
             ("hud-scale", "85"),
+            ("no-chrome", "true"),
             ("no-hud", "true"),
             ("stats", "true"),
             ("view", "system,home"),
@@ -477,7 +479,7 @@ mod tests {
             );
         }
         assert!(CONTROLS.iter().any(|c| c.flag == "script"));
-        assert_eq!(CONTROLS.len(), 45);
+        assert_eq!(CONTROLS.len(), 46);
     }
 
     #[test]

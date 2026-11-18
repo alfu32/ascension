@@ -1282,12 +1282,25 @@ impl HudPainter {
         if h.data_tab == 4 {
             self.research_overview(l, &h.overview);
         }
+        // The version, small, in the bottom right corner nothing else uses.
+        self.text(
+            version_label(),
+            l.map(R, Rect::new(1470.0, 905.0, 150.0, 14.0)),
+            TextSize::Small,
+            Align::Right,
+            MUTED,
+        );
         if let Some(drag) = overlay.drag_box {
             self.solid(drag, [63, 208, 255, 36]);
             self.frame(drag, (1.5 * l.scale).max(1.0), CYAN);
         }
         &self.quads
     }
+}
+
+/// The text of the HUD's version label: the workspace version.
+pub fn version_label() -> &'static str {
+    env!("CARGO_PKG_VERSION")
 }
 
 /// A rate with its sign and thousands separators: `+1,234`, `-56`, `+0`.
@@ -1312,4 +1325,13 @@ fn number(value: i64) -> String {
         result.push(ch);
     }
     result
+}
+
+#[cfg(test)]
+mod version_tests {
+    #[test]
+    fn the_version_label_is_the_package_version() {
+        assert_eq!(super::version_label(), env!("CARGO_PKG_VERSION"));
+        assert!(!super::version_label().is_empty());
+    }
 }

@@ -149,6 +149,19 @@ an event feed exists, and submitted research appears after activation. No
 simulation crate or database change is needed.
 
 `--no-hud` hides the HUD and restores the full-frame projection centre.
+
+The workspace version is drawn small in the bottom right corner (below the data panel, which
+nothing else uses), right-aligned in the muted colour; it is the text of
+`rom_render::hud::version_label()`. The window title reads `Ascension — Rise of Man <version>`;
+the in-match menu and the launcher show it too, and `rise-of-man --version` prints it.
+
+## Window chrome
+
+The game window opens with the desktop's own title bar and borders (GPUI server-side
+decorations: move, minimise, maximise, resize, close come from the window manager). The close
+button goes through the same exit path as Quit. `--no-chrome` (launcher: Window tab, "No chrome")
+opens a bare window. The title bar is outside the drawn area, so `--size`, `--screenshot` and
+`--bench` give the same image size in both modes.
 `--hud-scale 25..200` overrides the automatic scale as a percentage of design
 pixels (and follows the internal render scale). Oversized explicit scales can
 crop panels. Diagnostic GPUI text is hidden unless `--stats` is supplied.
