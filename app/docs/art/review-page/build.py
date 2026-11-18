@@ -12,7 +12,7 @@ VERSION = sys.argv[3] if len(sys.argv) > 3 else ""
 
 ROUND1 = {"bld.city@ancient", "bld.city@classical", "bld.barracks@ancient",
           "bld.library@ancient", "unit.citizen@any"}
-NAMES = {"bld.city": "City", "bld.woodcutter_camp": "Woodcutter's camp"}
+NAMES = {"bld.city": "City", "bld.woodcutter_camp": "Woodcutter's camp", "node.relics": "Relic site"}
 
 def name_of(entity):
     if entity in NAMES:
@@ -130,7 +130,10 @@ OVERVIEW12 = [
     ("match_labs", "Research labs beside a city and in a colony's area (with the approved look)"),
     ("match_inhibitor_map", "The jump inhibitor's effect on the star map: a red ring around the held system"),
 ]
-OVERVIEW = OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
+OVERVIEW13 = [
+    ("relic-site", "In a match: a relic site in the grass beside an ancient town (placed there for the picture; generated sites lie farther out)"),
+]
+OVERVIEW = OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
     ("gallery_ancient", "Ancient age, game camera: <code>--gallery ancient</code>"),
     ("gallery_classical", "Classical age, game camera: <code>--gallery classical</code>"),
     ("gallery_classical_close_team2", "Classical age, close, in player 2's blue to show where team colour sits"),
@@ -152,9 +155,12 @@ def round_of(m):
     7 modern and information buildings, 8 modern and information units, 9 future buildings
     (automation and fusion), 10 future units (automation and fusion), 11 space-age models
     (starfaring to galactic), 12 the jump inhibitor, the automated colony and the
-    alternative lab look (approved: now the Auto Lab, bld.auto_lab@automation)."""
+    alternative lab look (approved: now the Auto Lab, bld.auto_lab@automation), 13 the relic
+    site (task 82)."""
     if m["id"] in ROUND1:
         return 1
+    if m["id"] == "node.relics@any":
+        return 13  # task 82
     if m["id"] in ("bld.jump_inhibitor@starfaring", "bld.auto_colony@abundance",
                    "bld.auto_university@automation~lab", "bld.auto_lab@automation"):
         return 12  # first looks made with tasks 70 and 73; the lab's look adopted in round 12
