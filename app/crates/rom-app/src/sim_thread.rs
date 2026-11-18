@@ -1584,6 +1584,52 @@ mod tests {
         assert_eq!(model_of(None, "unit.citizen"), "unit.citizen@any");
     }
 
+    /// A map node wears its type's composed model when the rules give it one, as buildings do
+    /// (the relic site, task 82); a node without one keeps the marker the renderer draws.
+    #[test]
+    fn nodes_wear_their_model_when_they_have_one() {
+        let content = generate_content(&Options {
+            players: 2,
+            map_size: (128, 128),
+            ..Options::default()
+        })
+        .expect("content");
+        let mut game =
+            build_match(&content.rules, &content.map, &content.factions, 1).expect("match");
+        let book = crate::looks::ModelBook::new(&content.rules);
+        let own = game.starts.iter().find(|s| s.player == PLAYER).unwrap();
+        let near = game.world.entity(own.builders[0]).unwrap().pos;
+        let world = &mut game.world;
+        let mut spawned = Vec::new();
+        for (key, dx) in [("node.relics", 4000), ("node.ore_planet", -4000)] {
+            let type_id = content.rules.id_of(key).unwrap();
+            let at = world.offset(near, dx, 0);
+            let id = world
+                .spawn(type_id, crate::match_setup::NEUTRAL, at)
+                .expect("spawn");
+            spawned.push((key, id));
+        }
+        let snapshot = snapshot_of(world);
+        let view = |id: EntityId| {
+            snapshot
+                .entities
+                .iter()
+                .find(|v| v.id == id.0)
+                .unwrap_or_else(|| panic!("node {} not in view", id.0))
+        };
+        let relics = view(spawned[0].1);
+        let model = relics.model.expect("the relic site has a model");
+        assert_eq!(
+            book.entries[usize::from(model.index)].id,
+            "node.relics@any",
+            "{}",
+            spawned[0].0
+        );
+        assert!(!relics.building && relics.carry_node);
+        let ore = view(spawned[1].1);
+        assert_eq!(ore.model, None, "{} keeps its marker", spawned[1].0);
+    }
+
     #[test]
     fn units_show_what_they_are_doing() {
         let content = generate_content(&Options {

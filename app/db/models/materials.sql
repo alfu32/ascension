@@ -71,7 +71,8 @@ INSERT INTO def(kind,key,name) VALUES
   ('material','mat.graphite','Graphite composite'),
   ('material','mat.paving','Composite paving'),
   ('material','mat.greens','Leafy crops'),
-  ('material','mat.laser','Laser beam');
+  ('material','mat.laser','Laser beam'),
+  ('material','mat.gold','Gold leaf');
 WITH v(k,prog,params) AS (VALUES
   ('mat.mud_plaster','plaster','{"colour":"#c4a27a","colour_alt":"#a3825c","scale":0.7}'),
   ('mat.mud_brick','brick','{"colour":"#b58a5e","colour_alt":"#8c6b4c","scale":0.32}'),
@@ -143,5 +144,6 @@ WITH v(k,prog,params) AS (VALUES
   ('mat.graphite','metal','{"colour":"#4d545c","colour_alt":"#30363c","scale":0.35}'),
   ('mat.paving','brick','{"colour":"#c6cbca","colour_alt":"#a9afae","scale":0.9}'),
   ('mat.greens','thatch','{"colour":"#6cae46","colour_alt":"#3a6e26","scale":0.1}'),
-  ('mat.laser','emissive','{"colour":"#ffb0a8","colour_alt":"#ff3048","scale":0.5}'))
+  ('mat.laser','emissive','{"colour":"#ffb0a8","colour_alt":"#ff3048","scale":0.5}'),
+  ('mat.gold','metal','{"colour":"#e8b23e","colour_alt":"#a06a1a","scale":0.25}'))
 INSERT INTO material(id,program,params) SELECT d.id, v.prog, v.params FROM v JOIN def d ON d.key=v.k;
