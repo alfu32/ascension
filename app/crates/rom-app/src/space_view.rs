@@ -325,7 +325,7 @@ pub fn space_snapshot_with(
     snapshot.colonies = colonies(world);
     snapshot.charted = Some(world.known_routes(PLAYER));
     snapshot.charges = charges(world, &snapshot.ships);
-    snapshot.holds = holds_with(world, index);
+    snapshot.holds = holds(world, index);
     snapshot
 }
 
@@ -346,13 +346,7 @@ pub fn charges(world: &World, ships: &[ShipView]) -> Vec<ChargeView> {
 
 /// The systems with a jump inhibitor that player one knows of: its own and its allies', and an
 /// enemy's that holds a ship of player one, or whose ground it has explored. By system.
-#[cfg(test)]
-pub fn holds(world: &World) -> Vec<HoldView> {
-    holds_with(world, &SystemIndex::new(world))
-}
-
-/// [`holds`] with the match's system index.
-pub fn holds_with(world: &World, index: &SystemIndex) -> Vec<HoldView> {
+pub fn holds(world: &World, index: &SystemIndex) -> Vec<HoldView> {
     let mut out: Vec<HoldView> = world
         .jump_inhibitors()
         .filter_map(|(e, _)| {
