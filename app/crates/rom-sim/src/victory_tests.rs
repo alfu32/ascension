@@ -547,20 +547,18 @@ fn territory_victory_after_timer() {
     );
 }
 
+/// Task 76: a victory is a notice, not an end. The winners keep giving orders and the first
+/// victory is kept.
 #[test]
-fn no_orders_after_victory() {
+fn orders_go_on_after_victory() {
     let mut w = territory_world();
     let city = city(&mut w, P1);
     let unit = soldier(&mut w, P1);
     ticks(&mut w, 6);
-    let hash = w.hash();
-    assert_eq!(
-        w.submit(command(&w, city, "stop", None)),
-        Err(SimError::OrdersClosed)
-    );
-    assert_eq!(w.hash(), hash);
+    assert_ne!(w.outcome(), &Outcome::Playing);
+    assert!(w.submit(command(&w, city, "stop", None)).is_ok());
     let stance = w.entity(unit).unwrap().stance;
-    assert_eq!(w.set_stance(P1, unit, stance), Err(SimError::OrdersClosed));
+    assert_eq!(w.set_stance(P1, unit, stance), Ok(()));
     let outcome = w.outcome().clone();
     w.step();
     assert_eq!(w.tick(), 7);

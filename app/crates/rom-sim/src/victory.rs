@@ -43,6 +43,9 @@ pub enum PlayerStatus {
     Defeated,
     /// Member of the winning team.
     Won,
+    /// Left the material plane (task 76): owns nothing, is never defeated and counts in no
+    /// victory or defeat check; may descend again.
+    Ascended,
 }
 
 /// The first completed victory, retained while subsequent ticks continue.
@@ -221,8 +224,12 @@ impl World {
                 BTreeSet::new()
             };
         for player in self.players.values() {
+            // The match goes on after a victory (task 76): the winners can still be defeated.
             if player.id == PlayerId(0)
-                || self.player_status(player.id) != Some(PlayerStatus::Playing)
+                || !matches!(
+                    self.player_status(player.id),
+                    Some(PlayerStatus::Playing | PlayerStatus::Won)
+                )
             {
                 continue;
             }
@@ -283,10 +290,11 @@ impl World {
     }
 
     pub(crate) fn update_victory(&mut self) {
+        // The first victory is kept; defeats go on being checked while the match goes on.
+        self.eliminate_players();
         if self.victory.outcome != Outcome::Playing {
             return;
         }
-        self.eliminate_players();
         // Solo benchmarks and cooperative scenarios have no opposing team to defeat.
         let initial: BTreeSet<_> = self
             .players

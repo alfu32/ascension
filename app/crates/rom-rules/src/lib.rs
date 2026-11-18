@@ -5,6 +5,7 @@ use std::path::Path;
 use rusqlite::{Connection, backup::Backup};
 use thiserror::Error;
 
+mod ascension;
 mod load;
 mod model;
 mod modifiers;

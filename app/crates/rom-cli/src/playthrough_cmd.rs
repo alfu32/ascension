@@ -99,5 +99,34 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
     if player.age != final_age || !audit.is_complete() {
         return Err("playthrough did not complete all content within 400000 ticks".into());
     }
+    // Task 76: then the ascension and a descent onto the first city's site.
+    let (ascended, descended) = audit.ascend_and_descend()?;
+    let world = audit.world();
+    let player = world
+        .players()
+        .find(|p| p.id == PlayerId(1))
+        .expect("audit player");
+    let count = |class| {
+        world
+            .entities()
+            .filter(|e| e.owner == player.id && rules.entity_types[&e.type_id].class == class)
+            .count()
+    };
+    let resources: Vec<String> = player
+        .resources
+        .iter()
+        .filter(|(_, amount)| **amount > 0)
+        .map(|(id, amount)| format!("{}:{amount}", rules.key(*id)))
+        .collect();
+    println!(
+        "ascension ascended_tick={ascended} descended_tick={descended} age={} cities={} buildings={} units={} techs={} resources={} hash={:016x}",
+        rules.key(player.age),
+        world.cities(player.id).len(),
+        count(EntityClass::Building),
+        count(EntityClass::Unit),
+        player.techs.len(),
+        resources.join(","),
+        audit.hash()
+    );
     Ok(())
 }

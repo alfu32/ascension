@@ -552,6 +552,7 @@ the same input (task 74):
 | Shift + up / down | pan | pan | fly up and down the screen |
 | Pointer at the edge | pan | pan | fly sideways, up and down |
 | F4 | — | — | turn the camera upright again |
+| F6 | fly to the celestial home (task 76), wherever the star map is open | the same | the same |
 | Double-click | — | fly to a planet, star or system | the same |
 | Home | home view | fly back to the home planet | the same |
 | Space / Shift + Space | fly to / follow the selection | the same, at the level it is seen at | the same |
@@ -774,6 +775,22 @@ star map).
   a shaded disc → a point of light.
 - The star of the current system is the sun light; the shadow map follows
   the visible part of the surface.
+
+### The celestial home and the ascended view (task 76)
+
+Beyond the match region, in the real direction of the galactic centre (Sagittarius A*, right
+ascension 17h45m40s, declination −29°00′28″) from the middle of the match's stars and 150 % of
+their radius away, `rom-mapgen` adds the **celestial home** before play: a system with a black
+hole at its centre (`black_hole`) and one mythical planet without a surface (`celestial`),
+joined to nothing by routes and with no system space in the simulation. The star map frames
+the match's systems without it; its region (`ZoomCamera::map_region`) widens to hold it. It
+is drawn as a black sphere in a glowing accretion disc; the planet carries a residence for each
+ascended player. Material players see it on the star map and cannot reach it; F6 flies the
+camera there wherever the star map is open.
+
+An **ascended** player sees the whole universe with no fog and no tier cap and moves freely
+from planet to star map; it gives no orders to anything material, and descends with a city on
+open land of any habitable planet. Everything else is in `docs/ascension.md`.
 
 ## Migration plan
 

@@ -55,6 +55,8 @@ pub struct Stats {
 #[derive(Debug)]
 pub struct World {
     pub(crate) victory: crate::victory::VictoryState,
+    /// Ascended players, starting factions and ascensions completing this tick (task 76).
+    pub(crate) ascension: crate::ascension::AscensionState,
     pub(crate) capture: crate::capture::CaptureState,
     pub(crate) hits: Vec<crate::combat::PendingHit>,
     pub(crate) shots: Vec<crate::combat::PendingShot>,
@@ -261,6 +263,10 @@ impl World {
         let avoid = Avoidance::new(&rules);
         let tick_rate = rules.constant("sim.ticks_per_second").unwrap_or(1).max(1);
         let victory = crate::victory::VictoryState::new(&rules, &by_id)?;
+        let ascension = crate::ascension::AscensionState {
+            origins: by_id.values().map(|p| (p.id, p.faction)).collect(),
+            ..Default::default()
+        };
         let max_footprint = rules
             .entity_types
             .values()
@@ -271,6 +277,7 @@ impl World {
         let stain_rules = crate::stains::StainRules::of(&rules);
         Ok(Self {
             victory,
+            ascension,
             capture: crate::capture::CaptureState::default(),
             hits: Vec::new(),
             shots: Vec::new(),
@@ -715,6 +722,10 @@ impl World {
 
     /// Validates now and defers queue mutation until the next step.
     pub fn submit(&mut self, mut command: Command) -> Result<OrderId, SimError> {
+        // An ascended player's only order needs no executor (task 76).
+        if command.kind == "descend" {
+            return self.submit_descent(command);
+        }
         self.check_orders_open(command.player)?;
         let entity = self
             .entity(command.executor)
@@ -864,6 +875,10 @@ impl World {
         self.regenerate_energy();
         let mut applied = Vec::new();
         for (mut order, append) in std::mem::take(&mut self.pending) {
+            if order.kind == "descend" {
+                self.apply_descent(&order);
+                continue;
+            }
             // An executor disbanded earlier in this loop takes no more orders.
             if self.entity(order.executor).is_none() {
                 self.stats.orders_cancelled += 1;
@@ -954,6 +969,9 @@ impl World {
         self.land_projectiles();
         self.apply_attrition();
         self.remove_dead();
+        if !self.ascension.completing.is_empty() {
+            self.complete_ascensions();
+        }
         self.fade_stains();
         self.forget_blasts();
         self.update_captures();

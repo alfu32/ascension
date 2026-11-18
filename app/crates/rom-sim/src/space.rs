@@ -256,6 +256,14 @@ impl World {
             .ok_or(SimError::InvalidRules("planet marker"))?
             .id;
         for system in self.systems().to_vec() {
+            // The celestial home (task 76) has no space: nothing material goes there.
+            if self
+                .bodies()
+                .iter()
+                .any(|b| b.system == system.id && b.kind == BodyKind::BlackHole)
+            {
+                continue;
+            }
             if self
                 .bodies()
                 .iter()

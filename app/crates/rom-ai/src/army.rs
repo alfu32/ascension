@@ -712,6 +712,22 @@ pub(crate) fn intruders(view: &View<'_>, memory: &Memory) -> Option<(Pos, i64)> 
     nearest.map(|(_, pos)| (pos, strength))
 }
 
+/// The military manager's measure of a lost war (task 76): an enemy holds its capital, or the
+/// armed intruders inside its borders outweigh its own fighters twice over.
+pub(crate) fn facing_defeat(view: &View<'_>, memory: &Memory) -> bool {
+    if view.world.capital_hold(view.me).is_some()
+        || view
+            .world
+            .capital(view.me)
+            .and_then(|id| view.world.entity(id))
+            .is_some_and(|c| c.owner != view.me)
+    {
+        return true;
+    }
+    let own: i64 = fighters(view).iter().map(|e| power(view, e)).sum();
+    intruders(view, memory).is_some_and(|(_, strength)| strength > own.max(1) * 2)
+}
+
 /// Ticks in a game hour.
 fn hour(view: &View<'_>) -> u64 {
     view.rules
