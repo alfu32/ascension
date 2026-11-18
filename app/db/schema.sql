@@ -695,7 +695,6 @@ CREATE TABLE map_style_feature (
   start_max_dist INTEGER NOT NULL DEFAULT 0
 ) STRICT;
 
--- Game-setup options (start age, end age, pop limit, tech cost, rush rule …).
 -- Task 77: the brushes an ascended player paints a planet it brought to life with. A stroke
 -- (`paint` order) lays the brush's terrain on every tile within `radius` of the point, sets the
 -- tiles' heights by `height_op` (dome toward `height` at the centre, falling to the tile's
@@ -712,6 +711,7 @@ CREATE TABLE life_brush (
   CHECK (terrain_id IS NOT NULL OR node_type_id IS NOT NULL OR height_op <> 'keep')
 ) STRICT;
 
+-- Game-setup options (start age, end age, pop limit, tech cost, rush rule …).
 CREATE TABLE match_option (
   key     TEXT PRIMARY KEY,
   name    TEXT NOT NULL,
