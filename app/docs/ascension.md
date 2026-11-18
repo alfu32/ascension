@@ -14,8 +14,10 @@ defeated. This replaces the decision that the game ends at the last age.
   researched by the player: a data test over the producer's `production` rows
   (`Rules::ascension_requirements`, `Rules::ascension_ready`), not a list of keys. Technologies
   not available to the player's faction do not count; of an exclusive group any one member
-  counts for the group. Before that the button says how many are left; the simulation refuses
-  the order with `Locked`.
+  counts for the group; an age advance counts once the player has reached its age, however it
+  got there (a match started in a later age records no advances; owner report 2026-11-18,
+  `Rules::ascension_missing`). Before that the button says how many are left, from the same
+  rule; the simulation refuses the order with `Locked`.
 - **Price** (`cost` rows of `tech.ascension`): 10 000 knowledge and 10 000 wealth.
 - **Duration**: `ascension.duration_pct` = 250 % of the research time of the age advance that
   brought the player its current age, with the player's `research_time` modifiers

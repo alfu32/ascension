@@ -37,6 +37,67 @@ impl World {
         Ok(())
     }
 
+    /// Test setups (`research-all` in a script): before the first tick, completes for `player`
+    /// every technology it could research in its current age, with their effects, until none
+    /// is left: each one researched somewhere, available to its faction and unlocked, except
+    /// ascensions, handicaps, a second member of an exclusive group, and age advances beyond
+    /// its age. The player keeps its age. Returns how many were completed.
+    pub fn complete_research_for_setup(&mut self, player: PlayerId) -> Result<usize, SimError> {
+        if self.tick != 0 {
+            return Err(SimError::Locked);
+        }
+        let age = self
+            .players
+            .get(&player)
+            .ok_or(SimError::UnknownPlayer(player))?
+            .age;
+        let rules = self.rules.clone();
+        let reached = rules.ages[&age].ordinal;
+        let mut done = 0;
+        loop {
+            let p = &self.players[&player];
+            let sources = p.active_sources();
+            let owned = self.owned_types(player);
+            let groups: std::collections::BTreeSet<&str> = p
+                .techs
+                .iter()
+                .filter(|(_, n)| **n > 0)
+                .map(|(id, _)| rules.techs[id].exclusive_group.as_str())
+                .filter(|g| !g.is_empty())
+                .collect();
+            let next = rules.techs.iter().find_map(|(id, tech)| {
+                let beyond = rules.tech_effects.get(id).into_iter().flatten().any(|e| {
+                    e.effect == TechEffectKind::SetAge
+                        && e.target_def_id
+                            .is_none_or(|a| rules.ages[&a].ordinal > reached)
+                });
+                let researched_somewhere = rules
+                    .production_by_product
+                    .get(id)
+                    .into_iter()
+                    .flatten()
+                    .any(|row| row.mode == rom_rules::ProductionMode::Research);
+                (researched_somewhere
+                    && !beyond
+                    && !rules.ascends(*id)
+                    && tech.kind != rom_rules::TechKind::Handicap
+                    && p.techs.get(id).is_none_or(|n| *n == 0)
+                    && (tech.exclusive_group.is_empty()
+                        || !groups.contains(tech.exclusive_group.as_str()))
+                    && rules.is_available(*id, p.faction)
+                    && rules.is_unlocked(*id, &sources, &owned))
+                .then_some(*id)
+            });
+            let Some(tech) = next else {
+                break;
+            };
+            self.complete_research(player, tech);
+            self.players.get_mut(&player).expect("checked player").age = age;
+            done += 1;
+        }
+        Ok(done)
+    }
+
     pub(crate) fn complete_research(&mut self, player: PlayerId, subject: DefId) {
         *self
             .players
@@ -176,5 +237,56 @@ mod tests {
             w.hash()
         };
         assert_eq!(run(), run());
+    }
+
+    /// `research-all` (task 84): everything up to the player's age is researched, nothing
+    /// beyond it, the age is kept, and the same setup gives the same state twice.
+    #[test]
+    fn research_for_setup_completes_everything_up_to_the_age_and_no_further() {
+        let conn = build_rules_db(
+            include_str!("../../../db/schema.sql"),
+            include_str!("../../../db/seed.sql"),
+        )
+        .unwrap();
+        let rules = Arc::new(Rules::load(&conn).unwrap());
+        let industrial = rules.id_of("age.industrial").unwrap();
+        let reached = rules.ages[&industrial].ordinal;
+        let run = || {
+            let mut w = World::movement_scenario(rules.clone(), 7, 0).unwrap();
+            w.players.get_mut(&PlayerId(1)).unwrap().age = industrial;
+            let done = w.complete_research_for_setup(PlayerId(1)).unwrap();
+            assert!(done > 0);
+            assert_eq!(w.complete_research_for_setup(PlayerId(1)).unwrap(), 0);
+            let p = &w.players[&PlayerId(1)];
+            assert_eq!(p.age, industrial);
+            let sources = p.active_sources();
+            for (id, tech) in &rules.techs {
+                let age_of = |a: &crate::DefId| rules.ages.get(a).map(|a| a.ordinal);
+                let needs_later_age = rules
+                    .prerequisites
+                    .get(id)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|r| age_of(&r.requires_def_id))
+                    .any(|o| o > reached);
+                let advance_beyond = rules.tech_effects.get(id).into_iter().flatten().any(|e| {
+                    e.effect == rom_rules::TechEffectKind::SetAge
+                        && e.target_def_id.and_then(|a| age_of(&a)) > Some(reached)
+                });
+                let has = p.techs.get(id).is_some_and(|n| *n > 0);
+                if needs_later_age || advance_beyond || rules.ascends(*id) {
+                    assert!(!has, "{} is beyond the industrial age", id.0);
+                } else if tech.kind != rom_rules::TechKind::Handicap
+                    && rules.is_unlocked(*id, &sources, &Default::default())
+                {
+                    assert!(has, "{} was left out", id.0);
+                }
+            }
+            w.hash()
+        };
+        assert_eq!(run(), run());
+        let mut w = World::movement_scenario(rules.clone(), 7, 0).unwrap();
+        w.step();
+        assert!(w.complete_research_for_setup(PlayerId(1)).is_err());
     }
 }
