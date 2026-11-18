@@ -182,6 +182,31 @@ it in review round 12 (2026-11-17): it is now the lab's only look, `bld.auto_lab
 (the building was renamed the Auto Lab the same day), locked in `approved.toml`; the earlier
 look was retired.
 
+Task 93 (higher-definition spaceships) adds no shape, motion knob or material. The owner: "there
+is never gonna be a whole lot of them, we can afford a higher polygon budget". Every starship and
+orbital craft has about four times its earlier near triangles and keeps its far version (the
+detail is near-only, `far` 0). Detail that reads at the system view's distance: hull plating in
+plates with gaps between them (`mat.composite_panel` tinted blue-grey), dorsal and flank plates,
+keels, bridge windows in light strips, masts with yards, radar domes, dishes and whip aerials,
+engine bells in cast iron with a band, a glowing throat and a short glowing plume, turrets on
+rings with a hood, a mantlet and muzzles, the fore turrets facing ahead and the aft ones astern
+(the battleship's aft pair astern and outboard), point-defence mounts, the carrier's lit hangar
+mouths (one wide at the bow, two in each flank) and deck lights, running lights (red
+`mat.signal_red` to port, `mat.light_strip` to starboard) and a red beacon on the highest mast.
+The classes keep their plans and their size order (corvette 3.3 tiles long, frigate 3.9, cruiser
+5.0, battleship 7.3 with their shots), and their bounds, which give the landing radius
+(`HULL_REACH` in `db/content/generate.py`). The space frigate, cruiser and battleship each have
+two looks since task 92 moved them one age earlier: the first one is the earlier generation,
+with cyan bolts (`mat.light_strip`; the battleship's spinal mass driver too) and lighter fittings
+(the frigate's open radiator vanes, the cruiser's twin aft turret), the later one fires violet
+plasma and adds armour and guns (the frigate's nacelle cowls and point defence, the cruiser's
+third triple turret and tower wings, the battleship's superfiring mid turrets). The two line
+ships of task 92 keep the sea budget: Ships of the Line (`unit.ship_of_the_line@enlightenment`),
+a two-decker longer and taller than the frigate with two tiers of ports in team bands and three
+masts of three sails, and Dreadnoughts (`unit.dreadnought@modern`), a long haze-grey hull with
+five twin turrets (one forward, two on the wings facing out, two aft, one superfiring), a tripod
+mast with a spotting top and two funnels with team bands.
+
 ## Budgets
 
 | Model | Near | Far |
@@ -189,6 +214,7 @@ look was retired.
 | Building | ≤ 1,500 triangles | ≤ 300 |
 | Unit figure (each figure of a crew) | ≤ 300 | ≤ 80 |
 | Vehicle, ship, aircraft | ≤ 800 | ≤ 160 |
+| Starship or orbital craft (drawn in space: an `et_view_scale` row) | ≤ 3,200 | ≤ 160 |
 
 Construction: a foundation plate first, then the model rises from the ground
 as work progresses.
