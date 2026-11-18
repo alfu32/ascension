@@ -178,6 +178,28 @@ impl Rules {
         })
     }
 
+    /// Whether a building type has left the build menu (task 92): a research among `active`
+    /// upgrades it in place (`tech_effect` `upgrade_type` from it), and it is not a site worked
+    /// by people (`et_gather_site.slots_max > 0`), which stays buildable beside its successor.
+    pub fn is_superseded_building(&self, def: DefId, active: &ActiveSources) -> bool {
+        let Some(et) = self.entity_types.get(&def) else {
+            return false;
+        };
+        let manned = et.gather_site.as_ref().is_some_and(|g| g.slots_max > 0);
+        if et.class != EntityClass::Building || manned {
+            return false;
+        }
+        active.iter().any(|tech| {
+            self.tech_effects
+                .get(tech)
+                .into_iter()
+                .flatten()
+                .any(|effect| {
+                    effect.effect == TechEffectKind::UpgradeType && effect.from_def_id == Some(def)
+                })
+        })
+    }
+
     /// Tests every prerequisite OR-group using active techs/ages and owned entity types.
     pub fn is_unlocked(&self, def: DefId, active: &ActiveSources, owned: &Owned) -> bool {
         let mut groups = std::collections::BTreeMap::new();

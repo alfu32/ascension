@@ -22,7 +22,7 @@ use std::{
 use rom_rules::{AppliesTo, DefId, EntityClass, Layer, Rules, TechKind};
 use rom_sim::{Command, MapGrid, MatchOptions, Player, PlayerId, Pos, World};
 
-const USAGE: &str = "usage: rom fight-matrix --db <rules.db> [--ages <first>..<last>] [--seeds <n>] [--jobs <n>] [--all] [--orbit-only] [--no-orbit] [--fight a,b | --orbit-fight a,b]";
+const USAGE: &str = "usage: rom fight-matrix --db <rules.db> [--ages <first>..<last>] [--seeds <n>] [--jobs <n>] [--all] [--orbit-only] [--no-orbit] [--no-sea] [--fight a,b | --orbit-fight a,b | --sea-fight a,b]";
 /// Each side spends this many times the dearer side's price.
 const BUDGET_UNITS: i64 = 3;
 /// The most of one type on a side.
@@ -166,7 +166,7 @@ fn layer_of(rules: &Rules, unit: DefId) -> Layer {
 
 /// The farthest a type's weapons reach a target on `layer`, in milli-tiles; `None` when no
 /// weapon can hit that layer (orbital strikes do not count on the ground).
-fn reach_at(rules: &Rules, unit: DefId, layer: Layer) -> Option<i64> {
+pub(crate) fn reach_at(rules: &Rules, unit: DefId, layer: Layer) -> Option<i64> {
     rules.entity_types[&unit]
         .weapons
         .iter()
@@ -177,7 +177,7 @@ fn reach_at(rules: &Rules, unit: DefId, layer: Layer) -> Option<i64> {
 
 /// How far from its centre a type is hit: half its footprint for a building, its radius for
 /// a unit (weapons measure to the edge).
-fn extent(rules: &Rules, unit: DefId) -> i64 {
+pub(crate) fn extent(rules: &Rules, unit: DefId) -> i64 {
     let et = &rules.entity_types[&unit];
     if et.class == EntityClass::Building {
         et.footprint_w.max(et.footprint_h) * 500
@@ -339,6 +339,33 @@ pub fn fight(
     second: Side,
     seed: u64,
 ) -> Result<(i64, i64), String> {
+    let reach =
+        |a: DefId, b: DefId| reach_at(rules, a, layer_of(rules, b)).unwrap_or(0) + extent(rules, b);
+    let gap = reach(first.unit, second.unit).max(reach(second.unit, first.unit));
+    fight_on(
+        rules,
+        setup,
+        age,
+        [first, second],
+        [setup.terrain; 2],
+        gap,
+        seed,
+    )
+}
+
+/// Plays one fight at equal cost on a seed with each side's half of the field of its own
+/// terrain (`terrains`; the sea rows put ships on water beside the shore), the sides `gap`
+/// milli-tiles of reach apart besides the slack: the shares of their starting value each
+/// side still has at the end, per mille.
+pub(crate) fn fight_on(
+    rules: &Arc<Rules>,
+    setup: &Setup,
+    age: i64,
+    [first, second]: [Side; 2],
+    terrains: [DefId; 2],
+    gap: i64,
+    seed: u64,
+) -> Result<(i64, i64), String> {
     let age_id = rules
         .ages
         .values()
@@ -357,8 +384,18 @@ pub fn fight(
             techs: side.tech.map(|t| (t, 1)).into_iter().collect(),
         })
         .collect();
-    let map = MapGrid::new(MAP_W, MAP_H, vec![setup.terrain; (MAP_W * MAP_H) as usize])
-        .map_err(|e| e.to_string())?;
+    let gap = gap + GAP_SLACK;
+    let front = 40_000;
+    // The halves meet midway between the two fronts.
+    let shore = ((front + gap as i32 / 2) / 1000).max(0) as u32;
+    let map = MapGrid::new(
+        MAP_W,
+        MAP_H,
+        (0..MAP_W * MAP_H)
+            .map(|i| terrains[usize::from(i % MAP_W >= shore)])
+            .collect(),
+    )
+    .map_err(|e| e.to_string())?;
     let mut world = World::new(Arc::clone(rules), map, seed, players)
         .map_err(|e| e.to_string())?
         .with_match_options(MatchOptions {
@@ -367,11 +404,7 @@ pub fn fight(
         })
         .map_err(|e| e.to_string())?;
     let budget = BUDGET_UNITS * price(rules, first.unit).max(price(rules, second.unit));
-    let reach =
-        |a: DefId, b: DefId| reach_at(rules, a, layer_of(rules, b)).unwrap_or(0) + extent(rules, b);
-    let gap = reach(first.unit, second.unit).max(reach(second.unit, first.unit)) + GAP_SLACK;
     let centre_y = MAP_H as i32 * 500;
-    let front = 40_000;
     let mut state = seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1;
     let mut spawned: [Vec<(rom_sim::EntityId, i64)>; 2] = [Vec::new(), Vec::new()];
     for (i, side) in [first, second].iter().enumerate() {
@@ -678,6 +711,44 @@ pub fn measure_orbit(
         .collect()
 }
 
+/// Measures ship against ship in orbit (task 92) for the ages in `ages` that have an orbital
+/// attacker, on `jobs` threads, in age order.
+pub fn measure_space(
+    rules: &Arc<Rules>,
+    ages: (i64, i64),
+    seeds: u64,
+    jobs: usize,
+    all: bool,
+) -> Result<Vec<crate::orbit_matrix::OrbitMatrix>, String> {
+    let setup = setup(rules)?;
+    let Some(first) = crate::orbit_matrix::first_orbit_age(rules, &setup) else {
+        return Ok(Vec::new());
+    };
+    let list: Vec<i64> = (ages.0.max(first)..=ages.1).collect();
+    let next = AtomicUsize::new(0);
+    let results = Mutex::new(BTreeMap::new());
+    std::thread::scope(|scope| {
+        for _ in 0..jobs.max(1) {
+            scope.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(age) = list.get(i) else {
+                        break;
+                    };
+                    let result =
+                        crate::orbit_matrix::measure_space_age(rules, &setup, *age, seeds, all);
+                    results.lock().expect("results lock").insert(*age, result);
+                }
+            });
+        }
+    });
+    results
+        .into_inner()
+        .expect("results lock")
+        .into_values()
+        .collect()
+}
+
 /// The orbit rows of one age, as Markdown rows.
 pub fn orbit_table(
     rules: &Rules,
@@ -702,6 +773,14 @@ pub fn orbit_table(
         },
         seeds,
     )
+}
+
+/// Strengths of a matrix without an answer that wins.
+pub fn unanswered(strengths: &[Strength]) -> usize {
+    strengths
+        .iter()
+        .filter(|s| !s.answer.is_some_and(|(_, p)| p.first_wins()))
+        .count()
 }
 
 /// A type's key without its kind prefix.
@@ -761,16 +840,22 @@ pub fn run_command(
     let mut one: Option<(String, String)> = None;
     let mut seeds = SEEDS;
     let mut all = false;
-    let (mut orbit_only, mut no_orbit, mut orbit_fight) = (false, false, false);
+    let (mut orbit_only, mut no_orbit, mut no_sea) = (false, false, false);
+    // Where a single fight is fought: on the ground, across the orbit or at sea.
+    let mut field = "--fight";
     let mut jobs = std::thread::available_parallelism().map_or(1, |n| n.get().min(4));
     while let Some(flag) = args.next() {
         match flag.as_str() {
             "--all" => all = true,
             "--orbit-only" => orbit_only = true,
             "--no-orbit" => no_orbit = true,
+            "--no-sea" => no_sea = true,
             _ => {}
         }
-        if matches!(flag.as_str(), "--all" | "--orbit-only" | "--no-orbit") {
+        if matches!(
+            flag.as_str(),
+            "--all" | "--orbit-only" | "--no-orbit" | "--no-sea"
+        ) {
             continue;
         }
         let value = args
@@ -781,10 +866,14 @@ pub fn run_command(
             "--ages" => ages = Some(parse_range(&value)?),
             "--seeds" => seeds = value.parse::<u64>()?.max(1),
             "--jobs" => jobs = value.parse::<usize>()?.max(1),
-            "--fight" | "--orbit-fight" => {
+            "--fight" | "--orbit-fight" | "--sea-fight" => {
                 let (a, b) = value.split_once(',').ok_or("--fight a,b")?;
                 one = Some((a.to_string(), b.to_string()));
-                orbit_fight = flag == "--orbit-fight";
+                field = match flag.as_str() {
+                    "--orbit-fight" => "--orbit-fight",
+                    "--sea-fight" => "--sea-fight",
+                    _ => "--fight",
+                };
             }
             _ => return Err(format!("unknown argument: {flag}").into()),
         }
@@ -811,10 +900,14 @@ pub fn run_command(
             })
         };
         for seed in 1..=seeds {
-            let (x, y) = if orbit_fight {
-                crate::orbit_matrix::fight(&rules, &setup, ages.0, side(&a)?, side(&b)?, seed)?
-            } else {
-                fight(&rules, &setup, ages.0, side(&a)?, side(&b)?, seed)?
+            let (x, y) = match field {
+                "--orbit-fight" => {
+                    crate::orbit_matrix::fight(&rules, &setup, ages.0, side(&a)?, side(&b)?, seed)?
+                }
+                "--sea-fight" => {
+                    crate::sea_matrix::fight(&rules, &setup, ages.0, side(&a)?, side(&b)?, seed)?
+                }
+                _ => fight(&rules, &setup, ages.0, side(&a)?, side(&b)?, seed)?,
             };
             println!("fight seed={seed} {a}={x} {b}={y}");
         }
@@ -825,10 +918,20 @@ pub fn run_command(
     } else {
         measure(&rules, ages, seeds, jobs, all)?
     };
+    let seas = if orbit_only || no_sea {
+        Vec::new()
+    } else {
+        crate::sea_matrix::measure(&rules, ages, seeds, jobs, all)?
+    };
     let orbits = if no_orbit {
         Vec::new()
     } else {
         measure_orbit(&rules, ages, seeds, jobs, all)?
+    };
+    let spaces = if no_orbit {
+        Vec::new()
+    } else {
+        measure_space(&rules, ages, seeds, jobs, all)?
     };
     let mut missing = 0;
     println!(
@@ -848,6 +951,27 @@ pub fn run_command(
     for matrix in &matrices {
         let roster: Vec<&str> = matrix.roster.iter().map(|u| short(&rules, *u)).collect();
         println!("roster {}: {}", rules.key(matrix.age), roster.join(", "));
+    }
+    if !seas.is_empty() {
+        println!();
+        println!(
+            "| Age | At sea | Outranges and beats | Answer | Research | Answer's fights (won, value left) |"
+        );
+        println!("| --- | --- | --- | --- | --- | --- |");
+        for matrix in &seas {
+            for row in table(&rules, matrix, seeds) {
+                println!("{row}");
+            }
+            missing += unanswered(&matrix.strengths);
+        }
+        for matrix in &seas {
+            let roster: Vec<&str> = matrix.roster.iter().map(|u| short(&rules, *u)).collect();
+            println!(
+                "sea roster {}: {}",
+                rules.key(matrix.age),
+                roster.join(", ")
+            );
+        }
     }
     if !orbits.is_empty() {
         println!();
@@ -869,6 +993,29 @@ pub fn run_command(
             let roster: Vec<&str> = matrix.roster.iter().map(|u| short(&rules, *u)).collect();
             println!(
                 "orbit roster {}: {}",
+                rules.key(matrix.age),
+                roster.join(", ")
+            );
+        }
+        println!();
+        println!(
+            "| Age | Ship against ship | Outranges and beats | Answer | Research | Answer's fights (won, value left) |"
+        );
+        println!("| --- | --- | --- | --- | --- | --- |");
+        for matrix in &spaces {
+            for row in orbit_table(&rules, matrix, seeds) {
+                println!("{row}");
+            }
+            missing += matrix
+                .strengths
+                .iter()
+                .filter(|s| !s.answer.is_some_and(|(_, p)| p.first_wins()))
+                .count();
+        }
+        for matrix in &spaces {
+            let roster: Vec<&str> = matrix.roster.iter().map(|u| short(&rules, *u)).collect();
+            println!(
+                "space roster {}: {}",
                 rules.key(matrix.age),
                 roster.join(", ")
             );
@@ -899,8 +1046,16 @@ pub fn run_command(
     }
     println!(
         "fight-matrix strengths={} unanswered={missing}",
-        matrices.iter().map(|m| m.strengths.len()).sum::<usize>()
-            + orbits.iter().map(|m| m.strengths.len()).sum::<usize>()
+        matrices
+            .iter()
+            .chain(seas.iter())
+            .map(|m| m.strengths.len())
+            .sum::<usize>()
+            + orbits
+                .iter()
+                .chain(spaces.iter())
+                .map(|m| m.strengths.len())
+                .sum::<usize>()
     );
     if missing > 0 {
         return Err(format!("{missing} strengths have no answer").into());

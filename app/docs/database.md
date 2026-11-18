@@ -1438,6 +1438,29 @@ answer"). What the data needed to pass it, all ordinary rows and no schema chang
 Siege with a weapon whose `range_min` is set is read by the computer players as "needs an
 escort" (`rom-ai`, by the column, not by name).
 
+## Unit series: warship classes and building upgrades (task 92)
+
+Details and the tables as built: `docs/unit-series.md`, section 11. No schema change.
+
+- **A series is its `ui_group`.** Each unit's `upgrades_from_id` points at the one before it in
+  the same `ui_group`; the generator's `SHIP_CLASSES` gives the warships and starships their
+  class (`frigate`, `destroyer`, `line_ship`, `strike_ship`; `corvette`, `space_frigate`,
+  `space_cruiser`, `battleship`), so classes coexist and an upgrade retires only its own class.
+  New definitions (Ships of the Line, Dreadnoughts, their upgrade researches, the two building
+  upgrades, the refits Fire Control and Armour Belts) are written after every other generated
+  definition (the generator's `late` steps).
+- **Hitting ships**: the city, tower and fort lines, the siege line and the bomber line have an
+  `et_weapon_target` row for `fluid`.
+- **Building upgrades** `tech.up.vehicle_plant` (stable) and `tech.up.factory` (siege workshop),
+  like Farm → Automated Farm; the new building takes the old one's palette after its own.
+- **Superseded buildings**: `Rules::is_superseded_building(def, active)` — a researched
+  `tech_effect` `upgrade_type` from the building, and no worker slots
+  (`et_gather_site.slots_max = 0` or no gather site). The simulation refuses to construct such a
+  building (`SimError::Superseded`); a farm, woodcutter's camp, mine, oil well or university stays
+  buildable beside its automated successor.
+- The damage class `kinetic` and its matrix rows (task 75) are written at the start of the
+  generated block, before the starship guns that use it.
+
 ## Placement and resource discovery (task 41)
 
 Every building with an `in_city_radius` row also has an `in_own_territory`

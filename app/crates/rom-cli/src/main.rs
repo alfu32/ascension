@@ -7,6 +7,7 @@ mod mapgen_cmd;
 mod model_cmd;
 mod orbit_matrix;
 mod playthrough_cmd;
+mod sea_matrix;
 mod siege_cmd;
 mod territory_cmd;
 mod universe_cmd;
