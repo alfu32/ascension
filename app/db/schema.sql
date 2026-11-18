@@ -666,6 +666,14 @@ CREATE TABLE map_style (
   planet_n_max    INTEGER NOT NULL DEFAULT 256,
   route_extra_pct INTEGER NOT NULL DEFAULT 30,   -- extra routes beyond a spanning tree, % of its edges
   star_map_radius INTEGER NOT NULL DEFAULT 1000, -- widest region of the star catalogue a universe may span: every system within this many map units of its centre star
+  star_region     TEXT NOT NULL DEFAULT 'nearest' CHECK (star_region IN ('nearest','single','quadrant','all')),
+                                       -- task 89: which catalogue stars a universe takes.
+                                       -- nearest: a seeded star and its nearest neighbours, one
+                                       -- system per race plus neutral_systems_min..max, within
+                                       -- star_map_radius; single: one seeded star whose system
+                                       -- holds every race's home planet; quadrant: every star in
+                                       -- one seeded galactic quadrant; all: every catalogue star.
+                                       -- neutral_systems_* and star_map_radius apply to nearest only
   life_n          INTEGER NOT NULL DEFAULT 64 CHECK (life_n BETWEEN 16 AND 512),
                                        -- task 77: cube face size of the dormant surface every
                                        -- resource body gets before play (small bodies grow to it)
@@ -892,7 +900,9 @@ CREATE TABLE star (
   dist_cly         INTEGER NOT NULL CHECK (dist_cly > 0),                    -- distance from the Sun, 1/100 light-year
   x                INTEGER NOT NULL,         -- map position computed from the three values above
   y                INTEGER NOT NULL,         -- (direction exact, distance compressed), abstract units
-  z                INTEGER NOT NULL
+  z                INTEGER NOT NULL,
+  glon_mdeg        INTEGER NOT NULL CHECK (glon_mdeg BETWEEN 0 AND 359999) -- galactic longitude seen from
+                                             -- the Sun, milli-degrees, from ra/dec (task 89: quadrants)
 ) STRICT;
 CREATE INDEX star_by_constellation ON star(constellation_id);
 

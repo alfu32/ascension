@@ -1,14 +1,15 @@
 //! A universe: star systems on a star map, the bodies on their orbits and the
-//! routes between systems. The systems are a connected region of the real star
-//! catalogue (`rom_rules::Star`), in 3D. Integer arithmetic only; the same request
-//! always yields the same universe.
+//! routes between systems. The systems are a region of the real star catalogue
+//! (`rom_rules::Star`), in 3D, chosen by the map style's `star_region`: the stars nearest
+//! a seeded one, one star, one galactic quadrant or the whole catalogue (task 89). Integer
+//! arithmetic only; the same request always yields the same universe.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use rom_geo::SurfacePos;
 use rom_rules::{
     BodyKind, DefId, FeaturePattern, MAX_STAR_MAP_RADIUS, MapStyle, MapStyleFeature,
-    PLANET_N_RANGE, RegionKind, Rules, Star,
+    PLANET_N_RANGE, RegionKind, Rules, Star, StarRegion,
 };
 use rom_sim::SimRng;
 
@@ -23,15 +24,30 @@ const GOLDEN_MDEG: i64 = 137_508;
 const TURN_MDEG: i64 = 360_000;
 /// Star map layouts tried before the most balanced one is kept.
 const ATTEMPTS: u64 = 64;
+/// Layouts tried for a quadrant or the whole catalogue: the homes' surroundings vary more among
+/// hundreds of mostly empty systems, so fewer layouts pass the fairness checks.
+const WIDE_ATTEMPTS: u64 = 256;
 /// Routes counted from a home system when its resource-body value is measured.
 pub const FAIR_HOPS: u32 = 2;
 /// The poorest home system must reach this share of the richest one's value.
 pub const FAIR_VALUE_PCT: i64 = 80;
-/// Most neutral systems in one universe (with at most 64 home systems, every
-/// system still gets a distinct name).
-const MAX_NEUTRAL_SYSTEMS: i64 = 192;
+/// Most neutral systems a nearest-stars region asks for: more than the catalogue holds (745),
+/// so the whole catalogue may be taken this way too.
+const MAX_NEUTRAL_SYSTEMS: i64 = 1024;
+/// Most planets of a Solar system (every home planet and the others): its outermost orbit stays
+/// within an `i32` radius.
+const MAX_SOLAR_PLANETS: i64 = 16;
+/// Milli-degrees of galactic longitude in one quadrant.
+const QUADRANT_MDEG: i64 = 90_000;
+/// Mixed into the seed to choose the galactic quadrant, once for every layout attempt.
+const QUADRANT_STREAM: u64 = 0x7175_6164_7261_6e74;
 /// Most bodies orbiting one star.
 const MAX_ORBITS: i64 = 64;
+/// Neighbours whose distances measure a star's local density: three in a nearest-stars region;
+/// more in a quadrant or the whole catalogue, where a star on the rim of the region has close
+/// neighbours on one side only and few systems within two routes.
+const REACH_NEIGHBOURS: usize = 3;
+const WIDE_REACH_NEIGHBOURS: usize = 8;
 /// Home-system candidates are stars whose local density is within this band of the region's median,
 /// in percent, so no player starts in an outlier.
 const HOME_BAND_PCT: (i64, i64) = (70, 135);
@@ -203,7 +219,6 @@ fn knobs_ok(style: &MapStyle) -> bool {
         ),
     ];
     pairs.iter().all(|&(lo, hi)| 0 <= lo && lo <= hi)
-        && style.habitable_per_system_min >= 1
         && style.habitable_per_system_max + style.resource_bodies_per_system_max <= MAX_ORBITS
         && style.neutral_systems_max <= MAX_NEUTRAL_SYSTEMS
         && style.planet_n_min <= style.planet_n_median
@@ -240,9 +255,9 @@ fn choose_region<'a>(
     (ranked[count - 1].0 <= radius * radius).then(|| ranked.into_iter().map(|r| r.2).collect())
 }
 
-/// Sum of the distances from each point to its three nearest neighbours: how crowded its
+/// Sum of the distances from each point to its `k` nearest neighbours: how crowded its
 /// surroundings are.
-fn local_reach(pts: &[Point]) -> Vec<i64> {
+fn local_reach(pts: &[Point], k: usize) -> Vec<i64> {
     pts.iter()
         .enumerate()
         .map(|(i, &p)| {
@@ -253,7 +268,7 @@ fn local_reach(pts: &[Point]) -> Vec<i64> {
                 .map(|(_, &q)| isqrt(dist2(p, q)))
                 .collect();
             d.sort_unstable();
-            d.iter().take(3).sum()
+            d.iter().take(k).sum()
         })
         .collect()
 }
@@ -262,8 +277,8 @@ fn local_reach(pts: &[Point]) -> Vec<i64> {
 /// neighbourhood: candidates are stars whose local reach is near the region's median, and of
 /// several farthest-point placements the one with the smallest spread of reach, then the widest
 /// gap between homes, wins. Returns region indices in increasing order.
-fn place_homes(rng: &mut SimRng, pts: &[Point], homes: usize) -> Vec<usize> {
-    let reach = local_reach(pts);
+fn place_homes(rng: &mut SimRng, pts: &[Point], homes: usize, neighbours: usize) -> Vec<usize> {
+    let reach = local_reach(pts, neighbours);
     let mut sorted = reach.clone();
     sorted.sort_unstable();
     let median = sorted[sorted.len() / 2];
@@ -386,8 +401,9 @@ const CLEARANCE_MDEG: i64 = 5000;
 /// resource bodies that circle a planet as moons.
 #[derive(Clone)]
 struct Arrangement {
-    /// Habitable planets from the star outward: face size and whether it is the home planet.
-    planets: Vec<(u32, bool)>,
+    /// Habitable planets from the star outward: face size and, for a home planet, its place
+    /// among the races whose homes the system holds.
+    planets: Vec<(u32, Option<usize>)>,
     /// Orbit slot (counted from the star) the belt takes, when any body belongs to it.
     belt_slot: Option<usize>,
     /// Resource bodies and the planet each circles; `None` for belt bodies.
@@ -395,10 +411,26 @@ struct Arrangement {
 }
 
 impl Arrangement {
-    fn new(rng: &mut SimRng, mut planets: Vec<(u32, bool)>, kinds: Vec<DefId>) -> Self {
-        planets.sort_by_key(|&(n, home)| (n, !home));
+    /// Arranges `planets` and resource bodies of `kinds`; every home planet first takes
+    /// `home_moons` as its own moons (at most [`MOONS_PER_PLANET`]).
+    fn new(
+        rng: &mut SimRng,
+        mut planets: Vec<(u32, Option<usize>)>,
+        kinds: Vec<DefId>,
+        home_moons: &[DefId],
+    ) -> Self {
+        planets.sort_by_key(|&(n, home)| (n, home.is_none(), home));
         let mut moons = vec![0u8; planets.len()];
         let mut resources = Vec::new();
+        let homes: Vec<usize> = (0..planets.len())
+            .filter(|&p| planets[p].1.is_some())
+            .collect();
+        for p in homes {
+            for &kind in home_moons.iter().take(usize::from(MOONS_PER_PLANET)) {
+                moons[p] += 1;
+                resources.push((kind, Some(p)));
+            }
+        }
         for kind in kinds {
             let open: Vec<usize> = (0..planets.len())
                 .filter(|&p| moons[p] < MOONS_PER_PLANET)
@@ -422,8 +454,9 @@ impl Arrangement {
     }
 
     /// The bodies of the system with radii growing geometrically from the star, ids and names
-    /// left for the caller.
-    fn orbits(&self, rng: &mut SimRng, race: Option<DefId>) -> Vec<Body> {
+    /// left for the caller, each with its place among the system's homes; a home planet's race
+    /// is `races[its place]`.
+    fn orbits(&self, rng: &mut SimRng, races: &[DefId]) -> Vec<(Body, Option<usize>)> {
         let slots = self.planets.len() + usize::from(self.belt_slot.is_some());
         let mut radii = Vec::with_capacity(slots);
         let mut radius = INNER_ORBIT + i64::from(rng.range(0, INNER_SPREAD));
@@ -466,17 +499,20 @@ impl Arrangement {
             let jitter = i64::from(rng.range(0, 6001)) - 3000;
             let angle = spot(&mut angles, start + i as i64 * GOLDEN_MDEG + jitter);
             planet_angle.push(angle);
-            out.push(Body {
-                id: 0,
-                system_id: 0,
-                kind: BodyKind::Habitable,
-                name: String::new(),
-                orbit_radius: planet_radii[i] as i32,
-                orbit_angle_mdeg: angle as i32,
-                n: Some(n),
-                home_race: if home { race } else { None },
-                node_entity_type: None,
-            });
+            out.push((
+                Body {
+                    id: 0,
+                    system_id: 0,
+                    kind: BodyKind::Habitable,
+                    name: String::new(),
+                    orbit_radius: planet_radii[i] as i32,
+                    orbit_angle_mdeg: angle as i32,
+                    n: Some(n),
+                    home_race: home.and_then(|h| races.get(h).copied()),
+                    node_entity_type: None,
+                },
+                home,
+            ));
         }
         let belt_start = i64::from(rng.range(0, TURN_MDEG as u32));
         let width = belt_radius / 6;
@@ -531,19 +567,22 @@ impl Arrangement {
                     )
                 }
             };
-            out.push(Body {
-                id: 0,
-                system_id: 0,
-                kind: BodyKind::Resource,
-                name: String::new(),
-                orbit_radius: radius as i32,
-                orbit_angle_mdeg: angle as i32,
-                n: None,
-                home_race: None,
-                node_entity_type: Some(kind),
-            });
+            out.push((
+                Body {
+                    id: 0,
+                    system_id: 0,
+                    kind: BodyKind::Resource,
+                    name: String::new(),
+                    orbit_radius: radius as i32,
+                    orbit_angle_mdeg: angle as i32,
+                    n: None,
+                    home_race: None,
+                    node_entity_type: Some(kind),
+                },
+                None,
+            ));
         }
-        out.sort_by_key(|b| (b.orbit_radius, b.orbit_angle_mdeg));
+        out.sort_by_key(|(b, _)| (b.orbit_radius, b.orbit_angle_mdeg));
         out
     }
 }
@@ -553,6 +592,34 @@ struct Layout {
     bodies: Vec<Body>,
     routes: Vec<Route>,
     figure: Vec<(u32, u32)>,
+    /// The home group (index into the request's homes) of every home planet, by body id.
+    homes: BTreeMap<u32, usize>,
+}
+
+/// Appends the bodies of one system (`orbits` already named) with their ids, recording which
+/// home group each home planet belongs to: `groups[its place]`.
+fn push_orbits(
+    bodies: &mut Vec<Body>,
+    homes: &mut BTreeMap<u32, usize>,
+    system: u32,
+    orbits: Vec<(Body, Option<usize>)>,
+    groups: &[usize],
+) {
+    for (mut body, home) in orbits {
+        body.id = bodies.len() as u32 + 1;
+        body.system_id = system;
+        if let Some(group) = home.and_then(|h| groups.get(h)) {
+            homes.insert(body.id, *group);
+        }
+        bodies.push(body);
+    }
+}
+
+/// Names the bodies of one system in orbit order (see [`name_bodies`]), keeping their home places.
+fn named(star: &str, orbits: Vec<(Body, Option<usize>)>) -> Vec<(Body, Option<usize>)> {
+    let (mut list, places): (Vec<Body>, Vec<Option<usize>>) = orbits.into_iter().unzip();
+    name_bodies(star, &mut list);
+    list.into_iter().zip(places).collect()
 }
 
 /// May the route `a`-`b` join the map? It passes clear of every other system and, unless
@@ -571,10 +638,11 @@ fn can_add(
     !edges.contains(&(a.min(b), a.max(b)))
         && pos.iter().enumerate().all(|(i, &p)| {
             let id = i as u32 + 1;
+            // The cheap neighbourhood test first: on a large map it refuses most candidates.
             id == a
                 || id == b
-                || (segment_dist2(pa, pb, p) >= clearance * clearance
-                    && !(lune && dist2(pa, p).max(dist2(pb, p)) < ab))
+                || (!(lune && dist2(pa, p).max(dist2(pb, p)) < ab)
+                    && segment_dist2(pa, pb, p) >= clearance * clearance)
         })
 }
 
@@ -697,19 +765,48 @@ fn name_bodies(star: &str, bodies: &mut [Body]) {
     }
 }
 
+/// The catalogue stars of one galactic quadrant (0 for quadrant I), in id order.
+fn quadrant_stars(rules: &Rules, quadrant: i64) -> Vec<&Star> {
+    rules
+        .stars
+        .values()
+        .filter(|s| s.glon_mdeg.div_euclid(QUADRANT_MDEG) == quadrant)
+        .collect()
+}
+
+/// The galactic quadrant (0 for quadrant I) a seed chooses; every layout attempt keeps it.
+pub fn seed_quadrant(seed: u64) -> u8 {
+    (mix64(seed ^ QUADRANT_STREAM) % 4) as u8
+}
+
 fn layout(
     rng: &mut SimRng,
     rules: &Rules,
     style: &MapStyle,
     races: &[DefId],
     rows: &[&MapStyleFeature],
+    quadrant: i64,
 ) -> Option<Layout> {
     let homes = races.len();
-    let neutral = pick(rng, style.neutral_systems_min, style.neutral_systems_max) as usize;
-    let k = homes + neutral;
-    let region = choose_region(rng, rules, k, style.star_map_radius)?;
+    let region = match style.star_region {
+        StarRegion::Nearest => {
+            let neutral = pick(rng, style.neutral_systems_min, style.neutral_systems_max) as usize;
+            choose_region(rng, rules, homes + neutral, style.star_map_radius)?
+        }
+        StarRegion::Single => return solar_layout(rng, rules, style, races, rows),
+        StarRegion::Quadrant => quadrant_stars(rules, quadrant),
+        StarRegion::All => rules.stars.values().collect(),
+    };
+    let k = region.len();
+    if k < homes {
+        return None;
+    }
     let pts: Vec<Point> = region.iter().map(|s| star_point(s)).collect();
-    let chosen = place_homes(rng, &pts, homes);
+    let neighbours = match style.star_region {
+        StarRegion::Quadrant | StarRegion::All => WIDE_REACH_NEIGHBOURS,
+        StarRegion::Nearest | StarRegion::Single => REACH_NEIGHBOURS,
+    };
+    let chosen = place_homes(rng, &pts, homes, neighbours);
     if chosen.len() != homes {
         return None;
     }
@@ -762,12 +859,13 @@ fn layout(
         style.habitable_per_system_min,
         style.habitable_per_system_max,
     ) as usize;
-    let mut home_planets: Vec<(u32, bool)> = vec![(style.planet_n_median as u32, true)];
-    home_planets.extend((1..home_habitable).map(|_| (n_pick(rng), false)));
+    let mut home_planets: Vec<(u32, Option<usize>)> = vec![(style.planet_n_median as u32, Some(0))];
+    home_planets.extend((1..home_habitable).map(|_| (n_pick(rng), None)));
     let home_resources = resource_kinds(rng, style, rows, true);
-    let home_plan = Arrangement::new(rng, home_planets, home_resources);
+    let home_plan = Arrangement::new(rng, home_planets, home_resources, &[]);
 
     let mut bodies = Vec::new();
+    let mut home_bodies = BTreeMap::new();
     for system in &systems {
         let (plan, race) = if let Some(&race) = races.get(system.id as usize - 1) {
             (home_plan.clone(), Some(race))
@@ -777,9 +875,9 @@ fn layout(
                 style.habitable_per_system_min,
                 style.habitable_per_system_max,
             );
-            let planets = (0..habitable).map(|_| (n_pick(rng), false)).collect();
+            let planets = (0..habitable).map(|_| (n_pick(rng), None)).collect();
             let kinds = resource_kinds(rng, style, rows, false);
-            (Arrangement::new(rng, planets, kinds), None)
+            (Arrangement::new(rng, planets, kinds, &[]), None)
         };
         bodies.push(Body {
             id: bodies.len() as u32 + 1,
@@ -792,28 +890,180 @@ fn layout(
             home_race: None,
             node_entity_type: None,
         });
-        let mut orbits = plan.orbits(rng, race);
-        name_bodies(&system.name, &mut orbits);
-        for mut body in orbits {
-            body.id = bodies.len() as u32 + 1;
-            body.system_id = system.id;
-            bodies.push(body);
-        }
+        let orbits = named(&system.name, plan.orbits(rng, race.as_slice()));
+        let group = [system.id as usize - 1];
+        push_orbits(&mut bodies, &mut home_bodies, system.id, orbits, &group);
     }
     Some(Layout {
         systems,
         bodies,
         routes,
         figure,
+        homes: home_bodies,
     })
+}
+
+/// Solar (task 89): one catalogue star chosen by the seed, whose system holds every race's home
+/// planet (each race its own, at the median size), `habitable_per_system_min..=max` − 1 more
+/// planets (the count of a home system, home included) and the resource bodies; every home planet
+/// has the style's `per_player` resource bodies as its moons. No routes.
+fn solar_layout(
+    rng: &mut SimRng,
+    rules: &Rules,
+    style: &MapStyle,
+    races: &[DefId],
+    rows: &[&MapStyleFeature],
+) -> Option<Layout> {
+    let all: Vec<&Star> = rules.stars.values().collect();
+    if all.is_empty() {
+        return None;
+    }
+    let star = all[rng.range(0, all.len() as u32) as usize];
+    let system = StarSystem {
+        id: 1,
+        name: star.name.clone(),
+        x: star.x as i32,
+        y: star.y as i32,
+        z: star.z as i32,
+        star: Some(star.id),
+        constellation: rules
+            .constellations
+            .get(&star.constellation_id)
+            .map(|c| c.name.clone())
+            .unwrap_or_default(),
+    };
+    let others = (pick(
+        rng,
+        style.habitable_per_system_min,
+        style.habitable_per_system_max,
+    ) - 1)
+        .max(0);
+    let mut planets: Vec<(u32, Option<usize>)> = (0..races.len())
+        .map(|i| (style.planet_n_median as u32, Some(i)))
+        .collect();
+    planets.extend((0..others).map(|_| {
+        (
+            pick(rng, style.planet_n_min, style.planet_n_max) as u32,
+            None,
+        )
+    }));
+    let home_moons: Vec<DefId> = rows
+        .iter()
+        .filter(|r| r.pattern == FeaturePattern::PerPlayer)
+        .flat_map(|r| std::iter::repeat_n(r.feature_def_id, r.clumps_min.max(0) as usize))
+        .take(usize::from(MOONS_PER_PLANET))
+        .collect();
+    let count = pick(
+        rng,
+        style.resource_bodies_per_system_min,
+        style.resource_bodies_per_system_max,
+    ) as usize;
+    let kinds = (0..count.saturating_sub(home_moons.len() * races.len()))
+        .map(|_| weighted_kind(rng, rows))
+        .collect();
+    let plan = Arrangement::new(rng, planets, kinds, &home_moons);
+    let mut bodies = vec![Body {
+        id: 1,
+        system_id: 1,
+        kind: BodyKind::Star,
+        name: system.name.clone(),
+        orbit_radius: 0,
+        orbit_angle_mdeg: 0,
+        n: None,
+        home_race: None,
+        node_entity_type: None,
+    }];
+    let orbits = named(&system.name, plan.orbits(rng, races));
+    let groups: Vec<usize> = (0..races.len()).collect();
+    let mut homes = BTreeMap::new();
+    push_orbits(&mut bodies, &mut homes, 1, orbits, &groups);
+    Some(Layout {
+        systems: vec![system],
+        bodies,
+        routes: Vec::new(),
+        figure: Vec::new(),
+        homes,
+    })
+}
+
+/// Where players start (`match_option` `start_placement`, task 89).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StartPlacement {
+    /// `separate`: each race on its own home planet; players of one race share it.
+    #[default]
+    Separate,
+    /// `together`: players of different races may share a planet; the players are put on as
+    /// few home planets as fairness allows.
+    Together,
+}
+
+impl StartPlacement {
+    /// The `match_option` key.
+    pub const OPTION: &'static str = "start_placement";
+
+    /// The choice of a `match_option_choice.value`.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "separate" => Some(Self::Separate),
+            "together" => Some(Self::Together),
+            _ => None,
+        }
+    }
+
+    /// The `match_option_choice.value` of this choice.
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Separate => "separate",
+            Self::Together => "together",
+        }
+    }
+
+    /// The rules' default (the option's `default_value`); separate when the rules have no
+    /// such option.
+    pub fn of_rules(rules: &Rules) -> Result<Self, MapGenError> {
+        rules
+            .match_options
+            .get(Self::OPTION)
+            .map_or(Some(Self::Separate), |row| Self::parse(&row.default_value))
+            .ok_or(MapGenError::InvalidRequest(
+                "unknown start_placement default",
+            ))
+    }
 }
 
 struct Checked<'a> {
     rules: &'a Rules,
     style: &'a MapStyle,
+    /// One race per home group: the race its home planet is marked with.
     races: Vec<DefId>,
+    /// The home group of each player, in player order.
+    player_groups: Vec<usize>,
+    /// The race of each player, in player order.
     player_races: Vec<DefId>,
     rows: Vec<&'a MapStyleFeature>,
+}
+
+impl Checked<'_> {
+    /// Players dealt into `groups` home groups in turn (player `p` into group `p % groups`),
+    /// each marked with the race of its first player: the together placement.
+    fn together(&mut self, groups: usize) -> Result<(), MapGenError> {
+        let groups = groups.clamp(1, self.player_races.len());
+        self.player_groups = (0..self.player_races.len()).map(|p| p % groups).collect();
+        self.races = self.player_races[..groups].to_vec();
+        solar_fits(self.style, self.races.len())
+    }
+}
+
+/// A Solar system holds every home planet and the others within [`MAX_SOLAR_PLANETS`].
+fn solar_fits(style: &MapStyle, homes: usize) -> Result<(), MapGenError> {
+    if style.star_region == StarRegion::Single
+        && homes as i64 + (style.habitable_per_system_max - 1).max(0) > MAX_SOLAR_PLANETS
+    {
+        return Err(MapGenError::InvalidRequest(
+            "a Solar system holds at most 16 planets",
+        ));
+    }
+    Ok(())
 }
 
 fn check_request<'a>(
@@ -848,6 +1098,11 @@ fn check_request<'a>(
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
+    let player_groups = player_races
+        .iter()
+        .map(|r| races.iter().position(|x| x == r).unwrap_or(0))
+        .collect();
+    solar_fits(style, races.len())?;
     let mut rows: Vec<&MapStyleFeature> = rules
         .map_style_features
         .get(&request.style)
@@ -874,27 +1129,61 @@ fn check_request<'a>(
         rules,
         style,
         races,
+        player_groups,
         player_races,
         rows,
     })
 }
 
 /// Lays out the star map, bodies and routes and records a recipe for every
-/// habitable planet, without generating any planet surface.
+/// habitable planet, without generating any planet surface; players start as the rules'
+/// `start_placement` default says.
 pub fn plan_universe(rules: &Rules, request: &UniverseRequest) -> Result<Universe, MapGenError> {
-    let checked = check_request(rules, request)?;
-    plan(&checked, request)
+    plan_universe_placed(rules, request, StartPlacement::of_rules(rules)?)
 }
 
-fn plan(c: &Checked, request: &UniverseRequest) -> Result<Universe, MapGenError> {
-    let mut best: Option<(i64, Universe)> = None;
-    for attempt in 0..ATTEMPTS {
+/// [`plan_universe`] with the start placement chosen for the match. A together plan puts every
+/// player on one home planet; [`generate_universe_placed`] spreads them over more when that
+/// planet cannot hold them fairly.
+pub fn plan_universe_placed(
+    rules: &Rules,
+    request: &UniverseRequest,
+    placement: StartPlacement,
+) -> Result<Universe, MapGenError> {
+    let mut checked = check_request(rules, request)?;
+    if placement == StartPlacement::Together {
+        checked.together(1)?;
+    }
+    plan(&checked, request).map(|(u, _)| u)
+}
+
+/// The players (indices in player order) who start on each home planet, by body id.
+type HomePlayers = BTreeMap<u32, Vec<usize>>;
+
+fn plan(c: &Checked, request: &UniverseRequest) -> Result<(Universe, HomePlayers), MapGenError> {
+    let mut best: Option<(i64, (Universe, HomePlayers))> = None;
+    let quadrant = i64::from(seed_quadrant(request.seed));
+    let attempts = match c.style.star_region {
+        StarRegion::Nearest | StarRegion::Single => ATTEMPTS,
+        StarRegion::Quadrant | StarRegion::All => WIDE_ATTEMPTS,
+    };
+    for attempt in 0..attempts {
         let mut rng = SimRng::new(mix64(
             request.seed ^ attempt.wrapping_mul(0xd1b5_4a32_d192_ed03),
         ));
-        let Some(layout) = layout(&mut rng, c.rules, c.style, &c.races, &c.rows) else {
+        let Some(layout) = layout(&mut rng, c.rules, c.style, &c.races, &c.rows, quadrant) else {
             continue;
         };
+        let players: HomePlayers = layout
+            .homes
+            .iter()
+            .map(|(&body, &group)| {
+                let on = (0..c.player_groups.len())
+                    .filter(|&p| c.player_groups[p] == group)
+                    .collect();
+                (body, on)
+            })
+            .collect();
         let mut universe = Universe {
             style: request.style,
             systems: layout.systems,
@@ -908,12 +1197,11 @@ fn plan(c: &Checked, request: &UniverseRequest) -> Result<Universe, MapGenError>
         };
         for body in &universe.bodies {
             let Some(n) = body.n else { continue };
-            let player_factions = request
-                .player_factions
-                .iter()
-                .zip(&c.player_races)
-                .filter(|&(_, race)| Some(*race) == body.home_race)
-                .map(|(&f, _)| f)
+            let player_factions = players
+                .get(&body.id)
+                .into_iter()
+                .flatten()
+                .map(|&p| request.player_factions[p])
                 .collect();
             let seed = mix64(request.seed ^ u64::from(body.id).wrapping_mul(0x9e37_79b9_7f4a_7c15));
             universe.recipes.insert(
@@ -934,20 +1222,23 @@ fn plan(c: &Checked, request: &UniverseRequest) -> Result<Universe, MapGenError>
         if fair {
             add_dormant_surfaces(&mut universe, c.style);
             add_celestial_home(&mut universe, c.rules);
-            return Ok(universe);
+            return Ok((universe, players));
         }
         if best.as_ref().is_none_or(|(s, _)| score > *s) {
-            best = Some((score, universe));
+            best = Some((score, (universe, players)));
         }
     }
-    best.map(|(_, mut u)| {
+    best.map(|(_, (mut u, players))| {
         add_dormant_surfaces(&mut u, c.style);
         add_celestial_home(&mut u, c.rules);
-        u
+        (u, players)
     })
-    .ok_or(MapGenError::StarMap(
-        c.races.len() as u32 + c.style.neutral_systems_max as u32,
-    ))
+    .ok_or(MapGenError::StarMap(match c.style.star_region {
+        StarRegion::Nearest => c.races.len() as u32 + c.style.neutral_systems_max as u32,
+        StarRegion::Single => 1,
+        StarRegion::Quadrant => quadrant_stars(c.rules, quadrant).len() as u32,
+        StarRegion::All => c.rules.stars.len() as u32,
+    }))
 }
 
 /// Gives every resource body its dormant surface (task 77): the style's `life_n` tiles a face
@@ -1052,27 +1343,60 @@ fn add_celestial_home(universe: &mut Universe, rules: &Rules) {
 }
 
 /// Generates a universe: the star map, bodies and routes, then every home
-/// planet (median size, shared by all players of its race) with its starts.
+/// planet (median size, shared by all players of its race) with its starts; players start as
+/// the rules' `start_placement` default says.
 pub fn generate_universe(
     rules: &Rules,
     request: &UniverseRequest,
 ) -> Result<Universe, MapGenError> {
-    let checked = check_request(rules, request)?;
-    let mut universe = plan(&checked, request)?;
-    let mut starts = vec![None; request.player_factions.len()];
-    for body in universe.bodies.iter().filter(|b| b.home_race.is_some()) {
-        let recipe = &universe.recipes[&body.id];
-        let planet = generate_sphere(rules, recipe)?;
-        let players = checked
-            .player_races
-            .iter()
-            .enumerate()
-            .filter(|&(_, race)| Some(*race) == body.home_race)
-            .map(|(p, _)| p);
-        for (p, &pos) in players.zip(&planet.starts) {
-            starts[p] = Some((body.id, pos));
+    generate_universe_placed(rules, request, StartPlacement::of_rules(rules)?)
+}
+
+/// [`generate_universe`] with the start placement chosen for the match. Together: every player
+/// on one home planet; when that planet has no fair room for them all (no start for every
+/// player, or its starts fail the planet's fairness checks), the players are dealt over two
+/// home planets, then three, and so on.
+pub fn generate_universe_placed(
+    rules: &Rules,
+    request: &UniverseRequest,
+    placement: StartPlacement,
+) -> Result<Universe, MapGenError> {
+    let mut checked = check_request(rules, request)?;
+    if placement == StartPlacement::Separate {
+        return generate_homes(&checked, request, false);
+    }
+    let players = request.player_factions.len();
+    let mut last = None;
+    for groups in 1..=players {
+        checked.together(groups)?;
+        match generate_homes(&checked, request, groups < players) {
+            Ok(universe) => return Ok(universe),
+            Err(e @ (MapGenError::NoRoomForPlayers(_) | MapGenError::UnfairHome)) => last = Some(e),
+            Err(e) => return Err(e),
         }
-        universe.planets.insert(body.id, planet);
+    }
+    Err(last.unwrap_or(MapGenError::NoRoomForPlayers(players as u32)))
+}
+
+/// Plans the universe and generates every home planet with its starts; `strict` refuses a home
+/// planet whose starts are unfair ([`MapGenError::UnfairHome`]).
+fn generate_homes(
+    checked: &Checked,
+    request: &UniverseRequest,
+    strict: bool,
+) -> Result<Universe, MapGenError> {
+    let (mut universe, players) = plan(checked, request)?;
+    let mut starts = vec![None; request.player_factions.len()];
+    for (&body, on) in &players {
+        let recipe = &universe.recipes[&body];
+        let planet = generate_sphere(checked.rules, recipe)?;
+        if strict && !planet.fairness(checked.rules).is_empty() {
+            return Err(MapGenError::UnfairHome);
+        }
+        for (&p, &pos) in on.iter().zip(&planet.starts) {
+            starts[p] = Some((body, pos));
+        }
+        universe.planets.insert(body, planet);
     }
     universe.starts = starts
         .into_iter()
@@ -1224,8 +1548,10 @@ impl Universe {
             problems.push("not every system is reachable".to_owned());
         }
         let shares = self.home_shares(rules);
+        // Systems routes may join: all but the celestial home.
+        let joinable = self.systems.len() - usize::from(celestial.is_some());
         for s in &shares {
-            if self.systems.len() > 2 && self.degree(s.system) < 2 {
+            if joinable > 2 && self.degree(s.system) < 2 {
                 problems.push(format!(
                     "home system {} has fewer than two routes",
                     s.system

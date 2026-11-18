@@ -87,8 +87,11 @@ skirmish maps and the existing scenarios.
   battles.
 - **Resource bodies** have no surface play. They stay small objects that a
   player owns while a starship stays beside them (the earlier decision).
-- Each **race's home planet** is in its own star system. Players of the same
-  race share that planet.
+- By default each **race's home planet** is in its own star system (in the
+  Solar map style, task 89, every race has its own planet of one shared system).
+  Players of the same race share that planet. This is the default start
+  placement, not a rule: the setup option "Together" puts players of different
+  races on one planet ("Start placement" below).
 - An entity has exactly one **location**: on a surface, in orbit around a
   body, in a system's space, or in transit between systems. Moving between
   levels is an order (launch from a spaceport, land at a site, leave orbit,
@@ -132,7 +135,8 @@ order, "Vega II"; resource bodies "Vega belt" and "Vega II moon".
   reachable, two routes per home, equal habitable counts, resource-body value
   within two routes at least 80 percent of the richest home's, and the two
   shortest routes of the poorest home at least 70 percent of the richest
-  home's. Layouts failing this are redrawn (up to 64 centres).
+  home's. Layouts failing this are redrawn (up to 64 centres; 256 layouts in a Quadrant or Galaxy,
+task 89).
 - **Seeing the sky.** F2 switches the "Sky from the Sun" preset: the eye
   goes to the Sun and looks toward the middle of the systems; arrows or a drag
   turn the look; the constellation stick figures are drawn between the member
@@ -145,6 +149,69 @@ order, "Vega II"; resource bodies "Vega belt" and "Vega II moon".
   faded, names fading with distance) and from the parallax when turning. The
   equatorial plane's rings and the drop lines of task 59 are gone: they were
   mistaken for routes.
+
+### Map styles (task 89)
+
+The owner (2026-11-18): "solar (single solar system), cluster (as it is right now), quadrant
+(using one of the quadrants) and galaxy (using everything)". The style decides which stars of the
+catalogue a match takes (`map_style.star_region`, `database.md` "Map styles"); the knobs of each
+system (habitable planets, resource bodies, routes) stay as they are.
+
+| Style | The match's systems |
+| --- | --- |
+| One World | one home system per race and nothing else (a quick match) |
+| Solar | one star system for everyone: a catalogue star chosen by the seed, whose system holds every player's home, one to three more planets and the resource bodies. With separate worlds each race has its own planet of the system. Travel is within the system only |
+| Cluster | the earlier Many Worlds (the key `map.many_worlds` stays): a seeded star and its nearest neighbours, the homes plus two to four more systems; same seeds, same universes |
+| Quadrant | every catalogue star in one galactic quadrant as astronomers number them (galactic longitude seen from the Sun: I 0-90, II 90-180, III 180-270, IV 270-360 degrees; 163 to 225 stars); the seed chooses the quadrant |
+| Galaxy | every catalogue star: 745 systems. **Held back**: not in the seed, so the launchers do not offer it, until the simulation makes a system's space on first visit ("Scale" below) |
+
+In Quadrant (and Galaxy) most systems are empty of people: beyond the homes each holds up to two
+planets and a few resource bodies. The homes are placed and checked as in a Cluster (density band,
+farthest-point placements, two routes each, equal contents, comparable value within two routes);
+a star's density is measured over its eight nearest neighbours there (three in a Cluster), so no
+home sits on the thin rim of the region, and up to 256 layouts are tried (64 in a Cluster).
+Routes are the same connected network. Bodies are generated before play, planet surfaces only
+when first visited. The launchers list the styles from the data.
+
+#### Start placement
+
+A setup option for every style (owner, 2026-11-18: "on Solar or any other game players can be put
+on the same planet"), the `match_option` `start_placement`:
+
+- **Separate worlds** (`separate`, the default): each race on its own home planet; races meet in
+  space; nations of one race share their race's planet. The universes are the ones the styles gave
+  before the option existed.
+- **Together** (`together`): players of different races may share a planet. The generator puts
+  every player on one home planet (one home system in the style's region; in Solar one planet of
+  the one system), with the usual start spacing and fairness checks on that planet; when the
+  planet has no fair room for them all, the players are dealt over two home planets, then three,
+  and so on (eight players of three races fitted on one median planet in every style tried).
+
+`rom-mapgen` reads the option (`StartPlacement`, `generate_universe_placed`); `rom universe` and
+`rom duel --universe` take `--start-placement separate|together`. The launchers do not offer it
+yet.
+
+#### Scale (measured 2026-11-18, release build, two players)
+
+| Style | Systems | Generation | Building the match world | Save | Star map, 1280×800 |
+| --- | --- | --- | --- | --- | --- |
+| Cluster | 5–7 | 0.6 s | 1.8 s, 119 MB | 1.1 MB | 57 fps |
+| Quadrant | 163–225 | 0.6 s | 12.5 s, 2.3 GB | 18.5 MB | 50 fps |
+| Galaxy (held back) | 745 | 1.0 s | over 8.4 GB: killed for want of memory | — | not run |
+
+Generation (`rom-mapgen`) is quick at every size. What does not scale is the simulation's world:
+`rom-sim` makes a flat space map of about 512 × 512 tiles for every star system when the match
+starts (`build_space`), and the world's memory grows by about 12 MB a system. A 20 000-tick Quadrant duel
+of computer players took 35 s and 2.1 GB; the same on the Galaxy took 395 s and 7.4 GB, and
+building a Galaxy world for a match was killed at 8.4 GB. So the Galaxy is held back: the
+`all` region stays in `rom-mapgen` with its tests (which make the style themselves), but the seed
+has no `map.galaxy` row until a system's space is made only when someone first goes there, as
+planets are (a card of its own).
+
+Screenshots (scripts `tasks/89-*-script.txt`, seed 1, `--ai none`): `img/starmap-style-cluster.png`,
+`img/starmap-style-quadrant.png` (quadrant III, the star map at its widest) and
+`img/starmap-style-solar.png` (one system; the celestial home's ring beside it), and
+`img/solar-system-homes.png` (the Solar system Zavijava with the home planets of three races).
 
 ## Camera and visibility by age
 

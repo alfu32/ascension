@@ -3,7 +3,9 @@
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc, time::Instant};
 
 use rom_ai::Brain;
-use rom_mapgen::{MapRequest, Universe, UniverseRequest, generate_fair, generate_universe};
+use rom_mapgen::{
+    MapRequest, StartPlacement, Universe, UniverseRequest, generate_fair, generate_universe_placed,
+};
 use rom_rules::{DefId, ResourceKind, Rules};
 use rom_sim::{BodyId, MatchOptions, Player, PlayerId, Pos, World};
 
@@ -34,6 +36,10 @@ pub struct Request {
     pub side: u32,
     /// Seed of the map or universe when it differs from the match seed.
     pub map_seed: Option<u64>,
+    /// Map style key of the universe; `None` picks the one with the most neutral systems.
+    pub universe_style: Option<String>,
+    /// Where the players start in the universe; `None` takes the rules' default.
+    pub start_placement: Option<StartPlacement>,
 }
 
 /// One player's line of the result table.
@@ -306,23 +312,36 @@ pub fn build_world_with(
     let factions = factions.to_vec();
     let players = make_players(rules, &factions, request);
     if request.universe {
-        let style = rules
-            .map_styles
-            .values()
-            .max_by(|a, b| {
-                a.neutral_systems_max
-                    .cmp(&b.neutral_systems_max)
-                    .then(b.id.cmp(&a.id))
-            })
-            .ok_or("the rules have no map style")?
-            .id;
-        let universe = generate_universe(
+        let style = match &request.universe_style {
+            Some(key) => rules
+                .id_of(key)
+                .filter(|id| rules.map_styles.contains_key(id))
+                .ok_or_else(|| format!("unknown style {key}"))?,
+            None => {
+                rules
+                    .map_styles
+                    .values()
+                    .max_by(|a, b| {
+                        a.neutral_systems_max
+                            .cmp(&b.neutral_systems_max)
+                            .then(b.id.cmp(&a.id))
+                    })
+                    .ok_or("the rules have no map style")?
+                    .id
+            }
+        };
+        let placement = match request.start_placement {
+            Some(placement) => placement,
+            None => StartPlacement::of_rules(rules).map_err(|e| e.to_string())?,
+        };
+        let universe = generate_universe_placed(
             rules,
             &UniverseRequest {
                 style,
                 seed: request.map_seed.unwrap_or(request.seed),
                 player_factions: factions.clone(),
             },
+            placement,
         )
         .map_err(|e| e.to_string())?;
         let homes: BTreeMap<PlayerId, BodyId> = universe
@@ -623,6 +642,8 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
         trace,
         side: 0,
         map_seed: None,
+        universe_style: None,
+        start_placement: None,
     };
     let conn = rusqlite::Connection::open_with_flags(
         db.ok_or(USAGE)?,
@@ -743,6 +764,8 @@ mod tests {
             trace: 0,
             side: 0,
             map_seed: None,
+            universe_style: None,
+            start_placement: None,
         };
         let (world, _) = build_world(&rules, &request).unwrap();
         for player in [PlayerId(1), PlayerId(2)] {
