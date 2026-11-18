@@ -829,9 +829,10 @@ impl World {
                     width: s.map.width,
                     height: s.map.height,
                     terrain: s.map.terrain.clone(),
-                    winner: match s.territory.winner.uniform_value() {
-                        Some(0) => Vec::new(),
-                        _ => s.territory.winner.to_vec(),
+                    winner: if s.territory.winner.holds_only(0) {
+                        Vec::new()
+                    } else {
+                        s.territory.winner.to_vec()
                     },
                     path: PathSnapshot {
                         next_request: pathing.next_request,
@@ -858,9 +859,10 @@ impl World {
                         .iter()
                         .map(|(player, v)| PlayerVisionSnapshot {
                             player: *player,
-                            explored: match v.explored.uniform_value() {
-                                Some(0) => Vec::new(),
-                                _ => v.explored.to_vec(),
+                            explored: if v.explored.holds_only(0) {
+                                Vec::new()
+                            } else {
+                                v.explored.to_vec()
                             },
                             memory: v.memory.iter().map(|((tile, _), b)| (*tile, *b)).collect(),
                         })

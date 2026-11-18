@@ -56,6 +56,16 @@ impl<T: Copy + PartialEq> Tiles<T> {
             .then_some(self.value)
     }
 
+    /// Whether every tile holds `value`, stored or not.
+    pub fn holds_only(&self, value: T) -> bool {
+        self.value == value
+            && self
+                .chunks
+                .iter()
+                .flatten()
+                .all(|chunk| chunk.iter().all(|v| *v == value))
+    }
+
     /// Tiles in chunk `chunk`; the last chunk may be short.
     fn chunk_len(&self, chunk: usize) -> usize {
         (self.len - chunk * CHUNK).min(CHUNK)
@@ -218,6 +228,11 @@ mod tests {
         let mut all = layer.clone();
         all.store_all();
         assert_eq!(all, layer);
+        assert!(!layer.holds_only(0));
+        assert!(Tiles::uniform(0, 3).holds_only(0));
+        let mut zeros = Tiles::uniform(0, 3);
+        zeros[1] = 0;
+        assert!(zeros.holds_only(0) && zeros.uniform_value().is_none());
         layer.set_all(4);
         assert_eq!(layer.uniform_value(), Some(4));
         assert_eq!(Tiles::from_vec(vec![7, 7]).uniform_value(), Some(7));
