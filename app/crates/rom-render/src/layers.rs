@@ -332,6 +332,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_sphere_behind_or_far_aside_is_out_of_the_picture() {
+        let view = FrameView {
+            eye: [0.0, 0.0, 100.0],
+            target: [0.0, 0.0, 0.0],
+            up: [0.0, 1.0, 0.0],
+        };
+        let aspect = 1.6;
+        assert!(view.sees_sphere([0.0, 0.0, 0.0], 10.0, aspect));
+        assert!(view.sees_sphere([20.0, 5.0, 0.0], 10.0, aspect));
+        // Behind the eye, and far off to the side.
+        assert!(!view.sees_sphere([0.0, 0.0, 500.0], 10.0, aspect));
+        assert!(!view.sees_sphere([5000.0, 0.0, 0.0], 10.0, aspect));
+        // The eye inside the sphere: always seen.
+        assert!(view.sees_sphere([0.0, 0.0, 130.0], 50.0, aspect));
+    }
+
+    #[test]
     fn frames_nest_and_round_trip() {
         let frame = PlanetFrame::aligned([0.3, 0.4, 0.866], [5000.0, 0.0, -2000.0], [0.0; 3]);
         let place = PlanetPlace {

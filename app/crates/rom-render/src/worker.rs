@@ -626,7 +626,6 @@ fn render_loop(shared: &Shared) {
 
     while !shared.stop.load(Ordering::Acquire) {
         let frame_start = Instant::now();
-        crate::prof::begin();
         let seconds = frame_start
             .duration_since(last_frame)
             .as_secs_f32()
@@ -874,7 +873,6 @@ fn render_loop(shared: &Shared) {
             }
         }
         scene.run_shade_queue(SHADE_CHUNKS_PER_FRAME);
-        crate::prof::mark("a_pre");
         if let Some(published) = lock(&shared.camera).take()
             && orbit.is_none()
         {
@@ -899,7 +897,6 @@ fn render_loop(shared: &Shared) {
             zoom.set_cap(current_cap(shared));
             zoom.set_known(lock(&shared.space).known.as_deref());
         }
-        crate::prof::mark("b_known");
         let view_range = shared.view_range.load(Ordering::Relaxed);
         if view_range != u32::MAX {
             let all = shared.zoom_all.load(Ordering::Relaxed);
@@ -926,7 +923,6 @@ fn render_loop(shared: &Shared) {
         let space_snapshot = Arc::clone(&lock(&shared.space));
         let pair = lock(&shared.snapshots).clone();
         pair.blend_at_on(frame_start, globe.as_deref(), &mut blended);
-        crate::prof::mark("c_blend");
         // Ships on and above the planet are drawn larger than true, by their type's scale, and
         // hold higher the bigger they are.
         let ship_scales = Arc::clone(&lock(&shared.ship_scales));
@@ -1234,7 +1230,6 @@ fn render_loop(shared: &Shared) {
             orbit.as_ref(),
         );
         scene.prepare_overlays(drawn, &hud_snapshot, camera.yaw, orbit.as_ref());
-        crate::prof::mark("d_events_zoom_prep");
         // Scale explicit HUD pixels with the offscreen render target, just like automatic scale.
         let mut hud_layout = HudLayout::new(size.0, size.1, None);
         if percent > 0 {
@@ -1247,7 +1242,6 @@ fn render_loop(shared: &Shared) {
             0.0
         };
         scene.set_space_state(&space_snapshot, &hud_snapshot.selected);
-        crate::prof::mark("e_space_state");
         // What the pointer rests on in space: highlighted, named and explained, with a hand
         // cursor over what a double click enters.
         let pointing = match (zoom.as_ref(), orbit.as_ref()) {
@@ -1265,14 +1259,12 @@ fn render_loop(shared: &Shared) {
             matches!(pointing, Some((SpaceHover::Target(_), _))),
             Ordering::Relaxed,
         );
-        crate::prof::mark("e2_hover");
         let graticule = shared.graticule.load(Ordering::Relaxed);
         scene.show_graticule = graticule;
         scene.show_grass = shared.grass.load(Ordering::Relaxed);
         match (&orbit, &zoom) {
             (Some(orbit), Some(zoom)) if scene.has_space() => {
                 scene.draw_zoomed(&mut rl, &thread, texture, zoom, orbit);
-                crate::prof::mark("e3_draw_zoomed");
                 // A tooltip beside the pointer names what it rests on.
                 if let (Some((hover, (x, y))), Some(_)) = (pointing, zoom.pointer()) {
                     let ratio = size.0 as f32 / layout.0.max(1) as f32;
@@ -1435,7 +1427,6 @@ fn render_loop(shared: &Shared) {
             scene.draw_bars(&mut drawing);
         }
 
-        crate::prof::mark("f_draw_hud");
         let readback_start = Instant::now();
         let snapshot_taken = Cell::new(false);
         let take_snapshot = || {
@@ -1485,8 +1476,6 @@ fn render_loop(shared: &Shared) {
                 sequence,
             });
         }
-        crate::prof::mark("g_readback");
-        crate::prof::end();
         stats.record(
             finished_at,
             millis(finished_at - frame_start),

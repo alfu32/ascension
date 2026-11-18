@@ -8,7 +8,6 @@
 //! a [`PlanetScene`], drawn as a globe with an [`OrbitCamera`]. Entities arrive as plain
 //! [`EntitySnapshot`]s; the render thread keeps the last two and interpolates between them.
 
-mod prof;
 mod bars;
 mod camera;
 mod entities;

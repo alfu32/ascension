@@ -368,9 +368,7 @@ pub fn holds_with(world: &World, index: &SystemIndex) -> Vec<HoldView> {
                 )
                 || world.entities().any(|own| {
                     own.owner == PLAYER
-                        && index
-                            .star(system)
-                            .is_some_and(|star| own.pos.body == star)
+                        && index.star(system).is_some_and(|star| own.pos.body == star)
                 });
             known.then(|| HoldView {
                 system,

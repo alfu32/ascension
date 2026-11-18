@@ -281,6 +281,8 @@ pub(super) struct SpaceGpu {
     placed: Vec<Vec<PlacedBody>>,
     tints: Vec<Option<[u8; 3]>>,
     shader: Shader,
+    /// The shader's `tint`, `emissive` and `alpha` uniform locations, looked up once.
+    uniforms: [i32; 3],
     material: WeakMaterial,
     lod_material: WeakMaterial,
     sphere: Mesh,
@@ -426,6 +428,7 @@ impl Scene {
                 .map(|s| universe.place_system(s.id))
                 .collect(),
             tints,
+            uniforms: ["tint", "emissive", "alpha"].map(|n| shader.get_shader_location(n)),
             shader,
             material,
             lod_material,
@@ -505,9 +508,7 @@ impl Scene {
         zoom: &ZoomCamera,
         orbit: &OrbitCamera,
     ) {
-        crate::prof::mark("pre_draw");
         let one = zoom.one_view(orbit);
-        crate::prof::mark("z0_one_view");
         if let Some(space) = &mut self.space {
             space.labels.clear();
         }
@@ -538,10 +539,8 @@ impl Scene {
             // From the Sun only the real stars show: the backdrop's made-up ones would mislead.
             self.space_backdrop(rl, thread, target, &one.system, !zoom.sky_active());
         }
-        crate::prof::mark("z1_backdrop");
         let stars = frame.as_ref().map_or(1.0, |f| f.stars);
         self.draw_map_layer(rl, thread, target, zoom, orbit, &one, stars);
-        crate::prof::mark("z2_map_layer");
         let drawn = globe.is_some() && frame.is_some();
         let mut passes = if zoom.sky_active() {
             Vec::new()
@@ -559,8 +558,6 @@ impl Scene {
                 .cmp(&(b.index == zoom.system()))
                 .then(b.distance.total_cmp(&a.distance))
         });
-        crate::prof::mark("z3_passes_sort");
-        crate::prof::count("passes", passes.len());
         let mut globe_left = drawn;
         for pass in passes {
             match (&globe, &frame) {
@@ -575,7 +572,6 @@ impl Scene {
                 _ => self.draw_system_layer(rl, thread, target, zoom, &pass, Part::All),
             }
         }
-        crate::prof::mark("z4_system_layers");
         if let (true, Some((eye, _)), Some(frame)) = (globe_left, &globe, &frame) {
             self.globe_world(rl, thread, target, orbit, eye, frame);
         }
@@ -700,9 +696,7 @@ impl Scene {
             .get(pass.index)
             .is_some_and(|s| s.celestial);
         let mut residence_labels: Vec<([f32; 3], String, [u8; 3])> = Vec::new();
-        let tint_at = space.shader.get_shader_location("tint");
-        let emissive_at = space.shader.get_shader_location("emissive");
-        let alpha_at = space.shader.get_shader_location("alpha");
+        let [tint_at, emissive_at, alpha_at] = space.uniforms;
         let (width, height) = (target.texture.width as f32, target.texture.height as f32);
         let mut rim_labels: Vec<([f32; 3], u32, u32, f32)> = Vec::new();
         let bar_look = view.view((width, height), self.projection_centre_y);
@@ -723,11 +717,9 @@ impl Scene {
         };
         // Rings, claims and names belong to space: they fade in as the camera leaves the planet.
         let detail = pass.detail * pass.space;
-        crate::prof::mark("p0_setup");
         let mut drawing = rl.begin_texture_mode(thread, target);
         clear_depth();
         let far = view.distance_to([0.0; 3]) + SYSTEM_RADIUS * 2.5;
-        crate::prof::mark("p1_begin_tex");
         let near = (view.distance() * 0.05).clamp(0.05, far * 0.01);
         set_clip_planes(f64::from(near), f64::from(far));
         {
@@ -912,7 +904,6 @@ impl Scene {
                 }
                 end_sprite_run();
             }
-            crate::prof::mark("p2_bodies");
             // Every habitable planet wears an atmosphere halo, lit from the star at the origin.
             if known && pass.detail > 0.5 {
                 for (pos, radius) in halos {
@@ -938,7 +929,6 @@ impl Scene {
                     );
                 }
             }
-            crate::prof::mark("p3_flashes");
             let system_id = universe.systems.get(pass.index).map(|s| s.id);
             if let Some(system_id) = system_id {
                 let outermost = universe.system_outermost(system_id);
@@ -1233,7 +1223,6 @@ impl Scene {
                     .retain(|t| t.colour[3] > 0 && keeps(centroid(t)));
                 super::draw_overlay(&mut world, &overlay);
             }
-            crate::prof::mark("p5_ships_marks");
             // The glow of the star: additive, without writing depth; never wider on screen than
             // a soft disc, so seen from a planet it is a sun, not a sheet of light.
             if let Some(star) = bodies_placed
@@ -1274,7 +1263,6 @@ impl Scene {
             }
         }
         set_clip_planes(DEFAULT_NEAR, DEFAULT_FAR);
-        crate::prof::mark("p6_ships_etc_end");
         drop(drawing);
         self.screen_bars.extend(ship_bars);
         if !part.first() {
@@ -1375,7 +1363,6 @@ impl Scene {
         } else {
             Vec::new()
         };
-        crate::prof::mark("m0_marks");
         let mut drawing = rl.begin_texture_mode(thread, target);
         let far = view.distance_to([0.0; 3]) + MAP_RADIUS * 3.0;
         let near = (view.distance() * 0.01).clamp(1e-4, far * 1e-3);
@@ -1435,7 +1422,6 @@ impl Scene {
                     );
                 }
             }
-            crate::prof::mark("m1_lines");
             let grow = view.distance() * 0.1;
             let k = one.system_place.per_unit;
             // Far systems first, so the near ones are drawn over them.
@@ -1444,7 +1430,6 @@ impl Scene {
                 let distance = |i: usize| view.distance_to(space.map_positions[i]);
                 distance(b).total_cmp(&distance(a)).then(a.cmp(&b))
             });
-            crate::prof::mark("m2_sort");
             begin_sprite_run();
             for i in order {
                 let system = &universe.systems[i];
@@ -1517,7 +1502,6 @@ impl Scene {
                 );
             }
             end_sprite_run();
-            crate::prof::mark("m3_sprites");
             // Ships: a mark beside each system that has ships, an arrowhead on the lane for each
             // ship between systems, its lane ahead lit and its destination ringed.
             for mark in &marks {
@@ -1632,7 +1616,6 @@ impl Scene {
                     ));
                 }
             }
-            crate::prof::mark("m4_overlay_build");
             fade_overlay(&mut overlay, detail);
             super::draw_overlay(&mut world, &overlay);
             // SAFETY: as above; the batch is flushed before depth testing is restored.
@@ -1643,7 +1626,6 @@ impl Scene {
         }
         set_clip_planes(DEFAULT_NEAR, DEFAULT_FAR);
         drop(drawing);
-        crate::prof::mark("m5_flush");
         if detail <= 0.004 {
             return;
         }

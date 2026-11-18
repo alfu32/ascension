@@ -971,14 +971,12 @@ fn publish(
     models: &crate::looks::ModelBook,
     ascension: &AscensionView,
 ) {
-    let t0 = Instant::now();
     let sightings = world.visible_entities(PLAYER);
     let body = host.map_or_else(|| world.surfaces()[0].body(), |h| h.viewed);
     if TerrainKnowledge::refresh(&mut memory.terrain, world, body) {
         let hidden = crate::terrain::hidden_terrain(world, PLAYER);
         bridge.publish_hidden_terrain(Arc::new(hidden));
     }
-    let t1 = Instant::now();
     let snapshot = snapshot_on(world, body, &sightings, models, &mut memory.motions);
     link.stats.tick.store(snapshot.tick, Ordering::Relaxed);
     link.stats
@@ -987,14 +985,12 @@ fn publish(
     bridge.publish_snapshot(Arc::new(snapshot));
     if let Some(host) = host {
         let system = bridge.view_state().system.unwrap_or(host.home_system);
-        let t2 = Instant::now();
-        let index = memory.systems.get_or_insert_with(|| SystemIndex::new(world));
+        let index = memory
+            .systems
+            .get_or_insert_with(|| SystemIndex::new(world));
         let mut space = space_snapshot_with(world, index, system, &sightings);
         dress_ships(&mut space, world, models);
         bridge.publish_space(Arc::new(space));
-        if std::env::var_os("ROM_PROFILE").is_some() && world.tick() % 40 == 0 {
-            eprintln!("simprof sightings+terrain={:?} snapshot={:?} space={:?}", t1 - t0, t2 - t1, t2.elapsed());
-        }
     }
     publish_camera_limits(world, bridge);
     if world.tick().is_multiple_of(VISION_INTERVAL) {
@@ -1555,9 +1551,9 @@ impl FogPublisher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::space_view::space_snapshot;
     use crate::args::Options;
     use crate::match_setup::build_match;
+    use crate::space_view::space_snapshot;
     use crate::terrain::generate_content;
     use rom_sim::EntityId;
 
