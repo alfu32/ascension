@@ -221,6 +221,43 @@ struct ModelMeshes {
     periods: [f32; 4],
     /// Its three most used colours, not counting the owner's (task 80: its debris).
     palette: [[u8; 3]; 3],
+    /// Extent of its near mesh as drawn idle at the start of the cycle (a hidden muzzle flash
+    /// left out), along the palette picture's camera right and up: what the picture frames.
+    icon_extent: [[f32; 2]; 2],
+}
+
+/// Share of a model's vertices left out at each end of its palette picture's height, so a long
+/// upright part (a spear, a mast) does not shrink the body to a speck; the width keeps every
+/// vertex, as the pictures stand side by side in one strip.
+const ICON_TRIM: f32 = 0.05;
+
+/// The extent of `mesh`, posed by `rig` idle at the start of its cycle (at rest when it is
+/// still), along `axes` (across, up): `[low, high]` per axis, leaving out [`ICON_TRIM`] of the
+/// vertices at each end of the second.
+fn idle_extent(mesh: &ModelMesh, rig: &Rig, axes: [[f32; 3]; 2]) -> [[f32; 2]; 2] {
+    let pose = rig.is_animated().then(|| rig.pose(Activity::Idle, 0.0));
+    let mut along: [Vec<f32>; 2] = [Vec::new(), Vec::new()];
+    for (i, &p) in mesh.positions.iter().enumerate() {
+        let joint = usize::from(mesh.joints.get(i).copied().unwrap_or(0));
+        let p = match pose.as_ref().and_then(|pose| pose.get(joint)) {
+            Some(transform) if joint > 0 => crate::rig::apply(transform, p),
+            _ => p,
+        };
+        for (values, axis) in along.iter_mut().zip(axes) {
+            values.push(p[0] * axis[0] + p[1] * axis[1] + p[2] * axis[2]);
+        }
+    }
+    let mut extent = [[0.0; 2]; 2];
+    for (k, (values, range)) in along.iter_mut().zip(&mut extent).enumerate() {
+        if values.is_empty() {
+            continue;
+        }
+        values.sort_by(f32::total_cmp);
+        let trim = if k == 1 { ICON_TRIM } else { 0.0 };
+        let cut = ((values.len() as f32 * trim) as usize).min((values.len() - 1) / 2);
+        *range = [values[cut], values[values.len() - 1 - cut]];
+    }
+    extent
 }
 
 /// The three colours covering the most triangles of `mesh`, leaving out owner-coloured faces;
@@ -307,6 +344,10 @@ impl ModelGpu {
                     poses: origin.filter(|_| poses.is_some()),
                     periods: Activity::ALL.map(|a| baked.rig.period(a)),
                     palette: palette_of(&baked.far).unwrap_or(crate::stains::PLAIN_DEBRIS),
+                    icon_extent: idle_extent(&baked.near, &baked.rig, {
+                        let [_, right, up] = super::icons::icon_axes();
+                        [right, up]
+                    }),
                 })
             })
             .collect();
@@ -481,6 +522,61 @@ impl ModelGpu {
         Some((transform, near))
     }
 
+    /// The palette picture's instance of model `index` (task 91): upright and unturned,
+    /// scaled and placed so its idle extent along the camera axes `[right, up]` (those of
+    /// [`super::icons::icon_axes`]) fills
+    /// `fill` of a unit square centred `offset` along `right`; in the owner colour `team`, idle
+    /// at the start of its cycle. `None` when the model was not uploaded or is empty.
+    pub(super) fn icon_transform(
+        &self,
+        index: u16,
+        [right, up]: [[f32; 3]; 2],
+        offset: f32,
+        fill: f32,
+        team: [f32; 3],
+    ) -> Option<Matrix> {
+        let model = self.models.get(usize::from(index))?.as_ref()?;
+        let [r, u] = model.icon_extent;
+        let span = (r[1] - r[0]).max(u[1] - u[0]);
+        if span <= 1e-6 {
+            return None;
+        }
+        let k = fill / span;
+        let (cr, cu) = ((r[0] + r[1]) / 2.0, (u[0] + u[1]) / 2.0);
+        let origin: [f32; 3] =
+            std::array::from_fn(|i| right[i] * (offset - k * cr) - up[i] * k * cu);
+        Some(Matrix {
+            m0: k,
+            m1: 0.0,
+            m2: 0.0,
+            m3: team[0],
+            m4: 0.0,
+            m5: k,
+            m6: 0.0,
+            m7: team[1],
+            m8: 0.0,
+            m9: 0.0,
+            m10: k,
+            m11: team[2],
+            m12: origin[0],
+            m13: origin[1],
+            m14: origin[2],
+            m15: Activity::Idle.index() as f32,
+        })
+    }
+
+    /// Draws palette pictures (instances from [`ModelGpu::icon_transform`]) with their near
+    /// meshes, every model at the start of its cycle.
+    pub(super) fn draw_icons(
+        &self,
+        world: &mut impl RaylibDraw3D,
+        shader: &mut Shader,
+        material: &WeakMaterial,
+        instances: &mut [(u16, bool, Matrix)],
+    ) {
+        self.draw_at(world, shader, material, instances, &mut Vec::new(), 0.0);
+    }
+
     /// Draws `instances` (model index, near mesh, transform from [`ModelGpu::instance_at`])
     /// with `material` (the model shader's), batched per model and mesh; `scratch` is reused.
     pub(super) fn draw_instances(
@@ -491,6 +587,19 @@ impl ModelGpu {
         instances: &mut [(u16, bool, Matrix)],
         scratch: &mut Vec<Matrix>,
     ) {
+        self.draw_at(world, shader, material, instances, scratch, self.time);
+    }
+
+    /// [`ModelGpu::draw_instances`] at `seconds` of motion.
+    fn draw_at(
+        &self,
+        world: &mut impl RaylibDraw3D,
+        shader: &mut Shader,
+        material: &WeakMaterial,
+        instances: &mut [(u16, bool, Matrix)],
+        scratch: &mut Vec<Matrix>,
+        seconds: f32,
+    ) {
         if instances.is_empty() {
             return;
         }
@@ -498,7 +607,7 @@ impl ModelGpu {
         let reveal = shader.get_shader_location("reveal");
         shader.set_shader_value(reveal, REVEAL_ALL);
         let time = shader.get_shader_location("poseTime");
-        shader.set_shader_value(time, self.time);
+        shader.set_shader_value(time, seconds);
         bind_poses(self.poses.as_ref().map(|t| t.id));
         for group in instances.chunk_by(|a, b| (a.0, a.1) == (b.0, b.1)) {
             let (index, near, _) = group[0];

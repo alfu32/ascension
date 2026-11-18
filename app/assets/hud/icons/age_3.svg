@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+<defs>
+<linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="64">
+<stop offset="0" stop-color="#f4dca0"/><stop offset="0.5" stop-color="#d9a955"/><stop offset="1" stop-color="#a06c2a"/></linearGradient>
+</defs>
+<path d="M6 34 L46 14 Q52 12 54 17 L56 22 Q57 27 52 29 L12 44Z" fill="url(#g)" stroke="#2e1e0a" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" />
+<path d="M50 13 L58 10 L61 24 L54 27Z" fill="#c99a4c" stroke="#2e1e0a" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" />
+<circle cx="24" cy="44" r="14" fill="url(#g)" stroke="#2e1e0a" stroke-width="2.2"/>
+<path d="M24 44 L34.5 47.3" fill="none" stroke="#2e1e0a" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M24 44 L34.5 47.3" fill="none" stroke="#2e1e0a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M24 44 L25.9 54.8" fill="none" stroke="#2e1e0a" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M24 44 L25.9 54.8" fill="none" stroke="#2e1e0a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M24 44 L15.2 50.6" fill="none" stroke="#2e1e0a" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M24 44 L15.2 50.6" fill="none" stroke="#2e1e0a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M24 44 L14.1 39.1" fill="none" stroke="#2e1e0a" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M24 44 L14.1 39.1" fill="none" stroke="#2e1e0a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M24 44 L23.9 33.0" fill="none" stroke="#2e1e0a" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M24 44 L23.9 33.0" fill="none" stroke="#2e1e0a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M24 44 L33.7 38.9" fill="none" stroke="#2e1e0a" stroke-width="4.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M24 44 L33.7 38.9" fill="none" stroke="#2e1e0a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="24" cy="44" r="4" fill="#2a1a08" stroke="#2e1e0a" stroke-width="1.5"/>
+<circle cx="50" cy="56" r="5" fill="url(#g)" stroke="#2e1e0a" stroke-width="2.2"/>
+<circle cx="60" cy="58" r="4" fill="url(#g)" stroke="#2e1e0a" stroke-width="2.2"/>
+</svg>

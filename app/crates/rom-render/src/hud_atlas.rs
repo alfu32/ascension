@@ -43,6 +43,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../assets/hud/chrome/emblem.svg"),
     ),
     (
+        "chrome/mark_upgrade",
+        include_str!("../../../assets/hud/chrome/mark_upgrade.svg"),
+    ),
+    (
         "chrome/minimap",
         include_str!("../../../assets/hud/chrome/minimap.svg"),
     ),
@@ -61,6 +65,114 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "chrome/topbar",
         include_str!("../../../assets/hud/chrome/topbar.svg"),
+    ),
+    (
+        "icons/age_0",
+        include_str!("../../../assets/hud/icons/age_0.svg"),
+    ),
+    (
+        "icons/age_1",
+        include_str!("../../../assets/hud/icons/age_1.svg"),
+    ),
+    (
+        "icons/age_2",
+        include_str!("../../../assets/hud/icons/age_2.svg"),
+    ),
+    (
+        "icons/age_3",
+        include_str!("../../../assets/hud/icons/age_3.svg"),
+    ),
+    (
+        "icons/age_4",
+        include_str!("../../../assets/hud/icons/age_4.svg"),
+    ),
+    (
+        "icons/age_5",
+        include_str!("../../../assets/hud/icons/age_5.svg"),
+    ),
+    (
+        "icons/age_6",
+        include_str!("../../../assets/hud/icons/age_6.svg"),
+    ),
+    (
+        "icons/age_7",
+        include_str!("../../../assets/hud/icons/age_7.svg"),
+    ),
+    (
+        "icons/age_8",
+        include_str!("../../../assets/hud/icons/age_8.svg"),
+    ),
+    (
+        "icons/age_9",
+        include_str!("../../../assets/hud/icons/age_9.svg"),
+    ),
+    (
+        "icons/age_10",
+        include_str!("../../../assets/hud/icons/age_10.svg"),
+    ),
+    (
+        "icons/age_11",
+        include_str!("../../../assets/hud/icons/age_11.svg"),
+    ),
+    (
+        "icons/age_12",
+        include_str!("../../../assets/hud/icons/age_12.svg"),
+    ),
+    (
+        "icons/age_13",
+        include_str!("../../../assets/hud/icons/age_13.svg"),
+    ),
+    (
+        "icons/tech_ability",
+        include_str!("../../../assets/hud/icons/tech_ability.svg"),
+    ),
+    (
+        "icons/tech_ascension",
+        include_str!("../../../assets/hud/icons/tech_ascension.svg"),
+    ),
+    (
+        "icons/tech_evolution",
+        include_str!("../../../assets/hud/icons/tech_evolution.svg"),
+    ),
+    (
+        "icons/tech_government",
+        include_str!("../../../assets/hud/icons/tech_government.svg"),
+    ),
+    (
+        "icons/tech_project",
+        include_str!("../../../assets/hud/icons/tech_project.svg"),
+    ),
+    (
+        "icons/tech_reveal",
+        include_str!("../../../assets/hud/icons/tech_reveal.svg"),
+    ),
+    (
+        "icons/tech_rule",
+        include_str!("../../../assets/hud/icons/tech_rule.svg"),
+    ),
+    (
+        "icons/tech_unify",
+        include_str!("../../../assets/hud/icons/tech_unify.svg"),
+    ),
+    (
+        "icons/tech_upgrade",
+        include_str!("../../../assets/hud/icons/tech_upgrade.svg"),
+    ),
+    (
+        "icons/track_civic",
+        include_str!("../../../assets/hud/icons/track_civic.svg"),
+    ),
+    (
+        "icons/track_commerce",
+        include_str!("../../../assets/hud/icons/track_commerce.svg"),
+    ),
+    (
+        "icons/track_military",
+        include_str!("../../../assets/hud/icons/track_military.svg"),
+    ),
+    (
+        "icons/track_science",
+        include_str!("../../../assets/hud/icons/track_science.svg"),
     ),
     (
         "icons/arrow_left",
@@ -330,6 +442,8 @@ pub const SOURCES: &[(&str, &str)] = &[
 
 /// Edge of an icon in design pixels when baked; icons are drawn at or below this size.
 pub const ICON_DESIGN_SIZE: f32 = 44.0;
+/// Model pictures (task 91) the atlas keeps room for, in a shelf below the artwork.
+pub const MODEL_ICON_SLOTS: usize = 160;
 /// Largest atlas width the packer will use.
 const MAX_ATLAS_WIDTH: u32 = 8192;
 /// Transparent pixels kept around every entry so filtering never bleeds neighbours in.
@@ -390,6 +504,23 @@ pub struct AtlasImage {
     /// HUD scale the artwork was rasterised at.
     pub scale: f32,
     rects: BTreeMap<&'static str, AtlasRect>,
+    shelf: Shelf,
+}
+
+/// The shelf of model pictures below the artwork: square cells in rows.
+#[derive(Clone, Copy, Debug)]
+struct Shelf {
+    /// Top of the first row.
+    y: u32,
+    /// Edge of one picture.
+    edge: u32,
+    /// Cells in a row.
+    columns: u32,
+}
+
+/// Edge in pixels of an icon baked at HUD `scale`: vector icons and model pictures alike.
+pub fn icon_edge(scale: f32) -> u32 {
+    (ICON_DESIGN_SIZE * scale).ceil().max(8.0) as u32
 }
 
 impl AtlasImage {
@@ -401,6 +532,44 @@ impl AtlasImage {
     /// Every entry with its rectangle, in name order.
     pub fn entries(&self) -> impl Iterator<Item = (&'static str, AtlasRect)> + '_ {
         self.rects.iter().map(|(name, rect)| (*name, *rect))
+    }
+
+    /// Edge in pixels of a model picture.
+    pub fn model_icon_edge(&self) -> u32 {
+        self.shelf.edge
+    }
+
+    /// The rectangle of model picture slot `slot` (below [`MODEL_ICON_SLOTS`]).
+    pub fn model_slot(&self, slot: usize) -> Option<AtlasRect> {
+        if slot >= MODEL_ICON_SLOTS {
+            return None;
+        }
+        let (row, column) = (
+            slot as u32 / self.shelf.columns,
+            slot as u32 % self.shelf.columns,
+        );
+        let pitch = self.shelf.edge + PADDING;
+        Some(AtlasRect {
+            x: PADDING + column * pitch,
+            y: self.shelf.y + row * pitch,
+            w: self.shelf.edge,
+            h: self.shelf.edge,
+        })
+    }
+
+    /// Copies straight RGBA `pixels` (`rect.w × rect.h`) into the atlas at `rect`.
+    pub fn write(&mut self, rect: AtlasRect, pixels: &[u8]) {
+        write_rect(&mut self.rgba, self.width, rect, pixels);
+    }
+}
+
+/// Copies RGBA `pixels` (`rect.w × rect.h`) into `image`, `width` pixels wide, at `rect`.
+pub fn write_rect(image: &mut [u8], width: u32, rect: AtlasRect, pixels: &[u8]) {
+    let len = rect.w as usize * 4;
+    assert_eq!(pixels.len(), len * rect.h as usize, "picture size");
+    for row in 0..rect.h as usize {
+        let to = ((rect.y as usize + row) * width as usize + rect.x as usize) * 4;
+        image[to..to + len].copy_from_slice(&pixels[row * len..(row + 1) * len]);
     }
 }
 
@@ -421,7 +590,7 @@ fn rasterise(
         .map_err(|error| AtlasError::Parse(name, error.to_string()))?;
     let size = tree.size();
     let (zoom_x, zoom_y, width, height) = if name.starts_with("icons/") {
-        let edge = (ICON_DESIGN_SIZE * scale).ceil().max(8.0);
+        let edge = icon_edge(scale) as f32;
         (
             edge / size.width(),
             edge / size.height(),
@@ -510,7 +679,16 @@ fn bake_sources(sources: &[(&'static str, &str)], scale: f32) -> Result<AtlasIma
         x += item.width + PADDING;
         row_height = row_height.max(item.height);
     }
-    let height = (y + row_height + PADDING).max(1);
+    // The model shelf: room for every picture slot, in rows as wide as the atlas.
+    let edge = icon_edge(scale);
+    let columns = ((width - PADDING) / (edge + PADDING)).max(1);
+    let rows = (MODEL_ICON_SLOTS as u32).div_ceil(columns);
+    let shelf = Shelf {
+        y: y + row_height + PADDING,
+        edge,
+        columns,
+    };
+    let height = shelf.y + rows * (edge + PADDING);
     let mut rgba = vec![0_u8; width as usize * height as usize * 4];
     let mut rects = BTreeMap::new();
     for (item, (px, py)) in baked.iter().zip(placements) {
@@ -536,6 +714,7 @@ fn bake_sources(sources: &[(&'static str, &str)], scale: f32) -> Result<AtlasIma
         rgba,
         scale,
         rects,
+        shelf,
     })
 }
 
@@ -589,6 +768,7 @@ mod tests {
         }
         // Pieces the layout relies on exist.
         for name in [
+            "chrome/mark_upgrade",
             "chrome/topbar",
             "chrome/tile",
             "chrome/minimap",
@@ -615,6 +795,37 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    /// Every model picture slot lies inside the atlas, clear of the artwork and of the other
+    /// slots, at the smallest and largest HUD scales; the atlas stays within 8192 pixels.
+    #[test]
+    fn model_pictures_fit_the_atlas() {
+        for scale in [0.25, 2.5] {
+            let atlas = bake(scale).expect("bake");
+            assert!(
+                atlas.width <= MAX_ATLAS_WIDTH && atlas.height <= 8192,
+                "{scale}"
+            );
+            let art: Vec<_> = atlas.entries().map(|(_, r)| r).collect();
+            let slots: Vec<_> = (0..MODEL_ICON_SLOTS)
+                .map(|i| atlas.model_slot(i).expect("slot"))
+                .collect();
+            assert!(atlas.model_slot(MODEL_ICON_SLOTS).is_none());
+            for (i, slot) in slots.iter().enumerate() {
+                assert_eq!((slot.w, slot.h), (icon_edge(scale), icon_edge(scale)));
+                assert!(slot.x + slot.w <= atlas.width && slot.y + slot.h <= atlas.height);
+                assert!(art.iter().all(|a| !a.overlaps(slot)), "slot {i} at {scale}");
+                assert!(slots[i + 1..].iter().all(|b| !b.overlaps(slot)), "slot {i}");
+            }
+            // Writing a picture lands where the slot says.
+            let mut atlas = atlas;
+            let slot = slots[MODEL_ICON_SLOTS - 1];
+            let picture = vec![7_u8; (slot.w * slot.h * 4) as usize];
+            atlas.write(slot, &picture);
+            let at = ((slot.y * atlas.width + slot.x) * 4) as usize;
+            assert_eq!(&atlas.rgba[at..at + 4], &[7, 7, 7, 7]);
         }
     }
 
@@ -706,6 +917,33 @@ mod tests {
             "cmd_repair",
             "cmd_build",
             "cmd_cancel",
+            "age_0",
+            "age_1",
+            "age_2",
+            "age_3",
+            "age_4",
+            "age_5",
+            "age_6",
+            "age_7",
+            "age_8",
+            "age_9",
+            "age_10",
+            "age_11",
+            "age_12",
+            "age_13",
+            "track_military",
+            "track_civic",
+            "track_commerce",
+            "track_science",
+            "tech_upgrade",
+            "tech_project",
+            "tech_government",
+            "tech_evolution",
+            "tech_ascension",
+            "tech_reveal",
+            "tech_rule",
+            "tech_unify",
+            "tech_ability",
         ] {
             assert!(
                 listed.contains(&format!("icons/{name}")),

@@ -34,6 +34,7 @@ use crate::vision::{ChunkSpec, shade_chunk};
 
 mod globe_eye;
 mod grass;
+mod icons;
 mod materials;
 mod models;
 mod shadow;
@@ -42,6 +43,7 @@ mod space;
 mod stains;
 use globe_eye::{GlobeEye, GlobeFrame};
 use globe_eye::{clear_depth, eye_clip_planes};
+pub(crate) use icons::ModelPictures;
 pub(crate) use space::{OrbitalShip, SpaceLabel};
 
 /// Width of the ground in tiles.
@@ -371,6 +373,8 @@ pub(crate) struct Scene {
     grass: Option<grass::GrassGpu>,
     /// Whether the grass blades are drawn (the graphics setting).
     pub(crate) show_grass: bool,
+    /// The palette's model pictures on the GPU (task 91).
+    icons: icons::IconStrip,
 }
 
 /// A chunk mesh whose vertex colours follow the player's fog of war and borders.
@@ -738,7 +742,13 @@ impl Scene {
             stains,
             grass,
             show_grass: true,
+            icons: icons::IconStrip::default(),
         }
+    }
+
+    /// Whether composed models are uploaded (their pictures can be rendered).
+    pub(crate) fn has_models(&self) -> bool {
+        self.models.is_some()
     }
 
     /// The surface of the published terrain, for height sampling.

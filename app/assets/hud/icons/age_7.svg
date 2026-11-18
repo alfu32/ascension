@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+<defs>
+<linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="64">
+<stop offset="0" stop-color="#f4dca0"/><stop offset="0.5" stop-color="#d9a955"/><stop offset="1" stop-color="#a06c2a"/></linearGradient>
+</defs>
+<path d="M21.0 6 V14" fill="none" stroke="#2e1e0a" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M21.0 6 V14" fill="none" stroke="url(#g)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M21.0 50 V58" fill="none" stroke="#2e1e0a" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M21.0 50 V58" fill="none" stroke="url(#g)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6 21.0 H14" fill="none" stroke="#2e1e0a" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6 21.0 H14" fill="none" stroke="url(#g)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M50 21.0 H58" fill="none" stroke="#2e1e0a" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M50 21.0 H58" fill="none" stroke="url(#g)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M28.3 6 V14" fill="none" stroke="#2e1e0a" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M28.3 6 V14" fill="none" stroke="url(#g)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M28.3 50 V58" fill="none" stroke="#2e1e0a" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M28.3 50 V58" fill="none" stroke="url(#g)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6 28.3 H14" fill="none" stroke="#2e1e0a" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6 28.3 H14" fill="none" stroke="url(#g)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M50 28.3 H58" fill="none" stroke="#2e1e0a" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M50 28.3 H58" fill="none" stroke="url(#g)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M35.6 6 V14" fill="none" stroke="#2e1e0a" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M35.6 6 V14" fill="none" stroke="url(#g)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M35.6 50 V58" fill="none" stroke="#2e1e0a" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M35.6 50 V58" fill="none" stroke="url(#g)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6 35.6 H14" fill="none" stroke="#2e1e0a" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6 35.6 H14" fill="none" stroke="url(#g)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M50 35.6 H58" fill="none" stroke="#2e1e0a" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M50 35.6 H58" fill="none" stroke="url(#g)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M42.9 6 V14" fill="none" stroke="#2e1e0a" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M42.9 6 V14" fill="none" stroke="url(#g)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M42.9 50 V58" fill="none" stroke="#2e1e0a" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M42.9 50 V58" fill="none" stroke="url(#g)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6 42.9 H14" fill="none" stroke="#2e1e0a" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6 42.9 H14" fill="none" stroke="url(#g)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M50 42.9 H58" fill="none" stroke="#2e1e0a" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M50 42.9 H58" fill="none" stroke="url(#g)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M14 14 H50 V50 H14Z" fill="url(#g)" stroke="#2e1e0a" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" />
+<path d="M24 24 H40 V40 H24Z" fill="#2a1a08" stroke="#2e1e0a" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />
+<path d="M28 28 H36 V36 H28Z" fill="#f4dca0" stroke="#2e1e0a" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" />
+</svg>

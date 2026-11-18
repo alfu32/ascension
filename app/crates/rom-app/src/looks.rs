@@ -299,6 +299,16 @@ impl ModelBook {
             size: self.entries[index].size(),
         })
     }
+
+    /// As [`ModelBook::resolve`]; for a type with no look yet in `age`, its earliest look.
+    pub fn resolve_any(&self, entity: DefId, faction: DefId, age: DefId) -> Option<ModelRef> {
+        self.resolve(entity, faction, age).or_else(|| {
+            let mut ages: Vec<(i64, DefId)> = self.ordinals.iter().map(|(a, o)| (*o, *a)).collect();
+            ages.sort_unstable();
+            ages.into_iter()
+                .find_map(|(_, later)| self.resolve(entity, faction, later))
+        })
+    }
 }
 
 #[cfg(test)]
