@@ -5084,4 +5084,84 @@ INSERT INTO modifier(source_def_id,stat_key,op,value)
 UPDATE ai_difficulty SET handicap_tech_id=(SELECT id FROM def WHERE key='tech.handicap.income_25')
  WHERE income_bonus_pct=25;
 
+-- Task 77: ascended players bring life to moons and asteroids (docs/bringing-life.md). Defined
+-- after everything else so every earlier definition id (and existing hashes) stays.
+-- Every resource body gets a dormant surface before play: a cube of map_style.life_n tiles a
+-- face (the smallest planet that holds a few cities) of barren rock without deposits. Brought
+-- to life, the body is a habitable planet its ascended player paints with these brushes, free.
+INSERT INTO def(kind,key,name) VALUES
+ ('terrain','ter.barren','Barren Rock'), ('terrain','ter.desert','Desert'), ('terrain','ter.snow','Snowfield'),
+ ('material','mat.barren','Barren rock'), ('material','mat.desert','Desert sand');
+WITH v(k,prog,params) AS (VALUES
+  ('mat.barren','stone','{"base_colour":"#6f6862","colour":"#7d766e","colour_alt":"#58524c","scale":1.4}'),
+  ('mat.desert','sand','{"base_colour":"#d9bf84","colour":"#e2cb93","colour_alt":"#c2a466","scale":0.7}'))
+INSERT INTO material(id,program,params) SELECT d.id, v.prog, v.params FROM v JOIN def d ON d.key=v.k;
+-- Barren rock, desert and snow are open ground: walked like the plain, but no building stands
+-- on them (every building needs the plain), so a body must be painted before it is settled.
+WITH v(k,m) AS (VALUES ('ter.barren','mat.barren'), ('ter.desert','mat.desert'), ('ter.snow','mat.ice'))
+INSERT INTO terrain(id,layer,buildable,blocks_los,material_id)
+ SELECT t.id,'ground',1,0,m.id FROM v JOIN def t ON t.key=v.k JOIN def m ON m.key=v.m;
+INSERT INTO movement_class_terrain(movement_class_id,terrain_id,speed_pct)
+ SELECT m.movement_class_id, t.id, m.speed_pct FROM movement_class_terrain m
+ JOIN def plain ON plain.id=m.terrain_id AND plain.key='ter.plain'
+ JOIN def t ON t.key IN ('ter.barren','ter.desert','ter.snow') ORDER BY t.id, m.movement_class_id;
+UPDATE map_style SET life_n=64, life_terrain_id=(SELECT id FROM def WHERE key='ter.barren');
+INSERT INTO order_kind(key,needs,target,note) VALUES
+ ('bring_life','','entity','an ascended player turns a resource body (its marker) into a habitable planet; no executor, no cost'),
+ ('paint','','point','an ascended player paints a planet it brought to life with a brush (the subject); no executor, no cost');
+INSERT INTO game_constant(key,value,unit,note) VALUES
+ ('life.sea_height',100,'height','sea level of a planet brought to life, on the 0..255 height scale'),
+ ('life.ground_height',112,'height','height of the barren ground of a dormant surface and of land painted flat');
+-- The brushes: land, water, elevation and biomes by hand, sizes in milli-tiles (a dormant
+-- surface is 64 tiles a face, 41 tiles in radius); deposits from the rules below.
+INSERT INTO def(kind,key,name,sort) VALUES
+ ('brush','brush.land.small','Land',10), ('brush','brush.land.large','Land, wide',11),
+ ('brush','brush.land.huge','Land, continent',12),
+ ('brush','brush.shallows.small','Shallows',20), ('brush','brush.shallows.large','Shallows, wide',21),
+ ('brush','brush.deep.small','Deep sea',22), ('brush','brush.deep.large','Deep sea, wide',23),
+ ('brush','brush.deep.huge','Ocean',24),
+ ('brush','brush.hills.small','Hills',30), ('brush','brush.hills.large','Hills, wide',31),
+ ('brush','brush.mountains.small','Mountains',32), ('brush','brush.mountains.large','Mountain range',33),
+ ('brush','brush.grass.small','Grass',40), ('brush','brush.grass.large','Grass, wide',41),
+ ('brush','brush.forest.small','Forest',42), ('brush','brush.forest.large','Forest, wide',43),
+ ('brush','brush.desert.small','Desert',44), ('brush','brush.desert.large','Desert, wide',45),
+ ('brush','brush.snow.small','Snow',46), ('brush','brush.snow.large','Snow, wide',47);
+WITH v(k,family,t,op,h,r) AS (VALUES
+  ('brush.land.small','land','ter.plain','set',112,3000), ('brush.land.large','land','ter.plain','set',112,8000),
+  ('brush.land.huge','land','ter.plain','set',112,16000),
+  ('brush.shallows.small','water','ter.coast','lower',92,3000), ('brush.shallows.large','water','ter.coast','lower',92,8000),
+  ('brush.deep.small','water','ter.deep','lower',50,3000), ('brush.deep.large','water','ter.deep','lower',50,8000),
+  ('brush.deep.huge','water','ter.deep','lower',50,16000),
+  ('brush.hills.small','elevation',NULL,'raise',165,4000), ('brush.hills.large','elevation',NULL,'raise',165,9000),
+  ('brush.mountains.small','elevation','ter.mountain','raise',240,3000),
+  ('brush.mountains.large','elevation','ter.mountain','raise',240,7000),
+  ('brush.grass.small','biome','ter.plain','keep',0,4000), ('brush.grass.large','biome','ter.plain','keep',0,9000),
+  ('brush.forest.small','biome','ter.forest','keep',0,3000), ('brush.forest.large','biome','ter.forest','keep',0,7000),
+  ('brush.desert.small','biome','ter.desert','keep',0,4000), ('brush.desert.large','biome','ter.desert','keep',0,9000),
+  ('brush.snow.small','biome','ter.snow','keep',0,4000), ('brush.snow.large','biome','ter.snow','keep',0,9000))
+INSERT INTO life_brush(id,family,terrain_id,height_op,height,radius)
+ SELECT d.id, v.family, t.id, v.op, v.h, v.r FROM v JOIN def d ON d.key=v.k LEFT JOIN def t ON t.key=v.t;
+-- Deposits of every kind the rules define, at two sizes: each terrain a gather site needs
+-- beside it or stands on (other than the plain every building needs), and each map node a
+-- player takes by keeping or carrying it (not the resource bodies, held from orbit).
+CREATE TEMP TABLE deposit(terrain_id INTEGER, node_id INTEGER, stem TEXT, name TEXT, sort INTEGER);
+INSERT INTO deposit
+ SELECT DISTINCT d.id, NULL, substr(d.key, instr(d.key, '.') + 1), d.name, 50 + d.id % 1000 FROM def d
+ WHERE d.id IN (SELECT needs_node_terrain_id FROM et_gather_site WHERE needs_node_terrain_id IS NOT NULL
+                UNION SELECT p.ref_def_id FROM placement_rule p JOIN et_gather_site g ON g.entity_type_id=p.entity_type_id
+                 WHERE p.rule='on_terrain')
+   AND d.key <> 'ter.plain';
+INSERT INTO deposit
+ SELECT NULL, d.id, substr(d.key, instr(d.key, '.') + 1), d.name, 50 + d.id % 1000 FROM def d
+ JOIN et_node n ON n.entity_type_id=d.id WHERE n.claim_mode <> 'presence';
+INSERT INTO def(kind,key,name,sort)
+ SELECT 'brush', 'brush.deposit.' || stem || s.suffix, name || s.label, sort * 2 + s.step FROM deposit
+ JOIN (SELECT '.small' AS suffix, '' AS label, 0 AS step UNION ALL SELECT '.large', ', large', 1) s
+ WHERE terrain_id IS NOT NULL OR s.step = 0 ORDER BY sort, s.step;
+INSERT INTO life_brush(id,family,terrain_id,node_type_id,height_op,height,radius)
+ SELECT d.id, 'deposit', p.terrain_id, p.node_id, 'keep', 0,
+        CASE WHEN p.node_id IS NOT NULL THEN 500 WHEN d.key LIKE '%.large' THEN 4000 ELSE 1500 END
+ FROM deposit p JOIN def d ON d.key LIKE 'brush.deposit.' || p.stem || '.%' ORDER BY d.id;
+DROP TABLE deposit;
+
 COMMIT;

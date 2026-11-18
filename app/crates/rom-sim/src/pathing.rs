@@ -144,59 +144,65 @@ pub(crate) struct Pathing {
     components: std::sync::Mutex<BTreeMap<u32, std::sync::Arc<Vec<u32>>>>,
 }
 
+/// Speed and step weight of every movement class on every tile of `map`.
+fn class_grids(rules: &Rules, map: &MapGrid) -> BTreeMap<u32, ClassGrid> {
+    let mut classes = BTreeMap::new();
+    for movement in rules
+        .entity_types
+        .values()
+        .filter_map(|et| et.movement.as_ref())
+    {
+        let class = movement.movement_class_id;
+        if classes.contains_key(&class) {
+            continue;
+        }
+        let flies = rules.movement_classes.get(&class).is_some_and(|c| c.flies);
+        let rows = rules.movement_class_terrain.get(&class);
+        let pct: Vec<u32> = map
+            .terrain
+            .iter()
+            .map(|terrain| {
+                if flies {
+                    return 100;
+                }
+                rows.into_iter()
+                    .flatten()
+                    .find(|row| row.terrain_id == *terrain)
+                    .map_or(0, |row| row.speed_pct.clamp(0, i64::from(u32::MAX)) as u32)
+            })
+            .collect();
+        let weight: Vec<u32> = pct
+            .iter()
+            .map(|p| {
+                if *p == 0 {
+                    0
+                } else {
+                    (WEIGHT_SCALE / u64::from(*p)).max(1) as u32
+                }
+            })
+            .collect();
+        let min_weight = weight
+            .iter()
+            .filter(|w| **w > 0)
+            .min()
+            .map_or(1, |w| u64::from(*w));
+        classes.insert(
+            class,
+            ClassGrid {
+                flies,
+                pct,
+                weight,
+                min_weight,
+            },
+        );
+    }
+    classes
+}
+
 impl Pathing {
     pub fn new(rules: &Rules, map: &MapGrid, geo: Geometry) -> Self {
         let tiles = map.terrain.len();
-        let mut classes = BTreeMap::new();
-        for movement in rules
-            .entity_types
-            .values()
-            .filter_map(|et| et.movement.as_ref())
-        {
-            let class = movement.movement_class_id;
-            if classes.contains_key(&class) {
-                continue;
-            }
-            let flies = rules.movement_classes.get(&class).is_some_and(|c| c.flies);
-            let rows = rules.movement_class_terrain.get(&class);
-            let pct: Vec<u32> = map
-                .terrain
-                .iter()
-                .map(|terrain| {
-                    if flies {
-                        return 100;
-                    }
-                    rows.into_iter()
-                        .flatten()
-                        .find(|row| row.terrain_id == *terrain)
-                        .map_or(0, |row| row.speed_pct.clamp(0, i64::from(u32::MAX)) as u32)
-                })
-                .collect();
-            let weight: Vec<u32> = pct
-                .iter()
-                .map(|p| {
-                    if *p == 0 {
-                        0
-                    } else {
-                        (WEIGHT_SCALE / u64::from(*p)).max(1) as u32
-                    }
-                })
-                .collect();
-            let min_weight = weight
-                .iter()
-                .filter(|w| **w > 0)
-                .min()
-                .map_or(1, |w| u64::from(*w));
-            classes.insert(
-                class,
-                ClassGrid {
-                    flies,
-                    pct,
-                    weight,
-                    min_weight,
-                },
-            );
-        }
+        let classes = class_grids(rules, map);
         let radius = rules
             .entity_types
             .values()
@@ -234,6 +240,13 @@ impl Pathing {
             shared: BTreeMap::new(),
             components: std::sync::Mutex::new(BTreeMap::new()),
         }
+    }
+
+    /// Recomputes the movement grids after the terrain of `map` was painted (task 77) and
+    /// forgets the landmass labels made from the old terrain.
+    pub fn refresh_terrain(&mut self, rules: &Rules, map: &MapGrid) {
+        self.classes = class_grids(rules, map);
+        self.components.lock().expect("component cache").clear();
     }
 
     /// Connected stretches of terrain a movement class can cross, labelled from 1 per tile

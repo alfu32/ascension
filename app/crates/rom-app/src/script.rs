@@ -388,6 +388,10 @@ pub enum ScriptAction {
     Ascend(rom_sim::PlayerId),
     /// The person writes a line to the celestial home's channel (task 76).
     Chat(String),
+    /// The camera flies to a body and down to its globe (`visit rockN|planetN|=id`, task 77).
+    Visit(u32),
+    /// The camera turns the planet shown to centre a tile (`look F:x,y`, task 77).
+    Look(SurfacePos),
 }
 
 /// Orders the ascension at a finished library of `player` (task 76): what pressing the button
@@ -525,6 +529,30 @@ impl Script {
                     actions.push((tick, ScriptAction::Ascend(rom_sim::PlayerId(player))));
                     continue;
                 }
+                (Some(tick), Some("look")) => {
+                    let (_, at) = point(words.get(2).copied().unwrap_or(""), context, offset)
+                        .map_err(|error| format!("line {}: {error}", number + 1))?;
+                    actions.push((tick, ScriptAction::Look(at)));
+                    continue;
+                }
+                (Some(tick), Some("visit")) => {
+                    let word = words.get(2).copied().unwrap_or("");
+                    let nth = |prefix: &str, list: &[u32]| {
+                        word.strip_prefix(prefix)
+                            .and_then(|n| n.parse::<usize>().ok())
+                            .and_then(|n| list.get(n.wrapping_sub(1)).copied())
+                    };
+                    let body = word
+                        .strip_prefix('=')
+                        .and_then(|n| n.parse().ok())
+                        .or_else(|| nth("rock", &context.rocks))
+                        .or_else(|| nth("planet", &context.planets))
+                        .ok_or_else(|| {
+                            format!("line {}: visit needs rockN, planetN or =id", number + 1)
+                        })?;
+                    actions.push((tick, ScriptAction::Visit(body)));
+                    continue;
+                }
                 (Some(tick), Some("chat")) => {
                     actions.push((tick, ScriptAction::Chat(words[2..].join(" "))));
                     continue;
@@ -627,6 +655,19 @@ fn point(
         Some(rest) => (true, rest),
         None => (false, word),
     };
+    // `F:x,y`: tile x, y of face F of the planet shown (task 77).
+    let (face, rest) = match rest.split_once(':') {
+        Some((face, rest)) if !relative => (
+            Some(
+                face.parse::<u8>()
+                    .ok()
+                    .filter(|f| *f < 6)
+                    .ok_or_else(|| format!("bad face in {word:?}"))?,
+            ),
+            rest,
+        ),
+        _ => (None, rest),
+    };
     let (x, y) = rest
         .split_once(',')
         .ok_or_else(|| format!("expected a point x,y or @dx,dy, got {word:?}"))?;
@@ -643,7 +684,7 @@ fn point(
         ))
     } else {
         let surface = SurfacePos {
-            face: context.city_face,
+            face: face.unwrap_or(context.city_face),
             x: (x * 1000.0).round() as i64,
             y: (y * 1000.0).round() as i64,
         };

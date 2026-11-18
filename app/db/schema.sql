@@ -45,7 +45,7 @@ CREATE TABLE def (
   id    INTEGER PRIMARY KEY,
   kind  TEXT NOT NULL CHECK (kind IN (
           'age','faction','resource','terrain','entity_type','tech','ability',
-          'formation','stance','material','mesh','map_style','victory')),
+          'formation','stance','material','mesh','map_style','victory','brush')),
   key   TEXT NOT NULL UNIQUE,          -- stable id used by data files & saves, e.g. 'unit.citizen'
   name  TEXT NOT NULL,                 -- default (English) display name
   descr TEXT NOT NULL DEFAULT '',
@@ -665,7 +665,11 @@ CREATE TABLE map_style (
   planet_n_median INTEGER NOT NULL DEFAULT 192, -- home planets use the median, for fairness
   planet_n_max    INTEGER NOT NULL DEFAULT 256,
   route_extra_pct INTEGER NOT NULL DEFAULT 30,   -- extra routes beyond a spanning tree, % of its edges
-  star_map_radius INTEGER NOT NULL DEFAULT 1000  -- widest region of the star catalogue a universe may span: every system within this many map units of its centre star
+  star_map_radius INTEGER NOT NULL DEFAULT 1000, -- widest region of the star catalogue a universe may span: every system within this many map units of its centre star
+  life_n          INTEGER NOT NULL DEFAULT 64 CHECK (life_n BETWEEN 16 AND 512),
+                                       -- task 77: cube face size of the dormant surface every
+                                       -- resource body gets before play (small bodies grow to it)
+  life_terrain_id INTEGER REFERENCES terrain(id) -- the barren ground of a dormant surface; NULL: none
 ) STRICT;
 
 -- What the generator scatters: forests, mountains, deposits, rare resources, ruins.
@@ -689,6 +693,22 @@ CREATE TABLE map_style_feature (
   size_max     INTEGER NOT NULL DEFAULT 1,
   start_min_dist INTEGER NOT NULL DEFAULT 0,  -- tiles from a player start
   start_max_dist INTEGER NOT NULL DEFAULT 0
+) STRICT;
+
+-- Task 77: the brushes an ascended player paints a planet it brought to life with. A stroke
+-- (`paint` order) lays the brush's terrain on every tile within `radius` of the point, sets the
+-- tiles' heights by `height_op` (dome toward `height` at the centre, falling to the tile's
+-- height at the rim) and puts the brush's node at the centre. Ground terrain without a height
+-- op (biomes, deposits) paints land tiles only.
+CREATE TABLE life_brush (
+  id           INTEGER PRIMARY KEY REFERENCES def(id),        -- def.kind 'brush'
+  family       TEXT NOT NULL CHECK (family IN ('land','water','elevation','biome','deposit')),
+  terrain_id   INTEGER REFERENCES terrain(id),                -- laid on the disc; NULL keeps it
+  node_type_id INTEGER REFERENCES et_node(entity_type_id),    -- a deposit set at the centre
+  height_op    TEXT NOT NULL DEFAULT 'keep' CHECK (height_op IN ('keep','set','raise','lower')),
+  height       INTEGER NOT NULL DEFAULT 0 CHECK (height BETWEEN 0 AND 255), -- life.sea_height is sea level
+  radius       INTEGER NOT NULL CHECK (radius BETWEEN 500 AND 64000),        -- milli-tiles
+  CHECK (terrain_id IS NOT NULL OR node_type_id IS NOT NULL OR height_op <> 'keep')
 ) STRICT;
 
 -- Game-setup options (start age, end age, pop limit, tech cost, rush rule …).
@@ -921,6 +941,23 @@ CREATE TABLE body (
   CHECK ((kind = 'resource') = (node_entity_type_id IS NOT NULL))
 ) STRICT;
 CREATE INDEX body_by_system ON body(system_id);
+
+-- Task 77: the dormant surface each resource body was given before play (a cube of barren
+-- ground, no deposits), and the bodies an ascended player brought to life. A living body is a
+-- habitable `body` row with a `surface`; its painted heights are kept here.
+CREATE TABLE body_dormant (
+  body_id    INTEGER PRIMARY KEY REFERENCES body(id),
+  n          INTEGER NOT NULL CHECK (n >= 4),
+  terrain_id INTEGER NOT NULL REFERENCES terrain(id)
+) STRICT;
+
+CREATE TABLE body_life (
+  body_id    INTEGER PRIMARY KEY REFERENCES body(id),
+  player_id  INTEGER NOT NULL,            -- player.id of the ascended player that brought it
+  since_tick INTEGER NOT NULL,
+  strokes    INTEGER NOT NULL,            -- paint strokes applied so far
+  heights    BLOB NOT NULL                -- one height 0..255 per tile, RLE like surface.terrain
+) STRICT;
 
 CREATE TABLE route (
   system_a INTEGER NOT NULL REFERENCES star_system(id),
@@ -1394,7 +1431,8 @@ SELECT d.id, d.kind, d.key FROM def d WHERE
   OR (d.kind='material'    AND d.id NOT IN (SELECT id FROM material))
   OR (d.kind='mesh'        AND d.id NOT IN (SELECT id FROM mesh))
   OR (d.kind='map_style'   AND d.id NOT IN (SELECT id FROM map_style))
-  OR (d.kind='victory'     AND d.id NOT IN (SELECT id FROM victory));
+  OR (d.kind='victory'     AND d.id NOT IN (SELECT id FROM victory))
+  OR (d.kind='brush'       AND d.id NOT IN (SELECT id FROM life_brush));
 
 -- Must return zero rows: anything trainable/constructible needs a producer.
 CREATE VIEW lint_unproducible AS

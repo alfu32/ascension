@@ -1278,6 +1278,103 @@ impl Scene {
         )
     }
 
+    /// Re-bakes what painting changed on the loaded planet (task 77): the land and sea chunks
+    /// whose tiles (or the tiles around them) differ between the loaded scene and `planet`, and
+    /// the feature objects. The camera, the sun and everything else stay. Returns the number of
+    /// chunk windows re-baked and the time taken in milliseconds; `None` when `planet` is not
+    /// the loaded planet repainted.
+    pub(crate) fn repaint_planet(
+        &mut self,
+        thread: &RaylibThread,
+        planet: &Arc<PlanetScene>,
+        globe: &Arc<Globe>,
+    ) -> Option<(usize, f32)> {
+        let started = Instant::now();
+        let gpu = self.globe.as_mut()?;
+        let old = Arc::clone(&gpu.planet);
+        if old.n != planet.n || old.kinds.len() != planet.kinds.len() {
+            return None;
+        }
+        let n = planet.n as usize;
+        let mut changed: Vec<bool> = old
+            .kinds
+            .iter()
+            .zip(&planet.kinds)
+            .zip(old.heights.iter().zip(&planet.heights))
+            .map(|((a, b), (c, d))| a != b || c != d)
+            .collect();
+        // Normals look one tile further: grow the change by a tile within each face.
+        let grown: Vec<usize> = (0..changed.len())
+            .filter(|&i| changed[i])
+            .flat_map(|i| {
+                let (face, rest) = (i / (n * n), i % (n * n));
+                let (x, y) = ((rest % n) as i64, (rest / n) as i64);
+                (-1..=1_i64).flat_map(move |dy| {
+                    (-1..=1_i64).filter_map(move |dx| {
+                        let (x, y) = (x + dx, y + dy);
+                        ((0..n as i64).contains(&x) && (0..n as i64).contains(&y))
+                            .then(|| face * n * n + y as usize * n + x as usize)
+                    })
+                })
+            })
+            .collect();
+        for i in grown {
+            changed[i] = true;
+        }
+        let adjoining = |face: u8, vx: u32, vy: u32| globe.corner_tiles(face, vx, vy);
+        let touched: Vec<ChunkSpec> = globe
+            .chunk_specs()
+            .into_iter()
+            .filter(|spec| chunk_touches_change(*spec, planet.n, &changed, Some(&adjoining)))
+            .collect();
+        let slots = surface_slots(&**globe, &self.looks);
+        gpu.land.retain(|(mesh, _)| !touched.contains(&mesh.spec));
+        gpu.sea.retain(|(mesh, _)| !touched.contains(&mesh.spec));
+        for spec in &touched {
+            let (land, sea) = globe.chunk_pair(*spec);
+            if let Some(c) = land {
+                let attributes = chunk_attributes(*spec, &slots.tile_slot, &adjoining, &c.colors);
+                if let Some(mesh) = materials::upload_land(thread, &c, &attributes) {
+                    gpu.land
+                        .push((ShadedMesh::new(mesh, *spec, &c), ChunkBounds::of(&c)));
+                }
+            }
+            if let Some(c) = sea
+                && let Some(mesh) = upload(thread, &c)
+            {
+                gpu.sea
+                    .push((ShadedMesh::new(mesh, *spec, &c), ChunkBounds::of(&c)));
+            }
+        }
+        gpu.planet = Arc::clone(planet);
+        gpu.globe = Arc::clone(globe);
+        self.graticule = graticule_on(globe, GRATICULE_LIFT);
+        let [_, _, terrain, _, _] = &mut self._shaders;
+        materials::set_slots(terrain, &slots);
+        let baked = crate::features::bake_planet(globe, &self.looks);
+        self.features = materials::FeatureGpu::upload(thread, &baked);
+        if let Some(grass) = &mut self.grass {
+            grass.clear();
+            grass.set_slots(&slots);
+        }
+        if let Some(shadow) = &mut self.shadow {
+            shadow.invalidate();
+        }
+        // The chunks take the fog and borders again, a few a frame.
+        let gpu = self.globe.as_ref().expect("the loaded planet");
+        self.shade_queue = if self.last_shades.is_empty() {
+            Vec::new()
+        } else {
+            (0..gpu.land.len() + gpu.sea.len()).collect()
+        };
+        if let Some(features) = &mut self.features
+            && !self.last_shades.is_empty()
+        {
+            features.apply_shades(&self.last_shades);
+        }
+        Some((touched.len(), started.elapsed().as_secs_f32() * 1_000.0))
+    }
+
     /// Draws the sphere planet seen by `orbit` into `target`.
     pub(crate) fn draw_globe(
         &mut self,
@@ -1931,6 +2028,7 @@ mod tests {
             ..SceneLooks::default()
         };
         let plain = PlanetScene {
+            sea_level: None,
             n: 64,
             kinds: vec![TileKind::Land; 6 * 64 * 64],
             heights: vec![100; 6 * 64 * 64],

@@ -38,6 +38,10 @@ pub struct PlanetScene {
     pub nodes: Vec<SurfacePos>,
     /// How the light that represents the sun moves over this planet.
     pub sun: crate::sun::SunSettings,
+    /// Sea level on the height scale of a painted planet (task 77): heights are then absolute,
+    /// so a stroke changes the relief of the tiles it touches only. `None`: heights are
+    /// relative to the planet's own lowest land and highest water.
+    pub sea_level: Option<u8>,
 }
 
 impl PlanetScene {
@@ -229,11 +233,24 @@ pub struct Globe {
 impl Globe {
     /// Builds the geometry of `planet`; `planet` must be valid.
     pub fn new(planet: &PlanetScene) -> Self {
+        Self::build(planet, None)
+    }
+
+    /// The geometry of this planet painted anew (task 77): the vertex directions are kept,
+    /// heights, colours and normals follow `planet`, which must be valid and of the same size.
+    pub fn repainted(&self, planet: &PlanetScene) -> Self {
+        if planet.n != self.surface.n {
+            return Self::new(planet);
+        }
+        Self::build(planet, Some(&self.dirs))
+    }
+
+    fn build(planet: &PlanetScene, dirs: Option<&[[f32; 3]]>) -> Self {
         assert!(planet.is_valid(), "inconsistent planet scene");
         let surface = CubeSurface { n: planet.n };
         let n = planet.n;
         let side = n as usize + 1;
-        let shape = Shape::from_tiles(&planet.kinds, &planet.heights, &planet.feature_colors);
+        let shape = Shape::of_planet(planet);
         let radius = planet_radius(n);
         let vertices = 6 * side * side;
         let mut globe = Self {
@@ -250,13 +267,18 @@ impl Globe {
         for face in 0..6_u8 {
             for vy in 0..=n {
                 for vx in 0..=n {
-                    let point = surface.sphere_point(SurfacePos {
-                        face,
-                        x: i64::from(vx) * 1000,
-                        y: i64::from(vy) * 1000,
-                    });
-                    let unit = to_render(point.map(|c| c as f32 / SPHERE_SCALE as f32));
-                    globe.dirs.push(normalize(unit));
+                    let dir = match dirs {
+                        Some(dirs) => dirs[globe.dirs.len()],
+                        None => {
+                            let point = surface.sphere_point(SurfacePos {
+                                face,
+                                x: i64::from(vx) * 1000,
+                                y: i64::from(vy) * 1000,
+                            });
+                            normalize(to_render(point.map(|c| c as f32 / SPHERE_SCALE as f32)))
+                        }
+                    };
+                    globe.dirs.push(dir);
                     let (tiles, count) = globe.adjoining(face, vx, vy);
                     let mut height = 0.0;
                     let mut color = [0.0; 3];
@@ -291,7 +313,7 @@ impl Globe {
     pub(crate) fn with_ground_kinds(&self, planet: &PlanetScene) -> Self {
         let mut visible = self.clone();
         visible.kinds.clone_from(&planet.kinds);
-        visible.shape = Shape::from_tiles(&planet.kinds, &planet.heights, &planet.feature_colors);
+        visible.shape = Shape::of_planet(planet);
         let side = self.n() as usize + 1;
         for (i, colour) in visible.colors.iter_mut().enumerate() {
             let (face, vy, vx) = (i / (side * side), i / side % side, i % side);
@@ -617,6 +639,31 @@ impl Globe {
         self.chunks(Cover::Water)
     }
 
+    /// The land and sea meshes of one chunk window (task 77: re-baking what a stroke touched);
+    /// `None` where the window has no tile of that cover.
+    pub(crate) fn chunk_pair(&self, spec: ChunkSpec) -> (Option<ChunkMesh>, Option<ChunkMesh>) {
+        let ChunkSpec { face, x0, y0, w, h } = spec;
+        (
+            self.chunk(face, x0, y0, w, h, Cover::Land),
+            self.chunk(face, x0, y0, w, h, Cover::Water),
+        )
+    }
+
+    /// Every chunk window of the planet, in the order the chunks are built.
+    pub(crate) fn chunk_specs(&self) -> Vec<ChunkSpec> {
+        let n = self.surface.n;
+        let mut specs = Vec::new();
+        for face in 0..6_u8 {
+            for y0 in (0..n).step_by(GLOBE_CHUNK_TILES as usize) {
+                for x0 in (0..n).step_by(GLOBE_CHUNK_TILES as usize) {
+                    let (w, h) = (GLOBE_CHUNK_TILES.min(n - x0), GLOBE_CHUNK_TILES.min(n - y0));
+                    specs.push(ChunkSpec { face, x0, y0, w, h });
+                }
+            }
+        }
+        specs
+    }
+
     /// The tile indices touching the corner (`vx`, `vy`) of `face`, looking across face edges.
     pub fn corner_tiles(&self, face: u8, vx: u32, vy: u32) -> ([usize; 4], usize) {
         self.adjoining(face, vx, vy)
@@ -803,6 +850,7 @@ mod tests {
             })
             .collect();
         PlanetScene {
+            sea_level: None,
             n,
             kinds,
             heights: (0..tiles).map(|i| (i * 37 % 251) as u8).collect(),
@@ -825,6 +873,7 @@ mod tests {
     fn level_planet(n: u32) -> PlanetScene {
         let tiles = 6 * (n * n) as usize;
         PlanetScene {
+            sea_level: None,
             n,
             kinds: vec![TileKind::Land; tiles],
             heights: vec![100; tiles],
@@ -833,6 +882,34 @@ mod tests {
             nodes: Vec::new(),
             sun: Default::default(),
         }
+    }
+
+    /// Task 77: a planet repainted keeps its vertex directions and builds the same geometry as
+    /// a fresh build, and with a fixed sea level a stroke changes only the vertices it touches.
+    #[test]
+    fn a_repainted_globe_equals_a_fresh_one_and_changes_only_what_was_painted() {
+        let mut first = planet(8);
+        first.sea_level = Some(100);
+        let globe = Globe::new(&first);
+        let mut painted = first.clone();
+        painted.heights[0] = 250;
+        painted.kinds[0] = TileKind::Feature(9);
+        let repainted = globe.repainted(&painted);
+        let fresh = Globe::new(&painted);
+        let mut differing = 0;
+        for face in 0..6_u8 {
+            for vy in 0..=8 {
+                for vx in 0..=8 {
+                    assert_eq!(repainted.vertex(face, vx, vy), fresh.vertex(face, vx, vy));
+                    if repainted.vertex(face, vx, vy) != globe.vertex(face, vx, vy) {
+                        differing += 1;
+                    }
+                }
+            }
+        }
+        // The four corners of tile 0 (face 0, 0, 0), as stored by each face they lie on: the
+        // cube corner by three faces, two edge points by two, the inner point by one.
+        assert!((4..=8).contains(&differing), "{differing} vertices moved");
     }
 
     #[test]

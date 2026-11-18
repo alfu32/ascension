@@ -1,0 +1,13 @@
+# Task 77, replayed by --script in universe mode (--players 2 --ai none, seed 1, --sun fixed,
+# --view system,home): player one ascends (as 76-ascend-script.txt, without the towns) and the
+# game all but stops at tick 3 640, the camera over the home system: the ore asteroid nearest the
+# home planet is a small rock beside it.
+0 grant-age age.galactic
+0 ascension-ready 1
+0 place 1 bld.library @12,0
+5 ascend 1
+6 speed 1000
+3560 speed 100
+3620 cam wheel -3 836,400
+3630 cam wheel 4 1238,405
+3640 speed 1

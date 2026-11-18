@@ -526,6 +526,10 @@ pub struct Snapshot {
     pub failures: Vec<(PlayerId, Vec<crate::OrderFailure>)>,
     /// Automated colonies whose governor is paused, in id order.
     pub governors_paused: Vec<EntityId>,
+    /// Dormant surfaces of resource bodies not yet brought to life, in body order (task 77).
+    pub dormant: Vec<(BodyId, crate::DormantSurface)>,
+    /// Bodies brought to life, in body order (task 77).
+    pub living: Vec<(BodyId, crate::Living)>,
 }
 
 const RULES: [VictoryRule; 8] = [
@@ -1002,6 +1006,13 @@ impl World {
                 .map(|(player, list)| (*player, list.iter().cloned().collect()))
                 .collect(),
             governors_paused: self.governors_paused.iter().copied().collect(),
+            dormant: self.life.dormant.iter().map(|(b, d)| (*b, *d)).collect(),
+            living: self
+                .life
+                .living
+                .iter()
+                .map(|(b, l)| (*b, l.clone()))
+                .collect(),
         }
     }
 
@@ -1043,6 +1054,8 @@ impl World {
             rallies,
             failures,
             governors_paused,
+            dormant,
+            living,
         } = snapshot;
         let mut world = Self::empty(
             rules.clone(),
@@ -1405,6 +1418,30 @@ impl World {
             .collect();
         world.rallies = rallies.into_iter().collect();
         world.governors_paused = governors_paused.into_iter().collect();
+        for (body, d) in &dormant {
+            if world
+                .body(*body)
+                .is_none_or(|b| b.kind != rom_rules::BodyKind::Resource)
+                || !rules.terrains.contains_key(&d.terrain)
+            {
+                return Err(bad("dormant surface of a body that is not a resource body"));
+            }
+        }
+        for (body, l) in &living {
+            if world
+                .surface(*body)
+                .is_none_or(|s| s.tiles() != l.heights.len())
+                || world
+                    .body(*body)
+                    .is_none_or(|b| b.kind != rom_rules::BodyKind::Habitable)
+            {
+                return Err(bad("living body without its surface"));
+            }
+        }
+        world.life = crate::life::LifeState {
+            dormant: dormant.into_iter().collect(),
+            living: living.into_iter().collect(),
+        };
         world.failures = failures
             .into_iter()
             .map(|(player, list)| (player, list.into_iter().collect()))

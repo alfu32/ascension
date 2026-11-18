@@ -512,6 +512,12 @@ def icons():
     I["pic_wonder"] = P(star_path(32, 34, 28, 12)) + C(32, 34, 6, "#2a1a08", 1.5)
     I["badge_done"] = C(32, 32, 27) + S("M18 33 L28 44 L47 21", 8, "#2a1a08")
     I["event"] = P("M26 6 H38 L36 38 H28Z") + C(32, 52, 5)
+    # Task 77: bringing life to a moon and the brushes that paint it.
+    I["life"] = C(30, 36, 22) + P("M30 36 C30 22 40 10 56 8 C56 24 46 34 30 36Z", "#7fae4a") + S("M30 36 L48 16", 2.5, OUT)
+    I["brush_land"] = P("M8 40 C6 28 18 20 26 24 C30 12 46 12 50 22 C60 24 60 40 52 44 C48 54 30 54 24 48 C14 52 8 48 8 40Z", "#9bbf5a")
+    I["brush_water"] = "".join(S(f"M6 {y} Q14 {y - 8} 22 {y} T38 {y} T54 {y} T62 {y - 4}", 5, "#4aa3c8") for y in (20, 34, 48))
+    I["brush_elevation"] = P("M2 56 L22 18 L32 34 L42 12 L62 56Z") + P("M22 18 L28 29 L22 26 L17 28Z", "#f4f1e8", 1.2) + P("M42 12 L49 25 L42 22 L36 24Z", "#f4f1e8", 1.2)
+    I["brush_biome"] = P("M32 4 L52 34 H40 L54 50 H10 L24 34 H12Z", "#5c9a3c") + P("M28 50 H36 V62 H28Z", "#8a5a2a")
     for name, art in I.items():
         write("icons", name, 64, 64, art, ICON_DEFS)
 

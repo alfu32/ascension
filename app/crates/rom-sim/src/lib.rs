@@ -16,6 +16,7 @@ mod healing;
 mod income;
 mod index;
 mod jumps;
+mod life;
 mod map;
 mod math;
 mod movement;
@@ -55,6 +56,7 @@ pub use income::Income;
 pub use jumps::{
     Inhibition, JumpCharge, RULE_INTERSTELLAR_TRADE, RULE_ROUTE_SENSORS, RULE_ROUTE_SURVEY,
 };
+pub use life::{DormantSurface, Living};
 pub use map::MapGrid;
 pub use math::{Pos, integer_sqrt};
 pub use order::{Command, Order, OrderFailure, OrderId, OrderKindKey, OrderStatus};
@@ -332,9 +334,23 @@ pub enum SimError {
     /// A descent needs open land of a habitable planet (task 76).
     #[error("cannot descend there: choose open land of a habitable planet")]
     CannotDescend,
+    /// Only a resource body with a dormant surface can be brought to life (task 77).
+    #[error("only a moon or asteroid not yet brought to life can be")]
+    NoDormantSurface,
+    /// Only the ascended player that brought a planet to life paints it.
+    #[error("only a planet you brought to life can be painted")]
+    NotYourLiving,
+    /// A city stands on the planet: it is no longer painted.
+    #[error("a city stands on this planet: it can no longer be painted")]
+    Settled,
+    /// The subject of a `paint` order is not a brush of the rules.
+    #[error("unknown brush")]
+    UnknownBrush,
 }
 
 #[cfg(test)]
 mod ascension_tests;
+#[cfg(test)]
+mod life_tests;
 #[cfg(test)]
 mod victory_tests;

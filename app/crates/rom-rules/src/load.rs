@@ -1022,6 +1022,8 @@ fn load_map_style(conn: &Connection) -> Result<Vec<MapStyle>, RulesError> {
             planet_n_max: row.get("planet_n_max")?,
             route_extra_pct: row.get("route_extra_pct")?,
             star_map_radius: row.get("star_map_radius")?,
+            life_n: row.get("life_n")?,
+            life_terrain_id: row.get::<_, Option<u32>>("life_terrain_id")?.map(DefId),
         })
     })
 }
@@ -1116,6 +1118,20 @@ fn load_victory(conn: &Connection) -> Result<Vec<Victory>, RulesError> {
             rule: enum_value(row, "rule", "victory", &identity)?,
             threshold: row.get("threshold")?,
             timer_ticks: row.get("timer_ticks")?,
+        })
+    })
+}
+fn load_life_brush(conn: &Connection) -> Result<Vec<LifeBrush>, RulesError> {
+    read(conn, "SELECT * FROM life_brush ORDER BY id", |row| {
+        let identity = format!("id={:?}", row.get::<_, i64>("id")?);
+        Ok(LifeBrush {
+            id: DefId(row.get("id")?),
+            family: enum_value(row, "family", "life_brush", &identity)?,
+            terrain_id: row.get::<_, Option<u32>>("terrain_id")?.map(DefId),
+            node_type_id: row.get::<_, Option<u32>>("node_type_id")?.map(DefId),
+            height_op: enum_value(row, "height_op", "life_brush", &identity)?,
+            height: row.get("height")?,
+            radius: row.get("radius")?,
         })
     })
 }
@@ -1344,6 +1360,10 @@ impl Rules {
             .map(|r| (r.id, r))
             .collect();
         rules.victories = load_victory(conn)?.into_iter().map(|r| (r.id, r)).collect();
+        rules.brushes = load_life_brush(conn)?
+            .into_iter()
+            .map(|r| (r.id, r))
+            .collect();
         let mut targets = group(load_et_weapon_target(conn)?, |r| r.weapon_id);
         for mut row in load_et_weapon(conn)? {
             row.targets = targets.remove(&row.id).unwrap_or_default();

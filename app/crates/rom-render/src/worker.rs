@@ -124,6 +124,12 @@ struct Shared {
     mailbox: FrameMailbox,
     terrain: Mutex<Option<Arc<TerrainScene>>>,
     planet: Mutex<Option<(Arc<PlanetScene>, OrbitSettings)>>,
+    /// The loaded planet painted since (task 77): only what changed is re-baked.
+    repaint: Mutex<Option<Arc<PlanetScene>>>,
+    /// Bodies whose view changed (a moon brought to life), replaced by id.
+    body_views: Mutex<Vec<crate::universe::BodyView>>,
+    /// A body the camera is asked to fly to (scripts).
+    fly_body: Mutex<Option<u32>>,
     looks: Mutex<Arc<SceneLooks>>,
     universe: Mutex<Option<(Arc<UniverseScene>, UniverseSettings)>>,
     zoom_cap: AtomicU8,
@@ -205,6 +211,25 @@ impl RenderBridge {
     pub fn publish_planet(&self, scene: Arc<PlanetScene>, settings: OrbitSettings) {
         self.shared.terrain_ready.store(false, Ordering::Release);
         *lock(&self.shared.planet) = Some((scene, settings));
+    }
+
+    /// Hands the render thread the loaded planet as painted now (task 77): the chunks whose
+    /// tiles changed and the feature objects are re-baked, the camera stays. Ignored when the
+    /// planet shown is another one (its size differs) or none.
+    pub fn publish_repaint(&self, scene: Arc<PlanetScene>) {
+        *lock(&self.shared.repaint) = Some(scene);
+    }
+
+    /// Changes how bodies are drawn in the system view, by id (a moon brought to life is drawn
+    /// as a small planet, task 77).
+    pub fn publish_body_views(&self, bodies: Vec<crate::universe::BodyView>) {
+        lock(&self.shared.body_views).extend(bodies);
+    }
+
+    /// Flies the camera to a body of the universe and down to its globe, as a double click on it
+    /// in the system view would (scripts).
+    pub fn fly_to_body(&self, body: u32) {
+        *lock(&self.shared.fly_body) = Some(body);
     }
 
     /// Hands the render thread the universe to zoom out into: the star map and the systems.
@@ -476,6 +501,9 @@ impl Shared {
             mailbox: FrameMailbox::default(),
             terrain: Mutex::new(None),
             planet: Mutex::new(None),
+            repaint: Mutex::new(None),
+            body_views: Mutex::new(Vec::new()),
+            fly_body: Mutex::new(None),
             looks: Mutex::new(Arc::new(SceneLooks::default())),
             universe: Mutex::new(None),
             zoom_cap: AtomicU8::new(Level::Globe as u8),
@@ -690,8 +718,54 @@ fn render_loop(shared: &Shared) {
             }
             shared.terrain_ready.store(true, Ordering::Release);
         }
+        if let Some(painted) = lock(&shared.repaint).take()
+            && painted.is_valid()
+            && planet_scene.as_ref().is_some_and(|p| p.n == painted.n)
+        {
+            let built_at = Instant::now();
+            let built = Arc::new(match &globe {
+                Some(loaded) => loaded.repainted(&painted),
+                None => Globe::new(&painted),
+            });
+            let geometry_ms = millis(built_at.elapsed());
+            if let Some((chunks, ms)) = scene.repaint_planet(&thread, &painted, &built) {
+                eprintln!(
+                    "planet-repaint n={} chunks={chunks} geometry_ms={geometry_ms:.1} rebake_ms={ms:.1}",
+                    painted.n
+                );
+                planet_scene = Some(painted);
+                globe = Some(built);
+                // The minimap and concealed terrain follow the new ground.
+                knowledge_dirty = true;
+            }
+        }
+        if let (Some(zoom_camera), Some(orbit_camera)) = (zoom.as_mut(), orbit.as_mut())
+            && let Some(body) = lock(&shared.fly_body).take()
+            && let Some(index) = zoom_camera.scene().body_index(body)
+        {
+            zoom_camera.fly_to_target(crate::zoom::Target::Body(index), orbit_camera);
+        }
         if let Some(published) = lock(&shared.universe).take() {
             pending_universe = Some(published);
+        }
+        // Bodies drawn anew wait until there is a universe to change.
+        if zoom.is_some() || pending_universe.is_some() {
+            let changed_bodies = std::mem::take(&mut *lock(&shared.body_views));
+            if !changed_bodies.is_empty() {
+                if let Some(zoom_camera) = zoom.as_mut() {
+                    zoom_camera.replace_bodies(&changed_bodies);
+                    scene.replace_universe(&zoom_camera.scene_arc());
+                }
+                if let Some((universe, _)) = pending_universe.as_mut() {
+                    let mut replaced = (**universe).clone();
+                    for body in &changed_bodies {
+                        if let Some(index) = replaced.body_index(body.id) {
+                            replaced.bodies[index] = body.clone();
+                        }
+                    }
+                    *universe = Arc::new(replaced);
+                }
+            }
         }
         if let (Some(_), Some(globe), Some(orbit)) = (&pending_universe, &globe, &mut orbit)
             && let Some((universe, settings)) = pending_universe.take()

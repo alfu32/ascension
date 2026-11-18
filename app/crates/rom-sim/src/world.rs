@@ -57,6 +57,8 @@ pub struct World {
     pub(crate) victory: crate::victory::VictoryState,
     /// Ascended players, starting factions and ascensions completing this tick (task 76).
     pub(crate) ascension: crate::ascension::AscensionState,
+    /// Dormant surfaces of resource bodies and the bodies brought to life (task 77).
+    pub(crate) life: crate::life::LifeState,
     pub(crate) capture: crate::capture::CaptureState,
     pub(crate) hits: Vec<crate::combat::PendingHit>,
     pub(crate) shots: Vec<crate::combat::PendingShot>,
@@ -278,6 +280,7 @@ impl World {
         Ok(Self {
             victory,
             ascension,
+            life: crate::life::LifeState::default(),
             capture: crate::capture::CaptureState::default(),
             hits: Vec::new(),
             shots: Vec::new(),
@@ -726,6 +729,10 @@ impl World {
         if command.kind == "descend" {
             return self.submit_descent(command);
         }
+        // So do the orders that bring a body to life and paint it (task 77).
+        if matches!(command.kind.as_str(), "bring_life" | "paint") {
+            return self.submit_life(command);
+        }
         self.check_orders_open(command.player)?;
         let entity = self
             .entity(command.executor)
@@ -877,6 +884,14 @@ impl World {
         for (mut order, append) in std::mem::take(&mut self.pending) {
             if order.kind == "descend" {
                 self.apply_descent(&order);
+                continue;
+            }
+            if order.kind == "bring_life" {
+                self.apply_bring_life(&order);
+                continue;
+            }
+            if order.kind == "paint" {
+                self.apply_paint(&order);
                 continue;
             }
             // An executor disbanded earlier in this loop takes no more orders.

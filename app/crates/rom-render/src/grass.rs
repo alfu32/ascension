@@ -751,6 +751,7 @@ mod tests {
             .collect();
         let heights: Vec<u8> = (0..tiles).map(|i| 130 + (i * 7 % 13) as u8).collect();
         let globe = Globe::new(&PlanetScene {
+            sea_level: None,
             n: N,
             kinds: kinds.clone(),
             heights,

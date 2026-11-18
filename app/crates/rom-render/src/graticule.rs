@@ -178,6 +178,7 @@ mod tests {
     fn hilly(n: u32) -> PlanetScene {
         let tiles = 6 * (n * n) as usize;
         PlanetScene {
+            sea_level: None,
             n,
             kinds: (0..tiles)
                 .map(|i| {

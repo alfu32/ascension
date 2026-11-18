@@ -1,6 +1,6 @@
 # Game database
 
-Files: [`../db/schema.sql`](../db/schema.sql) (120 tables, 4 views),
+Files: [`../db/schema.sql`](../db/schema.sql) (124 tables, 4 views),
 [`../db/seed.sql`](../db/seed.sql) (the full generated content catalogue and hand-written
 world rules) and the model files in [`../db/models/`](../db/models/) (one per building or
 unit model, task 55; see §10a and `docs/models-in-meshcraft.md`), which load after the seed:
@@ -1317,6 +1317,29 @@ Schema and seed (deliberate; both lint views stay empty, the seed loads), all ge
   while the status is `ascended`, a CHECK), `player.ascensions`; `player.status` takes
   `ascended`. A `star_system` without a catalogue star (`star_id` NULL) is the celestial home.
 
+## Bringing life (task 77)
+
+The rules, the state and the views are described in `docs/bringing-life.md`. Schema and seed
+(deliberate; both lint views stay empty, the seed loads), hand-written at the end of `seed.sql`
+after every other definition so earlier ids stay:
+
+- **PART A.** `def.kind` takes **`brush`**, with its subtype table **`life_brush`** (`family`
+  land, water, elevation, biome or deposit; `terrain_id` laid on the disc or NULL; `node_type_id`
+  a map node set at the centre or NULL; `height_op` keep, set, raise or lower toward `height`
+  on the 0..255 scale; `radius` in milli-tiles); `lint_def_without_subtype` checks it. `map_style`
+  gains **`life_n`** (64: the face size of the dormant surface every resource body gets before
+  play) and **`life_terrain_id`** (`ter.barren`). New ground terrains `ter.barren` (Barren Rock),
+  `ter.desert` (Desert), `ter.snow` (Snowfield), walked like the plain (its movement rows are
+  copied) but not the plain every building needs; materials `mat.barren`, `mat.desert` (snow
+  wears `mat.ice`). `order_kind` **`bring_life`** (target an entity, the body's marker; no
+  executor) and **`paint`** (target a point, subject a brush; no executor). Constants
+  `life.sea_height` 100 and `life.ground_height` 112. The 27 brushes of the seed: 20 by hand,
+  the deposits from the rules (every terrain a gather site needs or stands on other than the
+  plain, at two sizes; every map node that is kept or carried).
+- **PART B, save format 11.** `body_dormant(body_id, n, terrain_id)` and
+  `body_life(body_id, player_id, since_tick, strokes, heights)`. A body brought to life is a
+  `habitable` body row with `n` and a `surface` row; its marker is a planet marker.
+
 ## Capture and difficulty (task 67)
 
 Owner's choice (2026-11-16) after tasks 61 and 65 ended most duels in stand-offs:
@@ -1444,6 +1467,8 @@ back. No SQL runs in `rom-sim`.
 - **Rally points.** `entity_rally(entity_id, target_entity_id | x, y, face, body)`
   (task 64). Not part of the state hash while no producer has one, so worlds
   without rally points keep their hashes.
+- **Bringing life of task 77 (format 11).** `body_dormant` and `body_life` rows (see
+  "Bringing life"). Format 10 saves are refused.
 - **Ascension of task 76 (format 10).** `player.origin_faction_id`, `ascended_tick`,
   `ascensions` and the status `ascended` (see "Ascension"). Format 9 saves are refused.
 - **Ground stains of task 80 (format 9).** `surface_stain` rows, oldest first per surface

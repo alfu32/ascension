@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+<defs>
+<linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="64">
+<stop offset="0" stop-color="#f4dca0"/><stop offset="0.5" stop-color="#d9a955"/><stop offset="1" stop-color="#a06c2a"/></linearGradient>
+</defs>
+<path d="M6 20 Q14 12 22 20 T38 20 T54 20 T62 16" fill="none" stroke="#2e1e0a" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6 20 Q14 12 22 20 T38 20 T54 20 T62 16" fill="none" stroke="#4aa3c8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6 34 Q14 26 22 34 T38 34 T54 34 T62 30" fill="none" stroke="#2e1e0a" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6 34 Q14 26 22 34 T38 34 T54 34 T62 30" fill="none" stroke="#4aa3c8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6 48 Q14 40 22 48 T38 48 T54 48 T62 44" fill="none" stroke="#2e1e0a" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6 48 Q14 40 22 48 T38 48 T54 48 T62 44" fill="none" stroke="#4aa3c8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

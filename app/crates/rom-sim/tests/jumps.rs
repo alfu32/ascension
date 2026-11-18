@@ -60,6 +60,7 @@ fn world(rules: &Arc<Rules>, age: &str, techs: &[&str]) -> World {
         length,
     };
     let setup = UniverseSetup {
+        dormant: Default::default(),
         figure: Vec::new(),
         systems: [(1, 0, 0), (2, 100, 0), (3, 200, 0), (4, 0, 200)]
             .into_iter()

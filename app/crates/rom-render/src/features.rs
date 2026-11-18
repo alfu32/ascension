@@ -1091,6 +1091,7 @@ mod tests {
     #[test]
     fn feature_instances_are_bounded_per_chunk() {
         let planet = PlanetScene {
+            sea_level: None,
             n: 40,
             kinds: (0..6 * 40 * 40)
                 .map(|i| match i % 11 {

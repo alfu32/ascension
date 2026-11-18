@@ -244,7 +244,8 @@ impl UniverseScene {
     /// angle, which no other body does. `None` for anything that is not a moon.
     pub fn moon_parent(&self, index: usize, outermost: f32) -> Option<usize> {
         let body = self.bodies.get(index)?;
-        if body.kind != BodyViewKind::Resource {
+        // A moon brought to life (task 77) circles its planet still.
+        if !matches!(body.kind, BodyViewKind::Resource | BodyViewKind::Habitable) {
             return None;
         }
         let near = |a: i32, b: i32| {
@@ -254,7 +255,13 @@ impl UniverseScene {
         self.bodies
             .iter()
             .enumerate()
-            .filter(|(_, p)| p.system == body.system && p.kind == BodyViewKind::Habitable)
+            .filter(|&(i, p)| {
+                i != index
+                    && p.system == body.system
+                    && p.kind == BodyViewKind::Habitable
+                    // A planet is a moon only of a larger planet.
+                    && (body.kind == BodyViewKind::Resource || p.n_or_size > body.n_or_size)
+            })
             .map(|(i, p)| {
                 (
                     near(p.orbit_angle, body.orbit_angle),

@@ -1,0 +1,70 @@
+# Task 77, the painting bench: as 77-land-script.txt up to the flight to the asteroid, then 45
+# strokes three ticks apart (about seven a second) with a brush of every page: land, ocean,
+# mountain range, snow, oil. Run with --bench; compare with 77-bench-idle-script.txt, the same run
+# without the strokes.
+0 grant-age age.galactic
+0 ascension-ready 1
+0 place 1 bld.library @12,0
+5 ascend 1
+6 speed 1000
+3560 speed 100
+3645 hud slot 1
+3650 orbit rock1
+3660 visit rock1
+3790 look 0:32,32
+3800 hud tab 0
+3805 hud slot 2
+3810 click 0:32,32
+3813 click 0:20,20
+3816 click 0:44,44
+3819 click 0:20,44
+3822 click 0:44,20
+3825 click 0:32,12
+3828 click 0:32,52
+3831 click 0:12,32
+3834 click 0:52,32
+3837 hud arrow 1
+3839 hud slot 4
+3841 click 0:32,32
+3844 click 0:20,20
+3847 click 0:44,44
+3850 click 0:20,44
+3853 click 0:44,20
+3856 click 0:32,12
+3859 click 0:32,52
+3862 click 0:12,32
+3865 click 0:52,32
+3868 hud arrow 1
+3870 hud slot 3
+3872 click 0:32,32
+3875 click 0:20,20
+3878 click 0:44,44
+3881 click 0:20,44
+3884 click 0:44,20
+3887 click 0:32,12
+3890 click 0:32,52
+3893 click 0:12,32
+3896 click 0:52,32
+3899 hud arrow 1
+3901 hud slot 7
+3903 click 0:32,32
+3906 click 0:20,20
+3909 click 0:44,44
+3912 click 0:20,44
+3915 click 0:44,20
+3918 click 0:32,12
+3921 click 0:32,52
+3924 click 0:12,32
+3927 click 0:52,32
+3930 hud arrow 1
+3932 hud slot 6
+3934 click 0:32,32
+3937 click 0:20,20
+3940 click 0:44,44
+3943 click 0:20,44
+3946 click 0:44,20
+3949 click 0:32,12
+3952 click 0:32,52
+3955 click 0:12,32
+3958 click 0:52,32
+4005 speed 1

@@ -88,6 +88,8 @@ pub struct UniverseSetup {
     pub planets: BTreeMap<BodyId, PlanetSurface>,
     /// Constellation stick-figure lines between systems, `a < b`. Display only.
     pub figure: Vec<(u32, u32)>,
+    /// The dormant surface of each resource body, made before play (task 77).
+    pub dormant: BTreeMap<BodyId, crate::DormantSurface>,
 }
 
 /// Stored universe facts, shared by planetary surfaces and system space.
@@ -119,6 +121,7 @@ impl World {
             mut routes,
             planets,
             mut figure,
+            dormant,
         } = setup;
         bodies.sort_by_key(|b| b.id);
         systems.sort_by_key(|s| s.id);
@@ -165,6 +168,19 @@ impl World {
         for (body, planet) in &planets {
             world.check_planet(*body, planet)?;
         }
+        for (body, surface) in &dormant {
+            if world
+                .body(*body)
+                .is_none_or(|b| b.kind != BodyKind::Resource)
+                || !(4..=4096).contains(&surface.n)
+                || !world.rules.terrains.contains_key(&surface.terrain)
+            {
+                return Err(SimError::InvalidUniverse(
+                    "dormant surface of a non-resource body",
+                ));
+            }
+        }
+        world.life.dormant = dormant;
         for (body, planet) in &planets {
             world.insert_surface(*body, planet.surface, planet.terrain.clone())?;
         }
@@ -377,6 +393,7 @@ mod tests {
             nodes: Vec::new(),
         };
         let setup = UniverseSetup {
+            dormant: Default::default(),
             systems: vec![
                 SystemInfo {
                     id: 1,

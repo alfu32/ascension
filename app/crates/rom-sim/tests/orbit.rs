@@ -72,6 +72,7 @@ fn world(rules: &Arc<Rules>) -> World {
         node_type: None,
     };
     let setup = UniverseSetup {
+        dormant: Default::default(),
         figure: Vec::new(),
         systems: vec![SystemInfo {
             z: 0,

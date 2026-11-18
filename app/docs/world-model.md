@@ -792,6 +792,19 @@ An **ascended** player sees the whole universe with no fog and no tier cap and m
 from planet to star map; it gives no orders to anything material, and descends with a city on
 open land of any habitable planet. Everything else is in `docs/ascension.md`.
 
+### Moons and asteroids brought to life (task 77)
+
+Every resource body is given a **dormant surface** before play: a cube of 64 tiles a face
+(`map_style.life_n`) of barren rock, whatever size the body is drawn, kept as a recipe and
+neither shown nor simulated. An ascended player may **bring a resource body to life**: its
+resource node is retired (claims on it end) and it becomes a small habitable planet with that
+surface, drawn as a planet in the system view (a moon still circles its planet). Until a city
+stands on it, the player that brought it to life **paints** it with brushes (land, water,
+hills and mountains, grass, forest, desert, snow, deposits), each click a `paint` order applied
+at a tick; heights are kept in the simulation for these planets, absolute about a fixed sea
+level, so the renderer re-bakes only the chunks a stroke touched. Then it is an ordinary
+habitable planet. Details in `docs/bringing-life.md`.
+
 ## Migration plan
 
 Each step keeps the game working and every existing test passing.

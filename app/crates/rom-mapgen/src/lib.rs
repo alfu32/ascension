@@ -6,9 +6,9 @@ mod universe;
 
 pub use sphere::{SpherePlanet, SphereRequest, expand_planet, generate_sphere};
 pub use universe::{
-    BLACK_HOLE_NAME, Body, CELESTIAL_PLANET_NAME, CELESTIAL_SYSTEM_NAME, FAIR_HOPS, FAIR_NEAR_PCT,
-    FAIR_VALUE_PCT, HomeShare, Route, StarSystem, Universe, UniverseRequest, generate_universe,
-    plan_universe,
+    BLACK_HOLE_NAME, Body, CELESTIAL_PLANET_NAME, CELESTIAL_SYSTEM_NAME, DormantSurface, FAIR_HOPS,
+    FAIR_NEAR_PCT, FAIR_VALUE_PCT, HomeShare, Route, StarSystem, Universe, UniverseRequest,
+    generate_universe, plan_universe,
 };
 
 use rom_rules::{DefId, FeaturePattern, Layer, MapStyleFeature, Rules};
@@ -206,7 +206,7 @@ fn fbm(seed: u64, salt: u64, x: u32, y: u32, base_cell: u32) -> i64 {
     total / weight_sum
 }
 
-fn pick_base(rules: &Rules) -> Result<BaseTerrains, MapGenError> {
+pub(crate) fn pick_base(rules: &Rules) -> Result<BaseTerrains, MapGenError> {
     let find = |layer: Layer, buildable: bool, no_los: bool, name: &'static str| {
         rules
             .terrains

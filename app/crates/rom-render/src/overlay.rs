@@ -679,6 +679,7 @@ mod tests {
     #[test]
     fn route_line_conforms_to_the_globe() {
         let globe = crate::Globe::new(&crate::PlanetScene {
+            sea_level: None,
             n: 64,
             kinds: vec![crate::TileKind::Land; 6 * 64 * 64],
             heights: vec![0; 6 * 64 * 64],
@@ -838,6 +839,7 @@ mod tests {
     fn ghost_and_city_circles_conform_to_the_globe() {
         let n = 64;
         let globe = crate::Globe::new(&crate::PlanetScene {
+            sea_level: None,
             n,
             kinds: vec![crate::TileKind::Land; 6 * (n * n) as usize],
             heights: vec![0; 6 * (n * n) as usize],

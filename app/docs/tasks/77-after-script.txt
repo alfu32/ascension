@@ -1,0 +1,15 @@
+# Task 77: as 77-before-script.txt, then the person presses Bring life (slot W of the Order tab)
+# at tick 3 645 and right-clicks the rock nearest the home planet at 3 650: at the next tick it
+# comes to life and the system view draws it as a small planet circling the home planet; the
+# event line says whose claim ended. The game all but stops at tick 3 700.
+0 grant-age age.galactic
+0 ascension-ready 1
+0 place 1 bld.library @12,0
+5 ascend 1
+6 speed 1000
+3560 speed 100
+3620 cam wheel -3 836,400
+3630 cam wheel 4 1238,405
+3645 hud slot 1
+3650 orbit rock1
+3700 speed 1

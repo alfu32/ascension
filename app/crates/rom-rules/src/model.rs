@@ -36,6 +36,8 @@ pub enum DefKind {
     MapStyle,
     /// SQL value `victory`.
     Victory,
+    /// SQL value `brush` (task 77).
+    Brush,
 }
 impl crate::load::SqlEnum for DefKind {
     fn parse(value: &str) -> Option<Self> {
@@ -53,6 +55,7 @@ impl crate::load::SqlEnum for DefKind {
             "mesh" => Some(Self::Mesh),
             "map_style" => Some(Self::MapStyle),
             "victory" => Some(Self::Victory),
+            "brush" => Some(Self::Brush),
             _ => None,
         }
     }
@@ -1811,6 +1814,77 @@ pub struct MapStyle {
     /// Widest region of the star catalogue one universe may span, in map units: systems are
     /// taken nearest first from a centre star and none lies farther from it than this.
     pub star_map_radius: i64,
+    /// Cube face size of the dormant surface every resource body gets before play (task 77).
+    pub life_n: i64,
+    /// The barren ground of a dormant surface; `None`: resource bodies get none.
+    pub life_terrain_id: Option<DefId>,
+}
+/// What a brush does to the heights of the tiles it covers (task 77).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum HeightOp {
+    /// SQL value `keep`: heights stay.
+    Keep,
+    /// SQL value `set`: heights become the brush's.
+    Set,
+    /// SQL value `raise`: a dome up to the brush's height; lower tiles rise.
+    Raise,
+    /// SQL value `lower`: a bowl down to the brush's height; higher tiles sink.
+    Lower,
+}
+impl crate::load::SqlEnum for HeightOp {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "keep" => Some(Self::Keep),
+            "set" => Some(Self::Set),
+            "raise" => Some(Self::Raise),
+            "lower" => Some(Self::Lower),
+            _ => None,
+        }
+    }
+}
+/// The panel group a brush is listed in (task 77).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BrushFamily {
+    /// SQL value `land`.
+    Land,
+    /// SQL value `water`.
+    Water,
+    /// SQL value `elevation`.
+    Elevation,
+    /// SQL value `biome`.
+    Biome,
+    /// SQL value `deposit`.
+    Deposit,
+}
+impl crate::load::SqlEnum for BrushFamily {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "land" => Some(Self::Land),
+            "water" => Some(Self::Water),
+            "elevation" => Some(Self::Elevation),
+            "biome" => Some(Self::Biome),
+            "deposit" => Some(Self::Deposit),
+            _ => None,
+        }
+    }
+}
+/// One `life_brush` row: a brush an ascended player paints a planet it brought to life with.
+#[derive(Debug, Clone)]
+pub struct LifeBrush {
+    /// The `id` column.
+    pub id: DefId,
+    /// The panel group.
+    pub family: BrushFamily,
+    /// Terrain laid on the disc; `None` keeps the terrain.
+    pub terrain_id: Option<DefId>,
+    /// A deposit node set at the centre.
+    pub node_type_id: Option<DefId>,
+    /// What happens to the heights.
+    pub height_op: HeightOp,
+    /// Target height at the centre, 0..=255.
+    pub height: i64,
+    /// Radius in milli-tiles.
+    pub radius: i64,
 }
 /// One `constellation` row.
 #[derive(Debug, Clone)]
@@ -2133,6 +2207,8 @@ pub struct Rules {
     pub map_styles: BTreeMap<DefId, MapStyle>,
     /// Loaded `victory` rows, keyed by primary key.
     pub victories: BTreeMap<DefId, Victory>,
+    /// Loaded `life_brush` rows, keyed by primary key (task 77).
+    pub brushes: BTreeMap<DefId, LifeBrush>,
     /// Production rows indexed by product.
     pub production_by_product: BTreeMap<DefId, Vec<Production>>,
 }

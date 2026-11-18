@@ -325,6 +325,7 @@ mod tests {
             })
             .collect();
         let planet = PlanetScene {
+            sea_level: None,
             n,
             kinds: kinds.clone(),
             heights: vec![140; tiles],

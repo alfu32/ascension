@@ -353,6 +353,7 @@ pub fn to_planet_scene(planet: &SpherePlanet) -> PlanetScene {
         .map(|&id| kind_of(id, planet.base, &mut feature_colors))
         .collect();
     PlanetScene {
+        sea_level: None,
         n: planet.surface.n,
         kinds,
         heights: planet.height.clone(),
@@ -361,6 +362,29 @@ pub fn to_planet_scene(planet: &SpherePlanet) -> PlanetScene {
         nodes: planet.nodes.iter().map(|&(_, p)| p).collect(),
         sun: SunSettings::default(),
     }
+}
+
+/// The planet a moon or asteroid became when an ascended player brought it to life (task 77),
+/// as painted so far: the world's terrain and heights over its dormant surface, with absolute
+/// heights about the rules' sea level. `None` for a body that does not live.
+pub fn living_scene(
+    world: &rom_sim::World,
+    universe: &rom_mapgen::Universe,
+    body: rom_sim::BodyId,
+) -> Option<PlanetScene> {
+    let living = world.living(body)?;
+    let surface = world.surface(body)?;
+    let rules = world.rules();
+    let mut planet = universe.dormant_planet(rules, body.0).ok()?;
+    if planet.terrain.len() != surface.tiles() {
+        return None;
+    }
+    planet.terrain.copy_from_slice(surface.terrain());
+    planet.height.clone_from(&living.heights);
+    let mut scene = to_planet_scene(&planet);
+    apply_terrain_colours(&mut scene.feature_colors, rules);
+    scene.sea_level = Some(world.sea_height());
+    Some(scene)
 }
 
 /// Tiles within which `--look-at`'s second terrain must lie.

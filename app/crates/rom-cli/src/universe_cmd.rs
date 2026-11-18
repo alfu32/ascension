@@ -151,6 +151,11 @@ pub fn universe_setup(universe: &Universe) -> UniverseSetup {
             })
             .collect(),
         figure: universe.figure.clone(),
+        dormant: universe
+            .dormant
+            .iter()
+            .map(|(body, surface)| (BodyId(*body), *surface))
+            .collect(),
         routes: universe
             .routes
             .iter()
