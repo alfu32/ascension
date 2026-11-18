@@ -6,7 +6,7 @@ use std::path::PathBuf;
 pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <file.png>] \
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] [--ai <profile:difficulty,...|none>] [--watch] \
 [--map-size <width>x<height>] [--sphere <n>] [--single-planet] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
-[--universe] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-chrome] [--no-hud] [--hud-scale <percent>] [--stats] \
+[--universe] [--start-placement <separate|together>] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-chrome] [--no-hud] [--hud-scale <percent>] [--stats] \
 [--sun <orbit|fixed|midnight>] [--graticule <on|off>] [--grass <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
 [--middle-drag <turn|pan>] [--invert-horizontal-turn] [--invert-vertical-turn] \
 [--gallery <all|units|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
@@ -40,6 +40,8 @@ pub struct Options {
     pub screenshot: Option<PathBuf>,
     /// Map style key; `None` picks the first style in id order.
     pub style: Option<String>,
+    /// Where players start in a universe; `None` takes the rules' default.
+    pub start_placement: Option<rom_mapgen::StartPlacement>,
     /// Map seed.
     pub seed: u64,
     /// Number of players.
@@ -178,6 +180,7 @@ impl Default for Options {
             scale: 100,
             screenshot: None,
             style: None,
+            start_placement: None,
             seed: 1,
             players: 4,
             factions: None,
@@ -265,6 +268,13 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             }
             "--screenshot" => options.screenshot = Some(PathBuf::from(value("--screenshot")?)),
             "--style" => options.style = Some(value("--style")?),
+            "--start-placement" => {
+                let text = value("--start-placement")?;
+                options.start_placement =
+                    Some(rom_mapgen::StartPlacement::parse(&text).ok_or_else(|| {
+                        format!("--start-placement expects separate or together, got {text:?}")
+                    })?);
+            }
             "--seed" => options.seed = number("--seed", &value("--seed")?)?,
             "--players" => {
                 let players: u32 = number("--players", &value("--players")?)?;
@@ -464,8 +474,9 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
 /// what a save keeps so loading can regenerate the same terrain, planets and looks. Window,
 /// camera and automation options are left out.
 pub fn match_arguments(arguments: &[String]) -> Vec<String> {
-    const WITH_VALUE: [&str; 9] = [
+    const WITH_VALUE: [&str; 10] = [
         "--style",
+        "--start-placement",
         "--seed",
         "--players",
         "--factions",
@@ -863,6 +874,20 @@ mod tests {
     #[test]
     fn defaults_without_arguments() {
         assert_eq!(parse(args(&[])), Ok(Options::default()));
+    }
+
+    #[test]
+    fn start_placement_parses_and_is_kept_in_a_save() {
+        use rom_mapgen::StartPlacement;
+        assert_eq!(parse(args(&[])).unwrap().start_placement, None);
+        let o = parse(args(&["--start-placement", "together"])).unwrap();
+        assert_eq!(o.start_placement, Some(StartPlacement::Together));
+        assert!(parse(args(&["--start-placement", "close"])).is_err());
+        let given = args(&["--start-placement", "together", "--stats", "--seed", "3"]);
+        assert_eq!(
+            match_arguments(&given),
+            ["--start-placement", "together", "--seed", "3"]
+        );
     }
 
     #[test]
