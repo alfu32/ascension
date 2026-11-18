@@ -832,6 +832,54 @@ mod transit_tests {
     /// A ship of player one sent from its home system to a neighbouring one stays selected and
     /// visible for its whole journey, and its departure and arrival are announced about it.
     #[test]
+    fn the_system_index_gives_what_the_scans_gave() {
+        let (_content, game) = crate::match_setup::universe_game_for_tests();
+        let world = &game.world;
+        let index = SystemIndex::new(world);
+        assert!(!world.systems().is_empty());
+        for system in world.systems() {
+            let scanned: Vec<BodyId> = world
+                .bodies()
+                .iter()
+                .filter(|b| b.system == system.id)
+                .map(|b| b.id)
+                .collect();
+            assert_eq!(index.bodies(system.id), scanned, "bodies of {}", system.id);
+            assert_eq!(index.star(system.id), world.space_of(system.id));
+            assert_eq!(index.frame(system.id), SpaceFrame::of(world, system.id));
+        }
+        // The scan of the old known-systems rule, for the systems whose bodies the team saw.
+        let seen_by_scan: BTreeSet<u32> = world
+            .systems()
+            .iter()
+            .filter(|system| {
+                world
+                    .bodies()
+                    .iter()
+                    .filter(|b| b.system == system.id)
+                    .filter_map(|b| world.body_position(b.id))
+                    .any(|at| {
+                        world.is_explored_on_body(
+                            PLAYER,
+                            world.space_of(system.id).unwrap(),
+                            0,
+                            at.x.div_euclid(1000),
+                            at.y.div_euclid(1000),
+                        )
+                    })
+            })
+            .map(|s| s.id)
+            .collect();
+        let known: BTreeSet<u32> = known_systems_with(world, &index).into_iter().collect();
+        assert!(seen_by_scan.is_subset(&known));
+        assert_eq!(known_systems_with(world, &index), known_systems(world));
+        assert_eq!(
+            space_snapshot_with(world, &index, 1, &[]).known,
+            space_snapshot(world, 1, &[]).known
+        );
+    }
+
+    #[test]
     fn a_ship_in_transit_stays_selected_seen_and_announced() {
         let (content, mut game) = crate::match_setup::universe_game_for_tests();
         let home = game.world.home_body(PLAYER).unwrap();

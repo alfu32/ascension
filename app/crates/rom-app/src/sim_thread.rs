@@ -1555,6 +1555,7 @@ impl FogPublisher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::space_view::space_snapshot;
     use crate::args::Options;
     use crate::match_setup::build_match;
     use crate::terrain::generate_content;
