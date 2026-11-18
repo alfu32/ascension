@@ -147,8 +147,8 @@ OVERVIEW14 = [
     ("93-before-after", "Every ship of this round, before (left) and after (right), close (<code>--gallery &lt;id&gt; --gallery-view close</code>, player 2's blue)"),
     ("93-starships", "The starships, smallest to largest, near versions: survey ship, corvette, frigate, cruiser, battleship; transport, freighter, carrier"),
     ("93-generations", "The three classes task 92 moved an age earlier, first look (left) and later look (right): frigate, cruiser, battleship"),
-    ("93-system-close", "System view, zoomed in: a mixed fleet of 60 ships on the plane of the home system (near versions)"),
-    ("93-system-fleet", "System view at the bench framing: the same 60 ships at the distance where they take their far versions"),
+    ("93-orbit", "Twenty starships in orbit above the city (planet view, <code>docs/tasks/72-bench-script.txt</code>), near versions, in player 1's red"),
+    ("93-system-fleet", "System view at the bench framing: sixty ships of every class on the plane of the home system (<code>docs/tasks/93-bench-script.txt</code>), far versions at this distance"),
     ("93-sea", "The two new line ships at sea level beside their neighbours: frigate and ship of the line; destroyer and dreadnought"),
 ]
 OVERVIEW = OVERVIEW14 if ROUND == "14" else OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
