@@ -1145,7 +1145,8 @@ sites cost 3 500 metal, 1 000 timber and 750 knowledge. A governor pays them as 
 and waits, naming what is missing ("needs 200 Metal"), when its owner cannot pay. Note: the
 abundance age's own research makes every price zero (`tech.age.abundance`, `cost.all × 0`), so a
 player who researched the age pays nothing and a governor waits only for a player who reached
-the age without that research (a granted age, as in the screenshots); this rule was left as it is.
+the age without that research (a granted age, as in the screenshots). The owner kept this
+(2026-11-18): the automated sites' prices stay as they are, free after the abundance research.
 
 Removing "Upgrade to Corvettes" moved the ids of every definition generated after it down by one
 (and shifted the spaceport's research grid); the new definitions come last.
