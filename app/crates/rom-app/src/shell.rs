@@ -112,22 +112,22 @@ pub fn run(options: &Options, arguments: &[String]) -> ExitCode {
         let canvas = size(px(width as f32), px(height as f32));
         let mut window_options = WindowOptions {
             titlebar: Some(TitlebarOptions {
-                title: Some("Ascension: Rise of Man".into()),
+                title: Some(crate::args::window_title().into()),
                 ..Default::default()
             }),
             app_id: Some("rise-of-man".into()),
             ..Default::default()
         };
+        window_options.window_decorations = Some(decorations(&options));
         let fixed_window = options.bench_seconds.is_some() || options.screenshot.is_some();
         let opened = if fixed_window {
-            // Benchmark and screenshot windows have no title bar or component frame (which pads
+            // Benchmark and screenshot windows have no component frame (which pads
             // client-decorated windows for a shadow), so the whole requested size is canvas even
-            // at monitor size.
+            // at monitor size; a desktop title bar sits outside that canvas.
             window_options.window_bounds = Some(WindowBounds::Windowed(Bounds::new(
                 point(px(0.0), px(0.0)),
                 canvas,
             )));
-            window_options.window_decorations = Some(WindowDecorations::Client);
             let exit_code = Arc::clone(&app_exit_code);
             cx.open_window(window_options, move |window, cx| {
                 let view = world_view(
@@ -203,6 +203,16 @@ pub fn run(options: &Options, arguments: &[String]) -> ExitCode {
     ExitCode::from(exit_code.load(Ordering::Relaxed))
 }
 
+/// The desktop's own title bar and borders (server-side decorations) unless `--no-chrome`
+/// asks for a bare window.
+fn decorations(options: &Options) -> WindowDecorations {
+    if options.no_chrome {
+        WindowDecorations::Client
+    } else {
+        WindowDecorations::Server
+    }
+}
+
 /// Sets up the freshly opened window and creates the world view for it.
 fn world_view(
     bridge: &RenderBridge,
@@ -213,6 +223,9 @@ fn world_view(
     window: &mut Window,
     cx: &mut App,
 ) -> Entity<WorldView> {
+    // GPUI's X11 window creation writes the title as Latin-1; setting it again writes the
+    // UTF-8 `_NET_WM_NAME`, so the dash shows correctly in the title bar.
+    window.set_window_title(&crate::args::window_title());
     let close_shutdown = shutdown.clone();
     let close_sim = sim.clone();
     // GPUI's X11 client holds its state borrowed while asking this, so calling `cx.quit()`
@@ -602,4 +615,17 @@ fn read_script(path: &std::path::Path, game: &Match) -> Result<Script, String> {
         context.systems = neighbours.into_iter().map(|(_, id)| id).collect();
     }
     Script::parse(&text, &context, &offset).map_err(|error| format!("{}: {error}", path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_window_has_the_desktop_title_bar_unless_no_chrome() {
+        let mut options = Options::default();
+        assert_eq!(decorations(&options), WindowDecorations::Server);
+        options.no_chrome = true;
+        assert_eq!(decorations(&options), WindowDecorations::Client);
+    }
 }
