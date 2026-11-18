@@ -880,7 +880,7 @@ mod tests {
     }
 
     #[test]
-    fn selected_unit_gets_a_ring_and_a_health_bar() {
+    fn selected_unit_gets_a_ring_and_no_3d_health_bar() {
         let hud = HudSnapshot {
             selected: vec![1],
             ..HudSnapshot::default()
@@ -888,8 +888,8 @@ mod tests {
         let mut out = OverlayGeometry::default();
         build_overlays(&[unit(1), unit(2)], &|_, _| 0.0, &hud, 0.0, &mut out);
         assert_eq!(out.lines.len(), RING_SEGMENTS * 3);
-        // Background and fill, two triangles each.
-        assert_eq!(out.tris.len(), 4);
+        // The health bar is drawn on the 2D batch, not here.
+        assert!(out.tris.is_empty());
         assert!(out.lines.iter().all(|l| l.colour == rgba(owner_color(1))));
         // An unselected unit draws nothing.
         build_overlays(&[unit(2)], &|_, _| 0.0, &hud, 0.0, &mut out);
