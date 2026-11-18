@@ -2718,3 +2718,56 @@ fn battery_script_holds_the_frigates_off() {
     assert_eq!(batteries, 2);
     assert!(ships < 3, "{ships} frigates left");
 }
+
+/// Names on every page of the builder's build palette.
+fn build_names(fx: &mut Fx) -> Vec<String> {
+    let bt = fx.mover();
+    let builder = fx.spawn(bt, 1, 10, 10);
+    fx.click(builder, false);
+    let pages = fx.hud_snapshot().palette.expect("palette").pages;
+    let mut names = Vec::new();
+    for _ in 0..pages {
+        names.extend(
+            fx.hud_snapshot()
+                .palette
+                .unwrap()
+                .buttons
+                .into_iter()
+                .map(|b| b.name),
+        );
+        fx.hud(HudRegionKind::PaletteArrow, 1, PointerButton::Left, false);
+    }
+    names
+}
+
+/// Task 100: a building whose in-place upgrade is researched leaves the build palette; a
+/// worked site (a farm) stays beside its upgrade.
+#[test]
+fn superseded_buildings_leave_the_build_palette_but_worked_sites_stay() {
+    let mut before = fixture_config(10_000, "age.automation", &[]);
+    let faction = before
+        .world
+        .players()
+        .find(|p| p.id == PLAYER)
+        .unwrap()
+        .faction;
+    let name_of = |fx: &Fx, key: &str| {
+        fx.rules
+            .display_name(fx.rules.id_of(key).unwrap(), faction)
+            .to_string()
+    };
+    let (stable, farm) = (name_of(&before, "bld.stable"), name_of(&before, "bld.farm"));
+    let names = build_names(&mut before);
+    assert!(
+        names.contains(&stable) && names.contains(&farm),
+        "{names:?}"
+    );
+    let mut after = fixture_config(
+        10_000,
+        "age.automation",
+        &["tech.up.vehicle_plant", "tech.up.auto_farm"],
+    );
+    let names = build_names(&mut after);
+    assert!(!names.contains(&stable), "{names:?}");
+    assert!(names.contains(&farm), "{names:?}");
+}
