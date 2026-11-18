@@ -151,6 +151,7 @@
 "bld.woodcutter_camp@industrial" = "05d5a99423f99158"
 "bld.woodcutter_camp@medieval" = "658aee8ebc579358"
 "bld.woodcutter_camp@modern" = "21cc71632a94657f"
+"node.relics@any" = "b088e4e82af19568"
 "unit.anti_tank_rifleman@industrial" = "8fe600d63b4562ed"
 "unit.archer@classical" = "ddaf1ce5adf5beab"
 "unit.armoured_car@industrial" = "e4a6fbed35bbf337"
