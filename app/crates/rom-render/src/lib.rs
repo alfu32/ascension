@@ -13,6 +13,7 @@ mod camera;
 mod entities;
 pub mod features;
 mod globe;
+pub mod grass;
 pub mod graticule;
 pub mod hud;
 pub mod hud_atlas;

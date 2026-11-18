@@ -1,0 +1,9 @@
+# Task 83: the scene of 83-close-script.txt with the setting off (--grass off added to its
+# command line): the ground as it was before the blades.
+0 place 1 unit.spearman @-2,6
+0 place 1 unit.spearman @0,7
+0 place 1 unit.spearman @2,6
+0 place 1 unit.slinger @-1,9
+0 place 1 unit.slinger @1,9
+0 place 1 unit.scout @4,9
+20 cam wheel 5 836,520

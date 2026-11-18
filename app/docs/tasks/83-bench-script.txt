@@ -1,0 +1,4 @@
+# Task 83, the bench (--sphere 192 --demo --seed 1 --size 1280x800 --bench 10, with --grass on
+# and --grass off): three wheel steps bring the camera from the 48-tile home view to 27.8
+# tiles, over the meadow in front of the city, so blades fill most of the ground in view.
+20 cam wheel 3 640,400

@@ -1,0 +1,9 @@
+# Task 83, replayed by --script in universe mode (--sphere 192 --players 2 --ai none --seed 2
+# --sun fixed --size 1672x941 --after 5): the home city of seed 2 lies by the sea. Two farms of
+# player one between the city and the beach and a citizen beside them; the wheel brings the
+# camera to 23 tiles. The blades thin out across the beach sand, stop at the water and leave
+# the fields to their crop rows.
+0 place 1 bld.farm @-8,4
+0 place 1 bld.farm @-4,8
+0 place 1 unit.citizen @-6,9
+20 cam wheel 4 560,420

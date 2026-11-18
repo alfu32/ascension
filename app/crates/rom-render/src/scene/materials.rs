@@ -104,6 +104,21 @@ pub(super) fn expand(template: &str) -> String {
         .replace("/*MATERIALS*/", MATERIALS)
 }
 
+/// Marks the end of the noise helpers a vertex shader may use: what follows needs screen
+/// derivatives, which only fragment shaders have.
+const NOISE_FRAGMENT_ONLY: &str = "// Derivative bump mapping";
+
+/// Fills the insertion points of a vertex shader template: the noise helpers without the
+/// derivative ones, and the material library.
+pub(super) fn expand_vertex(template: &str) -> String {
+    let noise = NOISE
+        .split_once(NOISE_FRAGMENT_ONLY)
+        .map_or(NOISE, |(before, _)| before);
+    template
+        .replace("/*NOISE*/", noise)
+        .replace("/*MATERIALS*/", MATERIALS)
+}
+
 /// The land shader's fragment source.
 pub(super) fn terrain_fs() -> String {
     expand(TERRAIN_FS)
@@ -481,6 +496,16 @@ pub(super) fn upload_land(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn vertex_shaders_get_the_materials_without_derivatives() {
+        let source = expand_vertex("/*NOISE*/\n/*MATERIALS*/");
+        assert!(source.contains("float fbm(") && source.contains("vec4 grassMaterial("));
+        for derivative in ["dFdx", "dFdy", "fwidth"] {
+            assert!(!source.contains(derivative), "{derivative}");
+        }
+        assert!(NOISE.contains(NOISE_FRAGMENT_ONLY));
+    }
 
     #[test]
     fn noise_texture_carries_the_next_slice_in_green() {

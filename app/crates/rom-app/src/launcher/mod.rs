@@ -119,6 +119,7 @@ impl Catalog {
                 ("view", choices(&["surface", "globe", "system", "starmap"])),
                 ("sun", choices(&["orbit", "fixed", "night"])),
                 ("graticule", choices(&["on", "off"])),
+                ("grass", choices(&["on", "off"])),
                 (
                     "gallery-view",
                     choices(&["game", "front", "side", "top", "close"]),
