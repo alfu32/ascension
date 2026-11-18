@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use rom_geo::SurfacePos;
 
+use crate::bars::BarAnchor;
 use crate::globe::Globe;
 use crate::layers::{ORBIT_ALTITUDE, ShipScales, hover_altitude, planet_factor};
 use crate::rig::Activity;
@@ -405,6 +406,10 @@ pub trait Footing {
             height - self.height_at(face, x + delta.0, y + delta.1),
         )
     }
+    /// Whether the ground is a sphere centred on the origin (a bar behind it is hidden).
+    fn is_round(&self) -> bool {
+        false
+    }
     /// Height above sea level in tiles at (`x`, `y`), never below zero.
     fn height_at(&self, face: u8, x: f32, y: f32) -> f32;
     /// The frame standing on the ground at (`x`, `y`).
@@ -472,21 +477,6 @@ fn cross3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
         a[2] * b[0] - a[0] * b[2],
         a[0] * b[1] - a[1] * b[0],
     ]
-}
-
-/// `right` made perpendicular to `up` and of unit length (unchanged when already so).
-pub(crate) fn side_of(right: [f32; 3], up: [f32; 3]) -> [f32; 3] {
-    let d = dot3(right, up);
-    let v = [
-        right[0] - up[0] * d,
-        right[1] - up[1] * d,
-        right[2] - up[2] * d,
-    ];
-    let length = dot3(v, v).sqrt();
-    if length < 1e-6 {
-        return [1.0, 0.0, 0.0];
-    }
-    v.map(|c| c / length)
 }
 
 /// The heading of an entity facing `facing_deg` (clockwise from the face's x axis).
@@ -634,54 +624,46 @@ pub fn box_corners_axes(centre: [f32; 3], axes: [[f32; 3]; 3], size: [f32; 3]) -
     corners
 }
 
-/// Appends the instances that draw `views` on a flat map; `camera_yaw` (radians) turns health
-/// bars to the camera.
-pub fn build_instances(
-    views: &[EntityView],
-    surface: &Surface,
-    camera_yaw: f32,
-    out: &mut Vec<[f32; 16]>,
-) {
-    build_instances_on(
-        views,
-        surface,
-        [camera_yaw.cos(), 0.0, -camera_yaw.sin()],
-        out,
-    );
+/// Appends the instances that draw `views` on a flat map.
+pub fn build_instances(views: &[EntityView], surface: &Surface, out: &mut Vec<[f32; 16]>) {
+    build_instances_on(views, surface, out);
 }
 
-/// Appends the instances that draw `views` standing on `ground`; `right` is the camera's right
-/// vector, which turns health bars to the viewer.
-pub fn build_instances_on(
-    views: &[EntityView],
-    ground: &dyn Footing,
-    right: [f32; 3],
-    out: &mut Vec<[f32; 16]>,
-) {
-    instances_on(views, ground, right, out, None, &|_| false);
+/// Appends the instances that draw `views` standing on `ground`.
+pub fn build_instances_on(views: &[EntityView], ground: &dyn Footing, out: &mut Vec<[f32; 16]>) {
+    instances_on(views, ground, out, None, None, &|_| false);
 }
 
 /// Builds display instances and records which ones are bodies that cast shadows. Buildings
 /// whose type `drawn_as_objects` get only a ground plate and a marker post; their look is
-/// drawn by the feature objects (crop rows).
+/// drawn by the feature objects (crop rows). `anchors` gets where each entity's health bar
+/// hangs; the bars themselves are drawn on the 2D batch, so no instance is a bar.
 pub(crate) fn build_instances_with_casters_on(
     views: &[EntityView],
     ground: &dyn Footing,
-    right: [f32; 3],
     out: &mut Vec<[f32; 16]>,
     casters: &mut Vec<std::ops::Range<usize>>,
+    anchors: &mut Vec<BarAnchor>,
     drawn_as_objects: &dyn Fn(u16) -> bool,
 ) {
     casters.clear();
-    instances_on(views, ground, right, out, Some(casters), drawn_as_objects);
+    anchors.clear();
+    instances_on(
+        views,
+        ground,
+        out,
+        Some(casters),
+        Some(anchors),
+        drawn_as_objects,
+    );
 }
 
 fn instances_on(
     views: &[EntityView],
     ground: &dyn Footing,
-    right: [f32; 3],
     out: &mut Vec<[f32; 16]>,
     mut casters: Option<&mut Vec<std::ops::Range<usize>>>,
+    mut anchors: Option<&mut Vec<BarAnchor>>,
     drawn_as_objects: &dyn Fn(u16) -> bool,
 ) {
     out.clear();
@@ -723,39 +705,27 @@ fn instances_on(
                 NODE_COLOR,
             ));
         }
-        if view.hp_frac < 1.0 {
+        if let Some(anchors) = anchors.as_mut() {
             let width = if view.building {
                 f32::from(view.footprint.0.max(view.footprint.1)).max(1.0)
             } else {
                 (view.radius * 4.0).max(0.8)
             };
-            let side = side_of(right, frame.up);
-            let axes = [side, frame.up, cross3(side, frame.up)];
-            let frac = view.hp_frac.clamp(0.0, 1.0);
-            let centre = frame.at([0.0, top + 0.4, 0.0]);
-            out.push(frame_box(
-                centre,
-                axes,
-                [width + 0.08, 0.14, 0.06],
-                [0.08, 0.08, 0.08],
-            ));
-            if frac > 0.0 {
-                let shift = -(width - width * frac) / 2.0;
-                let fill_centre: [f32; 3] = std::array::from_fn(|i| centre[i] + side[i] * shift);
-                let color = if frac > 0.5 {
-                    [0.25, 0.85, 0.3]
-                } else if frac > 0.25 {
-                    [0.95, 0.75, 0.2]
+            let ground_radius = ground.is_round().then(|| {
+                let floor = if view.altitude > 0.0 || (view.spacecraft && !view.building) {
+                    ground.frame(view.face, view.x, view.y).origin
                 } else {
-                    [0.9, 0.2, 0.15]
+                    frame.origin
                 };
-                out.push(frame_box(
-                    fill_centre,
-                    axes,
-                    [width * frac, 0.1, 0.1],
-                    color,
-                ));
-            }
+                dot3(floor, floor).sqrt()
+            });
+            anchors.push(BarAnchor {
+                id: view.id,
+                at: frame.at([0.0, top + 0.4, 0.0]),
+                width,
+                frac: view.hp_frac.clamp(0.0, 1.0),
+                ground_radius,
+            });
         }
     }
 }
@@ -1261,7 +1231,7 @@ mod tests {
         unit.carrying = true;
         let ground = FlatGround(&|_, _| 2.0);
         let mut instances = Vec::new();
-        build_instances_on(&[unit], &ground, [1.0, 0.0, 0.0], &mut instances);
+        build_instances_on(&[unit], &ground, &mut instances);
         assert_eq!(instances.len(), 3);
         let marker = instances[2];
         assert_eq!([marker[3], marker[7], marker[11]], NODE_COLOR);
@@ -1280,7 +1250,7 @@ mod tests {
             nodes: vec![],
             sun: Default::default(),
         });
-        build_instances_on(&[unit], &globe, [1.0, 0.0, 0.0], &mut instances);
+        build_instances_on(&[unit], &globe, &mut instances);
         let frame = globe.frame(unit.face, unit.x, unit.y);
         let marker = instances[2];
         let lift: f32 = (0..3)
@@ -1351,7 +1321,7 @@ mod tests {
     }
 
     #[test]
-    fn health_bars_do_not_cast_shadows_or_change_caster_geometry() {
+    fn health_bars_are_not_instances_and_never_cast_shadows() {
         let ground = hill();
         let mut unit = view(1, 1.7, 2.2, 90.0);
         let mut building = view(2, 2.0, 2.0, 0.0);
@@ -1361,33 +1331,35 @@ mod tests {
         node.owner = 0;
         let mut display = Vec::new();
         let mut ranges = Vec::new();
-        let mut bodies = |views: &[EntityView], right| {
+        let mut anchors = Vec::new();
+        let mut bodies = |views: &[EntityView]| {
             build_instances_with_casters_on(
                 views,
                 &ground,
-                right,
                 &mut display,
                 &mut ranges,
+                &mut anchors,
                 &|_| false,
             );
             let casters: Vec<_> = ranges
                 .iter()
                 .flat_map(|r| display[r.clone()].iter().copied())
                 .collect();
-            (display.clone(), casters)
+            (display.clone(), casters, anchors.clone())
         };
-        let (healthy, expected) = bodies(&[unit, building, node], [1.0, 0.0, 0.0]);
+        let (healthy, expected, first) = bodies(&[unit, building, node]);
         assert_eq!(healthy, expected);
         unit.hp_frac = 0.7;
         building.hp_frac = 0.3;
-        let (injured, casters) = bodies(&[unit, building, node], [1.0, 0.0, 0.0]);
+        let (injured, casters, second) = bodies(&[unit, building, node]);
         assert_eq!(casters, expected);
-        assert_eq!(injured.len(), healthy.len() + 4);
-        let (turned, casters) = bodies(&[unit, building, node], [0.0, 0.0, 1.0]);
-        assert_ne!(turned, injured, "health bars turn toward the camera");
-        assert_eq!(casters, expected, "bodies keep the cached shadow map");
+        assert_eq!(injured, healthy, "a bar adds no instance");
+        assert_eq!(second.len(), 3, "every entity has an anchor");
+        assert_eq!(first[0].frac, 1.0);
+        assert_eq!((second[0].frac, second[1].frac), (0.7, 0.3));
+        assert!(second.iter().all(|a| a.ground_radius.is_none()));
         unit.x += 0.2;
-        let (_, moved) = bodies(&[unit, building, node], [0.0, 0.0, 1.0]);
+        let (_, moved, _) = bodies(&[unit, building, node]);
         assert_ne!(moved, expected, "moving a body invalidates the shadow map");
     }
 
@@ -1396,7 +1368,7 @@ mod tests {
         let surface = hill();
         let unit = view(1, 1.7, 2.2, 90.0);
         let mut out = Vec::new();
-        build_instances(&[unit], &surface, 0.0, &mut out);
+        build_instances(&[unit], &surface, &mut out);
         let body = out[0];
         let ground = surface.height(1.7, 2.2);
         assert!(ground > 0.1, "test terrain should be above sea level");
@@ -1411,7 +1383,7 @@ mod tests {
         let mut building = view(2, 2.0, 2.0, 0.0);
         building.building = true;
         building.footprint = (2, 2);
-        build_instances(&[building], &surface, 0.0, &mut out);
+        build_instances(&[building], &surface, &mut out);
         let base = out[0];
         let bottom = base[13] - base[5] / 2.0;
         let lowest = surface.height(1.02, 1.02).min(surface.height(2.98, 1.02));
@@ -1420,18 +1392,6 @@ mod tests {
         assert!(base[13] + base[5] / 2.0 > highest);
         // Owner colour is carried in the unused cells.
         assert!(out.iter().all(|m| m[15] == 1.0));
-    }
-
-    #[test]
-    fn health_bars_only_for_damaged_entities() {
-        let surface = hill();
-        let mut damaged = view(1, 1.0, 1.0, 0.0);
-        let mut out = Vec::new();
-        build_instances(&[damaged], &surface, 0.0, &mut out);
-        let healthy = out.len();
-        damaged.hp_frac = 0.5;
-        build_instances(&[damaged], &surface, 0.0, &mut out);
-        assert_eq!(out.len(), healthy + 2);
     }
 
     /// A planet with hills, for placing entities on the sphere.
@@ -1467,7 +1427,7 @@ mod tests {
         let raised = ground.up.map(|v| v * (globe.radius() + ship.altitude));
         assert!(norm(std::array::from_fn(|i| foot[i] - raised[i])) < 0.001);
         let mut instances = Vec::new();
-        build_instances_on(&[ship], &globe, [1.0, 0.0, 0.0], &mut instances);
+        build_instances_on(&[ship], &globe, &mut instances);
         assert!(!instances.is_empty());
         for matrix in instances {
             let at = [matrix[12], matrix[13], matrix[14]];
@@ -1581,7 +1541,7 @@ mod tests {
             let mut unit = view(7, tx as f32 + 0.5, ty as f32 + 0.5, 30.0);
             unit.face = face;
             let mut out = Vec::new();
-            build_instances_on(&[unit], &globe, [1.0, 0.0, 0.0], &mut out);
+            build_instances_on(&[unit], &globe, &mut out);
             let body = out[0];
             let (width, height) = (unit_width(&unit), unit_height(&unit));
             // The body's up axis is the local up, and its foot rests on the ground of the tile.
