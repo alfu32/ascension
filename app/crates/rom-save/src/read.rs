@@ -3,10 +3,10 @@
 use crate::{AiState, AiStates, Controller, FORMAT, MatchInfo, SaveError, SaveHeader, Seat, codec};
 use rom_rules::{BodyKind, DefId, Rules};
 use rom_sim::{
-    BodyId, BodyInfo, Elimination, EmitterSnapshot, EntityId, EntitySnapshot, HitSnapshot,
-    MatchOptions, MoveSnapshot, OrbitSnapshot, OrderId, OrderSnapshot, OrderStatus, Outcome,
-    PathRequestSnapshot, PathSnapshot, Player, PlayerId, PlayerSnapshot, PlayerStatus,
-    PlayerVisionSnapshot, Pos, Rally, RememberedBuilding, RouteInfo, RouteSnapshot,
+    BodyId, BodyInfo, DormantSurface, Elimination, EmitterSnapshot, EntityId, EntitySnapshot,
+    HitSnapshot, Living, MatchOptions, MoveSnapshot, OrbitSnapshot, OrderId, OrderSnapshot,
+    OrderStatus, Outcome, PathRequestSnapshot, PathSnapshot, Player, PlayerId, PlayerSnapshot,
+    PlayerStatus, PlayerVisionSnapshot, Pos, Rally, RememberedBuilding, RouteInfo, RouteSnapshot,
     SearchNodeSnapshot, SearchSnapshot, ShotSnapshot, Snapshot, SpaceSnapshot, Stats, SurfaceShape,
     SurfaceSnapshot, SystemInfo, TileRef, TradeRoute, TransitSnapshot, VictorySnapshot,
     ViewerSnapshot, World, victory_rule_from_key,
@@ -1081,6 +1081,40 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
         dirty: flags(conn, "dirty")?,
         awake: flags(conn, "awake")?,
         governors_paused: flags(conn, "governor_paused")?,
+        dormant: query_vec(
+            conn,
+            "SELECT body_id, n, terrain_id FROM body_dormant ORDER BY body_id",
+            |r| {
+                Ok((
+                    BodyId(uint(r, 0, "dormant body")?),
+                    DormantSurface {
+                        n: uint(r, 1, "dormant size")?,
+                        terrain: DefId(uint(r, 2, "dormant terrain")?),
+                    },
+                ))
+            },
+        )?,
+        living: query_vec(
+            conn,
+            "SELECT l.body_id, l.player_id, l.since_tick, l.strokes, l.heights, s.width * s.height \
+             FROM body_life l JOIN surface s ON s.body_id = l.body_id ORDER BY l.body_id",
+            |r| {
+                let bytes: Vec<u8> = r.get(4)?;
+                let heights = codec::decode_runs(&bytes, uint(r, 5, "living tiles")?)?
+                    .into_iter()
+                    .map(|h| u8::try_from(h).map_err(|_| bad("living height")))
+                    .collect::<Result<_, _>>()?;
+                Ok((
+                    BodyId(uint(r, 0, "living body")?),
+                    Living {
+                        by: PlayerId(uint(r, 1, "living painter")?),
+                        since: u(int(r, 2)?),
+                        strokes: u(int(r, 3)?),
+                        heights,
+                    },
+                ))
+            },
+        )?,
         neutralised: flags(conn, "neutralised")?,
         assimilating: flags(conn, "assimilating")?,
         sieges: query_vec(

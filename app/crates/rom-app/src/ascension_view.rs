@@ -117,6 +117,10 @@ pub struct AscensionView {
     projects: BTreeSet<(PlayerId, u64)>,
     ascended: BTreeSet<PlayerId>,
     standing: Option<u32>,
+    /// Bodies brought to life (task 77).
+    living: BTreeSet<rom_sim::BodyId>,
+    /// Who held each resource body at the last look.
+    claims: BTreeMap<rom_sim::BodyId, PlayerId>,
     /// The players a computer plays: they speak in the channel.
     computers: BTreeSet<PlayerId>,
     /// The channel, oldest first.
@@ -278,6 +282,36 @@ impl AscensionView {
                 );
             }
         }
+        // Task 77: a moon or asteroid brought to life; whoever held it is told.
+        let living: BTreeSet<rom_sim::BodyId> = world.living_bodies().map(|(b, _)| b).collect();
+        if self.started {
+            for &body in living.difference(&self.living) {
+                let Some(life) = world.living(body) else {
+                    continue;
+                };
+                let name = world
+                    .body(body)
+                    .map_or_else(|| "a moon".to_owned(), |b| b.name.clone());
+                let who = if life.by == PLAYER {
+                    "You have".to_owned()
+                } else {
+                    format!("{} has", player_name(world, life.by))
+                };
+                let claim = match self.claims.get(&body) {
+                    Some(&holder) if holder == PLAYER => ": your claim on it has ended".to_owned(),
+                    Some(&holder) => {
+                        format!(
+                            ": the claim of {} on it has ended",
+                            player_name(world, holder)
+                        )
+                    }
+                    None => ": its resources are gone, its ground is open".to_owned(),
+                };
+                lines.push(format!("{who} brought {name} to life{claim}"));
+            }
+        }
+        self.living = living;
+        self.claims = world.claims().collect();
         self.projects = projects.into_keys().collect();
         self.ascended = ascended;
         self.standing = standing;
@@ -382,6 +416,12 @@ mod tests {
 
     /// A universe match with player one ready to ascend and a library beside its city.
     fn ready() -> (World, BTreeSet<PlayerId>) {
+        let (world, computers, _) = ready_with_universe();
+        (world, computers)
+    }
+
+    /// [`ready`] with the generated universe.
+    fn ready_with_universe() -> (World, BTreeSet<PlayerId>, rom_mapgen::Universe) {
         let options = crate::args::Options {
             universe: true,
             players: 2,
@@ -410,7 +450,108 @@ mod tests {
                 .place_for_setup(library, start.player, at)
                 .expect("a library");
         }
-        (game.world, [PlayerId(2)].into())
+        (game.world, [PlayerId(2)].into(), content.universe)
+    }
+
+    /// Task 77: the person ascends, presses Bring life and right-clicks a rock of its home
+    /// system; the rock lives, the event line says so; on its globe the Build tab holds the
+    /// brushes and a click paints.
+    #[test]
+    fn the_ascended_person_brings_a_rock_to_life_and_paints_it() {
+        use crate::selection::{Controller, ViewCtx};
+        use rom_render::{HudRegionKind, Modifiers, PickEvent, PointerButton, SurfacePos};
+        let (mut world, computers, universe) = ready_with_universe();
+        let mut view = AscensionView::new(computers);
+        view.update(&world);
+        crate::script::ascend(&mut world, PLAYER).unwrap();
+        while !world.is_ascended(PLAYER) {
+            world.step();
+            assert!(world.tick() < 20_000);
+        }
+        view.update(&world);
+        let home = world.home_body(PLAYER).unwrap();
+        let system = world.body(home).unwrap().system;
+        let rock = world
+            .dormant_bodies()
+            .map(|(b, _)| b)
+            .find(|b| world.body(*b).is_some_and(|i| i.system == system))
+            .expect("a rock at home");
+        let mut ctl = Controller::new();
+        let press = |ctl: &mut Controller, world: &mut World, region, index| {
+            ctl.handle(
+                world,
+                PickEvent::HudClick {
+                    region,
+                    index,
+                    button: PointerButton::Left,
+                    modifiers: Modifiers::default(),
+                },
+            );
+        };
+        ctl.set_view(ViewCtx {
+            planet: home,
+            system: Some(system),
+            in_space: true,
+            frame: None,
+        });
+        press(&mut ctl, &mut world, HudRegionKind::CommandSlot, 1);
+        ctl.handle(
+            &mut world,
+            PickEvent::SpaceRightClick {
+                surface: SurfacePos {
+                    face: 0,
+                    x: 0,
+                    y: 0,
+                },
+                entity: None,
+                body: Some(rock.0),
+                system: None,
+                modifiers: Modifiers::default(),
+            },
+        );
+        world.step();
+        assert!(world.living(rock).is_some());
+        let lines = view.update(&world);
+        assert!(
+            lines.iter().any(|l| l.starts_with("You have brought")),
+            "{lines:?}"
+        );
+        let barren = crate::terrain::living_scene(&world, &universe, rock).expect("a scene");
+        assert_eq!(barren.sea_level, Some(world.sea_height()));
+        // On its globe: the Build tab's first page, "Land, continent", one click.
+        ctl.set_view(ViewCtx {
+            planet: rock,
+            system: Some(system),
+            in_space: false,
+            frame: None,
+        });
+        press(&mut ctl, &mut world, HudRegionKind::PaletteTab, 0);
+        press(&mut ctl, &mut world, HudRegionKind::CommandSlot, 2);
+        ctl.handle(
+            &mut world,
+            PickEvent::Click {
+                world_point: (32.0, 32.0),
+                surface: SurfacePos {
+                    face: 0,
+                    x: 32_000,
+                    y: 32_000,
+                },
+                entity: None,
+                modifiers: Modifiers::default(),
+                double: false,
+                on_screen: Vec::new(),
+            },
+        );
+        world.step();
+        assert_eq!(world.living(rock).unwrap().strokes, 1);
+        let painted = crate::terrain::living_scene(&world, &universe, rock).expect("a scene");
+        let changed = painted
+            .kinds
+            .iter()
+            .zip(&barren.kinds)
+            .filter(|(a, b)| a != b)
+            .count();
+        assert!(changed > 400, "{changed} tiles painted");
     }
 
     #[test]

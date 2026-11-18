@@ -102,11 +102,42 @@ impl Shape {
         Self::from_tiles(&scene.kinds, &scene.heights, &scene.feature_colors)
     }
 
+    /// Computes elevation and colour of a planet's tiles, with absolute heights when the
+    /// planet was painted (task 77).
+    pub fn of_planet(planet: &crate::globe::PlanetScene) -> Self {
+        match planet.sea_level {
+            Some(sea) => {
+                Self::with_sea_level(&planet.kinds, &planet.heights, &planet.feature_colors, sea)
+            }
+            None => Self::from_tiles(&planet.kinds, &planet.heights, &planet.feature_colors),
+        }
+    }
+
+    /// Like [`Self::from_tiles`] with sea level fixed at `sea` and the highest land at 255, so a
+    /// tile's look depends on its own height alone.
+    pub fn with_sea_level(
+        kinds: &[TileKind],
+        heights: &[u8],
+        feature_colors: &BTreeMap<u16, [u8; 3]>,
+        sea: u8,
+    ) -> Self {
+        Self::shaped(kinds, heights, feature_colors, Some(sea))
+    }
+
     /// Computes elevation and colour from per-tile kinds and heights in any tile order.
     pub fn from_tiles(
         kinds: &[TileKind],
         heights: &[u8],
         feature_colors: &BTreeMap<u16, [u8; 3]>,
+    ) -> Self {
+        Self::shaped(kinds, heights, feature_colors, None)
+    }
+
+    fn shaped(
+        kinds: &[TileKind],
+        heights: &[u8],
+        feature_colors: &BTreeMap<u16, [u8; 3]>,
+        sea: Option<u8>,
     ) -> Self {
         let (mut land_min, mut land_max) = (u8::MAX, 0_u8);
         let (mut water_min, mut water_max) = (u8::MAX, 0_u8);
@@ -127,15 +158,20 @@ impl Shape {
             }
         }
         // Sea level sits at the highest water tile, or at the lowest land when there is no water.
-        let base = match (has_water, has_land) {
-            (true, _) => f32::from(water_max),
-            (false, true) => f32::from(land_min),
-            (false, false) => 0.0,
+        let base = match (sea, has_water, has_land) {
+            (Some(sea), _, _) => f32::from(sea),
+            (None, true, _) => f32::from(water_max),
+            (None, false, true) => f32::from(land_min),
+            (None, false, false) => 0.0,
         };
-        let top = f32::from(land_max);
+        let top = sea.map_or(f32::from(land_max), |_| 255.0);
         let land_span = (top - base).max(1.0);
+        let (water_max, water_min) = sea.map_or((water_max, water_min), |sea| (sea, 0));
         let water_span = f32::from(water_max.saturating_sub(water_min)).max(1.0);
 
+        // On a painted planet a terrain shows its own colour: barren rock, desert and snow are
+        // whole regions there, not specks on grassland.
+        let tint_share = if sea.is_some() { 0.85 } else { 0.65 };
         let tiles = kinds.len();
         let mut elevation = vec![0.0; tiles];
         let mut color = vec![[0.0; 3]; tiles];
@@ -149,7 +185,7 @@ impl Shape {
                     color[i] = match kind {
                         TileKind::Feature(id) => {
                             let tint = feature_colors.get(id).copied().unwrap_or([200, 0, 200]);
-                            mix(ground, tint.map(|c| f32::from(c) / 255.0), 0.65)
+                            mix(ground, tint.map(|c| f32::from(c) / 255.0), tint_share)
                         }
                         _ => ground,
                     };

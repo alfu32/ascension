@@ -761,6 +761,25 @@ fn write_space(tx: &Transaction, s: &Snapshot) -> Result<(), SaveError> {
             params![body.0, player.0],
         )?;
     }
+    // Task 77: dormant surfaces and the bodies brought to life.
+    for (body, d) in &s.dormant {
+        tx.execute(
+            "INSERT INTO body_dormant VALUES (?,?,?)",
+            params![body.0, d.n, d.terrain.0],
+        )?;
+    }
+    for (body, l) in &s.living {
+        tx.execute(
+            "INSERT INTO body_life VALUES (?,?,?,?,?)",
+            params![
+                body.0,
+                l.by.0,
+                w(l.since),
+                w(l.strokes),
+                codec::encode_runs(l.heights.iter().map(|h| u32::from(*h))),
+            ],
+        )?;
+    }
     for (id, v) in s.viewers.iter().enumerate() {
         if let Some(v) = v {
             write_viewer(tx, id as u32, false, v)?;

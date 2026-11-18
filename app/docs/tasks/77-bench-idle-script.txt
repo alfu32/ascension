@@ -1,0 +1,12 @@
+# Task 77, the bench without painting: 77-bench-script.txt without its strokes.
+0 grant-age age.galactic
+0 ascension-ready 1
+0 place 1 bld.library @12,0
+5 ascend 1
+6 speed 1000
+3560 speed 100
+3645 hud slot 1
+3650 orbit rock1
+3660 visit rock1
+3790 look 0:32,32
+4005 speed 1

@@ -814,11 +814,12 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
     for kind in rules
         .order_kinds
         .values()
-        // `descend` has no executor: an ascended player gives it (task 76, `ascension_tests`).
+        // `descend` has no executor: an ascended player gives it (task 76, `ascension_tests`);
+        // nor have `bring_life` and `paint` (task 77, `life_tests`).
         .filter(|kind| {
             !matches!(
                 kind.key.as_str(),
-                "train" | "research" | "construct" | "descend"
+                "train" | "research" | "construct" | "descend" | "bring_life" | "paint"
             )
         })
     {

@@ -1219,6 +1219,7 @@ mod tests {
     fn globe_drag_keeps_the_surface_point_under_the_cursor() {
         let n = 64;
         let globe = Globe::new(&crate::PlanetScene {
+            sea_level: None,
             n,
             kinds: vec![crate::TileKind::Land; 6 * (n * n) as usize],
             heights: vec![0; 6 * (n * n) as usize],
@@ -1549,6 +1550,7 @@ mod tests {
     fn orbital_ships_are_picked_above_the_surface_and_occluded_on_the_far_side() {
         let n = 64;
         let globe = Globe::new(&crate::PlanetScene {
+            sea_level: None,
             n,
             kinds: vec![crate::TileKind::Land; 6 * (n * n) as usize],
             heights: vec![0; 6 * (n * n) as usize],

@@ -1242,6 +1242,7 @@ mod tests {
         );
         assert_eq!((marker[12], marker[14]), (8.0, 10.0));
         let globe = Globe::new(&crate::PlanetScene {
+            sea_level: None,
             n: 64,
             kinds: vec![TileKind::Land; 6 * 64 * 64],
             heights: vec![0; 6 * 64 * 64],
@@ -1398,6 +1399,7 @@ mod tests {
     fn hilly_planet(n: u32) -> crate::globe::PlanetScene {
         let tiles = 6 * (n * n) as usize;
         crate::globe::PlanetScene {
+            sea_level: None,
             n,
             kinds: vec![TileKind::Land; tiles],
             heights: (0..tiles).map(|i| 90 + (i * 29 % 90) as u8).collect(),

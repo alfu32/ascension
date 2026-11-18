@@ -668,3 +668,139 @@ fn an_ascension_under_way_then_an_ascended_player_descending() {
         .unwrap();
     });
 }
+
+/// Task 77: a player ascends, brings a moon to life and paints it; the match is saved in the
+/// middle of the painting (a stroke still pending), both worlds paint on alike, and a descent on
+/// the painted moon saves and loads too.
+#[test]
+fn a_moon_brought_to_life_saved_in_the_middle_of_its_painting() {
+    use rom_rules::BodyKind;
+    use rom_sim::{BodyInfo, DormantSurface, EntityId, PlanetSurface, SystemInfo, UniverseSetup};
+    const MOON: BodyId = BodyId(3);
+    let rules = rules_with("UPDATE tech SET research_ticks=20 WHERE kind='age';");
+    let plain = rules.id_of("ter.plain").unwrap();
+    let galactic = rules.id_of("age.galactic").unwrap();
+    let body = |id: u32, kind: BodyKind| BodyInfo {
+        id: BodyId(id),
+        system: 1,
+        kind,
+        name: format!("Body {id}"),
+        orbit_radius: id as i32 * 1500,
+        orbit_angle_mdeg: id as i32 * 40_000,
+        n: (kind == BodyKind::Habitable).then_some(32),
+        home_race: None,
+        node_type: (kind == BodyKind::Resource).then(|| rules.id_of("node.tar_moon").unwrap()),
+    };
+    let setup = UniverseSetup {
+        systems: vec![SystemInfo {
+            id: 1,
+            name: "Sol".into(),
+            x: 0,
+            y: 0,
+            z: 0,
+            constellation: String::new(),
+        }],
+        bodies: vec![
+            body(1, BodyKind::Star),
+            body(2, BodyKind::Habitable),
+            body(3, BodyKind::Resource),
+        ],
+        routes: Vec::new(),
+        planets: BTreeMap::from([(
+            HOME,
+            PlanetSurface {
+                surface: CubeSurface { n: 32 },
+                terrain: vec![plain; 6 * 32 * 32],
+                nodes: Vec::new(),
+            },
+        )]),
+        figure: Vec::new(),
+        dormant: BTreeMap::from([(
+            MOON,
+            DormantSurface {
+                n: 24,
+                terrain: rules.id_of("ter.barren").unwrap(),
+            },
+        )]),
+    };
+    let players = (1..=2)
+        .map(|n| Player {
+            id: PlayerId(n),
+            team: n,
+            faction: rules.id_of("nation.romans").unwrap(),
+            age: galactic,
+            resources: rules.resources.keys().map(|r| (*r, 100_000)).collect(),
+            techs: if n == 1 {
+                rules
+                    .ascension_requirements()
+                    .into_iter()
+                    .map(|t| (t, 1))
+                    .collect()
+            } else {
+                BTreeMap::new()
+            },
+        })
+        .collect();
+    let homes = BTreeMap::from([(P1, HOME), (P2, HOME)]);
+    let mut w = World::from_universe(rules.clone(), setup, 9, players, homes).unwrap();
+    w.place_for_setup(id(&w, "bld.city"), P1, at(HOME, 8_500, 8_500))
+        .unwrap();
+    let library = w
+        .place_for_setup(id(&w, "bld.library"), P1, at(HOME, 16_000, 8_000))
+        .unwrap();
+    w.place_for_setup(id(&w, "bld.city"), P2, at(HOME, 24_500, 24_500))
+        .unwrap();
+    w.submit(Command {
+        subject: Some(id(&w, "tech.ascension")),
+        ..command(&w, library, "research")
+    })
+    .unwrap();
+    run_until(&mut w, 20_000, |w| w.is_ascended(P1));
+    let ascended = |kind: &str| Command {
+        player: P1,
+        executor: EntityId(0),
+        kind: kind.into(),
+        subject: None,
+        target_entity: None,
+        target_pos: None,
+        queue: false,
+    };
+    let marker = w.body_marker(MOON).unwrap();
+    w.submit(Command {
+        target_entity: Some(marker),
+        ..ascended("bring_life")
+    })
+    .unwrap();
+    w.step();
+    assert!(w.living(MOON).is_some());
+    let stroke = |w: &mut World, brush: &str, face: u8, x: i32, y: i32| {
+        let brush = id(w, brush);
+        w.submit(Command {
+            subject: Some(brush),
+            target_pos: Some(Pos::on(MOON, face, x, y)),
+            ..ascended("paint")
+        })
+        .unwrap();
+    };
+    for (brush, face) in [("brush.land.huge", 0), ("brush.deep.large", 1)] {
+        stroke(&mut w, brush, face, 12_500, 12_500);
+        w.step();
+    }
+    // Saved with a stroke still to be applied.
+    stroke(&mut w, "brush.mountains.small", 0, 12_500, 12_500);
+    let copy = World::restore(rules.clone(), w.snapshot()).unwrap();
+    check("moon_mid_painting", &rules, copy, 40, |w| {
+        stroke(w, "brush.forest.small", 0, 6_500, 6_500);
+        stroke(w, "brush.deposit.relics.small", 0, 18_500, 18_500);
+    });
+    for _ in 0..3 {
+        w.step();
+    }
+    check("moon_descent", &rules, w, 200, |w| {
+        w.submit(Command {
+            target_pos: Some(Pos::on(MOON, 0, 18_500, 12_500)),
+            ..ascended("descend")
+        })
+        .unwrap();
+    });
+}

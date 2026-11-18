@@ -562,6 +562,27 @@ impl StateHash {
             self.u32(r.system_b);
             self.bytes(&r.length.to_le_bytes());
         }
+        // Task 77: only in universes with dormant surfaces or living bodies, so others keep
+        // their hashes.
+        let life = &world.life;
+        if !life.dormant.is_empty() || !life.living.is_empty() {
+            self.bytes(b"life");
+            self.u64(life.dormant.len() as u64);
+            for (body, d) in &life.dormant {
+                self.u32(body.0);
+                self.u32(d.n);
+                self.u32(d.terrain.0);
+            }
+            self.u64(life.living.len() as u64);
+            for (body, l) in &life.living {
+                self.u32(body.0);
+                self.u32(l.by.0);
+                self.u64(l.since);
+                self.u64(l.strokes);
+                self.u64(l.heights.len() as u64);
+                self.bytes(&l.heights);
+            }
+        }
     }
 
     /// One surface: shape, terrain, path state, border grid and every player's fog there.

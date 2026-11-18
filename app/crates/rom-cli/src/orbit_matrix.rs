@@ -223,6 +223,7 @@ fn planet_world(
     };
     let side = (N * N) as usize;
     let universe = UniverseSetup {
+        dormant: Default::default(),
         figure: Vec::new(),
         systems: vec![SystemInfo {
             z: 0,

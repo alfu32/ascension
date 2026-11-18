@@ -38,6 +38,7 @@ fn world_at(sql: &str, age_key: &str) -> World {
         node_type: (kind == BodyKind::Resource).then_some(id("node.ore_asteroid")),
     };
     let setup = UniverseSetup {
+        dormant: Default::default(),
         figure: Vec::new(),
         systems: [(1, 0, 0), (2, 100, 0), (3, 200, 0), (4, 0, 200)]
             .into_iter()

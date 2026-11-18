@@ -75,6 +75,22 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../assets/hud/icons/badge_done.svg"),
     ),
     (
+        "icons/brush_biome",
+        include_str!("../../../assets/hud/icons/brush_biome.svg"),
+    ),
+    (
+        "icons/brush_elevation",
+        include_str!("../../../assets/hud/icons/brush_elevation.svg"),
+    ),
+    (
+        "icons/brush_land",
+        include_str!("../../../assets/hud/icons/brush_land.svg"),
+    ),
+    (
+        "icons/brush_water",
+        include_str!("../../../assets/hud/icons/brush_water.svg"),
+    ),
+    (
         "icons/centre",
         include_str!("../../../assets/hud/icons/centre.svg"),
     ),
@@ -165,6 +181,10 @@ pub const SOURCES: &[(&str, &str)] = &[
     (
         "icons/help",
         include_str!("../../../assets/hud/icons/help.svg"),
+    ),
+    (
+        "icons/life",
+        include_str!("../../../assets/hud/icons/life.svg"),
     ),
     (
         "icons/menu",

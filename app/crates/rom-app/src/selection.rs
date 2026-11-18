@@ -100,6 +100,10 @@ enum Action {
     Governor,
     /// An ascended player picks open land of a habitable planet to descend onto (task 76).
     Descend,
+    /// An ascended player picks a moon or asteroid to bring to life (task 77).
+    BringLife,
+    /// The brush an ascended player paints the planet it brought to life with (task 77).
+    Brush(DefId),
 }
 
 /// What the camera shows, as far as turning picks into orders needs it.
@@ -180,6 +184,10 @@ pub struct Controller {
     trade_pick: bool,
     /// The next click on a planet's ground is where the ascended player descends (task 76).
     descend_pick: bool,
+    /// The next right click on a moon or asteroid brings it to life (task 77).
+    life_pick: bool,
+    /// Clicks on the ground of the planet shown paint with this brush (task 77).
+    brush: Option<DefId>,
     placement: Option<Placement>,
     markers: Vec<Marker>,
     helpers: Vec<Helpers>,
@@ -309,6 +317,44 @@ fn blocked_reason(reason: &str) -> String {
 
 fn rules_class(world: &World, entity: &Entity) -> EntityClass {
     world.rules().entity_types[&entity.type_id].class
+}
+
+/// The icon of a brush (task 77): a deposit shows the resource it yields, other brushes their
+/// family's picture.
+fn brush_icon(rules: &Rules, brush: DefId) -> String {
+    let Some(row) = rules.brushes.get(&brush) else {
+        return "icons/brush_land".into();
+    };
+    let resource = row
+        .node_type_id
+        .and_then(|n| {
+            rules
+                .entity_types
+                .get(&n)?
+                .node
+                .as_ref()
+                .map(|n| n.resource_id)
+        })
+        .or_else(|| {
+            let terrain = row.terrain_id?;
+            rules
+                .entity_types
+                .values()
+                .filter_map(|et| et.gather_site.as_ref())
+                .find(|g| g.needs_node_terrain_id == Some(terrain))
+                .map(|g| g.resource_id)
+        });
+    match (row.family, resource) {
+        (rom_rules::BrushFamily::Deposit | rom_rules::BrushFamily::Biome, Some(resource)) => {
+            let key = rules.key(resource);
+            format!("icons/res_{}", key.split_once('.').map_or(key, |(_, k)| k))
+        }
+        (rom_rules::BrushFamily::Deposit, None) => "icons/res_oil".into(),
+        (rom_rules::BrushFamily::Land, _) => "icons/brush_land".into(),
+        (rom_rules::BrushFamily::Water, _) => "icons/brush_water".into(),
+        (rom_rules::BrushFamily::Elevation, _) => "icons/brush_elevation".into(),
+        (rom_rules::BrushFamily::Biome, None) => "icons/brush_biome".into(),
+    }
 }
 
 fn stance_icon(behavior: &str) -> &'static str {
@@ -587,6 +633,8 @@ impl Controller {
             PickEvent::Escape => {
                 self.placement = None;
                 self.descend_pick = false;
+                self.life_pick = false;
+                self.brush = None;
                 self.attack_move = false;
                 self.patrol = false;
                 self.trade_pick = false;
@@ -609,6 +657,10 @@ impl Controller {
         }
         if self.descend_pick && !self.view.in_space {
             self.descend(world, at);
+            return;
+        }
+        if let Some(brush) = self.brush.filter(|_| !self.view.in_space) {
+            self.paint(world, brush, at);
             return;
         }
         // The pick ends once no trader is selected any more.
@@ -709,6 +761,92 @@ impl Controller {
                 self.say(world, text);
             }
         }
+    }
+
+    /// Brings the moon or asteroid `body` to life (task 77), or says why it cannot.
+    fn bring_life(&mut self, world: &mut World, body: BodyId) {
+        let Some(marker) = world.body_marker(body) else {
+            self.say(world, "Pick a moon or asteroid");
+            return;
+        };
+        let command = Command {
+            player: PLAYER,
+            executor: EntityId(0),
+            kind: "bring_life".into(),
+            subject: None,
+            target_entity: Some(marker),
+            target_pos: None,
+            queue: false,
+        };
+        match world.submit(command) {
+            Ok(_) => {
+                self.life_pick = false;
+                self.ordered = true;
+                let name = world
+                    .body(body)
+                    .map_or_else(String::new, |b| b.name.clone());
+                self.say(world, format!("Bringing {name} to life"));
+            }
+            Err(error) => {
+                let text = rejection_message(world, &error, None);
+                self.say(world, text);
+            }
+        }
+    }
+
+    /// One stroke of `brush` at `at` on the planet shown (task 77), or why it cannot be.
+    fn paint(&mut self, world: &mut World, brush: DefId, at: Pos) {
+        let command = Command {
+            player: PLAYER,
+            executor: EntityId(0),
+            kind: "paint".into(),
+            subject: Some(brush),
+            target_entity: None,
+            target_pos: Some(at),
+            queue: false,
+        };
+        match world.submit(command) {
+            Ok(_) => self.ordered = true,
+            Err(error) => {
+                self.brush = None;
+                let text = rejection_message(world, &error, Some(brush));
+                self.say(world, text);
+            }
+        }
+    }
+
+    /// The brushes the person may paint the planet shown with, by family in rules order, as
+    /// pages of the palette: none unless it brought that planet to life and may paint it.
+    fn brush_pages(&self, world: &World) -> Vec<PageRows> {
+        if self.view.in_space || world.paint_check(PLAYER, self.view.planet).is_err() {
+            return Vec::new();
+        }
+        let rules = world.rules();
+        let mut by_family: BTreeMap<rom_rules::BrushFamily, Vec<DefId>> = BTreeMap::new();
+        for brush in rules.brushes.values() {
+            by_family.entry(brush.family).or_default().push(brush.id);
+        }
+        by_family
+            .into_iter()
+            .flat_map(|(family, mut ids)| {
+                ids.sort_by_key(|id| (rules.def(*id).sort, *id));
+                let name = match family {
+                    rom_rules::BrushFamily::Land => "Land",
+                    rom_rules::BrushFamily::Water => "Water",
+                    rom_rules::BrushFamily::Elevation => "Elevation",
+                    rom_rules::BrushFamily::Biome => "Biomes",
+                    rom_rules::BrushFamily::Deposit => "Deposits",
+                };
+                ids.chunks(15)
+                    .map(|page| {
+                        (
+                            name.to_owned(),
+                            page.iter().enumerate().map(|(s, id)| (s, *id)).collect(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect()
     }
 
     fn box_select(&mut self, world: &World, entities: &[u32], mods: Modifiers) {
@@ -1166,6 +1304,12 @@ impl Controller {
         system: Option<u32>,
         mods: Modifiers,
     ) {
+        if self.life_pick
+            && let Some(body) = body
+        {
+            self.bring_life(world, BodyId(body));
+            return;
+        }
         let ships = self.selected_ships(world);
         let foe = entity
             .map(EntityId)
@@ -1459,16 +1603,40 @@ impl Controller {
 
     /// The palette of the current selection, with the action behind each slot.
     fn palette(&self, world: &World) -> Option<(HudPalette, Vec<(usize, Action)>)> {
-        // An ascended player commands nothing material: it may only descend (task 76).
+        // An ascended player commands nothing material: it may descend (task 76), bring moons
+        // and asteroids to life and paint the planets it brought to life (task 77).
         if world.is_ascended(PLAYER) {
-            let actions = vec![(0, Action::Descend)];
-            let palette = HudPalette {
-                tab: PaletteTab::Order,
-                tabs: [false, true, false, false],
+            let brushes = self.brush_pages(world);
+            let tabs = [!brushes.is_empty(), true, false, false];
+            let tab = if tabs[self.tab.index()] {
+                self.tab
+            } else {
+                PaletteTab::Order
+            };
+            let mut palette = HudPalette {
+                tab,
+                tabs,
                 pages: 1,
-                buttons: vec![self.button(world, world.rules(), 0, Action::Descend, &[])],
                 ..HudPalette::default()
             };
+            let actions: Vec<(usize, Action)> = if tab == PaletteTab::Build {
+                let count = brushes.len().max(1);
+                let page = self.page.unwrap_or(0).min(count - 1);
+                let (name, entries) = brushes.get(page).cloned().unwrap_or_default();
+                palette.pages = count;
+                palette.page = page;
+                palette.page_name = name;
+                entries
+                    .into_iter()
+                    .map(|(s, d)| (s, Action::Brush(d)))
+                    .collect()
+            } else {
+                vec![(0, Action::Descend), (1, Action::BringLife)]
+            };
+            palette.buttons = actions
+                .iter()
+                .map(|(slot, action)| self.button(world, world.rules(), *slot, *action, &[]))
+                .collect();
             return Some((palette, actions));
         }
         let own = self.own_selected(world);
@@ -1801,6 +1969,16 @@ impl Controller {
                 button.icon = "icons/cmd_rally".into();
                 button.armed = self.descend_pick;
             }
+            Action::BringLife => {
+                button.name = "Bring life to a moon or asteroid".into();
+                button.icon = "icons/life".into();
+                button.armed = self.life_pick;
+            }
+            Action::Brush(def) => {
+                button.name = rules.def(def).name.clone();
+                button.icon = brush_icon(rules, def);
+                button.armed = self.brush == Some(def);
+            }
             Action::Release => {
                 button.name = "Release all workers".into();
                 button.icon = "icons/cmd_cancel".into();
@@ -1891,6 +2069,31 @@ impl Controller {
         }
         let rules = world.rules().clone();
         match action {
+            Action::BringLife => {
+                self.life_pick = !self.life_pick;
+                if self.life_pick {
+                    self.say(
+                        world,
+                        "Right-click a moon or asteroid in a star system to bring it to life",
+                    );
+                }
+            }
+            Action::Brush(def) => {
+                self.brush = if self.brush == Some(def) {
+                    None
+                } else {
+                    Some(def)
+                };
+                if self.brush.is_some() {
+                    self.say(
+                        world,
+                        format!(
+                            "{}: click the ground to paint, Escape to stop",
+                            rules.def(def).name
+                        ),
+                    );
+                }
+            }
             Action::Descend => {
                 self.descend_pick = !self.descend_pick;
                 if self.descend_pick {
@@ -2844,6 +3047,11 @@ fn rejection_message(world: &World, error: &SimError, subject: Option<DefId>) ->
         }
         SimError::NotInOwnTerritory => "Outside your borders".into(),
         SimError::CannotDescend => "Choose open land of a habitable planet".into(),
+        SimError::NoDormantSurface => {
+            "Only a moon or asteroid not yet brought to life can be brought to life".into()
+        }
+        SimError::NotYourLiving => "Only a planet you brought to life can be painted".into(),
+        SimError::Settled => "A city stands on this planet: it can no longer be painted".into(),
         SimError::OrdersClosed if world.is_ascended(PLAYER) => {
             "Ascended: you command nothing on the ground until you descend".into()
         }

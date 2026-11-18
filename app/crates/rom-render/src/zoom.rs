@@ -797,6 +797,23 @@ impl ZoomCamera {
         Arc::clone(&self.scene)
     }
 
+    /// Replaces the bodies of the same ids (a moon brought to life is drawn as a planet, task
+    /// 77) and places the systems' bodies again; the camera stays where it is.
+    pub fn replace_bodies(&mut self, bodies: &[crate::universe::BodyView]) {
+        let mut scene = (*self.scene).clone();
+        for body in bodies {
+            if let Some(index) = scene.body_index(body.id) {
+                scene.bodies[index] = body.clone();
+            }
+        }
+        self.placed = scene
+            .systems
+            .get(self.system)
+            .map(|s| scene.place_system(s.id))
+            .unwrap_or_default();
+        self.scene = Arc::new(scene);
+    }
+
     /// Star-map positions of the systems, indexed like the scene's systems.
     pub fn map_positions(&self) -> &[[f32; 3]] {
         &self.map_positions

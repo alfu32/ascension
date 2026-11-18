@@ -437,6 +437,19 @@ impl Scene {
         });
     }
 
+    /// Takes the universe the zoom camera now shows after bodies changed (a moon brought to
+    /// life, task 77): the same systems and positions, bodies placed again.
+    pub(crate) fn replace_universe(&mut self, universe: &Arc<UniverseScene>) {
+        if let Some(space) = &mut self.space {
+            space.placed = universe
+                .systems
+                .iter()
+                .map(|s| universe.place_system(s.id))
+                .collect();
+            space.universe = Arc::clone(universe);
+        }
+    }
+
     /// Keeps what is in space and the selected entity ids for the next draw.
     pub(crate) fn set_space_state(&mut self, snapshot: &Arc<SpaceSnapshot>, selected: &[u32]) {
         if !Arc::ptr_eq(&self.space_state.snapshot, snapshot) {

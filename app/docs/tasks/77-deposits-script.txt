@@ -1,0 +1,64 @@
+# Task 77, painting deposits: as 77-forest-script.txt without the close-up, then page Deposits:
+# "Oil Deposit, large" (slot S), a "Relic Site" (slot T) and a "Mountain" (slot E, metal for a
+# mine); the camera closes in. Stops at tick 4 280.
+0 grant-age age.galactic
+0 ascension-ready 1
+0 place 1 bld.library @12,0
+5 ascend 1
+6 speed 1000
+3560 speed 100
+3645 hud slot 1
+3650 orbit rock1
+3660 visit rock1
+3790 look 0:32,32
+3800 hud tab 0
+3805 hud slot 1
+3810 click 0:32,32
+3815 click 0:26,26
+3820 click 0:38,36
+3825 click 0:30,40
+3830 click 0:40,26
+3835 click 0:22,34
+3840 click 0:34,22
+3845 click 0:44,42
+3850 click 0:24,42
+3900 hud arrow 1
+3905 hud slot 4
+3910 click 0:4,4
+3915 click 0:60,6
+3920 click 0:6,60
+3925 click 0:60,60
+3930 click 0:32,2
+3935 click 0:2,32
+3940 click 0:62,32
+3945 click 0:32,62
+3950 hud slot 0
+3955 click 0:16,30
+3960 click 0:48,32
+3965 click 0:30,52
+3970 click 0:36,12
+4000 hud arrow 1
+4005 hud slot 3
+4010 click 0:40,26
+4015 hud slot 2
+4020 click 0:45,32
+4025 click 0:36,20
+4030 hud slot 0
+4035 click 0:26,22
+4100 hud arrow 1
+4105 hud slot 3
+4110 click 0:20,38
+4115 hud slot 2
+4120 click 0:28,46
+4125 click 0:46,44
+4130 hud slot 4
+4135 click 0:40,47
+4200 hud arrow 1
+4205 hud slot 6
+4210 click 0:42,40
+4215 hud slot 4
+4220 click 0:26,30
+4225 hud slot 2
+4230 click 0:20,29
+4260 cam wheel 3 800,400
+4280 speed 1

@@ -37,6 +37,8 @@ pub struct UniverseHost {
     pub home_system: u32,
     scenes: BTreeMap<BodyId, Arc<rom_render::PlanetScene>>,
     home_starts: BTreeMap<BodyId, SurfacePos>,
+    /// Strokes of each living body as its scene shows them (task 77).
+    painted: BTreeMap<BodyId, u64>,
     /// How the light that represents the sun moves over every planet shown.
     pub sun: rom_render::SunSettings,
 }
@@ -50,6 +52,7 @@ impl UniverseHost {
             home_system,
             scenes: BTreeMap::new(),
             home_starts: BTreeMap::new(),
+            painted: BTreeMap::new(),
             sun: rom_render::SunSettings::default(),
         }
     }
@@ -114,11 +117,58 @@ impl UniverseHost {
         Ok(())
     }
 
+    /// Follows the bodies brought to life (task 77): a moon that came to life is drawn as a
+    /// small planet in the system view, and the planet shown is re-baked where it was painted.
+    pub fn follow_life(&mut self, world: &World, bridge: &RenderBridge) {
+        let mut woke = Vec::new();
+        for (body, living) in world.living_bodies() {
+            let known = self.painted.get(&body).copied();
+            if known == Some(living.strokes) {
+                continue;
+            }
+            if known.is_none()
+                && let Some(info) = world.body(body)
+            {
+                woke.push(rom_render::universe::BodyView {
+                    id: body.0,
+                    name: info.name.clone(),
+                    system: info.system,
+                    kind: rom_render::universe::BodyViewKind::Habitable,
+                    orbit_radius: info.orbit_radius,
+                    orbit_angle: info.orbit_angle_mdeg,
+                    n_or_size: info.n.unwrap_or(64),
+                    home_race_colour: None,
+                });
+            }
+            self.painted.insert(body, living.strokes);
+            if self.scenes.contains_key(&body)
+                && let Some(mut scene) = crate::terrain::living_scene(world, &self.universe, body)
+            {
+                scene.sun = self.sun;
+                let scene = Arc::new(scene);
+                self.scenes.insert(body, Arc::clone(&scene));
+                if body == self.viewed {
+                    bridge.publish_repaint(scene);
+                }
+            }
+        }
+        if !woke.is_empty() {
+            bridge.publish_body_views(woke);
+        }
+    }
+
     /// Generates `body` and adds its surface when the world has none, keeping its globe for the
     /// render thread. Returns whether a surface was added.
     fn generate(&mut self, world: &mut World, body: BodyId) -> Result<bool, String> {
         let rules = Arc::clone(world.rules());
         let mut added = false;
+        // A body brought to life shows its painted ground (task 77).
+        if !self.scenes.contains_key(&body)
+            && let Some(mut scene) = crate::terrain::living_scene(world, &self.universe, body)
+        {
+            scene.sun = self.sun;
+            self.scenes.insert(body, Arc::new(scene));
+        }
         if !self.scenes.contains_key(&body) {
             let planet = self
                 .universe
@@ -677,6 +727,8 @@ fn run(
                             }
                         }
                         ScriptAction::Chat(line) => ascension.say(&world, &line),
+                        ScriptAction::Visit(body) => bridge.fly_to_body(body),
+                        ScriptAction::Look(at) => bridge.focus_surface(at),
                         ScriptAction::Input(events) => {
                             for event in events {
                                 bridge.push_input(event);
@@ -710,6 +762,9 @@ fn run(
             // The governors of automated colonies work for every owner, the person included.
             rom_ai::run_governors(&mut world);
             world.step();
+            if let Some(host) = host.as_mut() {
+                host.follow_life(&world, bridge);
+            }
             if world.tick().is_multiple_of(VISIT_INTERVAL)
                 && let Some(host) = host.as_mut()
                 && let Err(error) = host.generate_visited(&mut world)

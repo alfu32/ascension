@@ -274,6 +274,7 @@ pub fn universe(rules: &Arc<Rules>) -> World {
         node_type: None,
     };
     let setup = UniverseSetup {
+        dormant: Default::default(),
         // A figure line, heights and a constellation, so a save round trip covers them.
         figure: vec![(1, 2)],
         systems: [(1, 0, 0), (2, 100, 0)]

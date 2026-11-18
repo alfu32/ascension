@@ -218,7 +218,40 @@ impl Rules {
         }
         self.validate_handicaps(&mut problems);
         self.validate_reachability(&mut problems);
+        self.validate_brushes(&mut problems);
         problems
+    }
+
+    /// Task 77: a brush paints a known terrain, sets a map node (not a resource body, which
+    /// is held from orbit), or changes heights; heights lie on the 0..=255 scale.
+    fn validate_brushes(&self, problems: &mut Vec<Problem>) {
+        for brush in self.brushes.values() {
+            let mut report = |message: &str| {
+                problems.push(Problem {
+                    message: format!("life_brush {}: {message}", self.label(brush.id)),
+                });
+            };
+            if brush.terrain_id.is_some_and(|t| {
+                !self
+                    .terrains
+                    .get(&t)
+                    .is_some_and(|t| t.layer != crate::Layer::Space)
+            }) {
+                report("terrain_id must be a ground or water terrain");
+            }
+            if brush.node_type_id.is_some_and(|n| {
+                !self
+                    .entity_types
+                    .get(&n)
+                    .and_then(|e| e.node.as_ref())
+                    .is_some_and(|node| node.claim_mode != ClaimMode::Presence)
+            }) {
+                report("node_type_id must be a map node, not a resource body");
+            }
+            if !(0..=255).contains(&brush.height) {
+                report("height is outside 0..=255");
+            }
+        }
     }
 
     /// Handicap technologies are granted at setup: never produced, without effects (only
@@ -448,6 +481,17 @@ impl Rules {
             if !PLANET_N_RANGE.contains(&value) {
                 report(format!("{knob} {value} is outside 64..=512"));
             }
+        }
+        if !(16..=512).contains(&style.life_n) {
+            report(format!("life_n {} is outside 16..=512", style.life_n));
+        }
+        if style.life_terrain_id.is_some_and(|id| {
+            !self
+                .terrains
+                .get(&id)
+                .is_some_and(|t| t.layer == crate::Layer::Ground)
+        }) {
+            report("life_terrain_id must reference ground terrain".into());
         }
         if style.route_extra_pct < 0 {
             report(format!(

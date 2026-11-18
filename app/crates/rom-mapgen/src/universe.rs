@@ -12,7 +12,10 @@ use rom_rules::{
 };
 use rom_sim::SimRng;
 
-use crate::{MapGenError, SpherePlanet, SphereRequest, expand_planet, generate_sphere, mix64};
+use crate::{
+    MapGenError, SpherePlanet, SphereRequest, expand_planet, generate_sphere, mix64, pick_base,
+};
+pub use rom_sim::DormantSurface;
 
 /// Golden angle in millidegrees: successive orbits never line up.
 const GOLDEN_MDEG: i64 = 137_508;
@@ -127,6 +130,9 @@ pub struct Universe {
     pub planets: BTreeMap<u32, SpherePlanet>,
     /// One start per player, in player order: home planet body id and tile centre.
     pub starts: Vec<(u32, SurfacePos)>,
+    /// The dormant surface of every resource body, keyed by body id (task 77): made before
+    /// play, shown and simulated only once an ascended player brings the body to life.
+    pub dormant: BTreeMap<u32, DormantSurface>,
 }
 
 /// One home system's share in the fairness measure.
@@ -898,6 +904,7 @@ fn plan(c: &Checked, request: &UniverseRequest) -> Result<Universe, MapGenError>
             recipes: BTreeMap::new(),
             planets: BTreeMap::new(),
             starts: Vec::new(),
+            dormant: BTreeMap::new(),
         };
         for body in &universe.bodies {
             let Some(n) = body.n else { continue };
@@ -925,6 +932,7 @@ fn plan(c: &Checked, request: &UniverseRequest) -> Result<Universe, MapGenError>
         let score = if high == 0 { 1000 } else { low * 1000 / high };
         let fair = universe.layout_problems(c.rules).is_empty();
         if fair {
+            add_dormant_surfaces(&mut universe, c.style);
             add_celestial_home(&mut universe, c.rules);
             return Ok(universe);
         }
@@ -933,12 +941,32 @@ fn plan(c: &Checked, request: &UniverseRequest) -> Result<Universe, MapGenError>
         }
     }
     best.map(|(_, mut u)| {
+        add_dormant_surfaces(&mut u, c.style);
         add_celestial_home(&mut u, c.rules);
         u
     })
     .ok_or(MapGenError::StarMap(
         c.races.len() as u32 + c.style.neutral_systems_max as u32,
     ))
+}
+
+/// Gives every resource body its dormant surface (task 77): the style's `life_n` tiles a face
+/// of its barren `life_terrain_id`, however small the body is drawn. Without that terrain the
+/// bodies get none and cannot be brought to life.
+fn add_dormant_surfaces(universe: &mut Universe, style: &MapStyle) {
+    let Some(terrain) = style.life_terrain_id else {
+        return;
+    };
+    let n = style.life_n.clamp(4, 4096) as u32;
+    for body in universe
+        .bodies
+        .iter()
+        .filter(|b| b.kind == BodyKind::Resource)
+    {
+        universe
+            .dormant
+            .insert(body.id, DormantSurface { n, terrain });
+    }
 }
 
 /// Name of the celestial home's system (task 76).
@@ -1064,6 +1092,28 @@ impl Universe {
             .get(&body)
             .ok_or(MapGenError::InvalidRequest("not a habitable body"))?;
         expand_planet(rules, recipe)
+    }
+
+    /// The dormant surface of a resource body as a planet (task 77): barren ground at
+    /// `life.ground_height` everywhere, no starts, no deposits.
+    pub fn dormant_planet(&self, rules: &Rules, body: u32) -> Result<SpherePlanet, MapGenError> {
+        let dormant = self.dormant.get(&body).ok_or(MapGenError::InvalidRequest(
+            "not a resource body with a dormant surface",
+        ))?;
+        let surface = rom_geo::CubeSurface { n: dormant.n };
+        let height = rules
+            .constant("life.ground_height")
+            .unwrap_or(128)
+            .clamp(0, 255) as u8;
+        Ok(SpherePlanet {
+            surface,
+            terrain: vec![dormant.terrain; surface.len()],
+            height: vec![height; surface.len()],
+            starts: Vec::new(),
+            nodes: Vec::new(),
+            base: pick_base(rules)?,
+            style: self.style,
+        })
     }
 
     /// The celestial home's system (task 76): the one with a black hole at its centre.
@@ -1289,6 +1339,11 @@ impl Universe {
             feed(&[p.face]);
             feed(&p.x.to_le_bytes());
             feed(&p.y.to_le_bytes());
+        }
+        for (id, d) in &self.dormant {
+            feed(&id.to_le_bytes());
+            feed(&d.n.to_le_bytes());
+            feed(&d.terrain.0.to_le_bytes());
         }
         h
     }
