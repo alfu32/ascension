@@ -1,0 +1,10 @@
+# Task 82, replayed by --script (--sphere 192 --demo --seed 1): a relic site placed five tiles
+# west and nine south of player one's first city, the camera on the city, zoomed in four
+# notches, nothing selected. The generated relic sites of seed 1 stand far from the towns
+# (`relic1`..`relic4` with `cam focus` show each of them alone in the grass).
+0 place 0 node.relics @-5,9
+20 click city
+22 cam focus
+40 cam focus
+60 cam wheel 4 800,450
+90 click @3,14

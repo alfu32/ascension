@@ -43,8 +43,9 @@ const PART: [u8; 4] = [120, 230, 255, 255];
 /// The approved fingerprints.
 pub const APPROVED: &str = include_str!("../../../docs/art/approved.toml");
 
-/// The models `filter` selects, buildings first, then units, each by key and age: `all`,
-/// `units`, an age (`ancient`, with the models for any age), an entity key or a model id.
+/// The models `filter` selects, buildings and map nodes first, then units, each by key and
+/// age: `all`, `units`, an age (`ancient`, with the models for any age), an entity key or a
+/// model id.
 pub fn select(book: &ModelBook, rules: &Rules, filter: &str) -> Result<Vec<usize>, String> {
     let age_key = format!("age.{filter}");
     let unit = |e: &ModelEntry| {
@@ -71,7 +72,8 @@ pub fn select(book: &ModelBook, rules: &Rules, filter: &str) -> Result<Vec<usize
         ));
     }
     let class = |e: &ModelEntry| match rules.entity_type(e.entity).map(|t| t.class) {
-        Some(EntityClass::Building) => 0,
+        // A map node with a model (the relic site) stands on its footprint like a building.
+        Some(EntityClass::Building | EntityClass::Node) => 0,
         Some(EntityClass::Unit) => 1,
         _ => 2,
     };
@@ -623,6 +625,7 @@ mod tests {
                 "bld.stable@industrial",
                 "bld.tower@industrial",
                 "bld.tower@modern",
+                "node.relics@any",
                 "unit.anti_tank_rifleman@industrial",
                 "unit.armoured_car@industrial",
                 "unit.arquebusier@gunpowder",
@@ -727,7 +730,12 @@ mod tests {
                 "{id}: {:?}",
                 entry.baked.warnings
             );
-            let building = rules.entity_type(entry.entity).unwrap().class == EntityClass::Building;
+            // A map node standing on its footprint (the relic site, task 82) is held to a
+            // building's budget and cover.
+            let building = matches!(
+                rules.entity_type(entry.entity).unwrap().class,
+                EntityClass::Building | EntityClass::Node
+            );
             let vehicle = is_vehicle(entry);
             // A crew of foot figures (a machine gun's) has each figure's budget.
             let crew = entry
