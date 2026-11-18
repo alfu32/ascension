@@ -119,7 +119,7 @@ const STAR_FILL: f32 = 0.35;
 #[derive(Default)]
 pub(super) struct SpaceState {
     snapshot: Arc<SpaceSnapshot>,
-    selected: Vec<u32>,
+    pub(super) selected: Vec<u32>,
     hover: Option<SpaceHover>,
     /// The ships above the loaded globe as it draws them, in the planet frame.
     orbital: Vec<OrbitalShip>,
@@ -495,6 +495,7 @@ impl Scene {
         if let Some(space) = &mut self.space {
             space.labels.clear();
         }
+        self.screen_bars.clear();
         let height = target.texture.height as f32;
         // The loaded globe is drawn as itself while it is more than a few pixels wide; the
         // system draws it as a small sphere below that.
@@ -661,6 +662,8 @@ impl Scene {
         let alpha_at = space.shader.get_shader_location("alpha");
         let (width, height) = (target.texture.width as f32, target.texture.height as f32);
         let mut rim_labels: Vec<([f32; 3], u32, u32, f32)> = Vec::new();
+        let bar_look = view.view((width, height), self.projection_centre_y);
+        let mut ship_bars: Vec<crate::bars::ScreenBar> = Vec::new();
         let mut icons: Vec<([f32; 3], f32, String, f32)> = Vec::new();
         let keeps = |p: [f32; 3]| part.keeps(view.distance_to(p));
         let loaded = zoom.surface_body();
@@ -914,9 +917,6 @@ impl Scene {
                         ));
                     }
                 }
-                let forward = unit_vector(sub3(view.target, view.eye));
-                let right = unit_vector(cross3(forward, [0.0, 1.0, 0.0]));
-                let cam_up = cross3(right, forward);
                 let mut boxes: Vec<[f32; 16]> = Vec::with_capacity(state.snapshot.ships.len() * 8);
                 let mut model_ships: Vec<(u16, bool, Matrix)> = Vec::new();
                 let models = self.models.as_ref();
@@ -1016,35 +1016,30 @@ impl Scene {
                         overlay.tris.extend(ring);
                     }
                     if selected || ship.hp_frac < 0.999 {
-                        let width = unit * 3.0 * scale.system.sqrt();
-                        let base = [at[0], at[1] + unit * 2.2, at[2]];
-                        let corner = |along: f32, up: f32| {
-                            [
-                                base[0] + right[0] * along + cam_up[0] * up,
-                                base[1] + right[1] * along + cam_up[1] * up,
-                                base[2] + right[2] * along + cam_up[2] * up,
-                            ]
+                        let anchor = BarAnchor {
+                            id: ship.id,
+                            at: [hull.origin[0], hull.origin[1] + unit * 1.8, hull.origin[2]],
+                            width: unit * 3.0 * scale.system.sqrt(),
+                            frac: ship.hp_frac.clamp(0.0, 1.0),
+                            ground_radius: None,
                         };
-                        let h = unit * 0.32;
-                        let filled = -width / 2.0 + width * ship.hp_frac.clamp(0.0, 1.0);
-                        let quad = |from: f32, to: f32, colour: [u8; 4]| {
-                            [
-                                crate::overlay::Tri3 {
-                                    v: [corner(from, 0.0), corner(to, 0.0), corner(to, h)],
-                                    colour,
-                                },
-                                crate::overlay::Tri3 {
-                                    v: [corner(from, 0.0), corner(to, h), corner(from, h)],
-                                    colour,
-                                },
-                            ]
-                        };
-                        overlay
-                            .tris
-                            .extend(quad(-width / 2.0, width / 2.0, [30, 30, 30, mark]));
-                        overlay
-                            .tris
-                            .extend(quad(-width / 2.0, filled, [70, 230, 90, mark]));
+                        // A planet between the eye and the ship hides its bar, as it hides it.
+                        let hidden = bodies_placed.iter().any(|b| {
+                            crate::bars::behind_sphere(view.eye, anchor.at, b.pos, b.radius * 0.98)
+                        });
+                        if !hidden {
+                            let first = ship_bars.len();
+                            crate::bars::project(
+                                &[anchor],
+                                &|_| true,
+                                &bar_look,
+                                self.bar_scale,
+                                &mut ship_bars,
+                            );
+                            for bar in &mut ship_bars[first..] {
+                                bar.alpha = mark;
+                            }
+                        }
                     }
                 }
                 if !boxes.is_empty() {
@@ -1162,6 +1157,7 @@ impl Scene {
         }
         set_clip_planes(DEFAULT_NEAR, DEFAULT_FAR);
         drop(drawing);
+        self.screen_bars.extend(ship_bars);
         if !part.first() {
             return;
         }

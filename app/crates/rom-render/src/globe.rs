@@ -735,6 +735,10 @@ impl Globe {
 }
 
 impl Footing for Globe {
+    fn is_round(&self) -> bool {
+        true
+    }
+
     fn datum_point(&self, face: u8, x: f32, y: f32, delta: (f32, f32), height: f32) -> [f32; 3] {
         let from = self.clamp_pos(face, x, y);
         let to = self.step_on(

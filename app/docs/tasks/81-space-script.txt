@@ -1,0 +1,16 @@
+# Task 81, replayed by --script in universe mode (--players 2 --ai none, seed 1, --sun fixed):
+# a few warships of both players in orbit of the home planet, firing on each other; the camera
+# leaves the planet for the system view, where the damaged ships and the selected ones carry
+# their bars (a planet between the eye and a ship hides its bar).
+0 grant-age age.galactic
+0 place-orbit 1 unit.space_frigate @40,-27
+0 place-orbit 1 unit.space_frigate @44,-27
+0 place-orbit 1 unit.space_frigate @36,-27
+0 place-orbit 2 unit.space_frigate @40,-20
+0 place-orbit 2 unit.space_frigate @44,-20
+0 place-orbit 2 unit.space_frigate @36,-20
+60 click ship1
+62 cam focus
+100 cam wheel -12 836,400
+105 click ship1
+110 speed 400
