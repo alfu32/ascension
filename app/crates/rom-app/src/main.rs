@@ -10,6 +10,7 @@ mod hud;
 mod launcher;
 mod looks;
 mod match_setup;
+mod palette_icons;
 mod saves;
 mod screenshot;
 mod script;

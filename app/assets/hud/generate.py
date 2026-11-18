@@ -20,11 +20,12 @@ NAVY0, NAVY1, SLOT, LINE = "#0c1118", "#141b24", "#0a0e14", "#2a3340"
 OUT = "#2e1e0a"
 
 
-def write(folder, name, width, height, body, defs=""):
+def write(folder, name, width, height, body, defs="", view=None):
     os.makedirs(os.path.join(HERE, folder), exist_ok=True)
+    view = view or f"0 0 {width} {height}"
     text = (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
-        f'viewBox="0 0 {width} {height}">\n<defs>\n{defs}</defs>\n{body}</svg>\n'
+        f'viewBox="{view}">\n<defs>\n{defs}</defs>\n{body}</svg>\n'
     )
     path = os.path.join(HERE, folder, name + ".svg")
     if CHECK:
@@ -518,8 +519,169 @@ def icons():
     I["brush_water"] = "".join(S(f"M6 {y} Q14 {y - 8} 22 {y} T38 {y} T54 {y} T62 {y - 4}", 5, "#4aa3c8") for y in (20, 34, 48))
     I["brush_elevation"] = P("M2 56 L22 18 L32 34 L42 12 L62 56Z") + P("M22 18 L28 29 L22 26 L17 28Z", "#f4f1e8", 1.2) + P("M42 12 L49 25 L42 22 L36 24Z", "#f4f1e8", 1.2)
     I["brush_biome"] = P("M32 4 L52 34 H40 L54 50 H10 L24 34 H12Z", "#5c9a3c") + P("M28 50 H36 V62 H28Z", "#8a5a2a")
+    I.update(research_icons())
     for name, art in I.items():
         write("icons", name, 64, 64, art, ICON_DEFS)
+    # Task 91: the mark of an upgrade, drawn small over a model picture; rasterised at its own
+    # size (18 design pixels) so it stays crisp.
+    write("chrome", "mark_upgrade", 18, 18, upgrade_mark(), ICON_DEFS, "0 0 64 64")
+
+
+DARK = "#2a1a08"
+LIGHT = "#fff1c8"
+
+
+def leaf_arc(cx, cy, radius, a0, a1, count, length=12, width=6):
+    """Leaves along an arc (degrees), each pointing along the arc, for wreaths."""
+    out = ""
+    for i in range(count):
+        a = math.radians(a0 + (a1 - a0) * i / max(count - 1, 1))
+        px, py = cx + radius * math.cos(a), cy + radius * math.sin(a)
+        tangent = math.degrees(a) + (90 if a1 > a0 else -90)
+        out += E(f"{px:.1f}", f"{py:.1f}", length / 2, width / 2, f"{tangent + 25:.1f}", G, 1.6)
+    return out
+
+
+def research_icons():
+    """Task 91: pictures for technologies, by what they do (app/docs/hud.md, "Palette icons")."""
+    I = {}
+    # One emblem per age, by ordinal (`age.ordinal`), each a distinct silhouette:
+    # hand axe, column, castle gate, cannon, quill and ink, factory, aeroplane, microchip,
+    # robot arm, fusion ring, rocket, ringed planet, infinity, spiral galaxy.
+    I["age_0"] = P("M32 4 C45 16 51 34 45 50 C41 59 23 59 19 50 C13 34 19 16 32 4Z") + "".join(
+        S(d, 2, OUT) for d in ("M32 10 L26 30 L32 48", "M32 10 L39 28 L32 48", "M22 36 L26 30", "M42 36 L39 28")
+    )
+    I["age_1"] = (
+        P("M8 9 H56 V16 H8Z") + C(13, 19, 6) + C(51, 19, 6) + C(13, 19, 2.2, DARK, 1) + C(51, 19, 2.2, DARK, 1)
+        + P("M18 17 H46 V23 H18Z") + P("M21 23 H43 V51 H21Z")
+        + "".join(S(f"M{x} 26 V48", 1.6, OUT) for x in (27, 32, 37))
+        + P("M15 51 H49 V56 H15Z") + P("M10 56 H54 V61 H10Z")
+    )
+    I["age_2"] = (
+        P("M22 60 V30 H26 V25 H31 V30 H33 V25 H38 V30 H42 V60Z")
+        + P("M4 60 V16 H8 V10 H13 V16 H15 V10 H20 V16 H24 V60Z")
+        + P("M40 60 V16 H44 V10 H49 V16 H51 V10 H56 V16 H60 V60Z")
+        + P("M26 60 V48 A6 6 0 0 1 38 48 V60Z", DARK, 1.5)
+        + P("M11 28 H17 V36 H11Z", DARK, 1.2) + P("M47 28 H53 V36 H47Z", DARK, 1.2)
+    )
+    spokes = "".join(
+        S(f"M24 44 L{24 + 11 * math.cos(a):.1f} {44 + 11 * math.sin(a):.1f}", 1.8, OUT) for a in (0.3, 1.4, 2.5, 3.6, 4.7, 5.8)
+    )
+    I["age_3"] = (
+        P("M6 34 L46 14 Q52 12 54 17 L56 22 Q57 27 52 29 L12 44Z")
+        + P("M50 13 L58 10 L61 24 L54 27Z", "#c99a4c")
+        + C(24, 44, 14) + spokes + C(24, 44, 4, DARK, 1.5)
+        + C(50, 56, 5) + C(60, 58, 4)
+    )
+    I["age_4"] = (
+        P("M12 48 Q12 44 16 44 H36 Q40 44 40 48 V60 H12Z") + P("M18 38 H34 V44 H18Z", "#c99a4c")
+        + P("M24 44 C28 28 38 12 58 3 C56 19 46 33 30 44Z")
+        + S("M26 42 C33 30 42 18 55 7", 1.6, OUT)
+    )
+    I["age_5"] = (
+        P("M4 60 V36 L16 27 V36 L28 27 V36 L40 27 V60Z")
+        + P("M43 60 V16 H53 V60Z") + P("M41 14 H55 V19 H41Z", "#c99a4c")
+        + E(50, 9, 6, 4, 0, "#9aa3ad", 1.5) + E(58, 4, 4.5, 3, 0, "#9aa3ad", 1.5)
+        + "".join(P(f"M{x} 44 H{x + 6} V52 H{x}Z", DARK, 1.2) for x in (9, 21, 31))
+    )
+    I["age_6"] = P(
+        "M32 3 C35 3 36 8 36 14 V25 L61 36 V43 L36 37 V50 L45 56 V61 L32 57 L19 61 V56 L28 50 V37 L3 43 V36 L28 25 V14 C28 8 29 3 32 3Z"
+    ) + S("M32 10 V20", 2, OUT)
+    pins = ""
+    for i in range(4):
+        o = 21 + i * 7.3
+        pins += S(f"M{o:.1f} 6 V14", 3.4) + S(f"M{o:.1f} 50 V58", 3.4) + S(f"M6 {o:.1f} H14", 3.4) + S(f"M50 {o:.1f} H58", 3.4)
+    I["age_7"] = pins + P("M14 14 H50 V50 H14Z") + P("M24 24 H40 V40 H24Z", DARK, 1.5) + P("M28 28 H36 V36 H28Z", "#f4dca0", 1)
+    I["age_8"] = (
+        P("M6 54 H32 V61 H6Z") + P("M12 46 H26 V54 H12Z", "#c99a4c")
+        + S("M19 48 L26 26", 7) + S("M26 26 L48 18", 6)
+        + C(19, 48, 5) + C(26, 26, 5.5) + C(48, 18, 4.5)
+        + P("M50 13 L60 9 L62 15 L54 18Z") + P("M51 22 L61 25 L59 31 L50 26Z")
+    )
+    I["age_9"] = (
+        S("M6 34 A26 11 0 1 1 58 34 A26 11 0 1 1 6 34", 7)
+        + "".join(P(f"M{x - 3} {y - 7} H{x + 3} V{y + 7} H{x - 3}Z", "#c99a4c", 1.5) for x, y in ((8, 34), (56, 34), (32, 23), (32, 45)))
+        + P(star_path(32, 34, 14, 5, 4), LIGHT, 1.2) + C(32, 34, 6, LIGHT, 1.5)
+    )
+    I["age_10"] = (
+        P("M24 34 L13 48 V56 L24 48Z") + P("M40 34 L51 48 V56 L40 48Z")
+        + P("M32 3 C41 11 43 24 41 48 H23 C21 24 23 11 32 3Z")
+        + C(32, 22, 4.5, DARK, 1.5)
+        + P("M25 48 H39 L35 56 L32 62 L29 56Z", "#f08a3a", 1.5)
+    )
+    I["age_11"] = (
+        S("M5 38 A28 9 0 0 1 59 26", 4.5)
+        + C(32, 32, 16) + S("M18 24 C26 28 38 28 46 24", 2, OUT)
+        + S("M59 26 A28 9 0 0 1 5 38", 4.5)
+        + C(55, 9, 4) + C(9, 55, 3)
+    )
+    I["age_12"] = (
+        S("M32 32 C25 20 8 19 8 32 C8 45 25 44 32 32 C39 20 56 19 56 32 C56 45 39 44 32 32Z", 7)
+        + P(star_path(32, 10, 7, 2.6, 4)) + P(star_path(32, 54, 5, 2, 4))
+    )
+    arms = S("M32 32 C40 24 50 28 50 38 C50 50 36 56 24 52", 4.5) + S("M32 32 C24 40 14 36 14 26 C14 14 28 8 40 12", 4.5)
+    I["age_13"] = arms + C(32, 32, 7, LIGHT, 2) + "".join(C(x, y, 2.2, G, 1) for x, y in ((54, 12), (10, 52), (56, 54), (8, 10)))
+    # Research tracks (`tech.track`), shown with their level as pips.
+    I["track_military"] = (
+        S("M8 60 L52 8", 4.5) + P("M48 4 L60 2 L58 14 L52 10Z")
+        + C(30, 36, 19) + C(30, 36, 13, "#c99a4c", 1.5) + C(30, 36, 5, DARK, 1.5)
+    )
+    I["track_civic"] = (
+        leaf_arc(32, 30, 22, 105, 245, 6) + leaf_arc(32, 30, 22, 75, -65, 6)
+        + P(star_path(32, 30, 11, 4.5)) + S("M24 58 L32 52 L40 58", 3)
+    )
+    I["track_commerce"] = (
+        P("M30 10 H34 V54 H30Z") + P("M20 54 H44 V60 H20Z") + S("M8 16 H56", 4) + C(32, 10, 4)
+        + S("M10 18 L4 38 M10 18 L16 38", 2) + S("M54 18 L48 38 M54 18 L60 38", 2)
+        + P("M2 38 H18 Q16 46 10 46 Q4 46 2 38Z") + P("M46 38 H62 Q60 46 54 46 Q48 46 46 38Z")
+    )
+    I["track_science"] = (
+        P("M24 4 H40 V10 H37 V26 L56 54 Q58 60 52 60 H12 Q6 60 8 54 L27 26 V10 H24Z")
+        + P("M18 44 H46 L53 54 Q54 57 51 57 H13 Q10 57 11 54Z", "#7fd3e8", 1.2)
+        + C(28, 50, 2.5, "#e9fbff", 0.8) + C(36, 47, 1.8, "#e9fbff", 0.8)
+    )
+    # One picture per technology kind with nothing more specific to show.
+    I["tech_upgrade"] = (
+        P("M4 18 H44 C52 18 58 21 61 26 C53 27 48 29 45 33 V37 H37 L41 49 H49 V57 H15 V49 H23 L27 37 H19 C10 37 4 30 4 18Z")
+        + S("M12 18 V24", 2, OUT)
+    )
+    I["tech_project"] = (
+        S("M32 10 L14 58", 4.5) + S("M32 10 L50 58", 4.5) + S("M20 42 Q32 48 44 42", 3)
+        + C(32, 10, 6) + C(32, 10, 2, DARK, 1) + P("M30 2 H34 V5 H30Z")
+    )
+    I["tech_government"] = (
+        P("M6 22 L18 34 L32 12 L46 34 L58 22 L52 50 H12Z") + P("M10 50 H54 V58 H10Z", "#c99a4c")
+        + C(6, 20, 4) + C(32, 10, 4.5) + C(58, 20, 4) + C(32, 41, 4, "#b8303a", 1.5)
+    )
+    rungs = "".join(S(f"M{x0} {y} H{x1}", 2.4, OUT) for x0, x1, y in ((22, 42, 12), (30, 34, 22), (30, 34, 42), (22, 42, 52)))
+    helix = S("M18 4 C18 18 46 22 46 32 C46 42 18 46 18 60", 4.5) + S("M46 4 C46 18 18 22 18 32 C18 42 46 46 46 60", 4.5)
+    I["tech_evolution"] = rungs + helix
+    I["tech_ascension"] = "".join(
+        S(f"M{14 - i * 2} {32 + i * 13} L32 {14 + i * 13} L{50 + i * 2} {32 + i * 13}", 4.5) for i in range(3)
+    ) + P(star_path(32, 9, 9, 3.6), LIGHT, 1.5)
+    I["tech_reveal"] = (
+        P("M2 32 C14 14 50 14 62 32 C50 50 14 50 2 32Z") + C(32, 32, 12, "#7fd3e8", 2) + C(32, 32, 5, DARK, 1.5)
+        + C(28, 28, 2, "#ffffff", 0)
+    )
+    I["tech_rule"] = C(18, 32, 13) + C(18, 32, 5, DARK, 1.5) + P("M29 28 H60 V36 H56 V44 H50 V36 H46 V42 H40 V36 H29Z")
+    I["tech_unify"] = (
+        C(32, 32, 17) + S("M15 32 H49", 2, OUT)
+        + f'<ellipse cx="32" cy="32" rx="8" ry="17" fill="none" stroke="{OUT}" stroke-width="2"/>\n'
+        + S("M8 22 A26 26 0 0 1 46 8", 3.5) + P("M44 2 L54 9 L43 14Z")
+        + S("M56 42 A26 26 0 0 1 18 56", 3.5) + P("M20 62 L10 55 L21 50Z")
+    )
+    I["tech_ability"] = P(star_path(28, 34, 24, 7, 4)) + P(star_path(50, 12, 9, 3, 4)) + P(star_path(52, 50, 6, 2.2, 4))
+    return I
+
+
+def upgrade_mark():
+    """A green double chevron pointing up, outlined, for upgrades."""
+    green, deep = "#3ddc3d", "#0d3d0d"
+    out = ""
+    for y in (30, 52):
+        d = f"M6 {y} L32 {y - 24} L58 {y} L47 {y + 10} L32 {y - 5} L17 {y + 10}Z"
+        out += f'<path d="{d}" fill="{green}" stroke="{deep}" stroke-width="6" stroke-linejoin="round"/>\n'
+    return out
 
 
 if __name__ == "__main__":

@@ -78,6 +78,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map(|(slot, (name, state))| HudButton {
                 slot,
                 icon: "icons/pic_scroll".into(),
+                model: None,
+                mark: rom_render::IconMark::None,
                 name: name.into(),
                 price: "200 Food, 200 Timber".into(),
                 state,

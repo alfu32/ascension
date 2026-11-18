@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+<defs>
+<linearGradient id="g" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="64">
+<stop offset="0" stop-color="#f4dca0"/><stop offset="0.5" stop-color="#d9a955"/><stop offset="1" stop-color="#a06c2a"/></linearGradient>
+</defs>
+<path d="M22 12 H42" fill="none" stroke="#2e1e0a" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M22 12 H42" fill="none" stroke="#2e1e0a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M30 22 H34" fill="none" stroke="#2e1e0a" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M30 22 H34" fill="none" stroke="#2e1e0a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M30 42 H34" fill="none" stroke="#2e1e0a" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M30 42 H34" fill="none" stroke="#2e1e0a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M22 52 H42" fill="none" stroke="#2e1e0a" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M22 52 H42" fill="none" stroke="#2e1e0a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M18 4 C18 18 46 22 46 32 C46 42 18 46 18 60" fill="none" stroke="#2e1e0a" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M18 4 C18 18 46 22 46 32 C46 42 18 46 18 60" fill="none" stroke="url(#g)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M46 4 C46 18 18 22 18 32 C18 42 46 46 46 60" fill="none" stroke="#2e1e0a" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M46 4 C46 18 18 22 18 32 C18 42 46 46 46 60" fill="none" stroke="url(#g)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

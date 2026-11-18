@@ -1,0 +1,14 @@
+# Task 91: the RESEARCH page of a barracks in the medieval age: unit upgrades show the new
+# unit's model with the upgrade chevron. Use:
+# env -u WAYLAND_DISPLAY target/release/rise-of-man --seed 1 --age 2 --size 1280x800 \
+#   --script docs/tasks/91-barracks-research-script.txt --screenshot docs/img/91-research-barracks.png --after 4
+0 grant res.food 100000
+0 grant res.timber 100000
+0 grant res.metal 100000
+0 grant res.wealth 100000
+0 grant res.knowledge 100000
+0 grant res.oil 100000
+0 grant res.energy 100000
+0 place 1 bld.barracks @9,0
+5 producers
+6 hud tab 3

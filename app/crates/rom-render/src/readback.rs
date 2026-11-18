@@ -419,6 +419,122 @@ fn frame_bytes(size: (u32, u32)) -> isize {
     (size.0 as isize) * (size.1 as isize) * 4
 }
 
+/// One picture read back without waiting (task 91: the palette's model pictures): the copy goes
+/// into a pixel pack buffer behind a fence, and a later frame takes it once the fence signals.
+pub(crate) struct PictureReadback {
+    gl: Gl,
+    buffer: u32,
+    fence: GlSync,
+    /// Size of the picture in flight.
+    size: (u32, u32),
+    /// Bytes the buffer holds.
+    capacity: isize,
+}
+
+const GL_RGBA: u32 = 0x1908;
+
+impl PictureReadback {
+    /// Loads the GL entry points and creates the buffer; `Err` names what the context lacks.
+    pub(crate) fn new() -> Result<Self, String> {
+        let gl = Gl::load()?;
+        let mut buffer = 0_u32;
+        // SAFETY: valid entry point on the render thread; `buffer` has room for one name.
+        unsafe { (gl.gen_buffers)(1, &mut buffer) };
+        if buffer == 0 {
+            return Err("pixel pack buffer".into());
+        }
+        Ok(Self {
+            gl,
+            buffer,
+            fence: ptr::null(),
+            size: (0, 0),
+            capacity: 0,
+        })
+    }
+
+    /// Starts copying the RGBA pixels of `target` (`size`) into the buffer.
+    pub(crate) fn issue(&mut self, target: &RenderTexture2D, size: (u32, u32)) {
+        self.drop_fence();
+        let bytes = frame_bytes(size);
+        let gl = &self.gl;
+        // SAFETY: GL calls on the render thread against raylib's framebuffer and this struct's
+        // buffer; the read writes into the bound pack buffer (offset 0), not client memory, and
+        // every binding is put back to 0 as raylib leaves it after drawing to a texture.
+        unsafe {
+            (gl.bind_buffer)(GL_PIXEL_PACK_BUFFER, self.buffer);
+            if bytes > self.capacity {
+                (gl.buffer_data)(GL_PIXEL_PACK_BUFFER, bytes, ptr::null(), GL_STREAM_READ);
+                self.capacity = bytes;
+            }
+            (gl.bind_framebuffer)(GL_FRAMEBUFFER, target.id());
+            (gl.read_pixels)(
+                0,
+                0,
+                size.0 as i32,
+                size.1 as i32,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                ptr::null_mut(),
+            );
+            (gl.bind_buffer)(GL_PIXEL_PACK_BUFFER, 0);
+            (gl.bind_framebuffer)(GL_FRAMEBUFFER, 0);
+            self.fence = (gl.fence_sync)(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+            (gl.flush)();
+        }
+        self.size = size;
+    }
+
+    /// The pixels of the read in flight once the GPU has copied them: RGBA rows, bottom first
+    /// (as GL stores a render target), with the picture's size; `None` while it is not done.
+    pub(crate) fn take(&mut self) -> Option<(Vec<u8>, (u32, u32))> {
+        if self.fence.is_null() {
+            return None;
+        }
+        // SAFETY: polling (timeout 0) a live fence of this struct.
+        let status =
+            unsafe { (self.gl.client_wait_sync)(self.fence, GL_SYNC_FLUSH_COMMANDS_BIT, 0) };
+        if status == GL_TIMEOUT_EXPIRED {
+            return None;
+        }
+        self.drop_fence();
+        let bytes = frame_bytes(self.size);
+        // SAFETY: mapping this struct's buffer, whose storage holds at least `bytes` bytes, for
+        // reading only.
+        let mapped = unsafe {
+            (self.gl.bind_buffer)(GL_PIXEL_PACK_BUFFER, self.buffer);
+            (self.gl.map_buffer_range)(GL_PIXEL_PACK_BUFFER, 0, bytes, GL_MAP_READ_BIT)
+        };
+        let pixels = (!mapped.is_null()).then(|| {
+            // SAFETY: the mapping covers `bytes` readable bytes until the unmap below.
+            unsafe { slice::from_raw_parts(mapped.cast::<u8>(), bytes as usize) }.to_vec()
+        });
+        // SAFETY: unmapping (if mapped) and unbinding the buffer bound above.
+        unsafe {
+            if !mapped.is_null() {
+                (self.gl.unmap_buffer)(GL_PIXEL_PACK_BUFFER);
+            }
+            (self.gl.bind_buffer)(GL_PIXEL_PACK_BUFFER, 0);
+        }
+        pixels.map(|p| (p, self.size))
+    }
+
+    fn drop_fence(&mut self) {
+        let fence = std::mem::replace(&mut self.fence, ptr::null());
+        if !fence.is_null() {
+            // SAFETY: deleting a fence this struct created, exactly once.
+            unsafe { (self.gl.delete_sync)(fence) };
+        }
+    }
+}
+
+impl Drop for PictureReadback {
+    fn drop(&mut self) {
+        self.drop_fence();
+        // SAFETY: the render thread drops this before closing the GL context; the name is ours.
+        unsafe { (self.gl.delete_buffers)(1, &self.buffer) };
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

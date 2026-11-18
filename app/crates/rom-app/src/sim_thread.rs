@@ -609,7 +609,8 @@ fn run(
     };
     suggest(&world);
     let mut memory = Memory::default();
-    let models = crate::looks::ModelBook::new(world.rules());
+    let models = Arc::new(crate::looks::ModelBook::new(world.rules()));
+    controller.set_models(Arc::clone(&models));
     let mut notices = Notices::default();
     let mut frames: BTreeMap<u32, Option<SpaceFrame>> = BTreeMap::new();
     notices.update(&world);

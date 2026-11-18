@@ -236,6 +236,48 @@ and `hud data 4` (open the research overview). Setup resource `grant` lines
 also apply to flat and single-sphere matches. The task 30 scripts use real
 construction and research orders, then slow the simulation for capture.
 
+## Palette icons (task 91)
+
+Every build, train and research button has a picture of its own, chosen from data
+(`rom-app/src/palette_icons.rs`), never from definition keys:
+
+| Button | Picture |
+| --- | --- |
+| Building or unit | its own model in the player's current look (`ModelBook::resolve`; a type with no look yet in the player's age shows its earliest look) |
+| Technology with `upgrade_type` | the new type's model with a green upward chevron (`chrome/mark_upgrade`) |
+| Age advance (`set_age`) | the emblem of the age it reaches, `icons/age_<ordinal>` (14: hand axe, column, castle gate, cannon, quill, factory, aeroplane, microchip, robot arm, fusion ring, rocket, ringed planet, infinity, spiral galaxy) |
+| Track level (`tech.kind = 'track'`) | `icons/track_<tech.track>` (military, civic, commerce, science) with the level as gold pips in rows of five in the bottom-left corner |
+| `ascend` | `icons/tech_ascension` |
+| `change_faction`, `reveal_map`, `enable_rule`, `grant_ability` | `tech_unify`, `tech_reveal`, `tech_rule`, `tech_ability` |
+| `unlock`, `spawn` of a type | that type's model |
+| Modifiers only | what the first modifier improves, with the chevron: a resource's icon for `income.<resource>`, the model of its target type or of the first type of a narrow tag (at most four types), else the stat's icon |
+| Anything else | one icon per kind: `tech_upgrade`, `tech_project`, `tech_government`, `tech_evolution` |
+
+The production queue uses the same pictures. Selection portraits and tiles keep the generic
+pictograms. Hover and help are unchanged.
+
+Model pictures are rendered on the render thread (`scene/icons.rs`): the models a snapshot's
+palette and queue name are drawn side by side into one strip through an orthographic camera at a
+fixed three-quarter view (35° off the front toward the model's right, 30° above the ground), idle
+at the start of their cycle, in the review gallery's mid-morning light and player one's colour,
+on a transparent ground, four times larger than the icon. Each fills its cell by its width and
+by its height without the top and bottom 5 % of its vertices, so a spear or a mast does not
+shrink a figure to a speck. The strip is read back without waiting (a pixel pack buffer behind a
+fence, taken a frame or two later); each picture is filtered down and outlined in the vector
+icons' dark outline colour (`hud_icons.rs`), then written into a shelf of 160 slots below the
+artwork in the HUD atlas and its greyscale copy (`hud_atlas.rs`), so locked buttons grey them
+like any icon. At most 15 pictures (a page) are drawn at a time; until a picture is ready the
+button shows its generic pictogram. A picture is keyed by model index, so an age that changes a
+type's look renders the new one; when the shelf is full the slot of a model no longer shown is
+reused. Each batch prints one line to standard error: count, edge, drawing and finishing time,
+and the atlas size.
+
+Measured on this machine (Intel HD 530, 1280 × 800, automatic HUD scale 0.77): icons 34 px
+drawn at 136; the shelf adds 3 rows (108 px) to the atlas, 2048 × 467 → 2048 × 575. The first batch of a
+session costs about 16 ms of drawing on the render thread (the driver's first use of the strip),
+later ones 0.1–4 ms, plus 0.5–4 ms to finish 1–15 pictures; pictures are ready about 20–30 ms
+after they are drawn.
+
 ## Game menu (task 63)
 
 The menu button and Esc open a GPUI overlay on the world view (resume, save game, load

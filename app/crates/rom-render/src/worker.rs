@@ -1330,6 +1330,7 @@ fn render_loop(shared: &Shared) {
                 }
             }
             if let Some(hud) = &mut hud {
+                hud.bake_model_icons(&mut rl, &thread, &mut scene, &hud_snapshot);
                 let ratio = size.0 as f32 / layout.0.max(1) as f32;
                 let hud_overlay = {
                     let surface = scene.surface();
@@ -2244,6 +2245,8 @@ mod tests {
             buttons: vec![HudButton {
                 slot: 9,
                 icon: String::new(),
+                model: None,
+                mark: crate::hud_model::IconMark::None,
                 name: String::new(),
                 price: String::new(),
                 state: crate::hud_model::ButtonState::Ready,

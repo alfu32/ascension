@@ -1,0 +1,14 @@
+# Task 91: the RESEARCH page of a temple: its upgrades raise the temple's border, so they show
+# the temple's model with the upgrade chevron. Use:
+# env -u WAYLAND_DISPLAY target/release/rise-of-man --seed 1 --age 1 --size 1280x800 \
+#   --script docs/tasks/91-temple-script.txt --screenshot docs/img/91-research-temple.png --after 4
+0 grant res.food 100000
+0 grant res.timber 100000
+0 grant res.metal 100000
+0 grant res.wealth 100000
+0 grant res.knowledge 100000
+0 grant res.oil 100000
+0 grant res.energy 100000
+0 place 1 bld.temple @9,0
+5 click temple1
+6 hud tab 3

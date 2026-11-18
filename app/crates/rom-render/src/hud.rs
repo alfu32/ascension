@@ -1,6 +1,8 @@
 //! Plain HUD snapshots and shared composition for GPU drawing and CPU previews.
 
-use crate::hud_atlas::{self, AtlasError, AtlasImage};
+use std::collections::BTreeMap;
+
+use crate::hud_atlas::{self, AtlasError, AtlasImage, AtlasRect};
 use crate::hud_layout::{Group, HudLayout, Rect, Region};
 use crate::hud_text::{Align, GlyphAtlas, TextSize, TextStyle};
 
@@ -32,8 +34,8 @@ pub struct HudResearch {
 
 pub use crate::hud_model::{
     ButtonState, HudButton, HudCard, HudCityRadius, HudMarker, HudPalette, HudPlacement, HudQueue,
-    HudQueueItem, HudSelection, HudTile, MarkerKind, PaletteTab, ResearchCell, ResearchOverview,
-    ResearchTrack, SLOT_KEYS,
+    HudQueueItem, HudSelection, HudTile, IconMark, MarkerKind, PaletteTab, ResearchCell,
+    ResearchOverview, ResearchTrack, SLOT_KEYS,
 };
 use crate::pick::HudTarget;
 
@@ -209,6 +211,8 @@ pub struct HudPainter {
     pub glyphs: GlyphAtlas,
     quads: Vec<HudQuad>,
     scale: f32,
+    /// The atlas slot holding each model's picture (task 91).
+    model_slots: BTreeMap<u16, usize>,
 }
 
 impl HudPainter {
@@ -222,7 +226,119 @@ impl HudPainter {
             glyphs: GlyphAtlas::bake(scale),
             quads: Vec::new(),
             scale,
+            model_slots: BTreeMap::new(),
         })
+    }
+
+    /// The models the palette and the queue of `h` show, in order, each once.
+    pub fn shown_models(h: &HudSnapshot) -> Vec<u16> {
+        let buttons = h
+            .palette
+            .iter()
+            .flat_map(|p| p.buttons.iter().map(|b| b.model));
+        let rows = h.queue.iter().flat_map(|q| q.items.iter().map(|i| i.model));
+        let mut models: Vec<u16> = Vec::new();
+        for model in buttons.chain(rows).flatten() {
+            if !models.contains(&model) {
+                models.push(model);
+            }
+        }
+        models
+    }
+
+    /// The models `h` shows that have no picture yet.
+    pub fn missing_models(&self, h: &HudSnapshot) -> Vec<u16> {
+        Self::shown_models(h)
+            .into_iter()
+            .filter(|m| !self.model_slots.contains_key(m))
+            .collect()
+    }
+
+    /// Where the picture of `model` is in the atlas, once it has been stored.
+    pub fn model_icon(&self, model: u16) -> Option<AtlasRect> {
+        self.artwork.model_slot(*self.model_slots.get(&model)?)
+    }
+
+    /// Stores the picture of `model` (straight RGBA, [`AtlasImage::model_icon_edge`] a side) in
+    /// the atlas and its greyscale copy: in a free slot, or else in the slot of a model `h` does
+    /// not show. Returns the rectangle written, for the textures.
+    pub fn store_model_icon(
+        &mut self,
+        model: u16,
+        pixels: &[u8],
+        h: &HudSnapshot,
+    ) -> Option<AtlasRect> {
+        let slot = match self.model_slots.get(&model) {
+            Some(slot) => *slot,
+            None => {
+                let used: std::collections::BTreeSet<usize> =
+                    self.model_slots.values().copied().collect();
+                let free = (0..hud_atlas::MODEL_ICON_SLOTS).find(|s| !used.contains(s));
+                let slot = match free {
+                    Some(slot) => slot,
+                    None => {
+                        let shown = Self::shown_models(h);
+                        let (old, slot) = self
+                            .model_slots
+                            .iter()
+                            .find(|(m, _)| !shown.contains(m))
+                            .map(|(m, s)| (*m, *s))?;
+                        self.model_slots.remove(&old);
+                        slot
+                    }
+                };
+                self.model_slots.insert(model, slot);
+                slot
+            }
+        };
+        let rect = self.artwork.model_slot(slot)?;
+        if pixels.len() != rect.w as usize * rect.h as usize * 4 {
+            self.model_slots.remove(&model);
+            return None;
+        }
+        self.artwork.write(rect, pixels);
+        hud_atlas::write_rect(
+            &mut self.greyscale,
+            self.artwork.width,
+            rect,
+            &hud_atlas::greyscale(pixels),
+        );
+        Some(rect)
+    }
+
+    /// Whether the picture of `model` is in the atlas.
+    fn has_model_icon(&self, model: Option<u16>) -> bool {
+        model.is_some_and(|m| self.model_slots.contains_key(&m))
+    }
+
+    /// The picture of a button or queue row: the model's, once rendered, else the artwork.
+    fn picture(&mut self, icon: &str, model: Option<u16>, dest: Rect) {
+        match model.and_then(|m| self.model_icon(m)) {
+            Some(r) => self.quads.push(HudQuad {
+                texture: HudTexture::Artwork,
+                source: Rect::new(r.x as f32, r.y as f32, r.w as f32, r.h as f32),
+                dest,
+                colour: WHITE,
+            }),
+            None => self.art(icon, dest),
+        }
+    }
+
+    /// A track level's pips in the bottom-left corner of `tile`: rows of five, bottom up.
+    fn level_pips(&mut self, level: u8, tile: Rect, locked: bool) {
+        let s = self.scale;
+        let (side, gap) = (5.5 * s, 1.8 * s);
+        let colour = if locked { MUTED } else { GOLD };
+        for i in 0..usize::from(level.min(15)) {
+            let (row, column) = ((i / 5) as f32, (i % 5) as f32);
+            let x = tile.x + 5.0 * s + column * (side + gap);
+            let y = tile.bottom() - 6.0 * s - side - row * (side + gap);
+            self.solid(
+                Rect::new(x - s, y - s, side + 2.0 * s, side + 2.0 * s),
+                [20, 13, 5, 235],
+            );
+            self.solid(Rect::new(x, y, side, side), colour);
+        }
     }
 
     fn art(&mut self, name: &str, dest: Rect) {
@@ -566,25 +682,49 @@ impl HudPainter {
         };
         for b in &palette.buttons {
             let r = l.command_slot(b.slot % 5, b.slot / 5);
-            let icon = 34.0 * s;
             let start = self.quads.len();
-            if matches!(b.state, ButtonState::Locked { .. }) {
+            let locked = matches!(b.state, ButtonState::Locked { .. });
+            if locked {
                 self.art("chrome/tile", r);
             }
-            self.art(
-                &b.icon,
+            // A track level leaves the bottom-left corner to its pips.
+            let dest = if matches!(b.mark, IconMark::Level(_)) {
+                let icon = 29.0 * s;
+                Rect::new(r.right() - icon - 5.0 * s, r.y + 4.0 * s, icon, icon)
+            } else {
+                // A model's picture fills more of the tile than a vector glyph.
+                let icon = if self.has_model_icon(b.model) {
+                    40.0
+                } else {
+                    34.0
+                } * s;
                 Rect::new(
                     r.x + (r.w - icon) / 2.0,
                     r.y + (r.h - icon) / 2.0 + 2.0 * s,
                     icon,
                     icon,
-                ),
-            );
-            if matches!(b.state, ButtonState::Locked { .. }) {
+                )
+            };
+            self.picture(&b.icon, b.model, dest);
+            if b.mark == IconMark::Upgrade {
+                self.art(
+                    "chrome/mark_upgrade",
+                    Rect::new(
+                        r.right() - 21.0 * s,
+                        r.bottom() - 22.0 * s,
+                        18.0 * s,
+                        18.0 * s,
+                    ),
+                );
+            }
+            if locked {
                 for quad in &mut self.quads[start..] {
                     quad.texture = HudTexture::Greyscale;
                     quad.colour = [195, 195, 195, 255];
                 }
+            }
+            if let IconMark::Level(level) = b.mark {
+                self.level_pips(level, r, locked);
             }
             self.text(
                 &SLOT_KEYS[b.slot.min(14)].to_string(),
@@ -631,10 +771,22 @@ impl HudPainter {
             let slot = l.queue_slot(i);
             self.art("chrome/tile", slot);
             let icon = slot.h - 6.0 * s;
-            self.art(
+            self.picture(
                 &item.icon,
+                item.model,
                 Rect::new(slot.x + (slot.w - icon) / 2.0, slot.y + 3.0 * s, icon, icon),
             );
+            if item.mark == IconMark::Upgrade {
+                self.art(
+                    "chrome/mark_upgrade",
+                    Rect::new(
+                        slot.right() - 13.0 * s,
+                        slot.bottom() - 14.0 * s,
+                        12.0 * s,
+                        12.0 * s,
+                    ),
+                );
+            }
             let y = 772.0 + i as f32 * 49.0;
             self.caption(
                 l,
