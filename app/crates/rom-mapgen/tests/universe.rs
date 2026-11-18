@@ -640,7 +640,7 @@ fn the_celestial_home_lies_toward_sagittarius_beyond_the_region() {
     }
 }
 
-/// Task 89: every universe map style.
+/// Task 89: every universe map style; `map.galaxy` exists only in [`galaxy_rules`].
 const STYLES: [&str; 5] = [
     "map.one_world",
     "map.many_worlds",
@@ -648,6 +648,31 @@ const STYLES: [&str; 5] = [
     "map.quadrant",
     "map.galaxy",
 ];
+
+/// The seed plus a Galaxy style made here (task 89): the seed holds it back until the simulation
+/// makes a system's space on first visit, so the test copies the Quadrant row with
+/// `star_region = 'all'`.
+fn galaxy_rules() -> Rules {
+    let conn = build_rules_db(SCHEMA, SEED).unwrap();
+    conn.execute_batch(
+        "INSERT INTO def(kind,key,name) VALUES ('map_style','map.galaxy','Galaxy');
+         CREATE TEMP TABLE galaxy AS SELECT * FROM map_style
+          WHERE id=(SELECT id FROM def WHERE key='map.quadrant');
+         UPDATE galaxy SET id=(SELECT id FROM def WHERE key='map.galaxy'), star_region='all';
+         INSERT INTO map_style SELECT * FROM galaxy;
+         INSERT INTO map_style_feature(map_style_id,feature_def_id,region_kind,pattern,chance_pct,
+           coverage_pct,clumps_min,clumps_max,size_min,size_max,start_min_dist,start_max_dist)
+          SELECT (SELECT id FROM def WHERE key='map.galaxy'), feature_def_id, region_kind, pattern,
+           chance_pct, coverage_pct, clumps_min, clumps_max, size_min, size_max, start_min_dist,
+           start_max_dist
+          FROM map_style_feature WHERE map_style_id=(SELECT id FROM def WHERE key='map.quadrant')
+          ORDER BY id;",
+    )
+    .unwrap();
+    let rules = Rules::load(&conn).unwrap();
+    assert_eq!(rules.validate(), vec![]);
+    rules
+}
 
 /// Systems other than the celestial home.
 fn star_systems(u: &Universe) -> Vec<&rom_mapgen::StarSystem> {
@@ -675,7 +700,11 @@ fn cluster_gives_the_many_worlds_universes() {
 
 #[test]
 fn every_style_is_connected_and_fair_on_20_seeds() {
-    let r = rules();
+    let r = galaxy_rules();
+    assert!(
+        rules().id_of("map.galaxy").is_none(),
+        "the seed holds Galaxy back"
+    );
     for style in STYLES {
         for factions in [&FOUR[..], &FOUR[1..3]] {
             let races: BTreeSet<DefId> = factions
@@ -780,7 +809,7 @@ fn quadrant_takes_every_star_of_one_galactic_quadrant() {
 
 #[test]
 fn galaxy_takes_every_catalogue_star() {
-    let r = rules();
+    let r = galaxy_rules();
     let all: BTreeSet<u32> = r.stars.keys().copied().collect();
     assert_eq!(all.len(), 745);
     for seed in 0..3 {

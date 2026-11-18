@@ -762,7 +762,6 @@ fn universe_knobs_load_and_validate() {
         ("map.many_worlds", StarRegion::Nearest),
         ("map.solar", StarRegion::Single),
         ("map.quadrant", StarRegion::Quadrant),
-        ("map.galaxy", StarRegion::All),
     ] {
         let style = &rules.map_styles[&rules.id_of(key).unwrap()];
         assert_eq!(style.star_region, region, "{key}");
@@ -772,6 +771,14 @@ fn universe_knobs_load_and_validate() {
             "{key}"
         );
     }
+    // Galaxy (`all`) is held back until a system's space is made on first visit.
+    assert!(rules.id_of("map.galaxy").is_none());
+    assert!(
+        rules
+            .map_styles
+            .values()
+            .all(|s| s.star_region != StarRegion::All)
+    );
     assert_eq!(rules.def(many.id).name, "Cluster");
     assert_eq!(
         rules.match_options["start_placement"].default_value,

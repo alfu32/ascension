@@ -232,15 +232,15 @@ never a style key.
 | Cluster (`map.many_worlds`) | `nearest` | a seeded star and its nearest neighbours: the homes plus `neutral_systems_min..max` (2 to 4), within `star_map_radius` (the key stays: saves and scripts name it) |
 | Solar (`map.solar`) | `single` | one seeded catalogue star whose system holds every home planet (with separate worlds, each race its own planet), `habitable_per_system_min..max` − 1 more planets, and the resource bodies; no routes |
 | Quadrant (`map.quadrant`) | `quadrant` | every catalogue star in one galactic quadrant (`star.glon_mdeg` / 90 000; the seed chooses it and keeps it through the layout's retries) |
-| Galaxy (`map.galaxy`) | `all` | every catalogue star: 745 systems |
+| Galaxy (held back) | `all` | every catalogue star: 745 systems. The seed has no row for it until the simulation makes a system's space on first visit: the match world grows by about 12 MB a system and was killed at 8.4 GB (`world-model.md` "Scale"). The `all` region and its tests stay; the tests make the row themselves (a copy of Quadrant's) |
 
 `neutral_systems_*` and `star_map_radius` bound the `nearest` region only (the
-other rows carry 0 and the catalogue's extent, 8 300). In Quadrant and Galaxy the
+other rows carry 0 and the catalogue's extent, 8 300). In Quadrant (and Galaxy) the
 systems beyond the homes are mostly empty: 0 to 2 habitable planets and 2 to 6
 resource bodies each. `habitable_per_system_min` may therefore be 0; a home
 system always holds its home planet. In Solar every home planet has the
 `per_player` resource bodies as its own moons (one ore asteroid each in the seed).
-In Quadrant and Galaxy a home candidate's density is measured over its eight
+In the `quadrant` and `all` regions a home candidate's density is measured over its eight
 nearest neighbours (three in the nearest region) and up to 256 layouts are tried.
 
 **Start placement (task 89).** `match_option` `start_placement`, choices
