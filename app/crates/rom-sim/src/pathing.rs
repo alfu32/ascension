@@ -195,11 +195,7 @@ fn class_grids(rules: &Rules, map: &MapGrid) -> BTreeMap<u32, ClassGrid> {
                 (Tiles::from_vec(pct), Tiles::from_vec(weight))
             }
         };
-        let min_weight = weight
-            .iter()
-            .filter(|w| *w > 0)
-            .min()
-            .map_or(1, u64::from);
+        let min_weight = weight.iter().filter(|w| *w > 0).min().map_or(1, u64::from);
         classes.insert(
             class,
             ClassGrid {

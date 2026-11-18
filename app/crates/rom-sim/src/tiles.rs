@@ -90,9 +90,7 @@ impl<T: Copy + PartialEq> Tiles<T> {
                 Some(run) => (run, 0),
                 None => (&[][..], len),
             };
-            run.iter()
-                .copied()
-                .chain(std::iter::repeat_n(value, fill))
+            run.iter().copied().chain(std::iter::repeat_n(value, fill))
         })
     }
 
@@ -210,8 +208,13 @@ mod tests {
         expected[50] = 3;
         assert_eq!(layer.uniform_value(), None);
         layer.update(CHUNK - 2..CHUNK + 2, |i, v| *v = i as u32);
-        for i in CHUNK - 2..CHUNK + 2 {
-            expected[i] = i as u32;
+        for (i, v) in expected
+            .iter_mut()
+            .enumerate()
+            .take(CHUNK + 2)
+            .skip(CHUNK - 2)
+        {
+            *v = i as u32;
         }
         layer[len - 1] = 9;
         expected[len - 1] = 9;

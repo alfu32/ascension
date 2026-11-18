@@ -12,9 +12,9 @@ use rom_sim::{
 };
 use std::{collections::BTreeMap, sync::Arc};
 
-/// The Quadrant universe of seed 1 for two players in the expansion age, with a transport of
-/// player one beside its home planet, ordered across its system to the outermost body.
-fn quadrant(rules: &Arc<Rules>) -> World {
+/// The universe of `style` and seed 1 for two players in the expansion age, with a transport
+/// of player one beside its home planet, ordered across its system to the outermost body.
+fn universe(rules: &Arc<Rules>, style: &str) -> World {
     let factions = [
         rules.id_of("nation.romans").unwrap(),
         rules.id_of("nation.ashscale").unwrap(),
@@ -22,13 +22,12 @@ fn quadrant(rules: &Arc<Rules>) -> World {
     let universe = generate_universe(
         rules,
         &UniverseRequest {
-            style: rules.id_of("map.quadrant").unwrap(),
+            style: rules.id_of(style).unwrap(),
             seed: 1,
             player_factions: factions.to_vec(),
         },
     )
     .unwrap();
-    assert!(universe.systems.len() > 150, "a quadrant");
     let setup = UniverseSetup {
         systems: universe
             .systems
@@ -135,8 +134,9 @@ fn quadrant(rules: &Arc<Rules>) -> World {
 #[test]
 fn a_quadrant_match_runs_the_same_twice_and_survives_a_save() {
     let rules = common::rules();
-    let mut a = quadrant(&rules);
-    let mut b = quadrant(&rules);
+    let mut a = universe(&rules, "map.quadrant");
+    let mut b = universe(&rules, "map.quadrant");
+    assert!(a.systems().len() > 150, "a quadrant");
     assert_eq!(a.hash(), b.hash());
     ticks(&mut a, 200);
     ticks(&mut b, 200);
@@ -149,4 +149,30 @@ fn a_quadrant_match_runs_the_same_twice_and_survives_a_save() {
         "{} bytes for {systems} systems",
         outcome.bytes
     );
+}
+
+/// The save sizes of the world-model table (`cargo test --release -p rom-save --test quadrant
+/// -- --ignored --nocapture`, under a memory cap): each style after 200 ticks.
+#[test]
+#[ignore = "measurement; Galaxy is slow in a debug build"]
+fn save_sizes_of_the_universe_styles() {
+    let rules = common::rules();
+    for style in ["map.many_worlds", "map.quadrant", "map.galaxy"] {
+        let mut w = universe(&rules, style);
+        ticks(&mut w, 200);
+        let path = common::temp_path(style);
+        let started = std::time::Instant::now();
+        rom_save::save(&path, &w, &common::info(&w), &common::ai()).unwrap();
+        let saved = started.elapsed();
+        let bytes = std::fs::metadata(&path).unwrap().len();
+        let started = std::time::Instant::now();
+        let (loaded, _, _) = rom_save::load(&path, &rules).unwrap();
+        let loaded_in = started.elapsed();
+        assert_eq!(loaded.hash(), w.hash(), "{style}");
+        std::fs::remove_file(&path).unwrap();
+        println!(
+            "save {style}: systems={} bytes={bytes} save={saved:?} load={loaded_in:?}",
+            w.systems().len()
+        );
+    }
 }

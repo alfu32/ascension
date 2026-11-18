@@ -6,6 +6,7 @@
 //! the economic radius index of a surface's slots); the restored world's `hash()` equals
 //! the exported world's, which the save tests check.
 
+use crate::tiles::Tiles;
 use crate::{
     BodyId, BodyInfo, Entity, EntityId, MapGrid, MatchOptions, Order, OrderId, OrderStatus,
     Outcome, Player, PlayerId, PlayerStatus, Pos, RememberedBuilding, RouteInfo, SimError, SimRng,
@@ -22,7 +23,6 @@ use crate::{
     vision::{PlayerVision, Viewer, Vision},
     wealth::RouteState,
 };
-use crate::tiles::Tiles;
 use rom_geo::CubeSurface;
 use rom_rules::{DefId, Rules, VictoryRule};
 use std::{
