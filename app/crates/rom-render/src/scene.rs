@@ -373,6 +373,9 @@ pub(crate) struct Scene {
     grass: Option<grass::GrassGpu>,
     /// Whether the grass blades are drawn (the graphics setting).
     pub(crate) show_grass: bool,
+    /// Light uniforms last set without shadows, and whether the stain and grass shaders existed:
+    /// setting them again to the same values would only cost GL lookups.
+    lighting_applied: Option<([f32; 3], bool, bool, bool)>,
     /// The palette's model pictures on the GPU (task 91).
     icons: icons::IconStrip,
 }
@@ -742,6 +745,7 @@ impl Scene {
             stains,
             grass,
             show_grass: true,
+            lighting_applied: None,
             icons: icons::IconStrip::default(),
         }
     }
@@ -1160,6 +1164,15 @@ impl Scene {
         planet: bool,
         shadow: Option<shadow::ShadowUniforms>,
     ) {
+        let key = (toward, planet, self.stains.is_some(), self.grass.is_some());
+        if shadow.is_none() {
+            if self.lighting_applied == Some(key) {
+                return;
+            }
+            self.lighting_applied = Some(key);
+        } else {
+            self.lighting_applied = None;
+        }
         let [_, _, terrain, _, entity] = &mut self._shaders;
         let mut shaders = vec![
             terrain,

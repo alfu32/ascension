@@ -546,7 +546,12 @@ impl Scene {
         let mut passes = if zoom.sky_active() {
             Vec::new()
         } else {
-            self.system_passes(zoom, &one, drawn)
+            self.system_passes(
+                zoom,
+                &one,
+                drawn,
+                target.texture.width as f32 / height.max(1.0),
+            )
         };
         // The farthest system first; the anchored one last, around the globe it holds.
         passes.sort_by(|a, b| {
@@ -579,7 +584,13 @@ impl Scene {
     /// The systems whose own detail shows through the one camera: the anchored one in its
     /// frame, any other seen through the star map in its own frame; `globe` when the loaded
     /// globe draws itself.
-    fn system_passes(&self, zoom: &ZoomCamera, one: &OneView, globe: bool) -> Vec<SystemPass> {
+    fn system_passes(
+        &self,
+        zoom: &ZoomCamera,
+        one: &OneView,
+        globe: bool,
+        aspect: f32,
+    ) -> Vec<SystemPass> {
         let Some(space) = &self.space else {
             return Vec::new();
         };
@@ -600,7 +611,11 @@ impl Scene {
             };
             let distance = view.distance_to([0.0; 3]).max(1e-6);
             let detail = system_detail(SYSTEM_RADIUS / distance);
-            if detail <= 0.004 {
+            if detail <= PASS_DETAIL_MIN {
+                continue;
+            }
+            // A system off the picture draws nothing: its disc lies outside the view cone.
+            if !anchored && !view.sees_sphere([0.0; 3], SYSTEM_RADIUS, aspect) {
                 continue;
             }
             passes.push(SystemPass {
@@ -708,9 +723,11 @@ impl Scene {
         };
         // Rings, claims and names belong to space: they fade in as the camera leaves the planet.
         let detail = pass.detail * pass.space;
+        crate::prof::mark("p0_setup");
         let mut drawing = rl.begin_texture_mode(thread, target);
         clear_depth();
         let far = view.distance_to([0.0; 3]) + SYSTEM_RADIUS * 2.5;
+        crate::prof::mark("p1_begin_tex");
         let near = (view.distance() * 0.05).clamp(0.05, far * 0.01);
         set_clip_planes(f64::from(near), f64::from(far));
         {
@@ -774,6 +791,8 @@ impl Scene {
                     })
             };
             let mut halos: Vec<([f32; 3], f32)> = Vec::new();
+            // The soft halos of bodies too small to read, drawn together after the bodies.
+            let mut small_halos: Vec<([f32; 3], f32, [u8; 3], u8)> = Vec::new();
             let mut flashes: Vec<([f32; 3], f32, f32)> = Vec::new();
             for (placed, &radius) in bodies_placed.iter().zip(&drawn) {
                 let body = &universe.bodies[placed.body];
@@ -851,15 +870,12 @@ impl Scene {
                 // Never smaller than a few pixels, and a soft halo below that.
                 if body.kind != BodyViewKind::Star && radius < per_pixel * HALO_BELOW_PIXELS {
                     let faint = 1.0 - radius / (per_pixel * HALO_BELOW_PIXELS);
-                    sprite(
-                        &mut world,
-                        camera,
-                        &space.glow,
+                    small_halos.push((
                         placed.pos,
                         per_pixel * HALO_PIXELS,
                         colour,
                         (((120.0 * faint) + 30.0) * pass.detail) as u8,
-                    );
+                    ));
                 }
                 if matches!(body.kind, BodyViewKind::Habitable | BodyViewKind::Celestial) {
                     halos.push((placed.pos, radius));
@@ -889,6 +905,14 @@ impl Scene {
                     icons.push((placed.pos, radius, r.icon.clone(), per_pixel));
                 }
             }
+            if !small_halos.is_empty() {
+                begin_sprite_run();
+                for (pos, size, colour, alpha) in small_halos {
+                    sprite_in_run(&mut world, camera, &space.glow, pos, size, colour, alpha);
+                }
+                end_sprite_run();
+            }
+            crate::prof::mark("p2_bodies");
             // Every habitable planet wears an atmosphere halo, lit from the star at the origin.
             if known && pass.detail > 0.5 {
                 for (pos, radius) in halos {
@@ -914,6 +938,7 @@ impl Scene {
                     );
                 }
             }
+            crate::prof::mark("p3_flashes");
             let system_id = universe.systems.get(pass.index).map(|s| s.id);
             if let Some(system_id) = system_id {
                 let outermost = universe.system_outermost(system_id);
@@ -1208,6 +1233,7 @@ impl Scene {
                     .retain(|t| t.colour[3] > 0 && keeps(centroid(t)));
                 super::draw_overlay(&mut world, &overlay);
             }
+            crate::prof::mark("p5_ships_marks");
             // The glow of the star: additive, without writing depth; never wider on screen than
             // a soft disc, so seen from a planet it is a sun, not a sheet of light.
             if let Some(star) = bodies_placed
@@ -1225,7 +1251,8 @@ impl Scene {
                 } else {
                     (glow, 200.0)
                 };
-                sprite(
+                begin_sprite_run();
+                sprite_in_run(
                     &mut world,
                     camera,
                     &space.glow,
@@ -1234,7 +1261,7 @@ impl Scene {
                     star_colour,
                     a(150.0),
                 );
-                sprite(
+                sprite_in_run(
                     &mut world,
                     camera,
                     &space.glow,
@@ -1243,9 +1270,11 @@ impl Scene {
                     [255, 255, 255],
                     a(core),
                 );
+                end_sprite_run();
             }
         }
         set_clip_planes(DEFAULT_NEAR, DEFAULT_FAR);
+        crate::prof::mark("p6_ships_etc_end");
         drop(drawing);
         self.screen_bars.extend(ship_bars);
         if !part.first() {
@@ -1804,6 +1833,10 @@ fn nearest_gap(points: &[[f32; 3]]) -> f32 {
     nearest.sort_by(f32::total_cmp);
     nearest[nearest.len() / 2]
 }
+
+/// Least detail at which another system gets a pass of its own: below it every layer of the
+/// pass is barely visible, and the star map's halo stands for the system.
+const PASS_DETAIL_MIN: f32 = 0.004;
 
 /// Flushes what is queued and switches to additive blending without depth writes, for a run of
 /// [`sprite_in_run`] draws that [`end_sprite_run`] closes: one draw call for the whole run.
