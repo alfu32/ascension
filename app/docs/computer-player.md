@@ -227,6 +227,60 @@ Nothing above names a definition: types are found by component rows
 (harvester, gather site, builder, producer, trader, territory, weapons),
 technologies by their effects, modifiers and prerequisites.
 
+## At sea (task 97)
+
+Warships are the units that fight and move on water and on no ground (`Catalogue::sea_units`);
+they are never enlisted in an army on land, never count as intruders for the home guard, and
+the producers that train only them get no rally point on land. The naval manager (`navy.rs`)
+leads them as the army `Navy`.
+
+- **When.** The difficulty's rank is at least `sea.min_difficulty_rank` (default 1: the
+  easiest level stays ashore) and the player has water near its capital (beside a dock, or
+  within the capital's border), and an enemy can be reached from it by water: enemy warships
+  remembered on the same sea, or an enemy building with water the navy can sail to within a
+  warship's reach of it (a shore target). The dock itself is the construction manager's: it
+  wishes for every building that trains fighters when the player has none.
+- **How many.** `sea.navy_share_pct` (default 20) of the military target, or the enemy fleet
+  seen times `mil.attack_ratio_pct` when that is more (at most twice the share: an arms race
+  at sea leaves no army to win on land). The land army's target is the rest.
+- **Which class.** The warship with the best exchange against what it has seen: the enemy
+  warships and the aircraft that strike ships (before any is seen, one of every warship it
+  could train), and once the enemy fleet is beaten (a squadron of three, stronger than the
+  fleet seen by the attack ratio) the shore targets. The exchange is the production manager's
+  (damage dealt times staying power over damage suffered, at the water layer), divided by the
+  price twice: ships fight at range in numbers, where a fleet's strength grows with the square
+  of its count. A building a ship outranges cannot hurt it. Against line ships this picks the
+  escort, against a coast with towers and forts the line ship.
+- **Missions.** Enemy warships off the own coast (within a city's border and eight tiles) are
+  met by every sound ship. A squadron of three stronger than the enemy fleet by the attack
+  ratio hunts it. With the enemy fleet beaten, the ships that outrange the defences around the
+  nearest shore target (towers, forts and cities that fire at ships first, then cities, then
+  any building) sail to water within their reach of it and shell it, at least two of them;
+  the others keep the harbour. Nothing is hunted or shelled during the difficulty's grace
+  period. A navy that has lost strength below `mil.retreat_ratio_pct` of its strength when it
+  set off pulls back home for a minute (where the difficulty `retreats`).
+- **Repair.** A ship below 40 % of its hit points goes home to the harbour. When the player
+  can train a unit that heals ships and reaches them on the water (the repair drone), one is
+  kept and mends the most damaged ship at home; a ship there stays until 85 %. Before such a
+  unit, nothing mends a ship: a damaged ship keeps the harbour.
+
+### Measured (task 97)
+
+The duel map (`rom duel` without `--universe`: the fair one-world map, 160 tiles) is one
+continent ringed by sea, so both starts are on the coast in most seeds; no new option was
+needed. `sea_duel_report` plays seeds 1–10 of it with two `balanced:moderate` players and
+conquest on (player one always the first side; the map is not redrawn for fairness as
+`rom duel` does): 183 and 177 warships trained, 83 and 118 sunk, 26 and 19 enemy buildings
+shelled from the sea, of which 22 and 12 fell; 7–2, one draw.
+
+| Duel, 100 seeds | Before (0.0.87) | With the navy |
+| --- | --- | --- |
+| `balanced:moderate` vs `balanced:easiest` | 97–0, 3 draws, mean tick 46910 | 95–0, 5 draws, mean tick 52532 |
+| `balanced:moderate` mirror | 51–42, 7 draws, mean tick 64178 | 50–41, 9 draws, mean tick 67173 |
+
+The easiest level stays ashore, so against it the moderate player's navy is land army it
+does not have: its wins come about five game minutes later on average.
+
 ## Bounded cost
 
 A thought costs about 1–2 ms of processor time on the i7-6700HQ; the worst
@@ -1143,6 +1197,10 @@ fighters stood near the stand-in's capital then.
 - `crates/rom-ai/tests/governor.rs` — a governor keeps fifteen sites in its colony's area and
   rebuilds them, twice alike; paused it waits, without means it names the price; a brain in the
   abundance age founds a colony and turns a paused governor back on (task 73).
+- `crates/rom-ai/tests/navy.rs` — on a strait both sides train warships and keep them out of
+  the armies on land; against enemy line ships the class chosen sinks them at equal cost; the
+  same sea match twice gives equal hashes; `sea_duel_report` (ignored) plays the 10-seed sea
+  duel of task 97.
 - `crates/rom-ai/tests/ages.rs` — the second age in the ordinary run; every
   profile to the third age on seeds 1–5 with
   `cargo test --release -p rom-ai --test ages -- --ignored`.

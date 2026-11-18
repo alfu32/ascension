@@ -3241,6 +3241,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.armour_belts'),(SELECT id FROM def WHERE key='res.wealth'),1000,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.armour_belts'),(SELECT id FROM def WHERE key='res.knowledge'),500,0);
 INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.armour_belts'),'hp','pct',25,(SELECT id FROM tag WHERE key='line_ship'));
+INSERT INTO ai_weight_key VALUES ('sea.navy_share_pct',20,'share of the military target kept at sea while an enemy can be reached by water'), ('sea.min_difficulty_rank',1,'difficulties of a lower rank stay ashore');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.1'),'research','research',1,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.civic.1'),'research','research',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.commerce.1'),'research','research',3,0);

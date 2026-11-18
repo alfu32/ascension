@@ -3,7 +3,7 @@
 //! Everything here comes from component rows, effects and prerequisites; no definition is
 //! looked up by key.
 
-use rom_rules::{DefId, EntityClass, ProductionMode, Rules, TechEffectKind, TechKind};
+use rom_rules::{DefId, EntityClass, Layer, ProductionMode, Rules, TechEffectKind, TechKind};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Largest radius, in tiles, of a building-site search around a city.
@@ -30,6 +30,9 @@ pub(crate) struct Catalogue {
     pub node_terrains: BTreeSet<DefId>,
     /// Tile offsets around a centre, nearest first.
     pub spiral: Vec<(i32, i32)>,
+    /// Fighting unit types that move on water and on no ground: warships, the naval
+    /// manager's (task 97).
+    pub sea_units: BTreeSet<DefId>,
 }
 
 impl Catalogue {
@@ -57,6 +60,28 @@ impl Catalogue {
                         .entry(harvester.resource_id)
                         .or_default()
                         .push(et.id);
+                }
+            }
+            if crate::production::is_military(rules, et.id)
+                && let Some(class) = et.movement.as_ref().map(|m| m.movement_class_id)
+            {
+                let crosses = |layer: Layer| {
+                    rules
+                        .movement_class_terrain
+                        .get(&class)
+                        .into_iter()
+                        .flatten()
+                        .any(|row| {
+                            row.speed_pct > 0
+                                && rules
+                                    .terrains
+                                    .get(&row.terrain_id)
+                                    .is_some_and(|t| t.layer == layer)
+                        })
+                };
+                let flies = rules.movement_classes.get(&class).is_some_and(|c| c.flies);
+                if !flies && crosses(Layer::Fluid) && !crosses(Layer::Ground) {
+                    c.sea_units.insert(et.id);
                 }
             }
             if et.class == EntityClass::Building
@@ -98,6 +123,11 @@ impl Catalogue {
         c.spiral
             .sort_by_key(|(dx, dy)| (dx * dx + dy * dy, *dy, *dx));
         c
+    }
+
+    /// Whether a type is a warship: it fights, and moves on water only.
+    pub fn is_sea_unit(&self, id: DefId) -> bool {
+        self.sea_units.contains(&id)
     }
 
     /// The first type of the upgrade line `id` belongs to.

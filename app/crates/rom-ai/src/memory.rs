@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// same layout without the armies, the scouting record and the fleet; version 2 (task 61)
 /// ends after the fleet, without the age clock (task 65); version 3 ends after the age
 /// clock, without the measured defences, the enemy peak and the rally moves (task 67). All
-/// still read.
+/// still read. The navy (task 97) is one more role code in the same layout.
 pub(crate) const VERSION: u32 = 4;
 
 /// What an army is for.
@@ -32,16 +32,19 @@ pub enum Role {
     Scout,
     /// Warships: escort claimed bodies, contest the enemy's and strike enemy orbits.
     Escort,
+    /// Ships at sea: guard the coast, hunt enemy ships and shell the shore (task 97).
+    Navy,
 }
 
 impl Role {
     /// Every role, in the order armies are served.
-    pub const ALL: [Role; 5] = [
+    pub const ALL: [Role; 6] = [
         Role::Defend,
         Role::Attack,
         Role::Raid,
         Role::Scout,
         Role::Escort,
+        Role::Navy,
     ];
 
     fn code(self) -> u8 {

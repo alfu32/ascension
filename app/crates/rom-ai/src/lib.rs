@@ -10,6 +10,7 @@
 //! production), fights with armies (defence, attack, raids, scouting, siege, formations) and,
 //! from the starfaring ages, flies: survey ships claim resource bodies, warships escort and
 //! contest them and attack enemy orbits, transports carry armies and found colonies.
+//! Where an enemy can be reached by water, a naval manager keeps a small navy (task 97).
 //!
 //! The [`governor`] of an automated colony is separate from the brains: it runs for every
 //! owner, people included (`run_governors`), and keeps the colony's sites standing.
@@ -24,6 +25,7 @@ mod economy;
 mod fleet;
 pub mod governor;
 mod memory;
+mod navy;
 mod opening;
 mod plan;
 mod production;
@@ -83,6 +85,11 @@ pub(crate) struct Weights {
     pub scouts: i64,
     /// `space.claim_eagerness`: priority of resource bodies once in space.
     pub claim: i64,
+    /// `sea.navy_share_pct`: share of the military target kept at sea when an enemy can be
+    /// reached by water (task 97).
+    pub sea_share: i64,
+    /// `sea.min_difficulty_rank`: the lowest difficulty rank that goes to sea.
+    pub sea_min_rank: i64,
 }
 
 /// A player's state in a few numbers, for match reports.
