@@ -121,6 +121,44 @@ fn owned(w: &World, player: PlayerId) -> usize {
     w.entities().filter(|e| e.owner == player).count()
 }
 
+/// A match started in a later age records no age advances; the ages reached count for them,
+/// and an advance beyond the player's age still does not.
+#[test]
+fn a_match_started_in_the_last_age_may_ascend_without_recorded_age_advances() {
+    let (mut w, library, tech) = ready_world(None);
+    let rules = w.rules.clone();
+    let advances: Vec<DefId> = rules
+        .ascension_requirements()
+        .into_iter()
+        .filter(|t| rules.techs[t].kind == rom_rules::TechKind::Age)
+        .collect();
+    assert!(!advances.is_empty());
+    let p = w.players.get_mut(&P1).unwrap();
+    for t in &advances {
+        p.techs.remove(t);
+    }
+    assert!(w.ascension_ready(P1));
+    let p = &w.players[&P1];
+    assert!(
+        rules
+            .ascension_missing(p.faction, p.age, &p.techs)
+            .is_empty()
+    );
+    // One age short of the last: the advance to it is still missing, and only that.
+    let last = rules.ages[&p.age].ordinal;
+    let earlier = rules
+        .ages
+        .values()
+        .find(|a| a.ordinal == last - 1)
+        .unwrap()
+        .id;
+    w.players.get_mut(&P1).unwrap().age = earlier;
+    let p = &w.players[&P1];
+    assert_eq!(rules.ascension_missing(p.faction, p.age, &p.techs).len(), 1);
+    assert!(!w.ascension_ready(P1));
+    assert_eq!(research(&mut w, library, tech), Err(SimError::Locked));
+}
+
 #[test]
 fn the_library_offers_the_ascension_only_once_everything_else_is_researched() {
     let (mut w, library, tech) = ready_world(None);

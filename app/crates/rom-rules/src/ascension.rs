@@ -37,11 +37,38 @@ impl Rules {
             .collect()
     }
 
-    /// Whether a player of `faction` with `researched` has every technology the library
-    /// offers it: each one available to the faction is researched (a repeatable one at least
-    /// once), and of an exclusive group any one member counts for the whole group.
-    pub fn ascension_ready(&self, faction: DefId, researched: &BTreeMap<DefId, u32>) -> bool {
-        let done = |id: &DefId| researched.get(id).is_some_and(|n| *n > 0);
+    /// Whether a player of `faction` in `age` with `researched` has every technology the
+    /// library offers it (see [`Rules::ascension_missing`]).
+    pub fn ascension_ready(
+        &self,
+        faction: DefId,
+        age: DefId,
+        researched: &BTreeMap<DefId, u32>,
+    ) -> bool {
+        self.ascension_missing(faction, age, researched).is_empty()
+    }
+
+    /// The library technologies a player of `faction` in `age` with `researched` still lacks
+    /// before it may ascend, in id order. Each one available to the faction must be researched
+    /// (a repeatable one at least once); of an exclusive group any one member counts for the
+    /// whole group; an age advance counts once the player has reached its age, however it got
+    /// there (a match started in a later age records no advances).
+    pub fn ascension_missing(
+        &self,
+        faction: DefId,
+        age: DefId,
+        researched: &BTreeMap<DefId, u32>,
+    ) -> Vec<DefId> {
+        let reached = self.ages.get(&age).map_or(i64::MIN, |a| a.ordinal);
+        let done = |id: &DefId| {
+            researched.get(id).is_some_and(|n| *n > 0)
+                || self.tech_effects.get(id).into_iter().flatten().any(|e| {
+                    e.effect == TechEffectKind::SetAge
+                        && e.target_def_id
+                            .and_then(|a| self.ages.get(&a))
+                            .is_some_and(|a| a.ordinal <= reached)
+                })
+        };
         let required = self.ascension_requirements();
         let groups: BTreeSet<&str> = required
             .iter()
@@ -49,12 +76,15 @@ impl Rules {
             .map(|id| self.techs[id].exclusive_group.as_str())
             .filter(|group| !group.is_empty())
             .collect();
-        required.iter().all(|id| {
-            let group = self.techs[id].exclusive_group.as_str();
-            done(id)
-                || !self.is_available(*id, faction)
-                || (!group.is_empty() && groups.contains(group))
-        })
+        required
+            .into_iter()
+            .filter(|id| {
+                let group = self.techs[id].exclusive_group.as_str();
+                !(done(id)
+                    || !self.is_available(*id, faction)
+                    || (!group.is_empty() && groups.contains(group)))
+            })
+            .collect()
     }
 
     /// What a player gets on descent, per base resource in id order: for each resource the

@@ -78,13 +78,8 @@ pub(crate) fn button_state(world: &World, def: DefId, pending: bool) -> ButtonSt
     // The ascension waits for everything else at the library (task 76).
     if rules.ascends(def) && !world.ascension_ready(player.id) {
         let left = rules
-            .ascension_requirements()
-            .into_iter()
-            .filter(|t| {
-                rules.is_available(*t, player.faction)
-                    && player.techs.get(t).is_none_or(|n| *n == 0)
-            })
-            .count();
+            .ascension_missing(player.faction, player.age, &player.techs)
+            .len();
         return ButtonState::Locked {
             reason: format!("Needs every library technology ({left} left)"),
         };
