@@ -264,6 +264,23 @@ leads them as the army `Navy`.
   kept and mends the most damaged ship at home; a ship there stays until 85 %. Before such a
   unit, nothing mends a ship: a damaged ship keeps the harbour.
 
+### Measured (task 97)
+
+The duel map (`rom duel` without `--universe`: the fair one-world map, 160 tiles) is one
+continent ringed by sea, so both starts are on the coast in most seeds; no new option was
+needed. `sea_duel_report` plays seeds 1–10 of it with two `balanced:moderate` players and
+conquest on (player one always the first side; the map is not redrawn for fairness as
+`rom duel` does): 183 and 177 warships trained, 83 and 118 sunk, 26 and 19 enemy buildings
+shelled from the sea, of which 22 and 12 fell; 7–2, one draw.
+
+| Duel, 100 seeds | Before (0.0.87) | With the navy |
+| --- | --- | --- |
+| `balanced:moderate` vs `balanced:easiest` | 97–0, 3 draws, mean tick 46910 | 95–0, 5 draws, mean tick 52532 |
+| `balanced:moderate` mirror | 51–42, 7 draws, mean tick 64178 | 50–41, 9 draws, mean tick 67173 |
+
+The easiest level stays ashore, so against it the moderate player's navy is land army it
+does not have: its wins come about five game minutes later on average.
+
 ## Bounded cost
 
 A thought costs about 1–2 ms of processor time on the i7-6700HQ; the worst
