@@ -1,0 +1,15 @@
+# Task 95, replayed by --script in universe mode (--players 2 --ai none, seed 2, --sun fixed):
+# on seed 2 the sea lies west of player one's city: four frigates of player one and three
+# ships of the line of player two five tiles apart exchange broadsides (the frigates every 20
+# ticks, the ships of the line every 40); slowed to a crawl from
+# tick 34 for the volley at tick 40. Screenshot: --seed 2 --size 1280x800 --after 21 (cropped).
+0 grant-age age.enlightenment
+0 place 1 unit.frigate @-14,-6
+0 place 1 unit.frigate @-14,-2
+0 place 1 unit.frigate @-14,2
+0 place 1 unit.frigate @-14,6
+0 place 2 unit.ship_of_the_line @-19,-4
+0 place 2 unit.ship_of_the_line @-19,0
+0 place 2 unit.ship_of_the_line @-19,4
+1 speed 100
+34 speed 2

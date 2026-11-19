@@ -1119,6 +1119,10 @@ const FORGET_AFTER: u64 = 200;
 pub struct Motions {
     /// Position, tick it last moved, tick it was last seen; by entity id.
     seen: BTreeMap<u32, (Pos, u64, u64)>,
+    /// Where each entity stood at its last snapshot (its point in orbit and height there for a
+    /// ship aloft), and the tick (task 95): a shot that kills its target at once is still drawn
+    /// to where the target fell.
+    places: BTreeMap<u32, (Pos, f32, u64)>,
 }
 
 impl Motions {
@@ -1146,6 +1150,8 @@ impl Motions {
     fn prune(&mut self, tick: u64) {
         if tick.is_multiple_of(FORGET_AFTER) {
             self.seen
+                .retain(|_, (_, _, seen)| tick.saturating_sub(*seen) < FORGET_AFTER);
+            self.places
                 .retain(|_, (_, _, seen)| tick.saturating_sub(*seen) < FORGET_AFTER);
         }
     }
@@ -1235,6 +1241,10 @@ pub fn snapshot_on(
         if !on_body || entity.container_id.is_some() || entity.is_inside() {
             continue;
         }
+        let (place, height) = place_of(world, entity);
+        motions
+            .places
+            .insert(entity.id.0, (place, height, world.tick()));
         let moving = motions.moving(entity, world.tick());
         let known_ground = || {
             entity.owner == PlayerId(0)
@@ -1271,10 +1281,7 @@ pub fn snapshot_on(
         // Orbital craft are drawn like ships while they climb, orbit and come down.
         view.spacecraft =
             world.is_spacecraft_type(entity.type_id) || world.is_craft_type(entity.type_id);
-        if let Some((target, flight)) = recent_shot(world, entity) {
-            view.shot_at = Some(target);
-            view.shot_flight = flight;
-        }
+        view.shot = recent_shot(world, entity, &motions.places);
         // Orbit is eight tiles up; a ship landing or lifting off is drawn on its way.
         let altitude = world
             .altitude_pct(entity.id)
@@ -1286,15 +1293,6 @@ pub fn snapshot_on(
             view.y = orbit.pos.y as f32 / 1000.0;
             view.facing_deg = f32::from(orbit.facing);
             view.altitude = altitude.max(0.05);
-            view.beam_target = orbit
-                .last_shot
-                .as_ref()
-                .filter(|shot| world.tick().saturating_sub(shot.tick) <= 20)
-                .map(|shot| SurfacePos {
-                    face: shot.target.face,
-                    x: i64::from(shot.target.x),
-                    y: i64::from(shot.target.y),
-                });
         }
         if !view.building {
             view.activity = activity_of(world, entity, moving);
@@ -1322,9 +1320,7 @@ pub fn snapshot_on(
                 y: building.pos.y as f32 / 1000.0,
                 facing_deg: 0.0,
                 altitude: 0.0,
-                beam_target: None,
-                shot_at: None,
-                shot_flight: None,
+                shot: None,
                 spacecraft: false,
                 hp_frac: 1.0,
                 building: true,
@@ -1371,9 +1367,7 @@ pub fn snapshot_on(
             y: wreck.pos.y as f32 / 1000.0,
             facing_deg: 0.0,
             altitude: 0.0,
-            beam_target: None,
-            shot_at: None,
-            shot_flight: None,
+            shot: None,
             spacecraft: false,
             // No health bar over what is no longer there.
             hp_frac: 1.0,
@@ -1400,44 +1394,153 @@ pub fn snapshot_on(
     }
 }
 
-/// The entity `entity` fired at in the last few ticks, when the shot went to or from orbit or
-/// came from a building (a defence's arrows and gunfire), with how far a projectile has flown;
-/// shots from orbit at the ground have their own beam (`beam_target`).
-fn recent_shot(world: &World, entity: &Entity) -> Option<(u32, Option<f32>)> {
+/// Where `entity` stands as the views place it: its point in orbit and the orbit's height for a
+/// ship aloft, else its position on the ground.
+fn place_of(world: &World, entity: &Entity) -> (Pos, f32) {
+    match world.orbit(entity.id) {
+        Some(orbit) => (orbit.pos, ORBIT_HEIGHT),
+        None => (entity.pos, 0.0),
+    }
+}
+
+/// Ticks a shot stays in the snapshots after it was fired (after it lands, for a projectile the
+/// simulation flies), so the render thread sees each one even when it skips a snapshot.
+const SHOT_WINDOW: u64 = 8;
+
+/// What the views draw for a weapon's `et_weapon.projectile` (task 95); `None` for a melee blow.
+pub fn projectile_kind(projectile: rom_rules::Projectile) -> Option<rom_render::ProjectileKind> {
+    use rom_render::ProjectileKind as Kind;
+    use rom_rules::Projectile as P;
+    Some(match projectile {
+        P::None => return None,
+        P::Arrow => Kind::Arrow,
+        P::Bolt => Kind::Bolt,
+        P::Stone => Kind::Stone,
+        P::Bullet => Kind::Bullet,
+        P::Shell => Kind::Shell,
+        P::Rocket => Kind::Rocket,
+        P::Missile => Kind::Missile,
+        P::Torpedo => Kind::Torpedo,
+        P::Beam => Kind::Beam,
+        P::Plasma => Kind::Plasma,
+        P::Railgun => Kind::Railgun,
+    })
+}
+
+/// The latest shot of `entity` while its projectile may still be in flight (task 95): what its
+/// weapon throws, at what, and the ticks the simulation fired it in and lands it in. Read from
+/// the weapon's cooldown; presentation only.
+fn recent_shot(
+    world: &World,
+    entity: &Entity,
+    places: &BTreeMap<u32, (Pos, f32, u64)>,
+) -> Option<rom_render::ShotView> {
     let et = &world.rules().entity_types[&entity.type_id];
+    let weapons = et
+        .weapons
+        .iter()
+        .filter(|w| w.projectile != rom_rules::Projectile::None);
+    let (fired, weapon) = weapons
+        .filter_map(|w| {
+            let ready = entity.cooldowns.get(&w.id)?;
+            Some((ready.checked_sub(w.cooldown_ticks.max(1) as u64)?, w))
+        })
+        .max_by_key(|(fired, w)| (*fired, std::cmp::Reverse(w.slot)))?;
+    let kind = projectile_kind(weapon.projectile)?;
+    let since = world.tick().checked_sub(fired)?;
+    if since > SHOT_WINDOW + MAX_DRAWN_TRAVEL {
+        return None;
+    }
     let ordered = entity
         .orders()
         .front()
         .filter(|o| matches!(o.kind.as_str(), "attack" | "attack_move" | "patrol"))
         .and_then(|o| o.target_entity);
-    let target = ordered.or(entity.aim)?;
-    let building = et.class == EntityClass::Building;
-    if !building && world.orbit(entity.id).is_none() && world.orbit(target).is_none() {
+    let aimed = ordered.or(entity.aim);
+    let target = aimed.and_then(|id| world.entity(id));
+    // Where it struck: the target; where it stood at the last snapshot when the shot killed it
+    // at once; or the ground point of a shot from orbit.
+    let (at, altitude) = match (target, aimed) {
+        (Some(t), _) => place_of(world, t),
+        (None, Some(id)) => places.get(&id.0).map(|&(at, height, _)| (at, height))?,
+        (None, None) => (
+            world
+                .orbit(entity.id)
+                .and_then(|o| o.last_shot.as_ref())
+                .filter(|shot| shot.tick == fired)?
+                .target,
+            0.0,
+        ),
+    };
+    let travel = match target {
+        Some(t) if weapon.projectile_speed > 0 => travel_ticks(world, entity, weapon, t)?,
+        _ => 0,
+    };
+    if since > travel + SHOT_WINDOW {
         return None;
     }
-    let (fired, weapon) = et
-        .weapons
-        .iter()
-        .filter(|w| !w.orbit_only)
-        .filter_map(|w| {
-            let ready = entity.cooldowns.get(&w.id)?;
-            Some((ready.saturating_sub(w.cooldown_ticks.max(1) as u64), w))
-        })
-        .max_by_key(|(fired, _)| *fired)?;
-    let since = world.tick().saturating_sub(fired);
-    if weapon.projectile_speed <= 0 {
-        return (since <= 6).then_some((target.0, None));
-    }
-    // A projectile is drawn on its way: the travel time is the simulation's.
-    let to = world.entity(target)?.pos;
-    let distance = world.distance(entity.pos, to)?;
-    let rate = world
-        .rules()
-        .constant("sim.ticks_per_second")
-        .unwrap_or(20)
-        .max(1) as u64;
-    let travel = (distance * rate / weapon.projectile_speed as u64).max(1);
-    (since <= travel).then_some((target.0, Some(since as f32 / travel as f32)))
+    Some(rom_render::ShotView {
+        kind,
+        target: aimed.map(|id| id.0),
+        face: at.face,
+        x: at.x as f32 / 1000.0,
+        y: at.y as f32 / 1000.0,
+        altitude,
+        fired_tick: fired,
+        land_tick: fired + travel,
+        count: u8::try_from(weapon.shots.clamp(1, 255)).unwrap_or(1),
+    })
+}
+
+/// Longest flight, in ticks, a projectile the simulation flies is reported for.
+const MAX_DRAWN_TRAVEL: u64 = 400;
+
+/// Ticks the simulation gives a shot of `weapon` from `entity` at `target` to land, measured as
+/// it measures them when it fires: from the weapon's origin (the orbit of a weapon that fires
+/// only from there) to the target's footprint or edge, its ground point when it orbits the same
+/// planet. `None` when the target is out of reach.
+pub fn travel_ticks(
+    world: &World,
+    entity: &Entity,
+    weapon: &rom_rules::Weapon,
+    target: &Entity,
+) -> Option<u64> {
+    let rules = world.rules();
+    let from = match world.orbit(entity.id) {
+        Some(orbit) if weapon.orbit_only => orbit.pos,
+        _ => entity.pos,
+    };
+    let to = match world.orbit(target.id) {
+        Some(orbit) if orbit.body == from.body => orbit.pos,
+        _ => target.pos,
+    };
+    let et = &rules.entity_types[&target.type_id];
+    let distance = if et.class == EntityClass::Building {
+        // The nearest point of the footprint on its face; across a face edge, the centre less
+        // half the footprint.
+        let (half_w, half_h) = (et.footprint_w * 500, et.footprint_h * 500);
+        if from.body == to.body && from.face == to.face {
+            let clamp = |p: i32, c: i32, half: i64| {
+                i64::from(p).clamp(i64::from(c) - half, i64::from(c) + half) as i32
+            };
+            let near = Pos {
+                x: clamp(from.x, to.x, half_w),
+                y: clamp(from.y, to.y, half_h),
+                ..to
+            };
+            world.distance(from, near)?
+        } else {
+            world
+                .distance(from, to)?
+                .saturating_sub(half_w.min(half_h).max(0) as u64)
+        }
+    } else {
+        world
+            .distance(from, to)?
+            .saturating_sub(et.radius.max(0) as u64)
+    };
+    let rate = rules.constant("sim.ticks_per_second").unwrap_or(20).max(1) as u64;
+    Some((distance * rate / weapon.projectile_speed.max(1) as u64).max(1))
 }
 
 fn view_of(
@@ -1455,9 +1558,7 @@ fn view_of(
         y: entity.pos.y as f32 / 1000.0,
         facing_deg: f32::from(entity.facing),
         altitude: 0.0,
-        beam_target: None,
-        shot_at: None,
-        shot_flight: None,
+        shot: None,
         spacecraft: false,
         hp_frac: (entity.hp as f32 / et.hp.max(1) as f32).clamp(0.0, 1.0),
         building: et.class == EntityClass::Building,
@@ -2325,5 +2426,122 @@ mod save_tests {
         let (loaded, _, _) = load_match(&auto.path, &rules).expect("autosave loads");
         assert!(loaded.tick() >= 1_200);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn every_weapon_takes_its_projectile_kind_from_data() {
+        let rules = crate::terrain::load_rules().expect("rules");
+        let mut weapons = 0;
+        for et in rules.entity_types.values() {
+            for weapon in &et.weapons {
+                weapons += 1;
+                // A weapon with a reach throws something; a melee blow throws nothing.
+                assert_eq!(
+                    projectile_kind(weapon.projectile).is_some(),
+                    weapon.range_max > 0,
+                    "weapon {} of type {:?}",
+                    weapon.id,
+                    et.id
+                );
+            }
+        }
+        assert!(weapons > 50);
+        // The kind follows the row, whatever the type: change it in the data and it changes.
+        let conn = rom_rules::build_rules_db(
+            include_str!("../../../db/schema.sql"),
+            &crate::terrain::seed_with_models(),
+        )
+        .expect("database");
+        conn.execute_batch(
+            "UPDATE et_weapon SET projectile='torpedo' WHERE entity_type_id=(SELECT id FROM def \
+             WHERE key='unit.archer');",
+        )
+        .expect("update");
+        let changed = rom_rules::Rules::load(&conn).expect("rules");
+        let archer = changed.id_of("unit.archer").unwrap();
+        let weapon = &changed.entity_types[&archer].weapons[0];
+        assert_eq!(
+            projectile_kind(weapon.projectile),
+            Some(rom_render::ProjectileKind::Torpedo)
+        );
+        for kind in rom_render::ProjectileKind::ALL {
+            let sql = format!(
+                "UPDATE et_weapon SET projectile='{}' WHERE id={};",
+                kind.key(),
+                weapon.id
+            );
+            conn.execute_batch(&sql).expect("update");
+            let rules = rom_rules::Rules::load(&conn).expect("rules");
+            let weapon = &rules.entity_types[&archer].weapons[0];
+            assert_eq!(projectile_kind(weapon.projectile), Some(kind));
+        }
+    }
+
+    #[test]
+    fn a_projectile_lands_when_the_simulation_lands_it() {
+        let rules = Arc::new(crate::terrain::load_rules().expect("rules"));
+        let mut world = World::battle_scenario(Arc::clone(&rules), 1, 0).expect("scenario");
+        let id = |key: &str| rules.id_of(key).unwrap();
+        // A city's arrows fly (`projectile_speed`): at a farm (a footprint) and at a spearman
+        // standing its ground (an edge).
+        let city = world
+            .spawn(id("bld.city"), PLAYER, Pos::flat(30_000, 30_000))
+            .unwrap();
+        world
+            .spawn(id("bld.farm"), PlayerId(2), Pos::flat(37_500, 31_000))
+            .unwrap();
+        let spearman = world
+            .spawn(id("unit.spearman"), PlayerId(2), Pos::flat(30_500, 37_800))
+            .unwrap();
+        let hold = rules
+            .stances
+            .values()
+            .find(|s| s.behavior == "stand_ground")
+            .unwrap()
+            .id;
+        world.set_stance(PlayerId(2), spearman, hold).unwrap();
+        let mut targets = std::collections::BTreeSet::new();
+        let mut checked = 0;
+        let models = crate::looks::ModelBook::default();
+        let mut motions = Motions::default();
+        for _ in 0..1_200 {
+            if checked >= 12 {
+                break;
+            }
+            world.step();
+            let snapshot = snapshot_on(
+                &world,
+                world.surfaces()[0].body(),
+                &world.visible_entities(PLAYER),
+                &models,
+                &mut motions,
+            );
+            let Some(shot) = snapshot
+                .entities
+                .iter()
+                .find(|v| v.id == city.0)
+                .and_then(|v| v.shot)
+            else {
+                continue;
+            };
+            // The first snapshot after the shot, as the render thread first sees it.
+            if shot.fired_tick + 1 != world.tick() {
+                continue;
+            }
+            assert_eq!(shot.kind, rom_render::ProjectileKind::Arrow);
+            let target = shot.target.expect("aimed at an entity");
+            let hit = world
+                .snapshot()
+                .hits
+                .into_iter()
+                .find(|h| h.attacker == city && h.target.0 == target)
+                .expect("the hit is on its way");
+            assert!(hit.land_tick > shot.fired_tick);
+            assert_eq!(shot.land_tick, hit.land_tick, "shot at {target}");
+            targets.insert(target);
+            checked += 1;
+        }
+        assert!(checked >= 3, "{checked} shots");
+        assert!(targets.len() == 2 || checked >= 10, "{targets:?}");
     }
 }

@@ -585,7 +585,7 @@ INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHER
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.city'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.city'),(SELECT id FROM tag WHERE key='city'));
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) VALUES ((SELECT id FROM def WHERE key='bld.city'),1,40000,16000,1);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile_speed) VALUES ((SELECT id FROM def WHERE key='bld.city'),8,(SELECT id FROM damage_class WHERE key='pierce'),10000,30,25000);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile_speed,projectile) VALUES ((SELECT id FROM def WHERE key='bld.city'),8,(SELECT id FROM damage_class WHERE key='pierce'),10000,30,25000,'arrow');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.city')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.city')),'fluid');
 INSERT INTO et_container(entity_type_id,capacity,heals,adds_firepower) VALUES ((SELECT id FROM def WHERE key='bld.city'),10,1,1);
@@ -759,7 +759,7 @@ INSERT INTO et_producer(entity_type_id) VALUES ((SELECT id FROM def WHERE key='b
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.tower'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.tower'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.tower'),(SELECT id FROM tag WHERE key='tower'));
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile_speed) VALUES ((SELECT id FROM def WHERE key='bld.tower'),10,(SELECT id FROM damage_class WHERE key='pierce'),10000,30,25000);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile_speed,projectile) VALUES ((SELECT id FROM def WHERE key='bld.tower'),10,(SELECT id FROM damage_class WHERE key='pierce'),10000,30,25000,'arrow');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.tower')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.tower')),'fluid');
 INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.dock'),'building','military',1000,3,(SELECT id FROM armor_class WHERE key='structure'),14000,4,4,150,'per_type','none',0,(SELECT id FROM def WHERE key='age.ancient'));
@@ -802,7 +802,7 @@ INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHER
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.fort'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.fort'),(SELECT id FROM tag WHERE key='fort'));
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) VALUES ((SELECT id FROM def WHERE key='bld.fort'),0,14000,0,0);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile_speed) VALUES ((SELECT id FROM def WHERE key='bld.fort'),12,(SELECT id FROM damage_class WHERE key='pierce'),10000,30,25000);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile_speed,projectile) VALUES ((SELECT id FROM def WHERE key='bld.fort'),12,(SELECT id FROM damage_class WHERE key='pierce'),10000,30,25000,'arrow');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fort')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fort')),'fluid');
 INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.factory'),'building','military',2700,3,(SELECT id FROM armor_class WHERE key='structure'),15000,4,4,275,'per_type','none',0,(SELECT id FROM def WHERE key='age.industrial'));
@@ -856,7 +856,7 @@ INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE 
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.bastion'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.tower');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id,layer,distance) SELECT (SELECT id FROM def WHERE key='bld.bastion'),rule,ref_def_id,layer,distance FROM placement_rule WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.tower');
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income) SELECT (SELECT id FROM def WHERE key='bld.bastion'),resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income FROM et_gather_site WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.tower');
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='bld.bastion'),20,(SELECT id FROM damage_class WHERE key='explosive'),10000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='bld.bastion'),20,(SELECT id FROM damage_class WHERE key='explosive'),10000,30,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bastion')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bastion')),'fluid');
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.up.bastion','Upgrade to Bastion');
@@ -875,7 +875,7 @@ INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE 
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.bunker'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bastion');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id,layer,distance) SELECT (SELECT id FROM def WHERE key='bld.bunker'),rule,ref_def_id,layer,distance FROM placement_rule WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bastion');
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income) SELECT (SELECT id FROM def WHERE key='bld.bunker'),resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income FROM et_gather_site WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bastion');
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='bld.bunker'),24,(SELECT id FROM damage_class WHERE key='explosive'),10000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='bld.bunker'),24,(SELECT id FROM damage_class WHERE key='explosive'),10000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bunker')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bunker')),'fluid');
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.up.bunker','Upgrade to Bunker');
@@ -894,7 +894,7 @@ INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE 
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.defence_turret'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bunker');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id,layer,distance) SELECT (SELECT id FROM def WHERE key='bld.defence_turret'),rule,ref_def_id,layer,distance FROM placement_rule WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bunker');
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income) SELECT (SELECT id FROM def WHERE key='bld.defence_turret'),resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income FROM et_gather_site WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.bunker');
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='bld.defence_turret'),28,(SELECT id FROM damage_class WHERE key='energy'),10000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='bld.defence_turret'),28,(SELECT id FROM damage_class WHERE key='energy'),10000,30,'beam');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.defence_turret')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.defence_turret')),'fluid');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.defence_turret')),'air');
@@ -914,7 +914,7 @@ INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE 
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.star_fort'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fort');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id,layer,distance) SELECT (SELECT id FROM def WHERE key='bld.star_fort'),rule,ref_def_id,layer,distance FROM placement_rule WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fort');
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income) SELECT (SELECT id FROM def WHERE key='bld.star_fort'),resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income FROM et_gather_site WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fort');
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='bld.star_fort'),20,(SELECT id FROM damage_class WHERE key='explosive'),10000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='bld.star_fort'),20,(SELECT id FROM damage_class WHERE key='explosive'),10000,30,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.star_fort')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.star_fort')),'fluid');
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.up.star_fort','Upgrade to Star Fort');
@@ -933,7 +933,7 @@ INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE 
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.fortress'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.star_fort');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id,layer,distance) SELECT (SELECT id FROM def WHERE key='bld.fortress'),rule,ref_def_id,layer,distance FROM placement_rule WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.star_fort');
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income) SELECT (SELECT id FROM def WHERE key='bld.fortress'),resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income FROM et_gather_site WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.star_fort');
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='bld.fortress'),24,(SELECT id FROM damage_class WHERE key='explosive'),10000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='bld.fortress'),24,(SELECT id FROM damage_class WHERE key='explosive'),10000,30,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fortress')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fortress')),'fluid');
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.up.fortress','Upgrade to Fortress');
@@ -952,7 +952,7 @@ INSERT INTO et_keeper(entity_type_id,capacity) SELECT (SELECT id FROM def WHERE 
 INSERT INTO et_territory(entity_type_id,is_city,border_radius,economic_radius,capturable) SELECT (SELECT id FROM def WHERE key='bld.citadel'),is_city,border_radius,economic_radius,capturable FROM et_territory WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fortress');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id,layer,distance) SELECT (SELECT id FROM def WHERE key='bld.citadel'),rule,ref_def_id,layer,distance FROM placement_rule WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fortress');
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income) SELECT (SELECT id FROM def WHERE key='bld.citadel'),resource_id,slots_base,slots_per_node,slots_max,node_radius,needs_node_terrain_id,self_income FROM et_gather_site WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.fortress');
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='bld.citadel'),30,(SELECT id FROM damage_class WHERE key='energy'),10000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='bld.citadel'),30,(SELECT id FROM damage_class WHERE key='energy'),10000,30,'plasma');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.citadel')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.citadel')),'fluid');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.citadel')),'air');
@@ -1012,7 +1012,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.m
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.musketeer'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.musketeer'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.musketeer'),(SELECT id FROM movement_class WHERE key='foot'),1250);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.musketeer'),13,(SELECT id FROM damage_class WHERE key='bullet'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.musketeer'),13,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.musketeer')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.musketeer'),'train','units',3,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.musketeer'),(SELECT id FROM def WHERE key='res.food'),58,1);
@@ -1028,7 +1028,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.f
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fusilier'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fusilier'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.fusilier'),(SELECT id FROM movement_class WHERE key='foot'),1250);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.fusilier'),14,(SELECT id FROM damage_class WHERE key='bullet'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.fusilier'),14,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.fusilier')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.fusilier'),'train','units',4,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.fusilier'),(SELECT id FROM def WHERE key='res.food'),64,1);
@@ -1044,7 +1044,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.r
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.rifleman'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.rifleman'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.rifleman'),(SELECT id FROM movement_class WHERE key='foot'),1250);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.rifleman'),15,(SELECT id FROM damage_class WHERE key='bullet'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.rifleman'),15,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.rifleman')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.rifleman'),'train','units',0,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.rifleman'),(SELECT id FROM def WHERE key='res.food'),70,1);
@@ -1060,7 +1060,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.i
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.infantry'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.infantry'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.infantry'),(SELECT id FROM movement_class WHERE key='foot'),1250);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.infantry'),17,(SELECT id FROM damage_class WHERE key='bullet'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.infantry'),17,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.infantry')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.infantry'),'train','units',1,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.infantry'),(SELECT id FROM def WHERE key='res.food'),76,1);
@@ -1076,7 +1076,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.a
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.assault_infantry'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.assault_infantry'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.assault_infantry'),(SELECT id FROM movement_class WHERE key='foot'),1250);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.assault_infantry'),18,(SELECT id FROM damage_class WHERE key='bullet'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.assault_infantry'),18,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.assault_infantry')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.assault_infantry'),'train','units',2,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.assault_infantry'),(SELECT id FROM def WHERE key='res.food'),82,1);
@@ -1092,7 +1092,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.c
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.combat_robot'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.combat_robot'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.combat_robot'),(SELECT id FROM movement_class WHERE key='wheeled'),1250);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.combat_robot'),19,(SELECT id FROM damage_class WHERE key='bullet'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.combat_robot'),19,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.combat_robot')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.combat_robot'),'train','units',3,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.combat_robot'),(SELECT id FROM def WHERE key='res.food'),88,1);
@@ -1108,7 +1108,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.e
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.exo_trooper'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.exo_trooper'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.exo_trooper'),(SELECT id FROM movement_class WHERE key='foot'),1250);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.exo_trooper'),21,(SELECT id FROM damage_class WHERE key='bullet'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.exo_trooper'),21,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.exo_trooper')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.exo_trooper'),'train','units',4,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.exo_trooper'),(SELECT id FROM def WHERE key='res.food'),94,1);
@@ -1124,7 +1124,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.m
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.marine'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.marine'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.marine'),(SELECT id FROM movement_class WHERE key='foot'),1250);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.marine'),22,(SELECT id FROM damage_class WHERE key='energy'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.marine'),22,(SELECT id FROM damage_class WHERE key='energy'),5000,30,'plasma');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.marine')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.marine'),'train','units',0,2);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.marine'),(SELECT id FROM def WHERE key='res.food'),100,2);
@@ -1140,7 +1140,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.s
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.shock_marine'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.shock_marine'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.shock_marine'),(SELECT id FROM movement_class WHERE key='foot'),1250);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.shock_marine'),25,(SELECT id FROM damage_class WHERE key='energy'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.shock_marine'),25,(SELECT id FROM damage_class WHERE key='energy'),5000,30,'plasma');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.shock_marine')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.shock_marine'),'train','units',1,2);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.shock_marine'),(SELECT id FROM def WHERE key='res.food'),112,2);
@@ -1156,7 +1156,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.s
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.slinger'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.slinger'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.slinger'),(SELECT id FROM movement_class WHERE key='foot'),1200);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.slinger'),7,(SELECT id FROM damage_class WHERE key='pierce'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.slinger'),7,(SELECT id FROM damage_class WHERE key='pierce'),5000,30,'stone');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.slinger')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.slinger'),'train','units',2,2);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.slinger'),(SELECT id FROM def WHERE key='res.food'),30,1);
@@ -1167,7 +1167,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.a
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.archer'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.archer'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.archer'),(SELECT id FROM movement_class WHERE key='foot'),1200);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.archer'),8,(SELECT id FROM damage_class WHERE key='pierce'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.archer'),8,(SELECT id FROM damage_class WHERE key='pierce'),5000,30,'arrow');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.archer')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.archer'),'train','units',3,2);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.archer'),(SELECT id FROM def WHERE key='res.food'),34,1);
@@ -1183,7 +1183,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.c
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.crossbowman'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.crossbowman'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.crossbowman'),(SELECT id FROM movement_class WHERE key='foot'),1200);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.crossbowman'),9,(SELECT id FROM damage_class WHERE key='pierce'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.crossbowman'),9,(SELECT id FROM damage_class WHERE key='pierce'),5000,30,'bolt');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.crossbowman')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.crossbowman'),'train','units',4,2);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.crossbowman'),(SELECT id FROM def WHERE key='res.food'),39,1);
@@ -1199,7 +1199,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.a
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.arquebusier'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.arquebusier'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.arquebusier'),(SELECT id FROM movement_class WHERE key='foot'),1200);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.arquebusier'),10,(SELECT id FROM damage_class WHERE key='bullet'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.arquebusier'),10,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.arquebusier')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.arquebusier'),'train','units_2',0,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.arquebusier'),(SELECT id FROM def WHERE key='res.food'),43,1);
@@ -1215,7 +1215,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.l
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.light_infantry'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.light_infantry'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.light_infantry'),(SELECT id FROM movement_class WHERE key='foot'),1200);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.light_infantry'),11,(SELECT id FROM damage_class WHERE key='bullet'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.light_infantry'),11,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.light_infantry')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.light_infantry'),'train','units_2',1,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.light_infantry'),(SELECT id FROM def WHERE key='res.food'),48,1);
@@ -1231,7 +1231,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.m
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.machine_gunner'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.machine_gunner'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.machine_gunner'),(SELECT id FROM movement_class WHERE key='foot'),1200);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.machine_gunner'),12,(SELECT id FROM damage_class WHERE key='bullet'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.machine_gunner'),12,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.machine_gunner')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.machine_gunner'),'train','units_2',2,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.machine_gunner'),(SELECT id FROM def WHERE key='res.food'),52,1);
@@ -1247,7 +1247,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.h
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.heavy_machine_gunner'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.heavy_machine_gunner'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.heavy_machine_gunner'),(SELECT id FROM movement_class WHERE key='foot'),1200);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.heavy_machine_gunner'),13,(SELECT id FROM damage_class WHERE key='bullet'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.heavy_machine_gunner'),13,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.heavy_machine_gunner')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.heavy_machine_gunner'),'train','units_2',3,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.heavy_machine_gunner'),(SELECT id FROM def WHERE key='res.food'),57,1);
@@ -1264,7 +1264,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.g
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.gun_drone'),(SELECT id FROM tag WHERE key='drone'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.gun_drone'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.gun_drone'),(SELECT id FROM movement_class WHERE key='wheeled'),1200);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.gun_drone'),14,(SELECT id FROM damage_class WHERE key='bullet'),6000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.gun_drone'),14,(SELECT id FROM damage_class WHERE key='bullet'),6000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.gun_drone')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.gun_drone'),'train','units_2',4,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.gun_drone'),(SELECT id FROM def WHERE key='res.food'),61,1);
@@ -1280,7 +1280,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.p
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.pulse_gunner'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.pulse_gunner'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.pulse_gunner'),(SELECT id FROM movement_class WHERE key='foot'),1200);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.pulse_gunner'),16,(SELECT id FROM damage_class WHERE key='energy'),6000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.pulse_gunner'),16,(SELECT id FROM damage_class WHERE key='energy'),6000,30,'plasma');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.pulse_gunner')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.pulse_gunner'),'train','units_2',0,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.pulse_gunner'),(SELECT id FROM def WHERE key='res.food'),70,1);
@@ -1296,7 +1296,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.b
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.beam_trooper'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.beam_trooper'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.beam_trooper'),(SELECT id FROM movement_class WHERE key='foot'),1200);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.beam_trooper'),18,(SELECT id FROM damage_class WHERE key='energy'),6000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.beam_trooper'),18,(SELECT id FROM damage_class WHERE key='energy'),6000,30,'beam');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.beam_trooper')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.beam_trooper'),'train','units_2',1,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.beam_trooper'),(SELECT id FROM def WHERE key='res.food'),79,1);
@@ -1312,7 +1312,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.a
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.anti_tank_rifleman'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.anti_tank_rifleman'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.anti_tank_rifleman'),(SELECT id FROM movement_class WHERE key='foot'),1100);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.anti_tank_rifleman'),24,(SELECT id FROM damage_class WHERE key='explosive'),6000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.anti_tank_rifleman'),24,(SELECT id FROM damage_class WHERE key='explosive'),6000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.anti_tank_rifleman')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.anti_tank_rifleman'),'train','units_2',2,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.anti_tank_rifleman'),(SELECT id FROM def WHERE key='res.food'),70,1);
@@ -1323,7 +1323,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.b
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.bazooka_team'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.bazooka_team'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.bazooka_team'),(SELECT id FROM movement_class WHERE key='foot'),1100);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.bazooka_team'),26,(SELECT id FROM damage_class WHERE key='explosive'),6000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.bazooka_team'),26,(SELECT id FROM damage_class WHERE key='explosive'),6000,30,'rocket');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.bazooka_team')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.bazooka_team'),'train','units_2',3,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.bazooka_team'),(SELECT id FROM def WHERE key='res.food'),76,1);
@@ -1339,7 +1339,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.m
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_team'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_team'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.missile_team'),(SELECT id FROM movement_class WHERE key='foot'),1100);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.missile_team'),28,(SELECT id FROM damage_class WHERE key='explosive'),6000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.missile_team'),28,(SELECT id FROM damage_class WHERE key='explosive'),6000,30,'missile');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.missile_team')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.missile_team'),'train','units_2',4,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.missile_team'),(SELECT id FROM def WHERE key='res.food'),82,1);
@@ -1355,7 +1355,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.r
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.railgun_team'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.railgun_team'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.railgun_team'),(SELECT id FROM movement_class WHERE key='foot'),1100);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.railgun_team'),32,(SELECT id FROM damage_class WHERE key='explosive'),6000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.railgun_team'),32,(SELECT id FROM damage_class WHERE key='explosive'),6000,30,'railgun');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.railgun_team')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.railgun_team'),'train','units_2',0,2);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.railgun_team'),(SELECT id FROM def WHERE key='res.food'),94,1);
@@ -1484,7 +1484,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.a
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.armoured_car'),(SELECT id FROM tag WHERE key='vehicle'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.armoured_car'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.armoured_car'),(SELECT id FROM movement_class WHERE key='wheeled'),1600);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.armoured_car'),21,(SELECT id FROM damage_class WHERE key='explosive'),4000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.armoured_car'),21,(SELECT id FROM damage_class WHERE key='explosive'),4000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.armoured_car')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),(SELECT id FROM def WHERE key='unit.armoured_car'),'train','units',0,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.armoured_car'),(SELECT id FROM def WHERE key='res.food'),105,2);
@@ -1502,7 +1502,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.s
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.scout_car'),(SELECT id FROM tag WHERE key='vehicle'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.scout_car'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.scout_car'),(SELECT id FROM movement_class WHERE key='wheeled'),1600);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.scout_car'),22,(SELECT id FROM damage_class WHERE key='explosive'),4000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.scout_car'),22,(SELECT id FROM damage_class WHERE key='explosive'),4000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.scout_car')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),(SELECT id FROM def WHERE key='unit.scout_car'),'train','units',1,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.scout_car'),(SELECT id FROM def WHERE key='res.food'),114,2);
@@ -1520,7 +1520,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.h
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.hovercraft'),(SELECT id FROM tag WHERE key='vehicle'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.hovercraft'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.hovercraft'),(SELECT id FROM movement_class WHERE key='wheeled'),1600);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.hovercraft'),26,(SELECT id FROM damage_class WHERE key='explosive'),4000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.hovercraft'),26,(SELECT id FROM damage_class WHERE key='explosive'),4000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.hovercraft')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),(SELECT id FROM def WHERE key='unit.hovercraft'),'train','units',2,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.hovercraft'),(SELECT id FROM def WHERE key='res.food'),132,2);
@@ -1538,7 +1538,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.g
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.grav_skimmer'),(SELECT id FROM tag WHERE key='vehicle'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.grav_skimmer'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.grav_skimmer'),(SELECT id FROM movement_class WHERE key='wheeled'),1600);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.grav_skimmer'),30,(SELECT id FROM damage_class WHERE key='explosive'),4000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.grav_skimmer'),30,(SELECT id FROM damage_class WHERE key='explosive'),4000,30,'plasma');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.grav_skimmer')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),(SELECT id FROM def WHERE key='unit.grav_skimmer'),'train','units',3,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.grav_skimmer'),(SELECT id FROM def WHERE key='res.food'),150,3);
@@ -1615,7 +1615,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.l
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.light_tank'),(SELECT id FROM tag WHERE key='vehicle'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.light_tank'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.light_tank'),(SELECT id FROM movement_class WHERE key='wheeled'),1600);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.light_tank'),21,(SELECT id FROM damage_class WHERE key='explosive'),4000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.light_tank'),21,(SELECT id FROM damage_class WHERE key='explosive'),4000,30,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.light_tank')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),(SELECT id FROM def WHERE key='unit.light_tank'),'train','units',4,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.light_tank'),(SELECT id FROM def WHERE key='res.food'),105,2);
@@ -1633,7 +1633,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.t
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.tank'),(SELECT id FROM tag WHERE key='vehicle'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.tank'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.tank'),(SELECT id FROM movement_class WHERE key='wheeled'),1600);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.tank'),22,(SELECT id FROM damage_class WHERE key='explosive'),4000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.tank'),22,(SELECT id FROM damage_class WHERE key='explosive'),4000,30,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.tank')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),(SELECT id FROM def WHERE key='unit.tank'),'train','units',0,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.tank'),(SELECT id FROM def WHERE key='res.food'),114,2);
@@ -1651,7 +1651,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.m
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.main_battle_tank'),(SELECT id FROM tag WHERE key='vehicle'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.main_battle_tank'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.main_battle_tank'),(SELECT id FROM movement_class WHERE key='wheeled'),1600);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.main_battle_tank'),24,(SELECT id FROM damage_class WHERE key='explosive'),4000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.main_battle_tank'),24,(SELECT id FROM damage_class WHERE key='explosive'),4000,30,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.main_battle_tank')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),(SELECT id FROM def WHERE key='unit.main_battle_tank'),'train','units',1,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.main_battle_tank'),(SELECT id FROM def WHERE key='res.food'),123,2);
@@ -1669,7 +1669,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.r
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.robot_tank'),(SELECT id FROM tag WHERE key='vehicle'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.robot_tank'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.robot_tank'),(SELECT id FROM movement_class WHERE key='wheeled'),1600);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.robot_tank'),26,(SELECT id FROM damage_class WHERE key='explosive'),4000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.robot_tank'),26,(SELECT id FROM damage_class WHERE key='explosive'),4000,30,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.robot_tank')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),(SELECT id FROM def WHERE key='unit.robot_tank'),'train','units',2,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.robot_tank'),(SELECT id FROM def WHERE key='res.food'),132,2);
@@ -1687,7 +1687,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.f
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fusion_tank'),(SELECT id FROM tag WHERE key='vehicle'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fusion_tank'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.fusion_tank'),(SELECT id FROM movement_class WHERE key='wheeled'),1600);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.fusion_tank'),28,(SELECT id FROM damage_class WHERE key='explosive'),4000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.fusion_tank'),28,(SELECT id FROM damage_class WHERE key='explosive'),4000,30,'plasma');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.fusion_tank')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),(SELECT id FROM def WHERE key='unit.fusion_tank'),'train','units',3,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.fusion_tank'),(SELECT id FROM def WHERE key='res.food'),141,2);
@@ -1705,7 +1705,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.g
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.grav_tank'),(SELECT id FROM tag WHERE key='vehicle'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.grav_tank'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.grav_tank'),(SELECT id FROM movement_class WHERE key='wheeled'),1600);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.grav_tank'),31,(SELECT id FROM damage_class WHERE key='explosive'),4000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.grav_tank'),31,(SELECT id FROM damage_class WHERE key='explosive'),4000,30,'beam');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.grav_tank')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),(SELECT id FROM def WHERE key='unit.grav_tank'),'train','units',4,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.grav_tank'),(SELECT id FROM def WHERE key='res.food'),159,3);
@@ -1723,7 +1723,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.c
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.catapult'),(SELECT id FROM tag WHERE key='siege'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.catapult'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.catapult'),(SELECT id FROM movement_class WHERE key='wheeled'),800);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min) VALUES ((SELECT id FROM def WHERE key='unit.catapult'),34,(SELECT id FROM damage_class WHERE key='explosive'),10000,30,3000);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min,projectile) VALUES ((SELECT id FROM def WHERE key='unit.catapult'),34,(SELECT id FROM damage_class WHERE key='explosive'),10000,30,3000,'stone');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.catapult')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.catapult')),'fluid');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.siege_workshop'),(SELECT id FROM def WHERE key='unit.catapult'),'train','units',0,0);
@@ -1735,7 +1735,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.t
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.trebuchet'),(SELECT id FROM tag WHERE key='siege'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.trebuchet'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.trebuchet'),(SELECT id FROM movement_class WHERE key='wheeled'),800);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min) VALUES ((SELECT id FROM def WHERE key='unit.trebuchet'),39,(SELECT id FROM damage_class WHERE key='explosive'),10000,30,3000);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min,projectile) VALUES ((SELECT id FROM def WHERE key='unit.trebuchet'),39,(SELECT id FROM damage_class WHERE key='explosive'),10000,30,3000,'stone');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.trebuchet')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.trebuchet')),'fluid');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.siege_workshop'),(SELECT id FROM def WHERE key='unit.trebuchet'),'train','units',1,0);
@@ -1752,7 +1752,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.b
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.bombard'),(SELECT id FROM tag WHERE key='siege'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.bombard'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.bombard'),(SELECT id FROM movement_class WHERE key='wheeled'),800);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min) VALUES ((SELECT id FROM def WHERE key='unit.bombard'),43,(SELECT id FROM damage_class WHERE key='explosive'),11000,30,3000);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min,projectile) VALUES ((SELECT id FROM def WHERE key='unit.bombard'),43,(SELECT id FROM damage_class WHERE key='explosive'),11000,30,3000,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.bombard')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.bombard')),'fluid');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.siege_workshop'),(SELECT id FROM def WHERE key='unit.bombard'),'train','units',2,0);
@@ -1769,7 +1769,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.c
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cannon'),(SELECT id FROM tag WHERE key='siege'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.cannon'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.cannon'),(SELECT id FROM movement_class WHERE key='wheeled'),800);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min) VALUES ((SELECT id FROM def WHERE key='unit.cannon'),48,(SELECT id FROM damage_class WHERE key='explosive'),11000,30,3000);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min,projectile) VALUES ((SELECT id FROM def WHERE key='unit.cannon'),48,(SELECT id FROM damage_class WHERE key='explosive'),11000,30,3000,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.cannon')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.cannon')),'fluid');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.siege_workshop'),(SELECT id FROM def WHERE key='unit.cannon'),'train','units',3,0);
@@ -1786,7 +1786,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.f
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.field_gun'),(SELECT id FROM tag WHERE key='siege'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.field_gun'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.field_gun'),(SELECT id FROM movement_class WHERE key='wheeled'),800);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min) VALUES ((SELECT id FROM def WHERE key='unit.field_gun'),52,(SELECT id FROM damage_class WHERE key='explosive'),12000,30,3000);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min,projectile) VALUES ((SELECT id FROM def WHERE key='unit.field_gun'),52,(SELECT id FROM damage_class WHERE key='explosive'),12000,30,3000,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.field_gun')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.field_gun')),'fluid');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.factory'),(SELECT id FROM def WHERE key='unit.field_gun'),'train','units',0,0);
@@ -1803,7 +1803,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.h
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.howitzer'),(SELECT id FROM tag WHERE key='siege'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.howitzer'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.howitzer'),(SELECT id FROM movement_class WHERE key='wheeled'),800);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min) VALUES ((SELECT id FROM def WHERE key='unit.howitzer'),57,(SELECT id FROM damage_class WHERE key='explosive'),12000,30,3000);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min,projectile) VALUES ((SELECT id FROM def WHERE key='unit.howitzer'),57,(SELECT id FROM damage_class WHERE key='explosive'),12000,30,3000,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.howitzer')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.howitzer')),'fluid');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.factory'),(SELECT id FROM def WHERE key='unit.howitzer'),'train','units',1,0);
@@ -1820,7 +1820,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.r
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.rocket_artillery'),(SELECT id FROM tag WHERE key='siege'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.rocket_artillery'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.rocket_artillery'),(SELECT id FROM movement_class WHERE key='wheeled'),800);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min) VALUES ((SELECT id FROM def WHERE key='unit.rocket_artillery'),61,(SELECT id FROM damage_class WHERE key='explosive'),13000,30,3000);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min,projectile) VALUES ((SELECT id FROM def WHERE key='unit.rocket_artillery'),61,(SELECT id FROM damage_class WHERE key='explosive'),13000,30,3000,'rocket');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.rocket_artillery')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.rocket_artillery')),'fluid');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.factory'),(SELECT id FROM def WHERE key='unit.rocket_artillery'),'train','units',2,0);
@@ -1837,7 +1837,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.r
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.railgun_battery'),(SELECT id FROM tag WHERE key='siege'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.railgun_battery'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.railgun_battery'),(SELECT id FROM movement_class WHERE key='wheeled'),800);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min) VALUES ((SELECT id FROM def WHERE key='unit.railgun_battery'),70,(SELECT id FROM damage_class WHERE key='explosive'),14000,30,3000);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min,projectile) VALUES ((SELECT id FROM def WHERE key='unit.railgun_battery'),70,(SELECT id FROM damage_class WHERE key='explosive'),14000,30,3000,'railgun');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.railgun_battery')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.railgun_battery')),'fluid');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.factory'),(SELECT id FROM def WHERE key='unit.railgun_battery'),'train','units',3,0);
@@ -1854,7 +1854,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.f
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.flak_gun'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.flak_gun'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.flak_gun'),(SELECT id FROM movement_class WHERE key='wheeled'),1100);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.flak_gun'),26,(SELECT id FROM damage_class WHERE key='explosive'),6000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.flak_gun'),26,(SELECT id FROM damage_class WHERE key='explosive'),6000,30,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.flak_gun')),'air');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.factory'),(SELECT id FROM def WHERE key='unit.flak_gun'),'train','units',4,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.flak_gun'),(SELECT id FROM def WHERE key='res.food'),76,1);
@@ -1865,7 +1865,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.m
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_launcher'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_launcher'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.missile_launcher'),(SELECT id FROM movement_class WHERE key='wheeled'),1100);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.missile_launcher'),28,(SELECT id FROM damage_class WHERE key='explosive'),6000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.missile_launcher'),28,(SELECT id FROM damage_class WHERE key='explosive'),6000,30,'missile');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.missile_launcher')),'air');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.factory'),(SELECT id FROM def WHERE key='unit.missile_launcher'),'train','units',0,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.missile_launcher'),(SELECT id FROM def WHERE key='res.food'),82,1);
@@ -1881,7 +1881,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.l
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.laser_battery'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.laser_battery'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.laser_battery'),(SELECT id FROM movement_class WHERE key='wheeled'),1100);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.laser_battery'),32,(SELECT id FROM damage_class WHERE key='explosive'),6000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.laser_battery'),32,(SELECT id FROM damage_class WHERE key='explosive'),6000,30,'beam');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.laser_battery')),'air');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.factory'),(SELECT id FROM def WHERE key='unit.laser_battery'),'train','units',1,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.laser_battery'),(SELECT id FROM def WHERE key='res.food'),94,1);
@@ -1927,7 +1927,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.t
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.trireme'),(SELECT id FROM tag WHERE key='ship'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.trireme'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.trireme'),(SELECT id FROM movement_class WHERE key='ship'),2400);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.trireme'),20,(SELECT id FROM damage_class WHERE key='pierce'),5000,20);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.trireme'),20,(SELECT id FROM damage_class WHERE key='pierce'),5000,20,'arrow');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.trireme')),'fluid');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.trireme')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='unit.trireme'),'train','units',0,0);
@@ -1939,7 +1939,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.w
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.war_galley'),(SELECT id FROM tag WHERE key='ship'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.war_galley'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.war_galley'),(SELECT id FROM movement_class WHERE key='ship'),2400);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.war_galley'),23,(SELECT id FROM damage_class WHERE key='pierce'),5000,20);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.war_galley'),23,(SELECT id FROM damage_class WHERE key='pierce'),5000,20,'arrow');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.war_galley')),'fluid');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.war_galley')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='unit.war_galley'),'train','units',1,0);
@@ -1956,7 +1956,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.c
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.carrack'),(SELECT id FROM tag WHERE key='ship'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.carrack'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.carrack'),(SELECT id FROM movement_class WHERE key='ship'),1400);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min) VALUES ((SELECT id FROM def WHERE key='unit.carrack'),52,(SELECT id FROM damage_class WHERE key='explosive'),12000,40,3000);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min,projectile) VALUES ((SELECT id FROM def WHERE key='unit.carrack'),52,(SELECT id FROM damage_class WHERE key='explosive'),12000,40,3000,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.carrack')),'fluid');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.carrack')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='unit.carrack'),'train','units',2,0);
@@ -1968,7 +1968,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.f
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.frigate'),(SELECT id FROM tag WHERE key='ship'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.frigate'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.frigate'),(SELECT id FROM movement_class WHERE key='ship'),2400);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.frigate'),28,(SELECT id FROM damage_class WHERE key='explosive'),5000,20);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.frigate'),28,(SELECT id FROM damage_class WHERE key='explosive'),5000,20,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.frigate')),'fluid');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.frigate')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='unit.frigate'),'train','units',3,0);
@@ -1985,10 +1985,10 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.d
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.destroyer'),(SELECT id FROM tag WHERE key='ship'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.destroyer'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.destroyer'),(SELECT id FROM movement_class WHERE key='ship'),2400);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.destroyer'),34,(SELECT id FROM damage_class WHERE key='explosive'),5000,20);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.destroyer'),34,(SELECT id FROM damage_class WHERE key='explosive'),5000,20,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.destroyer')),'fluid');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.destroyer')),'ground');
-INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.destroyer'),1,38,(SELECT id FROM damage_class WHERE key='explosive'),6000,20);
+INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.destroyer'),1,38,(SELECT id FROM damage_class WHERE key='explosive'),6000,20,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.destroyer') AND slot=1),'air');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='unit.destroyer'),'train','units',1,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.destroyer'),(SELECT id FROM def WHERE key='res.timber'),106,2);
@@ -1999,7 +1999,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.m
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_cruiser'),(SELECT id FROM tag WHERE key='ship'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.missile_cruiser'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.missile_cruiser'),(SELECT id FROM movement_class WHERE key='ship'),1800);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min) VALUES ((SELECT id FROM def WHERE key='unit.missile_cruiser'),82,(SELECT id FROM damage_class WHERE key='explosive'),15000,40,4000);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min,projectile) VALUES ((SELECT id FROM def WHERE key='unit.missile_cruiser'),82,(SELECT id FROM damage_class WHERE key='explosive'),15000,40,4000,'missile');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.missile_cruiser')),'fluid');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.missile_cruiser')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='unit.missile_cruiser'),'train','units',3,1);
@@ -2012,7 +2012,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.d
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_cruiser'),(SELECT id FROM tag WHERE key='drone'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_cruiser'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.drone_cruiser'),(SELECT id FROM movement_class WHERE key='ship'),1800);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min) VALUES ((SELECT id FROM def WHERE key='unit.drone_cruiser'),88,(SELECT id FROM damage_class WHERE key='explosive'),16000,40,4000);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min,projectile) VALUES ((SELECT id FROM def WHERE key='unit.drone_cruiser'),88,(SELECT id FROM damage_class WHERE key='explosive'),16000,40,4000,'missile');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.drone_cruiser')),'fluid');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.drone_cruiser')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='unit.drone_cruiser'),'train','units',4,1);
@@ -2029,7 +2029,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.h
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.hover_frigate'),(SELECT id FROM tag WHERE key='ship'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.hover_frigate'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.hover_frigate'),(SELECT id FROM movement_class WHERE key='ship'),2400);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.hover_frigate'),42,(SELECT id FROM damage_class WHERE key='explosive'),5000,20);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.hover_frigate'),42,(SELECT id FROM damage_class WHERE key='explosive'),5000,20,'plasma');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.hover_frigate')),'fluid');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.hover_frigate')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='unit.hover_frigate'),'train','units',0,2);
@@ -2046,7 +2046,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.b
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.biplane'),(SELECT id FROM tag WHERE key='aircraft'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.biplane'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.biplane'),(SELECT id FROM movement_class WHERE key='aircraft'),4000);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.biplane'),35,(SELECT id FROM damage_class WHERE key='bullet'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.biplane'),35,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.biplane')),'air');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM def WHERE key='unit.biplane'),'train','units',0,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.biplane'),(SELECT id FROM def WHERE key='res.metal'),140,2);
@@ -2057,7 +2057,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.f
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fighter'),(SELECT id FROM tag WHERE key='aircraft'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.fighter'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.fighter'),(SELECT id FROM movement_class WHERE key='aircraft'),4000);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.fighter'),38,(SELECT id FROM damage_class WHERE key='bullet'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.fighter'),38,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.fighter')),'air');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM def WHERE key='unit.fighter'),'train','units',1,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.fighter'),(SELECT id FROM def WHERE key='res.metal'),152,3);
@@ -2073,7 +2073,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.j
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.jet_fighter'),(SELECT id FROM tag WHERE key='aircraft'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.jet_fighter'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.jet_fighter'),(SELECT id FROM movement_class WHERE key='aircraft'),4000);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.jet_fighter'),41,(SELECT id FROM damage_class WHERE key='bullet'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.jet_fighter'),41,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'missile');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.jet_fighter')),'air');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM def WHERE key='unit.jet_fighter'),'train','units',2,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.jet_fighter'),(SELECT id FROM def WHERE key='res.metal'),164,3);
@@ -2090,7 +2090,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.d
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_fighter'),(SELECT id FROM tag WHERE key='drone'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_fighter'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.drone_fighter'),(SELECT id FROM movement_class WHERE key='aircraft'),4000);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.drone_fighter'),44,(SELECT id FROM damage_class WHERE key='bullet'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.drone_fighter'),44,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'missile');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.drone_fighter')),'air');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM def WHERE key='unit.drone_fighter'),'train','units',3,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.drone_fighter'),(SELECT id FROM def WHERE key='res.metal'),176,3);
@@ -2106,7 +2106,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.i
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.interceptor'),(SELECT id FROM tag WHERE key='aircraft'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.interceptor'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.interceptor'),(SELECT id FROM movement_class WHERE key='aircraft'),4000);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.interceptor'),47,(SELECT id FROM damage_class WHERE key='bullet'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.interceptor'),47,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'plasma');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.interceptor')),'air');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM def WHERE key='unit.interceptor'),'train','units',4,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.interceptor'),(SELECT id FROM def WHERE key='res.metal'),188,3);
@@ -2122,7 +2122,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.b
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.bomber'),(SELECT id FROM tag WHERE key='aircraft'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.bomber'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.bomber'),(SELECT id FROM movement_class WHERE key='aircraft'),4000);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.bomber'),38,(SELECT id FROM damage_class WHERE key='explosive'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.bomber'),38,(SELECT id FROM damage_class WHERE key='explosive'),5000,30,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.bomber')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.bomber')),'fluid');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM def WHERE key='unit.bomber'),'train','units',0,1);
@@ -2134,7 +2134,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.s
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.strategic_bomber'),(SELECT id FROM tag WHERE key='aircraft'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.strategic_bomber'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.strategic_bomber'),(SELECT id FROM movement_class WHERE key='aircraft'),4000);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.strategic_bomber'),41,(SELECT id FROM damage_class WHERE key='explosive'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.strategic_bomber'),41,(SELECT id FROM damage_class WHERE key='explosive'),5000,30,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.strategic_bomber')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.strategic_bomber')),'fluid');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM def WHERE key='unit.strategic_bomber'),'train','units',1,1);
@@ -2152,7 +2152,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.d
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_bomber'),(SELECT id FROM tag WHERE key='drone'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_bomber'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.drone_bomber'),(SELECT id FROM movement_class WHERE key='aircraft'),4000);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.drone_bomber'),44,(SELECT id FROM damage_class WHERE key='explosive'),5000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.drone_bomber'),44,(SELECT id FROM damage_class WHERE key='explosive'),5000,30,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.drone_bomber')),'ground');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.drone_bomber')),'fluid');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM def WHERE key='unit.drone_bomber'),'train','units',2,1);
@@ -2168,7 +2168,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.s
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),(SELECT id FROM tag WHERE key='starship'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),(SELECT id FROM movement_class WHERE key='starship'),3000);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),75,(SELECT id FROM damage_class WHERE key='energy'),8000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),75,(SELECT id FROM damage_class WHERE key='energy'),8000,30,'beam');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.survey_ship')),'space');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.survey_ship')),'orbit');
 INSERT INTO et_container(entity_type_id,capacity,accept_tag_id) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),1,(SELECT id FROM tag WHERE key='passenger'));
@@ -2180,7 +2180,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.c
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),(SELECT id FROM tag WHERE key='starship'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),(SELECT id FROM movement_class WHERE key='starship'),3600);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),45,(SELECT id FROM damage_class WHERE key='kinetic'),6000,15);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),45,(SELECT id FROM damage_class WHERE key='kinetic'),6000,15,'railgun');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.corvette')),'space');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.corvette')),'orbit');
 INSERT INTO et_container(entity_type_id,capacity,accept_tag_id) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),1,(SELECT id FROM tag WHERE key='passenger'));
@@ -2192,7 +2192,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.s
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),(SELECT id FROM tag WHERE key='starship'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),(SELECT id FROM movement_class WHERE key='starship'),3200);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),40,(SELECT id FROM damage_class WHERE key='energy'),7000,10);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),40,(SELECT id FROM damage_class WHERE key='energy'),7000,10,'beam');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.space_frigate')),'space');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.space_frigate')),'orbit');
 INSERT INTO et_container(entity_type_id,capacity,accept_tag_id) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),2,(SELECT id FROM tag WHERE key='passenger'));
@@ -2204,7 +2204,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.s
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),(SELECT id FROM tag WHERE key='starship'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),(SELECT id FROM movement_class WHERE key='starship'),2600);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),120,(SELECT id FROM damage_class WHERE key='kinetic'),10000,40);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),120,(SELECT id FROM damage_class WHERE key='kinetic'),10000,40,'railgun');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.space_cruiser')),'space');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.space_cruiser')),'orbit');
 INSERT INTO et_container(entity_type_id,capacity,accept_tag_id) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),2,(SELECT id FROM tag WHERE key='passenger'));
@@ -2216,7 +2216,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.b
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),(SELECT id FROM tag WHERE key='starship'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),(SELECT id FROM movement_class WHERE key='starship'),2000);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),260,(SELECT id FROM damage_class WHERE key='kinetic'),13000,60);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),260,(SELECT id FROM damage_class WHERE key='kinetic'),13000,60,'plasma');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.battleship')),'space');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.battleship')),'orbit');
 INSERT INTO et_container(entity_type_id,capacity,accept_tag_id) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),2,(SELECT id FROM tag WHERE key='passenger'));
@@ -2978,7 +2978,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.o
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.orbital_fighter'),(SELECT id FROM tag WHERE key='aircraft'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.orbital_fighter'),(SELECT id FROM tag WHERE key='orbital_craft'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed,climb_ticks) VALUES ((SELECT id FROM def WHERE key='unit.orbital_fighter'),(SELECT id FROM movement_class WHERE key='aircraft'),5000,100);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.orbital_fighter'),40,(SELECT id FROM damage_class WHERE key='explosive'),5000,20);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.orbital_fighter'),40,(SELECT id FROM damage_class WHERE key='explosive'),5000,20,'missile');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.orbital_fighter')),'air');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.orbital_fighter')),'orbit');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.orbital_fighter')),'space');
@@ -2991,10 +2991,10 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.o
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.orbital_bomber'),(SELECT id FROM tag WHERE key='aircraft'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.orbital_bomber'),(SELECT id FROM tag WHERE key='orbital_craft'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed,climb_ticks) VALUES ((SELECT id FROM def WHERE key='unit.orbital_bomber'),(SELECT id FROM movement_class WHERE key='aircraft'),4000,120);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.orbital_bomber'),30,(SELECT id FROM damage_class WHERE key='explosive'),4000,40);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.orbital_bomber'),30,(SELECT id FROM damage_class WHERE key='explosive'),4000,40,'missile');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.orbital_bomber')),'orbit');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.orbital_bomber')),'space');
-INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks,orbit_only) VALUES ((SELECT id FROM def WHERE key='unit.orbital_bomber'),1,90,(SELECT id FROM damage_class WHERE key='explosive'),8000,60,1);
+INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks,orbit_only,projectile) VALUES ((SELECT id FROM def WHERE key='unit.orbital_bomber'),1,90,(SELECT id FROM damage_class WHERE key='explosive'),8000,60,1,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.orbital_bomber') AND slot=1),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.airfield'),(SELECT id FROM def WHERE key='unit.orbital_bomber'),'train','units',4,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.orbital_bomber'),(SELECT id FROM def WHERE key='res.metal'),260,5);
@@ -3004,7 +3004,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.c
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.carrier'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.carrier'),(SELECT id FROM tag WHERE key='starship'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.carrier'),(SELECT id FROM movement_class WHERE key='starship'),2400);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.carrier'),25,(SELECT id FROM damage_class WHERE key='energy'),6000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.carrier'),25,(SELECT id FROM damage_class WHERE key='energy'),6000,30,'beam');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.carrier')),'space');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.carrier')),'orbit');
 INSERT INTO et_container(entity_type_id,capacity,accept_tag_id,launches) VALUES ((SELECT id FROM def WHERE key='unit.carrier'),10,(SELECT id FROM tag WHERE key='orbital_craft'),1);
@@ -3020,7 +3020,7 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.ground_battery'),'construct','military_2',1,0);
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.ground_battery'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.ground_battery'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='bld.ground_battery'),150,(SELECT id FROM damage_class WHERE key='explosive'),14000,30);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='bld.ground_battery'),150,(SELECT id FROM damage_class WHERE key='explosive'),14000,30,'missile');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='bld.ground_battery')),'orbit');
 INSERT INTO tag(key,category) VALUES ('orbit_bound','movement');
 INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.space_freighter','Space Freighters');
@@ -3130,13 +3130,13 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.auto_woodcutter_camp'),(SELECT id FROM def WHERE key='res.timber'),100,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.auto_lab'),(SELECT id FROM def WHERE key='res.metal'),300,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.auto_lab'),(SELECT id FROM def WHERE key='res.knowledge'),150,0);
-INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks,orbit_only,splash_radius,splash_pct) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),1,60,(SELECT id FROM damage_class WHERE key='explosive'),10000,60,1,2000,50);
+INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks,orbit_only,splash_radius,splash_pct,projectile) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),1,60,(SELECT id FROM damage_class WHERE key='explosive'),10000,60,1,2000,50,'missile');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.corvette') AND slot=1),'ground');
-INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks,orbit_only,splash_radius,splash_pct) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),1,2000,(SELECT id FROM damage_class WHERE key='kinetic'),12000,100,1,12000,100);
+INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks,orbit_only,splash_radius,splash_pct,projectile) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),1,2000,(SELECT id FROM damage_class WHERE key='kinetic'),12000,100,1,12000,100,'beam');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.space_frigate') AND slot=1),'ground');
-INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks,orbit_only,splash_radius,splash_pct) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),1,2600,(SELECT id FROM damage_class WHERE key='kinetic'),13000,100,1,14000,100);
+INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks,orbit_only,splash_radius,splash_pct,projectile) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),1,2600,(SELECT id FROM damage_class WHERE key='kinetic'),13000,100,1,14000,100,'railgun');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.space_cruiser') AND slot=1),'ground');
-INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks,orbit_only,splash_radius,splash_pct) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),1,3200,(SELECT id FROM damage_class WHERE key='kinetic'),14000,80,1,16000,100);
+INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_max,cooldown_ticks,orbit_only,splash_radius,splash_pct,projectile) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),1,3200,(SELECT id FROM damage_class WHERE key='kinetic'),14000,80,1,16000,100,'plasma');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.battleship') AND slot=1),'ground');
 UPDATE et_weapon SET damage=300,damage_class_id=(SELECT id FROM damage_class WHERE key='kinetic'),range_max=8000,cooldown_ticks=80,splash_radius=4000,splash_pct=100 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.orbital_bomber') AND orbit_only=1;
 UPDATE entity_type SET hp=9000,los=30000,armor_class_id=(SELECT id FROM armor_class WHERE key='hull') WHERE id=(SELECT id FROM def WHERE key='bld.ground_battery');
@@ -3168,7 +3168,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.s
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.ship_of_the_line'),(SELECT id FROM tag WHERE key='ship'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.ship_of_the_line'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.ship_of_the_line'),(SELECT id FROM movement_class WHERE key='ship'),1400);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min) VALUES ((SELECT id FROM def WHERE key='unit.ship_of_the_line'),57,(SELECT id FROM damage_class WHERE key='explosive'),12000,40,3000);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min,projectile) VALUES ((SELECT id FROM def WHERE key='unit.ship_of_the_line'),57,(SELECT id FROM damage_class WHERE key='explosive'),12000,40,3000,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.ship_of_the_line')),'fluid');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.ship_of_the_line')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='unit.ship_of_the_line'),'train','units',4,0);
@@ -3185,7 +3185,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.i
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.ironclad'),(SELECT id FROM tag WHERE key='ship'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.ironclad'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.ironclad'),(SELECT id FROM movement_class WHERE key='ship'),1400);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min) VALUES ((SELECT id FROM def WHERE key='unit.ironclad'),63,(SELECT id FROM damage_class WHERE key='explosive'),13000,40,3000);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min,projectile) VALUES ((SELECT id FROM def WHERE key='unit.ironclad'),63,(SELECT id FROM damage_class WHERE key='explosive'),13000,40,3000,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.ironclad')),'fluid');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.ironclad')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='unit.ironclad'),'train','units',0,1);
@@ -3203,7 +3203,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.d
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.dreadnought'),(SELECT id FROM tag WHERE key='ship'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.dreadnought'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.dreadnought'),(SELECT id FROM movement_class WHERE key='ship'),1400);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min) VALUES ((SELECT id FROM def WHERE key='unit.dreadnought'),68,(SELECT id FROM damage_class WHERE key='explosive'),14000,40,3000);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,range_min,projectile) VALUES ((SELECT id FROM def WHERE key='unit.dreadnought'),68,(SELECT id FROM damage_class WHERE key='explosive'),14000,40,3000,'shell');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.dreadnought')),'fluid');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.dreadnought')),'ground');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='unit.dreadnought'),'train','units',2,1);

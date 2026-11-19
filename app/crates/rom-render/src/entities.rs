@@ -44,14 +44,8 @@ pub struct EntityView {
     pub y: f32,
     /// Orbital height in tiles above sea level; zero places the entity on the surface.
     pub altitude: f32,
-    /// Ground target of a recent orbital shot, when its beam is visible.
-    pub beam_target: Option<SurfacePos>,
-    /// Entity it shot at in the last few ticks, drawn when either is aloft or the shooter is a
-    /// building.
-    pub shot_at: Option<u32>,
-    /// How far along its way that shot is (0 to 1) when it is a projectile in flight (an arrow);
-    /// `None` for a shot that hits at once (a tracer).
-    pub shot_flight: Option<f32>,
+    /// Its latest shot while the projectile may still be in flight (task 95).
+    pub shot: Option<crate::projectiles::ShotView>,
     /// A ship that flies through space: drawn as a hull in orbit and when it has landed.
     pub spacecraft: bool,
     /// Facing in degrees, clockwise from the positive x axis.
@@ -149,6 +143,24 @@ impl SnapshotPair {
     /// Time the blend takes to go from the older to the newer snapshot.
     pub fn interval(&self) -> Duration {
         self.interval.unwrap_or(DEFAULT_INTERVAL)
+    }
+
+    /// The simulation time the blend at the wall-clock time `now` shows, in ticks: the older
+    /// snapshot's tick moved towards the newer one's as [`Self::blend`] moves the entities.
+    pub fn render_tick(&self, now: Instant) -> f64 {
+        let Some(latest) = &self.latest else {
+            return 0.0;
+        };
+        let elapsed = self
+            .arrived
+            .map_or(Duration::ZERO, |at| now.saturating_duration_since(at));
+        let alpha = (elapsed.as_secs_f64() / self.interval().as_secs_f64()).clamp(0.0, 1.0);
+        match &self.previous {
+            Some(previous) if latest.tick >= previous.tick => {
+                previous.tick as f64 + (latest.tick - previous.tick) as f64 * alpha
+            }
+            _ => latest.tick as f64,
+        }
     }
 
     /// The entities blended by the wall-clock time `now` (see [`Self::blend`]).
@@ -1197,9 +1209,7 @@ mod tests {
             under_construction: None,
             model: None,
             altitude: 0.0,
-            beam_target: None,
-            shot_at: None,
-            shot_flight: None,
+            shot: None,
             spacecraft: false,
             activity: Default::default(),
         }
@@ -1276,6 +1286,25 @@ mod tests {
             );
             assert!((out[0].y - (10.0 + expected)).abs() < 1e-5);
         }
+    }
+
+    #[test]
+    fn render_tick_moves_with_the_blend() {
+        let start = Instant::now();
+        let mut pair = SnapshotPair::default();
+        assert_eq!(pair.render_tick(start), 0.0);
+        for (tick, ms) in [(10, 0), (11, 100)] {
+            let snapshot = EntitySnapshot {
+                tick,
+                entities: Vec::new(),
+            };
+            pair.push(Arc::new(snapshot), start + Duration::from_millis(ms));
+        }
+        let at = |ms: u64| pair.render_tick(start + Duration::from_millis(100 + ms));
+        assert!((at(0) - 10.0).abs() < 1e-9);
+        assert!((at(25) - 10.25).abs() < 1e-6);
+        // Held at the newest snapshot while no newer one comes (a paused game).
+        assert!((at(5_000) - 11.0).abs() < 1e-9);
     }
 
     #[test]

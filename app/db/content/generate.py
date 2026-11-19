@@ -112,6 +112,47 @@ SPACE_CLASSES = {
     'space_cruiser': (2000, 6, ('kinetic', 120, 10, 0, 40), 2600, {'metal': 700, 'energy': 300}, 2, 2),
     'battleship': (3600, 8, ('kinetic', 260, 13, 0, 60), 2000, {'metal': 1200, 'energy': 500}, 3, 2),
 }
+# Task 95: what each weapon throws, as the views draw it in flight (`et_weapon.projectile`;
+# presentation only, the simulation never reads it). Keyed by the armed type, or by (type, slot)
+# for a second weapon. Every weapon with a reach needs a kind; melee weapons have none.
+PROJECTILES = {
+    'bld.city': 'arrow', 'bld.tower': 'arrow', 'bld.fort': 'arrow',
+    'bld.bastion': 'shell', 'bld.bunker': 'bullet', 'bld.defence_turret': 'beam',
+    'bld.star_fort': 'shell', 'bld.fortress': 'shell', 'bld.citadel': 'plasma',
+    'bld.ground_battery': 'missile',
+    'unit.musketeer': 'bullet', 'unit.fusilier': 'bullet', 'unit.rifleman': 'bullet',
+    'unit.infantry': 'bullet', 'unit.assault_infantry': 'bullet', 'unit.combat_robot': 'bullet',
+    'unit.exo_trooper': 'bullet', 'unit.marine': 'plasma', 'unit.shock_marine': 'plasma',
+    'unit.slinger': 'stone', 'unit.archer': 'arrow', 'unit.crossbowman': 'bolt',
+    'unit.arquebusier': 'bullet', 'unit.light_infantry': 'bullet', 'unit.machine_gunner': 'bullet',
+    'unit.heavy_machine_gunner': 'bullet', 'unit.gun_drone': 'bullet', 'unit.pulse_gunner': 'plasma',
+    'unit.beam_trooper': 'beam',
+    'unit.anti_tank_rifleman': 'bullet', 'unit.bazooka_team': 'rocket', 'unit.missile_team': 'missile',
+    'unit.railgun_team': 'railgun',
+    'unit.armoured_car': 'bullet', 'unit.scout_car': 'bullet', 'unit.hovercraft': 'bullet',
+    'unit.grav_skimmer': 'plasma',
+    'unit.light_tank': 'shell', 'unit.tank': 'shell', 'unit.main_battle_tank': 'shell',
+    'unit.robot_tank': 'shell', 'unit.fusion_tank': 'plasma', 'unit.grav_tank': 'beam',
+    'unit.catapult': 'stone', 'unit.trebuchet': 'stone', 'unit.bombard': 'shell', 'unit.cannon': 'shell',
+    'unit.field_gun': 'shell', 'unit.howitzer': 'shell', 'unit.rocket_artillery': 'rocket',
+    'unit.railgun_battery': 'railgun',
+    'unit.flak_gun': 'shell', 'unit.missile_launcher': 'missile', 'unit.laser_battery': 'beam',
+    'unit.trireme': 'arrow', 'unit.war_galley': 'arrow', 'unit.carrack': 'shell', 'unit.frigate': 'shell',
+    'unit.ship_of_the_line': 'shell', 'unit.ironclad': 'shell', 'unit.destroyer': 'shell',
+    ('unit.destroyer', 1): 'bullet', 'unit.dreadnought': 'shell', 'unit.missile_cruiser': 'missile',
+    'unit.drone_cruiser': 'missile', 'unit.hover_frigate': 'plasma',
+    'unit.biplane': 'bullet', 'unit.fighter': 'bullet', 'unit.jet_fighter': 'missile',
+    'unit.drone_fighter': 'missile', 'unit.interceptor': 'plasma',
+    'unit.bomber': 'shell', 'unit.strategic_bomber': 'shell', 'unit.drone_bomber': 'shell',
+    'unit.survey_ship': 'beam', 'unit.corvette': 'railgun', 'unit.space_frigate': 'beam',
+    'unit.space_cruiser': 'railgun', 'unit.battleship': 'plasma', 'unit.carrier': 'beam',
+    'unit.orbital_fighter': 'missile', 'unit.orbital_bomber': 'missile',
+    # Bombardment from orbit (slot 1, `orbit_only`).
+    ('unit.corvette', 1): 'missile', ('unit.space_frigate', 1): 'beam',
+    ('unit.space_cruiser', 1): 'railgun', ('unit.battleship', 1): 'plasma',
+    ('unit.orbital_bomber', 1): 'shell',
+}
+
 RESEARCH = [
     ('granary', 'income.food', 'agriculture:1:10|crop_rotation:3:15|food_processing:5:20'),
     ('lumber_mill', 'income.timber', 'carpentry:1:10|architecture:3:15|engineering:5:20'),
@@ -253,6 +294,11 @@ def generate():
         research.append((building, age, len(research), key, kind, track))
         cost(key, prices)
     def weapon(key, damage, dc, reach, layers, cooldown=30, slot=0, **extra):
+        kind = PROJECTILES.get((key, slot)) or (PROJECTILES.get(key) if slot == 0 else None)
+        if reach > 0 and kind is None:
+            raise SystemExit(f'{key} slot {slot}: a weapon with a reach needs a PROJECTILES kind')
+        if kind is not None:
+            extra['projectile'] = kind
         row('et_weapon', entity_type_id=Ref(key), **({'slot': slot} if slot else {}), damage=damage,
             damage_class_id=Ref(dc, 'damage_class'), range_max=reach, cooldown_ticks=cooldown, **extra)
         which = f'entity_type_id={val(Ref(key))}' + (f' AND slot={slot}' if slot else '')

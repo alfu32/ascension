@@ -1,0 +1,19 @@
+# Task 95, replayed by --script in universe mode (--players 2 --ai none, seed 1, --sun fixed):
+# three space frigates of player one and a corvette, a cruiser and a battleship of player two
+# fight in the orbit above player one's city: the frigates' lasers, the corvette's and the
+# cruiser's rail shots and the battleship's plasma. Slowed to a crawl from tick 66.
+# Screenshot: --size 1280x800 --after 13 (cropped).
+0 grant-age age.galactic
+0 place-orbit 1 unit.space_frigate @0,-7
+0 place-orbit 1 unit.space_frigate @0,0
+0 place-orbit 1 unit.space_frigate @0,7
+0 place-orbit 2 unit.corvette @6,-7
+0 place-orbit 2 unit.space_cruiser @6,0
+0 place-orbit 2 unit.battleship @6,7
+1 speed 100
+40 click ship1
+42 cam focus
+60 cam focus
+62 cam wheel -2 640,300
+64 cam drag 640,300 640,420
+66 speed 3

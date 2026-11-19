@@ -7,7 +7,7 @@ pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <f
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] [--ai <profile:difficulty,...|none>] [--watch] \
 [--map-size <width>x<height>] [--sphere <n>] [--single-planet] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
 [--universe] [--start-placement <separate|together>] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-chrome] [--no-hud] [--hud-scale <percent>] [--stats] \
-[--sun <orbit|fixed|midnight>] [--graticule <on|off>] [--grass <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
+[--sun <orbit|fixed|midnight>] [--graticule <on|off>] [--grass <on|off>] [--projectiles <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
 [--middle-drag <turn|pan>] [--invert-horizontal-turn] [--invert-vertical-turn] \
 [--gallery <all|units|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
 [--model <model id>] [--parts] [--pose <idle|move|attack|work>] [--anim-time <seconds>] \
@@ -105,6 +105,8 @@ pub struct Options {
     pub graticule: bool,
     /// Draw grass blades on the ground near the camera.
     pub grass: bool,
+    /// Draw projectiles in flight (task 95).
+    pub projectiles: bool,
     /// The middle button pans and Shift + middle turns (`--middle-drag pan`); by default the
     /// middle button turns the view at every level.
     pub middle_drag_pans: bool,
@@ -211,6 +213,7 @@ impl Default for Options {
             age: None,
             graticule: true,
             grass: true,
+            projectiles: true,
             middle_drag_pans: false,
             invert_horizontal_turn: false,
             invert_vertical_turn: false,
@@ -371,6 +374,14 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                     "on" => true,
                     "off" => false,
                     _ => return Err(format!("--grass expects on or off, got {text:?}")),
+                };
+            }
+            "--projectiles" => {
+                let text = value("--projectiles")?;
+                options.projectiles = match text.to_ascii_lowercase().as_str() {
+                    "on" => true,
+                    "off" => false,
+                    _ => return Err(format!("--projectiles expects on or off, got {text:?}")),
                 };
             }
             "--middle-drag" => {
@@ -746,6 +757,9 @@ mod tests {
         assert!(defaults.grass && !parse(args(&["--grass", "off"])).unwrap().grass);
         assert!(parse(args(&["--grass", "On"])).unwrap().grass);
         assert!(parse(args(&["--grass", "maybe"])).is_err());
+        assert!(defaults.projectiles);
+        assert!(!parse(args(&["--projectiles", "off"])).unwrap().projectiles);
+        assert!(parse(args(&["--projectiles", "maybe"])).is_err());
     }
 
     #[test]

@@ -893,6 +893,54 @@ impl crate::load::SqlEnum for Layer {
         }
     }
 }
+/// Closed rules vocabulary for Projectile: what a weapon throws, as the views draw it (task 95).
+/// Presentation only; the simulation never reads it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Projectile {
+    /// SQL value `none`: a melee blow, nothing in flight.
+    None,
+    /// SQL value `arrow`.
+    Arrow,
+    /// SQL value `bolt`.
+    Bolt,
+    /// SQL value `stone`.
+    Stone,
+    /// SQL value `bullet`.
+    Bullet,
+    /// SQL value `shell`.
+    Shell,
+    /// SQL value `rocket`.
+    Rocket,
+    /// SQL value `missile`.
+    Missile,
+    /// SQL value `torpedo`.
+    Torpedo,
+    /// SQL value `beam`.
+    Beam,
+    /// SQL value `plasma`.
+    Plasma,
+    /// SQL value `railgun`.
+    Railgun,
+}
+impl crate::load::SqlEnum for Projectile {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "none" => Some(Self::None),
+            "arrow" => Some(Self::Arrow),
+            "bolt" => Some(Self::Bolt),
+            "stone" => Some(Self::Stone),
+            "bullet" => Some(Self::Bullet),
+            "shell" => Some(Self::Shell),
+            "rocket" => Some(Self::Rocket),
+            "missile" => Some(Self::Missile),
+            "torpedo" => Some(Self::Torpedo),
+            "beam" => Some(Self::Beam),
+            "plasma" => Some(Self::Plasma),
+            "railgun" => Some(Self::Railgun),
+            _ => None,
+        }
+    }
+}
 /// One `schema_meta` row.
 #[derive(Debug, Clone)]
 pub struct SchemaMeta {
@@ -1303,6 +1351,8 @@ pub struct Weapon {
     pub consumed: bool,
     /// Whether the weapon fires only from orbit onto the surface below.
     pub orbit_only: bool,
+    /// What it throws, as drawn in flight (task 95); the simulation never reads it.
+    pub projectile: Projectile,
     /// Layers this weapon can hit.
     pub targets: Vec<WeaponTarget>,
 }

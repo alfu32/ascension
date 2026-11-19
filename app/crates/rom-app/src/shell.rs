@@ -84,6 +84,7 @@ pub fn run(options: &Options, arguments: &[String]) -> ExitCode {
     bridge.publish_box_count(options.boxes);
     bridge.publish_graticule(options.graticule);
     bridge.publish_grass(options.grass);
+    bridge.publish_projectiles(options.projectiles);
     bridge.publish_turn(rom_render::TurnSettings {
         middle_pans: options.middle_drag_pans,
         invert_horizontal: options.invert_horizontal_turn,

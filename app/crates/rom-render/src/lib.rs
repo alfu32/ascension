@@ -32,6 +32,7 @@ mod orbit;
 mod overlay;
 pub mod pick;
 mod pixels;
+pub mod projectiles;
 mod readback;
 pub mod review;
 mod scene;
@@ -71,6 +72,7 @@ pub use orbit::{
 };
 pub use overlay::{Line3, OverlayGeometry, build_overlays, build_overlays_on};
 pub use pixels::rgba_to_bgra_flipped;
+pub use projectiles::{ProjectileKind, ShotView};
 pub use review::{Review, SheetView, WorldLabel};
 pub use rig::Activity;
 pub use rom_geo::SurfacePos;
