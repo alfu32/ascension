@@ -1409,7 +1409,9 @@ fn task_30_scripts_reach_the_capture_states_without_a_window() {
                     | ScriptAction::QuickSave
                     | ScriptAction::Menu(_)
                     | ScriptAction::Ascend(_)
-                    | ScriptAction::Chat(_)
+                    | ScriptAction::Chat(..)
+                    | ScriptAction::ChatFrom(..)
+                    | ScriptAction::ChatKeys(_)
                     | ScriptAction::Visit(_)
                     | ScriptAction::Look(_) => {}
                 }
@@ -1849,7 +1851,9 @@ fn wealth_screenshot_script_reaches_capture_without_a_window() {
                 | ScriptAction::QuickSave
                 | ScriptAction::Menu(_)
                 | ScriptAction::Ascend(_)
-                | ScriptAction::Chat(_)
+                | ScriptAction::Chat(..)
+                | ScriptAction::ChatFrom(..)
+                | ScriptAction::ChatKeys(_)
                 | ScriptAction::Visit(_)
                 | ScriptAction::Look(_) => {}
             }
@@ -2060,7 +2064,9 @@ fn orbital_review_script_trains_launches_selects_and_bombards_through_picks() {
                 | ScriptAction::QuickSave
                 | ScriptAction::Menu(_)
                 | ScriptAction::Ascend(_)
-                | ScriptAction::Chat(_)
+                | ScriptAction::Chat(..)
+                | ScriptAction::ChatFrom(..)
+                | ScriptAction::ChatKeys(_)
                 | ScriptAction::Visit(_)
                 | ScriptAction::Look(_) => {}
             }
@@ -2081,7 +2087,7 @@ fn orbital_review_script_trains_launches_selects_and_bombards_through_picks() {
             saw_beam |= snapshot
                 .entities
                 .iter()
-                .any(|e| e.altitude == 8.0 && e.beam_target.is_some());
+                .any(|e| e.altitude == 8.0 && e.shot.is_some());
         }
     }
     let ship = *ctl
@@ -2342,7 +2348,9 @@ fn colony_script_run() -> (crate::match_setup::Match, Controller, BodyId, u64) {
                 | ScriptAction::QuickSave
                 | ScriptAction::Menu(_)
                 | ScriptAction::Ascend(_)
-                | ScriptAction::Chat(_)
+                | ScriptAction::Chat(..)
+                | ScriptAction::ChatFrom(..)
+                | ScriptAction::ChatKeys(_)
                 | ScriptAction::Visit(_)
                 | ScriptAction::Look(_) => {}
             }
@@ -2482,6 +2490,8 @@ fn orbital_combat_script(
         surface_of(game.world.offset(start.city_pos, dx, dy))
     })
     .unwrap();
+    // Kept from one snapshot to the next, as the simulation thread keeps it.
+    let mut motions = crate::sim_thread::Motions::default();
     let mut ctl = Controller::new();
     ctl.set_view(ViewCtx {
         planet: home,
@@ -2509,7 +2519,9 @@ fn orbital_combat_script(
                 | ScriptAction::QuickSave
                 | ScriptAction::Menu(_)
                 | ScriptAction::Ascend(_)
-                | ScriptAction::Chat(_)
+                | ScriptAction::Chat(..)
+                | ScriptAction::ChatFrom(..)
+                | ScriptAction::ChatKeys(_)
                 | ScriptAction::Visit(_)
                 | ScriptAction::Look(_) => {}
             }
@@ -2524,7 +2536,7 @@ fn orbital_combat_script(
             home,
             &game.world.visible_entities(PLAYER),
             &crate::looks::ModelBook::default(),
-            &mut crate::sim_thread::Motions::default(),
+            &mut motions,
         );
         each(&game, &ctl, &snapshot);
     }
@@ -2568,7 +2580,7 @@ fn dogfight_script_shows_tracers_between_craft_in_orbit() {
         if snapshot
             .entities
             .iter()
-            .any(|v| v.shot_at.is_some_and(aloft) && v.altitude > 0.0)
+            .any(|v| v.shot.and_then(|s| s.target).is_some_and(aloft) && v.altitude > 0.0)
         {
             tracer_ticks.push(game.world.tick());
         }
@@ -2597,7 +2609,7 @@ fn battery_script_fires_up_at_a_ship_in_orbit() {
         if snapshot
             .entities
             .iter()
-            .any(|v| battery(v) && v.shot_at.is_some())
+            .any(|v| battery(v) && v.shot.is_some())
         {
             tracer_ticks.push(game.world.tick());
         }
@@ -2695,7 +2707,7 @@ fn battery_script_holds_the_frigates_off() {
         if snapshot
             .entities
             .iter()
-            .any(|v| battery(v) && v.shot_at.is_some())
+            .any(|v| battery(v) && v.shot.is_some())
         {
             tracer_ticks.push(game.world.tick());
         }

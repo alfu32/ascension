@@ -1461,6 +1461,32 @@ Details and the tables as built: `docs/unit-series.md`, section 11. No schema ch
 - The damage class `kinetic` and its matrix rows (task 75) are written at the start of the
   generated block, before the starship guns that use it.
 
+## Projectiles you can see (task 95)
+
+The owner (2026-11-18): projectile weapons throw projectiles you can see; big ones have a model,
+small ones are lines, laser beams glow. What a weapon throws could not be told from its other
+columns (a shell, a rocket and a missile are all `explosive`; a sling stone, an arrow and a bolt
+all `pierce`), so it is a column of its own:
+
+`et_weapon.projectile TEXT NOT NULL DEFAULT 'none'`, one of `none`, `arrow`, `bolt`, `stone`,
+`bullet`, `shell`, `rocket`, `missile`, `torpedo`, `beam`, `plasma`, `railgun`.
+
+- **Presentation only.** `rom-rules` loads it (`Weapon::projectile`, enum `Projectile`); the
+  simulation never reads it and nothing hashes it, so the playthrough hash is unchanged. The
+  views draw each shot as its kind from the weapon's cooldown (`rom-app`, `recent_shot`), the
+  render thread flies it (`rom-render`, `projectiles.rs`).
+- **Generated.** `PROJECTILES` in `db/content/generate.py` names the kind per armed type (and per
+  `(type, slot)` for a second weapon: the destroyer's anti-aircraft gun, bombardment from orbit).
+  The generator stops when a weapon with a reach (`range_max > 0`) has no kind; melee blows keep
+  `none`. No row was added or moved: definition and weapon ids are unchanged.
+- **Flight time.** A weapon with `projectile_speed` (the city's, tower's and fort's arrows) is
+  drawn landing exactly when the simulation lands it. Every other weapon hits at once in the
+  simulation; its projectile is drawn flying at a speed per kind after the shot, so its impact
+  shows a little after the damage (a bullet within a tick, an arrow about 0.4 s over five
+  tiles, a shell about half a second). Giving those weapons a `projectile_speed` would make the
+  flight real, but changes the simulation and its hash: a balance decision for the owner.
+- `torpedo` is in the vocabulary and drawn, but no weapon uses it yet (there is no submarine).
+
 ## Placement and resource discovery (task 41)
 
 Every building with an `in_city_radius` row also has an `in_own_territory`

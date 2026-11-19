@@ -207,6 +207,19 @@ masts of three sails, and Dreadnoughts (`unit.dreadnought@modern`), a long haze-
 five twin turrets (one forward, two on the wings facing out, two aft, one superfiring), a tripod
 mast with a spotting top and two funnels with team bands.
 
+Task 95 makes shots visible in flight, as the weapon's `et_weapon.projectile` says (presentation
+only; `rom-render/src/projectiles.rs`). Arrows (a shaft with white fletching), sling and siege
+stones, shells (brass with a short hot streak behind), rockets and missiles (with a flame and a
+smoke trail) and torpedoes are small models of the part kit, about a tile long, turned along
+their way; arrows, stones and shells fly an arc whose height grows with the distance, the rest a
+line, and anything to or from orbit a straight line drawn two and a half times larger. Bullets
+and crossbow bolts are short bright streaks; plasma a violet glowing bolt; lasers a cyan beam
+with a white core, a soft halo and a flicker, held for a moment from muzzle to target; rail shots
+a pale streak that fades. Each leaves a small effect where it lands: dust for arrows, bolts and
+stones, sparks for bullets and rail shots, a flash and smoke for shells, rockets, missiles and
+torpedoes, a glow for beams and plasma. Streaks, beams and glows are drawn with additive
+blending.
+
 ## Budgets
 
 | Model | Near | Far |

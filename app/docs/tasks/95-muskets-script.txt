@@ -1,0 +1,48 @@
+# Task 95, replayed by --script in universe mode (--players 2 --ai none, seed 1, --sun fixed):
+# two lines of twenty musketeers four tiles apart in front of player one's city fire their
+# volleys at ticks 0 and 30; the game is slowed to a crawl from tick 18.
+# Screenshot: --size 1280x800 --after 31 (cropped).
+0 grant-age age.gunpowder
+0 place 1 unit.musketeer @-9,11
+0 place 1 unit.musketeer @-8,11
+0 place 1 unit.musketeer @-7,11
+0 place 1 unit.musketeer @-6,11
+0 place 1 unit.musketeer @-5,11
+0 place 1 unit.musketeer @-4,11
+0 place 1 unit.musketeer @-3,11
+0 place 1 unit.musketeer @-2,11
+0 place 1 unit.musketeer @-1,11
+0 place 1 unit.musketeer @0,11
+0 place 1 unit.musketeer @1,11
+0 place 1 unit.musketeer @2,11
+0 place 1 unit.musketeer @3,11
+0 place 1 unit.musketeer @4,11
+0 place 1 unit.musketeer @5,11
+0 place 1 unit.musketeer @6,11
+0 place 1 unit.musketeer @7,11
+0 place 1 unit.musketeer @8,11
+0 place 1 unit.musketeer @9,11
+0 place 1 unit.musketeer @10,11
+0 place 2 unit.musketeer @-9,7
+0 place 2 unit.musketeer @-8,7
+0 place 2 unit.musketeer @-7,7
+0 place 2 unit.musketeer @-6,7
+0 place 2 unit.musketeer @-5,7
+0 place 2 unit.musketeer @-4,7
+0 place 2 unit.musketeer @-3,7
+0 place 2 unit.musketeer @-2,7
+0 place 2 unit.musketeer @-1,7
+0 place 2 unit.musketeer @0,7
+0 place 2 unit.musketeer @1,7
+0 place 2 unit.musketeer @2,7
+0 place 2 unit.musketeer @3,7
+0 place 2 unit.musketeer @4,7
+0 place 2 unit.musketeer @5,7
+0 place 2 unit.musketeer @6,7
+0 place 2 unit.musketeer @7,7
+0 place 2 unit.musketeer @8,7
+0 place 2 unit.musketeer @9,7
+0 place 2 unit.musketeer @10,7
+1 speed 100
+2 cam wheel 4 620,400
+18 speed 2

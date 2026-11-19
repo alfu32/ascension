@@ -281,6 +281,8 @@ pub(super) struct SpaceGpu {
     placed: Vec<Vec<PlacedBody>>,
     tints: Vec<Option<[u8; 3]>>,
     shader: Shader,
+    /// The shader's `tint`, `emissive` and `alpha` uniform locations, looked up once.
+    uniforms: [i32; 3],
     material: WeakMaterial,
     lod_material: WeakMaterial,
     sphere: Mesh,
@@ -426,6 +428,7 @@ impl Scene {
                 .map(|s| universe.place_system(s.id))
                 .collect(),
             tints,
+            uniforms: ["tint", "emissive", "alpha"].map(|n| shader.get_shader_location(n)),
             shader,
             material,
             lod_material,
@@ -542,7 +545,12 @@ impl Scene {
         let mut passes = if zoom.sky_active() {
             Vec::new()
         } else {
-            self.system_passes(zoom, &one, drawn)
+            self.system_passes(
+                zoom,
+                &one,
+                drawn,
+                target.texture.width as f32 / height.max(1.0),
+            )
         };
         // The farthest system first; the anchored one last, around the globe it holds.
         passes.sort_by(|a, b| {
@@ -572,7 +580,13 @@ impl Scene {
     /// The systems whose own detail shows through the one camera: the anchored one in its
     /// frame, any other seen through the star map in its own frame; `globe` when the loaded
     /// globe draws itself.
-    fn system_passes(&self, zoom: &ZoomCamera, one: &OneView, globe: bool) -> Vec<SystemPass> {
+    fn system_passes(
+        &self,
+        zoom: &ZoomCamera,
+        one: &OneView,
+        globe: bool,
+        aspect: f32,
+    ) -> Vec<SystemPass> {
         let Some(space) = &self.space else {
             return Vec::new();
         };
@@ -593,7 +607,11 @@ impl Scene {
             };
             let distance = view.distance_to([0.0; 3]).max(1e-6);
             let detail = system_detail(SYSTEM_RADIUS / distance);
-            if detail <= 0.004 {
+            if detail <= PASS_DETAIL_MIN {
+                continue;
+            }
+            // A system off the picture draws nothing: its disc lies outside the view cone.
+            if !anchored && !view.sees_sphere([0.0; 3], SYSTEM_RADIUS, aspect) {
                 continue;
             }
             passes.push(SystemPass {
@@ -678,9 +696,7 @@ impl Scene {
             .get(pass.index)
             .is_some_and(|s| s.celestial);
         let mut residence_labels: Vec<([f32; 3], String, [u8; 3])> = Vec::new();
-        let tint_at = space.shader.get_shader_location("tint");
-        let emissive_at = space.shader.get_shader_location("emissive");
-        let alpha_at = space.shader.get_shader_location("alpha");
+        let [tint_at, emissive_at, alpha_at] = space.uniforms;
         let (width, height) = (target.texture.width as f32, target.texture.height as f32);
         let mut rim_labels: Vec<([f32; 3], u32, u32, f32)> = Vec::new();
         let bar_look = view.view((width, height), self.projection_centre_y);
@@ -767,6 +783,8 @@ impl Scene {
                     })
             };
             let mut halos: Vec<([f32; 3], f32)> = Vec::new();
+            // The soft halos of bodies too small to read, drawn together after the bodies.
+            let mut small_halos: Vec<([f32; 3], f32, [u8; 3], u8)> = Vec::new();
             let mut flashes: Vec<([f32; 3], f32, f32)> = Vec::new();
             for (placed, &radius) in bodies_placed.iter().zip(&drawn) {
                 let body = &universe.bodies[placed.body];
@@ -844,15 +862,12 @@ impl Scene {
                 // Never smaller than a few pixels, and a soft halo below that.
                 if body.kind != BodyViewKind::Star && radius < per_pixel * HALO_BELOW_PIXELS {
                     let faint = 1.0 - radius / (per_pixel * HALO_BELOW_PIXELS);
-                    sprite(
-                        &mut world,
-                        camera,
-                        &space.glow,
+                    small_halos.push((
                         placed.pos,
                         per_pixel * HALO_PIXELS,
                         colour,
                         (((120.0 * faint) + 30.0) * pass.detail) as u8,
-                    );
+                    ));
                 }
                 if matches!(body.kind, BodyViewKind::Habitable | BodyViewKind::Celestial) {
                     halos.push((placed.pos, radius));
@@ -881,6 +896,13 @@ impl Scene {
                 if let Some(r) = held {
                     icons.push((placed.pos, radius, r.icon.clone(), per_pixel));
                 }
+            }
+            if !small_halos.is_empty() {
+                begin_sprite_run();
+                for (pos, size, colour, alpha) in small_halos {
+                    sprite_in_run(&mut world, camera, &space.glow, pos, size, colour, alpha);
+                }
+                end_sprite_run();
             }
             // Every habitable planet wears an atmosphere halo, lit from the star at the origin.
             if known && pass.detail > 0.5 {
@@ -1218,7 +1240,8 @@ impl Scene {
                 } else {
                     (glow, 200.0)
                 };
-                sprite(
+                begin_sprite_run();
+                sprite_in_run(
                     &mut world,
                     camera,
                     &space.glow,
@@ -1227,7 +1250,7 @@ impl Scene {
                     star_colour,
                     a(150.0),
                 );
-                sprite(
+                sprite_in_run(
                     &mut world,
                     camera,
                     &space.glow,
@@ -1236,6 +1259,7 @@ impl Scene {
                     [255, 255, 255],
                     a(core),
                 );
+                end_sprite_run();
             }
         }
         set_clip_planes(DEFAULT_NEAR, DEFAULT_FAR);
@@ -1406,6 +1430,7 @@ impl Scene {
                 let distance = |i: usize| view.distance_to(space.map_positions[i]);
                 distance(b).total_cmp(&distance(a)).then(a.cmp(&b))
             });
+            begin_sprite_run();
             for i in order {
                 let system = &universe.systems[i];
                 let pos = space.map_positions[i];
@@ -1457,7 +1482,7 @@ impl Scene {
                 if halo_alpha < 1.0 {
                     continue;
                 }
-                sprite(
+                sprite_in_run(
                     &mut world,
                     camera,
                     &space.glow,
@@ -1466,7 +1491,7 @@ impl Scene {
                     halo,
                     halo_alpha as u8,
                 );
-                sprite(
+                sprite_in_run(
                     &mut world,
                     camera,
                     &space.glow,
@@ -1476,6 +1501,7 @@ impl Scene {
                     core_alpha as u8,
                 );
             }
+            end_sprite_run();
             // Ships: a mark beside each system that has ships, an arrowhead on the lane for each
             // ship between systems, its lane ahead lit and its destination ringed.
             for mark in &marks {
@@ -1790,8 +1816,34 @@ fn nearest_gap(points: &[[f32; 3]]) -> f32 {
     nearest[nearest.len() / 2]
 }
 
-/// An additive billboard of `size` units at `pos`; it does not write depth.
-fn sprite(
+/// Least detail at which another system gets a pass of its own: below it every layer of the
+/// pass is barely visible, and the star map's halo stands for the system.
+const PASS_DETAIL_MIN: f32 = 0.004;
+
+/// Flushes what is queued and switches to additive blending without depth writes, for a run of
+/// [`sprite_in_run`] draws that [`end_sprite_run`] closes: one draw call for the whole run.
+fn begin_sprite_run() {
+    // SAFETY: the render thread has an active GL context; these calls only flip the depth mask
+    // and blend mode around billboard draws.
+    unsafe {
+        raylib::ffi::rlDrawRenderBatchActive();
+        raylib::ffi::rlDisableDepthMask();
+        raylib::ffi::BeginBlendMode(BlendMode::BLEND_ADDITIVE as i32);
+    }
+}
+
+/// Draws the queued sprites and restores blending and the depth mask.
+fn end_sprite_run() {
+    // SAFETY: as above; the batch is flushed so the sprites are drawn with the settings above.
+    unsafe {
+        raylib::ffi::rlDrawRenderBatchActive();
+        raylib::ffi::EndBlendMode();
+        raylib::ffi::rlEnableDepthMask();
+    }
+}
+
+/// Queues an additive billboard of `size` units at `pos` inside a sprite run.
+fn sprite_in_run(
     world: &mut impl RaylibDraw3D,
     camera: Camera3D,
     texture: &Texture2D,
@@ -1800,13 +1852,6 @@ fn sprite(
     colour: [u8; 3],
     alpha: u8,
 ) {
-    // SAFETY: the render thread has an active GL context; these calls only flip the depth mask
-    // and blend mode around a billboard draw.
-    unsafe {
-        raylib::ffi::rlDrawRenderBatchActive();
-        raylib::ffi::rlDisableDepthMask();
-        raylib::ffi::BeginBlendMode(BlendMode::BLEND_ADDITIVE as i32);
-    }
     // The quad faces the camera with the camera's own up, so it stays round seen from above.
     let side = texture.width as f32;
     world.draw_billboard_pro(
@@ -1820,12 +1865,21 @@ fn sprite(
         0.0,
         Color::new(colour[0], colour[1], colour[2], alpha),
     );
-    // SAFETY: as above; the batch is flushed so the sprite is drawn with the settings above.
-    unsafe {
-        raylib::ffi::rlDrawRenderBatchActive();
-        raylib::ffi::EndBlendMode();
-        raylib::ffi::rlEnableDepthMask();
-    }
+}
+
+/// An additive billboard of `size` units at `pos`; it does not write depth.
+fn sprite(
+    world: &mut impl RaylibDraw3D,
+    camera: Camera3D,
+    texture: &Texture2D,
+    pos: [f32; 3],
+    size: f32,
+    colour: [u8; 3],
+    alpha: u8,
+) {
+    begin_sprite_run();
+    sprite_in_run(world, camera, texture, pos, size, colour, alpha);
+    end_sprite_run();
 }
 
 /// Where the `k`-th of `n` residences stands on the celestial planet centred at `centre` with

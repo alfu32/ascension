@@ -163,9 +163,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             model: None,
             activity: Default::default(),
             altitude: 0.0,
-            beam_target: None,
-            shot_at: None,
-            shot_flight: None,
+            shot: None,
             spacecraft: false,
         })
         .collect::<Vec<_>>();

@@ -32,6 +32,7 @@ mod orbit;
 mod overlay;
 pub mod pick;
 mod pixels;
+pub mod projectiles;
 mod readback;
 pub mod review;
 mod scene;
@@ -71,6 +72,7 @@ pub use orbit::{
 };
 pub use overlay::{Line3, OverlayGeometry, build_overlays, build_overlays_on};
 pub use pixels::rgba_to_bgra_flipped;
+pub use projectiles::{ProjectileKind, ShotView};
 pub use review::{Review, SheetView, WorldLabel};
 pub use rig::Activity;
 pub use rom_geo::SurfacePos;
@@ -91,7 +93,10 @@ pub use worker::{
 };
 pub use zoom::Level;
 
-pub use hud::{HudPanel, HudResearch, HudResource, HudSelection, HudSnapshot};
+pub use hud::{
+    CHAT_HISTORY_ROWS, HudChat, HudChatHistory, HudChatLine, HudPanel, HudResearch, HudResource,
+    HudSelection, HudSnapshot,
+};
 pub use hud_model::{
     ButtonState, HudBlast, HudButton, HudCard, HudCityRadius, HudMarker, HudPalette, HudPatrol,
     HudPlacement, HudQueue, HudQueueItem, HudStain, HudTile, HudTradeRoute, HudWealth, HudWreck,

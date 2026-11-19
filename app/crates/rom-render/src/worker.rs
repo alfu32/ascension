@@ -160,6 +160,8 @@ struct Shared {
     graticule: AtomicBool,
     /// Whether grass blades are drawn near the camera (the graphics setting).
     grass: AtomicBool,
+    /// Whether projectiles in flight are drawn (task 95).
+    projectiles: AtomicBool,
     /// The player's turning preferences, packed by [`TurnSettings::bits`].
     turn: AtomicU8,
     snapshot_wanted: AtomicBool,
@@ -347,6 +349,11 @@ impl RenderBridge {
         self.shared.grass.store(shown, Ordering::Relaxed);
     }
 
+    /// Turns the projectiles in flight on or off (on by default; task 95).
+    pub fn publish_projectiles(&self, shown: bool) {
+        self.shared.projectiles.store(shown, Ordering::Relaxed);
+    }
+
     /// Sets the player's turning preferences: which middle drag turns and which pans, and
     /// inverted turning drags.
     pub fn publish_turn(&self, turn: TurnSettings) {
@@ -530,6 +537,7 @@ impl Shared {
             start_markers: AtomicBool::new(false),
             graticule: AtomicBool::new(true),
             grass: AtomicBool::new(true),
+            projectiles: AtomicBool::new(true),
             turn: AtomicU8::new(0),
             snapshot_wanted: AtomicBool::new(false),
             snapshot: Mutex::new(None),
@@ -1229,7 +1237,17 @@ fn render_loop(shared: &Shared) {
             shared.start_markers.load(Ordering::Relaxed),
             orbit.as_ref(),
         );
-        scene.prepare_overlays(drawn, &hud_snapshot, camera.yaw, orbit.as_ref());
+        scene.show_projectiles = shared.projectiles.load(Ordering::Relaxed);
+        scene.prepare_overlays(
+            drawn,
+            &hud_snapshot,
+            camera.yaw,
+            orbit.as_ref(),
+            (
+                pair.render_tick(frame_start),
+                pair.latest_tick().unwrap_or(0),
+            ),
+        );
         // Scale explicit HUD pixels with the offscreen render target, just like automatic scale.
         let mut hud_layout = HudLayout::new(size.0, size.1, None);
         if percent > 0 {

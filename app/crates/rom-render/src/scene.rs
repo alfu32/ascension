@@ -25,6 +25,7 @@ use crate::looks::{SceneLooks, lod_weight};
 use crate::materials::{SurfaceSlots, chunk_attributes, surface_slots};
 use crate::orbit::OrbitCamera;
 use crate::overlay::{OverlayGeometry, build_overlays, build_overlays_on};
+use crate::projectiles::{ProjectileGeometry, Projectiles, projectile_looks};
 use crate::sun;
 use crate::terrain::{
     ChunkMesh, RELIEF, STAR_COUNT, TerrainScene, TileKind, build_sea_chunks_with_specs,
@@ -373,8 +374,20 @@ pub(crate) struct Scene {
     grass: Option<grass::GrassGpu>,
     /// Whether the grass blades are drawn (the graphics setting).
     pub(crate) show_grass: bool,
+    /// Light uniforms last set without shadows, and whether the stain and grass shaders existed:
+    /// setting them again to the same values would only cost GL lookups.
+    lighting_applied: Option<([f32; 3], bool, bool, bool)>,
     /// The palette's model pictures on the GPU (task 91).
     icons: icons::IconStrip,
+    /// Projectiles in flight (task 95), what they draw this frame and their models.
+    projectiles: Projectiles,
+    projectile_geometry: ProjectileGeometry,
+    /// Index of the first projectile model among the uploaded models (they follow the looks').
+    projectile_base: Option<u16>,
+    projectile_instances: Vec<(u16, bool, Matrix)>,
+    projectile_scratch: Vec<Matrix>,
+    /// Whether projectiles are drawn (`--projectiles`).
+    pub(crate) show_projectiles: bool,
 }
 
 /// A chunk mesh whose vertex colours follow the player's fog of war and borders.
@@ -742,7 +755,14 @@ impl Scene {
             stains,
             grass,
             show_grass: true,
+            lighting_applied: None,
             icons: icons::IconStrip::default(),
+            projectiles: Projectiles::default(),
+            projectile_geometry: ProjectileGeometry::default(),
+            projectile_base: None,
+            projectile_instances: Vec::new(),
+            projectile_scratch: Vec::new(),
+            show_projectiles: true,
         }
     }
 
@@ -756,16 +776,28 @@ impl Scene {
         self.terrain.as_ref().map(|t| &t.surface)
     }
 
-    /// Builds the selection, marker and placement overlays for the next draw.
+    /// Builds the selection, marker and placement overlays for the next draw, and the
+    /// projectiles in flight at `render_tick` (task 95) from the snapshot of `latest_tick`.
     pub(crate) fn prepare_overlays(
         &mut self,
         views: &[EntityView],
         hud: &HudSnapshot,
         camera_yaw: f32,
         orbit: Option<&OrbitCamera>,
+        (render_tick, latest_tick): (f64, u64),
     ) {
+        if !self.show_projectiles {
+            self.projectiles.clear();
+            self.projectile_geometry = ProjectileGeometry::default();
+        }
         if let (Some(gpu), Some(orbit)) = (&self.globe, orbit) {
             build_overlays_on(views, &*gpu.globe, orbit.right(), hud, &mut self.overlay);
+            if self.show_projectiles {
+                self.projectiles
+                    .update(render_tick, latest_tick, views, &*gpu.globe);
+                self.projectiles
+                    .build(render_tick, &mut self.projectile_geometry);
+            }
             if let Some(stains) = &mut self.stains {
                 let models = &self.models;
                 stains.prepare(
@@ -794,10 +826,18 @@ impl Scene {
                     camera_yaw,
                     &mut self.overlay,
                 );
+                if self.show_projectiles {
+                    self.projectiles
+                        .update(render_tick, latest_tick, views, surface);
+                    self.projectiles
+                        .build(render_tick, &mut self.projectile_geometry);
+                }
             }
             None => {
                 self.overlay.lines.clear();
                 self.overlay.tris.clear();
+                self.projectiles.clear();
+                self.projectile_geometry = ProjectileGeometry::default();
             }
         }
     }
@@ -1136,7 +1176,12 @@ impl Scene {
         materials::set_water(&mut self.sea_globe_shader, looks);
         let started = Instant::now();
         self.features = materials::FeatureGpu::upload(thread, baked);
-        self.models = models::ModelGpu::upload(thread, &looks.models);
+        // The projectile models ride along after the looks' own, drawn with the same pose
+        // texture and state (task 95).
+        let mut all = looks.models.clone();
+        self.projectile_base = u16::try_from(all.len()).ok();
+        all.extend(projectile_looks());
+        self.models = models::ModelGpu::upload(thread, &all);
         if let Some(models) = &mut self.models {
             models.near_only = self.models_near_only;
             models.lockstep = self.anim_time.is_some();
@@ -1160,6 +1205,15 @@ impl Scene {
         planet: bool,
         shadow: Option<shadow::ShadowUniforms>,
     ) {
+        let key = (toward, planet, self.stains.is_some(), self.grass.is_some());
+        if shadow.is_none() {
+            if self.lighting_applied == Some(key) {
+                return;
+            }
+            self.lighting_applied = Some(key);
+        } else {
+            self.lighting_applied = None;
+        }
         let [_, _, terrain, _, entity] = &mut self._shaders;
         let mut shaders = vec![
             terrain,
@@ -1596,6 +1650,7 @@ impl Scene {
                 );
             }
             draw_overlay(&mut world, &self.overlay);
+            self.draw_projectiles(&mut world, eye);
             shadow::bind_shadow_map(None);
             materials::bind_noise(None);
         }
@@ -1836,6 +1891,7 @@ impl Scene {
                     );
                 }
                 draw_overlay(&mut world, &self.overlay);
+                self.draw_projectiles(&mut world, eye);
                 shadow::bind_shadow_map(None);
                 materials::bind_noise(None);
             }
@@ -1947,6 +2003,75 @@ fn draw_overlay(world: &mut impl RaylibDraw3D, overlay: &OverlayGeometry) {
             colour,
         );
     }
+}
+
+impl Scene {
+    /// Draws the projectiles of this frame seen from `eye`: their models with the model shader,
+    /// then smoke blended and streaks, beams and glows added, without writing depth.
+    fn draw_projectiles(&mut self, world: &mut impl RaylibDraw3D, eye: [f32; 3]) {
+        let geometry = &self.projectile_geometry;
+        if let (Some(models), Some(base)) = (&self.models, self.projectile_base) {
+            self.projectile_instances.clear();
+            for p in &geometry.models {
+                let index = base.saturating_add(p.model);
+                if let Some((transform, near)) = models.instance_at(
+                    index, p.origin, p.forward, p.up, p.length, [0.5; 3], 0.0, eye,
+                ) {
+                    self.projectile_instances.push((index, near, transform));
+                }
+            }
+            models.draw_instances(
+                world,
+                &mut self.model_shader,
+                &self.model_material,
+                &mut self.projectile_instances,
+                &mut self.projectile_scratch,
+            );
+        }
+        if geometry.glow.is_empty() && geometry.smoke.is_empty() && geometry.lines.is_empty() {
+            return;
+        }
+        // SAFETY: the render thread has an active GL context; the batch is flushed before and
+        // after so only these draws see the depth mask, culling and blend mode changed here.
+        unsafe {
+            raylib::ffi::rlDrawRenderBatchActive();
+            raylib::ffi::rlDisableDepthMask();
+            raylib::ffi::rlDisableBackfaceCulling();
+        }
+        for tri in &geometry.smoke {
+            draw_tri(world, tri);
+        }
+        // SAFETY: as above.
+        unsafe {
+            raylib::ffi::rlDrawRenderBatchActive();
+            raylib::ffi::BeginBlendMode(raylib::consts::BlendMode::BLEND_ADDITIVE as i32);
+        }
+        for tri in &geometry.glow {
+            draw_tri(world, tri);
+        }
+        for line in &geometry.lines {
+            let c = line.colour;
+            world.draw_line3D(
+                Vector3::new(line.a[0], line.a[1], line.a[2]),
+                Vector3::new(line.b[0], line.b[1], line.b[2]),
+                Color::new(c[0], c[1], c[2], c[3]),
+            );
+        }
+        // SAFETY: as above.
+        unsafe {
+            raylib::ffi::rlDrawRenderBatchActive();
+            raylib::ffi::EndBlendMode();
+            raylib::ffi::rlEnableBackfaceCulling();
+            raylib::ffi::rlEnableDepthMask();
+        }
+    }
+}
+
+/// Draws one triangle, one side only (culling is off where this is used).
+fn draw_tri(world: &mut impl RaylibDraw3D, tri: &crate::overlay::Tri3) {
+    let colour = Color::new(tri.colour[0], tri.colour[1], tri.colour[2], tri.colour[3]);
+    let [a, b, c] = tri.v.map(|p| Vector3::new(p[0], p[1], p[2]));
+    world.draw_triangle3D(a, b, c, colour);
 }
 
 /// Height of the graticule above the ground, in tiles.

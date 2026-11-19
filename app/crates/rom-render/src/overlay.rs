@@ -3,9 +3,7 @@
 //! any [`Footing`], a flat map or a sphere, so rings, outlines and the placement grid follow
 //! the curvature.
 
-use crate::entities::{
-    EntityView, FlatGround, Footing, building_height, entity_frame, owner_color, unit_width,
-};
+use crate::entities::{EntityView, FlatGround, Footing, building_height, owner_color, unit_width};
 use crate::hud::{HudSnapshot, MarkerKind};
 
 mod effects;
@@ -321,152 +319,7 @@ pub fn build_overlays_on(
         };
         out.building_ghost(origin, view, rgba(owner_color(view.owner)), true);
     }
-    for view in views {
-        let Some(target) = view.beam_target.filter(|_| view.altitude > 0.0) else {
-            continue;
-        };
-        let from = entity_frame(view, ground).at([0.0, unit_width(view) * 0.15, 0.0]);
-        let target_height = views
-            .iter()
-            .find(|v| {
-                v.face == target.face
-                    && (v.x * 1000.0 - target.x as f32).abs() < 1.0
-                    && (v.y * 1000.0 - target.y as f32).abs() < 1.0
-                    && v.altitude == 0.0
-            })
-            .map_or(0.8, |v| {
-                if v.building {
-                    building_height(v) + 0.2
-                } else {
-                    crate::entities::unit_height(v) * 0.5
-                }
-            });
-        let to = ground.point(
-            target.face,
-            target.x as f32 / 1000.0,
-            target.y as f32 / 1000.0,
-            (0.0, 0.0),
-            target_height,
-        );
-        let direction = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
-        let mut side = [
-            direction[1] * right[2] - direction[2] * right[1],
-            direction[2] * right[0] - direction[0] * right[2],
-            direction[0] * right[1] - direction[1] * right[0],
-        ];
-        let length = side.iter().map(|v| v * v).sum::<f32>().sqrt().max(0.001);
-        // A wide glow round the shot from orbit (task 75), the hot core drawn over it.
-        for (half, colour) in [(0.6, [255, 170, 80, 60]), (0.25, [255, 220, 150, 140])] {
-            let glow = side.map(|v| v / length * half);
-            let offset = |p: [f32; 3], sign: f32| -> [f32; 3] {
-                std::array::from_fn(|i| p[i] + glow[i] * sign)
-            };
-            out.quad(
-                [
-                    offset(from, -1.0),
-                    offset(from, 1.0),
-                    offset(to, 1.0),
-                    offset(to, -1.0),
-                ],
-                colour,
-            );
-        }
-        side = side.map(|v| v / length * 0.07);
-        let offset = |p: [f32; 3], sign: f32| std::array::from_fn(|i| p[i] + side[i] * sign);
-        out.quad(
-            [
-                offset(from, -1.0),
-                offset(from, 1.0),
-                offset(to, 1.0),
-                offset(to, -1.0),
-            ],
-            [90, 200, 255, 220],
-        );
-        out.line(from, to, [230, 250, 255, 255]);
-        let impact = Origin {
-            ground,
-            face: target.face,
-            x: target.x as f32 / 1000.0,
-            y: target.y as f32 / 1000.0,
-            altitude: 0.0,
-        };
-        out.ring(impact, 0.8, [255, 190, 70, 255]);
-        out.line(to, impact.at(0.0, 0.0, 2.0), [255, 235, 160, 255]);
-    }
     effects::bombardment(out, ground, right, views, hud);
-    // Shots to or from what is aloft (batteries firing up, dogfights in orbit) and from
-    // defences: a tracer for what hits at once, an arrow in flight for a projectile.
-    for view in views {
-        let Some(target) = view
-            .shot_at
-            .and_then(|id| views.iter().find(|v| v.id == id))
-            .filter(|t| view.altitude > 0.0 || t.altitude > 0.0 || view.building)
-        else {
-            continue;
-        };
-        let centre = |v: &EntityView| {
-            let height = if v.building {
-                building_height(v) * 0.8
-            } else {
-                crate::entities::unit_height(v) * 0.5
-            };
-            entity_frame(v, ground).at([0.0, height, 0.0])
-        };
-        let (from, to) = (centre(view), centre(target));
-        let along =
-            |t: f32| -> [f32; 3] { std::array::from_fn(|i| from[i] + (to[i] - from[i]) * t) };
-        if let Some(flight) = view.shot_flight {
-            // An arrow: a short dark shaft on a shallow arc, its head bright.
-            let length = (0..3)
-                .map(|i| (to[i] - from[i]).powi(2))
-                .sum::<f32>()
-                .sqrt();
-            let up = ground.frame(view.face, view.x, view.y).up;
-            let arc = |t: f32| -> [f32; 3] {
-                let p = along(t);
-                let lift = 4.0 * t * (1.0 - t) * length * 0.06;
-                std::array::from_fn(|i| p[i] + up[i] * lift)
-            };
-            // A shaft of a tile and a half with flat sides across and up, so that it shows from
-            // above and from the side.
-            let (tail, head) = (arc((flight - 1.5 / length.max(1.0)).max(0.0)), arc(flight));
-            let d: [f32; 3] = std::array::from_fn(|i| head[i] - tail[i]);
-            let across = [
-                d[1] * up[2] - d[2] * up[1],
-                d[2] * up[0] - d[0] * up[2],
-                d[0] * up[1] - d[1] * up[0],
-            ];
-            let norm = across.iter().map(|v| v * v).sum::<f32>().sqrt().max(0.001);
-            for side in [across.map(|v| v / norm * 0.05), up.map(|v| v * 0.05)] {
-                let offset =
-                    |p: [f32; 3], sign: f32| std::array::from_fn(|i| p[i] + side[i] * sign);
-                out.quad(
-                    [
-                        offset(tail, -1.0),
-                        offset(tail, 1.0),
-                        offset(head, 1.0),
-                        offset(head, -1.0),
-                    ],
-                    [60, 40, 22, 255],
-                );
-            }
-            let tip = arc((flight - 0.3 / length.max(1.0)).max(0.0));
-            out.line(tip, head, [250, 240, 215, 255]);
-            continue;
-        }
-        // Thin lines only: their width never follows the ship view scale. A bright streak
-        // marks the head of the shot.
-        out.line(from, to, [255, 150, 60, 200]);
-        out.line(along(0.7), to, [255, 240, 200, 255]);
-        let hit = Origin {
-            ground,
-            face: target.face,
-            x: target.x,
-            y: target.y,
-            altitude: target.altitude,
-        };
-        out.ring(hit, 0.6, [255, 200, 90, 255]);
-    }
     for id in &hud.selected {
         let Ok(index) = views.binary_search_by_key(id, |v| v.id) else {
             continue;
@@ -626,9 +479,7 @@ pub fn build_overlays_on(
             under_construction: None,
             model: None,
             altitude: 0.0,
-            beam_target: None,
-            shot_at: None,
-            shot_flight: None,
+            shot: None,
             spacecraft: false,
             activity: Default::default(),
         };
@@ -668,9 +519,7 @@ mod tests {
             under_construction: None,
             model: None,
             altitude: 0.0,
-            beam_target: None,
-            shot_at: None,
-            shot_flight: None,
+            shot: None,
             spacecraft: false,
             activity: Default::default(),
         }
@@ -899,14 +748,9 @@ mod tests {
     }
 
     #[test]
-    fn orbital_selection_and_bombard_beam_follow_the_ships_altitude() {
+    fn orbital_selection_follows_the_ships_altitude() {
         let mut ship = unit(1);
         ship.altitude = 8.0;
-        ship.beam_target = Some(rom_geo::SurfacePos {
-            face: 0,
-            x: 32_000,
-            y: 32_000,
-        });
         let hud = HudSnapshot {
             selected: vec![1],
             ..HudSnapshot::default()
@@ -917,17 +761,6 @@ mod tests {
         let rings: Vec<_> = out.lines.iter().filter(|l| l.colour == selection).collect();
         assert_eq!(rings.len(), RING_SEGMENTS * 3);
         assert!(rings.iter().all(|l| (l.a[1] - (8.0 + LIFT)).abs() < 0.001));
-        let beam = out
-            .lines
-            .iter()
-            .find(|l| l.colour == [230, 250, 255, 255])
-            .unwrap();
-        assert!(beam.a[1] > 8.0);
-        assert!((beam.b[1] - 2.8).abs() < 0.001);
-        assert_eq!((beam.b[0], beam.b[2]), (32.0, 32.0));
-        ship.altitude = 0.0;
-        build_overlays(&[ship], &|_, _| 2.0, &hud, 0.0, &mut out);
-        assert!(!out.lines.iter().any(|l| l.colour == [230, 250, 255, 255]));
     }
 
     #[test]

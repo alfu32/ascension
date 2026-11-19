@@ -19,13 +19,14 @@ use rom_rules::{ActiveSources, EntityClass};
 use rom_sim::{BodyId, Command, Entity, OrderStatus, PlayerId, Pos, Sighting, Topology, World};
 
 use crate::ascension_view::AscensionView;
+use crate::chat::{Channel, ChatInput, ChatKey, ChatLog};
 use crate::computer::ComputerPlayers;
 use crate::demo::DemoDriver;
 use crate::match_setup::planet_surface;
 use crate::saves::{self, Kind, SaveRequest, SaveSetup, Saved};
 use crate::script::{Script, ScriptAction};
 use crate::selection::{Controller, PLAYER, ViewCtx};
-use crate::space_view::{Notices, SpaceFrame, dress_ships, space_snapshot};
+use crate::space_view::{Notices, SpaceFrame, SystemIndex, dress_ships, space_snapshot_with};
 
 /// The universe the simulation thread expands planets from, and which planet is shown.
 pub struct UniverseHost {
@@ -327,49 +328,52 @@ pub struct SimLink {
     stats: Arc<SimStats>,
     speed: Arc<AtomicU32>,
     stop: Arc<AtomicBool>,
-    /// The celestial home's chat (task 76): the line being typed and the lines sent.
-    chat: Arc<Mutex<ChatBox>>,
-    /// Whether the person's player is ascended: only then is there a channel to write to.
+    /// The keyboard side of the chat (tasks 76 and 94), shared with the simulation thread.
+    chat: Arc<Mutex<ChatInput>>,
+    /// Whether the person's player is ascended: only then is the celestial channel open.
     ascended: Arc<AtomicBool>,
 }
 
-/// The chat line the window is typing and the lines it sent, for the simulation thread.
-#[derive(Debug, Default)]
-struct ChatBox {
-    draft: Option<String>,
-    sent: Vec<String>,
-}
-
 impl SimLink {
-    /// Whether the person may write to the celestial home's channel (its player is ascended).
-    pub fn chat_allowed(&self) -> bool {
-        self.ascended.load(Ordering::Acquire)
-    }
-
-    /// The line being typed, or `None` when no line is open.
-    pub fn chat_draft(&self) -> Option<String> {
-        self.chat.lock().ok()?.draft.clone()
-    }
-
-    /// Opens, changes or (with `None`) closes the line being typed.
-    pub fn set_chat_draft(&self, draft: Option<String>) {
-        if let Ok(mut chat) = self.chat.lock() {
-            chat.draft = draft;
-        }
-    }
-
-    /// Sends a line to the channel.
-    pub fn send_chat(&self, line: String) {
-        if let Ok(mut chat) = self.chat.lock() {
-            chat.sent.push(line);
-        }
-    }
-
-    fn take_chat(&self) -> Vec<String> {
+    /// Offers a key to the chat; returns whether it took it (while the chat has the keyboard it
+    /// takes every key, so the game sees none).
+    pub fn chat_key(&self, key: ChatKey) -> bool {
+        let celestial = self.ascended.load(Ordering::Acquire);
         self.chat
             .lock()
-            .map(|mut chat| std::mem::take(&mut chat.sent))
-            .unwrap_or_default()
+            .is_ok_and(|mut chat| chat.key(key, celestial))
+    }
+
+    /// Whether the chat has the keyboard.
+    pub fn chat_focused(&self) -> bool {
+        self.chat.lock().is_ok_and(|chat| chat.focused())
+    }
+
+    /// A click on the chat line: the chat takes the keyboard.
+    pub fn chat_open(&self) {
+        if let Ok(mut chat) = self.chat.lock() {
+            chat.open();
+        }
+    }
+
+    /// The chat button or its key: opens or closes the history.
+    pub fn chat_toggle_history(&self) {
+        if let Ok(mut chat) = self.chat.lock() {
+            chat.toggle_history();
+        }
+    }
+
+    /// The chat as the window left it, with the history's scroll kept inside a log of `len`
+    /// lines, and the lines sent since the last call.
+    fn take_chat(&self, len: usize) -> (ChatInput, Vec<(Channel, String)>) {
+        self.chat.lock().map_or_else(
+            |_| (ChatInput::default(), Vec::new()),
+            |mut chat| {
+                chat.clamp_scroll(len);
+                let sent = chat.take_sent();
+                (chat.clone(), sent)
+            },
+        )
     }
 
     /// A link with no simulation behind it: counters stay zero and commands are dropped.
@@ -620,6 +624,12 @@ fn run(
             .map(|c| c.players().collect())
             .unwrap_or_default(),
     );
+    if let Some(text) = saving
+        .as_ref()
+        .and_then(|s| s.info.settings.get(crate::chat::SAVE_KEY))
+    {
+        ascension.restore(ChatLog::decode(text));
+    }
     ascension.update(&world);
     publish(
         &world,
@@ -644,6 +654,15 @@ fn run(
             step.advance(now - last)
         };
         last = now;
+        // The chat (tasks 76 and 94): what the window typed, sent in the person's name.
+        link.ascended
+            .store(world.is_ascended(PLAYER), Ordering::Release);
+        let (input, sent) = link.take_chat(ascension.chat().len());
+        for (channel, line) in sent {
+            ascension.say(&world, channel, &line);
+        }
+        let typing = input != ascension.input;
+        ascension.input = input;
         while let Ok(request) = requests.try_recv() {
             let text = write_save(
                 &world,
@@ -652,17 +671,11 @@ fn run(
                 speed,
                 link,
                 &request,
+                ascension.log(),
             );
             controller.notify(&world, text);
             publish_hud(&world, &controller, bridge, &ascension);
         }
-        // The celestial home's chat (task 76).
-        for line in link.take_chat() {
-            ascension.say(&world, &line);
-        }
-        let draft = link.chat_draft();
-        let typing = draft != ascension.draft;
-        ascension.draft = draft;
         if let Some(host) = host.as_mut() {
             if let Some(body) = bridge.take_surface_request()
                 && let Err(error) = host.show(&mut world, BodyId(body), bridge)
@@ -727,7 +740,17 @@ fn run(
                                 controller.notify(&world, error);
                             }
                         }
-                        ScriptAction::Chat(line) => ascension.say(&world, &line),
+                        ScriptAction::Chat(channel, line) => {
+                            ascension.say(&world, channel, &line);
+                        }
+                        ScriptAction::ChatFrom(player, channel, line) => {
+                            ascension.hear(&world, player, channel, &line);
+                        }
+                        ScriptAction::ChatKeys(keys) => {
+                            for key in keys {
+                                link.chat_key(key);
+                            }
+                        }
                         ScriptAction::Visit(body) => bridge.fly_to_body(body),
                         ScriptAction::Look(at) => bridge.focus_surface(at),
                         ScriptAction::Input(events) => {
@@ -782,8 +805,6 @@ fn run(
             for line in ascension.update(&world) {
                 controller.notify(&world, line);
             }
-            link.ascended
-                .store(world.is_ascended(PLAYER), Ordering::Release);
             focus_camera(&world, &mut controller, bridge);
             if let Some(every) = autosave_every
                 && world.tick().is_multiple_of(every)
@@ -799,6 +820,7 @@ fn run(
                     speed,
                     link,
                     &request,
+                    ascension.log(),
                 );
                 if text.starts_with("Save failed") {
                     controller.notify(&world, text);
@@ -856,6 +878,7 @@ fn write_save(
     speed_pct: u32,
     link: &SimLink,
     request: &SaveRequest,
+    chat: &ChatLog,
 ) -> String {
     let result = match saving {
         None => Err("this match cannot be saved".to_owned()),
@@ -868,7 +891,7 @@ fn write_save(
                     &none
                 }
             };
-            saves::write(world, computers, setup, speed_pct, request)
+            saves::write(world, computers, setup, speed_pct, request, chat)
         }
     };
     let text = match &result {
@@ -888,6 +911,34 @@ fn write_save(
 /// Gives a pick to the selection, except the buttons beside the clock: the menu button asks the
 /// window for the menu and the pause button holds or releases the simulation.
 fn handle_pick(controller: &mut Controller, world: &mut World, link: &SimLink, pick: PickEvent) {
+    // While the chat has the keyboard the game's keys are the chat's (a script's `key`).
+    if link.chat_focused() {
+        match &pick {
+            PickEvent::Hotkey { ch, modifiers } => {
+                let ch = if modifiers.shift {
+                    ch.to_ascii_uppercase()
+                } else {
+                    *ch
+                };
+                link.chat_key(ChatKey::Char(ch));
+                return;
+            }
+            PickEvent::Escape => {
+                link.chat_key(ChatKey::Escape);
+                return;
+            }
+            _ => {}
+        }
+    }
+    if let PickEvent::HudClick {
+        region: HudRegionKind::ChatLine,
+        button: PointerButton::Left,
+        ..
+    } = &pick
+    {
+        link.chat_open();
+        return;
+    }
     if let PickEvent::HudClick {
         region: HudRegionKind::TopButton,
         index,
@@ -896,6 +947,7 @@ fn handle_pick(controller: &mut Controller, world: &mut World, link: &SimLink, p
     } = &pick
     {
         match index {
+            1 => link.chat_toggle_history(),
             2 => link.request_menu(MenuPage::Main),
             3 => {
                 let paused = !link.paused();
@@ -915,6 +967,8 @@ struct Memory {
     fog: FogPublisher,
     motions: Motions,
     terrain: Option<TerrainKnowledge>,
+    /// The bodies of each system, indexed on the first publish.
+    systems: Option<SystemIndex>,
 }
 
 /// A per-player view of resource terrain, refreshed on age and planet changes.
@@ -983,7 +1037,10 @@ fn publish(
     bridge.publish_snapshot(Arc::new(snapshot));
     if let Some(host) = host {
         let system = bridge.view_state().system.unwrap_or(host.home_system);
-        let mut space = space_snapshot(world, system, &sightings);
+        let index = memory
+            .systems
+            .get_or_insert_with(|| SystemIndex::new(world));
+        let mut space = space_snapshot_with(world, index, system, &sightings);
         dress_ships(&mut space, world, models);
         bridge.publish_space(Arc::new(space));
     }
@@ -1114,6 +1171,10 @@ const FORGET_AFTER: u64 = 200;
 pub struct Motions {
     /// Position, tick it last moved, tick it was last seen; by entity id.
     seen: BTreeMap<u32, (Pos, u64, u64)>,
+    /// Where each entity stood at its last snapshot (its point in orbit and height there for a
+    /// ship aloft), and the tick (task 95): a shot that kills its target at once is still drawn
+    /// to where the target fell.
+    places: BTreeMap<u32, (Pos, f32, u64)>,
 }
 
 impl Motions {
@@ -1141,6 +1202,8 @@ impl Motions {
     fn prune(&mut self, tick: u64) {
         if tick.is_multiple_of(FORGET_AFTER) {
             self.seen
+                .retain(|_, (_, _, seen)| tick.saturating_sub(*seen) < FORGET_AFTER);
+            self.places
                 .retain(|_, (_, _, seen)| tick.saturating_sub(*seen) < FORGET_AFTER);
         }
     }
@@ -1230,6 +1293,10 @@ pub fn snapshot_on(
         if !on_body || entity.container_id.is_some() || entity.is_inside() {
             continue;
         }
+        let (place, height) = place_of(world, entity);
+        motions
+            .places
+            .insert(entity.id.0, (place, height, world.tick()));
         let moving = motions.moving(entity, world.tick());
         let known_ground = || {
             entity.owner == PlayerId(0)
@@ -1266,10 +1333,7 @@ pub fn snapshot_on(
         // Orbital craft are drawn like ships while they climb, orbit and come down.
         view.spacecraft =
             world.is_spacecraft_type(entity.type_id) || world.is_craft_type(entity.type_id);
-        if let Some((target, flight)) = recent_shot(world, entity) {
-            view.shot_at = Some(target);
-            view.shot_flight = flight;
-        }
+        view.shot = recent_shot(world, entity, &motions.places);
         // Orbit is eight tiles up; a ship landing or lifting off is drawn on its way.
         let altitude = world
             .altitude_pct(entity.id)
@@ -1281,15 +1345,6 @@ pub fn snapshot_on(
             view.y = orbit.pos.y as f32 / 1000.0;
             view.facing_deg = f32::from(orbit.facing);
             view.altitude = altitude.max(0.05);
-            view.beam_target = orbit
-                .last_shot
-                .as_ref()
-                .filter(|shot| world.tick().saturating_sub(shot.tick) <= 20)
-                .map(|shot| SurfacePos {
-                    face: shot.target.face,
-                    x: i64::from(shot.target.x),
-                    y: i64::from(shot.target.y),
-                });
         }
         if !view.building {
             view.activity = activity_of(world, entity, moving);
@@ -1317,9 +1372,7 @@ pub fn snapshot_on(
                 y: building.pos.y as f32 / 1000.0,
                 facing_deg: 0.0,
                 altitude: 0.0,
-                beam_target: None,
-                shot_at: None,
-                shot_flight: None,
+                shot: None,
                 spacecraft: false,
                 hp_frac: 1.0,
                 building: true,
@@ -1366,9 +1419,7 @@ pub fn snapshot_on(
             y: wreck.pos.y as f32 / 1000.0,
             facing_deg: 0.0,
             altitude: 0.0,
-            beam_target: None,
-            shot_at: None,
-            shot_flight: None,
+            shot: None,
             spacecraft: false,
             // No health bar over what is no longer there.
             hp_frac: 1.0,
@@ -1395,44 +1446,153 @@ pub fn snapshot_on(
     }
 }
 
-/// The entity `entity` fired at in the last few ticks, when the shot went to or from orbit or
-/// came from a building (a defence's arrows and gunfire), with how far a projectile has flown;
-/// shots from orbit at the ground have their own beam (`beam_target`).
-fn recent_shot(world: &World, entity: &Entity) -> Option<(u32, Option<f32>)> {
+/// Where `entity` stands as the views place it: its point in orbit and the orbit's height for a
+/// ship aloft, else its position on the ground.
+fn place_of(world: &World, entity: &Entity) -> (Pos, f32) {
+    match world.orbit(entity.id) {
+        Some(orbit) => (orbit.pos, ORBIT_HEIGHT),
+        None => (entity.pos, 0.0),
+    }
+}
+
+/// Ticks a shot stays in the snapshots after it was fired (after it lands, for a projectile the
+/// simulation flies), so the render thread sees each one even when it skips a snapshot.
+const SHOT_WINDOW: u64 = 8;
+
+/// What the views draw for a weapon's `et_weapon.projectile` (task 95); `None` for a melee blow.
+pub fn projectile_kind(projectile: rom_rules::Projectile) -> Option<rom_render::ProjectileKind> {
+    use rom_render::ProjectileKind as Kind;
+    use rom_rules::Projectile as P;
+    Some(match projectile {
+        P::None => return None,
+        P::Arrow => Kind::Arrow,
+        P::Bolt => Kind::Bolt,
+        P::Stone => Kind::Stone,
+        P::Bullet => Kind::Bullet,
+        P::Shell => Kind::Shell,
+        P::Rocket => Kind::Rocket,
+        P::Missile => Kind::Missile,
+        P::Torpedo => Kind::Torpedo,
+        P::Beam => Kind::Beam,
+        P::Plasma => Kind::Plasma,
+        P::Railgun => Kind::Railgun,
+    })
+}
+
+/// The latest shot of `entity` while its projectile may still be in flight (task 95): what its
+/// weapon throws, at what, and the ticks the simulation fired it in and lands it in. Read from
+/// the weapon's cooldown; presentation only.
+fn recent_shot(
+    world: &World,
+    entity: &Entity,
+    places: &BTreeMap<u32, (Pos, f32, u64)>,
+) -> Option<rom_render::ShotView> {
     let et = &world.rules().entity_types[&entity.type_id];
+    let weapons = et
+        .weapons
+        .iter()
+        .filter(|w| w.projectile != rom_rules::Projectile::None);
+    let (fired, weapon) = weapons
+        .filter_map(|w| {
+            let ready = entity.cooldowns.get(&w.id)?;
+            Some((ready.checked_sub(w.cooldown_ticks.max(1) as u64)?, w))
+        })
+        .max_by_key(|(fired, w)| (*fired, std::cmp::Reverse(w.slot)))?;
+    let kind = projectile_kind(weapon.projectile)?;
+    let since = world.tick().checked_sub(fired)?;
+    if since > SHOT_WINDOW + MAX_DRAWN_TRAVEL {
+        return None;
+    }
     let ordered = entity
         .orders()
         .front()
         .filter(|o| matches!(o.kind.as_str(), "attack" | "attack_move" | "patrol"))
         .and_then(|o| o.target_entity);
-    let target = ordered.or(entity.aim)?;
-    let building = et.class == EntityClass::Building;
-    if !building && world.orbit(entity.id).is_none() && world.orbit(target).is_none() {
+    let aimed = ordered.or(entity.aim);
+    let target = aimed.and_then(|id| world.entity(id));
+    // Where it struck: the target; where it stood at the last snapshot when the shot killed it
+    // at once; or the ground point of a shot from orbit.
+    let (at, altitude) = match (target, aimed) {
+        (Some(t), _) => place_of(world, t),
+        (None, Some(id)) => places.get(&id.0).map(|&(at, height, _)| (at, height))?,
+        (None, None) => (
+            world
+                .orbit(entity.id)
+                .and_then(|o| o.last_shot.as_ref())
+                .filter(|shot| shot.tick == fired)?
+                .target,
+            0.0,
+        ),
+    };
+    let travel = match target {
+        Some(t) if weapon.projectile_speed > 0 => travel_ticks(world, entity, weapon, t)?,
+        _ => 0,
+    };
+    if since > travel + SHOT_WINDOW {
         return None;
     }
-    let (fired, weapon) = et
-        .weapons
-        .iter()
-        .filter(|w| !w.orbit_only)
-        .filter_map(|w| {
-            let ready = entity.cooldowns.get(&w.id)?;
-            Some((ready.saturating_sub(w.cooldown_ticks.max(1) as u64), w))
-        })
-        .max_by_key(|(fired, _)| *fired)?;
-    let since = world.tick().saturating_sub(fired);
-    if weapon.projectile_speed <= 0 {
-        return (since <= 6).then_some((target.0, None));
-    }
-    // A projectile is drawn on its way: the travel time is the simulation's.
-    let to = world.entity(target)?.pos;
-    let distance = world.distance(entity.pos, to)?;
-    let rate = world
-        .rules()
-        .constant("sim.ticks_per_second")
-        .unwrap_or(20)
-        .max(1) as u64;
-    let travel = (distance * rate / weapon.projectile_speed as u64).max(1);
-    (since <= travel).then_some((target.0, Some(since as f32 / travel as f32)))
+    Some(rom_render::ShotView {
+        kind,
+        target: aimed.map(|id| id.0),
+        face: at.face,
+        x: at.x as f32 / 1000.0,
+        y: at.y as f32 / 1000.0,
+        altitude,
+        fired_tick: fired,
+        land_tick: fired + travel,
+        count: u8::try_from(weapon.shots.clamp(1, 255)).unwrap_or(1),
+    })
+}
+
+/// Longest flight, in ticks, a projectile the simulation flies is reported for.
+const MAX_DRAWN_TRAVEL: u64 = 400;
+
+/// Ticks the simulation gives a shot of `weapon` from `entity` at `target` to land, measured as
+/// it measures them when it fires: from the weapon's origin (the orbit of a weapon that fires
+/// only from there) to the target's footprint or edge, its ground point when it orbits the same
+/// planet. `None` when the target is out of reach.
+pub fn travel_ticks(
+    world: &World,
+    entity: &Entity,
+    weapon: &rom_rules::Weapon,
+    target: &Entity,
+) -> Option<u64> {
+    let rules = world.rules();
+    let from = match world.orbit(entity.id) {
+        Some(orbit) if weapon.orbit_only => orbit.pos,
+        _ => entity.pos,
+    };
+    let to = match world.orbit(target.id) {
+        Some(orbit) if orbit.body == from.body => orbit.pos,
+        _ => target.pos,
+    };
+    let et = &rules.entity_types[&target.type_id];
+    let distance = if et.class == EntityClass::Building {
+        // The nearest point of the footprint on its face; across a face edge, the centre less
+        // half the footprint.
+        let (half_w, half_h) = (et.footprint_w * 500, et.footprint_h * 500);
+        if from.body == to.body && from.face == to.face {
+            let clamp = |p: i32, c: i32, half: i64| {
+                i64::from(p).clamp(i64::from(c) - half, i64::from(c) + half) as i32
+            };
+            let near = Pos {
+                x: clamp(from.x, to.x, half_w),
+                y: clamp(from.y, to.y, half_h),
+                ..to
+            };
+            world.distance(from, near)?
+        } else {
+            world
+                .distance(from, to)?
+                .saturating_sub(half_w.min(half_h).max(0) as u64)
+        }
+    } else {
+        world
+            .distance(from, to)?
+            .saturating_sub(et.radius.max(0) as u64)
+    };
+    let rate = rules.constant("sim.ticks_per_second").unwrap_or(20).max(1) as u64;
+    Some((distance * rate / weapon.projectile_speed.max(1) as u64).max(1))
 }
 
 fn view_of(
@@ -1450,9 +1610,7 @@ fn view_of(
         y: entity.pos.y as f32 / 1000.0,
         facing_deg: f32::from(entity.facing),
         altitude: 0.0,
-        beam_target: None,
-        shot_at: None,
-        shot_flight: None,
+        shot: None,
         spacecraft: false,
         hp_frac: (entity.hp as f32 / et.hp.max(1) as f32).clamp(0.0, 1.0),
         building: et.class == EntityClass::Building,
@@ -1548,6 +1706,7 @@ mod tests {
     use super::*;
     use crate::args::Options;
     use crate::match_setup::build_match;
+    use crate::space_view::space_snapshot;
     use crate::terrain::generate_content;
     use rom_sim::EntityId;
 
@@ -2236,6 +2395,16 @@ mod save_tests {
         .expect("thread");
         let link = thread.link();
         assert!(link.paused());
+        // A line typed into the chat is kept in the save, outside the world and its hash.
+        for key in [
+            ChatKey::Enter,
+            ChatKey::Char('h'),
+            ChatKey::Char('i'),
+            ChatKey::Enter,
+        ] {
+            assert!(link.chat_key(key));
+        }
+        std::thread::sleep(Duration::from_millis(300));
         link.request_save(Kind::Manual, "Test save / one");
         let saved = wait_for_outcome(&link).expect("saved");
         assert_eq!(saved.name, "Test save / one");
@@ -2248,6 +2417,9 @@ mod save_tests {
         assert_eq!(info.settings[KEY_NAME], "Test save / one");
         assert_eq!(info.settings[saves::KEY_ARGS], "--seed\n5");
         assert_eq!(info.seats.len(), 4);
+        let log = ChatLog::decode(&info.settings[crate::chat::SAVE_KEY]);
+        assert_eq!(log.lines().len(), 1);
+        assert_eq!(log.lines()[0].text, "hi");
 
         // The list reads the header only, newest first, and flags other rules.
         let current = RulesId::of(&rules);
@@ -2319,5 +2491,122 @@ mod save_tests {
         let (loaded, _, _) = load_match(&auto.path, &rules).expect("autosave loads");
         assert!(loaded.tick() >= 1_200);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn every_weapon_takes_its_projectile_kind_from_data() {
+        let rules = crate::terrain::load_rules().expect("rules");
+        let mut weapons = 0;
+        for et in rules.entity_types.values() {
+            for weapon in &et.weapons {
+                weapons += 1;
+                // A weapon with a reach throws something; a melee blow throws nothing.
+                assert_eq!(
+                    projectile_kind(weapon.projectile).is_some(),
+                    weapon.range_max > 0,
+                    "weapon {} of type {:?}",
+                    weapon.id,
+                    et.id
+                );
+            }
+        }
+        assert!(weapons > 50);
+        // The kind follows the row, whatever the type: change it in the data and it changes.
+        let conn = rom_rules::build_rules_db(
+            include_str!("../../../db/schema.sql"),
+            &crate::terrain::seed_with_models(),
+        )
+        .expect("database");
+        conn.execute_batch(
+            "UPDATE et_weapon SET projectile='torpedo' WHERE entity_type_id=(SELECT id FROM def \
+             WHERE key='unit.archer');",
+        )
+        .expect("update");
+        let changed = rom_rules::Rules::load(&conn).expect("rules");
+        let archer = changed.id_of("unit.archer").unwrap();
+        let weapon = &changed.entity_types[&archer].weapons[0];
+        assert_eq!(
+            projectile_kind(weapon.projectile),
+            Some(rom_render::ProjectileKind::Torpedo)
+        );
+        for kind in rom_render::ProjectileKind::ALL {
+            let sql = format!(
+                "UPDATE et_weapon SET projectile='{}' WHERE id={};",
+                kind.key(),
+                weapon.id
+            );
+            conn.execute_batch(&sql).expect("update");
+            let rules = rom_rules::Rules::load(&conn).expect("rules");
+            let weapon = &rules.entity_types[&archer].weapons[0];
+            assert_eq!(projectile_kind(weapon.projectile), Some(kind));
+        }
+    }
+
+    #[test]
+    fn a_projectile_lands_when_the_simulation_lands_it() {
+        let rules = Arc::new(crate::terrain::load_rules().expect("rules"));
+        let mut world = World::battle_scenario(Arc::clone(&rules), 1, 0).expect("scenario");
+        let id = |key: &str| rules.id_of(key).unwrap();
+        // A city's arrows fly (`projectile_speed`): at a farm (a footprint) and at a spearman
+        // standing its ground (an edge).
+        let city = world
+            .spawn(id("bld.city"), PLAYER, Pos::flat(30_000, 30_000))
+            .unwrap();
+        world
+            .spawn(id("bld.farm"), PlayerId(2), Pos::flat(37_500, 31_000))
+            .unwrap();
+        let spearman = world
+            .spawn(id("unit.spearman"), PlayerId(2), Pos::flat(30_500, 37_800))
+            .unwrap();
+        let hold = rules
+            .stances
+            .values()
+            .find(|s| s.behavior == "stand_ground")
+            .unwrap()
+            .id;
+        world.set_stance(PlayerId(2), spearman, hold).unwrap();
+        let mut targets = std::collections::BTreeSet::new();
+        let mut checked = 0;
+        let models = crate::looks::ModelBook::default();
+        let mut motions = Motions::default();
+        for _ in 0..1_200 {
+            if checked >= 12 {
+                break;
+            }
+            world.step();
+            let snapshot = snapshot_on(
+                &world,
+                world.surfaces()[0].body(),
+                &world.visible_entities(PLAYER),
+                &models,
+                &mut motions,
+            );
+            let Some(shot) = snapshot
+                .entities
+                .iter()
+                .find(|v| v.id == city.0)
+                .and_then(|v| v.shot)
+            else {
+                continue;
+            };
+            // The first snapshot after the shot, as the render thread first sees it.
+            if shot.fired_tick + 1 != world.tick() {
+                continue;
+            }
+            assert_eq!(shot.kind, rom_render::ProjectileKind::Arrow);
+            let target = shot.target.expect("aimed at an entity");
+            let hit = world
+                .snapshot()
+                .hits
+                .into_iter()
+                .find(|h| h.attacker == city && h.target.0 == target)
+                .expect("the hit is on its way");
+            assert!(hit.land_tick > shot.fired_tick);
+            assert_eq!(shot.land_tick, hit.land_tick, "shot at {target}");
+            targets.insert(target);
+            checked += 1;
+        }
+        assert!(checked >= 3, "{checked} shots");
+        assert!(targets.len() == 2 || checked >= 10, "{targets:?}");
     }
 }

@@ -1,0 +1,19 @@
+# Task 95, replayed by --script in universe mode (--players 2 --ai none, seed 1, --sun fixed):
+# in front of player one's city, five howitzers and three field guns of player one shell a
+# barracks and a factory of player two ten tiles away; they fire together at ticks 0 and 30 and
+# the game is slowed to a crawl from tick 18, so the second salvo is seen in the air.
+# Screenshot: --size 1280x800 --after 37 (cropped).
+0 grant-age age.modern
+0 place 1 unit.howitzer @-9,18
+0 place 1 unit.howitzer @-5,18
+0 place 1 unit.howitzer @-1,18
+0 place 1 unit.howitzer @3,18
+0 place 1 unit.howitzer @7,18
+0 place 1 unit.field_gun @-7,17
+0 place 1 unit.field_gun @1,17
+0 place 1 unit.field_gun @9,17
+0 place 2 bld.barracks @-6,8
+0 place 2 bld.factory @6,8
+1 speed 100
+2 cam wheel 2 620,420
+18 speed 2

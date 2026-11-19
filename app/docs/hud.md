@@ -66,7 +66,7 @@ the right, the minimap to the bottom centre. Rectangles are `x, y, w, h`.
 
 | Region | Rect | Content |
 | --- | --- | --- |
-| Message lines | 16, 578, 362, 56 | chat prompt line and the latest event line |
+| Message lines | 16, 578, 362, 56 | chat prompt line (a click, or Enter, gives it the keyboard) and the latest event line |
 | Help line | 22, 644, 580, 34 | rollover help text |
 | Palette tabs | 22, 692, 580, 38 | `<` BUILD · ORDER · TRAIN · RESEARCH `>`; active tab has the cyan frame |
 | Command grid | 26, 742, 330, 176 | 5 columns × 3 rows of 58 × 52 slots, pitch 67 × 59, first slot at 28, 744 |
@@ -285,3 +285,16 @@ game, quit); the simulation is held while it is open. Save asks for a name (defa
 age, date). F5 quick saves, F9 loads the newest quick save. The pause button holds the
 simulation; the event line says Paused or Resumed. The overlay is not part of the raylib
 frame, so `--screenshot` does not show it (use `import -window root`, see `docs/launcher.md`).
+
+## Chat (task 94)
+
+Enter or a click on the chat line gives the chat the keyboard: game hotkeys and camera keys
+wait. Type; Left, Right, Home, End, Delete, Backspace and Ctrl+V edit; Enter sends, Escape drops
+the line; Tab or Shift+Enter picks the channel (All, Allies, and Celestial once ascended), shown
+as a coloured tag and remembered for the match. The latest lines show over the world at the left
+(sender in the player colour, channel tag) and fade; F7 or the chat button opens the history,
+Up/Down/PageUp/PageDown scroll it, Escape closes it. Lines are presentation, never orders: they
+leave through one `ChatSink` (`rom-app/src/chat.rs`) with their recipients, so network play can
+relay them. A save keeps the log in its settings under `chat.log` (a save without it loads with
+an empty log). Scripts: `key enter|escape|tab|left|...`, `type words`, `chat [channel] words`,
+`chatfrom <player> <channel> words`, `hud chat 0`, `hud top 1`.

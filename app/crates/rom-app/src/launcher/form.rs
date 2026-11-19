@@ -66,6 +66,7 @@ controls! {
     ("size", 1, "1280x800", "Canvas width × height in physical pixels (1–16384 each).", false),
     ("scale", 1, "100", "Internal render resolution, 50–100 percent.", false),
     ("grass", 1, "on", "Grass detail: blades on the ground near the camera, on or off.", false),
+    ("projectiles", 1, "on", "Projectiles in flight: arrows, shells, rockets and beams, on or off.", false),
     ("hud-scale", 1, "", "HUD scale, 25–200 percent; blank uses automatic scaling.", false),
     ("no-chrome", 1, "false", "Open the game window without the desktop title bar and borders (default: with them).", true),
     ("no-hud", 1, "false", "Hide the match HUD.", true),
@@ -402,6 +403,7 @@ mod tests {
             ("size", "900x600"),
             ("scale", "75"),
             ("grass", "off"),
+            ("projectiles", "off"),
             ("hud-scale", "85"),
             ("no-chrome", "true"),
             ("no-hud", "true"),
@@ -481,7 +483,7 @@ mod tests {
             );
         }
         assert!(CONTROLS.iter().any(|c| c.flag == "script"));
-        assert_eq!(CONTROLS.len(), 47);
+        assert_eq!(CONTROLS.len(), 48);
     }
 
     #[test]
