@@ -182,6 +182,19 @@ it in review round 12 (2026-11-17): it is now the lab's only look, `bld.auto_lab
 (the building was renamed the Auto Lab the same day), locked in `approved.toml`; the earlier
 look was retired.
 
+Task 95 makes shots visible in flight, as the weapon's `et_weapon.projectile` says (presentation
+only; `rom-render/src/projectiles.rs`). Arrows (a shaft with white fletching), sling and siege
+stones, shells (brass with a short hot streak behind), rockets and missiles (with a flame and a
+smoke trail) and torpedoes are small models of the part kit, about a tile long, turned along
+their way; arrows, stones and shells fly an arc whose height grows with the distance, the rest a
+line, and anything to or from orbit a straight line drawn two and a half times larger. Bullets
+and crossbow bolts are short bright streaks; plasma a violet glowing bolt; lasers a cyan beam
+with a white core, a soft halo and a flicker, held for a moment from muzzle to target; rail shots
+a pale streak that fades. Each leaves a small effect where it lands: dust for arrows, bolts and
+stones, sparks for bullets and rail shots, a flash and smoke for shells, rockets, missiles and
+torpedoes, a glow for beams and plasma. Streaks, beams and glows are drawn with additive
+blending.
+
 ## Budgets
 
 | Model | Near | Far |

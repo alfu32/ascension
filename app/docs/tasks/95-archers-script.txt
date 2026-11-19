@@ -1,0 +1,45 @@
+# Task 95, replayed by --script in universe mode (--players 2 --ai none, seed 1, --sun fixed):
+# in front of player one's city, twenty archers of player one stand within bowshot of
+# spearmen and archers of player two; units pick their targets every ten ticks, so both lines
+# loose a volley at once, at ticks 0 and 30; the game is all but stopped from tick 29 while
+# the second flies. Screenshot: --size 1280x800 --after 8 (img/95-archers.png is the battle cropped).
+0 grant-age age.classical
+0 place 1 unit.archer @-9,11
+0 place 1 unit.archer @-8,11
+0 place 1 unit.archer @-7,11
+0 place 1 unit.archer @-6,11
+0 place 1 unit.archer @-5,11
+0 place 1 unit.archer @-4,11
+0 place 1 unit.archer @-3,11
+0 place 1 unit.archer @-2,11
+0 place 1 unit.archer @-1,11
+0 place 1 unit.archer @0,11
+0 place 1 unit.archer @1,11
+0 place 1 unit.archer @2,11
+0 place 1 unit.archer @3,11
+0 place 1 unit.archer @4,11
+0 place 1 unit.archer @5,11
+0 place 1 unit.archer @6,11
+0 place 1 unit.archer @7,11
+0 place 1 unit.archer @8,11
+0 place 1 unit.archer @9,11
+0 place 1 unit.archer @10,11
+0 place 2 unit.spearman @-8,7
+0 place 2 unit.spearman @-6,7
+0 place 2 unit.spearman @-4,7
+0 place 2 unit.spearman @-2,7
+0 place 2 unit.spearman @0,7
+0 place 2 unit.spearman @2,7
+0 place 2 unit.spearman @4,7
+0 place 2 unit.spearman @6,7
+0 place 2 unit.spearman @8,7
+0 place 2 unit.archer @-9,6
+0 place 2 unit.archer @-6,6
+0 place 2 unit.archer @-3,6
+0 place 2 unit.archer @0,6
+0 place 2 unit.archer @3,6
+0 place 2 unit.archer @6,6
+0 place 2 unit.archer @9,6
+1 speed 100
+2 cam wheel 4 620,400
+29 speed 1

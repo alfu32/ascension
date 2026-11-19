@@ -212,9 +212,7 @@ fn place(
             // Units face south, towards the camera.
             facing_deg: 90.0,
             altitude: 0.0,
-            beam_target: None,
-            shot_at: None,
-            shot_flight: None,
+            shot: None,
             spacecraft: false,
             hp_frac: 1.0,
             building,

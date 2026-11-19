@@ -1154,9 +1154,7 @@ mod tests {
             under_construction: None,
             model: None,
             altitude: 0.0,
-            beam_target: None,
-            shot_at: None,
-            shot_flight: None,
+            shot: None,
             spacecraft: false,
             activity: Default::default(),
         }

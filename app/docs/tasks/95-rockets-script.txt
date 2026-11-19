@@ -1,0 +1,20 @@
+# Task 95, replayed by --script in universe mode (--players 2 --ai none, seed 1, --sun fixed):
+# in front of player one's city, rocket artillery and bazooka teams of player one fire at a
+# barracks and a factory of player two; they fire together at ticks 0 and 30, the rockets
+# trailing smoke, and the game is slowed to a crawl from tick 18.
+# Screenshot: --size 1280x800 --after 36 (cropped).
+0 grant-age age.information
+0 place 1 unit.rocket_artillery @-8,18
+0 place 1 unit.rocket_artillery @-3,18
+0 place 1 unit.rocket_artillery @2,18
+0 place 1 unit.rocket_artillery @7,18
+0 place 1 unit.bazooka_team @-6,13
+0 place 1 unit.bazooka_team @-3,13
+0 place 1 unit.bazooka_team @0,13
+0 place 1 unit.bazooka_team @3,13
+0 place 1 unit.bazooka_team @6,13
+0 place 2 bld.barracks @-6,8
+0 place 2 bld.factory @6,8
+1 speed 100
+2 cam wheel 2 620,420
+18 speed 2

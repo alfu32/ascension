@@ -1,0 +1,24 @@
+# Task 95, replayed by --script in universe mode (--players 2 --ai none, seed 1, --sun fixed):
+# the town of task 80 (80-battle-script.txt) bombarded by a space frigate of player one from
+# orbit, a survey ship beside it giving sight. The frigate's bombardment is a laser: its first
+# volley comes at tick 177; the game is slowed to a crawl from tick 170 so the beam is seen
+# burning down on the town. Screenshot: --size 1280x800 --after 22 (cropped).
+0 grant-age age.expansion
+0 place 2 bld.city @40,0
+0 place 2 bld.barracks @32,-8
+0 place 2 bld.factory @48,-8
+0 place 2 bld.farm @40,-11
+0 place 2 unit.marine @37,-4
+0 place 2 unit.marine @43,4
+0 place 2 unit.grav_tank @38,-5
+0 place 2 unit.grav_tank @42,5
+0 place-orbit 1 unit.survey_ship @40,0
+0 place-orbit 1 unit.space_frigate @40,-27
+60 click ship1
+62 cam focus
+90 cam focus
+92 cam wheel -1 640,300
+94 cam drag 640,300 640,400
+100 click ship2
+101 rclick foecity1
+170 speed 2

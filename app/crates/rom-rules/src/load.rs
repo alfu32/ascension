@@ -428,6 +428,7 @@ fn load_et_weapon(conn: &Connection) -> Result<Vec<Weapon>, RulesError> {
             fires_moving: boolean(row, "fires_moving", "et_weapon", &identity)?,
             consumed: boolean(row, "consumed", "et_weapon", &identity)?,
             orbit_only: boolean(row, "orbit_only", "et_weapon", &identity)?,
+            projectile: enum_value(row, "projectile", "et_weapon", &identity)?,
             targets: Vec::new(),
         })
     })

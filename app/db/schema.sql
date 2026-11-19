@@ -292,6 +292,9 @@ CREATE TABLE et_weapon (               -- "attacks" (0..n per type)
   fires_moving   INTEGER NOT NULL DEFAULT 0,
   consumed       INTEGER NOT NULL DEFAULT 0,   -- attacker is destroyed (missile, fire ship, kamikaze drone)
   orbit_only     INTEGER NOT NULL DEFAULT 0 CHECK (orbit_only IN (0,1)), -- surface range below an orbiting attacker
+  -- what the views draw in flight (task 95); presentation only, the simulation never reads it
+  projectile     TEXT NOT NULL DEFAULT 'none' CHECK (projectile IN ('none','arrow','bolt','stone',
+                   'bullet','shell','rocket','missile','torpedo','beam','plasma','railgun')),
   UNIQUE (entity_type_id, slot)
 ) STRICT;
 
