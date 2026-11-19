@@ -1272,6 +1272,14 @@ pub fn snapshot_on(
             *count = count.saturating_add(1);
         }
     }
+    // The newest hit of each weapon still on its way, with its target and landing tick.
+    let mut in_flight = BTreeMap::<(u32, u32), (u32, u64)>::new();
+    for hit in world.hits_in_flight() {
+        in_flight.insert(
+            (hit.attacker.0, hit.weapon_id),
+            (hit.target.0, hit.land_tick),
+        );
+    }
     let mut views: Vec<EntityView> = Vec::with_capacity(sightings.len());
     let mut remembered = false;
     let mut live = sightings.iter().filter_map(|s| match s {
@@ -1333,7 +1341,7 @@ pub fn snapshot_on(
         // Orbital craft are drawn like ships while they climb, orbit and come down.
         view.spacecraft =
             world.is_spacecraft_type(entity.type_id) || world.is_craft_type(entity.type_id);
-        view.shot = recent_shot(world, entity, &motions.places);
+        view.shot = recent_shot(world, entity, &motions.places, &in_flight);
         // Orbit is eight tiles up; a ship landing or lifting off is drawn on its way.
         let altitude = world
             .altitude_pct(entity.id)
@@ -1481,11 +1489,13 @@ pub fn projectile_kind(projectile: rom_rules::Projectile) -> Option<rom_render::
 
 /// The latest shot of `entity` while its projectile may still be in flight (task 95): what its
 /// weapon throws, at what, and the ticks the simulation fired it in and lands it in. Read from
-/// the weapon's cooldown; presentation only.
+/// the weapon's cooldown and the hits `in_flight` (the newest per attacker and weapon: target
+/// and landing tick); presentation only.
 fn recent_shot(
     world: &World,
     entity: &Entity,
     places: &BTreeMap<u32, (Pos, f32, u64)>,
+    in_flight: &BTreeMap<(u32, u32), (u32, u64)>,
 ) -> Option<rom_render::ShotView> {
     let et = &world.rules().entity_types[&entity.type_id];
     let weapons = et
@@ -1524,8 +1534,14 @@ fn recent_shot(
             0.0,
         ),
     };
-    let travel = match target {
-        Some(t) if weapon.projectile_speed > 0 => travel_ticks(world, entity, weapon, t)?,
+    // The simulation's own landing tick while the hit is on its way (task 102); measured again
+    // for a shot that missed (no hit flies), and none for one that hit at once.
+    let landing = in_flight
+        .get(&(entity.id.0, weapon.id))
+        .filter(|&&(at, land)| Some(at) == aimed.map(|id| id.0) && land > fired);
+    let travel = match (landing, target) {
+        (Some(&(_, land)), _) => land - fired,
+        (None, Some(t)) if weapon.projectile_speed > 0 => travel_ticks(world, entity, weapon, t)?,
         _ => 0,
     };
     if since > travel + SHOT_WINDOW {
@@ -2608,5 +2624,104 @@ mod save_tests {
         }
         assert!(checked >= 3, "{checked} shots");
         assert!(targets.len() == 2 || checked >= 10, "{targets:?}");
+    }
+
+    #[test]
+    fn a_drawn_flight_ends_at_the_simulations_land_tick_at_a_moving_target() {
+        // Task 102: an archer's arrows and a howitzer's shells fly (data), at a spearman walking
+        // past: the drawn shot lands at the tick the simulation computed when it fired, read
+        // from the hit on its way, not measured again where the target has walked to.
+        let rules = Arc::new(crate::terrain::load_rules().expect("rules"));
+        let id = |key: &str| rules.id_of(key).unwrap();
+        let models = crate::looks::ModelBook::default();
+        for (shooter, kind) in [
+            ("unit.archer", rom_render::ProjectileKind::Arrow),
+            ("unit.howitzer", rom_render::ProjectileKind::Shell),
+        ] {
+            let mut world = World::battle_scenario(Arc::clone(&rules), 1, 0).expect("scenario");
+            let gun = world
+                .spawn(id(shooter), PLAYER, Pos::flat(30_000, 30_000))
+                .unwrap();
+            let walker = world
+                .spawn(id("unit.spearman"), PlayerId(2), Pos::flat(33_500, 27_000))
+                .unwrap();
+            for (owner, unit, behaviour) in [
+                (PLAYER, gun, "stand_ground"),
+                (PlayerId(2), walker, "hold_fire"),
+            ] {
+                let stance = rules
+                    .stances
+                    .values()
+                    .find(|s| s.behavior == behaviour)
+                    .unwrap()
+                    .id;
+                world.set_stance(owner, unit, stance).unwrap();
+            }
+            world.step();
+            world
+                .submit(Command {
+                    player: PlayerId(2),
+                    executor: walker,
+                    kind: "move".into(),
+                    subject: None,
+                    target_entity: None,
+                    target_pos: Some(Pos::flat(33_500, 34_000)),
+                    queue: false,
+                })
+                .expect("move");
+            world
+                .submit(Command {
+                    player: PLAYER,
+                    executor: gun,
+                    kind: "attack".into(),
+                    subject: None,
+                    target_entity: Some(walker),
+                    target_pos: None,
+                    queue: false,
+                })
+                .expect("attack");
+            let mut motions = Motions::default();
+            let mut checked = 0;
+            for _ in 0..400 {
+                if checked >= 2 || world.entity(walker).is_none() {
+                    break;
+                }
+                world.step();
+                let snapshot = snapshot_on(
+                    &world,
+                    world.surfaces()[0].body(),
+                    &world.visible_entities(PLAYER),
+                    &models,
+                    &mut motions,
+                );
+                let Some(shot) = snapshot
+                    .entities
+                    .iter()
+                    .find(|v| v.id == gun.0)
+                    .and_then(|v| v.shot)
+                else {
+                    continue;
+                };
+                if shot.fired_tick + 1 != world.tick() {
+                    continue;
+                }
+                assert_eq!(shot.kind, kind);
+                let hit = world
+                    .hits_in_flight()
+                    .find(|h| h.attacker == gun)
+                    .expect("the hit is on its way");
+                assert!(hit.land_tick > shot.fired_tick, "{shooter}");
+                assert_eq!(shot.land_tick, hit.land_tick, "{shooter}");
+                // The render thread's flight ends with the snapshot that shows the hit.
+                let (start, end) =
+                    rom_render::flight_span(shot.kind, shot.fired_tick, shot.land_tick);
+                assert_eq!(
+                    (start, end),
+                    (shot.fired_tick as f64, (hit.land_tick + 1) as f64)
+                );
+                checked += 1;
+            }
+            assert!(checked >= 1, "{shooter} fired at the walker");
+        }
     }
 }

@@ -950,11 +950,11 @@ fires on its own whatever its order queue holds: it keeps its aim (`entity.aim`,
 state, below) while the target is alive, visible and in range, takes the nearest
 visible enemy in range when it has none (every ten ticks, or at once when its target
 is lost), and fires when reloaded. It stays stand-ground; an explicit `attack` order
-aims it instead. The early weapons of the city, tower and fort shoot arrows: they have
-`et_weapon.projectile_speed` 25 tiles per second (the column existed), so hits land
-after their flight and the arrow is drawn in flight; the gun-age variants hit at once
-and draw a tracer. (The city's weapon is `pierce` in every age in the data, so a city
-shoots arrows in every age.)
+aims it instead. The early weapons of the city, tower and fort shoot arrows: their hits
+land after the arrow's flight (`et_weapon.projectile_speed`, since task 102 the speed of
+every arrow, see "Projectiles you can see"); the gun-age variants fire shells, bullets,
+beams or plasma at their kind's speed. (The city's weapon is `pierce` in every age in the
+data, so a city shoots arrows in every age.)
 
 Screenshots (scripts `tasks/68-*-script.txt`): `img/sight-tower-firing.png`,
 `img/sight-city-training-firing.png` (the city fires while its queue trains),
@@ -1482,12 +1482,43 @@ all `pierce`), so it is a column of its own:
   `(type, slot)` for a second weapon: the destroyer's anti-aircraft gun, bombardment from orbit).
   The generator stops when a weapon with a reach (`range_max > 0`) has no kind; melee blows keep
   `none`. No row was added or moved: definition and weapon ids are unchanged.
-- **Flight time.** A weapon with `projectile_speed` (the city's, tower's and fort's arrows) is
-  drawn landing exactly when the simulation lands it. Every other weapon hits at once in the
-  simulation; its projectile is drawn flying at a speed per kind after the shot, so its impact
-  shows a little after the damage (a bullet within a tick, an arrow about 0.4 s over five
-  tiles, a shell about half a second). Giving those weapons a `projectile_speed` would make the
-  flight real, but changes the simulation and its hash: a balance decision for the owner.
+- **Flight time (task 102).** The owner (2026-11-19): damage is "counted when the projectile is
+  supposed to land … by the numbers", the flight is pure animation. Every weapon whose
+  projectile travels has a `projectile_speed` (milli-tiles per game second): `PROJECTILE_SPEED`
+  in `generate.py` gives one per kind, `PROJECTILE_SPEED_OF` the few weapons that differ.
+  When it fires, the simulation computes the landing tick, `fire tick + max(1, distance ×
+  tick rate / projectile_speed)`, with the distance it measured for the shot (to a building's
+  footprint, a unit's edge, an orbiting target's ground subpoint), and queues the hit; at that
+  tick the hit lands on the target by id wherever it is (no collision, no dodging). A target
+  that dies or is neutralised first wastes the hit. Nothing the renderer does reaches the
+  simulation: the views read the landing tick of the hit on its way
+  (`World::hits_in_flight`) and draw the flight ending then, so the drawn speed is the data's.
+
+  | Kind | Tiles per second | Why |
+  | --- | --- | --- |
+  | arrow | 15 | slow enough to watch on its arc: 0.3 s over an archer's five tiles, 0.7 s from a tower |
+  | bolt | 20 | a crossbow's flatter, faster shot |
+  | stone | 10 | sling stones and siege stones on a high arc, the slowest thrown thing |
+  | bullet | 40 | fast: two or three ticks over a rifle's reach |
+  | shell | 24 | a tank's, a gun tower's or a warship's shell; the howitzer lobs its shell at 14 |
+  | rocket | 16 | a rocket's motor, slower than a shell |
+  | missile | 20 | a guided missile |
+  | torpedo | 8 | unused (no submarine) |
+  | plasma | 30 | a visible glowing charge, slower than a bullet |
+  | beam | 0 | light: hits the tick it fires, drawn as a held, flickering line |
+  | railgun | 0 | a rail slug would cross the longest reach within a tick or two: hits at once, drawn as a fading line |
+
+  The longest flight in the data is one second (a catapult or a ground battery at full
+  reach). To and from orbit the distance is the one the weapons' reach uses, along the ground
+  to the orbiting ship's subpoint; the orbit's height (drawn eight tiles up) is not part of
+  it, so a shot straight up or down takes the one-tick minimum and is drawn fast.
+
+  Balance at 0.0.95 → task 102: the fight matrix keeps 255 strengths with none unanswered;
+  duels over seeds 1..100, balanced:moderate against balanced:easiest 95–0 (5 draws, mean tick
+  52532) → 94–1 (5 draws, 56192), moderate against moderate 50–41 (9 draws, 67173) → 48–42
+  (10 draws, 70179). Fights last a little longer (volleys at targets that die first are
+  wasted); no speed needed changing. Screenshots: `img/102-archers.png`, `img/102-shells.png`
+  (scripts `tasks/102-*-script.txt`).
 - `torpedo` is in the vocabulary and drawn, but no weapon uses it yet (there is no submarine).
 
 ## Placement and resource discovery (task 41)

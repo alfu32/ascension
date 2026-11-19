@@ -1,0 +1,19 @@
+# Task 102, replayed by --script in universe mode (--players 2 --ai none --seed 1 --sun fixed
+# --speed 2): task 95's guns. Five howitzers and three field guns of player one fire their first
+# salvo at tick 0 at a barracks and a factory of player two ten tiles away (eight to their
+# walls); a howitzer lobs its shell at 14 tiles a second and a field gun's flies at 24 (data),
+# so they land about ticks 11 and 7. The game crawls from the start, a tick every 2.5 seconds,
+# so the shells are seen in the air and both buildings still at full health.
+# Screenshot: --size 1280x800 --after 10 (img/102-shells.png, the battle cropped).
+0 grant-age age.modern
+0 place 1 unit.howitzer @-9,18
+0 place 1 unit.howitzer @-5,18
+0 place 1 unit.howitzer @-1,18
+0 place 1 unit.howitzer @3,18
+0 place 1 unit.howitzer @7,18
+0 place 1 unit.field_gun @-7,17
+0 place 1 unit.field_gun @1,17
+0 place 1 unit.field_gun @9,17
+0 place 2 bld.barracks @-6,8
+0 place 2 bld.factory @6,8
+1 cam wheel 2 620,420
