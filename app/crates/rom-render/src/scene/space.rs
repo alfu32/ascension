@@ -15,13 +15,13 @@ use crate::entities::{Hull, owner_color};
 use crate::globe::PlanetScene;
 use crate::hud_minimap::planet_pixels;
 use crate::layers::{
-    FrameView, OneView, PlanetPlace, ShipScales, SystemPlace, morph_size, plane_unit,
-    system_detail, system_ship_length,
+    CAPITAL_CLASS, FrameView, OneView, PlanetPlace, ShipScales, SystemPlace, apparent_share,
+    morph_size, plane_unit, ship_on_screen, ship_true_length, system_detail,
 };
 use crate::space::{
     FIGURE_DASH, MapLineKind, SpaceHover, SpaceSnapshot, annulus, arc, chevron, chevron3,
-    claim_rings, colony_rings, diamond, facing, map_colony_rings, map_mark_scale, map_ship_marks,
-    ship_frame_pos, star_map_lines, transit_at_rim,
+    claim_rings, class_marker, colony_rings, diamond, facing, map_colony_rings, map_mark_scale,
+    map_ship_marks, overlapping_marks, ship_frame_pos, star_map_lines, transit_at_rim,
 };
 use crate::universe::{
     ACCRETION_RGB, BodyViewKind, CELESTIAL_RGB, MAP_RADIUS, PlacedBody, SYSTEM_RADIUS,
@@ -109,9 +109,6 @@ const SKY_PLANET_DISC: f32 = 3.5;
 const SKY_ROCK_DISC: f32 = 2.5;
 /// Diameter in pixels of another system's point of light seen from inside a system.
 const SKY_STAR_PIXELS: f32 = 3.0;
-/// A ship drawn as its model on the system plane is this many times the hull's length: the
-/// hull is as wide as it is long, a model is slender, and this keeps them as large on screen.
-const MODEL_ON_PLANE: f32 = 1.6;
 /// Light from above the system's plane on ships drawn as their models, out in space (none in
 /// the planet's orbit, where the globe lights them).
 const STAR_FILL: f32 = 0.35;
@@ -699,6 +696,8 @@ impl Scene {
         let [tint_at, emissive_at, alpha_at] = space.uniforms;
         let (width, height) = (target.texture.width as f32, target.texture.height as f32);
         let mut rim_labels: Vec<([f32; 3], u32, u32, f32)> = Vec::new();
+        // Groups of overlapping ship markers: where their count goes, in pixels, and the owner.
+        let mut group_counts: Vec<(f32, f32, usize, u8)> = Vec::new();
         let bar_look = view.view((width, height), self.projection_centre_y);
         let mut ship_bars: Vec<crate::bars::ScreenBar> = Vec::new();
         let mut icons: Vec<([f32; 3], f32, String, f32)> = Vec::new();
@@ -1019,6 +1018,13 @@ impl Scene {
                 let mut model_ships: Vec<(u16, bool, Matrix)> = Vec::new();
                 let models = self.models.as_ref();
                 let loaded_id = loaded.map(|b| universe.bodies[b].id);
+                let per_tile = zoom.scale().system_per_tile();
+                // The eye's own axes: markers face it.
+                let eye_toward = unit_vector(sub3(view.eye, view.target));
+                let eye_right = unit_vector(cross3(view.up, eye_toward));
+                let eye_up = cross3(eye_toward, eye_right);
+                // Ships far enough out to be class markers, for the counts of overlapping ones.
+                let mut marked: Vec<(u8, [f32; 3], f32)> = Vec::new();
                 for ship in state
                     .snapshot
                     .ships
@@ -1026,18 +1032,27 @@ impl Scene {
                     .filter(|s| s.system == system_id)
                 {
                     let scale = state.scales.of(ship.kind);
+                    let class = state.scales.class(ship.kind);
                     let at = ship_frame_pos(&universe, &bodies_placed, outermost, ship);
                     let theta = ship.facing_deg.to_radians();
+                    let heading = [theta.cos(), 0.0, theta.sin()];
                     // A ship whose model was uploaded is drawn as it; any other keeps the hull.
                     let model = ship
                         .model
                         .filter(|m| models.is_some_and(|g| g.has(m.index)));
-                    let on_plane = if model.is_some() { MODEL_ON_PLANE } else { 1.0 };
+                    // True size near, its floor far, its class marker farther still (task 96).
+                    // The floor holds for the length it shows the eye, nose on or side on.
+                    let per_pixel = view.per_pixel(at, height).max(1e-9);
+                    let true_length = ship_true_length(ship.model, scale, per_tile);
+                    let share =
+                        apparent_share(ship.model, heading, unit_vector(sub3(view.eye, at)));
+                    let screen = ship_on_screen(true_length * share, per_pixel, class);
+                    let lift = unit * 0.4;
                     let plane = Hull {
-                        origin: [at[0], at[1] + unit * 0.4, at[2]],
-                        forward: [theta.cos(), 0.0, theta.sin()],
+                        origin: [at[0], at[1] + lift, at[2]],
+                        forward: heading,
                         up: [0.0, 1.0, 0.0],
-                        length: system_ship_length(scale, distance) * on_plane,
+                        length: screen.model / share,
                         height: 0.0,
                     };
                     // A ship in orbit of the loaded globe leaves its place above the ground
@@ -1060,10 +1075,10 @@ impl Scene {
                         height: Hull::height_of(hull.length * pass.detail),
                         ..hull
                     };
-                    if !keeps(hull.origin) || hull.length <= 0.0 {
+                    if !keeps(hull.origin) {
                         continue;
                     }
-                    let instance = model.and_then(|m| {
+                    let instance = model.filter(|_| hull.length > 0.0).and_then(|m| {
                         let (transform, near) = models?.instance_at(
                             m.index,
                             hull.origin,
@@ -1078,15 +1093,54 @@ impl Scene {
                     });
                     match instance {
                         Some(instance) => model_ships.push(instance),
-                        None => hull.push(owner_color(ship.owner), &mut boxes),
+                        None if hull.length > 0.0 => hull.push(owner_color(ship.owner), &mut boxes),
+                        None => {}
                     }
-                    let selected = state.selected.binary_search(&ship.id).is_ok();
                     let mark = (255.0 * pass.detail * pass.space) as u8;
+                    // The class marker: a chevron, a diamond for a capital ship, in the owner's
+                    // colour on a white rim, facing the ship's heading; it grows in as the model
+                    // shrinks away.
+                    if screen.marker > 0.004 {
+                        let [r, g, b] = owner_rgb(ship.owner);
+                        let size = screen.marker_pixels * per_pixel * (0.6 + 0.4 * screen.marker);
+                        let a = (f32::from(mark) * screen.marker) as u8;
+                        let lifted = [at[0], at[1] + lift, at[2]];
+                        // Turned toward the eye, its nose along the heading as the screen shows
+                        // it, so it reads at any tilt of the camera.
+                        let along = screen_heading(heading, eye_right, eye_up);
+                        let across = cross3(along, eye_toward);
+                        let capital = class >= CAPITAL_CLASS;
+                        let behind: [f32; 3] =
+                            std::array::from_fn(|i| lifted[i] - eye_toward[i] * per_pixel);
+                        overlay.tris.extend(class_marker(
+                            behind,
+                            along,
+                            across,
+                            size * 0.62,
+                            capital,
+                            [255, 255, 255, a],
+                        ));
+                        overlay.tris.extend(class_marker(
+                            lifted,
+                            along,
+                            across,
+                            size * 0.5,
+                            capital,
+                            [r, g, b, a],
+                        ));
+                        if screen.marker >= 0.5 {
+                            marked.push((ship.owner, lifted, screen.marker_pixels));
+                        }
+                    }
+                    // Rings and bars follow the ship as drawn.
+                    let shown = screen.pixels.max(screen.marker_pixels) * per_pixel;
+                    let ring_radius = shown * 0.62 + per_pixel * 3.0;
+                    let selected = state.selected.binary_search(&ship.id).is_ok();
                     // A ship charging its jump wears a ring that fills.
                     if let Some(fraction) = state.snapshot.charge_of(ship.id) {
                         let [r, g, b] = CHARGE_RING;
-                        let radius = unit * 3.1 * scale.system.sqrt();
-                        let width = (unit * 0.3).max(thickness * 0.8);
+                        let radius = ring_radius + per_pixel * 6.0;
+                        let width = (per_pixel * 4.0).max(thickness * 0.8);
                         overlay.tris.extend(annulus(
                             [at[0], 0.7, at[2]],
                             radius,
@@ -1106,8 +1160,8 @@ impl Scene {
                     if selected {
                         let ring = annulus(
                             [at[0], 0.6, at[2]],
-                            unit * 2.4 * scale.system.sqrt(),
-                            (unit * 0.22).max(thickness * 0.7),
+                            ring_radius,
+                            (per_pixel * 3.0).max(thickness * 0.7),
                             [63, 208, 255, mark],
                             28,
                         );
@@ -1116,8 +1170,12 @@ impl Scene {
                     if selected || ship.hp_frac < 0.999 {
                         let anchor = BarAnchor {
                             id: ship.id,
-                            at: [hull.origin[0], hull.origin[1] + unit * 1.8, hull.origin[2]],
-                            width: unit * 3.0 * scale.system.sqrt(),
+                            at: [
+                                hull.origin[0],
+                                hull.origin[1] + shown * 0.3 + per_pixel * 10.0,
+                                hull.origin[2],
+                            ],
+                            width: shown.max(per_pixel * 30.0),
                             frac: ship.hp_frac.clamp(0.0, 1.0),
                             ground_radius: None,
                         };
@@ -1137,6 +1195,22 @@ impl Scene {
                             for bar in &mut ship_bars[first..] {
                                 bar.alpha = mark;
                             }
+                        }
+                    }
+                }
+                // Markers that overlap on screen are one group: it shows how many it holds.
+                if !marked.is_empty() {
+                    let screen: Vec<(u8, f32, f32, f32)> = marked
+                        .iter()
+                        .filter_map(|&(owner, at, px)| {
+                            let (x, y, _) = bar_look.project(at)?;
+                            Some((owner, x, y, px * 0.5))
+                        })
+                        .collect();
+                    for group in overlapping_marks(&screen) {
+                        if group.len() > 1 {
+                            let (owner, x, y, radius) = screen[group[0]];
+                            group_counts.push((x + radius + 6.0, y, group.len(), owner));
                         }
                     }
                 }
@@ -1265,6 +1339,22 @@ impl Scene {
         set_clip_planes(DEFAULT_NEAR, DEFAULT_FAR);
         drop(drawing);
         self.screen_bars.extend(ship_bars);
+        for (x, y, count, owner) in group_counts {
+            let lighter = lerp_colour(owner_rgb(owner), 0.75).map(|c| (c * 255.0) as u8);
+            space.labels.push(SpaceLabel {
+                icon: None,
+                text: format!("\u{00d7}{count}"),
+                x,
+                y: y + 5.0,
+                colour: [
+                    lighter[0],
+                    lighter[1],
+                    lighter[2],
+                    (245.0 * pass.detail) as u8,
+                ],
+                priority: -2.5,
+            });
+        }
         if !part.first() {
             return;
         }
@@ -1736,11 +1826,17 @@ impl Scene {
             let Some((x, y, _)) = look.project(mark.at) else {
                 continue;
             };
+            // Ships travelling together are one mark that counts them.
+            let many = if mark.ids.len() > 1 {
+                format!("{} ", plural_ships(mark.ids.len()))
+            } else {
+                String::new()
+            };
             let text = match mark.bound_for {
                 Some(dest) if mark.charting => {
-                    format!("to {} (charting)", universe.systems[dest].name)
+                    format!("{many}to {} (charting)", universe.systems[dest].name)
                 }
-                Some(dest) => format!("to {}", universe.systems[dest].name),
+                Some(dest) => format!("{many}to {}", universe.systems[dest].name),
                 None if mark.charge.is_some() => {
                     format!("{} charging a jump", plural_ships(mark.ids.len()))
                 }
@@ -1779,6 +1875,18 @@ fn plural_ships(n: usize) -> String {
     } else {
         format!("{n} ships")
     }
+}
+
+/// The unit direction in the eye's plane (axes `right` and `up`) that `heading` points on
+/// screen; straight up the screen for a heading along the line of sight.
+fn screen_heading(heading: [f32; 3], right: [f32; 3], up: [f32; 3]) -> [f32; 3] {
+    let dot = |a: [f32; 3], b: [f32; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    let (x, y) = (dot(heading, right), dot(heading, up));
+    let length = x.hypot(y);
+    if length < 1e-4 {
+        return up;
+    }
+    [0, 1, 2].map(|i| (right[i] * x + up[i] * y) / length)
 }
 
 fn cross3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {

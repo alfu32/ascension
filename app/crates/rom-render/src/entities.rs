@@ -12,7 +12,7 @@ use rom_geo::SurfacePos;
 
 use crate::bars::BarAnchor;
 use crate::globe::Globe;
-use crate::layers::{ORBIT_ALTITUDE, ShipScales, hover_altitude, planet_factor};
+use crate::layers::{ORBIT_ALTITUDE, ShipScales, hover_altitude, planet_factor, ship_on_screen};
 use crate::rig::Activity;
 use crate::terrain::{Shape, TerrainScene, vertex_height};
 
@@ -901,6 +901,41 @@ pub(crate) fn dress_ships(views: &mut [EntityView], scales: &ShipScales, globe: 
     spread_aloft(views, &aloft, &points, globe);
 }
 
+/// Keeps the ships aloft among `views` (dressed by [`dress_ships`]) at least their floor on
+/// screen (task 96), seen from `eye` (planet frame) on a canvas `height` pixels high: a ship
+/// that would look shorter than [`crate::layers::SHIP_FLOOR_PIXELS`] times its class is drawn
+/// at that length, so it stays seen and its pick box with it. Places and heights stay as they
+/// were. Ships on the ground keep their size.
+pub(crate) fn floor_ships(
+    views: &mut [EntityView],
+    scales: &ShipScales,
+    globe: &Globe,
+    eye: [f32; 3],
+    height: f32,
+) {
+    let tan = (crate::hud_minimap::FOV_DEGREES.to_radians() / 2.0).tan();
+    let radius = globe.radius();
+    for view in views.iter_mut() {
+        if !view.spacecraft || view.altitude <= 0.0 {
+            continue;
+        }
+        let dir = globe.dir_of(SurfacePos {
+            face: view.face,
+            x: (view.x * 1000.0).round() as i64,
+            y: (view.y * 1000.0).round() as i64,
+        });
+        let at = dir.map(|c| c * (radius + view.altitude));
+        let d: [f32; 3] = std::array::from_fn(|i| at[i] - eye[i]);
+        let per_pixel = dot3(d, d).sqrt() * 2.0 * tan / height.max(1.0);
+        let length = unit_width(view);
+        let drawn = ship_on_screen(length, per_pixel, scales.class(view.kind));
+        let factor = drawn.pixels * per_pixel / length.max(1e-6);
+        if factor > 1.0 {
+            scale_ship_view(view, factor);
+        }
+    }
+}
+
 /// The hold heights of the ships `aloft` over the points `points`: each its
 /// [`hover_altitude`], taken smallest first, raised above any smaller ship of another class
 /// whose hull it would meet (nearer than [`SPREAD_SPACING`] of their mean length, overlapping
@@ -1555,6 +1590,71 @@ mod tests {
         ];
         dress_ships(&mut again, &scales, &globe);
         assert_eq!(again[..], views[..4]);
+    }
+
+    #[test]
+    fn ships_aloft_keep_their_floor_on_screen_and_their_places() {
+        use crate::layers::{SHIP_FLOOR_PIXELS, ShipScale, ShipScales};
+        let globe = Globe::new(&hilly_planet(64));
+        let scales = ShipScales(
+            [
+                (1, ShipScale::from_pct(200, 25)),
+                (2, ShipScale::from_pct(300, 50)),
+            ]
+            .into_iter()
+            .collect(),
+        );
+        let dressed = || {
+            let mut views = vec![
+                ship(1, 1, 3.0, ORBIT_ALTITUDE),
+                ship(2, 2, 3.0, ORBIT_ALTITUDE),
+                EntityView {
+                    x: 10.5,
+                    ..ship(3, 1, 3.0, 0.0)
+                },
+            ];
+            dress_ships(&mut views, &scales, &globe);
+            views
+        };
+        let near = dressed();
+        let tan = (crate::hud_minimap::FOV_DEGREES.to_radians() / 2.0).tan();
+        let height = 800.0;
+        let pixels = |v: &EntityView, eye: [f32; 3]| {
+            let dir = globe.dir_of(SurfacePos {
+                face: v.face,
+                x: (v.x * 1000.0).round() as i64,
+                y: (v.y * 1000.0).round() as i64,
+            });
+            let at = dir.map(|c| c * (globe.radius() + v.altitude));
+            let d: [f32; 3] = std::array::from_fn(|i| at[i] - eye[i]);
+            unit_width(v) / (dot3(d, d).sqrt() * 2.0 * tan / height)
+        };
+        // Close by, the floor does not bind: sizes stay as dressed.
+        let close = globe
+            .dir_of(SurfacePos {
+                face: near[0].face,
+                x: 3000,
+                y: 3000,
+            })
+            .map(|c| c * (globe.radius() + 30.0));
+        let mut views = near.clone();
+        floor_ships(&mut views, &scales, &globe, close, height);
+        assert_eq!(views, near);
+        // Far out, ships aloft are drawn at their floor, by class; places, heights and the
+        // landed ship stay as they were.
+        let far = close.map(|c| c * 40.0);
+        let mut views = near.clone();
+        floor_ships(&mut views, &scales, &globe, far, height);
+        assert!((pixels(&views[0], far) - SHIP_FLOOR_PIXELS).abs() < 0.5);
+        assert!((pixels(&views[1], far) - 2.0 * SHIP_FLOOR_PIXELS).abs() < 1.0);
+        for (a, b) in views.iter().zip(&near) {
+            assert_eq!((a.x, a.y, a.altitude), (b.x, b.y, b.altitude));
+        }
+        assert_eq!(views[2], near[2]);
+        // The same every frame.
+        let mut again = near.clone();
+        floor_ships(&mut again, &scales, &globe, far, height);
+        assert_eq!(again, views);
     }
 
     #[test]

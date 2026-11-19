@@ -794,9 +794,9 @@ projection. What changes with the distance is only what is drawn:
   star from its direction, in the loaded planet's shadow when behind it, with
   a little light from above the plane out in space); a ship without one keeps
   task 53's hull. Above a planet hulls are drawn two to five times their true
-  size by class (models at their own size); on a system's plane a quarter to
-  a half of task 53's size (a model 1.6 times that length, as it is slender);
-  in between, a ship in orbit of the loaded planet slides from its place
+  size by class (models at their own size); on a system's plane, since task
+  96, at its true size there with a floor on screen and a class marker far out
+  (below, "Ships in space that scale with the zoom"); in between, a ship in orbit of the loaded planet slides from its place
   above the ground to its place on the plane while its size blends in log
   space, starting from the size the globe drew. The sizes come from
   `et_view_scale`.
@@ -856,6 +856,52 @@ star map).
   a shaded disc → a point of light.
 - The star of the current system is the sun light; the shadow map follows
   the visible part of the surface.
+
+### Ships in space that scale with the zoom (task 96)
+
+The owner (2026-11-18): zooming did not change a ship's size against the planets, and zoomed
+out ships stayed as large as planets. Presentation only; the simulation is unchanged.
+
+- **True size near.** In a system a ship is drawn at its true size there: its model's own
+  length (the longest of its extent across and deep, from the model's bounds at run time; three
+  tiles for a ship without a model) times its `et_view_scale.planet_pct`, in the home planet's
+  tiles (300 system units for a radius of 122 tiles, so 2.46 units a tile). A ship looks in
+  space as it looks above its planet, so the hand-over from the globe has nothing to blend. With
+  the seed's models: survey ship 15 units long, corvette 19, frigate 25, transport 23, carrier
+  32, cruiser 38, battleship 72, orbital fighter 17 and bomber 22, against a moon of at least
+  210 units across and the home planet's 600: a battleship a third of the smallest moon, four
+  fighters long (test `ships_in_space_read_as_ships_beside_the_bodies` in `rom-app`).
+- **A floor far.** A ship is never drawn shorter on screen than its floor: 14 pixels for the
+  smallest class, times its class (its `system_pct` over the smallest `system_pct` of all the
+  rows: survey ship and craft 14 pixels, corvette 17, frigate and freighter 20, transport and
+  cruiser 22, carrier 25, battleship 28). The floor counts the length the ship shows the eye,
+  never less than its model's width over its length, so a ship seen nose on is not drawn smaller
+  than one seen side on. True size and floor meet in a smooth maximum in log space over a band
+  of 1.5 either side, so nothing jumps.
+- **A marker farther.** Once a ship's true size is under 15 % of its floor its class marker,
+  in the owner's colour on a white rim, grows in while the model shrinks away, and below 7 % it
+  is the marker alone: a chevron, or for a class 1.5 times the smallest or more (transport,
+  cruiser, carrier, battleship) a long diamond, its nose along the ship's heading as the screen
+  shows it, facing the eye. Seen from the focus distance (4 500 units) the smaller ships are at
+  their floors as models; the whole system shows markers. Markers of one owner that overlap on
+  screen are a group, and the group shows how many it holds ("×6").
+- **Picking.** A ship's pick box is square, at least half its drawn length either way and never
+  under 13 pixels (26 across), at every zoom; a dragged box takes a ship whose drawn length
+  reaches into it. Clicks go through the existing pick events and selection.
+- **Ships holding a body** stand off at least 1.3 of its radii from its centre, so a ship at
+  its true size beside a moon is not hidden inside it.
+- **Above the globe**, ships aloft keep the same floor on screen (in length, by class); places
+  and hover heights stay as task 72 set them. The globe hands its ships to the system before
+  any of them would reach the marker, so it draws no markers.
+- **On the star map** ships stay task 53's marks; ships of one owner flying one route within
+  1 % of its length of each other are one mark, counted ("3 ships to Vega").
+
+Screenshots (scripts `tasks/96-*-script.txt`): `img/96-close.png`, `img/96-mid.png`,
+`img/96-far.png` and `img/96-system.png` (six ships, one of each class, beside a moon at four
+zooms), `img/96-zoom-before-after.png` (the same four zooms with 0.0.93 and with this task),
+`img/96-group-count.png` (the group of six counted at whole-system zoom), `img/96-far-click.png`
+(a click on that marker selects the survey ship) and `img/96-orbit-fleet-before-after.png`
+(task 72's twenty ships in orbit, ten wheel steps out).
 
 ### The celestial home and the ascended view (task 76)
 

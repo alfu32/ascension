@@ -529,10 +529,13 @@ review loop (`--gallery`, `--model`, `--parts`, `--gallery-manifest`,
 `et_view_scale` (added by task 57; presentation only, the simulation never
 reads it) gives a unit type two drawn sizes: `planet_pct`, its size above a
 planet as a percentage of its true size (in orbit; it eases back to its true
-size as the ship comes down to land), and `system_pct`, its size on a star
-system's plane as a percentage of the readable reference size there (the
-size task 53 drew every ship at, which keeps its size on screen). No row
-means 100 and 100. Since task 72 the seed gives the starships two to three
+size as the ship comes down to land), and `system_pct`, its class in space:
+since task 96 a ship in space is drawn at its true size there (its model's
+length at `planet_pct`, in the planet's tiles), and `system_pct` over the
+smallest of all the rows scales its floor on screen (14 pixels for the
+smallest class) and picks its marker far out (a chevron, a diamond from 1.5
+times the smallest class). Before task 96 it was a percentage of a size that
+stayed fixed on screen. No row means 100 and 100. Since task 72 the seed gives the starships two to three
 times their size above a planet, in orbit and landed (orbital craft three
 times in orbit, their own size once down in the air), and a quarter to a half
 of the reference on the plane, by class (survey ship smallest, battleship

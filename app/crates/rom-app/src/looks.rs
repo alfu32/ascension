@@ -506,8 +506,8 @@ mod tests {
             let et = &rules.entity_types[&DefId(u32::from(*kind))];
             assert!(et.movement.is_some(), "{kind}");
             // Two to three times their true size above a planet (task 72: the starships as
-            // large on the ground; orbital craft come down at their own size), a quarter to a
-            // half of the reference size on a system's plane.
+            // large on the ground; orbital craft come down at their own size); in space a
+            // class from a quarter to a half (task 96: the floor on screen and the marker).
             assert!((2.0..=3.2).contains(&scale.planet), "{kind}: {scale:?}");
             assert!((0.25..=0.5).contains(&scale.system), "{kind}: {scale:?}");
             let craft = et.movement.as_ref().is_some_and(|m| m.climb_ticks > 0);
@@ -560,5 +560,48 @@ mod tests {
             checked += 1;
         }
         assert!(checked >= 3, "the ships that land have a landing radius");
+    }
+
+    /// Ships in space at their true size there (task 96, the model's own length at its planet
+    /// scale, in the home planet's tiles) read as ships beside the bodies: every one shorter
+    /// than the smallest moon is across, and the largest class longer than the smallest.
+    #[test]
+    fn ships_in_space_read_as_ships_beside_the_bodies() {
+        use rom_render::layers::ship_true_length;
+        use rom_render::universe::{HOME_PLANET_RADIUS, ROCK_RADIUS, ROCK_RADIUS_STEP};
+        let rules = load_rules().expect("rules");
+        let book = ModelBook::new(&rules);
+        let scales = ship_scales(&rules);
+        let per_tile = HOME_PLANET_RADIUS / rom_render::planet_radius(192);
+        let moon = 2.0 * (ROCK_RADIUS + ROCK_RADIUS_STEP);
+        let mut by_class: Vec<(f32, f32, String)> = Vec::new();
+        for (&kind, &scale) in &scales.0 {
+            let entity = DefId(u32::from(kind));
+            for entry in book.entries.iter().filter(|e| e.entity == entity) {
+                let model = rom_render::ModelRef {
+                    index: 0,
+                    size: entry.size(),
+                };
+                let length = ship_true_length(Some(model), scale, per_tile);
+                eprintln!(
+                    "{:<40} class {:.2} length {length:6.1} units ({:.2} of a small moon)",
+                    entry.id,
+                    scales.class(kind),
+                    length / moon
+                );
+                assert!(length < moon, "{}: {length} units", entry.id);
+                by_class.push((scales.class(kind), length, entry.id.clone()));
+            }
+        }
+        let largest = by_class.iter().map(|c| c.0).fold(1.0, f32::max);
+        let mean = |class: f32| {
+            let lengths: Vec<f32> = by_class
+                .iter()
+                .filter(|c| c.0 == class)
+                .map(|c| c.1)
+                .collect();
+            lengths.iter().sum::<f32>() / lengths.len().max(1) as f32
+        };
+        assert!(mean(largest) > mean(1.0), "{by_class:?}");
     }
 }
