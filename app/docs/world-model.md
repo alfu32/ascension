@@ -240,6 +240,22 @@ Screenshots (scripts `tasks/89-*-script.txt`, seed 1, `--ai none`): `img/starmap
 `img/starmap-style-galaxy.png` (task 99, the Galaxy at the star map's widest zoom, script
 `tasks/100-quadrant-script.txt` with `--style map.galaxy`).
 
+Task 109 (release build, two players of two races, `rom universe --simulate 6000 --space` and
+`--bench 15` on the star map at 1280 × 800, each run under a 6 GB cap). Systems for seeds 1–20,
+the celestial home left out: Planet and Solar 1 each; Cluster 10, 15, 12, 12, 11, 10, 15, 15, 10,
+10, 14, 10, 14, 10, 15, 12, 15, 12, 12, 11; Sector 103, 109, 112, 120, 102, 120, 124, 110, 94, 94,
+94, 118, 97, 121, 96, 104, 106, 107, 116, 109; Quadrant 165, 182, 106, 151, 132, 151, 182, 147,
+94, 94, 171, 142, 142, 133, 127, 129, 156, 120, 168, 97; Galaxy 745 (seeds 1–3 run); every layout
+fair. The
+largest of each: Sector seed 7 (124 systems) builds its match world in 1.9 s at 160 MB peak, runs
+20 000 ticks with ships in space in 9.6 s at 167 MB, and its star map draws at 57.5 fps;
+Quadrant seed 2 (182) builds in 1.5 s at 216 MB, 20 000 ticks in 24.3 s at 228 MB (the machine
+busy with another build), 57.8 fps (task 99's Quadrant: 220 MB, 47–56 fps). Screenshots (script
+`tasks/100-quadrant-script.txt`, `--zoom-all --view starmap --ai none`): `img/109-starmap-cluster.png`
+(seed 2, 15 systems), `img/109-starmap-sector.png` (seed 7), `img/109-starmap-quadrant.png`
+(seed 2), and `img/109-launcher.png` (the launcher's style help in the new order; the list itself
+was not opened, its order is tested).
+
 ## Camera and visibility by age
 
 | Tier rank | Camera and reach | First seeded age |
