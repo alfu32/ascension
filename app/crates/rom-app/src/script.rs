@@ -386,8 +386,12 @@ pub enum ScriptAction {
     Input(Vec<rom_render::InputEvent>),
     /// The player orders the ascension at its library (task 76).
     Ascend(rom_sim::PlayerId),
-    /// The person writes a line to the celestial home's channel (task 76).
-    Chat(String),
+    /// The person writes a line to a channel (tasks 76 and 94).
+    Chat(crate::chat::Channel, String),
+    /// A line arrives from another player: sender, channel, words (task 94).
+    ChatFrom(rom_sim::PlayerId, crate::chat::Channel, String),
+    /// Keys for the chat: named keys, or the characters of a text (task 94).
+    ChatKeys(Vec<crate::chat::ChatKey>),
     /// The camera flies to a body and down to its globe (`visit rockN|planetN|=id`, task 77).
     Visit(u32),
     /// The camera turns the planet shown to centre a tile (`look F:x,y`, task 77).
@@ -554,7 +558,52 @@ impl Script {
                     continue;
                 }
                 (Some(tick), Some("chat")) => {
-                    actions.push((tick, ScriptAction::Chat(words[2..].join(" "))));
+                    // `chat [all|allies|celestial] words`; without a channel, the celestial one.
+                    let (channel, rest) =
+                        match words.get(2).and_then(|w| crate::chat::Channel::from_key(w)) {
+                            Some(channel) => (channel, &words[3..]),
+                            None => (crate::chat::Channel::Celestial, &words[2..]),
+                        };
+                    actions.push((tick, ScriptAction::Chat(channel, rest.join(" "))));
+                    continue;
+                }
+                (Some(tick), Some("chatfrom")) => {
+                    let from = words.get(2).and_then(|p| p.parse::<u32>().ok());
+                    let channel = words.get(3).and_then(|w| crate::chat::Channel::from_key(w));
+                    let (Some(from), Some(channel)) = (from, channel) else {
+                        return Err(format!(
+                            "line {}: chatfrom needs a player id, a channel and words",
+                            number + 1
+                        ));
+                    };
+                    actions.push((
+                        tick,
+                        ScriptAction::ChatFrom(
+                            rom_sim::PlayerId(from),
+                            channel,
+                            words[4..].join(" "),
+                        ),
+                    ));
+                    continue;
+                }
+                // `type words`: the characters go to the chat as key presses.
+                (Some(tick), Some("type")) => {
+                    let keys = words[2..]
+                        .join(" ")
+                        .chars()
+                        .map(crate::chat::ChatKey::Char)
+                        .collect();
+                    actions.push((tick, ScriptAction::ChatKeys(keys)));
+                    continue;
+                }
+                // `key enter|escape|tab|backspace|left|right|home|end|f7|...`: a named key.
+                (Some(tick), Some("key"))
+                    if words.get(2).is_some_and(|w| {
+                        w.chars().count() > 1 && crate::chat::ChatKey::from_name(w).is_some()
+                    }) =>
+                {
+                    let key = crate::chat::ChatKey::from_name(words[2]).expect("checked above");
+                    actions.push((tick, ScriptAction::ChatKeys(vec![key])));
                     continue;
                 }
                 (Some(tick), Some("quicksave")) => {
@@ -777,6 +826,7 @@ fn parse_line(
                 "tab" => HudRegionKind::PaletteTab,
                 "data" => HudRegionKind::DataTab,
                 "top" => HudRegionKind::TopButton,
+                "chat" => HudRegionKind::ChatLine,
                 "arrow" => HudRegionKind::PaletteArrow,
                 "slot" => HudRegionKind::CommandSlot,
                 "queue" => HudRegionKind::QueueItem,

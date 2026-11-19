@@ -105,8 +105,66 @@ pub struct HudSnapshot {
     pub diplomacy: Vec<(String, [u8; 4])>,
     /// A panel over the world at the left: the celestial home's residents and chat (task 76).
     pub panel: Option<HudPanel>,
-    /// The chat channel's name beside the message line, and the line being typed, if any.
-    pub chat: (String, Option<String>),
+    /// The chat: the channel tag, the line being typed, the latest lines and the history.
+    pub chat: HudChat,
+}
+
+/// A line of the chat as drawn: who said it, in which channel, and how visible it still is.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HudChatLine {
+    /// The sender's name.
+    pub name: String,
+    /// The sender's player colour.
+    pub name_colour: [u8; 4],
+    /// The channel tag, such as `[Allies]`.
+    pub tag: String,
+    /// The channel's colour.
+    pub tag_colour: [u8; 4],
+    /// The words.
+    pub text: String,
+    /// Opacity, 255 for a fresh line; a line fades out as it ages.
+    pub alpha: u8,
+}
+
+/// The open chat history: a window onto the lines, newest at the bottom (task 94).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HudChatHistory {
+    /// The visible lines, oldest first.
+    pub lines: Vec<HudChatLine>,
+    /// Older lines above the window.
+    pub above: usize,
+    /// Newer lines below the window.
+    pub below: usize,
+}
+
+/// The chat as the HUD shows it (task 94).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HudChat {
+    /// The channel tag beside the message line, such as `[All]`.
+    pub channel: String,
+    /// The channel's colour.
+    pub channel_colour: [u8; 4],
+    /// The line being typed, if the chat has the keyboard.
+    pub draft: Option<String>,
+    /// The caret's place in the draft, in characters.
+    pub caret: usize,
+    /// The latest lines, drawn over the world at the left, oldest first.
+    pub recent: Vec<HudChatLine>,
+    /// The history, when it is open.
+    pub history: Option<HudChatHistory>,
+}
+
+impl Default for HudChat {
+    fn default() -> Self {
+        Self {
+            channel: "[All]".to_owned(),
+            channel_colour: CYAN,
+            draft: None,
+            caret: 0,
+            recent: Vec::new(),
+            history: None,
+        }
+    }
 }
 
 /// A panel of lines drawn over the world at the left, above the chat line (task 76).
@@ -151,10 +209,15 @@ impl Default for HudSnapshot {
             banner: Vec::new(),
             diplomacy: Vec::new(),
             panel: None,
-            chat: ("[Allies]".to_owned(), None),
+            chat: HudChat::default(),
         }
     }
 }
+
+/// Characters of the draft shown around the caret.
+const CHAT_WINDOW: usize = 34;
+/// Rows of the open chat history.
+pub const CHAT_HISTORY_ROWS: usize = 14;
 
 const WHITE: [u8; 4] = [242, 242, 242, 255];
 const MUTED: [u8; 4] = [151, 165, 177, 255];
@@ -1027,6 +1090,99 @@ impl HudPainter {
         }
     }
 
+    /// The tag, the draft with its caret or the hint, on the message line.
+    fn chat_line(&mut self, l: &HudLayout, chat: &HudChat) {
+        use Group::BottomLeft as L;
+        self.caption(
+            l,
+            L,
+            &chat.channel,
+            Rect::new(50.0, 584.0, 92.0, 17.0),
+            chat.channel_colour,
+        );
+        let field = Rect::new(146.0, 584.0, 217.0, 17.0);
+        match &chat.draft {
+            Some(text) => {
+                // Only the part around the caret is shown, so the caret never runs off the field.
+                let chars: Vec<char> = text.chars().collect();
+                let caret = chat.caret.min(chars.len());
+                let start = caret.saturating_sub(CHAT_WINDOW - 6);
+                let end = (start + CHAT_WINDOW).min(chars.len());
+                let mut shown: String = chars[start..caret].iter().collect();
+                shown.push('|');
+                shown.extend(&chars[caret..end]);
+                self.caption(l, L, &shown, field, WHITE);
+            }
+            None => self.caption(l, L, "Enter to talk, F7 for history", field, MUTED),
+        }
+    }
+
+    /// One row of the chat: tag, name, words, in columns.
+    fn chat_row(&mut self, l: &HudLayout, line: &HudChatLine, y: f32) {
+        use Group::BottomLeft as L;
+        let fade = |c: [u8; 4]| {
+            [
+                c[0],
+                c[1],
+                c[2],
+                (u16::from(c[3]) * u16::from(line.alpha) / 255) as u8,
+            ]
+        };
+        self.caption(
+            l,
+            L,
+            &line.tag,
+            Rect::new(28.0, y, 76.0, 17.0),
+            fade(line.tag_colour),
+        );
+        self.caption(
+            l,
+            L,
+            &line.name,
+            Rect::new(106.0, y, 124.0, 17.0),
+            fade(line.name_colour),
+        );
+        self.caption(
+            l,
+            L,
+            &line.text,
+            Rect::new(234.0, y, 290.0, 17.0),
+            fade(WHITE),
+        );
+    }
+
+    /// The latest lines over the world at the left, their bottom just above the message line.
+    fn chat_recent(&mut self, l: &HudLayout, lines: &[HudChatLine]) {
+        use Group::BottomLeft as L;
+        for (i, line) in lines.iter().enumerate() {
+            let y = 572.0 - 21.0 * (lines.len() - i) as f32;
+            let back = (u16::from(line.alpha) * 150 / 255) as u8;
+            self.solid(
+                l.map(L, Rect::new(16.0, y - 2.0, 520.0, 21.0)),
+                [8, 11, 18, back],
+            );
+            self.chat_row(l, line, y);
+        }
+    }
+
+    /// The history: a framed panel of rows with the number of older and newer lines.
+    fn chat_history(&mut self, l: &HudLayout, history: &HudChatHistory) {
+        use Group::BottomLeft as L;
+        let height = (CHAT_HISTORY_ROWS as f32 + 1.0) * 21.0 + 16.0;
+        let top = 572.0 - height;
+        let area = l.map(L, Rect::new(16.0, top, 520.0, height));
+        self.solid(area, [8, 11, 18, 225]);
+        self.frame(area, l.scale.max(1.0), [232, 201, 138, 160]);
+        let title = format!(
+            "CHAT HISTORY  Up/Down scroll, Esc closes  ({} older, {} newer)",
+            history.above, history.below
+        );
+        self.caption(l, L, &title, Rect::new(28.0, top + 8.0, 496.0, 17.0), GOLD);
+        for (i, line) in history.lines.iter().take(CHAT_HISTORY_ROWS).enumerate() {
+            self.chat_row(l, line, top + 29.0 + i as f32 * 21.0);
+        }
+    }
+
     /// A dark panel of lines over the world at the left, its bottom just above the chat line.
     fn side_panel(&mut self, l: &HudLayout, panel: &HudPanel) {
         use Group::BottomLeft as L;
@@ -1294,26 +1450,13 @@ impl HudPainter {
             );
         }
         self.art("icons/chat", l.map(L, Rect::new(24.0, 585.0, 18.0, 18.0)));
-        let (channel, draft) = &h.chat;
-        self.caption(l, L, channel, Rect::new(50.0, 584.0, 92.0, 17.0), CYAN);
-        match draft {
-            Some(text) => self.caption(
-                l,
-                L,
-                &format!("{text}_"),
-                Rect::new(146.0, 584.0, 217.0, 17.0),
-                WHITE,
-            ),
-            None => self.caption(
-                l,
-                L,
-                "Message...",
-                Rect::new(146.0, 584.0, 217.0, 17.0),
-                MUTED,
-            ),
-        }
+        self.chat_line(l, &h.chat);
         if let Some(panel) = &h.panel {
             self.side_panel(l, panel);
+        } else if let Some(history) = &h.chat.history {
+            self.chat_history(l, history);
+        } else {
+            self.chat_recent(l, &h.chat.recent);
         }
         // Ascensions under way, under the title, for everyone to see.
         let shown = h.banner.len().min(3);

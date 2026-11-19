@@ -1409,7 +1409,9 @@ fn task_30_scripts_reach_the_capture_states_without_a_window() {
                     | ScriptAction::QuickSave
                     | ScriptAction::Menu(_)
                     | ScriptAction::Ascend(_)
-                    | ScriptAction::Chat(_)
+                    | ScriptAction::Chat(..)
+                    | ScriptAction::ChatFrom(..)
+                    | ScriptAction::ChatKeys(_)
                     | ScriptAction::Visit(_)
                     | ScriptAction::Look(_) => {}
                 }
@@ -1849,7 +1851,9 @@ fn wealth_screenshot_script_reaches_capture_without_a_window() {
                 | ScriptAction::QuickSave
                 | ScriptAction::Menu(_)
                 | ScriptAction::Ascend(_)
-                | ScriptAction::Chat(_)
+                | ScriptAction::Chat(..)
+                | ScriptAction::ChatFrom(..)
+                | ScriptAction::ChatKeys(_)
                 | ScriptAction::Visit(_)
                 | ScriptAction::Look(_) => {}
             }
@@ -2060,7 +2064,9 @@ fn orbital_review_script_trains_launches_selects_and_bombards_through_picks() {
                 | ScriptAction::QuickSave
                 | ScriptAction::Menu(_)
                 | ScriptAction::Ascend(_)
-                | ScriptAction::Chat(_)
+                | ScriptAction::Chat(..)
+                | ScriptAction::ChatFrom(..)
+                | ScriptAction::ChatKeys(_)
                 | ScriptAction::Visit(_)
                 | ScriptAction::Look(_) => {}
             }
@@ -2342,7 +2348,9 @@ fn colony_script_run() -> (crate::match_setup::Match, Controller, BodyId, u64) {
                 | ScriptAction::QuickSave
                 | ScriptAction::Menu(_)
                 | ScriptAction::Ascend(_)
-                | ScriptAction::Chat(_)
+                | ScriptAction::Chat(..)
+                | ScriptAction::ChatFrom(..)
+                | ScriptAction::ChatKeys(_)
                 | ScriptAction::Visit(_)
                 | ScriptAction::Look(_) => {}
             }
@@ -2511,7 +2519,9 @@ fn orbital_combat_script(
                 | ScriptAction::QuickSave
                 | ScriptAction::Menu(_)
                 | ScriptAction::Ascend(_)
-                | ScriptAction::Chat(_)
+                | ScriptAction::Chat(..)
+                | ScriptAction::ChatFrom(..)
+                | ScriptAction::ChatKeys(_)
                 | ScriptAction::Visit(_)
                 | ScriptAction::Look(_) => {}
             }

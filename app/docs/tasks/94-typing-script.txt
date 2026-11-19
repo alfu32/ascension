@@ -1,0 +1,9 @@
+# Task 94, replayed by --script (--players 2 --ai none --seed 1 --size 1280x800 --after 4):
+# the chat takes the keyboard, a line is typed, the caret moves back and a letter goes in
+# the middle of a word, and Tab picks Allies.
+2 key enter
+3 type Hold the river crossng
+4 key left
+5 key left
+6 type i
+7 key tab

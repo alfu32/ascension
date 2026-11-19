@@ -93,7 +93,10 @@ pub use worker::{
 };
 pub use zoom::Level;
 
-pub use hud::{HudPanel, HudResearch, HudResource, HudSelection, HudSnapshot};
+pub use hud::{
+    CHAT_HISTORY_ROWS, HudChat, HudChatHistory, HudChatLine, HudPanel, HudResearch, HudResource,
+    HudSelection, HudSnapshot,
+};
 pub use hud_model::{
     ButtonState, HudBlast, HudButton, HudCard, HudCityRadius, HudMarker, HudPalette, HudPatrol,
     HudPlacement, HudQueue, HudQueueItem, HudStain, HudTile, HudTradeRoute, HudWealth, HudWreck,

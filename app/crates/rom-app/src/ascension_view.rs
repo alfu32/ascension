@@ -4,7 +4,8 @@
 //! its residents and the chat channel of the ascended players (computer players included).
 //!
 //! The chat is the application's, not the simulation's: like a chat between people, it changes
-//! nothing in the match and is not saved.
+//! nothing in the match. Its log lives here (see `chat.rs`) and a save keeps it beside the
+//! match settings, outside the simulation state and its hash.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -13,21 +14,8 @@ use rom_render::{CountdownView, HudPanel, HudSnapshot, ResidenceView, owner_colo
 use rom_rules::BodyKind;
 use rom_sim::{PlayerId, PlayerStatus, World};
 
+use crate::chat::{self, Channel, ChatInput, ChatLine, ChatLog, ChatSink};
 use crate::selection::PLAYER;
-
-/// Most chat lines kept.
-const CHAT_KEPT: usize = 40;
-
-/// A line of the celestial home's channel.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ChatLine {
-    /// When it was said.
-    pub tick: u64,
-    /// Who said it.
-    pub player: PlayerId,
-    /// The words.
-    pub text: String,
-}
 
 /// The name a player goes by in the event line, the diplomacy tab and the chat.
 pub fn player_name(world: &World, id: PlayerId) -> String {
@@ -123,10 +111,10 @@ pub struct AscensionView {
     claims: BTreeMap<rom_sim::BodyId, PlayerId>,
     /// The players a computer plays: they speak in the channel.
     computers: BTreeSet<PlayerId>,
-    /// The channel, oldest first.
-    chat: Vec<ChatLine>,
-    /// The line the person is typing, if any.
-    pub draft: Option<String>,
+    /// Every line the person has seen, oldest first.
+    chat: ChatLog,
+    /// The keyboard side of the chat, as the window left it.
+    pub input: ChatInput,
 }
 
 impl AscensionView {
@@ -138,40 +126,67 @@ impl AscensionView {
         }
     }
 
-    /// The channel, oldest first.
-    #[cfg(test)]
+    /// The lines the person has seen, oldest first.
     pub fn chat(&self) -> &[ChatLine] {
+        self.chat.lines()
+    }
+
+    /// The log, to save.
+    pub fn log(&self) -> &ChatLog {
         &self.chat
     }
 
-    fn post(&mut self, world: &World, player: PlayerId, text: impl Into<String>) {
-        let text = text.into();
-        if text.is_empty() {
-            return;
-        }
-        self.chat.push(ChatLine {
-            tick: world.tick(),
-            player,
-            text,
-        });
-        let over = self.chat.len().saturating_sub(CHAT_KEPT);
-        self.chat.drain(..over);
+    /// Takes back the log a save kept.
+    pub fn restore(&mut self, log: ChatLog) {
+        self.chat = log;
     }
 
-    /// The person's line in the channel; the first ascended computer player answers it.
-    pub fn say(&mut self, world: &World, text: &str) {
-        let text = text.trim();
-        if text.is_empty() || !world.is_ascended(PLAYER) {
-            return;
+    /// A line the application speaks into the celestial channel (computer players).
+    fn post(&mut self, world: &World, player: PlayerId, text: impl AsRef<str>) {
+        chat::deliver(
+            world,
+            &mut self.chat,
+            player,
+            Channel::Celestial,
+            text.as_ref(),
+        );
+    }
+
+    /// The person's line to `channel`. Only the celestial channel gets an answer, from the first
+    /// ascended computer player. Returns whether it was sent.
+    pub fn say(&mut self, world: &World, channel: Channel, text: &str) -> bool {
+        self.say_with(world, channel, text, None)
+    }
+
+    /// [`Self::say`], also handing the line to `sink` (network play relays it there).
+    pub fn say_with(
+        &mut self,
+        world: &World,
+        channel: Channel,
+        text: &str,
+        sink: Option<&mut dyn ChatSink>,
+    ) -> bool {
+        if !chat::send(world, &mut self.chat, PLAYER, channel, text) {
+            return false;
         }
-        self.post(world, PLAYER, text);
-        if let Some(&other) = self.computers.iter().find(|id| world.is_ascended(**id)) {
+        if let Some(sink) = sink {
+            chat::send(world, sink, PLAYER, channel, text);
+        }
+        if channel == Channel::Celestial
+            && let Some(&other) = self.computers.iter().find(|id| world.is_ascended(**id))
+        {
             self.post(
                 world,
                 other,
                 rom_ai::chat_line(other, ChatTopic::Reply, world.tick()),
             );
         }
+        true
+    }
+
+    /// A line arriving from another player, as the network will deliver it.
+    pub fn hear(&mut self, world: &World, from: PlayerId, channel: Channel, text: &str) {
+        chat::deliver(world, &mut self.chat, from, channel, text);
     }
 
     /// Event lines for what changed since the last call (the first call only remembers); the
@@ -363,9 +378,7 @@ impl AscensionView {
             })
             .collect();
         let ascended = world.is_ascended(PLAYER);
-        if ascended {
-            hud.chat = ("[Celestial]".to_owned(), self.draft.clone());
-        }
+        hud.chat = self.chat.view(world, &self.input);
         if !celestial_in_view {
             return;
         }
@@ -385,10 +398,16 @@ impl AscensionView {
         }
         if ascended {
             lines.push((
-                "Chat: Enter to write, Enter to send".to_owned(),
+                "Chat: Enter to write, Tab for channels, Enter to send".to_owned(),
                 [151, 165, 177, 255],
             ));
-            for line in self.chat.iter().rev().take(8).rev() {
+            let spoken: Vec<&ChatLine> = self
+                .chat
+                .lines()
+                .iter()
+                .filter(|l| l.channel == Channel::Celestial)
+                .collect();
+            for line in &spoken[spoken.len().saturating_sub(8)..] {
                 lines.push((
                     format!("{}: {}", player_name(world, line.player), line.text),
                     colour_of(line.player),
@@ -600,13 +619,13 @@ mod tests {
         // The computer player greets the channel and answers the person.
         assert!(view.chat().iter().any(|l| l.player == PlayerId(2)));
         let before = view.chat().len();
-        view.say(&world, "Hello");
+        assert!(view.say(&world, Channel::Celestial, "Hello"));
         assert_eq!(view.chat().len(), before + 2);
         let mut hud = HudSnapshot::default();
         view.fill(&world, &mut hud, true);
         let panel = hud.panel.expect("the celestial panel");
         assert!(panel.lines.iter().any(|(l, _)| l.contains("Hello")));
-        assert_eq!(hud.chat.0, "[Celestial]");
+        assert_eq!(hud.chat.channel, "[Celestial]");
         // Then the descent where its city stood.
         let home = world.home_body(PLAYER).unwrap();
         let site = world
