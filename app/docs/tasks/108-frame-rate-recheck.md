@@ -6,7 +6,8 @@ measurements show. Implementer: Claude (Opus). Owner 2026-11-19: "do it".
 ## Why
 
 Since the last frame-rate pass the game gained the Galaxy style (task 99, 101), visible
-projectiles (95, 102), higher-detail ships (93), zoom-scaled ships (96) and chat (94). Nobody has
+projectiles (95, 102), higher-detail ships (93), zoom-scaled ships (96, 105), chat (94), market trading (107),
+the Sector preset (109) and jumps from anywhere in a system (111). Nobody has
 measured the whole range since.
 
 ## Build
@@ -15,8 +16,9 @@ measured the whole range since.
    twice each, on a quiet machine (check `uptime` load and say it):
    - the home planet at ages 0, 4, 7, 10, 13 (`--age`), default zoom and zoomed out;
    - a large battle (task 95's 200-versus-200 script) with projectiles on;
-   - the star-system view and the star map for Solar, Cluster, Quadrant and Galaxy (Galaxy alone
-     under the memory cap);
+   - the star-system view and the star map for every preset since 0.0.102: Planet, Solar, Cluster,
+     Sector, Quadrant and Galaxy (largest seed of each from `docs/world-model.md`, "Map styles";
+     Galaxy alone under the memory cap);
    - orbit with 20 ships (`72-bench-script.txt`).
    Record render-thread fps, presented fps, frame ms avg/max, sim ticks per second, memory (RSS).
 2. **Find** the worst cases (anything under 45 fps presented, or frame max over 100 ms, or sim
