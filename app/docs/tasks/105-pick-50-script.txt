@@ -1,0 +1,18 @@
+# Task 105, replayed by --script in universe mode (--style map.many_worlds --seed 1 --players 2
+# --ai none --zoom-all --sun fixed --view system --size 1280x800 --scale 50 --after 33), shot as
+# img/105-pick-50.png: one battleship of player one sent to the nearest moon; the camera focuses it,
+# deselects it and is then one wheel step out, the ship held at its floor on screen. The render
+# target is half the canvas, so the hull is drawn twice as large on the canvas as at 100 %; a click
+# at the hull's end (canvas pixels) selects it through the ordinary pick path.
+0 grant-age age.galactic
+0 place-space 1 unit.battleship 52,-9
+1 speed 800
+2 ships
+4 orbit rock1
+3000 cam focus
+3300 speed 20
+3302 cam drag 320,400 896,560
+3304 cam click 200,250
+3306 cam wheel -1 632,355
+3310 cam click 626,340
+3316 cam point 100,150

@@ -67,6 +67,11 @@ pub fn scaled_size(layout: (u32, u32), percent: u32) -> (u32, u32) {
     (scale(layout.0), scale(layout.1))
 }
 
+/// How much of the canvas's pixels a side the render target holds at `percent` scale.
+pub fn render_per_canvas(layout: (u32, u32), percent: u32) -> f32 {
+    scaled_size(layout, percent).1 as f32 / layout.1.max(1) as f32
+}
+
 /// How the orbit camera of a sphere planet starts.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct OrbitSettings {
@@ -1046,6 +1051,10 @@ fn render_loop(shared: &Shared) {
                             picker: &mut space_picker,
                             space: &space_snapshot,
                             scales: &ship_scales,
+                            render_per_canvas: render_per_canvas(
+                                layout,
+                                shared.render_scale.load(Ordering::Relaxed),
+                            ),
                             out: &mut space_events,
                         },
                         event,
@@ -1282,6 +1291,7 @@ fn render_loop(shared: &Shared) {
                 &ship_scales,
                 (canvas.width, canvas.height),
                 centre_of(&canvas, hud_visible),
+                render_per_canvas(layout, shared.render_scale.load(Ordering::Relaxed)),
             ),
             _ => None,
         };
@@ -1692,6 +1702,8 @@ struct ZoomInput<'a> {
     picker: &'a mut SpacePicker,
     space: &'a SpaceSnapshot,
     scales: &'a ShipScales,
+    /// The render target's size over the canvas's (task 105).
+    render_per_canvas: f32,
     out: &'a mut Vec<PickEvent>,
 }
 
@@ -1713,6 +1725,7 @@ fn zoom_event(
         picker,
         space,
         scales,
+        render_per_canvas,
         out,
     } = input;
     let in_space = zoom.level() >= Level::System && !zoom.pans_planet();
@@ -1787,7 +1800,15 @@ fn zoom_event(
                 return true;
             }
             if in_space {
-                let ships = ship_points(zoom, orbit, space, scales, size, centre_y);
+                let ships = ship_points(
+                    zoom,
+                    orbit,
+                    space,
+                    scales,
+                    size,
+                    centre_y,
+                    *render_per_canvas,
+                );
                 let ctx = space_context(zoom, orbit, canvas, hud_visible, &ships);
                 out.extend(picker.handle(event, &ctx.context(), now_ms));
             }
@@ -1821,7 +1842,15 @@ fn zoom_event(
             if zoom.press(now_ms, (x, y), &view, orbit) {
                 picker.cancel();
             } else {
-                let ships = ship_points(zoom, orbit, space, scales, size, centre_y);
+                let ships = ship_points(
+                    zoom,
+                    orbit,
+                    space,
+                    scales,
+                    size,
+                    centre_y,
+                    *render_per_canvas,
+                );
                 let ctx = space_context(zoom, orbit, canvas, hud_visible, &ships);
                 out.extend(picker.handle(event, &ctx.context(), now_ms));
             }
@@ -1833,7 +1862,15 @@ fn zoom_event(
             y,
             ..
         } if on_world(x, y) => {
-            let ships = ship_points(zoom, orbit, space, scales, size, centre_y);
+            let ships = ship_points(
+                zoom,
+                orbit,
+                space,
+                scales,
+                size,
+                centre_y,
+                *render_per_canvas,
+            );
             let ctx = space_context(zoom, orbit, canvas, hud_visible, &ships);
             out.extend(picker.handle(event, &ctx.context(), now_ms));
             true
@@ -1847,7 +1884,15 @@ fn zoom_event(
             if !on_world(x, y) {
                 return false;
             }
-            let ships = ship_points(zoom, orbit, space, scales, size, centre_y);
+            let ships = ship_points(
+                zoom,
+                orbit,
+                space,
+                scales,
+                size,
+                centre_y,
+                *render_per_canvas,
+            );
             let ctx = space_context(zoom, orbit, canvas, hud_visible, &ships);
             out.extend(picker.handle(event, &ctx.context(), now_ms));
             true
@@ -2028,13 +2073,22 @@ fn space_hover(
     scales: &ShipScales,
     canvas: (f32, f32),
     centre_y: f32,
+    render_per_canvas: f32,
 ) -> Option<(SpaceHover, (f32, f32))> {
     let cursor = zoom.pointer()?;
     if zoom.level() < Level::System || zoom.pans_planet() || zoom.dragging() {
         return None;
     }
     let view = zoom.space_view_at(orbit, canvas, centre_y);
-    let ships = ship_points(zoom, orbit, space, scales, canvas, centre_y);
+    let ships = ship_points(
+        zoom,
+        orbit,
+        space,
+        scales,
+        canvas,
+        centre_y,
+        render_per_canvas,
+    );
     let hover = crate::space::nearest_ship(&view, &ships, cursor, 0.0)
         .map(SpaceHover::Ship)
         .or_else(|| {
@@ -2074,7 +2128,9 @@ fn centre_of(canvas: &HudLayout, hud_visible: bool) -> f32 {
 
 /// The ships a click can pick, with their places and pick boxes: in the anchored system's
 /// frame at the system level, each as large as it is drawn there (task 96), at their marks on
-/// the star map; seen on a canvas of `size` pixels whose picture centre is `centre_y`.
+/// the star map; seen on a canvas of `size` pixels whose picture centre is `centre_y`. The floor
+/// is reckoned in render-target pixels, as drawn, then taken to canvas pixels (task 105):
+/// `render_per_canvas` is the target's size over the canvas's.
 fn ship_points(
     zoom: &ZoomCamera,
     orbit: &OrbitCamera,
@@ -2082,6 +2138,7 @@ fn ship_points(
     scales: &ShipScales,
     size: (f32, f32),
     centre_y: f32,
+    render_per_canvas: f32,
 ) -> Vec<ShipPoint> {
     let scene = zoom.scene();
     if zoom.level() >= Level::StarMap {
@@ -2118,7 +2175,10 @@ fn ship_points(
                 to_eye.map(|c| c / d),
             );
             let length = ship_true_length(ship.model, scales.of(ship.kind), per_tile) * share;
-            let drawn = ship_on_screen(length, view.per_pixel(at), scales.class(ship.kind));
+            // `view` counts canvas pixels; the target has fewer, each covering more.
+            let per_pixel = view.per_pixel(at) / render_per_canvas.max(1e-3);
+            let drawn = ship_on_screen(length, per_pixel, scales.class(ship.kind))
+                .in_canvas(render_per_canvas);
             ShipPoint {
                 id: ship.id,
                 at,
@@ -2338,6 +2398,67 @@ mod tests {
         assert!(bridge.graticule());
         bridge.publish_graticule(false);
         assert!(!bridge.graticule());
+    }
+
+    #[test]
+    fn pick_boxes_cover_the_drawn_hull_at_reduced_render_scale() {
+        use crate::layers::SHIP_PICK_PIXELS;
+        use crate::space::ShipView;
+        use crate::universe::sample_scene;
+        let radius = 122.0;
+        let mut orbit = OrbitCamera::at(0.0, 0.0, HOME_DISTANCE, 0.0, radius, 3.0 * radius);
+        let mut zoom = ZoomCamera::new(
+            Arc::new(sample_scene()),
+            ZoomScale::new(radius, 3.0 * radius),
+            Some(Home {
+                system: 1,
+                body: 2,
+                dir: orbit.dir,
+            }),
+            Level::System,
+        );
+        zoom.set_l(zoom.l_cap());
+        for _ in 0..40 {
+            zoom.adopt_orbit(&orbit);
+            zoom.advance(0.05);
+            zoom.sync_orbit(&mut orbit);
+        }
+        let system = zoom.system_id().expect("a system level has a system");
+        let space = SpaceSnapshot {
+            ships: vec![ShipView {
+                id: 7,
+                kind: 1,
+                owner: 1,
+                system,
+                body: None,
+                x: 1500.0,
+                y: -400.0,
+                facing_deg: 0.0,
+                hp_frac: 1.0,
+                model: None,
+            }],
+            ..SpaceSnapshot::default()
+        };
+        let scales = ShipScales::default();
+        let canvas = (1280.0, 800.0);
+        let reach_at = |percent: u32| {
+            let ratio = render_per_canvas((1280, 800), percent);
+            let points = ship_points(&zoom, &orbit, &space, &scales, canvas, 0.0, ratio);
+            assert_eq!(points.len(), 1);
+            points[0]
+        };
+        let (full, three_quarters, half) = (reach_at(100), reach_at(75), reach_at(50));
+        // The ship sits at its floor, which the target draws at that many target pixels: on
+        // the canvas it is larger the fewer pixels the target has, and so is its pick box.
+        for (point, scale) in [(full, 1.0), (three_quarters, 0.75), (half, 0.5)] {
+            assert!(point.reach >= SHIP_PICK_PIXELS);
+            assert!(point.reach + 1e-3 >= point.half, "{scale}");
+            assert!(
+                point.half + 0.6 >= crate::layers::SHIP_FLOOR_PIXELS * 0.5 / scale,
+                "{scale}: {point:?}"
+            );
+        }
+        assert!(half.half > three_quarters.half && three_quarters.half > full.half);
     }
 
     #[test]

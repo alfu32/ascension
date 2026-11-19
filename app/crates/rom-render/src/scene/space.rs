@@ -15,14 +15,13 @@ use crate::entities::{Hull, owner_color};
 use crate::globe::PlanetScene;
 use crate::hud_minimap::planet_pixels;
 use crate::layers::{
-    CAPITAL_CLASS, FrameView, OneView, PlanetPlace, ShipScales, SystemPlace, apparent_share,
-    morph_size, plane_unit, ship_on_screen, ship_true_length, system_detail,
+    CAPITAL_CLASS, FLOOR_BAND, FrameView, OneView, PlanetPlace, ShipScales, SystemPlace,
+    apparent_share, morph_size, plane_unit, ship_on_screen, ship_true_length, system_detail,
 };
 use crate::space::{
     FIGURE_DASH, MapLineKind, SpaceHover, SpaceSnapshot, annulus, arc, chevron, chevron3,
     claim_rings, class_marker, colony_rings, diamond, facing, free_frame_pos, map_colony_rings,
-    map_mark_scale, map_ship_marks, overlapping_marks, ship_frame_pos, star_map_lines,
-    transit_at_rim,
+    map_mark_scale, map_ship_marks, ship_frame_pos, star_map_lines, sticky_groups, transit_at_rim,
 };
 use crate::universe::{
     ACCRETION_RGB, BodyViewKind, CELESTIAL_RGB, MAP_RADIUS, PlacedBody, SYSTEM_RADIUS,
@@ -288,6 +287,9 @@ pub(super) struct SpaceGpu {
     glow: Texture2D,
     planet_texture: Option<Texture2D>,
     labels: Vec<SpaceLabel>,
+    /// Which group each counted ship belonged to last frame, ship id to its leader's id, so a
+    /// group does not break up and re-form as ships drift in and out of overlap (task 105).
+    ship_groups: std::collections::BTreeMap<u32, u32>,
 }
 
 /// Uploads a unit sphere with normals and texture coordinates.
@@ -435,6 +437,7 @@ impl Scene {
             glow,
             planet_texture,
             labels: Vec::new(),
+            ship_groups: std::collections::BTreeMap::new(),
         });
     }
 
@@ -1027,7 +1030,8 @@ impl Scene {
                 let eye_right = unit_vector(cross3(view.up, eye_toward));
                 let eye_up = cross3(eye_toward, eye_right);
                 // Ships far enough out to be class markers, for the counts of overlapping ones.
-                let mut marked: Vec<(u8, [f32; 3], f32)> = Vec::new();
+                // Ships held at their floor are counted too, while they overlap (task 105).
+                let mut marked: Vec<(u32, u8, [f32; 3], f32)> = Vec::new();
                 for ship in state
                     .snapshot
                     .ships
@@ -1131,9 +1135,19 @@ impl Scene {
                             capital,
                             [r, g, b, a],
                         ));
-                        if screen.marker >= 0.5 {
-                            marked.push((ship.owner, lifted, screen.marker_pixels));
-                        }
+                    }
+                    // A class marker, or a model still at its floor (a little past it for a
+                    // ship already counted), is one to count with the overlapping.
+                    let held = space.ship_groups.contains_key(&ship.id);
+                    let band = if held { FLOOR_BAND * 1.25 } else { FLOOR_BAND };
+                    if screen.marker >= 0.5 || screen.pixels <= screen.marker_pixels * band {
+                        let size = screen.pixels.max(screen.marker_pixels);
+                        marked.push((
+                            ship.id,
+                            ship.owner,
+                            [at[0], at[1] + lift, at[2]],
+                            size * (1.0 - screen.marker) + screen.marker_pixels * screen.marker,
+                        ));
                     }
                     // Rings and bars follow the ship as drawn.
                     let shown = screen.pixels.max(screen.marker_pixels) * per_pixel;
@@ -1201,22 +1215,50 @@ impl Scene {
                         }
                     }
                 }
-                // Markers that overlap on screen are one group: it shows how many it holds.
+                // Ships that overlap on screen are one group: it shows how many it holds, beside
+                // the group so the label covers none of them.
+                let mut next_groups = std::collections::BTreeMap::new();
                 if !marked.is_empty() {
-                    let screen: Vec<(u8, f32, f32, f32)> = marked
+                    let screen: Vec<(u32, u8, f32, f32, f32)> = marked
                         .iter()
-                        .filter_map(|&(owner, at, px)| {
+                        .filter_map(|&(id, owner, at, px)| {
                             let (x, y, _) = bar_look.project(at)?;
-                            Some((owner, x, y, px * 0.5))
+                            Some((id, owner, x, y, px * 0.5))
                         })
                         .collect();
-                    for group in overlapping_marks(&screen) {
+                    for group in sticky_groups(&screen, &space.ship_groups) {
+                        let leader = screen[group[0]].0;
                         if group.len() > 1 {
-                            let (owner, x, y, radius) = screen[group[0]];
-                            group_counts.push((x + radius + 6.0, y, group.len(), owner));
+                            let right = group
+                                .iter()
+                                .map(|&i| screen[i].2 + screen[i].4)
+                                .fold(f32::MIN, f32::max);
+                            let top = group
+                                .iter()
+                                .map(|&i| screen[i].3 - screen[i].4)
+                                .fold(f32::MAX, f32::min);
+                            group_counts.push((
+                                right + 4.0,
+                                top - 6.0,
+                                group.len(),
+                                screen[group[0]].1,
+                            ));
+                            for &i in &group {
+                                next_groups.insert(screen[i].0, leader);
+                            }
                         }
                     }
                 }
+                // Only this system's ships change their entry; the others keep theirs.
+                for ship in state
+                    .snapshot
+                    .ships
+                    .iter()
+                    .filter(|s| s.system == system_id)
+                {
+                    space.ship_groups.remove(&ship.id);
+                }
+                space.ship_groups.extend(next_groups);
                 if !boxes.is_empty() {
                     let matrices: Vec<Matrix> = boxes.iter().map(matrix_of).collect();
                     world.draw_mesh_instanced(
