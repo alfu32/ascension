@@ -1,0 +1,17 @@
+# Task 104, replayed by --script in --universe mode (--players 2 --ai none, seed 1, --view
+# system,home): player two's jump inhibitor stands on player one's home planet; a battleship of
+# player one jumps home from the nearest system and arrives hurt: its card reads HP 2600 / 3600
+# (3 600 less the 1 000 blow), the strike's flash fading at the rim.
+# Screenshot: --size 1280x800 --after 30 (docs/img/104-strike-battleship.png).
+0 grant-age age.abundance
+0 place 2 bld.jump_inhibitor @30,10
+0 jump-in 1 unit.battleship
+1 speed 400
+2 ships
+1150 speed 50
+1200 speed 10
+1205 cam focus
+1215 cam focus
+1225 cam focus
+1235 cam focus
+1245 cam focus

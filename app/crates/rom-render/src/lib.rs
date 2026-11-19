@@ -78,7 +78,8 @@ pub use rig::Activity;
 pub use rom_geo::SurfacePos;
 pub use space::{
     ChargeView, ClaimState, ClaimView, ColonyView, CountdownView, FLASH_TICKS, FlashView, HoldView,
-    ResidenceView, ResourceBodyView, ShipView, SpaceSnapshot, TransitView,
+    ResidenceView, ResourceBodyView, STRIKE_FLASH_TICKS, ShipView, SpaceSnapshot, StrikeView,
+    TransitView,
 };
 pub use stats::RenderStats;
 pub use sun::{SunClock, SunSettings};

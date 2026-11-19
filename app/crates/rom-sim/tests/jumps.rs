@@ -10,6 +10,8 @@ use std::{collections::BTreeMap, sync::Arc};
 
 const P1: PlayerId = PlayerId(1);
 const P2: PlayerId = PlayerId(2);
+/// Player two's ally (task 104).
+const P3: PlayerId = PlayerId(3);
 
 fn rules() -> Arc<Rules> {
     let conn = build_rules_db(
@@ -21,13 +23,14 @@ fn rules() -> Arc<Rules> {
 }
 
 /// Four systems on a line and a spur: 1 – 2 – 3, a long route 1 – 3 and a route 1 – 4. Planet 2
-/// (system 1) and planet 11 (system 2) have surfaces. Player one starts with `techs`.
+/// (system 1) and planet 11 (system 2) have surfaces. Player one starts with `techs`; player
+/// three is player two's ally.
 fn world(rules: &Arc<Rules>, age: &str, techs: &[&str]) -> World {
     let id = |k: &str| rules.id_of(k).unwrap();
-    let players = (0..=2)
+    let players = (0..=3)
         .map(|p| Player {
             id: PlayerId(p),
-            team: p,
+            team: p.min(2),
             faction: id("nation.romans"),
             age: id(age),
             resources: BTreeMap::new(),
@@ -94,7 +97,7 @@ fn world(rules: &Arc<Rules>, age: &str, techs: &[&str]) -> World {
         setup,
         7,
         players,
-        BTreeMap::from([(P1, BodyId(2)), (P2, BodyId(2))]),
+        BTreeMap::from([(P1, BodyId(2)), (P2, BodyId(2)), (P3, BodyId(2))]),
     )
     .unwrap()
 }
@@ -375,10 +378,11 @@ fn an_enemy_inhibitor_holds_ships_but_lets_them_retreat() {
                 Pos::on(BodyId(2), 0, 30_500, 30_500),
             )
             .unwrap();
-        // A ship of player one comes into system 1 from system 2.
+        // A ship of player one comes into system 1 from system 2 (a cruiser: it survives the
+        // inhibitor's blow on arrival, task 104).
         let ship = {
             let at = w.system_edge(2, 1).unwrap();
-            spawn(&mut w, "unit.survey_ship", P1, at)
+            spawn(&mut w, "unit.space_cruiser", P1, at)
         };
         travel(&mut w, ship, 1).unwrap();
         run_until(&mut w, 1000, |w| {
@@ -397,7 +401,7 @@ fn an_enemy_inhibitor_holds_ships_but_lets_them_retreat() {
         assert_eq!(w.hash(), before);
         travel(&mut w, ship, 2).unwrap();
         run_until(&mut w, 2000, |w| w.jump_charge(ship).is_some());
-        let charge = charge_of(&w, "unit.survey_ship");
+        let charge = charge_of(&w, "unit.space_cruiser");
         assert_eq!(w.jump_charge(ship).unwrap().required, charge * 3 / 2);
         run_until(&mut w, 2000, |w| in_transit(w, ship));
         // A ship of the inhibitor's owner leaves along any route.
@@ -461,7 +465,7 @@ fn destroying_the_inhibitor_mid_charge_lifts_it_at_once() {
             .unwrap();
         let ship = {
             let at = w.system_edge(2, 1).unwrap();
-            spawn(&mut w, "unit.survey_ship", P1, at)
+            spawn(&mut w, "unit.space_cruiser", P1, at)
         };
         travel(&mut w, ship, 1).unwrap();
         run_until(&mut w, 1000, |w| {
@@ -471,7 +475,7 @@ fn destroying_the_inhibitor_mid_charge_lifts_it_at_once() {
         run_until(&mut w, 2000, |w| {
             w.jump_charge(ship).is_some_and(|c| c.progress >= 30)
         });
-        let charge = charge_of(&w, "unit.survey_ship");
+        let charge = charge_of(&w, "unit.space_cruiser");
         assert_eq!(w.jump_charge(ship).unwrap().required, charge * 3 / 2);
         w.despawn(inhibitor).unwrap();
         w.step();
@@ -487,6 +491,138 @@ fn destroying_the_inhibitor_mid_charge_lifts_it_at_once() {
         w
     });
     assert!(w.transits().count() >= 1);
+}
+
+/// The fixed blow of a jump inhibitor's type (`et_inhibitor.arrival_damage`).
+fn arrival_damage(rules: &Rules) -> i64 {
+    rules.entity_types[&rules.id_of("bld.jump_inhibitor").unwrap()]
+        .inhibitor
+        .as_ref()
+        .unwrap()
+        .arrival_damage
+}
+
+#[test]
+fn an_inhibitor_strikes_enemy_ships_jumping_into_its_system() {
+    let rules = rules();
+    let damage = arrival_damage(&rules);
+    assert!(damage > 0);
+    let hp = |key: &str| rules.entity_types[&rules.id_of(key).unwrap()].hp;
+    // The blow destroys light hulls and leaves line ships hurt but alive.
+    assert!(hp("unit.corvette") <= damage && hp("unit.battleship") > damage);
+    let w = twice(|| {
+        let mut w = world(&rules, "age.abundance", &[]);
+        let inhibitor = w
+            .place_for_setup(
+                rules.id_of("bld.jump_inhibitor").unwrap(),
+                P2,
+                Pos::on(BodyId(2), 0, 30_500, 30_500),
+            )
+            .unwrap();
+        // Already in the held system when the inhibitor stood: never struck.
+        let resident = {
+            let at = w.system_edge(1, 4).unwrap();
+            spawn(&mut w, "unit.corvette", P1, at)
+        };
+        let from_2 = w.system_edge(2, 1).unwrap();
+        // Orbital fighters jump only aboard a carrier: the corvette is the lightest warship.
+        let corvette = spawn(&mut w, "unit.corvette", P1, from_2);
+        let battleship = spawn(&mut w, "unit.battleship", P1, from_2);
+        let allied = spawn(&mut w, "unit.corvette", P3, from_2);
+        let own = spawn(&mut w, "unit.corvette", P2, from_2);
+        for ship in [corvette, battleship, allied, own] {
+            travel(&mut w, ship, 1).unwrap();
+        }
+        let full = w.entity(battleship).unwrap().max_hp;
+        run_until(&mut w, 2000, |w| {
+            w.entity(battleship)
+                .is_some_and(|e| e.pos.body == BodyId(1))
+        });
+        let tick = w.tick();
+        let mut struck_at = Vec::new();
+        // The light hull died on arrival, credited to the inhibitor's owner.
+        assert!(w.entity(corvette).is_none() && !in_transit(&w, corvette));
+        assert_eq!(w.stats().kills.get(&P2), Some(&1));
+        assert_eq!(w.stats().losses.get(&P1), Some(&1));
+        // The battleship arrived with its hit points less the blow.
+        assert_eq!(w.entity(battleship).unwrap().hp, full - damage);
+        // Allied and own ships, and the one already there, are untouched.
+        for ship in [allied, own, resident] {
+            let e = w.entity(ship).unwrap();
+            assert_eq!(e.hp, e.max_hp, "{ship:?} was struck");
+        }
+        // The views are told: one strike each, at its arrival tick (the corvette is faster).
+        let strikes: Vec<_> = w
+            .arrival_strikes()
+            .iter()
+            .map(|s| {
+                struck_at.push(s.tick);
+                (
+                    s.ship,
+                    s.inhibitor,
+                    s.owner,
+                    s.damage,
+                    s.destroyed,
+                    s.system,
+                )
+            })
+            .collect();
+        assert_eq!(
+            strikes,
+            [
+                (corvette, inhibitor, P2, damage, true, 1),
+                (battleship, inhibitor, P2, damage, false, 1),
+            ]
+        );
+        assert!(struck_at[0] <= tick && struck_at[1] == tick);
+        // Struck once: staying in the system brings no further blow (the ships here fight
+        // each other, so their hit points are no measure).
+        run(&mut w, 200);
+        assert_eq!(w.arrival_strikes().len(), 2);
+        w
+    });
+    assert!(w.arrival_strikes().iter().all(|s| s.owner == P2));
+}
+
+#[test]
+fn several_inhibitors_do_not_stack_and_a_destroyed_one_strikes_no_more() {
+    let rules = rules();
+    let damage = arrival_damage(&rules);
+    let w = twice(|| {
+        let mut w = world(&rules, "age.abundance", &[]);
+        let kind = rules.id_of("bld.jump_inhibitor").unwrap();
+        let first = w
+            .place_for_setup(kind, P2, Pos::on(BodyId(2), 0, 30_500, 30_500))
+            .unwrap();
+        let second = w
+            .place_for_setup(kind, P2, Pos::on(BodyId(2), 0, 40_500, 40_500))
+            .unwrap();
+        assert_eq!(
+            w.arrival_blow(P1, 1).map(|b| (b.inhibitor, b.damage)),
+            Some((first.min(second), damage))
+        );
+        assert!(w.arrival_blow(P3, 1).is_none() && w.arrival_blow(P1, 2).is_none());
+        let from_2 = w.system_edge(2, 1).unwrap();
+        let cruiser = spawn(&mut w, "unit.space_cruiser", P1, from_2);
+        let full = w.entity(cruiser).unwrap().max_hp;
+        travel(&mut w, cruiser, 1).unwrap();
+        run_until(&mut w, 2000, |w| {
+            w.entity(cruiser).is_some_and(|e| e.pos.body == BodyId(1))
+        });
+        assert_eq!(w.entity(cruiser).unwrap().hp, full - damage);
+        // With both gone, the next arrival is not struck.
+        w.despawn(first).unwrap();
+        w.despawn(second).unwrap();
+        let later = spawn(&mut w, "unit.corvette", P1, from_2);
+        travel(&mut w, later, 1).unwrap();
+        run_until(&mut w, 2000, |w| {
+            w.entity(later).is_some_and(|e| e.pos.body == BodyId(1))
+        });
+        let e = w.entity(later).unwrap();
+        assert_eq!(e.hp, e.max_hp);
+        w
+    });
+    assert_eq!(w.arrival_strikes().len(), 1);
 }
 
 /// A freighter of player one in orbit of planet 2 (system 1), with a city there and one on

@@ -33,6 +33,9 @@
 //! system, `dx`, `dy` tiles from its star, and `place-orbit <owner id> <entity key> @dx,dy` to
 //! put a ship into the orbit of player one's home planet above that point (an ordinary `orbit`
 //! order given before tick one; an orbital craft is placed there and ordered to climb);
+//! `jump-in <owner id> <entity key>` places a ship at the rim of the system nearest to player
+//! one's home system by route, on its side, and orders it home along the route (an ordinary
+//! `travel` order given before tick one: it charges, jumps and arrives, task 104);
 //! `colony <owner id>` founds a city for that owner on the nearest other habitable planet of
 //! player one's home system, generating the planet first (task 68's freighter route), and
 //! `auto-colony <owner id>` puts a finished automated colony there instead (task 73). `craft` selects player one's orbital craft that are not
@@ -89,6 +92,9 @@ pub struct ScriptSetup {
     /// Test ships ordered into the orbit of player one's home planet: owner, type key and
     /// milli-tile offsets from player one's city of the point they orbit above.
     pub orbit_placements: Vec<(u32, String, i64, i64)>,
+    /// Test ships placed at the rim of the nearest system by route and sent into player one's
+    /// home system (`jump-in <owner id> <entity key>`): owner and type key.
+    pub jump_ins: Vec<(u32, String)>,
     /// Technologies player one starts with, by key.
     pub techs: Vec<String>,
     /// Owners given a city on the nearest other habitable planet of player one's home system
@@ -210,6 +216,7 @@ impl ScriptSetup {
 
     /// Places the requested test ships in the plane of player one's home system.
     pub fn apply_space_placements(&self, world: &mut rom_sim::World) -> Result<(), String> {
+        self.apply_jump_ins(world)?;
         if self.space_placements.is_empty() {
             return Ok(());
         }
@@ -239,6 +246,63 @@ impl ScriptSetup {
         Ok(())
     }
 
+    /// Places the `jump-in` ships at the rim of the system nearest to player one's home system
+    /// by route (the shortest route, then the lowest id), toward home, and sends them home.
+    fn apply_jump_ins(&self, world: &mut rom_sim::World) -> Result<(), String> {
+        if self.jump_ins.is_empty() {
+            return Ok(());
+        }
+        let home = world
+            .home_body(crate::selection::PLAYER)
+            .and_then(|home| world.body(home))
+            .map(|home| home.system)
+            .ok_or("jump-in needs a universe match")?;
+        let from = world
+            .routes()
+            .iter()
+            .filter_map(|r| {
+                let other = if r.system_a == home {
+                    r.system_b
+                } else if r.system_b == home {
+                    r.system_a
+                } else {
+                    return None;
+                };
+                Some((r.length, other))
+            })
+            .min()
+            .map(|(_, other)| other)
+            .ok_or("jump-in needs a route from the home system")?;
+        let rim = world
+            .system_edge(from, home)
+            .ok_or("jump-in: no rim toward the home system")?;
+        let target = world
+            .space_of(home)
+            .and_then(|star| world.body_position(star))
+            .ok_or("the home star has no position")?;
+        for (owner, key) in &self.jump_ins {
+            let kind = world
+                .rules()
+                .id_of(key)
+                .filter(|id| world.rules().entity_types.contains_key(id))
+                .ok_or_else(|| format!("unknown entity type {key:?}"))?;
+            let owner = rom_sim::PlayerId(*owner);
+            let ship = world.spawn(kind, owner, rim).map_err(|e| e.to_string())?;
+            world
+                .submit(rom_sim::Command {
+                    player: owner,
+                    executor: ship,
+                    kind: "travel".into(),
+                    subject: None,
+                    target_entity: None,
+                    target_pos: Some(target),
+                    queue: false,
+                })
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
     /// Reads the `grant-age` and `grant` lines of a script.
     pub fn scan(text: &str) -> Result<Self, String> {
         let mut setup = Self::default();
@@ -247,6 +311,13 @@ impl ScriptSetup {
             let words: Vec<&str> = line.split_whitespace().collect();
             let at = || format!("line {}", number + 1);
             match words.get(1).copied() {
+                Some("jump-in") => {
+                    let (Some(owner), Some(key)) = (words.get(2), words.get(3)) else {
+                        return Err(format!("{}: jump-in needs owner and entity key", at()));
+                    };
+                    let owner = owner.parse().map_err(|_| format!("{}: bad owner", at()))?;
+                    setup.jump_ins.push((owner, (*key).to_owned()));
+                }
                 Some("place-space") => {
                     let (Some(owner), Some(key), Some(offset)) =
                         (words.get(2), words.get(3), words.get(4))
@@ -477,7 +548,7 @@ impl Script {
                     Some(
                         "grant-age" | "grant" | "grant-tech" | "place" | "place-space"
                         | "place-orbit" | "colony" | "colony-far" | "auto-colony"
-                        | "ascension-ready" | "research-all",
+                        | "ascension-ready" | "research-all" | "jump-in",
                     ),
                 ) => {
                     continue;
@@ -1348,6 +1419,14 @@ mod tests {
         ));
         assert!(Script::parse("1 orbit rock9", &context(), &offset).is_err());
         assert!(ScriptSetup::scan("1 grant res.food").is_err());
+        // Task 104: ships sent to jump into the home system are set up, not replayed.
+        let jump = "0 jump-in 2 unit.corvette";
+        assert_eq!(
+            ScriptSetup::scan(jump).unwrap().jump_ins,
+            vec![(2, "unit.corvette".to_owned())]
+        );
+        assert!(Script::parse(jump, &context(), &offset).is_ok());
+        assert!(ScriptSetup::scan("0 jump-in 2").is_err());
     }
 
     #[test]

@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use rom_render::{
     ChargeView, ClaimState, ClaimView, ColonyView, HoldView, ResourceBodyView, ShipView,
-    SpaceSnapshot, TransitView,
+    SpaceSnapshot, StrikeView, TransitView,
 };
 use rom_rules::{BodyKind, EntityClass};
 use rom_sim::{BodyClaim, BodyId, EntityId, PlayerId, Pos, Sighting, Topology, World};
@@ -201,6 +201,7 @@ pub fn space_snapshot_with(
         .frames()
         .map(|(id, frame)| (frame.body, (id, frame)))
         .collect();
+    snapshot.strikes = strikes(world, &planes);
     for sighting in sightings {
         let Sighting::Live(e) = sighting else {
             continue;
@@ -329,6 +330,38 @@ pub fn space_snapshot_with(
     snapshot
 }
 
+/// Jump inhibitors' recent blows on arriving ships that player one sees (task 104): on its own
+/// or an ally's ships, by its own or an ally's inhibitor, or in sight; oldest first.
+fn strikes(world: &World, planes: &BTreeMap<BodyId, (u32, SpaceFrame)>) -> Vec<StrikeView> {
+    world
+        .arrival_strikes()
+        .iter()
+        .filter(|s| world.tick().saturating_sub(s.tick) < u64::from(rom_render::STRIKE_FLASH_TICKS))
+        .filter(|s| {
+            allied(world, PLAYER, s.ship_owner)
+                || allied(world, PLAYER, s.owner)
+                || world.is_visible_on_body(
+                    PLAYER,
+                    s.pos.body,
+                    s.pos.face,
+                    s.pos.x.div_euclid(1000),
+                    s.pos.y.div_euclid(1000),
+                )
+        })
+        .filter_map(|s| {
+            let (system, frame) = planes.get(&s.pos.body)?;
+            let (x, y) = frame.units_of(s.pos);
+            Some(StrikeView {
+                system: *system,
+                x,
+                y,
+                age_ticks: world.tick().saturating_sub(s.tick) as u32,
+                destroyed: s.destroyed,
+            })
+        })
+        .collect()
+}
+
 /// The ships of player one and its allies among `ships` that are charging a jump.
 pub fn charges(world: &World, ships: &[ShipView]) -> Vec<ChargeView> {
     ships
@@ -368,10 +401,24 @@ pub fn holds(world: &World, index: &SystemIndex) -> Vec<HoldView> {
                 system,
                 owner: u8::try_from(e.owner.0).unwrap_or(u8::MAX),
                 enemy,
+                arrival_damage: world.rules().entity_types[&e.type_id]
+                    .inhibitor
+                    .as_ref()
+                    .map_or(0, |i| {
+                        u32::try_from(i.arrival_damage.max(0)).unwrap_or(u32::MAX)
+                    }),
             })
         })
         .collect();
-    out.sort_by_key(|h| (h.system, !h.enemy, h.owner));
+    // The largest blow first among a system's inhibitors of one side: several do not stack.
+    out.sort_by_key(|h| {
+        (
+            h.system,
+            !h.enemy,
+            std::cmp::Reverse(h.arrival_damage),
+            h.owner,
+        )
+    });
     out.dedup_by_key(|h| (h.system, h.enemy));
     out
 }
@@ -588,6 +635,68 @@ pub fn claim_changes(
         .collect()
 }
 
+/// The event lines for the jump inhibitors' blows struck after tick `after` (task 104): one per
+/// inhibitor of player one ("Jump inhibitor at Body 2 struck 3 arriving ships, 2 destroyed"),
+/// and one per enemy inhibitor that struck player one's ships.
+pub fn strike_notices(world: &World, after: u64) -> Vec<Notice> {
+    // (inhibitor, whether it is player one's) → (struck, destroyed, a ship that lives on).
+    let mut told: BTreeMap<(EntityId, bool), (usize, usize, Option<EntityId>)> = BTreeMap::new();
+    let mut systems: BTreeMap<EntityId, u32> = BTreeMap::new();
+    for s in world.arrival_strikes().iter().filter(|s| s.tick > after) {
+        let mine = s.owner == PLAYER;
+        if !mine && s.ship_owner != PLAYER {
+            continue;
+        }
+        systems.insert(s.inhibitor, s.system);
+        let entry = told.entry((s.inhibitor, mine)).or_default();
+        entry.0 += 1;
+        entry.1 += usize::from(s.destroyed);
+        if !s.destroyed && entry.2.is_none() && world.entity(s.ship).is_some() {
+            entry.2 = Some(s.ship);
+        }
+    }
+    told.into_iter()
+        .map(|((inhibitor, mine), (struck, destroyed, alive))| {
+            // Where it stands: its planet while it does, else its system.
+            let place = world
+                .entity(inhibitor)
+                .and_then(|e| world.body(e.pos.body))
+                .map(|b| b.name.clone())
+                .or_else(|| {
+                    world
+                        .systems()
+                        .iter()
+                        .find(|s| Some(&s.id) == systems.get(&inhibitor))
+                        .map(|s| s.name.clone())
+                })
+                .unwrap_or_default();
+            let lost = match destroyed {
+                0 => String::new(),
+                n if n == struck => ": destroyed".to_owned(),
+                n => format!(": {n} destroyed"),
+            };
+            let text = match (mine, struck) {
+                (true, 1) => format!("Jump inhibitor at {place} struck an arriving ship{lost}"),
+                (true, n) => format!("Jump inhibitor at {place} struck {n} arriving ships{lost}"),
+                (false, 1) => {
+                    format!("Enemy jump inhibitor at {place} struck your arriving ship{lost}")
+                }
+                (false, n) => format!(
+                    "Enemy jump inhibitor at {place} struck {n} of your arriving ships{lost}"
+                ),
+            };
+            Notice {
+                text,
+                about: if mine {
+                    world.entity(inhibitor).map(|e| e.id)
+                } else {
+                    alive
+                },
+            }
+        })
+        .collect()
+}
+
 /// Remembers ships and claims of player one and words what changed.
 #[derive(Debug, Default)]
 pub struct Notices {
@@ -601,6 +710,8 @@ pub struct Notices {
     charted: BTreeSet<(u32, u32)>,
     /// Orders of player one that an enemy jump inhibitor ended, already told.
     held: BTreeSet<rom_sim::OrderId>,
+    /// The tick of the latest arrival strike already told (task 104).
+    struck: u64,
     started: bool,
 }
 
@@ -719,6 +830,13 @@ impl Notices {
             .filter(|f| f.reason == "inhibited")
             .map(|f| f.order)
             .collect();
+        if self.started {
+            notices.extend(strike_notices(world, self.struck));
+        }
+        self.struck = world
+            .arrival_strikes()
+            .last()
+            .map_or(self.struck, |s| s.tick.max(self.struck));
         self.charted = charted;
         let reach = world.players().find(|p| p.id == PLAYER).and_then(|p| {
             let age = rules.ages.get(&p.age)?;
@@ -989,6 +1107,124 @@ mod transit_tests {
         let mut hud = HudSnapshot::default();
         controller.fill(&game.world, &mut hud);
         assert_eq!(hud.selected, vec![ship.0]);
+    }
+}
+
+#[cfg(test)]
+mod strike_tests {
+    use super::*;
+    use rom_sim::Command;
+
+    /// Task 104: player two's jump inhibitor on player one's home planet strikes player one's
+    /// ships as they jump home: the corvette is destroyed, the battleship hurt; the event line
+    /// tells it, the system view flashes, and the hover over the held system says so.
+    #[test]
+    fn an_inhibitor_strike_is_told_and_shown() {
+        let (content, mut game) = crate::match_setup::universe_game_for_tests();
+        let world = &mut game.world;
+        let rules = world.rules().clone();
+        let id = |k: &str| rules.id_of(k).unwrap();
+        let home = world.home_body(PLAYER).unwrap();
+        let home_system = world.body(home).unwrap().system;
+        let foe = world
+            .players()
+            .map(|p| p.id)
+            .find(|p| world.enemies(PLAYER, *p) && *p != PlayerId(0))
+            .unwrap();
+        let city = world
+            .entities()
+            .find(|e| e.owner == PLAYER && e.pos.body == home)
+            .unwrap()
+            .pos;
+        let inhibitor = [(12_000, 0), (0, 12_000), (-12_000, 0), (0, -12_000)]
+            .into_iter()
+            .find_map(|(dx, dy)| {
+                world
+                    .place_for_setup(id("bld.jump_inhibitor"), foe, world.offset(city, dx, dy))
+                    .ok()
+            })
+            .expect("room for the inhibitor");
+        let other = content
+            .universe
+            .routes
+            .iter()
+            .find_map(|r| {
+                (r.system_a == home_system)
+                    .then_some(r.system_b)
+                    .or((r.system_b == home_system).then_some(r.system_a))
+            })
+            .unwrap();
+        let edge = world.system_edge(other, home_system).unwrap();
+        let corvette = world.spawn(id("unit.corvette"), PLAYER, edge).unwrap();
+        let battleship = world.spawn(id("unit.battleship"), PLAYER, edge).unwrap();
+        let mut notices = Notices::default();
+        notices.update(world);
+        let target = world
+            .body_position(world.space_of(home_system).unwrap())
+            .unwrap();
+        for ship in [corvette, battleship] {
+            world
+                .submit(Command {
+                    player: PLAYER,
+                    executor: ship,
+                    kind: "travel".into(),
+                    subject: None,
+                    target_entity: None,
+                    target_pos: Some(target),
+                    queue: false,
+                })
+                .unwrap();
+        }
+        let mut lines = Vec::new();
+        let mut flashed = false;
+        for _ in 0..12_000 {
+            world.step();
+            lines.extend(notices.update(world));
+            let sightings = world.visible_entities(PLAYER);
+            let space = space_snapshot(world, home_system, &sightings);
+            flashed |= space.strikes.iter().any(|s| s.system == home_system);
+            if world.entity(battleship).is_some_and(|e| {
+                world
+                    .body(e.pos.body)
+                    .is_some_and(|b| b.system == home_system)
+            }) {
+                break;
+            }
+        }
+        let damage = rules.entity_types[&id("bld.jump_inhibitor")]
+            .inhibitor
+            .as_ref()
+            .unwrap()
+            .arrival_damage;
+        assert!(
+            world.entity(corvette).is_none(),
+            "the corvette is destroyed"
+        );
+        let e = world.entity(battleship).unwrap();
+        assert_eq!(e.hp, e.max_hp - damage);
+        assert!(flashed, "the system view flashes where they arrived");
+        let place = world.body(home).unwrap().name.clone();
+        let struck: Vec<_> = lines
+            .iter()
+            .filter(|n| n.text.starts_with("Enemy jump inhibitor"))
+            .collect();
+        assert!(!struck.is_empty(), "{lines:?}");
+        assert!(struck.iter().all(|n| n.text.contains(&place)), "{struck:?}");
+        assert!(
+            struck.iter().any(|n| n.text.contains("destroyed")),
+            "{struck:?}"
+        );
+        // The hover over the held system says that arriving ships are struck, and for how much.
+        let holds = holds(world, &SystemIndex::new(world));
+        let hold = holds.iter().find(|h| h.system == home_system).unwrap();
+        assert!(hold.enemy && i64::from(hold.arrival_damage) == damage);
+        let (_, what) = rom_render::space::hold_text(hold);
+        assert!(
+            what.contains(&format!("struck for {damage} hit points")),
+            "{what}"
+        );
+        // The inhibitor's own owner hears of it too, once the line is from its side.
+        assert!(world.entity(inhibitor).is_some());
     }
 }
 

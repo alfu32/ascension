@@ -1,0 +1,21 @@
+# Task 104, replayed by --script in --universe mode (--players 2 --ai none, seed 1, --view
+# system,home): player two's jump inhibitor stands on player one's home planet; two survey
+# ships and two space frigates of player one jump home from the nearest system (Tarf). Each is
+# struck once as it arrives at the rim: the frigates (faster) arrive first and are hurt (red
+# bars), the survey ships are destroyed on arrival (the large flash). The event line (cut short
+# in the picture) says "Enemy jump inhibitor at Gamma Canis Minoris II struck 2 of your arriving
+# ships: destroyed"; the help line says what the held system does. Slowed from tick 600, focused once all are in.
+# Screenshot: --size 1280x800 --after 60 (docs/img/104-strike-destroyed.png).
+0 grant-age age.abundance
+0 place 2 bld.jump_inhibitor @30,10
+0 jump-in 1 unit.survey_ship
+0 jump-in 1 unit.survey_ship
+0 jump-in 1 unit.space_frigate
+0 jump-in 1 unit.space_frigate
+1 speed 400
+2 ships
+600 speed 50
+700 speed 10
+774 cam focus
+778 cam focus
+782 cam focus

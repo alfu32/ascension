@@ -3060,7 +3060,7 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.jump_inhibitor'),'construct','military_2',2,0);
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.jump_inhibitor'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.jump_inhibitor'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
-INSERT INTO et_inhibitor(entity_type_id,reach,charge_pct) VALUES ((SELECT id FROM def WHERE key='bld.jump_inhibitor'),'system',50);
+INSERT INTO et_inhibitor(entity_type_id,reach,charge_pct,arrival_damage) VALUES ((SELECT id FROM def WHERE key='bld.jump_inhibitor'),'system',50,1000);
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.enhanced_sensors','Enhanced Sensors');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.enhanced_sensors'),'upgrade','',0,850);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.enhanced_sensors'),(SELECT id FROM def WHERE key='res.wealth'),1200,0);
@@ -3161,7 +3161,7 @@ INSERT INTO game_constant(key,value,unit,note) VALUES ('celestial.dir_y',-872844
 INSERT INTO game_constant(key,value,unit,note) VALUES ('celestial.dir_z',-484929,'millionths','z toward the north celestial pole');
 INSERT INTO game_constant(key,value,unit,note) VALUES ('celestial.distance_pct',150,'%','the celestial home lies this share of the match region''s radius from its middle');
 INSERT INTO game_constant(key,value,unit,note) VALUES ('celestial.planet_orbit',6000,'system units','orbit radius of the mythical planet about the black hole');
-INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.ship_of_the_line','Ships of the Line');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.ship_of_the_line','Men-of-War');
 INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.ship_of_the_line'),'unit','line_ship',960,2,(SELECT id FROM armor_class WHERE key='hull'),12000,1,250,'per_type',(SELECT id FROM def WHERE key='unit.carrack'),(SELECT id FROM def WHERE key='age.enlightenment'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.ship_of_the_line'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.ship_of_the_line'),(SELECT id FROM tag WHERE key='military'));
@@ -3174,7 +3174,7 @@ INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon 
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.dock'),(SELECT id FROM def WHERE key='unit.ship_of_the_line'),'train','units',4,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.ship_of_the_line'),(SELECT id FROM def WHERE key='res.timber'),256,5);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.ship_of_the_line'),(SELECT id FROM def WHERE key='res.metal'),128,2);
-INSERT INTO def(kind,key,name) VALUES ('tech','tech.up.ship_of_the_line','Upgrade to Ships of the Line');
+INSERT INTO def(kind,key,name) VALUES ('tech','tech.up.ship_of_the_line','Upgrade to Men-of-War');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.up.ship_of_the_line'),'unit_upgrade','',0,500);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.ship_of_the_line'),(SELECT id FROM def WHERE key='res.timber'),512,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.up.ship_of_the_line'),(SELECT id FROM def WHERE key='res.metal'),256,0);

@@ -22,7 +22,8 @@ ROUND14 = {"unit.survey_ship@starfaring", "unit.corvette@starfaring",
            "unit.space_freighter@starfaring", "unit.satellite@starfaring",
            "unit.orbital_fighter@starfaring", "unit.orbital_bomber@starfaring",
            "unit.ship_of_the_line@enlightenment", "unit.dreadnought@modern"}
-NAMES = {"bld.city": "City", "bld.woodcutter_camp": "Woodcutter's camp", "node.relics": "Relic site"}
+NAMES = {"bld.city": "City", "bld.woodcutter_camp": "Woodcutter's camp", "node.relics": "Relic site",
+         "unit.ship_of_the_line": "Man-of-war"}
 
 def name_of(entity):
     if entity in NAMES:
@@ -149,7 +150,7 @@ OVERVIEW14 = [
     ("93-generations", "The three classes task 92 moved an age earlier, first look (left) and later look (right): frigate, cruiser, battleship"),
     ("93-orbit", "Twenty starships in orbit above the city (planet view, <code>docs/tasks/72-bench-script.txt</code>), near versions, in player 1's red"),
     ("93-system-fleet", "System view at the bench framing: sixty ships of every class on the plane of the home system (<code>docs/tasks/93-bench-script.txt</code>), far versions at this distance"),
-    ("93-sea", "The two new line ships at sea level beside their neighbours: frigate and ship of the line; destroyer and dreadnought"),
+    ("93-sea", "The two new line ships at sea level beside their neighbours: frigate and man-of-war; destroyer and dreadnought"),
 ]
 OVERVIEW = OVERVIEW14 if ROUND == "14" else OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
     ("gallery_ancient", "Ancient age, game camera: <code>--gallery ancient</code>"),

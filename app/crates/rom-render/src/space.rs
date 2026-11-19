@@ -181,6 +181,24 @@ pub struct HoldView {
     /// Whether it holds player one's ships (an enemy's); otherwise it is player one's or an
     /// ally's and holds their enemies.
     pub enemy: bool,
+    /// Hit points an enemy ship loses on jumping into the system (task 104); 0 strikes none.
+    pub arrival_damage: u32,
+}
+
+/// A jump inhibitor's blow on a ship that jumped into its system (task 104), seen as a flash
+/// where the ship arrived at the rim of the system's plane.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StrikeView {
+    /// The system.
+    pub system: u32,
+    /// East offset of the ship in the system's plane, as [`ShipView::x`] with no body.
+    pub x: f32,
+    /// South offset, as [`ShipView::y`] with no body.
+    pub y: f32,
+    /// Game ticks since it struck.
+    pub age_ticks: u32,
+    /// Whether the blow destroyed the ship: a larger flash.
+    pub destroyed: bool,
 }
 
 /// A blast of an area weapon on a planet, seen from space as a flash on its globe (task 75).
@@ -217,6 +235,9 @@ pub struct ResidenceView {
 /// Game ticks a flash on a planet stays visible from space.
 pub const FLASH_TICKS: u32 = 40;
 
+/// Game ticks a jump inhibitor's strike on an arriving ship flashes (task 104).
+pub const STRIKE_FLASH_TICKS: u32 = 80;
+
 /// What the render thread draws in space.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SpaceSnapshot {
@@ -245,6 +266,8 @@ pub struct SpaceSnapshot {
     pub holds: Vec<HoldView>,
     /// Blasts on planets the player sees, newest last (task 75).
     pub flashes: Vec<FlashView>,
+    /// Blows of jump inhibitors on arriving ships the player sees, oldest first (task 104).
+    pub strikes: Vec<StrikeView>,
     /// Ascensions under way anywhere, by player (task 76).
     pub countdowns: Vec<CountdownView>,
     /// The ascended players living on the celestial home, by player (task 76).
@@ -504,17 +527,29 @@ pub fn arc(
 
 /// The words for a system's jump inhibitor in the pointer's tooltip, if it has one.
 pub fn hold_text(hold: &HoldView) -> (String, String) {
+    let strike = |whose: &str| match hold.arrival_damage {
+        0 => String::new(),
+        damage => format!(
+            "{whose} ships jumping in are struck for {damage} hit points \
+             (craft aboard a carrier are sheltered) · "
+        ),
+    };
     if hold.enemy {
         (
             format!("Held by a jump inhibitor of player {}", hold.owner),
-            "Your ships here may leave only the way they came, after a longer charge · \
-             destroy or capture it to free them"
-                .to_owned(),
+            format!(
+                "{}Your ships here may leave only the way they came, after a longer charge · \
+                 destroy or capture it to free them",
+                strike("Your")
+            ),
         )
     } else {
         (
             "Your jump inhibitor holds this system".to_owned(),
-            "Enemy ships here may leave only the way they came, after a longer charge".to_owned(),
+            format!(
+                "{}Enemy ships here may leave only the way they came, after a longer charge",
+                strike("Enemy")
+            ),
         )
     }
 }
@@ -579,12 +614,18 @@ pub fn ship_frame_pos(
         };
         return [at.pos[0] + dx, at.pos[1], at.pos[2] + dy];
     }
-    let radius = ship.x.hypot(ship.y);
+    free_frame_pos(ship.x, ship.y, outermost)
+}
+
+/// Where a point of a system's plane held by no body (`x`, `y` as [`ShipView`]'s with no
+/// body) stands in the system frame.
+pub fn free_frame_pos(x: f32, y: f32, outermost: f32) -> [f32; 3] {
+    let radius = x.hypot(y);
     if radius <= f32::EPSILON {
         return [0.0; 3];
     }
     let frame = orbit_to_frame(radius, outermost);
-    [ship.x / radius * frame, 0.0, ship.y / radius * frame]
+    [x / radius * frame, 0.0, y / radius * frame]
 }
 
 /// The orbit-radius-unit offset from the star of a point of the system plane.
@@ -2123,6 +2164,7 @@ mod tests {
                 system: id,
                 owner: 2,
                 enemy: true,
+                arrival_damage: 1000,
             }],
             ..SpaceSnapshot::default()
         };
@@ -2135,6 +2177,8 @@ mod tests {
         );
         assert!(name.starts_with("S2 (star system)") && name.contains("jump inhibitor"));
         assert!(action.contains("only the way they came"));
+        // Task 104: and that ships jumping in are struck, for how much.
+        assert!(action.contains("struck for 1000 hit points"));
         let (_, plain) = space_hover_help(
             &scene,
             SpaceHover::Target(Target::System(0)),

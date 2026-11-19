@@ -2700,6 +2700,14 @@ impl Controller {
             }
             .into();
         }
+        // A jump inhibitor says what it does to enemy ships (task 104), from its component.
+        if hud.help.is_empty()
+            && let Some(inhibitor) = own
+                .iter()
+                .find_map(|e| rules.entity_types[&e.type_id].inhibitor.as_ref())
+        {
+            hud.help = inhibitor_help(inhibitor);
+        }
         if hud.help.is_empty() && own.iter().any(|e| world.jump_charge(e.id).is_some()) {
             hud.help = "Charging a jump: it cannot move or fire until it leaves; \
                         any new order cancels the charge"
@@ -3034,6 +3042,22 @@ impl Controller {
             hud.event_about = self.message_about.map(|id| id.0);
         }
     }
+}
+
+/// What a jump inhibitor does, from its `et_inhibitor` row (task 104).
+fn inhibitor_help(inhibitor: &rom_rules::Inhibitor) -> String {
+    let mut help = format!(
+        "Enemy ships in this star system may leave only the way they came, charging {} % longer",
+        inhibitor.charge_pct.max(0)
+    );
+    if inhibitor.arrival_damage > 0 {
+        help.push_str(&format!(
+            "; each that jumps in is struck for {} hit points (craft aboard a carrier are \
+             sheltered)",
+            inhibitor.arrival_damage
+        ));
+    }
+    help
 }
 
 /// Translate rejected placement and research orders into the rule the player can fix.

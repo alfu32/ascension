@@ -394,6 +394,53 @@ fn craft_ride_a_carrier_to_another_system_and_launch_there() {
     println!("craft_ride_a_carrier_to_another_system_and_launch_there hashes={first:016x?}");
 }
 
+/// Task 104 (owner, 2026-11-19): a carrier shelters its craft from a jump inhibitor's blow.
+/// Arriving in a system an enemy inhibitor holds, the carrier alone is struck; the fighter
+/// aboard keeps every hit point and stays aboard.
+#[test]
+fn a_carrier_shelters_its_craft_from_an_inhibitors_blow() {
+    let rules = rules();
+    let play = || {
+        let mut w = world(&rules);
+        let fighters = train_craft(&mut w, "unit.orbital_fighter", 1);
+        let carrier = ship_in_orbit(&mut w, "unit.carrier", P1, HOME, None);
+        order(&mut w, fighters[0], "lift", None, None);
+        run_until(&mut w, 400, |w| w.orbit(fighters[0]).is_some());
+        order(&mut w, fighters[0], "enter", Some(carrier), None);
+        run_until(&mut w, 400, |w| w.passengers(carrier).len() == 1);
+        // Player two's inhibitor holds the second system.
+        w.add_surface(FAR, &planet(&rules)).unwrap();
+        w.place_for_setup(id(&w, "bld.jump_inhibitor"), P2, at(FAR, 0, 30_500, 30_500))
+            .unwrap();
+        let damage = rules.entity_types[&id(&w, "bld.jump_inhibitor")]
+            .inhibitor
+            .as_ref()
+            .unwrap()
+            .arrival_damage;
+        let full = w.entity(carrier).unwrap().max_hp;
+        w.submit(Command {
+            target_pos: Some(Pos {
+                body: w.space_of(2).unwrap(),
+                ..Pos::default()
+            }),
+            ..command(&w, carrier, "travel")
+        })
+        .unwrap();
+        run_until(&mut w, 20_000, |w| {
+            w.entity(carrier)
+                .is_some_and(|e| Some(e.pos.body) == w.space_of(2))
+        });
+        assert_eq!(w.entity(carrier).unwrap().hp, full - damage);
+        let fighter = w.entity(fighters[0]).unwrap();
+        assert_eq!(fighter.hp, fighter.max_hp, "the craft aboard was struck");
+        assert_eq!(fighter.container_id, Some(carrier));
+        let struck: Vec<_> = w.arrival_strikes().iter().map(|s| s.ship).collect();
+        assert_eq!(struck, [carrier]);
+        w.hash()
+    };
+    assert_eq!(play(), play());
+}
+
 #[test]
 fn batteries_shoot_down_a_descending_transport_and_damage_a_ship_in_orbit() {
     let rules = rules();

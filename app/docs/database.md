@@ -64,7 +64,7 @@ def ─┬─ age            ordinal, era, map scale
      │                 ├─ et_supply        supply radius
      │                 ├─ et_gather_site   farm, mine, camp, university
      │                 ├─ et_view_scale    drawn size in the space views (presentation)
-     │                 ├─ et_inhibitor     jump inhibitor: holds enemy ships in its system
+     │                 ├─ et_inhibitor     jump inhibitor: holds and strikes enemy ships in its system
      │                 ├─ et_colony        automated colony: wealth, the sites its governor keeps
      │                 └─ et_node          deposit placed by the map generator
      ├─ tech           age | track | upgrade | unit_upgrade | government | project | evolution
@@ -1053,6 +1053,32 @@ Destroying it lifts the effect on the next tick; it has hit points like any buil
 bombardment from orbit or troops on the ground answer it (task 71's rule: it has no weapon, so
 it is no strength that needs a counter).
 
+**Arrival strike (task 104).** Column `et_inhibitor.arrival_damage` (hit points, default 0;
+`bld.jump_inhibitor` 1 000): every ship of the inhibitor owner's enemies that arrives in its
+system by a jump loses that many hit points once, at the arrival tick (`World::arrive_transits`,
+in entity id order; what it destroys is removed in the same tick and credited to the
+inhibitor's owner, with the usual plunder). It is a fixed blow, deliberately **not** through the
+armour table (`damage_class` × `armor_class`, minus armour): the owner asked for "a fixed amount
+of damage", the inhibitor has no weapon row to carry a damage class, and the line between the
+hulls it destroys and those it only hurts should not move with armour research. Several do not
+stack: the largest blow applies, ties to the lowest id (as `charge_pct`), so a defender cannot
+make line ships die by building more. Own and allied ships, ships built in the system and ships
+already there when it is completed are not struck, nor are craft aboard a carrier (owner,
+2026-11-19: the carrier shelters them; only the carrier takes the blow, and if it dies they go
+down with it, as ever). Base starship hit points (no hit-point
+modifier applies to starships) and what the blow takes: space freighter 500, corvette 800 and
+survey ship 1 000 are destroyed; space frigate 1 300 keeps 300 (77 % lost), transport 1 500 keeps
+500 (67 %), space cruiser and carrier 2 000 keep 1 000 (50 %), battleship 3 600 keeps 2 600
+(28 %). Orbital craft jump only aboard a carrier, so they are never struck. The blows are kept a
+minute for the views (`World::arrival_strikes`, not hashed and not saved, like blasts); the hit
+points they take are state like any other. The answer under task 71's rule: the inhibitor now
+does damage, but only to ships arriving, and its counters are those of any building (orbital
+bombardment by the line ships that survive the blow, troops landed from a transport); the fight
+matrix pits armed units and armed buildings against each other in the field and does not model
+it. Computer players do not weigh the blow: their fleets (`rom-ai` fleet: claims, escort
+strikes, colony voyages) may send light hulls into a held system and lose them, which the owner
+accepted (2026-11-19).
+
 **Interstellar trade.** With `interstellar_trade`, `validate_trade` accepts a space freighter's
 target city in another star system (`SimError::NeedsInterstellarTrade` before the research).
 The route's length is the path its ships take: the distances in each system's plane (home
@@ -1071,6 +1097,9 @@ the route, takes longer.
 
 Schema and save format (deliberate):
 
+- **Task 104.** Column `et_inhibitor.arrival_damage` (deliberate schema change; lint views
+  empty, seed loads). The save layout is unchanged (format 12): the rules fingerprint changes, so
+  saves of earlier versions are refused as with any rules change.
 - **PART A.** `et_movement.jump_charge_ticks` (nullable); table `et_inhibitor`; stat
   `jump_charge`; constants `space.jump_charge_ticks`, `space.charting_pct`,
   `trade.route_length_mtiles`; the three rule keys above documented on `tech_effect.rule_key`.
@@ -1449,9 +1478,9 @@ Details and the tables as built: `docs/unit-series.md`, section 11. No schema ch
   the same `ui_group`; the generator's `SHIP_CLASSES` gives the warships and starships their
   class (`frigate`, `destroyer`, `line_ship`, `strike_ship`; `corvette`, `space_frigate`,
   `space_cruiser`, `battleship`), so classes coexist and an upgrade retires only its own class.
-  New definitions (Ships of the Line, Dreadnoughts, their upgrade researches, the two building
-  upgrades, the refits Fire Control and Armour Belts) are written after every other generated
-  definition (the generator's `late` steps).
+  New definitions (Men-of-War, key `unit.ship_of_the_line`; Dreadnoughts; their upgrade
+  researches, the two building upgrades, the refits Fire Control and Armour Belts) are written
+  after every other generated definition (the generator's `late` steps).
 - **Hitting ships**: the city, tower and fort lines, the siege line and the bomber line have an
   `et_weapon_target` row for `fluid`.
 - **Building upgrades** `tech.up.vehicle_plant` (stable) and `tech.up.factory` (siege workshop),

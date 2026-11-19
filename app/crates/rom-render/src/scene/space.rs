@@ -20,8 +20,9 @@ use crate::layers::{
 };
 use crate::space::{
     FIGURE_DASH, MapLineKind, SpaceHover, SpaceSnapshot, annulus, arc, chevron, chevron3,
-    claim_rings, class_marker, colony_rings, diamond, facing, map_colony_rings, map_mark_scale,
-    map_ship_marks, overlapping_marks, ship_frame_pos, star_map_lines, transit_at_rim,
+    claim_rings, class_marker, colony_rings, diamond, facing, free_frame_pos, map_colony_rings,
+    map_mark_scale, map_ship_marks, overlapping_marks, ship_frame_pos, star_map_lines,
+    transit_at_rim,
 };
 use crate::universe::{
     ACCRETION_RGB, BodyViewKind, CELESTIAL_RGB, MAP_RADIUS, PlacedBody, SYSTEM_RADIUS,
@@ -698,6 +699,8 @@ impl Scene {
         let mut rim_labels: Vec<([f32; 3], u32, u32, f32)> = Vec::new();
         // Groups of overlapping ship markers: where their count goes, in pixels, and the owner.
         let mut group_counts: Vec<(f32, f32, usize, u8)> = Vec::new();
+        // Jump inhibitors' blows on arriving ships (task 104): where, how large, how bright.
+        let mut strike_flashes: Vec<([f32; 3], f32, f32)> = Vec::new();
         let bar_look = view.view((width, height), self.projection_centre_y);
         let mut ship_bars: Vec<crate::bars::ScreenBar> = Vec::new();
         let mut icons: Vec<([f32; 3], f32, String, f32)> = Vec::new();
@@ -1264,6 +1267,27 @@ impl Scene {
                         64,
                     ));
                 }
+                // A jump inhibitor's blow on a ship that jumped in flashes where it arrived, as a
+                // shell's impact does (task 95), larger where the blow destroyed it.
+                for strike in state
+                    .snapshot
+                    .strikes
+                    .iter()
+                    .filter(|s| s.system == system_id)
+                {
+                    let k = strike.age_ticks as f32 / crate::space::STRIKE_FLASH_TICKS as f32;
+                    if k >= 1.0 {
+                        continue;
+                    }
+                    let at = free_frame_pos(strike.x, strike.y, outermost);
+                    let at = [at[0], at[1] + unit * 0.4, at[2]];
+                    if !keeps(at) {
+                        continue;
+                    }
+                    let pixels = if strike.destroyed { 150.0 } else { 100.0 };
+                    let size = view.per_pixel(at, height) * pixels * (0.5 + k);
+                    strike_flashes.push((at, size, (1.0 - k) * pass.detail * pass.space));
+                }
                 // Ships between systems wait at the rim, toward the other end of their lane.
                 let size = (distance * 0.03).max(60.0);
                 for transit in &state.snapshot.transits {
@@ -1296,6 +1320,26 @@ impl Scene {
                     .tris
                     .retain(|t| t.colour[3] > 0 && keeps(centroid(t)));
                 super::draw_overlay(&mut world, &overlay);
+            }
+            // The strikes' flashes: an orange burst and a white core, additive.
+            if !strike_flashes.is_empty() {
+                begin_sprite_run();
+                for &(at, size, strength) in &strike_flashes {
+                    for (scale, colour, alpha) in
+                        [(1.0, [255, 180, 80], 230.0), (0.4, [255, 245, 210], 255.0)]
+                    {
+                        sprite_in_run(
+                            &mut world,
+                            camera,
+                            &space.glow,
+                            at,
+                            size * scale,
+                            colour,
+                            (strength * alpha).clamp(0.0, 255.0) as u8,
+                        );
+                    }
+                }
+                end_sprite_run();
             }
             // The glow of the star: additive, without writing depth; never wider on screen than
             // a soft disc, so seen from a planet it is a sun, not a sheet of light.

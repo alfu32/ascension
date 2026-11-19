@@ -55,7 +55,8 @@ pub use entity::{Entity, EntityId, Player, PlayerId};
 pub use geometry::Topology;
 pub use income::Income;
 pub use jumps::{
-    Inhibition, JumpCharge, RULE_INTERSTELLAR_TRADE, RULE_ROUTE_SENSORS, RULE_ROUTE_SURVEY,
+    ArrivalBlow, ArrivalStrike, Inhibition, JumpCharge, RULE_INTERSTELLAR_TRADE,
+    RULE_ROUTE_SENSORS, RULE_ROUTE_SURVEY,
 };
 pub use life::{DormantSurface, Living};
 pub use map::MapGrid;

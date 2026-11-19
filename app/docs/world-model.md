@@ -315,6 +315,16 @@ shape that (values and tables in `database.md`, "Routes and jumps"):
   may leave only back the way they came, charge half as long again, and are told why when another
   route is refused. Several do not stack; destroying the building frees them at once. A system so
   held shows a six-sided ring on the star map and a faint boundary at its rim; hovering it explains.
+  Since task 104 (owner, 2026-11-19) it also strikes every enemy ship that jumps into its system,
+  once, on arrival: a fixed blow of 1 000 hit points (data: `et_inhibitor.arrival_damage`) that
+  destroys the light hulls (space freighter, corvette, survey ship) and leaves the line ships hurt
+  but alive (frigate and transport with a quarter to a third, cruiser and carrier half, battleship
+  72 %). Ships built there, or already there when it is completed, are not struck; craft aboard
+  a carrier are sheltered (only the carrier is struck; if it dies they go down with it). The strike
+  flashes where the ship arrived, the event line says "Jump inhibitor at X struck 3 arriving
+  ships: 1 destroyed", and the hover over the held system says how hard it strikes. Its answer is
+  what destroys a building: bombardment by the line ships that survive the blow, or troops landed
+  by a transport (1 500 hit points, it survives).
 - **Interstellar trade.** From the age of abundance (**Interstellar Trade**), a space freighter
   runs a route to an own or allied city in another star system: lift off, cross to the edge,
   charge, jump, cross, land, deliver, and back; it pays by the whole path's length.

@@ -1535,6 +1535,8 @@ pub struct Inhibitor {
     pub reach: InhibitorReach,
     /// The `charge_pct` column: extra jump charge time of the enemy ships it holds.
     pub charge_pct: i64,
+    /// The `arrival_damage` column: hit points an enemy ship loses on jumping into its system.
+    pub arrival_damage: i64,
 }
 /// One `et_colony` row with its `et_colony_site` rows: an automated colony, a city outside
 /// the city limit whose governor keeps sites standing in its area.

@@ -61,7 +61,7 @@ LINES = [
     # Warships and starships are classes that coexist (task 92, SHIP_CLASSES): each member
     # upgrades from the one before it in its own class only. Members marked `late` are defined
     # after every other generated definition, so the ids of earlier content stay stable.
-    ('warship', 'dock', 'trireme:Triremes:1|war_galley:War Galleys:2|carrack:Carracks:3|frigate:Frigates:4|ship_of_the_line:Ships of the Line:4:late|ironclad:Ironclads:5|destroyer:Destroyers:6|dreadnought:Dreadnoughts:6:late|missile_cruiser:Missile Cruisers:7|drone_cruiser:Drone Cruisers:8|hover_frigate:Hover Frigates:9'),
+    ('warship', 'dock', 'trireme:Triremes:1|war_galley:War Galleys:2|carrack:Carracks:3|frigate:Frigates:4|ship_of_the_line:Men-of-War:4:late|ironclad:Ironclads:5|destroyer:Destroyers:6|dreadnought:Dreadnoughts:6:late|missile_cruiser:Missile Cruisers:7|drone_cruiser:Drone Cruisers:8|hover_frigate:Hover Frigates:9'),
     ('fighter', 'airfield', 'biplane:Biplanes:5|fighter:Fighters:6|jet_fighter:Jet Fighters:7|drone_fighter:Drone Fighters:8|interceptor:Interceptors:9'),
     ('bomber', 'airfield', 'bomber:Bombers:6|strategic_bomber:Strategic Bombers:7|drone_bomber:Drone Bombers:8'),
     # The survey ship has a line of its own, so the corvette never supersedes it (task 73).
@@ -796,6 +796,11 @@ def orbit_units(definition, row, tag, need, produce, cost):
 JUMP_CHARGE = {1: 120, 2: 160, 3: 200, 4: 240}
 # How much longer an enemy jump inhibitor makes a ship's charge, percent.
 INHIBITOR_CHARGE_PCT = 50
+# Task 104: the fixed blow an enemy jump inhibitor deals each enemy ship that jumps into its
+# star system (hit points, not through the armour table). It destroys the light hulls (space
+# freighter 500, corvette 800, survey ship 1000); frigate 1300 and transport 1500 arrive with a
+# quarter to a third left, cruiser and carrier 2000 with half, battleship 3600 with 72 %.
+INHIBITOR_ARRIVAL_DAMAGE = 1000
 # Spaceport research: key, name, age, the rule it enables.
 ROUTE_RESEARCH = [
     ('enhanced_sensors', 'Enhanced Sensors', 'expansion', 'route_sensors'),
@@ -825,7 +830,8 @@ def jumps_and_inhibitors(definition, row, tag, need, produce, cost, tech, emit):
     row('placement_rule', entity_type_id=Ref(full), rule='in_own_territory')
     row('placement_rule', entity_type_id=Ref(full), rule='on_terrain', ref_def_id=Ref('ter.plain'))
     # Its reach is the whole star system of the planet it stands on.
-    row('et_inhibitor', entity_type_id=Ref(full), reach='system', charge_pct=INHIBITOR_CHARGE_PCT)
+    row('et_inhibitor', entity_type_id=Ref(full), reach='system', charge_pct=INHIBITOR_CHARGE_PCT,
+        arrival_damage=INHIBITOR_ARRIVAL_DAMAGE)
     for key, name, age_key, rule in ROUTE_RESEARCH:
         age = AGES.index(age_key)
         full = 'tech.' + key
