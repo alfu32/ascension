@@ -628,6 +628,7 @@ mod tests {
                 "unit.armoured_car@industrial",
                 "unit.arquebusier@gunpowder",
                 "unit.assault_infantry@information",
+                "unit.battleship@abundance",
                 "unit.battleship@galactic",
                 "unit.bazooka_team@modern",
                 "unit.biplane@industrial",
@@ -640,6 +641,7 @@ mod tests {
                 "unit.cuirassier@gunpowder",
                 "unit.destroyer@modern",
                 "unit.dragoon@enlightenment",
+                "unit.dreadnought@modern",
                 "unit.drone_bomber@automation",
                 "unit.drone_cruiser@automation",
                 "unit.drone_fighter@automation",
@@ -678,9 +680,12 @@ mod tests {
                 "unit.rocket_artillery@information",
                 "unit.satellite@starfaring",
                 "unit.scout_car@modern",
+                "unit.ship_of_the_line@enlightenment",
                 "unit.space_cruiser@abundance",
+                "unit.space_cruiser@expansion",
                 "unit.space_freighter@starfaring",
                 "unit.space_frigate@expansion",
+                "unit.space_frigate@starfaring",
                 "unit.strategic_bomber@information",
                 "unit.survey_ship@starfaring",
                 "unit.tank@modern",
@@ -735,6 +740,13 @@ mod tests {
                 EntityClass::Building | EntityClass::Node
             );
             let vehicle = is_vehicle(entry);
+            // Ships drawn in space (with an `et_view_scale` row) have four times a vehicle's
+            // near budget and the same far budget (task 93).
+            let spacecraft = rules
+                .entity_type(entry.entity)
+                .unwrap()
+                .view_scale
+                .is_some();
             // A crew of foot figures (a machine gun's) has each figure's budget.
             let crew = entry
                 .baked
@@ -745,6 +757,8 @@ mod tests {
                 .max(1);
             let (near, far) = if building {
                 (1_500, 300)
+            } else if vehicle && spacecraft {
+                (3_200, 160)
             } else if vehicle {
                 (800, 160)
             } else {

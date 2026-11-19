@@ -1,0 +1,68 @@
+# Task 93: sixty starships of player one on the plane of the home system, every class
+# mixed in a block of ten by six, for the system-view bench (--view system).
+# Test-only setup lines first.
+0 grant-age age.galactic
+0 place-space 1 unit.corvette 44,-15
+0 place-space 1 unit.space_frigate 50,-15
+0 place-space 1 unit.space_cruiser 56,-15
+0 place-space 1 unit.battleship 62,-15
+0 place-space 1 unit.carrier 68,-15
+0 place-space 1 unit.transport_ship 74,-15
+0 place-space 1 unit.space_freighter 80,-15
+0 place-space 1 unit.survey_ship 86,-15
+0 place-space 1 unit.corvette 92,-15
+0 place-space 1 unit.space_frigate 98,-15
+0 place-space 1 unit.space_cruiser 44,-9
+0 place-space 1 unit.battleship 50,-9
+0 place-space 1 unit.carrier 56,-9
+0 place-space 1 unit.transport_ship 62,-9
+0 place-space 1 unit.space_freighter 68,-9
+0 place-space 1 unit.survey_ship 74,-9
+0 place-space 1 unit.corvette 80,-9
+0 place-space 1 unit.space_frigate 86,-9
+0 place-space 1 unit.space_cruiser 92,-9
+0 place-space 1 unit.battleship 98,-9
+0 place-space 1 unit.carrier 44,-3
+0 place-space 1 unit.transport_ship 50,-3
+0 place-space 1 unit.space_freighter 56,-3
+0 place-space 1 unit.survey_ship 62,-3
+0 place-space 1 unit.corvette 68,-3
+0 place-space 1 unit.space_frigate 74,-3
+0 place-space 1 unit.space_cruiser 80,-3
+0 place-space 1 unit.battleship 86,-3
+0 place-space 1 unit.carrier 92,-3
+0 place-space 1 unit.transport_ship 98,-3
+0 place-space 1 unit.space_freighter 44,3
+0 place-space 1 unit.survey_ship 50,3
+0 place-space 1 unit.corvette 56,3
+0 place-space 1 unit.space_frigate 62,3
+0 place-space 1 unit.space_cruiser 68,3
+0 place-space 1 unit.battleship 74,3
+0 place-space 1 unit.carrier 80,3
+0 place-space 1 unit.transport_ship 86,3
+0 place-space 1 unit.space_freighter 92,3
+0 place-space 1 unit.survey_ship 98,3
+0 place-space 1 unit.corvette 44,9
+0 place-space 1 unit.space_frigate 50,9
+0 place-space 1 unit.space_cruiser 56,9
+0 place-space 1 unit.battleship 62,9
+0 place-space 1 unit.carrier 68,9
+0 place-space 1 unit.transport_ship 74,9
+0 place-space 1 unit.space_freighter 80,9
+0 place-space 1 unit.survey_ship 86,9
+0 place-space 1 unit.corvette 92,9
+0 place-space 1 unit.space_frigate 98,9
+0 place-space 1 unit.space_cruiser 44,15
+0 place-space 1 unit.battleship 50,15
+0 place-space 1 unit.carrier 56,15
+0 place-space 1 unit.transport_ship 62,15
+0 place-space 1 unit.space_freighter 68,15
+0 place-space 1 unit.survey_ship 74,15
+0 place-space 1 unit.corvette 80,15
+0 place-space 1 unit.space_frigate 86,15
+0 place-space 1 unit.space_cruiser 92,15
+0 place-space 1 unit.battleship 98,15
+2 ships
+4 cam focus
+6 cam click 300,200
+8 cam wheel 3 1000,370
