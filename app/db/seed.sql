@@ -3077,6 +3077,7 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.automated_route_survey'),(SELECT id FROM def WHERE key='res.knowledge'),700,0);
 INSERT INTO tech_effect(tech_id,effect,rule_key) VALUES ((SELECT id FROM def WHERE key='tech.automated_route_survey'),'enable_rule','route_survey');
 INSERT INTO game_constant(key,value,unit,note) VALUES ('space.landing_land_pct',20,'%','least share of the tiles under a landed ship that must be ground; the rest may be water');
+INSERT INTO game_constant(key,value,unit,note) VALUES ('space.orbit_height',8000,'milli-tiles','height of the orbit above the ground; a shot between ground or air and orbit flies the hypotenuse of this and the ground distance');
 INSERT INTO stat(key,scope,note) VALUES ('landing_radius','entity','milli-tiles of ground a landed ship covers around its tile');
 INSERT INTO tag(key,category) VALUES ('no_landing','terrain');
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='ter.mountain'),(SELECT id FROM tag WHERE key='no_landing'));

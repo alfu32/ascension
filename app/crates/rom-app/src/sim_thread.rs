@@ -1607,6 +1607,7 @@ pub fn travel_ticks(
             .distance(from, to)?
             .saturating_sub(et.radius.max(0) as u64)
     };
+    let distance = world.flight_distance(entity.id, target.id, distance);
     let rate = rules.constant("sim.ticks_per_second").unwrap_or(20).max(1) as u64;
     Some((distance * rate / weapon.projectile_speed.max(1) as u64).max(1))
 }
