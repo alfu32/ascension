@@ -237,7 +237,8 @@ pub struct OneView {
 pub struct ShipScale {
     /// Above a planet: times its true size.
     pub planet: f32,
-    /// On a system's plane: times the readable reference size.
+    /// Its class in space (task 96): its floor on screen and its marker, against the smallest
+    /// class's ([`ShipScales::class`]).
     pub system: f32,
     /// Standing on a planet's ground: times its true size (a starship keeps its planet size
     /// when it lands; an orbital craft comes down to its true size).
@@ -285,14 +286,27 @@ impl ShipScales {
     pub fn of(&self, kind: u16) -> ShipScale {
         self.0.get(&kind).copied().unwrap_or_default()
     }
+
+    /// The class of entity type `kind` in space: its system scale over the smallest of every
+    /// type's, so the smallest class is 1 and the others larger (1 for a type without a row).
+    pub fn class(&self, kind: u16) -> f32 {
+        let smallest = self
+            .0
+            .values()
+            .map(|s| s.system)
+            .fold(f32::INFINITY, f32::min);
+        if smallest.is_finite() && smallest > 0.0 {
+            (self.of(kind).system / smallest).max(1.0)
+        } else {
+            1.0
+        }
+    }
 }
 
 /// Height of an orbit above the ground in the planet view, in tiles, as the snapshots give it:
 /// a ship's altitude there is this times how far up it is (0 on the ground, 1 in orbit). The
 /// drawn height is [`hover_altitude`].
 pub const ORBIT_ALTITUDE: f32 = 8.0;
-/// Length of a ship on the system plane at scale 1, in units of [`plane_unit`].
-pub const SHIP_LENGTH_UNITS: f32 = 3.2;
 /// How much higher a ship holds over a planet per tile of its drawn length (task 72).
 pub const HOVER_PER_TILE: f32 = 0.6;
 
@@ -315,9 +329,110 @@ pub fn plane_unit(distance: f32) -> f32 {
     (distance * 0.016).max(24.0)
 }
 
-/// Length of a ship on the system plane at camera distance `distance`, in system units.
-pub fn system_ship_length(scale: ShipScale, distance: f32) -> f32 {
-    SHIP_LENGTH_UNITS * plane_unit(distance) * scale.system
+/// Length on screen, in pixels, under which a ship of the smallest class is not drawn (task 96);
+/// a larger class's floor is larger by its [`ShipScales::class`].
+pub const SHIP_FLOOR_PIXELS: f32 = 14.0;
+/// The ratio of true to floor size over which a ship eases from its floor to its true size:
+/// from the floor over this ratio up to the floor times it.
+pub const FLOOR_BAND: f32 = 1.5;
+/// Ratios of a ship's true size to its floor at which its class marker starts to take the
+/// model's place, and at which it has.
+pub const MARKER_FROM: f32 = 0.15;
+pub const MARKER_TO: f32 = 0.07;
+/// Least radius of a ship's pick box on screen, in pixels (a box at least 26 pixels across).
+pub const SHIP_PICK_PIXELS: f32 = 13.0;
+/// A class at least this many times the smallest is a capital ship: its marker is a diamond
+/// pointing ahead rather than a chevron.
+pub const CAPITAL_CLASS: f32 = 1.5;
+/// Length in tiles of a ship drawn without a composed model (the least width of a spacecraft
+/// hull, as [`crate::entities::unit_width`] gives it).
+pub const HULL_TILES: f32 = 3.0;
+
+/// A ship's own length in tiles: its model's longest extent across or deep, [`HULL_TILES`]
+/// for a plain hull.
+pub fn model_length(model: Option<crate::entities::ModelRef>) -> f32 {
+    model.map_or(HULL_TILES, |m| m.size[0].max(m.size[2]).max(0.1))
+}
+
+/// A ship's length in the system frame at its true size there (task 96): its own length times
+/// its planet scale, `per_tile` system units a tile. A ship looks in space as it looks above its
+/// planet, which is drawn at that planet's own size in tiles.
+pub fn ship_true_length(
+    model: Option<crate::entities::ModelRef>,
+    scale: ShipScale,
+    per_tile: f32,
+) -> f32 {
+    model_length(model) * scale.planet * per_tile
+}
+
+/// How much of its length a ship heading `heading` (a unit vector in the plane) shows to an
+/// eye in the unit direction `toward` from it: its length across the line of sight, never
+/// less than its slenderness (its model's least extent across or deep over its longest, 1 for
+/// a plain hull), the share it still shows end on. The floor applies to this apparent length,
+/// so a ship seen nose on is not drawn smaller than one seen side on.
+pub fn apparent_share(
+    model: Option<crate::entities::ModelRef>,
+    heading: [f32; 3],
+    toward: [f32; 3],
+) -> f32 {
+    let slender = model.map_or(1.0, |m| {
+        let (a, b) = (m.size[0].max(0.0), m.size[2].max(0.0));
+        a.min(b) / a.max(b).max(1e-6)
+    });
+    let along = (0..3).map(|i| heading[i] * toward[i]).sum::<f32>();
+    (1.0 - along * along)
+        .max(0.0)
+        .sqrt()
+        .max(slender)
+        .clamp(0.05, 1.0)
+}
+
+/// How a ship is drawn on screen at one zoom (task 96).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ShipOnScreen {
+    /// Length of the model before it yields to its marker, in pixels: its true size when near,
+    /// never under its floor.
+    pub pixels: f32,
+    /// Length the model is drawn, in frame units: [`ShipOnScreen::pixels`] shrinking as the
+    /// marker takes over, 0 once it has.
+    pub model: f32,
+    /// How far the class marker has taken the model's place, 0 to 1.
+    pub marker: f32,
+    /// Size of the class marker on screen, in pixels: the floor.
+    pub marker_pixels: f32,
+    /// Radius of the pick box on screen, in pixels: half the drawn length, never under
+    /// [`SHIP_PICK_PIXELS`].
+    pub reach: f32,
+}
+
+/// How a ship `true_length` frame units long, of class `class` ([`ShipScales::class`]), is
+/// drawn `per_pixel` frame units a pixel away. Above its floor it is drawn at its true size;
+/// below, at the floor ([`SHIP_FLOOR_PIXELS`] times its class), eased over [`FLOOR_BAND`] in log
+/// space so nothing jumps; far below ([`MARKER_FROM`] to [`MARKER_TO`] of the floor) its class
+/// marker takes its place, blended over that band.
+pub fn ship_on_screen(true_length: f32, per_pixel: f32, class: f32) -> ShipOnScreen {
+    let per_pixel = per_pixel.max(1e-9);
+    let floor = SHIP_FLOOR_PIXELS * class.max(1.0);
+    let x = (true_length.max(0.0) / per_pixel / floor).max(1e-9).ln();
+    let h = FLOOR_BAND.ln();
+    // A smooth maximum of x and 0 (the log of the floor): x above the band, 0 below it.
+    let y = if x >= h {
+        x
+    } else if x <= -h {
+        0.0
+    } else {
+        (x + h) * (x + h) / (4.0 * h)
+    };
+    let pixels = floor * y.exp();
+    let (from, to) = (MARKER_FROM.ln(), MARKER_TO.ln());
+    let marker = smoothstep((from - x) / (from - to));
+    ShipOnScreen {
+        pixels,
+        model: pixels * (1.0 - marker) * per_pixel,
+        marker,
+        marker_pixels: floor,
+        reach: (pixels * 0.5).max(SHIP_PICK_PIXELS),
+    }
 }
 
 /// A size between the planet view's (`t` = 0) and the system plane's (`t` = 1), blended in
@@ -401,10 +516,77 @@ mod tests {
         }
         assert_eq!(morph_size(2.0, 50.0, 0.0), 2.0);
         assert!((morph_size(2.0, 50.0, 1.0) - 50.0).abs() < 1e-3);
-        assert!(
-            system_ship_length(scale, 48_000.0)
-                < system_ship_length(ShipScale::default(), 48_000.0) * 0.5
-        );
+    }
+
+    #[test]
+    fn ships_follow_the_zoom_above_the_floor_and_hold_it_below() {
+        // A ship 50 units long seen from ever farther away: per pixel from 0.5 to 50 units.
+        let length = 50.0;
+        let mut last: Option<ShipOnScreen> = None;
+        for step in 0..=400 {
+            let per_pixel = 0.5 * 100f32.powf(step as f32 / 400.0);
+            let drawn = ship_on_screen(length, per_pixel, 1.0);
+            let true_px = length / per_pixel;
+            let floor = SHIP_FLOOR_PIXELS;
+            if true_px >= floor * FLOOR_BAND {
+                // True size: it shrinks as the camera draws back.
+                assert!((drawn.pixels - true_px).abs() < 1e-3, "{per_pixel}");
+            } else if true_px <= floor / FLOOR_BAND {
+                assert!((drawn.pixels - floor).abs() < 1e-3, "{per_pixel}");
+            }
+            assert!(drawn.pixels >= floor - 1e-3 && drawn.pixels >= true_px - 1e-3);
+            // A marker only far below the floor; all marker below the second threshold.
+            if true_px >= floor * MARKER_FROM {
+                assert_eq!(drawn.marker, 0.0);
+            }
+            if true_px <= floor * MARKER_TO {
+                assert_eq!(drawn.marker, 1.0);
+                assert_eq!(drawn.model, 0.0);
+            }
+            // The pick box covers the drawn ship and is never under the least box.
+            assert!(drawn.reach >= SHIP_PICK_PIXELS);
+            assert!(drawn.reach * 2.0 >= drawn.pixels);
+            assert!(drawn.reach * 2.0 >= drawn.marker_pixels);
+            // No jump between neighbouring zoom steps (1.2 % apart in distance).
+            if let Some(last) = last {
+                assert!(
+                    (drawn.pixels / last.pixels - 1.0).abs() < 0.02,
+                    "{per_pixel}"
+                );
+                assert!((drawn.marker - last.marker).abs() < 0.05, "{per_pixel}");
+            }
+            last = Some(drawn);
+        }
+        // Repeat zooms give the same sizes.
+        for per_pixel in [0.7, 3.3, 9.0, 41.0] {
+            assert_eq!(
+                ship_on_screen(length, per_pixel, 1.6),
+                ship_on_screen(length, per_pixel, 1.6)
+            );
+        }
+        // A larger class has a larger floor.
+        let far = ship_on_screen(length, 40.0, 2.0);
+        assert!((far.marker_pixels - 2.0 * SHIP_FLOOR_PIXELS).abs() < 1e-3);
+        assert!(far.pixels > ship_on_screen(length, 40.0, 1.0).pixels);
+    }
+
+    #[test]
+    fn classes_and_true_lengths_come_from_the_data() {
+        let scales = ShipScales(BTreeMap::from([
+            (1, ShipScale::from_pct(200, 25)),
+            (2, ShipScale::from_pct(300, 50)),
+        ]));
+        assert_eq!(scales.class(1), 1.0);
+        assert_eq!(scales.class(2), 2.0);
+        assert_eq!(scales.class(9), 4.0);
+        assert_eq!(ShipScales::default().class(1), 1.0);
+        let model = crate::entities::ModelRef {
+            index: 0,
+            size: [2.0, 1.0, 7.0],
+        };
+        let length = ship_true_length(Some(model), scales.of(2), 2.5);
+        assert!((length - 7.0 * 3.0 * 2.5).abs() < 1e-4);
+        assert_eq!(ship_true_length(None, scales.of(1), 1.0), HULL_TILES * 2.0);
     }
 
     #[test]

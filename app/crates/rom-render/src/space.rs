@@ -20,11 +20,38 @@ use crate::zoom::Target;
 
 /// Radius of the ring ships hold around a body, in radii of that body, at one orbit reach.
 pub const CLUSTER_RADII: f32 = 1.9;
+/// Least distance of a ship holding a body from that body's centre, in its radii.
+pub const CLEAR_RADII: f32 = 1.3;
 /// Smallest body radius the cluster ring is reckoned from, in system units: small moons and
 /// asteroids still hold their ships clear of the body.
 pub const CLUSTER_MIN_RADIUS: f32 = 100.0;
-/// Smallest pick radius of a ship on screen, in pixels.
-const SHIP_PICK_PIXELS: f32 = 13.0;
+use crate::layers::SHIP_PICK_PIXELS;
+
+/// A ship a click can pick: its id, its place in the frame and how it is drawn on screen.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ShipPoint {
+    /// Entity id.
+    pub id: u32,
+    /// Its place in the frame of the view.
+    pub at: [f32; 3],
+    /// Radius of its pick box on screen, in pixels: at least half its drawn length, never
+    /// under [`SHIP_PICK_PIXELS`].
+    pub reach: f32,
+    /// Half its drawn length on screen, in pixels: a dragged box that touches it takes it.
+    pub half: f32,
+}
+
+impl ShipPoint {
+    /// A ship marked at `at` with the least pick box (a mark on the star map).
+    pub fn mark(id: u32, at: [f32; 3]) -> Self {
+        Self {
+            id,
+            at,
+            reach: SHIP_PICK_PIXELS,
+            half: 0.0,
+        }
+    }
+}
 
 /// One ship in system space.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -539,11 +566,18 @@ pub fn ship_frame_pos(
         && let Some(at) = placed.iter().find(|p| p.body == body)
     {
         let step = at.radius.max(CLUSTER_MIN_RADIUS) * CLUSTER_RADII;
-        return [
-            at.pos[0] + ship.x * step,
-            at.pos[1],
-            at.pos[2] + ship.y * step,
-        ];
+        // Never inside the body: a ship near its middle stands off at its rim (task 96, where
+        // ships drawn at their true size beside a moon would vanish into it).
+        let off = ship.x.hypot(ship.y) * step;
+        let least = at.radius * CLEAR_RADII;
+        let (dx, dy) = if off >= least {
+            (ship.x * step, ship.y * step)
+        } else if off > f32::EPSILON {
+            (ship.x * step / off * least, ship.y * step / off * least)
+        } else {
+            (least, 0.0)
+        };
+        return [at.pos[0] + dx, at.pos[1], at.pos[2] + dy];
     }
     let radius = ship.x.hypot(ship.y);
     if radius <= f32::EPSILON {
@@ -590,6 +624,10 @@ pub struct MapShipMark {
     pub charge: Option<f32>,
 }
 
+/// Ships in transit whose progress along one lane differs by no more than this share of it
+/// are drawn as one mark.
+pub const TOGETHER_PROGRESS: f32 = 0.01;
+
 /// The ship marks of the star map: every ship in transit at its place on its lane, heading for
 /// its destination, and the ships in each system's space grouped by owner beside the system,
 /// `beside` map units apart (a step toward the screen's right).
@@ -599,7 +637,9 @@ pub fn map_ship_marks(
     snapshot: &SpaceSnapshot,
     beside: [f32; 3],
 ) -> Vec<MapShipMark> {
-    let mut marks = Vec::new();
+    let mut marks: Vec<MapShipMark> = Vec::new();
+    // Ships of one owner on one lane, side by side, are one mark that counts them (task 96).
+    let mut lanes: Vec<(u8, u32, u32, bool, f32, usize)> = Vec::new();
     for transit in &snapshot.transits {
         let (Some(a), Some(b)) = (
             scene.system_index(transit.from),
@@ -607,6 +647,23 @@ pub fn map_ship_marks(
         ) else {
             continue;
         };
+        if let Some(&(.., mark)) = lanes.iter().find(|l| {
+            (l.0, l.1, l.2, l.3) == (transit.owner, transit.from, transit.to, transit.charting)
+                && (l.4 - transit.progress).abs() <= TOGETHER_PROGRESS
+        }) {
+            let ids = &mut marks[mark].ids;
+            ids.push(transit.id);
+            ids.sort_unstable();
+            continue;
+        }
+        lanes.push((
+            transit.owner,
+            transit.from,
+            transit.to,
+            transit.charting,
+            transit.progress,
+            marks.len(),
+        ));
         let (from, to) = (positions[a], positions[b]);
         let way = [0, 1, 2].map(|i| to[i] - from[i]);
         let length = (way[0] * way[0] + way[1] * way[1] + way[2] * way[2]).sqrt();
@@ -789,6 +846,45 @@ pub fn diamond(at: [f32; 3], size: f32, colour: [u8; 4]) -> Vec<Tri3> {
         },
         Tri3 {
             v: [p(1.0, 0.0), p(-1.0, 0.0), p(0.0, -1.0)],
+            colour,
+        },
+    ]
+}
+
+/// A ship's class marker (task 96) at `at`, `size` long, its nose along the unit vector
+/// `along`, spread along the unit vector `across` (the marker lies in their plane, which the
+/// caller turns toward the eye): a chevron, or for a capital ship a diamond drawn long.
+pub fn class_marker(
+    at: [f32; 3],
+    along: [f32; 3],
+    across: [f32; 3],
+    size: f32,
+    capital: bool,
+    colour: [u8; 4],
+) -> Vec<Tri3> {
+    let point = |a: f32, c: f32| [0, 1, 2].map(|i| at[i] + (along[i] * a + across[i] * c) * size);
+    let (nose, notch, left, right) = if capital {
+        (
+            point(1.0, 0.0),
+            point(-0.7, 0.0),
+            point(-0.1, -0.55),
+            point(-0.1, 0.55),
+        )
+    } else {
+        (
+            point(0.75, 0.0),
+            point(-0.2, 0.0),
+            point(-0.6, -0.6),
+            point(-0.6, 0.6),
+        )
+    };
+    vec![
+        Tri3 {
+            v: [nose, left, notch],
+            colour,
+        },
+        Tri3 {
+            v: [nose, notch, right],
             colour,
         },
     ]
@@ -1081,38 +1177,62 @@ pub fn plane_point(view: &View, px: f32, py: f32) -> Option<[f32; 3]> {
     (t > 0.0).then(|| [eye[0] + dir[0] * t, 0.0, eye[2] + dir[2] * t])
 }
 
-/// The ship nearest to `cursor` among `ships` (id and frame position) whose projection lies
-/// within `reach_px` (at least [`SHIP_PICK_PIXELS`]) of it.
+/// The ship nearest to `cursor` among `ships` whose pick box reaches it: within its
+/// [`ShipPoint::reach`] on screen, and at least `reach_px`.
 pub fn nearest_ship(
     view: &View,
-    ships: &[(u32, [f32; 3])],
+    ships: &[ShipPoint],
     cursor: (f32, f32),
     reach_px: f32,
 ) -> Option<u32> {
-    let reach = reach_px.max(SHIP_PICK_PIXELS);
     ships
         .iter()
-        .filter_map(|&(id, at)| {
-            let (x, y, _) = view.project(at)?;
-            let d = (x - cursor.0).hypot(y - cursor.1);
-            (d <= reach).then_some((d, id))
+        .filter_map(|ship| {
+            let (x, y, _) = view.project(ship.at)?;
+            let reach = ship.reach.max(reach_px).max(SHIP_PICK_PIXELS);
+            let (dx, dy) = ((x - cursor.0).abs(), (y - cursor.1).abs());
+            // The pick box is square about the ship's centre.
+            (dx <= reach && dy <= reach).then_some((dx.hypot(dy), ship.id))
         })
-        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
         .map(|(_, id)| id)
 }
 
-/// The ships whose projected centres lie inside `rect`, in id order.
-pub fn ships_in_rect(view: &View, ships: &[(u32, [f32; 3])], rect: Rect) -> Vec<u32> {
+/// The ships a dragged `rect` takes, in id order: those whose drawn length on screen reaches
+/// into it (their centre inside it, for a ship drawn small).
+pub fn ships_in_rect(view: &View, ships: &[ShipPoint], rect: Rect) -> Vec<u32> {
     let mut ids: Vec<u32> = ships
         .iter()
-        .filter(|&&(_, at)| {
-            view.project(at)
-                .is_some_and(|(x, y, _)| rect.contains(x, y))
+        .filter(|ship| {
+            view.project(ship.at).is_some_and(|(x, y, _)| {
+                let dx = (rect.x - x).max(x - (rect.x + rect.w)).max(0.0);
+                let dy = (rect.y - y).max(y - (rect.y + rect.h)).max(0.0);
+                rect.contains(x, y) || dx.hypot(dy) <= ship.half
+            })
         })
-        .map(|&(id, _)| id)
+        .map(|ship| ship.id)
         .collect();
     ids.sort_unstable();
     ids
+}
+
+/// The groups of ship markers that overlap on screen. `marks` are each marker's owner, place in
+/// pixels and radius in pixels, in id order; a marker joins the first group of its owner whose
+/// first marker lies within the larger of their radii, else starts a group. Indices into
+/// `marks`, each group in order.
+pub fn overlapping_marks(marks: &[(u8, f32, f32, f32)]) -> Vec<Vec<usize>> {
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    for (i, &(owner, x, y, radius)) in marks.iter().enumerate() {
+        let joined = groups.iter_mut().find(|group| {
+            let (o, gx, gy, gr) = marks[group[0]];
+            o == owner && (x - gx).hypot(y - gy) <= radius.max(gr)
+        });
+        match joined {
+            Some(group) => group.push(i),
+            None => groups.push(vec![i]),
+        }
+    }
+    groups
 }
 
 /// What a space pick needs to know about the frame.
@@ -1121,8 +1241,9 @@ pub struct SpaceContext<'a> {
     pub view: View,
     /// True at the star-map level, false at the system level.
     pub star_map: bool,
-    /// Ships of the system with their frame positions (system level).
-    pub ships: &'a [(u32, [f32; 3])],
+    /// Ships of the system with their frame positions and pick boxes (system level), or their
+    /// marks (star map).
+    pub ships: &'a [ShipPoint],
     /// What a click can hit: bodies at the system level, systems on the star map, with screen
     /// markers as in [`crate::zoom::ZoomCamera::markers`].
     pub markers: &'a [(Target, (f32, f32, f32))],
@@ -1144,14 +1265,14 @@ impl SpaceContext<'_> {
 
     /// Every ship drawn at the same mark as `id` (a fleet beside a system on the star map).
     fn mark_of(&self, id: u32) -> Vec<u32> {
-        let Some(&(_, at)) = self.ships.iter().find(|s| s.0 == id) else {
+        let Some(at) = self.ships.iter().find(|s| s.id == id).map(|s| s.at) else {
             return vec![id];
         };
         let mut ids: Vec<u32> = self
             .ships
             .iter()
-            .filter(|s| s.1 == at)
-            .map(|s| s.0)
+            .filter(|s| s.at == at)
+            .map(|s| s.id)
             .collect();
         ids.sort_unstable();
         ids
@@ -1803,6 +1924,15 @@ mod tests {
             [0.0; 3]
         );
         assert_eq!(scene.bodies[body.body].kind, BodyViewKind::Resource);
+        // A ship near the middle of the body it holds stands off at its rim, never inside it.
+        for (x, y) in [(0.1, 0.05), (0.0, 0.0), (-0.2, 0.3)] {
+            let near = ship_frame_pos(&scene, &placed, outermost, &ship(13, Some(3), x, y));
+            let distance = (near[0] - body.pos[0]).hypot(near[2] - body.pos[2]);
+            assert!(
+                (distance - body.radius * CLEAR_RADII).abs() < 1e-2,
+                "{x},{y}: {distance}"
+            );
+        }
     }
 
     #[test]
@@ -1818,17 +1948,17 @@ mod tests {
             0.0,
         );
         let ships = [
-            (
+            ShipPoint::mark(
                 10,
                 ship_frame_pos(&scene, &placed, outermost, &ship(10, None, 1200.0, 300.0)),
             ),
-            (
+            ShipPoint::mark(
                 11,
                 ship_frame_pos(&scene, &placed, outermost, &ship(11, None, -1500.0, -900.0)),
             ),
         ];
         let at = |id: u32| {
-            let p = ships.iter().find(|s| s.0 == id).unwrap().1;
+            let p = ships.iter().find(|s| s.id == id).unwrap().at;
             let (x, y, _) = view.project(p).unwrap();
             (x, y)
         };
@@ -2051,6 +2181,86 @@ mod tests {
         assert_eq!(fleet.charge, Some(0.25));
         let voyage = marks.iter().find(|m| m.bound_for.is_some()).unwrap();
         assert!(voyage.charting && voyage.charge.is_none());
+    }
+
+    #[test]
+    fn ships_travelling_together_are_one_mark_that_counts_them() {
+        let scene = sample_scene();
+        let positions: Vec<[f32; 3]> = scene
+            .systems
+            .iter()
+            .enumerate()
+            .map(|(i, _)| [i as f32 * 100.0, 0.0, 0.0])
+            .collect();
+        let (s1, s2) = (scene.systems[0].id, scene.systems[1].id);
+        let snapshot = SpaceSnapshot {
+            transits: vec![
+                transit(7, s1, s2, 0.5),
+                transit(5, s1, s2, 0.505),
+                transit(6, s1, s2, 0.8),
+                TransitView {
+                    owner: 2,
+                    ..transit(8, s1, s2, 0.5)
+                },
+            ],
+            ..SpaceSnapshot::default()
+        };
+        let marks = map_ship_marks(&scene, &positions, &snapshot, [1.0, 0.0, 0.0]);
+        let ids: Vec<Vec<u32>> = marks.iter().map(|m| m.ids.clone()).collect();
+        assert_eq!(ids, vec![vec![5, 7], vec![6], vec![8]]);
+    }
+
+    #[test]
+    fn overlapping_markers_group_by_owner() {
+        let marks = [
+            (1, 100.0, 100.0, 7.0),
+            (1, 104.0, 102.0, 7.0),
+            (2, 101.0, 100.0, 7.0),
+            (1, 300.0, 100.0, 7.0),
+            (1, 99.0, 97.0, 7.0),
+        ];
+        assert_eq!(
+            overlapping_marks(&marks),
+            vec![vec![0, 1, 4], vec![2], vec![3]]
+        );
+        assert!(overlapping_marks(&[]).is_empty());
+    }
+
+    #[test]
+    fn a_ship_is_picked_anywhere_on_its_drawn_hull_and_never_by_less_than_the_least_box() {
+        let view = View::looking(
+            [0.0, 2000.0, 1500.0],
+            [0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            (1280.0, 720.0),
+            0.0,
+        );
+        let at = [0.0, 0.0, 0.0];
+        let (x, y, _) = view.project(at).unwrap();
+        // Drawn 300 pixels long: a click 120 pixels off its centre still finds it.
+        let big = ShipPoint {
+            id: 4,
+            at,
+            reach: 150.0,
+            half: 150.0,
+        };
+        assert_eq!(nearest_ship(&view, &[big], (x + 120.0, y), 0.0), Some(4));
+        assert_eq!(nearest_ship(&view, &[big], (x + 160.0, y), 0.0), None);
+        // Drawn small: the least box, 13 pixels either way, and no farther.
+        let small = ShipPoint {
+            reach: 2.0,
+            half: 2.0,
+            ..big
+        };
+        assert_eq!(
+            nearest_ship(&view, &[small], (x + 12.0, y - 12.0), 0.0),
+            Some(4)
+        );
+        assert_eq!(nearest_ship(&view, &[small], (x + 14.0, y), 0.0), None);
+        // A dragged box that touches a large ship's hull takes it; a small one needs its centre.
+        let touching = Rect::new(x + 100.0, y - 10.0, 80.0, 20.0);
+        assert_eq!(ships_in_rect(&view, &[big], touching), vec![4]);
+        assert!(ships_in_rect(&view, &[small], touching).is_empty());
     }
 
     #[test]

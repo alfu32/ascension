@@ -1,0 +1,52 @@
+# Task 96 bench, replayed by --script in universe mode (--style map.many_worlds --seed 1
+# --players 2 --ai none --zoom-all --sun fixed --view system --size 1280x800 --bench 12): task
+# 69's forty starships of two teams in the plane of player one's home system, the camera
+# focused on them, then six wheel steps out to the whole system (every ship a class marker),
+# the game nearly paused.
+0 grant-age age.galactic
+0 place-space 1 unit.survey_ship 64,-20
+0 place-space 1 unit.survey_ship 56,-20
+0 place-space 1 unit.survey_ship 48,-20
+0 place-space 1 unit.survey_ship 40,-20
+0 place-space 1 unit.corvette 64,-10
+0 place-space 1 unit.corvette 56,-10
+0 place-space 1 unit.corvette 48,-10
+0 place-space 1 unit.corvette 40,-10
+0 place-space 1 unit.space_frigate 64,0
+0 place-space 1 unit.space_frigate 56,0
+0 place-space 1 unit.space_frigate 48,0
+0 place-space 1 unit.space_frigate 40,0
+0 place-space 1 unit.space_cruiser 64,10
+0 place-space 1 unit.space_cruiser 56,10
+0 place-space 1 unit.space_cruiser 48,10
+0 place-space 1 unit.space_cruiser 40,10
+0 place-space 1 unit.battleship 64,20
+0 place-space 1 unit.battleship 56,20
+0 place-space 1 unit.battleship 48,20
+0 place-space 1 unit.battleship 40,20
+0 place-space 2 unit.survey_ship 76,-20
+0 place-space 2 unit.survey_ship 84,-20
+0 place-space 2 unit.survey_ship 92,-20
+0 place-space 2 unit.survey_ship 100,-20
+0 place-space 2 unit.corvette 76,-10
+0 place-space 2 unit.corvette 84,-10
+0 place-space 2 unit.corvette 92,-10
+0 place-space 2 unit.corvette 100,-10
+0 place-space 2 unit.space_frigate 76,0
+0 place-space 2 unit.space_frigate 84,0
+0 place-space 2 unit.space_frigate 92,0
+0 place-space 2 unit.space_frigate 100,0
+0 place-space 2 unit.space_cruiser 76,10
+0 place-space 2 unit.space_cruiser 84,10
+0 place-space 2 unit.space_cruiser 92,10
+0 place-space 2 unit.space_cruiser 100,10
+0 place-space 2 unit.battleship 76,20
+0 place-space 2 unit.battleship 84,20
+0 place-space 2 unit.battleship 92,20
+0 place-space 2 unit.battleship 100,20
+2 ships
+3 cam focus
+30 cam click 200,250
+40 cam wheel -6 640,380
+60 cam point 100,150
+80 speed 1

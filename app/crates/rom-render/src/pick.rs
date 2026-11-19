@@ -261,6 +261,12 @@ impl View {
         self.eye
     }
 
+    /// World units per pixel at `point`, as [`crate::layers::FrameView::per_pixel`] reckons it.
+    pub fn per_pixel(&self, point: [f32; 3]) -> f32 {
+        let d = sub(point, self.eye);
+        dot(d, d).sqrt() * 2.0 * self.tan / self.size.1.max(1.0)
+    }
+
     /// Unit direction the camera looks along.
     pub fn forward(&self) -> [f32; 3] {
         self.forward

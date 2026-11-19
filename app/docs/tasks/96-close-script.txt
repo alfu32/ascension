@@ -1,0 +1,22 @@
+# Task 96, replayed by --script in universe mode (--style map.many_worlds --seed 1 --players 2
+# --ai none --zoom-all --sun fixed --view system --size 1280x800 --after 33), shot as
+# img/96-close.png: six ships of player one, one of each class, sent to the nearest moon; the
+# camera focuses them, turns so they stand beside the moon, deselects them, and is then
+# zoomed in as close as the system view goes (six wheel steps): each ship
+# at its true size beside the moon.
+0 grant-age age.galactic
+0 place-space 1 unit.survey_ship 52,-9
+0 place-space 1 unit.corvette 58,-9
+0 place-space 1 unit.space_frigate 64,-9
+0 place-space 1 unit.space_cruiser 70,-9
+0 place-space 1 unit.carrier 76,-9
+0 place-space 1 unit.battleship 82,-9
+1 speed 800
+2 ships
+4 orbit rock1
+3000 cam focus
+3300 speed 20
+3302 cam drag 320,400 896,560
+3304 cam click 200,250
+3306 cam wheel 6 632,355
+3312 cam point 100,150

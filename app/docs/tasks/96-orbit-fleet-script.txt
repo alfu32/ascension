@@ -1,0 +1,28 @@
+# Task 96, replayed by --script in universe mode (--style map.many_worlds --seed 1 --players 2
+# --ai none --zoom-all --sun fixed --view globe --size 1280x800 --after 8), shot as
+# img/96-orbit-fleet-before-after.png (cropped, 0.0.93 and this task): task 72's twenty
+# starships in orbit over the city, the camera ten wheel steps out into the system.
+0 grant-age age.galactic
+0 place-orbit 1 unit.survey_ship @-40,-30
+0 place-orbit 1 unit.survey_ship @-20,-30
+0 place-orbit 1 unit.survey_ship @0,-30
+0 place-orbit 1 unit.survey_ship @20,-30
+0 place-orbit 1 unit.corvette @-40,-50
+0 place-orbit 1 unit.corvette @-20,-50
+0 place-orbit 1 unit.corvette @0,-50
+0 place-orbit 1 unit.corvette @20,-50
+0 place-orbit 1 unit.space_frigate @-40,-70
+0 place-orbit 1 unit.space_frigate @-20,-70
+0 place-orbit 1 unit.space_frigate @0,-70
+0 place-orbit 1 unit.space_frigate @20,-70
+0 place-orbit 1 unit.space_cruiser @-40,-10
+0 place-orbit 1 unit.space_cruiser @-20,-10
+0 place-orbit 1 unit.space_cruiser @0,-10
+0 place-orbit 1 unit.space_cruiser @20,-10
+0 place-orbit 1 unit.battleship @-40,10
+0 place-orbit 1 unit.battleship @-20,10
+0 place-orbit 1 unit.battleship @0,10
+0 place-orbit 1 unit.battleship @20,10
+1 speed 400
+400 speed 100
+10 cam wheel -10 640,400

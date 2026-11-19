@@ -16,7 +16,7 @@ use raylib::prelude::{
 
 use crate::camera::{Camera, CameraController, InputEvent, Key, PointerButton, TurnSettings};
 use crate::entities::{
-    EntitySnapshot, EntityView, SnapshotPair, aloft_hulls, dress_ships, is_aloft_ship,
+    EntitySnapshot, EntityView, SnapshotPair, aloft_hulls, dress_ships, floor_ships, is_aloft_ship,
 };
 use crate::globe::{Globe, PlanetScene};
 use crate::hud::{HudOverlay, HudSnapshot};
@@ -24,7 +24,7 @@ use crate::hud_gpu::{HudGpu, MinimapGpu, MinimapOverlays, draw_level_pips, draw_
 use crate::hud_layout::HudLayout;
 use crate::hud_layout::Rect;
 use crate::hud_minimap::{GLOBE_MINIMAP_SIZE, ndc_centre_y};
-use crate::layers::ShipScales;
+use crate::layers::{ShipScales, apparent_share, ship_on_screen, ship_true_length};
 use crate::looks::SceneLooks;
 use crate::mailbox::{Frame, FrameMailbox, FramePixels};
 use crate::orbit::{
@@ -36,7 +36,7 @@ use crate::readback::{AsyncReadback, ReadyFrame};
 use crate::review::{Review, sheet_cell};
 use crate::scene::{BakeReport, OrbitalShip, Scene};
 use crate::space::{
-    SpaceContext, SpaceHover, SpacePicker, SpaceSnapshot, level_help, ship_frame_pos,
+    ShipPoint, SpaceContext, SpaceHover, SpacePicker, SpaceSnapshot, level_help, ship_frame_pos,
     space_hover_help,
 };
 use crate::stats::{RenderStats, StatsWindow};
@@ -1045,6 +1045,7 @@ fn render_loop(shared: &Shared) {
                             orbit,
                             picker: &mut space_picker,
                             space: &space_snapshot,
+                            scales: &ship_scales,
                             out: &mut space_events,
                         },
                         event,
@@ -1207,6 +1208,17 @@ fn render_loop(shared: &Shared) {
         };
         // A snapshot asked for before this frame is drawn is answered by this frame or a later one.
         let snapshot_due = shared.snapshot_wanted.swap(false, Ordering::AcqRel);
+        // Ships above the planet never look smaller than their floor (task 96).
+        if let Some(globe) = globe.as_deref() {
+            let eye = match (zoom.as_ref(), orbit.as_ref()) {
+                (Some(zoom), Some(orbit)) => zoom.one_view(orbit).planet.map(|v| v.eye),
+                (None, Some(orbit)) => Some(orbit.position()),
+                _ => None,
+            };
+            if let Some(eye) = eye {
+                floor_ships(&mut blended, &ship_scales, globe, eye, size.1 as f32);
+            }
+        }
         let elapsed = frame_start.duration_since(started).as_secs_f32();
         let boxes = shared.box_count.load(Ordering::Relaxed) as usize;
         // Once the camera leaves the planet, the ships above it move to their places in the
@@ -1267,6 +1279,7 @@ fn render_loop(shared: &Shared) {
                 zoom,
                 orbit,
                 &space_snapshot,
+                &ship_scales,
                 (canvas.width, canvas.height),
                 centre_of(&canvas, hud_visible),
             ),
@@ -1678,6 +1691,7 @@ struct ZoomInput<'a> {
     orbit: &'a mut OrbitCamera,
     picker: &'a mut SpacePicker,
     space: &'a SpaceSnapshot,
+    scales: &'a ShipScales,
     out: &'a mut Vec<PickEvent>,
 }
 
@@ -1698,6 +1712,7 @@ fn zoom_event(
         orbit,
         picker,
         space,
+        scales,
         out,
     } = input;
     let in_space = zoom.level() >= Level::System && !zoom.pans_planet();
@@ -1772,7 +1787,7 @@ fn zoom_event(
                 return true;
             }
             if in_space {
-                let ships = ship_points(zoom, orbit, space);
+                let ships = ship_points(zoom, orbit, space, scales, size, centre_y);
                 let ctx = space_context(zoom, orbit, canvas, hud_visible, &ships);
                 out.extend(picker.handle(event, &ctx.context(), now_ms));
             }
@@ -1806,7 +1821,7 @@ fn zoom_event(
             if zoom.press(now_ms, (x, y), &view, orbit) {
                 picker.cancel();
             } else {
-                let ships = ship_points(zoom, orbit, space);
+                let ships = ship_points(zoom, orbit, space, scales, size, centre_y);
                 let ctx = space_context(zoom, orbit, canvas, hud_visible, &ships);
                 out.extend(picker.handle(event, &ctx.context(), now_ms));
             }
@@ -1818,7 +1833,7 @@ fn zoom_event(
             y,
             ..
         } if on_world(x, y) => {
-            let ships = ship_points(zoom, orbit, space);
+            let ships = ship_points(zoom, orbit, space, scales, size, centre_y);
             let ctx = space_context(zoom, orbit, canvas, hud_visible, &ships);
             out.extend(picker.handle(event, &ctx.context(), now_ms));
             true
@@ -1832,7 +1847,7 @@ fn zoom_event(
             if !on_world(x, y) {
                 return false;
             }
-            let ships = ship_points(zoom, orbit, space);
+            let ships = ship_points(zoom, orbit, space, scales, size, centre_y);
             let ctx = space_context(zoom, orbit, canvas, hud_visible, &ships);
             out.extend(picker.handle(event, &ctx.context(), now_ms));
             true
@@ -2010,6 +2025,7 @@ fn space_hover(
     zoom: &ZoomCamera,
     orbit: &OrbitCamera,
     space: &SpaceSnapshot,
+    scales: &ShipScales,
     canvas: (f32, f32),
     centre_y: f32,
 ) -> Option<(SpaceHover, (f32, f32))> {
@@ -2018,7 +2034,7 @@ fn space_hover(
         return None;
     }
     let view = zoom.space_view_at(orbit, canvas, centre_y);
-    let ships = ship_points(zoom, orbit, space);
+    let ships = ship_points(zoom, orbit, space, scales, canvas, centre_y);
     let hover = crate::space::nearest_ship(&view, &ships, cursor, 0.0)
         .map(SpaceHover::Ship)
         .or_else(|| {
@@ -2056,13 +2072,17 @@ fn centre_of(canvas: &HudLayout, hud_visible: bool) -> f32 {
     }
 }
 
-/// The ships a click can pick, with their places: in the anchored system's frame at the system
-/// level, at their marks on the star map.
+/// The ships a click can pick, with their places and pick boxes: in the anchored system's
+/// frame at the system level, each as large as it is drawn there (task 96), at their marks on
+/// the star map; seen on a canvas of `size` pixels whose picture centre is `centre_y`.
 fn ship_points(
     zoom: &ZoomCamera,
     orbit: &OrbitCamera,
     space: &SpaceSnapshot,
-) -> Vec<(u32, [f32; 3])> {
+    scales: &ShipScales,
+    size: (f32, f32),
+    centre_y: f32,
+) -> Vec<ShipPoint> {
     let scene = zoom.scene();
     if zoom.level() >= Level::StarMap {
         let view = zoom.map_view(orbit);
@@ -2070,22 +2090,42 @@ fn ship_points(
         let (_, beside) = crate::space::map_mark_scale(&view, distance);
         return crate::space::map_ship_marks(scene, zoom.map_positions(), space, beside)
             .into_iter()
-            .flat_map(|mark| mark.ids.into_iter().map(move |id| (id, mark.at)))
+            .flat_map(|mark| {
+                let at = mark.at;
+                mark.ids.into_iter().map(move |id| ShipPoint::mark(id, at))
+            })
             .collect();
     }
     let Some(system) = zoom.system_id() else {
         return Vec::new();
     };
+    let view = zoom.space_view_at(orbit, size, centre_y);
+    let per_tile = zoom.scale().system_per_tile();
     let outermost = scene.system_outermost(system);
     space
         .ships
         .iter()
         .filter(|ship| ship.system == system)
         .map(|ship| {
-            (
-                ship.id,
-                ship_frame_pos(scene, zoom.placed(), outermost, ship),
-            )
+            let at = ship_frame_pos(scene, zoom.placed(), outermost, ship);
+            let theta = ship.facing_deg.to_radians();
+            let eye = view.eye();
+            let to_eye = [eye[0] - at[0], eye[1] - at[1], eye[2] - at[2]];
+            let d = to_eye.iter().map(|c| c * c).sum::<f32>().sqrt().max(1e-6);
+            let share = apparent_share(
+                ship.model,
+                [theta.cos(), 0.0, theta.sin()],
+                to_eye.map(|c| c / d),
+            );
+            let length = ship_true_length(ship.model, scales.of(ship.kind), per_tile) * share;
+            let drawn = ship_on_screen(length, view.per_pixel(at), scales.class(ship.kind));
+            ShipPoint {
+                id: ship.id,
+                at,
+                reach: drawn.reach,
+                half: (drawn.pixels * (1.0 - drawn.marker)).max(drawn.marker_pixels * drawn.marker)
+                    * 0.5,
+            }
         })
         .collect()
 }
@@ -2094,7 +2134,7 @@ fn ship_points(
 struct OwnedSpaceContext<'a> {
     view: crate::pick::View,
     star_map: bool,
-    ships: &'a [(u32, [f32; 3])],
+    ships: &'a [ShipPoint],
     markers: Vec<(crate::zoom::Target, (f32, f32, f32))>,
     scene: &'a crate::universe::UniverseScene,
     outermost: f32,
@@ -2118,7 +2158,7 @@ fn space_context<'a>(
     orbit: &OrbitCamera,
     canvas: &HudLayout,
     hud_visible: bool,
-    ships: &'a [(u32, [f32; 3])],
+    ships: &'a [ShipPoint],
 ) -> OwnedSpaceContext<'a> {
     let size = (canvas.width, canvas.height);
     let centre_y = centre_of(canvas, hud_visible);
