@@ -436,13 +436,6 @@ pub fn build_universe_match(
         players,
         homes,
     )?;
-    for (key, amount) in &setup.grants {
-        let resource = rules
-            .id_of(key)
-            .filter(|id| rules.resources.contains_key(id))
-            .ok_or_else(|| SetupError::Setup(format!("unknown resource {key:?}")))?;
-        world.grant(PlayerId(1), resource, *amount)?;
-    }
     let mut starts = Vec::new();
     for (index, (body, start)) in universe.starts.iter().enumerate() {
         let (player, body) = (PlayerId(index as u32 + 1), BodyId(*body));
@@ -455,6 +448,18 @@ pub fn build_universe_match(
             .ok_or_else(|| SetupError::Setup("no room for a starting city".into()))?;
         let city = rules.entity_types[&city_id].clone();
         starts.push(place_start(&mut world, player, &city, builder_id, site)?);
+    }
+    // Task 110: as on a single planet (`ScriptSetup::apply_grants`): research with the starting
+    // city standing, then the grants.
+    for owner in &setup.research_all {
+        world.complete_research_for_setup(PlayerId(*owner))?;
+    }
+    for (key, amount) in &setup.grants {
+        let resource = rules
+            .id_of(key)
+            .filter(|id| rules.resources.contains_key(id))
+            .ok_or_else(|| SetupError::Setup(format!("unknown resource {key:?}")))?;
+        world.grant(PlayerId(1), resource, *amount)?;
     }
     setup
         .apply_placements(&mut world, starts[0].city_pos)
@@ -959,7 +964,7 @@ mod tests {
             ..crate::args::Options::default()
         };
         let content = crate::terrain::generate_universe_content(&options).expect("universe");
-        let mut game = build_universe_match(
+        let game = build_universe_match(
             &content.rules,
             &content.universe,
             &content.factions,
@@ -969,8 +974,7 @@ mod tests {
         )
         .expect("match");
         let me = crate::selection::PLAYER;
-        assert!(!game.world.ascension_ready(me));
-        setup.apply_grants(&mut game.world).expect("grants");
+        // Task 110: the universe match applies `research-all` and the grants itself.
         assert!(game.world.ascension_ready(me));
         let p = game
             .world
@@ -980,5 +984,90 @@ mod tests {
         assert_eq!(Some(p.age), content.rules.id_of("age.galactic"));
         let food = content.rules.id_of("res.food").unwrap();
         assert!(p.resources[&food] >= 100_000);
+    }
+
+    /// The technologies `research-all` must leave a player in `age` with, by the simulation's own
+    /// rule (`rom-sim` `research_for_setup_completes_everything_up_to_the_age_and_no_further`):
+    /// panics on one beyond the age or one left out; returns how many it owns.
+    fn assert_researched_up_to(world: &World, player: PlayerId, age: DefId) -> usize {
+        let rules = world.rules();
+        let p = world.players().find(|p| p.id == player).expect("player");
+        assert_eq!(p.age, age, "the age is kept");
+        let reached = rules.ages[&age].ordinal;
+        let sources = p.active_sources();
+        let age_of = |a: &DefId| rules.ages.get(a).map(|a| a.ordinal);
+        for (id, tech) in &rules.techs {
+            let needs_later_age = rules
+                .prerequisites
+                .get(id)
+                .into_iter()
+                .flatten()
+                .filter_map(|r| age_of(&r.requires_def_id))
+                .any(|o| o > reached);
+            let advance_beyond = rules.tech_effects.get(id).into_iter().flatten().any(|e| {
+                e.effect == rom_rules::TechEffectKind::SetAge
+                    && e.target_def_id.and_then(|a| age_of(&a)) > Some(reached)
+            });
+            let has = p.techs.get(id).is_some_and(|n| *n > 0);
+            if needs_later_age || advance_beyond || rules.ascends(*id) {
+                assert!(!has, "{} is beyond the age", rules.key(*id));
+            } else if tech.kind != rom_rules::TechKind::Handicap
+                && rules.is_unlocked(*id, &sources, &Default::default())
+            {
+                assert!(has, "{} was left out", rules.key(*id));
+            }
+        }
+        p.techs.values().filter(|n| **n > 0).count()
+    }
+
+    /// Task 110: `research-all` applies in a universe match as on a single planet: everything
+    /// up to the start age is researched before the first tick, and the age is kept.
+    #[test]
+    fn research_all_applies_in_universe_and_single_planet_matches() {
+        let setup = ScriptSetup::scan("0 research-all 1\n").expect("scan");
+        let options = Options {
+            universe: true,
+            seed: 1,
+            ..Options::default()
+        };
+        let universe = crate::terrain::generate_universe_content(&options).expect("universe");
+        let rules = &universe.rules;
+        let industrial = rules.id_of("age.industrial").expect("industrial");
+        let ordinal = Some(rules.ages[&industrial].ordinal);
+        let build = |setup: &ScriptSetup| {
+            build_universe_match(
+                rules,
+                &universe.universe,
+                &universe.factions,
+                1,
+                ordinal,
+                setup,
+            )
+            .expect("match")
+        };
+        let ages_only = build(&ScriptSetup::default());
+        let me = crate::selection::PLAYER;
+        let before = ages_only
+            .world
+            .players()
+            .find(|p| p.id == me)
+            .unwrap()
+            .techs
+            .len();
+        let game = build(&setup);
+        let owned = assert_researched_up_to(&game.world, me, industrial);
+        assert!(
+            owned > before,
+            "{owned} technologies, {before} with the ages only"
+        );
+        assert_eq!(game.world.tick(), 0);
+
+        let content = content(2);
+        let mut flat =
+            build_match_in_age(&content.rules, &content.map, &content.factions, 1, ordinal)
+                .expect("match");
+        setup.apply_grants(&mut flat.world).expect("grants");
+        let industrial = content.rules.id_of("age.industrial").unwrap();
+        assert_eq!(assert_researched_up_to(&flat.world, me, industrial), owned);
     }
 }
