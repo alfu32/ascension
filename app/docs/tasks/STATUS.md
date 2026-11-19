@@ -144,3 +144,4 @@ Usage limits, crashes and timeouts are treated the same way.
 
 Worktrees live in `../rise-of-man-worktrees/<task>` (outside the repository,
 on durable storage), never in a temporary folder.
+| 111 — jump from anywhere in a system: arrive at the edge of an unexplored system or anywhere in an explored one | `111-jump-from-anywhere.md` | `task/111-jump-from-anywhere` | Claude agent (Opus) | running (started 2026-11-19 from 0.0.102) | Owner 2026-11-19: routes stay; known = explored; charge anywhere in space (surface craft climb first); inhibitor blow only within arrival_radius of its planet. |
