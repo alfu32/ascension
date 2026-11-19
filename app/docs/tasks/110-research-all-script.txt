@@ -1,0 +1,8 @@
+# Task 110, shot as img/110-research-all.png: a universe match at the Information Age with
+# player one's research completed before the first tick, its library selected (the research page
+# shows the techs done). Run with --universe --seed 1 --players 2 --ai none --age 7
+# --size 1280x800 --screenshot <file> --after 6.
+0 research-all 1
+0 place 1 bld.library @9,0
+1 speed 100
+3 researchers
