@@ -452,3 +452,30 @@ the i7-6700HQ:
 The effects (flashes, rings, smoke and fire, the minute of scorched ground and the ruins) cost
 about 1.3 ms of a frame here; the render thread keeps 60 frames and the simulation 20 ticks per
 second. The town is levelled in the run (22 entities left of 56).
+
+## Higher-definition starships (task 93)
+
+```sh
+env -u WAYLAND_DISPLAY target/release/rise-of-man --universe --players 2 --ai none --seed 1 \
+  --sun fixed --size 1280x800 --script docs/tasks/93-bench-script.txt --view system --bench 12
+env -u WAYLAND_DISPLAY target/release/rise-of-man --universe --players 2 --ai none --seed 1 \
+  --sun fixed --size 1280x800 --script docs/tasks/72-bench-script.txt --bench 25
+```
+
+Sixty ships of every class on the plane of the home system, all in sight (system view; at this
+distance they take their far versions, which kept their cost), and twenty starships in orbit over
+the city (planet view, near versions, now about four times the triangles). 0.0.90's binary
+against task 93's, alternating, on the i7-6700HQ beside another agent's build:
+
+| View | Build | Load (1 min) | Shown fps | Frame ms (avg / max) |
+| --- | --- | --- | --- | --- |
+| system, 60 ships | 0.0.90 | 4.15 | 56.9 | 3.42 / 19.31 |
+| system, 60 ships | task 93 | 3.75 | 59.6 | 3.18 / 15.45 |
+| system, 60 ships | 0.0.90 | 3.50 | 56.2 | 3.20 / 14.79 |
+| system, 60 ships | task 93 | 3.25 | 55.8 | 3.24 / 16.60 |
+| orbit, 20 ships | 0.0.90 | 2.67 | 55.6 | 4.30 / 27.61 |
+| orbit, 20 ships | task 93 | 2.46 | 54.8 | 4.24 / 31.33 |
+| orbit, 20 ships | 0.0.90 | 2.20 | 56.0 | 4.25 / 21.63 |
+| orbit, 20 ships | task 93 | 1.94 | 53.5 | 4.10 / 20.33 |
+
+No difference beyond the noise: the frame time is not bound by the ships' triangles.
