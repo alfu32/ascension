@@ -1276,6 +1276,54 @@ pub fn overlapping_marks(marks: &[(u8, f32, f32, f32)]) -> Vec<Vec<usize>> {
     groups
 }
 
+/// How much farther than its own overlap two ships stay together if they were last frame.
+const GROUP_HOLD: f32 = 1.4;
+
+/// The groups of ships that overlap on screen, steady from frame to frame (task 105). `ships`
+/// are each ship's id, owner, place in pixels and radius in pixels, in id order; `held` maps a
+/// ship to the leader of the group it was in last frame. Ships of one owner whose centres lie
+/// within the larger of their radii are linked, and a chain of links is one group, so a tight
+/// fleet is one count. Two ships that were in one group stay linked while they lie within
+/// [`GROUP_HOLD`] times as far, so a pair drifting across the edge of overlap does not flicker.
+/// Indices into `ships`: each group in order, groups by their first ship.
+pub fn sticky_groups(
+    ships: &[(u32, u8, f32, f32, f32)],
+    held: &std::collections::BTreeMap<u32, u32>,
+) -> Vec<Vec<usize>> {
+    let mut root: Vec<usize> = (0..ships.len()).collect();
+    fn find(root: &mut [usize], mut i: usize) -> usize {
+        while root[i] != i {
+            root[i] = root[root[i]];
+            i = root[i];
+        }
+        i
+    }
+    for (i, &(id_a, owner_a, ax, ay, ra)) in ships.iter().enumerate() {
+        for (j, &(id_b, owner_b, bx, by, rb)) in ships.iter().enumerate().skip(i + 1) {
+            if owner_a != owner_b {
+                continue;
+            }
+            let together = held.get(&id_a).is_some_and(|l| held.get(&id_b) == Some(l));
+            let reach = ra.max(rb) * if together { GROUP_HOLD } else { 1.0 };
+            if (ax - bx).hypot(ay - by) <= reach {
+                let (x, y) = (find(&mut root, i), find(&mut root, j));
+                root[x.max(y)] = x.min(y);
+            }
+        }
+    }
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    let mut slot = vec![usize::MAX; ships.len()];
+    for i in 0..ships.len() {
+        let r = find(&mut root, i);
+        if slot[r] == usize::MAX {
+            slot[r] = groups.len();
+            groups.push(Vec::new());
+        }
+        groups[slot[r]].push(i);
+    }
+    groups
+}
+
 /// What a space pick needs to know about the frame.
 pub struct SpaceContext<'a> {
     /// View of the canvas through the active space camera.
@@ -2305,6 +2353,42 @@ mod tests {
         let touching = Rect::new(x + 100.0, y - 10.0, 80.0, 20.0);
         assert_eq!(ships_in_rect(&view, &[big], touching), vec![4]);
         assert!(ships_in_rect(&view, &[small], touching).is_empty());
+    }
+
+    #[test]
+    fn floor_ships_group_steadily_and_without_flicker() {
+        use std::collections::BTreeMap;
+        // Two ships of one owner 6 px apart (radii 7): overlapping. A third of the other
+        // owner on the same spot is a group of its own.
+        let ships = |gap: f32| {
+            vec![
+                (1, 1, 100.0, 100.0, 7.0),
+                (2, 1, 100.0 + gap, 100.0, 7.0),
+                (3, 2, 100.0, 100.0, 7.0),
+            ]
+        };
+        let first = sticky_groups(&ships(6.0), &BTreeMap::new());
+        assert_eq!(first, vec![vec![0, 1], vec![2]]);
+        // Drifting apart across the edge of overlap: held while within the hold, then freed.
+        let held: BTreeMap<u32, u32> = [(1, 1), (2, 1)].into();
+        assert_eq!(sticky_groups(&ships(9.0), &held).len(), 2);
+        assert_eq!(sticky_groups(&ships(9.0), &held)[0], vec![0, 1]);
+        assert_eq!(sticky_groups(&ships(12.0), &held)[0], vec![0]);
+        // Without the hold, the same gap never joins them: no flicker back and forth.
+        assert_eq!(sticky_groups(&ships(9.0), &BTreeMap::new())[0], vec![0]);
+        // A chain of overlaps is one group: a tight fleet is one count.
+        let chain = [
+            (1, 1, 100.0, 100.0, 7.0),
+            (2, 1, 106.0, 100.0, 7.0),
+            (3, 1, 112.0, 100.0, 7.0),
+            (4, 1, 118.0, 100.0, 7.0),
+        ];
+        assert_eq!(
+            sticky_groups(&chain, &BTreeMap::new()),
+            vec![vec![0, 1, 2, 3]]
+        );
+        // Same input, same groups.
+        assert_eq!(first, sticky_groups(&ships(6.0), &BTreeMap::new()));
     }
 
     #[test]

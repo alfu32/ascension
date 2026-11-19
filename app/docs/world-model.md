@@ -894,10 +894,17 @@ out ships stayed as large as planets. Presentation only; the simulation is uncha
   cruiser, carrier, battleship) a long diamond, its nose along the ship's heading as the screen
   shows it, facing the eye. Seen from the focus distance (4 500 units) the smaller ships are at
   their floors as models; the whole system shows markers. Markers of one owner that overlap on
-  screen are a group, and the group shows how many it holds ("×6").
+  screen are a group, and the group shows how many it holds ("×6"). Since task 105 models still
+  held at their floor are counted the same way: a chain of overlapping ships of one owner is one
+  group, its count above its right-hand edge so it covers no ship, and a pair that was in one
+  group stays in it a little past overlap (1.4 times) so the count does not flicker
+  (`img/105-floor-6-before-after.png`, `img/105-floor-20-before-after.png`).
 - **Picking.** A ship's pick box is square, at least half its drawn length either way and never
   under 13 pixels (26 across), at every zoom; a dragged box takes a ship whose drawn length
-  reaches into it. Clicks go through the existing pick events and selection.
+  reaches into it. Clicks go through the existing pick events and selection. The floor is a
+  length in render-target pixels; the pick box is reckoned from it in canvas pixels, stretched by
+  the render scale, so at 50 % the box covers the hull as drawn (task 105,
+  `img/105-pick-50.png`).
 - **Ships holding a body** stand off at least 1.3 of its radii from its centre, so a ship at
   its true size beside a moon is not hidden inside it.
 - **Above the globe**, ships aloft keep the same floor on screen (in length, by class); places

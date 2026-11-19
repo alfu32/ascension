@@ -435,6 +435,22 @@ pub fn ship_on_screen(true_length: f32, per_pixel: f32, class: f32) -> ShipOnScr
     }
 }
 
+impl ShipOnScreen {
+    /// This ship as the canvas shows it, when the render target holds `render_per_canvas` of the
+    /// canvas's pixels a side (task 105): the target is stretched over the canvas, so every
+    /// length in target pixels is that much longer in canvas pixels. The pick box is the
+    /// larger of half the drawn length and [`SHIP_PICK_PIXELS`], both in canvas pixels.
+    pub fn in_canvas(self, render_per_canvas: f32) -> Self {
+        let stretch = 1.0 / render_per_canvas.max(1e-3);
+        Self {
+            pixels: self.pixels * stretch,
+            marker_pixels: self.marker_pixels * stretch,
+            reach: (self.pixels * stretch * 0.5).max(SHIP_PICK_PIXELS),
+            ..self
+        }
+    }
+}
+
 /// A size between the planet view's (`t` = 0) and the system plane's (`t` = 1), blended in
 /// log space so the change reads the same at every step.
 pub fn morph_size(planet: f32, system: f32, t: f32) -> f32 {
@@ -598,5 +614,29 @@ mod tests {
             assert!(height > last, "{length}: {height}");
             last = height;
         }
+    }
+
+    #[test]
+    fn pick_boxes_cover_the_drawn_hull_at_every_render_scale() {
+        // A ship drawn by the target at `scale` of the canvas's pixels a side: the hull on the
+        // canvas is its target pixels stretched back, and the pick box (task 105) covers it.
+        for scale in [0.5_f32, 0.75, 1.0] {
+            for per_canvas_pixel in [0.02_f32, 0.2, 1.0, 5.0, 40.0] {
+                let class = 2.0;
+                let length = 6.0;
+                // One target pixel covers 1 / scale canvas pixels' worth of the frame.
+                let drawn = ship_on_screen(length, per_canvas_pixel / scale, class);
+                let canvas = drawn.in_canvas(scale);
+                let hull_on_canvas = drawn.pixels / scale;
+                assert!((canvas.pixels - hull_on_canvas).abs() < 1e-3);
+                assert!(canvas.reach + 1e-3 >= hull_on_canvas * 0.5, "{scale}");
+                assert!(canvas.reach >= SHIP_PICK_PIXELS);
+                // The floor holds on the canvas too: never less than the floor stretched.
+                assert!(canvas.pixels + 1e-3 >= SHIP_FLOOR_PIXELS * class / scale);
+            }
+        }
+        // At full scale nothing changes.
+        let d = ship_on_screen(3.0, 0.5, 1.0);
+        assert_eq!(d.in_canvas(1.0), d);
     }
 }
