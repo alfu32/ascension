@@ -1,0 +1,45 @@
+# Task 102, replayed by --script in universe mode (--players 2 --ai none --seed 1 --sun fixed
+# --speed 1): task 95's archers. Twenty archers of player one loose their first volley at tick 0
+# at the spearmen and archers of player two four and five tiles away, and those shoot back; the
+# arrows fly 15 tiles a second (data), so they land about tick 5. The game crawls from the start,
+# a tick every five seconds (with `speed` in the script instead, the first ticks would run at
+# full speed), so the volley is seen in the air and every target still at full health.
+# Screenshot: --size 1280x800 --after 12 (img/102-archers.png, the battle cropped).
+0 grant-age age.classical
+0 place 1 unit.archer @-9,11
+0 place 1 unit.archer @-8,11
+0 place 1 unit.archer @-7,11
+0 place 1 unit.archer @-6,11
+0 place 1 unit.archer @-5,11
+0 place 1 unit.archer @-4,11
+0 place 1 unit.archer @-3,11
+0 place 1 unit.archer @-2,11
+0 place 1 unit.archer @-1,11
+0 place 1 unit.archer @0,11
+0 place 1 unit.archer @1,11
+0 place 1 unit.archer @2,11
+0 place 1 unit.archer @3,11
+0 place 1 unit.archer @4,11
+0 place 1 unit.archer @5,11
+0 place 1 unit.archer @6,11
+0 place 1 unit.archer @7,11
+0 place 1 unit.archer @8,11
+0 place 1 unit.archer @9,11
+0 place 1 unit.archer @10,11
+0 place 2 unit.spearman @-8,7
+0 place 2 unit.spearman @-6,7
+0 place 2 unit.spearman @-4,7
+0 place 2 unit.spearman @-2,7
+0 place 2 unit.spearman @0,7
+0 place 2 unit.spearman @2,7
+0 place 2 unit.spearman @4,7
+0 place 2 unit.spearman @6,7
+0 place 2 unit.spearman @8,7
+0 place 2 unit.archer @-9,6
+0 place 2 unit.archer @-6,6
+0 place 2 unit.archer @-3,6
+0 place 2 unit.archer @0,6
+0 place 2 unit.archer @3,6
+0 place 2 unit.archer @6,6
+0 place 2 unit.archer @9,6
+1 cam wheel 4 620,400

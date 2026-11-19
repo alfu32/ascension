@@ -113,8 +113,9 @@ SPACE_CLASSES = {
     'battleship': (3600, 8, ('kinetic', 260, 13, 0, 60), 2000, {'metal': 1200, 'energy': 500}, 3, 2),
 }
 # Task 95: what each weapon throws, as the views draw it in flight (`et_weapon.projectile`;
-# presentation only, the simulation never reads it). Keyed by the armed type, or by (type, slot)
-# for a second weapon. Every weapon with a reach needs a kind; melee weapons have none.
+# the simulation never reads it). Keyed by the armed type, or by (type, slot) for a second
+# weapon. Every weapon with a reach needs a kind; melee weapons have none. How fast it flies is
+# PROJECTILE_SPEED.
 PROJECTILES = {
     'bld.city': 'arrow', 'bld.tower': 'arrow', 'bld.fort': 'arrow',
     'bld.bastion': 'shell', 'bld.bunker': 'bullet', 'bld.defence_turret': 'beam',
@@ -153,6 +154,23 @@ PROJECTILES = {
     ('unit.orbital_bomber', 1): 'shell',
 }
 
+# Task 102 (owner, 2026-11-19): every projectile takes its flight time. The simulation lands a
+# shot `distance / projectile_speed` after it is fired (milli-tiles per game second; 0 hits at
+# once) and the views draw the flight over exactly that time. By kind: arrows, bolts and stones
+# slow enough to watch on their arc; bullets fast (a few ticks over a rifle's reach); shells
+# between; rockets and missiles at their motor's pace. Beams travel at the speed of light and a
+# rail slug would cross the longest reach within a tick or two, so both hit at once (drawn as a
+# line); a plasma bolt is a visible glowing charge, slower than a bullet.
+PROJECTILE_SPEED = {
+    'arrow': 15000, 'bolt': 20000, 'stone': 10000, 'bullet': 40000, 'shell': 24000,
+    'rocket': 16000, 'missile': 20000, 'torpedo': 8000, 'beam': 0, 'plasma': 30000, 'railgun': 0,
+}
+# Weapons that fly at another speed than their kind, keyed like PROJECTILES. A howitzer lobs
+# its shell high to fall on the target, slower than the flat shot of a tank or a naval gun.
+PROJECTILE_SPEED_OF = {
+    'unit.howitzer': 14000,
+}
+
 RESEARCH = [
     ('granary', 'income.food', 'agriculture:1:10|crop_rotation:3:15|food_processing:5:20'),
     ('lumber_mill', 'income.timber', 'carpentry:1:10|architecture:3:15|engineering:5:20'),
@@ -171,7 +189,6 @@ SATELLITE_SIGHT = 96
 # Siege cannot depress its aim onto what stands beside it (task 71): units that close in are
 # safe from it, so cavalry and sallies answer siege.
 SIEGE_DEAD_ZONE = 3000
-ARROW_SPEED = 25000     # milli-tiles per second of a defence's arrows    # an eighth of a median planet's circumference (the measurable reach)
 # Hull size class of each spacecraft: its sight grows with it.
 SHIP_SIZE = {'survey_ship': 1, 'corvette': 1, 'space_frigate': 2, 'space_cruiser': 3, 'battleship': 4,
              'transport_ship': 2, 'carrier': 4, 'space_freighter': 2, 'orbital_fighter': 0, 'orbital_bomber': 0}
@@ -299,6 +316,10 @@ def generate():
             raise SystemExit(f'{key} slot {slot}: a weapon with a reach needs a PROJECTILES kind')
         if kind is not None:
             extra['projectile'] = kind
+            speed = PROJECTILE_SPEED_OF.get((key, slot), PROJECTILE_SPEED_OF.get(key) if slot == 0 else None)
+            speed = PROJECTILE_SPEED[kind] if speed is None else speed
+            if speed:
+                extra['projectile_speed'] = speed
         row('et_weapon', entity_type_id=Ref(key), **({'slot': slot} if slot else {}), damage=damage,
             damage_class_id=Ref(dc, 'damage_class'), range_max=reach, cooldown_ticks=cooldown, **extra)
         which = f'entity_type_id={val(Ref(key))}' + (f' AND slot={slot}' if slot else '')
@@ -379,9 +400,7 @@ def generate():
                 border_radius={'city': 40000, 'temple': 2000, 'fort': 14000, 'spaceport': 12000}[key],
                 economic_radius=16000 if key == 'city' else 0, capturable=int(key == 'city'))
         if key in ('city', 'tower', 'fort'):
-            # Arrows fly (drawn in flight); the gun-age variants below hit at once (tracers).
-            weapon(full, 8 + age * 2, 'pierce' if age < 3 else 'explosive', 10000, ['ground', 'fluid'],
-                   **({'projectile_speed': ARROW_SPEED} if age < 3 else {}))
+            weapon(full, 8 + age * 2, 'pierce' if age < 3 else 'explosive', 10000, ['ground', 'fluid'])
         if key == 'temple':
             row('et_keeper', entity_type_id=Ref(full), capacity=5)
         if key == 'city':

@@ -764,6 +764,12 @@ fn entity_from(e: EntitySnapshot) -> Entity {
 }
 
 impl World {
+    /// The hits on their way, oldest first, each with the tick it lands in (task 102: the views
+    /// draw a flight ending then).
+    pub fn hits_in_flight(&self) -> impl Iterator<Item = HitSnapshot> + '_ {
+        self.hits.iter().map(hit_snapshot)
+    }
+
     /// Exports the complete simulation state. Call between ticks.
     pub fn snapshot(&self) -> Snapshot {
         let players = self

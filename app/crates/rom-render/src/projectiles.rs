@@ -1,8 +1,8 @@
 //! Projectiles you can see (task 95): what each weapon throws flies from the shooter's muzzle to
-//! its target over the time the simulation allows, along a line or an arc, turned along its
-//! way, and leaves a small effect where it lands. Presentation only: the render thread keeps
-//! the flights from the shots the snapshots report ([`ShotView`]), and nothing here reaches the
-//! simulation.
+//! its target over the time the simulation gives it (task 102: the weapon's `projectile_speed`,
+//! data; nothing here has a speed of its own), along a line or an arc, turned along its way, and
+//! leaves a small effect where it lands. Presentation only: the render thread keeps the flights
+//! from the shots the snapshots report ([`ShotView`]), and nothing here reaches the simulation.
 //!
 //! Bullets and bolts are short bright streaks and plasma a glowing bolt; arrows, stones, shells,
 //! rockets, missiles and torpedoes are small models of the part kit drawn instanced, rockets and
@@ -21,8 +21,6 @@ use crate::models::{ModelLook, ModelSpec, PartSpec, Shape};
 use crate::overlay::{Line3, Tri3};
 use rom_kit::{MaterialLook, Program};
 
-/// Simulation ticks per game second (fixed by the rules).
-const TICKS_PER_SECOND: f32 = 20.0;
 /// Ticks a beam fired by a weapon that hits at once is held from muzzle to target.
 const BEAM_TICKS: f32 = 6.0;
 /// Ticks a rail shot's streak takes to fade.
@@ -109,9 +107,6 @@ enum Impact {
 /// How a kind is drawn.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Look {
-    /// Speed drawn for a shot the simulation lands at once, tiles per game second; 0 for a
-    /// line from muzzle to target.
-    speed: f32,
     /// Height of the arc at mid-flight, as a share of the distance.
     arc: f32,
     body: Body,
@@ -166,17 +161,9 @@ impl ProjectileKind {
 
     fn look(self) -> Look {
         let model = |index: u16, length: f32| Body::Model { index, length };
-        let (speed, arc, body, trail, impact, small) = match self {
-            Self::Arrow => (
-                9.0,
-                0.14,
-                model(0, 1.0),
-                Trail::None,
-                Impact::Dust(0.3),
-                true,
-            ),
+        let (arc, body, trail, impact, small) = match self {
+            Self::Arrow => (0.14, model(0, 1.0), Trail::None, Impact::Dust(0.3), true),
             Self::Bolt => (
-                14.0,
                 0.05,
                 Body::Streak {
                     length: 0.7,
@@ -186,16 +173,8 @@ impl ProjectileKind {
                 Impact::Dust(0.25),
                 true,
             ),
-            Self::Stone => (
-                8.0,
-                0.25,
-                model(1, 0.35),
-                Trail::None,
-                Impact::Dust(0.6),
-                true,
-            ),
+            Self::Stone => (0.25, model(1, 0.35), Trail::None, Impact::Dust(0.6), true),
             Self::Bullet => (
-                40.0,
                 0.0,
                 Body::Streak {
                     length: 1.5,
@@ -205,40 +184,11 @@ impl ProjectileKind {
                 Impact::Spark,
                 true,
             ),
-            Self::Shell => (
-                24.0,
-                0.15,
-                model(2, 0.6),
-                Trail::Hot,
-                Impact::Flash(1.0),
-                false,
-            ),
-            Self::Rocket => (
-                16.0,
-                0.06,
-                model(3, 0.9),
-                Trail::Smoke,
-                Impact::Flash(1.2),
-                false,
-            ),
-            Self::Missile => (
-                20.0,
-                0.1,
-                model(4, 1.2),
-                Trail::Smoke,
-                Impact::Flash(1.3),
-                false,
-            ),
-            Self::Torpedo => (
-                8.0,
-                0.0,
-                model(5, 1.2),
-                Trail::Wake,
-                Impact::Flash(1.0),
-                false,
-            ),
+            Self::Shell => (0.15, model(2, 0.6), Trail::Hot, Impact::Flash(1.0), false),
+            Self::Rocket => (0.06, model(3, 0.9), Trail::Smoke, Impact::Flash(1.2), false),
+            Self::Missile => (0.1, model(4, 1.2), Trail::Smoke, Impact::Flash(1.3), false),
+            Self::Torpedo => (0.0, model(5, 1.2), Trail::Wake, Impact::Flash(1.0), false),
             Self::Beam => (
-                0.0,
                 0.0,
                 Body::Beam {
                     colour: BEAM_COLOUR,
@@ -248,7 +198,6 @@ impl ProjectileKind {
                 false,
             ),
             Self::Plasma => (
-                30.0,
                 0.0,
                 Body::Glow {
                     colour: PLASMA_COLOUR,
@@ -259,7 +208,6 @@ impl ProjectileKind {
             ),
             Self::Railgun => (
                 0.0,
-                0.0,
                 Body::Rail {
                     colour: RAIL_COLOUR,
                 },
@@ -269,7 +217,6 @@ impl ProjectileKind {
             ),
         };
         Look {
-            speed,
             arc,
             body,
             trail,
@@ -303,23 +250,21 @@ pub struct ShotView {
 }
 
 /// The ticks, in the render thread's simulation time, at which a shot of `kind` fired at
-/// `fired` and landing at `land` leaves the muzzle and reaches its target `distance` tiles
-/// away. A projectile the simulation flies lands when the snapshot after its landing tick
-/// (the first one that shows the hit) is reached; one it lands at once flies at the kind's
-/// drawn speed, or is held as a line for a moment.
-pub fn flight_span(kind: ProjectileKind, fired: u64, land: u64, distance: f32) -> (f64, f64) {
+/// `fired` and landing at `land` leaves the muzzle and reaches its target. A projectile the
+/// simulation flies lands when the snapshot after its landing tick (the first one that shows
+/// the hit) is reached, so its drawn speed is the data's; a hit at once (a beam, a rail shot)
+/// is held as a line for a moment, anything else drawn for a tick.
+pub fn flight_span(kind: ProjectileKind, fired: u64, land: u64) -> (f64, f64) {
     let start = fired as f64;
     if land > fired {
         return (start, (land + 1) as f64);
     }
-    let look = kind.look();
-    let ticks = match look.body {
+    let ticks = match kind.look().body {
         Body::Beam { .. } => BEAM_TICKS,
         Body::Rail { .. } => RAIL_TICKS,
-        _ if look.speed > 0.0 => distance / look.speed * TICKS_PER_SECOND,
         _ => 1.0,
     };
-    (start, start + f64::from(ticks.max(1.0)))
+    (start, start + f64::from(ticks))
 }
 
 /// One projectile on its way (or landing).
@@ -506,12 +451,7 @@ impl Projectiles {
         };
         let from = muzzle(view, ground);
         let aloft = is_aloft(view) || target.is_some_and(is_aloft) || shot.altitude > 0.0;
-        let (start, end) = flight_span(
-            shot.kind,
-            shot.fired_tick,
-            shot.land_tick,
-            length(sub(to, from)),
-        );
+        let (start, end) = flight_span(shot.kind, shot.fired_tick, shot.land_tick);
         if now >= end + IMPACT_TICKS {
             return;
         }
@@ -1258,10 +1198,7 @@ mod tests {
         projectiles.update(100.2, 101, &views, &ground);
         assert_eq!(projectiles.len(), 1);
         // The snapshot after the landing tick shows the hit: the flight ends there.
-        assert_eq!(
-            flight_span(ProjectileKind::Arrow, 100, 108, 10.0),
-            (100.0, 109.0)
-        );
+        assert_eq!(flight_span(ProjectileKind::Arrow, 100, 108), (100.0, 109.0));
         let at_target = aim_point(&target, &ground);
         let (mid, landed) = projectiles.position(1, 100, 104.5).unwrap();
         assert!(!landed && !close(mid, at_target));
@@ -1283,15 +1220,19 @@ mod tests {
     }
 
     #[test]
-    fn a_hit_at_once_flies_at_the_drawn_speed() {
-        // A bullet crosses five tiles in a few ticks; a shell takes longer.
-        let (start, end) = flight_span(ProjectileKind::Bullet, 50, 50, 5.0);
-        assert_eq!(start, 50.0);
-        assert!(end - start <= 3.0);
-        let (_, shell) = flight_span(ProjectileKind::Shell, 50, 50, 12.0);
-        assert!(shell - 50.0 >= 8.0);
-        let (_, beam) = flight_span(ProjectileKind::Beam, 50, 50, 12.0);
-        assert_eq!(beam - 50.0, f64::from(BEAM_TICKS));
+    fn every_kind_flies_for_the_time_the_simulation_gives_it() {
+        // Task 102: the drawn flight of every kind ends with the snapshot that shows the hit,
+        // whatever the kind; the renderer has no speed of its own.
+        for kind in ProjectileKind::ALL {
+            assert_eq!(flight_span(kind, 50, 57), (50.0, 58.0), "{kind:?}");
+        }
+        // A hit at once: a beam held, a rail streak fading, anything else for one tick.
+        let (start, beam) = flight_span(ProjectileKind::Beam, 50, 50);
+        assert_eq!((start, beam - 50.0), (50.0, f64::from(BEAM_TICKS)));
+        let (_, rail) = flight_span(ProjectileKind::Railgun, 50, 50);
+        assert_eq!(rail - 50.0, f64::from(RAIL_TICKS));
+        let (_, bullet) = flight_span(ProjectileKind::Bullet, 50, 50);
+        assert_eq!(bullet - 50.0, 1.0);
     }
 
     #[test]
