@@ -723,7 +723,11 @@ impl World {
             );
         }
     }
+    /// Brings home the ships whose route leg ends now, in id order. An enemy jump inhibitor in
+    /// the system they jump into strikes each once (task 104); what that destroys is removed
+    /// at once, so no ship stands at zero hit points into the next tick.
     pub(crate) fn arrive_transits(&mut self) {
+        let mut destroyed = false;
         let due: Vec<_> = self
             .space
             .transits
@@ -757,6 +761,10 @@ impl World {
             self.refresh_income(id);
             self.economy.dirty.insert(id);
             self.space.transits_done += 1;
+            destroyed |= self.strike_arrival(id, transit.destination);
+        }
+        if destroyed {
+            self.remove_dead();
         }
     }
     /// The players whose claim-tagged units keep station within a presence node's claim radius;

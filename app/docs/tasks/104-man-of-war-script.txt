@@ -1,0 +1,13 @@
+# Task 104, replayed by --script in --universe mode (--players 2 --ai none, seed 2): the Ship
+# of the Line is shown as Men-of-War (key unit.ship_of_the_line kept). Player one has the
+# upgrade research; its dock on the western shore is selected with the Train tab open and the
+# pointer on the Men-of-War button: the help line reads "Men-of-War · 261 Timber, 130 Metal".
+# A man-of-war lies beside the dock. Screenshot: --seed 2 --size 1280x800 --after 5
+# (docs/img/104-man-of-war.png).
+0 grant-age age.enlightenment
+0 grant-tech tech.up.ship_of_the_line
+0 place 1 bld.dock @-12,0
+0 place 1 unit.ship_of_the_line @-17,0
+2 producers
+4 hud tab 2
+8 cam point 248,668

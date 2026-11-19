@@ -658,12 +658,13 @@ impl World {
         &self.wrecks
     }
 
-    /// Drops blasts and wrecks older than `BLAST_MEMORY_TICKS`.
+    /// Drops blasts, wrecks and arrival strikes older than `BLAST_MEMORY_TICKS`.
     pub(crate) fn forget_blasts(&mut self) {
         let tick = self.tick;
         let fresh = |at: u64| tick.saturating_sub(at) <= BLAST_MEMORY_TICKS;
         self.blasts.retain(|b| fresh(b.tick));
         self.wrecks.retain(|w| fresh(w.tick));
+        self.strikes.retain(|s| fresh(s.tick));
     }
 
     fn damage_entity(&mut self, target: EntityId, damage: i64, hit: &PendingHit) {

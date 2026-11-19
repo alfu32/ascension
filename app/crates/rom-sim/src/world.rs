@@ -112,6 +112,9 @@ pub struct World {
     pub(crate) blasts: Vec<crate::combat::Blast>,
     /// Buildings that fell lately, for the views (task 75; not hashed, not saved).
     pub(crate) wrecks: Vec<crate::combat::Wreck>,
+    /// Recent blows of jump inhibitors on arriving ships, for the views (task 104; not hashed,
+    /// not saved).
+    pub(crate) strikes: Vec<crate::jumps::ArrivalStrike>,
     /// Stain lifetime and cap per surface, from the rules (task 80).
     pub(crate) stain_rules: crate::stains::StainRules,
     /// Buildings pulled down by their owners this tick (no stain); empty between ticks.
@@ -315,6 +318,7 @@ impl World {
             max_footprint,
             blasts: Vec::new(),
             wrecks: Vec::new(),
+            strikes: Vec::new(),
             stain_rules,
             razed: Vec::new(),
         })

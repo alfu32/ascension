@@ -201,7 +201,7 @@ with cyan bolts (`mat.light_strip`; the battleship's spinal mass driver too) and
 (the frigate's open radiator vanes, the cruiser's twin aft turret), the later one fires violet
 plasma and adds armour and guns (the frigate's nacelle cowls and point defence, the cruiser's
 third triple turret and tower wings, the battleship's superfiring mid turrets). The two line
-ships of task 92 keep the sea budget: Ships of the Line (`unit.ship_of_the_line@enlightenment`),
+ships of task 92 keep the sea budget: Men-of-War (`unit.ship_of_the_line@enlightenment`),
 a two-decker longer and taller than the frigate with two tiers of ports in team bands and three
 masts of three sails, and Dreadnoughts (`unit.dreadnought@modern`), a long haze-grey hull with
 five twin turrets (one forward, two on the wings facing out, two aft, one superfiring), a tripod

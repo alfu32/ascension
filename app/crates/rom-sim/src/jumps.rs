@@ -5,10 +5,11 @@
 //! on arrival. A ship ordered along a route first charges at the edge of its system for its
 //! `jump_charge` time; the charge lives in its travel order (`total_ticks` the ticks it needs,
 //! `progress_ticks` the ticks charged). An enemy jump inhibitor in the system lets a ship leave
-//! only back along the route it arrived by, and lengthens its charge.
+//! only back along the route it arrived by, and lengthens its charge; an enemy ship that jumps
+//! into its system takes its fixed blow on arrival (task 104).
 
-use crate::{EntityId, Order, OrderStatus, PlayerId, World};
-use rom_rules::{InhibitorReach, TechEffectKind};
+use crate::{EntityId, Order, OrderStatus, PlayerId, Pos, World};
+use rom_rules::{DefId, InhibitorReach, TechEffectKind};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Rule key of the research that reveals the routes leaving the systems where its player has a
@@ -46,6 +47,43 @@ pub struct Inhibition {
     pub owner: PlayerId,
     /// Extra charge time of the held ships, percent.
     pub charge_pct: i64,
+}
+
+/// The blow an enemy jump inhibitor deals a player's ships that jump into a system (task 104).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ArrivalBlow {
+    /// The inhibitor that strikes (the largest blow, then the lowest id).
+    pub inhibitor: EntityId,
+    /// Its owner, credited with what the blow destroys.
+    pub owner: PlayerId,
+    /// Hit points the arriving ship loses (`et_inhibitor.arrival_damage`).
+    pub damage: i64,
+}
+
+/// A blow a jump inhibitor dealt an enemy ship as it jumped into the inhibitor's system (task
+/// 104), kept `BLAST_MEMORY_TICKS` for the views. A report, not hashed and not saved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ArrivalStrike {
+    /// The tick the ship arrived and was struck.
+    pub tick: u64,
+    /// The inhibitor that struck.
+    pub inhibitor: EntityId,
+    /// Its owner.
+    pub owner: PlayerId,
+    /// The ship struck.
+    pub ship: EntityId,
+    /// The ship's owner.
+    pub ship_owner: PlayerId,
+    /// The ship's type.
+    pub ship_type: DefId,
+    /// The system it jumped into.
+    pub system: u32,
+    /// Where it arrived: the edge of the system's plane.
+    pub pos: Pos,
+    /// Hit points it lost.
+    pub damage: i64,
+    /// Whether the blow destroyed it.
+    pub destroyed: bool,
 }
 
 /// A route as a pair of system ids, the lower first.
@@ -201,6 +239,68 @@ impl World {
                     .map_or(0, |i| i.charge_pct.max(0)),
             })
             .max_by_key(|i| (i.charge_pct, std::cmp::Reverse(i.inhibitor)))
+    }
+
+    /// The blow `player`'s ships take on jumping into `system`: the largest `arrival_damage` of
+    /// the complete, active enemy inhibitors there (several do not stack), ties to the lowest
+    /// id; `None` when no enemy inhibitor there strikes.
+    pub fn arrival_blow(&self, player: PlayerId, system: u32) -> Option<ArrivalBlow> {
+        self.jump_inhibitors()
+            .filter(|(e, _)| self.enemies(player, e.owner))
+            .filter(|(e, reach)| match reach {
+                InhibitorReach::System => self.body(e.pos.body).is_some_and(|b| b.system == system),
+            })
+            .map(|(e, _)| ArrivalBlow {
+                inhibitor: e.id,
+                owner: e.owner,
+                damage: self.rules.entity_types[&e.type_id]
+                    .inhibitor
+                    .as_ref()
+                    .map_or(0, |i| i.arrival_damage.max(0)),
+            })
+            .filter(|b| b.damage > 0)
+            .max_by_key(|b| (b.damage, std::cmp::Reverse(b.inhibitor)))
+    }
+
+    /// Strikes a ship that has just jumped into `system` with the blow of the enemy inhibitor
+    /// there, if any: it loses the fixed hit points once, and what dies is credited to the
+    /// inhibitor's owner. Returns whether the blow destroyed it.
+    pub(crate) fn strike_arrival(&mut self, ship: EntityId, system: u32) -> bool {
+        let Some(e) = self.entity(ship) else {
+            return false;
+        };
+        let (ship_owner, ship_type, pos) = (e.owner, e.type_id, e.pos);
+        let Some(blow) = self.arrival_blow(ship_owner, system) else {
+            return false;
+        };
+        let e = self.entities[ship.0 as usize]
+            .as_mut()
+            .expect("arrived ship");
+        let alive = e.hp > 0;
+        e.hp = e.hp.saturating_sub(blow.damage);
+        let destroyed = alive && e.hp <= 0;
+        if destroyed {
+            e.killer = Some(blow.owner);
+        }
+        self.strikes.push(ArrivalStrike {
+            tick: self.tick,
+            inhibitor: blow.inhibitor,
+            owner: blow.owner,
+            ship,
+            ship_owner,
+            ship_type,
+            system,
+            pos,
+            damage: blow.damage,
+            destroyed,
+        });
+        destroyed
+    }
+
+    /// Recent blows of jump inhibitors on arriving ships, oldest first (task 104; for the
+    /// views).
+    pub fn arrival_strikes(&self) -> &[ArrivalStrike] {
+        &self.strikes
     }
 
     /// Every complete, active jump inhibitor with its reach, in entity id order.

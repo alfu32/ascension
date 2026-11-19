@@ -110,7 +110,7 @@ each other.
 | Class (line key) | Members (first age) | Role | Cost level |
 | --- | --- | --- | --- |
 | **Escorts** (`escort`) | Triremes (1), War Galleys (2), Frigates (4), Destroyers (6), Hover Frigates (9) | fast, cheap, short reach, strongest close in; from the destroyer also an anti-air gun | low (0.7 × today) |
-| **Line ships** (`line_ship`) | Carracks (3), *Ships of the Line (4, new, optional)*, Ironclads (5), *Dreadnoughts (6, new)* | heavy guns at long reach with a dead zone, slow, tough; shell the shore | high (2 × today) |
+| **Line ships** (`line_ship`) | Carracks (3), *Men-of-War (4, new, optional)*, Ironclads (5), *Dreadnoughts (6, new)* | heavy guns at long reach with a dead zone, slow, tough; shell the shore | high (2 × today) |
 | **Strike ships** (`strike_ship`) | Missile Cruisers (7), Drone Cruisers (8) | the longest reach at sea, fragile, larger dead zone | high (2.2 × today) |
 
 Why these members:
@@ -118,11 +118,14 @@ Why these members:
 - The galleys are the escorts of their ages: oared, fast, fighting close (ram and boarding). The
   frigate was the sailing navy's fast cruising and escort ship, the destroyer the steel navy's,
   the hover frigate the fusion age's. Each does the escort's job better than the one before.
-- The carrack was the first ship built around a broadside of heavy guns; the ship of the line,
-  the ironclad and the dreadnought are the capital ship of their ages. **Ships of the Line**
+- The carrack was the first ship built around a broadside of heavy guns; the man-of-war,
+  the ironclad and the dreadnought are the capital ship of their ages. **Men-of-War**
   (`unit.ship_of_the_line`, enlightenment) is optional: without it the carrack is the line ship
   of the enlightenment age beside the frigate; with it the enlightenment age has its classic
-  pair (frigate and ship of the line). **Dreadnoughts** (`unit.dreadnought`, modern) fills the
+  pair (frigate and man-of-war). Task 104 (owner, 2026-11-19) renamed it from "Ships of the
+  Line" to Man-of-War (plural Men-of-War); the key `unit.ship_of_the_line`, its research
+  `tech.up.ship_of_the_line` and the locked model id `unit.ship_of_the_line@enlightenment` keep
+  the old wording, since keys are never shown. **Dreadnoughts** (`unit.dreadnought`, modern) fills the
   line class where the destroyer used to stand; "dreadnought" is the ordinary name of the
   all-big-gun battleship type from 1906. The key `unit.battleship` stays the spaceship.
 - Missile and drone cruisers stand off and strike; the drone cruiser does the missile cruiser's
@@ -339,7 +342,7 @@ The check: does any upgrade retire a unit of a different function?
    class to the end (Frigates → Hover Frigates) and the destroyer heads a fourth, anti-air escort
    class. Which?
 2. **New sea members.** Dreadnoughts (modern) is needed for the line class to reach past the
-   industrial age; Ships of the Line (enlightenment) is optional. Both need a model.
+   industrial age; Men-of-War (enlightenment) is optional. Both need a model.
 3. **Measuring sea and space.** The counter rule can only be checked for the new classes if the
    fight matrix fights at sea (water beside a shore) and ship against ship in space. That is
    `rom-cli` work, outside the card's crate list. Add it to task 92, or a card of its own before
@@ -374,7 +377,7 @@ The check: does any upgrade retire a unit of a different function?
   classes coexist; Stable → Vehicle Plant and Siege Workshop → Factory upgrade existing buildings
   with their queues and rally points; repeat → same hash; fight matrix unanswered = 0 (with the
   sea and space rows if question 3 is answered yes).
-- **Model looks** for the model review loop: Dreadnoughts and Ships of the Line (new); the space
+- **Model looks** for the model review loop: Dreadnoughts and Men-of-War (new); the space
   frigate, cruiser and battleship in their earlier ages (no new look needed unless the owner wants
   one per age).
 
@@ -384,7 +387,7 @@ The check: does any upgrade retire a unit of a different function?
    the destroyer does not retire them: **Frigates** (`frigate`): Triremes → War Galleys →
    Frigates → Hover Frigates; **Destroyers** (`destroyer`) head a fourth class from the modern
    age, the anti-air escort. Line ships and strike ships as in section 3.
-2. **Both new sea members**: Ships of the Line (enlightenment) and Dreadnoughts (modern). Their
+2. **Both new sea members**: Men-of-War (enlightenment) and Dreadnoughts (modern). Their
    looks go to the model review loop.
 3. **The fight matrix fights at sea and ship against ship in space**, as part of task 92
    (`rom-cli`).
@@ -418,13 +421,13 @@ member retires only its own class. Base values before the age scale are in `SEA_
 | --- | --- | --- | --- | --- | --- |
 | Frigates (`frigate`) | Triremes (1), War Galleys (2), Frigates (4), Hover Frigates (9) | 276 – 564 | 20 – 42, 5 tiles, 20 ticks | 2400 | 64 / 32 – 131 / 65 timber / metal |
 | Destroyers (`destroyer`) | Destroyers (6) | 456 | 34, 5 tiles; anti-air 38, 6 tiles, at `air` | 2400 | 106 / 53 |
-| Line ships (`line_ship`) | Carracks (3), **Ships of the Line (4)**, Ironclads (5), **Dreadnoughts (6)** | 870 – 1140 | 52 – 68, 12 / 12 / 13 / 14 tiles, dead zone 3, 40 ticks | 1400 | 232 / 116 – 304 / 152 |
+| Line ships (`line_ship`) | Carracks (3), **Men-of-War (4)**, Ironclads (5), **Dreadnoughts (6)** | 870 – 1140 | 52 – 68, 12 / 12 / 13 / 14 tiles, dead zone 3, 40 ticks | 1400 | 232 / 116 – 304 / 152 |
 | Strike ships (`strike_ship`) | Missile Cruisers (7), Drone Cruisers (8) | 738, 792 | 82, 88, 15 / 16 tiles, dead zone 4, 40 ticks | 1800 | 246 / 246, 264 / 264 |
 
 - The upgrade researches between classes are gone: `tech.up.carrack`, `tech.up.destroyer` and
   `tech.up.missile_cruiser`. New: `tech.up.ship_of_the_line`, `tech.up.dreadnought`.
   `tech.up.frigate` now upgrades war galleys, `tech.up.hover_frigate` frigates,
-  `tech.up.ironclad` ships of the line.
+  `tech.up.ironclad` men-of-war.
 - Line-ship refits at the dock, `modifier` rows on the new tag `line_ship`: **Fire Control**
   (information, reach +2 tiles) and **Armour Belts** (fusion, hit points +25 %).
 - A warship sees at least as far as it shoots (line and strike ships 12 – 16 tiles).

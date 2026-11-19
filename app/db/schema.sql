@@ -411,9 +411,13 @@ CREATE TABLE et_inhibitor (            -- jump inhibitor (task 70): holds enemy 
                                        -- 'system': every enemy ship in the star system of the
                                        -- planet it stands on may depart only back along the
                                        -- route it arrived by
-  charge_pct     INTEGER NOT NULL DEFAULT 0 CHECK (charge_pct >= 0)
+  charge_pct     INTEGER NOT NULL DEFAULT 0 CHECK (charge_pct >= 0),
                                        -- extra jump charge time of those ships, percent; several
                                        -- inhibitors do not stack (the largest applies)
+  arrival_damage INTEGER NOT NULL DEFAULT 0 CHECK (arrival_damage >= 0)
+                                       -- task 104: hit points an enemy ship loses, once, when it
+                                       -- jumps into that star system; a fixed blow, not through
+                                       -- the armour table; several do not stack (the largest)
 ) STRICT;
 
 -- Automated colony (task 73): a city (et_territory.is_city) that does not count towards
