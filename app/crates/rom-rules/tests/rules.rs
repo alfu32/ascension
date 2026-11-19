@@ -1342,3 +1342,31 @@ fn handicaps_are_granted_never_researched_and_match_the_difficulty() {
         &["toughest", "tech.religion"],
     );
 }
+
+#[test]
+fn loads_the_market_and_rejects_a_tradeable_currency() {
+    let r = seed();
+    let market = r.entity_types[&r.id_of("bld.market").unwrap()]
+        .market
+        .as_ref()
+        .unwrap();
+    let wealth = r.id_of("res.wealth").unwrap();
+    assert_eq!(market.currency_id, wealth);
+    assert!(!r.resources[&wealth].tradeable);
+    assert_eq!(
+        r.resources[&r.id_of("res.metal").unwrap()].market_base_price,
+        130
+    );
+    let conn = seed_db();
+    conn.execute_batch(
+        "UPDATE resource SET tradeable=1 WHERE id=(SELECT id FROM def WHERE key='res.wealth');",
+    )
+    .unwrap();
+    let problems = Rules::load(&conn).unwrap().validate();
+    assert!(
+        problems
+            .iter()
+            .any(|p| p.message.contains("market") && p.message.contains("not tradeable")),
+        "{problems:?}"
+    );
+}

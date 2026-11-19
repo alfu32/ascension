@@ -197,8 +197,10 @@ CREATE TABLE resource (
   kind       TEXT NOT NULL CHECK (kind IN ('base','rare')),
   abbrev     TEXT NOT NULL,
   rate_capped INTEGER NOT NULL DEFAULT 1,   -- income limited by the player's commerce cap
-  tradeable  INTEGER NOT NULL DEFAULT 1,    -- can be bought/sold at a market
-  market_base_price INTEGER NOT NULL DEFAULT 100,
+  tradeable  INTEGER NOT NULL DEFAULT 1,    -- can be bought/sold at a market (et_market)
+  market_base_price INTEGER NOT NULL DEFAULT 100 CHECK (market_base_price > 0),
+                                            -- price of one lot (market.lot_size) at rest, in
+                                            -- the market's currency, before the spread
   first_age_id INTEGER REFERENCES age(id)   -- invisible / unusable before this age
 ) STRICT;
 
@@ -420,6 +422,16 @@ CREATE TABLE et_inhibitor (            -- jump inhibitor (task 70): holds enemy 
                                        -- the armour table; several do not stack (the largest)
 ) STRICT;
 
+-- Market (task 107): its owner buys and sells lots of the tradeable resources here
+-- (orders `buy` and `sell`, subject = the resource) once a technology enables the rule
+-- 'market_trading'; every trade is paid in `currency_id`, which is itself not tradeable.
+-- Prices are per player; the constants `market.*` and the stat `market_spread` shape them
+-- (docs/database.md, "Market trading").
+CREATE TABLE et_market (
+  entity_type_id INTEGER PRIMARY KEY REFERENCES entity_type(id),
+  currency_id    INTEGER NOT NULL REFERENCES resource(id)
+) STRICT;
+
 -- Automated colony (task 73): a city (et_territory.is_city) that does not count towards
 -- the city limit and keeps a governor. Its owner earns `income` of the resource each income
 -- period, plus `site_share_pct` of what the complete gather sites of its area (buildings
@@ -516,7 +528,8 @@ CREATE TABLE tech_effect (
               -- technology its producer offers is researched.
   target_def_id INTEGER REFERENCES def(id),  -- age / unlocked def / new type / ability / faction
   from_def_id   INTEGER REFERENCES def(id),  -- upgrade_type: the old type
-  rule_key  TEXT NOT NULL DEFAULT '',        -- enable_rule: 'market_trading','sea_transport','ally_los' …
+  rule_key  TEXT NOT NULL DEFAULT '',        -- enable_rule: 'market_trading' (task 107: buy and
+                                             -- sell at an et_market), 'sea_transport','ally_los' …
                                              -- used (task 70): 'route_sensors', 'route_survey',
                                              -- 'interstellar_trade' (database.md, "Routes and jumps")
   amount    INTEGER NOT NULL DEFAULT 0
@@ -828,7 +841,7 @@ CREATE TABLE ai_difficulty (
 -- Order vocabulary. `needs` names the et_* component the executor must have.
 CREATE TABLE order_kind (
   key    TEXT PRIMARY KEY,
-  needs  TEXT NOT NULL DEFAULT '',     -- '', 'movement','weapon','builder','harvester','healer','trader','container','producer','energy','gather_site','colony'
+  needs  TEXT NOT NULL DEFAULT '',     -- '', 'movement','weapon','builder','harvester','healer','trader','container','producer','energy','gather_site','colony','market'
   target TEXT NOT NULL CHECK (target IN ('none','point','entity','def','entity_or_point')),
   note   TEXT NOT NULL DEFAULT ''
 ) STRICT, WITHOUT ROWID;
@@ -1139,6 +1152,15 @@ CREATE TABLE income_remainder (         -- fractional income carried between tic
   player_id   INTEGER NOT NULL REFERENCES player(id),
   resource_id INTEGER NOT NULL REFERENCES resource(id),
   remainder   INTEGER NOT NULL,
+  PRIMARY KEY (player_id, resource_id)
+) STRICT, WITHOUT ROWID;
+
+-- Market prices away from rest (task 107): `pressure` is in hundredths of a lot, positive
+-- after buying, negative after selling; it drifts back to 0. Rows only where it is not 0.
+CREATE TABLE market_pressure (
+  player_id   INTEGER NOT NULL REFERENCES player(id),
+  resource_id INTEGER NOT NULL REFERENCES resource(id),
+  pressure    INTEGER NOT NULL,
   PRIMARY KEY (player_id, resource_id)
 ) STRICT, WITHOUT ROWID;
 

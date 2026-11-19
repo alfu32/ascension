@@ -161,6 +161,21 @@ impl Rules {
                     }
                 }
             }
+            // A market pays in a resource that is not itself traded (task 107).
+            if let Some(market) = &entity.market
+                && self
+                    .resources
+                    .get(&market.currency_id)
+                    .is_none_or(|r| r.tradeable)
+            {
+                problems.push(Problem {
+                    message: format!(
+                        "market {} pays in {}, which must be a resource that is not tradeable",
+                        self.label(entity.id),
+                        self.label(market.currency_id)
+                    ),
+                });
+            }
             if entity.keeper.as_ref().is_some_and(|k| k.capacity < 1) {
                 problems.push(Problem {
                     message: format!("keeper {} capacity must be positive", self.label(entity.id)),

@@ -183,6 +183,12 @@ fn write_all(
             params![player.0, resource.0, remainder],
         )?;
     }
+    for ((player, resource), pressure) in &s.market {
+        tx.execute(
+            "INSERT INTO market_pressure VALUES (?,?,?)",
+            params![player.0, resource.0, pressure],
+        )?;
+    }
     write_entities(tx, s)?;
     write_space(tx, s)?;
     write_places(tx, s)?;

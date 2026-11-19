@@ -118,8 +118,8 @@ fn effect_art(effect: TechEffectKind) -> Option<&'static str> {
     })
 }
 
-/// A technology's picture: by its effects, then its track, then what its modifiers improve,
-/// then its kind.
+/// A technology's picture: a track level by its track; anything else by its effects, then what
+/// its modifiers improve, then its kind.
 fn tech_icon(
     rules: &Rules,
     book: Option<&ModelBook>,
@@ -127,6 +127,16 @@ fn tech_icon(
     age: DefId,
     tech: DefId,
 ) -> ProductIcon {
+    // A track level shows its track and level whatever else it does (Barter also enables
+    // trading at the market, task 107).
+    let row = &rules.techs[&tech];
+    if row.kind == TechKind::Track {
+        let name = format!("icons/track_{}", row.track);
+        if has_art(&name) {
+            let level = u8::try_from(row.level.max(0)).unwrap_or(u8::MAX);
+            return ProductIcon::art(name, IconMark::Level(level));
+        }
+    }
     let mut effects: Vec<_> = rules
         .tech_effects
         .get(&tech)
@@ -164,13 +174,6 @@ fn tech_icon(
         }
     }
     let row = &rules.techs[&tech];
-    if row.kind == TechKind::Track {
-        let name = format!("icons/track_{}", row.track);
-        if has_art(&name) {
-            let level = u8::try_from(row.level.max(0)).unwrap_or(u8::MAX);
-            return ProductIcon::art(name, IconMark::Level(level));
-        }
-    }
     if let Some(icon) = modifier_icon(rules, book, faction, age, tech) {
         return icon;
     }

@@ -99,6 +99,10 @@ enum Action {
     TradeRoute,
     /// The governors of the selected automated colonies pause, or resume when all are paused.
     Governor,
+    /// The selected market buys one lot of a resource (task 107).
+    Buy(DefId),
+    /// The selected market sells one lot of a resource (task 107).
+    Sell(DefId),
     /// An ascended player picks open land of a habitable planet to descend onto (task 76).
     Descend,
     /// An ascended player picks a moon or asteroid to bring to life (task 77).
@@ -1801,9 +1805,14 @@ impl Controller {
         let has_colony = own
             .iter()
             .any(|e| e.owner == PLAYER && world.is_colony_type(e.type_id));
+        // Markets alone: their orders are the trades (task 107).
+        let markets = !own.is_empty()
+            && own
+                .iter()
+                .all(|e| e.owner == PLAYER && world.market_currency(e.id).is_some());
         let tabs = [
             !build_pages.is_empty(),
-            can_move || has_workers || has_colony,
+            can_move || has_workers || has_colony || markets,
             !train_pages.is_empty(),
             !research_pages.is_empty(),
         ];
@@ -1857,6 +1866,13 @@ impl Controller {
                 }
                 if has_colony {
                     actions.push((7, Action::Governor));
+                }
+                if markets {
+                    let resources = world.tradeable_resources(PLAYER);
+                    for (n, resource) in resources.into_iter().take(5).enumerate() {
+                        actions.push((5 + n, Action::Buy(resource)));
+                        actions.push((10 + n, Action::Sell(resource)));
+                    }
                 }
                 if own.iter().any(|e| !world.passengers(e.id).is_empty()) {
                     actions.push((4, Action::Unload));
@@ -1990,6 +2006,15 @@ impl Controller {
             Action::Release => {
                 button.name = "Release all workers".into();
                 button.icon = "icons/cmd_cancel".into();
+            }
+            Action::Buy(resource) | Action::Sell(resource) => {
+                trade_button(
+                    world,
+                    &mut button,
+                    resource,
+                    matches!(action, Action::Buy(_)),
+                    own,
+                );
             }
             Action::Governor => {
                 let running = own
@@ -2206,6 +2231,27 @@ impl Controller {
                 };
                 for (colony, _) in colonies {
                     self.submit(world, colony, kind, None, None, None, false);
+                }
+            }
+            Action::Buy(resource) | Action::Sell(resource) => {
+                let kind = if matches!(action, Action::Buy(_)) {
+                    "buy"
+                } else {
+                    "sell"
+                };
+                let market = self
+                    .own_selected(world)
+                    .iter()
+                    .find(|e| e.build_progress.is_none() && world.market_currency(e.id).is_some())
+                    .map(|e| e.id);
+                let Some(market) = market else {
+                    self.say(world, "The market is not finished yet");
+                    return;
+                };
+                for _ in 0..if shift { SHIFT_BATCH } else { 1 } {
+                    if !self.submit(world, market, kind, Some(resource), None, None, false) {
+                        break;
+                    }
                 }
             }
             Action::Release => {
@@ -2708,6 +2754,13 @@ impl Controller {
         {
             hud.help = inhibitor_help(inhibitor);
         }
+        // A market says how its prices work (task 107).
+        if hud.help.is_empty()
+            && !own.is_empty()
+            && own.iter().all(|e| world.market_currency(e.id).is_some())
+        {
+            hud.help = crate::hud::market_help(world, PLAYER);
+        }
         if hud.help.is_empty() && own.iter().any(|e| world.jump_charge(e.id).is_some()) {
             hud.help = "Charging a jump: it cannot move or fire until it leaves; \
                         any new order cancels the charge"
@@ -2810,6 +2863,7 @@ impl Controller {
                     lines.extend(crate::space_view::holding_line(world, e));
                     if !foreign {
                         lines.extend(crate::hud::colony_lines(world, e));
+                        lines.extend(crate::hud::market_lines(world, e));
                     }
                     if !foreign {
                         lines.extend(crate::space_view::charge_line(world, e));
@@ -3045,6 +3099,71 @@ impl Controller {
 }
 
 /// What a jump inhibitor does, from its `et_inhibitor` row (task 104).
+/// A market button (task 107): the resource's picture, the trade and its price now, and why
+/// it cannot be pressed (no research, not enough to pay or to sell).
+fn trade_button(
+    world: &World,
+    button: &mut HudButton,
+    resource: DefId,
+    buying: bool,
+    own: &[&Entity],
+) {
+    let rules = world.rules();
+    button.icon = crate::hud::resource_icon(rules, resource);
+    let name = &rules.def(resource).name;
+    let currency = own.iter().find_map(|e| world.market_currency(e.id));
+    let (Some(currency), Some(quote)) = (currency, world.market_quote(PLAYER, resource)) else {
+        button.name = name.clone();
+        return;
+    };
+    let money = &rules.def(currency).name;
+    let (verb, price) = if buying {
+        ("Buy", quote.buy)
+    } else {
+        ("Sell", quote.sell)
+    };
+    button.name = format!("{verb} {} {name}", quote.lot);
+    button.price = if buying {
+        format!("Costs {price} {money}")
+    } else {
+        format!("Pays {price} {money}")
+    };
+    let shown = u32::try_from(price.max(0)).unwrap_or(u32::MAX);
+    button.mark = if buying {
+        rom_render::IconMark::Buy(shown)
+    } else {
+        rom_render::IconMark::Sell(shown)
+    };
+    let (paid, need) = if buying {
+        (currency, quote.buy)
+    } else {
+        (resource, quote.lot)
+    };
+    let have = world
+        .players()
+        .find(|p| p.id == PLAYER)
+        .and_then(|p| p.resources.get(&paid).copied())
+        .unwrap_or(0);
+    button.state = if !world.can_trade(PLAYER) {
+        ButtonState::Locked {
+            reason: format!(
+                "Needs {}",
+                crate::hud::rule_tech_name(world, rom_sim::RULE_MARKET_TRADING)
+            ),
+        }
+    } else if own.iter().all(|e| e.build_progress.is_some()) {
+        ButtonState::Locked {
+            reason: "The market is not finished yet".into(),
+        }
+    } else if have < need {
+        ButtonState::Unaffordable {
+            missing: vec![(crate::hud::resource_icon(rules, paid), need - have)],
+        }
+    } else {
+        ButtonState::Ready
+    };
+}
+
 fn inhibitor_help(inhibitor: &rom_rules::Inhibitor) -> String {
     let mut help = format!(
         "Enemy ships in this star system may leave only the way they came, charging {} % longer",
@@ -3104,6 +3223,16 @@ fn rejection_message(world: &World, error: &SimError, subject: Option<DefId>) ->
         SimError::HeldByInhibitor => {
             "An enemy jump inhibitor holds this system: leave the way you came, or destroy it"
                 .into()
+        }
+        SimError::NeedsMarketTrading => format!(
+            "Trading at the market needs {}",
+            crate::hud::rule_tech_name(world, rom_sim::RULE_MARKET_TRADING)
+        ),
+        SimError::NotTradeable => "That resource is not traded at the market".into(),
+        SimError::InsufficientResources
+            if subject.is_some_and(|r| world.rules().resources.contains_key(&r)) =>
+        {
+            "Not enough to trade".into()
         }
         SimError::NeedsInterstellarTrade => format!(
             "Trade with another star system needs {} (spaceport research)",

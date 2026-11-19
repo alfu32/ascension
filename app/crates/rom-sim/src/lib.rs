@@ -18,6 +18,7 @@ mod index;
 mod jumps;
 mod life;
 mod map;
+mod market;
 mod math;
 mod movement;
 mod orbit_motion;
@@ -60,6 +61,7 @@ pub use jumps::{
 };
 pub use life::{DormantSurface, Living};
 pub use map::MapGrid;
+pub use market::{MarketQuote, RULE_MARKET_TRADING};
 pub use math::{Pos, integer_sqrt};
 pub use order::{Command, Order, OrderFailure, OrderId, OrderKindKey, OrderStatus};
 pub use pathing::PathStats;
@@ -352,6 +354,12 @@ pub enum SimError {
     /// The subject of a `paint` order is not a brush of the rules.
     #[error("unknown brush")]
     UnknownBrush,
+    /// Task 107: trading at a market needs the research that enables `market_trading`.
+    #[error("trading at the market needs a research")]
+    NeedsMarketTrading,
+    /// Task 107: the subject is not traded at the market (or not yet known to the player).
+    #[error("that resource is not traded at the market")]
+    NotTradeable,
 }
 
 #[cfg(test)]

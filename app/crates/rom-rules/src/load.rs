@@ -379,6 +379,7 @@ fn load_entity_type(conn: &Connection) -> Result<Vec<EntityType>, RulesError> {
             supply: None,
             view_scale: None,
             inhibitor: None,
+            market: None,
             colony: None,
             weapons: Vec::new(),
             placement_rules: Vec::new(),
@@ -676,6 +677,18 @@ fn load_et_colony(conn: &Connection) -> Result<Vec<Colony>, RulesError> {
                 income: row.get("income")?,
                 site_share_pct: row.get("site_share_pct")?,
                 sites: sites.remove(&id).unwrap_or_default(),
+            })
+        },
+    )
+}
+fn load_et_market(conn: &Connection) -> Result<Vec<Market>, RulesError> {
+    read(
+        conn,
+        "SELECT * FROM et_market ORDER BY entity_type_id",
+        |row| {
+            Ok(Market {
+                entity_type_id: DefId(row.get("entity_type_id")?),
+                currency_id: DefId(row.get("currency_id")?),
             })
         },
     )
@@ -1438,6 +1451,10 @@ impl Rules {
         for row in load_et_colony(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_colony")?;
             entity.colony = Some(row);
+        }
+        for row in load_et_market(conn)? {
+            let entity = entity_mut(&mut rules, row.entity_type_id, "et_market")?;
+            entity.market = Some(row);
         }
         for row in load_et_view_scale(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_view_scale")?;

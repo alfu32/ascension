@@ -4,7 +4,7 @@
 use crate::{
     AiError, Army, BrainStats, Phase, Role, Summary, Voyage, Weights, army,
     catalogue::Catalogue,
-    construction, economy, fleet,
+    construction, economy, fleet, market,
     memory::Memory,
     navy, opening,
     plan::{Plan, RETRY_TICKS, Wish},
@@ -114,6 +114,11 @@ impl Brain {
             claim: weight(&rules, profile_key, "space.claim_eagerness")?.clamp(0, 100),
             sea_share: weight(&rules, profile_key, "sea.navy_share_pct")?.clamp(0, 100),
             sea_min_rank: weight(&rules, profile_key, "sea.min_difficulty_rank")?,
+            market_sell_above: weight(&rules, profile_key, "market.sell_above")?.max(0),
+            market_reserve: weight(&rules, profile_key, "market.wealth_reserve")?.max(0),
+            market_buy_max: weight(&rules, profile_key, "market.buy_max_pct")?.max(0),
+            market_sell_min: weight(&rules, profile_key, "market.sell_min_pct")?.max(0),
+            market_lots: weight(&rules, profile_key, "market.lots_per_thought")?.clamp(0, 10),
         };
         let mut opening = rules
             .ai_opening_steps
@@ -467,6 +472,8 @@ impl Brain {
                 opening::settle(&self.opening, memory, outcome, tick);
             }
         }
+        // What the wishes left over or lacked goes to the market (task 107).
+        market::trade(&mut plan, &self.weights);
         let pace = economy::pace(d);
         let paced = tick < memory.economy_tick || tick >= memory.economy_tick + pace;
         let unreachable: BTreeSet<u32> = memory

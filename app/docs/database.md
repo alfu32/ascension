@@ -1417,6 +1417,57 @@ after every other definition so earlier ids stay:
   `body_life(body_id, player_id, since_tick, strokes, heights)`. A body brought to life is a
   `habitable` body row with `n` and a `surface` row; its marker is a planet marker.
 
+## Market trading (task 107)
+
+Owner, 2026-11-19: a player with a market buys and sells resources for wealth at prices that rise
+when it buys and fall when it sells, recovering over time; the idea of Reference A's market, in our
+own numbers. Schema and seed (deliberate; both lint views stay empty, the seed loads; the data is
+written by `market_trading` in `db/content/generate.py`, after every other definition, and adds
+none, so every id stays):
+
+- **PART A.** Component table **`et_market(entity_type_id, currency_id)`**: the building trades
+  there, every trade paid in `currency_id`, which must be a resource that is not itself tradeable
+  (`Rules::validate`). The seed gives it to `bld.market`, paying in `res.wealth`. `resource.tradeable`
+  is 1 for food, timber, metal, oil and energy and 0 for wealth (the currency), knowledge (learned,
+  not bought) and the rare resources (claimed, not traded); `resource.market_base_price` (now
+  `CHECK > 0`) is the price of one lot at rest: food and timber 100, metal 130, oil and energy 160.
+  `order_kind` **`buy`** and **`sell`** (`needs = 'market'`, target a def: the resource). The
+  `enable_rule` key **`market_trading`** is set by `tech.commerce.1` (Barter, the market's own
+  prerequisite). Constants `market.lot_size` 100 (units in a lot), `market.price_step_pct` 4,
+  `market.spread_pct.base` 30, `market.spread_pct.min` 2, `market.price_min_pct` 30,
+  `market.price_max_pct` 300, `market.drift_period_ticks` 20, `market.drift_hundredths` 2. Player
+  stat **`market_spread`** (the spread before modifiers is the constant): Banking
+  (`tech.commerce.4`), Globalisation (`tech.commerce.8`) and Post-scarcity Markets
+  (`tech.commerce.12`) take 6 points off each, 30 → 12. Computer player weights `market.sell_above`
+  1500, `market.wealth_reserve` 300, `market.buy_max_pct` 140, `market.sell_min_pct` 70,
+  `market.lots_per_thought` 1 (`docs/computer-player.md`, "At the market").
+- **Prices are per player.** One player's selling does not cheapen another's goods: simpler, the
+  same in single player and against computer players, and nobody can ruin a rival's market from
+  across the map. Each player and tradeable resource has a **pressure** in hundredths of a lot,
+  0 at rest. The price of a lot is `base × (10 000 + step × pressure) / 10 000`, the pressure held
+  between the bounds where the price is `price_min_pct` and `price_max_pct` of the base. A lot
+  bought adds 100 to the pressure, a lot sold takes 100 off. Buying costs the price at the
+  pressure before the lot plus half the spread, rounded up; selling pays the price at the pressure
+  after the lot less half the spread, rounded down. So a lot sold straight back meets the same
+  price less the whole spread and always loses, even at a bound. Every `drift_period_ticks`
+  (at the start of each tick divisible by it, before that tick's trades) each pressure moves
+  `drift_hundredths` toward 0: one
+  lot of pressure is gone in 50 game seconds. The spread is `market.spread_pct.base` after the
+  player's `market_spread` modifiers, at least `market.spread_pct.min` (and at most 198).
+- **Orders.** `buy`/`sell` are given to an own complete market (`IncompleteExecutor`,
+  `InactiveExecutor` otherwise), need the rule (`SimError::NeedsMarketTrading`), a tradeable
+  resource the player's age has discovered and that is not the currency (`NotTradeable`), and the
+  price or the lot in store (`InsufficientResources`). They are applied as they leave `pending`,
+  in submission order, at the price of that moment, and leave the market's queue alone (like
+  `set_rally`); one whose money or goods are gone by then fails `cannot_afford` (reported like any
+  failed order). Read-only: `World::market_quote(player, resource)` (lot, price, base, buy, sell,
+  spread), `market_spread`, `market_pressure(s)`, `tradeable_resources`, `can_trade`,
+  `market_currency(entity)`.
+- **State.** `World.market`, only the pressures that are not 0, enters the state hash only while
+  one is not 0 (worlds where nobody trades keep their hashes), and is part of the snapshot.
+- **PART B, save format 13.** `market_pressure(player_id, resource_id, pressure)`, only rows that
+  are not 0. Format 12 saves are refused.
+
 ## Capture and difficulty (task 67)
 
 Owner's choice (2026-11-16) after tasks 61 and 65 ended most duels in stand-offs:
@@ -1628,6 +1679,8 @@ back. No SQL runs in `rom-sim`.
 - **Rally points.** `entity_rally(entity_id, target_entity_id | x, y, face, body)`
   (task 64). Not part of the state hash while no producer has one, so worlds
   without rally points keep their hashes.
+- **Market prices of task 107 (format 13).** `market_pressure` rows (see "Market trading").
+  Format 12 saves are refused.
 - **Light system space of task 99 (format 12).** `player_vision.explored` holds (word, run)
   pairs in LEB128 instead of raw words, and is empty when nothing is explored;
   `surface.territory` is empty when no tile is owned. An untouched star system writes its

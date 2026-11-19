@@ -865,6 +865,9 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
             if kind.key == "stance" {
                 command.subject = rules.id_of("stance.defensive");
             }
+            if matches!(kind.key.as_str(), "buy" | "sell") {
+                command.subject = rules.id_of("res.food");
+            }
             if kind.key == "heal" {
                 command.target_entity = Some(
                     if et.healer.as_ref().is_some_and(|h| {
@@ -902,6 +905,13 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
                         et.class != rom_rules::EntityClass::Building
                             || et.territory.as_ref().is_some_and(|t| t.capturable)
                     );
+                }
+                // A market reaches the trade's own checks (task 107, tests/market.rs): this
+                // player has not researched trading.
+                Err(SimError::NeedsMarketTrading) => {
+                    assert!(matches!(kind.key.as_str(), "buy" | "sell"));
+                    assert!(et.market.is_some());
+                    accepted = true;
                 }
                 Err(SimError::InvalidGuardTarget) => {
                     assert_eq!(kind.key, "guard");

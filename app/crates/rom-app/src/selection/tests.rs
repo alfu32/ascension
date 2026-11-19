@@ -2783,3 +2783,47 @@ fn superseded_buildings_leave_the_build_palette_but_worked_sites_stay() {
     assert!(!names.contains(&stable), "{names:?}");
     assert!(names.contains(&farm), "{names:?}");
 }
+
+/// Task 107: the market screenshot script trades through the palette: four lots of food sold,
+/// one of timber bought, each at the price its button showed.
+#[test]
+fn market_script_sells_and_buys_through_the_palette() {
+    let text = include_str!("../../../../docs/tasks/107-market-sales-script.txt");
+    let mut quotes = Vec::new();
+    let (game, ctl) = orbital_combat_script(text, 40, |game, ctl, _| {
+        let mut hud = rom_render::HudSnapshot::default();
+        ctl.fill(&game.world, &mut hud);
+        if let Some(palette) = hud.palette {
+            quotes.push((game.world.tick(), palette.buttons));
+        }
+    });
+    let world = &game.world;
+    let rules = world.rules();
+    let (food, timber) = (
+        rules.id_of("res.food").unwrap(),
+        rules.id_of("res.timber").unwrap(),
+    );
+    assert!(world.can_trade(PLAYER));
+    assert!(world.market_pressure(PLAYER, food) < -300);
+    assert!(world.market_pressure(PLAYER, timber) > 0);
+    // The selected market shows a buy and a sell button per tradeable resource, enabled.
+    let (_, buttons) = quotes.last().expect("a palette");
+    let trades: Vec<_> = buttons
+        .iter()
+        .filter(|b| {
+            matches!(
+                b.mark,
+                rom_render::IconMark::Buy(_) | rom_render::IconMark::Sell(_)
+            )
+        })
+        .collect();
+    assert_eq!(trades.len(), 2 * world.tradeable_resources(PLAYER).len());
+    assert!(trades.iter().all(|b| b.state.enabled()), "{trades:?}");
+    let mut hud = rom_render::HudSnapshot::default();
+    ctl.fill(world, &mut hud);
+    assert!(
+        hud.help.starts_with("Buy 15% over the price"),
+        "{}",
+        hud.help
+    );
+}

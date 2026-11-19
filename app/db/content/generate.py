@@ -665,6 +665,7 @@ def generate():
     sql.extend(late)
     unit_series(row, tag, tech, modifier, upgrade, sql.append)
     naval_manager(sql.append)
+    market_trading(row, modifier, sql.append)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -1108,6 +1109,57 @@ NAVAL_WEIGHTS = [
 def naval_manager(emit):
     """Task 97: the naval manager's weights, as rows of ai_weight_key (no definitions)."""
     values = ', '.join(f"('{key}',{default},'{note}')" for key, default, note in NAVAL_WEIGHTS)
+    emit(f'INSERT INTO ai_weight_key VALUES {values};')
+
+
+# Task 107 (owner, 2026-11-19): trading at the market, in our own numbers (docs/database.md,
+# "Market trading"). A lot is `market.lot_size` units; its price at rest is the resource's
+# market_base_price in wealth, before the spread. Wealth is the currency and is not traded;
+# knowledge is learned, not bought; rare resources are claimed, not traded.
+MARKET_BASE_PRICES = {'food': 100, 'timber': 100, 'metal': 130, 'oil': 160, 'energy': 160}
+MARKET_UNTRADED = ['wealth', 'knowledge']
+MARKET_CONSTANTS = [
+    ('market.lot_size', 100, 'units', 'units of a resource in one lot bought or sold'),
+    ('market.price_step_pct', 4, '%', 'each lot bought raises the price by this share of its base price; each lot sold lowers it'),
+    ('market.spread_pct.base', 30, '%', 'buying costs half of it above the price, selling pays half of it below; before market_spread modifiers'),
+    ('market.spread_pct.min', 2, '%', 'least spread whatever the modifiers'),
+    ('market.price_min_pct', 30, '%', 'lowest price, in percent of the base price'),
+    ('market.price_max_pct', 300, '%', 'highest price, in percent of the base price'),
+    ('market.drift_period_ticks', 20, 'ticks', 'prices drift back toward the base price once in this many ticks'),
+    ('market.drift_hundredths', 2, 'hundredths of a lot', 'how far a price drifts back each period: one lot of pressure in 50 periods'),
+]
+# Research that narrows the spread: track technology, points of spread taken off.
+MARKET_SPREAD_TECHS = [('tech.commerce.4', -6), ('tech.commerce.8', -6), ('tech.commerce.12', -6)]
+# The computer players' trading (docs/computer-player.md, "At the market"): key, default, note.
+MARKET_WEIGHTS = [
+    ('market.sell_above', 1500, 'a lot of a resource is sold while more than this is in store'),
+    ('market.wealth_reserve', 300, 'wealth kept back when buying'),
+    ('market.buy_max_pct', 140, 'no buying above this share of the base price'),
+    ('market.sell_min_pct', 70, 'no selling below this share of the base price'),
+    ('market.lots_per_thought', 1, 'most lots traded in one thought'),
+]
+
+
+def market_trading(row, modifier, emit):
+    """Task 107: the market component, prices, the rule that enables trading, the spread
+    research, the buy and sell orders and the computer players' weights (no definitions)."""
+    row('et_market', entity_type_id=Ref('bld.market'), currency_id=Ref('res.wealth'))
+    for resource, price in MARKET_BASE_PRICES.items():
+        emit(f"UPDATE resource SET tradeable=1, market_base_price={price} WHERE id={val(Ref('res.' + resource))};")
+    for resource in MARKET_UNTRADED:
+        emit(f"UPDATE resource SET tradeable=0 WHERE id={val(Ref('res.' + resource))};")
+    emit("UPDATE resource SET tradeable=0 WHERE kind='rare';")
+    for key, value, unit, note in MARKET_CONSTANTS:
+        row('game_constant', key=key, value=value, unit=unit, note=note)
+    row('stat', key='market_spread', scope='player', note='percent between what a lot costs and what it pays at the market')
+    for key, value in MARKET_SPREAD_TECHS:
+        modifier(key, 'market_spread', value, 'add')
+    row('tech_effect', tech_id=Ref('tech.commerce.1'), effect='enable_rule', rule_key='market_trading')
+    for kind in ('buy', 'sell'):
+        row('order_kind', key=kind, needs='market', target='def',
+            note=f"subject = a tradeable resource; one lot {'bought' if kind == 'buy' else 'sold'} at the "
+                 "price of the moment, paid in the market's currency; applied at once, the queue stays")
+    values = ', '.join(f"('{key}',{default},'{note}')" for key, default, note in MARKET_WEIGHTS)
     emit(f'INSERT INTO ai_weight_key VALUES {values};')
 
 
