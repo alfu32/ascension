@@ -1283,6 +1283,8 @@ pub struct EntityType {
     pub inhibitor: Option<Inhibitor>,
     /// Attached `et_colony` row and its `et_colony_site` rows: an automated colony.
     pub colony: Option<Colony>,
+    /// Attached `et_market` row: its owner trades resources here (task 107).
+    pub market: Option<Market>,
     /// Attached `et_weapon` rows.
     pub weapons: Vec<Weapon>,
     /// Attached `placement_rule` rows.
@@ -1537,6 +1539,15 @@ pub struct Inhibitor {
     pub charge_pct: i64,
     /// The `arrival_damage` column: hit points an enemy ship loses on jumping into its system.
     pub arrival_damage: i64,
+}
+/// One `et_market` row: a building where its owner buys and sells lots of the tradeable
+/// resources (task 107).
+#[derive(Debug, Clone)]
+pub struct Market {
+    /// The `entity_type_id` column.
+    pub entity_type_id: DefId,
+    /// The `currency_id` column: what every trade is paid in; not itself tradeable.
+    pub currency_id: DefId,
 }
 /// One `et_colony` row with its `et_colony_site` rows: an automated colony, a city outside
 /// the city limit whose governor keeps sites standing in its area.

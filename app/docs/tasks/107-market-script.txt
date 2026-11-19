@@ -1,0 +1,9 @@
+# Task 107: a finished market beside the starting city, Barter researched (it enables
+# trading), stock to trade. Selecting the market opens its trade buttons (Orders tab).
+0 grant-tech tech.commerce.1
+0 grant res.food 3000
+0 grant res.timber 3000
+0 grant res.wealth 1000
+0 place 1 bld.market @10,0
+20 click market1
+21 hud tab 1

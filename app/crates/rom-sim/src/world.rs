@@ -119,6 +119,10 @@ pub struct World {
     pub(crate) stain_rules: crate::stains::StainRules,
     /// Buildings pulled down by their owners this tick (no stain); empty between ticks.
     pub(crate) razed: Vec<EntityId>,
+    /// Market constants from the rules; `None` when the rules have no complete set (task 107).
+    pub(crate) market_rules: Option<crate::market::MarketRules>,
+    /// Market pressure by player and resource, hundredths of a lot; only where it is not 0.
+    pub(crate) market: BTreeMap<(PlayerId, DefId), i64>,
 }
 
 impl World {
@@ -280,6 +284,11 @@ impl World {
                 (w.max(et.footprint_w.max(0)), h.max(et.footprint_h.max(0)))
             });
         let stain_rules = crate::stains::StainRules::of(&rules);
+        // Rules with a market need a complete, valid set of market constants (task 107).
+        let market_rules = crate::market::MarketRules::of(&rules);
+        if market_rules.is_none() && rules.entity_types.values().any(|e| e.market.is_some()) {
+            return Err(SimError::InvalidRules("market constants"));
+        }
         Ok(Self {
             victory,
             ascension,
@@ -321,6 +330,8 @@ impl World {
             strikes: Vec::new(),
             stain_rules,
             razed: Vec::new(),
+            market_rules,
+            market: BTreeMap::new(),
         })
     }
 
@@ -818,6 +829,7 @@ impl World {
         self.validate_combat_order(&command)?;
         self.validate_rally_and_disband(&command)?;
         self.validate_tactics(&command)?;
+        self.validate_trade_order(&command)?;
         let payment = self.validate_economy_order(&mut command)?;
         let next = self
             .next_order_id
@@ -884,6 +896,8 @@ impl World {
         self.find_idle_work();
         self.acquire_idle();
         self.regenerate_energy();
+        // Prices drift before this tick's trades, which then meet the drifted prices.
+        self.drift_market();
         let mut applied = Vec::new();
         for (mut order, append) in std::mem::take(&mut self.pending) {
             if order.kind == "descend" {
@@ -920,6 +934,11 @@ impl World {
             }
             if order.kind == "raze" {
                 self.apply_raze(&order);
+                continue;
+            }
+            // A trade at the market happens at once, at the price of that moment (task 107).
+            if matches!(order.kind.as_str(), "buy" | "sell") {
+                self.apply_trade(&order);
                 continue;
             }
             // A colony's governor switch is a setting too.

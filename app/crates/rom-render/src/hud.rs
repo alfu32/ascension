@@ -789,6 +789,28 @@ impl HudPainter {
             if let IconMark::Level(level) = b.mark {
                 self.level_pips(level, r, locked);
             }
+            // A market button names its trade and the price of the moment along its bottom.
+            if let IconMark::Buy(price) | IconMark::Sell(price) = b.mark {
+                let word = if matches!(b.mark, IconMark::Buy(_)) {
+                    "Buy"
+                } else {
+                    "Sell"
+                };
+                let band = Rect::new(
+                    r.x + 3.0 * s,
+                    r.bottom() - 17.0 * s,
+                    r.w - 6.0 * s,
+                    14.0 * s,
+                );
+                self.solid(band, [6, 9, 14, 170]);
+                self.text(
+                    &format!("{word} {price}"),
+                    band,
+                    TextSize::Small,
+                    Align::Centre,
+                    if b.state.enabled() { GOLD } else { MUTED },
+                );
+            }
             self.text(
                 &SLOT_KEYS[b.slot.min(14)].to_string(),
                 Rect::new(r.x + 5.0 * s, r.y + 3.0 * s, 22.0 * s, 12.0 * s),

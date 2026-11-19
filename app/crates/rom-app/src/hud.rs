@@ -436,6 +436,50 @@ pub(crate) fn colony_lines(world: &World, entity: &rom_sim::Entity) -> Vec<Strin
     vec![counts, state]
 }
 
+/// The help line of a selected market (task 107): how buying and selling are priced.
+pub(crate) fn market_help(world: &World, player: PlayerId) -> String {
+    if !world.can_trade(player) {
+        return format!(
+            "Trading at the market needs {}",
+            rule_tech_name(world, rom_sim::RULE_MARKET_TRADING)
+        );
+    }
+    let spread = world.market_spread(player).unwrap_or(0);
+    let step = world.rules().constant("market.price_step_pct").unwrap_or(0);
+    format!(
+        "Buying costs {}% over the price, selling pays {}% under it; each lot moves the price \
+         {step}%, and it drifts back",
+        (spread + 1) / 2,
+        spread / 2
+    )
+}
+
+/// A market's card lines (task 107): what one lot of each resource costs and pays now.
+pub(crate) fn market_lines(world: &World, entity: &rom_sim::Entity) -> Vec<String> {
+    let rules = world.rules();
+    let Some(currency) = world.market_currency(entity.id) else {
+        return Vec::new();
+    };
+    let quotes: Vec<_> = world
+        .tradeable_resources(entity.owner)
+        .into_iter()
+        .filter(|r| *r != currency)
+        .filter_map(|r| world.market_quote(entity.owner, r))
+        .collect();
+    let Some(lot) = quotes.first().map(|q| q.lot) else {
+        return Vec::new();
+    };
+    let line = |label: &str, price: fn(&rom_sim::MarketQuote) -> i64| {
+        let prices = quotes
+            .iter()
+            .map(|q| format!("{} {}", rules.def(q.resource).name, price(q)))
+            .collect::<Vec<_>>()
+            .join(" · ");
+        format!("{label} {lot}: {prices}")
+    };
+    vec![line("Buy", |q| q.buy), line("Sell", |q| q.sell)]
+}
+
 pub(crate) fn wealth_card(world: &World, entity: &rom_sim::Entity) -> Vec<String> {
     let rules = world.rules();
     let et = &rules.entity_types[&entity.type_id];

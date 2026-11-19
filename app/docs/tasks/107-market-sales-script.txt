@@ -1,0 +1,14 @@
+# Task 107: as 107-market-script.txt, then four lots of food sold and one of timber bought:
+# the food prices fall, the timber prices rise, the wealth changes by the quoted prices.
+0 grant-tech tech.commerce.1
+0 grant res.food 3000
+0 grant res.timber 3000
+0 grant res.wealth 1000
+0 place 1 bld.market @10,0
+20 click market1
+21 hud tab 1
+22 hud slot 10
+23 hud slot 10
+24 hud slot 10
+25 hud slot 10
+26 hud slot 6

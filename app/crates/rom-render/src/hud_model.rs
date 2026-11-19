@@ -215,6 +215,10 @@ pub enum IconMark {
     Upgrade,
     /// A level of a research track, drawn as that many pips.
     Level(u8),
+    /// A market purchase (task 107): what one lot costs now, written along the bottom.
+    Buy(u32),
+    /// A market sale (task 107): what one lot pays now, written along the bottom.
+    Sell(u32),
 }
 
 /// One command button.

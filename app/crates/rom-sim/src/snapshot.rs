@@ -531,6 +531,8 @@ pub struct Snapshot {
     pub dormant: Vec<(BodyId, crate::DormantSurface)>,
     /// Bodies brought to life, in body order (task 77).
     pub living: Vec<(BodyId, crate::Living)>,
+    /// Market pressure away from rest by player and resource, hundredths of a lot (task 107).
+    pub market: Vec<((PlayerId, DefId), i64)>,
 }
 
 const RULES: [VictoryRule; 8] = [
@@ -1028,6 +1030,7 @@ impl World {
                 .iter()
                 .map(|(b, l)| (*b, l.clone()))
                 .collect(),
+            market: self.market_pressures().collect(),
         }
     }
 
@@ -1071,6 +1074,7 @@ impl World {
             governors_paused,
             dormant,
             living,
+            market,
         } = snapshot;
         let mut world = Self::empty(
             rules.clone(),
@@ -1439,6 +1443,15 @@ impl World {
             .collect();
         world.rallies = rallies.into_iter().collect();
         world.governors_paused = governors_paused.into_iter().collect();
+        for ((player, resource), pressure) in market {
+            if pressure == 0
+                || !world.players.contains_key(&player)
+                || !rules.resources.get(&resource).is_some_and(|r| r.tradeable)
+                || world.market.insert((player, resource), pressure).is_some()
+            {
+                return Err(bad("market pressure of an unknown player or resource"));
+            }
+        }
         for (body, d) in &dormant {
             if world
                 .body(*body)
