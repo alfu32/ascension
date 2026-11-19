@@ -1,0 +1,12 @@
+# Task 94, replayed by --script (--players 2 --ai none --seed 1 --size 1280x800 --after 6):
+# a conversation, then the chat button opens the history and the Up key scrolls it back.
+1 chat allies Hold the north ridge
+2 chatfrom 2 all Greetings, neighbour
+3 chat all Greetings to you
+4 chatfrom 2 all Our farms feed three cities
+5 chat all Trade grain for timber?
+6 chatfrom 2 all Agreed, send a caravan
+7 chat allies Scouts report a camp to the east
+8 hud top 1
+9 key up
+10 key up

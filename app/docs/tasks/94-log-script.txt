@@ -1,0 +1,5 @@
+# Task 94, replayed by --script (--players 2 --ai none --seed 1 --size 1280x800 --after 4):
+# three lines from two channels: yours to Allies, a neighbour's to All, yours to All.
+2 chat allies Hold the north ridge
+3 chatfrom 2 all Greetings, neighbour
+4 chat all Greetings to you

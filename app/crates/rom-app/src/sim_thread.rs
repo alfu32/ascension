@@ -19,6 +19,7 @@ use rom_rules::{ActiveSources, EntityClass};
 use rom_sim::{BodyId, Command, Entity, OrderStatus, PlayerId, Pos, Sighting, Topology, World};
 
 use crate::ascension_view::AscensionView;
+use crate::chat::{Channel, ChatInput, ChatKey, ChatLog};
 use crate::computer::ComputerPlayers;
 use crate::demo::DemoDriver;
 use crate::match_setup::planet_surface;
@@ -327,49 +328,52 @@ pub struct SimLink {
     stats: Arc<SimStats>,
     speed: Arc<AtomicU32>,
     stop: Arc<AtomicBool>,
-    /// The celestial home's chat (task 76): the line being typed and the lines sent.
-    chat: Arc<Mutex<ChatBox>>,
-    /// Whether the person's player is ascended: only then is there a channel to write to.
+    /// The keyboard side of the chat (tasks 76 and 94), shared with the simulation thread.
+    chat: Arc<Mutex<ChatInput>>,
+    /// Whether the person's player is ascended: only then is the celestial channel open.
     ascended: Arc<AtomicBool>,
 }
 
-/// The chat line the window is typing and the lines it sent, for the simulation thread.
-#[derive(Debug, Default)]
-struct ChatBox {
-    draft: Option<String>,
-    sent: Vec<String>,
-}
-
 impl SimLink {
-    /// Whether the person may write to the celestial home's channel (its player is ascended).
-    pub fn chat_allowed(&self) -> bool {
-        self.ascended.load(Ordering::Acquire)
-    }
-
-    /// The line being typed, or `None` when no line is open.
-    pub fn chat_draft(&self) -> Option<String> {
-        self.chat.lock().ok()?.draft.clone()
-    }
-
-    /// Opens, changes or (with `None`) closes the line being typed.
-    pub fn set_chat_draft(&self, draft: Option<String>) {
-        if let Ok(mut chat) = self.chat.lock() {
-            chat.draft = draft;
-        }
-    }
-
-    /// Sends a line to the channel.
-    pub fn send_chat(&self, line: String) {
-        if let Ok(mut chat) = self.chat.lock() {
-            chat.sent.push(line);
-        }
-    }
-
-    fn take_chat(&self) -> Vec<String> {
+    /// Offers a key to the chat; returns whether it took it (while the chat has the keyboard it
+    /// takes every key, so the game sees none).
+    pub fn chat_key(&self, key: ChatKey) -> bool {
+        let celestial = self.ascended.load(Ordering::Acquire);
         self.chat
             .lock()
-            .map(|mut chat| std::mem::take(&mut chat.sent))
-            .unwrap_or_default()
+            .is_ok_and(|mut chat| chat.key(key, celestial))
+    }
+
+    /// Whether the chat has the keyboard.
+    pub fn chat_focused(&self) -> bool {
+        self.chat.lock().is_ok_and(|chat| chat.focused())
+    }
+
+    /// A click on the chat line: the chat takes the keyboard.
+    pub fn chat_open(&self) {
+        if let Ok(mut chat) = self.chat.lock() {
+            chat.open();
+        }
+    }
+
+    /// The chat button or its key: opens or closes the history.
+    pub fn chat_toggle_history(&self) {
+        if let Ok(mut chat) = self.chat.lock() {
+            chat.toggle_history();
+        }
+    }
+
+    /// The chat as the window left it, with the history's scroll kept inside a log of `len`
+    /// lines, and the lines sent since the last call.
+    fn take_chat(&self, len: usize) -> (ChatInput, Vec<(Channel, String)>) {
+        self.chat.lock().map_or_else(
+            |_| (ChatInput::default(), Vec::new()),
+            |mut chat| {
+                chat.clamp_scroll(len);
+                let sent = chat.take_sent();
+                (chat.clone(), sent)
+            },
+        )
     }
 
     /// A link with no simulation behind it: counters stay zero and commands are dropped.
@@ -620,6 +624,12 @@ fn run(
             .map(|c| c.players().collect())
             .unwrap_or_default(),
     );
+    if let Some(text) = saving
+        .as_ref()
+        .and_then(|s| s.info.settings.get(crate::chat::SAVE_KEY))
+    {
+        ascension.restore(ChatLog::decode(text));
+    }
     ascension.update(&world);
     publish(
         &world,
@@ -644,6 +654,15 @@ fn run(
             step.advance(now - last)
         };
         last = now;
+        // The chat (tasks 76 and 94): what the window typed, sent in the person's name.
+        link.ascended
+            .store(world.is_ascended(PLAYER), Ordering::Release);
+        let (input, sent) = link.take_chat(ascension.chat().len());
+        for (channel, line) in sent {
+            ascension.say(&world, channel, &line);
+        }
+        let typing = input != ascension.input;
+        ascension.input = input;
         while let Ok(request) = requests.try_recv() {
             let text = write_save(
                 &world,
@@ -652,17 +671,11 @@ fn run(
                 speed,
                 link,
                 &request,
+                ascension.log(),
             );
             controller.notify(&world, text);
             publish_hud(&world, &controller, bridge, &ascension);
         }
-        // The celestial home's chat (task 76).
-        for line in link.take_chat() {
-            ascension.say(&world, &line);
-        }
-        let draft = link.chat_draft();
-        let typing = draft != ascension.draft;
-        ascension.draft = draft;
         if let Some(host) = host.as_mut() {
             if let Some(body) = bridge.take_surface_request()
                 && let Err(error) = host.show(&mut world, BodyId(body), bridge)
@@ -727,7 +740,17 @@ fn run(
                                 controller.notify(&world, error);
                             }
                         }
-                        ScriptAction::Chat(line) => ascension.say(&world, &line),
+                        ScriptAction::Chat(channel, line) => {
+                            ascension.say(&world, channel, &line);
+                        }
+                        ScriptAction::ChatFrom(player, channel, line) => {
+                            ascension.hear(&world, player, channel, &line);
+                        }
+                        ScriptAction::ChatKeys(keys) => {
+                            for key in keys {
+                                link.chat_key(key);
+                            }
+                        }
                         ScriptAction::Visit(body) => bridge.fly_to_body(body),
                         ScriptAction::Look(at) => bridge.focus_surface(at),
                         ScriptAction::Input(events) => {
@@ -782,8 +805,6 @@ fn run(
             for line in ascension.update(&world) {
                 controller.notify(&world, line);
             }
-            link.ascended
-                .store(world.is_ascended(PLAYER), Ordering::Release);
             focus_camera(&world, &mut controller, bridge);
             if let Some(every) = autosave_every
                 && world.tick().is_multiple_of(every)
@@ -799,6 +820,7 @@ fn run(
                     speed,
                     link,
                     &request,
+                    ascension.log(),
                 );
                 if text.starts_with("Save failed") {
                     controller.notify(&world, text);
@@ -856,6 +878,7 @@ fn write_save(
     speed_pct: u32,
     link: &SimLink,
     request: &SaveRequest,
+    chat: &ChatLog,
 ) -> String {
     let result = match saving {
         None => Err("this match cannot be saved".to_owned()),
@@ -868,7 +891,7 @@ fn write_save(
                     &none
                 }
             };
-            saves::write(world, computers, setup, speed_pct, request)
+            saves::write(world, computers, setup, speed_pct, request, chat)
         }
     };
     let text = match &result {
@@ -888,6 +911,34 @@ fn write_save(
 /// Gives a pick to the selection, except the buttons beside the clock: the menu button asks the
 /// window for the menu and the pause button holds or releases the simulation.
 fn handle_pick(controller: &mut Controller, world: &mut World, link: &SimLink, pick: PickEvent) {
+    // While the chat has the keyboard the game's keys are the chat's (a script's `key`).
+    if link.chat_focused() {
+        match &pick {
+            PickEvent::Hotkey { ch, modifiers } => {
+                let ch = if modifiers.shift {
+                    ch.to_ascii_uppercase()
+                } else {
+                    *ch
+                };
+                link.chat_key(ChatKey::Char(ch));
+                return;
+            }
+            PickEvent::Escape => {
+                link.chat_key(ChatKey::Escape);
+                return;
+            }
+            _ => {}
+        }
+    }
+    if let PickEvent::HudClick {
+        region: HudRegionKind::ChatLine,
+        button: PointerButton::Left,
+        ..
+    } = &pick
+    {
+        link.chat_open();
+        return;
+    }
     if let PickEvent::HudClick {
         region: HudRegionKind::TopButton,
         index,
@@ -896,6 +947,7 @@ fn handle_pick(controller: &mut Controller, world: &mut World, link: &SimLink, p
     } = &pick
     {
         match index {
+            1 => link.chat_toggle_history(),
             2 => link.request_menu(MenuPage::Main),
             3 => {
                 let paused = !link.paused();
@@ -2343,6 +2395,16 @@ mod save_tests {
         .expect("thread");
         let link = thread.link();
         assert!(link.paused());
+        // A line typed into the chat is kept in the save, outside the world and its hash.
+        for key in [
+            ChatKey::Enter,
+            ChatKey::Char('h'),
+            ChatKey::Char('i'),
+            ChatKey::Enter,
+        ] {
+            assert!(link.chat_key(key));
+        }
+        std::thread::sleep(Duration::from_millis(300));
         link.request_save(Kind::Manual, "Test save / one");
         let saved = wait_for_outcome(&link).expect("saved");
         assert_eq!(saved.name, "Test save / one");
@@ -2355,6 +2417,9 @@ mod save_tests {
         assert_eq!(info.settings[KEY_NAME], "Test save / one");
         assert_eq!(info.settings[saves::KEY_ARGS], "--seed\n5");
         assert_eq!(info.seats.len(), 4);
+        let log = ChatLog::decode(&info.settings[crate::chat::SAVE_KEY]);
+        assert_eq!(log.lines().len(), 1);
+        assert_eq!(log.lines()[0].text, "hi");
 
         // The list reads the header only, newest first, and flags other rules.
         let current = RulesId::of(&rules);

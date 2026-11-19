@@ -3,6 +3,7 @@
 mod args;
 mod ascension_view;
 mod bench;
+mod chat;
 mod computer;
 mod demo;
 mod gallery;

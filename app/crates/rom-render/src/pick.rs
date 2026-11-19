@@ -51,6 +51,8 @@ pub enum HudRegionKind {
     DataTab,
     /// A button beside the clock: diplomacy, chat, menu, pause (0 to 3).
     TopButton,
+    /// The chat line under the event line: a click gives it the keyboard.
+    ChatLine,
     /// Any other HUD surface; it consumes the press.
     Panel,
 }
@@ -537,6 +539,15 @@ pub fn hud_target(
                 return target(HudRegionKind::InsideWorker, i);
             }
         }
+    }
+    if layout
+        .map(
+            crate::hud_layout::Group::BottomLeft,
+            Rect::new(16.0, 578.0, 362.0, 28.0),
+        )
+        .contains(x, y)
+    {
+        return target(HudRegionKind::ChatLine, 0);
     }
     target(HudRegionKind::Panel, 0)
 }

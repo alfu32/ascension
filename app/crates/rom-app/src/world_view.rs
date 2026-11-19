@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 
 mod menu;
 
+use crate::chat::ChatKey;
 use crate::saves::Kind;
 use crate::sim_thread::{SimLink, SimReport};
 use gpui::{
@@ -26,8 +27,6 @@ use rom_render::{
 const POLL_INTERVAL: Duration = Duration::from_millis(8);
 /// Step for changing the render scale with Page Up / Page Down, in percent.
 const SCALE_STEP: u32 = 10;
-/// Longest line the celestial home's chat takes, in characters (task 76).
-const CHAT_LENGTH: usize = 80;
 /// Pixels of smooth scrolling that count as one wheel step.
 const PIXELS_PER_WHEEL_STEP: f32 = 80.0;
 /// Lines GPUI reports for one notch of a mouse wheel on Linux (its `SCROLL_LINES`).
@@ -198,39 +197,51 @@ impl WorldView {
         });
     }
 
-    /// The celestial home's chat (task 76): while the person's player is ascended, Enter opens
-    /// a line, typing fills it, Backspace takes back, Enter sends and Escape drops it. Returns
-    /// whether the key went to the chat.
-    fn chat_key(&mut self, event: &KeyDownEvent) -> bool {
-        let Some(mut draft) = self.sim.chat_draft() else {
-            if event.keystroke.key == "enter" && self.sim.chat_allowed() {
-                self.sim.set_chat_draft(Some(String::new()));
-                return true;
-            }
-            return false;
-        };
-        match event.keystroke.key.as_str() {
-            "enter" => {
-                if !draft.trim().is_empty() {
-                    self.sim.send_chat(draft);
-                }
-                self.sim.set_chat_draft(None);
-            }
-            "escape" => self.sim.set_chat_draft(None),
-            "backspace" => {
-                draft.pop();
-                self.sim.set_chat_draft(Some(draft));
-            }
-            _ => {
-                if let Some(text) = &event.keystroke.key_char
-                    && draft.chars().count() < CHAT_LENGTH
-                {
-                    draft.extend(text.chars().filter(|c| !c.is_control()));
-                    self.sim.set_chat_draft(Some(draft));
-                }
-            }
+    /// The chat (tasks 76 and 94): a keystroke as the chat takes it, if it is one. Letters and
+    /// digits arrive as characters; Shift+Enter and Tab change the channel.
+    fn chat_key_of(
+        event: &KeyDownEvent,
+        paste: impl FnOnce() -> Option<String>,
+    ) -> Option<ChatKey> {
+        let stroke = &event.keystroke;
+        let key = stroke.key.as_str();
+        if stroke.modifiers.control && key == "v" {
+            return paste().map(ChatKey::Paste);
         }
-        true
+        if stroke.modifiers.control || stroke.modifiers.alt || stroke.modifiers.platform {
+            return None;
+        }
+        match key {
+            "enter" if stroke.modifiers.shift => Some(ChatKey::Tab),
+            "enter" | "escape" | "tab" | "backspace" | "delete" | "left" | "right" | "home"
+            | "end" | "up" | "down" | "pageup" | "pagedown" | "f7" => ChatKey::from_name(key),
+            _ => stroke
+                .key_char
+                .as_deref()
+                .and_then(|text| text.chars().next())
+                .filter(|c| !c.is_control())
+                .map(ChatKey::Char),
+        }
+    }
+
+    /// Offers a key to the chat; returns whether the chat took it. With the keyboard focused it
+    /// takes every key, so no game hotkey or camera key moves while a line is typed.
+    fn chat_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) -> bool {
+        let focused = self.sim.chat_focused();
+        let key = Self::chat_key_of(event, || {
+            cx.read_from_clipboard().and_then(|item| item.text())
+        });
+        match key {
+            Some(key) => {
+                let took = self.sim.chat_key(key);
+                if took && !focused {
+                    // The line just opened: forget the camera keys still held.
+                    self.bridge.push_input(InputEvent::ReleaseAll);
+                }
+                took
+            }
+            None => focused,
+        }
     }
 
     fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -243,7 +254,7 @@ impl WorldView {
             }
             return;
         }
-        if self.chat_key(event) {
+        if self.chat_key(event, cx) {
             return;
         }
         match event.keystroke.key.as_str() {

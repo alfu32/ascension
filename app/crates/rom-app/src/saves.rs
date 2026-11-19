@@ -282,6 +282,7 @@ pub fn write(
     setup: &SaveSetup,
     speed_pct: u32,
     request: &SaveRequest,
+    chat: &crate::chat::ChatLog,
 ) -> Result<Saved, String> {
     std::fs::create_dir_all(&setup.folder)
         .map_err(|e| format!("creating {}: {e}", setup.folder.display()))?;
@@ -309,6 +310,9 @@ pub fn write(
     ] {
         info.settings.insert(key.into(), value);
     }
+    // The chat log rides with the settings: a save without it loads with an empty log.
+    info.settings
+        .insert(crate::chat::SAVE_KEY.into(), chat.encode());
     save_match(&path, world, &info, computers)?;
     Ok(Saved { path, name })
 }
