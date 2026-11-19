@@ -804,3 +804,50 @@ fn a_moon_brought_to_life_saved_in_the_middle_of_its_painting() {
         .unwrap();
     });
 }
+
+/// Task 107: a market's prices away from rest, mid-drift, survive the save, and trades after
+/// the load meet the same prices.
+#[test]
+fn market_prices_mid_drift() {
+    let rules = rules();
+    let plain = rules.id_of("ter.plain").unwrap();
+    let player = Player {
+        id: P1,
+        team: 1,
+        faction: rules.id_of("nation.romans").unwrap(),
+        age: rules.id_of("age.ancient").unwrap(),
+        resources: rules.resources.keys().map(|r| (*r, 10_000)).collect(),
+        techs: [(rules.id_of("tech.commerce.1").unwrap(), 1)].into(),
+    };
+    let mut w = World::new(
+        rules.clone(),
+        MapGrid::new(48, 48, vec![plain; 48 * 48]).unwrap(),
+        107,
+        vec![player],
+    )
+    .unwrap();
+    let market = w
+        .spawn(
+            rules.id_of("bld.market").unwrap(),
+            P1,
+            Pos::flat(20_000, 20_000),
+        )
+        .unwrap();
+    let trade = |w: &mut World, kind: &str, resource: &str| {
+        w.submit(Command {
+            subject: Some(id(w, resource)),
+            ..command(w, market, kind)
+        })
+        .unwrap();
+    };
+    for _ in 0..3 {
+        trade(&mut w, "buy", "res.food");
+    }
+    trade(&mut w, "sell", "res.timber");
+    ticks(&mut w, 45);
+    assert_eq!(w.market_pressures().count(), 2);
+    check("market_prices", &rules, w, 200, |w| {
+        trade(w, "sell", "res.food");
+        trade(w, "buy", "res.timber");
+    });
+}

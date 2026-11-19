@@ -278,6 +278,16 @@ impl World {
                 hash.u32(colony.0);
             }
         }
+        // Hashed only once a player has traded, so other worlds keep their hashes (task 107).
+        if !self.market.is_empty() {
+            hash.bytes(b"market");
+            hash.u64(self.market.len() as u64);
+            for ((player, resource), pressure) in &self.market {
+                hash.u32(player.0);
+                hash.u32(resource.0);
+                hash.bytes(&pressure.to_le_bytes());
+            }
+        }
         hash.u64(self.pending.len() as u64);
         for (order, append) in &self.pending {
             hash.order(order);

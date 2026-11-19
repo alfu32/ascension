@@ -24,6 +24,7 @@ mod construction;
 mod economy;
 mod fleet;
 pub mod governor;
+mod market;
 mod memory;
 mod navy;
 mod opening;
@@ -90,6 +91,16 @@ pub(crate) struct Weights {
     pub sea_share: i64,
     /// `sea.min_difficulty_rank`: the lowest difficulty rank that goes to sea.
     pub sea_min_rank: i64,
+    /// `market.sell_above`: a lot is sold while more than this is in store (task 107).
+    pub market_sell_above: i64,
+    /// `market.wealth_reserve`: currency kept back when buying.
+    pub market_reserve: i64,
+    /// `market.buy_max_pct`: no buying above this share of the base price.
+    pub market_buy_max: i64,
+    /// `market.sell_min_pct`: no selling below this share of the base price.
+    pub market_sell_min: i64,
+    /// `market.lots_per_thought`: most lots traded in one thought.
+    pub market_lots: i64,
 }
 
 /// A player's state in a few numbers, for match reports.

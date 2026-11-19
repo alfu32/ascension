@@ -1086,6 +1086,19 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
         dirty: flags(conn, "dirty")?,
         awake: flags(conn, "awake")?,
         governors_paused: flags(conn, "governor_paused")?,
+        market: query_vec(
+            conn,
+            "SELECT player_id, resource_id, pressure FROM market_pressure ORDER BY player_id, resource_id",
+            |r| {
+                Ok((
+                    (
+                        PlayerId(uint(r, 0, "market player")?),
+                        DefId(uint(r, 1, "market resource")?),
+                    ),
+                    int(r, 2)?,
+                ))
+            },
+        )?,
         dormant: query_vec(
             conn,
             "SELECT body_id, n, terrain_id FROM body_dormant ORDER BY body_id",
