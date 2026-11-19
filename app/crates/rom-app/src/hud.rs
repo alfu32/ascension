@@ -447,8 +447,7 @@ pub(crate) fn market_help(world: &World, player: PlayerId) -> String {
     let spread = world.market_spread(player).unwrap_or(0);
     let step = world.rules().constant("market.price_step_pct").unwrap_or(0);
     format!(
-        "Buying costs {}% over the price, selling pays {}% under it; each lot moves the price \
-         {step}%, and it drifts back",
+        "Buy {}% over the price, sell {}% under; a lot moves it {step}%, then it drifts back",
         (spread + 1) / 2,
         spread / 2
     )

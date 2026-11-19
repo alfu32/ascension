@@ -1,5 +1,6 @@
 # Task 107: a finished market beside the starting city, Barter researched (it enables
 # trading), stock to trade. Selecting the market opens its trade buttons (Orders tab).
+# Run with --universe (the script grants a technology, which only a universe match applies).
 0 grant-tech tech.commerce.1
 0 grant res.food 3000
 0 grant res.timber 3000

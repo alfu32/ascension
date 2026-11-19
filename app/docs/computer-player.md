@@ -1064,6 +1064,35 @@ by an average over every armour class, so the battery now wears an existing one 
 `rom fight-matrix`: 152 strengths (136 on the ground, the same rows as 0.0.75, and 16 across the
 orbit), `unanswered=0` (46 s).
 
+## At the market (task 107)
+
+Once its wishes are served, a brain with a complete market and the research that enables trading
+(`World::can_trade`) trades through the ordinary `buy` and `sell` orders, at the prices any player
+sees (`World::market_quote`); nothing in it names a resource (`crates/rom-ai/src/market.rs`):
+
+- **Selling surplus.** Each tradeable resource (id order) its plans did not lack this thought is
+  sold, one lot, while more than `market.sell_above` (1500) would remain and a lot still pays at
+  least `market.sell_min_pct` (70) of the base price.
+- **Buying shortfalls.** Then the resources this thought's wishes lacked, largest shortfall first:
+  one lot each while it costs at most `market.buy_max_pct` (140) of the base price and the
+  currency left stays above `market.wealth_reserve` (300) plus what the wishes lacked of it.
+- At most `market.lots_per_thought` (1) lots a thought and one per resource; the purse of the
+  thought follows each trade. The weights are `ai_weight_key` rows, so a profile may override
+  them.
+
+### Measured (task 107)
+
+`rom duel --seeds 1..100 --jobs 2` (conquest, flat two-player maps), before and after trading:
+
+| Profiles | 0.0.100 | Task 107 |
+| --- | --- | --- |
+| `balanced:moderate,balanced:easiest` | 94–1, 5 draws, mean tick 56 192 | 97–0, 3 draws, mean tick 53 258 |
+| `balanced:moderate,balanced:moderate` | 48–42, 10 draws, mean tick 70 179 | 48–47, 5 draws, mean tick 60 390 |
+
+Selling surplus pays for research and units sooner: matches end earlier and fewer are drawn.
+The playthrough does not trade, so its hashes stay; `rom fight-matrix` is unchanged
+(`strengths=255 unanswered=0`).
+
 ## Simulation gaps found in part 2, and what task 65 did with them
 
 - **Closed: `explore`, `patrol`, `guard`.** `explore` walks to the nearest tile

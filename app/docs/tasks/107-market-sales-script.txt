@@ -1,5 +1,6 @@
 # Task 107: as 107-market-script.txt, then four lots of food sold and one of timber bought:
 # the food prices fall, the timber prices rise, the wealth changes by the quoted prices.
+# Run with --universe (the script grants a technology, which only a universe match applies).
 0 grant-tech tech.commerce.1
 0 grant res.food 3000
 0 grant res.timber 3000
