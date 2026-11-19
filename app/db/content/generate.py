@@ -857,6 +857,8 @@ HULL_REACH = {
 }
 # Share of a landed ship's footprint that must be ground (the rest may be water), percent.
 LANDING_LAND_PCT = 20
+# Height of a planet's orbit above its ground, milli-tiles (task 106); the planet view draws 8 tiles.
+ORBIT_HEIGHT = 8000
 
 
 def big_ships_on_the_planet(row, tag, emit):
@@ -865,6 +867,8 @@ def big_ships_on_the_planet(row, tag, emit):
     or a mountain (tag `no_landing`) and must be at least LANDING_LAND_PCT ground."""
     row('game_constant', key='space.landing_land_pct', value=LANDING_LAND_PCT, unit='%',
         note='least share of the tiles under a landed ship that must be ground; the rest may be water')
+    row('game_constant', key='space.orbit_height', value=ORBIT_HEIGHT, unit='milli-tiles',
+        note='height of the orbit above the ground; a shot between ground or air and orbit flies the hypotenuse of this and the ground distance')
     row('stat', key='landing_radius', scope='entity', note='milli-tiles of ground a landed ship covers around its tile')
     row('tag', key='no_landing', category='terrain')
     tag('ter.mountain', 'no_landing')

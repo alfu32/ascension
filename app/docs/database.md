@@ -1538,9 +1538,13 @@ all `pierce`), so it is a column of its own:
   | railgun | 0 | a rail slug would cross the longest reach within a tick or two: hits at once, drawn as a fading line |
 
   The longest flight in the data is one second (a catapult or a ground battery at full
-  reach). To and from orbit the distance is the one the weapons' reach uses, along the ground
-  to the orbiting ship's subpoint; the orbit's height (drawn eight tiles up) is not part of
-  it, so a shot straight up or down takes the one-tick minimum and is drawn fast.
+  reach). Task 106: to and from orbit the flight is longer. Constant `space.orbit_height`
+  (**8000** milli-tiles, the height the planet view draws). A shot with exactly one end in
+  orbit (ground or air at a ship in orbit, a weapon in orbit at the ground) flies
+  `isqrt(ground² + height²)` for its landing tick, so one straight overhead no longer takes the
+  one-tick minimum. Weapon reach stays measured on the ground (task 58); orbit to orbit and
+  ground to ground are unchanged. `World::flight_distance` is the one place the rule lives and
+  `rom-app` calls it too.
 
   Balance at 0.0.95 → task 102: the fight matrix keeps 255 strengths with none unanswered;
   duels over seeds 1..100, balanced:moderate against balanced:easiest 95–0 (5 draws, mean tick

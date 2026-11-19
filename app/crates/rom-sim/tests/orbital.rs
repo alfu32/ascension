@@ -624,3 +624,76 @@ fn a_frigate_bombards_a_town_with_an_area_volley() {
     assert_eq!(first, play());
     println!("a_frigate_bombards_a_town_with_an_area_volley hashes={first:016x?}");
 }
+
+/// Task 106: a shot between the ground and an orbit flies the hypotenuse of the ground distance
+/// and the orbit's height, so a missile at a ship straight overhead takes `height / speed`, one
+/// at a ship off to the side the longer way round; reach is still measured on the ground.
+#[test]
+fn a_shot_to_orbit_flies_the_orbits_height() {
+    let rules = rules();
+    let rate = rules.constant("sim.ticks_per_second").unwrap();
+    let height = rules.constant("space.orbit_height").unwrap();
+    let weapon = rules.entity_types[&id_of(&rules, "bld.ground_battery")]
+        .weapons
+        .iter()
+        .find(|w| w.projectile_speed > 0)
+        .unwrap()
+        .clone();
+    let reach = weapon.range_max;
+    assert!(reach > height, "the battery outranges the orbit's height");
+    // A ship `gap` milli-tiles from the battery's centre, the distance a shot is measured over.
+    let play = |gap: i64| {
+        let mut w = world(&rules);
+        let battery = w
+            .place_for_setup(
+                id(&w, "bld.ground_battery"),
+                P2,
+                at(HOME, 3, 32_500, 32_500),
+            )
+            .unwrap();
+        let ship = ship_in_orbit(
+            &mut w,
+            "unit.corvette",
+            P1,
+            HOME,
+            Some(at(HOME, 3, 32_500 + gap as i32, 32_500)),
+        );
+        // The shot the battery fires next: its landing tick less the tick it fired in.
+        let start = w.tick();
+        let (fired, land) = loop {
+            assert!(
+                w.tick() < start + 600,
+                "the battery never fired at gap {gap}"
+            );
+            w.step();
+            let shot = w
+                .hits_in_flight()
+                .find(|h| h.attacker == battery && h.target == ship);
+            if let Some(hit) = shot {
+                let ready = w.entity(battery).unwrap().cooldowns[&weapon.id];
+                break (ready - weapon.cooldown_ticks.max(1) as u64, hit.land_tick);
+            }
+        };
+        (land - fired, w.hash())
+    };
+    let expected = |ground: i64| {
+        let flown = ((ground * ground + height * height) as f64).sqrt().floor() as i64;
+        (flown * rate / weapon.projectile_speed).max(1) as u64
+    };
+    // Straight overhead (over the battery): the height alone, not the one-tick minimum.
+    let (overhead, hash) = play(0);
+    assert_eq!(overhead, expected(0));
+    assert!(overhead > 1);
+    assert_eq!(play(0), (overhead, hash), "run twice, the same state");
+    // Far off to the side, still inside the reach on the ground: the hypotenuse.
+    let ground = reach - 100;
+    let (far, _) = play(ground);
+    assert_eq!(far, expected(ground));
+    assert!(far > overhead);
+    // The hypotenuse is beyond the reach, the ground distance is not: it still fires.
+    assert!(ground * ground + height * height > reach * reach);
+}
+
+fn id_of(rules: &Rules, key: &str) -> DefId {
+    rules.id_of(key).unwrap()
+}

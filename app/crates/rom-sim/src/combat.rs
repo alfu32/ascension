@@ -273,6 +273,30 @@ impl World {
         self.entity(id).expect("attacker").pos.body == self.entity(target).expect("target").pos.body
     }
 
+    /// The distance a shot flies, for its landing tick only (reach stays on the ground): the
+    /// hypotenuse of the `ground` distance and the orbit's height (`space.orbit_height`) when
+    /// exactly one end is in orbit; orbit to orbit and ground to ground are unchanged.
+    pub fn flight_distance(&self, attacker: EntityId, target: EntityId, ground: u64) -> u64 {
+        let Some(from) = self.entity(attacker) else {
+            return ground;
+        };
+        let aloft_from = self.orbit(attacker).is_some();
+        let aloft_to = self
+            .orbit(target)
+            .is_some_and(|orbit| orbit.body == from.pos.body);
+        let height = self
+            .rules
+            .constant("space.orbit_height")
+            .unwrap_or(0)
+            .max(0) as u64;
+        if aloft_from == aloft_to || ground == u64::MAX {
+            return ground;
+        }
+        let squared =
+            u128::from(ground) * u128::from(ground) + u128::from(height) * u128::from(height);
+        crate::integer_sqrt(squared)
+    }
+
     fn weapon_origin(&self, id: EntityId, weapon: &Weapon) -> Pos {
         if weapon.orbit_only {
             self.orbit(id).expect("orbital weapon").pos
@@ -482,7 +506,8 @@ impl World {
                 self.spent.push(id);
             }
             let travel = if weapon.projectile_speed > 0 {
-                (u128::from(distance) * self.tick_rate as u128 / weapon.projectile_speed as u128)
+                let flown = self.flight_distance(id, target_id, distance);
+                (u128::from(flown) * self.tick_rate as u128 / weapon.projectile_speed as u128)
                     .max(1) as u64
             } else {
                 0
