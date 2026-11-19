@@ -180,7 +180,7 @@ planets belong to star systems, and systems are joined by routes.
 | Table | Half | Holds |
 | --- | --- | --- |
 | `body_kind` | rules | the vocabulary `star`, `habitable`, `resource`, and `black_hole` and `celestial` for the celestial home (task 76) |
-| `map_style` (universe knobs) | rules | `star_region` (which catalogue stars a match takes, task 89: `nearest`, `single`, `quadrant`, `all`), neutral systems, habitable planets and resource bodies per system (each a `_min`/`_max` pair), planet face size `planet_n_min/median/max` (64..=512), `route_extra_pct`, `star_map_radius` |
+| `map_style` (universe knobs) | rules | `star_region` (which catalogue stars a match takes, tasks 89 and 109: `nearest`, `single`, `wedge`, `all`), `systems_min/max` (a nearest region's systems in all), `region_min_den/max_den` (a wedge's share of the catalogue), `shared_home`, habitable planets and resource bodies per system (each a `_min`/`_max` pair), planet face size `planet_n_min/median/max` (64..=512), `route_extra_pct`, `star_map_radius` |
 | `map_style_feature` with `region_kind = 'resource_body'` | rules | what resource bodies yield: a `node` type with `claim_mode = 'presence'`; `chance_pct` weights the kinds, and a `per_player` row puts `clumps_min` bodies of its kind in every home system |
 | `star_system` | state | the star's name, 3D star-map position (x, y, z integers), catalogue star and constellation |
 | `star_figure` | state | constellation stick-figure lines between this match's systems (display only) |
@@ -221,27 +221,38 @@ Information Age, 450,000 in Automation, and zero from Fusion on. These are
 the ground limits passed to the camera; task 41 supersedes the earlier
 separate whole-globe-only age.
 
-**Map styles (task 89).** `map_style.star_region` says which catalogue stars a
+**Map styles (tasks 89, 109).** `map_style.star_region` says which catalogue stars a
 universe takes; everything else about a system (habitable planets, resource
-bodies, routes) stays in the per-system knobs. The code reads the region kind,
-never a style key.
+bodies, routes) stays in the per-system knobs. The code reads the region kind and
+its numbers, never a style key. The launchers list the styles by `def.sort`.
 
 | Style (key) | `star_region` | Systems |
 | --- | --- | --- |
-| One World (`map.one_world`) | `nearest` | one home system per race, nothing else: a quick match |
-| Cluster (`map.many_worlds`) | `nearest` | a seeded star and its nearest neighbours: the homes plus `neutral_systems_min..max` (2 to 4), within `star_map_radius` (the key stays: saves and scripts name it) |
+| Planet (`map.one_world`) | `single`, `shared_home` 1 | one seeded catalogue star whose system holds one planet (`habitable_per_system` 1..1) that every player starts on whatever the start placement, and 3 to 5 resource bodies; no routes. The key stays, and its flat-map columns are unchanged (the playthrough's style) |
 | Solar (`map.solar`) | `single` | one seeded catalogue star whose system holds every home planet (with separate worlds, each race its own planet), `habitable_per_system_min..max` − 1 more planets, and the resource bodies; no routes |
-| Quadrant (`map.quadrant`) | `quadrant` | every catalogue star in one galactic quadrant (`star.glon_mdeg` / 90 000; the seed chooses it and keeps it through the layout's retries) |
+| Cluster (`map.many_worlds`) | `nearest` | a seeded star and its nearest neighbours: `systems_min..max` (10 to 15) systems in all, never fewer than one per race, within `star_map_radius` (the key stays: saves and scripts name it) |
+| Sector (`map.sector`) | `wedge`, 8 / 6 | the catalogue ordered by galactic longitude (`star.glon_mdeg`, ties by id): a seeded star and the ones after it around the circle, from 1/`region_min_den` (rounded up) to 1/`region_max_den` (rounded down) of the catalogue's stars: 94 to 124 of 745; the start and count drawn by each layout attempt from the seed |
+| Quadrant (`map.quadrant`) | `wedge`, 8 / 4 | the same, 94 to 186 of 745 (until task 109 one fixed galactic quadrant, 163 to 225) |
 | Galaxy (`map.galaxy`) | `all` | every catalogue star: 745 systems. Held back by task 89 (the match world grew by about 12 MB a system and was killed at 8.4 GB) and put back by task 99, appended last as before: system space now costs little until it is used (`world-model.md` "Scale") |
 
-`neutral_systems_*` and `star_map_radius` bound the `nearest` region only (the
-other rows carry 0 and the catalogue's extent, 8 300). In Quadrant (and Galaxy) the
+`systems_*` and `star_map_radius` bound the `nearest` region only (the
+other rows carry 1 and the catalogue's extent, 8 300); `region_*_den` the `wedge`
+region only (the others carry 1). In Sector, Quadrant and Galaxy the
 systems beyond the homes are mostly empty: 0 to 2 habitable planets and 2 to 6
 resource bodies each. `habitable_per_system_min` may therefore be 0; a home
-system always holds its home planet. In Solar every home planet has the
+system always holds its home planet. In Solar and Planet every home planet has the
 `per_player` resource bodies as its own moons (one ore asteroid each in the seed).
-In the `quadrant` and `all` regions a home candidate's density is measured over its eight
-nearest neighbours (three in the nearest region) and up to 256 layouts are tried.
+In the `wedge` and `all` regions a home candidate's density is measured over its eight
+nearest neighbours (three in the nearest region) and up to 256 layouts are tried; like a
+nearest region's centre, each attempt draws its own wedge from the seed.
+
+Schema change (task 109): `neutral_systems_min/max` became `systems_min/max`, totals with the
+homes included (a Cluster is 10 to 15 systems whatever the number of races; counting neutral
+systems could not say that); `star_region` value `quadrant` became `wedge`; new columns
+`region_min_den`, `region_max_den` (a share of the catalogue as 1/N, so the owner's "1/8 to 1/6"
+is exact in integers and follows the catalogue's size at load) and `shared_home` (0/1);
+`map.sector` defined last in the seed (only the definitions after it, the model files' meshes,
+move up by one). Both lint views stay empty.
 
 **Start placement (task 89).** `match_option` `start_placement`, choices
 `separate` (default: each race on its own home planet, as before) and `together`

@@ -1070,4 +1070,65 @@ mod tests {
         let industrial = content.rules.id_of("age.industrial").unwrap();
         assert_eq!(assert_researched_up_to(&flat.world, me, industrial), owned);
     }
+
+    /// Task 109: in the Planet style every player starts on the one planet of the one system,
+    /// and from the space age ships and orbital craft reach that planet's orbit.
+    #[test]
+    fn planet_style_reaches_orbit() {
+        let options = Options {
+            universe: true,
+            style: Some("map.one_world".into()),
+            factions: Some(vec!["nation.romans".into(), "nation.ashscale".into()]),
+            seed: 1,
+            ..Options::default()
+        };
+        let content = crate::terrain::generate_universe_content(&options).expect("universe");
+        let stars = content
+            .universe
+            .systems
+            .iter()
+            .filter(|s| s.star.is_some())
+            .count();
+        assert_eq!(stars, 1);
+        assert!(
+            content
+                .universe
+                .starts
+                .iter()
+                .all(|s| s.0 == content.universe.starts[0].0)
+        );
+        let setup = ScriptSetup::scan(
+            "0 grant-age age.starfaring\n0 place-orbit 1 unit.corvette @0,-30\n\
+             0 place-orbit 1 unit.orbital_fighter @10,-30\n",
+        )
+        .expect("scan");
+        let mut game = build_universe_match(
+            &content.rules,
+            &content.universe,
+            &content.factions,
+            1,
+            None,
+            &setup,
+        )
+        .expect("match");
+        let home = game.starts[0].city_pos.body;
+        assert!(game.starts.iter().all(|s| s.city_pos.body == home));
+        let orbiting = |world: &World| {
+            world
+                .entities()
+                .filter(|e| world.orbit(e.id).is_some_and(|o| o.body == home))
+                .count()
+        };
+        for _ in 0..4000 {
+            if orbiting(&game.world) == 2 {
+                break;
+            }
+            game.world.step();
+        }
+        assert_eq!(
+            orbiting(&game.world),
+            2,
+            "the corvette and the fighters in orbit"
+        );
+    }
 }

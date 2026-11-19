@@ -36,6 +36,14 @@ impl gpui_component::select::SelectItem for Choice {
     }
 }
 
+/// The map styles as the launcher lists them: by `def.sort` (Planet, Solar, Cluster, Sector,
+/// Quadrant, Galaxy in the seed, task 109), then id.
+fn styles_in_order(rules: &Rules) -> Vec<rom_rules::DefId> {
+    let mut ids: Vec<_> = rules.map_styles.keys().copied().collect();
+    ids.sort_by_key(|id| (rules.def(*id).sort, *id));
+    ids
+}
+
 struct Catalog {
     lists: BTreeMap<&'static str, Vec<Choice>>,
     factions: Vec<Choice>,
@@ -109,10 +117,7 @@ impl Catalog {
         Self {
             rules_id: crate::saves::RulesId::of(rules),
             lists: BTreeMap::from([
-                (
-                    "style",
-                    definitions(rules.map_styles.keys().copied().collect()),
-                ),
+                ("style", definitions(styles_in_order(rules))),
                 (
                     "start-placement",
                     rules
@@ -307,6 +312,21 @@ mod tests {
                 .profiles
                 .iter()
                 .any(|c| c.key == crate::computer::DEFAULT_SPEC.0)
+        );
+        // Task 109: the map styles in the owner's order, by def.sort.
+        assert_eq!(
+            catalog.lists["style"]
+                .iter()
+                .map(|c| c.label.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "Planet · map.one_world",
+                "Solar · map.solar",
+                "Cluster · map.many_worlds",
+                "Sector · map.sector",
+                "Quadrant · map.quadrant",
+                "Galaxy · map.galaxy",
+            ]
         );
         let book = crate::looks::ModelBook::new(&rules);
         assert_eq!(

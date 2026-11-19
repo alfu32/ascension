@@ -1367,7 +1367,9 @@ mod trade_tests {
     fn trade_rate(far: bool) -> (u64, i64, i64) {
         let options = crate::args::Options {
             universe: true,
-            seed: 1,
+            // Seed 2: since task 109 seed 1's Cluster has no room for a city on the nearest
+            // other planet of the home system.
+            seed: 2,
             ..crate::args::Options::default()
         };
         let content = crate::terrain::generate_universe_content(&options).expect("universe");

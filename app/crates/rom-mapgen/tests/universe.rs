@@ -211,10 +211,15 @@ fn routes_join_neighbours_and_keep_clear_of_other_systems() {
             let (a, b) = (pos(&u, route.system_a), pos(&u, route.system_b));
             let len2 = dist2(a, b);
             for s in &u.systems {
-                if s.id == route.system_a || s.id == route.system_b {
+                let c = (i64::from(s.x), i64::from(s.y), i64::from(s.z));
+                // A system within the clearance of a route's end (one of a close pair, such as
+                // Alpha Centauri and Proxima) cannot be cleared.
+                if s.id == route.system_a
+                    || s.id == route.system_b
+                    || dist2(a, c).min(dist2(b, c)) < 40 * 40
+                {
                     continue;
                 }
-                let c = (i64::from(s.x), i64::from(s.y), i64::from(s.z));
                 // Independent check: the point of the segment nearest `c`, by projection in f64.
                 let (ab, ac) = (
                     [(b.0 - a.0) as f64, (b.1 - a.1) as f64, (b.2 - a.2) as f64],
@@ -278,10 +283,10 @@ fn habitable_planets_are_within_size_bounds() {
     for seed in 0..10 {
         let u = plan(&r, "map.many_worlds", seed, &FOUR);
         assert!(in_range(
-            // Less the three homes and the celestial home (task 76).
-            u.systems.len() - 4,
-            style.neutral_systems_min,
-            style.neutral_systems_max
+            // Less the celestial home (task 76); the homes are among them (task 109).
+            u.systems.len() - 1,
+            style.systems_min,
+            style.systems_max
         ));
         for b in u.bodies.iter().filter(|b| b.kind == BodyKind::Habitable) {
             let n = i64::from(b.n.unwrap());
@@ -333,31 +338,53 @@ fn habitable_planets_are_within_size_bounds() {
     assert!(u.expand(&small, 1).is_err(), "a star has no surface");
 }
 
+/// Task 109: Planet is one planet in one system, every player on it whatever the placement,
+/// with its moons and belt around it.
 #[test]
-fn one_world_style_makes_a_single_system_per_race() {
+fn planet_style_is_one_planet_for_every_player() {
+    use rom_mapgen::{StartPlacement, generate_universe_placed};
     let r = rules();
+    let style = &r.map_styles[&r.id_of("map.one_world").unwrap()];
+    assert_eq!(r.def(style.id).name, "Planet");
     for seed in 0..5 {
         let u = plan(&r, "map.one_world", seed, &FOUR);
-        // Three homes and the celestial home (task 76).
-        assert_eq!(u.systems.len(), 4);
-        assert_eq!(u.home_systems().len(), 3);
-        for s in u.systems.iter().filter(|s| s.star.is_some()) {
-            let habitable = u
-                .bodies
-                .iter()
-                .filter(|b| b.system_id == s.id && b.kind == BodyKind::Habitable)
-                .count();
-            assert_eq!(habitable, 1);
-        }
-        assert_eq!(
-            u.routes.len(),
-            3,
-            "three systems: every home has two routes"
+        // One system and the celestial home (task 76).
+        assert_eq!(u.systems.len(), 2);
+        assert_eq!(star_systems(&u).len(), 1);
+        assert!(u.routes.is_empty());
+        let planets: Vec<_> = u
+            .bodies
+            .iter()
+            .filter(|b| b.system_id == 1 && b.kind == BodyKind::Habitable)
+            .collect();
+        assert_eq!(planets.len(), 1, "seed {seed}");
+        assert_eq!(planets[0].n, Some(style.planet_n_median as u32));
+        assert_eq!(u.recipes[&planets[0].id].player_factions.len(), FOUR.len());
+        let resources = u
+            .bodies
+            .iter()
+            .filter(|b| b.system_id == 1 && b.kind == BodyKind::Resource)
+            .count() as i64;
+        assert!(
+            (style.resource_bodies_per_system_min..=style.resource_bodies_per_system_max)
+                .contains(&resources),
+            "seed {seed}: {resources} resource bodies"
         );
         assert!(u.fairness(&r).is_empty());
     }
-    let u = plan(&r, "map.one_world", 1, &FOUR[..2]);
-    assert_eq!((u.systems.len(), u.routes.len()), (2, 0));
+    // Separate or together, every player starts on the one planet.
+    let req = request(&r, "map.one_world", 3, &FOUR);
+    for placement in [StartPlacement::Separate, StartPlacement::Together] {
+        let u = generate_universe_placed(&r, &req, placement).unwrap();
+        assert_eq!(u.starts.len(), FOUR.len());
+        assert!(
+            u.starts.iter().all(|s| s.0 == u.starts[0].0),
+            "{placement:?}"
+        );
+        assert_eq!(u.planets.len(), 1);
+        let starts: BTreeSet<_> = u.starts.iter().map(|s| (s.1.face, s.1.x, s.1.y)).collect();
+        assert_eq!(starts.len(), FOUR.len(), "{placement:?}: distinct starts");
+    }
 }
 
 #[test]
@@ -383,7 +410,7 @@ fn universe_fairness_holds_for_20_seeds() {
 #[test]
 fn generated_home_planets_are_fair() {
     let r = small_planet_rules();
-    let u = generate_universe(&r, &request(&r, "map.one_world", 4, &FOUR)).unwrap();
+    let u = generate_universe(&r, &request(&r, "map.many_worlds", 4, &FOUR)).unwrap();
     assert_eq!(u.fairness(&r), Vec::<String>::new());
 }
 
@@ -449,7 +476,7 @@ fn invalid_universe_requests_are_errors() {
         Err(MapGenError::UnknownStyle(req.style))
     );
     let conn = build_rules_db(SCHEMA, SEED).unwrap();
-    conn.execute_batch("UPDATE map_style SET neutral_systems_min=5, neutral_systems_max=1;")
+    conn.execute_batch("UPDATE map_style SET systems_min=5, systems_max=1;")
         .unwrap();
     let bad = Rules::load(&conn).unwrap();
     assert!(matches!(
@@ -640,11 +667,12 @@ fn the_celestial_home_lies_toward_sagittarius_beyond_the_region() {
     }
 }
 
-/// Task 89: every universe map style.
-const STYLES: [&str; 5] = [
+/// Task 89, 109: every universe map style, in the launcher's order.
+const STYLES: [&str; 6] = [
     "map.one_world",
-    "map.many_worlds",
     "map.solar",
+    "map.many_worlds",
+    "map.sector",
     "map.quadrant",
     "map.galaxy",
 ];
@@ -654,24 +682,109 @@ fn star_systems(u: &Universe) -> Vec<&rom_mapgen::StarSystem> {
     u.systems.iter().filter(|s| s.star.is_some()).collect()
 }
 
-/// Task 89: Cluster is the earlier Many Worlds under another name: the same seeds give the same
-/// universes as release 0.0.83 (hashes printed by `rom universe` there). Task 92 wrote two more
-/// definitions in the generated block, which moves the ids of the node types defined after it
-/// that the hash reads; with those two left out the hashes are 0.0.83's again.
+/// The stars of a universe's systems (the celestial home left out), by catalogue id.
+fn star_ids(u: &Universe) -> BTreeSet<u32> {
+    star_systems(u).iter().filter_map(|s| s.star).collect()
+}
+
+/// Task 109: a Cluster is 10 to 15 systems whatever the number of races, each race in its own
+/// home system: a star and its nearest neighbours (ties by id), the same for the same seed.
 #[test]
-fn cluster_gives_the_many_worlds_universes() {
+fn cluster_is_ten_to_fifteen_nearest_systems() {
     let r = rules();
-    let style = r.id_of("map.many_worlds").unwrap();
-    assert_eq!(r.def(style).name, "Cluster");
-    for (seed, four, two) in [
-        (0, 0x1834_1b5b_a05d_171d_u64, 0x1967_36a8_f476_1e0b_u64),
-        (1, 0xc1b0_6df2_eec7_b97d, 0xbd0f_8d66_3cac_3dc4),
-        (2, 0x1b6f_bb64_46cb_1f6e, 0x0d56_8230_dd16_5bf7),
-    ] {
-        let u = generate_universe(&r, &request(&r, "map.many_worlds", seed, &FOUR)).unwrap();
-        assert_eq!(u.hash(), four, "seed {seed}, four players");
-        let u = generate_universe(&r, &request(&r, "map.many_worlds", seed, &FOUR[1..3])).unwrap();
-        assert_eq!(u.hash(), two, "seed {seed}, two players");
+    let style = &r.map_styles[&r.id_of("map.many_worlds").unwrap()];
+    assert_eq!(r.def(style.id).name, "Cluster");
+    assert_eq!((style.systems_min, style.systems_max), (10, 15));
+    let point = |id: u32| {
+        let s = &r.stars[&id];
+        (s.x, s.y, s.z)
+    };
+    let mut sizes = BTreeSet::new();
+    for factions in [&FOUR[..], &FOUR[1..3]] {
+        for seed in 1..=20 {
+            let u = plan(&r, "map.many_worlds", seed, factions);
+            let ids = star_ids(&u);
+            assert!((10..=15).contains(&ids.len()), "seed {seed}: {}", ids.len());
+            sizes.insert(ids.len());
+            let homes: BTreeSet<_> = u.home_systems().iter().map(|h| h.1).collect();
+            let races: BTreeSet<_> = u.home_systems().iter().map(|h| h.0).collect();
+            assert_eq!(
+                homes.len(),
+                races.len(),
+                "seed {seed}: a home system per race"
+            );
+            // Contiguous: some star of the region has exactly the region as its nearest stars.
+            let nearest = |centre: u32| {
+                let mut all: Vec<(i64, u32)> = r
+                    .stars
+                    .keys()
+                    .map(|&id| (dist2(point(id), point(centre)), id))
+                    .collect();
+                all.sort_unstable();
+                all.iter()
+                    .take(ids.len())
+                    .map(|&(_, id)| id)
+                    .collect::<BTreeSet<_>>()
+            };
+            assert!(
+                ids.iter().any(|&c| nearest(c) == ids),
+                "seed {seed}: not the nearest stars of one centre"
+            );
+            assert_eq!(star_ids(&plan(&r, "map.many_worlds", seed, factions)), ids);
+        }
+    }
+    assert!(sizes.len() > 1, "the seed chooses the size: {sizes:?}");
+}
+
+/// A wedge region (task 109) is a run of the catalogue in galactic longitude: ordered by
+/// longitude, then id, its stars follow one another around the circle.
+fn is_longitude_run(r: &Rules, ids: &BTreeSet<u32>) -> bool {
+    let mut ring: Vec<(i64, u32)> = r.stars.values().map(|s| (s.glon_mdeg, s.id)).collect();
+    ring.sort_unstable();
+    let inside: Vec<bool> = ring.iter().map(|(_, id)| ids.contains(id)).collect();
+    // Exactly one place around the circle where the run starts.
+    let starts = (0..inside.len())
+        .filter(|&i| inside[i] && !inside[(i + inside.len() - 1) % inside.len()])
+        .count();
+    starts == 1 || ids.len() == ring.len()
+}
+
+/// Task 109: Sector and Quadrant take 1/8–1/6 and 1/8–1/4 of the catalogue (counted from the
+/// rules' stars), as a run in galactic longitude; the same seed gives the same stars.
+#[test]
+fn sector_and_quadrant_take_their_share_of_the_catalogue() {
+    let r = rules();
+    let n = r.stars.len();
+    for (key, low, high) in [("map.sector", 8, 6), ("map.quadrant", 8, 4)] {
+        let style = &r.map_styles[&r.id_of(key).unwrap()];
+        assert_eq!((style.region_min_den, style.region_max_den), (low, high));
+        let range = n.div_ceil(low as usize)..=n / high as usize;
+        assert_eq!(
+            rom_mapgen::wedge_size(style, n),
+            (*range.start(), *range.end())
+        );
+        let mut sizes = BTreeSet::new();
+        for seed in 1..=20 {
+            let u = plan(&r, key, seed, &FOUR[1..3]);
+            let ids = star_ids(&u);
+            assert!(
+                range.contains(&ids.len()),
+                "{key} seed {seed}: {}",
+                ids.len()
+            );
+            assert!(ids.len() * low as usize >= n && ids.len() * high as usize <= n);
+            assert!(
+                is_longitude_run(&r, &ids),
+                "{key} seed {seed}: not contiguous"
+            );
+            assert_eq!(
+                star_ids(&plan(&r, key, seed, &FOUR[1..3])),
+                ids,
+                "{key} seed {seed}"
+            );
+            sizes.insert(ids.len());
+        }
+        assert!(sizes.len() > 1, "{key}: the seed chooses the size");
     }
 }
 
@@ -696,9 +809,15 @@ fn every_style_is_connected_and_fair_on_20_seeds() {
                     );
                 }
                 let homes = u.home_systems();
+                // Planet (task 109) has one home planet, marked with the first player's race.
+                let expected = if r.map_styles[&r.id_of(style).unwrap()].shared_home {
+                    BTreeSet::from([r.race_of(r.id_of(factions[0]).unwrap())])
+                } else {
+                    races.clone()
+                };
                 assert_eq!(
                     homes.iter().map(|h| h.0).collect::<BTreeSet<_>>(),
-                    races,
+                    expected,
                     "{style} seed {seed}"
                 );
                 let names: BTreeSet<_> = u.bodies.iter().map(|b| &b.name).collect();
@@ -758,26 +877,6 @@ fn solar_holds_every_home_in_one_system() {
     assert_ne!(u.starts[0].0, u.starts[2].0);
     assert_ne!(u.starts[2].0, u.starts[3].0);
     assert_eq!(u.fairness(&small), Vec::<String>::new());
-}
-
-#[test]
-fn quadrant_takes_every_star_of_one_galactic_quadrant() {
-    let r = rules();
-    let mut seen = BTreeSet::new();
-    for seed in 0..20 {
-        let u = plan(&r, "map.quadrant", seed, &FOUR[1..3]);
-        let quadrant = i64::from(rom_mapgen::seed_quadrant(seed));
-        seen.insert(quadrant);
-        let in_quadrant: BTreeSet<u32> = r
-            .stars
-            .values()
-            .filter(|s| s.glon_mdeg / 90_000 == quadrant)
-            .map(|s| s.id)
-            .collect();
-        let systems: BTreeSet<u32> = star_systems(&u).iter().filter_map(|s| s.star).collect();
-        assert_eq!(systems, in_quadrant, "seed {seed}");
-    }
-    assert_eq!(seen.len(), 4, "the seeds choose every quadrant");
 }
 
 #[test]

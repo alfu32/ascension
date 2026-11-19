@@ -150,22 +150,32 @@ task 89).
   equatorial plane's rings and the drop lines of task 59 are gone: they were
   mistaken for routes.
 
-### Map styles (task 89)
+### Map styles (tasks 89, 109)
 
-The owner (2026-11-18): "solar (single solar system), cluster (as it is right now), quadrant
-(using one of the quadrants) and galaxy (using everything)". The style decides which stars of the
-catalogue a match takes (`map_style.star_region`, `database.md` "Map styles"); the knobs of each
-system (habitable planets, resource bodies, routes) stay as they are.
+The owner (2026-11-19, restating task 89's presets): "planet : single planet, players can reach
+orbit; solar : single, complete solar system; cluster: a cluster of 10-15 solar systems; sector:
+a slice of the galaxy (1/6-1/8 th of the total star systems in the database); quadrant (1/8th to
+1/4 of the total stars in the database); galaxy : the entire star database." The style decides
+which stars of the catalogue a match takes (`map_style.star_region` and its numbers, `database.md`
+"Map styles"); the knobs of each system (habitable planets, resource bodies, routes) stay as they
+are. The launchers and `--style` list them in this order (`def.sort`); the keys of Planet and
+Cluster stay `map.one_world` and `map.many_worlds`, so saves and scripts keep working.
 
-| Style | The match's systems |
+| Style (key) | The match's systems |
 | --- | --- |
-| One World | one home system per race and nothing else (a quick match) |
-| Solar | one star system for everyone: a catalogue star chosen by the seed, whose system holds every player's home, one to three more planets and the resource bodies. With separate worlds each race has its own planet of the system. Travel is within the system only |
-| Cluster | the earlier Many Worlds (the key `map.many_worlds` stays): a seeded star and its nearest neighbours, the homes plus two to four more systems; same seeds, same universes |
-| Quadrant | every catalogue star in one galactic quadrant as astronomers number them (galactic longitude seen from the Sun: I 0-90, II 90-180, III 180-270, IV 270-360 degrees; 163 to 225 stars); the seed chooses the quadrant |
-| Galaxy | every catalogue star: 745 systems. Held back by task 89 for want of memory and offered again since task 99, which made system space cost little until it is used ("Scale" below) |
+| Planet (`map.one_world`) | one planet for everyone, whatever the start placement: a seeded catalogue star whose system holds that planet (median size) and three to five resource bodies (its moons and a belt), no other planet and no routes. From the space age ships and orbital craft reach its orbit (tested, `planet_style_reaches_orbit`) |
+| Solar (`map.solar`) | one complete star system for everyone: a catalogue star chosen by the seed, whose system holds every player's home, one to three more planets and six to twelve resource bodies, as generated. With separate worlds each race has its own planet of the system. Travel is within the system only |
+| Cluster (`map.many_worlds`) | 10 to 15 systems in all, whatever the number of races (each race its own home system, the rest neutral): a seeded star and its nearest neighbours within `star_map_radius`; the seed picks the total |
+| Sector (`map.sector`) | a run of catalogue stars in galactic longitude seen from the Sun: a seeded star and the ones after it around the circle, 1/8 to 1/6 of the catalogue (94 to 124 of 745 stars), the count seeded. On the star map it is a slice of the sky around the Sun, like a slice of a pie |
+| Quadrant (`map.quadrant`) | the same with 1/8 to 1/4 of the catalogue (94 to 186 stars). Until task 109 it was one of the four galactic quadrants as astronomers number them (163 to 225 stars, up to 30 %, too many) |
+| Galaxy (`map.galaxy`) | every catalogue star: 745 systems. Held back by task 89 for want of memory and offered again since task 99, which made system space cost little until it is used ("Scale" below) |
 
-In Quadrant (and Galaxy) most systems are empty of people: beyond the homes each holds up to two
+The shares are of the catalogue's star count when the rules load (`region_min_den` and
+`region_max_den`: at least 1/8 rounded up, at most 1/6 or 1/4 rounded down), so another catalogue
+keeps the proportions. Like a Cluster's centre star, each layout attempt draws its own wedge
+(start and count) from the seed, so the retries for fair homes also try other slices.
+
+In Sector, Quadrant and Galaxy most systems are empty of people: beyond the homes each holds up to two
 planets and a few resource bodies. The homes are placed and checked as in a Cluster (density band,
 farthest-point placements, two routes each, equal contents, comparable value within two routes);
 a star's density is measured over its eight nearest neighbours there (three in a Cluster), so no
@@ -186,6 +196,9 @@ on the same planet"), the `match_option` `start_placement`:
   the one system), with the usual start spacing and fairness checks on that planet; when the
   planet has no fair room for them all, the players are dealt over two home planets, then three,
   and so on (eight players of three races fitted on one median planet in every style tried).
+- **Planet** (task 109, `map_style.shared_home`) has one planet, so every player starts on it
+  under either choice (it is not dealt over more planets: a planet without a start for every
+  player is a generation error, as in any style).
 
 `rom-mapgen` reads the option (`StartPlacement`, `generate_universe_placed`); `rom universe` and
 `rom duel --universe` take `--start-placement separate|together`. The launchers do not offer it

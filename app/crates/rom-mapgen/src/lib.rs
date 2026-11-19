@@ -9,7 +9,7 @@ pub use universe::{
     BLACK_HOLE_NAME, Body, CELESTIAL_PLANET_NAME, CELESTIAL_SYSTEM_NAME, DormantSurface, FAIR_HOPS,
     FAIR_NEAR_PCT, FAIR_VALUE_PCT, HomeShare, Route, StarSystem, StartPlacement, Universe,
     UniverseRequest, generate_universe, generate_universe_placed, plan_universe,
-    plan_universe_placed, seed_quadrant,
+    plan_universe_placed, wedge_size,
 };
 
 use rom_rules::{DefId, FeaturePattern, Layer, MapStyleFeature, Rules};
