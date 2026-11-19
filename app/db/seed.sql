@@ -293,12 +293,13 @@ INSERT INTO def(kind,key,name) VALUES ('map_style','map.one_world','One World'),
 INSERT INTO map_style(id,planets,fluid_pct,space_pct)
  SELECT id, CASE key WHEN 'map.one_world' THEN 1 ELSE 4 END, CASE key WHEN 'map.one_world' THEN 50 ELSE 35 END, CASE key WHEN 'map.one_world' THEN 55 ELSE 70 END
  FROM def WHERE kind='map_style';
--- universe knobs; one world: a quick match, one home system per race and nothing else
+-- universe knobs; one world: one planet (task 109, below); many worlds (Cluster): 10 to 15
+-- systems in all, the homes among them
 WITH v(k,n0,n1,h0,h1,r0,r1,p0,pm,p1,extra,radius) AS (VALUES
-  ('map.one_world',   0,0, 1,1, 3,5, 128,192,256, 30,1000),
-  ('map.many_worlds', 2,4, 1,3, 3,8, 128,192,256, 30,1000))
+  ('map.one_world',   1,1,   1,1, 3,5, 128,192,256, 30,1000),
+  ('map.many_worlds', 10,15, 1,3, 3,8, 128,192,256, 30,1000))
 UPDATE map_style SET
-  neutral_systems_min=v.n0, neutral_systems_max=v.n1,
+  systems_min=v.n0, systems_max=v.n1,
   habitable_per_system_min=v.h0, habitable_per_system_max=v.h1,
   resource_bodies_per_system_min=v.r0, resource_bodies_per_system_max=v.r1,
   planet_n_min=v.p0, planet_n_median=v.pm, planet_n_max=v.p1,
@@ -5282,9 +5283,9 @@ INSERT INTO map_style(id,planets,fluid_pct,space_pct,polar_cap_pct,start_latitud
 -- star_map_radius bounds the nearest region only; the others span the catalogue (Nu Cephei at 8 243).
 WITH v(k,region,h0,h1,r0,r1,radius) AS (VALUES
   ('map.solar',    'single',   2,4, 6,12, 1000),
-  ('map.quadrant', 'quadrant', 0,2, 2,6,  8300),
+  ('map.quadrant', 'wedge',    0,2, 2,6,  8300),
   ('map.galaxy',   'all',      0,2, 2,6,  8300))
-UPDATE map_style SET star_region=v.region, neutral_systems_min=0, neutral_systems_max=0,
+UPDATE map_style SET star_region=v.region, systems_min=1, systems_max=1,
   habitable_per_system_min=v.h0, habitable_per_system_max=v.h1,
   resource_bodies_per_system_min=v.r0, resource_bodies_per_system_max=v.r1, star_map_radius=v.radius
  FROM v JOIN def d ON d.key=v.k WHERE map_style.id=d.id;
@@ -5294,6 +5295,40 @@ INSERT INTO map_style_feature(map_style_id,feature_def_id,region_kind,pattern,ch
   f.size_min, f.size_max, f.start_min_dist, f.start_max_dist
  FROM def d, map_style_feature f JOIN def md ON md.id=f.map_style_id AND md.key='map.many_worlds'
  WHERE d.key IN ('map.solar','map.quadrant','map.galaxy') ORDER BY d.id, f.id;
+
+-- Task 109: the presets as the owner defines them (2026-11-19; docs/world-model.md "Map styles"),
+-- listed in this order (def.sort). Planet (map.one_world, key kept): one planet in one system, every
+-- player on it, its moons and belt around it. Solar: one complete system. Cluster: 10 to 15
+-- systems (above). Sector and Quadrant: a run of catalogue stars in galactic longitude holding
+-- 1/8 to 1/6 and 1/8 to 1/4 of the catalogue. Galaxy: every star. Sector is defined last so every
+-- earlier definition id stays.
+INSERT INTO def(kind,key,name) VALUES ('map_style','map.sector','Sector');
+INSERT INTO map_style(id,planets,fluid_pct,space_pct,polar_cap_pct,start_latitude_max_mdeg,polar_terrain_id,params,
+  systems_min,systems_max,habitable_per_system_min,habitable_per_system_max,
+  resource_bodies_per_system_min,resource_bodies_per_system_max,
+  planet_n_min,planet_n_median,planet_n_max,route_extra_pct,star_map_radius,life_n,life_terrain_id)
+ SELECT d.id, m.planets, m.fluid_pct, m.space_pct, m.polar_cap_pct, m.start_latitude_max_mdeg, m.polar_terrain_id, m.params,
+  m.systems_min, m.systems_max, m.habitable_per_system_min, m.habitable_per_system_max,
+  m.resource_bodies_per_system_min, m.resource_bodies_per_system_max,
+  m.planet_n_min, m.planet_n_median, m.planet_n_max, m.route_extra_pct, m.star_map_radius, m.life_n, m.life_terrain_id
+ FROM def d, map_style m JOIN def md ON md.id=m.id AND md.key='map.quadrant'
+ WHERE d.key='map.sector';
+INSERT INTO map_style_feature(map_style_id,feature_def_id,region_kind,pattern,chance_pct,coverage_pct,clumps_min,clumps_max,
+  size_min,size_max,start_min_dist,start_max_dist)
+ SELECT d.id, f.feature_def_id, f.region_kind, f.pattern, f.chance_pct, f.coverage_pct, f.clumps_min, f.clumps_max,
+  f.size_min, f.size_max, f.start_min_dist, f.start_max_dist
+ FROM def d, map_style_feature f JOIN def md ON md.id=f.map_style_id AND md.key='map.quadrant'
+ WHERE d.key='map.sector' ORDER BY f.id;
+WITH v(k,region,den0,den1,shared) AS (VALUES
+  ('map.one_world',   'single',  1,1, 1),
+  ('map.sector',      'wedge',   8,6, 0),
+  ('map.quadrant',    'wedge',   8,4, 0))
+UPDATE map_style SET star_region=v.region, region_min_den=v.den0, region_max_den=v.den1, shared_home=v.shared
+ FROM v JOIN def d ON d.key=v.k WHERE map_style.id=d.id;
+WITH v(k,name,sort) AS (VALUES
+  ('map.one_world','Planet',1), ('map.solar','Solar',2), ('map.many_worlds','Cluster',3),
+  ('map.sector','Sector',4), ('map.quadrant','Quadrant',5), ('map.galaxy','Galaxy',6))
+UPDATE def SET name=v.name, sort=v.sort FROM v WHERE def.key=v.k;
 
 -- Start placement, a setup option for every map style (owner, 2026-11-18): each race on its own
 -- home planet (separate, the default), or players of different races together on as few home

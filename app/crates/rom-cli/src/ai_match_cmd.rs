@@ -321,11 +321,8 @@ pub fn build_world_with(
                 rules
                     .map_styles
                     .values()
-                    .max_by(|a, b| {
-                        a.neutral_systems_max
-                            .cmp(&b.neutral_systems_max)
-                            .then(b.id.cmp(&a.id))
-                    })
+                    .filter(|s| s.star_region == rom_rules::StarRegion::Nearest)
+                    .max_by(|a, b| a.systems_max.cmp(&b.systems_max).then(b.id.cmp(&a.id)))
                     .ok_or("the rules have no map style")?
                     .id
             }

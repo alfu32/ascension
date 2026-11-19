@@ -1,8 +1,9 @@
 //! A universe: star systems on a star map, the bodies on their orbits and the
 //! routes between systems. The systems are a region of the real star catalogue
 //! (`rom_rules::Star`), in 3D, chosen by the map style's `star_region`: the stars nearest
-//! a seeded one, one star, one galactic quadrant or the whole catalogue (task 89). Integer
-//! arithmetic only; the same request always yields the same universe.
+//! a seeded one, one star, a wedge of galactic longitude sized as a share of the catalogue or
+//! the whole catalogue (tasks 89, 109). Integer arithmetic only; the same request always yields
+//! the same universe.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -24,27 +25,23 @@ const GOLDEN_MDEG: i64 = 137_508;
 const TURN_MDEG: i64 = 360_000;
 /// Star map layouts tried before the most balanced one is kept.
 const ATTEMPTS: u64 = 64;
-/// Layouts tried for a quadrant or the whole catalogue: the homes' surroundings vary more among
+/// Layouts tried for a wedge or the whole catalogue: the homes' surroundings vary more among
 /// hundreds of mostly empty systems, so fewer layouts pass the fairness checks.
 const WIDE_ATTEMPTS: u64 = 256;
 /// Routes counted from a home system when its resource-body value is measured.
 pub const FAIR_HOPS: u32 = 2;
 /// The poorest home system must reach this share of the richest one's value.
 pub const FAIR_VALUE_PCT: i64 = 80;
-/// Most neutral systems a nearest-stars region asks for: more than the catalogue holds (745),
-/// so the whole catalogue may be taken this way too.
-const MAX_NEUTRAL_SYSTEMS: i64 = 1024;
+/// Most systems a nearest-stars region asks for: more than the catalogue holds (745), so the
+/// whole catalogue may be taken this way too.
+const MAX_SYSTEMS: i64 = 1024;
 /// Most planets of a Solar system (every home planet and the others): its outermost orbit stays
 /// within an `i32` radius.
 const MAX_SOLAR_PLANETS: i64 = 16;
-/// Milli-degrees of galactic longitude in one quadrant.
-const QUADRANT_MDEG: i64 = 90_000;
-/// Mixed into the seed to choose the galactic quadrant, once for every layout attempt.
-const QUADRANT_STREAM: u64 = 0x7175_6164_7261_6e74;
 /// Most bodies orbiting one star.
 const MAX_ORBITS: i64 = 64;
 /// Neighbours whose distances measure a star's local density: three in a nearest-stars region;
-/// more in a quadrant or the whole catalogue, where a star on the rim of the region has close
+/// more in a wedge or the whole catalogue, where a star on the rim of the region has close
 /// neighbours on one side only and few systems within two routes.
 const REACH_NEIGHBOURS: usize = 3;
 const WIDE_REACH_NEIGHBOURS: usize = 8;
@@ -208,7 +205,7 @@ fn segment_dist2(a: Point, b: Point, c: Point) -> i64 {
 
 fn knobs_ok(style: &MapStyle) -> bool {
     let pairs = [
-        (style.neutral_systems_min, style.neutral_systems_max),
+        (style.systems_min, style.systems_max),
         (
             style.habitable_per_system_min,
             style.habitable_per_system_max,
@@ -220,7 +217,9 @@ fn knobs_ok(style: &MapStyle) -> bool {
     ];
     pairs.iter().all(|&(lo, hi)| 0 <= lo && lo <= hi)
         && style.habitable_per_system_max + style.resource_bodies_per_system_max <= MAX_ORBITS
-        && style.neutral_systems_max <= MAX_NEUTRAL_SYSTEMS
+        && style.systems_max <= MAX_SYSTEMS
+        && 1 <= style.region_max_den
+        && style.region_max_den <= style.region_min_den
         && style.planet_n_min <= style.planet_n_median
         && style.planet_n_median <= style.planet_n_max
         && PLANET_N_RANGE.contains(&style.planet_n_min)
@@ -765,18 +764,31 @@ fn name_bodies(star: &str, bodies: &mut [Body]) {
     }
 }
 
-/// The catalogue stars of one galactic quadrant (0 for quadrant I), in id order.
-fn quadrant_stars(rules: &Rules, quadrant: i64) -> Vec<&Star> {
-    rules
-        .stars
-        .values()
-        .filter(|s| s.glon_mdeg.div_euclid(QUADRANT_MDEG) == quadrant)
-        .collect()
+/// How many stars a wedge region of `style` takes from a catalogue of `n`: from 1/`region_min_den`
+/// of them (rounded up) to 1/`region_max_den` (rounded down), at least one (task 109).
+pub fn wedge_size(style: &MapStyle, n: usize) -> (usize, usize) {
+    let den = |d: i64| usize::try_from(d.max(1)).unwrap_or(usize::MAX);
+    let hi = (n / den(style.region_max_den)).clamp(n.min(1), n);
+    let lo = n.div_ceil(den(style.region_min_den)).clamp(n.min(1), hi);
+    (lo, hi)
 }
 
-/// The galactic quadrant (0 for quadrant I) a seed chooses; every layout attempt keeps it.
-pub fn seed_quadrant(seed: u64) -> u8 {
-    (mix64(seed ^ QUADRANT_STREAM) % 4) as u8
+/// The catalogue stars a wedge region takes (task 109), in id order: with the stars ordered by
+/// galactic longitude seen from the Sun (ties by id), a random star and the ones after it,
+/// around the circle, up to a random count within [`wedge_size`]. Each layout attempt draws its
+/// own from its seeded generator, as a nearest region draws its centre.
+fn wedge_stars<'a>(rng: &mut SimRng, rules: &'a Rules, style: &MapStyle) -> Vec<&'a Star> {
+    let mut ring: Vec<&Star> = rules.stars.values().collect();
+    if ring.is_empty() {
+        return ring;
+    }
+    ring.sort_by_key(|s| (s.glon_mdeg, s.id));
+    let (lo, hi) = wedge_size(style, ring.len());
+    let count = pick(rng, lo as i64, hi as i64) as usize;
+    let first = rng.range(0, ring.len() as u32) as usize;
+    let mut region: Vec<&Star> = (0..count).map(|i| ring[(first + i) % ring.len()]).collect();
+    region.sort_by_key(|s| s.id);
+    region
 }
 
 fn layout(
@@ -785,16 +797,15 @@ fn layout(
     style: &MapStyle,
     races: &[DefId],
     rows: &[&MapStyleFeature],
-    quadrant: i64,
 ) -> Option<Layout> {
     let homes = races.len();
     let region = match style.star_region {
         StarRegion::Nearest => {
-            let neutral = pick(rng, style.neutral_systems_min, style.neutral_systems_max) as usize;
-            choose_region(rng, rules, homes + neutral, style.star_map_radius)?
+            let total = (pick(rng, style.systems_min, style.systems_max) as usize).max(homes);
+            choose_region(rng, rules, total, style.star_map_radius)?
         }
         StarRegion::Single => return solar_layout(rng, rules, style, races, rows),
-        StarRegion::Quadrant => quadrant_stars(rules, quadrant),
+        StarRegion::Wedge => wedge_stars(rng, rules, style),
         StarRegion::All => rules.stars.values().collect(),
     };
     let k = region.len();
@@ -803,7 +814,7 @@ fn layout(
     }
     let pts: Vec<Point> = region.iter().map(|s| star_point(s)).collect();
     let neighbours = match style.star_region {
-        StarRegion::Quadrant | StarRegion::All => WIDE_REACH_NEIGHBOURS,
+        StarRegion::Wedge | StarRegion::All => WIDE_REACH_NEIGHBOURS,
         StarRegion::Nearest | StarRegion::Single => REACH_NEIGHBOURS,
     };
     let chosen = place_homes(rng, &pts, homes, neighbours);
@@ -1151,7 +1162,7 @@ pub fn plan_universe_placed(
     placement: StartPlacement,
 ) -> Result<Universe, MapGenError> {
     let mut checked = check_request(rules, request)?;
-    if placement == StartPlacement::Together {
+    if placement == StartPlacement::Together || checked.style.shared_home {
         checked.together(1)?;
     }
     plan(&checked, request).map(|(u, _)| u)
@@ -1162,16 +1173,15 @@ type HomePlayers = BTreeMap<u32, Vec<usize>>;
 
 fn plan(c: &Checked, request: &UniverseRequest) -> Result<(Universe, HomePlayers), MapGenError> {
     let mut best: Option<(i64, (Universe, HomePlayers))> = None;
-    let quadrant = i64::from(seed_quadrant(request.seed));
     let attempts = match c.style.star_region {
         StarRegion::Nearest | StarRegion::Single => ATTEMPTS,
-        StarRegion::Quadrant | StarRegion::All => WIDE_ATTEMPTS,
+        StarRegion::Wedge | StarRegion::All => WIDE_ATTEMPTS,
     };
     for attempt in 0..attempts {
         let mut rng = SimRng::new(mix64(
             request.seed ^ attempt.wrapping_mul(0xd1b5_4a32_d192_ed03),
         ));
-        let Some(layout) = layout(&mut rng, c.rules, c.style, &c.races, &c.rows, quadrant) else {
+        let Some(layout) = layout(&mut rng, c.rules, c.style, &c.races, &c.rows) else {
             continue;
         };
         let players: HomePlayers = layout
@@ -1234,9 +1244,9 @@ fn plan(c: &Checked, request: &UniverseRequest) -> Result<(Universe, HomePlayers
         (u, players)
     })
     .ok_or(MapGenError::StarMap(match c.style.star_region {
-        StarRegion::Nearest => c.races.len() as u32 + c.style.neutral_systems_max as u32,
+        StarRegion::Nearest => (c.style.systems_max as u32).max(c.races.len() as u32),
         StarRegion::Single => 1,
-        StarRegion::Quadrant => quadrant_stars(c.rules, quadrant).len() as u32,
+        StarRegion::Wedge => wedge_size(c.style, c.rules.stars.len()).1 as u32,
         StarRegion::All => c.rules.stars.len() as u32,
     }))
 }
@@ -1355,13 +1365,19 @@ pub fn generate_universe(
 /// [`generate_universe`] with the start placement chosen for the match. Together: every player
 /// on one home planet; when that planet has no fair room for them all (no start for every
 /// player, or its starts fail the planet's fairness checks), the players are dealt over two
-/// home planets, then three, and so on.
+/// home planets, then three, and so on. A `shared_home` style (Planet) puts every player on its
+/// one home planet whatever the placement.
 pub fn generate_universe_placed(
     rules: &Rules,
     request: &UniverseRequest,
     placement: StartPlacement,
 ) -> Result<Universe, MapGenError> {
     let mut checked = check_request(rules, request)?;
+    if checked.style.shared_home {
+        // Planet (task 109): one home planet for everyone, fair or not.
+        checked.together(1)?;
+        return generate_homes(&checked, request, false);
+    }
     if placement == StartPlacement::Separate {
         return generate_homes(&checked, request, false);
     }

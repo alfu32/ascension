@@ -453,11 +453,7 @@ impl Rules {
             report("polar_terrain_id is required when polar_cap_pct is nonzero".into());
         }
         for (knob, min, max) in [
-            (
-                "neutral_systems",
-                style.neutral_systems_min,
-                style.neutral_systems_max,
-            ),
+            ("systems", style.systems_min, style.systems_max),
             (
                 "habitable_per_system",
                 style.habitable_per_system_min,
@@ -509,6 +505,12 @@ impl Rules {
             report(format!(
                 "route_extra_pct {} is negative",
                 style.route_extra_pct
+            ));
+        }
+        if !(1 <= style.region_max_den && style.region_max_den <= style.region_min_den) {
+            report(format!(
+                "region_min_den {} and region_max_den {} are not 1 <= max_den <= min_den",
+                style.region_min_den, style.region_max_den
             ));
         }
         if !(1..=MAX_STAR_MAP_RADIUS).contains(&style.star_map_radius) {

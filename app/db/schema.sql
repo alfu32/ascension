@@ -664,8 +664,9 @@ CREATE TABLE et_view_scale (
 
 -- ── A12. Map styles and match options ───────────────────────────────────────
 -- A style is a recipe for a whole universe (and, for tests and skirmishes, a flat map).
--- Universe knobs: one home system per race present, plus neutral systems; every
--- `_min/_max` pair must satisfy min ≤ max (checked by the rules loader).
+-- Universe knobs: which catalogue stars a universe takes (star_region and its numbers), what
+-- each system holds; every `_min/_max` pair must satisfy min ≤ max (checked by the rules loader).
+-- The launchers list the styles by def.sort.
 CREATE TABLE map_style (
   id        INTEGER PRIMARY KEY REFERENCES def(id),
   planets   INTEGER NOT NULL DEFAULT 1,  -- flat map: planetary terrains (≥ 1 home terrain)
@@ -675,8 +676,8 @@ CREATE TABLE map_style (
   start_latitude_max_mdeg INTEGER NOT NULL DEFAULT 60000, -- absolute latitude, 0..=90000
   polar_terrain_id INTEGER REFERENCES terrain(id), -- required when caps are enabled
   params    TEXT NOT NULL DEFAULT '{}', -- JSON: generator knobs
-  neutral_systems_min INTEGER NOT NULL DEFAULT 2,           -- systems without a home race
-  neutral_systems_max INTEGER NOT NULL DEFAULT 4,
+  systems_min INTEGER NOT NULL DEFAULT 4,  -- task 109: systems in a nearest region, homes included;
+  systems_max INTEGER NOT NULL DEFAULT 6,  -- the seed picks the total, never fewer than one per race
   habitable_per_system_min INTEGER NOT NULL DEFAULT 1,      -- habitable planets per system (≥ 1)
   habitable_per_system_max INTEGER NOT NULL DEFAULT 3,
   resource_bodies_per_system_min INTEGER NOT NULL DEFAULT 3, -- moons, asteroids, small planets
@@ -686,18 +687,28 @@ CREATE TABLE map_style (
   planet_n_max    INTEGER NOT NULL DEFAULT 256,
   route_extra_pct INTEGER NOT NULL DEFAULT 30,   -- extra routes beyond a spanning tree, % of its edges
   star_map_radius INTEGER NOT NULL DEFAULT 1000, -- widest region of the star catalogue a universe may span: every system within this many map units of its centre star
-  star_region     TEXT NOT NULL DEFAULT 'nearest' CHECK (star_region IN ('nearest','single','quadrant','all')),
-                                       -- task 89: which catalogue stars a universe takes.
-                                       -- nearest: a seeded star and its nearest neighbours, one
-                                       -- system per race plus neutral_systems_min..max, within
-                                       -- star_map_radius; single: one seeded star whose system
-                                       -- holds every race's home planet; quadrant: every star in
-                                       -- one seeded galactic quadrant; all: every catalogue star.
-                                       -- neutral_systems_* and star_map_radius apply to nearest only
+  star_region     TEXT NOT NULL DEFAULT 'nearest' CHECK (star_region IN ('nearest','single','wedge','all')),
+                                       -- task 89, 109: which catalogue stars a universe takes.
+                                       -- nearest: a seeded star and its nearest neighbours,
+                                       -- systems_min..max in all, within star_map_radius;
+                                       -- single: one seeded star whose system holds every home
+                                       -- planet; wedge: a run of stars in galactic longitude from
+                                       -- a seeded star, holding 1/region_min_den to
+                                       -- 1/region_max_den of the catalogue; all: every star.
+                                       -- systems_* and star_map_radius apply to nearest only
+  region_min_den  INTEGER NOT NULL DEFAULT 1 CHECK (region_min_den >= 1),
+                                       -- task 109, wedge only: the region's smallest share of the
+                                       -- catalogue's stars is 1/region_min_den (rounded up) ...
+  region_max_den  INTEGER NOT NULL DEFAULT 1 CHECK (region_max_den >= 1),
+                                       -- ... and its largest 1/region_max_den (rounded down)
+  shared_home     INTEGER NOT NULL DEFAULT 0 CHECK (shared_home IN (0,1)),
+                                       -- task 109: 1 puts every player on one home planet,
+                                       -- whatever the start placement (the Planet style)
   life_n          INTEGER NOT NULL DEFAULT 64 CHECK (life_n BETWEEN 16 AND 512),
                                        -- task 77: cube face size of the dormant surface every
                                        -- resource body gets before play (small bodies grow to it)
-  life_terrain_id INTEGER REFERENCES terrain(id) -- the barren ground of a dormant surface; NULL: none
+  life_terrain_id INTEGER REFERENCES terrain(id), -- the barren ground of a dormant surface; NULL: none
+  CHECK (region_max_den <= region_min_den)
 ) STRICT;
 
 -- What the generator scatters: forests, mountains, deposits, rare resources, ruins.

@@ -688,13 +688,14 @@ impl crate::load::SqlEnum for RegionKind {
 /// Which stars of the catalogue a universe takes (`map_style.star_region`, task 89).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StarRegion {
-    /// SQL value `nearest`: a seeded star and its nearest neighbours, one system per race plus
-    /// the neutral systems, within `star_map_radius`.
+    /// SQL value `nearest`: a seeded star and its nearest neighbours, `systems_min..=max` in
+    /// all (at least one per race), within `star_map_radius`.
     Nearest,
     /// SQL value `single`: one seeded star whose system holds every race's home planet.
     Single,
-    /// SQL value `quadrant`: every star in one seeded galactic quadrant.
-    Quadrant,
+    /// SQL value `wedge`: a run of stars in galactic longitude from a seeded star, holding
+    /// 1/`region_min_den` to 1/`region_max_den` of the catalogue (task 109).
+    Wedge,
     /// SQL value `all`: every star of the catalogue.
     All,
 }
@@ -703,7 +704,7 @@ impl crate::load::SqlEnum for StarRegion {
         match value {
             "nearest" => Some(Self::Nearest),
             "single" => Some(Self::Single),
-            "quadrant" => Some(Self::Quadrant),
+            "wedge" => Some(Self::Wedge),
             "all" => Some(Self::All),
             _ => None,
         }
@@ -1878,10 +1879,10 @@ pub struct MapStyle {
     pub polar_terrain_id: Option<DefId>,
     /// The `params` column.
     pub params: String,
-    /// Fewest systems without a home race.
-    pub neutral_systems_min: i64,
-    /// Most systems without a home race.
-    pub neutral_systems_max: i64,
+    /// Fewest systems of a nearest region, homes included (task 109).
+    pub systems_min: i64,
+    /// Most systems of a nearest region, homes included; never fewer than one per race.
+    pub systems_max: i64,
     /// Fewest habitable planets per system.
     pub habitable_per_system_min: i64,
     /// Most habitable planets per system.
@@ -1904,6 +1905,13 @@ pub struct MapStyle {
     pub star_map_radius: i64,
     /// Which catalogue stars a universe takes (task 89).
     pub star_region: StarRegion,
+    /// A wedge region's smallest share of the catalogue's stars is 1/`region_min_den`, rounded up
+    /// (task 109).
+    pub region_min_den: i64,
+    /// A wedge region's largest share of the catalogue's stars is 1/`region_max_den`, rounded down.
+    pub region_max_den: i64,
+    /// Every player starts on one home planet, whatever the start placement (task 109, Planet).
+    pub shared_home: bool,
     /// Cube face size of the dormant surface every resource body gets before play (task 77).
     pub life_n: i64,
     /// The barren ground of a dormant surface; `None`: resource bodies get none.

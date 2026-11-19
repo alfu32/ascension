@@ -11,7 +11,7 @@ pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <f
 [--middle-drag <turn|pan>] [--invert-horizontal-turn] [--invert-vertical-turn] \
 [--gallery <all|units|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
 [--model <model id>] [--parts] [--pose <idle|move|attack|work>] [--anim-time <seconds>] \
-[--gallery-manifest <file.json>]\n\n--sphere N builds a universe with home face size N (64..=512).\n--single-planet preserves an isolated sphere (16..=512; default 192).";
+[--gallery-manifest <file.json>]\n\n--style takes a map style key: map.one_world (Planet), map.solar (Solar), map.many_worlds (Cluster), map.sector (Sector), map.quadrant (Quadrant) or map.galaxy (Galaxy).\n--sphere N builds a universe with home face size N (64..=512).\n--single-planet preserves an isolated sphere (16..=512; default 192).";
 
 /// The workspace version, shown in titles, menus and the HUD.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

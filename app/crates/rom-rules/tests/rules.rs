@@ -706,17 +706,16 @@ fn universe_knobs_load_and_validate() {
     // Star, habitable, resource, and the celestial home's black hole and planet (task 76).
     assert_eq!(rules.body_kinds.len(), 5);
     let one = &rules.map_styles[&rules.id_of("map.one_world").unwrap()];
-    assert_eq!(
-        (one.neutral_systems_min, one.neutral_systems_max),
-        (0, 0),
-        "one world has no neutral systems"
+    assert!(
+        one.shared_home,
+        "Planet: every player on one planet (task 109)"
     );
     assert_eq!(
         (one.habitable_per_system_min, one.habitable_per_system_max),
         (1, 1)
     );
     let many = &rules.map_styles[&rules.id_of("map.many_worlds").unwrap()];
-    assert_eq!((many.neutral_systems_min, many.neutral_systems_max), (2, 4));
+    assert_eq!((many.systems_min, many.systems_max), (10, 15));
     assert_eq!(
         (many.habitable_per_system_min, many.habitable_per_system_max),
         (1, 3)
@@ -756,16 +755,30 @@ fn universe_knobs_load_and_validate() {
             assert_eq!(rules.tags[&tag].key, "starship");
         }
     }
-    // Task 89: the region each style takes, and the start placement option.
-    for (key, region) in [
-        ("map.one_world", StarRegion::Nearest),
-        ("map.many_worlds", StarRegion::Nearest),
-        ("map.solar", StarRegion::Single),
-        ("map.quadrant", StarRegion::Quadrant),
-        ("map.galaxy", StarRegion::All),
+    // Task 89, 109: the region each style takes, in the launchers' order (def.sort), and the
+    // start placement option.
+    let mut order: Vec<_> = rules.map_styles.keys().copied().collect();
+    order.sort_by_key(|id| (rules.def(*id).sort, *id));
+    let order: Vec<_> = order
+        .iter()
+        .map(|id| rules.def(*id).name.as_str())
+        .collect();
+    assert_eq!(
+        order,
+        ["Planet", "Solar", "Cluster", "Sector", "Quadrant", "Galaxy"]
+    );
+    for (key, region, dens) in [
+        ("map.one_world", StarRegion::Single, (1, 1)),
+        ("map.many_worlds", StarRegion::Nearest, (1, 1)),
+        ("map.solar", StarRegion::Single, (1, 1)),
+        ("map.sector", StarRegion::Wedge, (8, 6)),
+        ("map.quadrant", StarRegion::Wedge, (8, 4)),
+        ("map.galaxy", StarRegion::All, (1, 1)),
     ] {
         let style = &rules.map_styles[&rules.id_of(key).unwrap()];
         assert_eq!(style.star_region, region, "{key}");
+        assert_eq!((style.region_min_den, style.region_max_den), dens, "{key}");
+        assert_eq!(style.shared_home, key == "map.one_world", "{key}");
         assert_eq!(
             rules.map_style_features[&style.id].len(),
             rules.map_style_features[&many.id].len(),
@@ -787,9 +800,9 @@ fn universe_knobs_load_and_validate() {
 #[test]
 fn bad_knob_range_is_reported() {
     assert_problem(
-        "UPDATE map_style SET neutral_systems_min=5, neutral_systems_max=2
+        "UPDATE map_style SET systems_min=5, systems_max=2
         WHERE id=(SELECT id FROM def WHERE key='map.many_worlds');",
-        "neutral_systems_min 5",
+        "systems_min 5",
         &["map.many_worlds"],
     );
     assert_problem(

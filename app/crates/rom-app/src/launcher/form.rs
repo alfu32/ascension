@@ -50,7 +50,7 @@ controls! {
     ("map-size", 0, "256x256", "Flat map width × height in tiles; ignored for spheres.", false),
     ("single-planet", 0, "false", "Isolated sphere; defaults to face size 192. Excludes universe.", true),
     ("universe", 0, "false", "Generate star systems; also implied by sphere unless isolated.", true),
-    ("style", 0, "", "Map style from the rules; blank selects the first in id order.", false),
+    ("style", 0, "", "Map style from the rules: Planet, Solar, Cluster, Sector, Quadrant or Galaxy. Blank: Cluster in a universe, the first in id order otherwise.", false),
     ("start-placement", 0, "", "Where players start in a universe: separate home worlds (default), or players of different races together on as few home planets as fairness allows. Ignored on flat maps and single planets.", false),
     ("seed", 0, "1", "Map seed (unsigned integer). Random chooses a fresh seed.", false),
     ("players", 0, "4", "Number of players, at least 1; factions override this count.", false),

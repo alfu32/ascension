@@ -11,7 +11,7 @@ use rom_sim::{
 
 use crate::mapgen_cmd::ppm;
 
-const USAGE: &str = "usage: rom universe --db <rules.db> --style <key> --seed <n> --factions <key,key,...> [--start-placement separate|together] [--ppm <file>] [--simulate <ticks>] [--space]";
+const USAGE: &str = "usage: rom universe --db <rules.db> --style <key> --seed <n> --factions <key,key,...> [--start-placement separate|together] [--ppm <file>] [--simulate <ticks>] [--space]\n  styles: map.one_world (Planet), map.solar (Solar), map.many_worlds (Cluster), map.sector (Sector), map.quadrant (Quadrant), map.galaxy (Galaxy)";
 /// Builders placed around each starting city.
 const BUILDERS: usize = 3;
 /// Ticks between rounds of random move orders for idle units.

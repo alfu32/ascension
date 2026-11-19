@@ -136,7 +136,10 @@ fn a_quadrant_match_runs_the_same_twice_and_survives_a_save() {
     let rules = common::rules();
     let mut a = universe(&rules, "map.quadrant");
     let mut b = universe(&rules, "map.quadrant");
-    assert!(a.systems().len() > 150, "a quadrant");
+    assert!(
+        a.systems().len() > 90,
+        "a quadrant: 1/8 to 1/4 of the catalogue (task 109)"
+    );
     assert_eq!(a.hash(), b.hash());
     ticks(&mut a, 200);
     ticks(&mut b, 200);
