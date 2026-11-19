@@ -1296,7 +1296,9 @@ impl Controller {
         self.submit(world, ship, "travel", None, None, Some(at), queue)
     }
 
-    /// A right click in space: attack a ship, orbit a body, travel to a system or move.
+    /// A right click in space: attack a ship, orbit a body, travel to a system or move. A body or
+    /// a point of another system's plane sends the ship there along the routes (task 111): it
+    /// arrives at that point if the player has explored the system, at its edge if not.
     fn space_right_click(
         &mut self,
         world: &mut World,
@@ -1326,14 +1328,32 @@ impl Controller {
             let armed = world
                 .entity(id)
                 .is_some_and(|e| !world.rules().entity_types[&e.type_id].weapons.is_empty());
+            let here = world
+                .entity(id)
+                .and_then(|e| world.body(e.pos.body))
+                .map(|b| b.system);
+            let elsewhere = |world: &World, body: BodyId| {
+                world.body(body).is_some_and(|b| Some(b.system) != here)
+            };
             if let (Some(foe), true) = (foe, armed) {
                 self.submit(world, id, "attack", None, Some(foe), None, mods.shift);
-            } else if let Some(body) = body {
-                self.order_orbit(world, id, BodyId(body), mods.shift);
+            } else if let Some(body) = body.map(BodyId) {
+                if elsewhere(world, body)
+                    && let Some(at) = world.body_position(body)
+                {
+                    self.submit(world, id, "travel", None, None, Some(at), mods.shift);
+                } else {
+                    self.order_orbit(world, id, body, mods.shift);
+                }
             } else if let Some(system) = system {
                 self.order_travel(world, id, system, mods.shift);
             } else if let Some(at) = point {
-                self.submit(world, id, "move", None, None, Some(at), mods.shift);
+                let kind = if elsewhere(world, at.body) {
+                    "travel"
+                } else {
+                    "move"
+                };
+                self.submit(world, id, kind, None, None, Some(at), mods.shift);
             }
         }
     }

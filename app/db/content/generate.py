@@ -802,6 +802,14 @@ INHIBITOR_CHARGE_PCT = 50
 # freighter 500, corvette 800, survey ship 1000); frigate 1300 and transport 1500 arrive with a
 # quarter to a third left, cruiser and carrier 2000 with half, battleship 3600 with 72 %.
 INHIBITOR_ARRIVAL_DAMAGE = 1000
+# Task 111: the blow strikes only a ship that arrives within this distance (milli-tiles of the
+# system's plane) of the inhibitor's planet. 12 tiles: twice the orbit hold (`space.orbit_reach`,
+# 6 tiles) and as far as the planet's moons (10 to 12 tiles out), so the planet's orbit and its
+# near space are covered; under the 16 tiles between the outermost orbit and the system's edge,
+# so a ship that arrives at the edge is never struck; and well under half the gap between
+# neighbouring planet orbits (they grow 1.4 to 1.9 times outward, the outermost at 240 tiles), so
+# a ship may jump in beside another planet of the system.
+INHIBITOR_ARRIVAL_RADIUS = 12_000
 # Spaceport research: key, name, age, the rule it enables.
 ROUTE_RESEARCH = [
     ('enhanced_sensors', 'Enhanced Sensors', 'expansion', 'route_sensors'),
@@ -832,7 +840,7 @@ def jumps_and_inhibitors(definition, row, tag, need, produce, cost, tech, emit):
     row('placement_rule', entity_type_id=Ref(full), rule='on_terrain', ref_def_id=Ref('ter.plain'))
     # Its reach is the whole star system of the planet it stands on.
     row('et_inhibitor', entity_type_id=Ref(full), reach='system', charge_pct=INHIBITOR_CHARGE_PCT,
-        arrival_damage=INHIBITOR_ARRIVAL_DAMAGE)
+        arrival_damage=INHIBITOR_ARRIVAL_DAMAGE, arrival_radius=INHIBITOR_ARRIVAL_RADIUS)
     for key, name, age_key, rule in ROUTE_RESEARCH:
         age = AGES.index(age_key)
         full = 'tech.' + key

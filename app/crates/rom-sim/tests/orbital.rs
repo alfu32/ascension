@@ -418,11 +418,11 @@ fn a_carrier_shelters_its_craft_from_an_inhibitors_blow() {
             .unwrap()
             .arrival_damage;
         let full = w.entity(carrier).unwrap().max_hp;
+        // Task 111: the blow strikes near the held planet only, and a jump ends there only in a
+        // system the player has explored.
+        w.reveal_terrain(P1, w.space_of(2).unwrap());
         w.submit(Command {
-            target_pos: Some(Pos {
-                body: w.space_of(2).unwrap(),
-                ..Pos::default()
-            }),
+            target_pos: w.body_position(FAR),
             ..command(&w, carrier, "travel")
         })
         .unwrap();

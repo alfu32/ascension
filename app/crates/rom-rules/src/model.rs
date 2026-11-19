@@ -1540,6 +1540,9 @@ pub struct Inhibitor {
     pub charge_pct: i64,
     /// The `arrival_damage` column: hit points an enemy ship loses on jumping into its system.
     pub arrival_damage: i64,
+    /// The `arrival_radius` column: how near its planet, in milli-tiles of the system's plane,
+    /// an arrival must be to be struck (task 111).
+    pub arrival_radius: i64,
 }
 /// One `et_market` row: a building where its owner buys and sells lots of the tradeable
 /// resources (task 107).

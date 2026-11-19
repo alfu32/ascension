@@ -111,6 +111,8 @@ impl World {
         let climbing = front.is_some_and(|o| {
             o.progress_ticks > 0
                 && (o.kind == "lift"
+                    // A landed ship sent to another system lifts off first (task 111).
+                    || (o.kind == "travel" && self.is_landed(id))
                     || (o.kind == "enter"
                         && o.target_entity
                             .is_some_and(|ship| self.boards_in_orbit(id, ship))))
@@ -633,10 +635,15 @@ impl World {
         if order.progress_ticks < ticks {
             return;
         }
+        self.lift_off(id);
+        order.status = OrderStatus::Done;
+    }
+
+    /// Takes a landed ship up into the orbit above where it stands.
+    pub(crate) fn lift_off(&mut self, id: EntityId) {
         let pos = self.entity(id).expect("lifting ship").pos;
         self.space.landed.remove(&id);
         self.begin_orbit(id, pos);
-        order.status = OrderStatus::Done;
     }
 
     fn advance_unload(&mut self, id: EntityId, order: &mut Order) {

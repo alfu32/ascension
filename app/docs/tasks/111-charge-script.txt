@@ -1,0 +1,16 @@
+# Task 111, replayed by --script in --universe mode (--ai none, seed 1, --view system,home): a
+# fleet of player one, placed in open space of its home system well inside the outermost orbit
+# (40 tiles from the star, far from every edge), is sent to the nearest neighbour (system1). It
+# charges its jump where it stands, without flying to the edge first: the amber rings fill
+# (corvettes 6 s, frigate 8 s, battleship 12 s) and the fleet leaves together.
+# Screenshot: --size 1280x800 --after 12 (docs/img/111-charging-in-place.png).
+0 grant-age age.expansion
+0 place-space 1 unit.corvette -40,30
+0 place-space 1 unit.corvette -36,30
+0 place-space 1 unit.space_frigate -40,34
+0 place-space 1 unit.battleship -34,35
+2 ships
+4 cam focus
+60 cam wheel 14 640,360
+100 travel system1
+200 cam focus

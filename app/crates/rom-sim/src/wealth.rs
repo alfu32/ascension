@@ -533,8 +533,10 @@ impl World {
                 order.status = OrderStatus::Failed("inhibited".into());
                 return;
             }
-            let star = self.space_of(there).and_then(|s| self.body_position(s));
-            self.trade_leg(unit, order, "travel", star);
+            // It jumps to the planet if its player has explored that system, to the edge if
+            // not (task 111).
+            let planet = self.body_position(at.body);
+            self.trade_leg(unit, order, "travel", planet);
             return;
         }
         self.trade_leg(unit, order, "orbit", Some(at));

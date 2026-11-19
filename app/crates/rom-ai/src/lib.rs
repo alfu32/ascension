@@ -36,6 +36,7 @@ mod view;
 
 pub use ascension::{ChatTopic, chat_line, descend};
 pub use brain::{Brain, SavedBrain};
+pub use fleet::jump_target;
 pub use governor::{ColonyStatus, SiteCount, Waiting, colony_status, run_governors};
 pub use memory::{Army, BrainStats, EnemySighting, Job, Phase, Role, Voyage};
 

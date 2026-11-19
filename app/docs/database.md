@@ -1038,8 +1038,9 @@ code looks for the key, never the technology):
 | `tech.interstellar_trade` Interstellar Trade | abundance | `interstellar_trade` | a space freighter may run a route to an own or allied city in another star system |
 | `tech.automated_route_survey` Automated Route Survey | galactic | `route_survey` | every route is known |
 
-**Charging a jump.** A ship ordered along a route flies to the edge of its system toward the
-next system and charges there for its stat `jump_charge` (new entity stat): the new nullable
+**Charging a jump.** A ship ordered along a route charges where it is (task 111; until then it
+first flew to the edge of its system toward the next system) for its stat `jump_charge` (new
+entity stat): the new nullable
 column `et_movement.jump_charge_ticks`, or the rule default `space.jump_charge_ticks` (160 ticks,
 8 s) where a type has none. By hull size class: survey ship and corvette 120 ticks (6 s); space
 frigate, transport and space freighter 160 (8 s); space cruiser 200 (10 s); battleship and carrier
@@ -1051,9 +1052,54 @@ from one system to one destination form a group; the group departs on the tick i
 has charged (orders the simulation makes itself, a freighter's legs, travel alone). Transit time
 still follows the route's length.
 
+**Jump from anywhere (task 111).** Owner (2026-11-19): "jump to hyperspace from anywhere inside
+the system to the edge of an unknown system, anywhere inside a known system; wind-up time still
+applies on departure; the departure takes place from orbit". Routes stay: a jump still goes
+along a route to a connected system, and a voyage over several systems is several jumps.
+
+- *Departure.* A `travel` order charges where the ship is in its system's plane: from the orbit
+  it holds (it leaves the orbit and charges at the planet's place in the plane) or from open
+  space. A ship landed on a planet (`entity_flag` `landed`) may take the order too: it first
+  lifts off to the orbit above, as its `lift` order would (`space.launch_ticks`; the travel
+  order stays `active` meanwhile and `World::jump_charge` is none), then charges; it belongs to
+  its group and holds the group back until it has charged. Orbital craft still leave a planet only aboard a
+  carrier (task 58), so none climbs for a jump. Charge time, groups, "a new order cancels the
+  charge" and the inhibitor's hold are as before.
+- *Explored systems* (`World::system_explored`, `explored_systems`): every system for an ascended
+  player; its home system; the celestial home; and any system on whose plane the player or an
+  ally has explored a tile, which a ship of theirs does by being there (the fog of the system
+  plane, already in the hash and the save: no new state). The star map labels the others
+  "(unexplored)" from the same rule (`space_view::known_systems`). A system a ship is bound for
+  is no longer counted before it arrives.
+- *Arrival.* On the last leg of a voyage the ship comes out at the point its order names, kept
+  inside the plane, if its player has explored the system it jumps into, and at the edge facing
+  the system it came from if not; the choice is made on departure of that leg, for the whole
+  group, and written into the travel order's `target_pos`. Passing through a system it comes out
+  at the edge and charges there for the next jump. Charting is unchanged.
+- *Orders.* The destination point travels in the `travel` command (`target_pos`, a point of the
+  destination system's plane). A right click on a point or a body of another system's plane, at
+  the system level, sends the selection there; on the star map, a known system sends it to the
+  star, an unknown one to its edge (the hover says "they arrive at the edge"). A space freighter
+  on an interstellar route jumps to the planet of its partner city (the edge, the first time).
+  Computer players aim at the body they want, or, when an enemy inhibitor they know of (they
+  have explored its ground) would strike an arrival there, straight out from its planet just
+  beyond `arrival_radius`; no weight needed.
+- *Inhibitor blow by distance.* Column `et_inhibitor.arrival_radius` (milli-tiles of the system
+  plane, default 0 = no blow): an enemy ship is struck only when its arrival point lies within
+  that distance of the planet the inhibitor stands on (`World::arrival_blow(player, at)`).
+  `bld.jump_inhibitor` 12 000 (12 tiles): twice the orbit hold (`space.orbit_reach`, 6 tiles) and
+  as far out as the planet's moons (10 to 12 tiles), so the planet's orbit and its near space are
+  covered; under the 16 tiles of margin between the outermost orbit (at most 240 tiles from the
+  star) and the plane's edge, so a ship that arrives at the edge is never struck; and well under
+  half the gap between neighbouring planet orbits, which grow 1.4 to 1.9 times outward (with
+  the outermost at 240 tiles the gaps run about 95, 57, 35 tiles inward), so an attacker can still
+  jump into the system away from the held planet. Several inhibitors: the largest blow whose
+  radius covers the point applies, ties to the lowest id.
+
 **Jump inhibitor** (`bld.jump_inhibitor`, starfaring, 3 × 3, 3 000 hp, 500 metal and 300 energy,
 built by citizens and worker drones in own territory on plain ground; no weapon). New component
-table `et_inhibitor(entity_type_id, reach, charge_pct)`: `reach = 'system'` (the only value)
+table `et_inhibitor(entity_type_id, reach, charge_pct)` (since tasks 104 and 111 also
+`arrival_damage` and `arrival_radius`): `reach = 'system'` (the only value)
 covers the whole star system of the planet it stands on; `charge_pct` 50. While a complete,
 active one stands, ships of its owner's enemies in that system may depart only back along the
 route they arrived by (the new PART B table `entity_arrival` records it; a ship built there may
@@ -1066,7 +1112,8 @@ it is no strength that needs a counter).
 
 **Arrival strike (task 104).** Column `et_inhibitor.arrival_damage` (hit points, default 0;
 `bld.jump_inhibitor` 1 000): every ship of the inhibitor owner's enemies that arrives in its
-system by a jump loses that many hit points once, at the arrival tick (`World::arrive_transits`,
+system by a jump (since task 111: within `arrival_radius` of its planet, see above) loses that
+many hit points once, at the arrival tick (`World::arrive_transits`,
 in entity id order; what it destroys is removed in the same tick and credited to the
 inhibitor's owner, with the usual plunder). It is a fixed blow, deliberately **not** through the
 armour table (`damage_class` × `armor_class`, minus armour): the owner asked for "a fixed amount
@@ -1108,6 +1155,11 @@ the route, takes longer.
 
 Schema and save format (deliberate):
 
+- **Task 111.** Column `et_inhibitor.arrival_radius` (deliberate schema change; lint views
+  empty, seed loads; the value comes from `db/content/generate.py`). No new state: explored
+  systems are read from the fog of the system planes, and the arrival point is the travel
+  order's `target_pos`, both already hashed and saved, so the save layout is unchanged (format
+  13); the rules fingerprint changes, so earlier saves are refused as with any rules change.
 - **Task 104.** Column `et_inhibitor.arrival_damage` (deliberate schema change; lint views
   empty, seed loads). The save layout is unchanged (format 12): the rules fingerprint changes, so
   saves of earlier versions are refused as with any rules change.
