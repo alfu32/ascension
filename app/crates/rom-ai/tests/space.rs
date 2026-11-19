@@ -419,3 +419,35 @@ fn the_warship_class_follows_the_enemy_ships_seen() {
     // Against shields the kinetic gun: the cruiser outranges and outlasts the ships it meets.
     assert_eq!(against_cruisers, "unit.space_cruiser");
 }
+
+/// Task 111: aiming a jump at a body, a computer player keeps out of the arrival radius of an
+/// enemy jump inhibitor it knows of (it has explored the ground the inhibitor stands on).
+#[test]
+fn a_jump_aims_outside_a_known_enemy_inhibitors_radius() {
+    let rules = common::rules();
+    let mut w = world(&rules);
+    let kind = rules.id_of("bld.jump_inhibitor").unwrap();
+    let radius = rules.entity_types[&kind]
+        .inhibitor
+        .as_ref()
+        .unwrap()
+        .arrival_radius as u64;
+    let site = Pos {
+        x: 20_500,
+        y: 20_500,
+        face: 0,
+        body: NEIGHBOUR,
+    };
+    w.place_for_setup(kind, PlayerId(2), site).unwrap();
+    let planet = w.body_position(NEIGHBOUR).unwrap();
+    // Unseen, the inhibitor does not move the aim.
+    assert_eq!(rom_ai::jump_target(&w, ME, NEIGHBOUR), Some(planet));
+    assert!(w.arrival_blow(ME, planet).is_some());
+    w.reveal_terrain(ME, NEIGHBOUR);
+    let aim = rom_ai::jump_target(&w, ME, NEIGHBOUR).unwrap();
+    assert!(aim.distance(planet) > radius && aim.distance(planet) <= radius + 2);
+    assert!(w.arrival_blow(ME, aim).is_none());
+    // A body far from it is aimed at directly.
+    let rock = w.body_position(BodyId(3)).unwrap();
+    assert_eq!(rom_ai::jump_target(&w, ME, BodyId(3)), Some(rock));
+}

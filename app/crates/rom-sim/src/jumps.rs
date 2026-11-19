@@ -2,14 +2,17 @@
 //!
 //! A player knows a route once one of its ships has flown it or a research revealed it; a
 //! voyage along an unknown route takes `space.charting_pct` of the usual transit and charts it
-//! on arrival. A ship ordered along a route first charges at the edge of its system for its
-//! `jump_charge` time; the charge lives in its travel order (`total_ticks` the ticks it needs,
-//! `progress_ticks` the ticks charged). An enemy jump inhibitor in the system lets a ship leave
-//! only back along the route it arrived by, and lengthens its charge; an enemy ship that jumps
-//! into its system takes its fixed blow on arrival (task 104).
+//! on arrival. A ship ordered along a route charges where it is (a landed ship first lifts off
+//! to orbit) for its `jump_charge` time (task 111); the charge lives in its travel order
+//! (`total_ticks` the ticks it needs, `progress_ticks` the ticks charged). It arrives at the
+//! point its order names when the player has explored the system it is bound for, and at the
+//! edge facing the system it came from otherwise, or when it only passes through. An enemy jump
+//! inhibitor in the system lets a ship leave only back along the route it arrived by, and
+//! lengthens its charge; an enemy ship that jumps in near the inhibitor's planet takes its fixed
+//! blow on arrival (tasks 104 and 111).
 
 use crate::{EntityId, Order, OrderStatus, PlayerId, Pos, World};
-use rom_rules::{DefId, InhibitorReach, TechEffectKind};
+use rom_rules::{BodyKind, DefId, InhibitorReach, TechEffectKind};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Rule key of the research that reveals the routes leaving the systems where its player has a
@@ -20,7 +23,7 @@ pub const RULE_ROUTE_SURVEY: &str = "route_survey";
 /// Rule key of the research that lets space freighters trade with other star systems.
 pub const RULE_INTERSTELLAR_TRADE: &str = "interstellar_trade";
 
-/// A ship charging its jump at the edge of its system.
+/// A ship charging its jump.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct JumpCharge {
     /// Ticks charged so far.
@@ -49,7 +52,8 @@ pub struct Inhibition {
     pub charge_pct: i64,
 }
 
-/// The blow an enemy jump inhibitor deals a player's ships that jump into a system (task 104).
+/// The blow an enemy jump inhibitor deals a player's ship that jumps in near its planet (tasks
+/// 104 and 111).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ArrivalBlow {
     /// The inhibitor that strikes (the largest blow, then the lowest id).
@@ -78,7 +82,7 @@ pub struct ArrivalStrike {
     pub ship_type: DefId,
     /// The system it jumped into.
     pub system: u32,
-    /// Where it arrived: the edge of the system's plane.
+    /// Where it arrived in the system's plane.
     pub pos: Pos,
     /// Hit points it lost.
     pub damage: i64,
@@ -241,36 +245,118 @@ impl World {
             .max_by_key(|i| (i.charge_pct, std::cmp::Reverse(i.inhibitor)))
     }
 
-    /// The blow `player`'s ships take on jumping into `system`: the largest `arrival_damage` of
-    /// the complete, active enemy inhibitors there (several do not stack), ties to the lowest
-    /// id; `None` when no enemy inhibitor there strikes.
-    pub fn arrival_blow(&self, player: PlayerId, system: u32) -> Option<ArrivalBlow> {
+    /// The blow a ship of `player` takes on jumping in at `at`, a point of a system's plane:
+    /// the largest `arrival_damage` of the complete, active enemy inhibitors of that system whose
+    /// planet lies within their `arrival_radius` of the point (several do not stack), ties to
+    /// the lowest id; `None` when none strikes there.
+    pub fn arrival_blow(&self, player: PlayerId, at: Pos) -> Option<ArrivalBlow> {
+        let system = self.system_space(at.body)?;
         self.jump_inhibitors()
             .filter(|(e, _)| self.enemies(player, e.owner))
             .filter(|(e, reach)| match reach {
                 InhibitorReach::System => self.body(e.pos.body).is_some_and(|b| b.system == system),
             })
-            .map(|(e, _)| ArrivalBlow {
-                inhibitor: e.id,
-                owner: e.owner,
-                damage: self.rules.entity_types[&e.type_id]
-                    .inhibitor
-                    .as_ref()
-                    .map_or(0, |i| i.arrival_damage.max(0)),
+            .filter_map(|(e, _)| {
+                let rule = self.rules.entity_types[&e.type_id].inhibitor.as_ref()?;
+                let planet = self.body_position(e.pos.body)?;
+                (rule.arrival_damage > 0
+                    && rule.arrival_radius > 0
+                    && self.geo(at.body).within(at, planet, rule.arrival_radius))
+                .then_some(ArrivalBlow {
+                    inhibitor: e.id,
+                    owner: e.owner,
+                    damage: rule.arrival_damage,
+                })
             })
-            .filter(|b| b.damage > 0)
             .max_by_key(|b| (b.damage, std::cmp::Reverse(b.inhibitor)))
     }
 
-    /// Strikes a ship that has just jumped into `system` with the blow of the enemy inhibitor
-    /// there, if any: it loses the fixed hit points once, and what dies is credited to the
-    /// inhibitor's owner. Returns whether the blow destroyed it.
+    /// Whether `player` has explored `system`, the systems its star map names (task 111): every
+    /// system for an ascended player; its home system; the celestial home; and any system in
+    /// whose plane it or an ally has had a ship or seen a tile. A jump into an explored system
+    /// may end anywhere in it.
+    pub fn system_explored(&self, player: PlayerId, system: u32) -> bool {
+        self.is_ascended(player)
+            || self.home_system(player) == Some(system)
+            || self
+                .bodies()
+                .iter()
+                .filter(|b| b.system == system)
+                .any(|b| self.body_explored(player, b))
+    }
+
+    /// The systems `player` has explored ([`World::system_explored`]), ascending; one pass over
+    /// the bodies, for the star map.
+    pub fn explored_systems(&self, player: PlayerId) -> Vec<u32> {
+        if self.is_ascended(player) {
+            return self.systems().iter().map(|s| s.id).collect();
+        }
+        let mut out: BTreeSet<u32> = self.home_system(player).into_iter().collect();
+        out.extend(
+            self.bodies()
+                .iter()
+                .filter(|b| self.body_explored(player, b))
+                .map(|b| b.system),
+        );
+        out.into_iter().collect()
+    }
+
+    fn home_system(&self, player: PlayerId) -> Option<u32> {
+        self.home_body(player)
+            .and_then(|b| self.body(b))
+            .map(|b| b.system)
+    }
+
+    /// Whether a body makes its system explored for `player`: the black hole of the celestial
+    /// home, which everyone may look at, or a star on whose plane `player` or an ally has
+    /// explored a tile.
+    fn body_explored(&self, player: PlayerId, body: &crate::BodyInfo) -> bool {
+        match body.kind {
+            BodyKind::BlackHole => true,
+            BodyKind::Star => {
+                let (Some(slot), Some(team)) = (
+                    self.slot_of(body.id),
+                    self.players.get(&player).map(|p| p.team),
+                ) else {
+                    return false;
+                };
+                let vision = &self.surfaces[slot].vision;
+                self.players
+                    .values()
+                    .filter(|p| p.team == team)
+                    .filter_map(|p| vision.players.get(&p.id))
+                    .any(|v| !v.explored.holds_only(0))
+            }
+            _ => false,
+        }
+    }
+
+    /// Where a ship of `player` jumping from system `from` into `system` comes out when its
+    /// order names `wanted`: that point, kept inside the plane, if the player has explored the
+    /// system; the edge facing `from` if not.
+    pub fn jump_arrival(
+        &self,
+        player: PlayerId,
+        from: u32,
+        system: u32,
+        wanted: Pos,
+    ) -> Option<Pos> {
+        let space = self.space_of(system)?;
+        if !self.system_explored(player, system) || wanted.body != space {
+            return self.system_edge(system, from);
+        }
+        Some(self.onto_plane(space, wanted))
+    }
+
+    /// Strikes a ship that has just jumped in with the blow of the enemy inhibitor whose radius
+    /// covers where it arrived, if any: it loses the fixed hit points once, and what dies is
+    /// credited to the inhibitor's owner. Returns whether the blow destroyed it.
     pub(crate) fn strike_arrival(&mut self, ship: EntityId, system: u32) -> bool {
         let Some(e) = self.entity(ship) else {
             return false;
         };
         let (ship_owner, ship_type, pos) = (e.owner, e.type_id, e.pos);
-        let Some(blow) = self.arrival_blow(ship_owner, system) else {
+        let Some(blow) = self.arrival_blow(ship_owner, pos) else {
             return false;
         };
         let e = self.entities[ship.0 as usize]
@@ -359,7 +445,7 @@ impl World {
         (i128::from(ticks) * i128::from(100 + pct) / 100).clamp(0, i128::from(u32::MAX)) as u64
     }
 
-    /// The jump `ship` is charging, if it is.
+    /// The jump `ship` is charging, if it is (not while a landed ship lifts off first).
     pub fn jump_charge(&self, ship: EntityId) -> Option<JumpCharge> {
         let e = self.entity(ship)?;
         let order = e.orders.front().filter(|o| o.kind == "travel")?;
@@ -374,7 +460,7 @@ impl World {
         })
     }
 
-    /// One tick of a charge at the edge: counts it and says whether the ship may depart.
+    /// One tick of a charge where the ship is: counts it and says whether the ship may depart.
     pub(crate) fn advance_charge(&mut self, id: EntityId, order: &mut Order, origin: u32) {
         let required = self.jump_charge_ticks(id, origin);
         let progress = match order.total_ticks {

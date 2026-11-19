@@ -647,6 +647,7 @@ fn load_et_inhibitor(conn: &Connection) -> Result<Vec<Inhibitor>, RulesError> {
                 reach: enum_value(row, "reach", "et_inhibitor", &identity)?,
                 charge_pct: row.get("charge_pct")?,
                 arrival_damage: row.get("arrival_damage")?,
+                arrival_radius: row.get("arrival_radius")?,
             })
         },
     )

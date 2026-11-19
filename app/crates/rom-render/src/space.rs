@@ -162,7 +162,7 @@ pub struct TransitView {
     pub charting: bool,
 }
 
-/// A ship of player one or an ally charging its jump at the edge of its system.
+/// A ship of player one or an ally charging its jump, where it stands in its system.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ChargeView {
     /// Entity id.
@@ -530,7 +530,7 @@ pub fn hold_text(hold: &HoldView) -> (String, String) {
     let strike = |whose: &str| match hold.arrival_damage {
         0 => String::new(),
         damage => format!(
-            "{whose} ships jumping in are struck for {damage} hit points \
+            "{whose} ships jumping in near its planet are struck for {damage} hit points \
              (craft aboard a carrier are sheltered) · "
         ),
     };
@@ -966,9 +966,17 @@ pub fn hover_help(
                 format!("{} (star system)", system.name),
                 format!("Double-click or scroll in to enter{send}"),
             ),
+            // A jump into a system the player has not explored ends at its edge (task 111).
             Some(system) => (
                 format!("{} (unexplored)", system.name),
-                format!("Send a ship to learn what it holds{send}"),
+                format!(
+                    "Send a ship to learn what it holds{}",
+                    if ships {
+                        " · right-click: send the selected ships (they arrive at the edge)"
+                    } else {
+                        ""
+                    }
+                ),
             ),
             None => Default::default(),
         },
@@ -1886,7 +1894,17 @@ mod tests {
             |_| None,
         );
         assert_eq!(name, "S2 (unexplored)");
-        assert!(action.contains("Send a ship"));
+        assert!(action.contains("Send a ship") && !action.contains("right-click"));
+        // Task 111: with ships selected it says they will come out at the edge.
+        let (_, action) = hover_help(
+            &scene,
+            SpaceHover::Target(Target::System(1)),
+            None,
+            true,
+            |id| id != 2,
+            |_| None,
+        );
+        assert!(action.contains("right-click: send the selected ships (they arrive at the edge)"));
         // A listed resource body names its kind, resource, yield and claim state.
         let listed = |claim| {
             Some(ResourceBodyView {

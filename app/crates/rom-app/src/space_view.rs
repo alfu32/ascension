@@ -320,7 +320,7 @@ pub fn space_snapshot_with(
         }
     }
     snapshot.transits = transits(world);
-    snapshot.known = Some(known_systems_with(world, index));
+    snapshot.known = Some(known_systems(world));
     snapshot.countdowns = crate::ascension_view::countdowns(world);
     snapshot.residences = crate::ascension_view::residences(world);
     snapshot.colonies = colonies(world);
@@ -533,63 +533,12 @@ pub fn holding_line(world: &World, ship: &rom_sim::Entity) -> Option<String> {
     Some(format!("Holds {}: {}", view.kind_name, view.yield_text()))
 }
 
-/// The systems player one knows, ascending: its home system, any system it has ships in or
-/// bound for, and any whose star or bodies its team has seen.
-#[cfg(test)]
+/// The systems player one knows, ascending: those it has explored as the simulation decides
+/// (`World::system_explored`, task 111), so the star map's "(unexplored)" label and where a jump
+/// ends agree: its home system, the celestial home, any system in whose plane it or an ally has
+/// had a ship or seen a tile, and every system once it has ascended.
 pub fn known_systems(world: &World) -> Vec<u32> {
-    known_systems_with(world, &SystemIndex::new(world))
-}
-
-/// [`known_systems`] with the match's system index.
-pub fn known_systems_with(world: &World, index: &SystemIndex) -> Vec<u32> {
-    // An ascended player sees every system (task 76).
-    if world.is_ascended(PLAYER) {
-        return world.systems().iter().map(|s| s.id).collect();
-    }
-    let home = world
-        .home_body(PLAYER)
-        .and_then(|b| world.body(b))
-        .map(|b| b.system);
-    let mut known: BTreeSet<u32> = home.into_iter().collect();
-    // Everyone may look at the celestial home on the star map (task 76).
-    known.extend(crate::ascension_view::celestial_system(world));
-    for t in world
-        .transits()
-        .filter(|t| allied(world, PLAYER, t.entity.owner))
-    {
-        known.insert(t.origin);
-        known.insert(t.destination);
-    }
-    let crowded: BTreeSet<BodyId> = world
-        .entities()
-        .filter(|e| allied(world, PLAYER, e.owner))
-        .map(|e| e.pos.body)
-        .collect();
-    for system in world.systems() {
-        let Some(star) = index.star(system.id) else {
-            continue;
-        };
-        let seen = |at: Pos| {
-            world.is_explored_on_body(
-                PLAYER,
-                star,
-                0,
-                at.x.div_euclid(1000),
-                at.y.div_euclid(1000),
-            )
-        };
-        let bodies = index
-            .bodies(system.id)
-            .iter()
-            .filter_map(|id| world.body_position(*id));
-        if crowded.contains(&star)
-            || world.body_position(star).is_some_and(seen)
-            || bodies.into_iter().any(seen)
-        {
-            known.insert(system.id);
-        }
-    }
-    known.into_iter().collect()
+    world.explored_systems(PLAYER)
 }
 
 /// Ships between systems that belong to player one or an ally; others are not seen.
@@ -980,9 +929,8 @@ mod transit_tests {
             })
             .map(|s| s.id)
             .collect();
-        let known: BTreeSet<u32> = known_systems_with(world, &index).into_iter().collect();
+        let known: BTreeSet<u32> = known_systems(world).into_iter().collect();
         assert!(seen_by_scan.is_subset(&known));
-        assert_eq!(known_systems_with(world, &index), known_systems(world));
         assert_eq!(
             space_snapshot_with(world, &index, 1, &[]).known,
             space_snapshot(world, 1, &[]).known
@@ -1159,9 +1107,8 @@ mod strike_tests {
         let battleship = world.spawn(id("unit.battleship"), PLAYER, edge).unwrap();
         let mut notices = Notices::default();
         notices.update(world);
-        let target = world
-            .body_position(world.space_of(home_system).unwrap())
-            .unwrap();
+        // Into the explored home system they come out beside the held planet (task 111).
+        let target = world.body_position(home).unwrap();
         for ship in [corvette, battleship] {
             world
                 .submit(Command {

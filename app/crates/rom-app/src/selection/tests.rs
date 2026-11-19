@@ -1029,6 +1029,98 @@ fn right_click_on_a_body_orders_orbit_and_on_a_system_orders_travel() {
     );
 }
 
+/// Task 111: with the view in another system, a right click on a point of its plane or on one of
+/// its bodies sends the selected ship there along the routes (the simulation decides whether it
+/// comes out there or at the edge).
+#[test]
+fn right_click_in_another_system_orders_travel_to_that_point() {
+    let (content, mut game) = crate::match_setup::universe_game_for_tests();
+    let home = game.world.home_body(PLAYER).expect("home");
+    let system = game.world.body(home).unwrap().system;
+    let ship_type = game.world.rules().id_of("unit.survey_ship").unwrap();
+    let star = game.world.space_of(system).unwrap();
+    let mut at = game.world.body_position(star).unwrap();
+    at.x += 4000;
+    let ship = game.world.spawn(ship_type, PLAYER, at).unwrap();
+    game.world.step();
+    let other = content
+        .universe
+        .routes
+        .iter()
+        .find_map(|r| {
+            (r.system_a == system)
+                .then_some(r.system_b)
+                .or((r.system_b == system).then_some(r.system_a))
+        })
+        .unwrap();
+    let frame = crate::space_view::SpaceFrame::of(&game.world, other).unwrap();
+    let mut ctl = Controller::new();
+    ctl.set_view(ViewCtx {
+        planet: home,
+        system: Some(other),
+        in_space: true,
+        frame: Some(frame),
+    });
+    ctl.handle(
+        &mut game.world,
+        PickEvent::BoxSelect {
+            entities: vec![ship.0],
+            modifiers: Modifiers::default(),
+        },
+    );
+    assert_eq!(ctl.selection(), &[ship]);
+    let front = |world: &World| {
+        world
+            .entity(ship)
+            .unwrap()
+            .orders()
+            .front()
+            .cloned()
+            .unwrap()
+    };
+    let click = SurfacePos {
+        face: 0,
+        x: 30_000,
+        y: -20_000,
+    };
+    ctl.handle(
+        &mut game.world,
+        PickEvent::SpaceRightClick {
+            surface: click,
+            entity: None,
+            body: None,
+            system: None,
+            modifiers: Modifiers::default(),
+        },
+    );
+    game.world.step();
+    let order = front(&game.world);
+    assert_eq!(order.kind, "travel");
+    assert_eq!(order.target_pos, Some(frame.pos_of(30.0, -20.0)));
+    // A body of that system: the ship is sent beside it.
+    let planet = game
+        .world
+        .bodies()
+        .iter()
+        .find(|b| b.system == other && b.kind != rom_rules::BodyKind::Star)
+        .unwrap()
+        .id;
+    ctl.handle(
+        &mut game.world,
+        PickEvent::SpaceRightClick {
+            surface: click,
+            entity: None,
+            body: Some(planet.0),
+            system: None,
+            modifiers: Modifiers::default(),
+        },
+    );
+    game.world.step();
+    let order = front(&game.world);
+    assert_eq!(order.kind, "travel");
+    assert_eq!(order.target_pos, game.world.body_position(planet));
+}
+
 fn pos_of(surface: SurfacePos) -> Pos {
     Pos {
         x: surface.x as i32,

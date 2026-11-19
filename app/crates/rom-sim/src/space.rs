@@ -2,7 +2,7 @@
 
 use crate::{
     BodyId, Command, Entity, EntityId, MapGrid, Order, OrderStatus, PlayerId, Pos, SimError,
-    Topology, World, avoidance::Motion, movement::Walk,
+    Topology, World, avoidance::Motion,
 };
 use rom_rules::{BodyKind, ClaimMode, DefId, EntityClass, Layer, ProductionMode};
 use std::collections::{BTreeMap, BTreeSet};
@@ -341,6 +341,27 @@ impl World {
             .map(|b| b.system)
     }
 
+    /// The system a ship may set out from along a route: the one whose plane it flies in, or,
+    /// for a ship landed on a planet, the planet's.
+    pub(crate) fn ship_system(&self, ship: &Entity) -> Option<u32> {
+        self.system_space(ship.pos.body).or_else(|| {
+            self.is_landed(ship.id)
+                .then(|| self.body(ship.pos.body).map(|b| b.system))
+                .flatten()
+        })
+    }
+
+    /// `pos` moved onto the plane of `space` if it lies outside.
+    pub(crate) fn onto_plane(&self, space: BodyId, pos: Pos) -> Pos {
+        let (w, h) = self.geo(space).face_size();
+        Pos::on(
+            space,
+            0,
+            pos.x.clamp(0, w * 1000 - 1),
+            pos.y.clamp(0, h * 1000 - 1),
+        )
+    }
+
     pub(crate) fn can_stand(&self, type_id: DefId, pos: Pos) -> bool {
         let Some(movement) = &self.rules.entity_types[&type_id].movement else {
             return false;
@@ -386,9 +407,13 @@ impl World {
             return Ok(());
         }
         let ship = self.entity(command.executor).expect("executor");
-        let origin = self
-            .system_space(ship.pos.body)
-            .ok_or(SimError::CannotEnterSpace)?;
+        // A landed ship may be sent to another system: it lifts off first (task 111).
+        let origin = if command.kind == "travel" {
+            self.ship_system(ship)
+        } else {
+            self.system_space(ship.pos.body)
+        }
+        .ok_or(SimError::CannotEnterSpace)?;
         self.check_space_placement(ship.type_id, ship.owner, ship.pos)?;
         if command.kind == "travel" {
             if self.space_rank(ship.owner) < 2 {
@@ -591,8 +616,10 @@ impl World {
             order.status = OrderStatus::Blocked("speed".into());
             return;
         }
-        let pos = ship.pos;
-        let origin = self.system_space(pos.body).expect("space ship");
+        let Some(origin) = self.ship_system(ship) else {
+            order.status = OrderStatus::Failed("not_in_space".into());
+            return;
+        };
         let destination = self
             .system_space(order.target_pos.expect("travel target").body)
             .expect("destination");
@@ -612,15 +639,22 @@ impl World {
             order.status = OrderStatus::Failed("inhibited".into());
             return;
         }
-        // At the edge the ship charges, unable to move or fire, until it may jump.
-        if order.total_ticks.is_some() {
-            self.advance_charge(id, order, origin);
+        // A landed ship lifts off to orbit first, as its `lift` order would (task 111).
+        if self.is_landed(id) {
+            order.progress_ticks = order.progress_ticks.saturating_add(1);
+            let ticks = self
+                .rules
+                .constant("space.launch_ticks")
+                .expect("launch ticks") as u64;
+            if order.progress_ticks >= ticks {
+                self.lift_off(id);
+                order.progress_ticks = 0;
+            }
             return;
         }
-        let goal = self.system_edge(origin, path[1]).expect("route edge");
-        if self.walk(id, order, goal, None, false) == Walk::Arrived {
-            self.advance_charge(id, order, origin);
-        }
+        // The ship charges where it is, unable to move or fire, until it may jump (task 111:
+        // anywhere in its system's space, no longer at the edge).
+        self.advance_charge(id, order, origin);
     }
     pub(crate) fn depart_ships(&mut self) {
         if self.systems().is_empty() {
@@ -635,8 +669,10 @@ impl World {
                     o.kind == "travel"
                         && !matches!(&o.status, OrderStatus::Blocked(r) if r == "speed")
                 })?;
-                let origin = self.system_space(e.pos.body)?;
-                let ready = matches!(&order.status, OrderStatus::Blocked(r) if r == "depart");
+                // A landed ship lifting off first is in its group, not yet ready.
+                let origin = self.ship_system(e)?;
+                let ready = !self.is_landed(e.id)
+                    && matches!(&order.status, OrderStatus::Blocked(r) if r == "depart");
                 Some((e.id, self.travel_group(order, origin), ready))
             })
             .collect();
@@ -697,7 +733,18 @@ impl World {
                 .div_ceil(speed as u128 * 100)
                 .max(1)
                 .min(u128::from(u64::MAX - self.tick - 1)) as u64;
+            // On the last leg the ship comes out where its order says if the player has
+            // explored that system, at its edge if not; decided now, for the whole group.
+            let arrival = (next == destination)
+                .then(|| {
+                    let wanted = ship.orders[0].target_pos.expect("target");
+                    self.jump_arrival(owner, origin, destination, wanted)
+                })
+                .flatten();
             let mut entity = self.entities[id.0 as usize].take().expect("departing ship");
+            if arrival.is_some() {
+                entity.orders[0].target_pos = arrival;
+            }
             let pos = entity.pos;
             entity.orders[0].movement = None;
             entity.orders[0].status = OrderStatus::Active;
@@ -723,9 +770,11 @@ impl World {
             );
         }
     }
-    /// Brings home the ships whose route leg ends now, in id order. An enemy jump inhibitor in
-    /// the system they jump into strikes each once (task 104); what that destroys is removed
-    /// at once, so no ship stands at zero hit points into the next tick.
+    /// Brings home the ships whose route leg ends now, in id order: at the point their order
+    /// names on the last leg (decided on departure, task 111), at the edge facing the system
+    /// they came from otherwise. An enemy jump inhibitor whose radius covers that point strikes
+    /// each once (tasks 104 and 111); what that destroys is removed at once, so no ship stands
+    /// at zero hit points into the next tick.
     pub(crate) fn arrive_transits(&mut self) {
         let mut destroyed = false;
         let due: Vec<_> = self
@@ -741,9 +790,18 @@ impl World {
             self.chart(transit.entity.owner, transit.origin, transit.destination);
             self.space.arrivals.insert(id, transit.origin);
             let mut entity = transit.entity;
-            let pos = self
-                .system_edge(transit.destination, transit.origin)
-                .expect("arrival edge");
+            let space = self.space_of(transit.destination).expect("arrival space");
+            let pos = match entity
+                .orders
+                .front()
+                .and_then(|o| o.target_pos)
+                .filter(|p| p.body == space)
+            {
+                Some(at) => self.onto_plane(space, at),
+                None => self
+                    .system_edge(transit.destination, transit.origin)
+                    .expect("arrival edge"),
+            };
             entity.pos = pos;
             let motion = Motion::of(&self.rules, entity.type_id);
             if let Some(mut order) = entity

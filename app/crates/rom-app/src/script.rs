@@ -34,8 +34,9 @@
 //! put a ship into the orbit of player one's home planet above that point (an ordinary `orbit`
 //! order given before tick one; an orbital craft is placed there and ordered to climb);
 //! `jump-in <owner id> <entity key>` places a ship at the rim of the system nearest to player
-//! one's home system by route, on its side, and orders it home along the route (an ordinary
-//! `travel` order given before tick one: it charges, jumps and arrives, task 104);
+//! one's home system by route, on its side, and orders it to player one's home planet along the
+//! route (an ordinary `travel` order given before tick one: it charges, jumps and arrives beside
+//! the planet, tasks 104 and 111);
 //! `colony <owner id>` founds a city for that owner on the nearest other habitable planet of
 //! player one's home system, generating the planet first (task 68's freighter route), and
 //! `auto-colony <owner id>` puts a finished automated colony there instead (task 73). `craft` selects player one's orbital craft that are not
@@ -247,7 +248,8 @@ impl ScriptSetup {
     }
 
     /// Places the `jump-in` ships at the rim of the system nearest to player one's home system
-    /// by route (the shortest route, then the lowest id), toward home, and sends them home.
+    /// by route (the shortest route, then the lowest id), toward home, and sends them to the
+    /// home planet.
     fn apply_jump_ins(&self, world: &mut rom_sim::World) -> Result<(), String> {
         if self.jump_ins.is_empty() {
             return Ok(());
@@ -276,10 +278,11 @@ impl ScriptSetup {
         let rim = world
             .system_edge(from, home)
             .ok_or("jump-in: no rim toward the home system")?;
+        // Into player one's explored home system they come out beside its home planet (task 111).
         let target = world
-            .space_of(home)
-            .and_then(|star| world.body_position(star))
-            .ok_or("the home star has no position")?;
+            .home_body(crate::selection::PLAYER)
+            .and_then(|planet| world.body_position(planet))
+            .ok_or("the home planet has no position")?;
         for (owner, key) in &self.jump_ins {
             let kind = world
                 .rules()

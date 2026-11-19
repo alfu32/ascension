@@ -3061,7 +3061,7 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.jump_inhibitor'),'construct','military_2',2,0);
 INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.jump_inhibitor'),'in_own_territory');
 INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.jump_inhibitor'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
-INSERT INTO et_inhibitor(entity_type_id,reach,charge_pct,arrival_damage) VALUES ((SELECT id FROM def WHERE key='bld.jump_inhibitor'),'system',50,1000);
+INSERT INTO et_inhibitor(entity_type_id,reach,charge_pct,arrival_damage,arrival_radius) VALUES ((SELECT id FROM def WHERE key='bld.jump_inhibitor'),'system',50,1000,12000);
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.enhanced_sensors','Enhanced Sensors');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.enhanced_sensors'),'upgrade','',0,850);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.enhanced_sensors'),(SELECT id FROM def WHERE key='res.wealth'),1200,0);

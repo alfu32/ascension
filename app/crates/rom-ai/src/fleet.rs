@@ -18,7 +18,7 @@ use crate::{
     view::{self, View, operational},
 };
 use rom_rules::{BodyKind, ClaimMode, DefId, Layer, ProductionMode, Rules};
-use rom_sim::{BodyClaim, BodyId, Entity, EntityId, Pos};
+use rom_sim::{BodyClaim, BodyId, Entity, EntityId, PlayerId, Pos, World};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Score of the wish for a building that trains spacecraft when the player has none.
@@ -593,14 +593,79 @@ fn fly(plan: &mut Plan<'_>, ship: &Entity, body: BodyId, reach: u64) -> bool {
     }
     if here == there {
         plan.order(ship.id, "orbit", None, Some(marker), None);
-    } else if let Some(star) = view
-        .world
-        .space_of(there)
-        .and_then(|s| view.world.body_position(s))
-    {
-        plan.order(ship.id, "travel", None, None, Some(star));
+    } else if let Some(at) = jump_target(view.world, view.me, body) {
+        plan.order(ship.id, "travel", None, None, Some(at));
     }
     false
+}
+
+/// Where a ship of `me` jumping into another system aims to reach `body` (task 111): beside it;
+/// or, when an enemy jump inhibitor the player knows of (it has explored the ground it stands
+/// on) would strike an arrival there, straight out from that inhibitor's planet just beyond its
+/// `arrival_radius`. The simulation brings the ship to the system's edge instead while the player
+/// has not explored the system.
+pub fn jump_target(world: &World, me: PlayerId, body: BodyId) -> Option<Pos> {
+    let system_of = |body: BodyId| world.body(body).map(|b| b.system);
+    let system = system_of(body)?;
+    let star = world
+        .space_of(system)
+        .and_then(|s| world.body_position(s))?;
+    let mut at = world.body_position(body)?;
+    for (inhibitor, _) in world.jump_inhibitors() {
+        let pos = inhibitor.pos;
+        if !world.enemies(me, inhibitor.owner)
+            || system_of(pos.body) != Some(system)
+            || !world.is_explored_on_body(
+                me,
+                pos.body,
+                pos.face,
+                pos.x.div_euclid(1000),
+                pos.y.div_euclid(1000),
+            )
+        {
+            continue;
+        }
+        let Some(rule) = world.rules().entity_types[&inhibitor.type_id]
+            .inhibitor
+            .as_ref()
+        else {
+            continue;
+        };
+        let Some(planet) = world.body_position(pos.body) else {
+            continue;
+        };
+        let reach = rule.arrival_radius;
+        if rule.arrival_damage <= 0 || reach <= 0 || at.distance(planet) > reach as u64 {
+            continue;
+        }
+        // Away from the planet through the wanted point; from the planet itself, toward the star.
+        let toward = [at, star]
+            .into_iter()
+            .find(|p| *p != planet)
+            .unwrap_or(Pos {
+                x: planet.x + 1,
+                ..planet
+            });
+        let (dx, dy) = (
+            i64::from(toward.x) - i64::from(planet.x),
+            i64::from(toward.y) - i64::from(planet.y),
+        );
+        let length = toward.distance(planet).max(1) as i64;
+        let mut out = reach + 1;
+        loop {
+            let point = Pos {
+                x: (i64::from(planet.x) + dx * out / length) as i32,
+                y: (i64::from(planet.y) + dy * out / length) as i32,
+                ..at
+            };
+            if point.distance(planet) > reach as u64 {
+                at = point;
+                break;
+            }
+            out += 1;
+        }
+    }
+    Some(at)
 }
 
 /// Leads the ships for one thought.

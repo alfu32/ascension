@@ -133,6 +133,16 @@ fn travel(w: &mut World, ship: EntityId, system: u32) -> Result<rom_sim::OrderId
     order(w, ship, "travel", None, Some(to))
 }
 
+/// Sends `ship` to the point `to` of another system's plane (task 111).
+fn travel_to(w: &mut World, ship: EntityId, to: Pos) -> Result<rom_sim::OrderId, SimError> {
+    order(w, ship, "travel", None, Some(to))
+}
+
+/// Where planet 2 (system 1, where the inhibitors stand) lies in its system's plane.
+fn planet_2(w: &World) -> Pos {
+    w.body_position(BodyId(2)).unwrap()
+}
+
 fn run(w: &mut World, ticks: u64) {
     for _ in 0..ticks {
         w.step();
@@ -530,8 +540,10 @@ fn an_inhibitor_strikes_enemy_ships_jumping_into_its_system() {
         let battleship = spawn(&mut w, "unit.battleship", P1, from_2);
         let allied = spawn(&mut w, "unit.corvette", P3, from_2);
         let own = spawn(&mut w, "unit.corvette", P2, from_2);
+        // They jump in beside the inhibitor's planet, within its radius (task 111).
+        let beside = planet_2(&w);
         for ship in [corvette, battleship, allied, own] {
-            travel(&mut w, ship, 1).unwrap();
+            travel_to(&mut w, ship, beside).unwrap();
         }
         let full = w.entity(battleship).unwrap().max_hp;
         run_until(&mut w, 2000, |w| {
@@ -597,15 +609,17 @@ fn several_inhibitors_do_not_stack_and_a_destroyed_one_strikes_no_more() {
         let second = w
             .place_for_setup(kind, P2, Pos::on(BodyId(2), 0, 40_500, 40_500))
             .unwrap();
+        let beside = planet_2(&w);
         assert_eq!(
-            w.arrival_blow(P1, 1).map(|b| (b.inhibitor, b.damage)),
+            w.arrival_blow(P1, beside).map(|b| (b.inhibitor, b.damage)),
             Some((first.min(second), damage))
         );
-        assert!(w.arrival_blow(P3, 1).is_none() && w.arrival_blow(P1, 2).is_none());
+        let elsewhere = w.body_position(BodyId(11)).unwrap();
+        assert!(w.arrival_blow(P3, beside).is_none() && w.arrival_blow(P1, elsewhere).is_none());
         let from_2 = w.system_edge(2, 1).unwrap();
         let cruiser = spawn(&mut w, "unit.space_cruiser", P1, from_2);
         let full = w.entity(cruiser).unwrap().max_hp;
-        travel(&mut w, cruiser, 1).unwrap();
+        travel_to(&mut w, cruiser, beside).unwrap();
         run_until(&mut w, 2000, |w| {
             w.entity(cruiser).is_some_and(|e| e.pos.body == BodyId(1))
         });
@@ -614,7 +628,7 @@ fn several_inhibitors_do_not_stack_and_a_destroyed_one_strikes_no_more() {
         w.despawn(first).unwrap();
         w.despawn(second).unwrap();
         let later = spawn(&mut w, "unit.corvette", P1, from_2);
-        travel(&mut w, later, 1).unwrap();
+        travel_to(&mut w, later, beside).unwrap();
         run_until(&mut w, 2000, |w| {
             w.entity(later).is_some_and(|e| e.pos.body == BodyId(1))
         });
@@ -747,4 +761,286 @@ fn an_inhibitor_holds_a_freighter_like_any_ship() {
         w.order_failures(P1)
             .any(|f| f.kind == "trade" && f.reason == "inhibited")
     );
+}
+
+// Task 111: a jump from anywhere in a system, to the edge of an unexplored system or anywhere in
+// an explored one.
+
+/// A point of system `system`'s plane, `dx`, `dy` milli-tiles from its star.
+fn near_star(w: &World, system: u32, dx: i32, dy: i32) -> Pos {
+    let at = star(w, system);
+    Pos {
+        x: at.x + dx,
+        y: at.y + dy,
+        ..at
+    }
+}
+
+#[test]
+fn a_ship_charges_where_it_stands_and_departs_from_there() {
+    let rules = rules();
+    let w = twice(|| {
+        let mut w = world(&rules, "age.expansion", &[]);
+        // In the middle of its system, far from the edge toward system 2.
+        let start = near_star(&w, 1, -4_000, 3_000);
+        let ship = spawn(&mut w, "unit.survey_ship", P1, start);
+        let charge = charge_of(&w, "unit.survey_ship");
+        travel(&mut w, ship, 2).unwrap();
+        w.step();
+        let begun = w.tick();
+        assert_eq!(w.jump_charge(ship).unwrap().required, charge);
+        run_until(&mut w, 400, |w| in_transit(w, ship));
+        // No flight to the edge: it charged for its jump_charge and left from where it stood.
+        assert_eq!(w.tick() - begun, charge);
+        let transit = w.transits().find(|t| t.entity.id == ship).unwrap();
+        assert_eq!(transit.entity.pos, start);
+        w
+    });
+    assert_eq!(w.transits().count(), 1);
+}
+
+#[test]
+fn a_ship_arrives_at_the_point_in_an_explored_system_and_at_the_edge_of_an_unexplored_one() {
+    let rules = rules();
+    let w = twice(|| {
+        let mut w = world(&rules, "age.expansion", &[]);
+        assert!(w.system_explored(P1, 1), "the home system");
+        assert!(!w.system_explored(P1, 2));
+        let wanted = near_star(&w, 2, 4_000, -6_000);
+        let scout = {
+            let at = near_star(&w, 1, 0, 5_000);
+            spawn(&mut w, "unit.survey_ship", P1, at)
+        };
+        travel_to(&mut w, scout, wanted).unwrap();
+        run_until(&mut w, 1000, |w| {
+            w.entity(scout).is_some_and(|e| e.pos.body == wanted.body)
+        });
+        // Unexplored: it came out at the edge facing system 1.
+        assert_eq!(w.entity(scout).unwrap().pos, w.system_edge(2, 1).unwrap());
+        assert!(w.system_explored(P1, 2), "a ship there explores it");
+        // Its enemies have not.
+        assert!(!w.system_explored(P2, 2));
+        // The next ship sent there comes out at the point its order names.
+        let second = {
+            let at = near_star(&w, 1, 0, -5_000);
+            spawn(&mut w, "unit.survey_ship", P1, at)
+        };
+        travel_to(&mut w, second, wanted).unwrap();
+        run_until(&mut w, 1000, |w| {
+            w.entity(second).is_some_and(|e| e.pos.body == wanted.body)
+        });
+        assert_eq!(w.entity(second).unwrap().pos, wanted);
+        // A point beyond the plane is kept inside it; back home it arrives where it is sent.
+        let beyond = Pos {
+            x: 900_000,
+            ..wanted
+        };
+        let third = {
+            let at = near_star(&w, 1, 3_000, 0);
+            spawn(&mut w, "unit.survey_ship", P1, at)
+        };
+        travel_to(&mut w, third, beyond).unwrap();
+        let home = near_star(&w, 1, -9_000, 2_000);
+        travel_to(&mut w, scout, home).unwrap();
+        run_until(&mut w, 2000, |w| {
+            w.entity(third).is_some_and(|e| e.pos.body == wanted.body)
+                && w.entity(scout).is_some_and(|e| e.pos.body == home.body)
+        });
+        let rom_sim::Topology::Flat { width, .. } = w.surface(wanted.body).unwrap().topology()
+        else {
+            panic!("a system's plane is flat");
+        };
+        assert_eq!(
+            w.entity(third).unwrap().pos,
+            Pos {
+                x: width as i32 * 1000 - 1,
+                ..wanted
+            }
+        );
+        assert_eq!(w.entity(scout).unwrap().pos, home);
+        w
+    });
+    assert_eq!(w.transits_done(), 4);
+}
+
+#[test]
+fn a_voyage_over_several_systems_charges_at_each_intermediate_edge() {
+    let rules = rules();
+    let w = twice(|| {
+        let mut w = world(&rules, "age.expansion", &[]);
+        // Systems 2 and 3 explored (their planes seen): only the last leg ends at the point.
+        w.reveal_terrain(P1, BodyId(10));
+        w.reveal_terrain(P1, BodyId(20));
+        assert!(w.system_explored(P1, 2) && w.system_explored(P1, 3));
+        let ship = {
+            let at = near_star(&w, 1, 2_000, 2_000);
+            spawn(&mut w, "unit.survey_ship", P1, at)
+        };
+        let wanted = near_star(&w, 3, -7_000, 4_000);
+        travel_to(&mut w, ship, wanted).unwrap();
+        assert_eq!(w.travel_path(P1, 1, 3), Some(vec![1, 2, 3]));
+        run_until(&mut w, 2000, |w| {
+            w.entity(ship).is_some_and(|e| e.pos.body == BodyId(10))
+        });
+        // Passing through system 2 it comes out at the edge facing system 1 and charges there.
+        let edge = w.system_edge(2, 1).unwrap();
+        assert_eq!(w.entity(ship).unwrap().pos, edge);
+        w.step();
+        let charge = w
+            .jump_charge(ship)
+            .expect("charging at the intermediate edge");
+        assert_eq!(charge.toward, 3);
+        run_until(&mut w, 400, |w| in_transit(w, ship));
+        assert_eq!(
+            w.transits()
+                .find(|t| t.entity.id == ship)
+                .unwrap()
+                .entity
+                .pos,
+            edge
+        );
+        run_until(&mut w, 2000, |w| {
+            w.entity(ship).is_some_and(|e| e.pos.body == BodyId(20))
+        });
+        assert_eq!(w.entity(ship).unwrap().pos, wanted);
+        assert!(w.entity(ship).unwrap().orders().is_empty());
+        w
+    });
+    assert_eq!(w.transits_done(), 2);
+}
+
+#[test]
+fn an_inhibitor_strikes_an_arrival_inside_its_radius_and_not_one_outside() {
+    let rules = rules();
+    let kind = rules.id_of("bld.jump_inhibitor").unwrap();
+    let rule = rules.entity_types[&kind].inhibitor.clone().unwrap();
+    assert!(rule.arrival_radius > 0);
+    let w = twice(|| {
+        let mut w = world(&rules, "age.abundance", &[]);
+        let inhibitor = w
+            .place_for_setup(kind, P2, Pos::on(BodyId(2), 0, 30_500, 30_500))
+            .unwrap();
+        let planet = planet_2(&w);
+        let radius = rule.arrival_radius as i32;
+        // The blow covers the planet and its near space, to the radius and no further.
+        let edge_of_reach = Pos {
+            x: planet.x - radius,
+            ..planet
+        };
+        assert_eq!(
+            w.arrival_blow(P1, edge_of_reach).map(|b| b.inhibitor),
+            Some(inhibitor)
+        );
+        assert!(
+            w.arrival_blow(
+                P1,
+                Pos {
+                    x: planet.x - radius - 1,
+                    ..planet
+                }
+            )
+            .is_none()
+        );
+        // Ships arriving at the edge of a system fall outside it.
+        assert!(w.arrival_blow(P1, w.system_edge(1, 2).unwrap()).is_none());
+        assert!(w.arrival_blow(P1, w.system_edge(1, 4).unwrap()).is_none());
+        let from_2 = w.system_edge(2, 1).unwrap();
+        let near = spawn(&mut w, "unit.space_cruiser", P1, from_2);
+        let far = spawn(&mut w, "unit.space_cruiser", P1, from_2);
+        let full = w.entity(near).unwrap().max_hp;
+        let inside = Pos {
+            x: planet.x - 5_000,
+            ..planet
+        };
+        // The star, 20 tiles from the planet: within the system, outside the radius.
+        let outside = star(&w, 1);
+        travel_to(&mut w, near, inside).unwrap();
+        travel_to(&mut w, far, outside).unwrap();
+        run_until(&mut w, 2000, |w| {
+            [near, far]
+                .iter()
+                .all(|s| w.entity(*s).is_some_and(|e| e.pos.body == BodyId(1)))
+        });
+        assert_eq!(w.entity(near).unwrap().hp, full - rule.arrival_damage);
+        assert_eq!(w.entity(far).unwrap().hp, full);
+        let strikes: Vec<_> = w
+            .arrival_strikes()
+            .iter()
+            .map(|s| (s.ship, s.pos))
+            .collect();
+        assert_eq!(strikes, [(near, inside)]);
+        w
+    });
+    assert_eq!(w.arrival_strikes().len(), 1);
+}
+
+/// A transport of player one landed on planet 2.
+fn landed_transport(w: &mut World) -> EntityId {
+    let at = planet_2(w);
+    let ship = spawn(w, "unit.transport_ship", P1, at);
+    let marker = w.body_marker(BodyId(2));
+    order(w, ship, "orbit", marker, None).unwrap();
+    run_until(w, 400, |w| w.orbit(ship).is_some());
+    let site = w
+        .landing_site(ship, Pos::on(BodyId(2), 0, 20_500, 20_500))
+        .unwrap();
+    order(w, ship, "land", None, Some(site)).unwrap();
+    run_until(w, 4000, |w| w.is_landed(ship));
+    ship
+}
+
+#[test]
+fn a_landed_ship_lifts_off_to_orbit_before_it_charges() {
+    let rules = rules();
+    let launch = rules.constant("space.launch_ticks").unwrap() as u64;
+    let w = twice(|| {
+        let mut w = world(&rules, "age.expansion", &[]);
+        let ship = landed_transport(&mut w);
+        let charge = charge_of(&w, "unit.transport_ship");
+        travel(&mut w, ship, 2).unwrap();
+        w.step();
+        // Rising, not yet charging.
+        assert!(w.is_landed(ship) && w.jump_charge(ship).is_none());
+        assert!(w.altitude_pct(ship).is_some_and(|a| a > 0 && a < 100));
+        let ordered = w.tick() - 1;
+        run_until(&mut w, launch + 10, |w| !w.is_landed(ship));
+        assert_eq!(w.tick() - ordered, launch);
+        // Up in its planet's orbit it charges, from the start, where it rose.
+        w.step();
+        assert_eq!(w.jump_charge(ship).unwrap().progress, 0);
+        assert_eq!(w.entity(ship).unwrap().pos, planet_2(&w));
+        run_until(&mut w, charge + 10, |w| in_transit(w, ship));
+        assert_eq!(w.tick() - ordered, launch + charge + 1);
+        w
+    });
+    assert_eq!(w.transits().count(), 1);
+}
+
+#[test]
+fn save_and_load_mid_charge_and_mid_transit_keep_the_hash() {
+    let rules = rules();
+    let mut w = world(&rules, "age.expansion", &[]);
+    w.reveal_terrain(P1, BodyId(10));
+    let ship = {
+        let at = near_star(&w, 1, 6_000, -2_000);
+        spawn(&mut w, "unit.space_cruiser", P1, at)
+    };
+    let wanted = near_star(&w, 2, -3_000, 8_000);
+    travel_to(&mut w, ship, wanted).unwrap();
+    let check = |w: &mut World| {
+        let mut copy = World::restore(rules.clone(), w.snapshot()).unwrap();
+        assert_eq!(copy.hash(), w.hash());
+        for _ in 0..30 {
+            w.step();
+            copy.step();
+        }
+        assert_eq!(copy.hash(), w.hash());
+    };
+    run(&mut w, 40);
+    assert!(w.jump_charge(ship).is_some_and(|c| c.progress > 0));
+    check(&mut w);
+    run_until(&mut w, 1000, |w| in_transit(w, ship));
+    check(&mut w);
+    run_until(&mut w, 2000, |w| w.entity(ship).is_some());
+    assert_eq!(w.entity(ship).unwrap().pos, wanted);
 }

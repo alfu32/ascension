@@ -335,17 +335,36 @@ shape that (values and tables in `database.md`, "Routes and jumps"):
   player's star map: a faint stub leaves each system it has seen. In the expansion age the
   spaceport's **Enhanced Sensors** reveal every route leaving a system where the player has a ship
   or a planet and remove the delay; in the galactic age **Automated Route Survey** reveals them all.
-- **Charging a jump.** A ship sent along a route flies to the edge of its system and charges (6 s
-  for a corvette to 12 s for a battleship); it cannot move or fire meanwhile and can be hit, and a
-  new order cancels the charge. Ships sent together leave together, when the slowest has charged.
-  A charging ship wears a ring that fills, in the system and on the star map; its card says
-  "Charging jump to Sirius: 4 s".
+- **Charging a jump.** A ship sent along a route charges where it is (6 s for a corvette to 12 s
+  for a battleship); it cannot move or fire meanwhile and can be hit, and a new order cancels the
+  charge. Ships sent together leave together, when the slowest has charged. A charging ship wears
+  a ring that fills, in the system and on the star map; its card says "Charging jump to Sirius:
+  4 s".
+- **Jump from anywhere (task 111).** The owner (2026-11-19): a ship jumps "from anywhere inside
+  the system to the edge of an unknown system, anywhere inside a known system; wind-up time still
+  applies on departure; the departure takes place from orbit". So a ship charges where it stands
+  in its system's space, from the orbit it holds or from open space; a ship landed on a planet
+  first lifts off to orbit, then charges. Routes stay: each jump follows a route to a connected
+  system. On the last jump of a voyage the ship comes out at the point it was sent to if its
+  player has explored that system (the systems the star map does not call "(unexplored)": its
+  home system, any system where it or an ally has had a ship, the celestial home, all of them once
+  ascended), and at the edge facing where it came from if not; passing through a system it comes
+  out at the edge and charges there for the next jump. A right click on a point of another
+  system, or on one of its bodies, sends the selected ships there; on the star map the hover over
+  an unexplored system says they will arrive at its edge. Screenshots (scripts
+  `tasks/111-*-script.txt`, universe seed 1, `--ai none`): `img/111-charging-in-place.png` (a
+  fleet charging in open space near its star, far from the rim) and `img/111-arrival-inside.png`
+  (four ships jumped home, out beside the home planet rather than at the rim).
 - **Jump inhibitors.** A building of the space age, on a planet: enemy ships in its star system
   may leave only back the way they came, charge half as long again, and are told why when another
   route is refused. Several do not stack; destroying the building frees them at once. A system so
   held shows a six-sided ring on the star map and a faint boundary at its rim; hovering it explains.
-  Since task 104 (owner, 2026-11-19) it also strikes every enemy ship that jumps into its system,
-  once, on arrival: a fixed blow of 1 000 hit points (data: `et_inhibitor.arrival_damage`) that
+  Since task 104 (owner, 2026-11-19) it also strikes an enemy ship that jumps into its system,
+  once, on arrival: since task 111 only one that comes out near the inhibitor's planet, within 12
+  tiles of it (`et_inhibitor.arrival_radius`: the planet's orbit and its moons, not the system as a
+  whole; the owner: "the adversary will still be able to jump inside the system but further away
+  from the planet(s) with inhibitor(s)"), so a ship arriving at the edge or beside another planet
+  is spared. The blow is a fixed 1 000 hit points (data: `et_inhibitor.arrival_damage`) that
   destroys the light hulls (space freighter, corvette, survey ship) and leaves the line ships hurt
   but alive (frigate and transport with a quarter to a third, cruiser and carrier half, battleship
   72 %). Ships built there, or already there when it is completed, are not struck; craft aboard
@@ -355,8 +374,9 @@ shape that (values and tables in `database.md`, "Routes and jumps"):
   what destroys a building: bombardment by the line ships that survive the blow, or troops landed
   by a transport (1 500 hit points, it survives).
 - **Interstellar trade.** From the age of abundance (**Interstellar Trade**), a space freighter
-  runs a route to an own or allied city in another star system: lift off, cross to the edge,
-  charge, jump, cross, land, deliver, and back; it pays by the whole path's length.
+  runs a route to an own or allied city in another star system: lift off, charge, jump (to the
+  partner's planet once its system is explored, to the edge the first time), cross, land,
+  deliver, and back; it pays by the whole path's length (still measured edge to edge).
 
 Screenshots (scripts `tasks/70-*-script.txt`, universe seed 1, `--ai none`):
 `img/jump-fleet-charging.png` (a fleet at the edge, amber charge rings filling),

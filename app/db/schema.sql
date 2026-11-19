@@ -416,10 +416,14 @@ CREATE TABLE et_inhibitor (            -- jump inhibitor (task 70): holds enemy 
   charge_pct     INTEGER NOT NULL DEFAULT 0 CHECK (charge_pct >= 0),
                                        -- extra jump charge time of those ships, percent; several
                                        -- inhibitors do not stack (the largest applies)
-  arrival_damage INTEGER NOT NULL DEFAULT 0 CHECK (arrival_damage >= 0)
+  arrival_damage INTEGER NOT NULL DEFAULT 0 CHECK (arrival_damage >= 0),
                                        -- task 104: hit points an enemy ship loses, once, when it
                                        -- jumps into that star system; a fixed blow, not through
                                        -- the armour table; several do not stack (the largest)
+  arrival_radius INTEGER NOT NULL DEFAULT 0 CHECK (arrival_radius >= 0)
+                                       -- task 111: the blow strikes only a ship whose arrival
+                                       -- point lies within this distance (milli-tiles of the
+                                       -- system's plane) of the planet it stands on; 0 = no blow
 ) STRICT;
 
 -- Market (task 107): its owner buys and sells lots of the tradeable resources here

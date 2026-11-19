@@ -1,0 +1,19 @@
+# Task 111, replayed by --script in --universe mode (--players 2 --ai none, seed 1, --view
+# system,home): two space frigates and two corvettes of player one jump home from the nearest
+# system (Tarf). Their home system is explored, so they come out beside the home planet, the
+# point their order names, not at the rim of the system. Slowed from tick 600, focused once all
+# four are in.
+# Screenshot: --size 1280x800 --after 60 (docs/img/111-arrival-inside.png).
+0 grant-age age.abundance
+0 jump-in 1 unit.space_frigate
+0 jump-in 1 unit.space_frigate
+0 jump-in 1 unit.corvette
+0 jump-in 1 unit.corvette
+1 speed 400
+2 ships
+600 speed 100
+880 speed 10
+884 cam focus
+888 cam focus
+892 cam focus
+896 cam wheel -8 640,400
