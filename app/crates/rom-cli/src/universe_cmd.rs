@@ -413,16 +413,16 @@ fn send_scouts(world: &mut World, scouts: &mut [Scout]) -> Result<(), rom_sim::S
         if scout.destination.is_none()
             && world.claims().any(|(b, p)| b == scout.first && p == owner)
         {
-            let system = world.body(pos.body).expect("space").system;
-            let origin = world
-                .systems()
-                .iter()
-                .find(|s| s.id == system)
-                .expect("origin");
+            let Some(system) = world.body(pos.body).map(|b| b.system) else {
+                continue;
+            };
+            let Some(origin) = world.systems().iter().find(|s| s.id == system) else {
+                continue;
+            };
             let destination = world
                 .systems()
                 .iter()
-                .filter(|s| s.id != system)
+                .filter(|s| s.id != system && world.space_of(s.id).is_some())
                 .min_by_key(|s| {
                     let dx = i64::from(s.x) - i64::from(origin.x);
                     let dy = i64::from(s.y) - i64::from(origin.y);
@@ -432,7 +432,9 @@ fn send_scouts(world: &mut World, scouts: &mut [Scout]) -> Result<(), rom_sim::S
                     )
                 })
                 .map(|s| s.id);
-            if let Some(destination) = destination {
+            if let Some(destination) = destination
+                && let Some(space) = world.space_of(destination)
+            {
                 world.submit(Command {
                     player: owner,
                     executor: scout.ship,
@@ -440,7 +442,7 @@ fn send_scouts(world: &mut World, scouts: &mut [Scout]) -> Result<(), rom_sim::S
                     subject: None,
                     target_entity: None,
                     target_pos: Some(Pos {
-                        body: world.space_of(destination).expect("space"),
+                        body: space,
                         ..Pos::default()
                     }),
                     queue: false,
@@ -767,5 +769,32 @@ mod tests {
         let first = run(600);
         assert!(first.contains("tick=600"), "{first}");
         assert_eq!(first, run(600));
+    }
+
+    /// Task 103: the nearest other system can be the celestial home, which has no space.
+    #[test]
+    fn space_scouts_skip_systems_without_space() {
+        let conn = rom_rules::build_rules_db(
+            include_str!("../../../db/schema.sql"),
+            include_str!("../../../db/seed.sql"),
+        )
+        .unwrap();
+        let rules = Rules::load(&conn).unwrap();
+        let factions: Vec<_> = ["nation.romans", "nation.ashscale"]
+            .iter()
+            .map(|k| rules.id_of(k).unwrap())
+            .collect();
+        let universe = generate_universe(
+            &rules,
+            &UniverseRequest {
+                style: rules.id_of("map.many_worlds").unwrap(),
+                seed: 1,
+                player_factions: factions.clone(),
+            },
+        )
+        .unwrap();
+        let world =
+            simulate_universe(Arc::new(rules), &universe, &factions, 1, 6000, true).unwrap();
+        assert!(world.claims().count() >= 2);
     }
 }
