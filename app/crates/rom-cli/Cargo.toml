@@ -17,4 +17,10 @@ rom-sim = { path = "../rom-sim" }
 rom-ai = { path = "../rom-ai" }
 rom-mapgen = { path = "../rom-mapgen" }
 rom-match.workspace = true
+rom-net = { path = "../rom-net", default-features = false }
 rusqlite.workspace = true
+signal-hook = { version = "=0.3.18", default-features = false }
+
+[features]
+# `rom client https://…`: TLS for the client. The server never needs it (nginx terminates TLS).
+tls = ["rom-net/tls"]

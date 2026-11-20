@@ -173,8 +173,8 @@ snapshot and logs the tick and both hashes; the client reloads and goes on.
 
 ## Keys and seats
 
-- A **key** is 20 random bytes from the operating system, shown as `XXXXX-XXXXX-XXXXX-XXXXX`
-  (base32). The server stores only its SHA-256. One key admits one person once: the first
+- A **key** is 20 random bytes from the operating system, shown as 32 base32 characters in four
+  groups, `XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX` (case, dashes and spaces are ignored when typed). The server stores only its SHA-256. One key admits one person once: the first
   successful `Hello` with it consumes it. It does not reserve a seat.
 - On admission the client gets a **seat token** (random, stored hashed on the server, kept by
   the client in its config folder per server URL). The token, not the key, is used to rejoin
@@ -221,6 +221,98 @@ location /ascension/ {
   Players then join `https://<your domain>/ascension/` with a key.
 - Cross-machine check: `rom replay-hash --seed N --ticks T` prints the final hash of a leader
   run replayed by a follower; it must print the same on the VPS and on a player's machine.
+
+## As built (task 86)
+
+`rom-net` holds the protocol types, the server and the client side; `rom serve`, `rom keys` and
+`rom client` are in `rom-cli`. Where the build differs from or adds to the design above:
+
+| Item | As built |
+| --- | --- |
+| Messages | JSON objects tagged by `"type"`, one per text frame (`rom_net::protocol`). Journal entries are `{"order": {…}}` and `{"surface": {"body", "revealed_for"}}`; an empty `Turn` is about 40 bytes |
+| Added, C → S | `Done { tick }` (strict lockstep only, below); `NeedSnapshot` (a follower out of step or far behind); `Save { name? }` (host); `Pong` (answer to a server `Ping`); `Visit` carries an optional `seq` so a refusal can name it |
+| Added, S → C | `Denied { action, reason }` (speed, start or save by a non-host; lobby actions after the start); `Notice { text }`; `Bye { reason }` (the server stops, or the seat was joined from another connection) |
+| Fields added | `Welcome.host`; `Refused.detail` (words, naming both versions); `Start.wait_for_clients` and `Start.snapshot` (a snapshot follows: the world is the snapshot's, not the one built from the setup); `Snapshot.bytes`; `Chat.from` and `Chat.seat` from the server; `Seat.wait_seconds` while waiting; `Lobby.phase`, `countdown`, `speed`; `SeatInfo.player`, `state`, `host` |
+| Seat states | `open` (a human seat nobody has taken) besides `connected`, `waiting`, `computer`, `idle` |
+| Host | a key added as a host key (`ServerHandle::add_keys(n, true)`: the integrated host's own seat) makes its seat the host. `rom serve` issues no host keys: the operator is the console |
+| Joining late | a key holder may take a human seat a computer is playing because nobody took it at the start; the computer leaves it |
+| Allies chat | delivered to the seats whose player is on the sender's team (every player is on its own team today, so only the sender sees it) |
+| Strict lockstep | `ServerConfig::wait_for_clients` (tests only, not a `rom serve` option): the leader steps a tick only when every connected person's client has sent `Done` for it, so a match of client-side computer players repeats exactly. Real matches wait for no one |
+| Snapshots | a `rom_save` file of the leader's world, built on the follower from the setup's universe recipe plus the save (`rom_net::Follower::load_snapshot`) |
+| Silence | a connection that sends nothing for 30 s is dropped; clients ping every 5 s |
+| Limits | 3 failed `Hello`s per address, then a wait of 2 s doubling to 5 min; messages of at most 64 KiB, 200 a second (bursts of 2,000); 64 connections |
+| TLS | `rustls` (ring) with the operating system's root certificates (`rustls-native-certs`, already in the app's lock file), behind `rom-net`'s `tls` feature. `rom-cli` builds without it unless `--features tls` |
+| `--resume` | continues the folder's match (in the lobby or under way) with its seats; a folder without one gets a new match, so a systemd unit can always pass it. Without `--resume` the folder's match is replaced (keys stay) |
+
+`server.db` is the server's own bookkeeping (`net_key`, `net_seat`, `net_match`), not the game
+database: no rules or simulation state live in it, and the game schema is unchanged.
+
+## Operating a server
+
+Build on the VPS (aarch64; no window libraries, no TLS needed behind nginx):
+
+```sh
+cargo build --release --locked -p rom-cli     # target/release/rom
+rom --version                                 # the version and the rules fingerprint
+```
+
+Run it once by hand to see the address and the first keys, then as a service:
+
+```sh
+rom serve --state-dir /var/lib/ascension --humans 2 --ai balanced:moderate --seed 7 --style Cluster
+```
+
+Options: `--bind` (127.0.0.1), `--port` (7400), `--path` (`/`), `--state-dir` (`./rom-server`),
+`--resume`, `--keys N` (default one per human seat; none on `--resume`), and the match:
+`--seed`, `--style` (Planet, Solar, Cluster, Sector, Quadrant, Galaxy or a style key; Cluster by
+default), `--home-size`, `--start-placement separate|together`, `--age`, `--humans N`,
+`--ai profile:difficulty,…|none`, `--factions key,…`, `--speed P`, `--on-disconnect
+pause-then-computer|idle|computer`, `--wait-seconds` (120), `--takeover profile:difficulty`,
+`--autosave-minutes` (5; 0 for none), `--countdown-seconds` (5). It prints one line per event
+(joins, drops, saves, desyncs). On a terminal it reads `status`, `keys N`, `start`, `pause`,
+`resume`, `speed P`, `save [name]`, `stop`. SIGTERM and Ctrl-C save and stop.
+
+A systemd unit (`/etc/systemd/system/ascension.service`):
+
+```ini
+[Unit]
+Description=Ascension game server
+After=network-online.target
+
+[Service]
+User=ascension
+WorkingDirectory=/var/lib/ascension
+ExecStart=/opt/ascension/rom serve --resume --state-dir /var/lib/ascension --humans 2 --ai balanced:moderate --seed 7
+Restart=on-failure
+KillSignal=SIGTERM
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target
+```
+
+With `--resume` in the unit, a restart continues the match and its seats; to set up a new match,
+stop the service and run `rom serve` once without `--resume` (or empty the folder's match).
+Logs: `journalctl -u ascension -f`. The nginx block is the one above (`location /ascension/`).
+
+Keys while it runs (also under systemd, without a console):
+
+```sh
+rom keys add 2 --state-dir /var/lib/ascension   # prints two keys; hand one to each person
+rom keys list --state-dir /var/lib/ascension    # unused and used counts, never the keys
+curl -s https://<your domain>/ascension/status  # version, seats, tick, keys, desyncs
+```
+
+Smoke test from a player's machine (a build with TLS):
+
+```sh
+cargo build --release --locked -p rom-cli --features tls
+target/release/rom client https://<your domain>/ascension/ --key <key> --name Test --bot --ticks 2000
+```
+
+It joins, plays its seat with a computer player, follows the match, reports its hash every 100
+ticks, and prints `client seat=… tick=… hash=… desyncs=…` when it leaves. It prints its seat
+token: `rom client <url> --token <token>` rejoins the seat.
 
 ## Later (not in tasks 85–88)
 
