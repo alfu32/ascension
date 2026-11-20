@@ -34,6 +34,7 @@ pub mod pick;
 mod pixels;
 pub mod projectiles;
 mod readback;
+mod response;
 pub mod review;
 mod scene;
 pub mod shadow;
@@ -58,6 +59,7 @@ pub use entities::{
     SnapshotPair, Surface, build_instances, build_instances_on, interpolate_on, owner_color,
 };
 pub use globe::{ChunkSpec, Globe, PlanetScene, SurfaceHit, planet_radius, to_render};
+pub use grass::Detail;
 pub use image;
 pub use looks::{
     Generator, MATERIAL_FAR, MATERIAL_NEAR, MaterialLook, ObjectLook, Program, SceneLooks,
@@ -73,6 +75,7 @@ pub use orbit::{
 pub use overlay::{Line3, OverlayGeometry, build_overlays, build_overlays_on};
 pub use pixels::rgba_to_bgra_flipped;
 pub use projectiles::{ProjectileKind, ShotView, flight_span};
+pub use response::ResponseTimes;
 pub use review::{Review, SheetView, WorldLabel};
 pub use rig::Activity;
 pub use rom_geo::SurfacePos;

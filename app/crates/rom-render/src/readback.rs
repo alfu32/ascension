@@ -15,8 +15,9 @@ use raylib::prelude::{RaylibRenderTexture2D, RenderTexture2D};
 use crate::mailbox::FramePixels;
 use crate::pixels::bgra_rows_flipped;
 
-/// Pack buffers in the ring.
-pub(crate) const SLOTS: usize = 3;
+/// Pack buffers in the ring. Two (three until task 108): with the render thread waiting for a
+/// free one before it draws, a frame shows about one GPU frame sooner after it was drawn.
+pub(crate) const SLOTS: usize = 2;
 /// Time without a published frame after which the oldest read is waited for.
 pub(crate) const STALL: Duration = Duration::from_millis(100);
 /// Longest blocking wait on one fence, in nanoseconds.
@@ -113,16 +114,40 @@ impl Ring {
         }
     }
 
-    /// Frees `slot` after its frame was published; true when that frame answers the snapshot request.
-    pub(crate) fn published(&mut self, slot: usize, now: Instant) -> bool {
+    /// Plans freeing the slot the next read needs before another frame is drawn: while that slot is
+    /// busy, the oldest read is mapped, after a wait if its fence has not signalled. A frame drawn
+    /// with no slot to read it into would be GPU work nobody sees.
+    pub(crate) fn make_room(&self, signalled: impl FnOnce(usize) -> bool) -> Collect {
+        if self.issue_slot().is_some() {
+            return Collect::default();
+        }
+        let Some(oldest) = self.oldest() else {
+            return Collect::default();
+        };
+        Collect {
+            map: Some(oldest),
+            wait: !signalled(oldest),
+        }
+    }
+
+    /// Frees `slot` after its frame was published; true when that frame answers the snapshot
+    /// request, and the frame's number.
+    pub(crate) fn published(&mut self, slot: usize, now: Instant) -> (bool, u64) {
         self.last_publish = now;
-        match (self.slots[slot].take(), self.snapshot_from) {
+        let frame = self.slots[slot].take();
+        let number = frame.unwrap_or(self.issued);
+        match (frame, self.snapshot_from) {
             (Some(frame), Some(from)) if frame >= from => {
                 self.snapshot_from = None;
-                true
+                (true, number)
             }
-            _ => false,
+            _ => (false, number),
         }
+    }
+
+    /// The number the next read gets.
+    pub(crate) fn next_frame(&self) -> u64 {
+        self.issued
     }
 
     /// Frees `slot` without publishing its frame.
@@ -146,6 +171,8 @@ pub(crate) struct ReadyFrame {
     pub pixels: FramePixels,
     /// Whether this frame answers a snapshot request.
     pub snapshot: bool,
+    /// Its read-back number, in drawing order.
+    pub frame: u64,
 }
 
 type GlSync = *const c_void;
@@ -244,9 +271,16 @@ pub(crate) struct AsyncReadback {
     buffers: [u32; SLOTS],
     fences: [GlSync; SLOTS],
     ring: Ring,
+    /// When the last fence wait of [`Self::map_planned`] ended, if it waited.
+    wait_ended: Option<Instant>,
 }
 
 impl AsyncReadback {
+    /// The read-back number of the next frame read (later frames get higher ones).
+    pub(crate) fn next_frame(&self) -> u64 {
+        self.ring.next_frame()
+    }
+
     /// Loads the GL entry points and creates the buffers; `Err` names what the context lacks.
     pub(crate) fn new(now: Instant) -> Result<Self, String> {
         let gl = Gl::load()?;
@@ -263,6 +297,7 @@ impl AsyncReadback {
             buffers,
             fences: [ptr::null(); SLOTS],
             ring: Ring::new(now),
+            wait_ended: None,
         })
     }
 
@@ -341,7 +376,35 @@ impl AsyncReadback {
         }
     }
 
-    /// Maps the frame the ring picks, if any, and copies it out top-down.
+    /// Before a frame of `size` is drawn: when every buffer holds a read in flight, maps the
+    /// oldest, waiting for the GPU if need be, so that the frame about to be drawn can be read.
+    /// Keeps the render thread at the pace the GPU draws instead of drawing frames it skips.
+    /// Also returns how long it waited for the GPU.
+    pub(crate) fn make_room(
+        &mut self,
+        size: (u32, u32),
+        now: Instant,
+    ) -> Result<(Option<ReadyFrame>, Duration), String> {
+        if size != self.ring.size() {
+            // `frame` drops the reads in flight of the old size.
+            return Ok((None, Duration::ZERO));
+        }
+        let fences = self.fences;
+        let gl = &self.gl;
+        let plan = self.ring.make_room(|slot| {
+            // SAFETY: polling (timeout 0) a fence this struct created and has not deleted.
+            let status = unsafe { (gl.client_wait_sync)(fences[slot], 0, 0) };
+            status != GL_TIMEOUT_EXPIRED
+        });
+        let started = Instant::now();
+        let ready = self.map_planned(plan, now)?;
+        let waited = self
+            .wait_ended
+            .map_or(Duration::ZERO, |ended| ended.duration_since(started));
+        Ok((ready, waited))
+    }
+
+    /// Maps the oldest read once its fence has signalled, or after a stall, if there is one.
     fn collect(&mut self, now: Instant) -> Result<Option<ReadyFrame>, String> {
         let fences = self.fences;
         let gl = &self.gl;
@@ -350,14 +413,21 @@ impl AsyncReadback {
             let status = unsafe { (gl.client_wait_sync)(fences[slot], 0, 0) };
             status != GL_TIMEOUT_EXPIRED
         });
+        self.map_planned(plan, now)
+    }
+
+    /// Maps and copies out the read `plan` names, waiting for its fence first when it says so.
+    fn map_planned(&mut self, plan: Collect, now: Instant) -> Result<Option<ReadyFrame>, String> {
         let Some(slot) = plan.map else {
             return Ok(None);
         };
+        self.wait_ended = None;
         if plan.wait {
             // SAFETY: waiting on a live fence of this struct, flushing so it can signal.
             let status = unsafe {
                 (self.gl.client_wait_sync)(self.fences[slot], GL_SYNC_FLUSH_COMMANDS_BIT, WAIT_NS)
             };
+            self.wait_ended = Some(Instant::now());
             if status != GL_ALREADY_SIGNALED && status != GL_CONDITION_SATISFIED {
                 self.drop_fence(slot);
                 self.ring.release(slot);
@@ -387,11 +457,15 @@ impl AsyncReadback {
             (self.gl.unmap_buffer)(GL_PIXEL_PACK_BUFFER);
             (self.gl.bind_buffer)(GL_PIXEL_PACK_BUFFER, 0);
         }
-        let snapshot = self.ring.published(slot, now);
+        let (snapshot, frame) = self.ring.published(slot, now);
         let pixels = pixels
             .and_then(|bgra| FramePixels::from_raw(width, height, bgra))
             .ok_or("pixel pack buffer smaller than the frame")?;
-        Ok(Some(ReadyFrame { pixels, snapshot }))
+        Ok(Some(ReadyFrame {
+            pixels,
+            snapshot,
+            frame,
+        }))
     }
 
     /// Deletes `slot`'s fence, if it has one.
@@ -552,13 +626,13 @@ mod tests {
     #[test]
     fn ring_maps_oldest_ready_frame() {
         let now = Instant::now();
-        let mut ring = ring_with(3, now);
-        assert_eq!(ring.issue_slot(), None, "three reads fill the ring");
-        // Frames 0 and 1 have signalled: frame 0 is mapped now, frame 1 waits for the next frame.
+        let mut ring = ring_with(SLOTS, now);
+        assert_eq!(ring.issue_slot(), None, "two reads fill the ring");
+        // Both frames have signalled: frame 0 is mapped now, frame 1 waits for the next frame.
         let mut polled = Vec::new();
         let plan = ring.collect(now, |slot| {
             polled.push(slot);
-            slot != 2
+            true
         });
         assert_eq!(polled, vec![0]);
         assert_eq!(
@@ -568,25 +642,59 @@ mod tests {
                 wait: false
             }
         );
-        ring.published(0, now);
-        assert_eq!(ring.issue_slot(), Some(0), "frame 3 reuses slot 0");
+        assert_eq!(ring.published(0, now), (false, 0));
+        assert_eq!(ring.issue_slot(), Some(0), "frame 2 reuses slot 0");
         ring.issued(0, false);
-        // Frame 1 in slot 1 is now the oldest, ahead of frame 3 in slot 0.
-        assert_eq!(ring.collect(now, |slot| slot != 2).map, Some(1));
-        ring.published(1, now);
-        assert_eq!(ring.collect(now, |slot| slot != 2), Collect::default());
+        // Frame 1 in slot 1 is now the oldest, ahead of frame 2 in slot 0, which has not
+        // signalled yet.
+        assert_eq!(ring.collect(now, |slot| slot == 1).map, Some(1));
+        assert_eq!(ring.published(1, now), (false, 1));
+        assert_eq!(ring.collect(now, |slot| slot == 1), Collect::default());
+    }
+
+    #[test]
+    fn a_full_ring_frees_the_next_slot_before_drawing() {
+        let now = Instant::now();
+        let ring = ring_with(SLOTS - 1, now);
+        assert_eq!(
+            ring.make_room(|_| panic!("no fence is polled while a slot is free")),
+            Collect::default()
+        );
+        let mut ring = ring_with(SLOTS, now);
+        // Signalled: mapped without a wait.
+        assert_eq!(
+            ring.make_room(|slot| slot == 0),
+            Collect {
+                map: Some(0),
+                wait: false
+            }
+        );
+        // Not signalled: waited for, however recently a frame was published.
+        assert_eq!(
+            ring.make_room(|_| false),
+            Collect {
+                map: Some(0),
+                wait: true
+            }
+        );
+        ring.published(0, now);
+        assert_eq!(ring.issue_slot(), Some(0));
+        ring.issued(0, false);
+        assert_eq!(ring.next_frame(), SLOTS as u64 + 1);
+        // Frame 1 is now the oldest and its slot the next to issue into.
+        assert_eq!(ring.make_room(|_| false).map, Some(1));
     }
 
     #[test]
     fn resize_drops_in_flight_frames() {
         let now = Instant::now();
-        let mut ring = ring_with(2, now);
+        let mut ring = ring_with(SLOTS, now);
         assert!(ring.resize((4, 2), now).is_empty(), "same size keeps reads");
         assert_eq!(ring.resize((8, 4), now), vec![0, 1]);
         assert_eq!(ring.size(), (8, 4));
         let later = now + STALL * 2;
         assert_eq!(ring.collect(later, |_| true), Collect::default());
-        assert_eq!(ring.issue_slot(), Some(2));
+        assert_eq!(ring.issue_slot(), Some(0));
     }
 
     #[test]
@@ -618,16 +726,16 @@ mod tests {
         let slot = ring.issue_slot().expect("free slot");
         ring.issued(slot, true);
         assert!(
-            !ring.published(0, now),
+            !ring.published(0, now).0,
             "frame 0 was drawn before the request"
         );
         // A resize drops frame 1; the request stays open for the next frame.
         ring.resize((2, 2), now);
         let slot = ring.issue_slot().expect("free slot");
         ring.issued(slot, false);
-        assert!(ring.published(slot, now));
+        assert!(ring.published(slot, now).0);
         let slot = ring.issue_slot().expect("free slot");
         ring.issued(slot, false);
-        assert!(!ring.published(slot, now), "answered once");
+        assert!(!ring.published(slot, now).0, "answered once");
     }
 }

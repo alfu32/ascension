@@ -330,6 +330,11 @@ impl HudGpu {
             );
         }
     }
+    /// Where this HUD covers the layout `l` with opaque frame pixels.
+    pub(crate) fn opaque_cover(&self, l: &HudLayout) -> Vec<crate::hud_layout::Rect> {
+        self.painter.opaque_cover(l)
+    }
+
     pub(crate) fn needs_rebake(&self, scale: f32) -> bool {
         scale_needs_rebake(self.painter.artwork.scale, scale)
     }

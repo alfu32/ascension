@@ -3,7 +3,7 @@
 use std::cell::Cell;
 use std::io;
 use std::slice;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
@@ -19,6 +19,7 @@ use crate::entities::{
     EntitySnapshot, EntityView, SnapshotPair, aloft_hulls, dress_ships, floor_ships, is_aloft_ship,
 };
 use crate::globe::{Globe, PlanetScene};
+use crate::grass::Detail;
 use crate::hud::{HudOverlay, HudSnapshot};
 use crate::hud_gpu::{HudGpu, MinimapGpu, MinimapOverlays, draw_level_pips, draw_space_minimap};
 use crate::hud_layout::HudLayout;
@@ -33,6 +34,7 @@ use crate::orbit::{
 use crate::pick::{PickContext, PickController, PickEvent, canvas_view, canvas_view_orbit};
 use crate::pixels::rgba_to_bgra_flipped;
 use crate::readback::{AsyncReadback, ReadyFrame};
+use crate::response::{ResponseProbe, ResponseTimes};
 use crate::review::{Review, sheet_cell};
 use crate::scene::{BakeReport, OrbitalShip, Scene};
 use crate::space::{
@@ -165,6 +167,8 @@ struct Shared {
     graticule: AtomicBool,
     /// Whether grass blades are drawn near the camera (the graphics setting).
     grass: AtomicBool,
+    /// The rendering detail level, by [`Detail::index`] (task 108).
+    detail: AtomicU8,
     /// Whether projectiles in flight are drawn (task 95).
     projectiles: AtomicBool,
     /// The player's turning preferences, packed by [`TurnSettings::bits`].
@@ -173,6 +177,12 @@ struct Shared {
     snapshot: Mutex<Option<Arc<FramePixels>>>,
     review: Mutex<Option<Arc<Review>>>,
     stats: Mutex<RenderStats>,
+    /// Click-to-response time (task 108).
+    response: Mutex<ResponseProbe>,
+    /// Picks the simulation has taken and answered with a published snapshot.
+    picks_answered: AtomicU64,
+    /// Entity snapshots published so far.
+    snapshots_published: AtomicU64,
     stop: AtomicBool,
     finished: (Mutex<bool>, Condvar),
 }
@@ -318,6 +328,9 @@ impl RenderBridge {
     /// interpolates between them by the wall-clock time since the newer one arrived.
     pub fn publish_snapshot(&self, snapshot: Arc<EntitySnapshot>) {
         lock(&self.shared.snapshots).push(snapshot, Instant::now());
+        self.shared
+            .snapshots_published
+            .fetch_add(1, Ordering::Relaxed);
     }
 
     /// Publishes the newest immutable interface snapshot.
@@ -352,6 +365,16 @@ impl RenderBridge {
     /// Turns the grass blades near the camera on or off (on by default).
     pub fn publish_grass(&self, shown: bool) {
         self.shared.grass.store(shown, Ordering::Relaxed);
+    }
+
+    /// Sets the rendering detail level; it applies from the next frame, during a match too.
+    pub fn publish_detail(&self, level: Detail) {
+        self.shared.detail.store(level.index(), Ordering::Relaxed);
+    }
+
+    /// The rendering detail level last published.
+    pub fn detail(&self) -> Detail {
+        Detail::from_index(self.shared.detail.load(Ordering::Relaxed))
     }
 
     /// Turns the projectiles in flight on or off (on by default; task 95).
@@ -402,7 +425,30 @@ impl RenderBridge {
     /// Queues an input event for the next frame; the render thread decides what the HUD
     /// consumes, what moves the camera and what becomes a pick event.
     pub fn push_input(&self, event: InputEvent) {
+        if matches!(event, InputEvent::ButtonDown { .. }) {
+            lock(&self.shared.response).pressed(Instant::now());
+        }
         lock(&self.shared.input).push(event);
+    }
+
+    /// Says the simulation has taken `taken` picks in all and published what answers them.
+    pub fn answer_picks(&self, taken: u64) {
+        self.shared.picks_answered.store(taken, Ordering::Release);
+    }
+
+    /// The window shows the frame published as `sequence`.
+    pub fn frame_shown(&self, sequence: u64) {
+        lock(&self.shared.response).frame_shown(sequence, Instant::now());
+    }
+
+    /// Click-to-response times measured so far.
+    pub fn response_times(&self) -> ResponseTimes {
+        lock(&self.shared.response).times()
+    }
+
+    /// Entity snapshots published so far.
+    pub fn snapshots_published(&self) -> u64 {
+        self.shared.snapshots_published.load(Ordering::Relaxed)
     }
 
     /// Takes the pick events the render thread produced since the last call, oldest first.
@@ -542,12 +588,16 @@ impl Shared {
             start_markers: AtomicBool::new(false),
             graticule: AtomicBool::new(true),
             grass: AtomicBool::new(true),
+            detail: AtomicU8::new(Detail::Medium.index()),
             projectiles: AtomicBool::new(true),
             turn: AtomicU8::new(0),
             snapshot_wanted: AtomicBool::new(false),
             snapshot: Mutex::new(None),
             review: Mutex::new(None),
             stats: Mutex::new(RenderStats::default()),
+            response: Mutex::new(ResponseProbe::default()),
+            picks_answered: AtomicU64::new(0),
+            snapshots_published: AtomicU64::new(0),
             stop: AtomicBool::new(false),
             finished: (Mutex::new(false), Condvar::new()),
         }
@@ -625,6 +675,8 @@ fn render_loop(shared: &Shared) {
     // Double clicks on the selection's portrait fly to the selection.
     let mut portrait_clicks = crate::zoom::ClickTracker::default();
     let mut shades: Vec<[f32; 3]> = Vec::new();
+    // The visibility map the shades were made from, until the ground is drawn anew.
+    let mut shaded_from: Option<Arc<VisionMap>> = None;
     let mut stats = StatsWindow::default();
     let mut blended: Vec<EntityView> = Vec::new();
     let mut picker = PickController::default();
@@ -633,11 +685,31 @@ fn render_loop(shared: &Shared) {
     let mut review: Option<Arc<Review>> = None;
     let mut sheet_target: Option<(RenderTexture2D, (u32, u32))> = None;
     let mut sequence = 0_u64;
+    let mut picks_sent = 0_u64;
     let started = Instant::now();
     let mut last_frame = started;
     let mut deadline = started;
 
     while !shared.stop.load(Ordering::Acquire) {
+        // Wait for the GPU rather than draw a frame no pack buffer could read back. The
+        // read-back work this does (not the wait) counts towards the frame's timings.
+        let size = target.as_ref().map(|(_, size)| *size);
+        let room_start = Instant::now();
+        let mut room_work = Duration::ZERO;
+        if let (Some(gpu), Some(size)) = (readback.as_mut(), size) {
+            match gpu.make_room(size, room_start) {
+                Ok((ready, waited)) => {
+                    if let Some(ready) = ready {
+                        publish_frame(shared, &mut sequence, ready);
+                    }
+                    room_work = room_start.elapsed().saturating_sub(waited);
+                }
+                Err(error) => {
+                    eprintln!("rom-render: {error}; reading frames back synchronously from now on");
+                    readback = None;
+                }
+            }
+        }
         let frame_start = Instant::now();
         let seconds = frame_start
             .duration_since(last_frame)
@@ -841,6 +913,7 @@ fn render_loop(shared: &Shared) {
             hidden_terrain = hidden;
         }
         if knowledge_dirty {
+            shaded_from = None;
             if let Some(updated) = scene.set_hidden_terrain(&hidden_terrain) {
                 globe = Some(updated);
             }
@@ -876,9 +949,12 @@ fn render_loop(shared: &Shared) {
             scene.extra_lines = published.lines.clone();
             review = Some(published);
         }
+        // A map like the last one changes nothing: the shades it makes are already applied.
         if let Some(vision) = lock(&shared.vision).take()
             && vision.is_valid()
+            && shaded_from.as_deref() != Some(&*vision)
         {
+            shaded_from = Some(Arc::clone(&vision));
             vision.tile_shades(&mut shades);
             scene.apply_shades(&shades);
             if let Some(map) = &mut minimap {
@@ -931,6 +1007,14 @@ fn render_loop(shared: &Shared) {
         let layout = *lock(&shared.layout);
         let hud_visible = shared.hud_visible.load(Ordering::Relaxed);
         let percent = shared.hud_scale.load(Ordering::Relaxed);
+        // The simulation publishes its answer to a pick before it counts it answered.
+        let answered = shared.picks_answered.load(Ordering::Acquire);
+        lock(&shared.response).frame_started(
+            answered,
+            readback
+                .as_ref()
+                .map_or(u64::MAX, AsyncReadback::next_frame),
+        );
         let hud_snapshot = Arc::clone(&lock(&shared.hud));
         let canvas = HudLayout::new(layout.0, layout.1, (percent > 0).then_some(percent));
         let space_snapshot = Arc::clone(&lock(&shared.space));
@@ -1064,6 +1148,8 @@ fn render_loop(shared: &Shared) {
                         hud_visible,
                     );
                     for pick in space_events {
+                        picks_sent += 1;
+                        lock(&shared.response).pick_sent(picks_sent);
                         let _ = lock(&shared.pick_tx).send(pick);
                     }
                     if consumed {
@@ -1082,6 +1168,8 @@ fn render_loop(shared: &Shared) {
                     now_ms,
                 };
                 for pick in picker.handle_with_orbit(event, &ctx, &mut camera, orbit.as_mut()) {
+                    picks_sent += 1;
+                    lock(&shared.response).pick_sent(picks_sent);
                     let _ = lock(&shared.pick_tx).send(pick);
                 }
                 let position = match event {
@@ -1281,6 +1369,13 @@ fn render_loop(shared: &Shared) {
             0.0
         };
         scene.set_space_state(&space_snapshot, &hud_snapshot.selected);
+        // The world is not drawn where the HUD will cover it with opaque frame pixels.
+        scene.hud_cover = match &hud {
+            Some(hud) if hud_visible && review.is_none() && !hud.needs_rebake(hud_layout.scale) => {
+                hud.opaque_cover(&hud_layout)
+            }
+            _ => Vec::new(),
+        };
         // What the pointer rests on in space: highlighted, named and explained, with a hand
         // cursor over what a double click enters.
         let pointing = match (zoom.as_ref(), orbit.as_ref()) {
@@ -1303,6 +1398,7 @@ fn render_loop(shared: &Shared) {
         let graticule = shared.graticule.load(Ordering::Relaxed);
         scene.show_graticule = graticule;
         scene.show_grass = shared.grass.load(Ordering::Relaxed);
+        scene.set_detail(Detail::from_index(shared.detail.load(Ordering::Relaxed)));
         match (&orbit, &zoom) {
             (Some(orbit), Some(zoom)) if scene.has_space() => {
                 scene.draw_zoomed(&mut rl, &thread, texture, zoom, orbit);
@@ -1495,6 +1591,7 @@ fn render_loop(shared: &Shared) {
                 Some(ReadyFrame {
                     pixels,
                     snapshot: take_snapshot(),
+                    frame: u64::MAX,
                 })
             }
         };
@@ -1503,24 +1600,13 @@ fn render_loop(shared: &Shared) {
             shared.snapshot_wanted.store(true, Ordering::Release);
         }
         let finished_at = Instant::now();
-        if let Some(ReadyFrame { pixels, snapshot }) = ready {
-            sequence += 1;
-            let (width, height) = pixels.dimensions();
-            let pixels = Arc::new(pixels);
-            if snapshot {
-                *lock(&shared.snapshot) = Some(Arc::clone(&pixels));
-            }
-            shared.mailbox.publish(Frame {
-                pixels,
-                width,
-                height,
-                sequence,
-            });
+        if let Some(ready) = ready {
+            publish_frame(shared, &mut sequence, ready);
         }
         stats.record(
             finished_at,
-            millis(finished_at - frame_start),
-            millis(finished_at - readback_start),
+            millis(finished_at - frame_start + room_work),
+            millis(finished_at - readback_start + room_work),
             *size,
         );
         *lock(&shared.stats) = stats.snapshot();
@@ -1539,6 +1625,28 @@ fn render_loop(shared: &Shared) {
     drop(minimap);
     drop(target);
     drop(scene);
+}
+
+/// Hands a read-back frame to the mailbox (and to a waiting snapshot request).
+fn publish_frame(shared: &Shared, sequence: &mut u64, ready: ReadyFrame) {
+    let ReadyFrame {
+        pixels,
+        snapshot,
+        frame,
+    } = ready;
+    *sequence += 1;
+    let (width, height) = pixels.dimensions();
+    let pixels = Arc::new(pixels);
+    if snapshot {
+        *lock(&shared.snapshot) = Some(Arc::clone(&pixels));
+    }
+    lock(&shared.response).frame_published(frame, *sequence);
+    shared.mailbox.publish(Frame {
+        pixels,
+        width,
+        height,
+        sequence: *sequence,
+    });
 }
 
 /// Draws each view of a review sheet into its cell of `target`.

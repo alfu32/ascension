@@ -43,7 +43,7 @@ mod sky;
 mod space;
 mod stains;
 use globe_eye::{GlobeEye, GlobeFrame};
-use globe_eye::{clear_depth, eye_clip_planes};
+use globe_eye::{clear_depth, cover_depth, eye_clip_planes};
 pub(crate) use icons::ModelPictures;
 pub(crate) use space::{OrbitalShip, SpaceLabel};
 
@@ -288,6 +288,9 @@ pub(crate) fn mover_transform(mover: &Mover, seconds: f32) -> Matrix {
 /// GPU resources of the proof scene. Create, draw and drop on the render thread only.
 pub(crate) struct Scene {
     pub(crate) projection_centre_y: f32,
+    /// Render-target rectangles the HUD will cover with opaque pixels this frame: the world
+    /// passes of the globe skip them (task 108).
+    pub(crate) hud_cover: Vec<crate::hud_layout::Rect>,
     /// HUD scale rounded to whole pixels: the size of a health bar's pixel.
     pub(crate) bar_scale: f32,
     /// Where each entity's health bar hangs, from the last `prepare_entities`.
@@ -314,6 +317,9 @@ pub(crate) struct Scene {
     /// Baked feature objects and crop rows.
     object_shader: Shader,
     object_material: WeakMaterial,
+    /// The object shader without its fade, for full detail (task 108).
+    object_shader_solid: Shader,
+    object_material_solid: WeakMaterial,
     /// The uploaded feature objects of the current planet or map.
     features: Option<materials::FeatureGpu>,
     /// Composed models of buildings and units.
@@ -374,6 +380,8 @@ pub(crate) struct Scene {
     grass: Option<grass::GrassGpu>,
     /// Whether the grass blades are drawn (the graphics setting).
     pub(crate) show_grass: bool,
+    /// The rendering detail level the grass reach was last set for.
+    detail_level: crate::grass::Detail,
     /// Light uniforms last set without shadows, and whether the stain and grass shaders existed:
     /// setting them again to the same values would only cost GL lookups.
     lighting_applied: Option<([f32; 3], bool, bool, bool)>,
@@ -665,6 +673,7 @@ impl Scene {
         let mut entity_material = rl.load_material_default(thread);
         entity_material.set_shader(&entity_shader);
         let mut object_shader = materials::load_object_shader(rl, thread);
+        let mut object_shader_solid = materials::load_object_shader_solid(rl, thread);
         let noise = materials::load_noise(thread);
         let mut terrain_shader = terrain_shader;
         let mut sea_globe_shader = sea_globe_shader;
@@ -672,11 +681,14 @@ impl Scene {
             &mut terrain_shader,
             &mut sea_globe_shader,
             &mut object_shader,
+            &mut object_shader_solid,
         ] {
             materials::set_noise_slot(shader);
         }
         let mut object_material = rl.load_material_default(thread);
         object_material.set_shader(&object_shader);
+        let mut object_material_solid = rl.load_material_default(thread);
+        object_material_solid.set_shader(&object_shader_solid);
         let model_shader = models::load_model_shader(rl, thread);
         let mut model_material = rl.load_material_default(thread);
         model_material.set_shader(&model_shader);
@@ -696,6 +708,7 @@ impl Scene {
         );
         Self {
             projection_centre_y: 0.0,
+            hud_cover: Vec::new(),
             bar_scale: 1.0,
             bar_anchors: Vec::new(),
             screen_bars: Vec::new(),
@@ -719,6 +732,8 @@ impl Scene {
             sea_globe_material,
             object_shader,
             object_material,
+            object_shader_solid,
+            object_material_solid,
             features: None,
             model_shader,
             model_material,
@@ -755,6 +770,7 @@ impl Scene {
             stains,
             grass,
             show_grass: true,
+            detail_level: crate::grass::Detail::default(),
             lighting_applied: None,
             icons: icons::IconStrip::default(),
             projectiles: Projectiles::default(),
@@ -980,6 +996,7 @@ impl Scene {
             terrain,
             &mut self.sea_globe_shader,
             &mut self.object_shader,
+            &mut self.object_shader_solid,
             &mut self.model_shader,
         ] {
             materials::set_frame(shader, eye, self.detail, time);
@@ -991,9 +1008,11 @@ impl Scene {
             materials::set_frame(&mut grass.shader, eye, self.detail, time);
         }
 
-        let location = self.object_shader.get_shader_location("planetRadius");
         let radius = self.globe.as_ref().map_or(0.0, |g| g.globe.radius());
-        self.object_shader.set_shader_value(location, radius);
+        for shader in [&mut self.object_shader, &mut self.object_shader_solid] {
+            let location = shader.get_shader_location("planetRadius");
+            shader.set_shader_value(location, radius);
+        }
     }
 
     /// Recolours up to `budget` queued chunks with the newest shades.
@@ -1220,6 +1239,7 @@ impl Scene {
             entity,
             &mut self.sea_globe_shader,
             &mut self.object_shader,
+            &mut self.object_shader_solid,
             &mut self.model_shader,
         ];
         if let Some(stains) = &mut self.stains {
@@ -1263,6 +1283,17 @@ impl Scene {
         if let Some(models) = &mut self.models {
             models.near_only = near_only;
             models.lockstep = anim_time.is_some();
+        }
+    }
+
+    /// Sets the rendering detail level (task 108): how far the grass reaches.
+    pub(crate) fn set_detail(&mut self, level: crate::grass::Detail) {
+        if level == self.detail_level {
+            return;
+        }
+        self.detail_level = level;
+        if let Some(grass) = &mut self.grass {
+            grass.set_reach(level.reach());
         }
     }
 
@@ -1515,6 +1546,7 @@ impl Scene {
         );
         let mut drawing = rl.begin_texture_mode(thread, target);
         drawing.clear_background(SPACE);
+        cover_depth(&self.hud_cover);
         sky::draw_backdrop(
             &mut drawing,
             ([0, 1, 2].map(|i| eye.target[i] - eye.eye[i]), eye.up),
@@ -1580,6 +1612,7 @@ impl Scene {
         let pixel_angle = 2.0 * 22.5_f32.to_radians().tan() / size.1.max(1.0) * GRASS_FOOTPRINT;
         let mut drawing = rl.begin_texture_mode(thread, target);
         clear_depth();
+        cover_depth(&self.hud_cover);
         let radius = orbit.radius;
         let (near, far) = eye_clip_planes(eye, radius, RELIEF);
         set_clip_planes(f64::from(near), f64::from(far));
@@ -1603,12 +1636,17 @@ impl Scene {
             if let Some(grass) = &mut self.grass {
                 grass.draw(pixel_angle);
             }
+            let (object_shader, object_material) = if self.detail >= 1.0 {
+                (&mut self.object_shader_solid, &self.object_material_solid)
+            } else {
+                (&mut self.object_shader, &self.object_material)
+            };
             draw_features(
                 &mut world,
                 self.detail,
                 self.features.as_ref(),
-                &mut self.object_shader,
-                &self.object_material,
+                object_shader,
+                object_material,
             );
             if !gpu.markers.is_empty() {
                 world.draw_mesh_instanced(
@@ -1845,12 +1883,17 @@ impl Scene {
                         Matrix::identity(),
                     );
                 }
+                let (object_shader, object_material) = if self.detail >= 1.0 {
+                    (&mut self.object_shader_solid, &self.object_material_solid)
+                } else {
+                    (&mut self.object_shader, &self.object_material)
+                };
                 draw_features(
                     &mut world,
                     self.detail,
                     self.features.as_ref(),
-                    &mut self.object_shader,
-                    &self.object_material,
+                    object_shader,
+                    object_material,
                 );
                 if self.draw_markers {
                     for (centre, size, color) in &terrain.pillars {

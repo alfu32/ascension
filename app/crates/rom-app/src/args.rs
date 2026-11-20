@@ -7,7 +7,7 @@ pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <f
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] [--ai <profile:difficulty,...|none>] [--watch] \
 [--map-size <width>x<height>] [--sphere <n>] [--single-planet] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
 [--universe] [--start-placement <separate|together>] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-chrome] [--no-hud] [--hud-scale <percent>] [--stats] \
-[--sun <orbit|fixed|midnight>] [--graticule <on|off>] [--grass <on|off>] [--projectiles <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
+[--sun <orbit|fixed|midnight>] [--graticule <on|off>] [--grass <on|off>] [--detail <min|medium|max|ultra>] [--projectiles <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
 [--middle-drag <turn|pan>] [--invert-horizontal-turn] [--invert-vertical-turn] \
 [--gallery <all|units|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
 [--model <model id>] [--parts] [--pose <idle|move|attack|work>] [--anim-time <seconds>] \
@@ -136,6 +136,8 @@ pub struct Options {
     pub graticule: bool,
     /// Draw grass blades on the ground near the camera.
     pub grass: bool,
+    /// Rendering detail: how far the grass reaches (task 108).
+    pub detail: rom_render::Detail,
     /// Draw projectiles in flight (task 95).
     pub projectiles: bool,
     /// The middle button pans and Shift + middle turns (`--middle-drag pan`); by default the
@@ -265,6 +267,7 @@ impl Default for Options {
             age: None,
             graticule: true,
             grass: true,
+            detail: rom_render::Detail::default(),
             projectiles: true,
             middle_drag_pans: false,
             invert_horizontal_turn: false,
@@ -468,6 +471,12 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                     "off" => false,
                     _ => return Err(format!("--graticule expects on or off, got {text:?}")),
                 };
+            }
+            "--detail" => {
+                let text = value("--detail")?;
+                options.detail = rom_render::Detail::parse(&text).ok_or_else(|| {
+                    format!("--detail expects min, medium, max or ultra, got {text:?}")
+                })?;
             }
             "--grass" => {
                 let text = value("--grass")?;
@@ -1012,6 +1021,15 @@ mod tests {
         assert!(defaults.grass && !parse(args(&["--grass", "off"])).unwrap().grass);
         assert!(parse(args(&["--grass", "On"])).unwrap().grass);
         assert!(parse(args(&["--grass", "maybe"])).is_err());
+        assert_eq!(defaults.detail, rom_render::Detail::Medium);
+        for level in rom_render::Detail::ALL {
+            assert_eq!(
+                parse(args(&["--detail", level.name()])).unwrap().detail,
+                level
+            );
+        }
+        assert!(parse(args(&["--detail", "high"])).is_err());
+        assert!(USAGE.contains("--detail <min|medium|max|ultra>"));
         assert!(defaults.projectiles);
         assert!(!parse(args(&["--projectiles", "off"])).unwrap().projectiles);
         assert!(parse(args(&["--projectiles", "maybe"])).is_err());

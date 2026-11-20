@@ -146,6 +146,7 @@ impl WorldView {
             retire_image(window, previous);
         }
         let now = Instant::now();
+        self.bridge.frame_shown(frame.sequence);
         self.presented_frames += 1;
         self.presented_size = (frame.width, frame.height);
         self.recent_presents.push_back(now);

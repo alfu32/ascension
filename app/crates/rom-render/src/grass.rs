@@ -13,13 +13,15 @@
 //! random numbers, the seeded brightness variation and darker base, the flat blade normal seen
 //! from either side, the candidate scheme (one instanced draw, the domain advancing every
 //! "blades per triangle" instances) and its LOD falloff. What the game's frame changes:
-//! - the domains are the land triangles within [`FAR_DISTANCE`] of the eye that wear grass,
+//! - the domains are the land triangles within the far edge of the [`Reach`] that wear grass,
 //!   in view, off building footprints and stains, rebuilt as the eye moves;
 //! - the LOD is applied per triangle instead of per placed object, with a game distance
-//!   ([`LOD_DISTANCE`] instead of 3500), and multiplied by the far fade; one triangle's
+//!   ([`Reach::lod`] instead of 3500), and multiplied by the far fade; past [`Reach::coarse`]
+//!   the blades thin out faster and grow wider (task 108), so at the higher [`Detail`] levels the
+//!   patches show farther for few more blades; one triangle's
 //!   candidates are split over four draws of 64, 16, 4 and 1 candidates per domain entry, so no
 //!   draw carries many discarded candidates;
-//! - the candidate budget ([`BUDGET`]) bounds the candidates of the whole frame instead of one
+//! - the candidate budget ([`Reach::budget`]) bounds the candidates of the whole frame instead of one
 //!   material's (5500); when the view needs more, the density is scaled down evenly;
 //! - the base colour is the grass material of the ground under each blade (the terrain's own
 //!   material slot and map shade), so the material-colour uniform is dropped; the lighting is
@@ -52,15 +54,135 @@ pub const WIND: f32 = 0.15;
 pub const VARIATION: f32 = 0.25;
 /// Reproducible distribution ("Seed").
 pub const SEED: u32 = 1;
-/// Meshcraft's LOD distance, in tiles from the eye: the density halves there.
-pub const LOD_DISTANCE: f32 = 16.0;
-/// Distance from the eye, in tiles, up to which blades keep their full height (the distance of
-/// the owner's farthest-detail picture).
-pub const FULL_DISTANCE: f32 = 32.0;
-/// Distance from the eye, in tiles, at which the last blades have thinned and shrunk away.
-pub const FAR_DISTANCE: f32 = 42.0;
-/// Most candidates (blades before thinning) drawn in one frame.
-pub const BUDGET: usize = 30_000;
+/// How far the blades reach and how many are drawn: the "rendering detail" setting's part for
+/// the grass (task 108). All distances are in tiles from the eye.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Reach {
+    /// Meshcraft's LOD distance: the density halves there.
+    pub lod: f32,
+    /// Blades keep their full height up to here.
+    pub full: f32,
+    /// The last blades have thinned and shrunk away here.
+    pub far: f32,
+    /// Past here the blades are coarser: the density falls by the square of the distance's
+    /// ratio to it and each blade is that ratio wider.
+    pub coarse: f32,
+    /// Most candidates (blades before thinning) drawn in one frame within `coarse`.
+    pub budget: usize,
+    /// Most candidates drawn in one frame past `coarse`, besides `budget`: the far blades never
+    /// thin the near ones.
+    pub far_budget: usize,
+}
+
+impl Reach {
+    /// Meshcraft's LOD falloff times the coarse thinning and the far fade: the share of
+    /// [`DENSITY`] kept `distance` tiles from the eye.
+    pub fn lod(&self, distance: f32) -> f32 {
+        let d = distance / self.lod;
+        let wider = self.widen(distance);
+        1.0 / (1.0 + d * d) / (wider * wider) * self.height_fade(distance)
+    }
+
+    /// How many times wider than near ones the blades are `distance` tiles from the eye.
+    pub fn widen(&self, distance: f32) -> f32 {
+        (distance / self.coarse).max(1.0)
+    }
+
+    /// The share of the blade height kept `distance` tiles from the eye.
+    pub fn height_fade(&self, distance: f32) -> f32 {
+        1.0 - smoothstep(self.full, self.far, distance)
+    }
+}
+
+/// The "rendering detail" setting (owner, 2026-11-20): one level for the distances and budgets
+/// of what is drawn near the camera, so that performance can be judged level by level. It sets
+/// the grass's [`Reach`]; [`Detail::Medium`], the default, is the reach before the setting.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Detail {
+    /// Shorter than before, for weak GPUs.
+    Min,
+    /// The reach before task 108.
+    #[default]
+    Medium,
+    /// About 1.5 times as far, with coarser far blades.
+    Max,
+    /// About twice as far.
+    Ultra,
+}
+
+impl Detail {
+    /// Every level, lowest first.
+    pub const ALL: [Detail; 4] = [Detail::Min, Detail::Medium, Detail::Max, Detail::Ultra];
+
+    /// The level's name on the command line and in the settings.
+    pub fn name(self) -> &'static str {
+        match self {
+            Detail::Min => "min",
+            Detail::Medium => "medium",
+            Detail::Max => "max",
+            Detail::Ultra => "ultra",
+        }
+    }
+
+    /// The level named `name` (any case).
+    pub fn parse(name: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|level| level.name().eq_ignore_ascii_case(name.trim()))
+    }
+
+    /// The level's index in [`Self::ALL`].
+    pub fn index(self) -> u8 {
+        self as u8
+    }
+
+    /// The level of index `index` in [`Self::ALL`]; the default for any other.
+    pub fn from_index(index: u8) -> Self {
+        Self::ALL
+            .get(usize::from(index))
+            .copied()
+            .unwrap_or_default()
+    }
+
+    /// How far the grass reaches at this level.
+    pub fn reach(self) -> Reach {
+        match self {
+            Detail::Min => Reach {
+                lod: 12.0,
+                full: 20.0,
+                far: 28.0,
+                coarse: 28.0,
+                budget: 15_000,
+                far_budget: 0,
+            },
+            Detail::Medium => Reach {
+                lod: 16.0,
+                full: 32.0,
+                far: 42.0,
+                coarse: 42.0,
+                budget: 30_000,
+                far_budget: 0,
+            },
+            Detail::Max => Reach {
+                lod: 16.0,
+                full: 48.0,
+                far: 64.0,
+                coarse: 32.0,
+                budget: 30_000,
+                far_budget: 12_000,
+            },
+            Detail::Ultra => Reach {
+                lod: 16.0,
+                full: 64.0,
+                far: 84.0,
+                coarse: 32.0,
+                budget: 30_000,
+                far_budget: 20_000,
+            },
+        }
+    }
+}
+
 /// Candidates per domain entry of each draw, largest first.
 pub const SLICES: [u32; 4] = [64, 16, 4, 1];
 /// Eye movement, in tiles, before the domains are rebuilt; also the margin the candidate counts
@@ -107,18 +229,6 @@ pub const DOMAIN_ATTRIBUTES: [(u32, i32, usize); 9] = [
     (7, 3, 22),
     (8, 3, 25),
 ];
-
-/// Meshcraft's LOD falloff times the far fade: the share of [`DENSITY`] kept `distance` tiles
-/// from the eye.
-pub fn lod(distance: f32) -> f32 {
-    let d = distance / LOD_DISTANCE;
-    1.0 / (1.0 + d * d) * (1.0 - smoothstep(FULL_DISTANCE, FAR_DISTANCE, distance))
-}
-
-/// The share of the blade height kept `distance` tiles from the eye.
-pub fn height_fade(distance: f32) -> f32 {
-    1.0 - smoothstep(FULL_DISTANCE, FAR_DISTANCE, distance)
-}
 
 fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
     let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
@@ -168,6 +278,8 @@ pub(crate) struct GroundLook<'a> {
     pub shades: &'a [[f32; 3]],
     /// Tiles that grow no blades: building footprints and stains.
     pub blocked: &'a BTreeSet<usize>,
+    /// How far the blades reach.
+    pub reach: Reach,
 }
 
 /// What the ground wears at one corner of the land mesh.
@@ -193,6 +305,8 @@ struct TileGround<'a> {
 struct Candidate {
     domain: Domain,
     expected: f32,
+    /// Past [`Reach::coarse`]: counted against [`Reach::far_budget`].
+    far: bool,
 }
 
 /// Builds [`GrassField`]s, keeping its scratch memory between frames.
@@ -279,7 +393,8 @@ impl GrassBuilder {
             return;
         }
         let radius = globe.radius();
-        if length(eye) - radius - crate::terrain::RELIEF > FAR_DISTANCE {
+        let reach = ground.reach;
+        if length(eye) - radius - crate::terrain::RELIEF > reach.far {
             return;
         }
         if self.stamp.len() != tiles {
@@ -346,7 +461,7 @@ impl GrassBuilder {
             let offset = sub(first, eye);
             // Beyond reach, or behind the eye (the half-disk ahead holds every tile in view and
             // stays connected to the tile under the eye, which the view looks down on).
-            if length(offset) - 1.5 > FAR_DISTANCE || dot(offset, cull.forward) < -2.0 {
+            if length(offset) - 1.5 > reach.far || dot(offset, cull.forward) < -2.0 {
                 continue;
             }
             for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
@@ -364,7 +479,7 @@ impl GrassBuilder {
             let corners = [(0, 0), (1, 0), (0, 1), (1, 1)]
                 .map(|(dx, dy)| globe.vertex(tile.face, tile.x + dx, tile.y + dy));
             let centre = [0, 1, 2].map(|k| corners.iter().map(|c| c[k]).sum::<f32>() / 4.0);
-            if length(sub(centre, eye)) - 0.75 > FAR_DISTANCE {
+            if length(sub(centre, eye)) - 0.75 > reach.far {
                 continue;
             }
             let bounds = ChunkBounds {
@@ -381,9 +496,9 @@ impl GrassBuilder {
                 index,
                 corners,
             };
-            self.add_tile(&ground_tile, eye, &corner);
+            self.add_tile(&ground_tile, eye, &reach, &corner);
         }
-        self.allocate(out);
+        self.allocate(&reach, out);
     }
 
     /// Adds the two triangles of a tile (as the land mesh splits it) where they wear grass.
@@ -391,6 +506,7 @@ impl GrassBuilder {
         &mut self,
         ground: &TileGround,
         eye: [f32; 3],
+        reach: &Reach,
         corner: &dyn Fn(u8, u32, u32) -> Corner,
     ) {
         let TileGround {
@@ -417,7 +533,7 @@ impl GrassBuilder {
                 continue;
             }
             // As `grass.vs` counts: the shader then keeps a blade by its root's share of `most`.
-            let expected = area * DENSITY * lod(distance) * most;
+            let expected = area * DENSITY * reach.lod(distance) * most;
             let seed = triangle_seed(index, half);
             let domain = Domain {
                 a,
@@ -435,44 +551,71 @@ impl GrassBuilder {
                 nb: normals[j],
                 nc: normals[k],
             };
-            self.triangles.push(Candidate { domain, expected });
+            self.triangles.push(Candidate {
+                domain,
+                expected,
+                far: distance > reach.coarse,
+            });
         }
     }
 
-    /// Splits each triangle's candidates over the draws, within the budget.
-    fn allocate(&mut self, out: &mut GrassField) {
-        let count = |scale: f32| -> usize {
+    /// Splits each triangle's candidates over the draws, within the budgets: the near
+    /// triangles within the reach's budget, the far ones within its far budget and never denser
+    /// than the near ones.
+    fn allocate(&mut self, reach: &Reach, out: &mut GrassField) {
+        let count = |far: bool, scale: f32| -> usize {
             self.triangles
                 .iter()
+                .filter(|t| t.far == far)
                 .map(|t| t.expected * scale)
                 .filter(|e| *e >= MIN_EXPECTED)
                 .map(|e| e.ceil() as usize)
                 .sum()
         };
-        let mut scale = 1.0_f32;
-        for _ in 0..12 {
-            let needed = count(scale);
-            if needed <= BUDGET {
-                break;
+        let fit = |far: bool, budget: usize, mut scale: f32| {
+            for _ in 0..12 {
+                let needed = count(far, scale);
+                if needed <= budget {
+                    break;
+                }
+                scale *= budget as f32 / needed as f32 * 0.97;
             }
-            scale *= BUDGET as f32 / needed as f32 * 0.97;
-        }
-        out.density = DENSITY * scale;
-        let mut total = 0;
+            scale
+        };
+        let near_scale = fit(false, reach.budget, 1.0);
+        let far_scale = fit(true, reach.far_budget, near_scale);
+        out.density = DENSITY * near_scale;
+        let mut totals = [0, 0];
+        // The near ones stop at the first that would overrun their budget, as before task 108.
+        let mut near_full = false;
         for triangle in &self.triangles {
+            let (scale, budget, total) = if triangle.far {
+                (far_scale, reach.far_budget, &mut totals[1])
+            } else {
+                (near_scale, reach.budget, &mut totals[0])
+            };
             let expected = triangle.expected * scale;
-            if expected < MIN_EXPECTED {
+            if expected < MIN_EXPECTED || (near_full && !triangle.far) {
                 continue;
             }
             let n = expected.ceil() as u32;
-            if total + n as usize > BUDGET {
-                break;
+            if *total + n as usize > budget {
+                near_full |= !triangle.far;
+                continue;
             }
-            total += n as usize;
+            *total += n as usize;
+            let mut domain = triangle.domain;
+            if triangle.far {
+                // The field's density is the near one; a far triangle's blades are thinned by
+                // its grass share, which scales the count alone (`grass.vs` keeps a blade by
+                // its root's share of the largest).
+                let thin = far_scale / near_scale;
+                domain.share = domain.share.map(|s| s * thin);
+            }
             let mut first = 0;
             for (band, per) in out.bands.iter_mut().zip(SLICES) {
                 while n - first >= per {
-                    let mut entry = triangle.domain;
+                    let mut entry = domain;
                     entry.seed[2] = first as f32;
                     band.push(entry);
                     first += per;
@@ -501,6 +644,7 @@ pub(crate) struct GrassState {
     blocked_buildings: BTreeSet<usize>,
     blocked_stains: BTreeSet<usize>,
     blocked: BTreeSet<usize>,
+    reach: Reach,
 }
 
 impl Default for GrassState {
@@ -516,6 +660,7 @@ impl Default for GrassState {
             blocked_buildings: BTreeSet::new(),
             blocked_stains: BTreeSet::new(),
             blocked: BTreeSet::new(),
+            reach: Detail::default().reach(),
         }
     }
 }
@@ -537,6 +682,17 @@ impl GrassState {
         true
     }
 
+    /// Takes the reach of a rendering detail level; true when it changed (the next frame
+    /// rebuilds with it).
+    pub(crate) fn set_reach(&mut self, reach: Reach) -> bool {
+        if self.reach == reach {
+            return false;
+        }
+        self.reach = reach;
+        self.dirty = true;
+        true
+    }
+
     /// The map shades changed: the next frame rebuilds with them.
     pub(crate) fn shades_changed(&mut self) {
         self.dirty = true;
@@ -546,6 +702,7 @@ impl GrassState {
     pub(crate) fn clear(&mut self) {
         *self = Self {
             builder: std::mem::take(&mut self.builder),
+            reach: self.reach,
             ..Self::default()
         };
     }
@@ -626,19 +783,22 @@ impl GrassState {
             slots: &self.slots,
             shades,
             blocked: &self.blocked,
+            reach: self.reach,
         };
         self.builder.build(&ground, cull.eye, cull, &mut self.field);
         true
     }
 }
 
-/// Where `grass.vs` roots candidate `candidate` of `domain` for an eye at `eye` and the field
-/// density `density`, or `None` when it draws no blade for it (a reference for tests).
+/// Where `grass.vs` roots candidate `candidate` of `domain` for an eye at `eye`, the field
+/// density `density` and the reach `reach`, or `None` when it draws no blade for it (a reference
+/// for tests).
 pub fn blade_root(
     domain: &Domain,
     candidate: u32,
     eye: [f32; 3],
     density: f32,
+    reach: &Reach,
 ) -> Option<[f32; 3]> {
     let seed = domain.seed[0] as u32 | ((domain.seed[1] as u32) << 16);
     let key = hash(seed) ^ hash(candidate) ^ SEED;
@@ -646,7 +806,7 @@ pub fn blade_root(
     let area = length(cross(sub(b, a), sub(c, a))) * 0.5;
     let centroid = [0, 1, 2].map(|n| (a[n] + b[n] + c[n]) / 3.0);
     let most = domain.share.iter().copied().fold(0.0, f32::max);
-    let count = area * density * lod(length(sub(centroid, eye))) * most;
+    let count = area * density * reach.lod(length(sub(centroid, eye))) * most;
     if candidate as f32 + random(key.wrapping_add(3)) >= count {
         return None;
     }
@@ -658,7 +818,7 @@ pub fn blade_root(
     if random(key.wrapping_add(7)) * most >= share {
         return None;
     }
-    if height_fade(length(sub(root, eye))) <= 0.0 {
+    if reach.height_fade(length(sub(root, eye))) <= 0.0 {
         return None;
     }
     Some(root)
@@ -780,6 +940,11 @@ mod tests {
         (globe, slots)
     }
 
+    /// The reach the tests build with: the farthest-but-one level, coarse far blades included.
+    fn reach() -> Reach {
+        Detail::Max.reach()
+    }
+
     /// A camera over face 0 (the sea at its west), `distance` tiles from its target.
     fn camera(globe: &Globe, distance: f32, x: f32, heading: f32) -> (OrbitCamera, CullView) {
         let surface = globe.surface();
@@ -812,6 +977,7 @@ mod tests {
             slots,
             shades: &[],
             blocked,
+            reach: reach(),
         };
         let mut field = GrassField::default();
         GrassBuilder::default().build(&ground, cull.eye, cull, &mut field);
@@ -824,7 +990,7 @@ mod tests {
             for entry in band {
                 for k in 0..per {
                     let candidate = entry.seed[2] as u32 + k;
-                    if let Some(root) = blade_root(entry, candidate, eye, field.density) {
+                    if let Some(root) = blade_root(entry, candidate, eye, field.density, &reach()) {
                         out.push(root);
                     }
                 }
@@ -863,8 +1029,9 @@ mod tests {
         for (distance, x) in [
             (9.0, 46.0),
             (20.0, 48.0),
-            (FULL_DISTANCE, 50.0),
+            (reach().full, 50.0),
             (60.0, 50.0),
+            (100.0, 50.0),
         ] {
             let (_, cull) = camera(&globe, distance, x, 4.0);
             let field = build(&globe, &slots, &BTreeSet::new(), &cull);
@@ -875,12 +1042,12 @@ mod tests {
                         .iter()
                         .map(|p| length(sub(*p, cull.eye)))
                         .fold(f32::MAX, f32::min);
-                    assert!(near < FAR_DISTANCE + 1.0, "{near}");
+                    assert!(near < reach().far + 1.0, "{near}");
                 }
             }
             let surface = globe.surface();
             for root in roots(&field, cull.eye) {
-                assert!(length(sub(root, cull.eye)) < FAR_DISTANCE);
+                assert!(length(sub(root, cull.eye)) < reach().far);
                 // On grass or the sand beside it, never on the sea; on the near side.
                 let tile = surface.index(globe.tile_of(root));
                 assert!(slots.tile_slot[tile] > 0, "blade on water");
@@ -891,7 +1058,7 @@ mod tests {
                 let apart = (dot(root, cull.eye) / (length(root) * length(cull.eye))).acos();
                 assert!(apart < horizon, "blade beyond the horizon");
             }
-            if distance > FAR_DISTANCE {
+            if distance > reach().far {
                 assert!(field.is_empty());
             }
         }
@@ -964,28 +1131,77 @@ mod tests {
     fn the_work_stays_within_the_budget() {
         let (globe, slots) = planet();
         // The closest and the farthest views that still draw blades, every way round.
-        for distance in [8.0, 14.0, 24.0, FULL_DISTANCE, FAR_DISTANCE] {
+        for distance in [8.0, 14.0, 24.0, reach().full, reach().far] {
             for heading in [0.0, 1.6, 3.1, 4.7] {
                 let (_, cull) = camera(&globe, distance, 64.0, heading);
                 let field = build(&globe, &slots, &BTreeSet::new(), &cull);
-                assert!(field.candidates() <= BUDGET, "{}", field.candidates());
+                assert!(
+                    field.candidates() <= reach().budget + reach().far_budget,
+                    "{}",
+                    field.candidates()
+                );
                 assert!(field.density <= DENSITY && field.density > 0.0);
             }
         }
     }
 
     #[test]
+    fn far_blades_are_fewer_and_wider() {
+        let r = reach();
+        let falloff = |d: f32| 1.0 / (1.0 + (d / r.lod).powi(2));
+        assert_eq!(r.widen(r.coarse), 1.0);
+        assert_eq!(r.lod(r.coarse), falloff(r.coarse));
+        let d = r.coarse * 1.25;
+        assert!(d < r.full);
+        assert!((r.widen(d) - 1.25).abs() < 1e-6);
+        assert!((r.lod(d) - falloff(d) / 1.5625).abs() < 1e-6);
+    }
+
+    #[test]
+    fn the_detail_levels_set_the_reach() {
+        // Medium is the reach before the setting existed: no coarse blades, no far budget.
+        let medium = Detail::default().reach();
+        assert_eq!(Detail::default(), Detail::Medium);
+        assert_eq!(
+            (medium.lod, medium.full, medium.far, medium.budget),
+            (16.0, 32.0, 42.0, 30_000)
+        );
+        for d in [0.0, 10.0, 30.0, 41.0] {
+            assert_eq!(medium.widen(d), 1.0);
+        }
+        // Max and Ultra reach about 1.5 and 2 times as far; Min less far than Medium.
+        let ratio = |level: Detail| level.reach().far / medium.far;
+        assert!(ratio(Detail::Min) < 1.0);
+        assert!((1.4..=1.6).contains(&ratio(Detail::Max)));
+        assert!((1.9..=2.1).contains(&ratio(Detail::Ultra)));
+        for level in Detail::ALL {
+            assert_eq!(Detail::parse(level.name()), Some(level));
+            assert_eq!(Detail::from_index(level.index()), level);
+            let r = level.reach();
+            assert!(r.lod < r.full && r.full < r.far && r.coarse <= r.far);
+        }
+        assert_eq!(Detail::parse(" ULTRA "), Some(Detail::Ultra));
+        assert_eq!(Detail::parse("high"), None);
+    }
+
+    #[test]
     fn density_and_height_fade_out_smoothly() {
-        assert_eq!(height_fade(FULL_DISTANCE), 1.0);
-        assert_eq!(height_fade(FAR_DISTANCE), 0.0);
-        assert_eq!(lod(FAR_DISTANCE), 0.0);
-        assert!((lod(LOD_DISTANCE) - 0.5).abs() < 1e-6);
-        let mut last = lod(0.0);
-        for step in 1..=200 {
-            let d = step as f32 * FAR_DISTANCE / 200.0;
-            let now = lod(d);
-            assert!(now <= last && last - now < 0.02, "{d}: {last} -> {now}");
-            last = now;
+        for level in Detail::ALL {
+            let r = level.reach();
+            assert_eq!(r.height_fade(r.full), 1.0);
+            assert_eq!(r.height_fade(r.far), 0.0);
+            assert_eq!(r.lod(r.far), 0.0);
+            assert!((r.lod(r.lod) - 0.5).abs() < 1e-6);
+            let mut last = r.lod(0.0);
+            for step in 1..=200 {
+                let d = step as f32 * r.far / 200.0;
+                let now = r.lod(d);
+                assert!(
+                    now <= last && last - now < 0.02,
+                    "{level:?} {d}: {last} -> {now}"
+                );
+                last = now;
+            }
         }
     }
 

@@ -377,7 +377,7 @@ within 40 tiles. Screenshots: `docs/img/materials-street.png`,
 
 The render thread no longer waits for the GPU. After drawing a frame it sets the
 frame's alpha to opaque on the GPU (a colour-masked clear), starts
-`glReadPixels` in `GL_BGRA` into one of three pixel pack buffers and places a
+`glReadPixels` in `GL_BGRA` into one of three pixel pack buffers (two since task 108) and places a
 fence (`rom-render/src/readback.rs`). It then polls the fence of the oldest read
 in flight; once it has signalled, that buffer is mapped, its rows are copied
 top-down into the frame (whole-row copies, no per-pixel work) and the frame is
@@ -479,3 +479,271 @@ against task 93's, alternating, on the i7-6700HQ beside another agent's build:
 | orbit, 20 ships | task 93 | 1.94 | 53.5 | 4.10 / 20.33 |
 
 No difference beyond the noise: the frame time is not bound by the ships' triangles.
+
+## Frame-rate re-check (task 108)
+
+Owner report (2026-11-20), Sandbox preset (universe, `map.many_worlds`, age 13, rich-start script,
+`--speed 500`, window about 1920×1080) on the integrated HD 530: "choppy picture" and "clicks react
+late". Everything below is on the integrated GPU (no PRIME offload).
+
+```sh
+env -u WAYLAND_DISPLAY target/release/rise-of-man --universe --style map.many_worlds --players 1 \
+  --ai none --age 13 --seed 1 --script <rich start + clicks> --speed 500 --size 1920x1080 --bench 20
+```
+
+The click script is `rich-start-13-galactic-script.txt` plus a left click every 40 ticks,
+alternately on the city tower and on open ground (`cam click`, through the window's input path).
+"Before" is 0.0.109 with only the new measurements added (the bench lines below); "after" is this
+task's build. Runs alternate before/after, one at a time, under
+`systemd-run --user --scope -p MemoryMax=6G -p MemorySwapMax=0`.
+
+### New measurements in `--bench`
+
+- `bench-detail sim_ticks_measured= sim_tps_measured= snapshots_per_second= peak_rss_mb=`:
+  simulation ticks and entity snapshots during the measurement, peak resident memory.
+- `bench-detail clicks= click_ms_avg= click_ms_max= click_stages_ms=a/b/c/d`: click-to-response
+  time (`rom-render/src/response.rs`): from the button press reaching the bridge to the first frame
+  the window shows that was drawn after the simulation answered the pick (selection or order).
+  One press is followed at a time. Stages: press → pick sent by the render thread; → first frame
+  started with the answer published; → that frame read back and published; → shown by the window.
+  `click_ms_max` is the worst since start.
+- `bench-detail cpu_pct process= <thread>=…`: CPU per thread name over the measurement
+  (`/proc/self/task`; `rom-sim`, `rom-render`, the GPUI main thread named like the binary).
+
+### What limited the picture
+
+1. **Frames drawn that nobody saw.** The render thread draws offscreen with no swap, so nothing
+   throttled it to the GPU: it queued frames at 60 Hz while the GPU finished about 45, and the
+   three-buffer read-back skipped the frames it had no buffer for. At 1882×1043 the window showed
+   21–23 of 58–59 rendered frames, and a frame reached the screen ~175 ms after it was started
+   (stage c), most of the 212 ms click time. Fix (kept from the stopped first attempt, with
+   numbers): before drawing, when every pack buffer holds a read in flight, map the oldest, waiting
+   for its fence (`AsyncReadback::make_room`); and two pack buffers instead of three. The read-back
+   work this does counts in `frame_ms`/`readback_ms`; the wait does not.
+2. **GPU-bound at 1920×1080.** With the pacing the render rate is the GPU's. Temporary GL timestamp
+   queries (removed after) split one 1882×1043 Sandbox frame, speed 100, before the fixes below:
+
+   | Pass | GPU ms |
+   | --- | --- |
+   | terrain (materials ~4.2, shadow lookups ~2.0, rest ~1.8) | 8.0 |
+   | feature objects (forests, rocks) | 4.7 |
+   | grass | 2.6 |
+   | read-back (`glReadPixels` 1.9–2.1, alpha clear 0.45) | 2.4 |
+   | sky | 1.2 |
+   | shadow map | 0.7 |
+   | HUD | 0.7 |
+   | everything else | 1.7 |
+   | **total** | **22.0** |
+
+   Fixes that leave the picture as it was:
+   - **No world under the opaque HUD.** The frame artwork (top bar and bottom panels) covers about a
+     third of the screen with fully opaque pixels. Their rectangles are found once per HUD bake from
+     the artwork's alpha (runs of opaque pixels, 1.5 source pixels in from every edge), and before
+     the sky and the globe are drawn the depth buffer is filled at the nearest depth there
+     (`cover_depth`), so the depth test rejects those fragments before their programs run.
+     Terrain 8.0 → 6.4 ms, grass 2.7 → 2.1, sky 1.2 → 1.0; screenshots before and after differ in
+     170 of 1.96 M pixels (animation), none at the panel edges.
+   - **Feature objects at full detail test depth first.** `object.fs` ends with the screen-door
+     fade's `discard`, which keeps the driver from testing depth before the fragment program even
+     when nothing fades. At full detail (the usual case; the hash is always below 1 there, so the
+     fade never discards) a second program without that statement and with
+     `layout(early_fragment_tests)` draws them: 5.0 → 3.8 ms.
+   - Tried and dropped: drawing the objects before the ground (the ground under trees is then
+     not shaded, but the trees behind hills are: 22.0 → 24.9 ms), and grass before the ground (no
+     change).
+3. **Game speed cost render time through the fog.** At speed 500 the simulation published 100
+   snapshots a second and a visibility map every 5 ticks (20 a second); each map cost the render
+   thread ~12 ms (minimap recolour 7.4, chunk scan 3.2, shades 1.3), 5 ms a frame on average,
+   even though the map had not changed. Fixes: the render thread skips a map equal to the one its
+   shades came from (until the ground is drawn anew); the simulation sends a map at most every
+   200 ms of real time (still every 5 ticks at speed 100, where 5 ticks take 250 ms); and it
+   publishes once per loop turn, after the turn's last tick, at most once per 16 ms (a click is
+   answered at once) — per-tick duties (notices, autosave, script, journal, orders) stay per tick.
+   Turns ran one tick each at 500 %, so the 16 ms bound is what halves the snapshots (100 → 53 a
+   second). `Motions::prune` no longer relies on seeing a multiple of 200 ticks.
+4. **Shadow map with many units (earlier attempt, kept with a change).** With 400 units fighting
+   the shadow pass took 5.7 ms: the terrain and forests were drawn again whenever a unit moved.
+   The casters that stay put get a map of their own, copied before the moving casters are drawn
+   over it, but only once the light fit has held for three maps in a row (with the light turning
+   at speed 500 the copy only added work: 2.1 → 4.7 ms without that rule). Battle (200 v 200,
+   `--sun fixed`, 1600×900): shadow 5.7 → 4.6 ms, 46.8 → 48.5 fps.
+
+### Grass reach and the rendering detail setting
+
+The owner asked for grass visible from farther, then (same day) for the reach to sit under a
+**rendering detail** setting with four levels, "the easy way to assess performance". The setting
+(`--detail <min|medium|max|ultra>`, the launcher's Advanced form and its settings file
+`launcher.json`, and a row of four buttons in the in-game menu that applies at once) sets the
+grass's `Reach` (`rom-render/src/grass.rs`). Past the *coarse* distance the blades thin by the
+square of the distance's ratio to it and are that ratio wider, and they draw from a budget of
+their own, so the far ring never thins the near blades. `medium` is the reach before the task and
+the default.
+
+| Level | LOD | full height to | gone at | coarse past | budget near / far (candidates) |
+| --- | --- | --- | --- | --- | --- |
+| min | 12 | 20 | 28 | — | 15 000 / 0 |
+| medium (default, as before) | 16 | 32 | 42 | — | 30 000 / 0 |
+| max | 16 | 48 | 64 (1.52×) | 32 | 30 000 / 12 000 |
+| ultra | 16 | 64 | 84 (2×) | 32 | 30 000 / 20 000 |
+
+Only the grass follows the setting: it is the knob the measurements tied to distance. The feature
+objects (3.8 ms) and the terrain material distance were not measured against their distances in
+this task and keep theirs.
+
+Cost of each level, Sandbox (age 13, rich start, speed 100), the home planet at the default zoom
+(z0) and one wheel step out (z1), 15 s each, one run, after this task's other fixes. "Rendered" is
+what the GPU sustains (the render thread waits for it), so 1000 / rendered is the GPU frame time;
+"shown" is what the window presented:
+
+| Size | Zoom | Level | Shown fps | Rendered fps | GPU ms (1000/rendered) | Frame ms avg / max (render thread) | Load |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1280x800 | z0 | min | 56.2 | 60.0 | 16.7 | 3.16 / 8.20 | 2.02 |
+| 1280x800 | z0 | medium | 58.2 | 60.0 | 16.7 | 2.94 / 10.13 | 1.58 |
+| 1280x800 | z0 | max | 56.9 | 60.0 | 16.7 | 3.07 / 8.73 | 1.59 |
+| 1280x800 | z0 | ultra | 57.1 | 60.0 | 16.7 | 2.87 / 8.52 | 1.20 |
+| 1280x800 | z1 | min | 56.7 | 60.0 | 16.7 | 2.73 / 8.34 | 0.86 |
+| 1280x800 | z1 | medium | 57.2 | 60.0 | 16.7 | 2.75 / 9.93 | 0.74 |
+| 1280x800 | z1 | max | 55.6 | 60.0 | 16.7 | 3.29 / 16.54 | 0.59 |
+| 1280x800 | z1 | ultra | 57.7 | 60.0 | 16.7 | 3.06 / 9.54 | 0.46 |
+| 1920x1080 | z0 | min | 53.2 | 59.6 | 16.8 | 4.56 / 19.06 | 0.60 |
+| 1920x1080 | z0 | medium | 49.9 | 53.9 | 18.6 | 4.94 / 13.37 | 1.04 |
+| 1920x1080 | z0 | max | 49.2 | 51.8 | 19.3 | 4.68 / 12.39 | 1.12 |
+| 1920x1080 | z0 | ultra | 48.6 | 50.3 | 19.9 | 4.80 / 15.92 | 0.93 |
+| 1920x1080 | z1 | min | 50.3 | 60.0 | 16.7 | 5.04 / 16.91 | 0.80 |
+| 1920x1080 | z1 | medium | 53.0 | 59.9 | 16.7 | 4.29 / 13.01 | 0.63 |
+| 1920x1080 | z1 | max | 53.1 | 59.9 | 16.7 | 4.53 / 11.42 | 0.73 |
+| 1920x1080 | z1 | ultra | 50.7 | 58.9 | 17.0 | 4.76 / 19.66 | 0.79 |
+
+Rendered frames are capped at 60. At 1280×800 every level keeps 60 rendered frames (the GPU has
+room), so the level does not show there. At 1920×1080, default zoom, the GPU frame grows from
+16.8 ms (min) to 18.6 (medium), 19.3 (max) and 19.9 (ultra); one step out, where medium draws few
+blades, all levels but ultra keep 60. Shown fps varies by ±3 between single runs (presentation
+side), more than the step between neighbouring levels. Grass candidates measured during
+development (1882×1043, default zoom / one step out / two steps out): medium 29 700 (density
+cut to 238 of 480 by the budget) / 15 300 / none; max 38 500 (near blades at the full 480) /
+11 900 / 12 000. Screenshot pair (1280×800, default zoom, medium then max):
+`docs/img/108-grass-before.png`, `docs/img/108-grass-after.png`: with max the blades reach past
+the city, where medium shows the plain ground material.
+
+### Owner scenario: before and after
+
+Sandbox with clicks (above), 20 s each, alternating before/after, two rounds; no other `rise-of-man` process ran. Click times: presses followed / average / worst ms. Sim CPU is the `rom-sim` thread's share of a core.
+
+| Size | Speed | Build | Load | Shown fps | Rendered fps | Frame ms avg / max | Sim ticks/s | Snapshots/s | Clicks n / avg / max ms | Sim CPU % |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1280x800 | 100 | before | 0.91 | 59.5 | 59.9 | 3.66 / 21.79 | 20.0 | 20.0 | 10 / 101.0 / 108.3 | 5 |
+| 1280x800 | 100 | after | 1.08 | 56.8 | 60.0 | 3.01 / 12.94 | 20.0 | 20.0 | 10 / 56.6 / 64.2 | 5 |
+| 1280x800 | 100 | before | 1.24 | 55.8 | 59.9 | 4.25 / 21.16 | 20.0 | 20.0 | 10 / 93.4 / 98.9 | 5 |
+| 1280x800 | 100 | after | 1.19 | 57.9 | 60.0 | 3.34 / 11.20 | 20.0 | 20.0 | 10 / 53.8 / 59.4 | 5 |
+| 1280x800 | 500 | before | 0.85 | 45.9 | 59.6 | 7.20 / 23.77 | 100.0 | 100.0 | 50 / 94.1 / 120.5 | 21 |
+| 1280x800 | 500 | after | 1.67 | 52.8 | 60.0 | 3.93 / 12.20 | 100.0 | 54.0 | 50 / 65.2 / 88.4 | 10 |
+| 1280x800 | 500 | before | 1.08 | 45.1 | 59.6 | 7.26 / 29.12 | 100.0 | 100.0 | 50 / 91.9 / 118.5 | 21 |
+| 1280x800 | 500 | after | 0.97 | 53.5 | 60.0 | 3.94 / 11.91 | 100.0 | 53.3 | 50 / 54.3 / 76.7 | 11 |
+| 1882x1043 | 100 | before | 1.16 | 21.2 | 59.5 | 3.78 / 159.91 | 20.0 | 20.0 | 10 / 210.2 / 251.4 | 5 |
+| 1882x1043 | 100 | after | 1.10 | 49.3 | 54.4 | 5.37 / 37.70 | 20.0 | 20.0 | 10 / 82.8 / 97.1 | 5 |
+| 1882x1043 | 100 | before | 0.75 | 21.4 | 59.5 | 4.12 / 144.05 | 20.0 | 20.0 | 10 / 225.9 / 257.3 | 5 |
+| 1882x1043 | 100 | after | 0.77 | 49.5 | 53.8 | 5.13 / 39.08 | 20.0 | 20.0 | 10 / 70.9 / 76.3 | 5 |
+| 1882x1043 | 500 | before | 1.16 | 23.0 | 58.5 | 7.76 / 115.22 | 100.0 | 100.0 | 50 / 204.3 / 290.1 | 21 |
+| 1882x1043 | 500 | after | 1.31 | 49.1 | 52.6 | 5.91 / 20.79 | 100.0 | 53.0 | 50 / 79.5 / 108.5 | 11 |
+| 1882x1043 | 500 | before | 0.90 | 22.6 | 58.5 | 7.80 / 31.30 | 100.0 | 100.0 | 51 / 204.3 / 289.4 | 21 |
+| 1882x1043 | 500 | after | 1.00 | 49.3 | 52.1 | 6.28 / 17.44 | 100.0 | 53.2 | 50 / 78.8 / 98.1 | 11 |
+
+- **Shown frames at 1882×1043**: 21–23 → 49–50 at both speeds. The ≥ 55 target is not met: the
+  GPU sustains 52–54 frames (18.5–19 ms) and the window shows 49–50 of them; the rest of the GPU
+  work is fill-rate (terrain materials and shadow lookups, feature objects, grass) that the
+  picture needs as it is; see "Follow-up" below.
+- **Clicks**: 204–226 ms → 71–83 ms at 1882×1043, 92–101 → 54–65 ms at 1280×800. After, a click
+  at 1882×1043 splits roughly 9 ms to the pick, 18 ms to the next frame started with the answer,
+  37–45 ms drawing and reading back (two frames of the GPU), 11–14 ms until the window shows it.
+- **Speed 500 against 100** (render frame time): before +3.5 to +4 ms; after +0.6 to +0.9 ms
+  (target ≤ 2 ms). Snapshots 100 → 53 a second; the simulation thread's CPU at 500 % 21–23 % →
+  10–11 % of a core. Speed 300 was not benched separately.
+- `frame_ms` after is higher at 1882×1043 than before at speed 100 although the frames are the
+  same: before, only the ~21 frames a second that were read back paid for the row copy; now every
+  drawn frame is read back (about 1.5 ms of copying a frame at that size).
+
+### Every view since 0.0.102: before and after
+
+One 15 s run each (20 s for the camera script, battle and orbit; 12 s for the space views), alternating before/after, 1882×1043 unless noted, speed 100, seed 1; load 0.6–2.0, no other `rise-of-man` process. Ages: `--universe --style map.many_worlds --players 1 --ai none --age N`, default zoom and `--zoom-out`. Presets: `--universe --style map.<key> --players 2 --ai none --age 13 --view system|starmap` (seed 1 for every style, not the largest of each: deviation). Sim ticks/s were at the set rate in every run (the orbit script sets its own speed: 31 ticks/s).
+
+| View | Build | Shown fps | Rendered fps | Frame ms avg / max | Peak RSS MB |
+| --- | --- | --- | --- | --- | --- |
+| camera script (108), 1280×800 | before | 55.5 | 60.0 | 3.82 / 18.82 | 409 |
+| camera script (108), 1280×800 | after | 57.3 | 60.0 | 2.88 / 9.92 | 410 |
+| camera script (108), 1882×1043 | before | 41.0 | 58.7 | 4.83 / 189.34 | 434 |
+| camera script (108), 1882×1043 | after | 55.1 | 56.1 | 4.69 / 22.64 | 433 |
+| age0 default | before | 24.1 | 59.9 | 3.58 / 22.72 | 428 |
+| age0 default | after | 50.0 | 55.5 | 4.34 / 12.93 | 436 |
+| age0 zoomed out | before | 25.6 | 59.9 | 3.64 / 22.54 | 425 |
+| age0 zoomed out | after | 49.5 | 57.1 | 4.92 / 18.98 | 433 |
+| age4 default | before | 22.1 | 59.9 | 3.74 / 21.45 | 422 |
+| age4 default | after | 49.4 | 54.7 | 4.98 / 14.62 | 436 |
+| age4 zoomed out | before | 40.1 | 59.9 | 4.49 / 23.28 | 434 |
+| age4 zoomed out | after | 54.2 | 60.0 | 4.22 / 13.50 | 433 |
+| age7 default | before | 20.3 | 60.0 | 3.34 / 18.51 | 424 |
+| age7 default | after | 50.1 | 54.3 | 4.85 / 14.34 | 434 |
+| age7 zoomed out | before | 54.5 | 60.0 | 3.89 / 19.42 | 430 |
+| age7 zoomed out | after | 57.3 | 60.0 | 3.52 / 14.57 | 431 |
+| age10 default | before | 20.9 | 59.9 | 3.87 / 22.40 | 433 |
+| age10 default | after | 49.7 | 54.3 | 5.00 / 12.14 | 434 |
+| age10 zoomed out | before | 54.7 | 60.0 | 4.86 / 20.40 | 433 |
+| age10 zoomed out | after | 57.7 | 60.0 | 3.74 / 8.11 | 432 |
+| age13 default | before | 21.0 | 59.9 | 3.81 / 25.97 | 425 |
+| age13 default | after | 49.6 | 54.3 | 4.87 / 12.87 | 433 |
+| age13 zoomed out | before | 54.9 | 60.0 | 3.51 / 15.69 | 433 |
+| age13 zoomed out | after | 58.5 | 60.0 | 3.11 / 8.61 | 431 |
+| battle 200 v 200, projectiles on, `--sun fixed` (95) | before | 10.7 | 48.0 | 10.45 / 106.99 | 433 |
+| battle 200 v 200, projectiles on, `--sun fixed` (95) | after | 40.6 | 40.7 | 8.15 / 16.79 | 437 |
+| orbit, 20 ships (72) | before | 55.4 | 59.9 | 4.71 / 23.07 | 442 |
+| orbit, 20 ships (72) | after | 57.9 | 60.0 | 3.53 / 9.13 | 441 |
+| Planet system | before | 54.9 | 60.0 | 5.82 / 17.24 | 423 |
+| Planet system | after | 58.7 | 60.0 | 5.32 / 13.19 | 424 |
+| Planet starmap | before | 59.7 | 60.0 | 3.52 / 13.68 | 422 |
+| Planet starmap | after | 58.7 | 60.0 | 2.74 / 8.23 | 424 |
+| Solar system | before | 55.1 | 60.0 | 5.76 / 19.10 | 426 |
+| Solar system | after | 56.4 | 60.0 | 5.41 / 9.64 | 431 |
+| Solar starmap | before | 59.7 | 60.0 | 3.71 / 14.07 | 431 |
+| Solar starmap | after | 59.9 | 60.0 | 3.32 / 8.86 | 429 |
+| Cluster system | before | 57.6 | 60.0 | 5.02 / 15.51 | 437 |
+| Cluster system | after | 58.2 | 60.0 | 4.10 / 14.84 | 435 |
+| Cluster starmap | before | 55.9 | 60.0 | 3.55 / 14.55 | 437 |
+| Cluster starmap | after | 59.1 | 60.0 | 3.06 / 7.55 | 440 |
+| Sector system | before | 59.3 | 60.0 | 7.70 / 18.62 | 530 |
+| Sector system | after | 56.6 | 60.0 | 7.64 / 14.60 | 530 |
+| Sector starmap | before | 53.9 | 60.1 | 4.04 / 14.85 | 531 |
+| Sector starmap | after | 57.2 | 60.0 | 3.30 / 10.81 | 532 |
+| Quadrant system | before | 52.4 | 59.1 | 12.87 / 27.63 | 591 |
+| Quadrant system | after | 49.2 | 59.9 | 12.22 / 20.94 | 593 |
+| Quadrant starmap | before | 54.3 | 60.0 | 4.01 / 16.73 | 592 |
+| Quadrant starmap | after | 57.4 | 60.0 | 3.36 / 11.40 | 592 |
+| Galaxy system | before | 59.8 | 60.0 | 5.18 / 17.48 | 1164 |
+| Galaxy system | after | 59.8 | 60.0 | 4.80 / 11.00 | 1164 |
+| Galaxy starmap | before | 58.2 | 59.9 | 10.24 / 20.70 | 1164 |
+| Galaxy starmap | after | 55.4 | 60.0 | 8.75 / 13.28 | 1161 |
+
+- Every home-planet view at the default zoom went from 20–25 to 49–50 shown frames at 1882×1043
+  (the pacing; the GPU then sustains 54–56). Zoomed out (less ground on screen) they reach 54–59.
+- The worst case is the battle: 10.7 → 40.6 shown (GPU-bound, 40.7 rendered; frame max 107 →
+  17 ms). Under 45: the 400 units' shadow pass and their models; see the follow-up.
+- Star map and system views were already near 60 and stay there (the system views are CPU-bound
+  on the render thread in Quadrant, 12 ms a frame, unchanged; Quadrant system shown 52.4 → 49.2
+  in one run each, within the presentation noise seen elsewhere; rendered 59.1 → 59.9).
+- No frame over 100 ms after (before: 107–189 ms at 1882×1043); simulation at its rate everywhere.
+
+### Kept and dropped from the stopped first attempt
+
+Kept, each with the numbers above: `make_room` (wait for a free pack buffer before drawing,
+`readback.rs`, `worker.rs`), the bench's simulation-rate and peak-memory lines (`bench.rs`), and
+the shadow map of the casters that stay put (`scene/shadow.rs`), changed to wait for a steady fit.
+Nothing was dropped outright; the first attempt's three buffers became two.
+
+### Follow-up (not done here)
+
+At 1882×1043 the HD 530 needs about 18.5 ms of GPU work for the Sandbox frame after these fixes
+(terrain 6.0: materials ~4, shadow lookups ~2; feature objects 3.8; grass 2.2–2.9; read-back 2.4;
+sky 1.0; HUD 0.8; shadow map 0.6, 2.4 while the light turns at speed 500), so the window shows
+49–50 frames, not 55. What would reach 55 changes the picture or the shadow format: cheaper
+terrain material programs far from the eye, a single-channel shadow map read with `textureGather`
+(4 fetches instead of 9), or a lower render scale on this GPU (`--scale 75` renders 60). The battle
+needs a cheaper shadow pass for many units (instanced caster boxes instead of models, or every
+other frame). These are follow-up candidates, measured here, not changed.

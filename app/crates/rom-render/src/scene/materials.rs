@@ -134,6 +134,33 @@ pub(super) fn load_object_shader(rl: &mut RaylibHandle, thread: &RaylibThread) -
     rl.load_shader_from_memory(thread, Some(OBJECT_VS), Some(&expand(OBJECT_FS)))
 }
 
+/// The screen-door fade of the object shader, the one statement that may discard a fragment.
+const OBJECT_FADE: &str = "    if (hash13(vec3(floor(gl_FragCoord.xy), 3.0)) > detail) discard;\n";
+
+/// Asks for the depth test before the fragment program where the driver offers it.
+const EARLY_DEPTH_TEST: &str = "#ifdef GL_ARB_shader_image_load_store
+#extension GL_ARB_shader_image_load_store : enable
+layout(early_fragment_tests) in;
+#endif
+";
+
+/// The object shader's fragment source for objects at full detail (task 108): nothing fades, so
+/// the screen-door discard is left out, and with it the fragments hidden behind the ground and
+/// the HUD are rejected before the material program runs. At full detail the fade never
+/// discards (the hash stays below 1), so the picture is the same.
+pub(super) fn object_fs_solid() -> String {
+    let source = expand(OBJECT_FS).replacen(OBJECT_FADE, "", 1);
+    match source.split_once('\n') {
+        Some((version, rest)) => format!("{version}\n{EARLY_DEPTH_TEST}{rest}"),
+        None => source,
+    }
+}
+
+/// The object shader for objects at full detail ([`object_fs_solid`]).
+pub(super) fn load_object_shader_solid(rl: &mut RaylibHandle, thread: &RaylibThread) -> Shader {
+    rl.load_shader_from_memory(thread, Some(OBJECT_VS), Some(&object_fs_solid()))
+}
+
 /// Uniform values of the land material slots, in slot order.
 struct SlotValues {
     programs: [i32; MAX_SLOTS],
@@ -505,6 +532,23 @@ mod tests {
             assert!(!source.contains(derivative), "{derivative}");
         }
         assert!(NOISE.contains(NOISE_FRAGMENT_ONLY));
+    }
+
+    #[test]
+    fn objects_at_full_detail_never_discard_and_test_depth_early() {
+        let faded = expand(OBJECT_FS);
+        assert!(
+            faded.contains(OBJECT_FADE),
+            "the fade is still in object.fs"
+        );
+        let solid = object_fs_solid();
+        assert!(!solid.contains("discard"));
+        assert!(solid.starts_with("#version 330\n#ifdef GL_ARB_shader_image_load_store\n"));
+        assert!(solid.contains("layout(early_fragment_tests) in;"));
+        assert_eq!(
+            solid.len(),
+            faded.len() - OBJECT_FADE.len() + EARLY_DEPTH_TEST.len()
+        );
     }
 
     #[test]

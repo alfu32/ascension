@@ -3,7 +3,12 @@
 //! back with 3 × 3 percentage-closer filtering (see [`crate::sun::glsl_lighting`]).
 //!
 //! The map is drawn again only when the light turns by more than a small angle, the view moves
-//! the fitted box, or the casters move; otherwise the last map and its matrix are reused.
+//! the fitted box, or the casters move; otherwise the last map and its matrix are reused. On the
+//! globe, while the fit holds, the casters that stay put (terrain, markers, baked features and
+//! crops) are kept in a second map of their own: when only units and buildings changed, that map
+//! is copied whole and just those casters are drawn over it. Depth testing makes the result the
+//! same as drawing all casters at once. A frame whose fit changed (the light turned) draws all
+//! casters in one pass, as a second map would only add a copy then (task 108).
 
 use super::*;
 use crate::pick::View;
@@ -42,9 +47,25 @@ struct Drawn {
     features: bool,
 }
 
+/// What the map of the globe's casters that stay put was drawn for.
+#[derive(Clone, Debug, PartialEq)]
+struct StillDrawn {
+    fit: LightFit,
+    /// Markers and crops.
+    casters: [Vec<[f32; 12]>; 2],
+    features: bool,
+    /// The baked features pick their caster meshes by distance from the eye.
+    eye: [f32; 3],
+}
+
 /// The shadow target, the depth materials and the last map drawn.
 pub(super) struct ShadowGpu {
     map: RenderTexture2D,
+    /// Depth of the globe's casters that stay put, copied into `map` before the moving ones.
+    still: RenderTexture2D,
+    still_drawn: Option<StillDrawn>,
+    /// Maps drawn in a row for the same fit, the last included.
+    same_fit: u32,
     depth: WeakMaterial,
     depth_instanced: WeakMaterial,
     _shaders: [Shader; 2],
@@ -60,6 +81,13 @@ impl ShadowGpu {
                 return None;
             }
         };
+        let still = match rl.load_render_texture(thread, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE) {
+            Ok(still) => still,
+            Err(error) => {
+                eprintln!("rom-render: shadow map: {error}");
+                return None;
+            }
+        };
         let plain = rl.load_shader_from_memory(thread, Some(DEPTH_VS), Some(DEPTH_FS));
         let instanced =
             rl.load_shader_from_memory(thread, Some(DEPTH_INSTANCED_VS), Some(DEPTH_FS));
@@ -69,6 +97,9 @@ impl ShadowGpu {
         depth_instanced.set_shader(&instanced);
         Some(Self {
             map,
+            still,
+            still_drawn: None,
+            same_fit: 0,
             depth,
             depth_instanced,
             _shaders: [plain, instanced],
@@ -79,6 +110,22 @@ impl ShadowGpu {
     /// Forgets the last map, so the next frame draws it again (new terrain).
     pub(super) fn invalidate(&mut self) {
         self.last = None;
+        self.still_drawn = None;
+    }
+
+    /// Copies the colour and depth of the map of casters that stay put into the shadow map.
+    fn copy_still(&self) {
+        let size = SHADOW_MAP_SIZE as i32;
+        // SAFETY: render thread with an active GL context and no texture mode open; both
+        // framebuffers are this struct's, of the same size and formats, and the default
+        // framebuffer is bound again afterwards as raylib expects.
+        unsafe {
+            raylib::ffi::rlDrawRenderBatchActive();
+            raylib::ffi::rlBindFramebuffer(READ_FRAMEBUFFER, self.still.id);
+            raylib::ffi::rlBindFramebuffer(DRAW_FRAMEBUFFER, self.map.id);
+            raylib::ffi::rlBlitFramebuffer(0, 0, size, size, 0, 0, size, size, COLOUR_AND_DEPTH);
+            raylib::ffi::rlBindFramebuffer(FRAMEBUFFER, 0);
+        }
     }
 
     /// GL id of the shadow map's colour texture.
@@ -105,6 +152,17 @@ impl ShadowGpu {
             .map(|&(_, uniforms)| uniforms)
     }
 }
+
+/// Maps drawn in a row for one fit before the casters that stay put get a map of their own: a
+/// light that keeps turning would make it a waste.
+const STEADY_MAPS: u32 = 3;
+
+/// `GL_READ_FRAMEBUFFER`, `GL_DRAW_FRAMEBUFFER` and `GL_FRAMEBUFFER`.
+const READ_FRAMEBUFFER: u32 = 0x8CA8;
+const DRAW_FRAMEBUFFER: u32 = 0x8CA9;
+const FRAMEBUFFER: u32 = 0x8D40;
+/// `GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT`.
+const COLOUR_AND_DEPTH: i32 = 0x4000 | 0x0100;
 
 fn dot3(a: [f32; 3], b: [f32; 3]) -> f32 {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
@@ -261,26 +319,39 @@ impl Scene {
         if let Some(uniforms) = shadow.reuse(&wanted) {
             return Some(uniforms);
         }
+        let still = StillDrawn {
+            fit,
+            casters: [wanted.casters[1].clone(), wanted.casters[2].clone()],
+            features: wanted.features,
+            eye,
+        };
         set_clip_planes(f64::from(fit.near), f64::from(fit.far));
-        let light_vp;
-        {
-            let mut texture = rl.begin_texture_mode(thread, &mut shadow.map);
+        // While the light and the view hold the fit, only units and buildings move: the map of
+        // the casters that stay put is kept and copied. When the fit changes (the light turns),
+        // everything is drawn again anyway, in one pass.
+        shadow.same_fit = match &shadow.last {
+            Some((drawn, _)) if drawn.fit == fit => shadow.same_fit + 1,
+            _ => 1,
+        };
+        let steady = shadow.same_fit >= STEADY_MAPS || shadow.still_drawn.as_ref() == Some(&still);
+        if !steady {
+            shadow.still_drawn = None;
+        } else if shadow.still_drawn.as_ref() != Some(&still) {
+            let mut texture = rl.begin_texture_mode(thread, &mut shadow.still);
             texture.clear_background(Color::WHITE);
             let mut pass = texture.begin_mode3D(light_camera(&fit));
-            light_vp = begin_casters();
+            begin_casters();
             for (shaded, bounds) in &gpu.land {
                 if fit.may_touch(bounds.centre, bounds.radius) {
                     pass.draw_mesh(&shaded.mesh, shadow.depth.clone(), Matrix::identity());
                 }
             }
-            for transforms in [&gpu.markers, &self.entity_casters] {
-                if !transforms.is_empty() {
-                    pass.draw_mesh_instanced(
-                        &self.box_mesh,
-                        shadow.depth_instanced.clone(),
-                        transforms,
-                    );
-                }
+            if !gpu.markers.is_empty() {
+                pass.draw_mesh_instanced(
+                    &self.box_mesh,
+                    shadow.depth_instanced.clone(),
+                    &gpu.markers,
+                );
             }
             if let Some(features) = features {
                 features.draw_casters(
@@ -289,6 +360,50 @@ impl Scene {
                     eye,
                     &|centre, radius| fit.may_touch(centre, radius),
                     &mut self.caster_scratch,
+                );
+            }
+            end_casters();
+            shadow.still_drawn = Some(still);
+        }
+        if steady {
+            shadow.copy_still();
+        }
+        let light_vp;
+        {
+            let mut texture = rl.begin_texture_mode(thread, &mut shadow.map);
+            if !steady {
+                texture.clear_background(Color::WHITE);
+            }
+            let mut pass = texture.begin_mode3D(light_camera(&fit));
+            light_vp = begin_casters();
+            if !steady {
+                for (shaded, bounds) in &gpu.land {
+                    if fit.may_touch(bounds.centre, bounds.radius) {
+                        pass.draw_mesh(&shaded.mesh, shadow.depth.clone(), Matrix::identity());
+                    }
+                }
+                if !gpu.markers.is_empty() {
+                    pass.draw_mesh_instanced(
+                        &self.box_mesh,
+                        shadow.depth_instanced.clone(),
+                        &gpu.markers,
+                    );
+                }
+                if let Some(features) = features {
+                    features.draw_casters(
+                        &mut pass,
+                        &shadow.depth_instanced,
+                        eye,
+                        &|centre, radius| fit.may_touch(centre, radius),
+                        &mut self.caster_scratch,
+                    );
+                }
+            }
+            if !self.entity_casters.is_empty() {
+                pass.draw_mesh_instanced(
+                    &self.box_mesh,
+                    shadow.depth_instanced.clone(),
+                    &self.entity_casters,
                 );
             }
             if let Some(models) = &self.models {

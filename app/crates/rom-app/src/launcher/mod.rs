@@ -234,6 +234,7 @@ impl Catalog {
                 ("sun", choices(&["orbit", "fixed", "night"])),
                 ("graticule", choices(&["on", "off"])),
                 ("grass", choices(&["on", "off"])),
+                ("detail", choices(&["min", "medium", "max", "ultra"])),
                 ("projectiles", choices(&["on", "off"])),
                 ("middle-drag", choices(&["turn", "pan"])),
                 (
