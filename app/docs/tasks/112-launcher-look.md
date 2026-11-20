@@ -81,6 +81,21 @@ sandbox game, "maybe also add more presets with suggestive imagery (screenshots 
   line it stands for); saved custom presets show as tiles too.
 - Less text: short help lines; flag names only in Advanced.
 
+## Owner direction (2026-11-20): scripts and presets files
+
+"also please add in the setup the possibility to put a script/presets file, maybe also bundle some
+of what we have right now."
+- `--script` becomes a public option. Every match form gets a "Start script" choice: none, a
+  bundled script, or a file; the launcher shows the script's title and description (its first
+  comment lines). In network matches the script is part of the host's or server's setup.
+- Presets can be exported to and imported from one documented file format; a preset may name a
+  bundled script.
+- Bundled scripts shipped with the game: the rich-start scripts per age (task 84), research-all to
+  an age (task 110), the 200-versus-200 battle (task 95), and other player-useful scripts under
+  `app/docs/tasks/*script*.txt` (not the test drivers).
+- Tests: every bundled script parses; a preset with a script maps to `--script`; export and
+  import round-trip.
+
 Read first: `AGENTS.md`, `CLAUDE.md`, `app/docs/hud.md` (Style, Window chrome),
 `app/docs/launcher.md`, `research/04-hud-and-screens.md` (setup screen), card 87 and card 88,
 `rom-app/src/launcher/` (all), the HUD rasterising code in `rom-render` (search `chrome`), the
