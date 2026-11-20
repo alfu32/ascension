@@ -66,6 +66,21 @@ The owner annotated a screenshot of the advanced launcher (kept by the owner at
    command line; the launcher always launches a universe match with the chosen style. "Play
    (single planet)" folds into Play with the Planet style unless it does something Planet cannot.
 
+## Owner direction (2026-11-20): friendlier, more presets with pictures
+
+"the bottom line is that the launcher has to be friendlier", like a good launcher of a popular
+sandbox game, "maybe also add more presets with suggestive imagery (screenshots and icons)".
+(Do not name other games in the repository; describe the style.)
+- First screen: a large hero capture with the emblem and a big Play button (last-used or default
+  preset), then preset tiles (capture, icon, short name, one line). Host, Join and Run a server
+  stay reachable plainly.
+- More presets, each a tile: Quick match (Planet, one easy opponent), Classic (Cluster, three
+  moderate), Galactic war (Quadrant or Sector, many harder opponents), Start in space (space-faring
+  age), Sandbox (everything researched, rich start), Peaceful build (no opponents), Watch the
+  computers. Presets are data in one place; each maps onto `Options` (tested against the command
+  line it stands for); saved custom presets show as tiles too.
+- Less text: short help lines; flag names only in Advanced.
+
 Read first: `AGENTS.md`, `CLAUDE.md`, `app/docs/hud.md` (Style, Window chrome),
 `app/docs/launcher.md`, `research/04-hud-and-screens.md` (setup screen), card 87 and card 88,
 `rom-app/src/launcher/` (all), the HUD rasterising code in `rom-render` (search `chrome`), the
