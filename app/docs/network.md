@@ -45,6 +45,72 @@ changed the world before each step. **Follower**: applies the leader's journal f
 `World::step`. A follower never runs computer players or governors and never changes its world
 any other way; its world therefore equals the leader's tick for tick.
 
+## Who does what: server, client, shared
+
+Asked by the owner (2026-11-20). In a network match the **server** is the leader and the
+**client** is a follower; standalone, the app is both at once (it leads, with no network). The
+integrated host ("Host a game") runs a server thread and a client in one process.
+
+### Shared: the same code, built into both
+
+Gameplay is written once. Both ends compile these crates from the same release and refuse to
+play together unless the versions and the rules fingerprint match.
+
+| What | Crate / data |
+| --- | --- |
+| Every game rule: units, buildings, combat, projectiles, research, ages, economy, market, territory, colonies, space travel, jumps and inhibitors, vision and fog state, victory, ascension | `rom-sim` |
+| The rules themselves (definitions, stats, modifiers, constants), embedded in the binary; their hash is the rules fingerprint | `rom-rules` + `db/` |
+| Building the match from its setup: maps, universes, star selection, start placement, planet surfaces from the universe recipe | `rom-mapgen`, `rom-match` (task 85) |
+| The tick routine and the journal: `lead` (server) and `follow` (client) | `rom-match` |
+| The save format, used for snapshots sent to joining or out-of-step clients | `rom-save` |
+| The protocol messages (both ends speak the same types) | `rom-net` (task 86) |
+
+### Server only (the leader)
+
+| Responsibility | Notes |
+| --- | --- |
+| The match clock | steps at the match speed and waits for no one |
+| Deciding what happens on each tick | collects every player's orders, overwrites `command.player` with the seat's player, submits them in a fixed order; what `World::submit` refuses goes back as `Rejected` |
+| Computer players and colony governors | `rom-ai`; clients never run them in a network match (they receive their orders in the journal) |
+| Planet surfaces made on first visit | from a client's `Visit`; journaled as `SurfaceAdded` |
+| Broadcasting the journal | one `Turn` per tick to every client |
+| Checking that clients stay in step | compares their hashes every 100 ticks; sends a snapshot on a mismatch |
+| Admission | one-time keys, seat tokens, rate limits, version and fingerprint check |
+| The lobby | seats, races, ready, start (host) |
+| Pause, resume, speed | anyone pauses and resumes; only the host or operator sets the speed |
+| Dropped players | the disconnect policy: pause, then a computer player holds the seat until the person returns |
+| Chat relay | to all, or to allies only (filtered by team on the server) |
+| Saving | autosave every N minutes and on stop; `--resume` after a restart |
+| `GET /status` | version, seats, state |
+
+### Client only (the follower and the window)
+
+| Responsibility | Notes |
+| --- | --- |
+| Drawing everything | `rom-render`: planets, space, units, projectiles in flight, the sun's light, the HUD |
+| Every screen and input | `rom-app`: launcher, lobby screen, camera, selection, the order palette, hover text, chat window and log, settings |
+| Turning clicks into orders | sends `Order` and `Visit` to the server; shows `Rejected` refusals on the event line |
+| Following the match | applies each `Turn`, then steps its own copy of the world; keeps two ticks in hand, catches up when behind, asks for a snapshot when far behind |
+| Showing its own player's view | fog of war, known systems, notices: computed by the shared simulation, shown for this seat only |
+| Reporting its hash | every 100 ticks |
+| Remembering how to rejoin | the seat token per server address, in the config folder |
+| Network line in the HUD | latency, "waiting for …", who paused |
+
+A client never changes its world except through the journal, never runs computer players, and
+cannot save or load a network match (the in-match menu asks the server).
+
+### What this means for future work
+
+| A change to … | Is made in | Ships to |
+| --- | --- | --- |
+| Gameplay or balance (rules, data, simulation) | shared crates and `db/`, once | server and clients together (same release) |
+| Computer-player behaviour | `rom-ai`, once | the server (and standalone games) |
+| Graphics, HUD, screens, controls | `rom-app`, `rom-render` | clients only; the server need not update unless the version check requires it |
+| Lobby, keys, relay, disconnect handling | `rom-net`, `rom serve` | the server (and the client's side of the protocol when a message changes) |
+
+In phase one every release bumps the version, so in practice the server and the clients are
+updated together.
+
 ## The journal (what a tick carries)
 
 For tick `T`, in the order the leader applied them before stepping to `T + 1`:
