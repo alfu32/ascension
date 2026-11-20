@@ -11,7 +11,9 @@ pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <f
 [--middle-drag <turn|pan>] [--invert-horizontal-turn] [--invert-vertical-turn] \
 [--gallery <all|units|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
 [--model <model id>] [--parts] [--pose <idle|move|attack|work>] [--anim-time <seconds>] \
-[--gallery-manifest <file.json>]\n\n--style takes a map style key: map.one_world (Planet), map.solar (Solar), map.many_worlds (Cluster), map.sector (Sector), map.quadrant (Quadrant) or map.galaxy (Galaxy).\n--sphere N builds a universe with home face size N (64..=512).\n--single-planet preserves an isolated sphere (16..=512; default 192).";
+[--gallery-manifest <file.json>] \
+[--host <port>] [--remote-players <n>] [--connect <http(s)://url>] [--key <key>] [--token <token>] [--name <name>] [--serve] [--bind <address>] \
+[--on-disconnect <pause-then-computer|idle|computer>] [--wait-seconds <n>] [--autosave-minutes <n>]\n\n--style takes a map style key: map.one_world (Planet), map.solar (Solar), map.many_worlds (Cluster), map.sector (Sector), map.quadrant (Quadrant) or map.galaxy (Galaxy).\n--sphere N builds a universe with home face size N (64..=512).\n--single-planet preserves an isolated sphere (16..=512; default 192).\n\nNetwork (task 87; play arrives with task 88): --host <port> plays and lets --remote-players others join; --connect <url> joins a server with --key (or a remembered --token); --serve runs a server without a game window on --bind <address> and the --host port (default 7400).";
 
 /// The workspace version, shown in titles, menus and the HUD.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -19,6 +21,35 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// The title of the game window: the game, its subtitle and the version.
 pub fn window_title() -> String {
     format!("Ascension — Rise of Man {VERSION}")
+}
+
+/// What a network match does when a person's connection drops (`--on-disconnect`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DisconnectPolicy {
+    /// Pause while waiting, then a computer player holds the seat until the person returns.
+    #[default]
+    PauseThenComputer,
+    /// The match keeps going and the person's units stand idle.
+    Idle,
+    /// A computer player takes the seat at once.
+    Computer,
+}
+
+impl DisconnectPolicy {
+    /// The command-line spelling.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::PauseThenComputer => "pause-then-computer",
+            Self::Idle => "idle",
+            Self::Computer => "computer",
+        }
+    }
+
+    fn from_name(name: &str) -> Option<Self> {
+        [Self::PauseThenComputer, Self::Idle, Self::Computer]
+            .into_iter()
+            .find(|policy| policy.name() == name)
+    }
 }
 
 /// Default canvas size in pixels when `--size` is not given.
@@ -139,6 +170,27 @@ pub struct Options {
     pub autosave_minutes: u32,
     /// Open the window without the desktop's title bar and borders.
     pub no_chrome: bool,
+    /// Play and let others join, listening on this port (`--host`); with `--serve`, the
+    /// server's port.
+    pub host: Option<u16>,
+    /// Other people's seats in a hosted or served match (1 to 8).
+    pub remote_players: u32,
+    /// Join the server at this `http://` or `https://` address.
+    pub connect: Option<String>,
+    /// The key that admits this person to the server.
+    pub key: Option<String>,
+    /// The seat token a server gave, to take the same seat again.
+    pub token: Option<String>,
+    /// The name shown to the other players.
+    pub name: Option<String>,
+    /// Run a server without a game window.
+    pub serve: bool,
+    /// The address a hosted or served match listens on.
+    pub bind: String,
+    /// What happens when a person drops.
+    pub on_disconnect: DisconnectPolicy,
+    /// Seconds a paused match waits for a dropped person before the policy acts.
+    pub wait_seconds: u32,
     /// Print the version and exit.
     pub version: bool,
     /// Print usage and exit.
@@ -229,6 +281,16 @@ impl Default for Options {
             load: None,
             autosave_minutes: DEFAULT_AUTOSAVE_MINUTES,
             no_chrome: false,
+            host: None,
+            remote_players: 1,
+            connect: None,
+            key: None,
+            token: None,
+            name: None,
+            serve: false,
+            bind: "127.0.0.1".into(),
+            on_disconnect: DisconnectPolicy::default(),
+            wait_seconds: 120,
             version: false,
             help: false,
         }
@@ -504,8 +566,61 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                 );
             }
             "--load" => options.load = Some(PathBuf::from(value("--load")?)),
-            "--autosave" => {
-                options.autosave_minutes = number("--autosave", &value("--autosave")?)?;
+            "--autosave" | "--autosave-minutes" => {
+                options.autosave_minutes = number(&arg, &value(&arg)?)?;
+            }
+            "--host" => {
+                let text = value("--host")?;
+                options.host = Some(
+                    text.parse::<u16>()
+                        .ok()
+                        .filter(|port| *port > 0)
+                        .ok_or_else(|| {
+                            format!("--host expects a port, 1 to 65535, got {text:?}")
+                        })?,
+                );
+            }
+            "--remote-players" => {
+                let text = value("--remote-players")?;
+                options.remote_players =
+                    text.parse::<u32>()
+                        .ok()
+                        .filter(|n| (1..=8).contains(n))
+                        .ok_or_else(|| format!("--remote-players expects 1 to 8, got {text:?}"))?;
+            }
+            "--connect" => {
+                let text = value("--connect")?;
+                let rest = text
+                    .strip_prefix("http://")
+                    .or_else(|| text.strip_prefix("https://"))
+                    .filter(|rest| !rest.is_empty() && !rest.starts_with('/'));
+                if rest.is_none() || text.contains(char::is_whitespace) {
+                    return Err(format!(
+                        "--connect expects an http:// or https:// address, got {text:?}"
+                    ));
+                }
+                options.connect = Some(text);
+            }
+            "--key" => options.key = Some(non_empty("--key", value("--key")?)?),
+            "--token" => options.token = Some(non_empty("--token", value("--token")?)?),
+            "--name" => options.name = Some(non_empty("--name", value("--name")?)?),
+            "--serve" => options.serve = true,
+            "--bind" => options.bind = non_empty("--bind", value("--bind")?)?,
+            "--on-disconnect" => {
+                let text = value("--on-disconnect")?;
+                options.on_disconnect = DisconnectPolicy::from_name(&text).ok_or_else(|| {
+                    format!(
+                        "--on-disconnect expects pause-then-computer, idle or computer, got {text:?}"
+                    )
+                })?;
+            }
+            "--wait-seconds" => {
+                let text = value("--wait-seconds")?;
+                options.wait_seconds = text
+                    .parse::<u32>()
+                    .ok()
+                    .filter(|n| (1..=86_400).contains(n))
+                    .ok_or_else(|| format!("--wait-seconds expects 1 to 86400, got {text:?}"))?;
             }
             "-h" | "--help" => options.help = true,
             other => return Err(format!("unknown argument {other:?}")),
@@ -516,6 +631,14 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
     }
     if options.uses_universe() && options.sphere.is_some_and(|n| n < 64) {
         return Err("universe home planets require --sphere 64 to 512; use --single-planet for smaller spheres".into());
+    }
+    if options.connect.is_some() && (options.serve || options.host.is_some()) {
+        return Err(
+            "--connect joins a server; it cannot be combined with --host or --serve".into(),
+        );
+    }
+    if options.connect.is_some() && options.key.is_none() && options.token.is_none() {
+        return Err("--connect needs --key (or --token to take a seat again)".into());
     }
     Ok(options)
 }
@@ -561,6 +684,7 @@ pub fn match_arguments(arguments: &[String]) -> Vec<String> {
             "--invert-vertical-turn",
             "--start-markers",
             "--parts",
+            "--serve",
             "--help",
             "-h",
         ]
@@ -571,6 +695,14 @@ pub fn match_arguments(arguments: &[String]) -> Vec<String> {
         }
     }
     kept
+}
+
+fn non_empty(name: &str, text: String) -> Result<String, String> {
+    if text.trim().is_empty() {
+        Err(format!("{name} expects a value, not an empty one"))
+    } else {
+        Ok(text)
+    }
 }
 
 fn number<T: std::str::FromStr>(name: &str, text: &str) -> Result<T, String> {
@@ -671,6 +803,90 @@ mod tests {
 
     fn args(list: &[&str]) -> Vec<String> {
         list.iter().map(|arg| (*arg).to_owned()).collect()
+    }
+
+    #[test]
+    fn parses_network_options() {
+        let host = parse(args(&[
+            "--host",
+            "7401",
+            "--remote-players",
+            "3",
+            "--on-disconnect",
+            "idle",
+            "--wait-seconds",
+            "30",
+            "--bind",
+            "0.0.0.0",
+            "--autosave-minutes",
+            "9",
+        ]))
+        .unwrap();
+        assert_eq!(host.host, Some(7401));
+        assert_eq!(host.remote_players, 3);
+        assert_eq!(host.on_disconnect, DisconnectPolicy::Idle);
+        assert_eq!((host.wait_seconds, host.autosave_minutes), (30, 9));
+        assert_eq!(host.bind, "0.0.0.0");
+        let join = parse(args(&[
+            "--connect",
+            "https://play.example.org/ascension/",
+            "--key",
+            "k-1",
+            "--name",
+            "Ana",
+        ]))
+        .unwrap();
+        assert_eq!(
+            join.connect.as_deref(),
+            Some("https://play.example.org/ascension/")
+        );
+        assert_eq!(
+            (join.key.as_deref(), join.name.as_deref()),
+            (Some("k-1"), Some("Ana"))
+        );
+        let rejoin = parse(args(&[
+            "--connect",
+            "http://127.0.0.1:7400/",
+            "--token",
+            "t",
+        ]))
+        .unwrap();
+        assert_eq!(rejoin.token.as_deref(), Some("t"));
+        assert!(parse(args(&["--serve", "--host", "7400"])).unwrap().serve);
+        let defaults = Options::default();
+        assert_eq!(
+            (
+                defaults.host,
+                defaults.remote_players,
+                defaults.serve,
+                defaults.bind.as_str()
+            ),
+            (None, 1, false, "127.0.0.1")
+        );
+        assert_eq!(defaults.on_disconnect, DisconnectPolicy::PauseThenComputer);
+        assert_eq!(defaults.wait_seconds, 120);
+    }
+
+    #[test]
+    fn rejects_bad_network_options() {
+        for bad in [
+            &["--host", "0"][..],
+            &["--host", "70000"],
+            &["--remote-players", "0"],
+            &["--remote-players", "9"],
+            &["--connect", "ws://x/", "--key", "k"],
+            &["--connect", "play.example.org", "--key", "k"],
+            &["--connect", "http://", "--key", "k"],
+            &["--connect", "http://x", "--key", ""],
+            &["--connect", "http://x"],
+            &["--connect", "http://x", "--key", "k", "--serve"],
+            &["--connect", "http://x", "--key", "k", "--host", "7400"],
+            &["--on-disconnect", "ignore"],
+            &["--wait-seconds", "0"],
+            &["--bind", ""],
+        ] {
+            assert!(parse(args(bad)).is_err(), "{bad:?}");
+        }
     }
 
     #[test]

@@ -1,0 +1,28 @@
+# Screenshots of task 87 (run from app/ after `cargo build --release --locked`).
+# Each run opens the launcher on one screen with an isolated configuration folder, waits for
+# the window, captures it with ImageMagick `import -window <id>` (the id read from
+# `xwininfo -root -tree`; nothing is sent to the window), and the launcher ends itself (--after).
+# Memory: one instance at a time, under a 6 GB cap.
+shot() {  # shot <screen> <file> [extra env...]
+  rm -rf /tmp/rom-launcher-shot && mkdir -p /tmp/rom-launcher-shot
+  env -u WAYLAND_DISPLAY XDG_CONFIG_HOME=/tmp/rom-launcher-shot ROM_LAUNCHER_SCREEN=$1 "${@:3}" \
+    systemd-run --user --scope -q -p MemoryMax=6G -p MemorySwapMax=0 \
+    target/release/rise-of-man --launcher --after 14 &
+  sleep 7
+  id=$(xwininfo -root -tree | grep -m1 'Launcher' | awk '{print $1}')
+  import -window "$id" "$2"
+  wait
+}
+shot simple   docs/img/launcher-simple.png     # launcher-simple.png:   the four choices and Advanced …
+shot play     docs/img/launcher-play.png       # launcher-play.png:     the Play form, defaults
+shot host     docs/img/launcher-host.png       # launcher-host.png:     Host form; Host is off with the task 88 note
+shot join     docs/img/launcher-join.png       # launcher-join.png:     Join form; Join is off (address and key empty)
+shot server   docs/img/launcher-server.png     # launcher-server.png:   Run a server form
+shot advanced docs/img/launcher-advanced.png ROM_LAUNCHER_GROUP=5   # the advanced launcher on its Network group
+# One scripted run: Play, started by the launcher itself (presses Start after 2 s, adds --bench 6
+# so the game ends itself); the game is a separate process whose bench line is printed.
+rm -rf /tmp/rom-launcher-shot && mkdir -p /tmp/rom-launcher-shot
+env -u WAYLAND_DISPLAY XDG_CONFIG_HOME=/tmp/rom-launcher-shot ROM_LAUNCHER_SCREEN=play ROM_LAUNCHER_START=1 \
+  ROM_LAUNCHER_APPEND="--bench 6 --size 640x400" \
+  systemd-run --user --scope -q -p MemoryMax=6G -p MemorySwapMax=0 \
+  target/release/rise-of-man --launcher --after 40

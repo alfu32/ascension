@@ -60,6 +60,12 @@ fn main() -> ExitCode {
         );
         return ExitCode::SUCCESS;
     }
+    if options.host.is_some() || options.connect.is_some() || options.serve {
+        eprintln!(
+            "rise-of-man: network play arrives with task 88; --host, --connect and --serve are accepted but not yet run"
+        );
+        return ExitCode::from(2);
+    }
     if let Some(path) = &options.gallery_manifest {
         return match gallery::write_manifest(path) {
             Ok(count) => {
