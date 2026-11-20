@@ -364,6 +364,9 @@ pub struct SimLink {
 pub struct NetInfo {
     /// Whether this seat is the host (sets the speed, asks the server to save).
     pub host: bool,
+    /// What the follower measured of its pacing and the person's orders (tests).
+    #[cfg(test)]
+    pub stats: Arc<Mutex<crate::net::play::NetStats>>,
 }
 
 impl SimLink {
@@ -606,7 +609,11 @@ impl SimThread {
         let (requests, request_inbox) = channel();
         let net = match &game {
             Game::Lead(_) => None,
-            Game::Follow(net) => Some(Arc::new(NetInfo { host: net.host() })),
+            Game::Follow(net) => Some(Arc::new(NetInfo {
+                host: net.host(),
+                #[cfg(test)]
+                stats: net.stats(),
+            })),
         };
         let speed_pct = match &game {
             Game::Lead(_) => speed_pct,
@@ -682,8 +689,9 @@ impl Drop for SimThread {
 /// the demo driver before it, requeued orders, notices, saves and the snapshots for the window
 /// after it, and the (unused) order inbox last, as before task 85, so standalone matches play as
 /// they did (`rom_match::core` documents the order of a tick). In a network match one tick is
-/// the server's turn applied by the follower (`NetPlay::step`), paced by the turns held; the
-/// person's orders and visits gather in the outbox and go to the server once per loop turn.
+/// the server's turn applied by the follower (`NetPlay::step`), paced by their arrival; the
+/// person's orders and visits gather in the outbox and go to the server as soon as the loop
+/// turn has read the clicks (a script's, after its steps).
 #[allow(clippy::too_many_arguments)] // the thread's whole state, moved in once
 fn run(
     mut game: Game,
@@ -834,7 +842,8 @@ fn run(
                     link.speed.store(speed, Ordering::Relaxed);
                 }
                 link.paused.store(net.paused(), Ordering::Release);
-                net.due(step.advance(elapsed))
+                // The turns' arrival, not this thread's clock, sets when a turn is applied.
+                net.due(Instant::now())
             }
         };
         // The chat (tasks 76 and 94): what the window typed, sent in the person's name.
@@ -919,6 +928,13 @@ fn run(
             if handle_pick(&mut controller, &mut game.sink(&mut outbox), link, pick) {
                 toggle_pause(&game, &mut controller, link);
             }
+        }
+        if let Game::Follow(net) = &mut game {
+            // The clicks leave now, before this loop turn's steps.
+            while let Ok(command) = inbox.try_recv() {
+                outbox.orders.push(command);
+            }
+            net.send_outbox(&mut outbox);
         }
         focus_camera(game.world(), &mut controller, bridge);
         let mut line_changed = false;
@@ -1115,13 +1131,11 @@ fn run(
                 .store(micros(longest), Ordering::Relaxed);
         }
         if ticks == 0 {
-            let wait = step.until_next().min(MAX_SLEEP);
-            // A follower waiting for the server's next turn does not spin.
-            thread::sleep(if following {
-                wait.max(Duration::from_millis(1))
-            } else {
-                wait
-            });
+            match &mut game {
+                // A follower waits for the server's next turn, woken the moment it arrives.
+                Game::Follow(net) => net.wait(MAX_SLEEP),
+                Game::Lead(_) => thread::sleep(step.until_next().min(MAX_SLEEP)),
+            }
         } else {
             thread::yield_now();
         }
