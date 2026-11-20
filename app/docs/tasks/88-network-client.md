@@ -45,6 +45,40 @@ integrated, both on the same machine; clients connect over http or https. Design
 
 Rules: 1, 3, 8 (raylib objects stay on the render thread; network threads never touch them).
 
+## Since this card was written (orchestrator, 2026-11-20; tasks 85–87 released as 0.0.104–0.0.106)
+
+Build on what was built (read `network.md`, "As built (task 86)" and "Operating a server"):
+- **`rom-match`** (task 85): the app's sim thread already leads through `MatchCore::lead`; a
+  follower is `MatchCore::follow(&Journal)`. `MatchCore::world_mut` is still the controller's
+  way in: replace it with the one order sink this card asks for.
+- **`rom-net`** (task 86):
+  - Hosting: `Server::start(ServerConfig) -> ServerHandle` (`bind: 0.0.0.0` so others can join;
+    `log: Arc<dyn Fn(&str)>` for the server window's log); `ServerHandle::{addr, local_url,
+    status, command(Operator::{Start, Pause, Resume, Speed, Save, Stop}), add_keys(n, host),
+    key_counts, is_finished, stop, wait}`. A host key (`add_keys(n, true)`) makes its seat the
+    host: the integrated host admits itself with one. `Server::start` (when resuming) and the
+    match build at Start block for seconds: call them off the UI thread.
+  - Joining: `hello(url, &Credential::{Key, Token}, name) -> (Connection, Welcome{seat,
+    seat_token, host, lobby})`; refusals as `NetError::Refused{reason, detail}` (show `detail`:
+    it names both versions). `Connection::{send, recv_timeout, try_recv, close}` delivering
+    `Incoming::{Message, Snapshot{tick, save}, Closed}`.
+  - Following: `Follower::start(&setup, player, snapshot_dir)` on `Start`; `load_snapshot`;
+    `follow(&protocol::journal(tick, entries)) -> Result<Option<hash>, Desync>`: send `Hash` on
+    `Some`, `NeedSnapshot` on `Err`. The "more than 30 s behind" snapshot request is yours.
+  - Orders: `ClientMessage::Order{seq, command: WireCommand::from(&cmd)}`, `Visit{seq, body}`,
+    `Chat`, `Pause`/`Resume`/`Speed`/`Save`; replies `Rejected`, `Denied{action, reason}`,
+    `Notice`, `Bye`.
+  - TLS (https): `rom-net`'s `tls` feature (rustls with the operating system's root
+    certificates); the app enables it.
+- **Launcher** (task 87): the Host, Join and Run a server forms exist; flip
+  `launcher::simple::NETWORK_READY` to enable them. Options: `--host <port>` (also the port of
+  `--serve`), `--bind`, `--remote-players`, `--connect`, `--key`, `--token`, `--name`, `--serve`,
+  `--on-disconnect`, `--wait-seconds`, `--autosave-minutes`; `main.rs` refuses them today with
+  "network play arrives with task 88". Write seat tokens to `launcher.json` `tokens` (keyed by
+  server address); the Join form's Rejoin reads them there.
+- **Universe matches are the game** (owner 2026-11-19); test network matches on Cluster.
+- **Task 108** (frame rate) is paused with uncommitted work in its own worktree; do not touch it.
+
 Read first: `AGENTS.md`, `CLAUDE.md`, `app/docs/network.md`, tasks 85–87's cards and code,
 `research/02-rendering-ui-stack.md`, `research/04-hud-and-screens.md`, `rom-app/src/sim_thread.rs`,
 `selection.rs`, `shell.rs`, `launcher/`.
