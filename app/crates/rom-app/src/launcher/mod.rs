@@ -3,13 +3,17 @@
 mod assets;
 mod form;
 mod models;
+mod simple;
 mod ui;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::ExitCode;
 use std::time::Duration;
 
-use gpui::{App, AppContext, Application, TitlebarOptions, WindowBounds, WindowOptions, px, size};
+use gpui::{
+    App, AppContext, Application, KeyBinding, TitlebarOptions, WindowBounds, WindowOptions, px,
+    size,
+};
 use gpui_component::{Root, Theme, ThemeMode};
 use rom_rules::Rules;
 
@@ -51,6 +55,10 @@ struct Catalog {
     /// Computer player profiles and difficulties (by rank).
     profiles: Vec<Choice>,
     difficulties: Vec<Choice>,
+    /// The races and nations a player may start as, for the simple forms.
+    playable: Vec<Choice>,
+    /// The rules' default mix of factions for eight players, by key.
+    mix: Vec<String>,
     /// The rules this launcher was started with; a save must match them to load.
     rules_id: crate::saves::RulesId,
 }
@@ -152,6 +160,19 @@ impl Catalog {
                     choices(&["1280x800", "1920x1080", "2560x1440", "3840x2160"]),
                 ),
             ]),
+            playable: rom_match::start_age(rules)
+                .map(|age| rules.playable_start_factions(age))
+                .unwrap_or_default()
+                .into_iter()
+                .map(|id| Choice {
+                    key: rules.key(id).into(),
+                    label: rules.def(id).name.clone(),
+                })
+                .collect(),
+            mix: rom_match::default_factions(rules, 8)
+                .into_iter()
+                .map(|id| rules.key(id).into())
+                .collect(),
             factions: definitions(rules.factions.keys().copied().collect()),
             terrains: definitions(rules.terrains.keys().copied().collect()),
             profiles: rules
@@ -232,6 +253,10 @@ pub(crate) fn run(arguments: &[String]) -> ExitCode {
     let app_failed = failed.clone();
     application.run(move |cx: &mut App| {
         gpui_component::init(cx);
+        cx.bind_keys([
+            KeyBinding::new("escape", ui::Back, Some(ui::CONTEXT)),
+            KeyBinding::new("enter", ui::Confirm, Some(ui::CONTEXT)),
+        ]);
         Theme::change(ThemeMode::Dark, None, cx);
         {
             let theme = Theme::global_mut(cx);
@@ -305,6 +330,14 @@ mod tests {
         assert_eq!(catalog.factions.len(), rules.factions.len());
         assert_eq!(catalog.terrains.len(), rules.terrains.len());
         assert_eq!(catalog.lists["age"].len(), rules.ages.len());
+        assert!(!catalog.playable.is_empty());
+        assert_eq!(catalog.mix.len(), 8);
+        assert!(
+            catalog
+                .mix
+                .iter()
+                .all(|key| catalog.playable.iter().any(|c| &c.key == key))
+        );
         assert_eq!(catalog.profiles.len(), rules.ai_profiles.len());
         assert_eq!(catalog.difficulties.len(), rules.ai_difficulties.len());
         assert!(
