@@ -53,6 +53,15 @@ Added to the build (do these first):
 - The worktree holds uncommitted work from the stopped earlier attempt (`bench.rs`,
   `readback.rs`, `scene/shadow.rs`, `worker.rs`): review it, keep what measures better, drop the
   rest, and merge `main` first (the branch is older than 0.0.104).
+- **Rendering detail setting (owner, 2026-11-20, verbatim): "maybe the grass spread should stay
+  under a parameter 'rendering detail' that takes the values min,medium,max,ultra and regulates
+  those distances, its the easy way to asses ferformance."** Four levels set the grass distances
+  (LOD / full / far) and budget; `medium` equals today's (16 / 32 / 42), `max` and `ultra` extend
+  the far edge (about 1.5× and 2×), `min` is shorter, for weak GPUs. Reachable in the in-game
+  menu, the launcher's Advanced form, the settings file and `--detail <min|medium|max|ultra>`
+  (like `--grass on|off`); changeable during a match without a restart; presentation only. Bench
+  each level (fps shown, frame ms) at 1280×800 and 1920×1080 and put the table in
+  `performance.md`. Other distance knobs join the setting only where measurements show they matter.
 
 ## Build
 

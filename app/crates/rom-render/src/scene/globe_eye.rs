@@ -123,6 +123,37 @@ pub(super) fn clear_depth() {
     }
 }
 
+/// Fills the depth buffer at the nearest depth over `rects` (render-target pixels, in a texture
+/// mode outside a 3D mode), without touching colour: what is drawn there next fails the depth
+/// test before its fragment program runs. Used under the opaque HUD (task 108).
+pub(super) fn cover_depth(rects: &[crate::hud_layout::Rect]) {
+    if rects.is_empty() {
+        return;
+    }
+    // Just inside the near end of the texture mode's orthographic depth range (0 to 1).
+    const NEAR: f32 = -1e-4;
+    // SAFETY: the render thread has an active GL context inside a texture mode; the batch is
+    // flushed before and after, and depth test, depth writes and the colour mask are put back
+    // to raylib's 2D state (no depth test, colour on).
+    unsafe {
+        raylib::ffi::rlDrawRenderBatchActive();
+        raylib::ffi::rlEnableDepthTest();
+        raylib::ffi::rlEnableDepthMask();
+        raylib::ffi::rlColorMask(false, false, false, false);
+        raylib::ffi::rlBegin(raylib::ffi::RL_QUADS as i32);
+        for r in rects {
+            raylib::ffi::rlVertex3f(r.x, r.y, NEAR);
+            raylib::ffi::rlVertex3f(r.x, r.y + r.h, NEAR);
+            raylib::ffi::rlVertex3f(r.x + r.w, r.y + r.h, NEAR);
+            raylib::ffi::rlVertex3f(r.x + r.w, r.y, NEAR);
+        }
+        raylib::ffi::rlEnd();
+        raylib::ffi::rlDrawRenderBatchActive();
+        raylib::ffi::rlColorMask(true, true, true, true);
+        raylib::ffi::rlDisableDepthTest();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

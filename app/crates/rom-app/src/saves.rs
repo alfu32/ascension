@@ -444,7 +444,7 @@ pub fn display_arguments(arguments: &[String]) -> Vec<String> {
     let mut rest = arguments.iter();
     while let Some(argument) = rest.next() {
         match argument.as_str() {
-            "--size" | "--scale" | "--hud-scale" | "--grass" | "--projectiles" => {
+            "--size" | "--scale" | "--hud-scale" | "--grass" | "--detail" | "--projectiles" => {
                 if let Some(value) = rest.next() {
                     kept.extend([argument.clone(), value.clone()]);
                 }

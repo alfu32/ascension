@@ -24,8 +24,9 @@ uniform mat4 viewProjection;
 uniform int bladesPerTriangle;
 uniform float density;
 uniform vec3 viewPosition;
-// Meshcraft's LOD distance, the end of full height and the end of the fade (tiles from the eye).
-uniform vec3 reach;
+// Meshcraft's LOD distance, the end of full height, the end of the fade and the start of the
+// coarse blades (tiles from the eye).
+uniform vec4 reach;
 // Width of a pixel per tile of distance, for the material's pattern filter.
 uniform float pixelAngle;
 uniform vec3 slotColour[7];
@@ -48,9 +49,14 @@ out float bladeFade;
 /*MATERIALS*/
 uint hash(uint x) { x ^= x >> 16u; x *= 0x7feb352du; x ^= x >> 15u; x *= 0x846ca68bu; return x ^ (x >> 16u); }
 float random(uint x) { return float(hash(x) & 0x00ffffffu) / 16777216.0; }
+// Past reach.w the blades are fewer by the square of this and as many times wider.
+float widen(float d) {
+    return max(d / reach.w, 1.0);
+}
 float lod(float d) {
     float r = d / reach.x;
-    return 1.0 / (1.0 + r * r) * (1.0 - smoothstep(reach.y, reach.z, d));
+    float w = widen(d);
+    return 1.0 / (1.0 + r * r) / (w * w) * (1.0 - smoothstep(reach.y, reach.z, d));
 }
 vec3 unpackShade(float code) {
     return vec3(floor(code / 65536.0), mod(floor(code / 256.0), 256.0), mod(code, 256.0)) / 255.0 * 2.0;
@@ -97,7 +103,8 @@ void main() {
     vec2 uv = vec2(float(gl_VertexID % 2) * 2.0 - 1.0, float(gl_VertexID / 2) / 3.0);
     float h = u_height * (0.7 + 0.6 * random(key + 5u)) * fade;
     float wind = u_wind * sin(time * 1.7 + root.x * 0.5 + root.z * 0.7 + angle);
-    vec3 position = root + normal * (uv.y * h) + side * (uv.x * u_width * 0.5 * (1.0 - uv.y))
+    vec3 position = root + normal * (uv.y * h)
+        + side * (uv.x * u_width * widen(away) * 0.5 * (1.0 - uv.y))
         + bend * (uv.y * uv.y * h * (u_curvature + wind));
     // Base shading "material colour": the grass of the ground at the root.
     int slot = int(domainSeed.w);

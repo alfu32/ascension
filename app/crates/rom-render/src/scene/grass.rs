@@ -27,6 +27,7 @@ const FIRST_CAPACITY: usize = 4096;
 
 /// Uniform locations used every frame.
 struct Locations {
+    reach: i32,
     view_projection: i32,
     per: i32,
     density: i32,
@@ -89,23 +90,15 @@ impl GrassGpu {
         }
         let location = at(&shader, "u_seed");
         shader.set_shader_value(location, grass::SEED as i32);
-        let location = at(&shader, "reach");
-        shader.set_shader_value(
-            location,
-            [
-                grass::LOD_DISTANCE,
-                grass::FULL_DISTANCE,
-                grass::FAR_DISTANCE,
-            ],
-        );
         let locations = Locations {
+            reach: at(&shader, "reach"),
             view_projection: at(&shader, "viewProjection"),
             per: at(&shader, "bladesPerTriangle"),
             density: at(&shader, "density"),
             pixel_angle: at(&shader, "pixelAngle"),
         };
         let (vao, vbo, ebo) = make_buffer(FIRST_CAPACITY)?;
-        Some(Self {
+        let mut gpu = Self {
             shader,
             locations,
             vao,
@@ -114,7 +107,23 @@ impl GrassGpu {
             capacity: FIRST_CAPACITY,
             upload: Vec::new(),
             state: GrassState::default(),
-        })
+        };
+        gpu.set_reach_uniform(grass::Detail::default().reach());
+        Some(gpu)
+    }
+
+    /// Takes the reach of a rendering detail level (task 108); the next frame rebuilds with it.
+    pub(super) fn set_reach(&mut self, reach: grass::Reach) {
+        if self.state.set_reach(reach) {
+            self.set_reach_uniform(reach);
+        }
+    }
+
+    fn set_reach_uniform(&mut self, reach: grass::Reach) {
+        self.shader.set_shader_value(
+            self.locations.reach,
+            [reach.lod, reach.full, reach.far, reach.coarse],
+        );
     }
 
     /// Takes the land slots of a new planet (or of newly concealed terrain).

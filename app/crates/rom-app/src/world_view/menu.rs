@@ -7,7 +7,7 @@ use gpui::{
     rgb, rgba,
 };
 use gpui_component::{
-    Disableable, Sizable,
+    Disableable, Selectable, Sizable,
     button::{Button, ButtonVariants},
     input::{Input, InputEvent, InputState},
 };
@@ -224,6 +224,29 @@ impl WorldView {
     }
 
     /// The overlay, when the menu is open.
+    /// The rendering detail levels (task 108): a choice applied at once, during the match.
+    fn detail_row(&self, cx: &mut Context<Self>) -> AnyElement {
+        let current = self.bridge.detail();
+        let mut row = div().flex().flex_row().items_center().gap_2().child(
+            div()
+                .text_color(rgb(MUTED))
+                .child("Rendering detail (grass reach)"),
+        );
+        for level in rom_render::Detail::ALL {
+            row = row.child(
+                Button::new(SharedString::from(format!("menu-detail-{}", level.name())))
+                    .label(level.name())
+                    .small()
+                    .selected(level == current)
+                    .on_click(cx.listener(move |view, _, _, cx| {
+                        view.bridge.publish_detail(level);
+                        cx.notify();
+                    })),
+            );
+        }
+        row.into_any_element()
+    }
+
     pub(super) fn render_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let menu = self.menu.as_ref()?;
         let heading = |text: &str| {
@@ -270,6 +293,7 @@ impl WorldView {
                                 cx.listener(|view, _, window, cx| view.close_menu(window, cx)),
                             ),
                     )
+                    .child(self.detail_row(cx))
                     .child(
                         Button::new("menu-save")
                             .label("Save game")
@@ -322,6 +346,7 @@ impl WorldView {
                                 cx.listener(|view, _, window, cx| view.close_menu(window, cx)),
                             ),
                     )
+                    .child(self.detail_row(cx))
                     .child(
                         Button::new("menu-save")
                             .label("Save game")

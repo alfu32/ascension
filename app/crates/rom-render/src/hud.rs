@@ -276,6 +276,82 @@ pub struct HudPainter {
     scale: f32,
     /// The atlas slot holding each model's picture (task 91).
     model_slots: BTreeMap<u16, usize>,
+    /// The fully opaque parts of each frame piece, in its own pixels (task 108).
+    cover: Vec<Vec<AtlasRect>>,
+}
+
+/// Narrowest run of opaque pixels kept in a frame piece's cover.
+const COVER_MIN_RUN: u32 = 8;
+
+/// The frame pieces every HUD picture starts with, by atlas name, and where `l` puts them: the
+/// bar fill across the width, then the panels.
+fn chrome_pieces(l: &HudLayout) -> [(&'static str, Rect); 6] {
+    use Group::{BottomCentre as C, BottomLeft as L, BottomRight as R, Top as T};
+    [
+        (
+            "chrome/bar_fill",
+            Rect::new(0.0, 0.0, l.width, 135.0 * l.scale),
+        ),
+        (
+            "chrome/topbar",
+            l.map(T, Rect::new(0.0, 0.0, 1672.0, 135.0)),
+        ),
+        (
+            "chrome/bottom_left",
+            l.map(L, Rect::new(0.0, 570.0, 612.0, 371.0)),
+        ),
+        ("chrome/minimap", l.map(C, Region::MinimapFrame.design())),
+        (
+            "chrome/bottom_right",
+            l.map(R, Rect::new(975.0, 662.0, 697.0, 279.0)),
+        ),
+        ("chrome/emblem", l.map(T, Region::Emblem.design())),
+    ]
+}
+
+/// The parts of `piece` in `image` whose pixels are all fully opaque, as rectangles relative to
+/// the piece: runs of opaque pixels in each row, joined downwards while they keep their span.
+fn opaque_parts(image: &AtlasImage, piece: AtlasRect) -> Vec<AtlasRect> {
+    let alpha = |x: u32, y: u32| {
+        image.rgba[((piece.y + y) as usize * image.width as usize + (piece.x + x) as usize) * 4 + 3]
+    };
+    let mut done = Vec::new();
+    let mut open: Vec<AtlasRect> = Vec::new();
+    for y in 0..piece.h {
+        let mut runs = Vec::new();
+        let mut x = 0;
+        while x < piece.w {
+            if alpha(x, y) == u8::MAX {
+                let start = x;
+                while x < piece.w && alpha(x, y) == u8::MAX {
+                    x += 1;
+                }
+                if x - start >= COVER_MIN_RUN {
+                    runs.push((start, x - start));
+                }
+            } else {
+                x += 1;
+            }
+        }
+        let mut next = Vec::with_capacity(runs.len());
+        for mut rect in open.drain(..) {
+            if runs.contains(&(rect.x, rect.w)) {
+                rect.h += 1;
+                next.push(rect);
+            } else {
+                done.push(rect);
+            }
+        }
+        for (x, w) in runs {
+            if !next.iter().any(|r| r.x == x && r.w == w) {
+                next.push(AtlasRect { x, y, w, h: 1 });
+            }
+        }
+        open = next;
+    }
+    done.extend(open);
+    done.retain(|rect| rect.h >= 2);
+    done
 }
 
 impl HudPainter {
@@ -283,6 +359,14 @@ impl HudPainter {
     pub fn bake(scale: f32) -> Result<Self, AtlasError> {
         let artwork = hud_atlas::bake(scale)?;
         let greyscale = hud_atlas::greyscale(&artwork.rgba);
+        let cover = chrome_pieces(&HudLayout::new(1, 1, None))
+            .iter()
+            .map(|(name, _)| {
+                artwork
+                    .rect(name)
+                    .map_or_else(Vec::new, |piece| opaque_parts(&artwork, piece))
+            })
+            .collect();
         Ok(Self {
             artwork,
             greyscale,
@@ -290,7 +374,35 @@ impl HudPainter {
             quads: Vec::new(),
             scale,
             model_slots: BTreeMap::new(),
+            cover,
         })
+    }
+
+    /// Screen rectangles the HUD of layout `l` covers with fully opaque frame pixels: nothing
+    /// drawn under them before the HUD shows. Each keeps a margin of a source pixel and a half
+    /// from its edges, where filtering blends in the neighbouring pixels.
+    pub fn opaque_cover(&self, l: &HudLayout) -> Vec<Rect> {
+        let mut out = Vec::new();
+        for ((name, dest), parts) in chrome_pieces(l).iter().zip(&self.cover) {
+            let Some(piece) = self.artwork.rect(name) else {
+                continue;
+            };
+            let sx = dest.w / piece.w.max(1) as f32;
+            let sy = dest.h / piece.h.max(1) as f32;
+            let (mx, my) = (sx.max(1.0) * 1.5, sy.max(1.0) * 1.5);
+            for part in parts {
+                let rect = Rect::new(
+                    dest.x + part.x as f32 * sx + mx,
+                    dest.y + part.y as f32 * sy + my,
+                    part.w as f32 * sx - 2.0 * mx,
+                    part.h as f32 * sy - 2.0 * my,
+                );
+                if rect.w >= 4.0 && rect.h >= 4.0 {
+                    out.push(rect);
+                }
+            }
+        }
+        out
     }
 
     /// The models the palette and the queue of `h` show, in order, each once.
@@ -1299,18 +1411,8 @@ impl HudPainter {
         use Group::{BottomCentre as C, BottomLeft as L, BottomRight as R, Top as T};
         self.quads.clear();
         self.scale = l.scale;
-        self.art(
-            "chrome/bar_fill",
-            Rect::new(0.0, 0.0, l.width, 135.0 * l.scale),
-        );
-        for (name, group, rect) in [
-            ("topbar", T, Rect::new(0.0, 0.0, 1672.0, 135.0)),
-            ("bottom_left", L, Rect::new(0.0, 570.0, 612.0, 371.0)),
-            ("minimap", C, Region::MinimapFrame.design()),
-            ("bottom_right", R, Rect::new(975.0, 662.0, 697.0, 279.0)),
-            ("emblem", T, Region::Emblem.design()),
-        ] {
-            self.art(&format!("chrome/{name}"), l.map(group, rect));
+        for (name, dest) in chrome_pieces(l) {
+            self.art(name, dest);
         }
         self.text_scaled(
             "ASCENSION",
@@ -1659,5 +1761,56 @@ mod version_tests {
     fn the_version_label_is_the_package_version() {
         assert_eq!(super::version_label(), env!("CARGO_PKG_VERSION"));
         assert!(!super::version_label().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod cover_tests {
+    use super::*;
+
+    /// The artwork's alpha under screen point (`x`, `y`) of `piece` drawn at `dest`.
+    fn alpha_under(p: &HudPainter, piece: AtlasRect, dest: Rect, x: f32, y: f32) -> u8 {
+        let sx = ((x - dest.x) / dest.w * piece.w as f32) as u32;
+        let sy = ((y - dest.y) / dest.h * piece.h as f32) as u32;
+        let (sx, sy) = (sx.min(piece.w - 1), sy.min(piece.h - 1));
+        p.artwork.rgba
+            [((piece.y + sy) as usize * p.artwork.width as usize + (piece.x + sx) as usize) * 4 + 3]
+    }
+
+    #[test]
+    fn the_cover_lies_on_opaque_frame_pixels_and_hides_much_of_the_screen() {
+        for (width, height) in [(1280, 800), (1882, 1043)] {
+            let l = HudLayout::new(width, height, None);
+            let p = HudPainter::bake(l.scale).expect("artwork bakes");
+            let cover = p.opaque_cover(&l);
+            assert!(!cover.is_empty());
+            let mut area = 0.0;
+            for r in &cover {
+                area += r.w * r.h;
+                // Each corner (a pixel and a half inside) and the centre lie on a frame piece
+                // whose pixel there and its neighbours are fully opaque.
+                for (x, y) in [
+                    (r.x, r.y),
+                    (r.right(), r.y),
+                    (r.x, r.bottom()),
+                    (r.right(), r.bottom()),
+                    (r.x + r.w / 2.0, r.y + r.h / 2.0),
+                ] {
+                    let opaque = chrome_pieces(&l).iter().any(|(name, dest)| {
+                        let piece = p.artwork.rect(name).expect("frame piece");
+                        dest.contains(x, y)
+                            && [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)]
+                                .iter()
+                                .all(|(dx, dy)| {
+                                    alpha_under(&p, piece, *dest, x + dx, y + dy) == u8::MAX
+                                })
+                    });
+                    assert!(opaque, "{width}x{height}: {r:?} at ({x}, {y})");
+                }
+            }
+            // The top bar and the bottom panels: about a third of the screen.
+            let share = area / (width * height) as f32;
+            assert!(share > 0.2, "{width}x{height}: cover {share}");
+        }
     }
 }

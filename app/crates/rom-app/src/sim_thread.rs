@@ -717,6 +717,10 @@ fn run(
     let mut window_start = last;
     let mut window_ticks = 0_u32;
     let mut thoughts = (0_u32, Duration::ZERO, Duration::ZERO);
+    let mut picks_taken = 0_u64;
+    // Ticks stepped since the last snapshot, and when that was sent.
+    let mut unpublished = false;
+    let mut published_at = Instant::now();
     link.stats
         .computers
         .store(game.core().computers().len() as u32, Ordering::Relaxed);
@@ -924,6 +928,7 @@ fn run(
         );
         let picks = bridge.take_picks();
         let interacted = !picks.is_empty();
+        picks_taken += picks.len() as u64;
         for pick in picks {
             if handle_pick(&mut controller, &mut game.sink(&mut outbox), link, pick) {
                 toggle_pause(&game, &mut controller, link);
@@ -1085,8 +1090,22 @@ fn run(
                 }
             }
             window_ticks += 1;
+            unpublished = true;
+            if let Game::Lead(core) = &mut game {
+                while let Ok(command) = inbox.try_recv() {
+                    if core.apply(Input::Order(command)).is_err() {
+                        link.stats.rejected.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+            }
+        }
+        // One snapshot for the ticks of this turn, at most one a display frame; a click is
+        // answered at once.
+        if unpublished && (interacted || now.duration_since(published_at) >= PUBLISH_PERIOD) {
+            unpublished = false;
+            published_at = now;
             publish(
-                world,
+                game.world(),
                 me,
                 net_line.as_ref(),
                 &controller,
@@ -1097,13 +1116,10 @@ fn run(
                 &models,
                 &ascension,
             );
-            if let Game::Lead(core) = &mut game {
-                while let Ok(command) = inbox.try_recv() {
-                    if core.apply(Input::Order(command)).is_err() {
-                        link.stats.rejected.fetch_add(1, Ordering::Relaxed);
-                    }
-                }
-            }
+        }
+        if interacted {
+            // What answers the picks is published by now (the HUD or a snapshot).
+            bridge.answer_picks(picks_taken);
         }
         if let Game::Follow(net) = &mut game {
             while let Ok(command) = inbox.try_recv() {
@@ -1262,6 +1278,8 @@ struct Memory {
     terrain: Option<TerrainKnowledge>,
     /// The bodies of each system, indexed on the first publish.
     systems: Option<SystemIndex>,
+    /// Tick and time of the last visibility map sent.
+    vision: Option<(u64, Instant)>,
 }
 
 /// A per-player view of resource terrain, refreshed on age and planet changes.
@@ -1301,6 +1319,13 @@ const UNIT_STAIN_PER_EXTENT: f32 = 0.65;
 
 /// Ticks between two visibility maps sent to the render thread.
 const VISION_INTERVAL: u64 = 5;
+/// Shortest time between two visibility maps, a little under [`VISION_INTERVAL`] at normal
+/// speed (which keeps one every [`VISION_INTERVAL`] ticks): at higher speeds the fog changes
+/// about as often as at normal speed, not with every few ticks (task 108).
+const VISION_PERIOD: Duration = Duration::from_millis(200);
+/// Shortest time between two snapshots of a loop turn: one display frame. A faster game shows
+/// the ticks in between in the next snapshot (task 108).
+const PUBLISH_PERIOD: Duration = Duration::from_millis(16);
 
 #[allow(clippy::too_many_arguments)] // what one published frame is made of
 fn publish(
@@ -1337,7 +1362,12 @@ fn publish(
         bridge.publish_space(Arc::new(space));
     }
     publish_camera_limits(world, me, bridge);
-    if world.tick().is_multiple_of(VISION_INTERVAL) {
+    let now = Instant::now();
+    let vision_due = memory.vision.is_none_or(|(tick, at)| {
+        world.tick() >= tick + VISION_INTERVAL && now.duration_since(at) >= VISION_PERIOD
+    });
+    if vision_due {
+        memory.vision = Some((world.tick(), now));
         bridge.publish_vision(Arc::new(memory.fog.build_on(world, me, body)));
     }
     let mut hud = crate::hud::snapshot_of(world, me);
@@ -1476,6 +1506,8 @@ pub struct Motions {
     /// ship aloft), and the tick (task 95): a shot that kills its target at once is still drawn
     /// to where the target fell.
     places: BTreeMap<u32, (Pos, f32, u64)>,
+    /// Tick of the last pruning.
+    pruned: u64,
 }
 
 impl Motions {
@@ -1501,7 +1533,9 @@ impl Motions {
 
     /// Forgets units not seen for a while.
     fn prune(&mut self, tick: u64) {
-        if tick.is_multiple_of(FORGET_AFTER) {
+        // Snapshots may skip ticks (one per loop turn), so not only on multiples.
+        if tick >= self.pruned + FORGET_AFTER {
+            self.pruned = tick;
             self.seen
                 .retain(|_, (_, _, seen)| tick.saturating_sub(*seen) < FORGET_AFTER);
             self.places

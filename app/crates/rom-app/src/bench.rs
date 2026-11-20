@@ -102,6 +102,10 @@ async fn measure(
 
     let presented = |cx: &mut AsyncApp| presented(view, cx);
     let first = bridge.stats();
+    let first_tick = sim.report().tick;
+    let first_snapshots = bridge.snapshots_published();
+    let first_response = bridge.response_times();
+    let first_cpu = thread_cpu();
     let (first_presented, _) = presented(cx)?;
     let begin = Instant::now();
     let end = begin + Duration::from_secs_f64(bench.seconds);
@@ -117,6 +121,7 @@ async fn measure(
         readback_ms_max = readback_ms_max.max(stats.readback_ms_max);
     }
     let elapsed = begin.elapsed().as_secs_f64();
+    let last_cpu = thread_cpu();
     let last = bridge.stats();
     let (last_presented, (render_width, render_height)) = presented(cx)?;
 
@@ -139,6 +144,64 @@ async fn measure(
         "bench-detail sim_tick={} sim_ticks_per_second={:.1} entities={}",
         report.tick, report.ticks_per_second, report.entities
     );
+    let ticks = report.tick.saturating_sub(first_tick);
+    let snapshots = bridge.snapshots_published() - first_snapshots;
+    eprintln!(
+        "bench-detail sim_ticks_measured={ticks} sim_tps_measured={:.1} snapshots_per_second={:.1} peak_rss_mb={}",
+        ticks as f64 / elapsed,
+        snapshots as f64 / elapsed,
+        peak_rss_mb().map_or_else(|| "unknown".to_string(), |mb| mb.to_string())
+    );
+    let response = bridge.response_times();
+    let clicks = response.count - first_response.count;
+    let per_click = |total: f64, first: f64| (total - first) / f64::from(clicks.max(1));
+    let stages: Vec<String> = (0..4)
+        .map(|i| {
+            format!(
+                "{:.1}",
+                per_click(response.stage_ms[i], first_response.stage_ms[i])
+            )
+        })
+        .collect();
+    eprintln!(
+        "bench-detail clicks={clicks} click_ms_avg={:.1} click_ms_max={:.1} click_stages_ms={}",
+        per_click(response.total_ms, first_response.total_ms),
+        response.max_ms,
+        stages.join("/")
+    );
+    // CPU per thread name over the measurement, busiest first (several threads may share a name).
+    let mut names: Vec<&str> = last_cpu.iter().map(|(name, _)| name.as_str()).collect();
+    names.sort_unstable();
+    names.dedup();
+    let used = |name: &str, cpu: &[(String, u64)]| -> u64 {
+        cpu.iter()
+            .filter(|(thread, _)| thread == name)
+            .map(|(_, ticks)| ticks)
+            .sum()
+    };
+    let percent = |ticks: u64| ticks as f64 / CLOCK_TICKS_PER_SECOND / elapsed * 100.0;
+    let mut busy: Vec<(u64, &str)> = names
+        .into_iter()
+        .map(|name| {
+            (
+                used(name, &last_cpu).saturating_sub(used(name, &first_cpu)),
+                name,
+            )
+        })
+        .filter(|(ticks, _)| *ticks > 0)
+        .collect();
+    busy.sort_unstable_by(|a, b| b.cmp(a));
+    let total: u64 = busy.iter().map(|(ticks, _)| ticks).sum();
+    let threads: Vec<String> = busy
+        .iter()
+        .take(6)
+        .map(|(ticks, name)| format!("{}={:.0}", name.replace(' ', "_"), percent(*ticks)))
+        .collect();
+    eprintln!(
+        "bench-detail cpu_pct process={:.0} {}",
+        percent(total),
+        threads.join(" ")
+    );
     eprintln!(
         "bench-detail computers={} think_ms_avg={:.2} think_ms_max={:.2} computer_orders={} computer_rejected={}",
         report.computers,
@@ -158,4 +221,36 @@ async fn measure(
         per_frame(last.readback_ms_total - first.readback_ms_total),
         readback_ms_max,
     ))
+}
+
+/// Kernel clock ticks per second of `/proc` CPU times (`USER_HZ`, 100 on Linux).
+const CLOCK_TICKS_PER_SECOND: f64 = 100.0;
+
+/// CPU time (user and system, in clock ticks) of each thread of this process, by thread name,
+/// where the system reports it (Linux `/proc`).
+fn thread_cpu() -> Vec<(String, u64)> {
+    let Ok(tasks) = std::fs::read_dir("/proc/self/task") else {
+        return Vec::new();
+    };
+    tasks
+        .filter_map(|task| {
+            let stat = std::fs::read_to_string(task.ok()?.path().join("stat")).ok()?;
+            // The name is in parentheses and may hold spaces; the times follow it.
+            let (head, tail) = stat.rsplit_once(')')?;
+            let name = head.split_once('(')?.1.to_owned();
+            let fields: Vec<&str> = tail.split_whitespace().collect();
+            // Fields 14 and 15 of the line (utime, stime) are 11 and 12 after the name and state.
+            let user: u64 = fields.get(11)?.parse().ok()?;
+            let system: u64 = fields.get(12)?.parse().ok()?;
+            Some((name, user + system))
+        })
+        .collect()
+}
+
+/// The process's peak resident memory in MB, where the system reports it (`VmHWM` on Linux).
+fn peak_rss_mb() -> Option<u64> {
+    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+    let line = status.lines().find(|line| line.starts_with("VmHWM:"))?;
+    let kb: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
+    Some(kb / 1024)
 }
