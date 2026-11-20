@@ -1,0 +1,65 @@
+# Task 114, every kind of nature on one planet. Replayed by --script in universe mode (--players 2
+# --ai none, seed 1, --sun fixed, 1672 x 941): player one ascends and brings the ore asteroid
+# nearest its home planet to life as in 77-land-script.txt, paints a continent ("Land, wide") and
+# an ocean around it ("Ocean", "Shallows"), then picks each family from the list beside the
+# palette (hud family N) and paints: Elevation "Mountain range" and "Mountains"; Biomes "Forest,
+# wide", "Desert", "Snow" and "Ice"; Deposits "Oil Deposit, large", "Relic Site, scattered". The
+# Deposits family stays open with no brush in hand. The game all but stops at tick 4 220.
+0 grant-age age.galactic
+0 ascension-ready 1
+0 place 1 bld.library @12,0
+5 ascend 1
+6 speed 1000
+3560 speed 100
+3645 hud slot 1
+3650 orbit rock1
+3660 visit rock1
+3790 look 0:32,32
+3800 hud tab 0
+3805 hud slot 1
+3810 click 0:32,32
+3815 click 0:26,26
+3820 click 0:38,36
+3825 click 0:30,40
+3830 click 0:40,26
+3835 click 0:22,34
+3840 click 0:34,22
+3845 click 0:44,42
+3850 click 0:24,42
+3900 hud family 1
+3905 hud slot 4
+3910 click 0:4,4
+3915 click 0:60,6
+3920 click 0:6,60
+3925 click 0:60,60
+3930 click 0:32,2
+3935 click 0:2,32
+3940 click 0:62,32
+3945 click 0:32,62
+3950 hud slot 0
+3955 click 0:16,30
+3960 click 0:48,32
+3965 click 0:30,52
+3970 click 0:36,12
+4000 hud family 2
+4005 hud slot 3
+4010 click 0:41,22
+4015 hud slot 2
+4020 click 0:47,28
+4030 hud family 3
+4035 hud slot 3
+4040 click 0:20,40
+4045 hud slot 4
+4050 click 0:36,45
+4055 hud slot 6
+4060 click 0:24,23
+4065 hud slot 8
+4070 click 0:46,36
+4100 hud family 4
+4105 hud slot 7
+4110 click 0:32,33
+4115 hud slot 5
+4120 click 0:23,31
+4125 hud slot 5
+4200 hud family 4
+4220 speed 1

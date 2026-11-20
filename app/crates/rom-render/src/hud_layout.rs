@@ -246,6 +246,8 @@ pub const SLOT_SIZE: (f32, f32) = (58.0, 52.0);
 pub const SLOT_PITCH: (f32, f32) = (67.0, 59.0);
 /// Design-space origin of the first command slot.
 pub const SLOT_ORIGIN: (f32, f32) = (28.0, 744.0);
+/// Palette group rows the production queue panel holds.
+pub const PALETTE_GROUPS: usize = 5;
 
 /// Percentage change of the HUD scale beyond which the artwork is re-baked.
 pub const REBAKE_THRESHOLD_PERCENT: f32 = 10.0;
@@ -355,6 +357,15 @@ impl HudLayout {
     pub fn palette_arrow(&self, index: usize) -> Rect {
         let x = if index == 0 { 22.0 } else { 570.0 };
         self.map(Group::BottomLeft, Rect::new(x, 692.0, 30.0, 38.0))
+    }
+
+    /// Screen rectangle of palette group row `index` (0 to [`PALETTE_GROUPS`] - 1), listed in the
+    /// production queue panel.
+    pub fn palette_group(&self, index: usize) -> Rect {
+        self.map(
+            Group::BottomLeft,
+            Rect::new(380.0, 768.0 + index as f32 * 30.0, 218.0, 27.0),
+        )
     }
 
     /// Screen rectangle of the icon slot of production queue row `index` (0 to 2).

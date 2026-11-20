@@ -55,7 +55,7 @@
 4130 hud slot 4
 4135 click 0:40,47
 4200 hud arrow 1
-4205 hud slot 6
+4205 hud slot 7
 4210 click 0:42,40
 4215 hud slot 4
 4220 click 0:26,30

@@ -127,9 +127,23 @@ pub fn terrain_colours(rules: &Rules) -> BTreeMap<u16, [u8; 3]> {
         .collect()
 }
 
+/// The colour a terrain shows through its material: its `base_colour`, else its `colour`
+/// (task 114: the swatch of a brush).
+pub fn terrain_swatch(rules: &Rules, terrain: DefId) -> Option<[u8; 3]> {
+    let material = rules
+        .materials
+        .get(&rules.terrains.get(&terrain)?.material_id?)?;
+    base_colour(&material.params).or_else(|| colour_param(&material.params, "\"colour\""))
+}
+
 /// Reads `"base_colour":"#rrggbb"` from a material's parameter text.
 fn base_colour(params: &str) -> Option<[u8; 3]> {
-    let start = params.find("\"base_colour\"")?;
+    colour_param(params, "\"base_colour\"")
+}
+
+/// Reads the `#rrggbb` value of the quoted parameter `name` from a material's parameter text.
+fn colour_param(params: &str, name: &str) -> Option<[u8; 3]> {
+    let start = params.find(name)?;
     let hash = params[start..].find('#')? + start + 1;
     let hex = params.get(hash..hash + 6)?;
     let channel = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok();
