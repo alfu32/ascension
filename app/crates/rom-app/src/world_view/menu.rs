@@ -92,14 +92,19 @@ impl WorldView {
             entries: Vec::new(),
             _subscription: None,
         });
-        self.sim.set_paused(true);
+        // A network match is everyone's: the menu does not hold it (the pause button does).
+        if self.sim.network().is_none() {
+            self.sim.set_paused(true);
+        }
         window.focus(&self.focus);
         cx.notify();
     }
 
     /// Closes the menu and releases the simulation unless it was held before.
     pub(super) fn close_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(menu) = self.menu.take() {
+        if let Some(menu) = self.menu.take()
+            && self.sim.network().is_none()
+        {
             self.sim.set_paused(menu.was_paused);
         }
         window.focus(&self.focus);
@@ -203,6 +208,9 @@ impl WorldView {
 
     /// F9: the newest quick save, or the load page when there is none.
     pub(super) fn quick_load(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.sim.network().is_some() {
+            return;
+        }
         self.open_menu(window, cx);
         let newest = self.sim.save_ui().and_then(|ui| {
             saves::list(&ui.folder, &ui.rules)
@@ -239,6 +247,63 @@ impl WorldView {
             .text_color(rgb(0xf2f2f2))
             .text_size(px(14.));
         match menu.page {
+            Page::Main if self.sim.network().is_some() => {
+                // A network match is saved by its server (task 88): the host asks it to; the
+                // others are told how it saves; nothing loads into it.
+                let host = self.sim.network().is_some_and(|n| n.host);
+                panel = panel
+                    .child(heading("GAME MENU"))
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(MUTED))
+                            .child(format!(
+                                "Ascension — Rise of Man {} · network match",
+                                crate::args::VERSION
+                            )),
+                    )
+                    .child(
+                        Button::new("menu-resume")
+                            .primary()
+                            .label("Resume")
+                            .on_click(
+                                cx.listener(|view, _, window, cx| view.close_menu(window, cx)),
+                            ),
+                    )
+                    .child(
+                        Button::new("menu-save")
+                            .label("Save game")
+                            .disabled(!host)
+                            .on_click(cx.listener(|view, _, window, cx| {
+                                view.sim.request_save(Kind::Manual, "");
+                                view.close_menu(window, cx);
+                            })),
+                    )
+                    .child(div().text_xs().text_color(rgb(MUTED)).child(if host {
+                        "Save asks the server to save the match now; it also saves every few minutes."
+                    } else {
+                        "The server saves the match every few minutes; the host can ask it to save now."
+                    }))
+                    .child(
+                        Button::new("menu-load")
+                            .label("Load game")
+                            .disabled(true),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(rgb(MUTED))
+                            .child("Loading is not available in a network match."),
+                    )
+                    .child(
+                        Button::new("menu-quit")
+                            .label("Leave the match")
+                            .on_click(cx.listener(|view, _, _, cx| {
+                                view.sim.request_stop();
+                                cx.quit();
+                            })),
+                    );
+            }
             Page::Main => {
                 let saving = self.sim.save_ui().is_some();
                 panel = panel

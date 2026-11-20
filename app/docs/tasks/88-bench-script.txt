@@ -1,0 +1,16 @@
+# Frame rate of a client match against a standalone match on the same scene (Cluster, seed 1,
+# the person's home planet, one computer opponent): the client joins a headless `rom serve`
+# (the computer runs there); the standalone game runs its computer itself.
+. docs/tasks/88-common-script.txt
+rm -rf "$T" && mkdir -p "$T"
+"$R" serve --state-dir "$T/serve" --port 7402 --humans 1 --ai balanced:moderate --seed 1 \
+  --style Cluster --keys 1 --autosave-minutes 0 > "$T/serve.log" 2>&1 &
+SERVE=$!
+for _ in $(seq 1 60); do grep -q "^key: " "$T/serve.log" && break; sleep 0.5; done
+KEY=$(sed -n 's/^key: //p' "$T/serve.log" | head -1)
+run bench-client ROM_NET_READY=1 -- --connect http://127.0.0.1:7402/ --key "$KEY" \
+  --sun fixed --size 1280x800 --bench 10
+kill -TERM $SERVE; wait $SERVE
+run bench-standalone -- --universe --style map.many_worlds --seed 1 --players 2 \
+  --ai balanced:moderate --sun fixed --size 1280x800 --bench 10
+grep -h "^bench" "$T/bench-client.log" "$T/bench-standalone.log"

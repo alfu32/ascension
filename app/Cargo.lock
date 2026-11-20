@@ -4887,6 +4887,7 @@ dependencies = [
  "rom-mapgen",
  "rom-match",
  "rom-models",
+ "rom-net",
  "rom-render",
  "rom-rules",
  "rom-save",

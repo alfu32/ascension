@@ -17,7 +17,8 @@ use rom_sim::{BodyId, Command, Entity, EntityId, PlayerId, Pos, SimError, Topolo
 use crate::palette_icons::generic_icon as icon_of;
 use crate::space_view::SpaceFrame;
 
-/// The player this interface commands.
+/// The person's player in a standalone match (player one); a network match gives the person
+/// the player of their seat instead ([`Controller::for_player`]).
 pub const PLAYER: PlayerId = PlayerId(1);
 /// Ticks an order marker stays visible: half a second.
 const MARKER_TICKS: u64 = 10;
@@ -27,6 +28,10 @@ const GROUP_DOUBLE_TICKS: u64 = 10;
 const PLACEMENT_CHECK_TICKS: u64 = 3;
 /// Ticks a message stays in the event line: five seconds.
 const MESSAGE_TICKS: u64 = 100;
+/// Ticks helpers wait for a site they were sent to build (standalone: it appears next tick).
+const HELPER_TRIES: u8 = 6;
+/// The same in a network match, where the site appears a round trip later.
+const NETWORK_HELPER_TRIES: u8 = 200;
 /// Units trained by a Shift click.
 const SHIFT_BATCH: usize = 5;
 /// Combat stance behaviours offered as buttons, in this order.
@@ -167,7 +172,59 @@ struct RouteView {
     to_target: bool,
 }
 
-/// Selection, groups, palette state and placement of player one.
+/// The one way the person's orders reach the world (rule 3). Standalone, they are submitted to
+/// the leader's world at once (the match core journals what it accepts); in a network match
+/// the world is the follower's and read only, and orders and camera visits wait in the
+/// [`Outbox`] for the server, which applies them at its next tick and sends them back in the
+/// journal. Reading the world goes through `Deref`; nothing else can change it.
+#[derive(Debug)]
+pub enum OrderSink<'a> {
+    /// A standalone match: the leader's world.
+    Lead(&'a mut World),
+    /// A network match: the follower's world and the orders for the server.
+    Follow {
+        /// The follower's world.
+        world: &'a World,
+        /// What goes to the server.
+        outbox: &'a mut Outbox,
+    },
+}
+
+/// Orders and camera visits for the server, in the order they were given.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Outbox {
+    /// Orders, each sent as a `ClientMessage::Order`.
+    pub orders: Vec<Command>,
+    /// Planets the camera visits, each sent as a `ClientMessage::Visit`.
+    pub visits: Vec<BodyId>,
+}
+
+impl std::ops::Deref for OrderSink<'_> {
+    type Target = World;
+
+    fn deref(&self) -> &World {
+        match self {
+            Self::Lead(world) => world,
+            Self::Follow { world, .. } => world,
+        }
+    }
+}
+
+impl OrderSink<'_> {
+    /// Gives an order. Standalone the world accepts or refuses it now; in a network match it
+    /// is sent, and a refusal comes back from the server later (`Rejected`).
+    pub fn submit(&mut self, command: Command) -> Result<(), SimError> {
+        match self {
+            Self::Lead(world) => world.submit(command).map(|_| ()),
+            Self::Follow { outbox, .. } => {
+                outbox.orders.push(command);
+                Ok(())
+            }
+        }
+    }
+}
+
+/// Selection, groups, palette state and placement of the person's player.
 #[derive(Debug, Default)]
 pub struct Controller {
     selection: Vec<EntityId>,
@@ -205,6 +262,20 @@ pub struct Controller {
     view: ViewCtx,
     /// The composed models, for the palette's pictures (task 91); generic pictograms without.
     models: Option<std::sync::Arc<crate::looks::ModelBook>>,
+    /// The person's player: the seat's in a network match.
+    me: Me,
+    /// Ticks the helpers of a construction wait for its site to appear.
+    helper_tries: u8,
+}
+
+/// The person's player, player one unless the session says otherwise.
+#[derive(Clone, Copy, Debug)]
+struct Me(PlayerId);
+
+impl Default for Me {
+    fn default() -> Self {
+        Self(PLAYER)
+    }
 }
 
 /// Distance in milli-tiles between two positions; positions beyond reach (or on faces that do
@@ -363,16 +434,42 @@ fn stance_icon(behavior: &str) -> &'static str {
     }
 }
 
-/// Whether player one may place a building of type `def` centred near `centre`. Delegates to
+/// Whether `player` may place a building of type `def` centred near `centre`. Delegates to
 /// the simulation's own check, so the preview always agrees with `construct` at submit.
-pub fn placement_check(world: &World, def: DefId, centre: Pos) -> Result<(), SimError> {
-    world.check_placement(PLAYER, def, centre).map(|_| ())
+pub fn placement_check(
+    world: &World,
+    player: PlayerId,
+    def: DefId,
+    centre: Pos,
+) -> Result<(), SimError> {
+    world.check_placement(player, def, centre).map(|_| ())
 }
 
 impl Controller {
-    /// An empty controller.
+    /// An empty controller for the standalone player.
+    #[cfg(test)]
     pub fn new() -> Self {
-        Self::default()
+        Self::for_player(PLAYER)
+    }
+
+    /// An empty controller for `player`, the person's player in this session.
+    pub fn for_player(player: PlayerId) -> Self {
+        Self {
+            me: Me(player),
+            helper_tries: HELPER_TRIES,
+            ..Self::default()
+        }
+    }
+
+    /// The person's player.
+    pub fn me(&self) -> PlayerId {
+        self.me.0
+    }
+
+    /// In a network match a construction site appears only after the server's turn comes
+    /// back: its helpers wait that long.
+    pub fn set_network(&mut self) {
+        self.helper_tries = NETWORK_HELPER_TRIES;
     }
 
     /// Gives the controller the composed models, so palette buttons show their pictures.
@@ -415,10 +512,11 @@ impl Controller {
 
     /// Player one's finished buildings that train units and are not cities.
     pub fn select_producers(&mut self, world: &World) {
+        let me = self.me();
         let rules = world.rules();
         let ids: Vec<EntityId> = world
             .entities()
-            .filter(|e| e.owner == PLAYER && e.build_progress.is_none())
+            .filter(|e| e.owner == me && e.build_progress.is_none())
             .filter(|e| {
                 let et = &rules.entity_types[&e.type_id];
                 et.class == EntityClass::Building
@@ -437,11 +535,12 @@ impl Controller {
 
     /// Finished producers offering track research, in entity id order.
     pub fn select_researchers(&mut self, world: &World) {
+        let me = self.me();
         let rules = world.rules();
         self.set_selection(
             world
                 .entities()
-                .filter(|e| e.owner == PLAYER && e.build_progress.is_none())
+                .filter(|e| e.owner == me && e.build_progress.is_none())
                 .filter(|e| {
                     rules
                         .production
@@ -463,9 +562,10 @@ impl Controller {
 
     /// Player one's ships (movers standing in a system's space), ascending.
     pub fn select_own_ships(&mut self, world: &World) {
+        let me = self.me();
         let ships: Vec<EntityId> = world
             .entities()
-            .filter(|e| e.owner == PLAYER && e.container_id.is_none() && in_space(world, e))
+            .filter(|e| e.owner == me && e.container_id.is_none() && in_space(world, e))
             .filter(|e| world.rules().entity_types[&e.type_id].movement.is_some())
             .map(|e| e.id)
             .collect();
@@ -474,9 +574,10 @@ impl Controller {
 
     /// Selects every orbital craft of player one that is not aboard a carrier.
     pub fn select_own_craft(&mut self, world: &World) {
+        let me = self.me();
         let craft: Vec<EntityId> = world
             .entities()
-            .filter(|e| e.owner == PLAYER && e.container_id.is_none())
+            .filter(|e| e.owner == me && e.container_id.is_none())
             .filter(|e| world.is_craft_type(e.type_id))
             .map(|e| e.id)
             .collect();
@@ -515,7 +616,8 @@ impl Controller {
     }
 
     fn mine<'w>(&self, world: &'w World, id: EntityId) -> Option<&'w Entity> {
-        present(world, id).filter(|e| e.owner == PLAYER)
+        let me = self.me();
+        present(world, id).filter(|e| e.owner == me)
     }
 
     fn own_selected<'w>(&self, world: &'w World) -> Vec<&'w Entity> {
@@ -525,11 +627,9 @@ impl Controller {
             .collect()
     }
 
-    fn is_enemy(world: &World, entity: &Entity) -> bool {
+    fn is_enemy(world: &World, me: PlayerId, entity: &Entity) -> bool {
         let team_of = |id: PlayerId| world.players().find(|p| p.id == id).map(|p| p.team);
-        entity.owner != PLAYER
-            && entity.owner != PlayerId(0)
-            && team_of(entity.owner) != team_of(PLAYER)
+        entity.owner != me && entity.owner != PlayerId(0) && team_of(entity.owner) != team_of(me)
     }
 
     fn set_selection(&mut self, mut ids: Vec<EntityId>) {
@@ -543,7 +643,7 @@ impl Controller {
     #[allow(clippy::too_many_arguments)]
     fn submit(
         &mut self,
-        world: &mut World,
+        world: &mut OrderSink<'_>,
         executor: EntityId,
         kind: &str,
         subject: Option<DefId>,
@@ -551,8 +651,9 @@ impl Controller {
         target_pos: Option<Pos>,
         queue: bool,
     ) -> bool {
+        let me = self.me();
         let command = Command {
-            player: PLAYER,
+            player: me,
             executor,
             kind: kind.into(),
             subject,
@@ -571,7 +672,7 @@ impl Controller {
                 true
             }
             Err(error) => {
-                self.say(world, rejection_message(world, &error, subject));
+                self.say(world, rejection_message(world, self.me(), &error, subject));
                 false
             }
         }
@@ -579,8 +680,14 @@ impl Controller {
 
     // ----- events --------------------------------------------------------------------------
 
-    /// Applies one pick event.
+    /// Applies one pick event in a standalone world (tests).
+    #[cfg(test)]
     pub fn handle(&mut self, world: &mut World, event: PickEvent) {
+        self.handle_with(&mut OrderSink::Lead(world), event);
+    }
+
+    /// Applies one pick event; the orders it gives go into `world`, the order sink.
+    pub fn handle_with(&mut self, world: &mut OrderSink<'_>, event: PickEvent) {
         match event {
             PickEvent::Click {
                 surface,
@@ -646,13 +753,14 @@ impl Controller {
 
     fn click(
         &mut self,
-        world: &mut World,
+        world: &mut OrderSink<'_>,
         at: Pos,
         entity: Option<u32>,
         mods: Modifiers,
         double: bool,
         on_screen: &[u32],
     ) {
+        let me = self.me();
         if self.placement.is_some() {
             self.place(world, at, mods.shift);
             return;
@@ -705,7 +813,7 @@ impl Controller {
         let Some(clicked) = present(world, id) else {
             return;
         };
-        if clicked.owner != PLAYER {
+        if clicked.owner != me {
             self.set_selection(Vec::new());
             self.foreign = Some(id);
             return;
@@ -741,9 +849,10 @@ impl Controller {
     }
 
     /// Descends where the player clicked (task 76), or says why it cannot.
-    fn descend(&mut self, world: &mut World, at: Pos) {
+    fn descend(&mut self, world: &mut OrderSink<'_>, at: Pos) {
+        let me = self.me();
         let command = Command {
-            player: PLAYER,
+            player: me,
             executor: EntityId(0),
             kind: "descend".into(),
             subject: None,
@@ -759,20 +868,21 @@ impl Controller {
                 self.say(world, "Descending: a city and its citizens take shape");
             }
             Err(error) => {
-                let text = rejection_message(world, &error, None);
+                let text = rejection_message(world, self.me(), &error, None);
                 self.say(world, text);
             }
         }
     }
 
     /// Brings the moon or asteroid `body` to life (task 77), or says why it cannot.
-    fn bring_life(&mut self, world: &mut World, body: BodyId) {
+    fn bring_life(&mut self, world: &mut OrderSink<'_>, body: BodyId) {
+        let me = self.me();
         let Some(marker) = world.body_marker(body) else {
             self.say(world, "Pick a moon or asteroid");
             return;
         };
         let command = Command {
-            player: PLAYER,
+            player: me,
             executor: EntityId(0),
             kind: "bring_life".into(),
             subject: None,
@@ -790,16 +900,17 @@ impl Controller {
                 self.say(world, format!("Bringing {name} to life"));
             }
             Err(error) => {
-                let text = rejection_message(world, &error, None);
+                let text = rejection_message(world, self.me(), &error, None);
                 self.say(world, text);
             }
         }
     }
 
     /// One stroke of `brush` at `at` on the planet shown (task 77), or why it cannot be.
-    fn paint(&mut self, world: &mut World, brush: DefId, at: Pos) {
+    fn paint(&mut self, world: &mut OrderSink<'_>, brush: DefId, at: Pos) {
+        let me = self.me();
         let command = Command {
-            player: PLAYER,
+            player: me,
             executor: EntityId(0),
             kind: "paint".into(),
             subject: Some(brush),
@@ -811,7 +922,7 @@ impl Controller {
             Ok(_) => self.ordered = true,
             Err(error) => {
                 self.brush = None;
-                let text = rejection_message(world, &error, Some(brush));
+                let text = rejection_message(world, self.me(), &error, Some(brush));
                 self.say(world, text);
             }
         }
@@ -820,7 +931,8 @@ impl Controller {
     /// The brushes the person may paint the planet shown with, by family in rules order, as
     /// pages of the palette: none unless it brought that planet to life and may paint it.
     fn brush_pages(&self, world: &World) -> Vec<PageRows> {
-        if self.view.in_space || world.paint_check(PLAYER, self.view.planet).is_err() {
+        let me = self.me();
+        if self.view.in_space || world.paint_check(me, self.view.planet).is_err() {
             return Vec::new();
         }
         let rules = world.rules();
@@ -878,11 +990,12 @@ impl Controller {
     /// Blasts of area weapons and fallen buildings the player sees on the planet shown, for
     /// the bombardment effects (task 75), and the stains of what was destroyed there (task 80).
     fn bombardment(&self, world: &World, hud: &mut rom_render::HudSnapshot) {
+        let me = self.me();
         let body = self.view.planet;
         let tick = world.tick();
         let sees = |pos: Pos| {
             world.is_visible_on_body(
-                PLAYER,
+                me,
                 pos.body,
                 pos.face,
                 pos.x.div_euclid(1000),
@@ -1014,11 +1127,12 @@ impl Controller {
 
     fn right_click(
         &mut self,
-        world: &mut World,
+        world: &mut OrderSink<'_>,
         target: Pos,
         entity: Option<u32>,
         mods: Modifiers,
     ) {
+        let me = self.me();
         if self.placement.take().is_some() {
             return;
         }
@@ -1045,11 +1159,11 @@ impl Controller {
                     && let Some(tag) = node.claim_tag_id
                 {
                     Kind::Carry(e.id, tag)
-                } else if Self::is_enemy(world, e) {
+                } else if Self::is_enemy(world, me, e) {
                     Kind::Enemy(e.id)
-                } else if e.owner == PLAYER && e.build_progress.is_some() {
+                } else if e.owner == me && e.build_progress.is_some() {
                     Kind::Site(e.id)
-                } else if e.owner == PLAYER
+                } else if e.owner == me
                     && world.is_carrier_type(e.type_id)
                     && (world.is_landed(e.id) || world.orbit(e.id).is_some())
                 {
@@ -1059,7 +1173,7 @@ impl Controller {
                     && et.territory.as_ref().is_some_and(|t| t.is_city)
                 {
                     Kind::Trade(e.id)
-                } else if let (PLAYER, Some(site)) = (e.owner, et.gather_site.as_ref()) {
+                } else if let (true, Some(site)) = (e.owner == me, et.gather_site.as_ref()) {
                     Kind::Gather(e.id, site.resource_id)
                 } else {
                     Kind::Ground
@@ -1179,7 +1293,12 @@ impl Controller {
 
     /// The click while picking a trade partner: a city takes the selected traders' route;
     /// anything else says what to pick and keeps the pick open.
-    fn pick_trade_partner(&mut self, world: &mut World, entity: Option<EntityId>, shift: bool) {
+    fn pick_trade_partner(
+        &mut self,
+        world: &mut OrderSink<'_>,
+        entity: Option<EntityId>,
+        shift: bool,
+    ) {
         let city = entity
             .and_then(|id| world.entity(id))
             .filter(|e| is_city(world, e))
@@ -1203,6 +1322,7 @@ impl Controller {
     /// system (or of another system once interstellar trade is researched), for a caravan another
     /// city of its world.
     fn trade_hint(&self, world: &World) -> String {
+        let me = self.me();
         let freighter = self
             .selected_traders(world)
             .into_iter()
@@ -1211,7 +1331,7 @@ impl Controller {
         if !freighter {
             return "Pick another city of yours or an ally's for the trade route".into();
         }
-        if world.rule_enabled(PLAYER, rom_sim::RULE_INTERSTELLAR_TRADE) {
+        if world.rule_enabled(me, rom_sim::RULE_INTERSTELLAR_TRADE) {
             "Pick a city on another planet of this system, or in another star system".into()
         } else {
             "Pick a city on another planet of this system".into()
@@ -1219,7 +1339,13 @@ impl Controller {
     }
 
     /// Why `trader` cannot run a route to `city`, in words for the player.
-    fn trade_refusal(world: &World, trader: &Entity, city: &Entity, error: &SimError) -> String {
+    fn trade_refusal(
+        world: &World,
+        me: PlayerId,
+        trader: &Entity,
+        city: &Entity,
+        error: &SimError,
+    ) -> String {
         let space = world.is_spacecraft_type(trader.type_id);
         let here = world.orbit(trader.id).map_or(trader.pos.body, |o| o.body);
         match error {
@@ -1228,7 +1354,7 @@ impl Controller {
             }
             SimError::NoHomeCity if space => "no city of yours where the freighter is".into(),
             _ => {
-                let mut words = rejection_message(world, error, None);
+                let mut words = rejection_message(world, me, error, None);
                 if let Some(first) = words.get_mut(..1) {
                     first.make_ascii_lowercase();
                 }
@@ -1240,6 +1366,7 @@ impl Controller {
     /// The cities on the planet shown that the selected trader could run a route to, while a
     /// trade partner is being picked.
     fn trade_targets(&self, world: &World) -> Vec<u32> {
+        let me = self.me();
         let Some(trader) = self.selected_traders(world).first().copied() else {
             return Vec::new();
         };
@@ -1249,7 +1376,7 @@ impl Controller {
         world
             .entities()
             .filter(|e| e.pos.body == self.view.planet && is_city(world, e))
-            .filter(|e| world.trade_offer(PLAYER, trader, e.id).is_ok())
+            .filter(|e| world.trade_offer(me, trader, e.id).is_ok())
             .map(|e| e.id.0)
             .collect()
     }
@@ -1267,7 +1394,7 @@ impl Controller {
 
     fn order_orbit(
         &mut self,
-        world: &mut World,
+        world: &mut OrderSink<'_>,
         ship: EntityId,
         body: BodyId,
         queue: bool,
@@ -1281,7 +1408,7 @@ impl Controller {
 
     fn order_travel(
         &mut self,
-        world: &mut World,
+        world: &mut OrderSink<'_>,
         ship: EntityId,
         system: u32,
         queue: bool,
@@ -1301,13 +1428,14 @@ impl Controller {
     /// arrives at that point if the player has explored the system, at its edge if not.
     fn space_right_click(
         &mut self,
-        world: &mut World,
+        world: &mut OrderSink<'_>,
         surface: SurfacePos,
         entity: Option<u32>,
         body: Option<u32>,
         system: Option<u32>,
         mods: Modifiers,
     ) {
+        let me = self.me();
         if self.life_pick
             && let Some(body) = body
         {
@@ -1318,7 +1446,7 @@ impl Controller {
         let foe = entity
             .map(EntityId)
             .and_then(|id| world.entity(id))
-            .filter(|e| Self::is_enemy(world, e))
+            .filter(|e| Self::is_enemy(world, me, e))
             .map(|e| e.id);
         let point = self
             .view
@@ -1359,7 +1487,7 @@ impl Controller {
     }
 
     /// The Orbit button: every selected ship holds the nearest body of its system.
-    fn orbit_nearest(&mut self, world: &mut World) {
+    fn orbit_nearest(&mut self, world: &mut OrderSink<'_>) {
         for id in self.selected_ships(world) {
             let Some(ship) = world.entity(id) else {
                 continue;
@@ -1382,7 +1510,7 @@ impl Controller {
 
     /// The Unload button: a landed carrier sets everyone down around itself; a launching carrier
     /// in orbit sends its craft out; anything else in orbit must land first.
-    fn unload_selected(&mut self, world: &mut World) {
+    fn unload_selected(&mut self, world: &mut OrderSink<'_>) {
         let carriers: Vec<EntityId> = self
             .own_selected(world)
             .iter()
@@ -1404,7 +1532,7 @@ impl Controller {
 
     /// The Travel button: every selected ship goes to the system the camera is anchored to, or,
     /// when that is its own, to the nearest system along a route.
-    fn travel_on(&mut self, world: &mut World) {
+    fn travel_on(&mut self, world: &mut OrderSink<'_>) {
         for id in self.selected_ships(world) {
             let Some(ship) = world.entity(id) else {
                 continue;
@@ -1438,7 +1566,7 @@ impl Controller {
         }
     }
 
-    fn hotkey(&mut self, world: &mut World, ch: char, mods: Modifiers) {
+    fn hotkey(&mut self, world: &mut OrderSink<'_>, ch: char, mods: Modifiers) {
         if let Some(group) = ch.to_digit(10).map(|d| d as usize) {
             if mods.ctrl {
                 let own: Vec<EntityId> = self.own_selected(world).iter().map(|e| e.id).collect();
@@ -1514,7 +1642,7 @@ impl Controller {
 
     fn hud_click(
         &mut self,
-        world: &mut World,
+        world: &mut OrderSink<'_>,
         region: HudRegionKind,
         index: usize,
         button: PointerButton,
@@ -1599,8 +1727,9 @@ impl Controller {
 
     /// The workers inside the single selected own building, in strip order (at most twelve).
     fn inside_workers(&self, world: &World) -> Vec<EntityId> {
+        let me = self.me();
         match self.own_selected(world).as_slice() {
-            [one] if one.owner == PLAYER => {
+            [one] if one.owner == me => {
                 let mut ids = world.occupants(one.id);
                 if ids.is_empty() {
                     ids = world.passengers(one.id);
@@ -1625,9 +1754,10 @@ impl Controller {
 
     /// The palette of the current selection, with the action behind each slot.
     fn palette(&self, world: &World) -> Option<(HudPalette, Vec<(usize, Action)>)> {
+        let me = self.me();
         // An ascended player commands nothing material: it may descend (task 76), bring moons
         // and asteroids to life and paint the planets it brought to life (task 77).
-        if world.is_ascended(PLAYER) {
+        if world.is_ascended(me) {
             let brushes = self.brush_pages(world);
             let tabs = [!brushes.is_empty(), true, false, false];
             let tab = if tabs[self.tab.index()] {
@@ -1666,9 +1796,9 @@ impl Controller {
             return None;
         }
         let rules = world.rules();
-        let player = world.players().find(|p| p.id == PLAYER)?;
+        let player = world.players().find(|p| p.id == me)?;
         let sources = player.active_sources();
-        let owned = world.owned_types(PLAYER);
+        let owned = world.owned_types(me);
         let first_with = |pick: &dyn Fn(&Entity, &EntityType) -> bool| {
             own.iter()
                 .find(|e| pick(e, &rules.entity_types[&e.type_id]))
@@ -1708,7 +1838,7 @@ impl Controller {
                 }
                 if mode == ProductionMode::Research
                     && !(grid && is_grid_tech(rules, def))
-                    && !crate::hud::next_research(world, def)
+                    && !crate::hud::next_research(world, me, def)
                 {
                     continue;
                 }
@@ -1821,15 +1951,15 @@ impl Controller {
             .any(|e| rules.entity_types[&e.type_id].movement.is_some());
         let has_workers = own
             .iter()
-            .any(|e| e.owner == PLAYER && !world.occupants(e.id).is_empty());
+            .any(|e| e.owner == me && !world.occupants(e.id).is_empty());
         let has_colony = own
             .iter()
-            .any(|e| e.owner == PLAYER && world.is_colony_type(e.type_id));
+            .any(|e| e.owner == me && world.is_colony_type(e.type_id));
         // Markets alone: their orders are the trades (task 107).
         let markets = !own.is_empty()
             && own
                 .iter()
-                .all(|e| e.owner == PLAYER && world.market_currency(e.id).is_some());
+                .all(|e| e.owner == me && world.market_currency(e.id).is_some());
         let tabs = [
             !build_pages.is_empty(),
             can_move || has_workers || has_colony || markets,
@@ -1888,7 +2018,7 @@ impl Controller {
                     actions.push((7, Action::Governor));
                 }
                 if markets {
-                    let resources = world.tradeable_resources(PLAYER);
+                    let resources = world.tradeable_resources(me);
                     for (n, resource) in resources.into_iter().take(5).enumerate() {
                         actions.push((5 + n, Action::Buy(resource)));
                         actions.push((10 + n, Action::Sell(resource)));
@@ -1911,7 +2041,7 @@ impl Controller {
                 }
                 if own
                     .iter()
-                    .any(|e| e.owner == PLAYER && runs_routes(world, e.type_id))
+                    .any(|e| e.owner == me && runs_routes(world, e.type_id))
                 {
                     actions.push((8, Action::TradeRoute));
                 }
@@ -1962,9 +2092,10 @@ impl Controller {
         action: Action,
         own: &[&Entity],
     ) -> HudButton {
+        let me = self.me();
         let player = world
             .players()
-            .find(|p| p.id == PLAYER)
+            .find(|p| p.id == me)
             .expect("the player exists");
         let faction = player.faction;
         let mut button = HudButton {
@@ -1988,7 +2119,7 @@ impl Controller {
                     def,
                 );
                 (button.icon, button.model, button.mark) = (icon.art, icon.model, icon.mark);
-                let price = world.price(PLAYER, def);
+                let price = world.price(me, def);
                 button.price = price
                     .iter()
                     .filter(|(_, amount)| *amount > 0)
@@ -1997,6 +2128,7 @@ impl Controller {
                     .join(", ");
                 button.state = crate::hud::button_state(
                     world,
+                    me,
                     def,
                     self.pending_research
                         .get(&def)
@@ -2030,6 +2162,7 @@ impl Controller {
             Action::Buy(resource) | Action::Sell(resource) => {
                 trade_button(
                     world,
+                    me,
                     &mut button,
                     resource,
                     matches!(action, Action::Buy(_)),
@@ -2106,7 +2239,7 @@ impl Controller {
         button
     }
 
-    fn press_slot(&mut self, world: &mut World, slot: usize, shift: bool) {
+    fn press_slot(&mut self, world: &mut OrderSink<'_>, slot: usize, shift: bool) {
         let Some((palette, actions)) = self.palette(world) else {
             return;
         };
@@ -2343,7 +2476,8 @@ impl Controller {
     /// Cancels queue row `index` of the single selected producer. The simulation cancels a
     /// whole queue at once (refunding each order), so the other entries are ordered again on
     /// the next tick.
-    fn cancel_queued(&mut self, world: &mut World, index: usize) {
+    fn cancel_queued(&mut self, world: &mut OrderSink<'_>, index: usize) {
+        let me = self.me();
         let [id] = self.selection.as_slice() else {
             return;
         };
@@ -2364,7 +2498,7 @@ impl Controller {
             .enumerate()
             .filter(|(n, _)| *n != index)
             .map(|(_, o)| Command {
-                player: PLAYER,
+                player: me,
                 executor: id,
                 kind: o.kind.clone(),
                 subject: o.subject,
@@ -2415,6 +2549,7 @@ impl Controller {
     }
 
     fn refresh_placement(&mut self, world: &World) {
+        let me = self.me();
         let reachable = self
             .placement
             .as_ref()
@@ -2422,13 +2557,13 @@ impl Controller {
         let Some(p) = &mut self.placement else {
             return;
         };
-        let age = world.players().find(|p| p.id == PLAYER).map(|p| p.age);
+        let age = world.players().find(|p| p.id == me).map(|p| p.age);
         let age_changed = p.checked_age != age;
         let due = age_changed
             || p.checked
                 .is_none_or(|at| world.tick() >= at + PLACEMENT_CHECK_TICKS);
         if let (true, true, Some(centre)) = (p.dirty || age_changed, due, p.centre) {
-            let result = placement_check(world, p.def, centre).and_then(|()| {
+            let result = placement_check(world, me, p.def, centre).and_then(|()| {
                 // A site no selected builder can walk to (another planet) is refused too.
                 if reachable == Some(false) {
                     Err(SimError::OtherBody)
@@ -2443,7 +2578,7 @@ impl Controller {
         }
     }
 
-    fn place(&mut self, world: &mut World, at: Pos, shift: bool) {
+    fn place(&mut self, world: &mut OrderSink<'_>, at: Pos, shift: bool) {
         let Some(p) = self.placement.clone() else {
             return;
         };
@@ -2483,7 +2618,10 @@ impl Controller {
             builders.into_iter().map(|(_, d, id)| (d, id)).collect();
         builders.sort();
         let Some(&(_, first)) = builders.first() else {
-            self.say(world, rejection_message(world, &SimError::OtherBody, None));
+            self.say(
+                world,
+                rejection_message(world, self.me(), &SimError::OtherBody, None),
+            );
             if let Some(active) = &mut self.placement {
                 active.valid = Some(false);
             }
@@ -2526,7 +2664,14 @@ impl Controller {
 
     /// Housekeeping after each simulation step: drop dead entities, send queued helpers and
     /// re-queued orders, follow rally points, refresh the placement check.
+    #[cfg(test)]
     pub fn after_step(&mut self, world: &mut World) {
+        self.after_step_with(&mut OrderSink::Lead(world));
+    }
+
+    /// [`Controller::after_step`]; the orders it gives go into `world`, the order sink.
+    pub fn after_step_with(&mut self, world: &mut OrderSink<'_>) {
+        let me = self.me();
         self.update_wealth(world);
         let alive = |id: &EntityId| present(world, *id).is_some();
         self.selection.retain(|id| alive(id));
@@ -2559,7 +2704,7 @@ impl Controller {
             let site = world
                 .entities()
                 .find(|e| {
-                    e.owner == PLAYER
+                    e.owner == me
                         && e.type_id == job.def
                         && e.pos == job.pos
                         && e.build_progress.is_some()
@@ -2575,7 +2720,7 @@ impl Controller {
                 }
                 None => {
                     job.tries += 1;
-                    if job.tries < 6 {
+                    if job.tries < self.helper_tries {
                         self.helpers.push(job);
                     }
                 }
@@ -2585,16 +2730,17 @@ impl Controller {
     }
 
     fn update_wealth(&mut self, world: &World) {
+        let me = self.me();
         let live: BTreeSet<_> = world
             .entities()
-            .filter(|e| e.owner == PLAYER)
+            .filter(|e| e.owner == me)
             .flat_map(|e| e.orders())
             .map(|o| o.id)
             .collect();
         self.blocked_notices.retain(|id| live.contains(id));
         for order in world
             .entities()
-            .filter(|e| e.owner == PLAYER)
+            .filter(|e| e.owner == me)
             .flat_map(|e| e.orders())
         {
             if matches!(&order.status, rom_sim::OrderStatus::Blocked(reason) if reason == "no keeper")
@@ -2604,7 +2750,7 @@ impl Controller {
             }
         }
         let mut next = BTreeMap::new();
-        for route in world.trade_routes(PLAYER) {
+        for route in world.trade_routes(me) {
             let Some((unit, home)) = world.entity(route.trader).zip(world.entity(route.home))
             else {
                 continue;
@@ -2645,10 +2791,10 @@ impl Controller {
         }
         for (trader, route) in &self.routes {
             if next.get(trader).is_none_or(|r| r.order != route.order)
-                && world.entity(*trader).is_some_and(|e| e.owner == PLAYER)
+                && world.entity(*trader).is_some_and(|e| e.owner == me)
                 && [route.home, route.target].iter().any(|id| {
                     world.entity(*id).is_none_or(|e| {
-                        Self::is_enemy(world, e)
+                        Self::is_enemy(world, me, e)
                             || e.neutralised
                             || e.assimilation_until.is_some()
                             || e.build_progress.is_some()
@@ -2663,6 +2809,7 @@ impl Controller {
     }
 
     fn wealth_help(&self, world: &World) -> Option<String> {
+        let me = self.me();
         let rules = world.rules();
         let target = self.hovered.and_then(|id| world.entity(id))?;
         let et = &rules.entity_types[&target.type_id];
@@ -2678,7 +2825,7 @@ impl Controller {
             })
         {
             let keeper = rules.entity_types.values().find(|t| t.keeper.is_some())?;
-            let faction = world.players().find(|p| p.id == PLAYER)?.faction;
+            let faction = world.players().find(|p| p.id == me)?.faction;
             return Some(format!(
                 "Carry to a {}",
                 rules.display_name(keeper.id, faction).to_lowercase()
@@ -2690,7 +2837,7 @@ impl Controller {
             .copied();
         if let Some(trader) = trader.filter(|_| is_city(world, target)) {
             let income: i64 = world
-                .trade_routes(PLAYER)
+                .trade_routes(me)
                 .filter(|r| {
                     selected.iter().any(|e| e.id == r.trader)
                         && (r.home == target.id || r.target == target.id)
@@ -2700,7 +2847,7 @@ impl Controller {
             if income > 0 {
                 return Some(format!("Trade route: +{income} per trip"));
             }
-            return Some(match world.trade_offer(PLAYER, trader.id, target.id) {
+            return Some(match world.trade_offer(me, trader.id, target.id) {
                 Ok(route) => format!(
                     "Trade route to {}: +{} per trip",
                     crate::hud::city_label(world, target.id),
@@ -2709,7 +2856,7 @@ impl Controller {
                 Err(error) => format!(
                     "No trade route to {}: {}",
                     crate::hud::city_label(world, target.id),
-                    Self::trade_refusal(world, trader, target, &error)
+                    Self::trade_refusal(world, me, trader, target, &error)
                 ),
             });
         }
@@ -2720,6 +2867,7 @@ impl Controller {
 
     /// Adds the selection, palette, queue and overlay data to a HUD snapshot.
     pub fn fill(&self, world: &World, hud: &mut HudSnapshot) {
+        let me = self.me();
         let rules = world.rules();
         hud.data_tab = self.data_tab;
         hud.help = self.wealth_help(world).unwrap_or_default();
@@ -2733,10 +2881,10 @@ impl Controller {
             .filter(|(_, tick)| **tick == world.tick())
             .map(|(id, _)| *id)
             .collect();
-        hud.overview = crate::hud::research_overview(world, &pending);
+        hud.overview = crate::hud::research_overview(world, me, &pending);
         let (faction, age) = world
             .players()
-            .find(|p| p.id == PLAYER)
+            .find(|p| p.id == me)
             .map_or((DefId(0), DefId(0)), |p| (p.faction, p.age));
         let own = self.own_selected(world);
         if hud.help.is_empty()
@@ -2778,7 +2926,7 @@ impl Controller {
             && !own.is_empty()
             && own.iter().all(|e| world.market_currency(e.id).is_some())
         {
-            hud.help = crate::hud::market_help(world, PLAYER);
+            hud.help = crate::hud::market_help(world, me);
         }
         if hud.help.is_empty() && own.iter().any(|e| world.jump_charge(e.id).is_some()) {
             hud.help = "Charging a jump: it cannot move or fire until it leaves; \
@@ -2972,7 +3120,7 @@ impl Controller {
             _ => None,
         };
         hud.trade_routes = world
-            .trade_routes(PLAYER)
+            .trade_routes(me)
             .filter(|r| self.selection.contains(&r.trader))
             .filter_map(|r| {
                 let (home, target) = world.entity(r.home).zip(world.entity(r.target))?;
@@ -3032,18 +3180,19 @@ impl Controller {
         if let Some(age) = self
             .placement
             .as_ref()
-            .and_then(|p| world.placement_discovery_age(PLAYER, p.def))
+            .and_then(|p| world.placement_discovery_age(me, p.def))
         {
-            hud.help = rejection_message(world, &SimError::ResourceAgeRequired(age), None);
+            hud.help =
+                rejection_message(world, self.me(), &SimError::ResourceAgeRequired(age), None);
         } else if let Some(p) = self.placement.as_ref().filter(|p| p.valid == Some(false))
             && let Some(centre) = p.centre
         {
             // Say why the red footprint is red.
-            let reason = placement_check(world, p.def, centre).err().or_else(|| {
+            let reason = placement_check(world, me, p.def, centre).err().or_else(|| {
                 (!self.builder_can_reach(world, p.def, centre)).then_some(SimError::OtherBody)
             });
             if let Some(reason) = reason {
-                hud.help = rejection_message(world, &reason, Some(p.def));
+                hud.help = rejection_message(world, self.me(), &reason, Some(p.def));
             }
         }
         hud.placement = self.placement.as_ref().and_then(|p| {
@@ -3054,7 +3203,7 @@ impl Controller {
                 x: c.x,
                 y: c.y,
                 kind: u16::try_from(p.def.0).unwrap_or(u16::MAX),
-                owner: PLAYER.0 as u8,
+                owner: me.0 as u8,
                 valid: p.valid,
             })
         });
@@ -3085,7 +3234,7 @@ impl Controller {
                     return None;
                 }
                 let economic = if (city_selected || needs_radius)
-                    && e.owner == PLAYER
+                    && e.owner == me
                     && e.build_progress.is_none()
                     && !e.neutralised
                 {
@@ -3122,6 +3271,7 @@ impl Controller {
 /// it cannot be pressed (no research, not enough to pay or to sell).
 fn trade_button(
     world: &World,
+    me: PlayerId,
     button: &mut HudButton,
     resource: DefId,
     buying: bool,
@@ -3131,7 +3281,7 @@ fn trade_button(
     button.icon = crate::hud::resource_icon(rules, resource);
     let name = &rules.def(resource).name;
     let currency = own.iter().find_map(|e| world.market_currency(e.id));
-    let (Some(currency), Some(quote)) = (currency, world.market_quote(PLAYER, resource)) else {
+    let (Some(currency), Some(quote)) = (currency, world.market_quote(me, resource)) else {
         button.name = name.clone();
         return;
     };
@@ -3160,10 +3310,10 @@ fn trade_button(
     };
     let have = world
         .players()
-        .find(|p| p.id == PLAYER)
+        .find(|p| p.id == me)
         .and_then(|p| p.resources.get(&paid).copied())
         .unwrap_or(0);
-    button.state = if !world.can_trade(PLAYER) {
+    button.state = if !world.can_trade(me) {
         ButtonState::Locked {
             reason: format!(
                 "Needs {}",
@@ -3199,7 +3349,12 @@ fn inhibitor_help(inhibitor: &rom_rules::Inhibitor) -> String {
 }
 
 /// Translate rejected placement and research orders into the rule the player can fix.
-fn rejection_message(world: &World, error: &SimError, subject: Option<DefId>) -> String {
+fn rejection_message(
+    world: &World,
+    me: PlayerId,
+    error: &SimError,
+    subject: Option<DefId>,
+) -> String {
     match error {
         SimError::InvalidCarryTarget => "That relic is no longer available".into(),
         SimError::CannotCarry => "This unit cannot carry that".into(),
@@ -3212,7 +3367,7 @@ fn rejection_message(world: &World, error: &SimError, subject: Option<DefId>) ->
         SimError::NotATradePartner => "Not a trade partner".into(),
         SimError::CaravanLimit => format!(
             "Trade route limit reached ({})",
-            crate::hud::caravan_limit(world, PLAYER)
+            crate::hud::caravan_limit(world, me)
         ),
         SimError::CitiesTooClose => format!(
             "Too close to another city ({} tiles)",
@@ -3228,7 +3383,7 @@ fn rejection_message(world: &World, error: &SimError, subject: Option<DefId>) ->
         }
         SimError::NotYourLiving => "Only a planet you brought to life can be painted".into(),
         SimError::Settled => "A city stands on this planet: it can no longer be painted".into(),
-        SimError::OrdersClosed if world.is_ascended(PLAYER) => {
+        SimError::OrdersClosed if world.is_ascended(me) => {
             "Ascended: you command nothing on the ground until you descend".into()
         }
         SimError::InForeignTerritory => "Another nation's territory".into(),
@@ -3268,7 +3423,7 @@ fn rejection_message(world: &World, error: &SimError, subject: Option<DefId>) ->
         SimError::CannotUnload => "Nobody to set down here".into(),
         SimError::CityLimit => "City limit reached".into(),
         SimError::Locked => subject.map_or("Needs a prerequisite".into(), |id| {
-            format!("Needs {}", crate::hud::unmet(world, id))
+            format!("Needs {}", crate::hud::unmet(world, me, id))
         }),
         SimError::Unavailable => "Unavailable to your faction".into(),
         SimError::AlreadyResearched => "Already researched".into(),

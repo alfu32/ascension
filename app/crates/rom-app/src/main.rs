@@ -11,6 +11,7 @@ mod hud;
 mod launcher;
 mod looks;
 mod match_setup;
+mod net;
 mod palette_icons;
 mod saves;
 mod screenshot;
@@ -60,11 +61,9 @@ fn main() -> ExitCode {
         );
         return ExitCode::SUCCESS;
     }
-    if options.host.is_some() || options.connect.is_some() || options.serve {
-        eprintln!(
-            "rise-of-man: network play arrives with task 88; --host, --connect and --serve are accepted but not yet run"
-        );
-        return ExitCode::from(2);
+    // Run a server: a status window and no game (task 88).
+    if options.serve {
+        return net::server_window::run(&options);
     }
     if let Some(path) = &options.gallery_manifest {
         return match gallery::write_manifest(path) {

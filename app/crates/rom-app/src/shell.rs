@@ -1,8 +1,8 @@
 //! Application start-up: render thread, GPUI window, clean shutdown.
 
 use std::process::ExitCode;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use gpui::{
@@ -22,7 +22,7 @@ use crate::looks;
 use crate::match_setup::Match;
 use crate::screenshot;
 use crate::script::{Script, ScriptContext, ScriptSetup};
-use crate::sim_thread::{Extras, SimLink, SimThread, UniverseHost};
+use crate::sim_thread::{Extras, Game, SimLink, SimThread, UniverseHost};
 use crate::terrain;
 use crate::universe_view;
 use crate::world_view::WorldView;
@@ -51,13 +51,17 @@ pub fn run(options: &Options, arguments: &[String]) -> ExitCode {
     };
     bridge.publish_render_scale(options.scale);
     bridge.publish_hud_options(!options.no_hud, options.hud_scale);
+    // A network match (task 88) starts in the lobby; its world comes from the server's start.
+    let network = options.connect.is_some() || options.host.is_some();
     let started = if options.gallery.is_some() || options.model.is_some() {
         // The review screens show models on plain ground; no match runs.
         crate::gallery::start(options, &bridge).map(|()| None)
+    } else if network {
+        Ok(None)
     } else {
         start_simulation(options, arguments, &bridge).map(Some)
     };
-    let mut sim = match started {
+    let sim = match started {
         Ok(sim) => sim,
         Err(error) => {
             eprintln!("rise-of-man: {error}");
@@ -66,6 +70,8 @@ pub fn run(options: &Options, arguments: &[String]) -> ExitCode {
         }
     };
     let sim_link = sim.as_ref().map_or_else(SimLink::idle, SimThread::link);
+    let sim = Arc::new(Mutex::new(sim));
+    let server = Arc::new(Mutex::new(None));
     if options.sphere.is_none()
         && !options.single_planet
         && !options.uses_universe()
@@ -89,11 +95,25 @@ pub fn run(options: &Options, arguments: &[String]) -> ExitCode {
         invert_vertical: options.invert_vertical_turn,
     });
     bridge.publish_start_markers(options.start_markers);
-    let shutdown = worker.shutdown_handle();
+    let session = network.then(|| {
+        crate::net::session::Session::start(
+            options,
+            crate::net::session::MatchSlots {
+                bridge: bridge.clone(),
+                sim: Arc::clone(&sim),
+                server: Arc::clone(&server),
+            },
+        )
+    });
     let exit_code = Arc::new(AtomicU8::new(0));
-    let app_exit_code = Arc::clone(&exit_code);
-    let options = options.clone();
-    let display_arguments = crate::saves::display_arguments(arguments);
+    let ctx = WindowCtx {
+        options: options.clone(),
+        bridge: bridge.clone(),
+        shutdown: worker.shutdown_handle(),
+        exit_code: Arc::clone(&exit_code),
+        display_arguments: crate::saves::display_arguments(arguments),
+        sim: Arc::clone(&sim),
+    };
 
     application.run(move |cx: &mut App| {
         gpui_component::init(cx);
@@ -107,86 +127,13 @@ pub fn run(options: &Options, arguments: &[String]) -> ExitCode {
             theme.colors.border = gpui::rgb(0x2a3340).into();
             theme.font_family = "DejaVu Sans".into();
         }
-        let (width, height) = options.size;
-        let canvas = size(px(width as f32), px(height as f32));
-        let mut window_options = WindowOptions {
-            titlebar: Some(TitlebarOptions {
-                title: Some(crate::args::window_title().into()),
-                ..Default::default()
-            }),
-            app_id: Some("rise-of-man".into()),
-            ..Default::default()
-        };
-        window_options.window_decorations = Some(decorations(&options));
-        let fixed_window = options.bench_seconds.is_some() || options.screenshot.is_some();
-        let opened = if fixed_window {
-            // Benchmark and screenshot windows have no component frame (which pads
-            // client-decorated windows for a shadow), so the whole requested size is canvas even
-            // at monitor size; a desktop title bar sits outside that canvas.
-            window_options.window_bounds = Some(WindowBounds::Windowed(Bounds::new(
-                point(px(0.0), px(0.0)),
-                canvas,
-            )));
-            let exit_code = Arc::clone(&app_exit_code);
-            cx.open_window(window_options, move |window, cx| {
-                let view = world_view(
-                    &bridge,
-                    &shutdown,
-                    &sim_link,
-                    (options.size, options.stats),
-                    &display_arguments,
-                    window,
-                    cx,
-                );
-                view.update(cx, |view, _| view.ignore_pointer());
-                if let Some(seconds) = options.bench_seconds {
-                    let bench = bench::Bench {
-                        seconds,
-                        requested: options.size,
-                        scale: options.scale,
-                    };
-                    bench::start(
-                        bench,
-                        view.clone(),
-                        bridge,
-                        sim_link,
-                        shutdown,
-                        exit_code,
-                        cx,
-                    );
-                } else if let Some(path) = options.screenshot.clone() {
-                    screenshot::start(
-                        path,
-                        Duration::from_secs_f64(options.after_seconds),
-                        view.clone(),
-                        bridge,
-                        shutdown,
-                        exit_code,
-                        cx,
-                    );
-                }
-                view
-            })
-            .map(|_| ())
-        } else {
-            window_options.window_bounds = Some(WindowBounds::centered(canvas, cx));
-            cx.open_window(window_options, move |window, cx| {
-                let view = world_view(
-                    &bridge,
-                    &shutdown,
-                    &sim_link,
-                    (options.size, options.stats),
-                    &display_arguments,
-                    window,
-                    cx,
-                );
-                cx.new(|cx| Root::new(view, window, cx))
-            })
-            .map(|_| ())
+        let opened = match session {
+            Some(session) => crate::net::lobby::open(cx, ctx.clone(), session),
+            None => open_match_window(cx, &ctx, sim_link),
         };
         if let Err(error) = opened {
-            eprintln!("rise-of-man: could not open the window: {error:#}");
-            app_exit_code.store(1, Ordering::Relaxed);
+            eprintln!("rise-of-man: {error}");
+            ctx.exit_code.store(1, Ordering::Relaxed);
             cx.spawn(async |cx| {
                 let _ = cx.update(|cx| cx.quit());
             })
@@ -195,11 +142,130 @@ pub fn run(options: &Options, arguments: &[String]) -> ExitCode {
         }
         cx.activate(true);
     });
-    if let Some(sim) = &mut sim {
+    let sim = sim.lock().ok().and_then(|mut sim| sim.take());
+    if let Some(mut sim) = sim {
         sim.stop();
+    }
+    // The integrated host's server saves and stops with the window (task 88).
+    let server = server.lock().ok().and_then(|mut server| server.take());
+    if let Some(server) = server {
+        server.stop();
     }
     worker.stop();
     ExitCode::from(exit_code.load(Ordering::Relaxed))
+}
+
+/// What opening the match window needs.
+#[derive(Clone)]
+pub(crate) struct WindowCtx {
+    /// The launch options.
+    pub options: Options,
+    /// The render thread's bridge.
+    pub bridge: RenderBridge,
+    /// Stops the render thread.
+    pub shutdown: ShutdownHandle,
+    /// The process's exit code.
+    pub exit_code: Arc<AtomicU8>,
+    /// The launch arguments as a save keeps them.
+    pub display_arguments: Vec<String>,
+    /// The simulation thread, once a match runs (a network match starts after the lobby).
+    pub sim: Arc<Mutex<Option<SimThread>>>,
+}
+
+/// Opens the match window over `sim`: a fixed canvas for the benchmark and screenshots, which
+/// then run and end the program; otherwise a normal window.
+pub(crate) fn open_match_window(
+    cx: &mut App,
+    ctx: &WindowCtx,
+    sim_link: SimLink,
+) -> Result<(), String> {
+    let options = &ctx.options;
+    let (width, height) = options.size;
+    let canvas = size(px(width as f32), px(height as f32));
+    let mut window_options = WindowOptions {
+        titlebar: Some(TitlebarOptions {
+            title: Some(crate::args::window_title().into()),
+            ..Default::default()
+        }),
+        app_id: Some("rise-of-man".into()),
+        ..Default::default()
+    };
+    window_options.window_decorations = Some(decorations(options));
+    let fixed_window = options.bench_seconds.is_some() || options.screenshot.is_some();
+    let (bridge, shutdown, display_arguments) = (
+        ctx.bridge.clone(),
+        ctx.shutdown.clone(),
+        ctx.display_arguments.clone(),
+    );
+    let opened = if fixed_window {
+        // Benchmark and screenshot windows have no component frame (which pads
+        // client-decorated windows for a shadow), so the whole requested size is canvas even
+        // at monitor size; a desktop title bar sits outside that canvas.
+        window_options.window_bounds = Some(WindowBounds::Windowed(Bounds::new(
+            point(px(0.0), px(0.0)),
+            canvas,
+        )));
+        let exit_code = Arc::clone(&ctx.exit_code);
+        let options = options.clone();
+        cx.open_window(window_options, move |window, cx| {
+            let view = world_view(
+                &bridge,
+                &shutdown,
+                &sim_link,
+                (options.size, options.stats),
+                &display_arguments,
+                window,
+                cx,
+            );
+            view.update(cx, |view, _| view.ignore_pointer());
+            if let Some(seconds) = options.bench_seconds {
+                let bench = bench::Bench {
+                    seconds,
+                    requested: options.size,
+                    scale: options.scale,
+                };
+                bench::start(
+                    bench,
+                    view.clone(),
+                    bridge,
+                    sim_link,
+                    shutdown,
+                    exit_code,
+                    cx,
+                );
+            } else if let Some(path) = options.screenshot.clone() {
+                screenshot::start(
+                    path,
+                    Duration::from_secs_f64(options.after_seconds),
+                    view.clone(),
+                    bridge,
+                    shutdown,
+                    exit_code,
+                    cx,
+                );
+            }
+            view
+        })
+        .map(|_| ())
+    } else {
+        let stats = options.stats;
+        let size = options.size;
+        window_options.window_bounds = Some(WindowBounds::centered(canvas, cx));
+        cx.open_window(window_options, move |window, cx| {
+            let view = world_view(
+                &bridge,
+                &shutdown,
+                &sim_link,
+                (size, stats),
+                &display_arguments,
+                window,
+                cx,
+            );
+            cx.new(|cx| Root::new(view, window, cx))
+        })
+        .map(|_| ())
+    };
+    opened.map_err(|error| format!("could not open the window: {error:#}"))
 }
 
 /// The desktop's own title bar and borders (server-side decorations) unless `--no-chrome`
@@ -247,30 +313,28 @@ fn world_view(
     cx.new(|cx| WorldView::new(bridge, sim, stats, display_arguments, window, cx))
 }
 
-/// Generates the map or planet, publishes its terrain, builds the match and starts the
-/// simulation thread. The match is built from the options' `MatchSettings` by the match core
-/// (`rom_match`), as a server builds it.
-fn start_simulation(
+/// Publishes the match's world to the render thread as the person playing `me` sees it first:
+/// the universe and their home planet (or the planet or map), its looks and hidden terrain.
+/// Returns the drawing half of a universe match.
+pub(crate) fn show_match(
     options: &Options,
-    arguments: &[String],
+    built: &rom_match::Built,
+    me: rom_sim::PlayerId,
     bridge: &RenderBridge,
-) -> Result<SimThread, String> {
-    let setup = match &options.script {
-        Some(path) => {
-            let text = std::fs::read_to_string(path)
-                .map_err(|error| format!("reading {}: {error}", path.display()))?;
-            ScriptSetup::scan(&text).map_err(|e| format!("{}: {e}", path.display()))?
-        }
-        None => ScriptSetup::default(),
-    };
-    let built = options.match_settings(setup).build()?;
+) -> Result<Option<UniverseHost>, String> {
     let rules = Arc::clone(built.game.world.rules());
     let mut host = None;
+    let own = built
+        .game
+        .starts
+        .iter()
+        .find(|s| s.player == me)
+        .ok_or("the match has no start for this player")?;
     match &built.generated {
         Generated::Universe(universe) => {
             let game = &built.game;
             let bodies: Vec<u32> = universe.starts.iter().map(|s| s.0).collect();
-            let home_body = *bodies.first().ok_or("the universe has no start")?;
+            let home_body = own.city_pos.body.0;
             let home_system = universe
                 .bodies
                 .iter()
@@ -296,7 +360,7 @@ fn start_simulation(
                 );
             }
             host = Some(universe_host);
-            crate::sim_thread::publish_camera_limits(&game.world, bridge);
+            crate::sim_thread::publish_camera_limits(&game.world, me, bridge);
             bridge.publish_zoom_all(options.zoom_all);
             bridge.publish_universe(
                 Arc::new(universe_view::to_universe_scene(universe, &bodies)),
@@ -316,10 +380,7 @@ fn start_simulation(
             scene.sun = sun;
             scene.starts.clear();
             scene.nodes.clear();
-            bridge.publish_hidden_terrain(Arc::new(terrain::hidden_terrain(
-                &game.world,
-                crate::selection::PLAYER,
-            )));
+            bridge.publish_hidden_terrain(Arc::new(terrain::hidden_terrain(&game.world, me)));
             bridge.publish_planet(
                 Arc::new(scene),
                 OrbitSettings {
@@ -331,10 +392,10 @@ fn start_simulation(
                         ),
                         _ => options.orbit,
                     },
-                    home: game.starts.first().map(|s| SurfacePos {
-                        face: s.city_pos.face,
-                        x: i64::from(s.city_pos.x),
-                        y: i64::from(s.city_pos.y),
+                    home: Some(SurfacePos {
+                        face: own.city_pos.face,
+                        x: i64::from(own.city_pos.x),
+                        y: i64::from(own.city_pos.y),
                     }),
                     body: None,
                 },
@@ -349,10 +410,10 @@ fn start_simulation(
             scene.sun = terrain::sun_settings(&rules, options);
             scene.starts.clear();
             scene.nodes.clear();
-            let home = game.starts.first().map(|s| SurfacePos {
-                face: s.city_pos.face,
-                x: i64::from(s.city_pos.x),
-                y: i64::from(s.city_pos.y),
+            let home = Some(SurfacePos {
+                face: own.city_pos.face,
+                x: i64::from(own.city_pos.x),
+                y: i64::from(own.city_pos.y),
             });
             let view = match (&options.look_at, home) {
                 (Some(look), Some(home)) => Some(
@@ -366,10 +427,7 @@ fn start_simulation(
                 options.seed,
                 planet.base,
             )));
-            bridge.publish_hidden_terrain(Arc::new(terrain::hidden_terrain(
-                &game.world,
-                crate::selection::PLAYER,
-            )));
+            bridge.publish_hidden_terrain(Arc::new(terrain::hidden_terrain(&game.world, me)));
             bridge.publish_planet(
                 Arc::new(scene),
                 OrbitSettings {
@@ -384,13 +442,32 @@ fn start_simulation(
             let mut scene = terrain::to_scene(map);
             terrain::apply_terrain_colours(&mut scene.feature_colors, &rules);
             bridge.publish_looks(Arc::new(looks::scene_looks(&rules, options.seed, map.base)));
-            bridge.publish_hidden_terrain(Arc::new(terrain::hidden_terrain(
-                &built.game.world,
-                crate::selection::PLAYER,
-            )));
+            bridge.publish_hidden_terrain(Arc::new(terrain::hidden_terrain(&built.game.world, me)));
             bridge.publish_terrain(Arc::new(scene));
         }
     }
+    Ok(host)
+}
+
+/// Generates the map or planet, publishes its terrain, builds the match and starts the
+/// simulation thread. The match is built from the options' `MatchSettings` by the match core
+/// (`rom_match`), as a server builds it.
+fn start_simulation(
+    options: &Options,
+    arguments: &[String],
+    bridge: &RenderBridge,
+) -> Result<SimThread, String> {
+    let setup = match &options.script {
+        Some(path) => {
+            let text = std::fs::read_to_string(path)
+                .map_err(|error| format!("reading {}: {error}", path.display()))?;
+            ScriptSetup::scan(&text).map_err(|e| format!("{}: {e}", path.display()))?
+        }
+        None => ScriptSetup::default(),
+    };
+    let built = options.match_settings(setup).build()?;
+    let rules = Arc::clone(built.game.world.rules());
+    let host = show_match(options, &built, crate::selection::PLAYER, bridge)?;
     let rom_match::Built {
         mut game,
         mut computers,
@@ -434,7 +511,7 @@ fn start_simulation(
         driver
     });
     let script = match &options.script {
-        Some(path) => Some(read_script(path, &game)?),
+        Some(path) => Some(read_script(path, &game, crate::selection::PLAYER)?),
         None => None,
     };
     // Feature objects are baked when the render thread takes the terrain: the match starts
@@ -480,7 +557,7 @@ fn start_simulation(
         }
     };
     SimThread::spawn(
-        MatchCore::new(game.world, computers, universe),
+        Game::Lead(Box::new(MatchCore::new(game.world, computers, universe))),
         driver,
         script,
         speed_pct,
@@ -516,15 +593,19 @@ fn capital(world: &rom_sim::World, home: Option<BodyId>) -> Option<rom_sim::Pos>
         .copied()
 }
 
-/// Parses a `--script` file against player one's start.
-pub(crate) fn read_script(path: &std::path::Path, game: &Match) -> Result<Script, String> {
+/// Parses a `--script` file against the start of `me`, the person's player.
+pub(crate) fn read_script(
+    path: &std::path::Path,
+    game: &Match,
+    me: rom_sim::PlayerId,
+) -> Result<Script, String> {
     let text = std::fs::read_to_string(path)
         .map_err(|error| format!("reading {}: {error}", path.display()))?;
     let start = game
         .starts
         .iter()
-        .find(|s| s.player == crate::selection::PLAYER)
-        .ok_or("the match has no start for player one")?;
+        .find(|s| s.player == me)
+        .ok_or("the match has no start for this player")?;
     let offset = |dx: i64, dy: i64| {
         let at = game.world.offset(start.city_pos, dx, dy);
         SurfacePos {

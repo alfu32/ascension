@@ -1,0 +1,15 @@
+# net-lobby-host.png and net-lobby-client.png: an integrated host (Ada, one remote seat and a
+# computer) and a second app joining it over http://127.0.0.1:7400/ with the key the host
+# printed. Ben says Ready; both lobbies end themselves after a while.
+. docs/tasks/88-common-script.txt
+rm -rf "$T" && mkdir -p "$T"
+run lobby-host ROM_NET_KEYS="$T/keys" ROM_NET_LOBBY_SECONDS=30 -- \
+  --universe --style map.many_worlds --seed 7 --players 3 --ai balanced:moderate \
+  --host 7400 --remote-players 1 --bind 127.0.0.1 --name Ada &
+wait_file "$T/keys"
+run lobby-client ROM_NET_READY=1 ROM_NET_LOBBY_SECONDS=24 -- \
+  --connect http://127.0.0.1:7400/ --key "$(head -1 "$T/keys")" --name Ben &
+sleep 12
+shot 'Lobby.*Ada' docs/img/net-lobby-host.png
+shot 'Lobby.*Ben' docs/img/net-lobby-client.png
+wait

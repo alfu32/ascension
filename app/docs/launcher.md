@@ -14,15 +14,14 @@ The window opens on four large choices and **Advanced …**:
 Every form has **Back** (Escape), a final button that Enter presses, and **Open in
 Advanced …**, which loads the options the form stands for into the advanced launcher.
 The final button stays off until every field is valid (a URL that is not http or https, a port
-outside 1–65535, an empty key, more than eight players). Host, Join and Run a server open
-their forms but their button stays off with "Network play arrives with task 88"
-(`simple::NETWORK_READY`); Play and Advanced work fully. The simple forms start universe
-matches; flat and single-planet options live in Advanced only.
+outside 1–65535, an empty key, more than eight players). All four start their game (Host,
+Join and Run a server since task 88: `app/docs/network.md`, "Playing over the network"). The
+simple forms start universe matches; flat and single-planet options live in Advanced only.
 
 Each form fills the advanced `Form` (and so the same `Options` as the command line, one
 source of truth); `simple.rs` has the mapping and its tests. The forms' values are remembered
-in `launcher.json` under `simple`; seat tokens (written by task 88) under `tokens`, by server
-address. A blank seed becomes a random one when the game starts, so the command line shows it.
+in `launcher.json` under `simple`; seat tokens under `tokens`, by server address as typed: the
+game writes one when it joins with a key, and the open launcher picks it up for **Rejoin**. A blank seed becomes a random one when the game starts, so the command line shows it.
 
 | Form | Options it gives (besides `--universe --style --seed --speed`) |
 | --- | --- |
@@ -35,8 +34,9 @@ The network options (task 87) are `--host <port>` (with `--serve`: the server's 
 `--remote-players N` (1–8), `--connect <url>`, `--key`, `--token`, `--name`, `--serve`,
 `--bind <address>` (default 127.0.0.1), `--on-disconnect pause-then-computer|idle|computer`,
 `--wait-seconds` (default 120) and `--autosave-minutes` (same as `--autosave`). They parse and
-round-trip through the settings file and the advanced launcher's **Network** group; until
-task 88 the game refuses to run with `--host`, `--connect` or `--serve`.
+round-trip through the settings file and the advanced launcher's **Network** group. With
+`--host` the game opens a lobby and hosts; with `--connect` it opens a lobby and joins; with
+`--serve` it opens the server window instead of a game (task 88).
 
 Screenshot and scripted-run hooks (environment, for tests): `ROM_LAUNCHER_SCREEN=simple|play|
 host|join|server|advanced` opens that screen; `ROM_LAUNCHER_START=1` presses the form's final

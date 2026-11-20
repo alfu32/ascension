@@ -123,7 +123,10 @@ pub enum ScriptAction {
 
 /// Orders the ascension at a finished library of `player` (task 76): what pressing the button
 /// does.
-pub fn ascend(world: &mut rom_sim::World, player: rom_sim::PlayerId) -> Result<(), String> {
+pub fn ascend(
+    world: &mut crate::selection::OrderSink<'_>,
+    player: rom_sim::PlayerId,
+) -> Result<(), String> {
     let rules = std::sync::Arc::clone(world.rules());
     let (library, tech) = world
         .entities()
@@ -756,8 +759,11 @@ fn dynamic_name(word: &str) -> bool {
 
 /// Ground points named by the live world: `landingN` is open ground near the point below
 /// player one's N-th carrier in orbit (within forty tiles), `colonyN` a city site nearest its N-th landed ship.
-fn live_point(world: &rom_sim::World, target: &str) -> Result<Option<rom_sim::Pos>, String> {
-    let player = crate::selection::PLAYER;
+fn live_point(
+    world: &rom_sim::World,
+    player: rom_sim::PlayerId,
+    target: &str,
+) -> Result<Option<rom_sim::Pos>, String> {
     let nth = |prefix: &str, pick: &dyn Fn(&rom_sim::Entity) -> bool| {
         let n: usize = target.strip_prefix(prefix)?.parse().ok()?;
         world
@@ -808,6 +814,7 @@ fn live_point(world: &rom_sim::World, target: &str) -> Result<Option<rom_sim::Po
 /// Resolve a screenshot alias using components, without bypassing normal pick/order handling.
 pub fn live_pick(
     world: &rom_sim::World,
+    player: rom_sim::PlayerId,
     target: &str,
     right: bool,
     shift: bool,
@@ -818,7 +825,7 @@ pub fn live_pick(
         shift,
         ..Modifiers::default()
     };
-    if let Some(pos) = live_point(world, target)? {
+    if let Some(pos) = live_point(world, player, target)? {
         let surface = SurfacePos {
             face: pos.face,
             x: i64::from(pos.x),
@@ -874,12 +881,9 @@ pub fn live_pick(
                         .is_some_and(|n| n.claim_mode == ClaimMode::Carry);
                 }
                 if name == "enemy" || name == "foecity" {
-                    let own = world
-                        .players()
-                        .find(|p| p.id == crate::selection::PLAYER)
-                        .map(|p| p.team);
+                    let own = world.players().find(|p| p.id == player).map(|p| p.team);
                     let city = et.territory.as_ref().is_some_and(|t| t.is_city);
-                    return Some(e.pos.body) == world.home_body(crate::selection::PLAYER)
+                    return Some(e.pos.body) == world.home_body(player)
                         && e.owner != rom_sim::PlayerId(0)
                         && world
                             .players()
@@ -888,7 +892,7 @@ pub fn live_pick(
                         && et.class == EntityClass::Building
                         && city == (name == "foecity");
                 }
-                if e.owner != crate::selection::PLAYER || e.build_progress.is_some() {
+                if e.owner != player || e.build_progress.is_some() {
                     return false;
                 }
                 match name {

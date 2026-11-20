@@ -26,12 +26,14 @@ pub(crate) fn resource_colour(rules: &Rules, id: DefId) -> [u8; 3] {
 
 /// Public entity queues omit submissions awaiting their first tick; the controller
 /// supplies those locally until the queue becomes visible.
-pub(crate) fn button_state(world: &World, def: DefId, pending: bool) -> ButtonState {
+pub(crate) fn button_state(
+    world: &World,
+    player_id: PlayerId,
+    def: DefId,
+    pending: bool,
+) -> ButtonState {
     let rules = world.rules();
-    let player = world
-        .players()
-        .find(|p| p.id == PlayerId(1))
-        .expect("player");
+    let player = world.players().find(|p| p.id == player_id).expect("player");
     if rules.techs.get(&def).is_some_and(|t| !t.repeatable)
         && player.techs.get(&def).is_some_and(|n| *n > 0)
     {
@@ -72,7 +74,7 @@ pub(crate) fn button_state(world: &World, def: DefId, pending: bool) -> ButtonSt
     }
     if !rules.is_unlocked(def, &player.active_sources(), &world.owned_types(player.id)) {
         return ButtonState::Locked {
-            reason: format!("Needs {}", unmet(world, def)),
+            reason: format!("Needs {}", unmet(world, player_id, def)),
         };
     }
     // The ascension waits for everything else at the library (task 76).
@@ -104,12 +106,9 @@ pub(crate) fn button_state(world: &World, def: DefId, pending: bool) -> ButtonSt
 }
 
 /// First unmet OR-group, excluding alternatives of groups that are already met.
-pub(crate) fn unmet(world: &World, def: DefId) -> String {
+pub(crate) fn unmet(world: &World, player_id: PlayerId, def: DefId) -> String {
     let rules = world.rules();
-    let player = world
-        .players()
-        .find(|p| p.id == PlayerId(1))
-        .expect("player");
+    let player = world.players().find(|p| p.id == player_id).expect("player");
     let active = player.active_sources();
     let owned = world.owned_types(player.id);
     let mut groups = std::collections::BTreeMap::<_, Vec<_>>::new();
@@ -140,12 +139,9 @@ pub(crate) fn unmet(world: &World, def: DefId) -> String {
 }
 
 /// Whether a producer should show this technology as the next step in its track or age.
-pub(crate) fn next_research(world: &World, def: DefId) -> bool {
+pub(crate) fn next_research(world: &World, player_id: PlayerId, def: DefId) -> bool {
     let rules = world.rules();
-    let player = world
-        .players()
-        .find(|p| p.id == PlayerId(1))
-        .expect("player");
+    let player = world.players().find(|p| p.id == player_id).expect("player");
     let tech = &rules.techs[&def];
     let done = |id: &DefId| player.techs.get(id).is_some_and(|n| *n > 0);
     if !tech.repeatable && done(&def) {
@@ -169,12 +165,13 @@ pub(crate) fn next_research(world: &World, def: DefId) -> bool {
 }
 
 /// Completed levels, queued research and the next step of each track and age.
-pub(crate) fn research_overview(world: &World, pending: &[DefId]) -> ResearchOverview {
+pub(crate) fn research_overview(
+    world: &World,
+    player_id: PlayerId,
+    pending: &[DefId],
+) -> ResearchOverview {
     let rules = world.rules();
-    let player = world
-        .players()
-        .find(|p| p.id == PlayerId(1))
-        .expect("player");
+    let player = world.players().find(|p| p.id == player_id).expect("player");
     let done = |id: &DefId| player.techs.get(id).is_some_and(|n| *n > 0);
     let queued: std::collections::BTreeSet<_> = world
         .entities()
@@ -538,14 +535,14 @@ pub(crate) fn wealth_card(world: &World, entity: &rom_sim::Entity) -> Vec<String
 }
 
 /// Reads stock, effective income per configured income period, caps and active research.
-pub fn snapshot_of(world: &World) -> HudSnapshot {
+pub fn snapshot_of(world: &World, player_id: PlayerId) -> HudSnapshot {
     let rules = world.rules();
     let mut result = HudSnapshot {
         game_ticks: world.tick(),
         ticks_per_second: TICKS_PER_SECOND,
         ..HudSnapshot::default()
     };
-    let Some(player) = world.players().find(|p| p.id == PlayerId(1)) else {
+    let Some(player) = world.players().find(|p| p.id == player_id) else {
         return result;
     };
     result.wealth = rom_render::HudWealth {
@@ -695,7 +692,7 @@ mod tests {
         for _ in 0..100 {
             world.step();
         }
-        let h = snapshot_of(&world);
+        let h = snapshot_of(&world, PlayerId(1));
         let food = h
             .resources
             .iter()
@@ -744,7 +741,7 @@ mod tests {
         for _ in 0..100 {
             world.step();
         }
-        let capped = snapshot_of(&world)
+        let capped = snapshot_of(&world, PlayerId(1))
             .resources
             .into_iter()
             .find(|r| r.icon == "icons/res_food")
@@ -755,7 +752,7 @@ mod tests {
     #[test]
     fn hidden_resource_before_its_age() {
         let (world, rules) = scenario();
-        let h = snapshot_of(&world);
+        let h = snapshot_of(&world, PlayerId(1));
         let player = world.players().next().unwrap();
         for (resource, view) in rules
             .resources
@@ -796,14 +793,14 @@ mod tests {
             )
             .unwrap();
         let tech = rules.id_of("tech.military.1").unwrap();
-        assert!(snapshot_of(&world).research.is_empty());
+        assert!(snapshot_of(&world, PlayerId(1)).research.is_empty());
         world
             .submit(command(library, "research", Some(tech), None))
             .unwrap();
         for _ in 0..20 {
             world.step();
         }
-        let h = snapshot_of(&world);
+        let h = snapshot_of(&world, PlayerId(1));
         assert_eq!(h.research.len(), 1);
         assert_eq!(h.research[0].label, rules.def(tech).name);
         let order = world.entity(library).unwrap().orders().front().unwrap();
@@ -815,6 +812,6 @@ mod tests {
         for _ in 0..2000 {
             world.step();
         }
-        assert!(snapshot_of(&world).research.is_empty());
+        assert!(snapshot_of(&world, PlayerId(1)).research.is_empty());
     }
 }

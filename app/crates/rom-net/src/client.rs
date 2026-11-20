@@ -245,16 +245,27 @@ impl Follower {
         snapshot_dir: &Path,
     ) -> Result<Self, String> {
         let built = setup.to_settings()?.build()?;
+        Ok(Self::from_built(setup, built, player, snapshot_dir))
+    }
+
+    /// A follower of the match `built` from `setup` (a host that keeps the match's starts
+    /// builds it once and hands it over).
+    pub fn from_built(
+        setup: &MatchSetup,
+        built: rom_match::Built,
+        player: PlayerId,
+        snapshot_dir: &Path,
+    ) -> Self {
         let rules = Arc::clone(built.game.world.rules());
         let universe = built.universe().cloned();
-        Ok(Self {
+        Self {
             setup: setup.clone(),
             rules,
             universe,
             core: built.follower(),
             player,
             snapshot_dir: snapshot_dir.to_owned(),
-        })
+        }
     }
 
     /// Replaces the world with a snapshot's.

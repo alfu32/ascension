@@ -167,14 +167,23 @@ pub fn send(
 }
 
 /// The lines this person has seen, oldest first. It is the single-player [`ChatSink`].
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ChatLog {
     lines: Vec<ChatLine>,
+    /// The person whose log it is.
+    me: PlayerId,
+}
+
+impl Default for ChatLog {
+    /// The standalone player's log.
+    fn default() -> Self {
+        Self::for_player(PLAYER)
+    }
 }
 
 impl ChatSink for ChatLog {
     fn deliver(&mut self, line: &ChatLine, recipients: &[PlayerId]) {
-        if recipients.contains(&PLAYER) {
+        if recipients.contains(&self.me) {
             self.lines.push(line.clone());
             let over = self.lines.len().saturating_sub(KEPT);
             self.lines.drain(..over);
@@ -183,6 +192,20 @@ impl ChatSink for ChatLog {
 }
 
 impl ChatLog {
+    /// An empty log of the person playing `me`.
+    pub fn for_player(me: PlayerId) -> Self {
+        Self {
+            lines: Vec::new(),
+            me,
+        }
+    }
+
+    /// The same lines, as the log of the person playing `me`.
+    pub fn with_player(mut self, me: PlayerId) -> Self {
+        self.me = me;
+        self
+    }
+
     /// The lines, oldest first.
     pub fn lines(&self) -> &[ChatLine] {
         &self.lines
@@ -230,7 +253,7 @@ impl ChatLog {
                 })
             })
             .collect();
-        let mut log = Self { lines };
+        let mut log = Self { lines, me: PLAYER };
         let over = log.lines.len().saturating_sub(KEPT);
         log.lines.drain(..over);
         log
@@ -238,7 +261,7 @@ impl ChatLog {
 
     fn row(&self, world: &World, line: &ChatLine, alpha: u8) -> HudChatLine {
         HudChatLine {
-            name: player_name(world, line.player),
+            name: player_name(world, self.me, line.player),
             name_colour: colour_of(line.player),
             tag: line.channel.tag().to_owned(),
             tag_colour: line.channel.colour(),
@@ -249,7 +272,7 @@ impl ChatLog {
 
     /// What the HUD draws: the message line, the latest lines (fading) and the open history.
     pub fn view(&self, world: &World, input: &ChatInput) -> HudChat {
-        let celestial = world.is_ascended(PLAYER);
+        let celestial = world.is_ascended(self.me);
         let channel = input.channel(celestial);
         let now = world.tick();
         let typing = input.focused();

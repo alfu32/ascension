@@ -1,0 +1,19 @@
+# net-server-window.png and net-waiting.png: the server window (--serve, two human seats) with
+# two clients: Ada in the app, and Ben as the headless `rom client`, who leaves at tick 300.
+# The match then waits for Ben (pause, then a computer after 120 s): Ada's network line shows
+# the countdown; the server window shows the seats, the tick and the log.
+. docs/tasks/88-common-script.txt
+rm -rf "$T" && mkdir -p "$T"
+run server ROM_NET_KEYS="$T/keys" ROM_NET_QUIT_AFTER=75 -- \
+  --serve --universe --style map.many_worlds --seed 7 --players 2 --ai none \
+  --host 7401 --bind 127.0.0.1 --remote-players 2 --wait-seconds 120 &
+wait_file "$T/keys"
+run waiting ROM_NET_READY=1 -- \
+  --connect http://127.0.0.1:7401/ --key "$(sed -n 1p "$T/keys")" --name Ada \
+  --size 1280x800 --screenshot docs/img/net-waiting.png --after 42 &
+"$R" client http://127.0.0.1:7401/ --key "$(sed -n 2p "$T/keys")" --name Ben --ticks 300 \
+  > "$T/ben.log" 2>&1 &
+sleep 48
+shot 'Server :7401' docs/img/net-server-window.png
+wait
+tail -2 "$T/ben.log"; grep -h "^screenshot" "$T/waiting.log"

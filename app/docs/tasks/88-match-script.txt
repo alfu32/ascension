@@ -1,0 +1,16 @@
+# net-match-host.png and net-match-client.png: the same tick seen from both seats. Host Ada and
+# client Ben say Ready, the match starts after the countdown, Ada's game pauses the match for
+# everyone at tick 500 (ROM_NET_PAUSE_AT), and each game captures its own frame later. Ben's
+# capture comes first; when he leaves, Ada's seat keeps playing (--on-disconnect idle).
+. docs/tasks/88-common-script.txt
+rm -rf "$T" && mkdir -p "$T"
+run match-host ROM_NET_KEYS="$T/keys" ROM_NET_READY=1 ROM_NET_PAUSE_AT=500 -- \
+  --universe --style map.many_worlds --seed 7 --players 3 --ai balanced:moderate \
+  --host 7400 --remote-players 1 --bind 127.0.0.1 --on-disconnect idle --name Ada \
+  --size 1280x800 --screenshot docs/img/net-match-host.png --after 52 &
+wait_file "$T/keys"
+run match-client ROM_NET_READY=1 -- \
+  --connect http://127.0.0.1:7400/ --key "$(head -1 "$T/keys")" --name Ben \
+  --size 1280x800 --screenshot docs/img/net-match-client.png --after 44 &
+wait
+grep -h "^screenshot\|refused\|error" "$T"/match-*.log
