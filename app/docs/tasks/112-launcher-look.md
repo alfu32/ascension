@@ -52,6 +52,50 @@ Screenshots: `app/docs/img/launcher-{simple,play,host,join,server,advanced}.png`
 5. **Size and scaling.** Readable at 1280×800 and at 1920×1080; the window may be resized without
    overlap or clipping.
 
+## Owner review of the advanced launcher (2026-11-20)
+
+The owner annotated a screenshot of the advanced launcher (kept by the owner at
+`app/tasks/launcher-ui/launcher-screen-advanced-review.png`, not published). Requirements:
+1. The mode row (Play (universe), Play (single planet), Demo, Model gallery, One model, Bench)
+   becomes a carousel with suggestive pictures (game screenshots), one card per mode.
+2. The custom preset controls (name, Save preset, Reset to defaults) go to a menu behind a "…"
+   button at the end of the group tab row.
+3. The group tabs use icons.
+4. Remove useless settings: `--sphere`, `--single-planet` and `--universe` leave the launcher form;
+   `--universe` is replaced by the style picker; keep `--map-size`. The flags still parse on the
+   command line; the launcher always launches a universe match with the chosen style. "Play
+   (single planet)" folds into Play with the Planet style unless it does something Planet cannot.
+
+## Owner direction (2026-11-20): friendlier, more presets with pictures
+
+"the bottom line is that the launcher has to be friendlier", like a good launcher of a popular
+sandbox game, "maybe also add more presets with suggestive imagery (screenshots and icons)".
+(Do not name other games in the repository; describe the style.)
+- First screen: a large hero capture with the emblem and a big Play button (last-used or default
+  preset), then preset tiles (capture, icon, short name, one line). Host, Join and Run a server
+  stay reachable plainly.
+- More presets, each a tile: Quick match (Planet, one easy opponent), Classic (Cluster, three
+  moderate), Galactic war (Quadrant or Sector, many harder opponents), Start in space (space-faring
+  age), Sandbox (everything researched, rich start), Peaceful build (no opponents), Watch the
+  computers. Presets are data in one place; each maps onto `Options` (tested against the command
+  line it stands for); saved custom presets show as tiles too.
+- Less text: short help lines; flag names only in Advanced.
+
+## Owner direction (2026-11-20): scripts and presets files
+
+"also please add in the setup the possibility to put a script/presets file, maybe also bundle some
+of what we have right now."
+- `--script` becomes a public option. Every match form gets a "Start script" choice: none, a
+  bundled script, or a file; the launcher shows the script's title and description (its first
+  comment lines). In network matches the script is part of the host's or server's setup.
+- Presets can be exported to and imported from one documented file format; a preset may name a
+  bundled script.
+- Bundled scripts shipped with the game: the rich-start scripts per age (task 84), research-all to
+  an age (task 110), the 200-versus-200 battle (task 95), and other player-useful scripts under
+  `app/docs/tasks/*script*.txt` (not the test drivers).
+- Tests: every bundled script parses; a preset with a script maps to `--script`; export and
+  import round-trip.
+
 Read first: `AGENTS.md`, `CLAUDE.md`, `app/docs/hud.md` (Style, Window chrome),
 `app/docs/launcher.md`, `research/04-hud-and-screens.md` (setup screen), card 87 and card 88,
 `rom-app/src/launcher/` (all), the HUD rasterising code in `rom-render` (search `chrome`), the
