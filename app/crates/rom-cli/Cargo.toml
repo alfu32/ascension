@@ -16,4 +16,5 @@ rom-models.workspace = true
 rom-sim = { path = "../rom-sim" }
 rom-ai = { path = "../rom-ai" }
 rom-mapgen = { path = "../rom-mapgen" }
+rom-match.workspace = true
 rusqlite.workspace = true

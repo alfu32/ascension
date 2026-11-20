@@ -17,18 +17,16 @@ use rom_sim::BodyId;
 
 use crate::args::Options;
 use crate::bench;
-use crate::computer::ComputerPlayers;
 use crate::demo::{DemoDriver, add_stress_units};
 use crate::looks;
-use crate::match_setup::{
-    Match, build_match_in_age, build_sphere_match_in_age, build_universe_match,
-};
+use crate::match_setup::Match;
 use crate::screenshot;
 use crate::script::{Script, ScriptContext, ScriptSetup};
 use crate::sim_thread::{Extras, SimLink, SimThread, UniverseHost};
 use crate::terrain;
 use crate::universe_view;
 use crate::world_view::WorldView;
+use rom_match::{Generated, MatchCore};
 
 /// Longest wait for the render thread to mesh the terrain and bake its objects before the
 /// simulation starts anyway.
@@ -250,197 +248,168 @@ fn world_view(
 }
 
 /// Generates the map or planet, publishes its terrain, builds the match and starts the
-/// simulation thread.
+/// simulation thread. The match is built from the options' `MatchSettings` by the match core
+/// (`rom_match`), as a server builds it.
 fn start_simulation(
     options: &Options,
     arguments: &[String],
     bridge: &RenderBridge,
 ) -> Result<SimThread, String> {
+    let setup = match &options.script {
+        Some(path) => {
+            let text = std::fs::read_to_string(path)
+                .map_err(|error| format!("reading {}: {error}", path.display()))?;
+            ScriptSetup::scan(&text).map_err(|e| format!("{}: {e}", path.display()))?
+        }
+        None => ScriptSetup::default(),
+    };
+    let built = options.match_settings(setup).build()?;
+    let rules = Arc::clone(built.game.world.rules());
     let mut host = None;
-    let mut game = if options.uses_universe() {
-        let setup = match &options.script {
-            Some(path) => {
-                let text = std::fs::read_to_string(path)
-                    .map_err(|error| format!("reading {}: {error}", path.display()))?;
-                ScriptSetup::scan(&text).map_err(|e| format!("{}: {e}", path.display()))?
+    match &built.generated {
+        Generated::Universe(universe) => {
+            let game = &built.game;
+            let bodies: Vec<u32> = universe.starts.iter().map(|s| s.0).collect();
+            let home_body = *bodies.first().ok_or("the universe has no start")?;
+            let home_system = universe
+                .bodies
+                .iter()
+                .find(|b| b.id == home_body)
+                .map(|b| b.system_id)
+                .ok_or("the home planet is not in the universe")?;
+            let planet = universe
+                .planets
+                .get(&home_body)
+                .ok_or("the home planet was not generated")?;
+            let sun = terrain::sun_settings(&rules, options);
+            let mut universe_host = UniverseHost::new(BodyId(home_body), home_system);
+            universe_host.sun = sun;
+            for start in &game.starts {
+                let at = start.city_pos;
+                universe_host.remember_home_start(
+                    at.body,
+                    SurfacePos {
+                        face: at.face,
+                        x: i64::from(at.x),
+                        y: i64::from(at.y),
+                    },
+                );
             }
-            None => ScriptSetup::default(),
-        };
-        let content = terrain::generate_universe_content(options)?;
-        let universe = &content.universe;
-        let bodies: Vec<u32> = universe.starts.iter().map(|s| s.0).collect();
-        let home_body = *bodies.first().ok_or("the universe has no start")?;
-        let home_system = universe
-            .bodies
-            .iter()
-            .find(|b| b.id == home_body)
-            .map(|b| b.system_id)
-            .ok_or("the home planet is not in the universe")?;
-        let planet = universe
-            .planets
-            .get(&home_body)
-            .ok_or("the home planet was not generated")?;
-        let game = build_universe_match(
-            &content.rules,
-            universe,
-            &content.factions,
-            options.seed,
-            options.age,
-            &setup,
-        )
-        .map_err(|error| format!("setting up the match: {error}"))?;
-        let sun = terrain::sun_settings(&content.rules, options);
-        let mut universe_host = UniverseHost::new(universe.clone(), BodyId(home_body), home_system);
-        universe_host.sun = sun;
-        for start in &game.starts {
-            let at = start.city_pos;
-            universe_host.remember_home_start(
-                at.body,
-                SurfacePos {
-                    face: at.face,
-                    x: i64::from(at.x),
-                    y: i64::from(at.y),
+            host = Some(universe_host);
+            crate::sim_thread::publish_camera_limits(&game.world, bridge);
+            bridge.publish_zoom_all(options.zoom_all);
+            bridge.publish_universe(
+                Arc::new(universe_view::to_universe_scene(universe, &bodies)),
+                UniverseSettings {
+                    home: Some((home_system, home_body)),
+                    view: options.view,
+                },
+            );
+            bridge.publish_ship_scales(Arc::new(looks::ship_scales(&rules)));
+            bridge.publish_looks(Arc::new(looks::scene_looks(
+                &rules,
+                options.seed,
+                planet.base,
+            )));
+            let mut scene = terrain::to_planet_scene(planet);
+            terrain::apply_terrain_colours(&mut scene.feature_colors, &rules);
+            scene.sun = sun;
+            scene.starts.clear();
+            scene.nodes.clear();
+            bridge.publish_hidden_terrain(Arc::new(terrain::hidden_terrain(
+                &game.world,
+                crate::selection::PLAYER,
+            )));
+            bridge.publish_planet(
+                Arc::new(scene),
+                OrbitSettings {
+                    max_distance: None,
+                    view: match (&options.look_at, planet.starts.first().copied()) {
+                        (Some(look), Some(home)) => Some(
+                            terrain::look_at(&rules, planet, home, look)
+                                .ok_or_else(|| format!("--look-at: no tile matches {look:?}"))?,
+                        ),
+                        _ => options.orbit,
+                    },
+                    home: game.starts.first().map(|s| SurfacePos {
+                        face: s.city_pos.face,
+                        x: i64::from(s.city_pos.x),
+                        y: i64::from(s.city_pos.y),
+                    }),
+                    body: None,
                 },
             );
         }
-        host = Some(universe_host);
-        crate::sim_thread::publish_camera_limits(&game.world, bridge);
-        bridge.publish_zoom_all(options.zoom_all);
-        bridge.publish_universe(
-            Arc::new(universe_view::to_universe_scene(universe, &bodies)),
-            UniverseSettings {
-                home: Some((home_system, home_body)),
-                view: options.view,
-            },
-        );
-        bridge.publish_ship_scales(Arc::new(looks::ship_scales(&content.rules)));
-        bridge.publish_looks(Arc::new(looks::scene_looks(
-            &content.rules,
-            options.seed,
-            planet.base,
-        )));
-        let mut scene = terrain::to_planet_scene(planet);
-        terrain::apply_terrain_colours(&mut scene.feature_colors, &content.rules);
-        scene.sun = sun;
-        scene.starts.clear();
-        scene.nodes.clear();
-        bridge.publish_hidden_terrain(Arc::new(terrain::hidden_terrain(
-            &game.world,
-            crate::selection::PLAYER,
-        )));
-        bridge.publish_planet(
-            Arc::new(scene),
-            OrbitSettings {
-                max_distance: None,
-                view: match (&options.look_at, planet.starts.first().copied()) {
-                    (Some(look), Some(home)) => Some(
-                        terrain::look_at(&content.rules, planet, home, look)
-                            .ok_or_else(|| format!("--look-at: no tile matches {look:?}"))?,
-                    ),
-                    _ => options.orbit,
+        Generated::Sphere(planet) => {
+            let game = &built.game;
+            // Starts and nodes are drawn as entities (and only where the player may see them),
+            // not as scene markers; the camera starts at the first player's city.
+            let mut scene = terrain::to_planet_scene(planet);
+            terrain::apply_terrain_colours(&mut scene.feature_colors, &rules);
+            scene.sun = terrain::sun_settings(&rules, options);
+            scene.starts.clear();
+            scene.nodes.clear();
+            let home = game.starts.first().map(|s| SurfacePos {
+                face: s.city_pos.face,
+                x: i64::from(s.city_pos.x),
+                y: i64::from(s.city_pos.y),
+            });
+            let view = match (&options.look_at, home) {
+                (Some(look), Some(home)) => Some(
+                    terrain::look_at(&rules, planet, home, look)
+                        .ok_or_else(|| format!("--look-at: no tile matches {look:?}"))?,
+                ),
+                _ => options.orbit,
+            };
+            bridge.publish_looks(Arc::new(looks::scene_looks(
+                &rules,
+                options.seed,
+                planet.base,
+            )));
+            bridge.publish_hidden_terrain(Arc::new(terrain::hidden_terrain(
+                &game.world,
+                crate::selection::PLAYER,
+            )));
+            bridge.publish_planet(
+                Arc::new(scene),
+                OrbitSettings {
+                    max_distance: None,
+                    view,
+                    home,
+                    body: None,
                 },
-                home: game.starts.first().map(|s| SurfacePos {
-                    face: s.city_pos.face,
-                    x: i64::from(s.city_pos.x),
-                    y: i64::from(s.city_pos.y),
-                }),
-                body: None,
-            },
-        );
-        game
-    } else {
-        match options.sphere.or(options.single_planet.then_some(192)) {
-            Some(n) => {
-                let content = terrain::generate_sphere_content(options, n)?;
-                let game = build_sphere_match_in_age(
-                    &content.rules,
-                    &content.planet,
-                    &content.factions,
-                    options.seed,
-                    options.age,
-                )
-                .map_err(|error| format!("setting up the match: {error}"))?;
-                // Starts and nodes are drawn as entities (and only where the player may see them),
-                // not as scene markers; the camera starts at the first player's city.
-                let mut scene = terrain::to_planet_scene(&content.planet);
-                terrain::apply_terrain_colours(&mut scene.feature_colors, &content.rules);
-                scene.sun = terrain::sun_settings(&content.rules, options);
-                scene.starts.clear();
-                scene.nodes.clear();
-                let home = game.starts.first().map(|s| SurfacePos {
-                    face: s.city_pos.face,
-                    x: i64::from(s.city_pos.x),
-                    y: i64::from(s.city_pos.y),
-                });
-                let view = match (&options.look_at, home) {
-                    (Some(look), Some(home)) => Some(
-                        terrain::look_at(&content.rules, &content.planet, home, look)
-                            .ok_or_else(|| format!("--look-at: no tile matches {look:?}"))?,
-                    ),
-                    _ => options.orbit,
-                };
-                bridge.publish_looks(Arc::new(looks::scene_looks(
-                    &content.rules,
-                    options.seed,
-                    content.planet.base,
-                )));
-                bridge.publish_hidden_terrain(Arc::new(terrain::hidden_terrain(
-                    &game.world,
-                    crate::selection::PLAYER,
-                )));
-                bridge.publish_planet(
-                    Arc::new(scene),
-                    OrbitSettings {
-                        max_distance: None,
-                        view,
-                        home,
-                        body: None,
-                    },
-                );
-                game
-            }
-            None => {
-                let content = terrain::generate_content(options)?;
-                let mut scene = terrain::to_scene(&content.map);
-                terrain::apply_terrain_colours(&mut scene.feature_colors, &content.rules);
-                bridge.publish_looks(Arc::new(looks::scene_looks(
-                    &content.rules,
-                    options.seed,
-                    content.map.base,
-                )));
-                let game = build_match_in_age(
-                    &content.rules,
-                    &content.map,
-                    &content.factions,
-                    options.seed,
-                    options.age,
-                )
-                .map_err(|error| format!("setting up the match: {error}"))?;
-                bridge.publish_hidden_terrain(Arc::new(terrain::hidden_terrain(
-                    &game.world,
-                    crate::selection::PLAYER,
-                )));
-                bridge.publish_terrain(Arc::new(scene));
-                game
-            }
+            );
         }
-    };
-    if !options.uses_universe()
-        && let Some(path) = &options.script
-    {
-        let text = std::fs::read_to_string(path)
-            .map_err(|error| format!("reading {}: {error}", path.display()))?;
-        let setup = ScriptSetup::scan(&text)?;
-        setup.apply_grants(&mut game.world)?;
+        Generated::Flat(map) => {
+            let mut scene = terrain::to_scene(map);
+            terrain::apply_terrain_colours(&mut scene.feature_colors, &rules);
+            bridge.publish_looks(Arc::new(looks::scene_looks(&rules, options.seed, map.base)));
+            bridge.publish_hidden_terrain(Arc::new(terrain::hidden_terrain(
+                &built.game.world,
+                crate::selection::PLAYER,
+            )));
+            bridge.publish_terrain(Arc::new(scene));
+        }
     }
-    // A save replaces the freshly made world; the planet's looks above came from the same seed.
+    let rom_match::Built {
+        mut game,
+        mut computers,
+        generated,
+        ..
+    } = built;
+    let universe = match generated {
+        Generated::Universe(universe) => Some(universe),
+        _ => None,
+    };
+    // A save replaces the freshly made world and its computer players; the planet's looks above
+    // came from the same seed.
     let mut loaded = None;
     let mut speed_pct = options.speed_pct;
     if let Some(path) = &options.load {
-        let rules = Arc::clone(game.world.rules());
         let (world, info, brains) = crate::computer::load_match(path, &rules)
             .map_err(|error| format!("loading {}: {error}", path.display()))?;
         game.world = world;
+        computers = brains;
         speed_pct = info.speed_pct.clamp(1, 10_000);
         let home = game.starts.first().map(|s| s.city_pos.body);
         if let Some(at) = capital(&game.world, home) {
@@ -453,26 +422,13 @@ fn start_simulation(
                 _ => bridge.focus_camera(at.x as f32 / 1000.0, at.y as f32 / 1000.0),
             }
         }
-        loaded = Some((info, brains));
+        loaded = Some(info);
     }
-    // Every player no person plays is a computer player, unless `--ai none`.
-    let computers = if let Some((_, brains)) = loaded.as_mut() {
-        Some(std::mem::replace(brains, ComputerPlayers::empty())).filter(|b| b.len() > 0)
-    } else if options.no_ai {
-        None
-    } else {
-        Some(ComputerPlayers::new(
-            &mut game.world,
-            &options.ai,
-            options.seed,
-            options.watch,
-        )?)
-    };
     let wanderers = add_stress_units(&mut game, options.stress_units, options.seed);
     let driver = options.demo.then(|| {
         let mut driver = DemoDriver::new(&game, options.seed, wanderers);
         // The demo only moves what no brain plays.
-        for player in computers.iter().flat_map(ComputerPlayers::players) {
+        for player in computers.players() {
             driver.release(player);
         }
         driver
@@ -497,7 +453,6 @@ fn start_simulation(
                 .style
                 .clone()
                 .or_else(|| {
-                    let rules = game.world.rules();
                     rules
                         .map_styles
                         .keys()
@@ -513,7 +468,7 @@ fn start_simulation(
                 options.autosave_minutes,
                 folder,
             );
-            if let Some((info, _)) = loaded {
+            if let Some(info) = loaded {
                 // The save's own settings (seed, map, launch arguments, seats) carry on.
                 setup.info = info;
             }
@@ -525,9 +480,8 @@ fn start_simulation(
         }
     };
     SimThread::spawn(
-        game.world,
+        MatchCore::new(game.world, computers, universe),
         driver,
-        computers,
         script,
         speed_pct,
         bridge.clone(),
@@ -535,6 +489,7 @@ fn start_simulation(
         Extras {
             saving,
             paused: options.load.is_some(),
+            journals: None,
         },
     )
     .map_err(|error| format!("could not start the simulation thread: {error}"))
@@ -562,7 +517,7 @@ fn capital(world: &rom_sim::World, home: Option<BodyId>) -> Option<rom_sim::Pos>
 }
 
 /// Parses a `--script` file against player one's start.
-fn read_script(path: &std::path::Path, game: &Match) -> Result<Script, String> {
+pub(crate) fn read_script(path: &std::path::Path, game: &Match) -> Result<Script, String> {
     let text = std::fs::read_to_string(path)
         .map_err(|error| format!("reading {}: {error}", path.display()))?;
     let start = game

@@ -6,6 +6,7 @@ members = [
     "crates/rom-geo",
     "crates/rom-ai",
     "crates/rom-save",
+    "crates/rom-match",
     "crates/rom-kit",
     "crates/rom-models",
     "crates/rom-render",
@@ -29,6 +30,7 @@ rom-render = { path = "crates/rom-render" }
 rom-kit = { path = "crates/rom-kit" }
 rom-models = { path = "crates/rom-models" }
 rom-geo = { path = "crates/rom-geo" }
+rom-match = { path = "crates/rom-match" }
 gpui = { version = "=0.2.2", default-features = false, features = ["font-kit", "x11"] }
 gpui-component = { version = "=0.5.1", default-features = false }
 raylib = "=6.0.0"

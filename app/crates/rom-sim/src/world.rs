@@ -123,6 +123,10 @@ pub struct World {
     pub(crate) market_rules: Option<crate::market::MarketRules>,
     /// Market pressure by player and resource, hundredths of a lot; only where it is not 0.
     pub(crate) market: BTreeMap<(PlayerId, DefId), i64>,
+    /// Copies of the commands `submit` accepted since the last `take_accepted`, in order, while
+    /// the leader of a match records them (its journal); `None` when nobody does. Not hashed,
+    /// not saved.
+    pub(crate) accepted: Option<Vec<Command>>,
 }
 
 impl World {
@@ -332,6 +336,7 @@ impl World {
             razed: Vec::new(),
             market_rules,
             market: BTreeMap::new(),
+            accepted: None,
         })
     }
 
@@ -738,8 +743,40 @@ impl World {
         ids
     }
 
-    /// Validates now and defers queue mutation until the next step.
-    pub fn submit(&mut self, mut command: Command) -> Result<OrderId, SimError> {
+    /// Validates now and defers queue mutation until the next step. While commands are
+    /// recorded ([`World::record_accepted`]), an accepted one is kept for [`World::take_accepted`].
+    pub fn submit(&mut self, command: Command) -> Result<OrderId, SimError> {
+        if self.accepted.is_none() {
+            return self.submit_now(command);
+        }
+        let copy = command.clone();
+        let id = self.submit_now(command)?;
+        if let Some(accepted) = self.accepted.as_mut() {
+            accepted.push(copy);
+        }
+        Ok(id)
+    }
+
+    /// Starts or stops keeping a copy of every command [`World::submit`] accepts between steps,
+    /// for the journal of a match's leader. Stopping drops what was kept.
+    pub fn record_accepted(&mut self, on: bool) {
+        match (on, self.accepted.is_some()) {
+            (true, false) => self.accepted = Some(Vec::new()),
+            (false, _) => self.accepted = None,
+            (true, true) => {}
+        }
+    }
+
+    /// The commands accepted since the last call, in submit order; empty when none are
+    /// recorded.
+    pub fn take_accepted(&mut self) -> Vec<Command> {
+        self.accepted
+            .as_mut()
+            .map(std::mem::take)
+            .unwrap_or_default()
+    }
+
+    fn submit_now(&mut self, mut command: Command) -> Result<OrderId, SimError> {
         // An ascended player's only order needs no executor (task 76).
         if command.kind == "descend" {
             return self.submit_descent(command);
@@ -891,8 +928,15 @@ impl World {
     /// by id, runs path searches, separates overlapping units, lands every hit of the
     /// tick together, and distributes income. Combat decisions see other entities as
     /// they were when the order phase began, so the id order of updates cannot decide
-    /// who strikes first.
+    /// who strikes first. Orders the step gives itself (idle work, automatic attacks) are
+    /// not recorded for the journal: every world makes them alike.
     pub fn step(&mut self) {
+        let recording = self.accepted.take();
+        self.step_unrecorded();
+        self.accepted = recording;
+    }
+
+    fn step_unrecorded(&mut self) {
         self.find_idle_work();
         self.acquire_idle();
         self.regenerate_energy();

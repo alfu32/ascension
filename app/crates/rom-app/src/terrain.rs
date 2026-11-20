@@ -1,194 +1,36 @@
 //! Start-up content: rules built in memory, a generated map, and its conversion to a render scene.
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
-use rom_mapgen::{
-    BaseTerrains, GeneratedMap, MapRequest, SpherePlanet, SphereRequest, StartPlacement, Universe,
-    UniverseRequest, generate, generate_sphere, generate_universe_placed,
-};
+use rom_mapgen::{BaseTerrains, GeneratedMap, SpherePlanet};
 use rom_render::{
     PlanetScene, SunSettings, SurfacePos, TerrainScene, TileKind, lon_lat_of, to_render,
 };
-use rom_rules::{DefId, Rules, build_rules_db};
+use rom_rules::{DefId, Rules};
+
+#[cfg(test)]
+pub use rom_match::content::{Content, SCHEMA, SphereContent, UniverseContent, seed_with_models};
+pub use rom_match::content::{load_rules, model_files};
 
 use crate::args::{LookAt, Options};
-use crate::match_setup::default_factions;
 
-pub(crate) const SCHEMA: &str = include_str!("../../../db/schema.sql");
-pub(crate) const SEED: &str = include_str!("../../../db/seed.sql");
-
-/// The model files built into the game (`db/models`, `assets/models`).
-pub fn model_files() -> &'static rom_models::ModelFiles {
-    static FILES: std::sync::OnceLock<rom_models::ModelFiles> = std::sync::OnceLock::new();
-    FILES.get_or_init(rom_models::ModelFiles::embedded)
-}
-
-/// The embedded seed followed by the embedded model files.
-pub fn seed_with_models() -> String {
-    model_files().seed_with_models(SEED)
-}
-
-/// Builds the rules from the embedded schema, seed and model files.
-pub fn load_rules() -> Result<Rules, String> {
-    let conn = build_rules_db(SCHEMA, &seed_with_models())
-        .map_err(|error| format!("building rules: {error}"))?;
-    Rules::load(&conn).map_err(|error| format!("loading rules: {error}"))
-}
-
-/// The rules and the map the options ask for.
-pub struct Content {
-    /// The loaded rules.
-    pub rules: Arc<Rules>,
-    /// The generated map.
-    pub map: GeneratedMap,
-    /// The faction of each player, in player order.
-    pub factions: Vec<DefId>,
-}
-
-/// The rules, the map style and the faction of each player the options ask for.
-fn resolve(options: &Options) -> Result<(Rules, DefId, Vec<DefId>), String> {
-    let rules = load_rules()?;
-    let style = match &options.style {
-        Some(key) => rules
-            .id_of(key)
-            .filter(|id| rules.map_styles.contains_key(id))
-            .ok_or_else(|| format!("unknown map style {key:?}"))?,
-        None => *rules
-            .map_styles
-            .keys()
-            .next()
-            .ok_or("the rules define no map style")?,
-    };
-    let factions = match &options.factions {
-        Some(keys) => keys
-            .iter()
-            .map(|key| {
-                rules
-                    .id_of(key)
-                    .filter(|id| rules.factions.contains_key(id))
-                    .ok_or_else(|| format!("unknown faction {key:?}"))
-            })
-            .collect::<Result<Vec<_>, _>>()?,
-        None => default_factions(&rules, options.players),
-    };
-    if factions.is_empty() {
-        return Err("the rules define no playable faction".into());
-    }
-    Ok((rules, style, factions))
-}
-
-/// Generates the map the options ask for.
+/// Generates the flat map the options ask for (`rom_match`, which the server shares).
+#[cfg(test)]
 pub fn generate_content(options: &Options) -> Result<Content, String> {
-    let (rules, style, factions) = resolve(options)?;
-    let map = generate(
-        &rules,
-        &MapRequest {
-            style,
-            seed: options.seed,
-            width: options.map_size.0,
-            height: options.map_size.1,
-            player_factions: factions.clone(),
-        },
-    )
-    .map_err(|error| format!("generating the map: {error}"))?;
-    Ok(Content {
-        rules: Arc::new(rules),
-        map,
-        factions,
-    })
-}
-
-/// The rules and the sphere planet the options ask for.
-pub struct SphereContent {
-    /// The loaded rules.
-    pub rules: Arc<Rules>,
-    /// The generated planet.
-    pub planet: SpherePlanet,
-    /// The faction of each player, in player order.
-    pub factions: Vec<DefId>,
+    rom_match::generate_content(&options.content_request())
 }
 
 /// Generates a sphere planet of `n` tiles per face edge for the options' style, seed and factions,
 /// with the rules and factions it was made for.
+#[cfg(test)]
 pub fn generate_sphere_content(options: &Options, n: u32) -> Result<SphereContent, String> {
-    let (rules, style, factions) = resolve(options)?;
-    let planet = generate_sphere(
-        &rules,
-        &SphereRequest {
-            style,
-            seed: options.seed,
-            n,
-            player_factions: factions.clone(),
-        },
-    )
-    .map_err(|error| format!("generating the planet: {error}"))?;
-    Ok(SphereContent {
-        rules: Arc::new(rules),
-        planet,
-        factions,
-    })
-}
-
-/// The rules and the universe the options ask for.
-pub struct UniverseContent {
-    /// The loaded rules.
-    pub rules: Arc<Rules>,
-    /// The generated universe.
-    pub universe: Universe,
-    /// The faction of each player, in player order.
-    pub factions: Vec<DefId>,
-}
-
-/// The map style a universe match uses when none is given: the one whose nearest region allows
-/// the most star systems (ties: lowest id), so the star map has somewhere to expand to. Chosen
-/// by data.
-fn universe_default_style(rules: &Rules) -> Option<DefId> {
-    rules
-        .map_styles
-        .values()
-        .filter(|s| s.star_region == rom_rules::StarRegion::Nearest)
-        .max_by(|a, b| a.systems_max.cmp(&b.systems_max).then(b.id.cmp(&a.id)))
-        .map(|style| style.id)
+    rom_match::generate_sphere_content(&options.content_request(), n)
 }
 
 /// Generates the universe for the options' style, seed and factions.
+#[cfg(test)]
 pub fn generate_universe_content(options: &Options) -> Result<UniverseContent, String> {
-    let (mut rules, mut style, factions) = resolve(options)?;
-    if options.style.is_none()
-        && let Some(roomiest) = universe_default_style(&rules)
-    {
-        style = roomiest;
-    }
-    if let Some(n) = options.sphere {
-        if !(64..=512).contains(&n) {
-            return Err("universe home planet face size must be 64 to 512".into());
-        }
-        let recipe = rules.map_styles.get_mut(&style).expect("resolved style");
-        recipe.planet_n_median = i64::from(n);
-        recipe.planet_n_min = recipe.planet_n_min.min(i64::from(n));
-        recipe.planet_n_max = recipe.planet_n_max.max(i64::from(n));
-    }
-    let placement = match options.start_placement {
-        Some(placement) => placement,
-        None => StartPlacement::of_rules(&rules)
-            .map_err(|error| format!("generating the universe: {error}"))?,
-    };
-    let universe = generate_universe_placed(
-        &rules,
-        &UniverseRequest {
-            style,
-            seed: options.seed,
-            player_factions: factions.clone(),
-        },
-        placement,
-    )
-    .map_err(|error| format!("generating the universe: {error}"))?;
-    Ok(UniverseContent {
-        rules: Arc::new(rules),
-        universe,
-        factions,
-    })
+    rom_match::generate_universe_content(&options.content_request())
 }
 
 /// Terrain identities known to a player; `None` means display the surrounding plain land.
@@ -503,6 +345,7 @@ pub fn look_at(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rom_mapgen::{MapRequest, generate};
 
     #[test]
     fn sun_settings_come_from_the_rules() {
@@ -644,44 +487,5 @@ mod deposit_tests {
             )
             .is_some()
         );
-    }
-}
-
-#[cfg(test)]
-mod placement_tests {
-    use super::*;
-    use rom_mapgen::{StartPlacement, UniverseRequest, generate_universe_placed};
-
-    fn options(placement: Option<StartPlacement>) -> Options {
-        Options {
-            universe: true,
-            style: Some("map.solar".into()),
-            seed: 7,
-            players: 3,
-            start_placement: placement,
-            ..Options::default()
-        }
-    }
-
-    #[test]
-    fn together_gives_the_universe_the_generator_gives() {
-        let together = generate_universe_content(&options(Some(StartPlacement::Together))).unwrap();
-        let rules = &together.rules;
-        let style = rules.id_of("map.solar").unwrap();
-        let direct = generate_universe_placed(
-            rules,
-            &UniverseRequest {
-                style,
-                seed: 7,
-                player_factions: together.factions.clone(),
-            },
-            StartPlacement::Together,
-        )
-        .unwrap();
-        assert_eq!(together.universe.hash(), direct.hash());
-        let separate = generate_universe_content(&options(None)).unwrap();
-        let explicit = generate_universe_content(&options(Some(StartPlacement::Separate))).unwrap();
-        assert_eq!(separate.universe.hash(), explicit.universe.hash());
-        assert_ne!(separate.universe.hash(), together.universe.hash());
     }
 }
