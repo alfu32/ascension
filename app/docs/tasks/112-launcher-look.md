@@ -52,6 +52,20 @@ Screenshots: `app/docs/img/launcher-{simple,play,host,join,server,advanced}.png`
 5. **Size and scaling.** Readable at 1280×800 and at 1920×1080; the window may be resized without
    overlap or clipping.
 
+## Owner review of the advanced launcher (2026-11-20)
+
+The owner annotated a screenshot of the advanced launcher (kept by the owner at
+`app/tasks/launcher-ui/launcher-screen-advanced-review.png`, not published). Requirements:
+1. The mode row (Play (universe), Play (single planet), Demo, Model gallery, One model, Bench)
+   becomes a carousel with suggestive pictures (game screenshots), one card per mode.
+2. The custom preset controls (name, Save preset, Reset to defaults) go to a menu behind a "…"
+   button at the end of the group tab row.
+3. The group tabs use icons.
+4. Remove useless settings: `--sphere`, `--single-planet` and `--universe` leave the launcher form;
+   `--universe` is replaced by the style picker; keep `--map-size`. The flags still parse on the
+   command line; the launcher always launches a universe match with the chosen style. "Play
+   (single planet)" folds into Play with the Planet style unless it does something Planet cannot.
+
 Read first: `AGENTS.md`, `CLAUDE.md`, `app/docs/hud.md` (Style, Window chrome),
 `app/docs/launcher.md`, `research/04-hud-and-screens.md` (setup screen), card 87 and card 88,
 `rom-app/src/launcher/` (all), the HUD rasterising code in `rom-render` (search `chrome`), the
