@@ -32,6 +32,9 @@ const MESSAGE_TICKS: u64 = 100;
 const HELPER_TRIES: u8 = 6;
 /// The same in a network match, where the site appears a round trip later.
 const NETWORK_HELPER_TRIES: u8 = 200;
+/// Ticks a research ordered in a network match shows as started before its order comes back
+/// (standalone it is in the world the next tick).
+const NETWORK_PENDING_TICKS: u64 = 40;
 /// Units trained by a Shift click.
 const SHIFT_BATCH: usize = 5;
 /// Combat stance behaviours offered as buttons, in this order.
@@ -266,6 +269,8 @@ pub struct Controller {
     me: Me,
     /// Ticks the helpers of a construction wait for its site to appear.
     helper_tries: u8,
+    /// Ticks a research just ordered shows as started while its order is on its way.
+    pending_ticks: u64,
 }
 
 /// The person's player, player one unless the session says otherwise.
@@ -467,9 +472,17 @@ impl Controller {
     }
 
     /// In a network match a construction site appears only after the server's turn comes
-    /// back: its helpers wait that long.
+    /// back: its helpers wait that long, and a research ordered shows as started until then.
     pub fn set_network(&mut self) {
         self.helper_tries = NETWORK_HELPER_TRIES;
+        self.pending_ticks = NETWORK_PENDING_TICKS;
+    }
+
+    /// Whether `def` was just ordered researched and its order is not in the world yet.
+    fn research_pending(&self, world: &World, def: DefId) -> bool {
+        self.pending_research
+            .get(&def)
+            .is_some_and(|at| world.tick().saturating_sub(*at) <= self.pending_ticks)
     }
 
     /// Gives the controller the composed models, so palette buttons show their pictures.
@@ -2126,14 +2139,8 @@ impl Controller {
                     .map(|(resource, amount)| format!("{amount} {}", rules.def(*resource).name))
                     .collect::<Vec<_>>()
                     .join(", ");
-                button.state = crate::hud::button_state(
-                    world,
-                    me,
-                    def,
-                    self.pending_research
-                        .get(&def)
-                        .is_some_and(|tick| *tick == world.tick()),
-                );
+                button.state =
+                    crate::hud::button_state(world, me, def, self.research_pending(world, def));
                 button.armed = matches!(&self.placement, Some(p) if matches!(action, Action::Construct(d) if d == p.def));
             }
             Action::Stop => {
@@ -2682,7 +2689,21 @@ impl Controller {
             self.foreign = None;
         }
         let tick = world.tick();
-        self.pending_research.retain(|_, at| *at == tick);
+        // A research stays pending until its order is in the world (standalone: one tick).
+        let window = self.pending_ticks;
+        let ordered: BTreeSet<DefId> = if window == 0 || self.pending_research.is_empty() {
+            BTreeSet::new()
+        } else {
+            world
+                .entities()
+                .filter(|e| e.owner == me)
+                .flat_map(|e| e.orders())
+                .filter(|o| o.kind == "research")
+                .filter_map(|o| o.subject)
+                .collect()
+        };
+        self.pending_research
+            .retain(|def, at| tick.saturating_sub(*at) <= window && !ordered.contains(def));
         self.markers
             .retain(|m| tick.saturating_sub(m.tick) <= MARKER_TICKS);
         let due: Vec<Requeue> = {
@@ -2877,9 +2898,9 @@ impl Controller {
         hud.trade_targets = self.trade_targets(world);
         let pending: Vec<_> = self
             .pending_research
-            .iter()
-            .filter(|(_, tick)| **tick == world.tick())
-            .map(|(id, _)| *id)
+            .keys()
+            .filter(|def| self.research_pending(world, **def))
+            .copied()
             .collect();
         hud.overview = crate::hud::research_overview(world, me, &pending);
         let (faction, age) = world

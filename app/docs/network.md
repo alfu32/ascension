@@ -90,11 +90,11 @@ play together unless the versions and the rules fingerprint match.
 | Drawing everything | `rom-render`: planets, space, units, projectiles in flight, the sun's light, the HUD |
 | Every screen and input | `rom-app`: launcher, lobby screen, camera, selection, the order palette, hover text, chat window and log, settings |
 | Turning clicks into orders | sends `Order` and `Visit` to the server; shows `Rejected` refusals on the event line |
-| Following the match | applies each `Turn`, then steps its own copy of the world; keeps two ticks in hand, catches up when behind, asks for a snapshot when far behind |
+| Following the match | applies each `Turn`, then steps its own copy of the world; keeps only the link's jitter in hand (none on a quiet link, at most three turns), catches up when behind, asks for a snapshot when far behind |
 | Showing its own player's view | fog of war, known systems, notices: computed by the shared simulation, shown for this seat only |
 | Reporting its hash | every 100 ticks |
 | Remembering how to rejoin | the seat token per server address, in the config folder |
-| Network line in the HUD | latency, "waiting for …", who paused |
+| Network line in the HUD | latency and order delay, "waiting for …", who paused |
 
 A client never changes its world except through the journal, never runs computer players, and
 cannot save or load a network match (the in-match menu asks the server).
@@ -163,10 +163,45 @@ The handshake compares protocol version, application version and the **rules fin
 hash of the embedded schema, seed and model files the rules are built from): a mismatch is
 refused with both versions named. Both ends must run the same release.
 
-**Timing.** The leader steps at the match speed and does not wait for anyone. A follower steps
-toward the newest `Turn` it holds, keeping two ticks in hand to smooth jitter, and catches up
-several ticks per frame when behind. The effect of a click is seen after a round trip plus about
-100 ms. A follower more than 30 s behind asks for a snapshot.
+**Timing** (task 113). The leader steps at the match speed and **does not wait for anyone**:
+the match goes as fast as the server, not as the slowest client. Every person's game, the
+integrated host's included, is a follower, so a click goes to the server, waits there for its
+next tick, comes back in that tick's `Turn` and takes effect when the follower applies it:
+
+- The server leads an order at its **next** tick: its hub wakes on every message and on every
+  tick time, so an order waits 0–50 ms there at 100 % (25 ms on average), never a tick more.
+- The follower applies each turn at its tick's time on the server's clock as seen through the
+  slowest arrival of the last 3 seconds. The **turns kept in hand follow the measured jitter**:
+  none on a quiet loopback or LAN, the spread of arrivals on a jittery link, at most 3 turns.
+  When the jitter calms, the allowance falls by one tick per tick (an extra turn applied each
+  tick) until it is back to the measure; when it rises, the follower holds still that long.
+- A turn due before it arrives is applied **the moment it arrives**: the follower waits on the
+  connection, not on a clock of its own, so no due tick is lost to its clock's phase.
+- Far behind (a hitch, a snapshot reloaded) every turn due is applied, 20 per loop turn; more
+  than 30 s behind, the follower asks for a snapshot. Pausing, resuming, a speed change, a seat
+  waited for and a snapshot start the measure afresh (the server's clock starts afresh then).
+- The person's orders leave as soon as the loop turn has read the click, before its steps; the
+  order marker and a research's started state show at once, so the round trip does not feel
+  like a missed click.
+
+Expected order delay at 100 % (the order leaving to its effect on the clicking machine): the
+server's wait (0–50 ms) plus the trip there and back plus the jitter allowance. On this machine
+(loopback) about 30 ms on average and 60 ms at most (measured: 28 and 58 ms; 0.0.108 took 220
+and 250 ms, keeping four turns in hand); on a LAN about the same; over a 50 ms internet link
+(25 ms each way, some 10–20 ms of jitter) about 90–100 ms. With 80 ms of jitter injected the
+follower keeps one to three turns in hand and orders take 125 ms on average (0.0.108: 320 ms,
+five turns). A single-player match takes an order at its next tick (0–50 ms). The HUD's network
+line shows both: "Online · 7 ms · orders 49 ms" (the latency of a ping, and the mean delay of
+the last ten orders).
+
+**A slow client** (a slow machine, a poor link) only slows itself: its turns arrive late or
+bunched, so it keeps up to three turns in hand and its own orders take longer; it catches up
+when it can, and more than 30 s behind it reloads the server's world from a snapshot. The other
+players and the server do not wait for it (strict lockstep, `wait_for_clients`, is a test mode).
+
+The measurement: `cargo test --release -p rom-app -- --ignored --test-threads 1 order_delay`
+(a one-seat match on loopback, orders at random moments, 600 ticks, with and without 80 ms of
+injected jitter; it prints the turns kept in hand and the order delays).
 
 **Desync.** If a client's hash differs from the leader's at the same tick, the server sends a
 snapshot and logs the tick and both hashes; the client reloads and goes on.
@@ -323,12 +358,12 @@ before (the playthrough, duel and app-journal tests are unchanged).
 | --- | --- |
 | The person's player | a session value: player one standalone, the seat's player in a network match. `selection::PLAYER` is only the standalone default (the `Controller`, notices, chat log, ascension view, fog, snapshots, camera limits, scripts and save names take the session's player) |
 | One order sink | `selection::OrderSink`: `Lead(&mut World)` standalone (submitted at once; the match core journals what is accepted), `Follow { world, outbox }` in a network match (the world is read only; orders and camera visits wait in the `Outbox` and go to the server as `Order` and `Visit`). Reading the world goes through `Deref`, so nothing else can change it. The selection, `after_step` requeues and helpers, the HUD palette, script picks and `ascend`, and the `SimLink::submit` inbox all go through it |
-| Follower thread | `sim_thread::Game::{Lead(MatchCore), Follow(Box<NetPlay>)}`. `net::play::NetPlay` owns the `rom_net::Follower` and the connection: it reads turns, snapshots and messages each loop turn (`pump`), applies turns paced at the match speed keeping two in hand and catching up 20 a loop turn when behind, all of them while the server stands still (`due`, `step`), reports the hash every 100 ticks, asks for a snapshot on a turn that does not apply or when more than 30 s behind, and rejoins with the seat token every 3 s after a drop or a server restart (the server's `Bye` "the server stopped" included). Only a refusal, or a `Bye` saying another connection took the seat, ends that: the protocol has no reason code, so the client reads those words |
+| Follower thread | `sim_thread::Game::{Lead(MatchCore), Follow(Box<NetPlay>)}`. `net::play::NetPlay` owns the `rom_net::Follower` and the connection: it reads turns, snapshots and messages each loop turn (`pump`), applies turns as they come, paced by their arrival, keeping only the link's jitter in hand and catching up 20 a loop turn when behind, all of them while the server stands still (`due`, `step`; "Timing", task 113), reports the hash every 100 ticks, asks for a snapshot on a turn that does not apply or when more than 30 s behind, and rejoins with the seat token every 3 s after a drop or a server restart (the server's `Bye` "the server stopped" included). Only a refusal, or a `Bye` saying another connection took the seat, ends that: the protocol has no reason code, so the client reads those words |
 | Refusals | `Rejected` from the server shows on the event line in the simulation's words (a network client cannot check an order locally without a trial world) |
 | Chat | All and Allies go to the server and come back to everyone, the sender included (`ServerMessage::Chat` → `AscensionView::hear`); the celestial channel stays the application's |
 | Pause, speed | the HUD's pause button sends `Pause`/`Resume` (anyone; the event line says who); `+`/`-` send `Speed` from the host, and others read "Only the host sets the speed"; the in-match menu does not hold a network match |
 | In-match menu | Save asks the server to save (host; the server answers with a notice), others read that the server saves every few minutes; Load is off; Quit is "Leave the match" |
-| HUD network line | the first line of the banner at the top: "Online · 3 ms", "Waiting for Ada · 1:52", "Ada paused the match", "Catching up with the server …", "Connection lost · rejoining …", "Disconnected · …" |
+| HUD network line | the first line of the banner at the top: "Online · 3 ms · orders 36 ms", "Waiting for Ada · 1:52", "Ada paused the match", "Catching up with the server …", "Connection lost · rejoining …", "Disconnected · …" |
 | Lobby | a GPUI window before the match window (`net::lobby`): seats (name, race or nation, ready, connection), the seat's race or nation and Ready, chat, and for the host the keys with Copy, Add a key and Start now. Server refusals in plain words, naming both versions on a mismatch. When the server starts, the session thread (`net::session`) builds the match, shows the seat's home planet, waits for the terrain and starts the follower; the match window opens and the lobby closes |
 | Integrated host (`--host PORT`) | starts `rom_net::Server` in the process (listening on `--bind`, `0.0.0.0` from the launcher's Host form; state in `<data>/ascension/host`), takes a host key for its own seat, prints the others' keys (`key: …`) and the address they join, and joins over loopback. Closing the match window saves and stops the server |
 | Server window (`--serve`) | no game and no render thread: a GPUI window with the address, keys (Copy, Add a key), the seats and their states, tick, speed, hash checks, the log, and Start now, Pause, Resume, Speed, Save, Stop (state in `<data>/ascension/server`). Closing it saves and stops the server |

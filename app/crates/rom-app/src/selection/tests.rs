@@ -1177,6 +1177,80 @@ fn button_states_follow_rules_and_stock() {
     assert!(!civic_button(&fx).state.enabled());
 }
 
+/// Task 113: in a network match a research ordered shows as started from the click until its
+/// order comes back in the server's turn, not only for the tick of the click; one that never
+/// comes back (refused) shows as ready again after two seconds.
+#[test]
+fn a_research_sent_to_the_server_shows_as_started_until_it_returns() {
+    let mut fx = fixture();
+    fx.ctl.set_network();
+    let library = fx.spawn(fx.rules.id_of("bld.library").unwrap(), 1, 20, 20);
+    fx.click(library, false);
+    fx.ctl.tab = PaletteTab::Research;
+    let civic_button = |fx: &Fx| {
+        let palette = fx.hud_snapshot().palette.unwrap();
+        palette.buttons.into_iter().find(|b| b.slot == 2).unwrap()
+    };
+    let research = |fx: &mut Fx| {
+        let mut outbox = Outbox::default();
+        fx.ctl.handle_with(
+            &mut OrderSink::Follow {
+                world: &fx.world,
+                outbox: &mut outbox,
+            },
+            PickEvent::HudClick {
+                region: HudRegionKind::CommandSlot,
+                index: 2,
+                button: PointerButton::Left,
+                modifiers: Modifiers::default(),
+            },
+        );
+        outbox.orders
+    };
+    let follow = |fx: &mut Fx, n: usize| {
+        for _ in 0..n {
+            fx.world.step();
+            let mut outbox = Outbox::default();
+            fx.ctl.after_step_with(&mut OrderSink::Follow {
+                world: &fx.world,
+                outbox: &mut outbox,
+            });
+        }
+    };
+    let sent = research(&mut fx);
+    assert_eq!(sent.len(), 1);
+    assert_eq!(civic_button(&fx).state, ButtonState::InProgress { pct: 0 });
+    // Two turns pass before the server's turn with the order arrives: still started.
+    follow(&mut fx, 2);
+    assert_eq!(civic_button(&fx).state, ButtonState::InProgress { pct: 0 });
+    // The turn applies it: the world shows the research from then on.
+    fx.world.submit(sent[0].clone()).unwrap();
+    follow(&mut fx, 5);
+    assert!(
+        matches!(civic_button(&fx).state, ButtonState::InProgress { pct } if pct > 0),
+        "{:?}",
+        civic_button(&fx).state
+    );
+    // A research the server refuses is ready again once the wait is over.
+    let mut refused = fixture();
+    refused.ctl.set_network();
+    let library = refused.spawn(refused.rules.id_of("bld.library").unwrap(), 1, 20, 20);
+    refused.click(library, false);
+    refused.ctl.tab = PaletteTab::Research;
+    assert_eq!(research(&mut refused).len(), 1);
+    assert_eq!(
+        civic_button(&refused).state,
+        ButtonState::InProgress { pct: 0 }
+    );
+    follow(&mut refused, 40);
+    assert_eq!(
+        civic_button(&refused).state,
+        ButtonState::InProgress { pct: 0 }
+    );
+    follow(&mut refused, 1);
+    assert_eq!(civic_button(&refused).state, ButtonState::Ready);
+}
+
 #[test]
 fn library_shows_the_full_grid_with_done_badges() {
     let mut fx = fixture_config(10_000, "age.ancient", &["tech.civic.1", "tech.military.1"]);

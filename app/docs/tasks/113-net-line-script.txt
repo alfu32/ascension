@@ -1,0 +1,25 @@
+# Task 113: docs/img/113-net-line.png, the HUD's network line with the order delay
+# ("Online · N ms · orders M ms"). An integrated host on this machine (the server in the
+# process, its own seat a follower over loopback, the remote seat played by a computer after
+# Start now) whose person moves the builders back and forth; the window ends itself.
+# Run from app/ after `cargo build --release --locked -p rom-app`, on a free port:
+#   env -u WAYLAND_DISPLAY ROM_NET_READY=1 ROM_NET_START=2 XDG_CONFIG_HOME=<dir> XDG_DATA_HOME=<dir> \
+#     systemd-run --user --scope -q -p MemoryMax=6G -p MemorySwapMax=0 \
+#     target/release/rise-of-man --universe --style map.many_worlds --seed 7 --players 2 \
+#     --ai balanced:moderate --host 7413 --remote-players 1 --bind 127.0.0.1 --name Ada \
+#     --script docs/tasks/113-net-line-script.txt --size 1280x800 \
+#     --screenshot docs/img/113-net-line.png --after 40
+5 box builders
+10 rclick @6,4
+60 rclick @4,6
+110 rclick @6,4
+160 rclick @4,6
+210 rclick @6,4
+260 rclick @4,6
+310 rclick @6,4
+360 rclick @4,6
+410 rclick @6,4
+460 rclick @4,6
+510 rclick @6,4
+560 rclick @4,6
+610 rclick @6,4
