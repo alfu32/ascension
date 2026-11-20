@@ -516,6 +516,105 @@ impl HudPainter {
         }
     }
 
+    /// A brush's swatch along the bottom of `tile` and its size as one to three rising bars at
+    /// the right end (task 114).
+    fn brush_mark(&mut self, swatch: Option<[u8; 3]>, size: u8, tile: Rect) {
+        let s = self.scale;
+        let band = Rect::new(
+            tile.x + 6.0 * s,
+            tile.bottom() - 15.0 * s,
+            tile.w - 12.0 * s,
+            11.0 * s,
+        );
+        if let Some([r, g, b]) = swatch {
+            self.solid(
+                Rect::new(band.x - s, band.y - s, band.w + 2.0 * s, band.h + 2.0 * s),
+                [20, 13, 5, 235],
+            );
+            self.solid(band, [r, g, b, 255]);
+        }
+        let (width, gap) = (3.5 * s, 1.5 * s);
+        for i in 0..3u8 {
+            let height = (4.0 + 3.5 * f32::from(i)) * s;
+            let x = band.right() - (3.0 - f32::from(i)) * (width + gap) - s;
+            let bar = Rect::new(x, band.bottom() - height, width, height);
+            self.solid(
+                Rect::new(bar.x - s, bar.y - s, bar.w + 2.0 * s, bar.h + 2.0 * s),
+                [20, 13, 5, 235],
+            );
+            self.solid(
+                bar,
+                if i < size.clamp(1, 3) {
+                    WHITE
+                } else {
+                    [70, 76, 86, 255]
+                },
+            );
+        }
+    }
+
+    /// The palette's groups listed in the production queue panel: icon, name and size of each,
+    /// the shown one framed in cyan, a cyan square before the count of the one holding the armed
+    /// button.
+    fn group_block(&mut self, l: &HudLayout, h: &HudSnapshot, overlay: &HudOverlay) {
+        use crate::pick::HudRegionKind as K;
+        let s = l.scale;
+        let Some(palette) = h.palette.as_ref() else {
+            return;
+        };
+        for (i, group) in palette
+            .groups
+            .iter()
+            .take(crate::hud_layout::PALETTE_GROUPS)
+            .enumerate()
+        {
+            let r = l.palette_group(i);
+            self.solid(
+                r,
+                if group.current {
+                    [18, 52, 70, 235]
+                } else {
+                    [8, 12, 19, 210]
+                },
+            );
+            self.art(
+                &group.icon,
+                Rect::new(r.x + 6.0 * s, r.y + 2.0 * s, 23.0 * s, 23.0 * s),
+            );
+            let y = 768.0 + i as f32 * 30.0;
+            self.caption(
+                l,
+                Group::BottomLeft,
+                &group.name.to_uppercase(),
+                Rect::new(416.0, y + 5.0, 130.0, 17.0),
+                if group.current { WHITE } else { MUTED },
+            );
+            self.text(
+                &group.count.to_string(),
+                l.map(Group::BottomLeft, Rect::new(548.0, y + 5.0, 40.0, 17.0)),
+                TextSize::Small,
+                Align::Right,
+                if group.current { CYAN } else { MUTED },
+            );
+            if group.armed {
+                self.solid(
+                    Rect::new(r.right() - 52.0 * s, r.y + 10.0 * s, 7.0 * s, 7.0 * s),
+                    CYAN,
+                );
+            }
+            if group.current {
+                self.frame(r, 1.5 * s, CYAN);
+            } else if overlay.hover
+                == Some(HudTarget {
+                    region: K::PaletteGroup,
+                    index: i,
+                })
+            {
+                self.frame(r, 1.5 * s, GOLD);
+            }
+        }
+    }
+
     fn art(&mut self, name: &str, dest: Rect) {
         if let Some(r) = self.artwork.rect(name) {
             self.quads.push(HudQuad {
@@ -733,14 +832,29 @@ impl HudPainter {
                 index,
             }) => (
                 ["Build", "Orders", "Train", "Research"][index.min(3)].to_owned(),
-                String::new(),
+                h.palette
+                    .as_ref()
+                    .map(|p| p.tab_notes[index.min(3)].clone())
+                    .unwrap_or_default(),
             ),
+            Some(HudTarget {
+                region: K::PaletteGroup,
+                index,
+            }) => h
+                .palette
+                .as_ref()
+                .and_then(|p| p.groups.get(index))
+                .map_or_else(Default::default, |g| (g.name.clone(), g.note.clone())),
             _ => Default::default(),
         };
         let (first, second) = if !first.is_empty() {
             (first, second)
         } else if !h.help.is_empty() {
-            (h.help.clone(), String::new())
+            // A hint of two lines is split at its line break.
+            h.help.split_once('\n').map_or_else(
+                || (h.help.clone(), String::new()),
+                |(a, b)| (a.to_owned(), b.to_owned()),
+            )
         } else if let Some(help) = &overlay.world_help {
             help.clone()
         } else {
@@ -749,11 +863,12 @@ impl HudPainter {
                 String::new(),
             )
         };
-        let right = if h.palette.as_ref().is_some_and(|p| p.pages > 1) {
-            110.0
-        } else {
-            0.0
-        };
+        // A palette with groups lists them beside the grid instead of naming its page.
+        let paged = h
+            .palette
+            .as_ref()
+            .filter(|p| p.pages > 1 && p.groups.is_empty());
+        let right = if paged.is_some() { 110.0 } else { 0.0 };
         if second.is_empty() {
             self.caption(
                 l,
@@ -778,7 +893,7 @@ impl HudPainter {
                 GOLD,
             );
         }
-        if let Some(palette) = h.palette.as_ref().filter(|p| p.pages > 1) {
+        if let Some(palette) = paged {
             let label = format!(
                 "{} {}/{}",
                 palette.page_name.to_uppercase(),
@@ -866,6 +981,10 @@ impl HudPainter {
             let dest = if matches!(b.mark, IconMark::Level(_)) {
                 let icon = 29.0 * s;
                 Rect::new(r.right() - icon - 5.0 * s, r.y + 4.0 * s, icon, icon)
+            } else if matches!(b.mark, IconMark::Brush { .. }) {
+                // A brush leaves the bottom of the tile to its swatch and size.
+                let icon = 29.0 * s;
+                Rect::new(r.x + (r.w - icon) / 2.0, r.y + 5.0 * s, icon, icon)
             } else {
                 // A model's picture fills more of the tile than a vector glyph.
                 let icon = if self.has_model_icon(b.model) {
@@ -900,6 +1019,9 @@ impl HudPainter {
             }
             if let IconMark::Level(level) = b.mark {
                 self.level_pips(level, r, locked);
+            }
+            if let IconMark::Brush { swatch, size } = b.mark {
+                self.brush_mark(swatch, size, r);
             }
             // A market button names its trade in its top right corner and the price of the
             // moment along its bottom.
@@ -1618,18 +1740,32 @@ impl HudPainter {
         self.art("icons/help", l.map(L, Rect::new(32.0, 650.0, 23.0, 23.0)));
         self.help_block(l, h, overlay);
         self.palette_block(l, h, overlay);
+        // The ascended painter's brush families take the queue's place (task 114).
+        let grouped = h.palette.as_ref().is_some_and(|p| !p.groups.is_empty());
         self.art(
-            "icons/stat_workers",
+            if grouped {
+                "icons/life"
+            } else {
+                "icons/stat_workers"
+            },
             l.map(L, Rect::new(384.0, 740.0, 23.0, 23.0)),
         );
         self.caption(
             l,
             L,
-            "PRODUCTION QUEUE",
+            if grouped {
+                "BRUSH FAMILIES"
+            } else {
+                "PRODUCTION QUEUE"
+            },
             Rect::new(412.0, 741.0, 179.0, 19.0),
             WHITE,
         );
-        self.queue_block(l, h, overlay);
+        if grouped {
+            self.group_block(l, h, overlay);
+        } else {
+            self.queue_block(l, h, overlay);
+        }
         for (i, icon) in ["zoom_in", "zoom_out", "centre", "flag"]
             .into_iter()
             .enumerate()

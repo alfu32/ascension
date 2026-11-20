@@ -13,7 +13,8 @@
 //! Entities are `city`, `builder1`..`builderN`, `builders` (in `box`) or `#id`; points are
 //! `@dx,dy` (tiles from the city centre, across face edges on a sphere) or `x,y` (tiles on the
 //! city's face). Other commands: `rclick`,
-//! `key <char> [ctrl] [shift]`, `escape`; `hud` takes `tab`, `arrow`, `slot`, `queue`, `tile`.
+//! `key <char> [ctrl] [shift]`, `escape`; `hud` takes `tab`, `arrow`, `slot`, `queue`, `tile`,
+//! `family` (a brush family listed beside the palette, task 114).
 //!
 //! Live names (resolved at the step, in entity id order): `relicN` = free carry nodes,
 //! `templeN` = own completed keepers, `marketN` = own completed buildings training route
@@ -556,6 +557,7 @@ fn parse_line(
                 "arrow" => HudRegionKind::PaletteArrow,
                 "slot" => HudRegionKind::CommandSlot,
                 "queue" => HudRegionKind::QueueItem,
+                "family" => HudRegionKind::PaletteGroup,
                 "tile" => HudRegionKind::SelectionTile,
                 "inside" => HudRegionKind::InsideWorker,
                 "insideall" => HudRegionKind::InsideWorkerAll,

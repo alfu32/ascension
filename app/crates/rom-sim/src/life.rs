@@ -52,6 +52,8 @@ const SEA_HEIGHT: i64 = 100;
 const RAISE_CORE_PERMILLE: i64 = 400;
 /// Water painted at the rim of a lowering brush lies this far below sea level.
 const SHORE_DEPTH: i64 = 4;
+/// Least distance between the sites a node brush scatters when the rules give none.
+const NODE_SPACING: i64 = 3000;
 
 /// Smoothstep of `w` per mille: 0 at the rim, 1000 at the centre, flat at both.
 fn smooth(w: i64) -> i64 {
@@ -288,7 +290,8 @@ impl World {
         self.stats.orders_done += 1;
     }
 
-    /// Lays `brush` around `centre`: terrain, heights, and the brush's node at the centre.
+    /// Lays `brush` around `centre`: terrain, heights, and the brush's nodes: one at the centre and,
+    /// on a brush wider than a tile, more across the disc.
     fn paint_stroke(&mut self, centre: Pos, brush: &LifeBrush) {
         let body = centre.body;
         let sea = i64::from(self.sea_height());
@@ -313,6 +316,13 @@ impl World {
             .collect();
         tiles.sort_unstable();
         tiles.dedup_by_key(|(i, _)| *i);
+        // A node brush scatters its sites from the centre outward, nearest first.
+        let mut sites: Vec<(i64, usize)> = if brush.node_type_id.is_some() {
+            tiles.iter().map(|(i, d)| (*d, *i)).collect()
+        } else {
+            Vec::new()
+        };
+        sites.sort_unstable();
         let rules = std::sync::Arc::clone(&self.rules);
         let is_ground = |t: rom_rules::DefId| rules.terrains[&t].layer == Layer::Ground;
         let land_only = match brush.terrain_id {
@@ -367,18 +377,40 @@ impl World {
             .ownable_tiles
             .saturating_add_signed(ground_delta);
         if let Some(node) = brush.node_type_id {
-            self.paint_node(centre, node, &held);
+            let reach = self.node_reach(node);
+            if let Some(index) = self.geo(body).pos_index(centre) {
+                self.paint_node(body, index, node, reach, &held);
+            }
+            // The other tiles of the disc take sites `life.node_spacing` apart; a brush no
+            // wider than a tile has none.
+            let spacing = self
+                .rules
+                .constant("life.node_spacing")
+                .unwrap_or(NODE_SPACING)
+                .clamp(1000, 64_000) as u32;
+            for (_, index) in sites {
+                self.paint_node(body, index, node, reach.max(spacing), &held);
+            }
         }
     }
 
-    /// Sets a deposit node at the tile under `centre`, if that tile is free ground with no
-    /// other node within the node's own size.
-    fn paint_node(&mut self, centre: Pos, node: rom_rules::DefId, held: &BTreeSet<usize>) {
-        let geo = self.geo(centre.body);
-        let Some(index) = geo.pos_index(centre) else {
-            return;
-        };
-        let at = geo.index_centre(index);
+    /// How near another node a node of type `node` may stand: its own size.
+    fn node_reach(&self, node: rom_rules::DefId) -> u32 {
+        let et = &self.rules.entity_types[&node];
+        (et.footprint_w.max(et.footprint_h) * 1000).clamp(1000, 16_000) as u32
+    }
+
+    /// Sets a deposit node at tile `index` of `body`, if that tile is free ground with no
+    /// other node within `reach`.
+    fn paint_node(
+        &mut self,
+        body: BodyId,
+        index: usize,
+        node: rom_rules::DefId,
+        reach: u32,
+        held: &BTreeSet<usize>,
+    ) {
+        let at = self.geo(body).index_centre(index);
         let et = &self.rules.entity_types[&node];
         if held.contains(&index)
             || !self
@@ -391,7 +423,6 @@ impl World {
         {
             return;
         }
-        let reach = (et.footprint_w.max(et.footprint_h) * 1000).clamp(1000, 16_000) as u32;
         let crowded = self.entities_in_radius(at, reach).into_iter().any(|id| {
             self.entity(id)
                 .is_some_and(|e| self.rules.entity_types[&e.type_id].node.is_some())

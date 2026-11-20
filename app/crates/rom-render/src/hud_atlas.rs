@@ -191,6 +191,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../assets/hud/icons/brush_biome.svg"),
     ),
     (
+        "icons/brush_deposit",
+        include_str!("../../../assets/hud/icons/brush_deposit.svg"),
+    ),
+    (
         "icons/brush_elevation",
         include_str!("../../../assets/hud/icons/brush_elevation.svg"),
     ),

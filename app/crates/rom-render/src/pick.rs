@@ -37,6 +37,8 @@ pub enum HudRegionKind {
     CommandSlot,
     /// Production queue row, 0 to 2.
     QueueItem,
+    /// A group of the palette's pages listed where the queue stands (a brush family, task 114).
+    PaletteGroup,
     /// Multi-selection tile, 0 to 11.
     SelectionTile,
     /// Portrait of a worker inside the selected building, 0 to 11.
@@ -524,6 +526,12 @@ pub fn hud_target(
             .contains(x, y)
         {
             return target(HudRegionKind::DataTab, i);
+        }
+    }
+    let groups = hud.palette.as_ref().map_or(0, |p| p.groups.len());
+    for i in 0..groups.min(crate::hud_layout::PALETTE_GROUPS) {
+        if layout.palette_group(i).contains(x, y) {
+            return target(HudRegionKind::PaletteGroup, i);
         }
     }
     let queued = hud.queue.as_ref().map_or(0, |q| q.items.len());

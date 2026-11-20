@@ -5337,4 +5337,36 @@ INSERT INTO match_option VALUES ('start_placement','Start Placement','separate')
 INSERT INTO match_option_choice VALUES
  ('start_placement','separate','Separate Worlds',0), ('start_placement','together','Together',1);
 
+-- Task 114: every kind of nature paintable (docs/bringing-life.md). Defined last so every earlier
+-- definition id stays. A biome for each ground terrain that had no brush (ice, and barren rock,
+-- the dormant ground, which clears a biome), at the biomes' two sizes; and a scattering brush for
+-- each map node a player keeps or carries, which sets its sites across the disc at least
+-- `life.node_spacing` apart (the small brush sets one site).
+INSERT INTO game_constant(key,value,unit,note) VALUES
+ ('life.node_spacing',3000,'milli-tiles','least distance between the sites a scattering node brush sets');
+CREATE TEMP TABLE nature(terrain_id INTEGER, stem TEXT, name TEXT, sort INTEGER);
+INSERT INTO nature
+ SELECT t.id, substr(d.key, instr(d.key, '.') + 1), d.name, 48 + 2 * (row_number() OVER (ORDER BY t.id) - 1)
+ FROM terrain t JOIN def d ON d.id=t.id
+ WHERE t.layer='ground' AND t.id NOT IN (SELECT terrain_id FROM life_brush WHERE terrain_id IS NOT NULL)
+ ORDER BY t.id;
+INSERT INTO def(kind,key,name,sort)
+ SELECT 'brush', 'brush.' || stem || s.suffix, name || s.label, sort + s.step FROM nature
+ JOIN (SELECT '.small' AS suffix, '' AS label, 0 AS step UNION ALL SELECT '.large', ', wide', 1) s
+ ORDER BY sort, s.step;
+INSERT INTO life_brush(id,family,terrain_id,height_op,height,radius)
+ SELECT d.id, 'biome', n.terrain_id, 'keep', 0, CASE WHEN d.key LIKE '%.large' THEN 9000 ELSE 4000 END
+ FROM nature n JOIN def d ON d.key IN ('brush.' || n.stem || '.small', 'brush.' || n.stem || '.large')
+ ORDER BY d.id;
+DROP TABLE nature;
+INSERT INTO def(kind,key,name,sort)
+ SELECT 'brush', 'brush.deposit.' || substr(d.key, instr(d.key, '.') + 1) || '.large',
+        d.name || ', scattered', (50 + d.id % 1000) * 2 + 1
+ FROM def d JOIN et_node n ON n.entity_type_id=d.id WHERE n.claim_mode <> 'presence' ORDER BY d.id;
+INSERT INTO life_brush(id,family,node_type_id,height_op,height,radius)
+ SELECT b.id, 'deposit', n.entity_type_id, 'keep', 0, 4000
+ FROM et_node n JOIN def d ON d.id=n.entity_type_id
+ JOIN def b ON b.key='brush.deposit.' || substr(d.key, instr(d.key, '.') + 1) || '.large'
+ WHERE n.claim_mode <> 'presence' ORDER BY b.id;
+
 COMMIT;

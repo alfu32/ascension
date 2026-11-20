@@ -3125,3 +3125,191 @@ fn the_order_sink_leads_standalone_and_sends_when_following() {
     assert_eq!(outbox.orders[0].executor, theirs);
     assert_eq!(outbox.orders[0].player, PlayerId(2));
 }
+
+/// Task 114: a universe of two players (seed 1) in which player one, the person, has ascended
+/// and, with `alive`, brought the first dormant body to life. Returns the world, player one's
+/// home planet and that body.
+fn painter_world(alive: bool) -> (World, BodyId, BodyId) {
+    let options = crate::args::Options {
+        players: 2,
+        ..crate::args::Options::default()
+    };
+    let content = crate::terrain::generate_universe_content(&options).unwrap();
+    let setup = crate::script::ScriptSetup::scan("").unwrap();
+    let game = crate::match_setup::build_universe_match(
+        &content.rules,
+        &content.universe,
+        &content.factions,
+        1,
+        None,
+        &setup,
+    )
+    .unwrap();
+    let rules = game.world.rules().clone();
+    // Player one ascended at tick 0 (as a finished ascension leaves it).
+    let mut snapshot = game.world.snapshot();
+    for p in &mut snapshot.players {
+        if p.player.id == PLAYER {
+            p.status = rom_sim::PlayerStatus::Ascended;
+            p.ascended = Some(0);
+            p.ascensions = 1;
+        }
+    }
+    let mut world = World::restore(rules, snapshot).expect("restore");
+    assert!(world.is_ascended(PLAYER));
+    let home = world.home_body(PLAYER).unwrap();
+    let (moon, _) = world.dormant_bodies().next().expect("a dormant body");
+    if alive {
+        let marker = world.body_marker(moon).expect("marker");
+        world
+            .submit(Command {
+                player: PLAYER,
+                executor: EntityId(0),
+                kind: "bring_life".into(),
+                subject: None,
+                target_entity: Some(marker),
+                target_pos: None,
+                queue: false,
+            })
+            .expect("bring life");
+        world.step();
+        assert!(world.living(moon).is_some());
+    }
+    (world, home, moon)
+}
+
+fn painter(world: &World, planet: BodyId) -> Controller {
+    let _ = world;
+    let mut ctl = Controller::new();
+    ctl.set_view(ViewCtx {
+        planet,
+        ..ViewCtx::default()
+    });
+    ctl
+}
+
+fn hud_click(ctl: &mut Controller, world: &mut World, region: HudRegionKind, index: usize) {
+    ctl.handle(
+        world,
+        PickEvent::HudClick {
+            region,
+            index,
+            button: PointerButton::Left,
+            modifiers: Modifiers::default(),
+        },
+    );
+}
+
+#[test]
+fn every_brush_is_in_the_ascended_palette_by_its_family() {
+    let (mut world, _, moon) = painter_world(true);
+    let mut ctl = painter(&world, moon);
+    hud_click(&mut ctl, &mut world, HudRegionKind::PaletteTab, 0);
+    let (palette, _) = ctl.palette(&world).expect("a palette");
+    assert_eq!(palette.tab, PaletteTab::Build);
+    let families = palette.groups.len();
+    assert_eq!(families, 5, "land, water, elevation, biomes, deposits");
+    assert!(palette.groups[0].current);
+    let rules = world.rules().clone();
+    let mut seen = BTreeSet::new();
+    for family in 0..families {
+        // A click on the family's row shows its brushes, the row framed.
+        hud_click(&mut ctl, &mut world, HudRegionKind::PaletteGroup, family);
+        let (palette, actions) = ctl.palette(&world).expect("a palette");
+        assert!(palette.groups[family].current);
+        assert_eq!(palette.groups.iter().filter(|g| g.current).count(), 1);
+        assert_eq!(palette.groups[family].count, actions.len());
+        for ((slot, action), button) in actions.iter().zip(&palette.buttons) {
+            let Action::Brush(brush) = action else {
+                panic!("only brushes on the Build tab");
+            };
+            assert_eq!(rules.brushes[brush].family, {
+                let first = actions.iter().find_map(|(_, a)| match a {
+                    Action::Brush(b) => Some(*b),
+                    _ => None,
+                });
+                rules.brushes[&first.unwrap()].family
+            });
+            assert_eq!(button.slot, *slot);
+            // Its picture, swatch and size come from the data, its rollover names its size.
+            let rom_render::IconMark::Brush { swatch, size } = button.mark else {
+                panic!("a brush mark");
+            };
+            assert!((1..=3).contains(&size));
+            assert_eq!(swatch.is_some(), rules.brushes[brush].terrain_id.is_some());
+            assert!(button.name.contains("brush,"), "{}", button.name);
+            assert!(seen.insert(*brush), "listed once");
+        }
+    }
+    let all: BTreeSet<DefId> = rules.brushes.keys().copied().collect();
+    assert_eq!(seen, all, "no brush unreachable");
+    // The slot keys still pick brushes: the first family's second brush with W.
+    hud_click(&mut ctl, &mut world, HudRegionKind::PaletteGroup, 0);
+    let (_, actions) = ctl.palette(&world).unwrap();
+    ctl.handle(
+        &mut world,
+        PickEvent::Hotkey {
+            ch: 'w',
+            modifiers: Modifiers::default(),
+        },
+    );
+    assert_eq!(ctl.brush.map(Action::Brush), Some(actions[1].1));
+    let (palette, _) = ctl.palette(&world).unwrap();
+    assert!(palette.groups[0].armed);
+    // The hint names the brush in hand; without one, the families.
+    let mut hud = HudSnapshot::default();
+    ctl.fill(&world, &mut hud);
+    assert!(hud.help.contains("Click the ground"), "{}", hud.help);
+    ctl.brush = None;
+    ctl.fill(&world, &mut hud);
+    assert!(
+        hud.help
+            .starts_with("Paint land, water, mountains, biomes and deposits"),
+        "{}",
+        hud.help
+    );
+    // Sizes tell the brushes of one terrain apart: land 1, 2, 3.
+    let sizes: Vec<u8> = actions
+        .iter()
+        .map(|(_, a)| match a {
+            Action::Brush(b) => brush_size(&rules, *b),
+            _ => 0,
+        })
+        .collect();
+    assert_eq!(sizes, [1, 2, 3]);
+}
+
+#[test]
+fn the_palette_paints_nothing_on_a_planet_the_painter_did_not_bring_to_life() {
+    let (mut world, home, moon) = painter_world(false);
+    for planet in [home, moon] {
+        let mut ctl = painter(&world, planet);
+        hud_click(&mut ctl, &mut world, HudRegionKind::PaletteTab, 0);
+        let (palette, actions) = ctl.palette(&world).expect("the order tab");
+        assert!(!palette.tabs[0], "no brushes");
+        assert_eq!(palette.tab, PaletteTab::Order);
+        assert!(palette.groups.is_empty());
+        assert!(
+            actions.iter().all(|(_, a)| !matches!(a, Action::Brush(_))),
+            "no brush"
+        );
+        // The closed tab says why.
+        assert!(
+            palette.tab_notes[0].contains("did not bring"),
+            "{}",
+            palette.tab_notes[0]
+        );
+        let mut hud = HudSnapshot::default();
+        ctl.fill(&world, &mut hud);
+        assert!(!hud.help.starts_with("Paint "), "{}", hud.help);
+    }
+    // In space nothing is painted either.
+    let (world, _, moon) = painter_world(true);
+    let mut ctl = painter(&world, moon);
+    ctl.set_view(ViewCtx {
+        planet: moon,
+        in_space: true,
+        ..ViewCtx::default()
+    });
+    assert!(ctl.brush_families(&world).is_empty());
+}

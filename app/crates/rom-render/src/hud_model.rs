@@ -219,6 +219,14 @@ pub enum IconMark {
     Buy(u32),
     /// A market sale (task 107): what one lot pays now, written along the bottom.
     Sell(u32),
+    /// A painting brush (task 114): a swatch of what it lays along the bottom (`None` when it
+    /// keeps the ground) and its size, 1 to 3 rising bars at the right.
+    Brush {
+        /// Colour of the terrain it lays.
+        swatch: Option<[u8; 3]>,
+        /// Size among the brushes that paint the same: 1 small, 2 wide, 3 huge.
+        size: u8,
+    },
 }
 
 /// One command button.
@@ -258,6 +266,28 @@ pub struct HudPalette {
     pub page_name: String,
     /// Buttons of the shown page.
     pub buttons: Vec<HudButton>,
+    /// Groups of the tab's pages, listed beside the grid where the production queue stands (the
+    /// ascended painter's brush families, task 114); empty for every other palette.
+    pub groups: Vec<HudPaletteGroup>,
+    /// Second rollover line of each tab: what it holds, or why it is closed.
+    pub tab_notes: [String; 4],
+}
+
+/// One group of a palette's pages (task 114): a brush family.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HudPaletteGroup {
+    /// Atlas icon name.
+    pub icon: String,
+    /// Display name.
+    pub name: String,
+    /// Buttons in the group.
+    pub count: usize,
+    /// True for the group shown in the grid.
+    pub current: bool,
+    /// True when the armed button belongs to the group.
+    pub armed: bool,
+    /// Second rollover line.
+    pub note: String,
 }
 
 /// One entry of the production queue.

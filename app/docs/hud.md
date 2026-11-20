@@ -73,7 +73,7 @@ the right, the minimap to the bottom centre. Rectangles are `x, y, w, h`.
 | Help line | 22, 644, 580, 34 | rollover help text |
 | Palette tabs | 22, 692, 580, 38 | `<` BUILD · ORDER · TRAIN · RESEARCH `>`; active tab has the cyan frame |
 | Command grid | 26, 742, 330, 176 | 5 columns × 3 rows of 58 × 52 slots, pitch 67 × 59, first slot at 28, 744 |
-| Production queue | 370, 735, 232, 185 | title; three rows of icon slot (386, 772, 40 × 38; pitch 49) + progress bar |
+| Production queue | 370, 735, 232, 185 | title; three rows of icon slot (386, 772, 40 × 38; pitch 49) + progress bar; for the ascended painter the brush families (task 114) |
 
 ### Bottom centre
 
@@ -280,6 +280,37 @@ drawn at 136; the shelf adds 3 rows (108 px) to the atlas, 2048 × 467 → 2048 
 session costs about 16 ms of drawing on the render thread (the driver's first use of the strip),
 later ones 0.1–4 ms, plus 0.5–4 ms to finish 1–15 pictures; pictures are ready about 20–30 ms
 after they are drawn.
+
+## The ascended palette (task 114)
+
+An ascended player commands nothing material. Its ORDER tab holds Descend and Bring life; its
+BUILD tab holds the painting brushes (`docs/bringing-life.md`) when the camera is on the globe of
+a planet it brought to life and no city stands there.
+
+- **Families in sight.** The production queue panel (370, 735, 232, 185), empty for an ascended
+  player, becomes **BRUSH FAMILIES**: five rows (380, 768 + 30 n, 218 × 27), one per
+  `life_brush.family` (Land, Water, Elevation, Biomes, Deposits) with the family's icon
+  (`brush_land`, `brush_water`, `brush_elevation`, `brush_biome`, `brush_deposit`), its name and
+  its number of brushes. The family shown in the grid has the cyan frame and a lighter fill; a
+  cyan square before the count marks the family of the brush in hand. A click on a row shows
+  that family's brushes in the slots, in `def.sort` order; the page arrows still step through the families, and the
+  slot keys (Q W E R T / A S D F G / Z X C V B) pick brushes. The page name over the grid is not
+  drawn while families are listed. Rollover on a row names the family and its brushes.
+  `HudPalette::groups`, `HudRegionKind::PaletteGroup`; script `hud family <n>`.
+- **Brushes told apart.** Each brush button shows a picture (the icon of the resource a deposit
+  yields: its node's, or that of the gather site that needs its terrain beside it or stands on
+  it, as the oil well on oil; else its family's icon), a swatch of the terrain it lays along the bottom of the tile (the
+  terrain material's `base_colour`, else its `colour`; none for a brush that keeps the
+  terrain, such as hills) and its size as one to three rising bars at the right: its rank by
+  radius among the brushes of the same family, terrain, node and height (small, wide, huge).
+  `IconMark::Brush`. Rollover: "Desert, wide · wide brush, 18 tiles across".
+- **Says what to do.** With the BUILD tab open the hint line names the families ("Paint land,
+  water, mountains, biomes and deposits", then "Pick a family on the right, then a brush (Q to
+  B), and click the ground"), or the brush in hand and how to put it down. A hint holding a
+  line break is drawn as the help line's two lines. On a planet the player may not paint, the BUILD tab is
+  closed; its rollover (`HudPalette::tab_notes`) and a click on it say why ("You did not bring
+  Earth to life: only a planet you brought to life is painted", or that a city stands there,
+  or, at the system and star-map levels, to paint on a globe).
 
 ## Game menu (task 63)
 

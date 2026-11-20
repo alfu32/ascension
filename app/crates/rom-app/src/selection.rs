@@ -392,8 +392,8 @@ fn rules_class(world: &World, entity: &Entity) -> EntityClass {
     world.rules().entity_types[&entity.type_id].class
 }
 
-/// The icon of a brush (task 77): a deposit shows the resource it yields, other brushes their
-/// family's picture.
+/// The icon of a brush (task 77): a deposit shows the resource it yields (by the gather site that
+/// needs or stands on its terrain, or its node's), other brushes their family's picture.
 fn brush_icon(rules: &Rules, brush: DefId) -> String {
     let Some(row) = rules.brushes.get(&brush) else {
         return "icons/brush_land".into();
@@ -416,18 +416,100 @@ fn brush_icon(rules: &Rules, brush: DefId) -> String {
                 .filter_map(|et| et.gather_site.as_ref())
                 .find(|g| g.needs_node_terrain_id == Some(terrain))
                 .map(|g| g.resource_id)
+        })
+        .or_else(|| {
+            // A deposit a gather site stands on (oil under its well).
+            let terrain = row
+                .terrain_id
+                .filter(|_| row.family == rom_rules::BrushFamily::Deposit)?;
+            rules.entity_types.values().find_map(|et| {
+                et.placement_rules
+                    .iter()
+                    .any(|p| {
+                        p.rule == rom_rules::PlacementKind::OnTerrain
+                            && p.ref_def_id == Some(terrain)
+                    })
+                    .then_some(et.gather_site.as_ref()?.resource_id)
+            })
         });
     match (row.family, resource) {
         (rom_rules::BrushFamily::Deposit | rom_rules::BrushFamily::Biome, Some(resource)) => {
             let key = rules.key(resource);
             format!("icons/res_{}", key.split_once('.').map_or(key, |(_, k)| k))
         }
-        (rom_rules::BrushFamily::Deposit, None) => "icons/res_oil".into(),
-        (rom_rules::BrushFamily::Land, _) => "icons/brush_land".into(),
-        (rom_rules::BrushFamily::Water, _) => "icons/brush_water".into(),
-        (rom_rules::BrushFamily::Elevation, _) => "icons/brush_elevation".into(),
-        (rom_rules::BrushFamily::Biome, None) => "icons/brush_biome".into(),
+        (family, _) => family_icon(family).into(),
     }
+}
+
+/// The picture of a brush family (task 114).
+fn family_icon(family: rom_rules::BrushFamily) -> &'static str {
+    match family {
+        rom_rules::BrushFamily::Land => "icons/brush_land",
+        rom_rules::BrushFamily::Water => "icons/brush_water",
+        rom_rules::BrushFamily::Elevation => "icons/brush_elevation",
+        rom_rules::BrushFamily::Biome => "icons/brush_biome",
+        rom_rules::BrushFamily::Deposit => "icons/brush_deposit",
+    }
+}
+
+/// The name of a brush family as the palette lists it, and as the hint line says it.
+fn family_names(family: rom_rules::BrushFamily) -> (&'static str, &'static str) {
+    match family {
+        rom_rules::BrushFamily::Land => ("Land", "land"),
+        rom_rules::BrushFamily::Water => ("Water", "water"),
+        rom_rules::BrushFamily::Elevation => ("Elevation", "mountains"),
+        rom_rules::BrushFamily::Biome => ("Biomes", "biomes"),
+        rom_rules::BrushFamily::Deposit => ("Deposits", "deposits"),
+    }
+}
+
+/// A brush's size among the brushes that paint the same thing (family, terrain, node and
+/// height), by radius: 1 small, 2 wide, 3 huge (task 114).
+fn brush_size(rules: &Rules, brush: DefId) -> u8 {
+    let Some(row) = rules.brushes.get(&brush) else {
+        return 1;
+    };
+    let paints = |b: &rom_rules::LifeBrush| {
+        (
+            b.family,
+            b.terrain_id,
+            b.node_type_id,
+            b.height_op,
+            b.height,
+        )
+    };
+    let smaller = rules
+        .brushes
+        .values()
+        .filter(|b| paints(b) == paints(row) && b.radius < row.radius)
+        .count();
+    (smaller + 1).min(3) as u8
+}
+
+/// The mark of a brush's button: the colour of the terrain it lays and its size (task 114).
+fn brush_mark(rules: &Rules, brush: DefId) -> rom_render::IconMark {
+    rom_render::IconMark::Brush {
+        swatch: rules
+            .brushes
+            .get(&brush)
+            .and_then(|b| b.terrain_id)
+            .and_then(|t| crate::terrain::terrain_swatch(rules, t)),
+        size: brush_size(rules, brush),
+    }
+}
+
+/// A brush's rollover name: its own, its size and how many tiles across it paints.
+fn brush_label(rules: &Rules, brush: DefId) -> String {
+    let size = ["small", "wide", "huge"][usize::from(brush_size(rules, brush).clamp(1, 3) - 1)];
+    let across = rules
+        .brushes
+        .get(&brush)
+        .map_or(1, |b| (2 * b.radius / 1000).max(1));
+    format!(
+        "{} \u{b7} {size} brush, {across} tile{} across",
+        rules.def(brush).name,
+        if across == 1 { "" } else { "s" }
+    )
 }
 
 fn stance_icon(behavior: &str) -> &'static str {
@@ -941,11 +1023,10 @@ impl Controller {
         }
     }
 
-    /// The brushes the person may paint the planet shown with, by family in rules order, as
-    /// pages of the palette: none unless it brought that planet to life and may paint it.
-    fn brush_pages(&self, world: &World) -> Vec<PageRows> {
-        let me = self.me();
-        if self.view.in_space || world.paint_check(me, self.view.planet).is_err() {
+    /// The brushes the person may paint the planet shown with, by family in rules order: none
+    /// unless it brought that planet to life and may paint it.
+    fn brush_families(&self, world: &World) -> Vec<(rom_rules::BrushFamily, Vec<DefId>)> {
+        if self.paint_refusal(world).is_some() {
             return Vec::new();
         }
         let rules = world.rules();
@@ -955,22 +1036,63 @@ impl Controller {
         }
         by_family
             .into_iter()
-            .flat_map(|(family, mut ids)| {
+            .map(|(family, mut ids)| {
                 ids.sort_by_key(|id| (rules.def(*id).sort, *id));
-                let name = match family {
-                    rom_rules::BrushFamily::Land => "Land",
-                    rom_rules::BrushFamily::Water => "Water",
-                    rom_rules::BrushFamily::Elevation => "Elevation",
-                    rom_rules::BrushFamily::Biome => "Biomes",
-                    rom_rules::BrushFamily::Deposit => "Deposits",
-                };
+                (family, ids)
+            })
+            .collect()
+    }
+
+    /// Why the ascended person may not paint the planet shown, or `None` when it may.
+    fn paint_refusal(&self, world: &World) -> Option<String> {
+        if self.view.in_space {
+            return Some("Paint on the globe of a planet you brought to life".into());
+        }
+        world.paint_check(self.me(), self.view.planet).err().map(|error| {
+            let name = world
+                .body(self.view.planet)
+                .map_or_else(String::new, |b| b.name.clone());
+            match error {
+                rom_sim::SimError::NotYourLiving if !name.is_empty() => format!(
+                    "You did not bring {name} to life: only a planet you brought to life is painted"
+                ),
+                other => rejection_message(world, self.me(), &other, None),
+            }
+        })
+    }
+
+    /// The hint line of the ascended painter's Build tab (task 114): the brush in hand, else the
+    /// families it may paint with.
+    fn paint_hint(&self, world: &World) -> Option<String> {
+        let families = self.brush_families(world);
+        if self.tab != PaletteTab::Build || families.is_empty() {
+            return None;
+        }
+        if let Some(brush) = self.brush {
+            return Some(format!(
+                "{}\nClick the ground to paint; Escape puts the brush down",
+                brush_label(world.rules(), brush)
+            ));
+        }
+        let words: Vec<&str> = families.iter().map(|(f, _)| family_names(*f).1).collect();
+        let list = match words.split_last() {
+            Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.join(", ")),
+            _ => words.join(""),
+        };
+        Some(format!(
+            "Paint {list}\nPick a family on the right, then a brush (Q to B), and click the ground"
+        ))
+    }
+
+    /// The pages of the brush palette, each with its family's index: a family of more than
+    /// fifteen brushes takes more than one page.
+    fn brush_pages(&self, world: &World) -> Vec<(usize, Vec<(usize, DefId)>)> {
+        self.brush_families(world)
+            .into_iter()
+            .enumerate()
+            .flat_map(|(family, (_, ids))| {
                 ids.chunks(15)
-                    .map(|page| {
-                        (
-                            name.to_owned(),
-                            page.iter().enumerate().map(|(s, id)| (s, *id)).collect(),
-                        )
-                    })
+                    .map(|page| (family, page.iter().copied().enumerate().collect()))
                     .collect::<Vec<_>>()
             })
             .collect()
@@ -1668,10 +1790,25 @@ impl Controller {
             HudRegionKind::PaletteTab if button == PointerButton::Left => {
                 if let (Some(tab), Some((palette, _))) =
                     (PaletteTab::from_index(index), self.palette(world))
-                    && palette.tabs[index]
                 {
-                    self.tab = tab;
-                    self.page = None;
+                    if palette.tabs[index] {
+                        self.tab = tab;
+                        self.page = None;
+                    } else if !palette.tab_notes[index].is_empty() {
+                        // A closed tab says why it is closed.
+                        let note = palette.tab_notes[index].clone();
+                        self.say(world, note);
+                    }
+                }
+            }
+            HudRegionKind::PaletteGroup if button == PointerButton::Left => {
+                // The first page of that group (task 114: a brush family).
+                if let Some(page) = self
+                    .brush_pages(world)
+                    .iter()
+                    .position(|(family, _)| *family == index)
+                {
+                    self.page = Some(page);
                 }
             }
             HudRegionKind::PaletteArrow if button == PointerButton::Left => {
@@ -1771,6 +1908,7 @@ impl Controller {
         // An ascended player commands nothing material: it may descend (task 76), bring moons
         // and asteroids to life and paint the planets it brought to life (task 77).
         if world.is_ascended(me) {
+            let families = self.brush_families(world);
             let brushes = self.brush_pages(world);
             let tabs = [!brushes.is_empty(), true, false, false];
             let tab = if tabs[self.tab.index()] {
@@ -1784,13 +1922,41 @@ impl Controller {
                 pages: 1,
                 ..HudPalette::default()
             };
+            palette.tab_notes[0] = match self.paint_refusal(world) {
+                Some(why) => why,
+                None => {
+                    "The brushes: paint this planet's land, water, heights, biomes and deposits"
+                        .into()
+                }
+            };
             let actions: Vec<(usize, Action)> = if tab == PaletteTab::Build {
                 let count = brushes.len().max(1);
                 let page = self.page.unwrap_or(0).min(count - 1);
-                let (name, entries) = brushes.get(page).cloned().unwrap_or_default();
+                let (family, entries) = brushes.get(page).cloned().unwrap_or_default();
                 palette.pages = count;
                 palette.page = page;
-                palette.page_name = name;
+                palette.page_name = families
+                    .get(family)
+                    .map_or("", |(f, _)| family_names(*f).0)
+                    .to_owned();
+                // Every family stays in sight beside the grid, the shown one framed.
+                palette.groups = families
+                    .iter()
+                    .enumerate()
+                    .map(|(n, (f, ids))| rom_render::HudPaletteGroup {
+                        icon: family_icon(*f).into(),
+                        name: family_names(*f).0.into(),
+                        count: ids.len(),
+                        current: n == family,
+                        armed: self.brush.is_some_and(|b| ids.contains(&b)),
+                        note: ids
+                            .iter()
+                            .filter(|id| brush_size(world.rules(), **id) == 1)
+                            .map(|id| world.rules().def(*id).name.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    })
+                    .collect();
                 entries
                     .into_iter()
                     .map(|(s, d)| (s, Action::Brush(d)))
@@ -2158,8 +2324,9 @@ impl Controller {
                 button.armed = self.life_pick;
             }
             Action::Brush(def) => {
-                button.name = rules.def(def).name.clone();
+                button.name = brush_label(rules, def);
                 button.icon = brush_icon(rules, def);
+                button.mark = brush_mark(rules, def);
                 button.armed = self.brush == Some(def);
             }
             Action::Release => {
@@ -2894,6 +3061,9 @@ impl Controller {
         hud.help = self.wealth_help(world).unwrap_or_default();
         if hud.help.is_empty() && self.trade_pick && !self.selected_traders(world).is_empty() {
             hud.help = self.trade_hint(world);
+        }
+        if hud.help.is_empty() && world.is_ascended(me) {
+            hud.help = self.paint_hint(world).unwrap_or_default();
         }
         hud.trade_targets = self.trade_targets(world);
         let pending: Vec<_> = self

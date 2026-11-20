@@ -1469,6 +1469,19 @@ after every other definition so earlier ids stay:
   `body_life(body_id, player_id, since_tick, strokes, heights)`. A body brought to life is a
   `habitable` body row with `n` and a `surface` row; its marker is a planet marker.
 
+## Every nature paintable (task 114)
+
+Seed only (deliberate; both lint views stay empty, the seed loads), at the end of `seed.sql` after
+every other definition so earlier ids stay; no schema change:
+
+- **Five `life_brush` rows** (32 in all). `brush.ice.small` / `.large` ("Ice", "Ice, wide") and
+  `brush.barren.small` / `.large` ("Barren Rock", "Barren Rock, wide"): family `biome`, `keep`,
+  radius 4 000 and 9 000, made for every ground terrain no brush laid yet. Barren rock is the
+  dormant ground, so it also clears a biome. `brush.deposit.relics.large` ("Relic Site,
+  scattered"): family `deposit`, radius 4 000, made for every map node a player keeps or carries.
+- **Constant `life.node_spacing`** 3 000 milli-tiles: a node brush wider than a tile scatters its
+  sites over the disc at least this far apart (`rom-sim` `World::paint_stroke`).
+
 ## Market trading (task 107)
 
 Owner, 2026-11-19: a player with a market buys and sells resources for wealth at prices that rise

@@ -38,9 +38,10 @@ No cost. A body comes to life once.
 
 On a planet it brought to life, the ascended player paints with **brushes** (`life_brush`
 rows, def kind `brush`), while no city stands there (`World::paint_check`; once a city is
-founded the planet is no longer painted). Select a brush on the Build tab of the command panel
-(its pages are the brush families: Land, Water, Elevation, Biomes, Deposits); each click on the
-ground is a `paint` order (subject: the brush; target: the point), applied at the next tick by
+founded the planet is no longer painted). Select a brush on the Build tab of the command panel:
+the brush families (Land, Water, Elevation, Biomes, Deposits) are listed beside the grid where
+the production queue stands, and a click on one shows its brushes in the slots (task 114,
+`docs/hud.md` "The ascended palette"); each click on the ground is a `paint` order (subject: the brush; target: the point), applied at the next tick by
 the simulation, deterministic and saved. Escape puts the brush down.
 
 A stroke (`World::apply_paint`) covers the tiles whose centres lie within the brush's `radius`:
@@ -56,7 +57,10 @@ Water lies below the sea and ground above it: a tile turned to land below sea le
 the ground height, a tile turned to water above it just under the sea. A brush without terrain,
 or with ground terrain and `keep` (biomes, deposits), paints land tiles only. Tiles under a
 building or a unit keep their ground. A node brush sets its node at the centre tile when that is
-free land with no node within its size. After the stroke the movement grids of the surface are
+free land with no node within its size; a node brush wider than a tile then scatters more of its
+sites over the disc, nearest the centre first, each on free land at least `life.node_spacing`
+(3 000 milli-tiles) from every other node (task 114: the scattering relic brush of radius 4 sets
+about five). After the stroke the movement grids of the surface are
 recomputed (`Pathing::refresh_terrain`) and the land count for the territory victory follows.
 
 The brushes of the seed (radius in tiles):
@@ -66,8 +70,15 @@ The brushes of the seed (radius in tiles):
 | Land | Land 3, 8, 16 (plain, set to 112) |
 | Water | Shallows 3, 8 (lower to 92); Deep sea 3, 8, Ocean 16 (lower to 50) |
 | Elevation | Hills 4, 9 (raise to 165); Mountains 3, Mountain range 7 (raise to 240, mountain terrain) |
-| Biomes | Grass (plain), Forest, Desert, Snow, each 4 and 9 (forest 3 and 7) |
-| Deposits | made from the rules by `seed.sql`: every terrain a gather site needs or stands on other than the plain (forest, mountain, oil) at 1.5 and 4, and every map node a player keeps or carries (relic site) |
+| Biomes | Grass (plain), Forest, Desert, Snow, each 4 and 9 (forest 3 and 7); since task 114 also Ice and Barren Rock, 4 and 9, made by `seed.sql` for every ground terrain that had no brush |
+| Deposits | made from the rules by `seed.sql`: every terrain a gather site needs or stands on other than the plain (forest, mountain, oil) at 1.5 and 4, and every map node a player keeps or carries (relic site) at 0.5 and, since task 114, scattered over 4 |
+
+Every natural terrain and node of the rules has a brush (task 114): the ground terrains plain,
+forest, mountain, ice, oil, barren rock, desert and snow; the water terrains shallows and deep;
+the relic site. Not painted: open space and nebula (the space layer, not a planet's ground) and
+the resource bodies' nodes (ore planet, ore and crystal asteroids, tar moon), which are held from
+orbit and are the bodies themselves. Ice and snowfield wear the same material (`mat.ice`), so
+they look alike on the globe; they differ in that nothing is built on ice.
 
 Desert (`ter.desert`) and snow (`ter.snow`) are ground terrains like barren rock: walked like the
 plain, but no building stands on them, since every building needs the plain. A painter who

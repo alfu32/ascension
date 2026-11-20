@@ -57,7 +57,7 @@
 3924 click 0:12,32
 3927 click 0:52,32
 3930 hud arrow 1
-3932 hud slot 6
+3932 hud slot 7
 3934 click 0:32,32
 3937 click 0:20,20
 3940 click 0:44,44

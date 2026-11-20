@@ -368,3 +368,78 @@ fn the_painter_descends_on_its_planet() {
     };
     assert_eq!(run(), run());
 }
+
+#[test]
+fn task_114_brushes_paint_ice_barren_rock_and_scattered_relics() {
+    let run = || {
+        let mut w = world();
+        bring_life(&mut w, P1).unwrap();
+        w.step();
+        for (brush, at) in [
+            ("brush.land.huge", moon(0, 16, 16)),
+            ("brush.land.huge", moon(1, 16, 16)),
+            ("brush.ice.small", moon(0, 8, 8)),
+            ("brush.ice.large", moon(0, 24, 8)),
+            ("brush.barren.small", moon(0, 8, 24)),
+            ("brush.barren.large", moon(1, 8, 8)),
+            ("brush.deposit.relics.large", moon(0, 22, 22)),
+        ] {
+            paint(&mut w, P1, brush, at).unwrap();
+            w.step();
+        }
+        let ice = id(&w, "ter.ice");
+        let barren = id(&w, "ter.barren");
+        assert_eq!(terrain(&w, moon(0, 8, 8)), ice);
+        assert_eq!(terrain(&w, moon(0, 24, 8)), ice);
+        assert_eq!(
+            terrain(&w, moon(0, 30, 8)),
+            ice,
+            "the wide brush reaches 9 tiles"
+        );
+        assert_eq!(terrain(&w, moon(0, 8, 24)), barren);
+        assert_eq!(terrain(&w, moon(1, 8, 8)), barren);
+        // Biomes keep the heights: the ice stays land at the ground height.
+        assert!(height(&w, moon(0, 8, 8)) >= w.sea_height());
+        let relics = id(&w, "node.relics");
+        let sites: Vec<Pos> = w
+            .entities()
+            .filter(|e| e.type_id == relics && e.pos.body == MOON)
+            .map(|e| e.pos)
+            .collect();
+        assert!(sites.len() >= 3, "a scattering of relic sites: {sites:?}");
+        let spacing = w.rules.constant("life.node_spacing").unwrap() as u64;
+        let geo = w.geo(MOON).clone();
+        for (n, a) in sites.iter().enumerate() {
+            assert!(geo.distance(moon(0, 22, 22), *a).unwrap() <= 4000);
+            for b in &sites[n + 1..] {
+                assert!(geo.distance(*a, *b).unwrap() >= spacing, "{a:?} {b:?}");
+            }
+        }
+        assert_eq!(w.living(MOON).unwrap().strokes, 7);
+        w.hash()
+    };
+    assert_eq!(run(), run());
+}
+
+#[test]
+fn every_brush_of_the_rules_paints() {
+    let run = || {
+        let mut w = world();
+        bring_life(&mut w, P1).unwrap();
+        w.step();
+        let brushes: Vec<DefId> = w.rules.brushes.keys().copied().collect();
+        for (n, brush) in brushes.iter().enumerate() {
+            let at = moon((n % 6) as u8, 16, 16);
+            w.submit(Command {
+                subject: Some(*brush),
+                target_pos: Some(at),
+                ..order(P1, "paint")
+            })
+            .unwrap();
+            w.step();
+            assert_eq!(w.living(MOON).unwrap().strokes, n as u64 + 1);
+        }
+        w.hash()
+    };
+    assert_eq!(run(), run());
+}
