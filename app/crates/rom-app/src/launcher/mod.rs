@@ -201,6 +201,16 @@ impl Catalog {
     }
 }
 
+/// Remembers the seat token a server gave for `url`, so the Join form offers Rejoin (task 88).
+pub(crate) fn remember_token(url: &str, token: &str) -> Result<(), String> {
+    let path = config_path()?;
+    let mut config = Config::load(&path)?;
+    config
+        .tokens
+        .insert(url.trim().to_owned(), token.to_owned());
+    config.save_tokens(&path)
+}
+
 /// Opens the launcher without starting raylib or a simulation.
 pub(crate) fn run(arguments: &[String]) -> ExitCode {
     // Launcher-only --after is a timer for visual inspection; it is never forwarded to a child.

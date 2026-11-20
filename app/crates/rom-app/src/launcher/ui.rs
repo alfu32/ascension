@@ -23,7 +23,7 @@ use super::form::{
     preset,
 };
 use super::models;
-use super::simple::{self, Mode, NETWORK_NOTE, NETWORK_READY};
+use super::simple::{self, Mode};
 use super::{Catalog, Choice};
 
 actions!(rom_launcher, [Back, Confirm]);
@@ -183,6 +183,13 @@ impl Launcher {
                                     }
                                 }
                             }
+                        }
+                        // A game remembers seat tokens for the Join form's Rejoin (task 88).
+                        if let Ok(on_disk) = Config::load(&this.path)
+                            && on_disk.tokens != this.config.tokens
+                        {
+                            this.config.tokens = on_disk.tokens;
+                            changed = true;
                         }
                         if changed {
                             cx.notify();
@@ -1338,9 +1345,6 @@ impl Launcher {
 
     /// The final button of a form: starts the game or server it describes.
     fn start(&mut self, mode: Mode, cx: &mut Context<Self>) {
-        if mode.needs_network() && !NETWORK_READY {
-            return;
-        }
         if self
             .last_start
             .is_some_and(|at| at.elapsed() < Duration::from_secs(1))
@@ -1369,9 +1373,6 @@ impl Launcher {
 
     /// Joins with the seat token remembered for the typed address.
     fn rejoin(&mut self, cx: &mut Context<Self>) {
-        if !NETWORK_READY {
-            return;
-        }
         let url = self.config.simple.get("url").trim().to_owned();
         let Some(token) = self.config.tokens.get(&url).cloned() else {
             return;
@@ -1628,16 +1629,14 @@ impl Launcher {
 
     fn render_form(&mut self, mode: Mode, cx: &mut Context<Self>) -> gpui::AnyElement {
         let check = self.simple_check(mode);
-        let blocked = mode.needs_network() && !NETWORK_READY;
         let token = mode == Mode::Join
             && self
                 .config
                 .tokens
                 .contains_key(self.config.simple.get("url").trim());
-        let (note, warn) = match (&check, blocked) {
-            (Err(error), _) => (error.clone(), true),
-            (Ok(_), true) => (NETWORK_NOTE.to_owned(), true),
-            (Ok(_), false) => ("Ready".to_owned(), false),
+        let (note, warn) = match &check {
+            Err(error) => (error.clone(), true),
+            Ok(_) => ("Ready".to_owned(), false),
         };
         let mut buttons = div()
             .flex()
@@ -1653,14 +1652,13 @@ impl Launcher {
                     .primary()
                     .large()
                     .label(mode.action())
-                    .disabled(check.is_err() || blocked)
+                    .disabled(check.is_err())
                     .on_click(cx.listener(move |this, _, _, cx| this.start(mode, cx))),
             );
         if token {
             buttons = buttons.child(
                 Button::new("form-rejoin")
                     .label("Rejoin")
-                    .disabled(blocked)
                     .on_click(cx.listener(|this, _, _, cx| this.rejoin(cx))),
             );
         }

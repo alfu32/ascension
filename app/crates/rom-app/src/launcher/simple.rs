@@ -8,12 +8,6 @@ use serde_json::Value;
 use super::form::Form;
 use crate::args;
 
-/// Whether Host, Join and Run a server may start (task 88 turns this on).
-pub(super) const NETWORK_READY: bool = false;
-
-/// Shown beside the disabled final button of the three network forms.
-pub(super) const NETWORK_NOTE: &str = "Network play arrives with task 88";
-
 /// The most players in one match.
 const MAX_PLAYERS: u32 = 8;
 
@@ -61,11 +55,6 @@ impl Mode {
             Mode::Join => "Join",
             Mode::Serve => "Start server",
         }
-    }
-
-    /// Whether this mode needs the network (and so waits for task 88).
-    pub fn needs_network(self) -> bool {
-        self != Mode::Play
     }
 }
 

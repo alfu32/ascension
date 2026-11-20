@@ -15,11 +15,10 @@ use rom_rules::BodyKind;
 use rom_sim::{PlayerId, PlayerStatus, World};
 
 use crate::chat::{self, Channel, ChatInput, ChatLine, ChatLog, ChatSink};
-use crate::selection::PLAYER;
 
 /// The name a player goes by in the event line, the diplomacy tab and the chat.
-pub fn player_name(world: &World, id: PlayerId) -> String {
-    if id == PLAYER {
+pub fn player_name(world: &World, me: PlayerId, id: PlayerId) -> String {
+    if id == me {
         return "You".to_owned();
     }
     world.players().find(|p| p.id == id).map_or_else(
@@ -56,16 +55,16 @@ pub fn celestial_system(world: &World) -> Option<u32> {
 }
 
 /// "Your ascension" or "Ascension of Romans (2)".
-fn project_name(world: &World, player: PlayerId) -> String {
-    if player == PLAYER {
+fn project_name(world: &World, me: PlayerId, player: PlayerId) -> String {
+    if player == me {
         "Your ascension".to_owned()
     } else {
-        format!("Ascension of {}", player_name(world, player))
+        format!("Ascension of {}", player_name(world, me, player))
     }
 }
 
 /// The ascensions under way, for the star map: beside the system of each library.
-pub fn countdowns(world: &World) -> Vec<CountdownView> {
+pub fn countdowns(world: &World, me: PlayerId) -> Vec<CountdownView> {
     world
         .ascension_projects()
         .into_iter()
@@ -77,7 +76,7 @@ pub fn countdowns(world: &World) -> Vec<CountdownView> {
                 owner: u8::try_from(p.player.0).unwrap_or(u8::MAX),
                 text: format!(
                     "{} {}",
-                    project_name(world, p.player),
+                    project_name(world, me, p.player),
                     clock(world, p.remaining())
                 ),
             })
@@ -86,19 +85,19 @@ pub fn countdowns(world: &World) -> Vec<CountdownView> {
 }
 
 /// The ascended players living on the celestial home, by player.
-pub fn residences(world: &World) -> Vec<ResidenceView> {
+pub fn residences(world: &World, me: PlayerId) -> Vec<ResidenceView> {
     world
         .players()
         .filter(|p| world.is_ascended(p.id))
         .map(|p| ResidenceView {
             owner: u8::try_from(p.id.0).unwrap_or(u8::MAX),
-            name: player_name(world, p.id),
+            name: player_name(world, me, p.id),
         })
         .collect()
 }
 
 /// What changed of the ascension since the last look, and the chat of the celestial home.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct AscensionView {
     started: bool,
     /// Projects under way: player and the tick each was ordered.
@@ -115,14 +114,24 @@ pub struct AscensionView {
     chat: ChatLog,
     /// The keyboard side of the chat, as the window left it.
     pub input: ChatInput,
+    /// The person's player.
+    me: PlayerId,
 }
 
 impl AscensionView {
     /// A view of a match whose `computers` speak for themselves in the channel.
-    pub fn new(computers: BTreeSet<PlayerId>) -> Self {
+    pub fn new(computers: BTreeSet<PlayerId>, me: PlayerId) -> Self {
         Self {
+            started: false,
+            projects: BTreeSet::new(),
+            ascended: BTreeSet::new(),
+            standing: None,
+            living: BTreeSet::new(),
+            claims: BTreeMap::new(),
             computers,
-            ..Self::default()
+            chat: ChatLog::for_player(me),
+            input: ChatInput::default(),
+            me,
         }
     }
 
@@ -138,7 +147,7 @@ impl AscensionView {
 
     /// Takes back the log a save kept.
     pub fn restore(&mut self, log: ChatLog) {
-        self.chat = log;
+        self.chat = log.with_player(self.me);
     }
 
     /// A line the application speaks into the celestial channel (computer players).
@@ -166,11 +175,11 @@ impl AscensionView {
         text: &str,
         sink: Option<&mut dyn ChatSink>,
     ) -> bool {
-        if !chat::send(world, &mut self.chat, PLAYER, channel, text) {
+        if !chat::send(world, &mut self.chat, self.me, channel, text) {
             return false;
         }
         if let Some(sink) = sink {
-            chat::send(world, sink, PLAYER, channel, text);
+            chat::send(world, sink, self.me, channel, text);
         }
         if channel == Channel::Celestial
             && let Some(&other) = self.computers.iter().find(|id| world.is_ascended(**id))
@@ -209,7 +218,7 @@ impl AscensionView {
                 if self.projects.iter().any(|(p, _)| *p == player) {
                     continue;
                 }
-                lines.push(if player == PLAYER {
+                lines.push(if player == self.me {
                     format!(
                         "You have begun the Ascension: {} left. Every player is told; hold your library",
                         clock(world, left)
@@ -217,7 +226,7 @@ impl AscensionView {
                 } else {
                     format!(
                         "{} has begun the Ascension: {} left. Defeat them first to stop it",
-                        player_name(world, player),
+                        player_name(world, self.me, player),
                         clock(world, left)
                     )
                 });
@@ -226,7 +235,7 @@ impl AscensionView {
                 if projects.keys().any(|(p, _)| *p == player) || ascended.contains(&player) {
                     continue;
                 }
-                let name = player_name(world, player);
+                let name = player_name(world, self.me, player);
                 lines.push(match world.player_status(player) {
                     Some(PlayerStatus::Defeated) => {
                         format!("{name} fell before the Ascension was complete")
@@ -237,14 +246,14 @@ impl AscensionView {
             let arrived: Vec<PlayerId> = ascended.difference(&self.ascended).copied().collect();
             let left: Vec<PlayerId> = self.ascended.difference(&ascended).copied().collect();
             for player in arrived {
-                lines.push(if player == PLAYER {
+                lines.push(if player == self.me {
                     "You have ascended: your possessions left the material plane. Explore freely; \
                      Descend from the command panel when you wish"
                         .to_owned()
                 } else {
                     format!(
                         "{} has ascended and left the material plane",
-                        player_name(world, player)
+                        player_name(world, self.me, player)
                     )
                 });
                 if self.computers.contains(&player) {
@@ -267,10 +276,13 @@ impl AscensionView {
                     .home_body(player)
                     .and_then(|b| world.body(b))
                     .map_or_else(|| "the ground".to_owned(), |b| b.name.clone());
-                lines.push(if player == PLAYER {
+                lines.push(if player == self.me {
                     format!("You have descended on {planet}: a city, citizens and the first age")
                 } else {
-                    format!("{} has descended on {planet}", player_name(world, player))
+                    format!(
+                        "{} has descended on {planet}",
+                        player_name(world, self.me, player)
+                    )
                 });
                 if self.computers.contains(&player) {
                     let line = rom_ai::chat_line(player, ChatTopic::Farewell, world.tick());
@@ -278,7 +290,7 @@ impl AscensionView {
                 }
             }
             if standing.is_some() && standing != self.standing {
-                let team = world.players().find(|p| p.id == PLAYER).map(|p| p.team);
+                let team = world.players().find(|p| p.id == self.me).map(|p| p.team);
                 // First, so the news of an ascension or a descent stays on the event line.
                 lines.insert(
                     0,
@@ -290,7 +302,7 @@ impl AscensionView {
                         let names: Vec<String> = world
                             .players()
                             .filter(|p| p.id != PlayerId(0) && Some(p.team) == standing)
-                            .map(|p| player_name(world, p.id))
+                            .map(|p| player_name(world, self.me, p.id))
                             .collect();
                         format!("{} remain the last material power", names.join(", "))
                     },
@@ -307,17 +319,17 @@ impl AscensionView {
                 let name = world
                     .body(body)
                     .map_or_else(|| "a moon".to_owned(), |b| b.name.clone());
-                let who = if life.by == PLAYER {
+                let who = if life.by == self.me {
                     "You have".to_owned()
                 } else {
-                    format!("{} has", player_name(world, life.by))
+                    format!("{} has", player_name(world, self.me, life.by))
                 };
                 let claim = match self.claims.get(&body) {
-                    Some(&holder) if holder == PLAYER => ": your claim on it has ended".to_owned(),
+                    Some(&holder) if holder == self.me => ": your claim on it has ended".to_owned(),
                     Some(&holder) => {
                         format!(
                             ": the claim of {} on it has ended",
-                            player_name(world, holder)
+                            player_name(world, self.me, holder)
                         )
                     }
                     None => ": its resources are gone, its ground is open".to_owned(),
@@ -344,7 +356,7 @@ impl AscensionView {
                 (
                     format!(
                         "{}  {}",
-                        project_name(world, p.player).to_uppercase(),
+                        project_name(world, self.me, p.player).to_uppercase(),
                         clock(world, p.remaining())
                     ),
                     colour_of(p.player),
@@ -372,12 +384,12 @@ impl AscensionView {
                     _ => "playing".to_owned(),
                 };
                 [
-                    (player_name(world, p.id), colour_of(p.id)),
+                    (player_name(world, self.me, p.id), colour_of(p.id)),
                     (format!("  {state}"), [232, 201, 138, 255]),
                 ]
             })
             .collect();
-        let ascended = world.is_ascended(PLAYER);
+        let ascended = world.is_ascended(self.me);
         hud.chat = self.chat.view(world, &self.input);
         if !celestial_in_view {
             return;
@@ -393,7 +405,10 @@ impl AscensionView {
         } else {
             lines.push(("Residents:".to_owned(), [151, 165, 177, 255]));
             for id in &residents {
-                lines.push((format!("  {}", player_name(world, *id)), colour_of(*id)));
+                lines.push((
+                    format!("  {}", player_name(world, self.me, *id)),
+                    colour_of(*id),
+                ));
             }
         }
         if ascended {
@@ -409,7 +424,11 @@ impl AscensionView {
                 .collect();
             for line in &spoken[spoken.len().saturating_sub(8)..] {
                 lines.push((
-                    format!("{}: {}", player_name(world, line.player), line.text),
+                    format!(
+                        "{}: {}",
+                        player_name(world, self.me, line.player),
+                        line.text
+                    ),
                     colour_of(line.player),
                 ));
             }
@@ -431,6 +450,7 @@ mod tests {
     use super::*;
     use crate::match_setup::build_universe_match;
     use crate::script::ScriptSetup;
+    use crate::selection::PLAYER;
     use rom_sim::{Command, EntityId, Pos};
 
     /// A universe match with player one ready to ascend and a library beside its city.
@@ -480,9 +500,9 @@ mod tests {
         use crate::selection::{Controller, ViewCtx};
         use rom_render::{HudRegionKind, Modifiers, PickEvent, PointerButton, SurfacePos};
         let (mut world, computers, universe) = ready_with_universe();
-        let mut view = AscensionView::new(computers);
+        let mut view = AscensionView::new(computers, PLAYER);
         view.update(&world);
-        crate::script::ascend(&mut world, PLAYER).unwrap();
+        crate::script::ascend(&mut crate::selection::OrderSink::Lead(&mut world), PLAYER).unwrap();
         while !world.is_ascended(PLAYER) {
             world.step();
             assert!(world.tick() < 20_000);
@@ -576,9 +596,9 @@ mod tests {
     #[test]
     fn everyone_is_told_of_the_project_and_the_ascension() {
         let (mut world, computers) = ready();
-        let mut view = AscensionView::new(computers);
+        let mut view = AscensionView::new(computers, PLAYER);
         view.update(&world);
-        crate::script::ascend(&mut world, PLAYER).unwrap();
+        crate::script::ascend(&mut crate::selection::OrderSink::Lead(&mut world), PLAYER).unwrap();
         world.step();
         let lines = view.update(&world);
         assert!(
@@ -595,12 +615,16 @@ mod tests {
         );
         let celestial = celestial_system(&world).expect("a celestial home");
         assert_eq!(
-            countdowns(&world)[0].system,
+            countdowns(&world, PLAYER)[0].system,
             world.body(world.home_body(PLAYER).unwrap()).unwrap().system
         );
         // Everyone may look at the celestial home; only the ascended know every system.
-        assert!(crate::space_view::known_systems(&world).contains(&celestial));
-        crate::script::ascend(&mut world, PlayerId(2)).unwrap();
+        assert!(crate::space_view::known_systems(PLAYER, &world).contains(&celestial));
+        crate::script::ascend(
+            &mut crate::selection::OrderSink::Lead(&mut world),
+            PlayerId(2),
+        )
+        .unwrap();
         let mut told = Vec::new();
         while !(world.is_ascended(PLAYER) && world.is_ascended(PlayerId(2))) {
             world.step();
@@ -611,9 +635,9 @@ mod tests {
             told.iter().any(|l| l.starts_with("You have ascended")),
             "{told:?}"
         );
-        assert_eq!(residences(&world).len(), 2);
+        assert_eq!(residences(&world, PLAYER).len(), 2);
         assert_eq!(
-            crate::space_view::known_systems(&world).len(),
+            crate::space_view::known_systems(PLAYER, &world).len(),
             world.systems().len()
         );
         // The computer player greets the channel and answers the person.

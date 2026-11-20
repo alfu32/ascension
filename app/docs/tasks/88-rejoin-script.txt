@@ -1,0 +1,23 @@
+# Rejoining (no picture): Ada plays in the app against a headless `rom serve`. The server is
+# stopped (SIGTERM saves) and resumed on the same folder; Ada's game rejoins by itself with its
+# seat token and reloads the match from the server's snapshot, without restarting its window.
+# Then a second run of the game joins with the token the first remembered in launcher.json
+# (what the Join form's Rejoin passes) and receives the match under way as a snapshot.
+. docs/tasks/88-common-script.txt
+rm -rf "$T" && mkdir -p "$T"
+SERVE=(serve --state-dir "$T/serve" --port 7403 --humans 1 --ai balanced:moderate --seed 1
+  --style Cluster --autosave-minutes 0)
+"$R" "${SERVE[@]}" --keys 1 > "$T/serve1.log" 2>&1 & S1=$!
+for _ in $(seq 1 60); do grep -q "^key: " "$T/serve1.log" && break; sleep 0.5; done
+KEY=$(sed -n 's/^key: //p' "$T/serve1.log" | head -1)
+run rejoin ROM_NET_READY=1 -- --connect http://127.0.0.1:7403/ --key "$KEY" --name Ada \
+  --size 960x600 --bench 45 & C=$!
+sleep 25; kill -TERM $S1; wait $S1
+"$R" "${SERVE[@]}" --resume > "$T/serve2.log" 2>&1 & S2=$!
+wait $C
+TOKEN=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['tokens']['http://127.0.0.1:7403/'])" \
+  "$T/rejoin/rise-of-man/launcher.json")
+run rejoin2 -- --connect http://127.0.0.1:7403/ --token "$TOKEN" --name Ada --size 960x600 --bench 8
+kill -TERM $S2; wait $S2
+grep -h "saved\|resumed\|took seat\|snapshot\|left" "$T/serve1.log" "$T/serve2.log"
+grep -h "sim_tick" "$T/rejoin.log" "$T/rejoin2.log"

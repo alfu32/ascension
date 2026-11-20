@@ -145,11 +145,12 @@ fn allied(world: &World, a: PlayerId, b: PlayerId) -> bool {
 /// `system` and the ships in transit.
 #[cfg(test)]
 pub fn space_snapshot(world: &World, system: u32, sightings: &[Sighting<'_>]) -> SpaceSnapshot {
-    space_snapshot_with(world, &SystemIndex::new(world), system, sightings)
+    space_snapshot_with(PLAYER, world, &SystemIndex::new(world), system, sightings)
 }
 
 /// [`space_snapshot`] with the match's system index, built once by the caller.
 pub fn space_snapshot_with(
+    me: PlayerId,
     world: &World,
     index: &SystemIndex,
     system: u32,
@@ -168,7 +169,7 @@ pub fn space_snapshot_with(
         .filter(|b| world.tick().saturating_sub(b.tick) < u64::from(rom_render::FLASH_TICKS))
         .filter(|b| {
             world.is_visible_on_body(
-                crate::selection::PLAYER,
+                me,
                 b.pos.body,
                 b.pos.face,
                 b.pos.x.div_euclid(1000),
@@ -201,7 +202,7 @@ pub fn space_snapshot_with(
         .frames()
         .map(|(id, frame)| (frame.body, (id, frame)))
         .collect();
-    snapshot.strikes = strikes(world, &planes);
+    snapshot.strikes = strikes(me, world, &planes);
     for sighting in sightings {
         let Sighting::Live(e) = sighting else {
             continue;
@@ -270,10 +271,10 @@ pub fn space_snapshot_with(
             let Some(info) = world.body(body).filter(|b| b.system == system) else {
                 continue;
             };
-            let seen = allied(world, PLAYER, owner)
+            let seen = allied(world, me, owner)
                 || world.body_position(info.id).is_some_and(|at| {
                     world.is_visible_on_body(
-                        PLAYER,
+                        me,
                         frame.body,
                         0,
                         at.x.div_euclid(1000),
@@ -289,7 +290,7 @@ pub fn space_snapshot_with(
         }
         let visible = |at: Pos| {
             world.is_visible_on_body(
-                PLAYER,
+                me,
                 frame.body,
                 0,
                 at.x.div_euclid(1000),
@@ -302,46 +303,50 @@ pub fn space_snapshot_with(
             .filter_map(|id| world.body(*id))
             .filter(|b| b.kind == BodyKind::Resource)
         {
-            let Some(mut view) = resource_view(world, info.id) else {
+            let Some(mut view) = resource_view(me, world, info.id) else {
                 continue;
             };
             let seen = |owner: PlayerId| {
-                allied(world, PLAYER, owner) || world.body_position(info.id).is_some_and(visible)
+                allied(world, me, owner) || world.body_position(info.id).is_some_and(visible)
             };
             view.claim = match world.body_claim(info.id) {
-                BodyClaim::Held(owner) if allied(world, PLAYER, owner) => ClaimState::Yours,
+                BodyClaim::Held(owner) if allied(world, me, owner) => ClaimState::Yours,
                 BodyClaim::Held(owner) if seen(owner) => {
                     ClaimState::Other(u8::try_from(owner.0).unwrap_or(u8::MAX))
                 }
-                BodyClaim::Contested if seen(PLAYER) => ClaimState::Contested,
+                BodyClaim::Contested if seen(me) => ClaimState::Contested,
                 _ => ClaimState::Unclaimed,
             };
             snapshot.resources.push(view);
         }
     }
-    snapshot.transits = transits(world);
-    snapshot.known = Some(known_systems(world));
-    snapshot.countdowns = crate::ascension_view::countdowns(world);
-    snapshot.residences = crate::ascension_view::residences(world);
-    snapshot.colonies = colonies(world);
-    snapshot.charted = Some(world.known_routes(PLAYER));
-    snapshot.charges = charges(world, &snapshot.ships);
-    snapshot.holds = holds(world, index);
+    snapshot.transits = transits(me, world);
+    snapshot.known = Some(known_systems(me, world));
+    snapshot.countdowns = crate::ascension_view::countdowns(world, me);
+    snapshot.residences = crate::ascension_view::residences(world, me);
+    snapshot.colonies = colonies(me, world);
+    snapshot.charted = Some(world.known_routes(me));
+    snapshot.charges = charges(me, world, &snapshot.ships);
+    snapshot.holds = holds(me, world, index);
     snapshot
 }
 
 /// Jump inhibitors' recent blows on arriving ships that player one sees (task 104): on its own
 /// or an ally's ships, by its own or an ally's inhibitor, or in sight; oldest first.
-fn strikes(world: &World, planes: &BTreeMap<BodyId, (u32, SpaceFrame)>) -> Vec<StrikeView> {
+fn strikes(
+    me: PlayerId,
+    world: &World,
+    planes: &BTreeMap<BodyId, (u32, SpaceFrame)>,
+) -> Vec<StrikeView> {
     world
         .arrival_strikes()
         .iter()
         .filter(|s| world.tick().saturating_sub(s.tick) < u64::from(rom_render::STRIKE_FLASH_TICKS))
         .filter(|s| {
-            allied(world, PLAYER, s.ship_owner)
-                || allied(world, PLAYER, s.owner)
+            allied(world, me, s.ship_owner)
+                || allied(world, me, s.owner)
                 || world.is_visible_on_body(
-                    PLAYER,
+                    me,
                     s.pos.body,
                     s.pos.face,
                     s.pos.x.div_euclid(1000),
@@ -363,10 +368,10 @@ fn strikes(world: &World, planes: &BTreeMap<BodyId, (u32, SpaceFrame)>) -> Vec<S
 }
 
 /// The ships of player one and its allies among `ships` that are charging a jump.
-pub fn charges(world: &World, ships: &[ShipView]) -> Vec<ChargeView> {
+pub fn charges(me: PlayerId, world: &World, ships: &[ShipView]) -> Vec<ChargeView> {
     ships
         .iter()
-        .filter(|s| allied(world, PLAYER, PlayerId(u32::from(s.owner))))
+        .filter(|s| allied(world, me, PlayerId(u32::from(s.owner))))
         .filter_map(|s| {
             let charge = world.jump_charge(EntityId(s.id))?;
             Some(ChargeView {
@@ -379,23 +384,22 @@ pub fn charges(world: &World, ships: &[ShipView]) -> Vec<ChargeView> {
 
 /// The systems with a jump inhibitor that player one knows of: its own and its allies', and an
 /// enemy's that holds a ship of player one, or whose ground it has explored. By system.
-pub fn holds(world: &World, index: &SystemIndex) -> Vec<HoldView> {
+pub fn holds(me: PlayerId, world: &World, index: &SystemIndex) -> Vec<HoldView> {
     let mut out: Vec<HoldView> = world
         .jump_inhibitors()
         .filter_map(|(e, _)| {
             let system = world.body(e.pos.body)?.system;
-            let enemy = world.enemies(PLAYER, e.owner);
+            let enemy = world.enemies(me, e.owner);
             let known = !enemy
                 || world.is_explored_on_body(
-                    PLAYER,
+                    me,
                     e.pos.body,
                     e.pos.face,
                     e.pos.x.div_euclid(1000),
                     e.pos.y.div_euclid(1000),
                 )
                 || world.entities().any(|own| {
-                    own.owner == PLAYER
-                        && index.star(system).is_some_and(|star| own.pos.body == star)
+                    own.owner == me && index.star(system).is_some_and(|star| own.pos.body == star)
                 });
             known.then(|| HoldView {
                 system,
@@ -453,7 +457,7 @@ pub fn dress_ships(snapshot: &mut SpaceSnapshot, world: &World, models: &crate::
 
 /// The planets with cities that player one knows of: its own and its allies' everywhere, other
 /// players' where it has explored the city's ground. By system, body and owner.
-pub fn colonies(world: &World) -> Vec<ColonyView> {
+pub fn colonies(me: PlayerId, world: &World) -> Vec<ColonyView> {
     let rules = world.rules();
     let mut out: Vec<ColonyView> = world
         .entities()
@@ -466,9 +470,9 @@ pub fn colonies(world: &World) -> Vec<ColonyView> {
                     .is_some_and(|t| t.is_city)
         })
         .filter(|e| {
-            allied(world, PLAYER, e.owner)
+            allied(world, me, e.owner)
                 || world.is_explored_on_body(
-                    PLAYER,
+                    me,
                     e.pos.body,
                     e.pos.face,
                     e.pos.x.div_euclid(1000),
@@ -491,14 +495,14 @@ pub fn colonies(world: &World) -> Vec<ColonyView> {
 
 /// What the resource body `body` holds and pays player one, with no claim state filled in.
 /// `None` for bodies that are not presence resource bodies.
-pub fn resource_view(world: &World, body: BodyId) -> Option<ResourceBodyView> {
+pub fn resource_view(me: PlayerId, world: &World, body: BodyId) -> Option<ResourceBodyView> {
     let rules = world.rules();
     let info = world.body(body)?;
     let node_type = info.node_type?;
-    let paid = world.body_yield(body, PLAYER)?;
+    let paid = world.body_yield(body, me)?;
     let faction = world
         .players()
-        .find(|p| p.id == PLAYER)
+        .find(|p| p.id == me)
         .map_or(rom_rules::DefId(0), |p| p.faction);
     Some(ResourceBodyView {
         body: body.0,
@@ -529,7 +533,7 @@ pub fn holding_line(world: &World, ship: &rom_sim::Entity) -> Option<String> {
                 at.body == ship.pos.body && ship.pos.distance(at) as i64 <= radius
             })
         })?;
-    let view = resource_view(world, info.id)?;
+    let view = resource_view(ship.owner, world, info.id)?;
     Some(format!("Holds {}: {}", view.kind_name, view.yield_text()))
 }
 
@@ -537,15 +541,15 @@ pub fn holding_line(world: &World, ship: &rom_sim::Entity) -> Option<String> {
 /// (`World::system_explored`, task 111), so the star map's "(unexplored)" label and where a jump
 /// ends agree: its home system, the celestial home, any system in whose plane it or an ally has
 /// had a ship or seen a tile, and every system once it has ascended.
-pub fn known_systems(world: &World) -> Vec<u32> {
-    world.explored_systems(PLAYER)
+pub fn known_systems(me: PlayerId, world: &World) -> Vec<u32> {
+    world.explored_systems(me)
 }
 
 /// Ships between systems that belong to player one or an ally; others are not seen.
-pub fn transits(world: &World) -> Vec<TransitView> {
+pub fn transits(me: PlayerId, world: &World) -> Vec<TransitView> {
     world
         .transits()
-        .filter(|t| allied(world, PLAYER, t.entity.owner))
+        .filter(|t| allied(world, me, t.entity.owner))
         .map(|t| TransitView {
             id: t.entity.id.0,
             kind: u16::try_from(t.entity.type_id.0).unwrap_or(u16::MAX),
@@ -570,6 +574,7 @@ pub enum ClaimChange {
 
 /// The changes between two claim tables, in body order.
 pub fn claim_changes(
+    me: PlayerId,
     before: &BTreeMap<BodyId, PlayerId>,
     now: &BTreeMap<BodyId, PlayerId>,
 ) -> Vec<(BodyId, ClaimChange)> {
@@ -577,8 +582,8 @@ pub fn claim_changes(
     bodies
         .into_iter()
         .filter_map(|body| match (before.get(&body), now.get(&body)) {
-            (b, Some(n)) if *n == PLAYER && b != Some(&PLAYER) => Some((body, ClaimChange::Won)),
-            (Some(b), n) if *b == PLAYER && n != Some(&PLAYER) => Some((body, ClaimChange::Lost)),
+            (b, Some(n)) if *n == me && b != Some(&me) => Some((body, ClaimChange::Won)),
+            (Some(b), n) if *b == me && n != Some(&me) => Some((body, ClaimChange::Lost)),
             _ => None,
         })
         .collect()
@@ -587,13 +592,13 @@ pub fn claim_changes(
 /// The event lines for the jump inhibitors' blows struck after tick `after` (task 104): one per
 /// inhibitor of player one ("Jump inhibitor at Body 2 struck 3 arriving ships, 2 destroyed"),
 /// and one per enemy inhibitor that struck player one's ships.
-pub fn strike_notices(world: &World, after: u64) -> Vec<Notice> {
+pub fn strike_notices(me: PlayerId, world: &World, after: u64) -> Vec<Notice> {
     // (inhibitor, whether it is player one's) → (struck, destroyed, a ship that lives on).
     let mut told: BTreeMap<(EntityId, bool), (usize, usize, Option<EntityId>)> = BTreeMap::new();
     let mut systems: BTreeMap<EntityId, u32> = BTreeMap::new();
     for s in world.arrival_strikes().iter().filter(|s| s.tick > after) {
-        let mine = s.owner == PLAYER;
-        if !mine && s.ship_owner != PLAYER {
+        let mine = s.owner == me;
+        if !mine && s.ship_owner != me {
             continue;
         }
         systems.insert(s.inhibitor, s.system);
@@ -647,7 +652,7 @@ pub fn strike_notices(world: &World, after: u64) -> Vec<Notice> {
 }
 
 /// Remembers ships and claims of player one and words what changed.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Notices {
     ships: BTreeSet<EntityId>,
     claims: BTreeMap<BodyId, PlayerId>,
@@ -661,7 +666,16 @@ pub struct Notices {
     held: BTreeSet<rom_sim::OrderId>,
     /// The tick of the latest arrival strike already told (task 104).
     struck: u64,
+    /// The person's player.
+    me: PlayerId,
     started: bool,
+}
+
+impl Default for Notices {
+    /// The standalone player's notices.
+    fn default() -> Self {
+        Self::for_player(PLAYER)
+    }
 }
 
 /// How to see a newly reached tier (by its rank: 1 a star system, 2 the star map).
@@ -689,6 +703,21 @@ pub struct Notice {
 }
 
 impl Notices {
+    /// Notices for `me`, the person's player.
+    pub fn for_player(me: PlayerId) -> Self {
+        Self {
+            ships: BTreeSet::new(),
+            claims: BTreeMap::new(),
+            travelling: BTreeMap::new(),
+            reach: None,
+            charted: BTreeSet::new(),
+            held: BTreeSet::new(),
+            struck: 0,
+            me,
+            started: false,
+        }
+    }
+
     /// Event lines for what changed since the last call; the first call only remembers.
     pub fn update(&mut self, world: &World) -> Vec<Notice> {
         let mut notices: Vec<Notice> = self
@@ -699,7 +728,7 @@ impl Notices {
         let rules = world.rules();
         let faction = world
             .players()
-            .find(|p| p.id == PLAYER)
+            .find(|p| p.id == self.me)
             .map_or(rom_rules::DefId(0), |p| p.faction);
         let name_of = |system: u32| {
             world
@@ -710,13 +739,13 @@ impl Notices {
         };
         let travelling: BTreeMap<EntityId, u32> = world
             .transits()
-            .filter(|t| t.entity.owner == PLAYER)
+            .filter(|t| t.entity.owner == self.me)
             .map(|t| (t.entity.id, t.destination))
             .collect();
         if self.started {
-            for transit in world.transits().filter(|t| t.entity.owner == PLAYER) {
+            for transit in world.transits().filter(|t| t.entity.owner == self.me) {
                 if !self.travelling.contains_key(&transit.entity.id) {
-                    let charting = !world.knows_route(PLAYER, transit.origin, transit.destination);
+                    let charting = !world.knows_route(self.me, transit.origin, transit.destination);
                     notices.push(Notice {
                         text: format!(
                             "{} departed for {}{}",
@@ -749,7 +778,7 @@ impl Notices {
             }
         }
         self.travelling = travelling;
-        let charted: BTreeSet<(u32, u32)> = world.known_routes(PLAYER).into_iter().collect();
+        let charted: BTreeSet<(u32, u32)> = world.known_routes(self.me).into_iter().collect();
         if self.started {
             let new: Vec<_> = charted.difference(&self.charted).copied().collect();
             match new.as_slice() {
@@ -764,7 +793,7 @@ impl Notices {
                 }),
             }
             for failure in world
-                .order_failures(PLAYER)
+                .order_failures(self.me)
                 .filter(|f| f.reason == "inhibited" && !self.held.contains(&f.order))
             {
                 notices.push(Notice {
@@ -775,19 +804,19 @@ impl Notices {
             }
         }
         self.held = world
-            .order_failures(PLAYER)
+            .order_failures(self.me)
             .filter(|f| f.reason == "inhibited")
             .map(|f| f.order)
             .collect();
         if self.started {
-            notices.extend(strike_notices(world, self.struck));
+            notices.extend(strike_notices(self.me, world, self.struck));
         }
         self.struck = world
             .arrival_strikes()
             .last()
             .map_or(self.struck, |s| s.tick.max(self.struck));
         self.charted = charted;
-        let reach = world.players().find(|p| p.id == PLAYER).and_then(|p| {
+        let reach = world.players().find(|p| p.id == self.me).and_then(|p| {
             let age = rules.ages.get(&p.age)?;
             Some(rules.map_scales.get(&age.map_scale)?.rank)
         });
@@ -810,11 +839,11 @@ impl Notices {
         let rules = world.rules();
         let faction = world
             .players()
-            .find(|p| p.id == PLAYER)
+            .find(|p| p.id == self.me)
             .map_or(rom_rules::DefId(0), |p| p.faction);
         let mut lines = Vec::new();
         let mut ships = BTreeSet::new();
-        for e in world.entities().filter(|e| e.owner == PLAYER) {
+        for e in world.entities().filter(|e| e.owner == self.me) {
             let in_space = world
                 .body(e.pos.body)
                 .is_some_and(|b| b.kind == BodyKind::Star);
@@ -833,13 +862,13 @@ impl Notices {
         ships.extend(
             world
                 .transits()
-                .filter(|t| t.entity.owner == PLAYER)
+                .filter(|t| t.entity.owner == self.me)
                 .map(|t| t.entity.id),
         );
         let claims: BTreeMap<BodyId, PlayerId> = world.claims().collect();
         if self.started {
-            for (body, change) in claim_changes(&self.claims, &claims) {
-                let Some(view) = resource_view(world, body) else {
+            for (body, change) in claim_changes(self.me, &self.claims, &claims) {
+                let Some(view) = resource_view(self.me, world, body) else {
                     continue;
                 };
                 lines.push(match change {
@@ -870,14 +899,14 @@ mod tests {
         let before = BTreeMap::from([(b(1), p(1)), (b(2), p(2))]);
         let now = BTreeMap::from([(b(2), p(1)), (b(3), p(1)), (b(4), p(2))]);
         assert_eq!(
-            claim_changes(&before, &now),
+            claim_changes(PLAYER, &before, &now),
             vec![
                 (b(1), ClaimChange::Lost),
                 (b(2), ClaimChange::Won),
                 (b(3), ClaimChange::Won)
             ]
         );
-        assert!(claim_changes(&now, &now).is_empty());
+        assert!(claim_changes(PLAYER, &now, &now).is_empty());
     }
 }
 
@@ -929,10 +958,10 @@ mod transit_tests {
             })
             .map(|s| s.id)
             .collect();
-        let known: BTreeSet<u32> = known_systems(world).into_iter().collect();
+        let known: BTreeSet<u32> = known_systems(PLAYER, world).into_iter().collect();
         assert!(seen_by_scan.is_subset(&known));
         assert_eq!(
-            space_snapshot_with(world, &index, 1, &[]).known,
+            space_snapshot_with(PLAYER, world, &index, 1, &[]).known,
             space_snapshot(world, 1, &[]).known
         );
     }
@@ -962,7 +991,7 @@ mod transit_tests {
             })
             .unwrap();
         // At first only the home system is known; the other end of the lane is not.
-        let known = known_systems(&game.world);
+        let known = known_systems(PLAYER, &game.world);
         assert!(known.contains(&home_system) && !known.contains(&other));
         let mut controller = Controller::new();
         let mut notices = Notices::default();
@@ -1040,7 +1069,7 @@ mod transit_tests {
         let arrived = arrived.expect("an arrival line");
         assert_eq!(arrived.about, Some(ship));
         // Its destination is known now: its bodies are drawn and named.
-        assert!(known_systems(&game.world).contains(&other));
+        assert!(known_systems(PLAYER, &game.world).contains(&other));
         // Arrived, it is in the space of the other system, still selected.
         let sightings = game.world.visible_entities(PLAYER);
         let space = space_snapshot(&game.world, home_system, &sightings);
@@ -1162,7 +1191,7 @@ mod strike_tests {
             "{struck:?}"
         );
         // The hover over the held system says that arriving ships are struck, and for how much.
-        let holds = holds(world, &SystemIndex::new(world));
+        let holds = holds(PLAYER, world, &SystemIndex::new(world));
         let hold = holds.iter().find(|h| h.system == home_system).unwrap();
         assert!(hold.enemy && i64::from(hold.arrival_damage) == damage);
         let (_, what) = rom_render::space::hold_text(hold);
@@ -1195,7 +1224,7 @@ mod resource_body_tests {
             .find(|b| b.system == system && b.kind == BodyKind::Resource)
             .unwrap()
             .clone();
-        let before = resource_view(world, body.id).unwrap();
+        let before = resource_view(PLAYER, world, body.id).unwrap();
         assert_eq!(before.claim, ClaimState::Unclaimed);
         assert!(before.per_period > 0 && before.period_secs > 0);
         assert!(!before.kind_name.is_empty() && before.icon.starts_with("icons/res_"));
@@ -1226,7 +1255,7 @@ mod resource_body_tests {
                 break;
             }
         }
-        let claimed = resource_view(world, body.id).unwrap();
+        let claimed = resource_view(PLAYER, world, body.id).unwrap();
         let sightings = world.visible_entities(PLAYER);
         let space = space_snapshot(world, system, &sightings);
         let listed = space.resource_body(body.id.0).expect("listed");

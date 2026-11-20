@@ -11,10 +11,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rom_rules::Rules;
 use rom_save::MatchInfo;
-use rom_sim::World;
+use rom_sim::{PlayerId, World};
 
 use crate::computer::{ComputerPlayers, save_match};
-use crate::selection::PLAYER;
 
 /// Slots kept for quick saves and for autosaves.
 pub const KEEP: usize = 3;
@@ -258,19 +257,19 @@ fn slot_path(folder: &Path, prefix: &str) -> PathBuf {
 }
 
 /// The name a save gets when the player gives none: map, age and date.
-pub fn default_name(world: &World, setup: &SaveSetup, at: u64) -> String {
+pub fn default_name(world: &World, player: PlayerId, setup: &SaveSetup, at: u64) -> String {
     format!(
         "{} · {} · {}",
         map_label(&setup.info.map_style),
-        age_name(world),
+        age_name(world, player),
         format_date(at)
     )
 }
 
-fn age_name(world: &World) -> String {
+fn age_name(world: &World, player: PlayerId) -> String {
     world
         .players()
-        .find(|p| p.id == PLAYER)
+        .find(|p| p.id == player)
         .map_or_else(String::new, |p| world.rules().def(p.age).name.clone())
 }
 
@@ -278,6 +277,7 @@ fn age_name(world: &World) -> String {
 /// ticks, on the thread that owns the world.
 pub fn write(
     world: &World,
+    player: PlayerId,
     computers: &ComputerPlayers,
     setup: &SaveSetup,
     speed_pct: u32,
@@ -291,7 +291,7 @@ pub fn write(
         Kind::Manual => {
             let name = request.name.trim();
             let name = if name.is_empty() {
-                default_name(world, setup, at)
+                default_name(world, player, setup, at)
             } else {
                 name.to_owned()
             };
@@ -306,7 +306,7 @@ pub fn write(
         (KEY_NAME, name.clone()),
         (KEY_KIND, request.kind.as_str().into()),
         (KEY_SAVED_AT, at.to_string()),
-        (KEY_AGE, age_name(world)),
+        (KEY_AGE, age_name(world, player)),
     ] {
         info.settings.insert(key.into(), value);
     }

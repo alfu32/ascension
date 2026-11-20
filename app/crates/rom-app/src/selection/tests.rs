@@ -668,13 +668,18 @@ fn placement_check_reports_valid_and_invalid() {
         face: 0,
         ..Pos::default()
     };
-    assert_eq!(placement_check(&fx.world, building, free), Ok(()));
+    assert_eq!(placement_check(&fx.world, PLAYER, building, free), Ok(()));
     assert_eq!(
-        placement_check(&fx.world, building, fx.world.entity(city).unwrap().pos),
+        placement_check(
+            &fx.world,
+            PLAYER,
+            building,
+            fx.world.entity(city).unwrap().pos
+        ),
         Err(SimError::PlacementOverlap)
     );
     assert_eq!(
-        placement_check(&fx.world, building, Pos::flat(100, 100)),
+        placement_check(&fx.world, PLAYER, building, Pos::flat(100, 100)),
         Err(SimError::OutsideMap)
     );
     // The submit result agrees on a valid and an invalid spot.
@@ -1135,20 +1140,22 @@ fn button_states_follow_rules_and_stock() {
     let mut fx = fixture();
     let civic = fx.rules.id_of("tech.civic.1").unwrap();
     assert_eq!(
-        crate::hud::button_state(&fx.world, civic, false),
+        crate::hud::button_state(&fx.world, PLAYER, civic, false),
         ButtonState::Ready
     );
     let poor = fixture_with(0);
     assert!(
-        matches!(crate::hud::button_state(&poor.world, civic, false),
+        matches!(crate::hud::button_state(&poor.world, PLAYER, civic, false),
         ButtonState::Unaffordable { missing } if missing.len() == 2 && missing.iter().all(|(_, n)| *n == 200))
     );
     let locked = fx.rules.id_of("tech.civic.2").unwrap();
-    assert!(matches!(crate::hud::button_state(&fx.world, locked, false),
-        ButtonState::Locked { reason } if reason.contains("Classical")));
+    assert!(
+        matches!(crate::hud::button_state(&fx.world, PLAYER, locked, false),
+        ButtonState::Locked { reason } if reason.contains("Classical"))
+    );
     let done = fixture_config(0, "age.ancient", &["tech.civic.1"]);
     assert_eq!(
-        crate::hud::button_state(&done.world, civic, false),
+        crate::hud::button_state(&done.world, PLAYER, civic, false),
         ButtonState::Done
     );
     let library = fx.spawn(fx.rules.id_of("bld.library").unwrap(), 1, 20, 20);
@@ -1163,8 +1170,10 @@ fn button_states_follow_rules_and_stock() {
     // Submission is already reflected before the public queue exposes it.
     assert_eq!(civic_button(&fx).state, ButtonState::InProgress { pct: 0 });
     fx.step(5);
-    assert!(matches!(crate::hud::button_state(&fx.world, civic, false),
-        ButtonState::InProgress { pct } if pct > 0 && pct < 100));
+    assert!(
+        matches!(crate::hud::button_state(&fx.world, PLAYER, civic, false),
+        ButtonState::InProgress { pct } if pct > 0 && pct < 100)
+    );
     assert!(!civic_button(&fx).state.enabled());
 }
 
@@ -1412,20 +1421,20 @@ fn research_overview_marks_done_next_and_locked() {
 fn rejection_messages_name_the_rule() {
     let fx = fixture();
     assert_eq!(
-        rejection_message(&fx.world, &SimError::CitiesTooClose, None),
+        rejection_message(&fx.world, PLAYER, &SimError::CitiesTooClose, None),
         "Too close to another city (20 tiles)"
     );
     assert_eq!(
-        rejection_message(&fx.world, &SimError::NotInOwnTerritory, None),
+        rejection_message(&fx.world, PLAYER, &SimError::NotInOwnTerritory, None),
         "Outside your borders"
     );
     let barracks = fx.rules.id_of("bld.barracks").unwrap();
     assert_eq!(
-        rejection_message(&fx.world, &SimError::Locked, Some(barracks)),
+        rejection_message(&fx.world, PLAYER, &SimError::Locked, Some(barracks)),
         "Needs Militia"
     );
     assert_eq!(
-        rejection_message(&fx.world, &SimError::NotInCityRadius, None),
+        rejection_message(&fx.world, PLAYER, &SimError::NotInCityRadius, None),
         "Outside a city's economic radius"
     );
     let mut fx = fixture_config(10_000, "age.ancient", &["tech.civic.1"]);
@@ -1434,12 +1443,14 @@ fn rejection_messages_name_the_rule() {
     let builder = fx.spawn(fx.mover(), 1, 10, 10);
     fx.click(builder, false);
     fx.hud(HudRegionKind::CommandSlot, 0, PointerButton::Left, false);
-    fx.ctl.place(&mut fx.world, at(30, 20), false);
+    fx.ctl
+        .place(&mut OrderSink::Lead(&mut fx.world), at(30, 20), false);
     assert_eq!(
         fx.hud_snapshot().events.last().unwrap(),
         "Too close to another city (20 tiles)"
     );
-    fx.ctl.place(&mut fx.world, at(60, 60), false);
+    fx.ctl
+        .place(&mut OrderSink::Lead(&mut fx.world), at(60, 60), false);
     assert_eq!(
         fx.hud_snapshot().events.last().unwrap(),
         "Outside your borders"
@@ -1491,7 +1502,8 @@ fn task_30_scripts_reach_the_capture_states_without_a_window() {
                         target,
                         right,
                         shift,
-                    } => match crate::script::live_pick(&game.world, &target, right, shift) {
+                    } => match crate::script::live_pick(&game.world, PLAYER, &target, right, shift)
+                    {
                         Ok(pick) => ctl.handle(&mut game.world, pick),
                         Err(error) => ctl.notify(&game.world, error),
                     },
@@ -1595,7 +1607,7 @@ fn task_30_scripts_reach_the_capture_states_without_a_window() {
 fn prerequisite_help_names_only_missing_tracks() {
     let fx = fixture_config(10_000, "age.ancient", &["tech.military.1"]);
     let advance = fx.rules.id_of("tech.age.classical").unwrap();
-    let reason = crate::hud::unmet(&fx.world, advance);
+    let reason = crate::hud::unmet(&fx.world, PLAYER, advance);
     assert!(!reason.contains("Militia"));
     assert!(
         ["Chiefdom", "Barter", "Writing"]
@@ -1613,7 +1625,7 @@ fn prerequisite_help_names_only_missing_tracks() {
         ],
     );
     assert_eq!(
-        crate::hud::button_state(&fx.world, advance, false),
+        crate::hud::button_state(&fx.world, PLAYER, advance, false),
         ButtonState::Ready
     );
 }
@@ -1824,7 +1836,7 @@ fn wealth_rejections_name_the_rule() {
         (SimError::NotATradePartner, "Not a trade partner"),
         (SimError::CaravanLimit, "Trade route limit reached (3)"),
     ] {
-        assert_eq!(rejection_message(&fx.world, &error, None), text);
+        assert_eq!(rejection_message(&fx.world, PLAYER, &error, None), text);
     }
 }
 
@@ -1847,7 +1859,7 @@ fn keeper_panel_counts_kept_relics() {
     let keeper = snapshot.entities.iter().find(|e| e.id == temple.0).unwrap();
     assert_eq!((keeper.kept, keeper.capacity), (1, 5));
     assert!(!snapshot.entities.iter().any(|e| e.id == relic.0));
-    assert_eq!(crate::hud::snapshot_of(&fx.world).wealth.relics, 1);
+    assert_eq!(crate::hud::snapshot_of(&fx.world, PLAYER).wealth.relics, 1);
 }
 
 #[test]
@@ -1886,7 +1898,7 @@ fn economy_tab_sums_routes() {
     fx.rclick(Some(city), (50.5, 20.5), false);
     fx.step(1);
     fx.hud(HudRegionKind::DataTab, 2, PointerButton::Left, false);
-    let mut hud = crate::hud::snapshot_of(&fx.world);
+    let mut hud = crate::hud::snapshot_of(&fx.world, PLAYER);
     fx.ctl.fill(&fx.world, &mut hud);
     assert_eq!(hud.data_tab, 2);
     assert_eq!(hud.wealth.routes, 2);
@@ -1931,7 +1943,7 @@ fn wealth_screenshot_script_reaches_capture_without_a_window() {
                     right,
                     shift,
                 } => {
-                    let pick = crate::script::live_pick(&game.world, &target, right, shift)
+                    let pick = crate::script::live_pick(&game.world, PLAYER, &target, right, shift)
                         .unwrap_or_else(|e| {
                             panic!("tick {}: {e}; notices {messages:?}", game.world.tick())
                         });
@@ -1962,7 +1974,7 @@ fn wealth_screenshot_script_reaches_capture_without_a_window() {
         }
     }
     assert!(messages.is_empty(), "{messages:?}");
-    let mut hud = crate::hud::snapshot_of(&game.world);
+    let mut hud = crate::hud::snapshot_of(&game.world, PLAYER);
     ctl.fill(&game.world, &mut hud);
     println!(
         "wealth-script ticks={} cities={} relics_kept={} routes={} per_trip={}",
@@ -2063,7 +2075,7 @@ fn undiscovered_deposit_preview_names_the_required_age() {
     let well = fx.rules.id_of("bld.oil_well").unwrap();
     let age = fx.rules.id_of("age.industrial").unwrap();
     assert_eq!(
-        placement_check(&fx.world, well, at(24, 24)),
+        placement_check(&fx.world, PLAYER, well, at(24, 24)),
         Err(SimError::ResourceAgeRequired(age))
     );
     fx.ctl.placement = Some(Placement {
@@ -2077,7 +2089,7 @@ fn undiscovered_deposit_preview_names_the_required_age() {
     });
     fx.ctl.refresh_placement(&fx.world);
     assert_eq!(fx.ctl.placement.as_ref().unwrap().valid, Some(false));
-    let mut hud = crate::hud::snapshot_of(&fx.world);
+    let mut hud = crate::hud::snapshot_of(&fx.world, PLAYER);
     fx.ctl.fill(&fx.world, &mut hud);
     assert_eq!(
         hud.help,
@@ -2139,8 +2151,8 @@ fn orbital_review_script_trains_launches_selects_and_bombards_through_picks() {
                     right,
                     shift,
                 } => {
-                    let pick =
-                        crate::script::live_pick(&game.world, &target, right, shift).unwrap();
+                    let pick = crate::script::live_pick(&game.world, PLAYER, &target, right, shift)
+                        .unwrap();
                     ctl.handle(&mut game.world, pick);
                 }
                 ScriptAction::Speed(1) => {
@@ -2171,6 +2183,7 @@ fn orbital_review_script_trains_launches_selects_and_bombards_through_picks() {
         if game.world.tick() >= 1300 {
             let snapshot = crate::sim_thread::snapshot_on(
                 &game.world,
+                PLAYER,
                 home,
                 &game.world.visible_entities(PLAYER),
                 &crate::looks::ModelBook::default(),
@@ -2207,7 +2220,7 @@ fn orbital_review_script_trains_launches_selects_and_bombards_through_picks() {
     );
     // The attack-hotkey click takes the same ordinary attack path as right-click.
     ctl.attack_move = true;
-    let pick = crate::script::live_pick(&game.world, "enemy1", false, false).unwrap();
+    let pick = crate::script::live_pick(&game.world, PLAYER, "enemy1", false, false).unwrap();
     ctl.handle(&mut game.world, pick);
     assert!(
         game.world
@@ -2235,7 +2248,7 @@ fn university_with_workers() -> (Fx, EntityId, Vec<EntityId>) {
     let workers: Vec<EntityId> = (0..3).map(|k| fx.spawn(scholar, 1, 16 + k, 24)).collect();
     for worker in &workers {
         assert!(fx.ctl.submit(
-            &mut fx.world,
+            &mut OrderSink::Lead(&mut fx.world),
             *worker,
             "harvest",
             None,
@@ -2351,7 +2364,7 @@ fn placing_a_city_on_another_planet_is_refused_with_a_message() {
     assert!(!fx.ctl.builder_can_reach(&fx.world, city, site));
     assert!(fx.ctl.builder_can_reach(&fx.world, city, at(30, 30)));
     assert_eq!(
-        rejection_message(&fx.world, &SimError::OtherBody, Some(city)),
+        rejection_message(&fx.world, PLAYER, &SimError::OtherBody, Some(city)),
         "No selected builder can reach this site (another planet)"
     );
 }
@@ -2428,7 +2441,8 @@ fn colony_script_run() -> (crate::match_setup::Match, Controller, BodyId, u64) {
                     right,
                     shift,
                 } => {
-                    let pick = crate::script::live_pick(world, &target, right, shift).unwrap();
+                    let pick =
+                        crate::script::live_pick(world, PLAYER, &target, right, shift).unwrap();
                     ctl.handle(world, pick);
                 }
                 // The focus key: the camera comes down to the planet the selected ship orbits.
@@ -2527,7 +2541,7 @@ fn a_carrier_lists_its_passengers_and_offers_unload_and_lift_off() {
     ctl.set_selection(walkers.clone());
     let landed_at = game.world.entity(transport).unwrap().pos;
     ctl.right_click(
-        &mut game.world,
+        &mut OrderSink::Lead(&mut game.world),
         landed_at,
         Some(transport.0),
         Modifiers::default(),
@@ -2548,10 +2562,10 @@ fn a_carrier_lists_its_passengers_and_offers_unload_and_lift_off() {
     assert!(actions.contains(&(4, Action::Unload)));
     assert!(actions.contains(&(5, Action::Lift)));
     // Unload sets them down; Lift off takes the ship back to orbit.
-    ctl.press_slot(&mut game.world, 4, false);
+    ctl.press_slot(&mut OrderSink::Lead(&mut game.world), 4, false);
     game.world.step();
     assert!(game.world.passengers(transport).is_empty());
-    ctl.press_slot(&mut game.world, 5, false);
+    ctl.press_slot(&mut OrderSink::Lead(&mut game.world), 5, false);
     for _ in 0..40 {
         game.world.step();
     }
@@ -2615,8 +2629,8 @@ fn orbital_combat_script(
                     right,
                     shift,
                 } => {
-                    let pick =
-                        crate::script::live_pick(&game.world, &target, right, shift).unwrap();
+                    let pick = crate::script::live_pick(&game.world, PLAYER, &target, right, shift)
+                        .unwrap();
                     ctl.handle(&mut game.world, pick);
                 }
                 ScriptAction::Speed(_)
@@ -2639,6 +2653,7 @@ fn orbital_combat_script(
         ctl.after_step(&mut game.world);
         let snapshot = crate::sim_thread::snapshot_on(
             &game.world,
+            PLAYER,
             home,
             &game.world.visible_entities(PLAYER),
             &crate::looks::ModelBook::default(),
@@ -2749,7 +2764,7 @@ fn carrier_script_boards_craft_and_offers_to_launch_them() {
     assert!(actions.contains(&(4, Action::Unload)));
     assert!(palette.buttons.iter().any(|b| b.name == "Launch craft"));
     // Launch: they come out into the carrier's orbit.
-    ctl.press_slot(&mut game.world, 4, false);
+    ctl.press_slot(&mut OrderSink::Lead(&mut game.world), 4, false);
     game.world.step();
     assert!(game.world.passengers(carrier).is_empty());
     let body = game.world.orbit(carrier).unwrap().body;
@@ -2973,4 +2988,66 @@ fn a_stance_button_gives_an_order() {
         STANCE_BEHAVIORS.len(),
         "every button set its stance"
     );
+}
+
+/// Task 88: the person's orders go into the leader's world standalone and into the outbox for
+/// the server in a network match, where the follower's world stays as the server left it; the
+/// person's player is the session's, not player one's.
+#[test]
+fn the_order_sink_leads_standalone_and_sends_when_following() {
+    let mut fx = fixture();
+    let mover = fx.mover();
+    let unit = fx.spawn(mover, 1, 5, 5);
+    fx.select(&[unit]);
+    let order = || PickEvent::RightClick {
+        world_point: (20.5, 20.5),
+        surface: flat_surface((20.5, 20.5)),
+        entity: None,
+        modifiers: Modifiers::default(),
+    };
+    // Following: the order waits for the server; the world does not change.
+    let before = fx.world.hash();
+    let mut outbox = Outbox::default();
+    fx.ctl.handle_with(
+        &mut OrderSink::Follow {
+            world: &fx.world,
+            outbox: &mut outbox,
+        },
+        order(),
+    );
+    assert_eq!(
+        fx.world.hash(),
+        before,
+        "a follower's world changes only by turns"
+    );
+    assert_eq!(outbox.orders.len(), 1);
+    assert_eq!(outbox.orders[0].executor, unit);
+    assert_eq!(outbox.orders[0].player, PLAYER);
+    fx.step(1);
+    assert!(fx.world.entity(unit).unwrap().orders().is_empty());
+    // Standalone: the same order goes into the leader's world at once.
+    fx.ctl
+        .handle_with(&mut OrderSink::Lead(&mut fx.world), order());
+    fx.step(1);
+    assert!(!fx.world.entity(unit).unwrap().orders().is_empty());
+    // The seat of player two commands player two's units, in its name.
+    let theirs = fx.spawn(mover, 2, 8, 8);
+    let mut seat_two = Controller::for_player(PlayerId(2));
+    let mut outbox = Outbox::default();
+    let mut sink = OrderSink::Follow {
+        world: &fx.world,
+        outbox: &mut outbox,
+    };
+    seat_two.handle_with(
+        &mut sink,
+        PickEvent::BoxSelect {
+            entities: vec![unit.0, theirs.0],
+            modifiers: Modifiers::default(),
+        },
+    );
+    assert_eq!(seat_two.selection(), &[theirs], "only its own units");
+    seat_two.handle_with(&mut sink, order());
+    assert_eq!(outbox.orders.len(), 1);
+    assert_eq!(outbox.orders[0].executor, theirs);
+    assert_eq!(outbox.orders[0].player, PlayerId(2));
 }

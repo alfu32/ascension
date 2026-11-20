@@ -21,9 +21,10 @@ use crate::ascension_view::AscensionView;
 use crate::chat::{Channel, ChatInput, ChatKey, ChatLog};
 use crate::computer::ComputerPlayers;
 use crate::demo::DemoDriver;
+use crate::net::play::{NetEvent, NetPlay};
 use crate::saves::{self, Kind, SaveRequest, SaveSetup, Saved};
 use crate::script::{Script, ScriptAction};
-use crate::selection::{Controller, PLAYER, ViewCtx};
+use crate::selection::{Controller, OrderSink, Outbox, PLAYER, ViewCtx};
 use crate::space_view::{Notices, SpaceFrame, SystemIndex, dress_ships, space_snapshot_with};
 use rom_match::{Input, Journal, MatchCore};
 
@@ -63,14 +64,18 @@ impl UniverseHost {
 
     /// Makes `body` the planet shown: the person's camera visits it (task 85: an input of the
     /// match, which makes its surface when it has none), and the render thread gets its globe.
-    /// Returns whether a surface was added.
+    /// Standalone the visit is applied now for `me`; in a network match (`outbox`) it goes to
+    /// the server, and the globe is drawn from the planet's recipe meanwhile. Returns whether a
+    /// surface was added.
     pub fn show(
         &mut self,
         core: &mut MatchCore,
         body: BodyId,
         bridge: &RenderBridge,
+        me: PlayerId,
+        outbox: Option<&mut crate::selection::Outbox>,
     ) -> Result<bool, String> {
-        let added = self.generate(core, body)?;
+        let added = self.generate(core, body, me, outbox)?;
         self.viewed = body;
         let home = self.home_starts.get(&body).copied().or_else(|| {
             core.universe()?
@@ -161,7 +166,13 @@ impl UniverseHost {
 
     /// Visits `body` for the person when the world has no surface for it, and keeps its globe
     /// for the render thread. Returns whether a surface was added.
-    fn generate(&mut self, core: &mut MatchCore, body: BodyId) -> Result<bool, String> {
+    fn generate(
+        &mut self,
+        core: &mut MatchCore,
+        body: BodyId,
+        me: PlayerId,
+        outbox: Option<&mut crate::selection::Outbox>,
+    ) -> Result<bool, String> {
         let rules = Arc::clone(core.world().rules());
         // A body brought to life shows its painted ground (task 77).
         if !self.scenes.contains_key(&body)
@@ -174,13 +185,22 @@ impl UniverseHost {
         if self.scenes.contains_key(&body) {
             return Ok(false);
         }
-        let added = core.world().surface(body).is_none();
+        let mut added = core.world().surface(body).is_none();
         if added {
-            core.apply(Input::Visit {
-                player: PLAYER,
-                body,
-            })?;
-            self.take_new_planets(core);
+            match outbox {
+                Some(outbox) => {
+                    // The server makes it and journals it; the globe below is drawn from the
+                    // recipe meanwhile.
+                    if core.world().ungenerated_bodies().contains(&body) {
+                        outbox.visits.push(body);
+                    }
+                    added = false;
+                }
+                None => {
+                    core.apply(Input::Visit { player: me, body })?;
+                    self.take_new_planets(core);
+                }
+            }
         }
         if !self.scenes.contains_key(&body) {
             // A planet the world already has (a home planet, a loaded game): drawn from its
@@ -335,6 +355,15 @@ pub struct SimLink {
     chat: Arc<Mutex<ChatInput>>,
     /// Whether the person's player is ascended: only then is the celestial channel open.
     ascended: Arc<AtomicBool>,
+    /// Set in a network match.
+    net: Option<Arc<NetInfo>>,
+}
+
+/// What the window needs to know of a network match.
+#[derive(Debug)]
+pub struct NetInfo {
+    /// Whether this seat is the host (sets the speed, asks the server to save).
+    pub host: bool,
 }
 
 impl SimLink {
@@ -394,10 +423,17 @@ impl SimLink {
             stop: Arc::new(AtomicBool::new(false)),
             chat: Arc::default(),
             ascended: Arc::default(),
+            net: None,
         }
     }
 
-    /// Whether the simulation is held (no tick runs).
+    /// The network match, if this is one.
+    pub fn network(&self) -> Option<&NetInfo> {
+        self.net.as_deref()
+    }
+
+    /// Whether the simulation is held (no tick runs); in a network match, whether someone
+    /// paused it.
     pub fn paused(&self) -> bool {
         self.paused.load(Ordering::Acquire)
     }
@@ -484,6 +520,57 @@ impl SimLink {
     }
 }
 
+/// The match the simulation thread plays.
+pub enum Game {
+    /// Standalone: the thread leads the match (task 85).
+    Lead(Box<MatchCore>),
+    /// A network match: the thread follows the server's (task 88).
+    Follow(Box<NetPlay>),
+}
+
+impl Game {
+    /// The match.
+    fn core(&self) -> &MatchCore {
+        match self {
+            Self::Lead(core) => core,
+            Self::Follow(net) => net.core(),
+        }
+    }
+
+    /// The match, to draw the planets it makes (and, leading, to apply camera visits).
+    fn core_mut(&mut self) -> &mut MatchCore {
+        match self {
+            Self::Lead(core) => core,
+            Self::Follow(net) => net.core_mut(),
+        }
+    }
+
+    /// The world.
+    fn world(&self) -> &World {
+        self.core().world()
+    }
+
+    /// The person's player: player one standalone, the seat's in a network match.
+    pub fn me(&self) -> PlayerId {
+        match self {
+            Self::Lead(_) => PLAYER,
+            Self::Follow(net) => net.player(),
+        }
+    }
+
+    /// The one way the person's orders reach the world: the leader's world now, or the
+    /// server through `outbox`.
+    fn sink<'a>(&'a mut self, outbox: &'a mut Outbox) -> OrderSink<'a> {
+        match self {
+            Self::Lead(core) => OrderSink::Lead(core.world_mut()),
+            Self::Follow(net) => OrderSink::Follow {
+                world: net.core().world(),
+                outbox,
+            },
+        }
+    }
+}
+
 /// What a match starts with besides its world.
 #[derive(Debug, Default)]
 pub struct Extras {
@@ -503,11 +590,11 @@ pub struct SimThread {
 }
 
 impl SimThread {
-    /// Moves the match (its leader, task 85) and the optional demo driver onto a new thread
-    /// that publishes snapshots to `bridge`. `extras` says how saving is set up and whether
-    /// the match starts held.
+    /// Moves the match (its leader, task 85, or a follower of a server, task 88) and the
+    /// optional demo driver onto a new thread that publishes snapshots to `bridge`. `extras`
+    /// says how saving is set up and whether the match starts held.
     pub fn spawn(
-        core: MatchCore,
+        game: Game,
         driver: Option<DemoDriver>,
         script: Option<Script>,
         speed_pct: u32,
@@ -517,6 +604,14 @@ impl SimThread {
     ) -> io::Result<Self> {
         let (commands, inbox) = channel();
         let (requests, request_inbox) = channel();
+        let net = match &game {
+            Game::Lead(_) => None,
+            Game::Follow(net) => Some(Arc::new(NetInfo { host: net.host() })),
+        };
+        let speed_pct = match &game {
+            Game::Lead(_) => speed_pct,
+            Game::Follow(net) => net.speed(),
+        };
         let link = SimLink {
             commands,
             requests,
@@ -535,13 +630,14 @@ impl SimThread {
             stop: Arc::new(AtomicBool::new(false)),
             chat: Arc::default(),
             ascended: Arc::default(),
+            net,
         };
         let thread_link = link.clone();
         let thread = thread::Builder::new()
             .name("rom-sim".into())
             .spawn(move || {
                 run(
-                    core,
+                    game,
                     driver,
                     script,
                     host,
@@ -581,14 +677,16 @@ impl Drop for SimThread {
     }
 }
 
-/// The thread's loop. One tick of the match is `MatchCore::lead`; around it the app does what
-/// a host does between ticks: the person's clicks and camera visits, script lines and the demo
-/// driver before it, requeued orders, notices, saves and the snapshots for the window after
-/// it, and the (unused) order inbox last, as before task 85, so standalone matches play as
-/// they did (`rom_match::core` documents the order of a tick).
+/// The thread's loop. Standalone, one tick of the match is `MatchCore::lead`; around it the app
+/// does what a host does between ticks: the person's clicks and camera visits, script lines and
+/// the demo driver before it, requeued orders, notices, saves and the snapshots for the window
+/// after it, and the (unused) order inbox last, as before task 85, so standalone matches play as
+/// they did (`rom_match::core` documents the order of a tick). In a network match one tick is
+/// the server's turn applied by the follower (`NetPlay::step`), paced by the turns held; the
+/// person's orders and visits gather in the outbox and go to the server once per loop turn.
 #[allow(clippy::too_many_arguments)] // the thread's whole state, moved in once
 fn run(
-    mut core: MatchCore,
+    mut game: Game,
     mut driver: Option<DemoDriver>,
     mut script: Option<Script>,
     mut host: Option<UniverseHost>,
@@ -599,6 +697,8 @@ fn run(
     requests: &Receiver<SaveRequest>,
     bridge: &RenderBridge,
 ) {
+    let me = game.me();
+    let following = matches!(game, Game::Follow(_));
     let autosave_every = saving
         .as_ref()
         .map(|s| u64::from(s.autosave_minutes) * 60 * u64::from(TICKS_PER_SECOND))
@@ -611,32 +711,52 @@ fn run(
     let mut thoughts = (0_u32, Duration::ZERO, Duration::ZERO);
     link.stats
         .computers
-        .store(core.computers().len() as u32, Ordering::Relaxed);
+        .store(game.core().computers().len() as u32, Ordering::Relaxed);
     // The globes of planets made by ships are kept for the render thread.
-    core.keep_new_planets(host.is_some());
-    let mut controller = Controller::new();
+    match &mut game {
+        Game::Lead(core) => core.keep_new_planets(host.is_some()),
+        Game::Follow(net) => net.keep_new_planets(host.is_some()),
+    }
+    let mut controller = Controller::for_player(me);
+    if following {
+        controller.set_network();
+    }
     let suggest = |world: &World| {
         if let (Some(setup), Ok(mut name)) = (saving.as_ref(), link.suggested.lock()) {
-            *name = saves::default_name(world, setup, saves::now_secs());
+            *name = saves::default_name(world, me, setup, saves::now_secs());
         }
     };
-    suggest(core.world());
+    suggest(game.world());
     let mut memory = Memory::default();
-    let models = Arc::new(crate::looks::ModelBook::new(core.world().rules()));
+    let models = Arc::new(crate::looks::ModelBook::new(game.world().rules()));
     controller.set_models(Arc::clone(&models));
-    let mut notices = Notices::default();
+    let mut notices = Notices::for_player(me);
     let mut frames: BTreeMap<u32, Option<SpaceFrame>> = BTreeMap::new();
-    notices.update(core.world());
-    let mut ascension = AscensionView::new(core.computers().players().collect());
+    notices.update(game.world());
+    let computers = match &game {
+        Game::Lead(core) => core.computers().players().collect(),
+        Game::Follow(net) => net.computer_players().into_iter().collect(),
+    };
+    let mut ascension = AscensionView::new(computers, me);
     if let Some(text) = saving
         .as_ref()
         .and_then(|s| s.info.settings.get(crate::chat::SAVE_KEY))
     {
         ascension.restore(ChatLog::decode(text));
     }
-    ascension.update(core.world());
+    ascension.update(game.world());
+    let mut outbox = Outbox::default();
+    let mut net_line = match &game {
+        Game::Lead(_) => None,
+        Game::Follow(net) => {
+            net.report_done();
+            Some(net.line())
+        }
+    };
     publish(
-        core.world(),
+        game.world(),
+        me,
+        net_line.as_ref(),
         &controller,
         link,
         bridge,
@@ -647,47 +767,127 @@ fn run(
     );
     while !link.stop.load(Ordering::Acquire) {
         let now = Instant::now();
-        let current = link.speed.load(Ordering::Relaxed);
-        if current != speed {
-            speed = current;
-            step.set_speed(speed);
-        }
-        let ticks = if link.paused() {
-            0
-        } else {
-            step.advance(now - last)
-        };
+        let elapsed = now - last;
         last = now;
+        let current = link.speed.load(Ordering::Relaxed);
+        let ticks = match &mut game {
+            Game::Lead(_) => {
+                if current != speed {
+                    speed = current;
+                    step.set_speed(speed);
+                }
+                if link.paused() {
+                    0
+                } else {
+                    step.advance(elapsed)
+                }
+            }
+            Game::Follow(net) => {
+                let mut reloaded = false;
+                for event in net.pump() {
+                    let world = net.core().world();
+                    match event {
+                        NetEvent::Notice(text) => controller.notify(world, text),
+                        NetEvent::Refused(text) => {
+                            link.stats.rejected.fetch_add(1, Ordering::Relaxed);
+                            controller.notify(world, text);
+                        }
+                        NetEvent::Chat {
+                            from,
+                            channel,
+                            text,
+                        } => ascension.hear(world, from, channel, &text),
+                        NetEvent::Reloaded => reloaded = true,
+                    }
+                }
+                if reloaded {
+                    // The world is the server's snapshot now: what was drawn starts afresh.
+                    memory = Memory::default();
+                    frames.clear();
+                    notices = Notices::for_player(me);
+                    notices.update(net.core().world());
+                    net.report_done();
+                    publish(
+                        net.core().world(),
+                        me,
+                        net_line.as_ref(),
+                        &controller,
+                        link,
+                        bridge,
+                        &mut memory,
+                        host.as_ref(),
+                        &models,
+                        &ascension,
+                    );
+                }
+                if current != speed {
+                    // The person pressed + or -: the host asks the server, others hear why not;
+                    // the speed changes when the server says so.
+                    if let Err(reason) = net.request_speed(current) {
+                        controller.notify(net.core().world(), reason);
+                    }
+                    link.speed.store(speed, Ordering::Relaxed);
+                }
+                if net.speed() != speed {
+                    speed = net.speed();
+                    step.set_speed(speed);
+                    link.speed.store(speed, Ordering::Relaxed);
+                }
+                link.paused.store(net.paused(), Ordering::Release);
+                net.due(step.advance(elapsed))
+            }
+        };
         // The chat (tasks 76 and 94): what the window typed, sent in the person's name.
         link.ascended
-            .store(core.world().is_ascended(PLAYER), Ordering::Release);
+            .store(game.world().is_ascended(me), Ordering::Release);
         let (input, sent) = link.take_chat(ascension.chat().len());
         for (channel, line) in sent {
-            ascension.say(core.world(), channel, &line);
+            say(&game, &mut ascension, channel, &line);
         }
         let typing = input != ascension.input;
         ascension.input = input;
         while let Ok(request) = requests.try_recv() {
-            let text = write_save(
-                core.world(),
-                core.computers(),
-                saving.as_ref(),
-                speed,
-                link,
-                &request,
-                ascension.log(),
+            let text = match &game {
+                Game::Lead(core) => write_save(
+                    core.world(),
+                    me,
+                    core.computers(),
+                    saving.as_ref(),
+                    speed,
+                    link,
+                    &request,
+                    ascension.log(),
+                ),
+                Game::Follow(net) => {
+                    let name = request.name.trim();
+                    net.save((!name.is_empty()).then(|| name.to_owned()))
+                }
+            };
+            controller.notify(game.world(), text);
+            publish_hud(
+                game.world(),
+                me,
+                net_line.as_ref(),
+                &controller,
+                bridge,
+                &ascension,
             );
-            controller.notify(core.world(), text);
-            publish_hud(core.world(), &controller, bridge, &ascension);
         }
         if let Some(host) = host.as_mut() {
-            // The camera's visit is an input of the match (task 85), applied now as before.
-            if let Some(body) = bridge.take_surface_request()
-                && let Err(error) = host.show(&mut core, BodyId(body), bridge)
-            {
-                eprintln!("rise-of-man: {error}");
+            // The camera's visit is an input of the match (task 85), applied now as before; in a
+            // network match it goes to the server.
+            if let Some(body) = bridge.take_surface_request() {
+                let shown = match &mut game {
+                    Game::Lead(core) => host.show(core, BodyId(body), bridge, me, None),
+                    Game::Follow(net) => {
+                        host.show(net.core_mut(), BodyId(body), bridge, me, Some(&mut outbox))
+                    }
+                };
+                if let Err(error) = shown {
+                    eprintln!("rise-of-man: {error}");
+                }
             }
-            let world = core.world();
+            let world = game.world();
             let view = bridge.view_state();
             let system = view.system.unwrap_or(host.home_system);
             let frame = *frames
@@ -700,7 +900,7 @@ fn run(
                 frame,
             });
         }
-        let world = core.world();
+        let world = game.world();
         link.stats.surfaces.store(
             world
                 .surfaces()
@@ -716,15 +916,34 @@ fn run(
         let picks = bridge.take_picks();
         let interacted = !picks.is_empty();
         for pick in picks {
-            handle_pick(&mut controller, core.world_mut(), link, pick);
+            if handle_pick(&mut controller, &mut game.sink(&mut outbox), link, pick) {
+                toggle_pause(&game, &mut controller, link);
+            }
         }
-        focus_camera(core.world(), &mut controller, bridge);
-        if (interacted || typing) && ticks == 0 {
-            publish_hud(core.world(), &controller, bridge, &ascension);
+        focus_camera(game.world(), &mut controller, bridge);
+        let mut line_changed = false;
+        if let Game::Follow(net) = &game {
+            let line = net.line();
+            if net_line.as_ref() != Some(&line) {
+                net_line = Some(line);
+                line_changed = true;
+            }
+        }
+        if (interacted || typing || line_changed) && ticks == 0 {
+            publish_hud(
+                game.world(),
+                me,
+                net_line.as_ref(),
+                &controller,
+                bridge,
+                &ascension,
+            );
         }
         for _ in 0..ticks {
             if let Some(script) = script.as_mut() {
-                let world = core.world_mut();
+                let mut chat = Vec::new();
+                let mut pauses = 0;
+                let world = &mut game.sink(&mut outbox);
                 for action in script.due_actions(world.tick()) {
                     match action {
                         ScriptAction::SelectShips => controller.select_own_ships(world),
@@ -735,8 +954,8 @@ fn run(
                             target,
                             right,
                             shift,
-                        } => match crate::script::live_pick(world, &target, right, shift) {
-                            Ok(pick) => controller.handle(world, pick),
+                        } => match crate::script::live_pick(world, me, &target, right, shift) {
+                            Ok(pick) => controller.handle_with(world, pick),
                             Err(error) => controller.notify(world, error),
                         },
                         ScriptAction::Speed(percent) => link.set_speed(percent),
@@ -748,9 +967,7 @@ fn run(
                                 controller.notify(world, error);
                             }
                         }
-                        ScriptAction::Chat(channel, line) => {
-                            ascension.say(world, channel, &line);
-                        }
+                        ScriptAction::Chat(channel, line) => chat.push((channel, line)),
                         ScriptAction::ChatFrom(player, channel, line) => {
                             ascension.hear(world, player, channel, &line);
                         }
@@ -769,40 +986,57 @@ fn run(
                     }
                 }
                 for pick in script.due(world.tick()) {
-                    handle_pick(&mut controller, world, link, pick);
+                    if handle_pick(&mut controller, world, link, pick) {
+                        pauses += 1;
+                    }
+                }
+                for (channel, line) in chat {
+                    say(&game, &mut ascension, channel, &line);
+                }
+                for _ in 0..pauses {
+                    toggle_pause(&game, &mut controller, link);
                 }
             }
-            if let Some(driver) = driver.as_mut() {
-                if controller.player_has_ordered() {
-                    driver.release(PLAYER);
+            let journal = match &mut game {
+                Game::Lead(core) => {
+                    if let Some(driver) = driver.as_mut() {
+                        if controller.player_has_ordered() {
+                            driver.release(me);
+                        }
+                        let rejected = driver.drive(core.world_mut()).len() as u64;
+                        link.stats.rejected.fetch_add(rejected, Ordering::Relaxed);
+                    }
+                    // Computer players, governors, the step, and planets ships are bound for.
+                    let outcome = core.lead(Vec::new());
+                    let report = outcome.computers;
+                    thoughts.0 += report.thoughts;
+                    thoughts.1 += report.think_time;
+                    thoughts.2 = thoughts.2.max(report.longest);
+                    link.stats
+                        .computer_orders
+                        .fetch_add(u64::from(report.orders), Ordering::Relaxed);
+                    link.stats
+                        .computer_rejected
+                        .fetch_add(u64::from(report.rejected), Ordering::Relaxed);
+                    for problem in outcome.problems {
+                        eprintln!("rise-of-man: {problem}");
+                    }
+                    Some(outcome.journal)
                 }
-                let rejected = driver.drive(core.world_mut()).len() as u64;
-                link.stats.rejected.fetch_add(rejected, Ordering::Relaxed);
-            }
-            // Computer players, governors, the step, and planets ships are bound for.
-            let outcome = core.lead(Vec::new());
-            let report = outcome.computers;
-            thoughts.0 += report.thoughts;
-            thoughts.1 += report.think_time;
-            thoughts.2 = thoughts.2.max(report.longest);
-            link.stats
-                .computer_orders
-                .fetch_add(u64::from(report.orders), Ordering::Relaxed);
-            link.stats
-                .computer_rejected
-                .fetch_add(u64::from(report.rejected), Ordering::Relaxed);
-            for problem in outcome.problems {
-                eprintln!("rise-of-man: {problem}");
-            }
+                // The server's turn: its journal applied, then the step.
+                Game::Follow(net) => net.step(),
+            };
+            // A follower out of step waits for the server's snapshot.
+            let Some(journal) = journal else { break };
             if let Some(journals) = journals.as_ref() {
-                let _ = journals.send((outcome.journal, core.world().hash()));
+                let _ = journals.send((journal, game.world().hash()));
             }
             if let Some(host) = host.as_mut() {
-                host.follow_life(&core, bridge);
-                host.take_new_planets(&mut core);
+                host.follow_life(game.core(), bridge);
+                host.take_new_planets(game.core_mut());
             }
-            controller.after_step(core.world_mut());
-            let world = core.world();
+            controller.after_step_with(&mut game.sink(&mut outbox));
+            let world = game.world();
             for notice in notices.update(world) {
                 match notice.about {
                     Some(id) => controller.notify_about(world, notice.text, id),
@@ -822,7 +1056,8 @@ fn run(
                 };
                 let text = write_save(
                     world,
-                    core.computers(),
+                    me,
+                    game.core().computers(),
                     saving.as_ref(),
                     speed,
                     link,
@@ -836,6 +1071,8 @@ fn run(
             window_ticks += 1;
             publish(
                 world,
+                me,
+                net_line.as_ref(),
                 &controller,
                 link,
                 bridge,
@@ -844,11 +1081,19 @@ fn run(
                 &models,
                 &ascension,
             );
-            while let Ok(command) = inbox.try_recv() {
-                if core.apply(Input::Order(command)).is_err() {
-                    link.stats.rejected.fetch_add(1, Ordering::Relaxed);
+            if let Game::Lead(core) = &mut game {
+                while let Ok(command) = inbox.try_recv() {
+                    if core.apply(Input::Order(command)).is_err() {
+                        link.stats.rejected.fetch_add(1, Ordering::Relaxed);
+                    }
                 }
             }
+        }
+        if let Game::Follow(net) = &mut game {
+            while let Ok(command) = inbox.try_recv() {
+                outbox.orders.push(command);
+            }
+            net.send_outbox(&mut outbox);
         }
         let window = now.duration_since(window_start);
         if window >= Duration::from_secs(1) {
@@ -858,7 +1103,7 @@ fn run(
                 .store((rate * 10.0).round() as u32, Ordering::Relaxed);
             window_start = now;
             window_ticks = 0;
-            suggest(core.world());
+            suggest(game.world());
             let (count, total, longest) = std::mem::take(&mut thoughts);
             let micros = |d: Duration| d.as_micros().min(u128::from(u32::MAX)) as u32;
             link.stats.think_us_avg.store(
@@ -870,16 +1115,51 @@ fn run(
                 .store(micros(longest), Ordering::Relaxed);
         }
         if ticks == 0 {
-            thread::sleep(step.until_next().min(MAX_SLEEP));
+            let wait = step.until_next().min(MAX_SLEEP);
+            // A follower waiting for the server's next turn does not spin.
+            thread::sleep(if following {
+                wait.max(Duration::from_millis(1))
+            } else {
+                wait
+            });
         } else {
             thread::yield_now();
         }
     }
 }
 
+/// A chat line the person typed or a script said: everyone's and allies' channels go to the
+/// server in a network match (the line comes back to everyone, the sender included); the
+/// celestial channel of the ascension stays the application's.
+fn say(game: &Game, ascension: &mut AscensionView, channel: Channel, line: &str) {
+    match game {
+        Game::Follow(net) if channel != Channel::Celestial => {
+            net.say(channel, line);
+        }
+        _ => {
+            ascension.say(game.world(), channel, line);
+        }
+    }
+}
+
+/// The pause button: standalone it holds or releases the simulation; in a network match it
+/// pauses or resumes the match for everyone (the server tells everyone who).
+fn toggle_pause(game: &Game, controller: &mut Controller, link: &SimLink) {
+    match game {
+        Game::Lead(core) => {
+            let paused = !link.paused();
+            link.set_paused(paused);
+            controller.notify(core.world(), if paused { "Paused" } else { "Resumed" });
+        }
+        Game::Follow(net) => net.toggle_pause(),
+    }
+}
+
 /// Writes a save the player or the autosave asked for; the event-line text says how it went.
+#[allow(clippy::too_many_arguments)] // what a save is written from
 fn write_save(
     world: &World,
+    me: PlayerId,
     computers: &ComputerPlayers,
     saving: Option<&SaveSetup>,
     speed_pct: u32,
@@ -889,7 +1169,7 @@ fn write_save(
 ) -> String {
     let result = match saving {
         None => Err("this match cannot be saved".to_owned()),
-        Some(setup) => saves::write(world, computers, setup, speed_pct, request, chat),
+        Some(setup) => saves::write(world, me, computers, setup, speed_pct, request, chat),
     };
     let text = match &result {
         Ok(saved) => match request.kind {
@@ -906,8 +1186,13 @@ fn write_save(
 }
 
 /// Gives a pick to the selection, except the buttons beside the clock: the menu button asks the
-/// window for the menu and the pause button holds or releases the simulation.
-fn handle_pick(controller: &mut Controller, world: &mut World, link: &SimLink, pick: PickEvent) {
+/// window for the menu; the pause button is left to the caller (returns true).
+fn handle_pick(
+    controller: &mut Controller,
+    world: &mut OrderSink<'_>,
+    link: &SimLink,
+    pick: PickEvent,
+) -> bool {
     // While the chat has the keyboard the game's keys are the chat's (a script's `key`).
     if link.chat_focused() {
         match &pick {
@@ -918,11 +1203,11 @@ fn handle_pick(controller: &mut Controller, world: &mut World, link: &SimLink, p
                     *ch
                 };
                 link.chat_key(ChatKey::Char(ch));
-                return;
+                return false;
             }
             PickEvent::Escape => {
                 link.chat_key(ChatKey::Escape);
-                return;
+                return false;
             }
             _ => {}
         }
@@ -934,7 +1219,7 @@ fn handle_pick(controller: &mut Controller, world: &mut World, link: &SimLink, p
     } = &pick
     {
         link.chat_open();
-        return;
+        return false;
     }
     if let PickEvent::HudClick {
         region: HudRegionKind::TopButton,
@@ -946,16 +1231,13 @@ fn handle_pick(controller: &mut Controller, world: &mut World, link: &SimLink, p
         match index {
             1 => link.chat_toggle_history(),
             2 => link.request_menu(MenuPage::Main),
-            3 => {
-                let paused = !link.paused();
-                link.set_paused(paused);
-                controller.notify(world, if paused { "Paused" } else { "Resumed" });
-            }
+            3 => return true,
             _ => {}
         }
-        return;
+        return false;
     }
-    controller.handle(world, pick);
+    controller.handle_with(world, pick);
+    false
 }
 
 /// What publishing keeps from one snapshot to the next.
@@ -977,8 +1259,8 @@ struct TerrainKnowledge {
 }
 
 impl TerrainKnowledge {
-    fn refresh(memory: &mut Option<Self>, world: &World, body: BodyId) -> bool {
-        let Some(player) = world.players().find(|p| p.id == PLAYER) else {
+    fn refresh(memory: &mut Option<Self>, world: &World, me: PlayerId, body: BodyId) -> bool {
+        let Some(player) = world.players().find(|p| p.id == me) else {
             return false;
         };
         if memory.as_ref().is_some_and(|known| {
@@ -993,7 +1275,7 @@ impl TerrainKnowledge {
         *memory = Some(Self {
             body,
             age: player.age,
-            tiles: crate::terrain::known_terrain(world, PLAYER, body),
+            tiles: crate::terrain::known_terrain(world, me, body),
         });
         true
     }
@@ -1009,6 +1291,8 @@ const VISION_INTERVAL: u64 = 5;
 #[allow(clippy::too_many_arguments)] // what one published frame is made of
 fn publish(
     world: &World,
+    me: PlayerId,
+    net_line: Option<&(String, [u8; 4])>,
     controller: &Controller,
     link: &SimLink,
     bridge: &RenderBridge,
@@ -1017,13 +1301,13 @@ fn publish(
     models: &crate::looks::ModelBook,
     ascension: &AscensionView,
 ) {
-    let sightings = world.visible_entities(PLAYER);
+    let sightings = world.visible_entities(me);
     let body = host.map_or_else(|| world.surfaces()[0].body(), |h| h.viewed);
-    if TerrainKnowledge::refresh(&mut memory.terrain, world, body) {
-        let hidden = crate::terrain::hidden_terrain(world, PLAYER);
+    if TerrainKnowledge::refresh(&mut memory.terrain, world, me, body) {
+        let hidden = crate::terrain::hidden_terrain(world, me);
         bridge.publish_hidden_terrain(Arc::new(hidden));
     }
-    let snapshot = snapshot_on(world, body, &sightings, models, &mut memory.motions);
+    let snapshot = snapshot_on(world, me, body, &sightings, models, &mut memory.motions);
     link.stats.tick.store(snapshot.tick, Ordering::Relaxed);
     link.stats
         .entities
@@ -1034,17 +1318,20 @@ fn publish(
         let index = memory
             .systems
             .get_or_insert_with(|| SystemIndex::new(world));
-        let mut space = space_snapshot_with(world, index, system, &sightings);
+        let mut space = space_snapshot_with(me, world, index, system, &sightings);
         dress_ships(&mut space, world, models);
         bridge.publish_space(Arc::new(space));
     }
-    publish_camera_limits(world, bridge);
+    publish_camera_limits(world, me, bridge);
     if world.tick().is_multiple_of(VISION_INTERVAL) {
-        bridge.publish_vision(Arc::new(memory.fog.build_on(world, body)));
+        bridge.publish_vision(Arc::new(memory.fog.build_on(world, me, body)));
     }
-    let mut hud = crate::hud::snapshot_of(world);
+    let mut hud = crate::hud::snapshot_of(world, me);
     controller.fill(world, &mut hud);
     ascension.fill(world, &mut hud, celestial_in_view(world, bridge));
+    if let Some(line) = net_line {
+        hud.banner.insert(0, line.clone());
+    }
     // A fallen building collapses from the height of the model it was drawn with (task 75).
     for wreck in &mut hud.wrecks {
         let model = world
@@ -1077,8 +1364,8 @@ fn publish(
 }
 
 /// Sends the current player's limits before camera setup and after every simulation update.
-pub(crate) fn publish_camera_limits(world: &World, bridge: &RenderBridge) {
-    if let Some(player) = world.players().find(|p| p.id == crate::selection::PLAYER) {
+pub(crate) fn publish_camera_limits(world: &World, me: PlayerId, bridge: &RenderBridge) {
+    if let Some(player) = world.players().find(|p| p.id == me) {
         // An ascended player moves freely at every level, planet to star map (task 76).
         if world.is_ascended(player.id) {
             bridge.publish_zoom_cap(Level::StarMap);
@@ -1110,13 +1397,18 @@ fn focus_camera(world: &World, controller: &mut Controller, bridge: &RenderBridg
 
 fn publish_hud(
     world: &World,
+    me: PlayerId,
+    net_line: Option<&(String, [u8; 4])>,
     controller: &Controller,
     bridge: &RenderBridge,
     ascension: &AscensionView,
 ) {
-    let mut hud = crate::hud::snapshot_of(world);
+    let mut hud = crate::hud::snapshot_of(world, me);
     controller.fill(world, &mut hud);
     ascension.fill(world, &mut hud, celestial_in_view(world, bridge));
+    if let Some(line) = net_line {
+        hud.banner.insert(0, line.clone());
+    }
     bridge.publish_hud(Arc::new(hud));
 }
 
@@ -1135,6 +1427,7 @@ fn celestial_in_view(world: &World, bridge: &RenderBridge) -> bool {
 pub fn snapshot_of(world: &World) -> EntitySnapshot {
     snapshot_on(
         world,
+        PLAYER,
         world.surfaces()[0].body(),
         &world.visible_entities(PLAYER),
         &crate::looks::ModelBook::new(world.rules()),
@@ -1238,6 +1531,7 @@ pub fn activity_of(world: &World, entity: &Entity, moving: bool) -> Activity {
 /// is doing (its moves remembered in `motions`).
 pub fn snapshot_on(
     world: &World,
+    me: PlayerId,
     body: BodyId,
     sightings: &[Sighting<'_>],
     models: &crate::looks::ModelBook,
@@ -1303,7 +1597,7 @@ pub fn snapshot_on(
         let known_ground = || {
             entity.owner == PlayerId(0)
                 && world.is_explored_on_body(
-                    PLAYER,
+                    me,
                     body,
                     entity.pos.face,
                     entity.pos.x.div_euclid(1000),
@@ -1398,7 +1692,7 @@ pub fn snapshot_on(
         if wreck.pos.body != body
             || age >= COLLAPSE_TICKS
             || !world.is_visible_on_body(
-                PLAYER,
+                me,
                 body,
                 wreck.pos.face,
                 wreck.pos.x.div_euclid(1000),
@@ -1649,11 +1943,11 @@ impl FogPublisher {
     /// The map of the first surface as the world stands now.
     #[cfg(test)]
     pub fn build(&mut self, world: &World) -> VisionMap {
-        self.build_on(world, world.surfaces()[0].body())
+        self.build_on(world, PLAYER, world.surfaces()[0].body())
     }
 
     /// The map of the surface of `body` as the world stands now; empty for a body without one.
-    pub fn build_on(&mut self, world: &World, body: BodyId) -> VisionMap {
+    pub fn build_on(&mut self, world: &World, me: PlayerId, body: BodyId) -> VisionMap {
         let Some(surface) = world.surface(body) else {
             return VisionMap::default();
         };
@@ -1662,7 +1956,7 @@ impl FogPublisher {
             Topology::Cube(surface) => (surface.n, surface.n * 6, surface.n, Some(surface)),
         };
         let tiles = width as usize * height as usize;
-        let known = world.visibility_tiles(PLAYER, body);
+        let known = world.visibility_tiles(me, body);
         let territory = world.territory_tiles(body);
         let mut state = vec![UNEXPLORED; tiles];
         let mut owner = vec![0_u8; tiles];
@@ -1872,6 +2166,7 @@ mod tests {
         let activity = |world: &World, motions: &mut Motions, id: EntityId| {
             snapshot_on(
                 world,
+                PLAYER,
                 world.surfaces()[0].body(),
                 &world.visible_entities(PLAYER),
                 &crate::looks::ModelBook::new(world.rules()),
@@ -2105,6 +2400,7 @@ mod tests {
         let sightings = world.visible_entities(PLAYER);
         let planet = snapshot_on(
             world,
+            PLAYER,
             home,
             &sightings,
             &crate::looks::ModelBook::new(world.rules()),
@@ -2132,6 +2428,7 @@ mod tests {
         if let Some(other) = other {
             let snap = snapshot_on(
                 world,
+                PLAYER,
                 other,
                 &sightings,
                 &crate::looks::ModelBook::new(world.rules()),
@@ -2166,7 +2463,7 @@ mod tests {
         game.world.step();
         let world = &game.world;
         let home = world.home_body(PLAYER).expect("home");
-        let map = FogPublisher.build_on(world, home);
+        let map = FogPublisher.build_on(world, PLAYER, home);
         assert!(map.is_valid());
         let known = world.visibility_tiles(PLAYER, home);
         let territory = world.territory_tiles(home);
@@ -2186,7 +2483,7 @@ mod tests {
         assert!(map.owner.contains(&(PLAYER.0 as u8)));
         // A body without a surface has no map.
         let none = world.ungenerated_bodies()[0];
-        assert!(!FogPublisher.build_on(world, none).is_valid());
+        assert!(!FogPublisher.build_on(world, PLAYER, none).is_valid());
     }
 
     #[test]
@@ -2199,7 +2496,11 @@ mod tests {
         let bridge = RenderBridge::detached();
         let host = UniverseHost::new(home, home_system);
         let mut thread = SimThread::spawn(
-            MatchCore::new(game.world, ComputerPlayers::empty(), Some(content.universe)),
+            Game::Lead(Box::new(MatchCore::new(
+                game.world,
+                ComputerPlayers::empty(),
+                Some(content.universe),
+            ))),
             None,
             None,
             100,
@@ -2281,7 +2582,7 @@ mod terrain_knowledge_tests {
                 .place_for_setup(library, PLAYER, Pos::flat(24_000, 16_000))
                 .unwrap();
             let mut memory = None;
-            TerrainKnowledge::refresh(&mut memory, &world, BodyId(0));
+            TerrainKnowledge::refresh(&mut memory, &world, PLAYER, BodyId(0));
             assert_eq!(memory.as_ref().unwrap().tiles[24 * 64 + 24], None);
             let oil_kind = rom_render::TileKind::Feature(oil.0 as u16);
             assert!(crate::terrain::hidden_terrain(&world, PLAYER).contains(&oil_kind));
@@ -2308,7 +2609,7 @@ mod terrain_knowledge_tests {
                 .unwrap();
             for _ in 0..10 {
                 world.step();
-                TerrainKnowledge::refresh(&mut memory, &world, BodyId(0));
+                TerrainKnowledge::refresh(&mut memory, &world, PLAYER, BodyId(0));
                 if memory.as_ref().unwrap().age == age {
                     break;
                 }
@@ -2390,7 +2691,7 @@ mod save_tests {
             dir.clone(),
         );
         let mut thread = SimThread::spawn(
-            MatchCore::new(world, computers, None),
+            Game::Lead(Box::new(MatchCore::new(world, computers, None))),
             None,
             None,
             100,
@@ -2459,7 +2760,7 @@ mod save_tests {
         let dir = folder("autosave");
         let setup = SaveSetup::new(&world, 5, "mapstyle.test", &[], 1, dir.clone());
         let mut thread = SimThread::spawn(
-            MatchCore::new(world, computers, None),
+            Game::Lead(Box::new(MatchCore::new(world, computers, None))),
             None,
             None,
             10_000,
@@ -2586,6 +2887,7 @@ mod save_tests {
             world.step();
             let snapshot = snapshot_on(
                 &world,
+                PLAYER,
                 world.surfaces()[0].body(),
                 &world.visible_entities(PLAYER),
                 &models,
@@ -2683,6 +2985,7 @@ mod save_tests {
                 world.step();
                 let snapshot = snapshot_on(
                     &world,
+                    PLAYER,
                     world.surfaces()[0].body(),
                     &world.visible_entities(PLAYER),
                     &models,
@@ -2748,7 +3051,7 @@ mod leader_tests {
             .match_settings(setup.clone())
             .build()
             .expect("leader");
-        let script = crate::shell::read_script(&path, &built.game).expect("script");
+        let script = crate::shell::read_script(&path, &built.game, PLAYER).expect("script");
         std::fs::remove_file(&path).unwrap();
         let home = built.game.world.home_body(PLAYER).unwrap();
         let home_system = built.game.world.body(home).unwrap().system;
@@ -2768,7 +3071,7 @@ mod leader_tests {
         let bridge = RenderBridge::detached();
         let (journals, received) = channel();
         let mut thread = SimThread::spawn(
-            built.leader(),
+            Game::Lead(Box::new(built.leader())),
             None,
             Some(script),
             2_000,

@@ -332,12 +332,32 @@ impl Config {
         })
     }
 
-    /// Replaces the configuration atomically within its directory.
+    /// Replaces the configuration atomically within its directory. Seat tokens a game wrote
+    /// meanwhile are kept: the file's tokens win over this copy's.
     pub fn save(&self, path: &Path) -> Result<(), String> {
+        self.write(path, false)
+    }
+
+    /// Like [`Config::save`], but this copy's seat tokens win (a game remembering a new one).
+    pub fn save_tokens(&self, path: &Path) -> Result<(), String> {
+        self.write(path, true)
+    }
+
+    fn write(&self, path: &Path, own_tokens_win: bool) -> Result<(), String> {
+        let mut tokens = self.tokens.clone();
+        if let Ok(on_disk) = Self::load(path) {
+            for (url, token) in on_disk.tokens {
+                if own_tokens_win {
+                    tokens.entry(url).or_insert(token);
+                } else {
+                    tokens.insert(url, token);
+                }
+            }
+        }
         let value = json!({
             "form": self.form.values,
             "simple": self.simple.values(),
-            "tokens": self.tokens,
+            "tokens": tokens,
             "presets": self.presets.iter().map(|(name, form)| (name, &form.values)).collect::<BTreeMap<_, _>>(),
         });
         let text = serde_json::to_vec_pretty(&value).map_err(|e| e.to_string())?;

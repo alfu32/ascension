@@ -314,6 +314,50 @@ It joins, plays its seat with a computer player, follows the match, reports its 
 ticks, and prints `client seat=… tick=… hash=… desyncs=…` when it leaves. It prints its seat
 token: `rom client <url> --token <token>` rejoins the seat.
 
+## As built (task 88): network play in the app
+
+`rom-app` plays a network match as a follower of a `rom-net` server; standalone matches play as
+before (the playthrough, duel and app-journal tests are unchanged).
+
+| Piece | As built |
+| --- | --- |
+| The person's player | a session value: player one standalone, the seat's player in a network match. `selection::PLAYER` is only the standalone default (the `Controller`, notices, chat log, ascension view, fog, snapshots, camera limits, scripts and save names take the session's player) |
+| One order sink | `selection::OrderSink`: `Lead(&mut World)` standalone (submitted at once; the match core journals what is accepted), `Follow { world, outbox }` in a network match (the world is read only; orders and camera visits wait in the `Outbox` and go to the server as `Order` and `Visit`). Reading the world goes through `Deref`, so nothing else can change it. The selection, `after_step` requeues and helpers, the HUD palette, script picks and `ascend`, and the `SimLink::submit` inbox all go through it |
+| Follower thread | `sim_thread::Game::{Lead(MatchCore), Follow(Box<NetPlay>)}`. `net::play::NetPlay` owns the `rom_net::Follower` and the connection: it reads turns, snapshots and messages each loop turn (`pump`), applies turns paced at the match speed keeping two in hand and catching up 20 a loop turn when behind, all of them while the server stands still (`due`, `step`), reports the hash every 100 ticks, asks for a snapshot on a turn that does not apply or when more than 30 s behind, and rejoins with the seat token every 3 s after a drop (a refusal ends that) |
+| Refusals | `Rejected` from the server shows on the event line in the simulation's words (a network client cannot check an order locally without a trial world) |
+| Chat | All and Allies go to the server and come back to everyone, the sender included (`ServerMessage::Chat` → `AscensionView::hear`); the celestial channel stays the application's |
+| Pause, speed | the HUD's pause button sends `Pause`/`Resume` (anyone; the event line says who); `+`/`-` send `Speed` from the host, and others read "Only the host sets the speed"; the in-match menu does not hold a network match |
+| In-match menu | Save asks the server to save (host; the server answers with a notice), others read that the server saves every few minutes; Load is off; Quit is "Leave the match" |
+| HUD network line | the first line of the banner at the top: "Online · 3 ms", "Waiting for Ada · 1:52", "Ada paused the match", "Catching up with the server …", "Connection lost · rejoining …", "Disconnected · …" |
+| Lobby | a GPUI window before the match window (`net::lobby`): seats (name, race or nation, ready, connection), the seat's race or nation and Ready, chat, and for the host the keys with Copy, Add a key and Start now. Server refusals in plain words, naming both versions on a mismatch. When the server starts, the session thread (`net::session`) builds the match, shows the seat's home planet, waits for the terrain and starts the follower; the match window opens and the lobby closes |
+| Integrated host (`--host PORT`) | starts `rom_net::Server` in the process (listening on `--bind`, `0.0.0.0` from the launcher's Host form; state in `<data>/ascension/host`), takes a host key for its own seat, prints the others' keys (`key: …`) and the address they join, and joins over loopback. Closing the match window saves and stops the server |
+| Server window (`--serve`) | no game and no render thread: a GPUI window with the address, keys (Copy, Add a key), the seats and their states, tick, speed, hash checks, the log, and Start now, Pause, Resume, Speed, Save, Stop (state in `<data>/ascension/server`). Closing it saves and stops the server |
+| Seat tokens | written to `launcher.json` `tokens` under the address as typed when joining with a key; the open launcher picks them up for the Join form's **Rejoin** |
+| TLS | `rom-app` builds `rom-net` with `tls`, so `https://` addresses work (the operating system's root certificates) |
+| Test hooks (environment) | `ROM_NET_READY=1` says Ready on joining; `ROM_NET_START=S` makes the host press Start now after S seconds; `ROM_NET_KEYS=FILE` writes the keys to hand out; `ROM_NET_PAUSE_AT=T` pauses the match once the world reaches tick T; `ROM_NET_LOBBY_SECONDS=S` ends the lobby after S seconds; `ROM_NET_QUIT_AFTER=S` ends the server window after S seconds |
+
+## Playing over the network
+
+**Host a game on this computer** (you play; others join): in the launcher choose **Host a
+game**, set the remote players and the port (7400), press **Host**. The lobby shows a key for
+each remote player and the address they join (`http://<this computer>:7400/`); press **Copy**
+and send each person one key. When everyone is ready the match starts after five seconds, or
+press **Start now** (empty seats are played by computers). From the command line:
+`rise-of-man --universe --style map.many_worlds --players 3 --ai balanced:moderate --host 7400
+--remote-players 1 --bind 0.0.0.0`. Others on the internet need the port forwarded to this
+computer, or a server on the VPS.
+
+**Join from another computer**: choose **Join a game**, type the address the host gave
+(`http://host:7400/`, or `https://your.domain/ascension/` for the VPS), the key and your name,
+press **Join**. In the lobby pick your race or nation and press **Ready**. After a drop the game
+rejoins by itself; after closing it, the Join form shows **Rejoin** for that address (the seat
+token). Command line: `rise-of-man --connect http://host:7400/ --key XXXXXXXX-… --name Ada`.
+
+**Run the server on the VPS**: build and run `rom serve` as in "Operating a server" (systemd,
+nginx with https at `/ascension/`); add keys with `rom keys add N`; players join
+`https://<your domain>/ascension/` with a key. The **Run a server** form starts the same
+server on a desktop, with a status window instead of a console.
+
 ## Later (not in tasks 85–88)
 
 - A web-accessible world launcher/manager; then match setup from both the command line and a
