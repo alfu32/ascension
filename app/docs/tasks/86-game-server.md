@@ -58,6 +58,26 @@ written there, and say where you had to deviate.
 5. **Docs**: `app/docs/network.md` gets a short operator section if anything differs:
    building on the VPS, a systemd unit, the nginx block, adding keys, resuming, logs.
 
+## Since this card was written (orchestrator, 2026-11-20; main at 0.0.104)
+
+Task 85 is released (0.0.104). Build on `rom-match` as it is, not as the card above guessed:
+- `MatchSettings { content, map, age, script, ai, humans }.build()` → `Built` → `.leader()` /
+  `.follower()` give a `MatchCore`. `MatchCore::lead(inputs) -> TickOutcome { journal, refused:
+  Vec<Refusal{index, reason}>, computers, problems }` (the `refused` list is what `Rejected`
+  reports); `follow(&Journal) -> Result<(), Desync{tick, reason}>`; `apply(Input)` for inputs
+  between ticks. `Input::{Order(Command), Visit{player, body}}`; `Entry::{Order(Command),
+  SurfaceAdded{body, revealed_for: Vec<PlayerId>}}`; `Journal { tick, entries }`.
+- Snapshots: `rom_match::save_match` / `load_match`. Fingerprint: `rom_match::rules_fingerprint()`
+  (`rom --version` prints it). Cross-machine check: `rom replay-hash`.
+- Disconnect policy: `ComputerPlayers::take_seat(rules, player, spec, seed)` and
+  `release_seat(player)` exist for it.
+- **Universe matches are the game** (owner 2026-11-19: flat worlds are obsolete). `rom serve`
+  defaults to a universe match with the map presets of task 109 (`--style`, default Cluster);
+  the in-process tests use a universe match (Cluster), as the card says.
+- Memory: a server plus three clients each hold a whole world (a Cluster is about 70 MB each);
+  keep the tests to Cluster or smaller and measure the server's RSS for the VPS sizing.
+- Runs beside task 87 (`rom-app` launcher only); do not touch `rom-app`.
+
 Rules: 1 (no clocks or randomness reach the simulation: the server's clock only decides when to
 step; keys use OS randomness outside the match), 3 (orders only, through the leader), 5, 8.
 

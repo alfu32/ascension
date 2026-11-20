@@ -40,6 +40,15 @@ client or launch server). The current UI launcher should be accessible through '
 5. Keep the launcher's look (`app/docs/hud.md`, the launcher's existing style). Keyboard: Tab
    order, Enter on the default button, Escape = Back.
 
+## Since this card was written (orchestrator, 2026-11-20; main at 0.0.104)
+
+- **Universe matches are the game** (owner 2026-11-19: flat worlds are obsolete). The simple
+  forms start universe matches; the map style list is the six presets in launcher order. Flat and
+  sphere options stay in Advanced only.
+- The app now builds matches through `rom_match::MatchSettings` (`Options::match_settings()`,
+  task 85): every simple-form value maps onto `Options`, which already feeds it.
+- Runs beside task 86 (`rom-net`, `rom-cli`); touch only `rom-app` (launcher and `args.rs`).
+
 Read first: `AGENTS.md`, `CLAUDE.md`, `app/docs/network.md` (roles), `research/04-hud-and-
 screens.md` (setup screen), `rom-app/src/launcher/` (all of it), `args.rs`.
 
