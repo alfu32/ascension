@@ -40,6 +40,7 @@ Crates (create only what your task needs):
 | `rom-mapgen` | map generation from seed and map style | graphics |
 | `rom-ai` | computer players: read state, emit orders | graphics |
 | `rom-save` | save and load a match | graphics |
+| `rom-match` | one match for app and server: setup, computer players, leader and follower (journal) | graphics |
 | `rom-kit` | the part kit: composed models baked into vertices, plain Rust | everything |
 | `rom-models` | model files, rules → kit parts, Meshcraft export/import, briefs | graphics, sim |
 | `rom-render` | raylib world and HUD drawing from render snapshots; may use `rom-geo`, `rom-kit` | gpui, sim, rules, mapgen |

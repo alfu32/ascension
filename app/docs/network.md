@@ -49,12 +49,19 @@ any other way; its world therefore equals the leader's tick for tick.
 
 For tick `T`, in the order the leader applied them before stepping to `T + 1`:
 
-- `Order(Command)`: every command `World::submit` **accepted** on the leader: people's,
-  computer players', governors', requeued ones. Rejected commands are not sent (the sender is
-  told, `Rejected`).
-- `SurfaceAdded { body, revealed_for: Option<PlayerId> }`: a planet's surface made on first
-  visit (`UniverseHost::generate`) and whose terrain is revealed to that player. Followers
-  expand the same body from the same universe recipe and add it.
+- `Order(Command)`: every command `World::submit` **accepted** on the leader between two
+  steps: people's, computer players', governors', requeued ones. Rejected commands are not sent
+  (the sender is told, `Rejected`). Orders a step gives itself (idle workers sent to harvest,
+  automatic attacks) are not in it: every world makes them alike.
+- `SurfaceAdded { body, revealed_for: Vec<PlayerId> }`: a planet's surface made on first visit
+  and whose terrain is revealed to those players: the visiting player for a camera visit, the
+  owners of the ships bound there for a ship's visit. Followers expand the same body from the
+  same universe recipe and add it.
+
+Built in task 85: `rom_match::MatchCore` (`lead`, `follow`, `apply`), `Input`, `Journal`,
+`Entry`; `World::record_accepted` and `World::take_accepted` in `rom-sim`; `rom_match::core`
+documents the order of a tick. `rom replay-hash --seed N --ticks T [--universe]` is the
+cross-machine check, and `rom --version` prints the rules fingerprint.
 
 A camera visit to a planet without a surface is therefore an input, not a local change: the
 client sends `Visit { body }`; the leader adds the surface at its next tick and journals it; the
