@@ -10,6 +10,50 @@ projectiles (95, 102), higher-detail ships (93), zoom-scaled ships (96, 105), ch
 the Sector preset (109) and jumps from anywhere in a system (111). Nobody has
 measured the whole range since.
 
+## Owner report and first measurements (2026-11-20)
+
+The owner, playing the Sandbox preset (universe, `map.many_worlds`, age 13, rich-start script,
+`--speed 500`, window about 1920×1080) on the integrated Intel HD 530: "choppy picture" and "clicks
+react late". Owner: leave the discrete GPU aside; do the best on the integrated GPU.
+
+Orchestrator measurements (`--bench`, 0.0.108; 0.0.103 built alongside for comparison):
+- No regression from the network work: 0.0.103 and 0.0.108 within noise everywhere (reference
+  `--single-planet --sphere 192 --demo`: 53–57 fps shown; universe age 13 with a camera script
+  that turns, pans and zooms out to orbit and the system: 55–56 fps at 1280×800, 43–45 fps at
+  1882×1043).
+- **Game speed costs frames.** Universe age 13 at 1882×1043, no camera script: speed 100 →
+  42 fps shown, render `frame_ms_avg` 8.8; speed 500 → 34.6 fps, `frame_ms_avg` 17.3. `--sun
+  fixed` does not change it; `--scale 75` does not raise the shown fps at speed 500 (34.8). So the
+  cost follows the number of new simulation snapshots, not pixels: the simulation thread calls
+  `publish` after every tick (`sim_thread.rs`, inside `for _ in 0..ticks`), up to 100 snapshots a
+  second at 500 %, and the render thread appears to rebuild per new snapshot.
+- At 1882×1043 the window shows ~43 of 60 rendered frames even at speed 100 (presentation:
+  read-back, upload, GPUI).
+
+Added to the build (do these first):
+- **One snapshot per loop turn.** Publish after the last tick of a turn, not after each tick
+  (keep every per-tick duty such as notices and autosave per tick). Measure the simulation
+  thread's CPU and the render frame time at speeds 100, 300 and 500.
+- **Cheaper per-snapshot work on the render thread.** Profile what a new snapshot costs
+  (instance lists, fog or vision textures, labels, HUD) and cut it; target: speed 500 costs no
+  more than 2 ms of render frame time over speed 100.
+- **Click-to-response time.** Measure from a pointer event to the first shown frame that reflects
+  it (selection ring or order marker), at speed 100 and 500, before and after; report it.
+- **Presentation at 1920×1080.** Find what limits shown frames to ~43 of 60 and fix what is
+  clearly fixable; target ≥ 55 fps shown at 1882×1043, speed 100, on the HD 530.
+- **Grass seen from farther (owner, 2026-11-20: "the patches of shader grass should be visible
+  from a little farther ( extend the area )").** Today `rom-render/src/grass.rs`: `LOD_DISTANCE`
+  16, `FULL_DISTANCE` 32, `FAR_DISTANCE` 42 tiles from the eye, `BUDGET` 30 000 domains. Extend
+  the far edge (about 1.5× to 2×, choose by measurement) with coarser slices past the current far
+  edge so the cost on the HD 530 stays bounded; state the new distances and the frame cost before
+  and after (home planet, default zoom and zoomed out a step), with a screenshot pair you looked
+  at (`app/docs/img/108-grass-{before,after}.png`).
+- The camera script used: rotate (plain drag), pan (Shift drag), wheel out to orbit and to the
+  system and back, repeated (keep one in `app/docs/tasks/108-camera-bench-script.txt`).
+- The worktree holds uncommitted work from the stopped earlier attempt (`bench.rs`,
+  `readback.rs`, `scene/shadow.rs`, `worker.rs`): review it, keep what measures better, drop the
+  rest, and merge `main` first (the branch is older than 0.0.104).
+
 ## Build
 
 1. **Measure** with `--bench` (1280×800 and 1920×1080, 20 s, after a warm-up), one run at a time,
