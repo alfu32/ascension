@@ -4956,7 +4956,7 @@ dependencies = [
 
 [[package]]
 name = "rom-net"
-version = "0.0.104"
+version = "0.0.105"
 dependencies = [
  "getrandom 0.3.4",
  "httparse",
