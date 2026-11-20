@@ -19,7 +19,7 @@ client or launch server). The current UI launcher should be accessible through '
 2. **Each choice opens a short form**, with sensible defaults, the last values remembered (the
    launcher's existing settings file):
    - Play: race or nation, number of computer opponents (0–7) and their difficulty, map style
-     (One World, Many Worlds), seed (blank = random). **Start**.
+     (Planet, Solar, Cluster, Sector, Quadrant, Galaxy, in that order; task 109), seed (blank = random). **Start**.
    - Host a game: the Play fields, plus remote players (1–7), port (7400), when a player drops
      (pause then computer / keep playing, units idle / computer at once), speed. **Host**.
    - Join a game: server address (`http://…` or `https://…`), key, your name; when a seat token

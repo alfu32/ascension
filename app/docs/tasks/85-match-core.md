@@ -58,6 +58,25 @@ Rules: 1 (the follower adds no floats, clocks or threads to the simulation; `rom
 that changes the world is deterministic), 3 (orders only), 5 (no schema change expected; stop
 and report if one is needed), 8.
 
+## Since this card was written (orchestrator, 2026-11-20; main at 0.0.103)
+
+The owner unblocked network play on 2026-11-20. The code moved on since 2026-11-18; build on
+main as it is now and keep these in mind:
+- **Universe matches are the game** (owner 2026-11-19: "that thing with flat worlds is
+  obsolete"). Flat and sphere setups still move into `rom-match` (the playthrough, duels and
+  fight matrix run on them), but the universe path is the one the leader/follower tests must
+  cover first. `match_setup::build_universe_match` now also applies `research-all`, grants and
+  `ascension-ready` before tick 0 (task 110); keep that before the first `lead`.
+- **Map presets** (task 109): Planet (`shared_home`), Solar, Cluster, Sector, Quadrant, Galaxy.
+- **New simulation state since the card**: market pressure (task 107, `buy`/`sell` orders),
+  jumps that charge in place and arrive at a point (task 111), projectiles in flight (task 102).
+  All of it changes only through orders and is in the hash and the save (format 13); a
+  follower needs nothing extra, but the journal test should include trades and a jump.
+- **Chat** (task 94, `rom-app/src/chat.rs`) stays in the app; it reaches the network in task 88.
+- **Script setup** (`rom-app/src/script.rs`, `ScriptSetup`) is match setup: whatever of it
+  changes the world before tick 0 moves with the setup; script orders during play are inputs.
+- **Task 108** (frame rate) is paused with uncommitted work in its own worktree; do not touch it.
+
 Read first: `AGENTS.md`, `CLAUDE.md`, `app/docs/network.md`, `app/docs/world-model.md`,
 `research/02-rendering-ui-stack.md` (threads), `rom-app/src/sim_thread.rs`,
 `match_setup.rs`, `terrain.rs`, `computer.rs`, `rom-cli/src/duel_cmd.rs` (a headless driver).
