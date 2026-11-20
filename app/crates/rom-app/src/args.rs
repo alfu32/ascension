@@ -240,6 +240,45 @@ impl Options {
     pub fn uses_universe(&self) -> bool {
         !self.single_planet && (self.universe || self.sphere.is_some())
     }
+
+    /// The content these options ask for, as the match core takes it.
+    pub fn content_request(&self) -> rom_match::ContentRequest {
+        rom_match::ContentRequest {
+            style: self.style.clone(),
+            factions: self.factions.clone(),
+            players: self.players,
+            seed: self.seed,
+            map_size: self.map_size,
+            home_size: self.sphere,
+            start_placement: self.start_placement,
+        }
+    }
+
+    /// The whole match these options set up (with a script's setup lines), as the match core
+    /// builds it: the person plays player one unless `--watch`, every other player is a computer
+    /// unless `--ai none`.
+    pub fn match_settings(&self, script: rom_match::ScriptSetup) -> rom_match::MatchSettings {
+        let map = if self.uses_universe() {
+            rom_match::MapKind::Universe
+        } else {
+            match self.sphere.or(self.single_planet.then_some(192)) {
+                Some(n) => rom_match::MapKind::Sphere(n),
+                None => rom_match::MapKind::Flat,
+            }
+        };
+        rom_match::MatchSettings {
+            content: self.content_request(),
+            map,
+            age: self.age,
+            script,
+            ai: (!self.no_ai).then(|| self.ai.clone()),
+            humans: if self.watch {
+                Vec::new()
+            } else {
+                vec![crate::selection::PLAYER]
+            },
+        }
+    }
 }
 
 /// Parses the arguments after the program name.

@@ -1239,3 +1239,91 @@ fn repeated_identical_scenarios_match_after_every_tick() {
         assert_eq!(first.hash(), second.hash());
     }
 }
+
+/// Task 85: the leader's journal. Only accepted commands are kept, in submit order; replaying
+/// them into a second world gives the same world; recording changes nothing, and run twice the
+/// result is the same.
+#[test]
+fn accepted_commands_are_recorded_in_order_and_replay_alike() {
+    let play = |record: bool| {
+        let mut world = world();
+        let mut replica = world_with(Arc::clone(world.rules()), "ter.plain");
+        world.record_accepted(record);
+        let mut kept = Vec::new();
+        let walkers: Vec<EntityId> = (0..3)
+            .map(|n| citizen(&mut world, Pos::flat(4_500 + n * 2_000, 4_500)))
+            .collect();
+        for n in 0..3 {
+            citizen(&mut replica, Pos::flat(4_500 + n * 2_000, 4_500));
+        }
+        for tick in 0..60_i32 {
+            if tick % 10 == 0 {
+                for (n, walker) in walkers.iter().enumerate() {
+                    let goal = Pos::flat(6_000 + tick * 300, 8_000 + n as i32 * 3_000);
+                    world.submit(move_command(*walker, goal, false)).unwrap();
+                }
+                // Refused: not recorded.
+                let foreign = Command {
+                    player: PlayerId(2),
+                    ..move_command(walkers[0], Pos::flat(9_000, 9_000), false)
+                };
+                assert!(world.submit(foreign).is_err());
+            }
+            let journal = world.take_accepted();
+            for command in &journal {
+                replica.submit(command.clone()).unwrap();
+            }
+            kept.extend(journal);
+            world.step();
+            replica.step();
+            if record {
+                assert_eq!(replica.hash(), world.hash(), "tick {tick}");
+            }
+        }
+        (world.hash(), kept)
+    };
+    let (hash, kept) = play(true);
+    assert_eq!(kept.len(), 18);
+    assert!(kept.iter().all(|c| c.player == OWNER && c.kind == "move"));
+    assert_eq!(kept[0].executor, kept[3].executor);
+    let (unrecorded, nothing) = play(false);
+    assert!(nothing.is_empty());
+    assert_eq!(unrecorded, hash, "recording does not change the world");
+    assert_eq!(play(true).0, hash, "run twice, the same");
+    // Orders a step gives itself are not recorded: armed enemies side by side attack at once.
+    let mut world = world();
+    world.record_accepted(true);
+    let armed = world
+        .rules()
+        .entity_types
+        .values()
+        .find(|et| et.movement.is_some() && !et.weapons.is_empty())
+        .map(|et| et.id)
+        .unwrap();
+    world
+        .spawn(armed, OWNER, Pos::flat(10_500, 10_500))
+        .unwrap();
+    world
+        .spawn(armed, PlayerId(2), Pos::flat(11_500, 10_500))
+        .unwrap();
+    for _ in 0..40 {
+        world.step();
+    }
+    assert!(
+        world
+            .entities()
+            .any(|e| e.orders().iter().any(|o| o.kind == "attack"))
+            || world.stats().losses.values().sum::<u64>() > 0,
+        "the step gave itself an attack"
+    );
+    assert!(world.take_accepted().is_empty(), "a step records nothing");
+    let walker = citizen(&mut world, Pos::flat(4_500, 4_500));
+    world
+        .submit(move_command(walker, Pos::flat(9_000, 9_000), false))
+        .unwrap();
+    world.record_accepted(false);
+    assert!(
+        world.take_accepted().is_empty(),
+        "stopping drops what was kept"
+    );
+}

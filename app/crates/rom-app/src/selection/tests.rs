@@ -2370,7 +2370,7 @@ fn colony_script_run() -> (crate::match_setup::Match, Controller, BodyId, u64) {
     };
     let content = crate::terrain::generate_universe_content(&options).unwrap();
     let setup = ScriptSetup::scan(text).unwrap();
-    let mut game = crate::match_setup::build_universe_match(
+    let game = crate::match_setup::build_universe_match(
         &content.rules,
         &content.universe,
         &content.factions,
@@ -2398,7 +2398,17 @@ fn colony_script_run() -> (crate::match_setup::Match, Controller, BodyId, u64) {
         surface_of(game.world.offset(start.city_pos, dx, dy))
     })
     .unwrap();
-    let mut host = crate::sim_thread::UniverseHost::new(content.universe, home, system);
+    // The match's leader (task 85) makes the planets ships are bound for.
+    let crate::match_setup::Match {
+        world,
+        starts,
+        builder_type,
+    } = game;
+    let mut core = rom_match::MatchCore::new(
+        world,
+        crate::computer::ComputerPlayers::empty(),
+        Some(content.universe),
+    );
     let mut ctl = Controller::new();
     ctl.set_view(ViewCtx {
         planet: home,
@@ -2406,27 +2416,27 @@ fn colony_script_run() -> (crate::match_setup::Match, Controller, BodyId, u64) {
         ..ViewCtx::default()
     });
     for _ in 0..4100 {
-        for action in script.due_actions(game.world.tick()) {
+        let world = core.world_mut();
+        for action in script.due_actions(world.tick()) {
             match action {
-                ScriptAction::SelectResearchers => ctl.select_researchers(&game.world),
-                ScriptAction::SelectCraft => ctl.select_own_craft(&game.world),
-                ScriptAction::SelectProducers => ctl.select_producers(&game.world),
-                ScriptAction::SelectShips => ctl.select_own_ships(&game.world),
+                ScriptAction::SelectResearchers => ctl.select_researchers(world),
+                ScriptAction::SelectCraft => ctl.select_own_craft(world),
+                ScriptAction::SelectProducers => ctl.select_producers(world),
+                ScriptAction::SelectShips => ctl.select_own_ships(world),
                 ScriptAction::EntityPick {
                     target,
                     right,
                     shift,
                 } => {
-                    let pick =
-                        crate::script::live_pick(&game.world, &target, right, shift).unwrap();
-                    ctl.handle(&mut game.world, pick);
+                    let pick = crate::script::live_pick(world, &target, right, shift).unwrap();
+                    ctl.handle(world, pick);
                 }
                 // The focus key: the camera comes down to the planet the selected ship orbits.
                 ScriptAction::Input(_) => {
                     let below = ctl
                         .selection()
                         .iter()
-                        .find_map(|id| game.world.orbit(*id).map(|o| o.body));
+                        .find_map(|id| world.orbit(*id).map(|o| o.body));
                     if let Some(planet) = below {
                         ctl.set_view(ViewCtx {
                             planet,
@@ -2447,16 +2457,20 @@ fn colony_script_run() -> (crate::match_setup::Match, Controller, BodyId, u64) {
                 | ScriptAction::Look(_) => {}
             }
         }
-        for event in script.due(game.world.tick()) {
-            ctl.handle(&mut game.world, event);
+        for event in script.due(world.tick()) {
+            ctl.handle(world, event);
         }
-        game.world.step();
-        if game.world.tick().is_multiple_of(10) {
-            host.generate_visited(&mut game.world).unwrap();
-        }
-        ctl.after_step(&mut game.world);
+        let outcome = core.lead(Vec::new());
+        assert!(outcome.problems.is_empty(), "{:?}", outcome.problems);
+        ctl.after_step(core.world_mut());
     }
-    let hash = game.world.hash();
+    let (world, _, _) = core.into_parts();
+    let hash = world.hash();
+    let game = crate::match_setup::Match {
+        world,
+        starts,
+        builder_type,
+    };
     (game, ctl, colony, hash)
 }
 
@@ -2917,5 +2931,46 @@ fn market_script_sells_and_buys_through_the_palette() {
         hud.help.starts_with("Buy 15% over the price"),
         "{}",
         hud.help
+    );
+}
+
+/// Task 85: a stance button gives a `stance` order like any other, so a follower sees it in the
+/// journal; the stance changes at the next step.
+#[test]
+fn a_stance_button_gives_an_order() {
+    let mut fx = fixture();
+    let armed = fx.spawn(fx.armed_other_than_builder(), 1, 20, 20);
+    fx.click(armed, false);
+    let mut previous = fx.world.entity(armed).unwrap().stance;
+    let palette = fx.hud_snapshot().palette.expect("palette");
+    assert_eq!(palette.buttons.len(), 3 + STANCE_BEHAVIORS.len());
+    fx.world.record_accepted(true);
+    let mut stances = std::collections::BTreeSet::new();
+    for button in &palette.buttons[3..] {
+        fx.hud(
+            HudRegionKind::CommandSlot,
+            button.slot,
+            PointerButton::Left,
+            false,
+        );
+        let orders = fx.world.take_accepted();
+        assert_eq!(orders.len(), 1, "{orders:?}");
+        assert_eq!(
+            (orders[0].kind.as_str(), orders[0].executor),
+            ("stance", armed)
+        );
+        assert_eq!(
+            fx.world.entity(armed).unwrap().stance,
+            previous,
+            "not before the step"
+        );
+        fx.step(1);
+        previous = fx.world.entity(armed).unwrap().stance;
+        stances.insert(previous);
+    }
+    assert_eq!(
+        stances.len(),
+        STANCE_BEHAVIORS.len(),
+        "every button set its stance"
     );
 }

@@ -9,7 +9,6 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use rom_mapgen::Universe;
 use rom_render::{
     Activity, EXPLORED, EntitySnapshot, EntityView, Level, OrbitSettings, RenderBridge, SurfacePos,
     UNEXPLORED, VISIBLE, VisionMap,
@@ -22,16 +21,16 @@ use crate::ascension_view::AscensionView;
 use crate::chat::{Channel, ChatInput, ChatKey, ChatLog};
 use crate::computer::ComputerPlayers;
 use crate::demo::DemoDriver;
-use crate::match_setup::planet_surface;
 use crate::saves::{self, Kind, SaveRequest, SaveSetup, Saved};
 use crate::script::{Script, ScriptAction};
 use crate::selection::{Controller, PLAYER, ViewCtx};
 use crate::space_view::{Notices, SpaceFrame, SystemIndex, dress_ships, space_snapshot_with};
+use rom_match::{Input, Journal, MatchCore};
 
-/// The universe the simulation thread expands planets from, and which planet is shown.
+/// The drawing half of a universe match: the globes of the planets shown, and which planet is
+/// shown. The planets themselves are made by the match core (`rom_match::MatchCore`) when a
+/// camera or a ship first visits them.
 pub struct UniverseHost {
-    /// The generated universe, whose recipes make the planets on demand.
-    pub universe: Universe,
     /// The planet whose globe and entities are published.
     pub viewed: BodyId,
     /// The system of that planet.
@@ -46,9 +45,8 @@ pub struct UniverseHost {
 
 impl UniverseHost {
     /// A host that shows `home` first.
-    pub fn new(universe: Universe, home: BodyId, home_system: u32) -> Self {
+    pub fn new(home: BodyId, home_system: u32) -> Self {
         Self {
-            universe,
             viewed: home,
             home_system,
             scenes: BTreeMap::new(),
@@ -63,18 +61,19 @@ impl UniverseHost {
         self.home_starts.entry(body).or_insert(at);
     }
 
-    /// Makes `body` the planet shown: generates and adds its surface when the world has none,
-    /// and hands the render thread its globe. Returns whether a surface was added.
+    /// Makes `body` the planet shown: the person's camera visits it (task 85: an input of the
+    /// match, which makes its surface when it has none), and the render thread gets its globe.
+    /// Returns whether a surface was added.
     pub fn show(
         &mut self,
-        world: &mut World,
+        core: &mut MatchCore,
         body: BodyId,
         bridge: &RenderBridge,
     ) -> Result<bool, String> {
-        let added = self.generate(world, body)?;
+        let added = self.generate(core, body)?;
         self.viewed = body;
         let home = self.home_starts.get(&body).copied().or_else(|| {
-            self.universe
+            core.universe()?
                 .starts
                 .iter()
                 .find(|(b, _)| *b == body.0)
@@ -91,36 +90,37 @@ impl UniverseHost {
         Ok(added)
     }
 
-    /// Generates the planets ships are ordered to orbit, so the first visit (and a landing there)
-    /// finds a surface: a planet is made when it is first visited, by camera or by ship.
-    pub fn generate_visited(&mut self, world: &mut World) -> Result<(), String> {
-        let waiting = world.ungenerated_bodies();
-        if waiting.is_empty() {
-            return Ok(());
+    /// Keeps the globes of the planets the match made since the last call (by camera or by
+    /// ship), so the first look at them is quick.
+    pub fn take_new_planets(&mut self, core: &mut MatchCore) {
+        let rules = Arc::clone(core.world().rules());
+        for (body, planet) in core.take_new_planets() {
+            if !self.scenes.contains_key(&body) {
+                let scene = Arc::new(self.scene_of(&planet, &rules));
+                self.scenes.insert(body, scene);
+            }
         }
-        let wanted: std::collections::BTreeSet<BodyId> = world
-            .entities()
-            .filter_map(|e| e.orders().front().filter(|o| o.kind == "orbit"))
-            .filter_map(|o| {
-                o.target_pos.map(|p| p.body).or_else(|| {
-                    let marker = o.target_entity?;
-                    waiting
-                        .iter()
-                        .copied()
-                        .find(|b| world.body_marker(*b) == Some(marker))
-                })
-            })
-            .filter(|b| waiting.contains(b))
-            .collect();
-        for body in wanted {
-            self.generate(world, body)?;
-        }
-        Ok(())
+    }
+
+    /// A made planet as the render thread draws it: no start or node markers (they are
+    /// entities), the rules' terrain colours and the sun's settings.
+    fn scene_of(
+        &self,
+        planet: &rom_mapgen::SpherePlanet,
+        rules: &rom_rules::Rules,
+    ) -> rom_render::PlanetScene {
+        let mut scene = crate::terrain::to_planet_scene(planet);
+        crate::terrain::apply_terrain_colours(&mut scene.feature_colors, rules);
+        scene.sun = self.sun;
+        scene.starts.clear();
+        scene.nodes.clear();
+        scene
     }
 
     /// Follows the bodies brought to life (task 77): a moon that came to life is drawn as a
     /// small planet in the system view, and the planet shown is re-baked where it was painted.
-    pub fn follow_life(&mut self, world: &World, bridge: &RenderBridge) {
+    pub fn follow_life(&mut self, core: &MatchCore, bridge: &RenderBridge) {
+        let world = core.world();
         let mut woke = Vec::new();
         for (body, living) in world.living_bodies() {
             let known = self.painted.get(&body).copied();
@@ -143,7 +143,8 @@ impl UniverseHost {
             }
             self.painted.insert(body, living.strokes);
             if self.scenes.contains_key(&body)
-                && let Some(mut scene) = crate::terrain::living_scene(world, &self.universe, body)
+                && let Some(universe) = core.universe()
+                && let Some(mut scene) = crate::terrain::living_scene(world, universe, body)
             {
                 scene.sun = self.sun;
                 let scene = Arc::new(scene);
@@ -158,36 +159,38 @@ impl UniverseHost {
         }
     }
 
-    /// Generates `body` and adds its surface when the world has none, keeping its globe for the
-    /// render thread. Returns whether a surface was added.
-    fn generate(&mut self, world: &mut World, body: BodyId) -> Result<bool, String> {
-        let rules = Arc::clone(world.rules());
-        let mut added = false;
+    /// Visits `body` for the person when the world has no surface for it, and keeps its globe
+    /// for the render thread. Returns whether a surface was added.
+    fn generate(&mut self, core: &mut MatchCore, body: BodyId) -> Result<bool, String> {
+        let rules = Arc::clone(core.world().rules());
         // A body brought to life shows its painted ground (task 77).
         if !self.scenes.contains_key(&body)
-            && let Some(mut scene) = crate::terrain::living_scene(world, &self.universe, body)
+            && let Some(universe) = core.universe()
+            && let Some(mut scene) = crate::terrain::living_scene(core.world(), universe, body)
         {
             scene.sun = self.sun;
             self.scenes.insert(body, Arc::new(scene));
         }
+        if self.scenes.contains_key(&body) {
+            return Ok(false);
+        }
+        let added = core.world().surface(body).is_none();
+        if added {
+            core.apply(Input::Visit {
+                player: PLAYER,
+                body,
+            })?;
+            self.take_new_planets(core);
+        }
         if !self.scenes.contains_key(&body) {
-            let planet = self
-                .universe
+            // A planet the world already has (a home planet, a loaded game): drawn from its
+            // recipe.
+            let planet = core
+                .universe()
+                .ok_or("not a universe match")?
                 .expand(&rules, body.0)
                 .map_err(|e| format!("expanding body {}: {e}", body.0))?;
-            if world.surface(body).is_none() {
-                world
-                    .add_surface(body, &planet_surface(&planet))
-                    .map_err(|e| format!("adding the surface of body {}: {e}", body.0))?;
-                // The terrain of a planet is surveyed from orbit; units stay hidden until seen.
-                world.reveal_terrain(PLAYER, body);
-                added = true;
-            }
-            let mut scene = crate::terrain::to_planet_scene(&planet);
-            crate::terrain::apply_terrain_colours(&mut scene.feature_colors, &rules);
-            scene.sun = self.sun;
-            scene.starts.clear();
-            scene.nodes.clear();
+            let scene = self.scene_of(&planet, &rules);
             self.scenes.insert(body, Arc::new(scene));
         }
         Ok(added)
@@ -488,6 +491,8 @@ pub struct Extras {
     pub saving: Option<SaveSetup>,
     /// Start held, as a loaded game does.
     pub paused: bool,
+    /// Receives every tick's journal and the world's hash after the step (tests; a host).
+    pub journals: Option<Sender<(Journal, u64)>>,
 }
 
 /// Owns the simulation thread; dropping it stops and joins the thread.
@@ -498,14 +503,12 @@ pub struct SimThread {
 }
 
 impl SimThread {
-    /// Moves `world` (and the optional demo driver and computer players) onto a new thread
+    /// Moves the match (its leader, task 85) and the optional demo driver onto a new thread
     /// that publishes snapshots to `bridge`. `extras` says how saving is set up and whether
     /// the match starts held.
-    #[allow(clippy::too_many_arguments)] // the thread's whole state, moved in once
     pub fn spawn(
-        world: World,
+        core: MatchCore,
         driver: Option<DemoDriver>,
-        computers: Option<ComputerPlayers>,
         script: Option<Script>,
         speed_pct: u32,
         bridge: RenderBridge,
@@ -538,12 +541,12 @@ impl SimThread {
             .name("rom-sim".into())
             .spawn(move || {
                 run(
-                    world,
+                    core,
                     driver,
-                    computers,
                     script,
                     host,
                     extras.saving,
+                    extras.journals,
                     &thread_link,
                     &inbox,
                     &request_inbox,
@@ -578,14 +581,19 @@ impl Drop for SimThread {
     }
 }
 
+/// The thread's loop. One tick of the match is `MatchCore::lead`; around it the app does what
+/// a host does between ticks: the person's clicks and camera visits, script lines and the demo
+/// driver before it, requeued orders, notices, saves and the snapshots for the window after
+/// it, and the (unused) order inbox last, as before task 85, so standalone matches play as
+/// they did (`rom_match::core` documents the order of a tick).
 #[allow(clippy::too_many_arguments)] // the thread's whole state, moved in once
 fn run(
-    mut world: World,
+    mut core: MatchCore,
     mut driver: Option<DemoDriver>,
-    mut computers: Option<ComputerPlayers>,
     mut script: Option<Script>,
     mut host: Option<UniverseHost>,
     saving: Option<SaveSetup>,
+    journals: Option<Sender<(Journal, u64)>>,
     link: &SimLink,
     inbox: &Receiver<Command>,
     requests: &Receiver<SaveRequest>,
@@ -601,38 +609,34 @@ fn run(
     let mut window_start = last;
     let mut window_ticks = 0_u32;
     let mut thoughts = (0_u32, Duration::ZERO, Duration::ZERO);
-    link.stats.computers.store(
-        computers.as_ref().map_or(0, |c| c.len() as u32),
-        Ordering::Relaxed,
-    );
+    link.stats
+        .computers
+        .store(core.computers().len() as u32, Ordering::Relaxed);
+    // The globes of planets made by ships are kept for the render thread.
+    core.keep_new_planets(host.is_some());
     let mut controller = Controller::new();
     let suggest = |world: &World| {
         if let (Some(setup), Ok(mut name)) = (saving.as_ref(), link.suggested.lock()) {
             *name = saves::default_name(world, setup, saves::now_secs());
         }
     };
-    suggest(&world);
+    suggest(core.world());
     let mut memory = Memory::default();
-    let models = Arc::new(crate::looks::ModelBook::new(world.rules()));
+    let models = Arc::new(crate::looks::ModelBook::new(core.world().rules()));
     controller.set_models(Arc::clone(&models));
     let mut notices = Notices::default();
     let mut frames: BTreeMap<u32, Option<SpaceFrame>> = BTreeMap::new();
-    notices.update(&world);
-    let mut ascension = AscensionView::new(
-        computers
-            .as_ref()
-            .map(|c| c.players().collect())
-            .unwrap_or_default(),
-    );
+    notices.update(core.world());
+    let mut ascension = AscensionView::new(core.computers().players().collect());
     if let Some(text) = saving
         .as_ref()
         .and_then(|s| s.info.settings.get(crate::chat::SAVE_KEY))
     {
         ascension.restore(ChatLog::decode(text));
     }
-    ascension.update(&world);
+    ascension.update(core.world());
     publish(
-        &world,
+        core.world(),
         &controller,
         link,
         bridge,
@@ -656,37 +660,39 @@ fn run(
         last = now;
         // The chat (tasks 76 and 94): what the window typed, sent in the person's name.
         link.ascended
-            .store(world.is_ascended(PLAYER), Ordering::Release);
+            .store(core.world().is_ascended(PLAYER), Ordering::Release);
         let (input, sent) = link.take_chat(ascension.chat().len());
         for (channel, line) in sent {
-            ascension.say(&world, channel, &line);
+            ascension.say(core.world(), channel, &line);
         }
         let typing = input != ascension.input;
         ascension.input = input;
         while let Ok(request) = requests.try_recv() {
             let text = write_save(
-                &world,
-                computers.as_ref(),
+                core.world(),
+                core.computers(),
                 saving.as_ref(),
                 speed,
                 link,
                 &request,
                 ascension.log(),
             );
-            controller.notify(&world, text);
-            publish_hud(&world, &controller, bridge, &ascension);
+            controller.notify(core.world(), text);
+            publish_hud(core.world(), &controller, bridge, &ascension);
         }
         if let Some(host) = host.as_mut() {
+            // The camera's visit is an input of the match (task 85), applied now as before.
             if let Some(body) = bridge.take_surface_request()
-                && let Err(error) = host.show(&mut world, BodyId(body), bridge)
+                && let Err(error) = host.show(&mut core, BodyId(body), bridge)
             {
                 eprintln!("rise-of-man: {error}");
             }
+            let world = core.world();
             let view = bridge.view_state();
             let system = view.system.unwrap_or(host.home_system);
             let frame = *frames
                 .entry(system)
-                .or_insert_with(|| SpaceFrame::of(&world, system));
+                .or_insert_with(|| SpaceFrame::of(world, system));
             controller.set_view(ViewCtx {
                 planet: host.viewed,
                 system: Some(system),
@@ -694,6 +700,7 @@ fn run(
                 frame,
             });
         }
+        let world = core.world();
         link.stats.surfaces.store(
             world
                 .surfaces()
@@ -709,42 +716,43 @@ fn run(
         let picks = bridge.take_picks();
         let interacted = !picks.is_empty();
         for pick in picks {
-            handle_pick(&mut controller, &mut world, link, pick);
+            handle_pick(&mut controller, core.world_mut(), link, pick);
         }
-        focus_camera(&world, &mut controller, bridge);
+        focus_camera(core.world(), &mut controller, bridge);
         if (interacted || typing) && ticks == 0 {
-            publish_hud(&world, &controller, bridge, &ascension);
+            publish_hud(core.world(), &controller, bridge, &ascension);
         }
         for _ in 0..ticks {
             if let Some(script) = script.as_mut() {
+                let world = core.world_mut();
                 for action in script.due_actions(world.tick()) {
                     match action {
-                        ScriptAction::SelectShips => controller.select_own_ships(&world),
-                        ScriptAction::SelectCraft => controller.select_own_craft(&world),
-                        ScriptAction::SelectProducers => controller.select_producers(&world),
-                        ScriptAction::SelectResearchers => controller.select_researchers(&world),
+                        ScriptAction::SelectShips => controller.select_own_ships(world),
+                        ScriptAction::SelectCraft => controller.select_own_craft(world),
+                        ScriptAction::SelectProducers => controller.select_producers(world),
+                        ScriptAction::SelectResearchers => controller.select_researchers(world),
                         ScriptAction::EntityPick {
                             target,
                             right,
                             shift,
-                        } => match crate::script::live_pick(&world, &target, right, shift) {
-                            Ok(pick) => controller.handle(&mut world, pick),
-                            Err(error) => controller.notify(&world, error),
+                        } => match crate::script::live_pick(world, &target, right, shift) {
+                            Ok(pick) => controller.handle(world, pick),
+                            Err(error) => controller.notify(world, error),
                         },
                         ScriptAction::Speed(percent) => link.set_speed(percent),
                         ScriptAction::Save(name) => link.request_save(Kind::Manual, name),
                         ScriptAction::QuickSave => link.request_save(Kind::Quick, ""),
                         ScriptAction::Menu(page) => link.request_menu(page),
                         ScriptAction::Ascend(player) => {
-                            if let Err(error) = crate::script::ascend(&mut world, player) {
-                                controller.notify(&world, error);
+                            if let Err(error) = crate::script::ascend(world, player) {
+                                controller.notify(world, error);
                             }
                         }
                         ScriptAction::Chat(channel, line) => {
-                            ascension.say(&world, channel, &line);
+                            ascension.say(world, channel, &line);
                         }
                         ScriptAction::ChatFrom(player, channel, line) => {
-                            ascension.hear(&world, player, channel, &line);
+                            ascension.hear(world, player, channel, &line);
                         }
                         ScriptAction::ChatKeys(keys) => {
                             for key in keys {
@@ -761,51 +769,50 @@ fn run(
                     }
                 }
                 for pick in script.due(world.tick()) {
-                    handle_pick(&mut controller, &mut world, link, pick);
+                    handle_pick(&mut controller, world, link, pick);
                 }
             }
             if let Some(driver) = driver.as_mut() {
                 if controller.player_has_ordered() {
                     driver.release(PLAYER);
                 }
-                let rejected = driver.drive(&mut world).len() as u64;
+                let rejected = driver.drive(core.world_mut()).len() as u64;
                 link.stats.rejected.fetch_add(rejected, Ordering::Relaxed);
             }
-            if let Some(computers) = computers.as_mut() {
-                let report = computers.step(&mut world);
-                thoughts.0 += report.thoughts;
-                thoughts.1 += report.think_time;
-                thoughts.2 = thoughts.2.max(report.longest);
-                link.stats
-                    .computer_orders
-                    .fetch_add(u64::from(report.orders), Ordering::Relaxed);
-                link.stats
-                    .computer_rejected
-                    .fetch_add(u64::from(report.rejected), Ordering::Relaxed);
+            // Computer players, governors, the step, and planets ships are bound for.
+            let outcome = core.lead(Vec::new());
+            let report = outcome.computers;
+            thoughts.0 += report.thoughts;
+            thoughts.1 += report.think_time;
+            thoughts.2 = thoughts.2.max(report.longest);
+            link.stats
+                .computer_orders
+                .fetch_add(u64::from(report.orders), Ordering::Relaxed);
+            link.stats
+                .computer_rejected
+                .fetch_add(u64::from(report.rejected), Ordering::Relaxed);
+            for problem in outcome.problems {
+                eprintln!("rise-of-man: {problem}");
             }
-            // The governors of automated colonies work for every owner, the person included.
-            rom_ai::run_governors(&mut world);
-            world.step();
+            if let Some(journals) = journals.as_ref() {
+                let _ = journals.send((outcome.journal, core.world().hash()));
+            }
             if let Some(host) = host.as_mut() {
-                host.follow_life(&world, bridge);
+                host.follow_life(&core, bridge);
+                host.take_new_planets(&mut core);
             }
-            if world.tick().is_multiple_of(VISIT_INTERVAL)
-                && let Some(host) = host.as_mut()
-                && let Err(error) = host.generate_visited(&mut world)
-            {
-                eprintln!("rise-of-man: {error}");
-            }
-            controller.after_step(&mut world);
-            for notice in notices.update(&world) {
+            controller.after_step(core.world_mut());
+            let world = core.world();
+            for notice in notices.update(world) {
                 match notice.about {
-                    Some(id) => controller.notify_about(&world, notice.text, id),
-                    None => controller.notify(&world, notice.text),
+                    Some(id) => controller.notify_about(world, notice.text, id),
+                    None => controller.notify(world, notice.text),
                 }
             }
-            for line in ascension.update(&world) {
-                controller.notify(&world, line);
+            for line in ascension.update(world) {
+                controller.notify(world, line);
             }
-            focus_camera(&world, &mut controller, bridge);
+            focus_camera(world, &mut controller, bridge);
             if let Some(every) = autosave_every
                 && world.tick().is_multiple_of(every)
             {
@@ -814,8 +821,8 @@ fn run(
                     name: String::new(),
                 };
                 let text = write_save(
-                    &world,
-                    computers.as_ref(),
+                    world,
+                    core.computers(),
                     saving.as_ref(),
                     speed,
                     link,
@@ -823,12 +830,12 @@ fn run(
                     ascension.log(),
                 );
                 if text.starts_with("Save failed") {
-                    controller.notify(&world, text);
+                    controller.notify(world, text);
                 }
             }
             window_ticks += 1;
             publish(
-                &world,
+                world,
                 &controller,
                 link,
                 bridge,
@@ -838,7 +845,7 @@ fn run(
                 &ascension,
             );
             while let Ok(command) = inbox.try_recv() {
-                if world.submit(command).is_err() {
+                if core.apply(Input::Order(command)).is_err() {
                     link.stats.rejected.fetch_add(1, Ordering::Relaxed);
                 }
             }
@@ -851,7 +858,7 @@ fn run(
                 .store((rate * 10.0).round() as u32, Ordering::Relaxed);
             window_start = now;
             window_ticks = 0;
-            suggest(&world);
+            suggest(core.world());
             let (count, total, longest) = std::mem::take(&mut thoughts);
             let micros = |d: Duration| d.as_micros().min(u128::from(u32::MAX)) as u32;
             link.stats.think_us_avg.store(
@@ -873,7 +880,7 @@ fn run(
 /// Writes a save the player or the autosave asked for; the event-line text says how it went.
 fn write_save(
     world: &World,
-    computers: Option<&ComputerPlayers>,
+    computers: &ComputerPlayers,
     saving: Option<&SaveSetup>,
     speed_pct: u32,
     link: &SimLink,
@@ -882,17 +889,7 @@ fn write_save(
 ) -> String {
     let result = match saving {
         None => Err("this match cannot be saved".to_owned()),
-        Some(setup) => {
-            let none;
-            let computers = match computers {
-                Some(computers) => computers,
-                None => {
-                    none = ComputerPlayers::empty();
-                    &none
-                }
-            };
-            saves::write(world, computers, setup, speed_pct, request, chat)
-        }
+        Some(setup) => saves::write(world, computers, setup, speed_pct, request, chat),
     };
     let text = match &result {
         Ok(saved) => match request.kind {
@@ -1005,9 +1002,6 @@ impl TerrainKnowledge {
 /// A unit's stain reaches this share of its model's longest extent, if that is wider than the
 /// simulation's mark (task 80).
 const UNIT_STAIN_PER_EXTENT: f32 = 0.65;
-
-/// Ticks between two looks for planets that ships are bound for and that are not made yet.
-const VISIT_INTERVAL: u64 = 10;
 
 /// Ticks between two visibility maps sent to the render thread.
 const VISION_INTERVAL: u64 = 5;
@@ -2203,10 +2197,9 @@ mod tests {
         let target = game.world.ungenerated_bodies()[0];
         let before = game.world.surfaces().len();
         let bridge = RenderBridge::detached();
-        let host = UniverseHost::new(content.universe.clone(), home, home_system);
+        let host = UniverseHost::new(home, home_system);
         let mut thread = SimThread::spawn(
-            game.world,
-            None,
+            MatchCore::new(game.world, ComputerPlayers::empty(), Some(content.universe)),
             None,
             None,
             100,
@@ -2354,7 +2347,7 @@ mod save_tests {
             options.seed,
         )
         .expect("match");
-        let computers = ComputerPlayers::new(&mut game.world, &[], 5, false).expect("brains");
+        let computers = ComputerPlayers::new(&mut game.world, &[], 5, &[PLAYER]).expect("brains");
         (Arc::clone(game.world.rules()), game.world, computers)
     }
 
@@ -2397,9 +2390,8 @@ mod save_tests {
             dir.clone(),
         );
         let mut thread = SimThread::spawn(
-            world,
+            MatchCore::new(world, computers, None),
             None,
-            Some(computers),
             None,
             100,
             RenderBridge::detached(),
@@ -2407,6 +2399,7 @@ mod save_tests {
             Extras {
                 saving: Some(setup),
                 paused: true,
+                journals: None,
             },
         )
         .expect("thread");
@@ -2466,9 +2459,8 @@ mod save_tests {
         let dir = folder("autosave");
         let setup = SaveSetup::new(&world, 5, "mapstyle.test", &[], 1, dir.clone());
         let mut thread = SimThread::spawn(
-            world,
+            MatchCore::new(world, computers, None),
             None,
-            Some(computers),
             None,
             10_000,
             RenderBridge::detached(),
@@ -2476,6 +2468,7 @@ mod save_tests {
             Extras {
                 saving: Some(setup),
                 paused: false,
+                journals: None,
             },
         )
         .expect("thread");
@@ -2724,5 +2717,100 @@ mod save_tests {
             }
             assert!(checked >= 1, "{shooter} fired at the walker");
         }
+    }
+}
+
+/// Task 85: the standalone game runs through the match core's leader.
+#[cfg(test)]
+mod leader_tests {
+    use super::*;
+    use crate::script::ScriptSetup;
+    use rom_match::Entry;
+
+    /// The simulation thread plays a scripted universe match (clicks of player one, computer
+    /// players for the others, a camera visit): a headless follower built from the same
+    /// settings and fed the thread's journals has the same world after every tick.
+    #[test]
+    fn a_follower_of_the_apps_journal_has_the_apps_world() {
+        let script_text = "0 grant-age age.expansion\n0 grant res.metal 5000\n\
+                           5 box builders\n8 rclick @6,4\n40 click city\n";
+        let path = std::env::temp_dir().join(format!("rom-t85-script-{}.txt", std::process::id()));
+        std::fs::write(&path, script_text).unwrap();
+        let options = crate::args::Options {
+            universe: true,
+            seed: 1,
+            players: 3,
+            script: Some(path.clone()),
+            ..crate::args::Options::default()
+        };
+        let setup = ScriptSetup::scan(script_text).unwrap();
+        let built = options
+            .match_settings(setup.clone())
+            .build()
+            .expect("leader");
+        let script = crate::shell::read_script(&path, &built.game).expect("script");
+        std::fs::remove_file(&path).unwrap();
+        let home = built.game.world.home_body(PLAYER).unwrap();
+        let home_system = built.game.world.body(home).unwrap().system;
+        let target = built
+            .game
+            .world
+            .ungenerated_bodies()
+            .into_iter()
+            .find(|b| {
+                built
+                    .game
+                    .world
+                    .body(*b)
+                    .is_some_and(|b| b.home_race.is_none())
+            })
+            .expect("a planet nobody has visited");
+        let bridge = RenderBridge::detached();
+        let (journals, received) = channel();
+        let mut thread = SimThread::spawn(
+            built.leader(),
+            None,
+            Some(script),
+            2_000,
+            bridge.clone(),
+            Some(UniverseHost::new(home, home_system)),
+            Extras {
+                journals: Some(journals),
+                ..Extras::default()
+            },
+        )
+        .expect("thread");
+        let mut follower = options
+            .match_settings(setup)
+            .build()
+            .expect("follower")
+            .follower();
+        let (mut orders_of_one, mut visited, mut computer_orders) = (0, false, 0);
+        let started = Instant::now();
+        while follower.world().tick() < 400 {
+            assert!(started.elapsed() < Duration::from_secs(120), "too slow");
+            let Ok((journal, hash)) = received.recv_timeout(Duration::from_secs(60)) else {
+                panic!("no journal");
+            };
+            if journal.tick == 60 {
+                // The camera zooms in on a planet without a surface.
+                bridge.request_surface(target.0);
+            }
+            for entry in &journal.entries {
+                match entry {
+                    Entry::Order(c) if c.player == PLAYER => orders_of_one += 1,
+                    Entry::Order(_) => computer_orders += 1,
+                    Entry::SurfaceAdded { body, revealed_for } => {
+                        visited |= *body == target && revealed_for == &vec![PLAYER];
+                    }
+                }
+            }
+            follower.follow(&journal).expect("in step");
+            assert_eq!(follower.world().hash(), hash, "tick {}", journal.tick);
+        }
+        thread.stop();
+        assert!(orders_of_one > 0, "the script's click ordered the builders");
+        assert!(computer_orders > 0, "the computer players played");
+        assert!(visited, "the camera's visit made the planet");
     }
 }

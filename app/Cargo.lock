@@ -4879,6 +4879,7 @@ dependencies = [
  "gpui-component",
  "rom-ai",
  "rom-mapgen",
+ "rom-match",
  "rom-models",
  "rom-render",
  "rom-rules",
@@ -4895,6 +4896,7 @@ dependencies = [
  "rom-ai",
  "rom-geo",
  "rom-mapgen",
+ "rom-match",
  "rom-models",
  "rom-rules",
  "rom-sim",
@@ -4917,6 +4919,19 @@ dependencies = [
  "rom-rules",
  "rom-sim",
  "rusqlite",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "rom-match"
+version = "0.0.103"
+dependencies = [
+ "rom-ai",
+ "rom-mapgen",
+ "rom-models",
+ "rom-rules",
+ "rom-save",
+ "rom-sim",
  "thiserror 2.0.21",
 ]
 

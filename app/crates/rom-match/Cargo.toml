@@ -1,0 +1,16 @@
+[package]
+name = "rom-match"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "One match core for the app and the server: setup, computer players, the leader and the follower"
+
+[dependencies]
+rom-rules.workspace = true
+rom-models.workspace = true
+rom-sim = { path = "../rom-sim" }
+rom-mapgen = { path = "../rom-mapgen" }
+rom-ai = { path = "../rom-ai" }
+rom-save = { path = "../rom-save" }
+thiserror.workspace = true

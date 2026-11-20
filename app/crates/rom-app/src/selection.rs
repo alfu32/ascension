@@ -2322,10 +2322,9 @@ impl Controller {
                     })
                     .map(|e| e.id)
                     .collect();
+                // An order like any other (task 85): a follower sees it in the journal.
                 for id in ids {
-                    if let Err(error) = world.set_stance(PLAYER, id, stance) {
-                        self.say(world, error.to_string());
-                    }
+                    self.submit(world, id, "stance", Some(stance), None, None, false);
                 }
             }
         }
