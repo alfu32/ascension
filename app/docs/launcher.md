@@ -1,4 +1,48 @@
-# Owner launcher
+# Launcher
+
+## The simple launcher (task 87)
+
+The window opens on four large choices and **Advanced …**:
+
+| Choice | Starts | Form |
+| --- | --- | --- |
+| Play | a standalone game | your race or nation, computer opponents (0–7) and their difficulty, map style (Planet, Solar, Cluster, Sector, Quadrant, Galaxy), seed (blank = random) |
+| Host a game | standalone with a server: you play, others join | the Play fields, remote players (1–7), port (7400), when a player drops, speed |
+| Join a game | a client | server address (`http://` or `https://`), key, your name; **Rejoin** when a seat token is remembered for that address |
+| Run a server | a server, no game window | listen address, port, human seats, computer seats, difficulty, map style, seed, speed, when a player drops, autosave minutes |
+
+Every form has **Back** (Escape), a final button that Enter presses, and **Open in
+Advanced …**, which loads the options the form stands for into the advanced launcher.
+The final button stays off until every field is valid (a URL that is not http or https, a port
+outside 1–65535, an empty key, more than eight players). Host, Join and Run a server open
+their forms but their button stays off with "Network play arrives with task 88"
+(`simple::NETWORK_READY`); Play and Advanced work fully. The simple forms start universe
+matches; flat and single-planet options live in Advanced only.
+
+Each form fills the advanced `Form` (and so the same `Options` as the command line, one
+source of truth); `simple.rs` has the mapping and its tests. The forms' values are remembered
+in `launcher.json` under `simple`; seat tokens (written by task 88) under `tokens`, by server
+address. A blank seed becomes a random one when the game starts, so the command line shows it.
+
+| Form | Options it gives (besides `--universe --style --seed --speed`) |
+| --- | --- |
+| Play | `--players N+1 --ai p:d,… [--factions race,…]` |
+| Host | `--players 1+R+N --ai … --host PORT --remote-players R --bind 0.0.0.0 --on-disconnect P` |
+| Join | `--connect URL --key K [--name N]`; Rejoin: `--connect URL --token T [--name N]` |
+| Run a server | `--serve --players H+C --ai … --host PORT --bind ADDR --remote-players H --on-disconnect P --autosave-minutes M` |
+
+The network options (task 87) are `--host <port>` (with `--serve`: the server's port),
+`--remote-players N` (1–8), `--connect <url>`, `--key`, `--token`, `--name`, `--serve`,
+`--bind <address>` (default 127.0.0.1), `--on-disconnect pause-then-computer|idle|computer`,
+`--wait-seconds` (default 120) and `--autosave-minutes` (same as `--autosave`). They parse and
+round-trip through the settings file and the advanced launcher's **Network** group; until
+task 88 the game refuses to run with `--host`, `--connect` or `--serve`.
+
+Screenshot and scripted-run hooks (environment, for tests): `ROM_LAUNCHER_SCREEN=simple|play|
+host|join|server|advanced` opens that screen; `ROM_LAUNCHER_START=1` presses the form's final
+button after two seconds; `ROM_LAUNCHER_APPEND="--bench 6"` adds arguments to that start.
+
+# Advanced launcher
 
 From `app/`, `env -u WAYLAND_DISPLAY cargo run -p rom-app` opens the launcher.
 The release binary opens it with no arguments or with `--launcher`. All existing
@@ -12,7 +56,7 @@ editable. Reset to defaults restores the command-line defaults (including a flat
 map), while retaining named presets. Save up to twelve custom presets by name;
 saving an existing name replaces it, and its adjacent × button removes it.
 
-The tabs expose all 44 game options, including the script path. Each row
+The tabs expose all 55 game options, including the script path. Each row
 shows its flag, help and default. Blank optional fields leave the option unset.
 Dropdowns offer rules-derived styles, age names, factions, terrain names, entities
 and composed model ids. The adjacent text fields also allow custom values; for

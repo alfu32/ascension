@@ -8,19 +8,20 @@ use serde_json::{Value, json};
 use crate::args;
 
 /// Navigation labels in the same order as control group indices.
-pub(super) const GROUPS: [&str; 7] = [
+pub(super) const GROUPS: [&str; 8] = [
     "Game",
     "Window",
     "Camera and light",
     "Model review",
     "Automation",
+    "Network",
     "Models",
     "Saved games",
 ];
 /// The group of model tools (export to and import from Meshcraft), which has no options.
-pub(super) const MODELS_GROUP: usize = 5;
+pub(super) const MODELS_GROUP: usize = 6;
 /// The group listing saved games, which has no options either.
-pub(super) const SAVES_GROUP: usize = 6;
+pub(super) const SAVES_GROUP: usize = 7;
 
 /// One command-line option and its form presentation.
 pub(super) struct Control {
@@ -94,6 +95,17 @@ controls! {
     ("after", 4, "1", "Seconds after the first frame before taking a screenshot.", false),
     ("bench", 4, "", "Run for this many positive seconds, print measurements and exit.", false),
     ("script", 4, "", "Path to a pick-event script replayed on the simulation thread.", false),
+    ("host", 5, "", "Play and let others join: the port to listen on (1–65535, usually 7400). With --serve, the server's port (default 7400). Blank: standalone.", false),
+    ("remote-players", 5, "1", "Other people's seats in a hosted or served match, 1–8.", false),
+    ("connect", 5, "", "Join the server at this http:// or https:// address; needs a key or a token. Excludes host and serve.", false),
+    ("key", 5, "", "The key that admits you to the server you connect to.", false),
+    ("token", 5, "", "The seat token the server gave you, to take the same seat again.", false),
+    ("name", 5, "", "The name the other players see.", false),
+    ("serve", 5, "false", "Run a server without a game window (a status window).", true),
+    ("bind", 5, "127.0.0.1", "The address a hosted or served match listens on; 0.0.0.0 lets the whole network in.", false),
+    ("on-disconnect", 5, "pause-then-computer", "When a person drops: pause-then-computer, idle (units stand idle) or computer (at once).", false),
+    ("wait-seconds", 5, "120", "How long a paused match waits for a dropped person, 1–86400 seconds.", false),
+    ("autosave-minutes", 5, "5", "Server autosave interval in game minutes; 0 turns it off.", false),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -284,6 +296,10 @@ pub(super) fn commands(executable: &Path, arguments: &[String]) -> [String; 2] {
 pub(super) struct Config {
     /// Most recently edited form.
     pub form: Form,
+    /// The simple launcher's fields.
+    pub simple: super::simple::Simple,
+    /// Seat tokens by server address, kept by network play for the Join form's Rejoin.
+    pub tokens: BTreeMap<String, String>,
     /// Owner-defined reusable forms, sorted by name.
     pub presets: BTreeMap<String, Form>,
 }
@@ -299,6 +315,13 @@ impl Config {
         let value: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
         Ok(Self {
             form: Form::from_json(&value["form"]),
+            simple: super::simple::Simple::from_json(&value["simple"]),
+            tokens: value["tokens"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .filter_map(|(url, token)| Some((url.clone(), token.as_str()?.to_owned())))
+                .collect(),
             presets: value["presets"]
                 .as_object()
                 .into_iter()
@@ -313,6 +336,8 @@ impl Config {
     pub fn save(&self, path: &Path) -> Result<(), String> {
         let value = json!({
             "form": self.form.values,
+            "simple": self.simple.values(),
+            "tokens": self.tokens,
             "presets": self.presets.iter().map(|(name, form)| (name, &form.values)).collect::<BTreeMap<_, _>>(),
         });
         let text = serde_json::to_vec_pretty(&value).map_err(|e| e.to_string())?;
@@ -431,9 +456,19 @@ mod tests {
             ("after", "3"),
             ("bench", "2"),
             ("script", "a script.txt"),
+            ("remote-players", "3"),
+            ("connect", "https://play.example.org/ascension/"),
+            ("key", "k-1"),
+            ("token", "t-2"),
+            ("name", "Ana"),
+            ("bind", "0.0.0.0"),
+            ("on-disconnect", "idle"),
+            ("wait-seconds", "30"),
+            ("autosave-minutes", "9"),
         ];
         let mut form = Form::default();
-        assert_eq!(values.len() + 1, CONTROLS.len());
+        // Not listed: single-planet (excludes universe), host and serve (exclude connect).
+        assert_eq!(values.len() + 3, CONTROLS.len());
         for (key, value) in values {
             form.set(key, value);
         }
@@ -458,6 +493,17 @@ mod tests {
         assert!(form.validate().unwrap().single_planet);
         form.set("universe", "true");
         assert!(form.validate().is_err());
+        // The server flags, apart from the client's.
+        let mut server = Form::default();
+        server.set("serve", "true");
+        server.set("host", "7401");
+        server.set("remote-players", "2");
+        let options = server.validate().unwrap();
+        assert!(options.serve);
+        assert_eq!((options.host, options.remote_players), (Some(7401), 2));
+        server.set("connect", "http://127.0.0.1:7400/");
+        server.set("key", "k");
+        assert!(server.validate().is_err());
     }
 
     #[test]
@@ -483,7 +529,7 @@ mod tests {
             );
         }
         assert!(CONTROLS.iter().any(|c| c.flag == "script"));
-        assert_eq!(CONTROLS.len(), 48);
+        assert_eq!(CONTROLS.len(), 59);
     }
 
     #[test]
@@ -517,11 +563,21 @@ mod tests {
             ..Default::default()
         };
         config.form.set("screenshot", "a path's image.png");
+        config.simple.set("seed", "31");
+        config.simple.set("url", "https://play.example.org/");
+        config
+            .tokens
+            .insert("https://play.example.org/".into(), "tok".into());
+        config.form.set("host", "7401");
+        config.form.set("on-disconnect", "computer");
         config.presets.insert("My demo".into(), config.form.clone());
         config.save(&path).unwrap();
         let loaded = Config::load(&path).unwrap();
         assert_eq!(loaded.form, config.form);
         assert_eq!(loaded.presets, config.presets);
+        assert_eq!(loaded.simple, config.simple);
+        assert_eq!(loaded.tokens, config.tokens);
+        assert_eq!(loaded.form.validate().unwrap().host, Some(7401));
         std::fs::write(&path, r#"{"form":{"seed":"72","future":"unknown","stats":null},"future":true,"presets":{"old":{"seed":"8"}}}"#).unwrap();
         let loaded = Config::load(&path).unwrap();
         assert_eq!(loaded.form.get("seed"), "72");
