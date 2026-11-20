@@ -1,0 +1,31 @@
+[package]
+name = "rom-net"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Network play: the protocol, the game server (lobby, keys, lockstep relay) and a headless client"
+
+[features]
+default = ["tls"]
+# `https://` servers (rustls with the operating system's root certificates). The server never
+# needs it: on the VPS nginx terminates TLS.
+tls = ["dep:rustls", "dep:rustls-native-certs"]
+
+[dependencies]
+rom-rules.workspace = true
+rom-sim = { path = "../rom-sim" }
+rom-ai = { path = "../rom-ai" }
+rom-mapgen = { path = "../rom-mapgen" }
+rom-save = { path = "../rom-save" }
+rom-match.workspace = true
+rusqlite.workspace = true
+thiserror.workspace = true
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+tungstenite = { version = "=0.30.0", default-features = false, features = ["handshake"] }
+httparse = "=1.10.1"
+sha2 = "=0.10.9"
+getrandom = "=0.3.4"
+rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"], optional = true }
+rustls-native-certs = { version = "=0.8.5", optional = true }

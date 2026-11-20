@@ -5,6 +5,7 @@ mod fight_matrix_cmd;
 mod first_attack_cmd;
 mod mapgen_cmd;
 mod model_cmd;
+mod net_cmd;
 mod orbit_matrix;
 mod playthrough_cmd;
 mod replay_cmd;
@@ -31,7 +32,7 @@ fn main() -> ExitCode {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = env::args().skip(1);
     let command = args.next().ok_or(
-        "usage: rom <build-rules|check-rules|run|battle|siege|mapgen|territory|universe|playthrough|ai-match|replay-hash|duel|first-attack|fight-matrix|wealth|model> [options]",
+        "usage: rom <build-rules|check-rules|run|battle|siege|mapgen|territory|universe|playthrough|ai-match|replay-hash|duel|first-attack|fight-matrix|wealth|model|serve|keys|client> [options]",
     )?;
     if command == "--version" {
         // The rules fingerprint: two builds play together only when it is the same.
@@ -41,6 +42,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             rom_match::rules_fingerprint_hex()
         );
         return Ok(());
+    }
+    if command == "serve" {
+        return net_cmd::serve(args);
+    }
+    if command == "keys" {
+        return net_cmd::keys(args);
+    }
+    if command == "client" {
+        return net_cmd::client(args);
     }
     if command == "replay-hash" {
         return replay_cmd::run(args);
@@ -113,7 +123,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     if command != "build-rules" {
         return Err(
-            "usage: rom <build-rules|check-rules|run|battle|siege|mapgen|territory|universe|playthrough|ai-match|replay-hash|duel|first-attack|fight-matrix|wealth|model> [options]"
+            "usage: rom <build-rules|check-rules|run|battle|siege|mapgen|territory|universe|playthrough|ai-match|replay-hash|duel|first-attack|fight-matrix|wealth|model|serve|keys|client> [options]"
                 .into(),
         );
     }
