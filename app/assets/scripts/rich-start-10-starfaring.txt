@@ -1,0 +1,13 @@
+# Rich start: Starfaring Age
+# Start in the Starfaring Age with its research done and plenty of every resource.
+# Bundled with the launcher (task 112), from docs/tasks/rich-start-10-starfaring-script.txt.
+# Only you get the research and the resources.
+0 grant-age age.starfaring
+0 research-all 1
+0 grant res.food 100000
+0 grant res.timber 100000
+0 grant res.metal 100000
+0 grant res.wealth 100000
+0 grant res.knowledge 100000
+0 grant res.oil 100000
+0 grant res.energy 100000

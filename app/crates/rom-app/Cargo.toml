@@ -24,3 +24,5 @@ rom-match.workspace = true
 rom-net = { path = "../rom-net", features = ["tls"] }
 thiserror.workspace = true
 serde_json = "=1.0.154"
+# The launcher, lobby and server window rasterise the HUD chrome as the HUD atlas does.
+resvg.workspace = true

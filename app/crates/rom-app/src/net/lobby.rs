@@ -4,27 +4,21 @@
 
 use std::time::{Duration, Instant};
 
+use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyWindowHandle, App, AppContext, ClipboardItem, Context, Entity, InteractiveElement,
     IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled,
     Subscription, TitlebarOptions, Window, WindowBounds, WindowOptions, div, px, rgb, size,
 };
 use gpui_component::{
-    Disableable, Root, Sizable,
-    button::{Button, ButtonVariants},
+    Root,
     input::{Input, InputEvent, InputState},
 };
 use rom_net::{SeatKind, SeatState};
 
 use super::session::{LobbyCommand, LobbyState, Phase, Session};
 use crate::shell::WindowCtx;
-
-const GOLD: u32 = 0xd8b26a;
-const MUTED: u32 = 0x8d98a8;
-const PANEL: u32 = 0x141b24;
-const LINE: u32 = 0x2a3340;
-const WARN: u32 = 0xeb6e64;
-const GOOD: u32 = 0x7fd08a;
+use crate::style::{self, Look};
 
 /// Opens the lobby window for `session`; the match window replaces it when the match starts.
 pub fn open(cx: &mut App, ctx: WindowCtx, session: Session) -> Result<(), String> {
@@ -33,7 +27,7 @@ pub fn open(cx: &mut App, ctx: WindowCtx, session: Session) -> Result<(), String
         None => format!("{} · Lobby", crate::args::window_title()),
     };
     let options = WindowOptions {
-        window_bounds: Some(WindowBounds::centered(size(px(1000.), px(720.)), cx)),
+        window_bounds: Some(WindowBounds::centered(size(px(1280.), px(800.)), cx)),
         titlebar: Some(TitlebarOptions {
             title: Some(title.clone().into()),
             ..Default::default()
@@ -195,9 +189,10 @@ impl LobbyView {
         let header = |text: &str, width: f32| {
             div()
                 .w(px(width))
-                .text_xs()
-                .text_color(rgb(MUTED))
-                .child(SharedString::from(text.to_owned()))
+                .text_size(px(11.))
+                .font_weight(gpui::FontWeight::BOLD)
+                .text_color(rgb(style::MUTED))
+                .child(SharedString::from(text.to_uppercase()))
         };
         table = table.child(
             div()
@@ -206,8 +201,8 @@ impl LobbyView {
                 .child(header("Seat", 50.))
                 .child(header("Name", 270.))
                 .child(header("Race or nation", 170.))
-                .child(header("Ready", 70.))
-                .child(header("Connection", 160.)),
+                .child(header("Ready", 80.))
+                .child(header("Connection", 180.)),
         );
         let Some(lobby) = &self.state.lobby else {
             return table.into_any_element();
@@ -215,7 +210,10 @@ impl LobbyView {
         for seat in &lobby.seats {
             let ours = Some(seat.seat) == self.state.seat;
             let cell = |text: String, width: f32| {
-                div().w(px(width)).text_sm().child(SharedString::from(text))
+                div()
+                    .w(px(width))
+                    .text_size(px(14.))
+                    .child(SharedString::from(text))
             };
             let mut name = seat.name.clone();
             if seat.host {
@@ -225,39 +223,34 @@ impl LobbyView {
                 name.push_str(" · you");
             }
             let (connection, colour) = match (seat.kind, seat.state) {
-                (SeatKind::Computer, _) => ("computer".to_owned(), MUTED),
+                (SeatKind::Computer, _) => ("computer".to_owned(), style::MUTED),
                 // In the lobby a taken seat stays `open` until the match starts.
-                (_, SeatState::Open) if seat.connected => ("connected".to_owned(), GOOD),
-                (_, SeatState::Open) => ("open: waiting for someone".to_owned(), MUTED),
-                (_, SeatState::Connected) => ("connected".to_owned(), GOOD),
-                (_, SeatState::Waiting) => ("dropped: waiting".to_owned(), WARN),
-                (_, SeatState::Computer) => ("a computer holds it".to_owned(), MUTED),
-                (_, SeatState::Idle) => ("dropped".to_owned(), WARN),
+                (_, SeatState::Open) if seat.connected => ("connected".to_owned(), style::GOOD),
+                (_, SeatState::Open) => ("open: waiting for someone".to_owned(), style::MUTED),
+                (_, SeatState::Connected) => ("connected".to_owned(), style::GOOD),
+                (_, SeatState::Waiting) => ("dropped: waiting".to_owned(), style::BAD),
+                (_, SeatState::Computer) => ("a computer holds it".to_owned(), style::MUTED),
+                (_, SeatState::Idle) => ("dropped".to_owned(), style::BAD),
             };
-            let ready = match seat.kind {
-                SeatKind::Computer => "—".to_owned(),
-                SeatKind::Human if seat.ready => "ready".to_owned(),
-                SeatKind::Human => "not yet".to_owned(),
+            let (ready, ready_colour) = match seat.kind {
+                SeatKind::Computer => ("—".to_owned(), style::MUTED),
+                SeatKind::Human if seat.ready => ("ready".to_owned(), style::GOOD),
+                SeatKind::Human => ("not yet".to_owned(), style::WARN),
             };
             table = table.child(
                 div()
                     .flex()
+                    .items_center()
                     .gap_2()
-                    .py_1()
+                    .py(px(6.))
                     .border_t_1()
-                    .border_color(rgb(LINE))
-                    .text_color(rgb(if ours { GOLD } else { 0xf2f2f2 }))
+                    .border_color(rgb(style::LINE))
+                    .text_color(rgb(if ours { style::GOLD } else { style::TEXT }))
                     .child(cell(format!("{}", seat.seat + 1), 50.))
                     .child(cell(name, 270.))
                     .child(cell(self.state.faction_name(&seat.faction), 170.))
-                    .child(cell(ready, 70.))
-                    .child(
-                        div()
-                            .w(px(160.))
-                            .text_sm()
-                            .text_color(rgb(colour))
-                            .child(SharedString::from(connection)),
-                    ),
+                    .child(cell(ready, 80.).text_color(rgb(ready_colour)))
+                    .child(cell(connection, 180.).text_color(rgb(colour))),
             );
         }
         table.into_any_element()
@@ -272,36 +265,42 @@ impl LobbyView {
             .lobby
             .as_ref()
             .is_some_and(|l| l.phase == "lobby" || l.phase == "countdown");
-        let mut factions = div().flex().flex_wrap().gap_1();
+        let mut factions = style::choices();
         for (index, (key, name)) in self.state.playable.iter().enumerate() {
             let key = key.clone();
             factions = factions.child(
-                Button::new(("faction", index))
-                    .small()
-                    .label(name.clone())
-                    .when_primary(mine.faction == key)
-                    .disabled(!in_lobby)
-                    .on_click(cx.listener(move |view, _, _, _| {
-                        view.session.send(LobbyCommand::Choose(key.clone()));
-                    })),
+                style::choice(("faction", index), name.clone(), mine.faction == key).when(
+                    in_lobby,
+                    |c| {
+                        c.on_click(cx.listener(move |view, _, _, _| {
+                            view.session.send(LobbyCommand::Choose(key.clone()));
+                        }))
+                    },
+                ),
             );
         }
         let ready = mine.ready;
+        let look = if ready { Look::Plain } else { Look::Gold };
         div()
             .flex()
             .flex_col()
-            .gap_2()
-            .child(heading("YOUR SEAT"))
+            .gap(px(12.))
+            .child(style::heading("Your seat"))
+            .child(style::hint("Your race or nation:"))
             .child(factions)
             .child(
                 div().flex().gap_2().items_center().child(
-                    Button::new("ready")
-                        .label(if ready { "Not ready" } else { "Ready" })
-                        .when_primary(!ready)
-                        .disabled(!in_lobby)
-                        .on_click(cx.listener(move |view, _, _, _| {
+                    style::button(
+                        "ready",
+                        if ready { "Not ready" } else { "Ready" },
+                        look,
+                        in_lobby,
+                    )
+                    .when(in_lobby, |b| {
+                        b.on_click(cx.listener(move |view, _, _, _| {
                             view.session.send(LobbyCommand::Ready(!ready));
-                        })),
+                        }))
+                    }),
                 ),
             )
             .into_any_element()
@@ -312,16 +311,14 @@ impl LobbyView {
             return div()
                 .flex()
                 .flex_col()
-                .gap_2()
-                .child(heading("THE START"))
-                .child(
-                    div()
-                        .text_sm()
-                        .child("The match starts five seconds after every person is ready, or when the host starts it."),
-                )
+                .gap(px(10.))
+                .child(style::heading("The start"))
+                .child(style::hint(
+                    "The match starts five seconds after every person is ready, or when the host starts it.",
+                ))
                 .into_any_element();
         }
-        let mut keys = div().flex().flex_col().gap_1();
+        let mut keys = div().flex().flex_col().gap(px(6.));
         for (index, key) in self.state.keys.iter().enumerate() {
             let copied = self
                 .copied
@@ -334,19 +331,24 @@ impl LobbyView {
                     .items_center()
                     .child(
                         div()
-                            .font_family("DejaVu Sans Mono")
-                            .text_sm()
+                            .flex_1()
+                            .min_w_0()
+                            .font_family(style::MONO)
+                            .text_size(px(13.))
                             .child(SharedString::from(key.clone())),
                     )
                     .child(
-                        Button::new(("copy-key", index))
-                            .small()
-                            .label(if copied { "Copied" } else { "Copy" })
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
-                                view.copied = Some((index, Instant::now()));
-                                cx.notify();
-                            })),
+                        style::button(
+                            ("copy-key", index),
+                            if copied { "Copied" } else { "Copy" },
+                            Look::Plain,
+                            true,
+                        )
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
+                            view.copied = Some((index, Instant::now()));
+                            cx.notify();
+                        })),
                     ),
             );
         }
@@ -358,19 +360,20 @@ impl LobbyView {
         div()
             .flex()
             .flex_col()
-            .gap_2()
-            .child(heading("KEYS TO HAND OUT"))
+            .gap(px(10.))
+            .child(style::heading("Keys to hand out"))
+            .child(style::hint("Each key admits one person once. Others join:"))
             .child(
                 div()
-                    .text_xs()
-                    .text_color(rgb(MUTED))
-                    .child(SharedString::from(format!(
-                        "Each key admits one person once. Others join {}",
+                    .font_family(style::MONO)
+                    .text_size(px(13.))
+                    .text_color(rgb(style::CYAN))
+                    .child(SharedString::from(
                         self.state
                             .address
-                            .as_deref()
-                            .unwrap_or("this computer's address")
-                    ))),
+                            .clone()
+                            .unwrap_or_else(|| "this computer's address".into()),
+                    )),
             )
             .child(keys)
             .child(
@@ -378,34 +381,29 @@ impl LobbyView {
                     .flex()
                     .gap_2()
                     .child(
-                        Button::new("add-key")
-                            .small()
-                            .label("Add a key")
-                            .on_click(cx.listener(|view, _, _, _| {
+                        style::button("add-key", "Add a key", Look::Plain, true).on_click(
+                            cx.listener(|view, _, _, _| {
                                 view.session.send(LobbyCommand::AddKey);
-                            })),
+                            }),
+                        ),
                     )
                     .child(
-                        Button::new("start-now")
-                            .primary()
-                            .label("Start now")
-                            .disabled(!in_lobby)
-                            .on_click(cx.listener(|view, _, _, _| {
-                                view.session.send(LobbyCommand::Start);
-                            })),
+                        style::button("start-now", "Start now", Look::Gold, in_lobby).when(
+                            in_lobby,
+                            |b| {
+                                b.on_click(cx.listener(|view, _, _, _| {
+                                    view.session.send(LobbyCommand::Start);
+                                }))
+                            },
+                        ),
                     ),
             )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(MUTED))
-                    .child("Start now plays empty seats with computers."),
-            )
+            .child(style::hint("Start now plays empty seats with computers."))
             .into_any_element()
     }
 
     fn chat_panel(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
-        let mut lines = div().flex().flex_col().gap_1().text_sm();
+        let mut lines = div().flex().flex_col().gap_1().text_size(px(13.));
         let shown = self.state.chat.len().saturating_sub(8);
         for line in &self.state.chat[shown..] {
             lines = lines.child(SharedString::from(line.clone()));
@@ -413,16 +411,16 @@ impl LobbyView {
         div()
             .flex()
             .flex_col()
-            .gap_2()
-            .child(heading("CHAT"))
+            .gap(px(10.))
+            .child(style::heading("Chat"))
             .child(lines)
             .child(
                 div()
                     .flex()
                     .gap_2()
-                    .child(div().flex_1().child(Input::new(&self.chat).small()))
+                    .child(div().flex_1().child(Input::new(&self.chat)))
                     .child(
-                        Button::new("chat-send").small().label("Send").on_click(
+                        style::button("chat-send", "Send", Look::Plain, true).on_click(
                             cx.listener(|view, _, window, cx| view.send_chat(window, cx)),
                         ),
                     ),
@@ -438,24 +436,6 @@ enum Step {
     Quit(u8),
 }
 
-fn heading(text: &str) -> gpui::Div {
-    div()
-        .text_color(rgb(GOLD))
-        .text_sm()
-        .child(SharedString::from(text.to_owned()))
-}
-
-/// `primary()` when asked.
-trait WhenPrimary {
-    fn when_primary(self, primary: bool) -> Self;
-}
-
-impl WhenPrimary for Button {
-    fn when_primary(self, primary: bool) -> Self {
-        if primary { self.primary() } else { self }
-    }
-}
-
 impl Render for LobbyView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let state = &self.state;
@@ -466,79 +446,69 @@ impl Render for LobbyView {
             .map(|s| format!("The match starts in {s} s"));
         let status = countdown.unwrap_or_else(|| state.status.clone());
         let mut page = div()
-            .id("lobby")
-            .size_full()
-            .overflow_y_scroll()
             .flex()
             .flex_col()
-            .gap_4()
-            .p_6()
-            .bg(rgb(0x0c1118))
-            .text_color(rgb(0xf2f2f2))
-            .text_size(px(14.))
+            .gap(px(16.))
+            .p(px(24.))
             .child(
                 div()
                     .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(div().text_xl().text_color(rgb(GOLD)).child("LOBBY"))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(MUTED))
-                            .child(SharedString::from(format!(
-                                "{} · {}",
-                                crate::args::window_title(),
-                                if state.url.is_empty() {
-                                    "…".to_owned()
-                                } else {
-                                    state.url.clone()
-                                }
-                            ))),
-                    )
-                    .child(SharedString::from(status)),
-            );
+                    .items_end()
+                    .gap(px(16.))
+                    .child(style::title("Lobby"))
+                    .child(style::hint(SharedString::from(format!(
+                        "{} · {}",
+                        crate::args::window_title(),
+                        if state.url.is_empty() {
+                            "…".to_owned()
+                        } else {
+                            state.url.clone()
+                        }
+                    )))),
+            )
+            .child(style::status(status, false));
         if let Some(error) = state.error.clone() {
             page = page.child(
-                div()
-                    .p_4()
-                    .bg(rgb(PANEL))
-                    .border_1()
-                    .border_color(rgb(WARN))
-                    .rounded(px(6.))
-                    .flex()
-                    .flex_col()
-                    .gap_2()
-                    .child(div().text_color(rgb(WARN)).child(SharedString::from(error)))
+                style::panel()
                     .child(
-                        Button::new("close")
-                            .label("Close")
-                            .on_click(cx.listener(|_, _, window, _| window.remove_window())),
+                        div()
+                            .relative()
+                            .text_color(rgb(style::BAD))
+                            .child(SharedString::from(error)),
+                    )
+                    .child(
+                        div().relative().child(
+                            style::button("close", "Close", Look::Plain, true)
+                                .on_click(cx.listener(|_, _, window, _| window.remove_window())),
+                        ),
                     ),
             );
-            return page;
+        } else {
+            let own = self.own_choice(cx);
+            let host = self.host_panel(cx);
+            let chat = self.chat_panel(cx);
+            page = page
+                .child(style::panel().child(div().relative().child(self.seats())))
+                .child(
+                    div()
+                        .flex()
+                        .gap(px(16.))
+                        .child(style::panel().flex_1().child(div().relative().child(own)))
+                        .child(
+                            style::panel()
+                                .w(px(440.))
+                                .child(div().relative().child(host)),
+                        ),
+                )
+                .child(style::panel().child(div().relative().child(chat)));
         }
-        let panel = || {
+        style::ground().child(style::backdrop()).child(
             div()
-                .p_4()
-                .bg(rgb(PANEL))
-                .border_1()
-                .border_color(rgb(LINE))
-                .rounded(px(6.))
-        };
-        page = page.child(panel().child(self.seats()));
-        let own = self.own_choice(cx);
-        let host = self.host_panel(cx);
-        let chat = self.chat_panel(cx);
-        page = page
-            .child(
-                div()
-                    .flex()
-                    .gap_4()
-                    .child(panel().flex_1().child(own))
-                    .child(panel().w(px(440.)).child(host)),
-            )
-            .child(panel().child(chat));
-        page
+                .id("lobby")
+                .absolute()
+                .size_full()
+                .overflow_y_scroll()
+                .child(page),
+        )
     }
 }

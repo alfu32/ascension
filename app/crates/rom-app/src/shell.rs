@@ -128,7 +128,11 @@ pub fn run(options: &Options, arguments: &[String]) -> ExitCode {
             theme.font_family = "DejaVu Sans".into();
         }
         let opened = match session {
-            Some(session) => crate::net::lobby::open(cx, ctx.clone(), session),
+            Some(session) => {
+                // The lobby wears the launcher's look (task 112).
+                crate::style::install(cx);
+                crate::net::lobby::open(cx, ctx.clone(), session)
+            }
             None => open_match_window(cx, &ctx, sim_link),
         };
         if let Err(error) = opened {

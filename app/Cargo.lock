@@ -4883,6 +4883,7 @@ version = "0.0.107"
 dependencies = [
  "gpui",
  "gpui-component",
+ "resvg 0.47.0",
  "rom-ai",
  "rom-mapgen",
  "rom-match",

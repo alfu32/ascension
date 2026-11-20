@@ -1,0 +1,4 @@
+# Task 112: the home system for the Planet and Solar launcher cards. Run with --universe
+# --style <key> --zoom-all --view system,home --ai none --no-hud.
+0 grant-age age.galactic
+1 speed 100

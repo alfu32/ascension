@@ -1,0 +1,73 @@
+{
+  "format": "rise-of-man presets 1",
+  "presets": [
+    {
+      "name": "Quick match",
+      "line": "One planet, one easy opponent.",
+      "icon": "clock",
+      "picture": "tiles/quick",
+      "fields": { "style": "map.one_world", "opponents": "1", "difficulty": "easy" }
+    },
+    {
+      "name": "Classic",
+      "line": "A cluster of stars, three opponents.",
+      "icon": "tab_political",
+      "picture": "tiles/classic",
+      "fields": { "style": "map.many_worlds", "opponents": "3", "difficulty": "moderate" }
+    },
+    {
+      "name": "Galactic war",
+      "line": "A quadrant of the galaxy, seven hard opponents.",
+      "icon": "tab_military",
+      "picture": "maps/map.quadrant",
+      "fields": { "style": "map.quadrant", "opponents": "7", "difficulty": "tougher" }
+    },
+    {
+      "name": "Start in space",
+      "line": "The Starfaring Age, ships from the start.",
+      "icon": "tech_ascension",
+      "picture": "tiles/space",
+      "fields": {
+        "style": "map.many_worlds", "opponents": "3", "difficulty": "moderate",
+        "age": "10", "script": "rich-start-10-starfaring"
+      }
+    },
+    {
+      "name": "Sandbox",
+      "line": "Everything researched, plenty of all. No enemies.",
+      "icon": "cmd_build",
+      "picture": "tiles/sandbox",
+      "fields": {
+        "style": "map.many_worlds", "opponents": "0", "age": "13",
+        "script": "rich-start-13-galactic"
+      }
+    },
+    {
+      "name": "Peaceful build",
+      "line": "Your own world, no opponents.",
+      "icon": "res_food",
+      "picture": "tiles/peaceful",
+      "fields": { "style": "map.many_worlds", "opponents": "0" }
+    },
+    {
+      "name": "Big battle",
+      "line": "Two armies of two hundred, beside your city.",
+      "icon": "stat_attack",
+      "picture": "tiles/war",
+      "fields": {
+        "style": "map.many_worlds", "opponents": "1", "difficulty": "moderate",
+        "script": "big-battle"
+      }
+    },
+    {
+      "name": "Watch the computers",
+      "line": "Four computers share a planet; you watch.",
+      "icon": "tech_reveal",
+      "picture": "tiles/watch",
+      "fields": {
+        "style": "map.one_world", "opponents": "3", "difficulty": "moderate", "watch": "true",
+        "speed": "200"
+      }
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+# Task 112: a map style's star map for its launcher card. Run with --universe --style <key>
+# --zoom-all --view starmap --ai none --no-hud: the galactic age and Automated Route Survey show
+# every route; the wheel backs the camera out until the region is in view.
+0 grant-age age.galactic
+0 grant-tech tech.automated_route_survey
+1 speed 100
+3 cam wheel -24 640,400

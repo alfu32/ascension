@@ -1,0 +1,10 @@
+# Rich start
+# Plenty of every resource for you from the first moment.
+# Bundled with the launcher (task 112), from docs/tasks/rich-start-script.txt.
+0 grant res.food 100000
+0 grant res.timber 100000
+0 grant res.metal 100000
+0 grant res.wealth 100000
+0 grant res.knowledge 100000
+0 grant res.oil 100000
+0 grant res.energy 100000

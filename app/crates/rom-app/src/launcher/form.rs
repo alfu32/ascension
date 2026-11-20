@@ -48,10 +48,10 @@ macro_rules! controls {
 
 controls! {
     ("sphere", 0, "", "Face size: 64–512 in a universe; 16–512 on one planet. Blank: flat map.", false),
-    ("map-size", 0, "256x256", "Flat map width × height in tiles; ignored for spheres.", false),
+    ("map-size", 0, "256x256", "Flat map width × height in tiles. A universe match (what the launcher starts) does not use it.", false),
     ("single-planet", 0, "false", "Isolated sphere; defaults to face size 192. Excludes universe.", true),
     ("universe", 0, "false", "Generate star systems; also implied by sphere unless isolated.", true),
-    ("style", 0, "", "Map style from the rules: Planet, Solar, Cluster, Sector, Quadrant or Galaxy. Blank: Cluster in a universe, the first in id order otherwise.", false),
+    ("style", 0, "", "The map: Planet, Solar, Cluster, Sector, Quadrant or Galaxy. None chosen: Cluster.", false),
     ("start-placement", 0, "", "Where players start in a universe: separate home worlds (default), or players of different races together on as few home planets as fairness allows. Ignored on flat maps and single planets.", false),
     ("seed", 0, "1", "Map seed (unsigned integer). Random chooses a fresh seed.", false),
     ("players", 0, "4", "Number of players, at least 1; factions override this count.", false),
@@ -94,7 +94,7 @@ controls! {
     ("screenshot", 4, "", "Write a PNG to this path after the first frame, then exit.", false),
     ("after", 4, "1", "Seconds after the first frame before taking a screenshot.", false),
     ("bench", 4, "", "Run for this many positive seconds, print measurements and exit.", false),
-    ("script", 4, "", "Path to a pick-event script replayed on the simulation thread.", false),
+    ("script", 0, "", "A setup script: a rich start, a big battle, or your own file.", false),
     ("host", 5, "", "Play and let others join: the port to listen on (1–65535, usually 7400). With --serve, the server's port (default 7400). Blank: standalone.", false),
     ("remote-players", 5, "1", "Other people's seats in a hosted or served match, 1–8.", false),
     ("connect", 5, "", "Join the server at this http:// or https:// address; needs a key or a token. Excludes host and serve.", false),
@@ -225,31 +225,68 @@ impl Form {
     }
 }
 
-/// Built-in owner workflows.
-pub(super) const PRESETS: [&str; 6] = [
-    "Play (universe)",
-    "Play (single planet)",
-    "Demo",
-    "Model gallery",
-    "One model",
-    "Bench",
+/// Built-in owner workflows, the advanced launcher's carousel: name, one line and picture.
+/// Task 112 folded "Play (single planet)" into Play on the Planet style (one planet in a
+/// universe); `--single-planet` still parses for scripts and tests.
+pub(super) const PRESETS: [(&str, &str, &str); 6] = [
+    (
+        "Play",
+        "A universe match on a cluster of stars.",
+        "maps/map.many_worlds",
+    ),
+    (
+        "Play on one planet",
+        "The Planet style: every player on one world.",
+        "maps/map.one_world",
+    ),
+    ("Demo", "The scripted demo on one planet.", "tiles/demo"),
+    (
+        "Model gallery",
+        "Every model of the game, side by side.",
+        "tiles/gallery",
+    ),
+    ("One model", "One model from four sides.", "tiles/model"),
+    (
+        "Bench",
+        "Ten seconds of frame times on one planet.",
+        "tiles/custom",
+    ),
 ];
 
-/// Fills a workflow from parser defaults and the rules' first composed model.
-pub(super) fn preset(index: usize, first_model: Option<&str>) -> Form {
+/// Fills a workflow from parser defaults, the rules' one-planet style (`planet`: one planet
+/// every player shares) and their first composed model.
+pub(super) fn preset(index: usize, first_model: Option<&str>, planet: &str) -> Form {
     let mut form = Form::default();
     let pairs: &[(&str, &str)] = match index {
         0 => &[("universe", "true")],
-        1 => &[("single-planet", "true")],
-        2 => &[("single-planet", "true"), ("demo", "true")],
+        1 => &[("universe", "true"), ("style", planet)],
+        2 => &[("universe", "true"), ("style", planet), ("demo", "true")],
         3 => &[("gallery", "all")],
         4 => &[("model", first_model.unwrap_or(""))],
-        _ => &[("bench", "10"), ("single-planet", "true"), ("sphere", "64")],
+        _ => &[("universe", "true"), ("style", planet), ("bench", "10")],
     };
     for &(key, value) in pairs {
         form.set(key, value);
     }
     form
+}
+
+/// Options the launcher's form no longer shows (task 112): it always starts a universe match
+/// with the chosen style. The flags still parse on the command line.
+pub(super) const HIDDEN: [&str; 3] = ["sphere", "single-planet", "universe"];
+
+impl Form {
+    /// The form as the launcher starts it: a universe match (unless it reviews models), never
+    /// an isolated planet or a flat map.
+    pub fn universe_match(mut self) -> Self {
+        self.set("single-planet", "false");
+        self.set("sphere", "");
+        let review = ["gallery", "model", "gallery-manifest"]
+            .iter()
+            .any(|flag| !self.get(flag).is_empty());
+        self.set("universe", if review { "false" } else { "true" });
+        self
+    }
 }
 
 /// Shell quoting is only for display and clipboard; spawning always passes an argument vector.
@@ -302,6 +339,10 @@ pub(super) struct Config {
     pub tokens: BTreeMap<String, String>,
     /// Owner-defined reusable forms, sorted by name.
     pub presets: BTreeMap<String, Form>,
+    /// The person's own match presets (task 112), shown as tiles after the bundled ones.
+    pub play_presets: Vec<super::presets::Preset>,
+    /// The name of the preset tile chosen on the home screen; Play starts it.
+    pub chosen: String,
 }
 
 impl Config {
@@ -329,6 +370,14 @@ impl Config {
                 .take(12)
                 .map(|(name, form)| (name.clone(), Form::from_json(form)))
                 .collect(),
+            play_presets: value["play_presets"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(super::presets::Preset::from_value)
+                .take(48)
+                .collect(),
+            chosen: value["chosen"].as_str().unwrap_or_default().to_owned(),
         })
     }
 
@@ -359,6 +408,8 @@ impl Config {
             "simple": self.simple.values(),
             "tokens": tokens,
             "presets": self.presets.iter().map(|(name, form)| (name, &form.values)).collect::<BTreeMap<_, _>>(),
+            "play_presets": self.play_presets.iter().map(super::presets::Preset::json).collect::<Vec<_>>(),
+            "chosen": self.chosen,
         });
         let text = serde_json::to_vec_pretty(&value).map_err(|e| e.to_string())?;
         let parent = path.parent().ok_or("configuration path has no parent")?;
@@ -404,26 +455,42 @@ mod tests {
         assert_eq!(changed.arguments(), ["--seed", "72"]);
         let rules = crate::terrain::load_rules().unwrap();
         let models = super::super::Catalog::new(&rules);
-        for (index, name) in PRESETS.iter().enumerate() {
-            let form = preset(index, models.first_model());
+        for (index, (name, _, _)) in PRESETS.iter().enumerate() {
+            let form = preset(index, models.first_model(), "map.one_world");
             let mut expected = args::Options::default();
             match index {
                 0 => expected.universe = true,
-                1 => expected.single_planet = true,
+                1 => {
+                    expected.universe = true;
+                    expected.style = Some("map.one_world".into());
+                }
                 2 => {
-                    expected.single_planet = true;
+                    expected.universe = true;
+                    expected.style = Some("map.one_world".into());
                     expected.demo = true;
                 }
                 3 => expected.gallery = Some("all".into()),
                 4 => expected.model = models.first_model().map(str::to_owned),
                 _ => {
+                    expected.universe = true;
+                    expected.style = Some("map.one_world".into());
                     expected.bench_seconds = Some(10.0);
-                    expected.single_planet = true;
-                    expected.sphere = Some(64);
                 }
             }
             assert_eq!(form.validate(), Ok(expected), "{name}");
+            // The launcher starts the same form as a universe match: unchanged.
+            assert_eq!(
+                form.clone().universe_match().validate(),
+                form.validate(),
+                "{name}"
+            );
         }
+        // An old form with an isolated planet or a flat map becomes a universe match.
+        let mut old = Form::default();
+        old.set("single-planet", "true");
+        old.set("sphere", "96");
+        let options = old.universe_match().validate().unwrap();
+        assert!(options.universe && !options.single_planet && options.sphere.is_none());
     }
 
     #[test]
@@ -579,7 +646,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("rom-launcher-test-{}", std::process::id()));
         let path = dir.join("launcher.json");
         let mut config = Config {
-            form: preset(2, None),
+            form: preset(2, None, "map.one_world"),
             ..Default::default()
         };
         config.form.set("screenshot", "a path's image.png");
@@ -591,12 +658,20 @@ mod tests {
         config.form.set("host", "7401");
         config.form.set("on-disconnect", "computer");
         config.presets.insert("My demo".into(), config.form.clone());
+        config.play_presets.push(super::super::presets::Preset::of(
+            &config.simple,
+            "Mine",
+            "A line",
+        ));
+        config.chosen = "Mine".into();
         config.save(&path).unwrap();
         let loaded = Config::load(&path).unwrap();
         assert_eq!(loaded.form, config.form);
         assert_eq!(loaded.presets, config.presets);
         assert_eq!(loaded.simple, config.simple);
         assert_eq!(loaded.tokens, config.tokens);
+        assert_eq!(loaded.play_presets, config.play_presets);
+        assert_eq!(loaded.chosen, "Mine");
         assert_eq!(loaded.form.validate().unwrap().host, Some(7401));
         std::fs::write(&path, r#"{"form":{"seed":"72","future":"unknown","stats":null},"future":true,"presets":{"old":{"seed":"8"}}}"#).unwrap();
         let loaded = Config::load(&path).unwrap();

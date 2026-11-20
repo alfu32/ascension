@@ -44,6 +44,9 @@ offscreen frame. No UI framework is involved in the in-match HUD.
 
 Game title: **Ascension**, subtitle **Rise of Man**.
 
+The GPUI windows (launcher, lobby, server window) use the same palette, font and chrome through
+`rom-app/src/style.rs` (task 112, `docs/launcher.md`).
+
 ## Layout
 
 Design space **1672 × 941** (the mock-up size). Everything scales uniformly

@@ -3,6 +3,8 @@
 mod assets;
 mod form;
 mod models;
+mod presets;
+mod scripts;
 mod simple;
 mod ui;
 
@@ -14,7 +16,7 @@ use gpui::{
     App, AppContext, Application, KeyBinding, TitlebarOptions, WindowBounds, WindowOptions, px,
     size,
 };
-use gpui_component::{Root, Theme, ThemeMode};
+use gpui_component::Root;
 use rom_rules::Rules;
 
 use form::{Config, config_path};
@@ -48,6 +50,82 @@ fn styles_in_order(rules: &Rules) -> Vec<rom_rules::DefId> {
     ids
 }
 
+/// A race the person may start as, with its nations (race cards, then the nation).
+#[derive(Clone)]
+struct Race {
+    key: String,
+    name: String,
+    nations: Vec<Choice>,
+}
+
+/// One map style as a picture card: its key, name and a line on what it holds.
+#[derive(Clone)]
+struct StyleCard {
+    key: String,
+    name: String,
+    line: String,
+}
+
+/// The playable factions grouped by the race above them (the faction itself when none is).
+fn races(rules: &Rules, playable: &[rom_rules::DefId]) -> Vec<Race> {
+    let race_of = |id: rom_rules::DefId| {
+        let mut at = id;
+        let mut seen = BTreeSet::new();
+        while seen.insert(at) {
+            match rules.factions.get(&at) {
+                Some(f) if f.kind == rom_rules::FactionKind::Race => return at,
+                Some(f) => match f.parent_id {
+                    Some(parent) => at = parent,
+                    None => break,
+                },
+                None => break,
+            }
+        }
+        id
+    };
+    let mut groups: BTreeMap<rom_rules::DefId, Vec<Choice>> = BTreeMap::new();
+    for &id in playable {
+        groups.entry(race_of(id)).or_default().push(Choice {
+            key: rules.key(id).into(),
+            label: rules.def(id).name.clone(),
+        });
+    }
+    groups
+        .into_iter()
+        .map(|(race, nations)| Race {
+            key: rules.key(race).into(),
+            name: rules.def(race).name.clone(),
+            nations,
+        })
+        .collect()
+}
+
+/// What a map style holds, in one line, from its rules row and the star catalogue.
+fn style_line(rules: &Rules, style: &rom_rules::MapStyle) -> String {
+    use rom_rules::StarRegion;
+    match style.star_region {
+        StarRegion::Single if style.shared_home => {
+            "One planet: every player on it, its moons around it".into()
+        }
+        StarRegion::Single => format!(
+            "One star system: every home planet, {}–{} resource bodies",
+            style.resource_bodies_per_system_min, style.resource_bodies_per_system_max
+        ),
+        StarRegion::Nearest => format!(
+            "{}–{} star systems, routes between them",
+            style.systems_min, style.systems_max
+        ),
+        StarRegion::Wedge => {
+            let (low, high) = rom_mapgen::wedge_size(style, rules.stars.len());
+            format!(
+                "1/{} to 1/{} of the galaxy: {low}–{high} star systems",
+                style.region_min_den, style.region_max_den
+            )
+        }
+        StarRegion::All => format!("The whole galaxy: all {} star systems", rules.stars.len()),
+    }
+}
+
 struct Catalog {
     lists: BTreeMap<&'static str, Vec<Choice>>,
     factions: Vec<Choice>,
@@ -55,8 +133,14 @@ struct Catalog {
     /// Computer player profiles and difficulties (by rank).
     profiles: Vec<Choice>,
     difficulties: Vec<Choice>,
-    /// The races and nations a player may start as, for the simple forms.
-    playable: Vec<Choice>,
+    /// The playable races and nations, by race.
+    races: Vec<Race>,
+    /// The map styles as picture cards, in the launcher's order.
+    styles: Vec<StyleCard>,
+    /// The style of one planet every player shares (the advanced Planet workflows).
+    planet_style: String,
+    /// The start placement the rules use when none is chosen.
+    placement_default: String,
     /// The rules' default mix of factions for eight players, by key.
     mix: Vec<String>,
     /// The rules this launcher was started with; a save must match them to load.
@@ -150,6 +234,18 @@ impl Catalog {
                 ("sun", choices(&["orbit", "fixed", "night"])),
                 ("graticule", choices(&["on", "off"])),
                 ("grass", choices(&["on", "off"])),
+                ("projectiles", choices(&["on", "off"])),
+                ("middle-drag", choices(&["turn", "pan"])),
+                (
+                    "on-disconnect",
+                    simple::drop_choices()
+                        .into_iter()
+                        .map(|(key, label, _)| Choice {
+                            key: key.into(),
+                            label: label.into(),
+                        })
+                        .collect(),
+                ),
                 (
                     "gallery-view",
                     choices(&["game", "front", "side", "top", "close"]),
@@ -160,15 +256,33 @@ impl Catalog {
                     choices(&["1280x800", "1920x1080", "2560x1440", "3840x2160"]),
                 ),
             ]),
-            playable: rom_match::start_age(rules)
-                .map(|age| rules.playable_start_factions(age))
-                .unwrap_or_default()
+            races: races(
+                rules,
+                &rom_match::start_age(rules)
+                    .map(|age| rules.playable_start_factions(age))
+                    .unwrap_or_default(),
+            ),
+            styles: styles_in_order(rules)
                 .into_iter()
-                .map(|id| Choice {
+                .map(|id| StyleCard {
                     key: rules.key(id).into(),
-                    label: rules.def(id).name.clone(),
+                    name: rules.def(id).name.clone(),
+                    line: style_line(rules, &rules.map_styles[&id]),
                 })
                 .collect(),
+            planet_style: styles_in_order(rules)
+                .into_iter()
+                .find(|id| {
+                    let style = &rules.map_styles[id];
+                    style.star_region == rom_rules::StarRegion::Single && style.shared_home
+                })
+                .map(|id| rules.key(id).to_owned())
+                .unwrap_or_default(),
+            placement_default: rules
+                .match_options
+                .get(rom_mapgen::StartPlacement::OPTION)
+                .map(|o| o.default_value.clone())
+                .unwrap_or_default(),
             mix: rom_match::default_factions(rules, 8)
                 .into_iter()
                 .map(|id| rules.key(id).into())
@@ -267,17 +381,19 @@ pub(crate) fn run(arguments: &[String]) -> ExitCode {
             KeyBinding::new("escape", ui::Back, Some(ui::CONTEXT)),
             KeyBinding::new("enter", ui::Confirm, Some(ui::CONTEXT)),
         ]);
-        Theme::change(ThemeMode::Dark, None, cx);
-        {
-            let theme = Theme::global_mut(cx);
-            theme.colors.background = gpui::rgb(0x0c1118).into();
-            theme.colors.foreground = gpui::rgb(0xf2f2f2).into();
-            theme.colors.primary = gpui::rgb(0x3fd0ff).into();
-            theme.colors.border = gpui::rgb(0x2a3340).into();
-            theme.font_family = "DejaVu Sans".into();
-        }
+        crate::style::install(cx);
+        // 1280 × 800 unless a scripted capture asks for another size (`ROM_LAUNCHER_SIZE`).
+        let (width, height) = std::env::var("ROM_LAUNCHER_SIZE")
+            .ok()
+            .and_then(|s| {
+                let (w, h) = s.split_once('x')?;
+                Some((w.parse::<f32>().ok()?, h.parse::<f32>().ok()?))
+            })
+            .filter(|(w, h)| (640.0..=7680.0).contains(w) && (480.0..=4320.0).contains(h))
+            .unwrap_or((1280., 800.));
         let options = WindowOptions {
-            window_bounds: Some(WindowBounds::centered(size(px(1100.), px(850.)), cx)),
+            window_bounds: Some(WindowBounds::centered(size(px(width), px(height)), cx)),
+            window_min_size: Some(size(px(960.), px(640.))),
             titlebar: Some(TitlebarOptions {
                 title: Some(format!("Rise of Man · Launcher {}", crate::args::VERSION).into()),
                 ..Default::default()
@@ -340,14 +456,13 @@ mod tests {
         assert_eq!(catalog.factions.len(), rules.factions.len());
         assert_eq!(catalog.terrains.len(), rules.terrains.len());
         assert_eq!(catalog.lists["age"].len(), rules.ages.len());
-        assert!(!catalog.playable.is_empty());
         assert_eq!(catalog.mix.len(), 8);
-        assert!(
+        assert!(catalog.mix.iter().all(|key| {
             catalog
-                .mix
+                .races
                 .iter()
-                .all(|key| catalog.playable.iter().any(|c| &c.key == key))
-        );
+                .any(|r| r.nations.iter().any(|n| &n.key == key))
+        }));
         assert_eq!(catalog.profiles.len(), rules.ai_profiles.len());
         assert_eq!(catalog.difficulties.len(), rules.ai_difficulties.len());
         assert!(
@@ -370,6 +485,24 @@ mod tests {
                 "Quadrant · map.quadrant",
                 "Galaxy · map.galaxy",
             ]
+        );
+        // Task 112: races group every playable nation; each map style has a line from its data.
+        let playable = rom_match::start_age(&rules)
+            .map(|age| rules.playable_start_factions(age))
+            .unwrap_or_default();
+        assert!(!playable.is_empty());
+        assert_eq!(
+            catalog.races.iter().map(|r| r.nations.len()).sum::<usize>(),
+            playable.len()
+        );
+        assert!(catalog.races.len() > 1 && catalog.races.len() < playable.len());
+        assert_eq!(catalog.styles.len(), rules.map_styles.len());
+        assert!(catalog.styles.iter().any(|s| s.key == catalog.planet_style));
+        assert!(catalog.styles.iter().all(|s| !s.line.is_empty()));
+        assert!(
+            catalog.lists["start-placement"]
+                .iter()
+                .any(|c| c.key == catalog.placement_default)
         );
         let book = crate::looks::ModelBook::new(&rules);
         assert_eq!(
