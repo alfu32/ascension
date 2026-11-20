@@ -25,6 +25,7 @@ pub(super) enum Mode {
 }
 
 impl Mode {
+    #[cfg(test)]
     pub const ALL: [Mode; 4] = [Mode::Play, Mode::Host, Mode::Join, Mode::Serve];
 
     /// The big choice's title.
@@ -66,6 +67,13 @@ pub(super) const FIELDS: &[(&str, &str)] = &[
     ("difficulty", ""),
     // Shared by Play, Host and Run a server.
     ("style", "map.many_worlds"),
+    // Start placement: blank keeps the rules' default (task 112).
+    ("placement", ""),
+    // Starting age (an ordinal), a setup script (a file) and, in Play, watching the computers
+    // (task 112's presets and the forms' script choice); blank or "false" leave them off.
+    ("age", ""),
+    ("script", ""),
+    ("watch", "false"),
     ("seed", ""),
     ("speed", "100"),
     ("drop", "pause-then-computer"),
@@ -125,6 +133,31 @@ impl Simple {
             }
         }
         simple
+    }
+
+    /// The whole-number range a stepper keeps field `key` in, if it is a count.
+    pub fn bounds(key: &str) -> Option<(u32, u32)> {
+        match key {
+            "opponents" | "computers" => Some((0, MAX_PLAYERS - 1)),
+            "remote" => Some((1, MAX_PLAYERS - 1)),
+            "humans" => Some((1, MAX_PLAYERS)),
+            _ => None,
+        }
+    }
+
+    /// Moves count `key` by `delta` within its bounds (a stepper's − and +); a value that does
+    /// not parse starts from the lower bound.
+    pub fn step(&mut self, key: &str, delta: i64) {
+        let Some((low, high)) = Self::bounds(key) else {
+            return;
+        };
+        let now = self
+            .get(key)
+            .trim()
+            .parse::<i64>()
+            .unwrap_or(i64::from(low));
+        let next = (now + delta).clamp(i64::from(low), i64::from(high));
+        self.set(key, next.to_string());
     }
 
     /// A whole number in `low..=high`, or the sentence that says what is wrong.
@@ -238,14 +271,32 @@ impl Simple {
                 self.number("computers", "Computer seats", 0, MAX_PLAYERS - 1)?,
             ),
         };
-        let players = people + computers;
+        // Watching: player one is a computer too.
+        let watch = mode == Mode::Play && self.get("watch") == "true";
+        let computers = computers + u32::from(watch);
+        let players = people + computers - u32::from(watch);
         if players > MAX_PLAYERS {
             return Err(format!(
                 "A match has at most {MAX_PLAYERS} players; this one has {players}"
             ));
         }
         form.set("players", players.to_string());
+        let placement = self.get("placement").trim();
+        if !placement.is_empty() {
+            form.set("start-placement", placement);
+        }
         form.set("ai", self.computers(computers));
+        if watch {
+            form.set("watch", "true");
+        }
+        let age = self.get("age").trim();
+        if !age.is_empty() {
+            form.set("age", age);
+        }
+        let script = self.get("script").trim();
+        if !script.is_empty() {
+            form.set("script", script);
+        }
         if mode != Mode::Serve
             && let Some(list) = self.factions(players, mix)
         {
@@ -311,13 +362,26 @@ impl Simple {
     }
 }
 
-/// The disconnect choices the forms offer: command-line value and words.
-pub(super) fn drop_choices() -> [(&'static str, &'static str); 3] {
+/// The disconnect choices the forms offer: command-line value, a short label for the choice
+/// and the sentence shown under it.
+pub(super) fn drop_choices() -> [(&'static str, &'static str, &'static str); 3] {
     use args::DisconnectPolicy::*;
     [
-        (PauseThenComputer.name(), "Pause, then a computer plays"),
-        (Idle.name(), "Keep playing, their units stand idle"),
-        (Computer.name(), "A computer plays at once"),
+        (
+            PauseThenComputer.name(),
+            "Pause, then computer",
+            "The match pauses for them, then a computer plays their side.",
+        ),
+        (
+            Idle.name(),
+            "Units stand idle",
+            "The match goes on; their units stand idle until they return.",
+        ),
+        (
+            Computer.name(),
+            "Computer at once",
+            "A computer plays their side at once.",
+        ),
     ]
 }
 
@@ -529,6 +593,83 @@ mod tests {
             let again = args::parse(form.arguments()).unwrap();
             assert_eq!(again, simple.options(mode, &mix(), 1).unwrap(), "{mode:?}");
         }
+    }
+
+    #[test]
+    fn steppers_stay_in_bounds() {
+        let mut simple = Simple::default();
+        for _ in 0..20 {
+            simple.step("opponents", 1);
+        }
+        assert_eq!(simple.get("opponents"), "7");
+        for _ in 0..20 {
+            simple.step("opponents", -1);
+        }
+        assert_eq!(simple.get("opponents"), "0");
+        simple.step("remote", -5);
+        assert_eq!(simple.get("remote"), "1");
+        simple.step("humans", 100);
+        assert_eq!(simple.get("humans"), "8");
+        simple.set("computers", "junk");
+        simple.step("computers", 1);
+        assert_eq!(simple.get("computers"), "1");
+        // Not a count: nothing changes.
+        simple.step("port", 1);
+        assert_eq!(simple.get("port"), "7400");
+        // Every count the steppers reach is one the forms accept.
+        let mut play = Simple::default();
+        play.step("opponents", 99);
+        assert_eq!(play.options(Mode::Play, &mix(), 1).unwrap().players, 8);
+        let mut serve = Simple::default();
+        serve.set("computers", "0");
+        serve.step("humans", 99);
+        assert_eq!(
+            serve
+                .options(Mode::Serve, &mix(), 1)
+                .unwrap()
+                .remote_players,
+            8
+        );
+    }
+
+    #[test]
+    fn segmented_choices_reach_the_options() {
+        for (key, _, _) in drop_choices() {
+            let mut simple = Simple::default();
+            simple.set("drop", key);
+            simple.set("difficulty", "easy");
+            simple.set("placement", "together");
+            let options = simple.options(Mode::Host, &mix(), 1).unwrap();
+            assert_eq!(options.on_disconnect.name(), key);
+            assert_eq!(options.ai[0].to_string(), "balanced:easy");
+            assert_eq!(
+                options,
+                parse(&[
+                    "--universe",
+                    "--style",
+                    "map.many_worlds",
+                    "--seed",
+                    "1",
+                    "--players",
+                    "5",
+                    "--start-placement",
+                    "together",
+                    "--ai",
+                    "balanced:easy,balanced:easy,balanced:easy",
+                    "--host",
+                    "7400",
+                    "--remote-players",
+                    "1",
+                    "--bind",
+                    "0.0.0.0",
+                    "--on-disconnect",
+                    key,
+                ])
+            );
+        }
+        // A blank placement leaves the rules' default.
+        let options = Simple::default().options(Mode::Play, &mix(), 1).unwrap();
+        assert_eq!(options.start_placement, None);
     }
 
     #[test]

@@ -8,26 +8,21 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use gpui::prelude::FluentBuilder;
 use gpui::{
     App, AppContext, Application, ClipboardItem, Context, Entity, InteractiveElement, IntoElement,
     ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, TitlebarOptions,
     Window, WindowBounds, WindowOptions, div, px, rgb, size,
 };
 use gpui_component::{
-    Disableable, Root, Sizable,
-    button::{Button, ButtonVariants},
+    Root, Sizable,
     input::{Input, InputState},
 };
 use rom_net::{Operator, Server, ServerHandle, Status};
 
 use super::session::{data_folder, join_address, server_config};
 use crate::args::Options;
-
-const GOLD: u32 = 0xd8b26a;
-const MUTED: u32 = 0x8d98a8;
-const PANEL: u32 = 0x141b24;
-const LINE: u32 = 0x2a3340;
-const WARN: u32 = 0xeb6e64;
+use crate::style::{self, Look};
 
 /// Lines of the log the window keeps.
 const KEPT_LINES: usize = 300;
@@ -61,22 +56,14 @@ pub fn run(options: &Options) -> ExitCode {
     let options = options.clone();
     application.run(move |cx: &mut App| {
         gpui_component::init(cx);
-        gpui_component::Theme::change(gpui_component::ThemeMode::Dark, None, cx);
-        {
-            let theme = gpui_component::Theme::global_mut(cx);
-            theme.colors.background = gpui::rgb(0x0c1118).into();
-            theme.colors.foreground = gpui::rgb(0xf2f2f2).into();
-            theme.colors.primary = gpui::rgb(0x3fd0ff).into();
-            theme.colors.border = gpui::rgb(0x2a3340).into();
-            theme.font_family = "DejaVu Sans".into();
-        }
+        crate::style::install(cx);
         let title = format!(
             "{} · Server :{}",
             crate::args::window_title(),
             options.host.unwrap_or(7400)
         );
         let window_options = WindowOptions {
-            window_bounds: Some(WindowBounds::centered(size(px(1000.), px(760.)), cx)),
+            window_bounds: Some(WindowBounds::centered(size(px(1280.), px(800.)), cx)),
             titlebar: Some(TitlebarOptions {
                 title: Some(title.clone().into()),
                 ..Default::default()
@@ -281,25 +268,6 @@ impl ServerView {
     }
 }
 
-fn heading(text: &str) -> gpui::Div {
-    div()
-        .text_color(rgb(GOLD))
-        .text_sm()
-        .child(SharedString::from(text.to_owned()))
-}
-
-fn panel() -> gpui::Div {
-    div()
-        .p_4()
-        .bg(rgb(PANEL))
-        .border_1()
-        .border_color(rgb(LINE))
-        .rounded(px(6.))
-        .flex()
-        .flex_col()
-        .gap_2()
-}
-
 impl Render for ServerView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (keys, log, error, names) = self
@@ -346,43 +314,39 @@ impl Render for ServerView {
             None if error.is_some() => "not running".to_owned(),
             None => "starting …".to_owned(),
         };
-        let mut page = div()
-            .id("server")
-            .size_full()
-            .overflow_y_scroll()
-            .flex()
-            .flex_col()
-            .gap_4()
-            .p_6()
-            .bg(rgb(0x0c1118))
-            .text_color(rgb(0xf2f2f2))
-            .text_size(px(14.))
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(div().text_xl().text_color(rgb(GOLD)).child("GAME SERVER"))
-                    .child(SharedString::from(format!(
+        let mut page =
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(16.))
+                .p(px(24.))
+                .child(
+                    div()
+                        .flex()
+                        .items_end()
+                        .gap(px(16.))
+                        .child(style::title("Game server"))
+                        .child(style::hint(SharedString::from(crate::args::window_title()))),
+                )
+                .child(div().text_size(px(15.)).text_color(rgb(style::TEXT)).child(
+                    SharedString::from(format!(
                         "Listening on {}:{port} · players join {address}",
                         self.options.bind
-                    )))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(rgb(MUTED))
-                            .child(SharedString::from(summary)),
-                    ),
-            );
+                    )),
+                ))
+                .child(style::status(summary, false));
         if let Some(error) = error {
             page = page.child(
-                panel()
-                    .border_color(rgb(WARN))
-                    .child(div().text_color(rgb(WARN)).child(SharedString::from(error))),
+                style::panel().child(
+                    div()
+                        .relative()
+                        .text_color(rgb(style::BAD))
+                        .child(SharedString::from(error)),
+                ),
             );
         }
         // Keys.
-        let mut key_rows = div().flex().flex_col().gap_1();
+        let mut key_rows = div().flex().flex_col().gap(px(6.));
         for (index, key) in keys.iter().enumerate() {
             let copied = self
                 .copied
@@ -395,114 +359,156 @@ impl Render for ServerView {
                     .items_center()
                     .child(
                         div()
-                            .font_family("DejaVu Sans Mono")
-                            .text_sm()
+                            .flex_1()
+                            .min_w_0()
+                            .font_family(style::MONO)
+                            .text_size(px(13.))
                             .child(SharedString::from(key.clone())),
                     )
                     .child(
-                        Button::new(("copy-key", index))
-                            .small()
-                            .label(if copied { "Copied" } else { "Copy" })
-                            .on_click(cx.listener(move |view, _, _, cx| {
-                                cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
-                                view.copied = Some((index, Instant::now()));
-                                cx.notify();
-                            })),
+                        style::button(
+                            ("copy-key", index),
+                            if copied { "Copied" } else { "Copy" },
+                            Look::Plain,
+                            true,
+                        )
+                        .on_click(cx.listener(move |view, _, _, cx| {
+                            cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
+                            view.copied = Some((index, Instant::now()));
+                            cx.notify();
+                        })),
                     ),
             );
         }
-        let keys_panel = panel()
-            .flex_1()
-            .child(heading("KEYS TO HAND OUT"))
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(rgb(MUTED))
-                    .child("Each key admits one person once."),
-            )
-            .child(key_rows)
-            .child(
-                Button::new("add-key")
-                    .small()
-                    .label("Add a key")
-                    .on_click(cx.listener(|view, _, _, cx| {
-                        view.add_key();
-                        cx.notify();
-                    })),
-            );
+        let keys_panel = style::panel().flex_1().child(
+            div()
+                .relative()
+                .flex()
+                .flex_col()
+                .gap(px(10.))
+                .child(style::heading("Keys to hand out"))
+                .child(style::hint("Each key admits one person once."))
+                .child(key_rows)
+                .child(div().flex().child(
+                    style::button("add-key", "Add a key", Look::Plain, true).on_click(cx.listener(
+                        |view, _, _, cx| {
+                            view.add_key();
+                            cx.notify();
+                        },
+                    )),
+                )),
+        );
         // Controls.
-        let controls = panel()
-            .w(px(420.))
-            .child(heading("MATCH"))
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .gap_2()
-                    .child(
-                        Button::new("start")
-                            .primary()
-                            .label("Start now")
-                            .disabled(playing || self.stopped)
-                            .on_click(cx.listener(|view, _, _, _| view.command(Operator::Start))),
-                    )
-                    .child(
-                        Button::new("pause")
-                            .label("Pause")
-                            .disabled(!running)
-                            .on_click(cx.listener(|view, _, _, _| view.command(Operator::Pause))),
-                    )
-                    .child(
-                        Button::new("resume")
-                            .label("Resume")
-                            .disabled(!paused)
-                            .on_click(cx.listener(|view, _, _, _| view.command(Operator::Resume))),
-                    )
-                    .child(
-                        Button::new("save")
-                            .label("Save")
-                            .disabled(!playing)
-                            .on_click(
-                                cx.listener(|view, _, _, _| view.command(Operator::Save(None))),
+        let can_start = !(playing || self.stopped);
+        let can_save = playing;
+        let can_stop = !self.stopped;
+        let controls = style::panel().w(px(460.)).child(
+            div()
+                .relative()
+                .flex()
+                .flex_col()
+                .gap(px(12.))
+                .child(style::heading("Match"))
+                .child(
+                    div()
+                        .flex()
+                        .flex_wrap()
+                        .gap(px(8.))
+                        .child(
+                            style::button("start", "Start now", Look::Gold, can_start).when(
+                                can_start,
+                                |b| {
+                                    b.on_click(
+                                        cx.listener(|view, _, _, _| view.command(Operator::Start)),
+                                    )
+                                },
                             ),
-                    )
-                    .child(
-                        Button::new("stop")
-                            .label("Stop")
-                            .disabled(self.stopped)
-                            .on_click(cx.listener(|view, _, _, cx| {
-                                view.command(Operator::Stop);
-                                view.stopped = true;
-                                cx.notify();
-                            })),
-                    ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .gap_2()
-                    .items_center()
-                    .child("Speed")
-                    .child(div().w(px(90.)).child(Input::new(&self.speed).small()))
-                    .child("%")
-                    .child(
-                        Button::new("speed")
-                            .small()
-                            .label("Set")
-                            .on_click(cx.listener(|view, _, _, cx| view.set_speed(cx))),
-                    ),
-            );
+                        )
+                        .child(style::button("pause", "Pause", Look::Framed, running).when(
+                            running,
+                            |b| {
+                                b.on_click(
+                                    cx.listener(|view, _, _, _| view.command(Operator::Pause)),
+                                )
+                            },
+                        ))
+                        .child(
+                            style::button("resume", "Resume", Look::Framed, paused).when(
+                                paused,
+                                |b| {
+                                    b.on_click(
+                                        cx.listener(|view, _, _, _| view.command(Operator::Resume)),
+                                    )
+                                },
+                            ),
+                        )
+                        .child(style::button("save", "Save", Look::Framed, can_save).when(
+                            can_save,
+                            |b| {
+                                b.on_click(
+                                    cx.listener(|view, _, _, _| view.command(Operator::Save(None))),
+                                )
+                            },
+                        ))
+                        .child(style::button("stop", "Stop", Look::Plain, can_stop).when(
+                            can_stop,
+                            |b| {
+                                b.on_click(cx.listener(|view, _, _, cx| {
+                                    view.command(Operator::Stop);
+                                    view.stopped = true;
+                                    cx.notify();
+                                }))
+                            },
+                        )),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .gap_2()
+                        .items_center()
+                        .child(style::label("Speed"))
+                        .child(div().w(px(90.)).child(Input::new(&self.speed).small()))
+                        .child(style::hint("%"))
+                        .child(
+                            style::button("speed", "Set", Look::Plain, true)
+                                .on_click(cx.listener(|view, _, _, cx| view.set_speed(cx))),
+                        ),
+                ),
+        );
         // Seats.
-        let mut seats = div().flex().flex_col().gap_1().text_sm();
+        let header = |text: &str, width: f32| {
+            div()
+                .w(px(width))
+                .text_size(px(11.))
+                .font_weight(gpui::FontWeight::BOLD)
+                .text_color(rgb(style::MUTED))
+                .child(SharedString::from(text.to_uppercase()))
+        };
+        let mut seats = div().flex().flex_col().gap_1().text_size(px(14.)).child(
+            div()
+                .flex()
+                .gap_2()
+                .child(header("Seat", 50.))
+                .child(header("Name", 240.))
+                .child(header("Race or nation", 200.))
+                .child(header("State", 120.))
+                .child(header("Ready", 80.)),
+        );
         if let Some(status) = &status {
             for seat in &status.seats {
+                let state = format!("{:?}", seat.state).to_lowercase();
+                let colour = match state.as_str() {
+                    "connected" => style::GOOD,
+                    "waiting" | "idle" => style::BAD,
+                    _ => style::MUTED,
+                };
                 seats = seats.child(
                     div()
                         .flex()
                         .gap_2()
-                        .py_1()
+                        .py(px(6.))
                         .border_t_1()
-                        .border_color(rgb(LINE))
+                        .border_color(rgb(style::LINE))
                         .child(
                             div()
                                 .w(px(50.))
@@ -521,12 +527,16 @@ impl Render for ServerView {
                                     .unwrap_or_else(|| seat.faction.clone()),
                             )),
                         )
-                        .child(div().w(px(120.)).child(SharedString::from(
-                            format!("{:?}", seat.state).to_lowercase(),
-                        )))
+                        .child(
+                            div()
+                                .w(px(120.))
+                                .text_color(rgb(colour))
+                                .child(SharedString::from(state)),
+                        )
                         .child(
                             div()
                                 .w(px(80.))
+                                .text_color(rgb(style::GOOD))
                                 .child(if seat.ready { "ready" } else { "" }),
                         ),
                 );
@@ -535,14 +545,44 @@ impl Render for ServerView {
         let mut log_lines = div()
             .flex()
             .flex_col()
-            .text_xs()
-            .font_family("DejaVu Sans Mono");
+            .text_size(px(12.))
+            .font_family(style::MONO)
+            .text_color(rgb(style::TEXT));
         let shown = log.len().saturating_sub(14);
         for line in &log[shown..] {
             log_lines = log_lines.child(SharedString::from(line.clone()));
         }
-        page.child(div().flex().gap_4().child(keys_panel).child(controls))
-            .child(panel().child(heading("SEATS")).child(seats))
-            .child(panel().child(heading("LOG")).child(log_lines))
+        page = page
+            .child(div().flex().gap(px(16.)).child(keys_panel).child(controls))
+            .child(
+                style::panel().child(
+                    div()
+                        .relative()
+                        .flex()
+                        .flex_col()
+                        .gap(px(8.))
+                        .child(style::heading("Seats"))
+                        .child(seats),
+                ),
+            )
+            .child(
+                style::panel().child(
+                    div()
+                        .relative()
+                        .flex()
+                        .flex_col()
+                        .gap(px(8.))
+                        .child(style::heading("Log"))
+                        .child(log_lines),
+                ),
+            );
+        style::ground().child(style::backdrop()).child(
+            div()
+                .id("server")
+                .absolute()
+                .size_full()
+                .overflow_y_scroll()
+                .child(page),
+        )
     }
 }

@@ -1,8 +1,93 @@
 # Launcher
 
+## The game's look, presets and scripts (task 112)
+
+The launcher, the lobby and the server window draw everything through one module,
+`rom-app/src/style.rs`: the HUD's palette and bundled bold face (`docs/hud.md`, "Style"), and
+its vector chrome rasterised with resvg as the HUD atlas does, cut into nine slices so corners
+keep their shape and edges stretch. Panels are the HUD's gold bevel round navy, the main
+button a gold plate, other buttons dark slots, a chosen option glows cyan (the HUD's active
+tab), yes/no settings are switches, counts are steppers (− value +). The launcher's own frame
+pieces are built with the HUD generator's helpers by `assets/launcher/generate.py`
+(`--check` verifies them). The window opens at 1280 × 800 and can be resized; screens scroll
+when the window is smaller than their content.
+
+**Home.** The emblem, one large **Play** button and the chosen match under it (**Change …**
+opens it in the Play form; **Continue** loads the newest save), then the match tiles: a capture
+of the game, an icon, a name and one line each. Click a tile to choose it, double-click to play
+it at once. **Host a game**, **Join a game**, **Run a server**, **Advanced …** and **Quit** sit
+on one plain row beneath. **Import …** and **Export …** read and write a presets file.
+
+**Presets.** The bundled tiles are `assets/launcher/presets.json`: Quick match (Planet, one easy
+opponent), Classic (Cluster, three moderate), Galactic war (Quadrant, seven tougher), Start in
+space (Cluster, the Starfaring Age, with that age's rich-start script), Sandbox (the last age,
+everything researched, plenty of all, no opponents), Peaceful build (no opponents), Big battle
+(the 200-against-200 script, one opponent) and Watch the computers (four computers on one
+planet, you watch). Play keeps the person's own race and name. A preset sets only the Play
+form's match fields; the Play form's **Save as preset** adds the person's own tile (kept in
+`launcher.json` under `play_presets`; × removes it). The file format, for export, import and
+the bundled set alike:
+
+```json
+{ "format": "rise-of-man presets 1",
+  "presets": [
+    { "name": "Classic", "line": "A cluster of stars, three opponents.",
+      "icon": "tab_political", "picture": "tiles/classic",
+      "fields": { "style": "map.many_worlds", "opponents": "3", "difficulty": "moderate" } } ] }
+```
+
+`fields` may hold `style`, `opponents`, `difficulty`, `placement`, `seed`, `speed`, `age` (an
+ordinal), `script` (a bundled script's name, or a file) and `watch`; anything else is refused.
+`icon` names a HUD icon (`assets/hud/icons/`), `picture` a launcher capture (`tiles/<name>`,
+`maps/<style key>`); an imported preset without one shows a generic picture. Import skips a
+preset whose name is already a tile.
+
+**Scripts.** `--script <file>` is public: a setup script (`rom-app/src/script.rs`; its setup
+lines such as `grant-age`, `research-all`, `grant` are read by `rom_match::ScriptSetup`). The
+Play, Host and Run a server forms and the advanced Game group offer **Start script**: none, a
+bundled script, or **Open file …**; the launcher shows the script's title and line (its first
+two comment lines). The bundled scripts are `assets/scripts/*.txt`, embedded in the game; the
+launcher writes them to `scripts/` beside `launcher.json` and passes that path. Bundled: Rich
+start (resources only), Rich start in each age 0–13 (that age, its research done, plenty of
+every resource), All research of your age, Big battle (task 95's 200 against 200; needs a
+second player) and Fleet clash (task 69's forty starships; needs a second player). In a network
+match the host's or server's script text travels in the match setup (`MatchSetup.script`) and
+every machine applies its setup lines (they favour player one, the first seat); its timed
+lines (camera, clicks) run on the host's game only.
+
+**Forms.** One header, the side (race cards, then the nation: a row of choices, or a dropdown
+for a race with many), opponents (stepper) and difficulty (choices), for Host the network
+(remote players stepper, port, what happens when a player drops), and the map: picture cards
+of the six map styles with a line each from the rules (systems, share of the galaxy), start
+placement, seed, speed, starting age and start script. Back is plain, the final button gold;
+the reason it is off stays beside it.
+
+**Advanced.** The workflows are a carousel of picture cards (Play, Play on one planet, Demo,
+Model gallery, One model, Bench). "Play (single planet)" became Play on the Planet style: one
+planet in a universe; `--single-planet` (an isolated sphere with no space) still parses for
+scripts and tests but the launcher no longer starts it. The launcher always starts a universe
+match with the chosen style (or reviews models): `--sphere`, `--single-planet` and
+`--universe` are gone from the form; the style row is the map picture cards. `--map-size` stays;
+it sizes flat maps only, which a universe match does not use. The option groups are tabs with
+HUD icons; **…** at the end of the tab row opens the menu of the person's saved forms (name,
+Save, Reset to defaults). Short lists are rows of choices, on/off options switches.
+
+**Pictures.** `assets/launcher/capture.sh` remakes every picture with the game's screenshot
+mode (`--no-hud`, self-ending runs, one at a time under a 6 GB cap) and ImageMagick crops:
+the backdrop, a card per map style (`maps/<style key>.jpg`) and the tiles (`tiles/*.jpg`),
+about 270 KB in all.
+
+Test hooks (environment): `ROM_LAUNCHER_SCREEN=simple|play|host|join|server|advanced`;
+`ROM_LAUNCHER_START=1` presses the form's final button after two seconds, or Play on the home
+screen; `ROM_LAUNCHER_PRESET=<name>` chooses a tile and puts it in the forms;
+`ROM_LAUNCHER_MENU=1` opens the advanced menu; `ROM_LAUNCHER_GROUP=<n>` opens a group;
+`ROM_LAUNCHER_SIZE=1920x1080` opens the window at that size.
+
 ## The simple launcher (task 87)
 
-The window opens on four large choices and **Advanced …**:
+(Task 112 replaced the four large choices with the Play button and match tiles above; the
+forms below are unchanged in what they start.) The window opened on four large choices and
+**Advanced …**:
 
 | Choice | Starts | Form |
 | --- | --- | --- |
@@ -50,8 +135,9 @@ argument-based game, gallery, screenshot, manifest and benchmark invocations
 continue to run directly. `--run` explicitly starts a game with default options;
 the launcher emits this routing marker when every setting is at its default.
 
-The six buttons at the top fill the form for a universe, an isolated planet, a
-demo, a model gallery, one model, or a ten-second benchmark. Every field remains
+The six workflows at the top (since task 112 a carousel) fill the form for a
+universe, the Planet style, a demo, a model gallery, one model, or a ten-second
+benchmark. Every field remains
 editable. Reset to defaults restores the command-line defaults (including a flat
 map), while retaining named presets. Save up to twelve custom presets by name;
 saving an existing name replaces it, and its adjacent × button removes it.

@@ -1,0 +1,5 @@
+# All research of your age
+# Everything researchable by your starting age is done before the first moment.
+# Bundled with the launcher (task 112), from docs/tasks/110-research-all-script.txt. Pair it with a
+# starting age (--age); only you get the research.
+0 research-all 1

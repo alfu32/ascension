@@ -20,6 +20,7 @@ mod selection;
 mod shell;
 mod sim_thread;
 mod space_view;
+mod style;
 mod terrain;
 mod universe_view;
 mod world_view;

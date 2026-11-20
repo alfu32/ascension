@@ -1,0 +1,31 @@
+# Screenshots of task 112 (run from app/ after `cargo build --release --locked -p rom-app`):
+#   bash docs/tasks/112-launcher-script.txt [screen...]
+# Each run opens the launcher on one screen with a fresh, isolated settings folder, waits for the
+# window, captures it with ImageMagick `import -window <id>` (the id from `xwininfo -root
+# -tree`; nothing is sent to the window) and the launcher ends itself (--after). One instance
+# at a time, under a 6 GB cap.
+OUT=${OUT:-docs/img}
+CFG=${CFG:-$PWD/target/t112-launcher}
+shot() {  # shot <file> <launcher screen> [env...]
+  rm -rf "$CFG" && mkdir -p "$CFG"
+  env -u WAYLAND_DISPLAY XDG_CONFIG_HOME="$CFG" ROM_LAUNCHER_SCREEN=$2 "${@:3}" \
+    systemd-run --user --scope -q -p MemoryMax=6G -p MemorySwapMax=0 \
+    target/release/rise-of-man --launcher --after 10 > "$CFG.log" 2>&1 &
+  sleep 7
+  id=$(xwininfo -root -tree | grep -m1 'Launcher' | awk '{print $1}')
+  [ -n "$id" ] && import -window "$id" "$OUT/$1" || echo "no launcher window for $1"
+  wait
+}
+all="$*"
+want() { [ -z "$all" ] || [[ " $all " == *" $1 "* ]]; }
+want home && shot 112-home.png simple
+want home1920 && shot 112-home-1920.png simple ROM_LAUNCHER_SIZE=1920x1080
+want play && shot 112-play.png play
+want space && shot 112-play-script.png play ROM_LAUNCHER_PRESET="Start in space"
+want host && shot 112-host.png host
+want join && shot 112-join.png join
+want server && shot 112-server.png server
+want advanced && shot 112-advanced.png advanced ROM_LAUNCHER_GROUP=0
+want menu && shot 112-advanced-menu.png advanced ROM_LAUNCHER_GROUP=0 ROM_LAUNCHER_MENU=1
+want network && shot 112-advanced-network.png advanced ROM_LAUNCHER_GROUP=5
+# The lobby (112-lobby.png) is the game's window: see 112-lobby-script.txt.

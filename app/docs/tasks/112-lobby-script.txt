@@ -1,0 +1,27 @@
+# 112-lobby.png and 112-server-window.png (run from app/ after
+# `cargo build --release --locked -p rom-app -p rom-cli`; loopback only; every window ends itself).
+# The lobby: an integrated host (Ada, one remote seat and a computer) and a second app joining it
+# with the key the host printed; Ben says Ready. The server window: --serve with two seats and
+# one client, Ben, as the headless `rom client`.
+. docs/tasks/88-common-script.txt
+T=${T:-$PWD/target/t112-run}
+rm -rf "$T" && mkdir -p "$T"
+run lobby-host ROM_NET_KEYS="$T/keys" ROM_NET_LOBBY_SECONDS=30 -- \
+  --universe --style map.many_worlds --seed 7 --players 3 --ai balanced:moderate \
+  --host 7400 --remote-players 1 --bind 127.0.0.1 --name Ada &
+wait_file "$T/keys"
+run lobby-client ROM_NET_READY=1 ROM_NET_LOBBY_SECONDS=24 -- \
+  --connect http://127.0.0.1:7400/ --key "$(head -1 "$T/keys")" --name Ben &
+sleep 12
+shot 'Lobby.*Ada' docs/img/112-lobby.png
+wait
+rm -f "$T/keys2"
+run server ROM_NET_KEYS="$T/keys2" ROM_NET_QUIT_AFTER=30 -- \
+  --serve --universe --style map.many_worlds --seed 7 --players 2 --ai none \
+  --host 7401 --bind 127.0.0.1 --remote-players 2 &
+wait_file "$T/keys2"
+"$R" client http://127.0.0.1:7401/ --key "$(sed -n 1p "$T/keys2")" --name Ben --ticks 200 \
+  > "$T/ben.log" 2>&1 &
+sleep 14
+shot 'Server :7401' docs/img/112-server-window.png
+wait

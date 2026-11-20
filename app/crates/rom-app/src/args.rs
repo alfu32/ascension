@@ -11,7 +11,7 @@ pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <f
 [--middle-drag <turn|pan>] [--invert-horizontal-turn] [--invert-vertical-turn] \
 [--gallery <all|units|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
 [--model <model id>] [--parts] [--pose <idle|move|attack|work>] [--anim-time <seconds>] \
-[--gallery-manifest <file.json>] \
+[--gallery-manifest <file.json>] [--script <file>] \
 [--host <port>] [--remote-players <n>] [--connect <http(s)://url>] [--key <key>] [--token <token>] [--name <name>] [--serve] [--bind <address>] \
 [--on-disconnect <pause-then-computer|idle|computer>] [--wait-seconds <n>] [--autosave-minutes <n>]\n\n--style takes a map style key: map.one_world (Planet), map.solar (Solar), map.many_worlds (Cluster), map.sector (Sector), map.quadrant (Quadrant) or map.galaxy (Galaxy).\n--sphere N builds a universe with home face size N (64..=512).\n--single-planet preserves an isolated sphere (16..=512; default 192).\n\nNetwork: --host <port> plays here and lets --remote-players others join (the server listens on --bind, 0.0.0.0 from the launcher); --connect <url> joins a server with --key, or with --token to take the same seat again; --serve runs a server with a status window and no game, on --bind <address> and the --host port (default 7400).";
 
@@ -1084,11 +1084,12 @@ mod tests {
     }
 
     #[test]
-    fn parses_the_hidden_script_option() {
+    fn parses_the_script_option() {
         let o = parse(args(&["--script", "demo.txt"])).unwrap();
         assert_eq!(o.script, Some(PathBuf::from("demo.txt")));
         assert!(parse(args(&["--script"])).is_err());
-        assert!(!USAGE.contains("--script"));
+        // Public since task 112: the launcher offers setup scripts.
+        assert!(USAGE.contains("--script <file>"));
     }
 
     #[test]

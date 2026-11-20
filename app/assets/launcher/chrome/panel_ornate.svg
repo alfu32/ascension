@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="180" viewBox="0 0 240 180">
+<defs>
+<linearGradient id="goldv" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#e8c98a"/><stop offset="0.45" stop-color="#b88a45"/><stop offset="1" stop-color="#6b4a1f"/></linearGradient>
+<linearGradient id="goldr" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#6b4a1f"/><stop offset="0.55" stop-color="#b88a45"/><stop offset="1" stop-color="#e8c98a"/></linearGradient>
+<linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#141b24"/><stop offset="1" stop-color="#0c1118"/></linearGradient>
+<linearGradient id="slot" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#0e141c"/><stop offset="1" stop-color="#0a0e14"/></linearGradient>
+<linearGradient id="fadeh" x1="0" y1="0" x2="1" y2="0">
+<stop offset="0" stop-color="#0c1118" stop-opacity="0.86"/><stop offset="0.8" stop-color="#0c1118" stop-opacity="0.7"/><stop offset="1" stop-color="#0c1118" stop-opacity="0"/></linearGradient>
+<radialGradient id="sphere" cx="0.4" cy="0.35" r="0.8">
+<stop offset="0" stop-color="#1c4a66"/><stop offset="0.6" stop-color="#0d2233"/><stop offset="1" stop-color="#0c1118"/></radialGradient>
+<filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.6"/></filter>
+</defs>
+<path d="M26.0 0.0L214.0 0.0L240.0 26.0L240.0 154.0L214.0 180.0L26.0 180.0L0.0 154.0L0.0 26.0Z" fill="#2e1e0a" />
+<path d="M26.4 0.8L213.6 0.8L239.2 26.4L239.2 153.6L213.6 179.2L26.4 179.2L0.8 153.6L0.8 26.4Z" fill="url(#goldv)" />
+<path d="M28.8 5.5L211.2 5.5L234.5 28.8L234.5 151.2L211.2 174.5L28.8 174.5L5.5 151.2L5.5 28.8Z" fill="url(#goldr)" opacity="0.9"/>
+<path d="M31.1 10.2L208.9 10.2L229.8 31.1L229.8 148.9L208.9 169.8L31.1 169.8L10.2 148.9L10.2 31.1Z" fill="#1d1408" />
+<path d="M31.5 11.0L208.5 11.0L229.0 31.5L229.0 148.5L208.5 169.0L31.5 169.0L11.0 148.5L11.0 31.5Z" fill="url(#panel)" fill-opacity="0.95"/>
+<path d="M33.0 14.0L207.0 14.0L226.0 33.0L226.0 147.0L207.0 166.0L33.0 166.0L14.0 147.0L14.0 33.0Z" fill="none" stroke="#b88a45" stroke-width="1.2" stroke-opacity="0.65"/>
+<path d="M8 38 L8 22 L24 6 H56" fill="none" stroke="#e8c98a" stroke-width="2"/>
+<path d="M8 142 L8 158 L24 174 H56" fill="none" stroke="#6b4a1f" stroke-width="3"/>
+<path d="M232 38 L232 22 L216 6 H184" fill="none" stroke="#e8c98a" stroke-width="2"/>
+<path d="M232 142 L232 158 L216 174 H184" fill="none" stroke="#6b4a1f" stroke-width="3"/>
+</svg>
