@@ -41,6 +41,13 @@ Added to the build (do these first):
   it (selection ring or order marker), at speed 100 and 500, before and after; report it.
 - **Presentation at 1920×1080.** Find what limits shown frames to ~43 of 60 and fix what is
   clearly fixable; target ≥ 55 fps shown at 1882×1043, speed 100, on the HD 530.
+- **Grass seen from farther (owner, 2026-11-20: "the patches of shader grass should be visible
+  from a little farther ( extend the area )").** Today `rom-render/src/grass.rs`: `LOD_DISTANCE`
+  16, `FULL_DISTANCE` 32, `FAR_DISTANCE` 42 tiles from the eye, `BUDGET` 30 000 domains. Extend
+  the far edge (about 1.5× to 2×, choose by measurement) with coarser slices past the current far
+  edge so the cost on the HD 530 stays bounded; state the new distances and the frame cost before
+  and after (home planet, default zoom and zoomed out a step), with a screenshot pair you looked
+  at (`app/docs/img/108-grass-{before,after}.png`).
 - The camera script used: rotate (plain drag), pan (Shift drag), wheel out to orbit and to the
   system and back, repeated (keep one in `app/docs/tasks/108-camera-bench-script.txt`).
 - The worktree holds uncommitted work from the stopped earlier attempt (`bench.rs`,
