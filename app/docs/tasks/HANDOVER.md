@@ -47,9 +47,10 @@ pushed, tree clean). Read `CLAUDE.md` (it imports `AGENTS.md`), then
      `round-<n>`, field `note`.
    - **Sounds (task 124, 2026-11-21):** pass a fourth argument, a folder holding the sound
      files (`<group>.<name>[.<n>].ogg`) and `assignment.json` (unit key → event → sound key;
-     events `select`, `move`, `attack`, `build`, `build_done`, `research_done`, `fire`,
-     `fight`); publish the files as `sounds/<file>` beside the page. The page then lists
-     **Unit sounds** (collection `sound_reviews`, doc id = unit key with non-alphanumerics →
+     unit events `select`, `move`, `attack`, `build`, `build_done`, `research_done`, `fire`,
+     `fight`; building events `select`, `active`, `build_done`, `train_done`, `research_done`); publish the files as `sounds/<file>` beside the page. Every unit and building type is in the assignment
+     with its own sounds (owner: individual sounds per type); its card shows them with a sound
+     verdict (collection `sound_reviews`, doc id = unit key with non-alphanumerics →
      `-`, fields `entity`, `status`, `note`) and the **Sound library** (collection
      `sound_files`, fields `sound`, `status`; collection `sound_groups`, fields `group`,
      `note`). The intro text per round is `LEADS` in `build.py`.

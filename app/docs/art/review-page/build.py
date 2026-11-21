@@ -290,4 +290,4 @@ page = (template
         .replace("__ROUND__", html.escape(ROUND))
         .replace("__VERSION__", html.escape(VERSION)))
 (here / "model-review.html").write_text(page)
-print("models", len(models), "units with sounds", len(sounds), "sound files", sum(len(k) for _, k in library))
+print("models", len(models), "types with sounds", len(sounds), "sound files", sum(len(k) for _, k in library))
