@@ -460,7 +460,7 @@ mod tests {
         assert!(map.terrain.contains(&ice));
         for (i, &terrain) in map.terrain.iter().enumerate() {
             if terrain == ice {
-                assert_eq!(colours[i], [0xe8, 0xee, 0xf2]);
+                assert_eq!(colours[i], [0xb3, 0xd3, 0xe8]);
             }
         }
         let surface = CubeSurface { n: 32 };
