@@ -1103,6 +1103,16 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
     } else {
         (Vec::new(), None, Vec::new())
     };
+    // Saves before format 15 (task 123) have every aircraft in the air.
+    let flight = if format >= 15 {
+        query_vec(
+            conn,
+            "SELECT entity_id, climbed FROM entity_flight ORDER BY entity_id",
+            |r| Ok((EntityId(uint(r, 0, "aircraft")?), uint(r, 1, "climbed")?)),
+        )?
+    } else {
+        Vec::new()
+    };
     Ok(Snapshot {
         tick,
         rng_state,
@@ -1188,6 +1198,7 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
         dirty: flags(conn, "dirty")?,
         awake: flags(conn, "awake")?,
         governors_paused: flags(conn, "governor_paused")?,
+        flight,
         history,
         market: query_vec(
             conn,

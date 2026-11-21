@@ -270,10 +270,14 @@ CREATE TABLE et_movement (             -- "moves"
                                        -- task 70: ticks a ship charges at its system's edge before
                                        -- a jump along a route (stat `jump_charge`); NULL = the
                                        -- rule default `space.jump_charge_ticks`
-  landing_radius    INTEGER CHECK (landing_radius >= 0)
+  landing_radius    INTEGER CHECK (landing_radius >= 0),
                                        -- task 72: milli-tiles; a landed ship covers the tiles whose
                                        -- centres lie within this radius of the tile it stands on
                                        -- (stat `landing_radius`); NULL = that tile only
+  takeoff_ticks     INTEGER NOT NULL DEFAULT 0 CHECK (takeoff_ticks >= 0 AND (takeoff_ticks = 0 OR climb_ticks = 0))
+                                       -- aircraft (task 123): ticks to take off from the ground into
+                                       -- the air above its planet, and to land; 0 = never lands
+                                       -- (always airborne). Never together with climb_ticks.
 ) STRICT;
 
 CREATE TABLE et_weapon (               -- "attacks" (0..n per type)
@@ -1388,6 +1392,14 @@ CREATE TABLE entity_flag (
   flag      TEXT NOT NULL CHECK (flag IN ('landed','neutralised','assimilating','idle','dirty','awake','governor_paused')),
   PRIMARY KEY (entity_id, flag)
 ) STRICT, WITHOUT ROWID;
+
+-- An aircraft that is not fully in the air (task 123, format 15): ticks it has climbed toward
+-- its flight height, 0 = landed, up to its type's `et_movement.takeoff_ticks` (then it is
+-- airborne and has no row). Taking off counts up, landing counts down.
+CREATE TABLE entity_flight (
+  entity_id INTEGER PRIMARY KEY,
+  climbed   INTEGER NOT NULL CHECK (climbed >= 0)
+) STRICT;
 
 -- A struck-down city held by an attacking team (task 67): the team and the tick
 -- its hold began; the city falls to it after `city.capture_hold_ticks`.

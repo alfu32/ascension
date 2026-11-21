@@ -87,6 +87,15 @@ impl World {
                         break;
                     }
                     worked = true;
+                    // A landed aircraft takes off before it flies anywhere or fights (task 123).
+                    if crate::aircraft::takes_off_for(&order.kind) && self.take_off_step(id) {
+                        self.entities[id.0 as usize]
+                            .as_mut()
+                            .expect("executor")
+                            .orders
+                            .push_front(order);
+                        break;
+                    }
                     // Within the orbit of a planet a ship moves, attacks and patrols in orbit.
                     if matches!(
                         order.kind.as_str(),
@@ -278,8 +287,16 @@ impl World {
             order.status = OrderStatus::Blocked("space_age".into());
             return;
         }
+        // An aircraft comes out of a building landed beside it (task 123).
+        let landed = (!launch)
+            .then(|| self.landed_spawn_spot(producer, subject, pos))
+            .flatten();
+        let pos = landed.unwrap_or(pos);
         order.status = match self.spawn(subject, order.player, pos) {
             Ok(ship) => {
+                if landed.is_some() {
+                    self.flight.insert(ship, 0);
+                }
                 if launch
                     && self
                         .submit(crate::Command {

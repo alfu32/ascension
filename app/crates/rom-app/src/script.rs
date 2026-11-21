@@ -41,7 +41,8 @@
 //! `colony <owner id>` founds a city for that owner on the nearest other habitable planet of
 //! player one's home system, generating the planet first (task 68's freighter route), and
 //! `auto-colony <owner id>` puts a finished automated colony there instead (task 73). `craft` selects player one's orbital craft that are not
-//! aboard a carrier; `craftN` names the N-th of them for `click` and `rclick`.
+//! aboard a carrier; `craftN` names the N-th of them for `click` and `rclick`, `aircraftN` the N-th
+//! of player one's aircraft (task 123).
 //!
 //! `save <name>`, `quicksave` and `menu [main|save|load]` write a save or open the in-match menu;
 //! `end-page report` opens the match report instead of the end dialog when the match ends
@@ -769,7 +770,7 @@ fn camera_input(words: &[&str]) -> Result<Vec<rom_render::InputEvent>, String> {
 fn dynamic_name(word: &str) -> bool {
     [
         "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy", "gather",
-        "landing", "colony", "landed", "foecity",
+        "landing", "colony", "landed", "foecity", "aircraft",
     ]
     .iter()
     .any(|prefix| {
@@ -873,7 +874,7 @@ pub fn live_pick(
     }
     let (name, n) = [
         "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy", "gather",
-        "craft", "landed", "foecity",
+        "craft", "landed", "foecity", "aircraft",
     ]
     .iter()
     .find_map(|name| {
@@ -920,6 +921,7 @@ pub fn live_pick(
                     "ship" => world.orbit(e.id).is_some(),
                     "landed" => world.is_landed(e.id),
                     "craft" => world.is_craft_type(e.type_id),
+                    "aircraft" => world.is_aircraft_type(e.type_id),
                     "temple" => et.keeper.is_some(),
                     "gather" => et.gather_site.is_some() && et.class == EntityClass::Building,
                     "market" => {

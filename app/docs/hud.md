@@ -183,6 +183,18 @@ camera, End resets it, Home frames the map, Ctrl+0..9 stores a group, 0..9 recal
 attack-move when slot A is empty. Hidden `--script <file>` replays pick events (see
 `rom-app/src/script.rs`); `docs/tasks/15-demo-script.txt` produced `docs/img/hud-selection.png`.
 
+### The Order tab
+
+Order buttons by slot (hotkey in brackets; a button shows only when a selected entity can use
+it): Stop (Q), Attack-move (W), Orbit (E) and Travel (R) in a system's space, Release (R) for a
+gather building, Unload or Launch craft (T), **Lift off** / **Climb to orbit** / **Take off**
+(A: a landed ship, an orbital craft in the air, a landed aircraft), **Land** (S: a ship or craft
+in orbit comes straight down; aircraft arm a pick, then land on the open ground clicked or beside
+the own airfield clicked, or where they are when Land is pressed again; task 123), Patrol (D) or Pause /
+Resume governor, Trade route (F), the combat stances on the bottom row; a market shows Buy on
+the middle row and Sell on the bottom row. Right-clicking an own airfield with aircraft
+selected lands them beside it.
+
 ## Controls
 
 Middle-button drag turns the view at every level: on a globe it turns the

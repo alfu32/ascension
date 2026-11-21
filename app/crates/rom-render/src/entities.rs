@@ -48,6 +48,12 @@ pub struct EntityView {
     pub shot: Option<crate::projectiles::ShotView>,
     /// A ship that flies through space: drawn as a hull in orbit and when it has landed.
     pub spacecraft: bool,
+    /// An aircraft's share of its flight height (task 123): 1 airborne, 0 landed (and for
+    /// everything that is not an aircraft), between while it takes off or lands.
+    pub flight: f32,
+    /// An aircraft that lands and takes off (task 123): placed by [`lift_aircraft`] with its
+    /// model's underside on the ground or at its flight height.
+    pub aircraft: bool,
     /// Facing in degrees, clockwise from the positive x axis.
     pub facing_deg: f32,
     /// Hit points as a fraction of the maximum, 0 to 1.
@@ -82,6 +88,9 @@ pub struct ModelRef {
     /// Extent of the model in tiles, around its origin: across (x), height (y) and deep (z).
     /// Picking, health bars and selection use it.
     pub size: [f32; 3],
+    /// Height in tiles of the model's lowest point above its origin (0 when it reaches the
+    /// origin or below): an aircraft model is built flying (task 123).
+    pub floor: f32,
 }
 
 /// All entities at one simulation tick, ordered by id.
@@ -216,6 +225,7 @@ pub fn interpolate(from: &EntityView, to: &EntityView, alpha: f32) -> EntityView
         x: from.x + (to.x - from.x) * alpha,
         y: from.y + (to.y - from.y) * alpha,
         facing_deg: lerp_angle(from.facing_deg, to.facing_deg, alpha),
+        flight: from.flight + (to.flight - from.flight) * alpha,
         ..*to
     }
 }
@@ -255,6 +265,7 @@ pub fn interpolate_on(globe: &Globe, from: &EntityView, to: &EntityView, alpha: 
         x,
         y,
         facing_deg: facing,
+        flight: from.flight + (to.flight - from.flight) * alpha,
         ..*to
     }
 }
@@ -583,6 +594,14 @@ pub fn pick_frame(view: &EntityView, ground: &dyn Footing) -> ([f32; 3], [[f32; 
 /// The surface frame for a ground entity or a constant-radius frame for an orbital one.
 pub(crate) fn entity_frame(view: &EntityView, ground: &dyn Footing) -> GroundFrame {
     let frame = ground.frame(view.face, view.x, view.y);
+    // An aircraft's origin is where `lift_aircraft` put it, under the ground for a model built
+    // flying (task 123).
+    if view.aircraft {
+        return GroundFrame {
+            origin: ground.datum_point(view.face, view.x, view.y, (0.0, 0.0), view.altitude),
+            ..frame
+        };
+    }
     if view.altitude > 0.0 || (view.spacecraft && !view.building) {
         // A ship never sinks below the ground it lands on; a big one stands on the highest
         // ground under its hull.
@@ -724,7 +743,10 @@ fn instances_on(
                 (view.radius * 4.0).max(0.8)
             };
             let ground_radius = ground.is_round().then(|| {
-                let floor = if view.altitude > 0.0 || (view.spacecraft && !view.building) {
+                let floor = if view.altitude > 0.0
+                    || view.aircraft
+                    || (view.spacecraft && !view.building)
+                {
                     ground.frame(view.face, view.x, view.y).origin
                 } else {
                     frame.origin
@@ -1056,6 +1078,96 @@ fn spread_aloft(
 /// slender: about two fifths as wide as long).
 const SPREAD_SPACING: f32 = 0.45;
 
+/// Height above the ground at which aircraft fly over a planet, in tiles (task 123), well under
+/// an orbit ([`ORBIT_ALTITUDE`]); they rise over buildings taller than that.
+pub const FLIGHT_ALTITUDE: f32 = 4.0;
+/// How much higher an aircraft flies per tile of its drawn length: bigger aircraft higher.
+pub const FLIGHT_PER_TILE: f32 = 0.5;
+/// How far above a building the aircraft keep, tiles.
+const FLIGHT_CLEARANCE: f32 = 1.5;
+/// How far from a tall building's footprint an aircraft begins to rise over it, tiles.
+const FLIGHT_ROOF_REACH: f32 = 2.0;
+/// Radius of the circle an idle aircraft is drawn flying round its spot, tiles.
+const CIRCLE_RADIUS: f32 = 1.2;
+/// Seconds an idle aircraft takes to fly once round its spot.
+const CIRCLE_SECONDS: f32 = 10.0;
+
+/// Lifts the aircraft among `views` into the air above `ground` (task 123): an airborne one
+/// flies [`FLIGHT_ALTITUDE`] and [`FLIGHT_PER_TILE`] of its length over the highest ground
+/// under it, rising smoothly over a taller building it nears (to [`FLIGHT_CLEARANCE`] above its
+/// roof), one taking off or landing
+/// at its share of that height (eased), a landed one stands on the ground; the height is that of
+/// the model's underside (a model built flying is lowered by its [`ModelRef::floor`]). An idle airborne one
+/// is drawn circling its spot, `seconds` into the match, while the circle stays on its face
+/// (`face_side` tiles across; `None` on a flat map, where it does not circle). Sets
+/// [`EntityView::altitude`], the height above sea level the drawing, picking and shots use.
+/// Presentation only.
+pub(crate) fn lift_aircraft(
+    views: &mut [EntityView],
+    ground: &dyn Footing,
+    seconds: f32,
+    face_side: Option<f32>,
+) {
+    if !views.iter().any(|v| v.aircraft) {
+        return;
+    }
+    // The buildings an aircraft must rise over: face, centre, half its footprint, height.
+    let tall: Vec<(u8, f32, f32, f32, f32)> = views
+        .iter()
+        .filter(|v| v.building && building_height(v) + FLIGHT_CLEARANCE > FLIGHT_ALTITUDE)
+        .map(|v| {
+            let half = f32::from(v.footprint.0.max(v.footprint.1)) * 0.5;
+            (
+                v.face,
+                v.x,
+                v.y,
+                half,
+                building_height(v) + FLIGHT_CLEARANCE,
+            )
+        })
+        .collect();
+    for view in views.iter_mut() {
+        if !view.aircraft || view.building || view.spacecraft {
+            continue;
+        }
+        let length = unit_width(view);
+        if view.flight >= 1.0
+            && view.activity == Activity::Idle
+            && let Some(side) = face_side
+        {
+            let phase = (view.id % 97) as f32 / 97.0;
+            let turn = (seconds / CIRCLE_SECONDS + phase) * std::f32::consts::TAU;
+            let (sin, cos) = turn.sin_cos();
+            let (x, y) = (view.x + CIRCLE_RADIUS * cos, view.y + CIRCLE_RADIUS * sin);
+            if (0.5..side - 0.5).contains(&x) && (0.5..side - 0.5).contains(&y) {
+                view.x = x;
+                view.y = y;
+                view.facing_deg = (turn.to_degrees() + 90.0).rem_euclid(360.0);
+            }
+        }
+        let reach = length * 0.5;
+        let floor = (0..8)
+            .map(|k| {
+                let (sin, cos) = (k as f32 * std::f32::consts::FRAC_PI_4).sin_cos();
+                ground.height_at(view.face, view.x + cos * reach, view.y + sin * reach)
+            })
+            .fold(ground.height_at(view.face, view.x, view.y), f32::max);
+        let base = tall
+            .iter()
+            .filter(|t| t.0 == view.face)
+            .map(|&(_, x, y, half, top)| {
+                let off = ((view.x - x).abs().max((view.y - y).abs()) - half).max(0.0);
+                let near = 1.0 - (off / FLIGHT_ROOF_REACH).min(1.0);
+                FLIGHT_ALTITUDE + (top - FLIGHT_ALTITUDE) * crate::layers::smoothstep(near)
+            })
+            .fold(FLIGHT_ALTITUDE, f32::max);
+        let rise = crate::layers::smoothstep(view.flight.clamp(0.0, 1.0));
+        // The model's underside at that height (on the ground when landed).
+        let built = view.model.map_or(0.0, |m| m.floor);
+        view.altitude = floor + (base + FLIGHT_PER_TILE * length) * rise - built;
+    }
+}
+
 /// Whether `view` is a ship above the ground: in orbit, landing or lifting off.
 pub(crate) fn is_aloft_ship(view: &EntityView) -> bool {
     view.spacecraft && view.altitude > 0.0
@@ -1246,6 +1358,8 @@ mod tests {
             altitude: 0.0,
             shot: None,
             spacecraft: false,
+            flight: 0.0,
+            aircraft: false,
             activity: Default::default(),
         }
     }
@@ -1268,6 +1382,49 @@ mod tests {
             start + Duration::from_millis(100),
         );
         pair
+    }
+
+    #[test]
+    fn aircraft_fly_at_their_height_rise_over_tall_buildings_and_land_on_the_ground() {
+        let ground = FlatGround(&|_, _| 2.0);
+        let plane = |id, x, flight| EntityView {
+            flight,
+            aircraft: true,
+            ..view(id, x, 10.0, 0.0)
+        };
+        let airborne = plane(1, 10.0, 1.0);
+        let climbing = plane(2, 30.0, 0.5);
+        // A model built flying: its underside 1.5 tiles over its origin.
+        let mut landed = plane(3, 50.0, 0.0);
+        landed.model = Some(ModelRef {
+            index: 0,
+            size: [1.0, 2.0, 1.0],
+            floor: 1.5,
+        });
+        let over_tower = plane(4, 70.0, 1.0);
+        let mut tower = view(5, 70.0, 10.0, 0.0);
+        tower.building = true;
+        tower.footprint = (2, 2);
+        tower.kind = 3;
+        let tower_height = building_height(&tower);
+        let length = unit_width(&airborne);
+        let mut views = [airborne, climbing, landed, over_tower, tower];
+        lift_aircraft(&mut views, &ground, 0.0, None);
+        let cruise = 2.0 + FLIGHT_ALTITUDE + FLIGHT_PER_TILE * length;
+        assert!(
+            (views[0].altitude - cruise).abs() < 1e-4,
+            "{}",
+            views[0].altitude
+        );
+        assert!(views[1].altitude > 2.0 && views[1].altitude < cruise);
+        assert!(
+            (views[2].altitude - 0.5).abs() < 1e-4,
+            "landed: underside on the ground"
+        );
+        let frame = entity_frame(&views[2], &ground);
+        assert!((frame.origin[1] - 0.5).abs() < 1e-4, "{:?}", frame.origin);
+        assert!(views[3].altitude >= 2.0 + tower_height.max(FLIGHT_ALTITUDE));
+        assert!(views[3].altitude < ORBIT_ALTITUDE + 2.0 + tower_height);
     }
 
     #[test]
@@ -1510,10 +1667,13 @@ mod tests {
         EntityView {
             kind,
             spacecraft: true,
+            flight: 0.0,
+            aircraft: false,
             altitude,
             model: Some(ModelRef {
                 index: 0,
                 size: [length * 0.4, length * 0.3, length],
+                floor: 0.0,
             }),
             ..view(id, 32.5, 32.5, 0.0)
         }

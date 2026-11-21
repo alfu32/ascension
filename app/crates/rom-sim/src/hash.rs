@@ -278,6 +278,15 @@ impl World {
                 hash.u32(colony.0);
             }
         }
+        // Hashed only once an aircraft is on the ground, so other worlds keep their hashes.
+        if !self.flight.is_empty() {
+            hash.bytes(b"flight");
+            hash.u64(self.flight.len() as u64);
+            for (id, climbed) in &self.flight {
+                hash.u32(id.0);
+                hash.u64(*climbed);
+            }
+        }
         // Hashed only once a player has traded, so other worlds keep their hashes (task 107).
         if !self.market.is_empty() {
             hash.bytes(b"market");

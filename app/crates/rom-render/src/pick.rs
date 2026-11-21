@@ -1181,6 +1181,8 @@ mod tests {
             altitude: 0.0,
             shot: None,
             spacecraft: false,
+            flight: 0.0,
+            aircraft: false,
             activity: Default::default(),
         }
     }

@@ -1516,6 +1516,60 @@ the seed loads.
   may alert once more. They change nothing in the game. No save format change; the rules
   fingerprint changes, so earlier saves are refused as with any rules change.
 
+## Aircraft land and take off (task 123)
+
+Owner (2026-11-21): jets and biplanes have two planes of action like the orbital craft, the
+ground and the air, "they can land and takeoff (but not in the orbital plane obviously)".
+Behaviour: `docs/world-model.md` "Aircraft in the air, on the ground". Rows come from
+`db/content/generate.py` (`aircraft_take_off()`, values only, so every id stays); deliberate
+schema change, both lint views stay empty and the seed loads.
+
+- **`et_movement.takeoff_ticks`** (new, `INTEGER NOT NULL DEFAULT 0`, `CHECK (takeoff_ticks >= 0
+  AND (takeoff_ticks = 0 OR climb_ticks = 0))`): ticks an aircraft takes to take off from the
+  ground into the air above its planet, and to land; 0 = it never lands (always airborne, as
+  every flyer was before). A type with `takeoff_ticks > 0` is an **aircraft**; it never has
+  `climb_ticks` (orbital craft keep theirs and never land). `rom-rules` reads it into
+  `Movement::takeoff_ticks`. Seed: biplane 60, fighter 70, drone fighter 70, jet fighter 80,
+  interceptor 80, bomber 90, drone bomber 90, strategic bomber 100. The repair drone (also of the
+  `aircraft` movement class) hovers and keeps 0; so do the orbital fighter and bomber.
+- **Constant** `air.takeoff_run` 3000 milli-tiles: the ground an aircraft rolls along its
+  heading while it takes off (accelerating), and glides over while it lands (slowing).
+- **Orders.** No new kind: `land` (point) and `lift` (none) serve aircraft too, their notes
+  updated. `land` is refused (`CannotLand`) unless a landing spot lies within twelve tiles of
+  the point on the aircraft's own planet; `lift` is refused (`NotLanded`) for an aircraft in
+  the air. Every order that moves an aircraft or makes it fight (`move`, `attack`,
+  `attack_move`, `patrol`, `guard`, `explore`, `enter`, …) takes off first.
+- **Landing spot** (`World::landing_spot`): the tile nearest the point, within twelve tiles,
+  whose terrain is on the `ground` layer and not tagged `no_landing` (no water, no mountain),
+  with no building on it or on the eight tiles round it (the wings stay clear of every
+  building), and at least `LANDING_SPACING` (two tiles) from every other aircraft that stands,
+  takes off or lands there or whose `land` has chosen its spot; chosen in id order. An airfield
+  (a building that trains a type with `takeoff_ticks > 0`, from `production`; no key is read)
+  is landed at by picking it: the aircraft park on the free ground beside it. Its own tiles hold
+  its hangar and tower, which a landed model would cut through.
+- **Where new aircraft appear** (the rule asked for by the card): an aircraft trained by a
+  building comes out **landed**, on the free landing spot nearest the building's gate, and
+  takes off when it is sent somewhere (its rally point, if
+  any). It comes out in the air only when no spot is free nearby, or when its producer is not a
+  building (no such producer exists today). From data: the producer's class and the product's
+  `takeoff_ticks`; aircraft only ever come from the airfield now, so in practice they come out
+  landed beside or on it.
+- **Combat.** An aircraft on the ground, taking off or landing is on the `ground` layer for the
+  weapons that hit it and, failing a `ground` row, still in reach of a weapon's `air` row
+  (`World::layer_row`: a parked aircraft is a ground target that anti-air reaches too). It
+  cannot fire. Idle on the ground it acquires targets and retaliates by its stance like any
+  idle unit, and the automatic attack takes off first: parked fighters scramble when an enemy
+  they can hit comes into sight. Airborne nothing changed.
+- **State** (`World::flight`, `BTreeMap<EntityId, u64>`): the ticks each aircraft on or near
+  the ground has climbed toward its flight height, 0 = landed; airborne aircraft have no entry.
+  Taking off counts up (and rolls), landing counts down (and glides); an aircraft whose orders
+  no longer take it up settles back to the ground where it is. Hashed only while not empty, so
+  worlds without a grounded aircraft keep their hashes. The landing spot is the `land` order's
+  `home`, its glide start the order's `target_pos`.
+- **Save format 15.** PART B table `entity_flight(entity_id, climbed)`; formats 13 and 14 still
+  load, with every aircraft in the air. The rules fingerprint changes, so earlier saves are
+  refused as with any rules change.
+
 ## Bringing life (task 77)
 
 The rules, the state and the views are described in `docs/bringing-life.md`. Schema and seed
@@ -1814,6 +1868,8 @@ back. No SQL runs in `rom-sim`.
 - **Rally points.** `entity_rally(entity_id, target_entity_id | x, y, face, body)`
   (task 64). Not part of the state hash while no producer has one, so worlds
   without rally points keep their hashes.
+- **Aircraft on the ground of task 123 (format 15).** `entity_flight(entity_id, climbed)` (see
+  "Aircraft land and take off"). Formats 13 and 14 still load, with every aircraft in the air.
 - **The match end and report of task 117 (format 14).** `match_human`, `match_end`,
   `player_stat`, `player_gathered`, `player_age_reached`, `player_history` (see "How a match
   ends"). Format 13 saves still load, without them; format 12 and older are refused.

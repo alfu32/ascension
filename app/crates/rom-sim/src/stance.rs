@@ -312,11 +312,10 @@ impl World {
         {
             return;
         }
-        let layer = self.target_layer(attacker);
         if !self.rules.entity_types[&e.type_id]
             .weapons
             .iter()
-            .any(|w| w.targets.iter().any(|t| t.layer == layer))
+            .any(|w| self.layer_row(&w.targets, attacker).is_some())
         {
             return;
         }
