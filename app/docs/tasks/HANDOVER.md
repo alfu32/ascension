@@ -45,6 +45,14 @@ pushed, tree clean). Read `CLAUDE.md` (it imports `AGENTS.md`), then
      non-alphanumerics → `-`, fields `model`, `round`, `status`
      (`draft|needs-work|approved`), `note`; collection `general`, doc
      `round-<n>`, field `note`.
+   - **Sounds (task 124, 2026-11-21):** pass a fourth argument, a folder holding the sound
+     files (`<group>.<name>[.<n>].ogg`) and `assignment.json` (unit key → event → sound key;
+     events `select`, `move`, `attack`, `build`, `build_done`, `research_done`, `fire`,
+     `fight`); publish the files as `sounds/<file>` beside the page. The page then lists
+     **Unit sounds** (collection `sound_reviews`, doc id = unit key with non-alphanumerics →
+     `-`, fields `entity`, `status`, `note`) and the **Sound library** (collection
+     `sound_files`, fields `sound`, `status`; collection `sound_groups`, fields `group`,
+     `note`). The intro text per round is `LEADS` in `build.py`.
 4. **Locking approved models:** append `"<id>" = "<fingerprint>"` (from the
    manifest) to `app/docs/art/approved.toml`; the test
    `approved_models_are_unchanged` then guards them. Never change a locked

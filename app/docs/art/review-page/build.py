@@ -9,6 +9,17 @@ here = Path(sys.argv[1])
 manifest = json.loads((here / "models.json").read_text())
 ROUND = sys.argv[2] if len(sys.argv) > 2 else "1"
 VERSION = sys.argv[3] if len(sys.argv) > 3 else ""
+# Optional: a folder with the sound files (`<group>.<name>[.<n>].ogg`) and `assignment.json`
+# (unit key -> event -> sound key), task 124; published beside the page as `sounds/`.
+SOUND_DIR = Path(sys.argv[4]) if len(sys.argv) > 4 else None
+
+LEADS = {
+    "13": "Buildings and units built from parts inside the game. Round 13 brings one model: the <strong>relic site</strong> (task 82; <code>node.relics@any</code>), the holy place in the wild where priests collect relics for their temples. Set its status and write directions. Name a part as <code>model id/part</code>, for example <code>node.relics@any/reliquary</code>.",
+    "15": "Buildings and units built from parts inside the game, and now their sounds. Round 15 brings one model: the <strong>Deep Space Tracking Station</strong> (task 118; <code>bld.jump_detector@fusion</code>), the fusion-age building that watches its star system and raises an alert when foreign ships jump in: a radar dish on a mast over a plated base, with a beacon and a small equipment hut. Set its status and write directions; name a part as <code>model id/part</code>. Below the models, <strong>Unit sounds</strong> and the <strong>Sound library</strong> let you play and rate every sound (task 124).",
+}
+LEAD = LEADS.get(ROUND, "Buildings and units built from parts inside the game. Set each model's status and write directions; name a part as <code>model id/part</code>.")
+GROUPS = {"ambient": "Ambience", "bld": "Buildings at work", "act": "Unit activity", "fire": "Weapons",
+          "ui": "Interface", "voice": "Voices"}
 
 ROUND1 = {"bld.city@ancient", "bld.city@classical", "bld.barracks@ancient",
           "bld.library@ancient", "unit.citizen@any"}
@@ -224,6 +235,7 @@ for m in manifest["models"]:
     models.append({
         "id": m["id"],
         "name": name_of(m["entity"]),
+        "entity": m["entity"],
         "round": round_of(m),
         "poses": [p for p in ("parts", "ages", "move", "attack", "work")
                   if (here / "img" / (m["id"].replace("@", "_") + "-" + p + ".jpg")).exists()],
@@ -251,11 +263,31 @@ AGES = ["ancient", "classical", "medieval", "gunpowder", "enlightenment", "indus
         "any"]
 models.sort(key=lambda m: (-m["round"], not m["id"].startswith("unit."), AGES.index(m["age"]) if m["age"] in AGES else 99, m["id"]))
 
+sounds, library = {}, []
+if SOUND_DIR:
+    files = sorted(f.stem for f in SOUND_DIR.glob("*.ogg"))
+    assignment = SOUND_DIR / "assignment.json"
+    if assignment.exists():
+        known = {m["entity"] for m in models}
+        sounds = {k: v for k, v in sorted(json.loads(assignment.read_text()).items()) if k in known}
+        missing = sorted({key for v in sounds.values() for key in v.values()} - set(files))
+        if missing:
+            sys.exit(f"assignment names sounds that are not in {SOUND_DIR}: {missing[:10]}")
+    order = list(GROUPS)
+    by_group = {}
+    for f in files:
+        by_group.setdefault(f.split(".", 1)[0], []).append(f)
+    for g in sorted(by_group, key=lambda g: (order.index(g) if g in order else 99, g)):
+        library.append([GROUPS.get(g, g.capitalize()), by_group[g]])
+
 template = (here / "page.html").read_text()
 page = (template
         .replace("__MODELS__", json.dumps(models))
         .replace("__OVERVIEW__", json.dumps(OVERVIEW))
+        .replace("__SOUNDS__", json.dumps(sounds))
+        .replace("__LIBRARY__", json.dumps(library))
+        .replace("__LEAD__", LEAD)
         .replace("__ROUND__", html.escape(ROUND))
         .replace("__VERSION__", html.escape(VERSION)))
 (here / "model-review.html").write_text(page)
-print("models", len(models))
+print("models", len(models), "units with sounds", len(sounds), "sound files", sum(len(k) for _, k in library))
