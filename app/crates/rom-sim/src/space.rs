@@ -777,6 +777,7 @@ impl World {
     /// at zero hit points into the next tick.
     pub(crate) fn arrive_transits(&mut self) {
         let mut destroyed = false;
+        let mut arrived = Vec::new();
         let due: Vec<_> = self
             .space
             .transits
@@ -819,8 +820,11 @@ impl World {
             self.refresh_income(id);
             self.economy.dirty.insert(id);
             self.space.transits_done += 1;
+            arrived.push((id, transit.destination));
             destroyed |= self.strike_arrival(id, transit.destination);
         }
+        // Detectors see the ships arrive, those the blow destroyed too (task 118).
+        self.detect_arrivals(&arrived);
         if destroyed {
             self.remove_dead();
         }

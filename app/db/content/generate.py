@@ -666,6 +666,7 @@ def generate():
     unit_series(row, tag, tech, modifier, upgrade, sql.append)
     naval_manager(sql.append)
     market_trading(row, modifier, sql.append)
+    alerts_and_detectors(definition, row, tag, need, produce, cost, tech)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -810,6 +811,8 @@ INHIBITOR_ARRIVAL_DAMAGE = 1000
 # neighbouring planet orbits (they grow 1.4 to 1.9 times outward, the outermost at 240 tiles), so
 # a ship may jump in beside another planet of the system.
 INHIBITOR_ARRIVAL_RADIUS = 12_000
+# Task 118: the age the jump inhibitor comes in (it was starfaring until then).
+INHIBITOR_AGE = 'expansion'
 # Spaceport research: key, name, age, the rule it enables.
 ROUTE_RESEARCH = [
     ('enhanced_sensors', 'Enhanced Sensors', 'expansion', 'route_sensors'),
@@ -825,14 +828,17 @@ def jumps_and_inhibitors(definition, row, tag, need, produce, cost, tech, emit):
     for key, size in SHIP_SIZE.items():
         if size in JUMP_CHARGE:
             emit(f"UPDATE et_movement SET jump_charge_ticks={JUMP_CHARGE[size]} WHERE entity_type_id={val(Ref('unit.' + key))};")
+    # Its sight and build time stay those of the starfaring age, where it was first defined;
+    # since task 118 it comes in the expansion age (owner, issue #3: no inhibitor before a
+    # player can travel between the stars).
     age = AGES.index('starfaring')
     full = 'bld.jump_inhibitor'
     definition('entity_type', full, 'Jump Inhibitor')
     row('entity_type', id=Ref(full), **{'class': 'building'}, ui_group='military', hp=3000, armor=5,
         armor_class_id=Ref('structure', 'armor_class'), los=building_sight(age, 3), footprint_w=3, footprint_h=3,
-        build_ticks=150 + 25 * age, ramp_mode='per_type', first_age_id=Ref('age.starfaring'))
+        build_ticks=150 + 25 * age, ramp_mode='per_type', first_age_id=Ref('age.' + INHIBITOR_AGE))
     tag(full, 'building', 'mechanical')
-    need(full, 'age.starfaring')
+    need(full, 'age.' + INHIBITOR_AGE)
     cost(full, {'metal': 500, 'energy': 300}, True)
     for builder in ('citizen', 'worker_drone'):
         produce('unit.' + builder, full, 'construct', 'military')
@@ -1169,6 +1175,59 @@ def market_trading(row, modifier, emit):
                  "price of the moment, paid in the market's currency; applied at once, the queue stays")
     values = ', '.join(f"('{key}',{default},'{note}')" for key, default, note in MARKET_WEIGHTS)
     emit(f'INSERT INTO ai_weight_key VALUES {values};')
+
+
+# Task 118 (owner, issue #3, 2026-11-21): alerts when a player's city or army is attacked and
+# when foreign ships jump into a system it watches (docs/database.md, "Alerts and jump
+# detectors"). Rule values: key, value, unit, note.
+ALERT_CONSTANTS = [
+    ('alert.attack_repeat_ticks', 600, 'ticks', 'one under-attack alert per city (or area of the field) in this many ticks: a battle is one line'),
+    ('alert.marker_ticks', 200, 'ticks', 'an alert marks its place on the minimap and the star map this long; arriving ships stay shown as long'),
+]
+# The jump detector: a building of the fusion age that watches its whole star system.
+DETECTOR_AGE = 'fusion'
+DETECTOR_COST = {'metal': 300, 'energy': 150}
+# The survey ship's sensor: once researched, a survey ship standing still in a system's plane
+# detects arrivals within this distance of it (milli-tiles of the plane; 40 tiles).
+SURVEY_SENSOR_RADIUS = 40_000
+SURVEY_SENSOR_AGE = 'starfaring'
+
+
+def alerts_and_detectors(definition, row, tag, need, produce, cost, tech):
+    """Task 118: the alerts' rule values, the jump detector building (fusion age), the survey
+    ship's sensor and the spaceport research that enables it. Defined after every other
+    generated definition so the ids of earlier content stay stable."""
+    for key, value, unit, note in ALERT_CONSTANTS:
+        row('game_constant', key=key, value=value, unit=unit, note=note)
+    row('stat', key='detector', scope='entity',
+        note='1 when the entity detects jump arrivals (et_detector.enabled is its base)')
+    age = AGES.index(DETECTOR_AGE)
+    full = 'bld.jump_detector'
+    definition('entity_type', full, 'Deep Space Tracking Station')
+    # One per city's area (the limit columns have no per-planet scope); several do not
+    # duplicate alerts.
+    row('entity_type', id=Ref(full), **{'class': 'building'}, ui_group='military', hp=1500, armor=3,
+        armor_class_id=Ref('structure', 'armor_class'), los=building_sight(age, 2), footprint_w=2, footprint_h=2,
+        build_ticks=150 + 25 * age, ramp_mode='per_type', limit_scope='per_city', limit_count=1,
+        first_age_id=Ref('age.' + DETECTOR_AGE))
+    tag(full, 'building', 'mechanical')
+    need(full, 'age.' + DETECTOR_AGE)
+    cost(full, DETECTOR_COST, True)
+    for builder in ('citizen', 'worker_drone'):
+        produce('unit.' + builder, full, 'construct', 'military')
+    # Placed as the jump inhibitor is: in own territory on plain ground.
+    row('placement_rule', entity_type_id=Ref(full), rule='in_own_territory')
+    row('placement_rule', entity_type_id=Ref(full), rule='on_terrain', ref_def_id=Ref('ter.plain'))
+    row('et_detector', entity_type_id=Ref(full), scope='system', radius=0, enabled=1)
+    # The survey ship carries the sensor switched off; the research switches it on.
+    row('et_detector', entity_type_id=Ref('unit.survey_ship'), scope='radius',
+        radius=SURVEY_SENSOR_RADIUS, enabled=0)
+    age = AGES.index(SURVEY_SENSOR_AGE)
+    full = 'tech.survey_sensor_array'
+    tech(full, 'Survey Sensor Array', age, 'spaceport', 300 + age * 50,
+         {'wealth': 100 * (age + 1), 'knowledge': 50 * (age + 1)})
+    row('modifier', source_def_id=Ref(full), target_def_id=Ref('unit.survey_ship'), stat_key='detector',
+        op='set', value=1)
 
 
 # Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"

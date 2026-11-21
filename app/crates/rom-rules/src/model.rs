@@ -404,6 +404,24 @@ impl crate::load::SqlEnum for InhibitorReach {
         }
     }
 }
+/// What a jump detector watches (`et_detector.scope`, task 118).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum DetectorScope {
+    /// SQL value `system`: every arrival in the star system of the planet it stands on.
+    System,
+    /// SQL value `radius`: arrivals within `et_detector.radius` of it while it stands still in a
+    /// system's plane.
+    Radius,
+}
+impl crate::load::SqlEnum for DetectorScope {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "system" => Some(Self::System),
+            "radius" => Some(Self::Radius),
+            _ => None,
+        }
+    }
+}
 /// Closed rules vocabulary for StatScope.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StatScope {
@@ -1282,6 +1300,8 @@ pub struct EntityType {
     pub view_scale: Option<ViewScale>,
     /// Attached `et_inhibitor` row: holds enemy ships in its star system.
     pub inhibitor: Option<Inhibitor>,
+    /// Attached `et_detector` row: tells its owner of foreign ships jumping in (task 118).
+    pub detector: Option<Detector>,
     /// Attached `et_colony` row and its `et_colony_site` rows: an automated colony.
     pub colony: Option<Colony>,
     /// Attached `et_market` row: its owner trades resources here (task 107).
@@ -1543,6 +1563,18 @@ pub struct Inhibitor {
     /// The `arrival_radius` column: how near its planet, in milli-tiles of the system's plane,
     /// an arrival must be to be struck (task 111).
     pub arrival_radius: i64,
+}
+/// One `et_detector` row: a jump detector (task 118).
+#[derive(Debug, Clone)]
+pub struct Detector {
+    /// The `entity_type_id` column.
+    pub entity_type_id: DefId,
+    /// The `scope` column: what it watches.
+    pub scope: DetectorScope,
+    /// The `radius` column: how far it detects, milli-tiles of a system's plane (`radius` scope).
+    pub radius: i64,
+    /// The `enabled` column: the base of the entity stat `detector` (1 detects).
+    pub enabled: i64,
 }
 /// One `et_market` row: a building where its owner buys and sells lots of the tradeable
 /// resources (task 107).
