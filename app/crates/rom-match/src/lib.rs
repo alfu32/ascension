@@ -10,6 +10,7 @@
 pub mod computer;
 pub mod content;
 pub mod core;
+pub mod report;
 pub mod script_setup;
 pub mod settings;
 pub mod setup;
@@ -20,6 +21,7 @@ pub use content::{
     generate_sphere_content, generate_universe_content, load_rules, model_files, seed_with_models,
 };
 pub use core::{Desync, Entry, Input, Journal, MatchCore, Refusal, TickOutcome, VISIT_INTERVAL};
+pub use report::{Aspect, Chart, MatchReport, ReportPlayer, Series, Standing};
 pub use script_setup::ScriptSetup;
 pub use settings::{Built, Generated, MapKind, MatchSettings};
 pub use setup::{

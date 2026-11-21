@@ -117,6 +117,10 @@ impl MatchSettings {
         if self.map != MapKind::Universe {
             self.script.apply_grants(&mut game.world)?;
         }
+        // The match ends when no human is left in it (task 117).
+        game.world
+            .set_humans(&self.humans)
+            .map_err(|error| format!("the human players: {error}"))?;
         let computers = match &self.ai {
             Some(specs) => {
                 ComputerPlayers::new(&mut game.world, specs, request.seed, &self.humans)?

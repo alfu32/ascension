@@ -2,8 +2,8 @@
 
 use crate::{AiStates, Controller, FORMAT, MatchInfo, SaveError, Seat, codec, part_b};
 use rom_sim::{
-    Elimination, EntitySnapshot, HitSnapshot, OrderSnapshot, OrderStatus, Outcome, PlayerId,
-    PlayerStatus, Pos, Rally, Snapshot, ViewerSnapshot, World, victory_rule_key,
+    Elimination, EndReason, EntitySnapshot, HitSnapshot, OrderSnapshot, OrderStatus, Outcome,
+    PlayerId, PlayerStatus, Pos, Rally, Snapshot, ViewerSnapshot, World, victory_rule_key,
 };
 use rusqlite::{Connection, Transaction, params};
 use std::path::Path;
@@ -192,6 +192,70 @@ fn write_all(
     write_entities(tx, s)?;
     write_space(tx, s)?;
     write_places(tx, s)?;
+    write_tally(tx, s)?;
+    Ok(())
+}
+
+/// The humans, the match end, the counters and the history (task 117).
+fn write_tally(tx: &Transaction, s: &Snapshot) -> Result<(), SaveError> {
+    for player in &s.victory.humans {
+        tx.execute("INSERT INTO match_human VALUES (?)", params![player.0])?;
+    }
+    if let Some(end) = s.victory.end {
+        let (reason, team) = match end.reason {
+            EndReason::NoHumanLeft => ("no_human_left", None),
+            EndReason::LastStanding { team } => ("last_standing", Some(team)),
+        };
+        tx.execute(
+            "INSERT INTO match_end VALUES (1,?,?,?)",
+            params![w(end.tick), reason, team],
+        )?;
+    }
+    for p in s.players.iter().filter(|p| p.player.id != PlayerId(0)) {
+        let (id, t) = (p.player.id.0, &p.tally);
+        tx.execute(
+            "INSERT INTO player_stat VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            params![
+                id,
+                t.spent,
+                w(t.units_trained),
+                w(t.buildings_completed),
+                w(t.cities_founded),
+                w(t.cities_captured),
+                w(t.cities_lost),
+                w(t.techs_researched),
+                w(t.peak_land),
+                w(t.peak_army),
+                t.defeated.map(|(tick, _)| w(tick)),
+                t.defeated.and_then(|(_, by)| by).map(|p| p.0),
+            ],
+        )?;
+        for (resource, amount) in &t.gathered {
+            tx.execute(
+                "INSERT INTO player_gathered VALUES (?,?,?)",
+                params![id, resource.0, amount],
+            )?;
+        }
+        for (age, tick) in &t.ages {
+            tx.execute(
+                "INSERT INTO player_age_reached VALUES (?,?,?)",
+                params![id, age.0, w(*tick)],
+            )?;
+        }
+    }
+    let mut history = tx.prepare_cached("INSERT INTO player_history VALUES (?,?,?,?,?,?,?,?)")?;
+    for h in &s.history {
+        history.execute(params![
+            w(h.tick),
+            h.player.0,
+            h.score,
+            w(h.land),
+            w(h.army),
+            w(h.cities),
+            h.stock,
+            h.age.0
+        ])?;
+    }
     Ok(())
 }
 

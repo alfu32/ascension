@@ -44,6 +44,20 @@ INSERT INTO game_constant(key,value,unit,note) VALUES
  ('space.orbit_speed',400,'milli-tiles/second','speed of the orbital ground footprint'),
  ('space.land_ticks',60,'ticks','descent of a carrier from orbit to open ground');
 
+-- The match report (task 117; docs/ascension.md "How a match ends"): the history period and
+-- the weights of the score, a sum of each player's counters.
+INSERT INTO game_constant(key,value,unit,note) VALUES
+ ('stats.history_period_ticks',1200,'ticks','one sample of every player''s standing per game minute, for the match report'),
+ ('score.gathered_per',100,'resources','one point per this many resources gathered (income and trade deliveries)'),
+ ('score.unit_trained',5,'points','per unit trained'),
+ ('score.building_completed',10,'points','per building completed'),
+ ('score.city_founded',100,'points','per city founded'),
+ ('score.city_captured',150,'points','per enemy city captured'),
+ ('score.kill',2,'points','per enemy unit or building destroyed'),
+ ('score.tech',20,'points','per technology researched'),
+ ('score.age',300,'points','per ordinal of the highest age reached'),
+ ('score.ascension',2000,'points','per ascension');
+
 -- Routes and jumps (task 70; docs/database.md "Routes and jumps").
 INSERT INTO game_constant(key,value,unit,note) VALUES
  ('space.jump_charge_ticks',160,'ticks','charge at the system edge before a jump, for a ship type without et_movement.jump_charge_ticks'),

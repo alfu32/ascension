@@ -12,6 +12,7 @@
 pub mod client;
 pub mod keys;
 pub mod protocol;
+pub mod report;
 pub mod server;
 pub mod state;
 mod transport;

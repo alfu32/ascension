@@ -458,6 +458,7 @@ impl World {
                 .entry(route.resource)
                 .or_default();
             *balance = balance.saturating_add(payment);
+            self.count_gathered(player, route.resource, payment);
         }
         self.stats.trade_trips = self.stats.trade_trips.saturating_add(1);
     }

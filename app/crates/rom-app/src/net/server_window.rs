@@ -287,7 +287,9 @@ impl Render for ServerView {
         let status = self.status.clone();
         let running = status.as_ref().is_some_and(|s| s.running);
         let paused = status.as_ref().is_some_and(|s| s.paused_by.is_some());
-        let playing = status.as_ref().is_some_and(|s| s.phase == "playing");
+        let playing = status
+            .as_ref()
+            .is_some_and(|s| matches!(s.phase.as_str(), "playing" | "finished"));
         let summary = match &status {
             Some(s) => {
                 let mut line = format!(

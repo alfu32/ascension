@@ -84,6 +84,8 @@ pub enum ClientMessage {
     },
     /// The client is too far behind (or lost) and wants a snapshot.
     NeedSnapshot,
+    /// After the match's end, a remaining human keeps playing (task 117).
+    KeepPlaying,
     /// Pause the match (anyone).
     Pause,
     /// Resume the match (anyone).

@@ -397,6 +397,8 @@ pub struct ClientReport {
     pub events: Vec<String>,
     /// Why the client ended.
     pub ended: String,
+    /// The tick the follower's world reached the match's end at (task 117), if it did.
+    pub end_tick: Option<u64>,
 }
 
 /// Our computer player.
@@ -427,7 +429,7 @@ pub fn run_client(options: ClientOptions) -> Result<ClientReport, NetError> {
         host: welcome.host,
         ..ClientReport::default()
     };
-    if welcome.lobby.phase != "playing" {
+    if !matches!(welcome.lobby.phase.as_str(), "playing" | "finished") {
         if let Some(faction) = &options.faction {
             connection.send(&ClientMessage::Choose {
                 faction: faction.clone(),
@@ -608,6 +610,7 @@ pub fn run_client(options: ClientOptions) -> Result<ClientReport, NetError> {
     if let Some(f) = &follower {
         report.tick = f.core().world().tick();
         report.hash = f.core().world().hash();
+        report.end_tick = f.core().world().match_end().map(|end| end.tick);
     }
     say(&format!(
         "left at tick {} ({ended}); hash {:016x}",

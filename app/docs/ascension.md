@@ -4,8 +4,8 @@ The owner (2026-11-17): a player that has researched everything at the library m
 Ascended players lose all their possessions, explore the universe freely, live at their
 celestial home beside the black hole at the galactic centre, and may descend again, at any
 time, on open land of any habitable planet, with a city, a fair amount of resources and the
-first age. The match has no end condition; a player must complete the ascension before it is
-defeated. This replaces the decision that the game ends at the last age.
+first age. A player must complete the ascension before it is defeated. This replaced the
+decision that the game ends at the last age; how a match ends is below (task 117).
 
 ## The project
 
@@ -109,12 +109,72 @@ The player then has:
 
 It can ascend again later by the same route; `World::ascensions` counts the times.
 
-## The match without an end
+## How a match ends
 
-A victory is a notice, not an end: orders stay open after it, the first victory is kept, and
-defeats go on being checked (the winners too). When one material player or alliance remains
-and every other player is defeated or ascended (`World::last_standing`), it is told so: it
-may keep playing, ascend, or leave.
+The owner (2026-11-21): when only computers are left there is no point in continuing. This
+replaces "the match without an end" of task 76.
+
+- **No human left.** The setup names the players people play (`World::set_humans`, from
+  `MatchSettings::humans`: the person's player in the app, the seats people took in a network
+  match). When every one of them is defeated, the match ends (`EndReason::NoHumanLeft`) at that
+  very tick. An ascended human is still in the match (it may descend); a human seat a computer
+  took over after a disconnect is still a human seat. Matches without a human (benchmarks,
+  `ai-match`, duels, the fight matrix, the playthrough) never end this way.
+- **Only humans left.** When every other player is defeated or ascended and one team of humans
+  remains (`World::last_standing` with no computer among the material players), the match also
+  reaches its end (`EndReason::LastStanding { team }`) and the report is made; the remaining
+  humans may choose **Keep playing**: the world goes on and the report stays as it was at the
+  end. The ascension stays open to them.
+- **The first victory** is kept as before (a notice; defeats go on being checked, the winners
+  too) and the report shows it.
+
+The end is decided in the simulation after the victory checks of a tick, in integers and id
+order: `World::match_end()` returns `MatchEnd { tick, reason }`, kept as first reached, hashed
+and saved, so every network peer reaches it at the same tick. After it, nothing in the tick
+changes (defeated players' orders stay refused). The app stops stepping a match it leads unless
+the person keeps playing; a server stops stepping unless a remaining human who chose to keep
+playing is connected (`docs/network.md`, "The end of a match").
+
+### What is counted (`World::tally`)
+
+Per player, updated where the event happens: resources **gathered** per resource (income
+payments and trade deliveries), resources **spent** (paid for orders when they are given;
+refunds are not subtracted), **units trained** (a unit leaving its producer), **buildings
+completed** and **cities founded** among them, **cities captured** and **lost** (a city
+restored by an enemy), **technologies researched** (research orders completed), the **tick each
+age was first held** (the starting age at tick 0), and after every tick the **peak land**
+(tiles owned) and **peak army**; the tick and the capturer of a **defeat**. Kills, losses and
+ascensions were counted already. An army is the units with a weapon that neither build nor
+gather (`World::is_army_type`), ships in transit included.
+
+**History.** Every `stats.history_period_ticks` (1 200 ticks, one game minute) one sample per
+player: score, land tiles, army, cities, the sum of its resource stores, age.
+
+**Score** (`World::score`): gathered resources / `score.gathered_per` (100) + units trained ×
+`score.unit_trained` (5) + buildings × `score.building_completed` (10) + cities founded ×
+`score.city_founded` (100) + cities captured × `score.city_captured` (150) + kills ×
+`score.kill` (2) + technologies × `score.tech` (20) + the ordinal of the highest age reached ×
+`score.age` (300) + ascensions × `score.ascension` (2 000). The weights are `game_constant`
+rows, not code.
+
+### The end dialog and the match report
+
+When the end tick is reached every human sees a modal dialog over the world, in the look of
+the in-match menu: "The match has ended", one line on why ("You were defeated by …", "No human
+player is left", "Your team is the last standing"), the winner if any, and **Match report**,
+**Exit** (the game process ends; the launcher, if it started it, stays) and, only for a
+remaining human, **Keep playing**. Escape does not close it.
+
+The **match report** (`rom_match::MatchReport`, drawn by GPUI in `rom-app/src/report_view.rs`)
+ranks the players (name, nation, race, human or computer, final standing: won, defeated at a
+time, ascended, playing) in six aspects, each ranked 1st, 2nd … with the leader marked:
+Overall (score), Military (kills, then fewer losses), Economy (gathered, then spent),
+Expansion (cities founded and captured, then peak land), Technology (techs, then the highest
+age and how early), Ascension. Four line charts follow from the history (score, land, army,
+resources in store), and the match facts: map style, seed, length in game time, end reason,
+first victory. Buttons Back (to the dialog) and Exit. The launcher's saved games have a
+**Report** button that shows the same report for a save (Back returns to the list). `rom
+report <save | server.db | state folder>` prints the ranking and the facts as text.
 
 ## Computer players
 
@@ -136,7 +196,8 @@ memory starts afresh (its opening book again).
   executor 0.
 - `rom-save`: **format 10**; the PART B `player` table has `origin_faction_id`,
   `ascended_tick`, `ascensions` and the status `ascended` (format 9 saves are refused, as every
-  older format is). Body kinds `black_hole` and `celestial` load with the universe.
+  older format is). Task 117 (format 14) adds the humans, the end, the counters and the history
+  (`docs/database.md`, "How a match ends"). Body kinds `black_hole` and `celestial` load with the universe.
 - Determinism: integers only, id order. Scenarios run twice with equal hashes
   (`rom-sim/src/ascension_tests.rs`, `rom-ai/tests/ascension.rs`, `rom-save` scenario
   `an_ascension_under_way_then_an_ascended_player_descending`): the project started and

@@ -1168,6 +1168,66 @@ CREATE TABLE market_pressure (
   PRIMARY KEY (player_id, resource_id)
 ) STRICT, WITHOUT ROWID;
 
+-- How a match ends (task 117; docs/ascension.md "How a match ends"). The players people play,
+-- from the setup: the match ends when every one of them is defeated, or when only they are left.
+CREATE TABLE match_human (
+  player_id INTEGER PRIMARY KEY REFERENCES player(id)
+) STRICT;
+
+-- The end of the match, once reached; at most one row.
+CREATE TABLE match_end (
+  id     INTEGER PRIMARY KEY CHECK (id = 1),
+  tick   INTEGER NOT NULL,
+  reason TEXT NOT NULL CHECK (reason IN ('no_human_left','last_standing')),
+  team   INTEGER,                        -- the remaining team of 'last_standing'
+  CHECK ((reason = 'last_standing') = (team IS NOT NULL))
+) STRICT;
+
+-- What each player did, for the match report (task 117): counters updated where the event
+-- happens. Kills, losses and ascensions are in `player`.
+CREATE TABLE player_stat (
+  player_id           INTEGER PRIMARY KEY REFERENCES player(id),
+  spent               INTEGER NOT NULL,  -- resources paid for orders when given
+  units_trained       INTEGER NOT NULL,
+  buildings_completed INTEGER NOT NULL,
+  cities_founded      INTEGER NOT NULL,
+  cities_captured     INTEGER NOT NULL,
+  cities_lost         INTEGER NOT NULL,
+  techs_researched    INTEGER NOT NULL,
+  peak_land           INTEGER NOT NULL,  -- most tiles owned at the end of a tick
+  peak_army           INTEGER NOT NULL,  -- most fighters at the end of a tick
+  defeated_tick       INTEGER,           -- when the player was defeated
+  defeated_by         INTEGER,           -- the player that took its capital, if any
+  CHECK (defeated_by IS NULL OR defeated_tick IS NOT NULL)
+) STRICT;
+
+CREATE TABLE player_gathered (          -- resources credited by income and trade
+  player_id   INTEGER NOT NULL REFERENCES player(id),
+  resource_id INTEGER NOT NULL REFERENCES resource(id),
+  amount      INTEGER NOT NULL,
+  PRIMARY KEY (player_id, resource_id)
+) STRICT, WITHOUT ROWID;
+
+CREATE TABLE player_age_reached (       -- the first tick each age was held
+  player_id INTEGER NOT NULL REFERENCES player(id),
+  age_id    INTEGER NOT NULL REFERENCES age(id),
+  tick      INTEGER NOT NULL,
+  PRIMARY KEY (player_id, age_id)
+) STRICT, WITHOUT ROWID;
+
+-- One sample per player every `stats.history_period_ticks` (the report's charts).
+CREATE TABLE player_history (
+  tick      INTEGER NOT NULL,
+  player_id INTEGER NOT NULL REFERENCES player(id),
+  score     INTEGER NOT NULL,
+  land      INTEGER NOT NULL,            -- tiles owned
+  army      INTEGER NOT NULL,            -- fighters
+  cities    INTEGER NOT NULL,
+  stock     INTEGER NOT NULL,            -- sum of the resource stores
+  age_id    INTEGER NOT NULL REFERENCES age(id),
+  PRIMARY KEY (tick, player_id)
+) STRICT, WITHOUT ROWID;
+
 CREATE TABLE victory_timer (            -- territory (and similar) timers per team
   victory_id INTEGER NOT NULL REFERENCES victory(id),
   team       INTEGER NOT NULL,

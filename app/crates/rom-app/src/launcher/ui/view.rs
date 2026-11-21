@@ -1184,52 +1184,62 @@ impl Launcher {
         for (index, entry) in self.saves.iter().enumerate() {
             let path = entry.path.clone();
             let refused = entry.refusal.is_some();
-            panel = panel.child(
-                div()
-                    .relative()
-                    .flex()
-                    .items_center()
-                    .gap(px(14.))
-                    .px(px(14.))
-                    .py(px(10.))
-                    .child(style::frame("cell"))
-                    .child(
-                        div()
-                            .relative()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .gap(px(2.))
-                            .child(
-                                div()
-                                    .font_bold()
-                                    .text_color(rgb(if refused {
-                                        style::MUTED
-                                    } else {
-                                        style::GOLD
-                                    }))
-                                    .child(format!("{} ({})", entry.name, entry.kind.label())),
-                            )
-                            .child(style::hint(entry.summary()))
-                            .children(entry.refusal.as_ref().map(|why| {
-                                div()
-                                    .text_size(px(12.))
-                                    .text_color(rgb(style::WARN))
-                                    .child(why.clone())
-                            })),
-                    )
-                    .child(
-                        style::button(("load-save", index), "Load", Look::Framed, !refused).when(
-                            !refused,
-                            |b| {
-                                b.on_click(
-                                    cx.listener(move |this, _, _, cx| this.load_save(&path, cx)),
+            panel =
+                panel.child(
+                    div()
+                        .relative()
+                        .flex()
+                        .items_center()
+                        .gap(px(14.))
+                        .px(px(14.))
+                        .py(px(10.))
+                        .child(style::frame("cell"))
+                        .child(
+                            div()
+                                .relative()
+                                .flex_1()
+                                .min_w_0()
+                                .flex()
+                                .flex_col()
+                                .gap(px(2.))
+                                .child(
+                                    div()
+                                        .font_bold()
+                                        .text_color(rgb(if refused {
+                                            style::MUTED
+                                        } else {
+                                            style::GOLD
+                                        }))
+                                        .child(format!("{} ({})", entry.name, entry.kind.label())),
                                 )
-                            },
+                                .child(style::hint(entry.summary()))
+                                .children(entry.refusal.as_ref().map(|why| {
+                                    div()
+                                        .text_size(px(12.))
+                                        .text_color(rgb(style::WARN))
+                                        .child(why.clone())
+                                })),
+                        )
+                        .child({
+                            let path = path.clone();
+                            style::button(("save-report", index), "Report", Look::Plain, !refused)
+                                .when(!refused, |b| {
+                                    b.on_click(cx.listener(move |this, _, window, cx| {
+                                        this.show_report(&path, window, cx)
+                                    }))
+                                })
+                        })
+                        .child(
+                            style::button(("load-save", index), "Load", Look::Framed, !refused)
+                                .when(!refused, |b| {
+                                    b.on_click(
+                                        cx.listener(move |this, _, _, cx| {
+                                            this.load_save(&path, cx)
+                                        }),
+                                    )
+                                }),
                         ),
-                    ),
-            );
+                );
         }
         panel.into_any_element()
     }
@@ -1678,3 +1688,54 @@ const GROUP_ICONS: [&str; 8] = [
     "cmd_repair",
     "pic_scroll",
 ];
+
+impl Launcher {
+    /// The match report of a saved game (task 117), with Back and Exit.
+    pub(super) fn render_report(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let header = div()
+            .flex()
+            .items_center()
+            .gap(px(16.))
+            .child(
+                style::button("report-back", "‹ Back", Look::Plain, true).on_click(cx.listener(
+                    |this, _, window, cx| {
+                        let to = this.report_from;
+                        this.go(to, window, cx)
+                    },
+                )),
+            )
+            .child(style::title("Match report"))
+            .child(div().flex_1())
+            .child(
+                style::button("report-exit", "Exit", Look::Plain, true)
+                    .on_click(cx.listener(|_, _, _, cx| cx.quit())),
+            );
+        let body = match &self.report {
+            None => style::hint("Reading the save …").into_any_element(),
+            Some(Err(error)) => div()
+                .text_color(rgb(style::WARN))
+                .child(format!("The report could not be made: {error}"))
+                .into_any_element(),
+            Some(Ok(report)) => crate::report_view::report_element(report, None, 1180.),
+        };
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .gap(px(12.))
+            .p(px(20.))
+            .bg(rgb(0x0b1016))
+            .text_color(rgb(0xf2f2f2))
+            .child(header)
+            .child(
+                style::panel().flex_1().min_h_0().p(px(14.)).child(
+                    div()
+                        .id("report-body")
+                        .size_full()
+                        .overflow_y_scroll()
+                        .child(body),
+                ),
+            )
+            .into_any_element()
+    }
+}

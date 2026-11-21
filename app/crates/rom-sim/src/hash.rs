@@ -366,11 +366,60 @@ impl World {
             }
         }
         hash.places(self);
+        hash.tally(self);
         hash.0
     }
 }
 
 impl StateHash {
+    /// The match report's counters and history (task 117), every player but nature.
+    fn tally(&mut self, world: &World) {
+        self.bytes(b"tally");
+        let empty = crate::PlayerTally::default();
+        for player in world.players.keys().filter(|p| p.0 != 0) {
+            let t = world.tally.players.get(player).unwrap_or(&empty);
+            self.u32(player.0);
+            self.u64(t.gathered.len() as u64);
+            for (resource, amount) in &t.gathered {
+                self.u32(resource.0);
+                self.bytes(&amount.to_le_bytes());
+            }
+            self.bytes(&t.spent.to_le_bytes());
+            for count in [
+                t.units_trained,
+                t.buildings_completed,
+                t.cities_founded,
+                t.cities_captured,
+                t.cities_lost,
+                t.techs_researched,
+                t.peak_land,
+                t.peak_army,
+            ] {
+                self.u64(count);
+            }
+            self.u64(t.ages.len() as u64);
+            for (age, tick) in &t.ages {
+                self.u32(age.0);
+                self.u64(*tick);
+            }
+            self.optional(t.defeated, |h, (tick, by)| {
+                h.u64(tick);
+                h.optional(by, |h, p| h.u32(p.0));
+            });
+        }
+        self.u64(world.tally.history.len() as u64);
+        for s in &world.tally.history {
+            self.u64(s.tick);
+            self.u32(s.player.0);
+            self.bytes(&s.score.to_le_bytes());
+            self.u64(s.land);
+            self.u64(s.army);
+            self.u64(s.cities);
+            self.bytes(&s.stock.to_le_bytes());
+            self.u32(s.age.0);
+        }
+    }
+
     fn match_state(&mut self, world: &World) {
         let v = &world.victory;
         self.bytes(&[match v.options.elimination {
@@ -391,6 +440,25 @@ impl StateHash {
                 crate::PlayerStatus::Won => 2,
                 crate::PlayerStatus::Ascended => 3,
             }]);
+        }
+        // Only in matches with people and once ended (task 117).
+        if !v.humans.is_empty() {
+            self.bytes(b"humans");
+            self.u64(v.humans.len() as u64);
+            for player in &v.humans {
+                self.u32(player.0);
+            }
+        }
+        if let Some(end) = v.end {
+            self.bytes(b"end");
+            self.u64(end.tick);
+            match end.reason {
+                crate::EndReason::NoHumanLeft => self.bytes(&[0]),
+                crate::EndReason::LastStanding { team } => {
+                    self.bytes(&[1]);
+                    self.u32(team);
+                }
+            }
         }
         // Only once a player has ascended, so other worlds keep their hashes (task 76).
         let a = &world.ascension;

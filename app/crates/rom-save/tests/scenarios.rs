@@ -851,3 +851,46 @@ fn market_prices_mid_drift() {
         trade(w, "buy", "res.timber");
     });
 }
+
+/// Task 117: a match with a human that has ended, with its counters and history.
+#[test]
+fn a_match_that_has_ended_with_its_history() {
+    let rules =
+        rules_with("UPDATE game_constant SET value=20 WHERE key='stats.history_period_ticks';");
+    let players = (0..=2)
+        .map(|n| Player {
+            id: PlayerId(n),
+            team: n,
+            faction: rules.id_of("nation.romans").unwrap(),
+            age: rules.id_of("age.ancient").unwrap(),
+            resources: BTreeMap::new(),
+            techs: BTreeMap::new(),
+        })
+        .collect();
+    let ground = rules.id_of("ter.plain").unwrap();
+    let mut w = World::new(
+        rules.clone(),
+        MapGrid::new(96, 96, vec![ground; 96 * 96]).unwrap(),
+        1,
+        players,
+    )
+    .unwrap()
+    .with_match_options(MatchOptions {
+        elimination: Elimination::Conquest,
+        victories: [VictoryRule::Conquest].into(),
+    })
+    .unwrap();
+    w.set_humans(&[P1]).unwrap();
+    let mine = w
+        .place_for_setup(id(&w, "bld.city"), P1, Pos::flat(20_500, 20_500))
+        .unwrap();
+    w.place_for_setup(id(&w, "bld.city"), P2, Pos::flat(70_500, 70_500))
+        .unwrap();
+    ticks(&mut w, 50);
+    w.despawn(mine).unwrap();
+    ticks(&mut w, 1);
+    assert!(w.match_end().is_some());
+    assert!(w.history().len() >= 4);
+    assert!(w.tally(P1).unwrap().defeated.is_some());
+    check("ended", &rules, w, 60, |_| {});
+}
