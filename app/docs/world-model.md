@@ -385,7 +385,8 @@ shape that (values and tables in `database.md`, "Routes and jumps"):
   spaceport research **Survey Sensor Array** turns the survey ship into a sensor picket: one
   standing still in a system's plane (no orders) sees arrivals within 40 tiles of it
   (`et_detector.radius`) and raises the same alert. Detection changes nothing in the game but
-  what the player is told and shown.
+  what the player is told and shown. The station's first model: `img/118-detector-model.png`
+  (`bld.jump_detector@fusion`, for the owner's review).
 - **Interstellar trade.** From the age of abundance (**Interstellar Trade**), a space freighter
   runs a route to an own or allied city in another star system: lift off, charge, jump (to the
   partner's planet once its system is explored, to the edge the first time), cross, land,
