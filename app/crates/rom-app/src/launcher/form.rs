@@ -421,14 +421,19 @@ impl Config {
     }
 }
 
-/// Resolves the XDG configuration location with the conventional home fallback.
+/// Resolves the XDG configuration location, then `%APPDATA%` on Windows, then `~/.config`.
 pub(super) fn config_path() -> Result<PathBuf, String> {
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .filter(|s| !s.is_empty())
         .map(PathBuf::from)
         .filter(|p| p.is_absolute())
+        .or_else(|| {
+            std::env::var_os("APPDATA")
+                .filter(|s| cfg!(windows) && !s.is_empty())
+                .map(PathBuf::from)
+        })
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
-        .ok_or("neither XDG_CONFIG_HOME nor HOME is set")?;
+        .ok_or("no configuration folder: XDG_CONFIG_HOME, APPDATA and HOME are unset")?;
     Ok(base.join("rise-of-man/launcher.json"))
 }
 

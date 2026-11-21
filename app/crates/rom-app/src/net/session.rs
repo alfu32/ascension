@@ -275,6 +275,8 @@ pub fn join_address(bind: &str, port: u16) -> String {
     let host = match bind {
         "0.0.0.0" | "::" => std::fs::read_to_string("/etc/hostname")
             .ok()
+            // Windows has no /etc/hostname; it names the computer in COMPUTERNAME.
+            .or_else(|| std::env::var("COMPUTERNAME").ok())
             .map(|h| h.trim().to_owned())
             .filter(|h| !h.is_empty())
             .unwrap_or_else(|| "this-computer".into()),

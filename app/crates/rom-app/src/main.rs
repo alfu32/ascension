@@ -1,5 +1,8 @@
 //! Rise of Man desktop shell: a GPUI window that shows the offscreen world view.
 
+// Release builds on Windows open no console window beside the game.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod args;
 mod ascension_view;
 mod bench;
