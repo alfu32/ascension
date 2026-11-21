@@ -116,7 +116,7 @@ jobs:
       - name: Snap (core24, strict, mesa-2404 GPU content)
         run: |
           # Runtime libraries the snap bundles (core24 and mesa-2404 lack them) and the XKB data.
-          sudo apt-get install -y --no-install-recommends squashfs-tools xvfb imagemagick xkb-data \
+          sudo apt-get install -y --no-install-recommends squashfs-tools xvfb x11-utils imagemagick xkb-data \
             libxcursor1 libxrandr2 libxi6 libxinerama1 libxrender1 libxkbcommon-x11-0 libxcb-xkb1 libvulkan1
           python3 scripts/release/snap.py --arch ${{ matrix.arch }} --output dist
       - name: Install the snap and check that it starts and paints a window
@@ -136,18 +136,32 @@ jobs:
           test "$(snap run ascension --version)" = "rise-of-man $version"
           test "$(snap run ascension.rom --version | cut -d' ' -f1-2)" = "rom $version"
           mkdir -p smoke
-          Xvfb :97 -screen 0 1280x800x24 &
+          Xvfb :97 -screen 0 1280x800x24 -ac -noreset &
           sleep 2
-          # A default game that ends itself after 90 seconds.
-          (cd /tmp && env -u WAYLAND_DISPLAY DISPLAY=:97 snap run ascension --bench 90 --size 1280x800) > smoke/app.log 2>&1 &
+          # A default game that ends itself 40 seconds after its first frame.
+          (cd /tmp && env -u WAYLAND_DISPLAY DISPLAY=:97 snap run ascension --bench 40 --size 1280x800) > smoke/app.log 2>&1 &
           pid=$!
-          sleep 45
-          kill -0 "$pid" || { cat smoke/app.log; exit 1; }
-          DISPLAY=:97 import -window root smoke/window.png
-          kill "$pid" || true
+          # The game window (WM_CLASS rise-of-man). Without a window manager GPUI reads the X
+          # events of its first map only when another event arrives: a property change wakes it.
+          window=""
+          for i in $(seq 1 120); do
+            window=$(DISPLAY=:97 xwininfo -root -tree 2>/dev/null | grep '("rise-of-man" "rise-of-man")' | awk '{print $1}' | head -1)
+            [ -n "$window" ] && break
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.5
+          done
+          echo "window: $window"
+          test -n "$window" || { cat smoke/app.log; exit 1; }
+          DISPLAY=:97 xprop -id "$window" -f _ASCENSION_WAKE 8s -set _ASCENSION_WAKE 1
+          sleep 20
+          DISPLAY=:97 import -window root smoke/window.png || true
+          status=0; wait "$pid" || status=$?
+          cat smoke/app.log
+          echo "exit status: $status"
           colours=$(convert smoke/window.png -format '%k' info:)
           echo "distinct colours: $colours"
-          test "$colours" -gt 50 || { tail -50 smoke/app.log; exit 1; }
+          test "$status" = 0
+          test "$colours" -gt 50
       - name: Keep the snap check output
         if: always()
         uses: actions/upload-artifact@v4
