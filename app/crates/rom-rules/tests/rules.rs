@@ -884,7 +884,7 @@ fn polar_and_start_latitude_knobs_load_and_validate() {
     assert!(!t.buildable && !t.blocks_los);
     assert_eq!(
         r.materials[&t.material_id.unwrap()].params,
-        "{\"base_colour\":\"#e8eef2\"}"
+        "{\"base_colour\":\"#b3d3e8\"}"
     );
     let plain = r.id_of("ter.plain").unwrap();
     for class in r.movement_classes.values() {

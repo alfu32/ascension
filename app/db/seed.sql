@@ -5369,4 +5369,16 @@ INSERT INTO life_brush(id,family,node_type_id,height_op,height,radius)
  JOIN def b ON b.key='brush.deposit.' || substr(d.key, instr(d.key, '.') + 1) || '.large'
  WHERE n.claim_mode <> 'presence' ORDER BY b.id;
 
+-- Owner, 2026-11-21 (task 115): ice has its own bluish colour, polar caps included; snowfields and
+-- the snow on mountain peaks keep the white. Appended so every earlier definition id stays.
+INSERT INTO def(kind,key,name) VALUES ('material','mat.snow','Snow');
+INSERT INTO material(id,program,params)
+ SELECT id,'snow','{"base_colour":"#e8eef2"}' FROM def WHERE key='mat.snow';
+UPDATE terrain SET material_id=(SELECT id FROM def WHERE key='mat.snow')
+ WHERE id=(SELECT id FROM def WHERE key='ter.snow');
+UPDATE material SET params=json_replace(params,'$.snow_material','mat.snow')
+ WHERE id=(SELECT id FROM def WHERE key='mat.mountain');
+UPDATE material SET params='{"base_colour":"#b3d3e8"}'
+ WHERE id=(SELECT id FROM def WHERE key='mat.ice');
+
 COMMIT;

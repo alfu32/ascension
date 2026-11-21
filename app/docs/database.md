@@ -1900,3 +1900,9 @@ values from primary catalogues, never invented:
   its stars' names, positions (`x`, `y`, `z`), `star_id` and `constellation`;
   `star_figure` holds the figure lines between them. Save format 6 stores the
   two tables; format 5 saves are refused.
+
+## Ice and snow apart (task 115)
+
+`mat.ice` (Ice: the ice brushes and every planet's polar caps) is a pale glacier blue, #b3d3e8.
+Snowfields (`ter.snow`) and the snow on mountain peaks (`mat.mountain` `snow_material`) use the new
+`mat.snow`, the old white #e8eef2. Appended at the end of `seed.sql`, so earlier definition ids stay.
