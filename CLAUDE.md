@@ -34,9 +34,12 @@ The current state of every task is in `app/docs/tasks/STATUS.md`.
   a setup option (owner, 2026-11-18, task 89) can instead put players of
   different races together on the same planet, in any map style.
 - Age 13 is the last age. A player who has researched everything at the
-  library may ascend (task 76, decided 2026-11-17); matches have no end
-  condition, but a player must complete the ascension before being defeated.
-  Travel between galaxies is parked.
+  library may ascend (task 76, decided 2026-11-17); a player must complete
+  the ascension before being defeated. Travel between galaxies is parked.
+- A match with human players ends when no human is left in it (every human
+  defeated; ascended humans still count), with an end dialog and a match
+  report; when only humans are left they may keep playing. Matches without
+  humans never end this way (owner, 2026-11-21, task 117).
 - The directional light that represents the sun orbits the planet orb by
   default (day and night for everyone); night stays playable. Presentation
   only for now. Say it this way: the star does not orbit the planet.
