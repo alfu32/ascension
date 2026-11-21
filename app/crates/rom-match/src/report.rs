@@ -272,6 +272,20 @@ impl MatchReport {
         }
     }
 
+    /// Whether `p` leads the aspect of [`Aspect::ALL`] at `index`: ranked first while someone
+    /// ranks below it (nobody leads when everyone is equal).
+    pub fn leads(&self, p: &ReportPlayer, index: usize) -> bool {
+        p.ranks[index] == 1 && self.players.iter().any(|q| q.ranks[index] > 1)
+    }
+
+    /// The map style's key without its prefix, in words.
+    pub fn map_style_name(&self) -> String {
+        match self.map_style.rsplit('.').next() {
+            Some(name) if !name.is_empty() => name.replace('_', " "),
+            _ => "default".to_owned(),
+        }
+    }
+
     /// A player's line.
     pub fn player(&self, id: PlayerId) -> Option<&ReportPlayer> {
         self.players.iter().find(|p| p.id == id)
@@ -302,7 +316,8 @@ impl MatchReport {
                 Some(p) if matches!(p.standing, Standing::Defeated { .. }) => match &p.standing {
                     Standing::Defeated { by: Some(by), .. } => format!(
                         "You were defeated by {}.",
-                        self.player(*by).map_or("an enemy", |b| b.label_str())
+                        self.player(*by)
+                            .map_or_else(|| "an enemy".to_owned(), ReportPlayer::label)
                     ),
                     _ => "You were defeated.".to_owned(),
                 },
@@ -333,11 +348,11 @@ impl MatchReport {
     }
 
     fn team_names(&self, team: u32) -> String {
-        let names: Vec<&str> = self
+        let names: Vec<String> = self
             .players
             .iter()
             .filter(|p| p.team == team)
-            .map(ReportPlayer::label_str)
+            .map(ReportPlayer::label)
             .collect();
         names.join(", ")
     }
@@ -387,11 +402,7 @@ impl MatchReport {
         let _ = writeln!(
             out,
             "map style {} · seed {} · length {} · end: {}",
-            if self.map_style.is_empty() {
-                "(default)"
-            } else {
-                &self.map_style
-            },
+            self.map_style_name(),
             self.seed,
             self.clock(self.length()),
             self.end_text()
@@ -423,7 +434,7 @@ impl MatchReport {
             ];
             for (i, aspect) in Aspect::ALL.iter().enumerate() {
                 let rank = p.ranks[i];
-                let lead = if rank == 1 { "*" } else { "" };
+                let lead = if self.leads(p, i) { "*" } else { "" };
                 row.push(format!("{lead}{} {}", ordinal(rank), self.cell(p, *aspect)));
             }
             rows.push(row);
@@ -447,10 +458,6 @@ impl ReportPlayer {
     /// "name (nation)".
     pub fn label(&self) -> String {
         format!("{} ({})", self.name, self.nation)
-    }
-
-    fn label_str(&self) -> &str {
-        &self.name
     }
 }
 
@@ -476,5 +483,24 @@ fn key(aspect: Aspect, p: &ReportPlayer) -> [i128; 3] {
         Aspect::Expansion => [n(p.cities_founded + p.cities_captured), n(p.peak_land), 0],
         Aspect::Technology => [n(p.techs), i128::from(p.age_ordinal), -n(p.age.1)],
         Aspect::Ascension => [i128::from(p.ascensions), 0, 0],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ordinal;
+
+    #[test]
+    fn ordinals_read_as_english() {
+        let words: Vec<String> = [1, 2, 3, 4, 11, 12, 13, 21, 22, 103, 111]
+            .map(ordinal)
+            .into();
+        assert_eq!(
+            words,
+            [
+                "1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "103rd",
+                "111th"
+            ]
+        );
     }
 }

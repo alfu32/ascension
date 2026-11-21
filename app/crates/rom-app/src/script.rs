@@ -43,7 +43,9 @@
 //! `auto-colony <owner id>` puts a finished automated colony there instead (task 73). `craft` selects player one's orbital craft that are not
 //! aboard a carrier; `craftN` names the N-th of them for `click` and `rclick`.
 //!
-//! `save <name>`, `quicksave` and `menu [main|save|load]` write a save or open the in-match menu.
+//! `save <name>`, `quicksave` and `menu [main|save|load]` write a save or open the in-match menu;
+//! `end-page report` opens the match report instead of the end dialog when the match ends
+//! (task 117).
 //!
 //! Camera commands replay input on the render thread exactly as the window would send it
 //! (positions in canvas pixels): `cam wheel <steps> [x,y]` (each step glides, as one notch of
@@ -180,6 +182,8 @@ pub struct Script {
     next: usize,
     actions: Vec<(u64, ScriptAction)>,
     next_action: usize,
+    /// When the match ends, open the report at once instead of the end dialog (task 117).
+    pub end_report: bool,
 }
 
 impl Script {
@@ -191,6 +195,7 @@ impl Script {
     ) -> Result<Self, String> {
         let mut events = Vec::new();
         let mut actions = Vec::new();
+        let mut end_report = false;
         for (number, line) in text.lines().enumerate() {
             let line = line.split('#').next().unwrap_or("").trim();
             if line.is_empty() {
@@ -207,6 +212,19 @@ impl Script {
                         | "ascension-ready" | "research-all" | "jump-in",
                     ),
                 ) => {
+                    continue;
+                }
+                (Some(_), Some("end-page")) => {
+                    end_report = match words.get(2).copied() {
+                        Some("report") => true,
+                        Some("dialog") => false,
+                        other => {
+                            return Err(format!(
+                                "line {}: end-page takes dialog or report, not {other:?}",
+                                number + 1
+                            ));
+                        }
+                    };
                     continue;
                 }
                 (Some(tick), Some("cam")) => {
@@ -373,6 +391,7 @@ impl Script {
             next: 0,
             actions,
             next_action: 0,
+            end_report,
         })
     }
 

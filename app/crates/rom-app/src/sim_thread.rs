@@ -357,6 +357,24 @@ pub struct SimLink {
     ascended: Arc<AtomicBool>,
     /// Set in a network match.
     net: Option<Arc<NetInfo>>,
+    /// The match's end and its report, once reached (task 117); `fresh` until the window
+    /// has shown it.
+    end: Arc<Mutex<Option<(Arc<EndNotice>, bool)>>>,
+    /// A remaining human chose to keep playing after the end.
+    keep_playing: Arc<AtomicBool>,
+}
+
+/// The end of the match as the window shows it (task 117).
+#[derive(Debug)]
+pub struct EndNotice {
+    /// The report, frozen at the end tick.
+    pub report: rom_match::MatchReport,
+    /// The person's player.
+    pub me: PlayerId,
+    /// Whether the person may keep playing: one of the remaining humans.
+    pub can_keep_playing: bool,
+    /// Open the report at once instead of the dialog (a script's `end-page report`).
+    pub open_report: bool,
 }
 
 /// What the window needs to know of a network match.
@@ -427,7 +445,21 @@ impl SimLink {
             chat: Arc::default(),
             ascended: Arc::default(),
             net: None,
+            end: Arc::default(),
+            keep_playing: Arc::default(),
         }
+    }
+
+    /// The end of the match the first time it is asked for after it was reached.
+    pub fn take_end(&self) -> Option<Arc<EndNotice>> {
+        let mut end = self.end.lock().ok()?;
+        let (notice, fresh) = end.as_mut()?;
+        std::mem::take(fresh).then(|| Arc::clone(notice))
+    }
+
+    /// The person keeps playing after the end: the world goes on.
+    pub fn keep_playing(&self) {
+        self.keep_playing.store(true, Ordering::Release);
     }
 
     /// The network match, if this is one.
@@ -638,6 +670,8 @@ impl SimThread {
             chat: Arc::default(),
             ascended: Arc::default(),
             net,
+            end: Arc::default(),
+            keep_playing: Arc::default(),
         };
         let thread_link = link.clone();
         let thread = thread::Builder::new()
@@ -777,6 +811,9 @@ fn run(
         &models,
         &ascension,
     );
+    // A saved game may have ended already.
+    note_end(&game, saving.as_ref(), script.as_ref(), link);
+    let mut asked_to_keep_playing = false;
     while !link.stop.load(Ordering::Acquire) {
         let now = Instant::now();
         let elapsed = now - last;
@@ -788,7 +825,7 @@ fn run(
                     speed = current;
                     step.set_speed(speed);
                 }
-                if link.paused() {
+                if link.paused() || held(&game, link) {
                     0
                 } else {
                     step.advance(elapsed)
@@ -934,6 +971,14 @@ fn run(
                 toggle_pause(&game, &mut controller, link);
             }
         }
+        if let Game::Follow(net) = &game
+            && !asked_to_keep_playing
+            && link.keep_playing.load(Ordering::Acquire)
+        {
+            // The server goes on stepping while a remaining human keeps playing.
+            net.keep_playing();
+            asked_to_keep_playing = true;
+        }
         if let Game::Follow(net) = &mut game {
             // The clicks leave now, before this loop turn's steps.
             while let Ok(command) = inbox.try_recv() {
@@ -961,6 +1006,9 @@ fn run(
             );
         }
         for _ in 0..ticks {
+            if held(&game, link) {
+                break;
+            }
             if let Some(script) = script.as_mut() {
                 let mut chat = Vec::new();
                 let mut pauses = 0;
@@ -1067,6 +1115,8 @@ fn run(
             for line in ascension.update(world) {
                 controller.notify(world, line);
             }
+            note_end(&game, saving.as_ref(), script.as_ref(), link);
+            let world = game.world();
             focus_camera(world, &mut controller, bridge);
             if let Some(every) = autosave_every
                 && world.tick().is_multiple_of(every)
@@ -1156,6 +1206,58 @@ fn run(
             thread::yield_now();
         }
     }
+}
+
+/// Whether a match this thread leads stands at its end and the person has not chosen to keep
+/// playing: the world then stops (task 117). A network match stops on its server.
+fn held(game: &Game, link: &SimLink) -> bool {
+    matches!(game, Game::Lead(_))
+        && game.world().match_end().is_some()
+        && !link.keep_playing.load(Ordering::Acquire)
+}
+
+/// Once the world has reached its end: the report, frozen at the end tick, for the window.
+fn note_end(game: &Game, saving: Option<&SaveSetup>, script: Option<&Script>, link: &SimLink) {
+    let world = game.world();
+    let Some(end) = world.match_end() else {
+        return;
+    };
+    let Ok(mut slot) = link.end.lock() else {
+        return;
+    };
+    if slot.is_some() {
+        return;
+    }
+    let me = game.me();
+    let mut info = saving.map(|s| s.info.clone()).unwrap_or_default();
+    info.seats = match game {
+        Game::Lead(core) => core.computers().seats(world),
+        Game::Follow(net) => net.report_seats(),
+    };
+    for seat in info.seats.iter_mut().filter(|s| s.player == me) {
+        seat.name = "You".into();
+    }
+    let report = rom_match::MatchReport::of(world, &info);
+    eprintln!(
+        "rise-of-man: the match ended at tick {}: {}",
+        end.tick,
+        report.end_line(Some(me)).unwrap_or_default()
+    );
+    let can_keep_playing = matches!(end.reason, rom_sim::EndReason::LastStanding { .. })
+        && world.is_human(me)
+        && matches!(
+            world.player_status(me),
+            Some(rom_sim::PlayerStatus::Playing | rom_sim::PlayerStatus::Won)
+        );
+    *slot = Some((
+        Arc::new(EndNotice {
+            report,
+            me,
+            can_keep_playing,
+            open_report: script.is_some_and(|s| s.end_report),
+        }),
+        true,
+    ));
 }
 
 /// A chat line the person typed or a script said: everyone's and allies' channels go to the

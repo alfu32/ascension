@@ -15,12 +15,15 @@ use rom_render::InputEvent as WorldInput;
 
 use super::WorldView;
 use crate::saves::{self, Entry, Kind};
-use crate::sim_thread::MenuPage;
+use crate::sim_thread::{EndNotice, MenuPage};
+use std::sync::Arc;
 
 const GOLD: u32 = 0xe8c98a;
 const AMBER: u32 = 0xf0b030;
 const CYAN: u32 = 0x3fd0ff;
 const MUTED: u32 = 0x9fb0c3;
+/// The width of the match report in the menu.
+const REPORT_WIDTH: f32 = 1280.;
 
 /// Which page of the menu shows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,6 +31,10 @@ pub(super) enum Page {
     Main,
     Save,
     Load,
+    /// The match has ended (task 117): the modal end dialog.
+    Ended,
+    /// The match report, from the end dialog.
+    Report,
 }
 
 /// The open menu.
@@ -40,6 +47,8 @@ pub(super) struct Menu {
     pending: bool,
     name: Option<Entity<InputState>>,
     entries: Vec<Entry>,
+    /// The end of the match, once the dialog has shown it.
+    end: Option<Arc<EndNotice>>,
     _subscription: Option<Subscription>,
 }
 
@@ -58,6 +67,9 @@ impl WorldView {
                 MenuPage::Save => self.show_save(window, cx),
                 MenuPage::Load => self.show_load(None, cx),
             }
+        }
+        if let Some(end) = self.sim.take_end() {
+            self.show_end(end, window, cx);
         }
         while let Some(outcome) = self.sim.take_save_outcome() {
             let waiting = self.menu.as_ref().is_some_and(|m| m.pending);
@@ -90,6 +102,7 @@ impl WorldView {
             pending: false,
             name: None,
             entries: Vec::new(),
+            end: None,
             _subscription: None,
         });
         // A network match is everyone's: the menu does not hold it (the pause button does).
@@ -98,6 +111,39 @@ impl WorldView {
         }
         window.focus(&self.focus);
         cx.notify();
+    }
+
+    /// The end of the match (task 117): the end dialog, over everything, until the person
+    /// chooses; or straight on the report when asked to (`end-page report` in a script).
+    fn show_end(&mut self, end: Arc<EndNotice>, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_menu(window, cx);
+        if let Some(menu) = self.menu.as_mut() {
+            menu.page = if end.open_report {
+                Page::Report
+            } else {
+                Page::Ended
+            };
+            menu.status = None;
+            menu.pending = false;
+            menu.end = Some(end);
+        }
+        window.focus(&self.focus);
+        cx.notify();
+    }
+
+    /// Keep playing after the end: the dialog closes and the world goes on.
+    fn keep_playing(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.sim.keep_playing();
+        if let Some(menu) = self.menu.as_mut() {
+            menu.was_paused = false;
+        }
+        self.close_menu(window, cx);
+    }
+
+    /// Back to the launcher: this game process ends.
+    fn exit_match(&mut self, cx: &mut Context<Self>) {
+        self.sim.request_stop();
+        cx.quit();
     }
 
     /// Closes the menu and releases the simulation unless it was held before.
@@ -111,9 +157,16 @@ impl WorldView {
         cx.notify();
     }
 
-    /// Escape: back to the main page, or close the menu from it.
+    /// Escape: back to the main page, or close the menu from it. The end dialog stays until
+    /// the person chooses; the report goes back to it.
     pub(super) fn menu_back(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         match self.menu.as_mut() {
+            Some(menu) if menu.page == Page::Ended => {}
+            Some(menu) if menu.page == Page::Report => {
+                menu.page = Page::Ended;
+                window.focus(&self.focus);
+                cx.notify();
+            }
             Some(menu) if menu.page != Page::Main => {
                 menu.page = Page::Main;
                 menu.status = None;
@@ -255,10 +308,12 @@ impl WorldView {
                 .text_color(rgb(GOLD))
                 .child(SharedString::from(text.to_owned()))
         };
+        let report = menu.page == Page::Report;
         let mut panel = div()
             .id("game-menu")
-            .w(px(560.))
-            .max_h(px(560.))
+            .w(px(if report { REPORT_WIDTH + 40. } else { 560. }))
+            .max_h(px(if report { 900. } else { 560. }))
+            .overflow_y_scroll()
             .flex()
             .flex_col()
             .gap_3()
@@ -270,6 +325,74 @@ impl WorldView {
             .text_color(rgb(0xf2f2f2))
             .text_size(px(14.));
         match menu.page {
+            Page::Ended => {
+                let end = menu.end.as_ref().expect("the end dialog has its end");
+                let me = Some(end.me);
+                panel = panel.child(heading("The match has ended"));
+                for line in crate::report_view::end_lines(&end.report, me) {
+                    panel = panel.child(div().text_color(rgb(0xf2f2f2)).child(line));
+                }
+                panel = panel
+                    .child(div().text_xs().text_color(rgb(MUTED)).child(format!(
+                        "Game time {}",
+                        end.report.clock(end.report.length())
+                    )))
+                    .child(
+                        Button::new("end-report")
+                            .primary()
+                            .label("Match report")
+                            .on_click(cx.listener(|view, _, window, cx| {
+                                if let Some(menu) = view.menu.as_mut() {
+                                    menu.page = Page::Report;
+                                }
+                                window.focus(&view.focus);
+                                cx.notify();
+                            })),
+                    );
+                if end.can_keep_playing {
+                    panel =
+                        panel
+                            .child(
+                                Button::new("end-keep-playing")
+                                    .label("Keep playing")
+                                    .on_click(cx.listener(|view, _, window, cx| {
+                                        view.keep_playing(window, cx)
+                                    })),
+                            )
+                            .child(div().text_xs().text_color(rgb(MUTED)).child(
+                                "The world goes on; the report stays as it was at the end. The \
+                             Ascension is still open to you.",
+                            ));
+                }
+                panel = panel.child(
+                    Button::new("end-exit")
+                        .label("Exit")
+                        .on_click(cx.listener(|view, _, _, cx| view.exit_match(cx))),
+                );
+            }
+            Page::Report => {
+                let end = menu.end.as_ref().expect("the report has its end");
+                panel = panel
+                    .child(heading("MATCH REPORT"))
+                    .child(crate::report_view::report_element(
+                        &end.report,
+                        Some(end.me),
+                        REPORT_WIDTH,
+                    ))
+                    .child(
+                        div()
+                            .flex()
+                            .gap_2()
+                            .child(Button::new("report-back").label("Back").on_click(
+                                cx.listener(|view, _, window, cx| view.menu_back(window, cx)),
+                            ))
+                            .child(
+                                Button::new("report-exit")
+                                    .label("Exit")
+                                    .on_click(cx.listener(|view, _, _, cx| view.exit_match(cx))),
+                            ),
+                    );
+            }
             Page::Main if self.sim.network().is_some() => {
                 // A network match is saved by its server (task 88): the host asks it to; the
                 // others are told how it saves; nothing loads into it.

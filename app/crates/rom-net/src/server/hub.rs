@@ -79,6 +79,15 @@ pub struct Status {
     pub last_save: Option<String>,
     /// The disconnect policy.
     pub on_disconnect: String,
+    /// The tick the match ended at (task 117), once it has.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_tick: Option<u64>,
+    /// Why: `no_human_left` or `last_standing`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_reason: Option<String>,
+    /// The players ranked by the match report, once the match has ended.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ranking: Vec<serde_json::Value>,
 }
 
 /// The person holding a human seat.
@@ -181,6 +190,10 @@ pub(crate) struct Hub {
     snapshots_sent: u64,
     key_counts: KeyCounts,
     key_counts_at: Option<Instant>,
+    /// The end of the match (task 117) and the ranking of its report, once reached.
+    finished: Option<(rom_sim::MatchEnd, Vec<serde_json::Value>)>,
+    /// Seats of remaining humans that chose to keep playing after the end.
+    keep_playing: std::collections::BTreeSet<u32>,
 }
 
 /// The playable factions' keys.
@@ -244,6 +257,8 @@ impl Hub {
             snapshots_sent: 0,
             key_counts: KeyCounts::default(),
             key_counts_at: None,
+            finished: None,
+            keep_playing: Default::default(),
         };
         if hub.config.resume && hub.db.match_row()?.is_some() {
             hub.resume()?;
@@ -413,6 +428,7 @@ impl Hub {
         );
         self.core = Some(core);
         self.phase = Phase::Playing;
+        self.check_finished();
         for index in 0..self.seats.len() {
             let seat = &self.seats[index];
             if seat.human && seat.person.is_some() {
@@ -425,10 +441,9 @@ impl Hub {
         Ok(())
     }
 
-    /// Stores the seats and the match row.
-    fn store(&self) -> Result<(), NetError> {
-        let rows: Vec<SeatRow> = self
-            .seats
+    /// The seats as the state database keeps them.
+    fn seat_rows(&self) -> Vec<SeatRow> {
+        self.seats
             .iter()
             .map(|seat| SeatRow {
                 seat: seat.index,
@@ -443,8 +458,12 @@ impl Hub {
                 human: seat.human,
                 spec: seat.spec.to_string(),
             })
-            .collect();
-        self.db.save_seats(&rows)?;
+            .collect()
+    }
+
+    /// Stores the seats and the match row.
+    fn store(&self) -> Result<(), NetError> {
+        self.db.save_seats(&self.seat_rows())?;
         self.db.save_match(&MatchRow {
             setup: encode(&self.setup),
             started: self.core.is_some(),
@@ -502,11 +521,86 @@ impl Hub {
         wake
     }
 
-    /// Whether the match steps.
+    /// Whether the match steps: after its end only while a remaining human who chose to keep
+    /// playing is connected (task 117).
     fn running(&self) -> bool {
         self.phase == Phase::Playing
             && self.manual_pause.is_none()
             && !self.seats.iter().any(|s| s.state == SeatState::Waiting)
+            && self.finished.as_ref().is_none_or(|_| {
+                self.keep_playing
+                    .iter()
+                    .any(|seat| self.seats[*seat as usize].state == SeatState::Connected)
+            })
+    }
+
+    /// Once the leader's world has reached its end (task 117): the finished phase, the
+    /// report beside `server.db`, a save of the end, and everyone told. The server neither exits
+    /// nor resets; a new match is started from the management page.
+    fn check_finished(&mut self) {
+        let Some(core) = self.core.as_ref() else {
+            return;
+        };
+        let Some(end) = core.world().match_end() else {
+            return;
+        };
+        if self.finished.is_some() {
+            return;
+        }
+        let info = MatchInfo {
+            seats: crate::report::seats_of(&self.seat_rows()),
+            ..self.match_info()
+        };
+        let report = rom_match::MatchReport::of(core.world(), &info);
+        let path = self.db.dir().join("report.json");
+        let text =
+            serde_json::to_string_pretty(&crate::report::report_json(&report)).unwrap_or_default();
+        if let Err(error) = std::fs::write(&path, text) {
+            log(
+                &self.config,
+                &format!("cannot write {}: {error}", path.display()),
+            );
+        }
+        let line = report.end_line(None).unwrap_or_default();
+        log(
+            &self.config,
+            &format!(
+                "the match has ended at tick {}: {line} The report is in {}",
+                end.tick,
+                path.display()
+            ),
+        );
+        self.finished = Some((end, crate::report::ranking(&report)));
+        self.save(None);
+        self.broadcast(&ServerMessage::Notice {
+            text: format!("The match has ended. {line}"),
+        });
+    }
+
+    /// A remaining human chose to keep playing after the end.
+    fn keep_playing(&mut self, seat: u32) -> Result<(), &'static str> {
+        let Some((end, _)) = self.finished else {
+            return Err("the match has not ended");
+        };
+        let player = self.seats[seat as usize].player();
+        let material = self.core.as_ref().is_some_and(|core| {
+            matches!(
+                core.world().player_status(player),
+                Some(rom_sim::PlayerStatus::Playing | rom_sim::PlayerStatus::Won)
+            )
+        });
+        if !matches!(end.reason, rom_sim::EndReason::LastStanding { .. }) || !material {
+            return Err("only a remaining human may keep playing");
+        }
+        let was_running = self.running();
+        if self.keep_playing.insert(seat) {
+            log(
+                &self.config,
+                &format!("{} keeps playing", self.seats[seat as usize].name()),
+            );
+        }
+        self.after_change(was_running);
+        Ok(())
     }
 
     /// In strict lockstep, whether every connected person's client stands at the leader's tick.
@@ -589,6 +683,7 @@ impl Hub {
                 &format!("tick {}: {problem}", outcome.journal.tick),
             );
         }
+        self.check_finished();
     }
 
     /// Countdown, waiting seats, silent connections, the autosave.
@@ -786,6 +881,11 @@ impl Hub {
                         &format!("{} asks for a snapshot", self.seats[index].name()),
                     );
                     self.send_snapshot(id);
+                }
+            }
+            ClientMessage::KeepPlaying => {
+                if let Err(reason) = self.keep_playing(seat) {
+                    denied(self, "KeepPlaying", reason);
                 }
             }
             ClientMessage::Pause => {
@@ -1520,6 +1620,7 @@ impl Hub {
         match self.phase {
             Phase::Lobby => "lobby",
             Phase::Countdown(_) => "countdown",
+            Phase::Playing if self.finished.is_some() => "finished",
             Phase::Playing => "playing",
             Phase::Stopped => "stopped",
         }
@@ -1578,6 +1679,16 @@ impl Hub {
             snapshots_sent: self.snapshots_sent,
             last_save: self.last_save_name.clone(),
             on_disconnect: self.config.on_disconnect.key().into(),
+            end_tick: self.finished.as_ref().map(|(end, _)| end.tick),
+            end_reason: self
+                .finished
+                .as_ref()
+                .map(|(end, _)| crate::report::end_key(end.reason).to_owned()),
+            ranking: self
+                .finished
+                .as_ref()
+                .map(|(_, ranking)| ranking.clone())
+                .unwrap_or_default(),
         };
         if let Ok(mut shared) = self.status.lock() {
             *shared = status;

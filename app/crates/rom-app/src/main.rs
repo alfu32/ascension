@@ -16,6 +16,7 @@ mod looks;
 mod match_setup;
 mod net;
 mod palette_icons;
+mod report_view;
 mod saves;
 mod screenshot;
 mod script;
