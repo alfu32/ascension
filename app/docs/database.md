@@ -108,6 +108,7 @@ build time). What an entity can *do* is the set of `et_*` rows it owns:
 | keeps carried nodes | `et_keeper` |
 | takes production and research orders | `et_producer` |
 | is a resource | `et_node` |
+| tells of ships jumping in (task 118) | `et_detector` |
 
 A unit and a building differ only by `class` and by which components they
 carry. A carrier that builds drones, a mobile temple, or a spaceport that
@@ -1096,7 +1097,8 @@ along a route to a connected system, and a voyage over several systems is severa
   jump into the system away from the held planet. Several inhibitors: the largest blow whose
   radius covers the point applies, ties to the lowest id.
 
-**Jump inhibitor** (`bld.jump_inhibitor`, starfaring, 3 × 3, 3 000 hp, 500 metal and 300 energy,
+**Jump inhibitor** (`bld.jump_inhibitor`, starfaring, since task 118 expansion (its sight and
+build time stay those it was given for starfaring), 3 × 3, 3 000 hp, 500 metal and 300 energy,
 built by citizens and worker drones in own territory on plain ground; no weapon). New component
 table `et_inhibitor(entity_type_id, reach, charge_pct)` (since tasks 104 and 111 also
 `arrival_damage` and `arrival_radius`): `reach = 'system'` (the only value)
@@ -1468,6 +1470,49 @@ lint views stay empty, the seed loads):
 - **State hash.** The counters and the history of every player are always hashed (so the
   playthrough's hash changed with task 117 while its world did not); the humans and the end only
   when there are any, so matches without people hash the same either way.
+
+## Alerts and jump detectors (task 118)
+
+Owner, issue #3 (2026-11-21): alerts when a city is attacked, a building that tells of ships
+jumping into the system (fusion age), the survey ship as a sensor (both, "Yes, exactly."), and
+the jump inhibitor no earlier than the age of expansion. Behaviour and wording:
+`docs/hud.md` "Alerts" and `docs/world-model.md` "Jump detectors". Rows come from
+`db/content/generate.py` (`alerts_and_detectors()`, defined after every other generated
+definition so earlier ids stay stable); deliberate schema change, both lint views stay empty and
+the seed loads.
+
+- **New component table** `et_detector(entity_type_id, scope, radius, enabled)`: `scope =
+  'system'` watches every jump arrival in the star system of the planet the entity stands on;
+  `scope = 'radius'` watches arrivals within `radius` (milli-tiles of the system's plane) of the
+  entity while it stands still (no orders) in a system's plane. `enabled` is the base of the new
+  entity stat **`detector`**: an entity detects while the stat is above 0, so a type can carry
+  the component switched off until a modifier switches it on. A detector must be complete and
+  active (not neutralised, not assimilating, not aboard). It watches for its owner only, and
+  sees ships of players not on its owner's team. Several detectors of one player give one alert
+  per arriving owner and system and tick. Code reads the component and the stat, never a key.
+- **`bld.jump_detector`** "Deep Space Tracking Station": fusion age, 2 × 2, 1 500 hp, armour 3,
+  300 metal and 150 energy (ramped), built by citizens and worker drones (military page) in own
+  territory on plain ground like the inhibitor, `limit_scope = 'per_city'`, `limit_count = 1`
+  (the limit columns have no per-planet scope; several do not duplicate alerts);
+  `et_detector('system', 0, 1)`. Model `db/models/bld.jump_detector@fusion.sql` (for the owner's
+  model review). Computer players build it through the construction manager's ordinary rule for
+  a building with no other role (one, low priority, once the fusion age unlocks it): no code
+  change and no weight.
+- **`unit.survey_ship`** gains `et_detector('radius', 40000, 0)`; **`tech.survey_sensor_array`**
+  "Survey Sensor Array" (spaceport research, starfaring age, 800 ticks, 1 100 wealth and 550
+  knowledge) carries the modifier `detector set 1` on `unit.survey_ship` (`target_def_id`).
+  Listed first on the spaceport's research page, so Enhanced Sensors, Interstellar Trade and
+  Automated Route Survey each move one slot right.
+- **Constants** `alert.attack_repeat_ticks` 600 (one under-attack alert per city, or per field
+  near a city, or per body without a city, in this window from the alert) and
+  `alert.marker_ticks` 200 (how long an alert is kept and marked, and arriving ships stay shown).
+- **The inhibitor** moves to the age of expansion: `first_age_id` and its prerequisite. Nothing
+  else required it.
+- **State.** Alerts are computed by the simulation in the step (blows that damaged an entity,
+  jump arrivals) and kept `alert.marker_ticks` for the views (`World::alerts`, like the arrival
+  strikes): not hashed and not saved; the repeat window is not saved either, so a loaded game
+  may alert once more. They change nothing in the game. No save format change; the rules
+  fingerprint changes, so earlier saves are refused as with any rules change.
 
 ## Bringing life (task 77)
 

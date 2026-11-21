@@ -1356,11 +1356,17 @@ mod tests {
                 continue;
             }
             // Every building and unit of the starfaring age and later has its first look; the
-            // future look of earlier buildings lasts through the space ages.
-            let has = book
-                .entries
-                .iter()
-                .any(|e| e.entity == id && e.faction.is_none() && e.age == Some(first));
+            // future look of earlier buildings lasts through the space ages. A look of an earlier
+            // space age serves too: the jump inhibitor keeps its approved starfaring look since it
+            // moved to the age of expansion (task 118).
+            let has = book.entries.iter().any(|e| {
+                e.entity == id
+                    && e.faction.is_none()
+                    && e.age.is_some_and(|age| {
+                        let ordinal = rules.ages[&age].ordinal;
+                        ordinal >= starfaring && ordinal <= rules.ages[&first].ordinal
+                    })
+            });
             assert!(
                 has,
                 "{} has no composed look for its first age",

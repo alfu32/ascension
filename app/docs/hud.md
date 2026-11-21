@@ -197,8 +197,8 @@ camera so the scene follows the pointer (`app/docs/world-model.md`, "Moving
 between levels"). Right-button drag also pans on a flat map when nothing is
 selected and no placement is active. The wheel zooms one gliding step per
 notch (one per gesture: a burst of notches within 80 ms counts once), arrow
-keys and the screen edges pan, End restores the starting view, and Home
-frames the map or globe. On the star map there is no plane (task 79): the
+keys and the screen edges pan, End restores the starting view, Home
+frames the map or globe, and Backspace flies to the newest alert (task 118). On the star map there is no plane (task 79): the
 turning drag turns the camera freely about its own axes, the arrows fly
 forward, back and sideways, Shift + up and Shift + down fly up and down the
 screen, the screen edges move it sideways and up and down, and F4 turns the
@@ -332,3 +332,41 @@ leave through one `ChatSink` (`rom-app/src/chat.rs`) with their recipients, so n
 relay them. A save keeps the log in its settings under `chat.log` (a save without it loads with
 an empty log). Scripts: `key enter|escape|tab|left|...`, `type words`, `chat [channel] words`,
 `chatfrom <player> <channel> words`, `hud chat 0`, `hud top 1`.
+
+## Alerts (task 118)
+
+Owner, issue #3: "when one of your cities gets attacked … you will be notified that you are
+under attack. And it will say which city is under attack. And maybe even put a signal on a marker
+on the mini-map." The simulation raises the alerts (`World::alerts`, `rom-sim/src/alerts.rs`); the
+interface words and marks them (`rom-app/src/alert_view.rs`).
+
+- **Under attack, from the first age.** When an enemy's blow damages a building or unit of the
+  player, the event line says where, in the notice look of every other event line:
+  "Your capital is under attack", "Your city 3 is under attack" (cities are counted in the order
+  they were founded; cities have no names yet), "Your army is under attack near your city 2"
+  for units outside the player's territory, "… on Mars" off the home world, "Your ships are under
+  attack in the Sol system" in space. The place is the city whose ground holds the victim (a
+  building of the city, or anything inside the player's borders: the nearest city), or for a unit
+  in the field the nearest city of the player on that body. One alert per city (or the field
+  near it, or a body without a city) per `alert.attack_repeat_ticks` (600 ticks, 30 s), counted
+  from the alert: a battle is one line. Allies are not alerted about each other; the attacker
+  hears nothing. There is no sound cue: the HUD has no sound path yet.
+- **Foreign ships jumping in.** A jump detector (`docs/world-model.md`, "Jump detectors") says
+  "Foreign ships entered the Sol system: 3 ships of Romans (2)".
+- **Markers.** For `alert.marker_ticks` (200 ticks, 10 s) a ring pulses once a second at the
+  place, red for an attack and amber for an arrival, and fades over its last quarter: on the
+  planet's minimap (`HudSnapshot::alerts`), in the system view and its minimap at the planet or
+  the arrival point, and on the star map and its minimap round the system (`SpaceSnapshot::alerts`)
+  — so an attack on another planet shows on the star map.
+- **Going there.** A click on the event line flies the camera to what the line is about (the
+  victim while it lives, else the city; an arriving ship); **Backspace** flies to what the newest
+  alert is about while its marker lasts (`HudSnapshot::alert_about`, `Key::LatestAlert`). Space
+  stays the selection key.
+
+Alerts are presentation: not hashed and not saved (a loaded game starts with none). Computer
+players ignore them; they see the state.
+
+Screenshots (self-ending scripted runs): `img/118-under-attack.png` (`tasks/118-attack-script.txt`:
+the event line and the red ring on the minimap) and `img/118-jump-detected.png`
+(`tasks/118-jump-script.txt`: the event line, the revealed ships and the amber ring on the star
+map).
