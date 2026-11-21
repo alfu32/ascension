@@ -403,7 +403,7 @@ impl FeatureGpu {
                 // SAFETY: render thread with an active GL context; restored below.
                 unsafe { raylib::ffi::rlDisableBackfaceCulling() }
             }
-            world.draw_mesh_instanced(&meshes[index], material.clone(), list);
+            world.draw_instances(&meshes[index], material.clone(), list);
             if crop {
                 // SAFETY: as above; raylib's default is culling on.
                 unsafe { raylib::ffi::rlEnableBackfaceCulling() }
@@ -440,7 +440,7 @@ impl FeatureGpu {
             }
             scratch.extend_from_slice(&self.crops[index]);
             if !scratch.is_empty() {
-                pass.draw_mesh_instanced(mesh, depth.clone(), scratch);
+                pass.draw_instances(mesh, depth.clone(), scratch);
             }
         }
     }

@@ -1261,11 +1261,7 @@ impl Scene {
                 space.ship_groups.extend(next_groups);
                 if !boxes.is_empty() {
                     let matrices: Vec<Matrix> = boxes.iter().map(matrix_of).collect();
-                    world.draw_mesh_instanced(
-                        &self.box_mesh,
-                        self.entity_material.clone(),
-                        &matrices,
-                    );
+                    world.draw_instances(&self.box_mesh, self.entity_material.clone(), &matrices);
                 }
                 if let (Some(models), false) = (&self.models, model_ships.is_empty()) {
                     // Lit by the star from its direction; the loaded planet shades what lies

@@ -1,0 +1,631 @@
+# Task 121: task 95's battle, then a planet switch every half minute and a quick save every third cycle.
+# Run with --universe --style map.solar --players 3 --seed 1 --speed 200 --size 1600x900 --projectiles on --bench 600.
+0 grant-age age.galactic
+0 place 1 unit.rifleman @24,-16
+0 place 1 unit.machine_gunner @26,-16
+0 place 1 unit.rifleman @28,-16
+0 place 1 unit.bazooka_team @30,-16
+0 place 1 unit.rifleman @32,-16
+0 place 1 unit.tank @34,-16
+0 place 1 unit.rifleman @36,-16
+0 place 1 unit.machine_gunner @38,-16
+0 place 1 unit.rifleman @40,-16
+0 place 1 unit.bazooka_team @42,-16
+0 place 1 unit.rifleman @44,-16
+0 place 1 unit.tank @46,-16
+0 place 1 unit.rifleman @48,-16
+0 place 1 unit.machine_gunner @50,-16
+0 place 1 unit.rifleman @52,-16
+0 place 1 unit.bazooka_team @54,-16
+0 place 1 unit.rifleman @56,-16
+0 place 1 unit.tank @24,-15
+0 place 1 unit.rifleman @26,-15
+0 place 1 unit.machine_gunner @28,-15
+0 place 1 unit.rifleman @30,-15
+0 place 1 unit.bazooka_team @32,-15
+0 place 1 unit.rifleman @34,-15
+0 place 1 unit.tank @36,-15
+0 place 1 unit.rifleman @38,-15
+0 place 1 unit.machine_gunner @40,-15
+0 place 1 unit.rifleman @42,-15
+0 place 1 unit.bazooka_team @44,-15
+0 place 1 unit.rifleman @46,-15
+0 place 1 unit.tank @48,-15
+0 place 1 unit.rifleman @50,-15
+0 place 1 unit.machine_gunner @52,-15
+0 place 1 unit.rifleman @54,-15
+0 place 1 unit.bazooka_team @56,-15
+0 place 1 unit.rifleman @24,-14
+0 place 1 unit.tank @26,-14
+0 place 1 unit.rifleman @28,-14
+0 place 1 unit.machine_gunner @30,-14
+0 place 1 unit.rifleman @32,-14
+0 place 1 unit.bazooka_team @34,-14
+0 place 1 unit.rifleman @36,-14
+0 place 1 unit.tank @38,-14
+0 place 1 unit.rifleman @40,-14
+0 place 1 unit.machine_gunner @42,-14
+0 place 1 unit.rifleman @44,-14
+0 place 1 unit.bazooka_team @46,-14
+0 place 1 unit.rifleman @48,-14
+0 place 1 unit.tank @50,-14
+0 place 1 unit.rifleman @52,-14
+0 place 1 unit.machine_gunner @54,-14
+0 place 1 unit.rifleman @56,-14
+0 place 1 unit.bazooka_team @24,-13
+0 place 1 unit.rifleman @26,-13
+0 place 1 unit.tank @28,-13
+0 place 1 unit.rifleman @30,-13
+0 place 1 unit.machine_gunner @32,-13
+0 place 1 unit.rifleman @34,-13
+0 place 1 unit.bazooka_team @36,-13
+0 place 1 unit.rifleman @38,-13
+0 place 1 unit.tank @40,-13
+0 place 1 unit.rifleman @42,-13
+0 place 1 unit.machine_gunner @44,-13
+0 place 1 unit.rifleman @46,-13
+0 place 1 unit.bazooka_team @48,-13
+0 place 1 unit.rifleman @50,-13
+0 place 1 unit.tank @52,-13
+0 place 1 unit.rifleman @54,-13
+0 place 1 unit.machine_gunner @56,-13
+0 place 1 unit.rifleman @24,-12
+0 place 1 unit.bazooka_team @26,-12
+0 place 1 unit.rifleman @28,-12
+0 place 1 unit.tank @30,-12
+0 place 1 unit.rifleman @32,-12
+0 place 1 unit.machine_gunner @34,-12
+0 place 1 unit.rifleman @36,-12
+0 place 1 unit.bazooka_team @38,-12
+0 place 1 unit.rifleman @40,-12
+0 place 1 unit.tank @42,-12
+0 place 1 unit.rifleman @44,-12
+0 place 1 unit.machine_gunner @46,-12
+0 place 1 unit.rifleman @48,-12
+0 place 1 unit.bazooka_team @50,-12
+0 place 1 unit.rifleman @52,-12
+0 place 1 unit.tank @54,-12
+0 place 1 unit.rifleman @56,-12
+0 place 1 unit.machine_gunner @24,-11
+0 place 1 unit.rifleman @26,-11
+0 place 1 unit.bazooka_team @28,-11
+0 place 1 unit.rifleman @30,-11
+0 place 1 unit.tank @32,-11
+0 place 1 unit.rifleman @34,-11
+0 place 1 unit.machine_gunner @36,-11
+0 place 1 unit.rifleman @38,-11
+0 place 1 unit.bazooka_team @40,-11
+0 place 1 unit.rifleman @42,-11
+0 place 1 unit.tank @44,-11
+0 place 1 unit.rifleman @46,-11
+0 place 1 unit.machine_gunner @48,-11
+0 place 1 unit.rifleman @50,-11
+0 place 1 unit.bazooka_team @52,-11
+0 place 1 unit.rifleman @54,-11
+0 place 1 unit.tank @56,-11
+0 place 1 unit.rifleman @24,-10
+0 place 1 unit.machine_gunner @26,-10
+0 place 1 unit.rifleman @28,-10
+0 place 1 unit.bazooka_team @30,-10
+0 place 1 unit.rifleman @32,-10
+0 place 1 unit.tank @34,-10
+0 place 1 unit.rifleman @36,-10
+0 place 1 unit.machine_gunner @38,-10
+0 place 1 unit.rifleman @40,-10
+0 place 1 unit.bazooka_team @42,-10
+0 place 1 unit.rifleman @44,-10
+0 place 1 unit.tank @46,-10
+0 place 1 unit.rifleman @48,-10
+0 place 1 unit.machine_gunner @50,-10
+0 place 1 unit.rifleman @52,-10
+0 place 1 unit.bazooka_team @54,-10
+0 place 1 unit.rifleman @56,-10
+0 place 1 unit.tank @24,-9
+0 place 1 unit.rifleman @26,-9
+0 place 1 unit.machine_gunner @28,-9
+0 place 1 unit.rifleman @30,-9
+0 place 1 unit.bazooka_team @32,-9
+0 place 1 unit.rifleman @34,-9
+0 place 1 unit.tank @36,-9
+0 place 1 unit.rifleman @38,-9
+0 place 1 unit.machine_gunner @40,-9
+0 place 1 unit.rifleman @42,-9
+0 place 1 unit.bazooka_team @44,-9
+0 place 1 unit.rifleman @46,-9
+0 place 1 unit.tank @48,-9
+0 place 1 unit.rifleman @50,-9
+0 place 1 unit.machine_gunner @52,-9
+0 place 1 unit.rifleman @54,-9
+0 place 1 unit.bazooka_team @56,-9
+0 place 1 unit.rifleman @24,-8
+0 place 1 unit.tank @26,-8
+0 place 1 unit.rifleman @28,-8
+0 place 1 unit.machine_gunner @30,-8
+0 place 1 unit.rifleman @32,-8
+0 place 1 unit.bazooka_team @34,-8
+0 place 1 unit.rifleman @36,-8
+0 place 1 unit.tank @38,-8
+0 place 1 unit.rifleman @40,-8
+0 place 1 unit.machine_gunner @42,-8
+0 place 1 unit.rifleman @44,-8
+0 place 1 unit.bazooka_team @46,-8
+0 place 1 unit.rifleman @48,-8
+0 place 1 unit.tank @50,-8
+0 place 1 unit.rifleman @52,-8
+0 place 1 unit.machine_gunner @54,-8
+0 place 1 unit.rifleman @56,-8
+0 place 1 unit.bazooka_team @24,-7
+0 place 1 unit.rifleman @26,-7
+0 place 1 unit.tank @28,-7
+0 place 1 unit.rifleman @30,-7
+0 place 1 unit.machine_gunner @32,-7
+0 place 1 unit.rifleman @34,-7
+0 place 1 unit.bazooka_team @36,-7
+0 place 1 unit.rifleman @38,-7
+0 place 1 unit.tank @40,-7
+0 place 1 unit.rifleman @42,-7
+0 place 1 unit.machine_gunner @44,-7
+0 place 1 unit.rifleman @46,-7
+0 place 1 unit.bazooka_team @48,-7
+0 place 1 unit.rifleman @50,-7
+0 place 1 unit.tank @52,-7
+0 place 1 unit.rifleman @54,-7
+0 place 1 unit.machine_gunner @56,-7
+0 place 1 unit.rifleman @24,-6
+0 place 1 unit.bazooka_team @26,-6
+0 place 1 unit.rifleman @28,-6
+0 place 1 unit.tank @30,-6
+0 place 1 unit.rifleman @32,-6
+0 place 1 unit.machine_gunner @34,-6
+0 place 1 unit.rifleman @36,-6
+0 place 1 unit.bazooka_team @38,-6
+0 place 1 unit.rifleman @40,-6
+0 place 1 unit.tank @42,-6
+0 place 1 unit.rifleman @44,-6
+0 place 1 unit.machine_gunner @46,-6
+0 place 1 unit.rifleman @48,-6
+0 place 1 unit.bazooka_team @50,-6
+0 place 1 unit.rifleman @52,-6
+0 place 1 unit.tank @54,-6
+0 place 1 unit.rifleman @56,-6
+0 place 1 unit.machine_gunner @24,-5
+0 place 1 unit.rifleman @26,-5
+0 place 1 unit.bazooka_team @28,-5
+0 place 1 unit.rifleman @30,-5
+0 place 1 unit.tank @32,-5
+0 place 1 unit.rifleman @34,-5
+0 place 1 unit.machine_gunner @36,-5
+0 place 1 unit.rifleman @38,-5
+0 place 1 unit.bazooka_team @40,-5
+0 place 1 unit.rifleman @42,-5
+0 place 1 unit.tank @44,-5
+0 place 1 unit.rifleman @46,-5
+0 place 1 unit.machine_gunner @48,-5
+0 place 2 unit.rifleman @24,14
+0 place 2 unit.rifleman @26,14
+0 place 2 unit.machine_gunner @28,14
+0 place 2 unit.tank @30,14
+0 place 2 unit.rifleman @32,14
+0 place 2 unit.bazooka_team @34,14
+0 place 2 unit.rifleman @36,14
+0 place 2 unit.rifleman @38,14
+0 place 2 unit.machine_gunner @40,14
+0 place 2 unit.tank @42,14
+0 place 2 unit.rifleman @44,14
+0 place 2 unit.bazooka_team @46,14
+0 place 2 unit.rifleman @48,14
+0 place 2 unit.rifleman @50,14
+0 place 2 unit.machine_gunner @52,14
+0 place 2 unit.tank @54,14
+0 place 2 unit.rifleman @56,14
+0 place 2 unit.bazooka_team @24,13
+0 place 2 unit.rifleman @26,13
+0 place 2 unit.rifleman @28,13
+0 place 2 unit.machine_gunner @30,13
+0 place 2 unit.tank @32,13
+0 place 2 unit.rifleman @34,13
+0 place 2 unit.bazooka_team @36,13
+0 place 2 unit.rifleman @38,13
+0 place 2 unit.rifleman @40,13
+0 place 2 unit.machine_gunner @42,13
+0 place 2 unit.tank @44,13
+0 place 2 unit.rifleman @46,13
+0 place 2 unit.bazooka_team @48,13
+0 place 2 unit.rifleman @50,13
+0 place 2 unit.rifleman @52,13
+0 place 2 unit.machine_gunner @54,13
+0 place 2 unit.tank @56,13
+0 place 2 unit.rifleman @24,12
+0 place 2 unit.bazooka_team @26,12
+0 place 2 unit.rifleman @28,12
+0 place 2 unit.rifleman @30,12
+0 place 2 unit.machine_gunner @32,12
+0 place 2 unit.tank @34,12
+0 place 2 unit.rifleman @36,12
+0 place 2 unit.bazooka_team @38,12
+0 place 2 unit.rifleman @40,12
+0 place 2 unit.rifleman @42,12
+0 place 2 unit.machine_gunner @44,12
+0 place 2 unit.tank @46,12
+0 place 2 unit.rifleman @48,12
+0 place 2 unit.bazooka_team @50,12
+0 place 2 unit.rifleman @52,12
+0 place 2 unit.rifleman @54,12
+0 place 2 unit.machine_gunner @56,12
+0 place 2 unit.tank @24,11
+0 place 2 unit.rifleman @26,11
+0 place 2 unit.bazooka_team @28,11
+0 place 2 unit.rifleman @30,11
+0 place 2 unit.rifleman @32,11
+0 place 2 unit.machine_gunner @34,11
+0 place 2 unit.tank @36,11
+0 place 2 unit.rifleman @38,11
+0 place 2 unit.bazooka_team @40,11
+0 place 2 unit.rifleman @42,11
+0 place 2 unit.rifleman @44,11
+0 place 2 unit.machine_gunner @46,11
+0 place 2 unit.tank @48,11
+0 place 2 unit.rifleman @50,11
+0 place 2 unit.bazooka_team @52,11
+0 place 2 unit.rifleman @54,11
+0 place 2 unit.rifleman @56,11
+0 place 2 unit.machine_gunner @24,10
+0 place 2 unit.tank @26,10
+0 place 2 unit.rifleman @28,10
+0 place 2 unit.bazooka_team @30,10
+0 place 2 unit.rifleman @32,10
+0 place 2 unit.rifleman @34,10
+0 place 2 unit.machine_gunner @36,10
+0 place 2 unit.tank @38,10
+0 place 2 unit.rifleman @40,10
+0 place 2 unit.bazooka_team @42,10
+0 place 2 unit.rifleman @44,10
+0 place 2 unit.rifleman @46,10
+0 place 2 unit.machine_gunner @48,10
+0 place 2 unit.tank @50,10
+0 place 2 unit.rifleman @52,10
+0 place 2 unit.bazooka_team @54,10
+0 place 2 unit.rifleman @56,10
+0 place 2 unit.rifleman @24,9
+0 place 2 unit.machine_gunner @26,9
+0 place 2 unit.tank @28,9
+0 place 2 unit.rifleman @30,9
+0 place 2 unit.bazooka_team @32,9
+0 place 2 unit.rifleman @34,9
+0 place 2 unit.rifleman @36,9
+0 place 2 unit.machine_gunner @38,9
+0 place 2 unit.tank @40,9
+0 place 2 unit.rifleman @42,9
+0 place 2 unit.bazooka_team @44,9
+0 place 2 unit.rifleman @46,9
+0 place 2 unit.rifleman @48,9
+0 place 2 unit.machine_gunner @50,9
+0 place 2 unit.tank @52,9
+0 place 2 unit.rifleman @54,9
+0 place 2 unit.bazooka_team @56,9
+0 place 2 unit.rifleman @24,8
+0 place 2 unit.rifleman @26,8
+0 place 2 unit.machine_gunner @28,8
+0 place 2 unit.tank @30,8
+0 place 2 unit.rifleman @32,8
+0 place 2 unit.bazooka_team @34,8
+0 place 2 unit.rifleman @36,8
+0 place 2 unit.rifleman @38,8
+0 place 2 unit.machine_gunner @40,8
+0 place 2 unit.tank @42,8
+0 place 2 unit.rifleman @44,8
+0 place 2 unit.bazooka_team @46,8
+0 place 2 unit.rifleman @48,8
+0 place 2 unit.rifleman @50,8
+0 place 2 unit.machine_gunner @52,8
+0 place 2 unit.tank @54,8
+0 place 2 unit.rifleman @56,8
+0 place 2 unit.bazooka_team @24,7
+0 place 2 unit.rifleman @26,7
+0 place 2 unit.rifleman @28,7
+0 place 2 unit.machine_gunner @30,7
+0 place 2 unit.tank @32,7
+0 place 2 unit.rifleman @34,7
+0 place 2 unit.bazooka_team @36,7
+0 place 2 unit.rifleman @38,7
+0 place 2 unit.rifleman @40,7
+0 place 2 unit.machine_gunner @42,7
+0 place 2 unit.tank @44,7
+0 place 2 unit.rifleman @46,7
+0 place 2 unit.bazooka_team @48,7
+0 place 2 unit.rifleman @50,7
+0 place 2 unit.rifleman @52,7
+0 place 2 unit.machine_gunner @54,7
+0 place 2 unit.tank @56,7
+0 place 2 unit.rifleman @24,6
+0 place 2 unit.bazooka_team @26,6
+0 place 2 unit.rifleman @28,6
+0 place 2 unit.rifleman @30,6
+0 place 2 unit.machine_gunner @32,6
+0 place 2 unit.tank @34,6
+0 place 2 unit.rifleman @36,6
+0 place 2 unit.bazooka_team @38,6
+0 place 2 unit.rifleman @40,6
+0 place 2 unit.rifleman @42,6
+0 place 2 unit.machine_gunner @44,6
+0 place 2 unit.tank @46,6
+0 place 2 unit.rifleman @48,6
+0 place 2 unit.bazooka_team @50,6
+0 place 2 unit.rifleman @52,6
+0 place 2 unit.rifleman @54,6
+0 place 2 unit.machine_gunner @56,6
+0 place 2 unit.tank @24,5
+0 place 2 unit.rifleman @26,5
+0 place 2 unit.bazooka_team @28,5
+0 place 2 unit.rifleman @30,5
+0 place 2 unit.rifleman @32,5
+0 place 2 unit.machine_gunner @34,5
+0 place 2 unit.tank @36,5
+0 place 2 unit.rifleman @38,5
+0 place 2 unit.bazooka_team @40,5
+0 place 2 unit.rifleman @42,5
+0 place 2 unit.rifleman @44,5
+0 place 2 unit.machine_gunner @46,5
+0 place 2 unit.tank @48,5
+0 place 2 unit.rifleman @50,5
+0 place 2 unit.bazooka_team @52,5
+0 place 2 unit.rifleman @54,5
+0 place 2 unit.rifleman @56,5
+0 place 2 unit.machine_gunner @24,4
+0 place 2 unit.tank @26,4
+0 place 2 unit.rifleman @28,4
+0 place 2 unit.bazooka_team @30,4
+0 place 2 unit.rifleman @32,4
+0 place 2 unit.rifleman @34,4
+0 place 2 unit.machine_gunner @36,4
+0 place 2 unit.tank @38,4
+0 place 2 unit.rifleman @40,4
+0 place 2 unit.bazooka_team @42,4
+0 place 2 unit.rifleman @44,4
+0 place 2 unit.rifleman @46,4
+0 place 2 unit.machine_gunner @48,4
+0 place 2 unit.tank @50,4
+0 place 2 unit.rifleman @52,4
+0 place 2 unit.bazooka_team @54,4
+0 place 2 unit.rifleman @56,4
+0 place 2 unit.rifleman @24,3
+0 place 2 unit.machine_gunner @26,3
+0 place 2 unit.tank @28,3
+0 place 2 unit.rifleman @30,3
+0 place 2 unit.bazooka_team @32,3
+0 place 2 unit.rifleman @34,3
+0 place 2 unit.rifleman @36,3
+0 place 2 unit.machine_gunner @38,3
+0 place 2 unit.tank @40,3
+0 place 2 unit.rifleman @42,3
+0 place 2 unit.bazooka_team @44,3
+0 place 2 unit.rifleman @46,3
+0 place 2 unit.rifleman @48,3
+0 place-orbit 1 unit.survey_ship @40,-1
+20 click ship1
+22 cam focus
+50 cam focus
+52 escape
+0 speed 200
+200 cam drag 400,400 880,460
+212 cam drag 500,300 780,500 shift
+224 cam drag 400,400 880,460
+236 cam drag 500,300 780,500 shift
+248 visit planet1
+648 cam drag 400,400 880,460
+660 cam wheel -8 640,400
+780 cam wheel -10 640,400
+900 cam home
+1300 cam focus
+1500 hud tab 0
+1520 escape
+1540 cam drag 400,400 880,460
+1552 cam drag 500,300 780,500 shift
+1564 cam drag 400,400 880,460
+1576 cam drag 500,300 780,500 shift
+1588 visit planet2
+1988 cam drag 400,400 880,460
+2000 cam wheel -8 640,400
+2120 cam wheel -10 640,400
+2240 cam home
+2640 cam focus
+2840 hud tab 1
+2860 escape
+2880 cam drag 400,400 880,460
+2892 cam drag 500,300 780,500 shift
+2904 cam drag 400,400 880,460
+2916 cam drag 500,300 780,500 shift
+2928 visit planet1
+3328 cam drag 400,400 880,460
+3340 cam wheel -8 640,400
+3460 cam wheel -10 640,400
+3580 cam home
+3980 cam focus
+4180 quicksave
+4280 hud tab 2
+4300 escape
+4320 cam drag 400,400 880,460
+4332 cam drag 500,300 780,500 shift
+4344 cam drag 400,400 880,460
+4356 cam drag 500,300 780,500 shift
+4368 visit planet2
+4768 cam drag 400,400 880,460
+4780 cam wheel -8 640,400
+4900 cam wheel -10 640,400
+5020 cam home
+5420 cam focus
+5620 hud tab 3
+5640 escape
+5660 cam drag 400,400 880,460
+5672 cam drag 500,300 780,500 shift
+5684 cam drag 400,400 880,460
+5696 cam drag 500,300 780,500 shift
+5708 visit planet1
+6108 cam drag 400,400 880,460
+6120 cam wheel -8 640,400
+6240 cam wheel -10 640,400
+6360 cam home
+6760 cam focus
+6960 hud tab 0
+6980 escape
+7000 cam drag 400,400 880,460
+7012 cam drag 500,300 780,500 shift
+7024 cam drag 400,400 880,460
+7036 cam drag 500,300 780,500 shift
+7048 visit planet2
+7448 cam drag 400,400 880,460
+7460 cam wheel -8 640,400
+7580 cam wheel -10 640,400
+7700 cam home
+8100 cam focus
+8300 quicksave
+8400 hud tab 1
+8420 escape
+8440 cam drag 400,400 880,460
+8452 cam drag 500,300 780,500 shift
+8464 cam drag 400,400 880,460
+8476 cam drag 500,300 780,500 shift
+8488 visit planet1
+8888 cam drag 400,400 880,460
+8900 cam wheel -8 640,400
+9020 cam wheel -10 640,400
+9140 cam home
+9540 cam focus
+9740 hud tab 2
+9760 escape
+9780 cam drag 400,400 880,460
+9792 cam drag 500,300 780,500 shift
+9804 cam drag 400,400 880,460
+9816 cam drag 500,300 780,500 shift
+9828 visit planet2
+10228 cam drag 400,400 880,460
+10240 cam wheel -8 640,400
+10360 cam wheel -10 640,400
+10480 cam home
+10880 cam focus
+11080 hud tab 3
+11100 escape
+11120 cam drag 400,400 880,460
+11132 cam drag 500,300 780,500 shift
+11144 cam drag 400,400 880,460
+11156 cam drag 500,300 780,500 shift
+11168 visit planet1
+11568 cam drag 400,400 880,460
+11580 cam wheel -8 640,400
+11700 cam wheel -10 640,400
+11820 cam home
+12220 cam focus
+12420 quicksave
+12520 hud tab 0
+12540 escape
+12560 cam drag 400,400 880,460
+12572 cam drag 500,300 780,500 shift
+12584 cam drag 400,400 880,460
+12596 cam drag 500,300 780,500 shift
+12608 visit planet2
+13008 cam drag 400,400 880,460
+13020 cam wheel -8 640,400
+13140 cam wheel -10 640,400
+13260 cam home
+13660 cam focus
+13860 hud tab 1
+13880 escape
+13900 cam drag 400,400 880,460
+13912 cam drag 500,300 780,500 shift
+13924 cam drag 400,400 880,460
+13936 cam drag 500,300 780,500 shift
+13948 visit planet1
+14348 cam drag 400,400 880,460
+14360 cam wheel -8 640,400
+14480 cam wheel -10 640,400
+14600 cam home
+15000 cam focus
+15200 hud tab 2
+15220 escape
+15240 cam drag 400,400 880,460
+15252 cam drag 500,300 780,500 shift
+15264 cam drag 400,400 880,460
+15276 cam drag 500,300 780,500 shift
+15288 visit planet2
+15688 cam drag 400,400 880,460
+15700 cam wheel -8 640,400
+15820 cam wheel -10 640,400
+15940 cam home
+16340 cam focus
+16540 quicksave
+16640 hud tab 3
+16660 escape
+16680 cam drag 400,400 880,460
+16692 cam drag 500,300 780,500 shift
+16704 cam drag 400,400 880,460
+16716 cam drag 500,300 780,500 shift
+16728 visit planet1
+17128 cam drag 400,400 880,460
+17140 cam wheel -8 640,400
+17260 cam wheel -10 640,400
+17380 cam home
+17780 cam focus
+17980 hud tab 0
+18000 escape
+18020 cam drag 400,400 880,460
+18032 cam drag 500,300 780,500 shift
+18044 cam drag 400,400 880,460
+18056 cam drag 500,300 780,500 shift
+18068 visit planet2
+18468 cam drag 400,400 880,460
+18480 cam wheel -8 640,400
+18600 cam wheel -10 640,400
+18720 cam home
+19120 cam focus
+19320 hud tab 1
+19340 escape
+19360 cam drag 400,400 880,460
+19372 cam drag 500,300 780,500 shift
+19384 cam drag 400,400 880,460
+19396 cam drag 500,300 780,500 shift
+19408 visit planet1
+19808 cam drag 400,400 880,460
+19820 cam wheel -8 640,400
+19940 cam wheel -10 640,400
+20060 cam home
+20460 cam focus
+20660 quicksave
+20760 hud tab 2
+20780 escape
+20800 cam drag 400,400 880,460
+20812 cam drag 500,300 780,500 shift
+20824 cam drag 400,400 880,460
+20836 cam drag 500,300 780,500 shift
+20848 visit planet2
+21248 cam drag 400,400 880,460
+21260 cam wheel -8 640,400
+21380 cam wheel -10 640,400
+21500 cam home
+21900 cam focus
+22100 hud tab 3
+22120 escape
+22140 cam drag 400,400 880,460
+22152 cam drag 500,300 780,500 shift
+22164 cam drag 400,400 880,460
+22176 cam drag 500,300 780,500 shift
+22188 visit planet1
+22588 cam drag 400,400 880,460
+22600 cam wheel -8 640,400
+22720 cam wheel -10 640,400
+22840 cam home
+23240 cam focus
+23440 hud tab 0
+23460 escape
+23480 cam drag 400,400 880,460
+23492 cam drag 500,300 780,500 shift
+23504 cam drag 400,400 880,460
+23516 cam drag 500,300 780,500 shift
+23528 visit planet2
+23928 cam drag 400,400 880,460
+23940 cam wheel -8 640,400
+24060 cam wheel -10 640,400
+24180 cam home
+24580 cam focus
+24780 quicksave
+24880 hud tab 1
+24900 escape
