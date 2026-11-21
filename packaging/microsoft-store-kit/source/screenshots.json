@@ -1,0 +1,15 @@
+{
+  "note": "Desktop screenshots in listing order (Partner Center takes at most ten). Each is scaled to 1920 pixels wide, whole, from the source capture in app/docs/img.",
+  "screenshots": [
+    {"file": "01-home-planet.png", "source": "app/docs/img/114-close.png", "caption": "Your home planet from orbit: a round world of continents, oceans and ice"},
+    {"file": "02-city-and-army.png", "source": "app/docs/img/ai-army-at-rally.png", "caption": "A classical city and its army gathered at the rally point"},
+    {"file": "03-modern-battle.png", "source": "app/docs/img/stains-soldiers-tanks.png", "caption": "Soldiers and tanks fight across a scarred battlefield"},
+    {"file": "04-dogfight.png", "source": "app/docs/img/orbital-dogfight.png", "caption": "Aircraft duel over a city"},
+    {"file": "05-orbital-strike.png", "source": "app/docs/img/bombard-impact.png", "caption": "A strike from orbit hits an enemy base"},
+    {"file": "06-star-system.png", "source": "app/docs/img/solar-system-homes.png", "caption": "Reach space: a star system with its planets, moons and belts"},
+    {"file": "07-charged-jump.png", "source": "app/docs/img/jump-fleet-charging.png", "caption": "A fleet charges its drive before jumping along a route"},
+    {"file": "08-celestial-home.png", "source": "app/docs/img/ascension-celestial.png", "caption": "After the Ascension: the celestial home beside the black hole"},
+    {"file": "09-painting-a-world.png", "source": "app/docs/img/114-paint.png", "caption": "Bring a barren moon to life and paint its land and seas"},
+    {"file": "10-launcher.png", "source": "app/docs/img/112-home-1920.png", "caption": "Start a quick game, a classic match, a space game or a network game"}
+  ]
+}

@@ -1,0 +1,4 @@
+Windows 10 1809 versija (17763 komponavimas) arba naujesnė, arba Windows 11
+x64 arba ARM64 kompiuteris su 8 GB atminties
+Grafika su DirectX 11 ir OpenGL 3.3 tvarkyklėmis
+Klaviatūra ir pelė

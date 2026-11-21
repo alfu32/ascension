@@ -1,0 +1,4 @@
+Windows 10 versiunea 1809 (build 17763) sau mai nouă, ori Windows 11
+PC x64 sau ARM64 cu 8 GB de memorie
+Placă grafică cu drivere DirectX 11 și OpenGL 3.3
+Tastatură și mouse

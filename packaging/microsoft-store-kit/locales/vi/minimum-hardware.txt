@@ -1,0 +1,4 @@
+Windows 10 phiên bản 1809 (bản dựng 17763) trở lên, hoặc Windows 11
+PC x64 hoặc ARM64 có 8 GB bộ nhớ
+Đồ họa có trình điều khiển DirectX 11 và OpenGL 3.3
+Bàn phím và chuột

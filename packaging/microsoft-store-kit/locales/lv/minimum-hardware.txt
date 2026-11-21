@@ -1,0 +1,4 @@
+Windows 10 versija 1809 (būvējums 17763) vai jaunāka, vai Windows 11
+x64 vai ARM64 dators ar 8 GB atmiņas
+Grafika ar DirectX 11 un OpenGL 3.3 draiveriem
+Tastatūra un pele

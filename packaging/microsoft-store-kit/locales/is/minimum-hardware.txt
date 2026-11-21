@@ -1,0 +1,4 @@
+Windows 10 útgáfa 1809 (smíð 17763) eða nýrri, eða Windows 11
+x64- eða ARM64-tölva með 8 GB minni
+Skjákort með DirectX 11- og OpenGL 3.3-reklum
+Lyklaborð og mús

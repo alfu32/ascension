@@ -1,0 +1,2 @@
+# Partner Center CSVs keep their CRLF line ends byte for byte.
+packaging/**/*.csv -text

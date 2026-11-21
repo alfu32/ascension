@@ -1,0 +1,4 @@
+Windows 10 version 1809 (version 17763) eller senare, eller Windows 11
+x64- eller ARM64-dator med 8 GB minne
+Grafik med DirectX 11- och OpenGL 3.3-drivrutiner
+Tangentbord och mus

@@ -1,0 +1,4 @@
+Windows 10 versioon 1809 (järk 17763) või uuem, või Windows 11
+x64- või ARM64-arvuti 8 GB mäluga
+Graafika DirectX 11 ja OpenGL 3.3 draiveritega
+Klaviatuur ja hiir

@@ -1,0 +1,4 @@
+Windows 10 verze 1809 (sestavení 17763) nebo novější, nebo Windows 11
+Počítač x64 nebo ARM64 s 8 GB paměti
+Grafika s ovladači DirectX 11 a OpenGL 3.3
+Klávesnice a myš

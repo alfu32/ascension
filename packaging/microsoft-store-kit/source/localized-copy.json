@@ -1,0 +1,1370 @@
+{
+  "af": {
+    "language": "Afrikaans",
+    "locale": "af",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Intydse strategie van die eerste dorpies tot 'n era van galaktiese ryke: bou stede op 'n ronde planeet, vorder deur veertien eras en neem jou vlote na die sterre.",
+    "Description": "Lei 'n volk van sy eerste dorpie tot by die sterre.\n\nStig stede op 'n ronde planeet, versamel voedsel, hout en metaal, handel by die mark, doen navorsing in die biblioteek en bou leërs op. Vorder deur veertien eras, van die Antieke Era tot Galaktiese Ryke, terwyl nasies saamsmelt in kontinentale blokke en die blokke as die mensdom verenig.\n\nBereik die ruimte en die uitsig maak oop van jou tuisplaneet na jou sterrestelsel en die sterrekaart. Eis hulpbronwêrelde op met jou ruimteskepe, stig kolonies en spring langs roetes tussen stelsels, tensy 'n vyandige inhibeerder jou vloot aan die rand van sy stelsel vashou.\n\nDaar is geen vaste einde nie: 'n speler wat alles nagevors het, kan opvaar, as mededingers dit nie eers keer nie, en dan dorre mane lewe gee.\n\nSpeel teen rekenaarteenstanders of saam met vriende oor die netwerk. Die koppelvlak is in Engels.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Ronde planete: zoem van 'n stadstraat uit na die hele aardbol en die sterrekaart",
+      "Veertien eras, van die eerste dorpies tot galaktiese ryke",
+      "Nasies smelt saam in kontinentale blokke en verenig uiteindelik as die mensdom",
+      "Sterrestelsels, hulpbronwêrelde, kolonies, gelaaide spronge en sprong-inhibeerders",
+      "Rekenaarteenstanders met vier persoonlikhede en ses moeilikheidsvlakke",
+      "Netwerkspel: bied 'n spel aan, sluit aan met 'n eenmalige sleutel of bedryf 'n bediener",
+      "Vaar op, gee dan lewe aan dorre mane en verf nuwe wêrelde"
+    ],
+    "keywords": [
+      "intydse strategie",
+      "RTS",
+      "strategie",
+      "geskiedenis",
+      "ruimte",
+      "ryk",
+      "planete"
+    ],
+    "minimum_hardware": [
+      "Windows 10 weergawe 1809 (bou 17763) of later, of Windows 11",
+      "x64- of ARM64-rekenaar met 8 GB geheue",
+      "Grafika met DirectX 11- en OpenGL 3.3-drywers",
+      "Sleutelbord en muis"
+    ],
+    "recommended_hardware": [
+      "16 GB geheue en 'n toegewyde grafiese kaart vir groot heelalle",
+      "1920 × 1080-skerm of groter"
+    ],
+    "ReleaseNotes": "Eerste vrystelling in die Microsoft Store."
+  },
+  "ar": {
+    "language": "العربية",
+    "locale": "ar",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "استراتيجية في الوقت الفعلي من القرى الأولى حتى عصر الإمبراطوريات المجرية: ابنِ المدن على كوكب كروي، وتقدّم عبر أربعة عشر عصرًا، وقُد أساطيلك إلى النجوم.",
+    "Description": "قُد شعبًا من قريته الأولى إلى النجوم.\n\nأسّس المدن على كوكب كروي، واجمع الطعام والخشب والمعادن، وتاجر في السوق، وابحث في المكتبة، وجهّز الجيوش. تقدّم عبر أربعة عشر عصرًا، من العصر القديم إلى الإمبراطوريات المجرية، بينما تندمج الأمم في تكتلات قارية ثم تتوحد التكتلات في إنسانية واحدة.\n\nاصعد إلى الفضاء فينفتح المشهد من كوكبك الأم إلى نظامك النجمي وخريطة النجوم. استولِ على عوالم الموارد بسفنك الفضائية، وأسّس المستعمرات، واقفز بين الأنظمة عبر المسارات، ما لم يوقف مثبّط معادٍ أسطولك عند حافة نظامه.\n\nلا توجد نهاية محددة: يمكن للاعب الذي أنجز كل الأبحاث أن يرتقي، إن لم يوقفه منافسوه أولًا، ثم يبعث الحياة في الأقمار القاحلة.\n\nالعب ضد خصوم يديرهم الحاسوب أو مع أصدقائك عبر الشبكة. الواجهة باللغة الإنجليزية.",
+    "DevStudio": "K3D0",
+    "features": [
+      "كواكب كروية: كبّر وصغّر من شارع في المدينة إلى الكرة كلها وخريطة النجوم",
+      "أربعة عشر عصرًا، من القرى الأولى إلى الإمبراطوريات المجرية",
+      "تندمج الأمم في تكتلات قارية ثم تتوحد أخيرًا في إنسانية واحدة",
+      "أنظمة نجمية وعوالم موارد ومستعمرات وقفزات مشحونة ومثبّطات للقفز",
+      "خصوم يديرهم الحاسوب بأربع شخصيات وستة مستويات صعوبة",
+      "اللعب عبر الشبكة: استضف لعبة، أو انضم بمفتاح يُستخدم مرة واحدة، أو شغّل خادمًا",
+      "ارتقِ، ثم ابعث الحياة في الأقمار القاحلة وارسم عوالم جديدة"
+    ],
+    "keywords": [
+      "استراتيجية فورية",
+      "RTS",
+      "استراتيجية",
+      "تاريخ",
+      "فضاء",
+      "إمبراطورية",
+      "كواكب"
+    ],
+    "minimum_hardware": [
+      "Windows 10 الإصدار 1809 (البنية 17763) أو أحدث، أو Windows 11",
+      "حاسوب x64 أو ARM64 بذاكرة 8 غيغابايت",
+      "رسوميات ببرامج تشغيل DirectX 11 وOpenGL 3.3",
+      "لوحة مفاتيح وفأرة"
+    ],
+    "recommended_hardware": [
+      "ذاكرة 16 غيغابايت وبطاقة رسوميات مستقلة للأكوان الكبيرة",
+      "شاشة 1920 × 1080 أو أكبر"
+    ],
+    "ReleaseNotes": "أول إصدار في Microsoft Store."
+  },
+  "bg": {
+    "language": "Български",
+    "locale": "bg",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Стратегия в реално време от първите селища до епохата на галактическите империи: строй градове на кръгла планета, премини през четиринадесет епохи и изведи флотите си към звездите.",
+    "Description": "Поведи един народ от първото му селище до звездите.\n\nОснови градове на кръгла планета, събирай храна, дървесина и метал, търгувай на пазара, проучвай в библиотеката и създавай армии. Премини през четиринадесет епохи, от Древността до Галактическите империи, докато нациите се сливат в континентални блокове, а блоковете се обединяват като човечество.\n\nДостигни космоса и гледката се разтваря от родната ти планета към звездната ти система и звездната карта. Завземай ресурсни светове с космическите си кораби, основавай колонии и скачай между системите по маршрути, освен ако вражески инхибитор не задържи флотата ти на края на системата си.\n\nНяма определен край: играч, който е проучил всичко, може да се възнесе, ако съперниците не го спрат преди това, и след това да вдъхне живот на безжизнени луни.\n\nИграй срещу компютърни противници или с приятели по мрежата. Интерфейсът е на английски.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Кръгли планети: от градска улица до цялото кълбо и звездната карта",
+      "Четиринадесет епохи, от първите селища до галактическите империи",
+      "Нациите се сливат в континентални блокове и накрая се обединяват като човечество",
+      "Звездни системи, ресурсни светове, колонии, заредени скокове и инхибитори на скокове",
+      "Компютърни противници с четири характера и шест нива на трудност",
+      "Мрежова игра: бъди домакин, влез с еднократен ключ или пусни сървър",
+      "Възнеси се, после вдъхни живот на безжизнени луни и рисувай нови светове"
+    ],
+    "keywords": [
+      "стратегия в реално време",
+      "RTS",
+      "стратегия",
+      "история",
+      "космос",
+      "империя",
+      "планети"
+    ],
+    "minimum_hardware": [
+      "Windows 10 версия 1809 (компилация 17763) или по-нова, или Windows 11",
+      "x64 или ARM64 компютър с 8 GB памет",
+      "Графика с драйвери за DirectX 11 и OpenGL 3.3",
+      "Клавиатура и мишка"
+    ],
+    "recommended_hardware": [
+      "16 GB памет и самостоятелна видеокарта за големи вселени",
+      "Екран 1920 × 1080 или по-голям"
+    ],
+    "ReleaseNotes": "Първо издание в Microsoft Store."
+  },
+  "cs": {
+    "language": "Čeština",
+    "locale": "cs",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Strategie v reálném čase od prvních vesnic po věk galaktických říší: stavějte města na kulaté planetě, projděte čtrnácti věky a vyšlete své flotily ke hvězdám.",
+    "Description": "Doveďte národ od jeho první vesnice až ke hvězdám.\n\nZakládejte města na kulaté planetě, získávejte potraviny, dřevo a kov, obchodujte na trhu, bádejte v knihovně a budujte armády. Projděte čtrnácti věky, od Starověku po Galaktické říše, zatímco se národy slučují do kontinentálních bloků a bloky se sjednocují jako lidstvo.\n\nDosáhněte vesmíru a pohled se otevře od vaší domovské planety k vaší hvězdné soustavě a hvězdné mapě. Zabírejte surovinové světy svými hvězdnými loděmi, zakládejte kolonie a skákejte mezi soustavami po trasách, pokud vaši flotilu nezadrží nepřátelský inhibitor na okraji své soustavy.\n\nHra nemá pevný konec: hráč, který vybádal vše, může vystoupit, pokud ho soupeři předtím nezastaví, a pak vdechnout život pustým měsícům.\n\nHrajte proti počítačovým soupeřům nebo s přáteli po síti. Rozhraní je v angličtině.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Kulaté planety: přibližte se z ulice města až na celou zeměkouli a hvězdnou mapu",
+      "Čtrnáct věků, od prvních vesnic po galaktické říše",
+      "Národy se slučují do kontinentálních bloků a nakonec se sjednotí jako lidstvo",
+      "Hvězdné soustavy, surovinové světy, kolonie, nabíjené skoky a inhibitory skoků",
+      "Počítačoví soupeři se čtyřmi povahami a šesti úrovněmi obtížnosti",
+      "Síťová hra: hostujte hru, připojte se jednorázovým klíčem nebo spusťte server",
+      "Vystupte, pak vdechněte život pustým měsícům a malujte nové světy"
+    ],
+    "keywords": [
+      "strategie v reálném čase",
+      "RTS",
+      "strategie",
+      "historie",
+      "vesmír",
+      "říše",
+      "planety"
+    ],
+    "minimum_hardware": [
+      "Windows 10 verze 1809 (sestavení 17763) nebo novější, nebo Windows 11",
+      "Počítač x64 nebo ARM64 s 8 GB paměti",
+      "Grafika s ovladači DirectX 11 a OpenGL 3.3",
+      "Klávesnice a myš"
+    ],
+    "recommended_hardware": [
+      "16 GB paměti a samostatná grafická karta pro velké vesmíry",
+      "Displej 1920 × 1080 nebo větší"
+    ],
+    "ReleaseNotes": "První vydání v Microsoft Store."
+  },
+  "da": {
+    "language": "Dansk",
+    "locale": "da",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Realtidsstrategi fra de første landsbyer til en tid med galaktiske imperier: byg byer på en rund planet, gå gennem fjorten tidsaldre og send dine flåder ud mod stjernerne.",
+    "Description": "Før et folk fra dets første landsby til stjernerne.\n\nGrundlæg byer på en rund planet, saml mad, tømmer og metal, handl på markedet, forsk på biblioteket og opbyg hære. Gå gennem fjorten tidsaldre, fra Oldtiden til Galaktiske imperier, mens nationer smelter sammen i kontinentale blokke, og blokkene forenes som menneskeheden.\n\nNå rummet, og udsigten åbner sig fra din hjemplanet til dit stjernesystem og stjernekortet. Gør krav på ressourceverdener med dine rumskibe, grundlæg kolonier og spring mellem systemer ad ruter, medmindre en fjendtlig inhibitor holder din flåde fast ved kanten af sit system.\n\nDer er ingen fast afslutning: en spiller, der har forsket i alt, kan ascendere, hvis rivalerne ikke stopper vedkommende først, og derefter give liv til golde måner.\n\nSpil mod computermodstandere eller med venner over netværket. Brugerfladen er på engelsk.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Runde planeter: zoom fra en bygade ud til hele kloden og stjernekortet",
+      "Fjorten tidsaldre, fra de første landsbyer til galaktiske imperier",
+      "Nationer smelter sammen i kontinentale blokke og forenes til sidst som menneskeheden",
+      "Stjernesystemer, ressourceverdener, kolonier, ladede spring og springinhibitorer",
+      "Computermodstandere med fire personligheder og seks sværhedsgrader",
+      "Netværksspil: vær vært, deltag med en engangsnøgle eller kør en server",
+      "Ascender, giv så liv til golde måner og mal nye verdener"
+    ],
+    "keywords": [
+      "realtidsstrategi",
+      "RTS",
+      "strategi",
+      "historie",
+      "rummet",
+      "imperium",
+      "planeter"
+    ],
+    "minimum_hardware": [
+      "Windows 10 version 1809 (build 17763) eller nyere, eller Windows 11",
+      "x64- eller ARM64-pc med 8 GB hukommelse",
+      "Grafik med DirectX 11- og OpenGL 3.3-drivere",
+      "Tastatur og mus"
+    ],
+    "recommended_hardware": [
+      "16 GB hukommelse og et dedikeret grafikkort til store universer",
+      "Skærm på 1920 × 1080 eller større"
+    ],
+    "ReleaseNotes": "Første udgivelse i Microsoft Store."
+  },
+  "de": {
+    "language": "Deutsch",
+    "locale": "de",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Echtzeitstrategie von den ersten Dörfern bis zum Zeitalter galaktischer Imperien: Bauen Sie Städte auf einem runden Planeten, durchlaufen Sie vierzehn Zeitalter und führen Sie Ihre Flotten zu den Sternen.",
+    "Description": "Führen Sie ein Volk von seinem ersten Dorf bis zu den Sternen.\n\nGründen Sie Städte auf einem runden Planeten, sammeln Sie Nahrung, Holz und Metall, handeln Sie auf dem Markt, forschen Sie in der Bibliothek und stellen Sie Armeen auf. Durchlaufen Sie vierzehn Zeitalter, von der Antike bis zu den Galaktischen Imperien, während Nationen zu kontinentalen Blöcken verschmelzen und sich die Blöcke als Menschheit vereinen.\n\nErreichen Sie den Weltraum, und der Blick öffnet sich von Ihrem Heimatplaneten zu Ihrem Sternsystem und der Sternkarte. Beanspruchen Sie Rohstoffwelten mit Ihren Raumschiffen, gründen Sie Kolonien und springen Sie entlang von Routen zwischen Systemen, sofern kein feindlicher Inhibitor Ihre Flotte am Rand seines Systems festhält.\n\nEs gibt kein festes Ende: Wer alles erforscht hat, darf aufsteigen, wenn die Rivalen es nicht vorher verhindern, und danach öden Monden Leben einhauchen.\n\nSpielen Sie gegen Computergegner oder mit Freunden über das Netzwerk. Die Benutzeroberfläche ist auf Englisch.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Runde Planeten: vom Straßenzug einer Stadt bis zum ganzen Globus und zur Sternkarte zoomen",
+      "Vierzehn Zeitalter, von den ersten Dörfern bis zu galaktischen Imperien",
+      "Nationen verschmelzen zu kontinentalen Blöcken und vereinen sich schließlich als Menschheit",
+      "Sternsysteme, Rohstoffwelten, Kolonien, aufgeladene Sprünge und Sprunginhibitoren",
+      "Computergegner mit vier Persönlichkeiten und sechs Schwierigkeitsstufen",
+      "Netzwerkspiel: ein Spiel ausrichten, mit einem Einmalschlüssel beitreten oder einen Server betreiben",
+      "Aufsteigen, dann öden Monden Leben einhauchen und neue Welten malen"
+    ],
+    "keywords": [
+      "Echtzeitstrategie",
+      "RTS",
+      "Strategie",
+      "Geschichte",
+      "Weltraum",
+      "Imperium",
+      "Planeten"
+    ],
+    "minimum_hardware": [
+      "Windows 10 Version 1809 (Build 17763) oder neuer, oder Windows 11",
+      "x64- oder ARM64-PC mit 8 GB Arbeitsspeicher",
+      "Grafik mit DirectX 11- und OpenGL 3.3-Treibern",
+      "Tastatur und Maus"
+    ],
+    "recommended_hardware": [
+      "16 GB Arbeitsspeicher und eine dedizierte Grafikkarte für große Universen",
+      "Bildschirm mit 1920 × 1080 oder mehr"
+    ],
+    "ReleaseNotes": "Erste Veröffentlichung im Microsoft Store."
+  },
+  "el": {
+    "language": "Ελληνικά",
+    "locale": "el",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Στρατηγική πραγματικού χρόνου από τα πρώτα χωριά έως την εποχή των γαλαξιακών αυτοκρατοριών: χτίστε πόλεις σε έναν στρογγυλό πλανήτη, περάστε από δεκατέσσερις εποχές και οδηγήστε τους στόλους σας στα άστρα.",
+    "Description": "Οδηγήστε έναν λαό από το πρώτο του χωριό έως τα άστρα.\n\nΙδρύστε πόλεις σε έναν στρογγυλό πλανήτη, συλλέξτε τροφή, ξυλεία και μέταλλο, εμπορευτείτε στην αγορά, ερευνήστε στη βιβλιοθήκη και συγκροτήστε στρατούς. Περάστε από δεκατέσσερις εποχές, από την Αρχαία Εποχή έως τις Γαλαξιακές Αυτοκρατορίες, καθώς τα έθνη συγχωνεύονται σε ηπειρωτικά μπλοκ και τα μπλοκ ενώνονται ως ανθρωπότητα.\n\nΦτάστε στο διάστημα και η θέα ανοίγει από τον πλανήτη σας στο αστρικό σας σύστημα και στον χάρτη των άστρων. Διεκδικήστε κόσμους πόρων με τα διαστημόπλοιά σας, ιδρύστε αποικίες και κάντε άλματα μεταξύ συστημάτων κατά μήκος διαδρομών, εκτός αν ένας εχθρικός αναστολέας κρατήσει τον στόλο σας στην άκρη του συστήματός του.\n\nΔεν υπάρχει καθορισμένο τέλος: ένας παίκτης που έχει ερευνήσει τα πάντα μπορεί να ανυψωθεί, αν οι αντίπαλοι δεν τον σταματήσουν πρώτα, και έπειτα να δώσει ζωή σε άγονα φεγγάρια.\n\nΠαίξτε απέναντι σε αντιπάλους του υπολογιστή ή με φίλους μέσω δικτύου. Η διεπαφή είναι στα αγγλικά.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Στρογγυλοί πλανήτες: ζουμ από έναν δρόμο της πόλης έως ολόκληρη τη σφαίρα και τον χάρτη των άστρων",
+      "Δεκατέσσερις εποχές, από τα πρώτα χωριά έως τις γαλαξιακές αυτοκρατορίες",
+      "Τα έθνη συγχωνεύονται σε ηπειρωτικά μπλοκ και τελικά ενώνονται ως ανθρωπότητα",
+      "Αστρικά συστήματα, κόσμοι πόρων, αποικίες, φορτισμένα άλματα και αναστολείς αλμάτων",
+      "Αντίπαλοι του υπολογιστή με τέσσερις χαρακτήρες και έξι επίπεδα δυσκολίας",
+      "Παιχνίδι δικτύου: φιλοξενήστε, συμμετέχετε με κλειδί μίας χρήσης ή τρέξτε διακομιστή",
+      "Ανυψωθείτε, δώστε ζωή σε άγονα φεγγάρια και ζωγραφίστε νέους κόσμους"
+    ],
+    "keywords": [
+      "στρατηγική πραγματικού χρόνου",
+      "RTS",
+      "στρατηγική",
+      "ιστορία",
+      "διάστημα",
+      "αυτοκρατορία",
+      "πλανήτες"
+    ],
+    "minimum_hardware": [
+      "Windows 10 έκδοση 1809 (έκδοση δόμησης 17763) ή νεότερη, ή Windows 11",
+      "Υπολογιστής x64 ή ARM64 με μνήμη 8 GB",
+      "Γραφικά με προγράμματα οδήγησης DirectX 11 και OpenGL 3.3",
+      "Πληκτρολόγιο και ποντίκι"
+    ],
+    "recommended_hardware": [
+      "Μνήμη 16 GB και αποκλειστική κάρτα γραφικών για μεγάλα σύμπαντα",
+      "Οθόνη 1920 × 1080 ή μεγαλύτερη"
+    ],
+    "ReleaseNotes": "Πρώτη κυκλοφορία στο Microsoft Store."
+  },
+  "es": {
+    "language": "Español",
+    "locale": "es",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Estrategia en tiempo real desde las primeras aldeas hasta una era de imperios galácticos: construye ciudades en un planeta redondo, avanza por catorce eras y lleva tus flotas a las estrellas.",
+    "Description": "Guía a un pueblo desde su primera aldea hasta las estrellas.\n\nFunda ciudades en un planeta redondo, reúne alimento, madera y metal, comercia en el mercado, investiga en la biblioteca y levanta ejércitos. Avanza por catorce eras, de la Edad Antigua a los Imperios Galácticos, mientras las naciones se funden en bloques continentales y los bloques se unen como humanidad.\n\nAlcanza el espacio y la vista se abre desde tu planeta natal hasta tu sistema estelar y el mapa estelar. Reclama mundos de recursos con tus naves, funda colonias y salta entre sistemas por rutas, salvo que un inhibidor enemigo retenga tu flota en el borde de su sistema.\n\nNo hay un final fijo: quien lo haya investigado todo puede ascender, si sus rivales no lo detienen antes, y después dar vida a lunas yermas.\n\nJuega contra oponentes controlados por el ordenador o con amigos en red. La interfaz está en inglés.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Planetas redondos: acerca la vista desde una calle hasta el globo entero y el mapa estelar",
+      "Catorce eras, de las primeras aldeas a los imperios galácticos",
+      "Las naciones se funden en bloques continentales y al final se unen como humanidad",
+      "Sistemas estelares, mundos de recursos, colonias, saltos cargados e inhibidores de salto",
+      "Oponentes del ordenador con cuatro personalidades y seis niveles de dificultad",
+      "Juego en red: organiza una partida, únete con una clave de un solo uso o ejecuta un servidor",
+      "Asciende, da vida a lunas yermas y pinta nuevos mundos"
+    ],
+    "keywords": [
+      "estrategia en tiempo real",
+      "RTS",
+      "estrategia",
+      "historia",
+      "espacio",
+      "imperio",
+      "planetas"
+    ],
+    "minimum_hardware": [
+      "Windows 10 versión 1809 (compilación 17763) o posterior, o Windows 11",
+      "PC x64 o ARM64 con 8 GB de memoria",
+      "Gráficos con controladores DirectX 11 y OpenGL 3.3",
+      "Teclado y ratón"
+    ],
+    "recommended_hardware": [
+      "16 GB de memoria y una tarjeta gráfica dedicada para universos grandes",
+      "Pantalla de 1920 × 1080 o mayor"
+    ],
+    "ReleaseNotes": "Primera versión en Microsoft Store."
+  },
+  "et": {
+    "language": "Eesti",
+    "locale": "et",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Reaalajastrateegia esimestest küladest galaktiliste impeeriumide ajastuni: ehita linnu ümmargusele planeedile, läbi neliteist ajastut ja vii oma laevastikud tähtede juurde.",
+    "Description": "Juhi rahvas tema esimesest külast tähtedeni.\n\nRaja linnu ümmargusele planeedile, kogu toitu, puitu ja metalli, kauple turul, uuri raamatukogus ja loo armeesid. Läbi neliteist ajastut, Vanaajast Galaktiliste impeeriumideni, samal ajal kui rahvad sulanduvad mandriblokkideks ja blokid ühinevad inimkonnaks.\n\nJõua kosmosesse ja vaade avaneb sinu koduplaneedilt sinu tähesüsteemi ja tähekaardini. Võta ressursimaailmad oma kosmoselaevadega enda valdusse, raja kolooniaid ja hüppa marsruute pidi süsteemide vahel, kui just vaenlase inhibiitor ei peata su laevastikku oma süsteemi serval.\n\nKindlat lõppu pole: mängija, kes on kõik läbi uurinud, võib ülestõusta, kui rivaalid teda enne ei peata, ja seejärel elutud kuud ellu äratada.\n\nMängi arvutivastaste vastu või sõpradega üle võrgu. Kasutajaliides on inglise keeles.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Ümmargused planeedid: suumi linnatänavalt kogu maakerale ja tähekaardile",
+      "Neliteist ajastut, esimestest küladest galaktiliste impeeriumideni",
+      "Rahvad sulanduvad mandriblokkideks ja ühinevad lõpuks inimkonnaks",
+      "Tähesüsteemid, ressursimaailmad, kolooniad, laetud hüpped ja hüppeinhibiitorid",
+      "Arvutivastased nelja iseloomu ja kuue raskusastmega",
+      "Võrgumäng: korralda mäng, liitu ühekordse võtmega või käivita server",
+      "Tõuse üles, ärata elutud kuud ellu ja maali uusi maailmu"
+    ],
+    "keywords": [
+      "reaalajastrateegia",
+      "RTS",
+      "strateegia",
+      "ajalugu",
+      "kosmos",
+      "impeerium",
+      "planeedid"
+    ],
+    "minimum_hardware": [
+      "Windows 10 versioon 1809 (järk 17763) või uuem, või Windows 11",
+      "x64- või ARM64-arvuti 8 GB mäluga",
+      "Graafika DirectX 11 ja OpenGL 3.3 draiveritega",
+      "Klaviatuur ja hiir"
+    ],
+    "recommended_hardware": [
+      "16 GB mälu ja eraldi graafikakaart suurte universumite jaoks",
+      "Ekraan 1920 × 1080 või suurem"
+    ],
+    "ReleaseNotes": "Esimene väljalase Microsoft Store'is."
+  },
+  "fa": {
+    "language": "فارسی",
+    "locale": "fa",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "استراتژی بی‌درنگ از نخستین روستاها تا عصر امپراتوری‌های کهکشانی: روی سیاره‌ای گِرد شهر بسازید، از چهارده عصر بگذرید و ناوگان‌هایتان را به ستارگان ببرید.",
+    "Description": "مردمی را از نخستین روستایشان تا ستارگان رهبری کنید.\n\nروی سیاره‌ای گِرد شهر بنا کنید، غذا، الوار و فلز گرد آورید، در بازار داد و ستد کنید، در کتابخانه پژوهش کنید و سپاه بسازید. از چهارده عصر بگذرید، از عصر باستان تا امپراتوری‌های کهکشانی، در حالی که ملت‌ها در بلوک‌های قاره‌ای ادغام می‌شوند و بلوک‌ها به‌صورت بشریت متحد می‌شوند.\n\nبه فضا برسید تا منظره از سیاره‌ی خانگی‌تان به منظومه‌ی ستاره‌ای و نقشه‌ی ستارگان گشوده شود. جهان‌های منابع را با سفینه‌هایتان تصاحب کنید، مستعمره بسازید و در امتداد مسیرها میان منظومه‌ها جهش کنید، مگر آنکه بازدارنده‌ای دشمن ناوگانتان را در لبه‌ی منظومه‌اش نگه دارد.\n\nپایان ثابتی وجود ندارد: بازیکنی که همه‌چیز را پژوهش کرده می‌تواند عروج کند، اگر رقیبان پیش‌تر جلویش را نگیرند، و سپس به قمرهای بی‌جان زندگی ببخشد.\n\nبا حریفان رایانه‌ای یا با دوستانتان از راه شبکه بازی کنید. رابط کاربری به زبان انگلیسی است.",
+    "DevStudio": "K3D0",
+    "features": [
+      "سیاره‌های گِرد: از خیابانی در شهر تا کل کره و نقشه‌ی ستارگان بزرگ‌نمایی کنید",
+      "چهارده عصر، از نخستین روستاها تا امپراتوری‌های کهکشانی",
+      "ملت‌ها در بلوک‌های قاره‌ای ادغام می‌شوند و سرانجام به‌صورت بشریت متحد می‌شوند",
+      "منظومه‌های ستاره‌ای، جهان‌های منابع، مستعمره‌ها، جهش‌های شارژشده و بازدارنده‌های جهش",
+      "حریفان رایانه‌ای با چهار شخصیت و شش سطح دشواری",
+      "بازی شبکه‌ای: میزبانی کنید، با کلید یک‌بارمصرف بپیوندید یا سرور اجرا کنید",
+      "عروج کنید، سپس به قمرهای بی‌جان زندگی ببخشید و جهان‌های تازه بکشید"
+    ],
+    "keywords": [
+      "استراتژی بی‌درنگ",
+      "RTS",
+      "استراتژی",
+      "تاریخ",
+      "فضا",
+      "امپراتوری",
+      "سیاره‌ها"
+    ],
+    "minimum_hardware": [
+      "Windows 10 نسخه‌ی 1809 (ساخت 17763) یا جدیدتر، یا Windows 11",
+      "رایانه‌ی x64 یا ARM64 با ۸ گیگابایت حافظه",
+      "گرافیک با درایورهای DirectX 11 و OpenGL 3.3",
+      "صفحه‌کلید و ماوس"
+    ],
+    "recommended_hardware": [
+      "۱۶ گیگابایت حافظه و کارت گرافیک مجزا برای جهان‌های بزرگ",
+      "نمایشگر 1920 × 1080 یا بزرگ‌تر"
+    ],
+    "ReleaseNotes": "نخستین انتشار در Microsoft Store."
+  },
+  "fi": {
+    "language": "Suomi",
+    "locale": "fi",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Reaaliaikaista strategiaa ensimmäisistä kylistä galaktisten imperiumien aikaan: rakenna kaupunkeja pyöreälle planeetalle, etene neljäntoista aikakauden läpi ja vie laivastosi tähtiin.",
+    "Description": "Johda kansa sen ensimmäisestä kylästä tähtiin asti.\n\nPerusta kaupunkeja pyöreälle planeetalle, kerää ruokaa, puuta ja metallia, käy kauppaa torilla, tutki kirjastossa ja kokoa armeijoita. Etene neljäntoista aikakauden läpi muinaisajasta galaktisiin imperiumeihin, kun kansakunnat sulautuvat mantereellisiksi blokeiksi ja blokit yhdistyvät ihmiskunnaksi.\n\nSaavuta avaruus, ja näkymä avautuu kotiplaneetaltasi tähtijärjestelmääsi ja tähtikartalle. Valtaa resurssimaailmoja avaruusaluksillasi, perusta siirtokuntia ja hyppää järjestelmien välillä reittejä pitkin, ellei vihollisen estin pidätä laivastoasi järjestelmänsä reunalla.\n\nPeli ei pääty kiinteästi: kaiken tutkinut pelaaja voi ylentyä, jos kilpailijat eivät pysäytä häntä ensin, ja herättää sen jälkeen elottomat kuut eloon.\n\nPelaa tietokonevastustajia vastaan tai ystävien kanssa verkossa. Käyttöliittymä on englanniksi.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Pyöreät planeetat: zoomaa kaupungin kadulta koko maapalloon ja tähtikarttaan",
+      "Neljätoista aikakautta ensimmäisistä kylistä galaktisiin imperiumeihin",
+      "Kansakunnat sulautuvat mantereellisiksi blokeiksi ja yhdistyvät lopulta ihmiskunnaksi",
+      "Tähtijärjestelmät, resurssimaailmat, siirtokunnat, ladatut hypyt ja hyppyestimet",
+      "Tietokonevastustajat, joilla on neljä luonnetta ja kuusi vaikeustasoa",
+      "Verkkopeli: isännöi peliä, liity kertakäyttöavaimella tai aja palvelinta",
+      "Ylenny, herätä elottomat kuut eloon ja maalaa uusia maailmoja"
+    ],
+    "keywords": [
+      "reaaliaikastrategia",
+      "RTS",
+      "strategia",
+      "historia",
+      "avaruus",
+      "imperiumi",
+      "planeetat"
+    ],
+    "minimum_hardware": [
+      "Windows 10 -versio 1809 (koontiversio 17763) tai uudempi, tai Windows 11",
+      "x64- tai ARM64-tietokone, 8 Gt muistia",
+      "Näytönohjain, jossa DirectX 11- ja OpenGL 3.3 -ajurit",
+      "Näppäimistö ja hiiri"
+    ],
+    "recommended_hardware": [
+      "16 Gt muistia ja erillinen näytönohjain suuria universumeja varten",
+      "Näyttö 1920 × 1080 tai suurempi"
+    ],
+    "ReleaseNotes": "Ensimmäinen julkaisu Microsoft Storessa."
+  },
+  "fil": {
+    "language": "Filipino",
+    "locale": "fil",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Real-time strategy mula sa mga unang nayon hanggang sa panahon ng mga imperyong galaktiko: magtayo ng mga lungsod sa isang bilog na planeta, dumaan sa labing-apat na panahon at dalhin ang iyong mga plota sa mga bituin.",
+    "Description": "Pangunahan ang isang bayan mula sa una nitong nayon hanggang sa mga bituin.\n\nMagtatag ng mga lungsod sa isang bilog na planeta, mangalap ng pagkain, kahoy at metal, makipagkalakalan sa pamilihan, magsaliksik sa aklatan at bumuo ng mga hukbo. Dumaan sa labing-apat na panahon, mula sa Sinaunang Panahon hanggang sa mga Imperyong Galaktiko, habang nagsasanib ang mga bansa sa mga bloke ng kontinente at nagkakaisa ang mga bloke bilang sangkatauhan.\n\nAbutin ang kalawakan at bubukas ang tanaw mula sa iyong tahanang planeta hanggang sa iyong sistemang bituin at sa mapa ng mga bituin. Angkinin ang mga mundo ng yaman gamit ang iyong mga sasakyang pangkalawakan, magtatag ng mga kolonya at tumalon sa pagitan ng mga sistema sa mga ruta, maliban kung pigilan ng isang kaaway na inhibitor ang iyong plota sa gilid ng sistema nito.\n\nWalang takdang katapusan: ang manlalarong nasaliksik na ang lahat ay maaaring umakyat, kung hindi muna siya mapigilan ng mga karibal, at pagkatapos ay bigyang-buhay ang mga tigang na buwan.\n\nMaglaro laban sa mga kalabang kompyuter o kasama ang mga kaibigan sa network. Nasa Ingles ang interface.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Bilog na mga planeta: mag-zoom mula sa isang kalye ng lungsod hanggang sa buong globo at mapa ng mga bituin",
+      "Labing-apat na panahon, mula sa mga unang nayon hanggang sa mga imperyong galaktiko",
+      "Nagsasanib ang mga bansa sa mga bloke ng kontinente at sa huli ay nagkakaisa bilang sangkatauhan",
+      "Mga sistemang bituin, mundo ng yaman, kolonya, kargadong talon at inhibitor ng talon",
+      "Mga kalabang kompyuter na may apat na personalidad at anim na antas ng hirap",
+      "Laro sa network: mag-host, sumali gamit ang isang beses na susi, o magpatakbo ng server",
+      "Umakyat, bigyang-buhay ang mga tigang na buwan at magpinta ng mga bagong mundo"
+    ],
+    "keywords": [
+      "real-time strategy",
+      "RTS",
+      "estratehiya",
+      "kasaysayan",
+      "kalawakan",
+      "imperyo",
+      "mga planeta"
+    ],
+    "minimum_hardware": [
+      "Windows 10 bersyon 1809 (build 17763) o mas bago, o Windows 11",
+      "x64 o ARM64 na PC na may 8 GB na memorya",
+      "Graphics na may DirectX 11 at OpenGL 3.3 na driver",
+      "Keyboard at mouse"
+    ],
+    "recommended_hardware": [
+      "16 GB na memorya at nakalaang graphics card para sa malalaking uniberso",
+      "Display na 1920 × 1080 o mas malaki"
+    ],
+    "ReleaseNotes": "Unang release sa Microsoft Store."
+  },
+  "fr": {
+    "language": "Français",
+    "locale": "fr",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Stratégie en temps réel des premiers villages à l'ère des empires galactiques : bâtissez des villes sur une planète ronde, traversez quatorze âges et menez vos flottes jusqu'aux étoiles.",
+    "Description": "Menez un peuple de son premier village jusqu'aux étoiles.\n\nFondez des villes sur une planète ronde, récoltez nourriture, bois et métal, commercez au marché, faites des recherches à la bibliothèque et levez des armées. Traversez quatorze âges, de l'Antiquité aux Empires galactiques, tandis que les nations fusionnent en blocs continentaux et que les blocs s'unissent en une seule humanité.\n\nAtteignez l'espace et la vue s'ouvre de votre planète natale à votre système stellaire et à la carte des étoiles. Revendiquez des mondes de ressources avec vos vaisseaux, fondez des colonies et sautez d'un système à l'autre le long des routes, à moins qu'un inhibiteur ennemi ne retienne votre flotte au bord de son système.\n\nIl n'y a pas de fin imposée : un joueur qui a tout recherché peut accomplir l'Ascension, si ses rivaux ne l'arrêtent pas avant, puis donner vie à des lunes stériles.\n\nJouez contre des adversaires contrôlés par l'ordinateur ou avec des amis en réseau. L'interface est en anglais.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Planètes rondes : zoomez d'une rue de la ville jusqu'au globe entier et à la carte des étoiles",
+      "Quatorze âges, des premiers villages aux empires galactiques",
+      "Les nations fusionnent en blocs continentaux puis s'unissent enfin en une seule humanité",
+      "Systèmes stellaires, mondes de ressources, colonies, sauts chargés et inhibiteurs de saut",
+      "Adversaires de l'ordinateur avec quatre personnalités et six niveaux de difficulté",
+      "Jeu en réseau : hébergez une partie, rejoignez-la avec une clé à usage unique ou lancez un serveur",
+      "Accomplissez l'Ascension, puis donnez vie à des lunes stériles et peignez de nouveaux mondes"
+    ],
+    "keywords": [
+      "stratégie en temps réel",
+      "RTS",
+      "stratégie",
+      "histoire",
+      "espace",
+      "empire",
+      "planètes"
+    ],
+    "minimum_hardware": [
+      "Windows 10 version 1809 (build 17763) ou ultérieure, ou Windows 11",
+      "PC x64 ou ARM64 avec 8 Go de mémoire",
+      "Carte graphique avec pilotes DirectX 11 et OpenGL 3.3",
+      "Clavier et souris"
+    ],
+    "recommended_hardware": [
+      "16 Go de mémoire et une carte graphique dédiée pour les grands univers",
+      "Écran de 1920 × 1080 ou plus"
+    ],
+    "ReleaseNotes": "Première version dans le Microsoft Store."
+  },
+  "he": {
+    "language": "עברית",
+    "locale": "he",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "אסטרטגיה בזמן אמת מהכפרים הראשונים ועד עידן האימפריות הגלקטיות: בנו ערים על כוכב לכת עגול, התקדמו דרך ארבעה־עשר עידנים והובילו את הציים שלכם אל הכוכבים.",
+    "Description": "הובילו עם מהכפר הראשון שלו ועד הכוכבים.\n\nיסדו ערים על כוכב לכת עגול, אספו מזון, עצים ומתכת, סחרו בשוק, חקרו בספרייה והקימו צבאות. התקדמו דרך ארבעה־עשר עידנים, מהעת העתיקה ועד האימפריות הגלקטיות, בזמן שאומות מתמזגות לגושים יבשתיים והגושים מתאחדים לאנושות אחת.\n\nהגיעו לחלל והמבט נפתח מכוכב הבית שלכם אל מערכת הכוכב שלכם ואל מפת הכוכבים. תבעו עולמות משאבים בעזרת ספינות החלל שלכם, יסדו מושבות וקפצו בין מערכות לאורך נתיבים, אלא אם מעכב של האויב יעצור את הצי שלכם בקצה המערכת שלו.\n\nאין סוף קבוע: שחקן שחקר הכול יכול להתעלות, אם יריביו לא יעצרו אותו קודם, ולאחר מכן להפיח חיים בירחים שוממים.\n\nשחקו נגד יריבים ממוחשבים או עם חברים ברשת. הממשק באנגלית.",
+    "DevStudio": "K3D0",
+    "features": [
+      "כוכבי לכת עגולים: התקרבו והתרחקו מרחוב בעיר ועד הכדור כולו ומפת הכוכבים",
+      "ארבעה־עשר עידנים, מהכפרים הראשונים ועד האימפריות הגלקטיות",
+      "אומות מתמזגות לגושים יבשתיים ולבסוף מתאחדות לאנושות אחת",
+      "מערכות כוכבים, עולמות משאבים, מושבות, קפיצות טעונות ומעכבי קפיצה",
+      "יריבים ממוחשבים עם ארבע אישיויות ושש רמות קושי",
+      "משחק ברשת: ארחו משחק, הצטרפו עם מפתח חד־פעמי או הריצו שרת",
+      "התעלו, ואז הפיחו חיים בירחים שוממים וציירו עולמות חדשים"
+    ],
+    "keywords": [
+      "אסטרטגיה בזמן אמת",
+      "RTS",
+      "אסטרטגיה",
+      "היסטוריה",
+      "חלל",
+      "אימפריה",
+      "כוכבי לכת"
+    ],
+    "minimum_hardware": [
+      "Windows 10 גרסה 1809 (גרסת build 17763) ואילך, או Windows 11",
+      "מחשב x64 או ARM64 עם 8 GB זיכרון",
+      "כרטיס גרפי עם מנהלי התקן DirectX 11 ו־OpenGL 3.3",
+      "מקלדת ועכבר"
+    ],
+    "recommended_hardware": [
+      "16 GB זיכרון וכרטיס גרפי ייעודי ליקומים גדולים",
+      "מסך 1920 × 1080 או גדול יותר"
+    ],
+    "ReleaseNotes": "הגרסה הראשונה ב־Microsoft Store."
+  },
+  "hi": {
+    "language": "हिन्दी",
+    "locale": "hi",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "पहले गाँवों से आकाशगंगीय साम्राज्यों के युग तक रियल-टाइम रणनीति: एक गोल ग्रह पर नगर बसाएँ, चौदह युगों से आगे बढ़ें और अपने बेड़ों को तारों तक ले जाएँ।",
+    "Description": "एक जनसमूह को उसके पहले गाँव से तारों तक ले जाएँ।\n\nएक गोल ग्रह पर नगर बसाएँ, भोजन, लकड़ी और धातु इकट्ठा करें, बाज़ार में व्यापार करें, पुस्तकालय में अनुसंधान करें और सेनाएँ खड़ी करें। प्राचीन युग से आकाशगंगीय साम्राज्यों तक चौदह युगों से आगे बढ़ें, जबकि राष्ट्र महाद्वीपीय गुटों में विलीन होते हैं और गुट मानवता के रूप में एक हो जाते हैं।\n\nअंतरिक्ष तक पहुँचें और दृश्य आपके गृह-ग्रह से आपके तारामंडल और तारों के मानचित्र तक खुल जाता है। अपने अंतरिक्ष यानों से संसाधन-लोकों पर दावा करें, उपनिवेश बसाएँ और मार्गों के साथ तारामंडलों के बीच छलाँग लगाएँ, जब तक कि कोई शत्रु अवरोधक आपके बेड़े को अपने तारामंडल के किनारे पर न रोक ले।\n\nकोई तय अंत नहीं है: जिस खिलाड़ी ने सब कुछ खोज लिया है वह उत्कर्ष कर सकता है, यदि प्रतिद्वंद्वी उसे पहले न रोक लें, और फिर बंजर चंद्रमाओं में जीवन ला सकता है।\n\nकंप्यूटर प्रतिद्वंद्वियों के विरुद्ध या नेटवर्क पर मित्रों के साथ खेलें। इंटरफ़ेस अंग्रेज़ी में है।",
+    "DevStudio": "K3D0",
+    "features": [
+      "गोल ग्रह: नगर की एक गली से पूरे गोले और तारों के मानचित्र तक ज़ूम करें",
+      "चौदह युग, पहले गाँवों से आकाशगंगीय साम्राज्यों तक",
+      "राष्ट्र महाद्वीपीय गुटों में विलीन होते हैं और अंत में मानवता के रूप में एक होते हैं",
+      "तारामंडल, संसाधन-लोक, उपनिवेश, आवेशित छलाँगें और छलाँग अवरोधक",
+      "चार स्वभावों और छह कठिनाई स्तरों वाले कंप्यूटर प्रतिद्वंद्वी",
+      "नेटवर्क खेल: खेल की मेज़बानी करें, एक-बार की कुंजी से जुड़ें या सर्वर चलाएँ",
+      "उत्कर्ष करें, फिर बंजर चंद्रमाओं में जीवन लाएँ और नए लोक रचें"
+    ],
+    "keywords": [
+      "रियल-टाइम रणनीति",
+      "RTS",
+      "रणनीति",
+      "इतिहास",
+      "अंतरिक्ष",
+      "साम्राज्य",
+      "ग्रह"
+    ],
+    "minimum_hardware": [
+      "Windows 10 संस्करण 1809 (बिल्ड 17763) या बाद का, या Windows 11",
+      "8 GB मेमोरी वाला x64 या ARM64 पीसी",
+      "DirectX 11 और OpenGL 3.3 ड्राइवरों वाला ग्राफ़िक्स",
+      "कीबोर्ड और माउस"
+    ],
+    "recommended_hardware": [
+      "बड़े ब्रह्मांडों के लिए 16 GB मेमोरी और समर्पित ग्राफ़िक्स कार्ड",
+      "1920 × 1080 या उससे बड़ा डिस्प्ले"
+    ],
+    "ReleaseNotes": "Microsoft Store में पहला संस्करण।"
+  },
+  "is": {
+    "language": "Íslenska",
+    "locale": "is",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Rauntímaherkænska frá fyrstu þorpunum til tíma vetrarbrautaveldanna: byggðu borgir á hnöttóttri plánetu, farðu í gegnum fjórtán aldir og sendu flotana þína til stjarnanna.",
+    "Description": "Leiddu þjóð frá fyrsta þorpi hennar til stjarnanna.\n\nStofnaðu borgir á hnöttóttri plánetu, safnaðu mat, timbri og málmi, verslaðu á markaðnum, rannsakaðu á bókasafninu og komdu upp herjum. Farðu í gegnum fjórtán aldir, frá fornöld til vetrarbrautaveldanna, á meðan þjóðir renna saman í álfublokkir og blokkirnar sameinast sem mannkyn.\n\nNáðu út í geiminn og útsýnið opnast frá heimaplánetunni til sólkerfisins og stjörnukortsins. Gerðu tilkall til auðlindaheima með geimskipunum þínum, stofnaðu nýlendur og stökktu milli kerfa eftir leiðum, nema óvinahemill haldi flotanum þínum við jaðar kerfis síns.\n\nLeikurinn hefur engan fastan endi: leikmaður sem hefur rannsakað allt getur upphafist, ef keppinautar stöðva hann ekki fyrst, og síðan vakið líf á hrjóstrugum tunglum.\n\nSpilaðu gegn tölvuandstæðingum eða með vinum yfir netið. Viðmótið er á ensku.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Hnöttóttar plánetur: þysjaðu frá borgargötu út á allan hnöttinn og stjörnukortið",
+      "Fjórtán aldir, frá fyrstu þorpunum til vetrarbrautaveldanna",
+      "Þjóðir renna saman í álfublokkir og sameinast að lokum sem mannkyn",
+      "Sólkerfi, auðlindaheimar, nýlendur, hlaðin stökk og stökkhemlar",
+      "Tölvuandstæðingar með fjóra persónuleika og sex erfiðleikastig",
+      "Netspilun: haltu leik, tengstu með einnota lykli eða keyrðu netþjón",
+      "Upphefstu, vektu síðan líf á hrjóstrugum tunglum og málaðu nýja heima"
+    ],
+    "keywords": [
+      "rauntímaherkænska",
+      "RTS",
+      "herkænska",
+      "saga",
+      "geimurinn",
+      "heimsveldi",
+      "plánetur"
+    ],
+    "minimum_hardware": [
+      "Windows 10 útgáfa 1809 (smíð 17763) eða nýrri, eða Windows 11",
+      "x64- eða ARM64-tölva með 8 GB minni",
+      "Skjákort með DirectX 11- og OpenGL 3.3-reklum",
+      "Lyklaborð og mús"
+    ],
+    "recommended_hardware": [
+      "16 GB minni og sérstakt skjákort fyrir stóra alheima",
+      "Skjár 1920 × 1080 eða stærri"
+    ],
+    "ReleaseNotes": "Fyrsta útgáfa í Microsoft Store."
+  },
+  "it": {
+    "language": "Italiano",
+    "locale": "it",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Strategia in tempo reale dai primi villaggi all'era degli imperi galattici: costruisci città su un pianeta rotondo, attraversa quattordici ere e guida le tue flotte verso le stelle.",
+    "Description": "Guida un popolo dal suo primo villaggio fino alle stelle.\n\nFonda città su un pianeta rotondo, raccogli cibo, legname e metallo, commercia al mercato, fai ricerca in biblioteca e arruola eserciti. Attraversa quattordici ere, dall'Età antica agli Imperi galattici, mentre le nazioni si fondono in blocchi continentali e i blocchi si uniscono come umanità.\n\nRaggiungi lo spazio e la visuale si apre dal tuo pianeta natale al tuo sistema stellare e alla mappa stellare. Rivendica mondi di risorse con le tue astronavi, fonda colonie e salta tra i sistemi lungo le rotte, a meno che un inibitore nemico non trattenga la tua flotta ai margini del suo sistema.\n\nNon c'è una fine prestabilita: chi ha ricercato tutto può ascendere, se i rivali non lo fermano prima, e poi portare la vita su lune aride.\n\nGioca contro avversari controllati dal computer o con amici in rete. L'interfaccia è in inglese.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Pianeti rotondi: zooma da una strada della città fino all'intero globo e alla mappa stellare",
+      "Quattordici ere, dai primi villaggi agli imperi galattici",
+      "Le nazioni si fondono in blocchi continentali e infine si uniscono come umanità",
+      "Sistemi stellari, mondi di risorse, colonie, salti caricati e inibitori di salto",
+      "Avversari del computer con quattro personalità e sei livelli di difficoltà",
+      "Gioco in rete: ospita una partita, unisciti con una chiave monouso o avvia un server",
+      "Ascendi, poi porta la vita su lune aride e dipingi nuovi mondi"
+    ],
+    "keywords": [
+      "strategia in tempo reale",
+      "RTS",
+      "strategia",
+      "storia",
+      "spazio",
+      "impero",
+      "pianeti"
+    ],
+    "minimum_hardware": [
+      "Windows 10 versione 1809 (build 17763) o successiva, oppure Windows 11",
+      "PC x64 o ARM64 con 8 GB di memoria",
+      "Grafica con driver DirectX 11 e OpenGL 3.3",
+      "Tastiera e mouse"
+    ],
+    "recommended_hardware": [
+      "16 GB di memoria e una scheda grafica dedicata per universi grandi",
+      "Schermo da 1920 × 1080 o superiore"
+    ],
+    "ReleaseNotes": "Prima versione nel Microsoft Store."
+  },
+  "ja": {
+    "language": "日本語",
+    "locale": "ja",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "最初の村から銀河帝国の時代までを描くリアルタイムストラテジー。丸い惑星に都市を築き、14 の時代を進み、艦隊を星々へ送り出しましょう。",
+    "Description": "ひとつの民を、最初の村から星々へと導きましょう。\n\n丸い惑星に都市を築き、食料・木材・金属を集め、市場で交易し、図書館で研究を進め、軍隊を編成します。古代から銀河帝国まで 14 の時代を進むうちに、国家は大陸ブロックへと統合され、ブロックはやがて人類としてひとつになります。\n\n宇宙に到達すると、視点は母星から恒星系、そして星図へと広がります。宇宙船で資源惑星を確保し、植民地を築き、航路に沿って星系間をジャンプしましょう。ただし敵のインヒビターがあれば、艦隊はその星系の外縁で足止めされます。\n\n決まった終わりはありません。すべてを研究したプレイヤーは、ライバルに阻止されなければアセンションを果たし、その後は不毛の衛星に生命をもたらすことができます。\n\nコンピューター相手に、またはネットワークで友人と遊べます。インターフェースは英語です。",
+    "DevStudio": "K3D0",
+    "features": [
+      "丸い惑星：街の通りから惑星全体、さらに星図までズーム",
+      "最初の村から銀河帝国まで、14 の時代",
+      "国家は大陸ブロックに統合され、最後には人類としてひとつに",
+      "恒星系、資源惑星、植民地、チャージジャンプ、ジャンプインヒビター",
+      "4 つの性格と 6 段階の難易度を持つコンピューター対戦相手",
+      "ネットワーク対戦：ホスト、使い捨てキーでの参加、サーバーの運用",
+      "アセンションを果たし、不毛の衛星に生命を与えて新しい世界を描く"
+    ],
+    "keywords": [
+      "リアルタイムストラテジー",
+      "RTS",
+      "ストラテジー",
+      "歴史",
+      "宇宙",
+      "帝国",
+      "惑星"
+    ],
+    "minimum_hardware": [
+      "Windows 10 バージョン 1809（ビルド 17763）以降、または Windows 11",
+      "メモリ 8 GB の x64 または ARM64 PC",
+      "DirectX 11 と OpenGL 3.3 ドライバーを備えたグラフィックス",
+      "キーボードとマウス"
+    ],
+    "recommended_hardware": [
+      "大きな宇宙には 16 GB のメモリと専用グラフィックスカード",
+      "1920 × 1080 以上のディスプレイ"
+    ],
+    "ReleaseNotes": "Microsoft Store での最初のリリースです。"
+  },
+  "kk": {
+    "language": "Қазақ тілі",
+    "locale": "kk",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Алғашқы ауылдардан галактикалық империялар дәуіріне дейінгі нақты уақыттағы стратегия: дөңгелек планетада қалалар салыңыз, он төрт дәуірден өтіңіз және флоттарыңызды жұлдыздарға бастаңыз.",
+    "Description": "Бір халықты алғашқы ауылынан жұлдыздарға дейін бастаңыз.\n\nДөңгелек планетада қалалар негізін қалаңыз, азық, ағаш және металл жинаңыз, базарда сауда жасаңыз, кітапханада зерттеу жүргізіңіз және әскер жасақтаңыз. Ежелгі дәуірден Галактикалық империяларға дейін он төрт дәуірден өтіңіз: ұлттар құрлықтық блоктарға бірігеді, ал блоктар адамзат болып тұтасады.\n\nҒарышқа жетсеңіз, көрініс туған планетаңыздан жұлдыздық жүйеңізге және жұлдыз картасына дейін ашылады. Ресурс әлемдерін ғарыш кемелеріңізбен иеленіңіз, колониялар құрыңыз және бағыттар бойымен жүйелер арасында секіріңіз, егер жау тежегіші флотыңызды өз жүйесінің шетінде ұстап қалмаса.\n\nБелгіленген соңы жоқ: бәрін зерттеп біткен ойыншы, егер қарсыластары оны алдын ала тоқтатпаса, асқақтай алады, содан кейін құлазыған серіктерге тіршілік дарыта алады.\n\nКомпьютер қарсыластарына қарсы немесе желі арқылы достарыңызбен ойнаңыз. Интерфейс ағылшын тілінде.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Дөңгелек планеталар: қала көшесінен бүкіл ғаламшарға және жұлдыз картасына дейін масштабтаңыз",
+      "Алғашқы ауылдардан галактикалық империяларға дейінгі он төрт дәуір",
+      "Ұлттар құрлықтық блоктарға бірігіп, ақырында адамзат болып тұтасады",
+      "Жұлдыздық жүйелер, ресурс әлемдері, колониялар, зарядталған секірістер және секіріс тежегіштері",
+      "Төрт мінезі және алты қиындық деңгейі бар компьютер қарсыластары",
+      "Желілік ойын: ойын ұйымдастырыңыз, бір реттік кілтпен қосылыңыз немесе сервер іске қосыңыз",
+      "Асқақтаңыз, құлазыған серіктерге тіршілік дарытып, жаңа әлемдер салыңыз"
+    ],
+    "keywords": [
+      "нақты уақыт стратегиясы",
+      "RTS",
+      "стратегия",
+      "тарих",
+      "ғарыш",
+      "империя",
+      "планеталар"
+    ],
+    "minimum_hardware": [
+      "Windows 10 нұсқасы 1809 (17763 құрастырма) немесе жаңасы, не Windows 11",
+      "8 ГБ жады бар x64 немесе ARM64 компьютері",
+      "DirectX 11 және OpenGL 3.3 драйверлері бар графика",
+      "Пернетақта және тінтуір"
+    ],
+    "recommended_hardware": [
+      "Үлкен ғаламдар үшін 16 ГБ жады және бөлек бейнекарта",
+      "1920 × 1080 немесе одан үлкен дисплей"
+    ],
+    "ReleaseNotes": "Microsoft Store дүкеніндегі алғашқы шығарылым."
+  },
+  "ko": {
+    "language": "한국어",
+    "locale": "ko",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "최초의 마을에서 은하 제국의 시대까지 이어지는 실시간 전략 게임: 둥근 행성에 도시를 세우고, 열네 개의 시대를 거쳐, 함대를 별들로 이끄세요.",
+    "Description": "한 민족을 첫 마을에서 별들까지 이끄세요.\n\n둥근 행성에 도시를 세우고, 식량과 목재와 금속을 모으고, 시장에서 교역하고, 도서관에서 연구하며 군대를 일으키세요. 고대 시대부터 은하 제국까지 열네 개의 시대를 거치는 동안 국가들은 대륙 블록으로 합쳐지고, 블록들은 인류로 하나가 됩니다.\n\n우주에 이르면 시야가 고향 행성에서 항성계와 성간 지도로 넓어집니다. 우주선으로 자원 행성을 차지하고, 식민지를 세우고, 항로를 따라 항성계 사이를 도약하세요. 단, 적의 억제기가 있으면 함대는 그 항성계의 가장자리에 묶이게 됩니다.\n\n정해진 끝은 없습니다. 모든 연구를 마친 플레이어는 경쟁자들이 먼저 막지 않는다면 승천할 수 있고, 그 뒤에는 황량한 위성에 생명을 불어넣을 수 있습니다.\n\n컴퓨터 상대와 겨루거나 네트워크로 친구들과 함께 플레이하세요. 인터페이스는 영어입니다.",
+    "DevStudio": "K3D0",
+    "features": [
+      "둥근 행성: 도시의 거리에서 행성 전체와 성간 지도까지 확대·축소",
+      "최초의 마을부터 은하 제국까지 열네 개의 시대",
+      "국가들이 대륙 블록으로 합쳐지고 마침내 인류로 하나가 됩니다",
+      "항성계, 자원 행성, 식민지, 충전 도약과 도약 억제기",
+      "네 가지 성격과 여섯 단계 난이도의 컴퓨터 상대",
+      "네트워크 플레이: 게임 호스트, 일회용 키로 참가, 서버 운영",
+      "승천한 뒤 황량한 위성에 생명을 불어넣고 새로운 세계를 그리세요"
+    ],
+    "keywords": [
+      "실시간 전략",
+      "RTS",
+      "전략",
+      "역사",
+      "우주",
+      "제국",
+      "행성"
+    ],
+    "minimum_hardware": [
+      "Windows 10 버전 1809(빌드 17763) 이상 또는 Windows 11",
+      "메모리 8GB의 x64 또는 ARM64 PC",
+      "DirectX 11 및 OpenGL 3.3 드라이버를 지원하는 그래픽",
+      "키보드와 마우스"
+    ],
+    "recommended_hardware": [
+      "큰 우주를 위한 16GB 메모리와 전용 그래픽 카드",
+      "1920 × 1080 이상의 디스플레이"
+    ],
+    "ReleaseNotes": "Microsoft Store 첫 출시입니다."
+  },
+  "lt": {
+    "language": "Lietuvių",
+    "locale": "lt",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Realaus laiko strategija nuo pirmųjų kaimų iki galaktikos imperijų amžiaus: statykite miestus apvalioje planetoje, pereikite keturiolika amžių ir veskite savo laivynus į žvaigždes.",
+    "Description": "Veskite tautą nuo jos pirmojo kaimo iki žvaigždžių.\n\nĮkurkite miestus apvalioje planetoje, rinkite maistą, medieną ir metalą, prekiaukite turguje, tyrinėkite bibliotekoje ir kurkite kariuomenes. Pereikite keturiolika amžių, nuo Senovės iki Galaktikos imperijų, kol tautos susilieja į žemynų blokus, o blokai susivienija kaip žmonija.\n\nPasiekite kosmosą ir vaizdas atsiveria nuo jūsų gimtosios planetos iki jūsų žvaigždžių sistemos ir žvaigždėlapio. Užimkite išteklių pasaulius savo erdvėlaiviais, kurkite kolonijas ir šokite tarp sistemų maršrutais, nebent priešo slopintuvas sulaikys jūsų laivyną savo sistemos pakraštyje.\n\nNustatytos pabaigos nėra: žaidėjas, ištyręs viską, gali pakilti, jei varžovai jo nesustabdys anksčiau, o tada įkvėpti gyvybę negyviems mėnuliams.\n\nŽaiskite prieš kompiuterio priešininkus arba su draugais per tinklą. Sąsaja yra anglų kalba.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Apvalios planetos: priartinkite nuo miesto gatvės iki viso gaublio ir žvaigždėlapio",
+      "Keturiolika amžių, nuo pirmųjų kaimų iki galaktikos imperijų",
+      "Tautos susilieja į žemynų blokus ir galiausiai susivienija kaip žmonija",
+      "Žvaigždžių sistemos, išteklių pasauliai, kolonijos, įkrauti šuoliai ir šuolių slopintuvai",
+      "Kompiuterio priešininkai su keturiais charakteriais ir šešiais sunkumo lygiais",
+      "Žaidimas tinkle: surenkite žaidimą, prisijunkite vienkartiniu raktu arba paleiskite serverį",
+      "Pakilkite, įkvėpkite gyvybę negyviems mėnuliams ir pieškite naujus pasaulius"
+    ],
+    "keywords": [
+      "realaus laiko strategija",
+      "RTS",
+      "strategija",
+      "istorija",
+      "kosmosas",
+      "imperija",
+      "planetos"
+    ],
+    "minimum_hardware": [
+      "Windows 10 1809 versija (17763 komponavimas) arba naujesnė, arba Windows 11",
+      "x64 arba ARM64 kompiuteris su 8 GB atminties",
+      "Grafika su DirectX 11 ir OpenGL 3.3 tvarkyklėmis",
+      "Klaviatūra ir pelė"
+    ],
+    "recommended_hardware": [
+      "16 GB atminties ir atskira vaizdo plokštė dideliems pasauliams",
+      "1920 × 1080 arba didesnis ekranas"
+    ],
+    "ReleaseNotes": "Pirmasis leidimas Microsoft Store parduotuvėje."
+  },
+  "lv": {
+    "language": "Latviešu",
+    "locale": "lv",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Reāllaika stratēģija no pirmajiem ciemiem līdz galaktisko impēriju laikmetam: būvējiet pilsētas uz apaļas planētas, izejiet cauri četrpadsmit laikmetiem un vediet savas flotes uz zvaigznēm.",
+    "Description": "Vediet tautu no tās pirmā ciema līdz zvaigznēm.\n\nDibiniet pilsētas uz apaļas planētas, vāciet pārtiku, kokmateriālus un metālu, tirgojieties tirgū, pētiet bibliotēkā un veidojiet armijas. Izejiet cauri četrpadsmit laikmetiem, no Senatnes līdz Galaktiskajām impērijām, kamēr nācijas saplūst kontinentālos blokos un bloki apvienojas kā cilvēce.\n\nSasniedziet kosmosu, un skats paveras no jūsu dzimtās planētas līdz jūsu zvaigžņu sistēmai un zvaigžņu kartei. Ieņemiet resursu pasaules ar saviem kosmosa kuģiem, dibiniet kolonijas un lēciet starp sistēmām pa maršrutiem, ja vien ienaidnieka slāpētājs neaiztur jūsu floti savas sistēmas malā.\n\nNoteikta beigu nav: spēlētājs, kurš izpētījis visu, var pacelties, ja sāncenši viņu neaptur iepriekš, un pēc tam iedvest dzīvību neauglīgiem pavadoņiem.\n\nSpēlējiet pret datora pretiniekiem vai ar draugiem tīklā. Saskarne ir angļu valodā.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Apaļas planētas: tuviniet no pilsētas ielas līdz visam globusam un zvaigžņu kartei",
+      "Četrpadsmit laikmeti, no pirmajiem ciemiem līdz galaktiskajām impērijām",
+      "Nācijas saplūst kontinentālos blokos un beidzot apvienojas kā cilvēce",
+      "Zvaigžņu sistēmas, resursu pasaules, kolonijas, uzlādēti lēcieni un lēcienu slāpētāji",
+      "Datora pretinieki ar četriem raksturiem un sešiem grūtības līmeņiem",
+      "Tīkla spēle: rīkojiet spēli, pievienojieties ar vienreizēju atslēgu vai darbiniet serveri",
+      "Paceļieties, iedvesiet dzīvību neauglīgiem pavadoņiem un gleznojiet jaunas pasaules"
+    ],
+    "keywords": [
+      "reāllaika stratēģija",
+      "RTS",
+      "stratēģija",
+      "vēsture",
+      "kosmoss",
+      "impērija",
+      "planētas"
+    ],
+    "minimum_hardware": [
+      "Windows 10 versija 1809 (būvējums 17763) vai jaunāka, vai Windows 11",
+      "x64 vai ARM64 dators ar 8 GB atmiņas",
+      "Grafika ar DirectX 11 un OpenGL 3.3 draiveriem",
+      "Tastatūra un pele"
+    ],
+    "recommended_hardware": [
+      "16 GB atmiņas un atsevišķa videokarte lieliem visumiem",
+      "Displejs 1920 × 1080 vai lielāks"
+    ],
+    "ReleaseNotes": "Pirmais laidiens Microsoft Store."
+  },
+  "nl": {
+    "language": "Nederlands",
+    "locale": "nl",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Realtime strategie van de eerste dorpen tot een tijdperk van galactische rijken: bouw steden op een ronde planeet, doorloop veertien tijdperken en leid je vloten naar de sterren.",
+    "Description": "Leid een volk van zijn eerste dorp naar de sterren.\n\nSticht steden op een ronde planeet, verzamel voedsel, hout en metaal, handel op de markt, onderzoek in de bibliotheek en stel legers op. Doorloop veertien tijdperken, van de Oudheid tot de Galactische rijken, terwijl naties samensmelten tot continentale blokken en de blokken zich verenigen als mensheid.\n\nBereik de ruimte en het zicht opent zich van je thuisplaneet naar je sterrenstelsel en de sterrenkaart. Claim grondstofwerelden met je ruimteschepen, sticht kolonies en spring langs routes tussen stelsels, tenzij een vijandelijke inhibitor je vloot aan de rand van zijn stelsel vasthoudt.\n\nEr is geen vast einde: een speler die alles heeft onderzocht, kan opstijgen als rivalen dat niet eerst verhinderen, en daarna leven brengen op dorre manen.\n\nSpeel tegen computertegenstanders of met vrienden via het netwerk. De interface is in het Engels.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Ronde planeten: zoom van een straat in de stad uit naar de hele wereldbol en de sterrenkaart",
+      "Veertien tijdperken, van de eerste dorpen tot galactische rijken",
+      "Naties smelten samen tot continentale blokken en verenigen zich ten slotte als mensheid",
+      "Sterrenstelsels, grondstofwerelden, kolonies, geladen sprongen en sprongremmers",
+      "Computertegenstanders met vier persoonlijkheden en zes moeilijkheidsgraden",
+      "Netwerkspel: host een spel, doe mee met een eenmalige sleutel of draai een server",
+      "Stijg op, breng dan leven op dorre manen en schilder nieuwe werelden"
+    ],
+    "keywords": [
+      "realtime strategie",
+      "RTS",
+      "strategie",
+      "geschiedenis",
+      "ruimte",
+      "rijk",
+      "planeten"
+    ],
+    "minimum_hardware": [
+      "Windows 10 versie 1809 (build 17763) of later, of Windows 11",
+      "x64- of ARM64-pc met 8 GB geheugen",
+      "Grafische kaart met DirectX 11- en OpenGL 3.3-stuurprogramma's",
+      "Toetsenbord en muis"
+    ],
+    "recommended_hardware": [
+      "16 GB geheugen en een aparte grafische kaart voor grote universums",
+      "Scherm van 1920 × 1080 of groter"
+    ],
+    "ReleaseNotes": "Eerste uitgave in de Microsoft Store."
+  },
+  "no": {
+    "language": "Norsk",
+    "locale": "no",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Sanntidsstrategi fra de første landsbyene til en tid med galaktiske imperier: bygg byer på en rund planet, gå gjennom fjorten tidsaldre og før flåtene dine til stjernene.",
+    "Description": "Led et folk fra den første landsbyen til stjernene.\n\nGrunnlegg byer på en rund planet, samle mat, tømmer og metall, handle på markedet, forsk på biblioteket og bygg opp hærer. Gå gjennom fjorten tidsaldre, fra oldtiden til galaktiske imperier, mens nasjoner smelter sammen til kontinentale blokker og blokkene forenes som menneskeheten.\n\nNå verdensrommet, og utsikten åpner seg fra hjemplaneten til stjernesystemet ditt og stjernekartet. Gjør krav på ressursverdener med romskipene dine, grunnlegg kolonier og hopp mellom systemer langs ruter, med mindre en fiendtlig inhibitor holder flåten din igjen i utkanten av systemet sitt.\n\nDet finnes ingen fast slutt: en spiller som har forsket på alt, kan stige opp, hvis rivalene ikke stopper vedkommende først, og deretter gi liv til golde måner.\n\nSpill mot datamaskinmotstandere eller med venner over nettverket. Grensesnittet er på engelsk.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Runde planeter: zoom fra en bygate ut til hele kloden og stjernekartet",
+      "Fjorten tidsaldre, fra de første landsbyene til galaktiske imperier",
+      "Nasjoner smelter sammen til kontinentale blokker og forenes til slutt som menneskeheten",
+      "Stjernesystemer, ressursverdener, kolonier, ladede hopp og hoppinhibitorer",
+      "Datamaskinmotstandere med fire personligheter og seks vanskelighetsgrader",
+      "Nettverksspill: vær vert, bli med med en engangsnøkkel eller kjør en server",
+      "Stig opp, gi så liv til golde måner og mal nye verdener"
+    ],
+    "keywords": [
+      "sanntidsstrategi",
+      "RTS",
+      "strategi",
+      "historie",
+      "verdensrommet",
+      "imperium",
+      "planeter"
+    ],
+    "minimum_hardware": [
+      "Windows 10 versjon 1809 (build 17763) eller nyere, eller Windows 11",
+      "x64- eller ARM64-PC med 8 GB minne",
+      "Grafikk med DirectX 11- og OpenGL 3.3-drivere",
+      "Tastatur og mus"
+    ],
+    "recommended_hardware": [
+      "16 GB minne og et eget grafikkort for store universer",
+      "Skjerm på 1920 × 1080 eller større"
+    ],
+    "ReleaseNotes": "Første utgivelse i Microsoft Store."
+  },
+  "pa": {
+    "language": "ਪੰਜਾਬੀ",
+    "locale": "pa",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "ਪਹਿਲੇ ਪਿੰਡਾਂ ਤੋਂ ਗਲੈਕਟਿਕ ਸਾਮਰਾਜਾਂ ਦੇ ਯੁੱਗ ਤੱਕ ਰੀਅਲ-ਟਾਈਮ ਰਣਨੀਤੀ: ਇੱਕ ਗੋਲ ਗ੍ਰਹਿ ਉੱਤੇ ਸ਼ਹਿਰ ਬਣਾਓ, ਚੌਦਾਂ ਯੁੱਗਾਂ ਵਿੱਚੋਂ ਅੱਗੇ ਵਧੋ ਅਤੇ ਆਪਣੇ ਬੇੜਿਆਂ ਨੂੰ ਤਾਰਿਆਂ ਤੱਕ ਲੈ ਜਾਓ।",
+    "Description": "ਇੱਕ ਲੋਕ ਨੂੰ ਉਸਦੇ ਪਹਿਲੇ ਪਿੰਡ ਤੋਂ ਤਾਰਿਆਂ ਤੱਕ ਲੈ ਜਾਓ।\n\nਇੱਕ ਗੋਲ ਗ੍ਰਹਿ ਉੱਤੇ ਸ਼ਹਿਰ ਵਸਾਓ, ਭੋਜਨ, ਲੱਕੜ ਅਤੇ ਧਾਤ ਇਕੱਠੀ ਕਰੋ, ਬਾਜ਼ਾਰ ਵਿੱਚ ਵਪਾਰ ਕਰੋ, ਲਾਇਬ੍ਰੇਰੀ ਵਿੱਚ ਖੋਜ ਕਰੋ ਅਤੇ ਫ਼ੌਜਾਂ ਖੜ੍ਹੀਆਂ ਕਰੋ। ਪ੍ਰਾਚੀਨ ਯੁੱਗ ਤੋਂ ਗਲੈਕਟਿਕ ਸਾਮਰਾਜਾਂ ਤੱਕ ਚੌਦਾਂ ਯੁੱਗਾਂ ਵਿੱਚੋਂ ਲੰਘੋ, ਜਦੋਂ ਕੌਮਾਂ ਮਹਾਂਦੀਪੀ ਗੁੱਟਾਂ ਵਿੱਚ ਮਿਲ ਜਾਂਦੀਆਂ ਹਨ ਅਤੇ ਗੁੱਟ ਮਨੁੱਖਤਾ ਵਜੋਂ ਇੱਕ ਹੋ ਜਾਂਦੇ ਹਨ।\n\nਪੁਲਾੜ ਤੱਕ ਪਹੁੰਚੋ ਅਤੇ ਨਜ਼ਾਰਾ ਤੁਹਾਡੇ ਘਰੇਲੂ ਗ੍ਰਹਿ ਤੋਂ ਤੁਹਾਡੇ ਤਾਰਾ-ਮੰਡਲ ਅਤੇ ਤਾਰਿਆਂ ਦੇ ਨਕਸ਼ੇ ਤੱਕ ਖੁੱਲ੍ਹ ਜਾਂਦਾ ਹੈ। ਆਪਣੇ ਪੁਲਾੜੀ ਜਹਾਜ਼ਾਂ ਨਾਲ ਸਰੋਤ-ਸੰਸਾਰਾਂ ਉੱਤੇ ਦਾਅਵਾ ਕਰੋ, ਬਸਤੀਆਂ ਵਸਾਓ ਅਤੇ ਰਸਤਿਆਂ ਦੇ ਨਾਲ ਤਾਰਾ-ਮੰਡਲਾਂ ਵਿਚਕਾਰ ਛਾਲ ਮਾਰੋ, ਜਦੋਂ ਤੱਕ ਕੋਈ ਦੁਸ਼ਮਣ ਰੋਕੂ ਤੁਹਾਡੇ ਬੇੜੇ ਨੂੰ ਆਪਣੇ ਤਾਰਾ-ਮੰਡਲ ਦੇ ਕੰਢੇ ਉੱਤੇ ਨਾ ਰੋਕ ਲਵੇ।\n\nਕੋਈ ਨਿਸ਼ਚਿਤ ਅੰਤ ਨਹੀਂ: ਜਿਸ ਖਿਡਾਰੀ ਨੇ ਸਭ ਕੁਝ ਖੋਜ ਲਿਆ ਹੈ ਉਹ ਉੱਤਥਾਨ ਕਰ ਸਕਦਾ ਹੈ, ਜੇ ਵਿਰੋਧੀ ਉਸਨੂੰ ਪਹਿਲਾਂ ਨਾ ਰੋਕਣ, ਅਤੇ ਫਿਰ ਬੰਜਰ ਚੰਦਰਮਿਆਂ ਵਿੱਚ ਜੀਵਨ ਪਾ ਸਕਦਾ ਹੈ।\n\nਕੰਪਿਊਟਰ ਵਿਰੋਧੀਆਂ ਦੇ ਵਿਰੁੱਧ ਜਾਂ ਨੈੱਟਵਰਕ ਉੱਤੇ ਦੋਸਤਾਂ ਨਾਲ ਖੇਡੋ। ਇੰਟਰਫੇਸ ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ ਹੈ।",
+    "DevStudio": "K3D0",
+    "features": [
+      "ਗੋਲ ਗ੍ਰਹਿ: ਸ਼ਹਿਰ ਦੀ ਇੱਕ ਗਲੀ ਤੋਂ ਪੂਰੇ ਗੋਲੇ ਅਤੇ ਤਾਰਿਆਂ ਦੇ ਨਕਸ਼ੇ ਤੱਕ ਜ਼ੂਮ ਕਰੋ",
+      "ਚੌਦਾਂ ਯੁੱਗ, ਪਹਿਲੇ ਪਿੰਡਾਂ ਤੋਂ ਗਲੈਕਟਿਕ ਸਾਮਰਾਜਾਂ ਤੱਕ",
+      "ਕੌਮਾਂ ਮਹਾਂਦੀਪੀ ਗੁੱਟਾਂ ਵਿੱਚ ਮਿਲਦੀਆਂ ਹਨ ਅਤੇ ਅੰਤ ਵਿੱਚ ਮਨੁੱਖਤਾ ਵਜੋਂ ਇੱਕ ਹੁੰਦੀਆਂ ਹਨ",
+      "ਤਾਰਾ-ਮੰਡਲ, ਸਰੋਤ-ਸੰਸਾਰ, ਬਸਤੀਆਂ, ਚਾਰਜ ਕੀਤੀਆਂ ਛਾਲਾਂ ਅਤੇ ਛਾਲ ਰੋਕੂ",
+      "ਚਾਰ ਸੁਭਾਵਾਂ ਅਤੇ ਛੇ ਮੁਸ਼ਕਲ ਪੱਧਰਾਂ ਵਾਲੇ ਕੰਪਿਊਟਰ ਵਿਰੋਧੀ",
+      "ਨੈੱਟਵਰਕ ਖੇਡ: ਮੇਜ਼ਬਾਨੀ ਕਰੋ, ਇੱਕ-ਵਾਰੀ ਕੁੰਜੀ ਨਾਲ ਜੁੜੋ ਜਾਂ ਸਰਵਰ ਚਲਾਓ",
+      "ਉੱਤਥਾਨ ਕਰੋ, ਫਿਰ ਬੰਜਰ ਚੰਦਰਮਿਆਂ ਵਿੱਚ ਜੀਵਨ ਪਾਓ ਅਤੇ ਨਵੇਂ ਸੰਸਾਰ ਰਚੋ"
+    ],
+    "keywords": [
+      "ਰੀਅਲ-ਟਾਈਮ ਰਣਨੀਤੀ",
+      "RTS",
+      "ਰਣਨੀਤੀ",
+      "ਇਤਿਹਾਸ",
+      "ਪੁਲਾੜ",
+      "ਸਾਮਰਾਜ",
+      "ਗ੍ਰਹਿ"
+    ],
+    "minimum_hardware": [
+      "Windows 10 ਵਰਜਨ 1809 (ਬਿਲਡ 17763) ਜਾਂ ਨਵਾਂ, ਜਾਂ Windows 11",
+      "8 GB ਮੈਮਰੀ ਵਾਲਾ x64 ਜਾਂ ARM64 ਪੀਸੀ",
+      "DirectX 11 ਅਤੇ OpenGL 3.3 ਡਰਾਈਵਰਾਂ ਵਾਲੇ ਗ੍ਰਾਫਿਕਸ",
+      "ਕੀਬੋਰਡ ਅਤੇ ਮਾਊਸ"
+    ],
+    "recommended_hardware": [
+      "ਵੱਡੇ ਬ੍ਰਹਿਮੰਡਾਂ ਲਈ 16 GB ਮੈਮਰੀ ਅਤੇ ਵੱਖਰਾ ਗ੍ਰਾਫਿਕਸ ਕਾਰਡ",
+      "1920 × 1080 ਜਾਂ ਵੱਡਾ ਡਿਸਪਲੇ"
+    ],
+    "ReleaseNotes": "Microsoft Store ਵਿੱਚ ਪਹਿਲੀ ਰਿਲੀਜ਼।"
+  },
+  "pl": {
+    "language": "Polski",
+    "locale": "pl",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Strategia czasu rzeczywistego od pierwszych wiosek po erę galaktycznych imperiów: buduj miasta na okrągłej planecie, przejdź przez czternaście epok i poprowadź swoje floty ku gwiazdom.",
+    "Description": "Poprowadź lud od jego pierwszej wioski aż do gwiazd.\n\nZakładaj miasta na okrągłej planecie, zbieraj żywność, drewno i metal, handluj na targu, prowadź badania w bibliotece i wystawiaj armie. Przejdź przez czternaście epok, od Starożytności po Galaktyczne imperia, gdy narody łączą się w bloki kontynentalne, a bloki jednoczą się jako ludzkość.\n\nDotrzyj w kosmos, a widok otworzy się od twojej planety macierzystej po twój układ gwiezdny i mapę gwiazd. Zajmuj światy surowców swoimi statkami kosmicznymi, zakładaj kolonie i skacz między układami wzdłuż tras, chyba że wrogi inhibitor zatrzyma twoją flotę na skraju swojego układu.\n\nNie ma ustalonego końca: gracz, który zbadał wszystko, może dokonać wniebowstąpienia, jeśli rywale nie powstrzymają go wcześniej, a potem tchnąć życie w jałowe księżyce.\n\nGraj przeciwko przeciwnikom sterowanym przez komputer lub z przyjaciółmi przez sieć. Interfejs jest w języku angielskim.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Okrągłe planety: przybliżaj od ulicy w mieście po cały glob i mapę gwiazd",
+      "Czternaście epok, od pierwszych wiosek po galaktyczne imperia",
+      "Narody łączą się w bloki kontynentalne, a w końcu jednoczą się jako ludzkość",
+      "Układy gwiezdne, światy surowców, kolonie, ładowane skoki i inhibitory skoków",
+      "Przeciwnicy komputerowi o czterech charakterach i sześciu poziomach trudności",
+      "Gra sieciowa: hostuj grę, dołącz kluczem jednorazowym lub uruchom serwer",
+      "Dokonaj wniebowstąpienia, tchnij życie w jałowe księżyce i maluj nowe światy"
+    ],
+    "keywords": [
+      "strategia czasu rzeczywistego",
+      "RTS",
+      "strategia",
+      "historia",
+      "kosmos",
+      "imperium",
+      "planety"
+    ],
+    "minimum_hardware": [
+      "Windows 10 w wersji 1809 (kompilacja 17763) lub nowszej albo Windows 11",
+      "Komputer x64 lub ARM64 z 8 GB pamięci",
+      "Grafika ze sterownikami DirectX 11 i OpenGL 3.3",
+      "Klawiatura i mysz"
+    ],
+    "recommended_hardware": [
+      "16 GB pamięci i osobna karta graficzna do dużych wszechświatów",
+      "Ekran 1920 × 1080 lub większy"
+    ],
+    "ReleaseNotes": "Pierwsze wydanie w Microsoft Store."
+  },
+  "ro": {
+    "language": "Română",
+    "locale": "ro",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Strategie în timp real de la primele sate până la era imperiilor galactice: construiește orașe pe o planetă rotundă, străbate paisprezece epoci și condu-ți flotele spre stele.",
+    "Description": "Condu un popor de la primul său sat până la stele.\n\nÎntemeiază orașe pe o planetă rotundă, adună hrană, lemn și metal, fă negoț la piață, cercetează în bibliotecă și ridică armate. Străbate paisprezece epoci, din Antichitate până la Imperiile galactice, în timp ce națiunile se contopesc în blocuri continentale, iar blocurile se unesc ca omenire.\n\nAjungi în spațiu și priveliștea se deschide de la planeta ta natală la sistemul tău stelar și la harta stelelor. Revendică lumi de resurse cu navele tale spațiale, întemeiază colonii și sari între sisteme de-a lungul rutelor, dacă un inhibitor inamic nu îți ține flota la marginea sistemului său.\n\nNu există un final fix: un jucător care a cercetat totul poate ascensiona, dacă rivalii nu îl opresc mai întâi, apoi poate aduce viață pe luni sterpe.\n\nJoacă împotriva adversarilor controlați de calculator sau cu prietenii în rețea. Interfața este în limba engleză.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Planete rotunde: apropie imaginea de la o stradă din oraș la întregul glob și la harta stelelor",
+      "Paisprezece epoci, de la primele sate la imperiile galactice",
+      "Națiunile se contopesc în blocuri continentale și, în final, se unesc ca omenire",
+      "Sisteme stelare, lumi de resurse, colonii, salturi încărcate și inhibitori de salt",
+      "Adversari controlați de calculator cu patru personalități și șase niveluri de dificultate",
+      "Joc în rețea: găzduiește un joc, intră cu o cheie de unică folosință sau rulează un server",
+      "Ascensionează, adu viață pe luni sterpe și pictează lumi noi"
+    ],
+    "keywords": [
+      "strategie în timp real",
+      "RTS",
+      "strategie",
+      "istorie",
+      "spațiu",
+      "imperiu",
+      "planete"
+    ],
+    "minimum_hardware": [
+      "Windows 10 versiunea 1809 (build 17763) sau mai nouă, ori Windows 11",
+      "PC x64 sau ARM64 cu 8 GB de memorie",
+      "Placă grafică cu drivere DirectX 11 și OpenGL 3.3",
+      "Tastatură și mouse"
+    ],
+    "recommended_hardware": [
+      "16 GB de memorie și o placă grafică dedicată pentru universuri mari",
+      "Ecran de 1920 × 1080 sau mai mare"
+    ],
+    "ReleaseNotes": "Prima versiune în Microsoft Store."
+  },
+  "ru-ua": {
+    "language": "Русский",
+    "locale": "ru-ua",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Стратегия в реальном времени от первых деревень до эпохи галактических империй: стройте города на круглой планете, пройдите четырнадцать эпох и выведите флоты к звёздам.",
+    "Description": "Проведите народ от его первой деревни до звёзд.\n\nОсновывайте города на круглой планете, добывайте пищу, древесину и металл, торгуйте на рынке, ведите исследования в библиотеке и собирайте армии. Пройдите четырнадцать эпох, от Древнего мира до Галактических империй, пока нации сливаются в континентальные блоки, а блоки объединяются в человечество.\n\nДостигните космоса, и вид раскроется от родной планеты до вашей звёздной системы и звёздной карты. Занимайте ресурсные миры своими звездолётами, основывайте колонии и прыгайте между системами по маршрутам, если только вражеский ингибитор не удержит ваш флот на краю своей системы.\n\nУ игры нет заданного конца: игрок, изучивший всё, может совершить вознесение, если соперники не остановят его раньше, а затем вдохнуть жизнь в безжизненные луны.\n\nИграйте против компьютерных противников или с друзьями по сети. Интерфейс на английском языке.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Круглые планеты: приближайте вид от городской улицы до всего шара и звёздной карты",
+      "Четырнадцать эпох, от первых деревень до галактических империй",
+      "Нации сливаются в континентальные блоки и в конце концов объединяются в человечество",
+      "Звёздные системы, ресурсные миры, колонии, заряженные прыжки и ингибиторы прыжков",
+      "Компьютерные противники с четырьмя характерами и шестью уровнями сложности",
+      "Сетевая игра: создайте игру, войдите по одноразовому ключу или запустите сервер",
+      "Совершите вознесение, затем вдохните жизнь в безжизненные луны и рисуйте новые миры"
+    ],
+    "keywords": [
+      "стратегия в реальном времени",
+      "RTS",
+      "стратегия",
+      "история",
+      "космос",
+      "империя",
+      "планеты"
+    ],
+    "minimum_hardware": [
+      "Windows 10 версии 1809 (сборка 17763) или новее, либо Windows 11",
+      "ПК x64 или ARM64 с 8 ГБ памяти",
+      "Графика с драйверами DirectX 11 и OpenGL 3.3",
+      "Клавиатура и мышь"
+    ],
+    "recommended_hardware": [
+      "16 ГБ памяти и дискретная видеокарта для больших вселенных",
+      "Экран 1920 × 1080 или больше"
+    ],
+    "ReleaseNotes": "Первый выпуск в Microsoft Store."
+  },
+  "sk": {
+    "language": "Slovenčina",
+    "locale": "sk",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Stratégia v reálnom čase od prvých dedín po vek galaktických ríš: stavajte mestá na guľatej planéte, prejdite štrnástimi vekmi a veďte svoje flotily ku hviezdam.",
+    "Description": "Doveďte národ od jeho prvej dediny až ku hviezdam.\n\nZakladajte mestá na guľatej planéte, získavajte potraviny, drevo a kov, obchodujte na trhu, bádajte v knižnici a budujte armády. Prejdite štrnástimi vekmi, od Staroveku po Galaktické ríše, zatiaľ čo sa národy zlučujú do kontinentálnych blokov a bloky sa zjednocujú ako ľudstvo.\n\nDosiahnite vesmír a pohľad sa otvorí od vašej domovskej planéty k vašej hviezdnej sústave a hviezdnej mape. Zaberajte surovinové svety svojimi hviezdnymi loďami, zakladajte kolónie a skáčte medzi sústavami po trasách, pokiaľ vašu flotilu nezadrží nepriateľský inhibítor na okraji svojej sústavy.\n\nHra nemá pevný koniec: hráč, ktorý vybádal všetko, môže vystúpiť, ak ho súperi predtým nezastavia, a potom vdýchnuť život pustým mesiacom.\n\nHrajte proti počítačovým súperom alebo s priateľmi cez sieť. Rozhranie je v angličtine.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Guľaté planéty: priblížte sa z ulice mesta až na celú zemeguľu a hviezdnu mapu",
+      "Štrnásť vekov, od prvých dedín po galaktické ríše",
+      "Národy sa zlučujú do kontinentálnych blokov a nakoniec sa zjednotia ako ľudstvo",
+      "Hviezdne sústavy, surovinové svety, kolónie, nabíjané skoky a inhibítory skokov",
+      "Počítačoví súperi so štyrmi povahami a šiestimi úrovňami obťažnosti",
+      "Sieťová hra: hostite hru, pripojte sa jednorazovým kľúčom alebo spustite server",
+      "Vystúpte, potom vdýchnite život pustým mesiacom a maľujte nové svety"
+    ],
+    "keywords": [
+      "stratégia v reálnom čase",
+      "RTS",
+      "stratégia",
+      "história",
+      "vesmír",
+      "ríša",
+      "planéty"
+    ],
+    "minimum_hardware": [
+      "Windows 10 verzia 1809 (zostava 17763) alebo novšia, alebo Windows 11",
+      "Počítač x64 alebo ARM64 s 8 GB pamäte",
+      "Grafika s ovládačmi DirectX 11 a OpenGL 3.3",
+      "Klávesnica a myš"
+    ],
+    "recommended_hardware": [
+      "16 GB pamäte a samostatná grafická karta pre veľké vesmíry",
+      "Displej 1920 × 1080 alebo väčší"
+    ],
+    "ReleaseNotes": "Prvé vydanie v Microsoft Store."
+  },
+  "sr-latn": {
+    "language": "Srpski (latinica)",
+    "locale": "sr-latn",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Strategija u realnom vremenu od prvih sela do doba galaktičkih carstava: gradite gradove na okrugloj planeti, prođite kroz četrnaest doba i povedite svoje flote ka zvezdama.",
+    "Description": "Povedite jedan narod od njegovog prvog sela do zvezda.\n\nOsnivajte gradove na okrugloj planeti, prikupljajte hranu, drvo i metal, trgujte na pijaci, istražujte u biblioteci i podižite vojske. Prođite kroz četrnaest doba, od Starog veka do Galaktičkih carstava, dok se nacije stapaju u kontinentalne blokove, a blokovi se ujedinjuju kao čovečanstvo.\n\nStignite do svemira i pogled se otvara od vaše matične planete do vašeg zvezdanog sistema i zvezdane karte. Zauzimajte svetove resursa svojim svemirskim brodovima, osnivajte kolonije i skačite između sistema duž ruta, osim ako neprijateljski inhibitor ne zadrži vašu flotu na ivici svog sistema.\n\nNema unapred određenog kraja: igrač koji je istražio sve može se uzneti, ako ga suparnici pre toga ne zaustave, a zatim udahnuti život pustim mesecima.\n\nIgrajte protiv računarskih protivnika ili sa prijateljima preko mreže. Interfejs je na engleskom.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Okrugle planete: zumirajte od gradske ulice do celog globusa i zvezdane karte",
+      "Četrnaest doba, od prvih sela do galaktičkih carstava",
+      "Nacije se stapaju u kontinentalne blokove i na kraju se ujedinjuju kao čovečanstvo",
+      "Zvezdani sistemi, svetovi resursa, kolonije, napunjeni skokovi i inhibitori skokova",
+      "Računarski protivnici sa četiri karaktera i šest nivoa težine",
+      "Mrežna igra: budite domaćin, pridružite se jednokratnim ključem ili pokrenite server",
+      "Uznesite se, zatim udahnite život pustim mesecima i slikajte nove svetove"
+    ],
+    "keywords": [
+      "strategija u realnom vremenu",
+      "RTS",
+      "strategija",
+      "istorija",
+      "svemir",
+      "carstvo",
+      "planete"
+    ],
+    "minimum_hardware": [
+      "Windows 10 verzija 1809 (verzija 17763) ili novija, ili Windows 11",
+      "x64 ili ARM64 računar sa 8 GB memorije",
+      "Grafika sa DirectX 11 i OpenGL 3.3 upravljačkim programima",
+      "Tastatura i miš"
+    ],
+    "recommended_hardware": [
+      "16 GB memorije i posebna grafička kartica za velike svemire",
+      "Ekran 1920 × 1080 ili veći"
+    ],
+    "ReleaseNotes": "Prvo izdanje u Microsoft Store prodavnici."
+  },
+  "sv": {
+    "language": "Svenska",
+    "locale": "sv",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Realtidsstrategi från de första byarna till en tid av galaktiska imperier: bygg städer på en rund planet, gå igenom fjorton tidsåldrar och för dina flottor till stjärnorna.",
+    "Description": "Led ett folk från dess första by till stjärnorna.\n\nGrunda städer på en rund planet, samla mat, timmer och metall, handla på marknaden, forska i biblioteket och bygg upp arméer. Gå igenom fjorton tidsåldrar, från antiken till galaktiska imperier, medan nationer smälter samman till kontinentala block och blocken enas som mänskligheten.\n\nNå rymden och utsikten öppnar sig från din hemplanet till ditt stjärnsystem och stjärnkartan. Gör anspråk på resursvärldar med dina rymdskepp, grunda kolonier och hoppa mellan system längs rutter, om inte en fientlig inhibitor håller kvar din flotta vid kanten av sitt system.\n\nDet finns inget fast slut: en spelare som har forskat fram allt kan stiga upp, om rivalerna inte stoppar hen först, och sedan ge liv åt karga månar.\n\nSpela mot datormotståndare eller med vänner över nätverket. Gränssnittet är på engelska.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Runda planeter: zooma från en stadsgata ut till hela jordklotet och stjärnkartan",
+      "Fjorton tidsåldrar, från de första byarna till galaktiska imperier",
+      "Nationer smälter samman till kontinentala block och enas till slut som mänskligheten",
+      "Stjärnsystem, resursvärldar, kolonier, laddade hopp och hoppinhibitorer",
+      "Datormotståndare med fyra personligheter och sex svårighetsgrader",
+      "Nätverksspel: var värd, gå med med en engångsnyckel eller kör en server",
+      "Stig upp, ge sedan liv åt karga månar och måla nya världar"
+    ],
+    "keywords": [
+      "realtidsstrategi",
+      "RTS",
+      "strategi",
+      "historia",
+      "rymden",
+      "imperium",
+      "planeter"
+    ],
+    "minimum_hardware": [
+      "Windows 10 version 1809 (version 17763) eller senare, eller Windows 11",
+      "x64- eller ARM64-dator med 8 GB minne",
+      "Grafik med DirectX 11- och OpenGL 3.3-drivrutiner",
+      "Tangentbord och mus"
+    ],
+    "recommended_hardware": [
+      "16 GB minne och ett separat grafikkort för stora universum",
+      "Skärm på 1920 × 1080 eller större"
+    ],
+    "ReleaseNotes": "Första utgåvan i Microsoft Store."
+  },
+  "th": {
+    "language": "ไทย",
+    "locale": "th",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "เกมวางแผนแบบเรียลไทม์ตั้งแต่หมู่บ้านแรกจนถึงยุคจักรวรรดิแห่งดาราจักร: สร้างเมืองบนดาวเคราะห์ทรงกลม ก้าวผ่านสิบสี่ยุค และนำกองยานของคุณสู่ดวงดาว",
+    "Description": "นำผู้คนกลุ่มหนึ่งจากหมู่บ้านแรกของพวกเขาไปสู่ดวงดาว\n\nตั้งเมืองบนดาวเคราะห์ทรงกลม รวบรวมอาหาร ไม้ และโลหะ ค้าขายที่ตลาด วิจัยที่ห้องสมุด และสร้างกองทัพ ก้าวผ่านสิบสี่ยุค ตั้งแต่ยุคโบราณจนถึงจักรวรรดิแห่งดาราจักร ขณะที่ชาติต่าง ๆ รวมตัวเป็นกลุ่มภาคพื้นทวีป และกลุ่มเหล่านั้นรวมเป็นหนึ่งเดียวในฐานะมนุษยชาติ\n\nเมื่อไปถึงอวกาศ มุมมองจะเปิดกว้างจากดาวบ้านเกิดไปสู่ระบบดาวของคุณและแผนที่ดวงดาว อ้างสิทธิ์โลกทรัพยากรด้วยยานอวกาศของคุณ ตั้งอาณานิคม และกระโดดข้ามระบบตามเส้นทาง เว้นแต่เครื่องยับยั้งของศัตรูจะตรึงกองยานของคุณไว้ที่ขอบระบบของมัน\n\nไม่มีตอนจบที่ตายตัว: ผู้เล่นที่วิจัยครบทุกอย่างแล้วสามารถเสด็จสู่สวรรค์ได้ หากคู่แข่งไม่หยุดยั้งเสียก่อน แล้วจึงมอบชีวิตให้แก่ดวงจันทร์ที่แห้งแล้ง\n\nเล่นกับคู่ต่อสู้ที่ควบคุมโดยคอมพิวเตอร์หรือกับเพื่อนผ่านเครือข่าย อินเทอร์เฟซเป็นภาษาอังกฤษ",
+    "DevStudio": "K3D0",
+    "features": [
+      "ดาวเคราะห์ทรงกลม: ซูมจากถนนในเมืองออกไปถึงทั้งโลกและแผนที่ดวงดาว",
+      "สิบสี่ยุค ตั้งแต่หมู่บ้านแรกจนถึงจักรวรรดิแห่งดาราจักร",
+      "ชาติต่าง ๆ รวมเป็นกลุ่มภาคพื้นทวีปและในที่สุดรวมเป็นมนุษยชาติ",
+      "ระบบดาว โลกทรัพยากร อาณานิคม การกระโดดแบบชาร์จ และเครื่องยับยั้งการกระโดด",
+      "คู่ต่อสู้คอมพิวเตอร์สี่บุคลิกและหกระดับความยาก",
+      "เล่นผ่านเครือข่าย: เป็นเจ้าภาพ เข้าร่วมด้วยกุญแจใช้ครั้งเดียว หรือเปิดเซิร์ฟเวอร์",
+      "เสด็จสู่สวรรค์ แล้วมอบชีวิตแก่ดวงจันทร์ที่แห้งแล้งและวาดโลกใหม่"
+    ],
+    "keywords": [
+      "วางแผนเรียลไทม์",
+      "RTS",
+      "วางแผน",
+      "ประวัติศาสตร์",
+      "อวกาศ",
+      "จักรวรรดิ",
+      "ดาวเคราะห์"
+    ],
+    "minimum_hardware": [
+      "Windows 10 เวอร์ชัน 1809 (บิลด์ 17763) ขึ้นไป หรือ Windows 11",
+      "พีซี x64 หรือ ARM64 ที่มีหน่วยความจำ 8 GB",
+      "กราฟิกที่มีไดรเวอร์ DirectX 11 และ OpenGL 3.3",
+      "แป้นพิมพ์และเมาส์"
+    ],
+    "recommended_hardware": [
+      "หน่วยความจำ 16 GB และการ์ดกราฟิกแยกสำหรับจักรวาลขนาดใหญ่",
+      "จอแสดงผล 1920 × 1080 หรือใหญ่กว่า"
+    ],
+    "ReleaseNotes": "เวอร์ชันแรกใน Microsoft Store"
+  },
+  "tr": {
+    "language": "Türkçe",
+    "locale": "tr",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "İlk köylerden galaktik imparatorluklar çağına uzanan gerçek zamanlı strateji: yuvarlak bir gezegende şehirler kurun, on dört çağı geçin ve filolarınızı yıldızlara götürün.",
+    "Description": "Bir halkı ilk köyünden yıldızlara kadar yönetin.\n\nYuvarlak bir gezegende şehirler kurun, yiyecek, kereste ve metal toplayın, pazarda ticaret yapın, kütüphanede araştırma yapın ve ordular kurun. İlk Çağ'dan Galaktik İmparatorluklar'a on dört çağı geçin; bu sırada uluslar kıtasal bloklarda birleşir, bloklar da insanlık olarak bir olur.\n\nUzaya ulaşın; görüş ana gezegeninizden yıldız sisteminize ve yıldız haritasına açılır. Kaynak dünyalarını yıldız gemilerinizle sahiplenin, koloniler kurun ve rotalar boyunca sistemler arasında atlayın; tabii bir düşman engelleyici filonuzu kendi sisteminin kıyısında tutmazsa.\n\nSabit bir son yok: her şeyi araştırmış bir oyuncu, rakipleri onu önce durdurmazsa yükselebilir ve ardından çorak uydulara hayat verebilir.\n\nBilgisayar rakiplerine karşı ya da ağ üzerinden arkadaşlarınızla oynayın. Arayüz İngilizcedir.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Yuvarlak gezegenler: bir şehir sokağından tüm küreye ve yıldız haritasına yakınlaştırın",
+      "İlk köylerden galaktik imparatorluklara on dört çağ",
+      "Uluslar kıtasal bloklarda birleşir ve sonunda insanlık olarak bir olur",
+      "Yıldız sistemleri, kaynak dünyaları, koloniler, yüklü atlamalar ve atlama engelleyicileri",
+      "Dört kişilik ve altı zorluk seviyesine sahip bilgisayar rakipleri",
+      "Ağ oyunu: oyun açın, tek kullanımlık anahtarla katılın veya sunucu çalıştırın",
+      "Yükselin, sonra çorak uydulara hayat verin ve yeni dünyalar boyayın"
+    ],
+    "keywords": [
+      "gerçek zamanlı strateji",
+      "RTS",
+      "strateji",
+      "tarih",
+      "uzay",
+      "imparatorluk",
+      "gezegenler"
+    ],
+    "minimum_hardware": [
+      "Windows 10 sürüm 1809 (derleme 17763) veya üstü ya da Windows 11",
+      "8 GB belleğe sahip x64 veya ARM64 bilgisayar",
+      "DirectX 11 ve OpenGL 3.3 sürücülerine sahip grafik",
+      "Klavye ve fare"
+    ],
+    "recommended_hardware": [
+      "Büyük evrenler için 16 GB bellek ve ayrı ekran kartı",
+      "1920 × 1080 veya daha büyük ekran"
+    ],
+    "ReleaseNotes": "Microsoft Store'daki ilk sürüm."
+  },
+  "uk": {
+    "language": "Українська",
+    "locale": "uk",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Стратегія в реальному часі від перших сіл до доби галактичних імперій: будуйте міста на круглій планеті, пройдіть чотирнадцять епох і поведіть свої флоти до зірок.",
+    "Description": "Проведіть народ від його першого села до зірок.\n\nЗасновуйте міста на круглій планеті, збирайте їжу, деревину й метал, торгуйте на ринку, досліджуйте в бібліотеці та збирайте армії. Пройдіть чотирнадцять епох, від Стародавнього світу до Галактичних імперій, поки нації зливаються в континентальні блоки, а блоки об'єднуються як людство.\n\nДосягніть космосу, і вид відкриється від рідної планети до вашої зоряної системи та зоряної мапи. Захоплюйте ресурсні світи своїми зорельотами, засновуйте колонії та стрибайте між системами маршрутами, якщо тільки ворожий інгібітор не затримає ваш флот на краю своєї системи.\n\nГра не має визначеного кінця: гравець, який дослідив усе, може здійснити вознесіння, якщо суперники не зупинять його раніше, а потім вдихнути життя в безплідні місяці.\n\nГрайте проти комп'ютерних суперників або з друзями через мережу. Інтерфейс англійською мовою.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Круглі планети: наближайте від міської вулиці до всієї кулі та зоряної мапи",
+      "Чотирнадцять епох, від перших сіл до галактичних імперій",
+      "Нації зливаються в континентальні блоки й зрештою об'єднуються як людство",
+      "Зоряні системи, ресурсні світи, колонії, заряджені стрибки та інгібітори стрибків",
+      "Комп'ютерні суперники з чотирма характерами та шістьма рівнями складності",
+      "Мережева гра: створіть гру, приєднайтеся одноразовим ключем або запустіть сервер",
+      "Здійсніть вознесіння, вдихніть життя в безплідні місяці й малюйте нові світи"
+    ],
+    "keywords": [
+      "стратегія в реальному часі",
+      "RTS",
+      "стратегія",
+      "історія",
+      "космос",
+      "імперія",
+      "планети"
+    ],
+    "minimum_hardware": [
+      "Windows 10 версії 1809 (збірка 17763) або новіша, або Windows 11",
+      "ПК x64 або ARM64 з 8 ГБ пам'яті",
+      "Графіка з драйверами DirectX 11 і OpenGL 3.3",
+      "Клавіатура та миша"
+    ],
+    "recommended_hardware": [
+      "16 ГБ пам'яті та дискретна відеокарта для великих всесвітів",
+      "Екран 1920 × 1080 або більший"
+    ],
+    "ReleaseNotes": "Перший випуск у Microsoft Store."
+  },
+  "vi": {
+    "language": "Tiếng Việt",
+    "locale": "vi",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "Chiến thuật thời gian thực từ những ngôi làng đầu tiên đến thời đại đế chế thiên hà: xây thành phố trên một hành tinh tròn, trải qua mười bốn thời đại và đưa hạm đội của bạn đến các vì sao.",
+    "Description": "Dẫn dắt một dân tộc từ ngôi làng đầu tiên đến các vì sao.\n\nLập thành phố trên một hành tinh tròn, thu thập lương thực, gỗ và kim loại, buôn bán ở chợ, nghiên cứu tại thư viện và xây dựng quân đội. Trải qua mười bốn thời đại, từ Thời Cổ đại đến các Đế chế Thiên hà, khi các quốc gia hợp nhất thành những khối lục địa và các khối hợp lại thành nhân loại.\n\nVươn tới không gian và tầm nhìn mở rộng từ hành tinh quê hương đến hệ sao của bạn và bản đồ sao. Chiếm các thế giới tài nguyên bằng tàu vũ trụ, lập thuộc địa và nhảy giữa các hệ sao theo các tuyến đường, trừ khi một thiết bị ức chế của đối phương giữ hạm đội của bạn ở rìa hệ sao của nó.\n\nKhông có kết thúc cố định: người chơi đã nghiên cứu mọi thứ có thể thăng thiên, nếu các đối thủ không ngăn lại trước, rồi mang sự sống đến những mặt trăng cằn cỗi.\n\nChơi với đối thủ do máy tính điều khiển hoặc cùng bạn bè qua mạng. Giao diện bằng tiếng Anh.",
+    "DevStudio": "K3D0",
+    "features": [
+      "Hành tinh tròn: phóng to từ một con phố trong thành phố ra toàn bộ quả cầu và bản đồ sao",
+      "Mười bốn thời đại, từ những ngôi làng đầu tiên đến các đế chế thiên hà",
+      "Các quốc gia hợp nhất thành khối lục địa và cuối cùng hợp lại thành nhân loại",
+      "Hệ sao, thế giới tài nguyên, thuộc địa, bước nhảy nạp năng lượng và thiết bị ức chế bước nhảy",
+      "Đối thủ máy tính với bốn tính cách và sáu mức độ khó",
+      "Chơi qua mạng: tổ chức trận, tham gia bằng khóa dùng một lần hoặc chạy máy chủ",
+      "Thăng thiên, rồi mang sự sống đến những mặt trăng cằn cỗi và vẽ nên thế giới mới"
+    ],
+    "keywords": [
+      "chiến thuật thời gian thực",
+      "RTS",
+      "chiến thuật",
+      "lịch sử",
+      "vũ trụ",
+      "đế chế",
+      "hành tinh"
+    ],
+    "minimum_hardware": [
+      "Windows 10 phiên bản 1809 (bản dựng 17763) trở lên, hoặc Windows 11",
+      "PC x64 hoặc ARM64 có 8 GB bộ nhớ",
+      "Đồ họa có trình điều khiển DirectX 11 và OpenGL 3.3",
+      "Bàn phím và chuột"
+    ],
+    "recommended_hardware": [
+      "16 GB bộ nhớ và card đồ họa rời cho các vũ trụ lớn",
+      "Màn hình 1920 × 1080 trở lên"
+    ],
+    "ReleaseNotes": "Bản phát hành đầu tiên trên Microsoft Store."
+  },
+  "zh": {
+    "language": "中文",
+    "locale": "zh",
+    "translation_status": "draft",
+    "Title": "Ascension",
+    "ShortDescription": "从最初的村庄到银河帝国时代的即时战略游戏：在圆形行星上建造城市，历经十四个时代，带领你的舰队驶向群星。",
+    "Description": "带领一个民族从第一座村庄走向群星。\n\n在圆形行星上建立城市，采集食物、木材和金属，在市场交易，在图书馆研究，组建军队。历经从古代到银河帝国的十四个时代，各个国家逐步融合为大陆联盟，各联盟最终团结为全人类。\n\n进入太空后，视野会从你的母星扩展到你的星系和星图。用星舰占领资源世界，建立殖民地，沿航线在星系之间跃迁；但如果敌方的抑制器在场，你的舰队会被拦在其星系的边缘。\n\n游戏没有固定结局：研究完所有科技的玩家可以飞升，只要对手没有抢先阻止，之后还能为荒芜的卫星带来生命。\n\n可与电脑对手对战，也可通过网络与朋友一起游戏。界面为英文。",
+    "DevStudio": "K3D0",
+    "features": [
+      "圆形行星：从城市街道一路缩放到整个星球和星图",
+      "十四个时代，从最初的村庄到银河帝国",
+      "国家融合为大陆联盟，最终团结为全人类",
+      "星系、资源世界、殖民地、充能跃迁和跃迁抑制器",
+      "电脑对手拥有四种性格和六个难度等级",
+      "网络对战：主持游戏、使用一次性密钥加入或运行服务器",
+      "飞升之后，为荒芜的卫星带来生命，描绘新的世界"
+    ],
+    "keywords": [
+      "即时战略",
+      "RTS",
+      "战略",
+      "历史",
+      "太空",
+      "帝国",
+      "行星"
+    ],
+    "minimum_hardware": [
+      "Windows 10 版本 1809（内部版本 17763）或更高版本，或 Windows 11",
+      "配备 8 GB 内存的 x64 或 ARM64 电脑",
+      "支持 DirectX 11 和 OpenGL 3.3 驱动的显卡",
+      "键盘和鼠标"
+    ],
+    "recommended_hardware": [
+      "大型宇宙建议 16 GB 内存和独立显卡",
+      "1920 × 1080 或更大的显示器"
+    ],
+    "ReleaseNotes": "首次在 Microsoft Store 发布。"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "language": "English",
+  "locale": "en",
+  "translation_status": "source",
+  "Title": "Ascension",
+  "ShortTitle": "Ascension",
+  "SortTitle": "Ascension",
+  "ShortDescription": "Real-time strategy from the first villages to an age of galactic empires: build cities on a round planet, advance through fourteen ages and take your fleets to the stars.",
+  "Description": "Lead a people from its first village to the stars.\n\nFound cities on a round planet, gather food, timber and metal, trade at the market, research at the library and raise armies. Advance through fourteen ages, from the Ancient Age to Galactic Empires, as nations merge into continental blocs and the blocs unite as humanity.\n\nReach space and the view opens from your home planet to your star system and the star map. Claim resource worlds with your starships, found colonies and jump between systems along routes, unless an enemy inhibitor holds your fleet at the edge of its system.\n\nThere is no fixed end: a player who has researched everything may ascend, if rivals do not stop them first, and then bring barren moons to life.\n\nPlay against computer opponents or with friends over the network. The interface is in English.",
+  "DevStudio": "K3D0",
+  "features": [
+    "Round planets: zoom from a city street out to the whole globe and the star map",
+    "Fourteen ages, from the first villages to galactic empires",
+    "Nations merge into continental blocs and finally unite as humanity",
+    "Star systems, resource worlds, colonies, charged jumps and jump inhibitors",
+    "Computer opponents with four personalities and six difficulty levels",
+    "Network play: host a game, join with a one-time key, or run a server",
+    "Ascend, then bring barren moons to life and paint new worlds"
+  ],
+  "keywords": [
+    "real-time strategy",
+    "RTS",
+    "strategy",
+    "history",
+    "space",
+    "empire",
+    "planets"
+  ],
+  "minimum_hardware": [
+    "Windows 10 version 1809 (build 17763) or later, or Windows 11",
+    "x64 or ARM64 PC with 8 GB of memory",
+    "Graphics with DirectX 11 and OpenGL 3.3 drivers",
+    "Keyboard and mouse"
+  ],
+  "recommended_hardware": [
+    "16 GB of memory and a dedicated graphics card for large universes",
+    "1920 × 1080 display or larger"
+  ],
+  "ReleaseNotes": "First release in the Microsoft Store."
+}

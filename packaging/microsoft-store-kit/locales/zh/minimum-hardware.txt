@@ -1,0 +1,4 @@
+Windows 10 版本 1809（内部版本 17763）或更高版本，或 Windows 11
+配备 8 GB 内存的 x64 或 ARM64 电脑
+支持 DirectX 11 和 OpenGL 3.3 驱动的显卡
+键盘和鼠标

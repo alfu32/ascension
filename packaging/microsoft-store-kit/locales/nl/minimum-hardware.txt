@@ -1,0 +1,4 @@
+Windows 10 versie 1809 (build 17763) of later, of Windows 11
+x64- of ARM64-pc met 8 GB geheugen
+Grafische kaart met DirectX 11- en OpenGL 3.3-stuurprogramma's
+Toetsenbord en muis

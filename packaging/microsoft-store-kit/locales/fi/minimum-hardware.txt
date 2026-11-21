@@ -1,0 +1,4 @@
+Windows 10 -versio 1809 (koontiversio 17763) tai uudempi, tai Windows 11
+x64- tai ARM64-tietokone, 8 Gt muistia
+Näytönohjain, jossa DirectX 11- ja OpenGL 3.3 -ajurit
+Näppäimistö ja hiiri

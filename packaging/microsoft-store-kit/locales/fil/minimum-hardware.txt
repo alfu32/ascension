@@ -1,0 +1,4 @@
+Windows 10 bersyon 1809 (build 17763) o mas bago, o Windows 11
+x64 o ARM64 na PC na may 8 GB na memorya
+Graphics na may DirectX 11 at OpenGL 3.3 na driver
+Keyboard at mouse

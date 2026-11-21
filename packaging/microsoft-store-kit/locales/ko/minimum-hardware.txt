@@ -1,0 +1,4 @@
+Windows 10 버전 1809(빌드 17763) 이상 또는 Windows 11
+메모리 8GB의 x64 또는 ARM64 PC
+DirectX 11 및 OpenGL 3.3 드라이버를 지원하는 그래픽
+키보드와 마우스

@@ -1,0 +1,4 @@
+Windows 10 weergawe 1809 (bou 17763) of later, of Windows 11
+x64- of ARM64-rekenaar met 8 GB geheue
+Grafika met DirectX 11- en OpenGL 3.3-drywers
+Sleutelbord en muis

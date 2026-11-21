@@ -1,0 +1,4 @@
+Windows 10 sürüm 1809 (derleme 17763) veya üstü ya da Windows 11
+8 GB belleğe sahip x64 veya ARM64 bilgisayar
+DirectX 11 ve OpenGL 3.3 sürücülerine sahip grafik
+Klavye ve fare

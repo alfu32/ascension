@@ -1,0 +1,4 @@
+Windows 10 verzija 1809 (verzija 17763) ili novija, ili Windows 11
+x64 ili ARM64 računar sa 8 GB memorije
+Grafika sa DirectX 11 i OpenGL 3.3 upravljačkim programima
+Tastatura i miš
