@@ -46,6 +46,14 @@ Built at `bld.airfield`.
 6. **Docs**: the unit lists in `research/03-timeline.md` / `docs/` where units per age are
    listed.
 
+## Known before starting (task 122)
+
+Jets and biplanes are drawn at ground height today; only orbital fighters climb to a real
+altitude (`hover_altitude`). Helicopters and the hover gunship must be seen in the air (or
+hovering low, for the hover gunship) — find how orbital fighters get their altitude, give the
+new craft theirs through data, and show it in the screenshot. Fixing the jets is not part of
+this card.
+
 ## Done when
 
 - Gate green; database lint views empty; the new units producible in their ages; fight matrix
