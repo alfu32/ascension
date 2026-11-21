@@ -66,7 +66,7 @@ OVERVIEW6 = [
     ("unit.light_tank_industrial_attack", "A tank firing: the turret has swung back onto the target, the gun recoils"),
     ("unit.machine_gunner_industrial_attack", "A machine gun firing a burst"),
     ("unit.biplane_industrial_move", "A biplane under way: aloft, banking, its propeller spinning"),
-    ("orbital-dogfight", "Starfaring: orbital fighters fighting in orbit above a city"),
+    ("orbital-dogfight", "Starfaring: two formations of orbital fighters fight high above a built-up city"),
     ("orbital-battery", "Starfaring: ground batteries firing at a ship in orbit"),
     ("unit.musketeer_gunpowder_attack_before", "Still open from round 5 — firing a long gun, before: one hand, from the hip"),
     ("unit.musketeer_gunpowder_attack", "Round 5 — after: from the shoulder, both hands (also the arquebusier and crossbowman)"),
