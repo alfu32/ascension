@@ -39,10 +39,10 @@
     "slot": 4,
     "file": "04-dogfight.png",
     "source": "app/docs/img/orbital-dogfight.png",
-    "source_sha256": "b9828b77c0798f1f679d63f43c5736fe32b274e532ec6ce2afcd98b59c39b6ae",
+    "source_sha256": "8284be8b1e4fb8141076b6bb8f27c84c90ad493ee419da8c6425770d5afa8bf4",
     "width": 1920,
     "height": 1064,
-    "sha256": "71531d05331993307e60e42d29a1d7154a43dac41d990bc9a6818b53344f2a4e",
+    "sha256": "e1137581175e6aec7295e91f893217a702fad7b176a2abe80cf960e67f5d40aa",
     "caption": "Aircraft duel over a city",
     "interface_language": "en-us",
     "capture_platform": "Linux"

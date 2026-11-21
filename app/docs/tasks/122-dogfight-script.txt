@@ -1,19 +1,25 @@
 # Task 122: the README and Store dogfight picture, replayed by --script (universe mode, seed 1,
-# --sun fixed, --players 2 --ai none, 1920 x 1080, --detail ultra). Jet fighters of both players
-# meet over player one's city and fight; the camera comes down close to them. The picture is
-# the frame at --after 12 (the window comes out 1882 x 1043):
+# --sun fixed, --players 2 --ai none, --detail ultra, --size 1920x1080). Orbital fighters of
+# both players climb above player one's built-up city and fight at altitude. Test-only setup lines first;
+# `place-orbit` places a craft and orders it to climb. The picture is the frame at --after 13 (the window comes out 1882 x 1043):
 #   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1920x1080
-#     --detail ultra --script app/docs/tasks/122-dogfight-script.txt --after 12 --screenshot out.png
-0 grant-age age.information
-0 place 1 bld.airfield @14,-4
-0 place 1 unit.jet_fighter @4,6
-0 place 1 unit.jet_fighter @6,7
-0 place 1 unit.jet_fighter @8,6
-0 place 1 unit.jet_fighter @6,4
-0 place 2 unit.jet_fighter @10,8
-0 place 2 unit.jet_fighter @12,6
-0 place 2 unit.jet_fighter @9,3
+#     --detail ultra --script app/docs/tasks/122-dogfight-script.txt --after 13 --screenshot out.png
+0 grant-age age.starfaring
+0 place 1 bld.market @-7,-5
+0 place 1 bld.factory @-8,4
+0 place 1 bld.university @7,-6
+0 place 1 bld.temple @8,5
+0 place 1 bld.tower @-3,8
+0 place 1 bld.library @3,-9
+0 place 1 bld.barracks @12,-1
+0 place 1 bld.granary @-12,-1
+0 place 1 bld.airfield @14,-9
+0 place-orbit 1 unit.orbital_fighter @-6,-3
+0 place-orbit 1 unit.orbital_fighter @-4,0
+0 place-orbit 1 unit.orbital_fighter @-6,3
+0 place-orbit 2 unit.orbital_fighter @6,-3
+0 place-orbit 2 unit.orbital_fighter @4,0
+0 place-orbit 2 unit.orbital_fighter @6,3
 1 speed 100
-4 craft
-10 cam wheel 3 960,400
-40 rclick @10,6
+8 cam wheel -1 960,500
+9 cam drag 960,400 960,520
