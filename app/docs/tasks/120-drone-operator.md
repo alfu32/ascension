@@ -23,7 +23,7 @@ the drone cloud unit"
 ## Design
 
 - **One unit**, `unit.drone_operator`, foot infantry, **information age** (the first age with
-  drones in the game; pending the owner's confirmation in issue #3). Its hit points are the
+  drones in the game; confirmed by the owner in issue #3: "Yes, agreed"). Its hit points are the
   operator's; killing the operator kills the unit and its cloud.
 - **The cloud** is part of the unit's state: `drones` (count, max `et_drone_cloud.capacity` =
   16), the cloud's position (milli-tiles), a leash `et_drone_cloud.leash` (e.g. 12 tiles): the

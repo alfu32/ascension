@@ -51,8 +51,7 @@ which city is under attack. And maybe even put a signal on a marker on the mini-
    `scope = 'system'`), not from the key. Model file: one building in `db/models/` in the style
    of the inhibitor (`app/docs/models-in-meshcraft.md`); it goes to the owner's model review
    like every new model (`HANDOVER.md` in the model review folder).
-3. **Survey ship sensor upgrade** (the owner's alternative; both are built unless the owner says
-   otherwise): a research at the spaceport in the starfaring age, "Survey Sensor Array", after
+3. **Survey ship sensor upgrade** (both are built: owner, issue #3, 2026-11-21: "Yes, exactly."): a research at the spaceport in the starfaring age, "Survey Sensor Array", after
    which a survey ship given a **Watch** stance (or simply standing still in a system) detects
    foreign jump arrivals within `et_detector.radius` tiles of it (data; start with 40 tiles) and
    raises the same alert. The same component, granted by the tech as a modifier/ability row.
