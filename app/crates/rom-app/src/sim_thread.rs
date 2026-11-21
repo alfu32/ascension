@@ -359,10 +359,14 @@ pub struct SimLink {
     net: Option<Arc<NetInfo>>,
     /// The match's end and its report, once reached (task 117); `fresh` until the window
     /// has shown it.
-    end: Arc<Mutex<Option<(Arc<EndNotice>, bool)>>>,
+    end: EndSlot,
     /// A remaining human chose to keep playing after the end.
     keep_playing: Arc<AtomicBool>,
 }
+
+/// Where the simulation thread leaves the end of the match, and whether the window has yet to
+/// show it.
+type EndSlot = Arc<Mutex<Option<(Arc<EndNotice>, bool)>>>;
 
 /// The end of the match as the window shows it (task 117).
 #[derive(Debug)]

@@ -195,7 +195,7 @@ impl World {
             .rules
             .constant("stats.history_period_ticks")
             .unwrap_or(0);
-        if period <= 0 || tick % period as u64 != 0 {
+        if period <= 0 || !tick.is_multiple_of(period as u64) {
             return;
         }
         for (player, age) in players {

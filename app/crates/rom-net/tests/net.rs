@@ -496,17 +496,17 @@ fn the_match_ends_when_no_human_is_left() {
     let _one = one_at_a_time();
     let mut script = String::new();
     for (dx, dy) in [
-        (-7, 6),
-        (-4, 7),
-        (0, 8),
-        (4, 7),
-        (7, 6),
-        (-7, -6),
-        (-4, -7),
-        (0, -8),
+        (-5, 0),
+        (5, 0),
+        (0, 5),
+        (0, -5),
+        (-4, 4),
+        (4, 4),
+        (-4, -4),
+        (4, -4),
     ] {
-        for kind in ["unit.marine", "unit.marine", "unit.marine"] {
-            script.push_str(&format!("0 place 2 {kind} @{dx},{dy}\n"));
+        for _ in 0..3 {
+            script.push_str(&format!("0 place 2 unit.marine @{dx},{dy}\n"));
         }
     }
     let mut config = config(
