@@ -3,7 +3,7 @@
 Issue #3 (owner, 2026-11-21), part 4. Files: `app/db/seed.sql` (or the generated content in
 `app/db/content/` if units are generated there — follow `database.md`), new model files in
 `app/db/models/`, `rom-sim` only if aircraft cannot hover today, `rom-ai` only through data,
-docs. Implementer: Claude (Sonnet). Starts after task 117 is merged (seed rows).
+docs. Implementer: Claude (Sonnet). Starts after task 123 is merged (aircraft planes, seed rows).
 
 ## Why — the owner, verbatim (issue #3)
 
@@ -46,13 +46,13 @@ Built at `bld.airfield`.
 6. **Docs**: the unit lists in `research/03-timeline.md` / `docs/` where units per age are
    listed.
 
-## Known before starting (task 122)
+## Known before starting (tasks 122 and 123)
 
-Jets and biplanes are drawn at ground height today; only orbital fighters climb to a real
-altitude (`hover_altitude`). Helicopters and the hover gunship must be seen in the air (or
-hovering low, for the hover gunship) — find how orbital fighters get their altitude, give the
-new craft theirs through data, and show it in the screenshot. Fixing the jets is not part of
-this card.
+Jets and biplanes were drawn at ground height; task 123 gives aircraft two planes (landed and
+airborne) with take-off and landing (`et_movement.takeoff_ticks`) and draws them at a flight
+altitude. This card starts after 123 is merged: helicopters and the gunship use that (they land
+and take off too; the hover gunship flies low), set through data. Show them in the air in the
+screenshot.
 
 ## Done when
 
