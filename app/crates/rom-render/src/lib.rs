@@ -13,6 +13,7 @@ mod camera;
 mod entities;
 pub mod features;
 mod globe;
+mod gpu_census;
 pub mod grass;
 pub mod graticule;
 pub mod hud;
@@ -24,6 +25,7 @@ pub mod hud_minimap;
 pub mod hud_model;
 pub mod hud_preview;
 pub mod hud_text;
+mod instancing;
 pub mod layers;
 pub mod looks;
 mod mailbox;
@@ -59,6 +61,7 @@ pub use entities::{
     SnapshotPair, Surface, build_instances, build_instances_on, interpolate_on, owner_color,
 };
 pub use globe::{ChunkSpec, Globe, PlanetScene, SurfaceHit, planet_radius, to_render};
+pub use gpu_census::GpuCensus;
 pub use grass::Detail;
 pub use image;
 pub use looks::{

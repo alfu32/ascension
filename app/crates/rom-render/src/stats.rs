@@ -3,6 +3,8 @@
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
+use crate::gpu_census::GpuCensus;
+
 const WINDOW: Duration = Duration::from_secs(1);
 
 /// Render-thread timings. Averages and maxima cover the last second.
@@ -28,6 +30,8 @@ pub struct RenderStats {
     pub render_width: u32,
     /// Height of the render target of the newest frame.
     pub render_height: u32,
+    /// The newest count of live GL objects, if counting is on (task 121).
+    pub gpu: GpuCensus,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -45,6 +49,7 @@ pub(crate) struct StatsWindow {
     frame_ms_total: f64,
     readback_ms_total: f64,
     size: (u32, u32),
+    gpu: GpuCensus,
 }
 
 impl StatsWindow {
@@ -73,6 +78,14 @@ impl StatsWindow {
         }
     }
 
+    /// Keeps the newest count of live GL objects.
+    pub(crate) fn record_census(&mut self, census: GpuCensus) {
+        if census.counts > 0 {
+            let counts = self.gpu.counts + 1;
+            self.gpu = GpuCensus { counts, ..census };
+        }
+    }
+
     pub(crate) fn snapshot(&self) -> RenderStats {
         let count = self.samples.len();
         let (mut frame_sum, mut frame_max, mut readback_sum, mut readback_max) =
@@ -95,6 +108,7 @@ impl StatsWindow {
             readback_ms_total: self.readback_ms_total,
             render_width: self.size.0,
             render_height: self.size.1,
+            gpu: self.gpu,
         }
     }
 }

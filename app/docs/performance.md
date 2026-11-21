@@ -747,3 +747,129 @@ terrain material programs far from the eye, a single-channel shadow map read wit
 (4 fetches instead of 9), or a lower render scale on this GPU (`--scale 75` renders 60). The battle
 needs a cheaper shadow pass for many units (instanced caster boxes instead of models, or every
 other frame). These are follow-up candidates, measured here, not changed.
+
+## GPU memory (task 121)
+
+Owner report (issue #4, 0.0.113 on Windows 11, NVIDIA RTX A2000 Laptop GPU with 4 GB): dedicated
+GPU memory climbs for as long as a match runs, at every detail level, never comes down, and the
+game turns sluggish once the 4 GB are full (3D load only 15 %).
+
+### How to measure
+
+`--bench` now counts the live GL objects of the render thread's context every 10 s
+(`rom-render/src/gpu_census.rs`). The count asks GL itself (`glIsTexture`, `glIsBuffer`,
+`glIsFramebuffer`, `glIsRenderbuffer`, `glIsVertexArray`, `glIsProgram` over the names in use, with
+the sizes of textures, renderbuffers and buffers), so it sees every object whoever made it. Each
+count is a `bench-gpu seconds=…` line on stderr; the `bench` summary line ends with the last count
+and a verdict:
+
+```
+… gpu_textures=14 gpu_texture_mb=97 gpu_framebuffers=4 gpu_renderbuffers=4 gpu_buffers=5406
+  gpu_buffer_mb=68 gpu_vertex_arrays=889 gpu_programs=17 gpu_free_vram_mb=1879
+  gpu_instanced_draws=3 gpu_count_us=1942 gpu_grown_mb=0 gpu_flat=yes
+```
+
+`gpu_flat=yes` means that from the count after the warm-up (a quarter of the run, at least 30 s)
+to the end, the objects' memory grew by at most 16 MiB and no kind of object by more than a tenth
+plus eight. `gpu_free_vram_mb` is the driver's free video memory where it reports it
+(`GL_NVX_gpu_memory_info`, NVIDIA; 0 elsewhere). `gpu_instanced_draws` is the number of instanced
+draws in a frame; `gpu_count_us` what the count cost the render thread (1.6–2.5 ms on the GTX
+960M, once every 10 s). `RenderBridge::count_gpu_objects(seconds)` turns the count on for other
+uses.
+
+The process's own GPU memory, sampled once a second beside a self-ending run:
+
+```sh
+# NVIDIA (GTX 960M here, PRIME offload): the raylib GL context
+__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia env -u WAYLAND_DISPLAY \
+  target/release/rise-of-man --universe --style map.many_worlds --players 3 --seed 1 \
+  --speed 200 --size 1600x900 --script <session> --bench 720 &
+nvidia-smi pmon -s m -c 1          # column fb (MB) of the process, once a second
+# Intel (i915): every DRM client of the process, the GPUI window's Vulkan device included
+cat /proc/<pid>/fdinfo/* | awk '/drm-total-system0/ {s+=$2} END {print s/1024}'
+```
+
+Under PRIME offload only raylib's GL context runs on the NVIDIA card; the GPUI window keeps the
+Intel GPU (its Vulkan device has the i915 render node open), so `nvidia-smi` shows the renderer
+and the i915 `fdinfo` shows the window. `nvidia-smi --query-compute-apps` lists nothing for a
+graphics process; `pmon -s m` does.
+
+The session (`docs/tasks/121-session-script.txt`, 12 minutes, game speed 200 so 24 game minutes):
+galactic age, two computer players; turn and pan drags, wheel out to orbit, the system and the star
+map, fly the star map with the arrow keys, wheel back in toward another body, home, focus, palette
+tabs and a palette button, box-select the builders. The in-match menu is left out: it holds the
+simulation and the script with it.
+
+### Before and after
+
+GTX 960M (2 GB), 1600×900, one run at a time beside the owner's own game (Intel GPU):
+
+| Build | t = 60 s | Range after 60 s | End (t = 720 s) | Frames shown |
+| --- | --- | --- | --- | --- |
+| before (0.0.113 code) | 193 MB | 110–193 MB | 110 MB | 42 177, 58.6 fps |
+| after (this task) | 195 MB | 112–195 MB | 112 MB | 41 129, 57.1 fps |
+
+Both curves are flat: they step down (193 → 171 → 110 MB) when the view leaves the planet for
+space and never climb. The live GL objects are as flat, before (`--bench` count added to the old
+drawing code, Intel GPU, the same session) and after (NVIDIA): 13–14 textures (93–97 MB), 3–4 render
+targets, 5 277 buffers before and 5 406 after (the 129 more are the reused instance buffers),
+889 vertex arrays and 17 programs at every count from 10 s to 720 s. On the Intel GPU (i915 `fdinfo`)
+the GPUI window alone held 147 MB at every sample after 60 s of the NVIDIA runs, and window and
+renderer together 1 064–1 077 MB over the 12 minutes of the Intel run (a few samples read 148 MB,
+missing the renderer's client).
+
+A second session (`docs/tasks/121-switch-script.txt`) switched planets every half minute
+(`map.solar`, `visit planet1`/`planet2` and home: each switch rebakes the surface, its minimap and
+the system frames), fought task 95's two-hundred-unit battle with projectiles and quick-saved every
+third cycle, ten minutes at speed 200 on the GTX 960M with this task's build: 36 surface bakes, GPU
+memory 188 MB at 60 s, 101–188 MB after, 181 MB at the end (`gpu_flat=yes`, grown 0 MB). Every count
+from 10 s to 600 s: 13 textures, 5 423–5 456 buffers, 888–895 vertex arrays (the higher counts while
+another planet is loaded), 17 programs; nothing left behind by a switch.
+
+### What leaked
+
+Nothing grows on Linux, on either GPU, with the 0.0.113 code: the leak the owner sees on Windows
+does not reproduce here, so what follows is what the code did that a Windows driver can turn into
+one, and the counts that would show it there.
+
+- **Instanced draws made and deleted a buffer each, and left it attached.** Every instanced draw
+  went through raylib's `DrawMeshInstanced` (`raylib-sys` `rmodels.c`, `DrawMeshInstanced`): it
+  makes a vertex buffer for the transforms, points the mesh's vertex array at it, unbinds the array
+  and deletes the buffer. A buffer deleted while attached to a vertex array that is not bound is not
+  freed (OpenGL keeps it for that array) until the array is pointed elsewhere at the mesh's next
+  instanced draw. Each frame makes such draws for the feature objects, the models near and far,
+  their shadow passes and the ships: up to about 40 a frame in these sessions, so up to 2 400
+  buffers created and deleted a second, each up to the instances in view times 64 bytes (the
+  planet of these sessions holds 18 679 feature instances). Freeing them is left to the driver's
+  deferred deletion; on a driver that collects them late (or only at a swap, which the hidden
+  renderer window never does) memory climbs with the frame rate and does not depend on the detail
+  level, as reported.
+- **The GPUI frame atlas** (gpui 0.2.2, not changed): every frame shown is a new picture uploaded
+  into a new atlas texture, freed two frames later (`world_view.rs`, `retire_image`). This works;
+  the window's memory stays flat. Its one weakness: gpui never frees a tile, only a whole texture
+  once nothing in it is used, so a small picture drawn for the first time while a frame's texture
+  has room below the frame (frames under 1024 pixels high get a 1024-high texture) keeps that
+  texture alive for good. Opening the in-match menu the first time added 4 MB to the window here
+  that stayed (its pictures entering the atlas, perhaps into such a texture); it does not grow
+  with time.
+
+### Fix
+
+`rom-render/src/instancing.rs` draws instances exactly as raylib does (same uniforms, attributes,
+texture slots and state left behind; screenshots of a city, a forest edge and the open ground match
+the old drawing within the run-to-run noise) but from instance buffers made once and rewritten: the
+draws of a frame take buffers in turn from one of three sets, the sets in turn by frame, so a
+buffer is not written while the GPU may still read it, and a buffer only grows (powers of two,
+`glBufferData` on the same buffer), never is deleted during the match. The render thread releases
+them before its GL context closes. No GL object is made or deleted per frame any more; the count
+of buffers is flat by construction (unit tests in `instancing.rs`), and `gpu_instanced_draws`
+shows how many per-frame buffers this replaces.
+
+### Not verified
+
+Windows: no Windows machine here. On the owner's machine, `--bench 600` with the same kind of
+session should print `gpu_flat=yes` and Task Manager's dedicated GPU memory should level off
+after the first minute; if it still climbs while the counts stay flat, the growth is outside the
+objects the game makes (the driver, or the GPUI DirectX window), and the next step is to watch
+which of the two GPUs grows (the window may run on the Intel GPU and the renderer on the NVIDIA one,
+as here) and to measure a window under 1024 pixels high against a taller one.

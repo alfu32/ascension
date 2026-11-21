@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::{Duration, Instant};
 
 use gpui::{App, AsyncApp, Entity, Timer};
-use rom_render::{RenderBridge, ShutdownHandle, scaled_size};
+use rom_render::{GpuCensus, RenderBridge, ShutdownHandle, scaled_size};
 
 use crate::sim_thread::SimLink;
 use crate::world_view::WorldView;
@@ -16,6 +16,10 @@ pub const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 pub const WARM_UP: Duration = Duration::from_secs(1);
 /// How often the last-second maxima are sampled.
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(250);
+/// Seconds between counts of the live GL objects during a benchmark (task 121).
+const CENSUS_SECONDS: u32 = 10;
+/// Growth of the GL objects' memory, after the warm-up, still called flat, in MiB.
+const FLAT_MIB: u64 = 16;
 
 /// Benchmark parameters from the command line.
 #[derive(Clone, Copy, Debug)]
@@ -98,6 +102,7 @@ async fn measure(
     cx: &mut AsyncApp,
 ) -> Result<String, String> {
     wait_until_ready(view, bridge, cx).await?;
+    bridge.count_gpu_objects(CENSUS_SECONDS);
     Timer::after(WARM_UP).await;
 
     let presented = |cx: &mut AsyncApp| presented(view, cx);
@@ -110,6 +115,10 @@ async fn measure(
     let begin = Instant::now();
     let end = begin + Duration::from_secs_f64(bench.seconds);
     let (mut frame_ms_max, mut readback_ms_max) = (0.0_f32, 0.0_f32);
+    // The count once the warm-up is over: a quarter of the run, at least half a minute.
+    let settled_at = begin + Duration::from_secs_f64((bench.seconds / 4.0).max(30.0));
+    let mut settled: Option<GpuCensus> = None;
+    let mut census = GpuCensus::default();
     loop {
         let now = Instant::now();
         if now >= end {
@@ -119,6 +128,17 @@ async fn measure(
         let stats = bridge.stats();
         frame_ms_max = frame_ms_max.max(stats.frame_ms_max);
         readback_ms_max = readback_ms_max.max(stats.readback_ms_max);
+        if stats.gpu.counts != census.counts {
+            census = stats.gpu;
+            eprintln!(
+                "bench-gpu seconds={:.0} {}",
+                begin.elapsed().as_secs_f64(),
+                census.line()
+            );
+            if settled.is_none() && Instant::now() >= settled_at {
+                settled = Some(census);
+            }
+        }
     }
     let elapsed = begin.elapsed().as_secs_f64();
     let last_cpu = thread_cpu();
@@ -210,8 +230,21 @@ async fn measure(
         report.computer_orders,
         report.computer_rejected
     );
+    let last_census = bridge.stats().gpu;
+    let gpu = if last_census.counts > 0 {
+        let verdict = settled.map_or("unmeasured", |s| {
+            if flat(&s, &last_census) { "yes" } else { "no" }
+        });
+        let grown = settled.map_or(0, |s| last_census.mib() as i64 - s.mib() as i64);
+        format!(
+            " {} gpu_grown_mb={grown} gpu_flat={verdict}",
+            last_census.line()
+        )
+    } else {
+        String::new()
+    };
     Ok(format!(
-        "bench size={}x{} scale={} frames={shown} fps={:.1} frame_ms_avg={:.2} frame_ms_max={:.2} readback_ms_avg={:.2} readback_ms_max={:.2}",
+        "bench size={}x{} scale={} frames={shown} fps={:.1} frame_ms_avg={:.2} frame_ms_max={:.2} readback_ms_avg={:.2} readback_ms_max={:.2}{gpu}",
         layout.0,
         layout.1,
         bench.scale,
@@ -221,6 +254,18 @@ async fn measure(
         per_frame(last.readback_ms_total - first.readback_ms_total),
         readback_ms_max,
     ))
+}
+
+/// Whether the GL objects stayed flat from `settled` (after the warm-up) to `end`: their memory
+/// grew by at most [`FLAT_MIB`] and no kind of object grew by more than a tenth plus a few.
+fn flat(settled: &GpuCensus, end: &GpuCensus) -> bool {
+    let within = |before: u32, after: u32| after <= before + before / 10 + 8;
+    end.mib() <= settled.mib() + FLAT_MIB
+        && within(settled.textures, end.textures)
+        && within(settled.framebuffers, end.framebuffers)
+        && within(settled.buffers, end.buffers)
+        && within(settled.vertex_arrays, end.vertex_arrays)
+        && within(settled.programs, end.programs)
 }
 
 /// Kernel clock ticks per second of `/proc` CPU times (`USER_HZ`, 100 on Linux).
@@ -253,4 +298,30 @@ fn peak_rss_mb() -> Option<u64> {
     let line = status.lines().find(|line| line.starts_with("VmHWM:"))?;
     let kb: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
     Some(kb / 1024)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn census(textures: u32, mib: u64) -> GpuCensus {
+        GpuCensus {
+            counts: 1,
+            textures,
+            texture_bytes: mib << 20,
+            buffers: 100,
+            vertex_arrays: 50,
+            programs: 20,
+            framebuffers: 4,
+            ..GpuCensus::default()
+        }
+    }
+
+    #[test]
+    fn objects_that_hold_steady_are_flat_and_a_steady_climb_is_not() {
+        assert!(flat(&census(200, 300), &census(204, 310)));
+        // A frame-sized texture a few seconds for ten minutes: memory and count both climb.
+        assert!(!flat(&census(200, 300), &census(200, 400)));
+        assert!(!flat(&census(200, 300), &census(260, 310)));
+    }
 }

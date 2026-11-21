@@ -21,6 +21,7 @@ use crate::features::{BakedFeatures, crop_instances};
 use crate::globe::{ChunkBounds, CullView, Globe, PlanetScene};
 use crate::graticule::{GraticuleLine, graticule_fade, graticule_on};
 use crate::hud::HudSnapshot;
+use crate::instancing::DrawInstances;
 use crate::looks::{SceneLooks, lod_weight};
 use crate::materials::{SurfaceSlots, chunk_attributes, surface_slots};
 use crate::orbit::OrbitCamera;
@@ -1649,14 +1650,10 @@ impl Scene {
                 object_material,
             );
             if !gpu.markers.is_empty() {
-                world.draw_mesh_instanced(
-                    &self.box_mesh,
-                    self.entity_material.clone(),
-                    &gpu.markers,
-                );
+                world.draw_instances(&self.box_mesh, self.entity_material.clone(), &gpu.markers);
             }
             if !self.entity_transforms.is_empty() {
-                world.draw_mesh_instanced(
+                world.draw_instances(
                     &self.box_mesh,
                     self.entity_material.clone(),
                     &self.entity_transforms,
@@ -1901,7 +1898,7 @@ impl Scene {
                     }
                 }
                 if !self.entity_transforms.is_empty() {
-                    world.draw_mesh_instanced(
+                    world.draw_instances(
                         &self.box_mesh,
                         self.entity_material.clone(),
                         &self.entity_transforms,
@@ -1920,7 +1917,7 @@ impl Scene {
                     );
                 }
                 if !self.transforms.is_empty() {
-                    world.draw_mesh_instanced(
+                    world.draw_instances(
                         &self.box_mesh,
                         self.box_material.clone(),
                         &self.transforms,
@@ -1945,7 +1942,7 @@ impl Scene {
                     Matrix::identity(),
                 );
                 if !self.transforms.is_empty() {
-                    world.draw_mesh_instanced(
+                    world.draw_instances(
                         &self.box_mesh,
                         self.box_material.clone(),
                         &self.transforms,

@@ -618,7 +618,7 @@ impl ModelGpu {
             scratch.clear();
             scratch.extend(group.iter().map(|g| g.2));
             let mesh = if near { &model.near } else { &model.far };
-            world.draw_mesh_instanced(mesh, material.clone(), scratch);
+            world.draw_instances(mesh, material.clone(), scratch);
         }
         bind_poses(None);
     }
@@ -653,10 +653,10 @@ impl ModelGpu {
             }
             self.set_poses(shader, model);
             if !self.near_lists[index].is_empty() {
-                world.draw_mesh_instanced(&model.near, material.clone(), &self.near_lists[index]);
+                world.draw_instances(&model.near, material.clone(), &self.near_lists[index]);
             }
             if !self.far_lists[index].is_empty() {
-                world.draw_mesh_instanced(&model.far, material.clone(), &self.far_lists[index]);
+                world.draw_instances(&model.far, material.clone(), &self.far_lists[index]);
             }
         }
         for placed in &self.placed {
@@ -667,7 +667,7 @@ impl ModelGpu {
             };
             shader.set_shader_value(reveal, model.top * progress);
             self.set_poses(shader, model);
-            world.draw_mesh_instanced(&model.near, material.clone(), &[placed.transform]);
+            world.draw_instances(&model.near, material.clone(), &[placed.transform]);
         }
         shader.set_shader_value(reveal, REVEAL_ALL);
         bind_poses(None);
@@ -720,7 +720,7 @@ impl ModelGpu {
                     && touches(centre, model.reach * placed_scale(t))
             }));
             if !scratch.is_empty() {
-                pass.draw_mesh_instanced(&model.far, depth.clone(), scratch);
+                pass.draw_instances(&model.far, depth.clone(), scratch);
             }
         }
     }

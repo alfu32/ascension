@@ -347,11 +347,7 @@ impl Scene {
                 }
             }
             if !gpu.markers.is_empty() {
-                pass.draw_mesh_instanced(
-                    &self.box_mesh,
-                    shadow.depth_instanced.clone(),
-                    &gpu.markers,
-                );
+                pass.draw_instances(&self.box_mesh, shadow.depth_instanced.clone(), &gpu.markers);
             }
             if let Some(features) = features {
                 features.draw_casters(
@@ -383,7 +379,7 @@ impl Scene {
                     }
                 }
                 if !gpu.markers.is_empty() {
-                    pass.draw_mesh_instanced(
+                    pass.draw_instances(
                         &self.box_mesh,
                         shadow.depth_instanced.clone(),
                         &gpu.markers,
@@ -400,7 +396,7 @@ impl Scene {
                 }
             }
             if !self.entity_casters.is_empty() {
-                pass.draw_mesh_instanced(
+                pass.draw_instances(
                     &self.box_mesh,
                     shadow.depth_instanced.clone(),
                     &self.entity_casters,
@@ -485,11 +481,7 @@ impl Scene {
             }
             for transforms in [&self.entity_casters, &self.transforms] {
                 if !transforms.is_empty() {
-                    pass.draw_mesh_instanced(
-                        &self.box_mesh,
-                        shadow.depth_instanced.clone(),
-                        transforms,
-                    );
+                    pass.draw_instances(&self.box_mesh, shadow.depth_instanced.clone(), transforms);
                 }
             }
             if let Some(features) = features {

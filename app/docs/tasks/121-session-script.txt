@@ -1,0 +1,1338 @@
+# Task 121: a 13-minute player session for GPU memory curves (generated; game speed 200).
+# Run with --universe --style map.many_worlds --players 3 --seed 1 --speed 200 --size 1600x900 --bench 720.
+0 grant-age age.galactic
+0 speed 200
+40 cam drag 400,400 880,460
+52 cam drag 880,460 400,400
+64 cam drag 500,300 780,500 shift
+76 cam drag 780,500 500,300 shift
+88 cam drag 400,400 880,460
+100 cam drag 880,460 400,400
+112 cam drag 500,300 780,500 shift
+124 cam drag 780,500 500,300 shift
+136 cam wheel -6 640,400
+176 cam drag 400,400 880,460
+188 cam drag 880,460 400,400
+200 cam drag 500,300 780,500 shift
+212 cam drag 780,500 500,300 shift
+224 cam wheel -8 640,400
+284 cam drag 400,400 880,460
+296 cam drag 880,460 400,400
+308 cam drag 500,300 780,500 shift
+320 cam drag 780,500 500,300 shift
+332 cam wheel -10 640,400
+412 cam drag 400,400 880,460
+424 cam drag 880,460 400,400
+436 cam drag 500,300 780,500 shift
+448 cam drag 780,500 500,300 shift
+460 cam key left down
+480 cam key left up
+484 cam key up down
+504 cam key up up
+508 cam key right down
+528 cam key right up
+532 cam key down down
+552 cam key down up
+556 cam wheel 10 480,400
+636 cam wheel 14 480,400
+756 cam drag 400,400 880,460
+768 cam drag 880,460 400,400
+780 cam drag 500,300 780,500 shift
+792 cam drag 780,500 500,300 shift
+804 cam home
+884 cam wheel 14 640,400
+964 hud tab 0
+984 hud tab 1
+1004 hud tab 2
+1024 hud slot 0
+1044 escape
+1064 box builders
+1084 escape
+1124 cam drag 400,400 880,460
+1136 cam drag 880,460 400,400
+1148 cam drag 500,300 780,500 shift
+1160 cam drag 780,500 500,300 shift
+1172 cam drag 400,400 880,460
+1184 cam drag 880,460 400,400
+1196 cam drag 500,300 780,500 shift
+1208 cam drag 780,500 500,300 shift
+1220 cam wheel -6 640,400
+1260 cam drag 400,400 880,460
+1272 cam drag 880,460 400,400
+1284 cam drag 500,300 780,500 shift
+1296 cam drag 780,500 500,300 shift
+1308 cam wheel -8 640,400
+1368 cam drag 400,400 880,460
+1380 cam drag 880,460 400,400
+1392 cam drag 500,300 780,500 shift
+1404 cam drag 780,500 500,300 shift
+1416 cam wheel -10 640,400
+1496 cam drag 400,400 880,460
+1508 cam drag 880,460 400,400
+1520 cam drag 500,300 780,500 shift
+1532 cam drag 780,500 500,300 shift
+1544 cam key left down
+1564 cam key left up
+1568 cam key up down
+1588 cam key up up
+1592 cam key right down
+1612 cam key right up
+1616 cam key down down
+1636 cam key down up
+1640 cam wheel 10 800,400
+1720 cam wheel 14 800,400
+1840 cam drag 400,400 880,460
+1852 cam drag 880,460 400,400
+1864 cam drag 500,300 780,500 shift
+1876 cam drag 780,500 500,300 shift
+1888 cam home
+1968 cam wheel 14 640,400
+2048 hud tab 0
+2068 hud tab 1
+2088 hud tab 2
+2108 hud slot 0
+2128 escape
+2148 box builders
+2168 escape
+2208 cam drag 400,400 880,460
+2220 cam drag 880,460 400,400
+2232 cam drag 500,300 780,500 shift
+2244 cam drag 780,500 500,300 shift
+2256 cam drag 400,400 880,460
+2268 cam drag 880,460 400,400
+2280 cam drag 500,300 780,500 shift
+2292 cam drag 780,500 500,300 shift
+2304 cam wheel -6 640,400
+2344 cam drag 400,400 880,460
+2356 cam drag 880,460 400,400
+2368 cam drag 500,300 780,500 shift
+2380 cam drag 780,500 500,300 shift
+2392 cam wheel -8 640,400
+2452 cam drag 400,400 880,460
+2464 cam drag 880,460 400,400
+2476 cam drag 500,300 780,500 shift
+2488 cam drag 780,500 500,300 shift
+2500 cam wheel -10 640,400
+2580 cam drag 400,400 880,460
+2592 cam drag 880,460 400,400
+2604 cam drag 500,300 780,500 shift
+2616 cam drag 780,500 500,300 shift
+2628 cam key left down
+2648 cam key left up
+2652 cam key up down
+2672 cam key up up
+2676 cam key right down
+2696 cam key right up
+2700 cam key down down
+2720 cam key down up
+2724 cam wheel 10 560,400
+2804 cam wheel 14 560,400
+2924 cam drag 400,400 880,460
+2936 cam drag 880,460 400,400
+2948 cam drag 500,300 780,500 shift
+2960 cam drag 780,500 500,300 shift
+2972 cam home
+3052 cam wheel 14 640,400
+3132 hud tab 0
+3152 hud tab 1
+3172 hud tab 2
+3192 hud slot 0
+3212 escape
+3232 box builders
+3252 escape
+3292 cam drag 400,400 880,460
+3304 cam drag 880,460 400,400
+3316 cam drag 500,300 780,500 shift
+3328 cam drag 780,500 500,300 shift
+3340 cam drag 400,400 880,460
+3352 cam drag 880,460 400,400
+3364 cam drag 500,300 780,500 shift
+3376 cam drag 780,500 500,300 shift
+3388 cam wheel -6 640,400
+3428 cam drag 400,400 880,460
+3440 cam drag 880,460 400,400
+3452 cam drag 500,300 780,500 shift
+3464 cam drag 780,500 500,300 shift
+3476 cam wheel -8 640,400
+3536 cam drag 400,400 880,460
+3548 cam drag 880,460 400,400
+3560 cam drag 500,300 780,500 shift
+3572 cam drag 780,500 500,300 shift
+3584 cam wheel -10 640,400
+3664 cam drag 400,400 880,460
+3676 cam drag 880,460 400,400
+3688 cam drag 500,300 780,500 shift
+3700 cam drag 780,500 500,300 shift
+3712 cam key left down
+3732 cam key left up
+3736 cam key up down
+3756 cam key up up
+3760 cam key right down
+3780 cam key right up
+3784 cam key down down
+3804 cam key down up
+3808 cam wheel 10 720,400
+3888 cam wheel 14 720,400
+4008 cam drag 400,400 880,460
+4020 cam drag 880,460 400,400
+4032 cam drag 500,300 780,500 shift
+4044 cam drag 780,500 500,300 shift
+4056 cam home
+4136 cam wheel 14 640,400
+4216 hud tab 0
+4236 hud tab 1
+4256 hud tab 2
+4276 hud slot 0
+4296 escape
+4316 box builders
+4336 escape
+4376 cam drag 400,400 880,460
+4388 cam drag 880,460 400,400
+4400 cam drag 500,300 780,500 shift
+4412 cam drag 780,500 500,300 shift
+4424 cam drag 400,400 880,460
+4436 cam drag 880,460 400,400
+4448 cam drag 500,300 780,500 shift
+4460 cam drag 780,500 500,300 shift
+4472 cam wheel -6 640,400
+4512 cam drag 400,400 880,460
+4524 cam drag 880,460 400,400
+4536 cam drag 500,300 780,500 shift
+4548 cam drag 780,500 500,300 shift
+4560 cam wheel -8 640,400
+4620 cam drag 400,400 880,460
+4632 cam drag 880,460 400,400
+4644 cam drag 500,300 780,500 shift
+4656 cam drag 780,500 500,300 shift
+4668 cam wheel -10 640,400
+4748 cam drag 400,400 880,460
+4760 cam drag 880,460 400,400
+4772 cam drag 500,300 780,500 shift
+4784 cam drag 780,500 500,300 shift
+4796 cam key left down
+4816 cam key left up
+4820 cam key up down
+4840 cam key up up
+4844 cam key right down
+4864 cam key right up
+4868 cam key down down
+4888 cam key down up
+4892 cam wheel 10 480,400
+4972 cam wheel 14 480,400
+5092 cam drag 400,400 880,460
+5104 cam drag 880,460 400,400
+5116 cam drag 500,300 780,500 shift
+5128 cam drag 780,500 500,300 shift
+5140 cam home
+5220 cam wheel 14 640,400
+5300 hud tab 0
+5320 hud tab 1
+5340 hud tab 2
+5360 hud slot 0
+5380 escape
+5400 box builders
+5420 escape
+5460 cam drag 400,400 880,460
+5472 cam drag 880,460 400,400
+5484 cam drag 500,300 780,500 shift
+5496 cam drag 780,500 500,300 shift
+5508 cam drag 400,400 880,460
+5520 cam drag 880,460 400,400
+5532 cam drag 500,300 780,500 shift
+5544 cam drag 780,500 500,300 shift
+5556 cam wheel -6 640,400
+5596 cam drag 400,400 880,460
+5608 cam drag 880,460 400,400
+5620 cam drag 500,300 780,500 shift
+5632 cam drag 780,500 500,300 shift
+5644 cam wheel -8 640,400
+5704 cam drag 400,400 880,460
+5716 cam drag 880,460 400,400
+5728 cam drag 500,300 780,500 shift
+5740 cam drag 780,500 500,300 shift
+5752 cam wheel -10 640,400
+5832 cam drag 400,400 880,460
+5844 cam drag 880,460 400,400
+5856 cam drag 500,300 780,500 shift
+5868 cam drag 780,500 500,300 shift
+5880 cam key left down
+5900 cam key left up
+5904 cam key up down
+5924 cam key up up
+5928 cam key right down
+5948 cam key right up
+5952 cam key down down
+5972 cam key down up
+5976 cam wheel 10 800,400
+6056 cam wheel 14 800,400
+6176 cam drag 400,400 880,460
+6188 cam drag 880,460 400,400
+6200 cam drag 500,300 780,500 shift
+6212 cam drag 780,500 500,300 shift
+6224 cam home
+6304 cam wheel 14 640,400
+6384 hud tab 0
+6404 hud tab 1
+6424 hud tab 2
+6444 hud slot 0
+6464 escape
+6484 box builders
+6504 escape
+6544 cam drag 400,400 880,460
+6556 cam drag 880,460 400,400
+6568 cam drag 500,300 780,500 shift
+6580 cam drag 780,500 500,300 shift
+6592 cam drag 400,400 880,460
+6604 cam drag 880,460 400,400
+6616 cam drag 500,300 780,500 shift
+6628 cam drag 780,500 500,300 shift
+6640 cam wheel -6 640,400
+6680 cam drag 400,400 880,460
+6692 cam drag 880,460 400,400
+6704 cam drag 500,300 780,500 shift
+6716 cam drag 780,500 500,300 shift
+6728 cam wheel -8 640,400
+6788 cam drag 400,400 880,460
+6800 cam drag 880,460 400,400
+6812 cam drag 500,300 780,500 shift
+6824 cam drag 780,500 500,300 shift
+6836 cam wheel -10 640,400
+6916 cam drag 400,400 880,460
+6928 cam drag 880,460 400,400
+6940 cam drag 500,300 780,500 shift
+6952 cam drag 780,500 500,300 shift
+6964 cam key left down
+6984 cam key left up
+6988 cam key up down
+7008 cam key up up
+7012 cam key right down
+7032 cam key right up
+7036 cam key down down
+7056 cam key down up
+7060 cam wheel 10 560,400
+7140 cam wheel 14 560,400
+7260 cam drag 400,400 880,460
+7272 cam drag 880,460 400,400
+7284 cam drag 500,300 780,500 shift
+7296 cam drag 780,500 500,300 shift
+7308 cam home
+7388 cam wheel 14 640,400
+7468 hud tab 0
+7488 hud tab 1
+7508 hud tab 2
+7528 hud slot 0
+7548 escape
+7568 box builders
+7588 escape
+7628 cam drag 400,400 880,460
+7640 cam drag 880,460 400,400
+7652 cam drag 500,300 780,500 shift
+7664 cam drag 780,500 500,300 shift
+7676 cam drag 400,400 880,460
+7688 cam drag 880,460 400,400
+7700 cam drag 500,300 780,500 shift
+7712 cam drag 780,500 500,300 shift
+7724 cam wheel -6 640,400
+7764 cam drag 400,400 880,460
+7776 cam drag 880,460 400,400
+7788 cam drag 500,300 780,500 shift
+7800 cam drag 780,500 500,300 shift
+7812 cam wheel -8 640,400
+7872 cam drag 400,400 880,460
+7884 cam drag 880,460 400,400
+7896 cam drag 500,300 780,500 shift
+7908 cam drag 780,500 500,300 shift
+7920 cam wheel -10 640,400
+8000 cam drag 400,400 880,460
+8012 cam drag 880,460 400,400
+8024 cam drag 500,300 780,500 shift
+8036 cam drag 780,500 500,300 shift
+8048 cam key left down
+8068 cam key left up
+8072 cam key up down
+8092 cam key up up
+8096 cam key right down
+8116 cam key right up
+8120 cam key down down
+8140 cam key down up
+8144 cam wheel 10 720,400
+8224 cam wheel 14 720,400
+8344 cam drag 400,400 880,460
+8356 cam drag 880,460 400,400
+8368 cam drag 500,300 780,500 shift
+8380 cam drag 780,500 500,300 shift
+8392 cam home
+8472 cam wheel 14 640,400
+8552 hud tab 0
+8572 hud tab 1
+8592 hud tab 2
+8612 hud slot 0
+8632 escape
+8652 box builders
+8672 escape
+8712 cam drag 400,400 880,460
+8724 cam drag 880,460 400,400
+8736 cam drag 500,300 780,500 shift
+8748 cam drag 780,500 500,300 shift
+8760 cam drag 400,400 880,460
+8772 cam drag 880,460 400,400
+8784 cam drag 500,300 780,500 shift
+8796 cam drag 780,500 500,300 shift
+8808 cam wheel -6 640,400
+8848 cam drag 400,400 880,460
+8860 cam drag 880,460 400,400
+8872 cam drag 500,300 780,500 shift
+8884 cam drag 780,500 500,300 shift
+8896 cam wheel -8 640,400
+8956 cam drag 400,400 880,460
+8968 cam drag 880,460 400,400
+8980 cam drag 500,300 780,500 shift
+8992 cam drag 780,500 500,300 shift
+9004 cam wheel -10 640,400
+9084 cam drag 400,400 880,460
+9096 cam drag 880,460 400,400
+9108 cam drag 500,300 780,500 shift
+9120 cam drag 780,500 500,300 shift
+9132 cam key left down
+9152 cam key left up
+9156 cam key up down
+9176 cam key up up
+9180 cam key right down
+9200 cam key right up
+9204 cam key down down
+9224 cam key down up
+9228 cam wheel 10 480,400
+9308 cam wheel 14 480,400
+9428 cam drag 400,400 880,460
+9440 cam drag 880,460 400,400
+9452 cam drag 500,300 780,500 shift
+9464 cam drag 780,500 500,300 shift
+9476 cam home
+9556 cam wheel 14 640,400
+9636 hud tab 0
+9656 hud tab 1
+9676 hud tab 2
+9696 hud slot 0
+9716 escape
+9736 box builders
+9756 escape
+9796 cam drag 400,400 880,460
+9808 cam drag 880,460 400,400
+9820 cam drag 500,300 780,500 shift
+9832 cam drag 780,500 500,300 shift
+9844 cam drag 400,400 880,460
+9856 cam drag 880,460 400,400
+9868 cam drag 500,300 780,500 shift
+9880 cam drag 780,500 500,300 shift
+9892 cam wheel -6 640,400
+9932 cam drag 400,400 880,460
+9944 cam drag 880,460 400,400
+9956 cam drag 500,300 780,500 shift
+9968 cam drag 780,500 500,300 shift
+9980 cam wheel -8 640,400
+10040 cam drag 400,400 880,460
+10052 cam drag 880,460 400,400
+10064 cam drag 500,300 780,500 shift
+10076 cam drag 780,500 500,300 shift
+10088 cam wheel -10 640,400
+10168 cam drag 400,400 880,460
+10180 cam drag 880,460 400,400
+10192 cam drag 500,300 780,500 shift
+10204 cam drag 780,500 500,300 shift
+10216 cam key left down
+10236 cam key left up
+10240 cam key up down
+10260 cam key up up
+10264 cam key right down
+10284 cam key right up
+10288 cam key down down
+10308 cam key down up
+10312 cam wheel 10 800,400
+10392 cam wheel 14 800,400
+10512 cam drag 400,400 880,460
+10524 cam drag 880,460 400,400
+10536 cam drag 500,300 780,500 shift
+10548 cam drag 780,500 500,300 shift
+10560 cam home
+10640 cam wheel 14 640,400
+10720 hud tab 0
+10740 hud tab 1
+10760 hud tab 2
+10780 hud slot 0
+10800 escape
+10820 box builders
+10840 escape
+10880 cam drag 400,400 880,460
+10892 cam drag 880,460 400,400
+10904 cam drag 500,300 780,500 shift
+10916 cam drag 780,500 500,300 shift
+10928 cam drag 400,400 880,460
+10940 cam drag 880,460 400,400
+10952 cam drag 500,300 780,500 shift
+10964 cam drag 780,500 500,300 shift
+10976 cam wheel -6 640,400
+11016 cam drag 400,400 880,460
+11028 cam drag 880,460 400,400
+11040 cam drag 500,300 780,500 shift
+11052 cam drag 780,500 500,300 shift
+11064 cam wheel -8 640,400
+11124 cam drag 400,400 880,460
+11136 cam drag 880,460 400,400
+11148 cam drag 500,300 780,500 shift
+11160 cam drag 780,500 500,300 shift
+11172 cam wheel -10 640,400
+11252 cam drag 400,400 880,460
+11264 cam drag 880,460 400,400
+11276 cam drag 500,300 780,500 shift
+11288 cam drag 780,500 500,300 shift
+11300 cam key left down
+11320 cam key left up
+11324 cam key up down
+11344 cam key up up
+11348 cam key right down
+11368 cam key right up
+11372 cam key down down
+11392 cam key down up
+11396 cam wheel 10 560,400
+11476 cam wheel 14 560,400
+11596 cam drag 400,400 880,460
+11608 cam drag 880,460 400,400
+11620 cam drag 500,300 780,500 shift
+11632 cam drag 780,500 500,300 shift
+11644 cam home
+11724 cam wheel 14 640,400
+11804 hud tab 0
+11824 hud tab 1
+11844 hud tab 2
+11864 hud slot 0
+11884 escape
+11904 box builders
+11924 escape
+11964 cam drag 400,400 880,460
+11976 cam drag 880,460 400,400
+11988 cam drag 500,300 780,500 shift
+12000 cam drag 780,500 500,300 shift
+12012 cam drag 400,400 880,460
+12024 cam drag 880,460 400,400
+12036 cam drag 500,300 780,500 shift
+12048 cam drag 780,500 500,300 shift
+12060 cam wheel -6 640,400
+12100 cam drag 400,400 880,460
+12112 cam drag 880,460 400,400
+12124 cam drag 500,300 780,500 shift
+12136 cam drag 780,500 500,300 shift
+12148 cam wheel -8 640,400
+12208 cam drag 400,400 880,460
+12220 cam drag 880,460 400,400
+12232 cam drag 500,300 780,500 shift
+12244 cam drag 780,500 500,300 shift
+12256 cam wheel -10 640,400
+12336 cam drag 400,400 880,460
+12348 cam drag 880,460 400,400
+12360 cam drag 500,300 780,500 shift
+12372 cam drag 780,500 500,300 shift
+12384 cam key left down
+12404 cam key left up
+12408 cam key up down
+12428 cam key up up
+12432 cam key right down
+12452 cam key right up
+12456 cam key down down
+12476 cam key down up
+12480 cam wheel 10 720,400
+12560 cam wheel 14 720,400
+12680 cam drag 400,400 880,460
+12692 cam drag 880,460 400,400
+12704 cam drag 500,300 780,500 shift
+12716 cam drag 780,500 500,300 shift
+12728 cam home
+12808 cam wheel 14 640,400
+12888 hud tab 0
+12908 hud tab 1
+12928 hud tab 2
+12948 hud slot 0
+12968 escape
+12988 box builders
+13008 escape
+13048 cam drag 400,400 880,460
+13060 cam drag 880,460 400,400
+13072 cam drag 500,300 780,500 shift
+13084 cam drag 780,500 500,300 shift
+13096 cam drag 400,400 880,460
+13108 cam drag 880,460 400,400
+13120 cam drag 500,300 780,500 shift
+13132 cam drag 780,500 500,300 shift
+13144 cam wheel -6 640,400
+13184 cam drag 400,400 880,460
+13196 cam drag 880,460 400,400
+13208 cam drag 500,300 780,500 shift
+13220 cam drag 780,500 500,300 shift
+13232 cam wheel -8 640,400
+13292 cam drag 400,400 880,460
+13304 cam drag 880,460 400,400
+13316 cam drag 500,300 780,500 shift
+13328 cam drag 780,500 500,300 shift
+13340 cam wheel -10 640,400
+13420 cam drag 400,400 880,460
+13432 cam drag 880,460 400,400
+13444 cam drag 500,300 780,500 shift
+13456 cam drag 780,500 500,300 shift
+13468 cam key left down
+13488 cam key left up
+13492 cam key up down
+13512 cam key up up
+13516 cam key right down
+13536 cam key right up
+13540 cam key down down
+13560 cam key down up
+13564 cam wheel 10 480,400
+13644 cam wheel 14 480,400
+13764 cam drag 400,400 880,460
+13776 cam drag 880,460 400,400
+13788 cam drag 500,300 780,500 shift
+13800 cam drag 780,500 500,300 shift
+13812 cam home
+13892 cam wheel 14 640,400
+13972 hud tab 0
+13992 hud tab 1
+14012 hud tab 2
+14032 hud slot 0
+14052 escape
+14072 box builders
+14092 escape
+14132 cam drag 400,400 880,460
+14144 cam drag 880,460 400,400
+14156 cam drag 500,300 780,500 shift
+14168 cam drag 780,500 500,300 shift
+14180 cam drag 400,400 880,460
+14192 cam drag 880,460 400,400
+14204 cam drag 500,300 780,500 shift
+14216 cam drag 780,500 500,300 shift
+14228 cam wheel -6 640,400
+14268 cam drag 400,400 880,460
+14280 cam drag 880,460 400,400
+14292 cam drag 500,300 780,500 shift
+14304 cam drag 780,500 500,300 shift
+14316 cam wheel -8 640,400
+14376 cam drag 400,400 880,460
+14388 cam drag 880,460 400,400
+14400 cam drag 500,300 780,500 shift
+14412 cam drag 780,500 500,300 shift
+14424 cam wheel -10 640,400
+14504 cam drag 400,400 880,460
+14516 cam drag 880,460 400,400
+14528 cam drag 500,300 780,500 shift
+14540 cam drag 780,500 500,300 shift
+14552 cam key left down
+14572 cam key left up
+14576 cam key up down
+14596 cam key up up
+14600 cam key right down
+14620 cam key right up
+14624 cam key down down
+14644 cam key down up
+14648 cam wheel 10 800,400
+14728 cam wheel 14 800,400
+14848 cam drag 400,400 880,460
+14860 cam drag 880,460 400,400
+14872 cam drag 500,300 780,500 shift
+14884 cam drag 780,500 500,300 shift
+14896 cam home
+14976 cam wheel 14 640,400
+15056 hud tab 0
+15076 hud tab 1
+15096 hud tab 2
+15116 hud slot 0
+15136 escape
+15156 box builders
+15176 escape
+15216 cam drag 400,400 880,460
+15228 cam drag 880,460 400,400
+15240 cam drag 500,300 780,500 shift
+15252 cam drag 780,500 500,300 shift
+15264 cam drag 400,400 880,460
+15276 cam drag 880,460 400,400
+15288 cam drag 500,300 780,500 shift
+15300 cam drag 780,500 500,300 shift
+15312 cam wheel -6 640,400
+15352 cam drag 400,400 880,460
+15364 cam drag 880,460 400,400
+15376 cam drag 500,300 780,500 shift
+15388 cam drag 780,500 500,300 shift
+15400 cam wheel -8 640,400
+15460 cam drag 400,400 880,460
+15472 cam drag 880,460 400,400
+15484 cam drag 500,300 780,500 shift
+15496 cam drag 780,500 500,300 shift
+15508 cam wheel -10 640,400
+15588 cam drag 400,400 880,460
+15600 cam drag 880,460 400,400
+15612 cam drag 500,300 780,500 shift
+15624 cam drag 780,500 500,300 shift
+15636 cam key left down
+15656 cam key left up
+15660 cam key up down
+15680 cam key up up
+15684 cam key right down
+15704 cam key right up
+15708 cam key down down
+15728 cam key down up
+15732 cam wheel 10 560,400
+15812 cam wheel 14 560,400
+15932 cam drag 400,400 880,460
+15944 cam drag 880,460 400,400
+15956 cam drag 500,300 780,500 shift
+15968 cam drag 780,500 500,300 shift
+15980 cam home
+16060 cam wheel 14 640,400
+16140 hud tab 0
+16160 hud tab 1
+16180 hud tab 2
+16200 hud slot 0
+16220 escape
+16240 box builders
+16260 escape
+16300 cam drag 400,400 880,460
+16312 cam drag 880,460 400,400
+16324 cam drag 500,300 780,500 shift
+16336 cam drag 780,500 500,300 shift
+16348 cam drag 400,400 880,460
+16360 cam drag 880,460 400,400
+16372 cam drag 500,300 780,500 shift
+16384 cam drag 780,500 500,300 shift
+16396 cam wheel -6 640,400
+16436 cam drag 400,400 880,460
+16448 cam drag 880,460 400,400
+16460 cam drag 500,300 780,500 shift
+16472 cam drag 780,500 500,300 shift
+16484 cam wheel -8 640,400
+16544 cam drag 400,400 880,460
+16556 cam drag 880,460 400,400
+16568 cam drag 500,300 780,500 shift
+16580 cam drag 780,500 500,300 shift
+16592 cam wheel -10 640,400
+16672 cam drag 400,400 880,460
+16684 cam drag 880,460 400,400
+16696 cam drag 500,300 780,500 shift
+16708 cam drag 780,500 500,300 shift
+16720 cam key left down
+16740 cam key left up
+16744 cam key up down
+16764 cam key up up
+16768 cam key right down
+16788 cam key right up
+16792 cam key down down
+16812 cam key down up
+16816 cam wheel 10 720,400
+16896 cam wheel 14 720,400
+17016 cam drag 400,400 880,460
+17028 cam drag 880,460 400,400
+17040 cam drag 500,300 780,500 shift
+17052 cam drag 780,500 500,300 shift
+17064 cam home
+17144 cam wheel 14 640,400
+17224 hud tab 0
+17244 hud tab 1
+17264 hud tab 2
+17284 hud slot 0
+17304 escape
+17324 box builders
+17344 escape
+17384 cam drag 400,400 880,460
+17396 cam drag 880,460 400,400
+17408 cam drag 500,300 780,500 shift
+17420 cam drag 780,500 500,300 shift
+17432 cam drag 400,400 880,460
+17444 cam drag 880,460 400,400
+17456 cam drag 500,300 780,500 shift
+17468 cam drag 780,500 500,300 shift
+17480 cam wheel -6 640,400
+17520 cam drag 400,400 880,460
+17532 cam drag 880,460 400,400
+17544 cam drag 500,300 780,500 shift
+17556 cam drag 780,500 500,300 shift
+17568 cam wheel -8 640,400
+17628 cam drag 400,400 880,460
+17640 cam drag 880,460 400,400
+17652 cam drag 500,300 780,500 shift
+17664 cam drag 780,500 500,300 shift
+17676 cam wheel -10 640,400
+17756 cam drag 400,400 880,460
+17768 cam drag 880,460 400,400
+17780 cam drag 500,300 780,500 shift
+17792 cam drag 780,500 500,300 shift
+17804 cam key left down
+17824 cam key left up
+17828 cam key up down
+17848 cam key up up
+17852 cam key right down
+17872 cam key right up
+17876 cam key down down
+17896 cam key down up
+17900 cam wheel 10 480,400
+17980 cam wheel 14 480,400
+18100 cam drag 400,400 880,460
+18112 cam drag 880,460 400,400
+18124 cam drag 500,300 780,500 shift
+18136 cam drag 780,500 500,300 shift
+18148 cam home
+18228 cam wheel 14 640,400
+18308 hud tab 0
+18328 hud tab 1
+18348 hud tab 2
+18368 hud slot 0
+18388 escape
+18408 box builders
+18428 escape
+18468 cam drag 400,400 880,460
+18480 cam drag 880,460 400,400
+18492 cam drag 500,300 780,500 shift
+18504 cam drag 780,500 500,300 shift
+18516 cam drag 400,400 880,460
+18528 cam drag 880,460 400,400
+18540 cam drag 500,300 780,500 shift
+18552 cam drag 780,500 500,300 shift
+18564 cam wheel -6 640,400
+18604 cam drag 400,400 880,460
+18616 cam drag 880,460 400,400
+18628 cam drag 500,300 780,500 shift
+18640 cam drag 780,500 500,300 shift
+18652 cam wheel -8 640,400
+18712 cam drag 400,400 880,460
+18724 cam drag 880,460 400,400
+18736 cam drag 500,300 780,500 shift
+18748 cam drag 780,500 500,300 shift
+18760 cam wheel -10 640,400
+18840 cam drag 400,400 880,460
+18852 cam drag 880,460 400,400
+18864 cam drag 500,300 780,500 shift
+18876 cam drag 780,500 500,300 shift
+18888 cam key left down
+18908 cam key left up
+18912 cam key up down
+18932 cam key up up
+18936 cam key right down
+18956 cam key right up
+18960 cam key down down
+18980 cam key down up
+18984 cam wheel 10 800,400
+19064 cam wheel 14 800,400
+19184 cam drag 400,400 880,460
+19196 cam drag 880,460 400,400
+19208 cam drag 500,300 780,500 shift
+19220 cam drag 780,500 500,300 shift
+19232 cam home
+19312 cam wheel 14 640,400
+19392 hud tab 0
+19412 hud tab 1
+19432 hud tab 2
+19452 hud slot 0
+19472 escape
+19492 box builders
+19512 escape
+19552 cam drag 400,400 880,460
+19564 cam drag 880,460 400,400
+19576 cam drag 500,300 780,500 shift
+19588 cam drag 780,500 500,300 shift
+19600 cam drag 400,400 880,460
+19612 cam drag 880,460 400,400
+19624 cam drag 500,300 780,500 shift
+19636 cam drag 780,500 500,300 shift
+19648 cam wheel -6 640,400
+19688 cam drag 400,400 880,460
+19700 cam drag 880,460 400,400
+19712 cam drag 500,300 780,500 shift
+19724 cam drag 780,500 500,300 shift
+19736 cam wheel -8 640,400
+19796 cam drag 400,400 880,460
+19808 cam drag 880,460 400,400
+19820 cam drag 500,300 780,500 shift
+19832 cam drag 780,500 500,300 shift
+19844 cam wheel -10 640,400
+19924 cam drag 400,400 880,460
+19936 cam drag 880,460 400,400
+19948 cam drag 500,300 780,500 shift
+19960 cam drag 780,500 500,300 shift
+19972 cam key left down
+19992 cam key left up
+19996 cam key up down
+20016 cam key up up
+20020 cam key right down
+20040 cam key right up
+20044 cam key down down
+20064 cam key down up
+20068 cam wheel 10 560,400
+20148 cam wheel 14 560,400
+20268 cam drag 400,400 880,460
+20280 cam drag 880,460 400,400
+20292 cam drag 500,300 780,500 shift
+20304 cam drag 780,500 500,300 shift
+20316 cam home
+20396 cam wheel 14 640,400
+20476 hud tab 0
+20496 hud tab 1
+20516 hud tab 2
+20536 hud slot 0
+20556 escape
+20576 box builders
+20596 escape
+20636 cam drag 400,400 880,460
+20648 cam drag 880,460 400,400
+20660 cam drag 500,300 780,500 shift
+20672 cam drag 780,500 500,300 shift
+20684 cam drag 400,400 880,460
+20696 cam drag 880,460 400,400
+20708 cam drag 500,300 780,500 shift
+20720 cam drag 780,500 500,300 shift
+20732 cam wheel -6 640,400
+20772 cam drag 400,400 880,460
+20784 cam drag 880,460 400,400
+20796 cam drag 500,300 780,500 shift
+20808 cam drag 780,500 500,300 shift
+20820 cam wheel -8 640,400
+20880 cam drag 400,400 880,460
+20892 cam drag 880,460 400,400
+20904 cam drag 500,300 780,500 shift
+20916 cam drag 780,500 500,300 shift
+20928 cam wheel -10 640,400
+21008 cam drag 400,400 880,460
+21020 cam drag 880,460 400,400
+21032 cam drag 500,300 780,500 shift
+21044 cam drag 780,500 500,300 shift
+21056 cam key left down
+21076 cam key left up
+21080 cam key up down
+21100 cam key up up
+21104 cam key right down
+21124 cam key right up
+21128 cam key down down
+21148 cam key down up
+21152 cam wheel 10 720,400
+21232 cam wheel 14 720,400
+21352 cam drag 400,400 880,460
+21364 cam drag 880,460 400,400
+21376 cam drag 500,300 780,500 shift
+21388 cam drag 780,500 500,300 shift
+21400 cam home
+21480 cam wheel 14 640,400
+21560 hud tab 0
+21580 hud tab 1
+21600 hud tab 2
+21620 hud slot 0
+21640 escape
+21660 box builders
+21680 escape
+21720 cam drag 400,400 880,460
+21732 cam drag 880,460 400,400
+21744 cam drag 500,300 780,500 shift
+21756 cam drag 780,500 500,300 shift
+21768 cam drag 400,400 880,460
+21780 cam drag 880,460 400,400
+21792 cam drag 500,300 780,500 shift
+21804 cam drag 780,500 500,300 shift
+21816 cam wheel -6 640,400
+21856 cam drag 400,400 880,460
+21868 cam drag 880,460 400,400
+21880 cam drag 500,300 780,500 shift
+21892 cam drag 780,500 500,300 shift
+21904 cam wheel -8 640,400
+21964 cam drag 400,400 880,460
+21976 cam drag 880,460 400,400
+21988 cam drag 500,300 780,500 shift
+22000 cam drag 780,500 500,300 shift
+22012 cam wheel -10 640,400
+22092 cam drag 400,400 880,460
+22104 cam drag 880,460 400,400
+22116 cam drag 500,300 780,500 shift
+22128 cam drag 780,500 500,300 shift
+22140 cam key left down
+22160 cam key left up
+22164 cam key up down
+22184 cam key up up
+22188 cam key right down
+22208 cam key right up
+22212 cam key down down
+22232 cam key down up
+22236 cam wheel 10 480,400
+22316 cam wheel 14 480,400
+22436 cam drag 400,400 880,460
+22448 cam drag 880,460 400,400
+22460 cam drag 500,300 780,500 shift
+22472 cam drag 780,500 500,300 shift
+22484 cam home
+22564 cam wheel 14 640,400
+22644 hud tab 0
+22664 hud tab 1
+22684 hud tab 2
+22704 hud slot 0
+22724 escape
+22744 box builders
+22764 escape
+22804 cam drag 400,400 880,460
+22816 cam drag 880,460 400,400
+22828 cam drag 500,300 780,500 shift
+22840 cam drag 780,500 500,300 shift
+22852 cam drag 400,400 880,460
+22864 cam drag 880,460 400,400
+22876 cam drag 500,300 780,500 shift
+22888 cam drag 780,500 500,300 shift
+22900 cam wheel -6 640,400
+22940 cam drag 400,400 880,460
+22952 cam drag 880,460 400,400
+22964 cam drag 500,300 780,500 shift
+22976 cam drag 780,500 500,300 shift
+22988 cam wheel -8 640,400
+23048 cam drag 400,400 880,460
+23060 cam drag 880,460 400,400
+23072 cam drag 500,300 780,500 shift
+23084 cam drag 780,500 500,300 shift
+23096 cam wheel -10 640,400
+23176 cam drag 400,400 880,460
+23188 cam drag 880,460 400,400
+23200 cam drag 500,300 780,500 shift
+23212 cam drag 780,500 500,300 shift
+23224 cam key left down
+23244 cam key left up
+23248 cam key up down
+23268 cam key up up
+23272 cam key right down
+23292 cam key right up
+23296 cam key down down
+23316 cam key down up
+23320 cam wheel 10 800,400
+23400 cam wheel 14 800,400
+23520 cam drag 400,400 880,460
+23532 cam drag 880,460 400,400
+23544 cam drag 500,300 780,500 shift
+23556 cam drag 780,500 500,300 shift
+23568 cam home
+23648 cam wheel 14 640,400
+23728 hud tab 0
+23748 hud tab 1
+23768 hud tab 2
+23788 hud slot 0
+23808 escape
+23828 box builders
+23848 escape
+23888 cam drag 400,400 880,460
+23900 cam drag 880,460 400,400
+23912 cam drag 500,300 780,500 shift
+23924 cam drag 780,500 500,300 shift
+23936 cam drag 400,400 880,460
+23948 cam drag 880,460 400,400
+23960 cam drag 500,300 780,500 shift
+23972 cam drag 780,500 500,300 shift
+23984 cam wheel -6 640,400
+24024 cam drag 400,400 880,460
+24036 cam drag 880,460 400,400
+24048 cam drag 500,300 780,500 shift
+24060 cam drag 780,500 500,300 shift
+24072 cam wheel -8 640,400
+24132 cam drag 400,400 880,460
+24144 cam drag 880,460 400,400
+24156 cam drag 500,300 780,500 shift
+24168 cam drag 780,500 500,300 shift
+24180 cam wheel -10 640,400
+24260 cam drag 400,400 880,460
+24272 cam drag 880,460 400,400
+24284 cam drag 500,300 780,500 shift
+24296 cam drag 780,500 500,300 shift
+24308 cam key left down
+24328 cam key left up
+24332 cam key up down
+24352 cam key up up
+24356 cam key right down
+24376 cam key right up
+24380 cam key down down
+24400 cam key down up
+24404 cam wheel 10 560,400
+24484 cam wheel 14 560,400
+24604 cam drag 400,400 880,460
+24616 cam drag 880,460 400,400
+24628 cam drag 500,300 780,500 shift
+24640 cam drag 780,500 500,300 shift
+24652 cam home
+24732 cam wheel 14 640,400
+24812 hud tab 0
+24832 hud tab 1
+24852 hud tab 2
+24872 hud slot 0
+24892 escape
+24912 box builders
+24932 escape
+24972 cam drag 400,400 880,460
+24984 cam drag 880,460 400,400
+24996 cam drag 500,300 780,500 shift
+25008 cam drag 780,500 500,300 shift
+25020 cam drag 400,400 880,460
+25032 cam drag 880,460 400,400
+25044 cam drag 500,300 780,500 shift
+25056 cam drag 780,500 500,300 shift
+25068 cam wheel -6 640,400
+25108 cam drag 400,400 880,460
+25120 cam drag 880,460 400,400
+25132 cam drag 500,300 780,500 shift
+25144 cam drag 780,500 500,300 shift
+25156 cam wheel -8 640,400
+25216 cam drag 400,400 880,460
+25228 cam drag 880,460 400,400
+25240 cam drag 500,300 780,500 shift
+25252 cam drag 780,500 500,300 shift
+25264 cam wheel -10 640,400
+25344 cam drag 400,400 880,460
+25356 cam drag 880,460 400,400
+25368 cam drag 500,300 780,500 shift
+25380 cam drag 780,500 500,300 shift
+25392 cam key left down
+25412 cam key left up
+25416 cam key up down
+25436 cam key up up
+25440 cam key right down
+25460 cam key right up
+25464 cam key down down
+25484 cam key down up
+25488 cam wheel 10 720,400
+25568 cam wheel 14 720,400
+25688 cam drag 400,400 880,460
+25700 cam drag 880,460 400,400
+25712 cam drag 500,300 780,500 shift
+25724 cam drag 780,500 500,300 shift
+25736 cam home
+25816 cam wheel 14 640,400
+25896 hud tab 0
+25916 hud tab 1
+25936 hud tab 2
+25956 hud slot 0
+25976 escape
+25996 box builders
+26016 escape
+26056 cam drag 400,400 880,460
+26068 cam drag 880,460 400,400
+26080 cam drag 500,300 780,500 shift
+26092 cam drag 780,500 500,300 shift
+26104 cam drag 400,400 880,460
+26116 cam drag 880,460 400,400
+26128 cam drag 500,300 780,500 shift
+26140 cam drag 780,500 500,300 shift
+26152 cam wheel -6 640,400
+26192 cam drag 400,400 880,460
+26204 cam drag 880,460 400,400
+26216 cam drag 500,300 780,500 shift
+26228 cam drag 780,500 500,300 shift
+26240 cam wheel -8 640,400
+26300 cam drag 400,400 880,460
+26312 cam drag 880,460 400,400
+26324 cam drag 500,300 780,500 shift
+26336 cam drag 780,500 500,300 shift
+26348 cam wheel -10 640,400
+26428 cam drag 400,400 880,460
+26440 cam drag 880,460 400,400
+26452 cam drag 500,300 780,500 shift
+26464 cam drag 780,500 500,300 shift
+26476 cam key left down
+26496 cam key left up
+26500 cam key up down
+26520 cam key up up
+26524 cam key right down
+26544 cam key right up
+26548 cam key down down
+26568 cam key down up
+26572 cam wheel 10 480,400
+26652 cam wheel 14 480,400
+26772 cam drag 400,400 880,460
+26784 cam drag 880,460 400,400
+26796 cam drag 500,300 780,500 shift
+26808 cam drag 780,500 500,300 shift
+26820 cam home
+26900 cam wheel 14 640,400
+26980 hud tab 0
+27000 hud tab 1
+27020 hud tab 2
+27040 hud slot 0
+27060 escape
+27080 box builders
+27100 escape
+27140 cam drag 400,400 880,460
+27152 cam drag 880,460 400,400
+27164 cam drag 500,300 780,500 shift
+27176 cam drag 780,500 500,300 shift
+27188 cam drag 400,400 880,460
+27200 cam drag 880,460 400,400
+27212 cam drag 500,300 780,500 shift
+27224 cam drag 780,500 500,300 shift
+27236 cam wheel -6 640,400
+27276 cam drag 400,400 880,460
+27288 cam drag 880,460 400,400
+27300 cam drag 500,300 780,500 shift
+27312 cam drag 780,500 500,300 shift
+27324 cam wheel -8 640,400
+27384 cam drag 400,400 880,460
+27396 cam drag 880,460 400,400
+27408 cam drag 500,300 780,500 shift
+27420 cam drag 780,500 500,300 shift
+27432 cam wheel -10 640,400
+27512 cam drag 400,400 880,460
+27524 cam drag 880,460 400,400
+27536 cam drag 500,300 780,500 shift
+27548 cam drag 780,500 500,300 shift
+27560 cam key left down
+27580 cam key left up
+27584 cam key up down
+27604 cam key up up
+27608 cam key right down
+27628 cam key right up
+27632 cam key down down
+27652 cam key down up
+27656 cam wheel 10 800,400
+27736 cam wheel 14 800,400
+27856 cam drag 400,400 880,460
+27868 cam drag 880,460 400,400
+27880 cam drag 500,300 780,500 shift
+27892 cam drag 780,500 500,300 shift
+27904 cam home
+27984 cam wheel 14 640,400
+28064 hud tab 0
+28084 hud tab 1
+28104 hud tab 2
+28124 hud slot 0
+28144 escape
+28164 box builders
+28184 escape
+28224 cam drag 400,400 880,460
+28236 cam drag 880,460 400,400
+28248 cam drag 500,300 780,500 shift
+28260 cam drag 780,500 500,300 shift
+28272 cam drag 400,400 880,460
+28284 cam drag 880,460 400,400
+28296 cam drag 500,300 780,500 shift
+28308 cam drag 780,500 500,300 shift
+28320 cam wheel -6 640,400
+28360 cam drag 400,400 880,460
+28372 cam drag 880,460 400,400
+28384 cam drag 500,300 780,500 shift
+28396 cam drag 780,500 500,300 shift
+28408 cam wheel -8 640,400
+28468 cam drag 400,400 880,460
+28480 cam drag 880,460 400,400
+28492 cam drag 500,300 780,500 shift
+28504 cam drag 780,500 500,300 shift
+28516 cam wheel -10 640,400
+28596 cam drag 400,400 880,460
+28608 cam drag 880,460 400,400
+28620 cam drag 500,300 780,500 shift
+28632 cam drag 780,500 500,300 shift
+28644 cam key left down
+28664 cam key left up
+28668 cam key up down
+28688 cam key up up
+28692 cam key right down
+28712 cam key right up
+28716 cam key down down
+28736 cam key down up
+28740 cam wheel 10 560,400
+28820 cam wheel 14 560,400
+28940 cam drag 400,400 880,460
+28952 cam drag 880,460 400,400
+28964 cam drag 500,300 780,500 shift
+28976 cam drag 780,500 500,300 shift
+28988 cam home
+29068 cam wheel 14 640,400
+29148 hud tab 0
+29168 hud tab 1
+29188 hud tab 2
+29208 hud slot 0
+29228 escape
+29248 box builders
+29268 escape
+29308 cam drag 400,400 880,460
+29320 cam drag 880,460 400,400
+29332 cam drag 500,300 780,500 shift
+29344 cam drag 780,500 500,300 shift
+29356 cam drag 400,400 880,460
+29368 cam drag 880,460 400,400
+29380 cam drag 500,300 780,500 shift
+29392 cam drag 780,500 500,300 shift
+29404 cam wheel -6 640,400
+29444 cam drag 400,400 880,460
+29456 cam drag 880,460 400,400
+29468 cam drag 500,300 780,500 shift
+29480 cam drag 780,500 500,300 shift
+29492 cam wheel -8 640,400
+29552 cam drag 400,400 880,460
+29564 cam drag 880,460 400,400
+29576 cam drag 500,300 780,500 shift
+29588 cam drag 780,500 500,300 shift
+29600 cam wheel -10 640,400
+29680 cam drag 400,400 880,460
+29692 cam drag 880,460 400,400
+29704 cam drag 500,300 780,500 shift
+29716 cam drag 780,500 500,300 shift
+29728 cam key left down
+29748 cam key left up
+29752 cam key up down
+29772 cam key up up
+29776 cam key right down
+29796 cam key right up
+29800 cam key down down
+29820 cam key down up
+29824 cam wheel 10 720,400
+29904 cam wheel 14 720,400
+30024 cam drag 400,400 880,460
+30036 cam drag 880,460 400,400
+30048 cam drag 500,300 780,500 shift
+30060 cam drag 780,500 500,300 shift
+30072 cam home
+30152 cam wheel 14 640,400
+30232 hud tab 0
+30252 hud tab 1
+30272 hud tab 2
+30292 hud slot 0
+30312 escape
+30332 box builders
+30352 escape
+30392 cam drag 400,400 880,460
+30404 cam drag 880,460 400,400
+30416 cam drag 500,300 780,500 shift
+30428 cam drag 780,500 500,300 shift
+30440 cam drag 400,400 880,460
+30452 cam drag 880,460 400,400
+30464 cam drag 500,300 780,500 shift
+30476 cam drag 780,500 500,300 shift
+30488 cam wheel -6 640,400
+30528 cam drag 400,400 880,460
+30540 cam drag 880,460 400,400
+30552 cam drag 500,300 780,500 shift
+30564 cam drag 780,500 500,300 shift
+30576 cam wheel -8 640,400
+30636 cam drag 400,400 880,460
+30648 cam drag 880,460 400,400
+30660 cam drag 500,300 780,500 shift
+30672 cam drag 780,500 500,300 shift
+30684 cam wheel -10 640,400
+30764 cam drag 400,400 880,460
+30776 cam drag 880,460 400,400
+30788 cam drag 500,300 780,500 shift
+30800 cam drag 780,500 500,300 shift
+30812 cam key left down
+30832 cam key left up
+30836 cam key up down
+30856 cam key up up
+30860 cam key right down
+30880 cam key right up
+30884 cam key down down
+30904 cam key down up
+30908 cam wheel 10 480,400
+30988 cam wheel 14 480,400
+31108 cam drag 400,400 880,460
+31120 cam drag 880,460 400,400
+31132 cam drag 500,300 780,500 shift
+31144 cam drag 780,500 500,300 shift
+31156 cam home
+31236 cam wheel 14 640,400
+31316 hud tab 0
+31336 hud tab 1
+31356 hud tab 2
+31376 hud slot 0
+31396 escape
+31416 box builders
+31436 escape

@@ -19,6 +19,7 @@ use crate::entities::{
     EntitySnapshot, EntityView, SnapshotPair, aloft_hulls, dress_ships, floor_ships, is_aloft_ship,
 };
 use crate::globe::{Globe, PlanetScene};
+use crate::gpu_census::Census;
 use crate::grass::Detail;
 use crate::hud::{HudOverlay, HudSnapshot};
 use crate::hud_gpu::{HudGpu, MinimapGpu, MinimapOverlays, draw_level_pips, draw_space_minimap};
@@ -174,6 +175,8 @@ struct Shared {
     /// The player's turning preferences, packed by [`TurnSettings::bits`].
     turn: AtomicU8,
     snapshot_wanted: AtomicBool,
+    /// Seconds between counts of the live GL objects; 0 counts none (task 121).
+    census_seconds: AtomicU32,
     snapshot: Mutex<Option<Arc<FramePixels>>>,
     review: Mutex<Option<Arc<Review>>>,
     stats: Mutex<RenderStats>,
@@ -393,6 +396,12 @@ impl RenderBridge {
         self.shared.graticule.load(Ordering::Relaxed)
     }
 
+    /// Counts the live GL objects every `seconds` (0: never); the newest count is in
+    /// [`RenderStats::gpu`]. A count takes a few milliseconds of the render thread.
+    pub fn count_gpu_objects(&self, seconds: u32) {
+        self.shared.census_seconds.store(seconds, Ordering::Relaxed);
+    }
+
     /// Asks for a copy of the next finished frame; fetch it with [`Self::take_snapshot`].
     pub fn request_snapshot(&self) {
         *lock(&self.shared.snapshot) = None;
@@ -592,6 +601,7 @@ impl Shared {
             projectiles: AtomicBool::new(true),
             turn: AtomicU8::new(0),
             snapshot_wanted: AtomicBool::new(false),
+            census_seconds: AtomicU32::new(0),
             snapshot: Mutex::new(None),
             review: Mutex::new(None),
             stats: Mutex::new(RenderStats::default()),
@@ -678,6 +688,8 @@ fn render_loop(shared: &Shared) {
     // The visibility map the shades were made from, until the ground is drawn anew.
     let mut shaded_from: Option<Arc<VisionMap>> = None;
     let mut stats = StatsWindow::default();
+    let mut census = Census::new();
+    let mut counted_at: Option<Instant> = None;
     let mut blended: Vec<EntityView> = Vec::new();
     let mut picker = PickController::default();
     let mut over_hud = false;
@@ -710,6 +722,7 @@ fn render_loop(shared: &Shared) {
                 }
             }
         }
+        crate::instancing::begin_frame();
         let frame_start = Instant::now();
         let seconds = frame_start
             .duration_since(last_frame)
@@ -1609,6 +1622,14 @@ fn render_loop(shared: &Shared) {
             millis(finished_at - readback_start + room_work),
             *size,
         );
+        let every = shared.census_seconds.load(Ordering::Relaxed);
+        if every > 0
+            && counted_at
+                .is_none_or(|at| finished_at.duration_since(at).as_secs() >= u64::from(every))
+        {
+            counted_at = Some(finished_at);
+            stats.record_census(census.count());
+        }
         *lock(&shared.stats) = stats.snapshot();
 
         deadline += FRAME_INTERVAL;
@@ -1620,6 +1641,7 @@ fn render_loop(shared: &Shared) {
         }
     }
     // Free GPU objects while the GL context still exists; `rl` closes it when dropped last.
+    crate::instancing::release();
     drop(readback);
     drop(hud);
     drop(minimap);
