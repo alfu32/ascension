@@ -942,6 +942,29 @@ impl NetPlay {
         });
     }
 
+    /// The seats as a save names them, for the match report (task 117).
+    pub fn report_seats(&self) -> Vec<rom_save::Seat> {
+        self.seats
+            .iter()
+            .map(|s| rom_save::Seat {
+                player: PlayerId(s.player),
+                slot: s.seat,
+                name: s.name.clone(),
+                controller: match s.kind {
+                    rom_net::SeatKind::Human => rom_save::Controller::Remote,
+                    rom_net::SeatKind::Computer => rom_save::Controller::Ai,
+                },
+                ai_profile: String::new(),
+                color: s.player,
+            })
+            .collect()
+    }
+
+    /// After the match's end, this remaining human keeps playing (task 117).
+    pub fn keep_playing(&self) {
+        self.send(&ClientMessage::KeepPlaying);
+    }
+
     /// Whether someone paused the match.
     pub fn paused(&self) -> bool {
         self.paused_by.is_some()

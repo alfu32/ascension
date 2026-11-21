@@ -306,7 +306,13 @@ impl World {
         if progress >= total {
             site.build_progress = None;
             site.hp = site.max_hp;
-            self.types.site_done(site.owner, site.type_id);
+            let (owner, type_id) = (site.owner, site.type_id);
+            self.types.site_done(owner, type_id);
+            if owner != PlayerId(0) {
+                let t = self.tally.players.entry(owner).or_default();
+                t.buildings_completed += 1;
+                t.cities_founded += u64::from(et.territory.as_ref().is_some_and(|t| t.is_city));
+            }
             for bonus in &et.completion_bonus {
                 let balance = self
                     .players

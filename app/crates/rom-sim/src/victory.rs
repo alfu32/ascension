@@ -48,6 +48,28 @@ pub enum PlayerStatus {
     Ascended,
 }
 
+/// Why a match reached its end (task 117).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EndReason {
+    /// The setup had a human player and every human player is defeated.
+    NoHumanLeft,
+    /// Every computer player is defeated or ascended and one team of humans remains; they may
+    /// keep playing.
+    LastStanding {
+        /// The remaining team.
+        team: u32,
+    },
+}
+
+/// The end of a match: decided in the simulation at the tick it happens, kept afterwards.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MatchEnd {
+    /// The tick the end was reached.
+    pub tick: u64,
+    /// Why.
+    pub reason: EndReason,
+}
+
 /// The first completed victory, retained while subsequent ticks continue.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
@@ -73,6 +95,10 @@ pub(crate) struct VictoryState {
     /// Ground tiles eligible for the territory victory, across all surfaces.
     pub ownable_tiles: u64,
     pub land_owned: BTreeMap<PlayerId, u64>,
+    /// The players people play, from the setup (task 117); empty in matches without people.
+    pub humans: BTreeSet<PlayerId>,
+    /// The end of the match, once reached.
+    pub end: Option<MatchEnd>,
 }
 
 impl VictoryState {
@@ -103,6 +129,8 @@ impl VictoryState {
             outcome: Outcome::Playing,
             ownable_tiles: 0,
             land_owned: BTreeMap::new(),
+            humans: BTreeSet::new(),
+            end: None,
         })
     }
 }
@@ -129,6 +157,36 @@ impl World {
         &self.victory.options
     }
 
+    /// Names the players people play (task 117), before the first tick. A human seat a
+    /// computer takes over later stays human. Matches without humans never end.
+    pub fn set_humans(&mut self, humans: &[PlayerId]) -> Result<(), SimError> {
+        if self.tick != 0
+            || humans
+                .iter()
+                .any(|p| *p == PlayerId(0) || !self.players.contains_key(p))
+        {
+            return Err(SimError::InvalidPlayer);
+        }
+        self.victory.humans = humans.iter().copied().collect();
+        Ok(())
+    }
+
+    /// The players people play, in id order.
+    pub fn humans(&self) -> impl Iterator<Item = PlayerId> + '_ {
+        self.victory.humans.iter().copied()
+    }
+
+    /// Whether people play `player`.
+    pub fn is_human(&self, player: PlayerId) -> bool {
+        self.victory.humans.contains(&player)
+    }
+
+    /// The end of the match, once reached (task 117): every human defeated, or only humans
+    /// left. The world goes on stepping if asked; the end stays as first reached.
+    pub fn match_end(&self) -> Option<MatchEnd> {
+        self.victory.end
+    }
+
     /// Current status in player id order; neutral player 0 never participates in victory.
     pub fn player_status(&self, player: PlayerId) -> Option<PlayerStatus> {
         self.victory.statuses.get(&player).copied()
@@ -146,6 +204,10 @@ impl World {
 
     fn defeat(&mut self, player: PlayerId, capturer: Option<PlayerId>) {
         self.victory.statuses.insert(player, PlayerStatus::Defeated);
+        let tick = self.tick;
+        if let Some(t) = self.tally_mut(player) {
+            t.defeated = Some((tick, capturer));
+        }
         let entities: Vec<_> = self
             .entities()
             .filter(|e| e.owner == player)
@@ -292,9 +354,47 @@ impl World {
     pub(crate) fn update_victory(&mut self) {
         // The first victory is kept; defeats go on being checked while the match goes on.
         self.eliminate_players();
-        if self.victory.outcome != Outcome::Playing {
+        if self.victory.outcome == Outcome::Playing {
+            self.check_victories();
+        }
+        self.check_end();
+    }
+
+    /// Reaches the end of a match with people in it (task 117): when every human is
+    /// defeated, or when every other player is defeated or ascended and one team of humans
+    /// remains. Ascended humans are still in the match.
+    fn check_end(&mut self) {
+        if self.victory.end.is_some() || self.victory.humans.is_empty() {
             return;
         }
+        let reason = if self
+            .victory
+            .humans
+            .iter()
+            .all(|p| self.player_status(*p) == Some(PlayerStatus::Defeated))
+        {
+            EndReason::NoHumanLeft
+        } else if let Some(team) = self.last_standing()
+            && self.players.keys().all(|p| {
+                *p == PlayerId(0)
+                    || self.victory.humans.contains(p)
+                    || matches!(
+                        self.player_status(*p),
+                        Some(PlayerStatus::Defeated | PlayerStatus::Ascended)
+                    )
+            })
+        {
+            EndReason::LastStanding { team }
+        } else {
+            return;
+        };
+        self.victory.end = Some(MatchEnd {
+            tick: self.tick,
+            reason,
+        });
+    }
+
+    fn check_victories(&mut self) {
         // Solo benchmarks and cooperative scenarios have no opposing team to defeat.
         let initial: BTreeSet<_> = self
             .players

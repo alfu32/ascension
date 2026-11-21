@@ -1446,6 +1446,29 @@ Schema and seed (deliberate; both lint views stay empty, the seed loads), all ge
   while the status is `ascended`, a CHECK), `player.ascensions`; `player.status` takes
   `ascended`. A `star_system` without a catalogue star (`star_id` NULL) is the celestial home.
 
+## How a match ends (task 117)
+
+The rules are in `docs/ascension.md`, "How a match ends". Schema and seed (deliberate; both
+lint views stay empty, the seed loads):
+
+- **PART A, constants.** `stats.history_period_ticks` 1 200 (one sample per player a game
+  minute) and the score weights `score.gathered_per` 100, `score.unit_trained` 5,
+  `score.building_completed` 10, `score.city_founded` 100, `score.city_captured` 150,
+  `score.kill` 2, `score.tech` 20, `score.age` 300, `score.ascension` 2 000 (hand-written in
+  `seed.sql`, beside the other match constants).
+- **PART B, save format 14.** `match_human(player_id)`: the players people play;
+  `match_end(id = 1, tick, reason, team)`: the end once reached (`no_human_left`, or
+  `last_standing` with its team); `player_stat(player_id, spent, units_trained,
+  buildings_completed, cities_founded, cities_captured, cities_lost, techs_researched,
+  peak_land, peak_army, defeated_tick, defeated_by)`; `player_gathered(player_id, resource_id,
+  amount)`; `player_age_reached(player_id, age_id, tick)`; `player_history(tick, player_id,
+  score, land, army, cities, stock, age_id)`. **Format 13 saves still load**: they have no
+  humans (the report then reads human seats from `player.controller`), no end, zero counters and
+  no history. Older formats are refused.
+- **State hash.** The counters and the history of every player are always hashed (so the
+  playthrough's hash changed with task 117 while its world did not); the humans and the end only
+  when there are any, so matches without people hash the same either way.
+
 ## Bringing life (task 77)
 
 The rules, the state and the views are described in `docs/bringing-life.md`. Schema and seed
@@ -1744,6 +1767,9 @@ back. No SQL runs in `rom-sim`.
 - **Rally points.** `entity_rally(entity_id, target_entity_id | x, y, face, body)`
   (task 64). Not part of the state hash while no producer has one, so worlds
   without rally points keep their hashes.
+- **The match end and report of task 117 (format 14).** `match_human`, `match_end`,
+  `player_stat`, `player_gathered`, `player_age_reached`, `player_history` (see "How a match
+  ends"). Format 13 saves still load, without them; format 12 and older are refused.
 - **Market prices of task 107 (format 13).** `market_pressure` rows (see "Market trading").
   Format 12 saves are refused.
 - **Light system space of task 99 (format 12).** `player_vision.explored` holds (word, run)

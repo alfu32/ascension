@@ -206,6 +206,34 @@ injected jitter; it prints the turns kept in hand and the order delays).
 **Desync.** If a client's hash differs from the leader's at the same tick, the server sends a
 snapshot and logs the tick and both hashes; the client reloads and goes on.
 
+## The end of a match (task 117)
+
+The end (`docs/ascension.md`, "How a match ends") is decided by the simulation, so the leader
+and every follower reach it at the same tick and the clients learn of it through the turns like
+any other state; each shows the same end dialog. The humans of a network match are the seats
+people took when it started; a seat a computer took over later stays human.
+
+Once the leader's world has ended, the server
+
+- writes **`report.json`** beside `server.db` in its state folder (the same data as the report
+  screen: the facts, every player's counters, standing and ranks, and the charts' points), saves
+  the match (`autosave.rom`) and tells everyone "The match has ended";
+- goes to the **finished** phase: `GET /status` shows `"phase": "finished"`, `end_tick`,
+  `end_reason` (`no_human_left` or `last_standing`) and `ranking` (player, name, nation, human,
+  standing, score and overall rank). It keeps serving `/status` and lets people reconnect with
+  their seat tokens to see the report (`Lobby.phase` is `finished` too; clients join it as a
+  match under way);
+- **stops stepping** when no human is left; when humans are left it steps on while one of them
+  chose **Keep playing** (`ClientMessage::KeepPlaying`, refused for anyone else) and is
+  connected;
+- **does not exit and does not reset itself**: the systemd service would restart it with
+  `--resume` anyway (a resumed finished match is finished again), and a reset would throw the
+  report away before people read it. A new match is started from the management page, which
+  archives the state folder with the finished match and its report.
+
+`rom report /var/lib/ascension/server.db` prints the ranking and the facts of the folder's match
+(its latest save, with the seats' names).
+
 ## Keys and seats
 
 - A **key** is 20 random bytes from the operating system, shown as 32 base32 characters in four

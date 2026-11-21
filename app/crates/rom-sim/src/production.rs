@@ -184,8 +184,16 @@ impl World {
                 if research {
                     self.complete_research(order.player, subject);
                     order.status = OrderStatus::Done;
+                    if let Some(t) = self.tally_mut(order.player) {
+                        t.techs_researched += 1;
+                    }
                 } else {
                     self.complete_training(id, &mut order);
+                    if order.status == OrderStatus::Done
+                        && let Some(t) = self.tally_mut(order.player)
+                    {
+                        t.units_trained += 1;
+                    }
                 }
             }
             if !self.finish_order(&order) {

@@ -1,0 +1,30 @@
+# Task 117: the end of a match, replayed by --script (universe mode, seed 1, --sun fixed,
+# 1672 x 941, --players 2 --ai balanced:easiest). A company of marines of player two stands
+# beside player one's city and takes it; after the capital hold player one, the only human, is
+# defeated and the end dialog shows (app/docs/img/117-end-dialog.png). 117-report-script.txt is
+# the same with `end-page report`: the report opens at once (app/docs/img/117-report.png).
+0 speed 800
+0 place 2 unit.marine @-5,0
+0 place 2 unit.marine @-5,0
+0 place 2 unit.marine @-5,0
+0 place 2 unit.marine @5,0
+0 place 2 unit.marine @5,0
+0 place 2 unit.marine @5,0
+0 place 2 unit.marine @0,5
+0 place 2 unit.marine @0,5
+0 place 2 unit.marine @0,5
+0 place 2 unit.marine @0,-5
+0 place 2 unit.marine @0,-5
+0 place 2 unit.marine @0,-5
+0 place 2 unit.marine @-4,4
+0 place 2 unit.marine @-4,4
+0 place 2 unit.marine @-4,4
+0 place 2 unit.marine @4,4
+0 place 2 unit.marine @4,4
+0 place 2 unit.marine @4,4
+0 place 2 unit.marine @-4,-4
+0 place 2 unit.marine @-4,-4
+0 place 2 unit.marine @-4,-4
+0 place 2 unit.marine @4,-4
+0 place 2 unit.marine @4,-4
+0 place 2 unit.marine @4,-4

@@ -165,7 +165,7 @@ impl World {
     pub(crate) fn restore_city(&mut self, id: EntityId, owner: PlayerId) {
         let e = self.entity(id).expect("restored city");
         let captured = self.enemies(e.owner, owner);
-        let type_id = e.type_id;
+        let (type_id, previous) = (e.type_id, e.owner);
         if e.owner != owner {
             let buildings: Vec<_> = self
                 .entities()
@@ -197,6 +197,12 @@ impl World {
         }
         if captured {
             self.stats.cities_captured += 1;
+            if let Some(t) = self.tally_mut(owner) {
+                t.cities_captured += 1;
+            }
+            if let Some(t) = self.tally_mut(previous) {
+                t.cities_lost += 1;
+            }
             let et = &self.rules.entity_types[&type_id];
             for cost in self.rules.costs.get(&type_id).into_iter().flatten() {
                 let amount = (i128::from(cost.amount) * i128::from(et.plunder_pct) / 100)

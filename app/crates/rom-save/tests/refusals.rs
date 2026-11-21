@@ -99,3 +99,44 @@ fn saving_replaces_an_existing_file_and_leaves_no_partial_file() {
     assert!(!std::path::Path::new(&part).exists());
     std::fs::remove_file(&path).unwrap();
 }
+
+/// Task 117: a format 13 save (before the match end, the counters and the history) still loads,
+/// with no humans, no end, zero counters and no history.
+#[test]
+fn a_format_13_save_loads_without_the_report_tables() {
+    let rules = rules();
+    let mut w = World::battle_scenario(rules.clone(), 3, 4).unwrap();
+    w.set_humans(&[P1]).unwrap();
+    ticks(&mut w, 30);
+    assert!(w.tally(P1).is_some());
+    let path = temp_path("format13");
+    rom_save::save(&path, &w, &info(&w), &ai()).unwrap();
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "DROP TABLE match_human; DROP TABLE match_end; DROP TABLE player_stat;
+             DROP TABLE player_gathered; DROP TABLE player_age_reached; DROP TABLE player_history;
+             UPDATE match SET format = 13;",
+        )
+        .unwrap();
+    }
+    let (old, _, _) = rom_save::load(&path, &rules).unwrap();
+    assert_eq!(old.tick(), w.tick());
+    assert_eq!(old.entities().count(), w.entities().count());
+    assert_eq!(old.humans().count(), 0);
+    assert_eq!(old.match_end(), None);
+    assert!(old.history().is_empty());
+    assert_eq!(
+        old.tally(P1).cloned().unwrap_or_default(),
+        Default::default()
+    );
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute("UPDATE match SET format = 12", []).unwrap();
+    }
+    assert!(matches!(
+        rom_save::load(&path, &rules),
+        Err(SaveError::UnsupportedFormat { found: 12 })
+    ));
+    std::fs::remove_file(&path).unwrap();
+}

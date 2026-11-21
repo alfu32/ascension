@@ -409,6 +409,8 @@ pub struct PlayerSnapshot {
     pub ascended: Option<u64>,
     /// How many times the player has ascended.
     pub ascensions: u32,
+    /// What the player did in the match (task 117).
+    pub tally: crate::PlayerTally,
 }
 
 /// A weapon hit waiting to land.
@@ -454,6 +456,10 @@ pub struct VictorySnapshot {
     pub outcome: Outcome,
     /// Ground tiles eligible for territory victory.
     pub ownable_tiles: u64,
+    /// The players people play (task 117).
+    pub humans: Vec<PlayerId>,
+    /// The end of the match, once reached.
+    pub end: Option<crate::MatchEnd>,
 }
 
 /// Complete simulation state.
@@ -533,6 +539,8 @@ pub struct Snapshot {
     pub living: Vec<(BodyId, crate::Living)>,
     /// Market pressure away from rest by player and resource, hundredths of a lot (task 107).
     pub market: Vec<((PlayerId, DefId), i64)>,
+    /// The sampled history of every player, in tick then player order (task 117).
+    pub history: Vec<crate::HistorySample>,
 }
 
 const RULES: [VictoryRule; 8] = [
@@ -793,6 +801,7 @@ impl World {
                 origin: self.ascension.origins.get(&p.id).copied(),
                 ascended: self.ascension.ascended.get(&p.id).copied(),
                 ascensions: self.ascensions(p.id),
+                tally: self.tally.players.get(&p.id).cloned().unwrap_or_default(),
             })
             .collect();
         let surfaces = self
@@ -904,6 +913,8 @@ impl World {
                 timers: self.victory.timers.iter().map(|(k, v)| (*k, *v)).collect(),
                 outcome: self.victory.outcome.clone(),
                 ownable_tiles: self.victory.ownable_tiles,
+                humans: self.victory.humans.iter().copied().collect(),
+                end: self.victory.end,
             },
             systems: self.universe.systems.clone(),
             bodies: self.universe.bodies.clone(),
@@ -1031,6 +1042,7 @@ impl World {
                 .map(|(b, l)| (*b, l.clone()))
                 .collect(),
             market: self.market_pressures().collect(),
+            history: self.tally.history.clone(),
         }
     }
 
@@ -1075,6 +1087,7 @@ impl World {
             dormant,
             living,
             market,
+            history,
         } = snapshot;
         let mut world = Self::empty(
             rules.clone(),
@@ -1414,6 +1427,24 @@ impl World {
                 .iter()
                 .filter_map(|p| p.land_owned.map(|n| (p.player.id, n)))
                 .collect(),
+            humans: victory.humans.iter().copied().collect(),
+            end: victory.end,
+        };
+        if victory
+            .humans
+            .iter()
+            .chain(history.iter().map(|s| &s.player))
+            .any(|p| *p == PlayerId(0) || !world.players.contains_key(p))
+        {
+            return Err(bad("humans or history of an unknown player"));
+        }
+        world.tally = crate::tally::TallyState {
+            players: players
+                .iter()
+                .filter(|p| p.player.id != PlayerId(0))
+                .map(|p| (p.player.id, p.tally.clone()))
+                .collect(),
+            history,
         };
         world.ascension = crate::ascension::AscensionState {
             origins: players

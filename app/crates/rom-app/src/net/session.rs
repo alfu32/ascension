@@ -367,7 +367,7 @@ fn run(
         welcome.seat + 1,
         if welcome.host { ", host" } else { "" }
     );
-    let under_way = welcome.lobby.phase == "playing";
+    let under_way = matches!(welcome.lobby.phase.as_str(), "playing" | "finished");
     update(state, |s| {
         s.phase = Phase::Lobby;
         s.status = if under_way {

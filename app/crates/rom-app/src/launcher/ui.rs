@@ -35,6 +35,8 @@ enum Screen {
     Form(Mode),
     /// The launcher with every option.
     Advanced,
+    /// The match report of a saved game (task 117).
+    Report,
 }
 
 type ChoiceState = Entity<SelectState<SearchableVec<Choice>>>;
@@ -72,6 +74,10 @@ pub(super) struct Launcher {
     model_busy: bool,
     saves: Vec<crate::saves::Entry>,
     saves_note: Option<String>,
+    /// The match report shown (task 117), or why it could not be made; `None` while it loads.
+    report: Option<Result<std::sync::Arc<rom_match::MatchReport>, String>>,
+    /// The screen the report goes back to.
+    report_from: Screen,
     screen: Screen,
     focus: FocusHandle,
     simple_inputs: BTreeMap<&'static str, Entity<InputState>>,
@@ -143,6 +149,8 @@ impl Launcher {
             model_busy: false,
             saves: Vec::new(),
             saves_note: None,
+            report: None,
+            report_from: Screen::Home,
             screen: Screen::Home,
             focus: cx.focus_handle().tab_stop(false),
             simple_inputs: BTreeMap::new(),
@@ -260,7 +268,7 @@ impl Launcher {
                 let _ = this.update(cx, |this, cx| match screen {
                     Screen::Form(mode) => this.start(mode, cx),
                     Screen::Home => this.play_chosen(cx),
-                    Screen::Advanced => {}
+                    Screen::Advanced | Screen::Report => {}
                 });
             })
             .detach();
@@ -562,6 +570,26 @@ impl Launcher {
             Err(error) => self.message = Some(error),
         }
         cx.notify();
+    }
+
+    /// Opens the match report of the save at `path` (task 117): the save is read off the UI
+    /// thread under the game's rules.
+    fn show_report(&mut self, path: &std::path::Path, window: &mut Window, cx: &mut Context<Self>) {
+        let path = path.to_owned();
+        self.report = None;
+        self.report_from = self.screen;
+        self.go(Screen::Report, window, cx);
+        cx.spawn(async move |this, cx| {
+            let report = cx
+                .background_executor()
+                .spawn(async move { report_of(&path) })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.report = Some(report.map(std::sync::Arc::new));
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// Continues the newest save this game can load.
@@ -1030,6 +1058,7 @@ impl Render for Launcher {
             Screen::Home => self.render_home(cx),
             Screen::Form(mode) => self.render_form(mode, window, cx),
             Screen::Advanced => self.render_advanced(window, cx),
+            Screen::Report => self.render_report(cx),
         };
         div()
             .id("launcher-root")
@@ -1038,6 +1067,8 @@ impl Render for Launcher {
             .on_action(cx.listener(|this, _: &Back, window, cx| {
                 if matches!(this.screen, Screen::Form(_)) {
                     this.go(Screen::Home, window, cx);
+                } else if this.screen == Screen::Report {
+                    this.go(this.report_from, window, cx);
                 }
             }))
             .on_action(cx.listener(|this, _: &Confirm, _, cx| {
@@ -1050,4 +1081,11 @@ impl Render for Launcher {
             .size_full()
             .child(body)
     }
+}
+
+/// The match report of a save, named from its seats (task 117).
+fn report_of(path: &std::path::Path) -> Result<rom_match::MatchReport, String> {
+    let rules = std::sync::Arc::new(rom_match::load_rules()?);
+    let (world, info, _) = rom_match::load_match(path, &rules)?;
+    Ok(rom_match::MatchReport::of(&world, &info))
 }

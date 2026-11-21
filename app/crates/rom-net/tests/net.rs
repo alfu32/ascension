@@ -487,3 +487,81 @@ fn the_status_page_answers_json() {
     server.stop();
     assert!(TcpStream::connect(addr).is_err());
 }
+
+/// Task 117: the only human is defeated by a computer (a scene of marines beside its city); the
+/// leader and the follower reach the end at the same tick, the server goes to the finished phase,
+/// stops stepping, ranks the players in `/status` and writes `report.json`.
+#[test]
+fn the_match_ends_when_no_human_is_left() {
+    let _one = one_at_a_time();
+    let mut script = String::new();
+    for (dx, dy) in [
+        (-5, 0),
+        (5, 0),
+        (0, 5),
+        (0, -5),
+        (-4, 4),
+        (4, 4),
+        (-4, -4),
+        (4, -4),
+    ] {
+        for _ in 0..3 {
+            script.push_str(&format!("0 place 2 unit.marine @{dx},{dy}\n"));
+        }
+    }
+    let mut config = config(
+        "ended",
+        MatchPlan {
+            ai: vec![Spec::parse("balanced:easiest").unwrap()],
+            script,
+            ..plan(1, "map.solar")
+        },
+    );
+    config.wait_for_clients = true;
+    config.speed = 10_000;
+    let state = config.state_dir.clone();
+    let server = Server::start(config).unwrap();
+    let key = server.add_keys(1, true).unwrap().remove(0);
+    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let person = spawn(ClientOptions {
+        bot: None,
+        stop: Some(Arc::clone(&stop)),
+        ..client(&server, "ended person", Credential::Key(key))
+    });
+    let status = until(&server, "the end of the match", |s| s.phase == "finished");
+    assert_eq!(status.end_reason.as_deref(), Some("no_human_left"));
+    let end = status.end_tick.unwrap();
+    assert_eq!(status.ranking.len(), 2, "{:?}", status.ranking);
+    // The leader stops at the end: nobody is left to keep playing.
+    std::thread::sleep(Duration::from_millis(500));
+    let later = server.status();
+    assert!(!later.running);
+    assert_eq!(later.tick, end);
+    let report: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(state.join("report.json")).unwrap()).unwrap();
+    assert_eq!(report["end"]["tick"], end);
+    assert_eq!(report["end"]["reason"], "no_human_left");
+    assert_eq!(report["players"].as_array().unwrap().len(), 2);
+    let defeated = report["players"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["player"] == 1)
+        .unwrap();
+    assert_eq!(defeated["standing"], "defeated");
+    assert_eq!(defeated["human"], true);
+    assert_eq!(defeated["defeated_by"], 2);
+    // The follower stands at the leader's end tick and found the same end.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while server.status().hash_checks == 0 && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    std::thread::sleep(Duration::from_millis(500));
+    stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    let followed = person.join().unwrap();
+    assert_eq!(followed.tick, end, "{followed:?}");
+    assert_eq!(followed.end_tick, Some(end));
+    assert_eq!(server.status().desyncs, 0);
+    assert_eq!(server.status().phase, "finished");
+    server.stop();
+}
