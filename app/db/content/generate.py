@@ -1206,7 +1206,7 @@ def alerts_and_detectors(definition, row, tag, need, produce, cost, tech):
     definition('entity_type', full, 'Deep Space Tracking Station')
     # One per city's area (the limit columns have no per-planet scope); several do not
     # duplicate alerts.
-    row('entity_type', id=Ref(full), **{'class': 'building'}, ui_group='military', hp=1500, armor=3,
+    row('entity_type', id=Ref(full), **{'class': 'building'}, ui_group='military', hp=1000, armor=3,
         armor_class_id=Ref('structure', 'armor_class'), los=building_sight(age, 2), footprint_w=2, footprint_h=2,
         build_ticks=150 + 25 * age, ramp_mode='per_type', limit_scope='per_city', limit_count=1,
         first_age_id=Ref('age.' + DETECTOR_AGE))

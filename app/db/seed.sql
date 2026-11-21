@@ -3287,7 +3287,7 @@ INSERT INTO game_constant(key,value,unit,note) VALUES ('alert.attack_repeat_tick
 INSERT INTO game_constant(key,value,unit,note) VALUES ('alert.marker_ticks',200,'ticks','an alert marks its place on the minimap and the star map this long; arriving ships stay shown as long');
 INSERT INTO stat(key,scope,note) VALUES ('detector','entity','1 when the entity detects jump arrivals (et_detector.enabled is its base)');
 INSERT INTO def(kind,key,name) VALUES ('entity_type','bld.jump_detector','Deep Space Tracking Station');
-INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.jump_detector'),'building','military',1500,3,(SELECT id FROM armor_class WHERE key='structure'),16000,2,2,375,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.fusion'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.jump_detector'),'building','military',1000,3,(SELECT id FROM armor_class WHERE key='structure'),16000,2,2,375,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.fusion'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.jump_detector'),(SELECT id FROM tag WHERE key='building'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.jump_detector'),(SELECT id FROM tag WHERE key='mechanical'));
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.jump_detector'),(SELECT id FROM def WHERE key='res.metal'),300,6);

@@ -1490,11 +1490,13 @@ the seed loads.
   active (not neutralised, not assimilating, not aboard). It watches for its owner only, and
   sees ships of players not on its owner's team. Several detectors of one player give one alert
   per arriving owner and system and tick. Code reads the component and the stat, never a key.
-- **`bld.jump_detector`** "Deep Space Tracking Station": fusion age, 2 × 2, 1 500 hp, armour 3,
+- **`bld.jump_detector`** "Deep Space Tracking Station": fusion age, 2 × 2, 1 000 hp, armour 3,
   300 metal and 150 energy (ramped), built by citizens and worker drones (military page) in own
   territory on plain ground like the inhibitor, `limit_scope = 'per_city'`, `limit_count = 1`
   (the limit columns have no per-planet scope; several do not duplicate alerts);
-  `et_detector('system', 0, 1)`. Model `db/models/bld.jump_detector@fusion.sql` (for the owner's
+  `et_detector('system', 0, 1)`. Its hit points are those of a light building so the town
+  `rom fight-matrix` levels from orbit (`orbit_matrix.rs`) still falls to a battleship in fewer
+  volleys than to a cruiser (at 1 500 both took four). Model `db/models/bld.jump_detector@fusion.sql` (for the owner's
   model review). Computer players build it through the construction manager's ordinary rule for
   a building with no other role (one, low priority, once the fusion age unlocks it): no code
   change and no weight.
