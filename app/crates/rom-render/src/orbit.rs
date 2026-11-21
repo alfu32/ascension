@@ -475,7 +475,8 @@ pub(crate) fn pan_index(key: Key) -> Option<usize> {
         | Key::SkyFromSun
         | Key::ToggleConstellations
         | Key::LevelView
-        | Key::CelestialHome => None,
+        | Key::CelestialHome
+        | Key::LatestAlert => None,
     }
 }
 

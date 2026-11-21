@@ -1543,6 +1543,7 @@ fn render_loop(shared: &Shared) {
                                 MinimapOverlays {
                                     cities: &hud_snapshot.city_radii,
                                     graticule,
+                                    alerts: &hud_snapshot.alerts,
                                 },
                             );
                         }
@@ -2042,13 +2043,14 @@ fn space_key_index(key: Key) -> Option<usize> {
 }
 
 /// A request to move the camera to something: the selection (Space, the minimap's centre
-/// button), following it (Shift + Space, Shift + the centre button), or what the newest event
-/// is about (a click on the event line).
+/// button), following it (Shift + Space, Shift + the centre button), what the newest event
+/// is about (a click on the event line), or what the newest alert is about (Backspace).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CameraAsk {
     Selection,
     Follow,
     Event,
+    Alert,
 }
 
 /// The camera request an input event makes, if any.
@@ -2061,6 +2063,9 @@ fn camera_request(
     match event {
         InputEvent::KeyDown(Key::FocusSelection) => Some(CameraAsk::Selection),
         InputEvent::KeyDown(Key::FollowSelection) => Some(CameraAsk::Follow),
+        InputEvent::KeyDown(Key::LatestAlert) if hud.alert_about.is_some() => {
+            Some(CameraAsk::Alert)
+        }
         InputEvent::ButtonDown {
             button: PointerButton::Left,
             x,
@@ -2152,6 +2157,7 @@ fn steer_to(
     }
     let wanted: Vec<u32> = match ask {
         CameraAsk::Event => hud.event_about.into_iter().collect(),
+        CameraAsk::Alert => hud.alert_about.into_iter().collect(),
         CameraAsk::Selection | CameraAsk::Follow => hud.selected.clone(),
     };
     match (zoom, orbit) {
@@ -2721,6 +2727,17 @@ mod tests {
         );
         hud.event_about = None;
         assert_eq!(camera_request(click, &layout, true, &hud), None);
+        // Backspace flies to what the newest alert is about, while there is one (task 118).
+        assert_eq!(Key::from_name("backspace"), Some(Key::LatestAlert));
+        assert_eq!(
+            camera_request(key(Key::LatestAlert), &layout, true, &hud),
+            None
+        );
+        hud.alert_about = Some(40);
+        assert_eq!(
+            camera_request(key(Key::LatestAlert), &layout, true, &hud),
+            Some(CameraAsk::Alert)
+        );
     }
 
     #[test]

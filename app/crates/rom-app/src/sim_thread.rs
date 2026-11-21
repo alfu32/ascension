@@ -921,6 +921,7 @@ fn run(
             publish_hud(
                 game.world(),
                 me,
+                viewed_body(game.world(), host.as_ref()),
                 net_line.as_ref(),
                 &controller,
                 bridge,
@@ -1003,6 +1004,7 @@ fn run(
             publish_hud(
                 game.world(),
                 me,
+                viewed_body(game.world(), host.as_ref()),
                 net_line.as_ref(),
                 &controller,
                 bridge,
@@ -1447,7 +1449,7 @@ fn publish(
     ascension: &AscensionView,
 ) {
     let sightings = world.visible_entities(me);
-    let body = host.map_or_else(|| world.surfaces()[0].body(), |h| h.viewed);
+    let body = viewed_body(world, host);
     if TerrainKnowledge::refresh(&mut memory.terrain, world, me, body) {
         let hidden = crate::terrain::hidden_terrain(world, me);
         bridge.publish_hidden_terrain(Arc::new(hidden));
@@ -1478,6 +1480,7 @@ fn publish(
     }
     let mut hud = crate::hud::snapshot_of(world, me);
     controller.fill(world, &mut hud);
+    crate::alert_view::fill_hud(world, me, body, &mut hud);
     ascension.fill(world, &mut hud, celestial_in_view(world, bridge));
     if let Some(line) = net_line {
         hud.banner.insert(0, line.clone());
@@ -1545,9 +1548,15 @@ fn focus_camera(world: &World, controller: &mut Controller, bridge: &RenderBridg
     }
 }
 
+/// The body whose surface the view shows: the planet the camera is on, or the only surface.
+fn viewed_body(world: &World, host: Option<&UniverseHost>) -> rom_sim::BodyId {
+    host.map_or_else(|| world.surfaces()[0].body(), |h| h.viewed)
+}
+
 fn publish_hud(
     world: &World,
     me: PlayerId,
+    body: rom_sim::BodyId,
     net_line: Option<&(String, [u8; 4])>,
     controller: &Controller,
     bridge: &RenderBridge,
@@ -1555,6 +1564,7 @@ fn publish_hud(
 ) {
     let mut hud = crate::hud::snapshot_of(world, me);
     controller.fill(world, &mut hud);
+    crate::alert_view::fill_hud(world, me, body, &mut hud);
     ascension.fill(world, &mut hud, celestial_in_view(world, bridge));
     if let Some(line) = net_line {
         hud.banner.insert(0, line.clone());

@@ -139,6 +139,42 @@ pub struct HudCityRadius {
     pub minimap: bool,
 }
 
+/// An alert's place on the shown surface (task 118): a pulsing ring on the minimap.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HudAlert {
+    /// Surface face.
+    pub face: u8,
+    /// Centre in milli-tiles.
+    pub x: i32,
+    /// Centre in milli-tiles.
+    pub y: i32,
+    /// Game ticks since it was raised.
+    pub age_ticks: u32,
+    /// Game ticks the marker lasts (`alert.marker_ticks`).
+    pub life_ticks: u32,
+    /// What it marks: an attack (red) or foreign ships jumping in (amber).
+    pub kind: AlertMark,
+}
+
+/// What an alert marker stands for (task 118).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AlertMark {
+    /// A city or army under attack: red.
+    Attack,
+    /// Foreign ships jumped in: amber.
+    Arrival,
+}
+
+impl AlertMark {
+    /// The marker's colour.
+    pub fn colour(self) -> [u8; 4] {
+        match self {
+            Self::Attack => [255, 70, 50, 255],
+            Self::Arrival => [255, 190, 60, 255],
+        }
+    }
+}
+
 /// A blast of an area weapon on the shown surface (task 75): its flash, shockwave, debris and
 /// the scorched ground it leaves.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
