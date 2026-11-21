@@ -3,13 +3,13 @@
 use crate::{AiState, AiStates, Controller, FORMAT, MatchInfo, SaveError, SaveHeader, Seat, codec};
 use rom_rules::{BodyKind, DefId, Rules};
 use rom_sim::{
-    BodyId, BodyInfo, DormantSurface, Elimination, EmitterSnapshot, EntityId, EntitySnapshot,
-    HitSnapshot, Living, MatchOptions, MoveSnapshot, OrbitSnapshot, OrderId, OrderSnapshot,
-    OrderStatus, Outcome, PathRequestSnapshot, PathSnapshot, Player, PlayerId, PlayerSnapshot,
-    PlayerStatus, PlayerVisionSnapshot, Pos, Rally, RememberedBuilding, RouteInfo, RouteSnapshot,
-    SearchNodeSnapshot, SearchSnapshot, ShotSnapshot, Snapshot, SpaceSnapshot, Stats, SurfaceShape,
-    SurfaceSnapshot, SystemInfo, TileRef, TradeRoute, TransitSnapshot, VictorySnapshot,
-    ViewerSnapshot, World, victory_rule_from_key,
+    BodyId, BodyInfo, DormantSurface, Elimination, EmitterSnapshot, EndReason, EntityId,
+    EntitySnapshot, HistorySample, HitSnapshot, Living, MatchEnd, MatchOptions, MoveSnapshot,
+    OrbitSnapshot, OrderId, OrderSnapshot, OrderStatus, Outcome, PathRequestSnapshot, PathSnapshot,
+    Player, PlayerId, PlayerSnapshot, PlayerStatus, PlayerTally, PlayerVisionSnapshot, Pos, Rally,
+    RememberedBuilding, RouteInfo, RouteSnapshot, SearchNodeSnapshot, SearchSnapshot, ShotSnapshot,
+    Snapshot, SpaceSnapshot, Stats, SurfaceShape, SurfaceSnapshot, SystemInfo, TileRef, TradeRoute,
+    TransitSnapshot, VictorySnapshot, ViewerSnapshot, World, victory_rule_from_key,
 };
 use rusqlite::{Connection, OpenFlags, Row, params};
 use std::{collections::BTreeMap, path::Path, sync::Arc};
@@ -102,7 +102,7 @@ pub fn header(conn: &Connection) -> Result<SaveHeader, SaveError> {
             },
         )
         .map_err(|_| bad("missing match row"))?;
-    if format != FORMAT {
+    if !(crate::OLDEST_FORMAT..=FORMAT).contains(&format) {
         return Err(SaveError::UnsupportedFormat { found: format });
     }
     let mut settings = BTreeMap::new();
@@ -650,6 +650,98 @@ fn surfaces(conn: &Connection) -> Result<Vec<SurfaceSnapshot>, SaveError> {
     Ok(by_body.into_values().collect())
 }
 
+type TallyTables = (Vec<PlayerId>, Option<MatchEnd>, Vec<HistorySample>);
+
+/// The humans, the match end, the counters and the history (task 117, format 14).
+fn tally(conn: &Connection, players: &mut [PlayerSnapshot]) -> Result<TallyTables, SaveError> {
+    let humans = query_vec(
+        conn,
+        "SELECT player_id FROM match_human ORDER BY player_id",
+        |r| Ok(PlayerId(uint(r, 0, "human")?)),
+    )?;
+    let end = query_vec(conn, "SELECT tick, reason, team FROM match_end", |r| {
+        Ok(MatchEnd {
+            tick: u(int(r, 0)?),
+            reason: match (text(r, 1)?.as_str(), ouint::<u32>(r, 2, "end team")?) {
+                ("no_human_left", None) => EndReason::NoHumanLeft,
+                ("last_standing", Some(team)) => EndReason::LastStanding { team },
+                _ => return Err(bad("end reason")),
+            },
+        })
+    })?
+    .into_iter()
+    .next();
+    fn find(players: &mut [PlayerSnapshot], id: u32) -> Result<&mut PlayerTally, SaveError> {
+        players
+            .iter_mut()
+            .find(|p| p.player.id.0 == id)
+            .map(|p| &mut p.tally)
+            .ok_or(bad("statistics of an unknown player"))
+    }
+    let mut stmt = conn.prepare(
+        "SELECT player_id, spent, units_trained, buildings_completed, cities_founded, cities_captured, cities_lost, techs_researched, peak_land, peak_army, defeated_tick, defeated_by FROM player_stat ORDER BY player_id",
+    )?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let t = find(players, uint(row, 0, "stat player")?)?;
+        t.spent = int(row, 1)?;
+        t.units_trained = u(int(row, 2)?);
+        t.buildings_completed = u(int(row, 3)?);
+        t.cities_founded = u(int(row, 4)?);
+        t.cities_captured = u(int(row, 5)?);
+        t.cities_lost = u(int(row, 6)?);
+        t.techs_researched = u(int(row, 7)?);
+        t.peak_land = u(int(row, 8)?);
+        t.peak_army = u(int(row, 9)?);
+        t.defeated = oint(row, 10)?
+            .map(|tick| Ok::<_, SaveError>((u(tick), ouint(row, 11, "defeated by")?.map(PlayerId))))
+            .transpose()?;
+    }
+    for (player, resource, amount) in query_vec(
+        conn,
+        "SELECT player_id, resource_id, amount FROM player_gathered ORDER BY player_id, resource_id",
+        |r| {
+            Ok((
+                uint::<u32>(r, 0, "player")?,
+                DefId(uint(r, 1, "resource")?),
+                int(r, 2)?,
+            ))
+        },
+    )? {
+        find(players, player)?.gathered.insert(resource, amount);
+    }
+    for (player, age, tick) in query_vec(
+        conn,
+        "SELECT player_id, age_id, tick FROM player_age_reached ORDER BY player_id, age_id",
+        |r| {
+            Ok((
+                uint::<u32>(r, 0, "player")?,
+                DefId(uint(r, 1, "age")?),
+                u(int(r, 2)?),
+            ))
+        },
+    )? {
+        find(players, player)?.ages.insert(age, tick);
+    }
+    let history = query_vec(
+        conn,
+        "SELECT tick, player_id, score, land, army, cities, stock, age_id FROM player_history ORDER BY tick, player_id",
+        |r| {
+            Ok(HistorySample {
+                tick: u(int(r, 0)?),
+                player: PlayerId(uint(r, 1, "history player")?),
+                score: int(r, 2)?,
+                land: u(int(r, 3)?),
+                army: u(int(r, 4)?),
+                cities: u(int(r, 5)?),
+                stock: int(r, 6)?,
+                age: DefId(uint(r, 7, "history age")?),
+            })
+        },
+    )?;
+    Ok((humans, end, history))
+}
+
 fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
     let (mut snap_stats, victory, scalars) = {
         let mut stmt = conn.prepare(
@@ -770,6 +862,7 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
                 origin: ouint(row, 13, "origin faction")?.map(DefId),
                 ascended: oint(row, 14)?.map(u),
                 ascensions: uint(row, 15, "ascensions")?,
+                tally: PlayerTally::default(),
             });
         }
     }
@@ -1003,6 +1096,13 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
         "SELECT entity_id, economic_radius FROM city ORDER BY entity_id",
         |r| Ok((EntityId(uint(r, 0, "city")?), oint(r, 1)?)),
     )?;
+    // Format 13 saves (before task 117) have no humans, end, counters or history.
+    let format: i64 = conn.query_row("SELECT format FROM match", [], |r| r.get(0))?;
+    let (humans, end, history) = if format >= 14 {
+        tally(conn, &mut players)?
+    } else {
+        (Vec::new(), None, Vec::new())
+    };
     Ok(Snapshot {
         tick,
         rng_state,
@@ -1019,6 +1119,8 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
             timers,
             outcome,
             ownable_tiles,
+            humans,
+            end,
         },
         systems,
         bodies,
@@ -1086,6 +1188,7 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
         dirty: flags(conn, "dirty")?,
         awake: flags(conn, "awake")?,
         governors_paused: flags(conn, "governor_paused")?,
+        history,
         market: query_vec(
             conn,
             "SELECT player_id, resource_id, pressure FROM market_pressure ORDER BY player_id, resource_id",

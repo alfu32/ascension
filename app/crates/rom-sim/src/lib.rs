@@ -40,6 +40,7 @@ mod stains;
 mod stance;
 mod surface;
 mod tactics;
+mod tally;
 mod territory;
 mod tiles;
 mod transport;
@@ -73,8 +74,9 @@ pub use snapshot::*;
 pub use space::{BodyClaim, BodyYield, Orbit, OrbitalShot, Transit};
 pub use stains::{BUILDING_STAIN_PERMILLE, STAIN_FLOOR, Stain, UNIT_STAIN_PERMILLE};
 pub use surface::Surface;
+pub use tally::{HistorySample, PlayerTally};
 pub use universe::{BodyId, BodyInfo, PlanetSurface, RouteInfo, SystemInfo, UniverseSetup};
-pub use victory::{Elimination, MatchOptions, Outcome, PlayerStatus};
+pub use victory::{Elimination, EndReason, MatchEnd, MatchOptions, Outcome, PlayerStatus};
 pub use vision::{RememberedBuilding, Sighting};
 pub use wealth::TradeRoute;
 pub use world::{Stats, World};
@@ -366,5 +368,7 @@ pub enum SimError {
 mod ascension_tests;
 #[cfg(test)]
 mod life_tests;
+#[cfg(test)]
+mod tally_tests;
 #[cfg(test)]
 mod victory_tests;

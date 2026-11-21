@@ -251,6 +251,7 @@ impl World {
                         .entry(*resource)
                         .or_default();
                     *balance = balance.saturating_add(payment);
+                    self.count_gathered(player, *resource, payment);
                 }
             }
         }

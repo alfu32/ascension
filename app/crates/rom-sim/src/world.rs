@@ -60,6 +60,8 @@ pub struct World {
     /// Dormant surfaces of resource bodies and the bodies brought to life (task 77).
     pub(crate) life: crate::life::LifeState,
     pub(crate) capture: crate::capture::CaptureState,
+    /// Per-player statistics and their history (task 117; hashed, saved).
+    pub(crate) tally: crate::tally::TallyState,
     pub(crate) hits: Vec<crate::combat::PendingHit>,
     pub(crate) shots: Vec<crate::combat::PendingShot>,
     pub(crate) tick: u64,
@@ -298,6 +300,7 @@ impl World {
             ascension,
             life: crate::life::LifeState::default(),
             capture: crate::capture::CaptureState::default(),
+            tally: crate::tally::TallyState::default(),
             hits: Vec::new(),
             shots: Vec::new(),
             tick: 0,
@@ -887,6 +890,14 @@ impl World {
                 .entry(*resource)
                 .or_default() -= amount;
         }
+        let paid = payment
+            .iter()
+            .fold(0i64, |sum, (_, amount)| sum.saturating_add(*amount));
+        if paid > 0
+            && let Some(t) = self.tally_mut(command.player)
+        {
+            t.spent = t.spent.saturating_add(paid);
+        }
         let total_ticks = if command.kind == "repair" {
             command
                 .target_entity
@@ -937,6 +948,9 @@ impl World {
     }
 
     fn step_unrecorded(&mut self) {
+        if self.tick == 0 {
+            self.record_ages();
+        }
         self.find_idle_work();
         self.acquire_idle();
         self.regenerate_energy();
@@ -1067,5 +1081,6 @@ impl World {
         self.tick = self.tick.checked_add(1).expect("simulation tick exhausted");
         self.arrive_transits();
         self.update_victory();
+        self.record_tally();
     }
 }

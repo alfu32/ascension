@@ -15,7 +15,11 @@ use std::{collections::BTreeMap, fmt::Write as _, path::Path, sync::Arc};
 use thiserror::Error;
 
 /// Layout version of the PART B tables this crate writes and reads.
-pub const FORMAT: i64 = 13;
+pub const FORMAT: i64 = 14;
+
+/// The oldest layout this crate still reads: format 13 saves load without the match end, the
+/// players' counters and their history (task 117).
+pub const OLDEST_FORMAT: i64 = 13;
 
 const PART_B: &str = include_str!("../../../db/schema.sql");
 
@@ -44,7 +48,9 @@ pub enum SaveError {
         rules_fingerprint: String,
     },
     /// The save uses a table layout this build does not read.
-    #[error("unsupported save format {found}; this build reads format {FORMAT}")]
+    #[error(
+        "unsupported save format {found}; this build reads formats {OLDEST_FORMAT} to {FORMAT}"
+    )]
     UnsupportedFormat {
         /// The format recorded in the file.
         found: i64,
