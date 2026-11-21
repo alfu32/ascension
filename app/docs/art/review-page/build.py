@@ -22,7 +22,9 @@ ROUND14 = {"unit.survey_ship@starfaring", "unit.corvette@starfaring",
            "unit.space_freighter@starfaring", "unit.satellite@starfaring",
            "unit.orbital_fighter@starfaring", "unit.orbital_bomber@starfaring",
            "unit.ship_of_the_line@enlightenment", "unit.dreadnought@modern"}
-NAMES = {"bld.city": "City", "bld.woodcutter_camp": "Woodcutter's camp", "node.relics": "Relic site",
+# Task 118: the Deep Space Tracking Station, the fusion age's jump detector.
+ROUND15 = {"bld.jump_detector@fusion"}
+NAMES = {"bld.jump_detector": "Deep Space Tracking Station", "bld.city": "City", "bld.woodcutter_camp": "Woodcutter's camp", "node.relics": "Relic site",
          "unit.ship_of_the_line": "Man-of-war"}
 
 def name_of(entity):
@@ -152,7 +154,11 @@ OVERVIEW14 = [
     ("93-system-fleet", "System view at the bench framing: sixty ships of every class on the plane of the home system (<code>docs/tasks/93-bench-script.txt</code>), far versions at this distance"),
     ("93-sea", "The two new line ships at sea level beside their neighbours: frigate and man-of-war; destroyer and dreadnought"),
 ]
-OVERVIEW = OVERVIEW14 if ROUND == "14" else OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
+OVERVIEW15 = [
+    ("118-jump-detected", "What the station does: foreign ships jumped into the watched home system — the alert line and amber rings on the star map and its minimap"),
+    ("118-under-attack", "The other alert of task 118, for context: \"Your capital is under attack\" and a red ring on the minimap"),
+]
+OVERVIEW = OVERVIEW15 if ROUND == "15" else OVERVIEW14 if ROUND == "14" else OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
     ("gallery_ancient", "Ancient age, game camera: <code>--gallery ancient</code>"),
     ("gallery_classical", "Classical age, game camera: <code>--gallery classical</code>"),
     ("gallery_classical_close_team2", "Classical age, close, in player 2's blue to show where team colour sits"),
@@ -176,9 +182,11 @@ def round_of(m):
     (starfaring to galactic), 12 the jump inhibitor, the automated colony and the
     alternative lab look (approved: now the Auto Lab, bld.auto_lab@automation), 13 the relic
     site (task 82), 14 the higher-definition spaceships and the two line ships of task 92
-    (task 93)."""
+    (task 93), 15 the Deep Space Tracking Station (task 118)."""
     if m["id"] in ROUND1:
         return 1
+    if m["id"] in ROUND15:
+        return 15
     if m["id"] in ROUND14:
         return 14
     if m["id"] == "node.relics@any":
