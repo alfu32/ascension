@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Name=Ascension
+GenericName=Real-Time Strategy
+Comment=Real-time strategy from early history to an age of galactic empires
+Exec=rise-of-man
+Icon=ascension
+Terminal=false
+StartupNotify=true
+StartupWMClass=rise-of-man
+Categories=Game;StrategyGame;
+Keywords=strategy;rts;history;space;empire;planet;
+Actions=run-server;
+X-AppImage-Version=@VERSION@
+
+[Desktop Action run-server]
+Name=Run a game server
+Exec=rise-of-man --serve

@@ -1,0 +1,269 @@
+# Release at a version tag (no `v` prefix, equal to `version` in app/Cargo.toml):
+# pushing the tag starts it, or `gh workflow run release.yaml --ref X.Y.Z`.
+# Started on a branch (workflow_dispatch), it builds and checks everything and
+# publishes nothing.
+#
+# Produces AppImages (+ zsync) and portable archives for Linux x86_64 and aarch64,
+# snaps (ascension_X.Y.Z_<arch>.snap, installed and started in the job), an MSI and
+# a Store-associated MSIX for Windows x64 and arm64 (signed and test-installed when
+# the ASCENSION_PFX_* secrets exist) with portable zips, and portable archives for
+# macOS arm64 and x86_64. The release is created only when every job passed.
+name: Release
+
+on:
+  push:
+    tags: ['[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+
+jobs:
+  tag:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      publish: ${{ steps.v.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          version=$(python3 -c 'import sys; sys.path.insert(0, "scripts/release"); import common; print(common.app_version())')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            test "$GITHUB_REF_NAME" = "$version" || { echo "tag $GITHUB_REF_NAME != app version $version"; exit 1; }
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Started on a branch: build and check only, no release."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  validate:
+    needs: tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake clang libclang-dev pkg-config \
+            libfontconfig1-dev libfreetype6-dev libx11-dev libxcursor-dev libxrandr-dev \
+            libxinerama-dev libxi-dev libgl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.99.1"
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app -> target
+          key: validate
+      - run: python3 db/content/generate.py --check
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - name: Release script and Store kit tests
+        working-directory: .
+        run: |
+          python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
+          python3 -m unittest discover -s packaging/microsoft-store-kit/source -p 'test_*.py' -v
+
+  linux:
+    needs: tag
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, runner: ubuntu-22.04, target: x86_64-unknown-linux-gnu }
+          - { arch: aarch64, runner: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake clang libclang-dev pkg-config \
+            libfontconfig1-dev libfreetype6-dev libx11-dev libxcursor-dev libxrandr-dev \
+            libxinerama-dev libxi-dev libgl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev zsync
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.99.1"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app -> target
+          key: release-${{ matrix.target }}
+      - name: Build
+        working-directory: app
+        run: |
+          cargo build --release --locked -p rom-app -p rom-cli
+          test "$(target/release/rise-of-man --version)" = "rise-of-man ${{ needs.tag.outputs.version }}"
+      - run: python3 scripts/release/appimage.py --arch ${{ matrix.arch }}
+      - run: python3 scripts/release/portable.py --target ${{ matrix.target }}
+      - name: Snap (core24, strict, mesa-2404 GPU content)
+        run: |
+          # Runtime libraries the snap bundles (core24 and mesa-2404 lack them) and the XKB data.
+          sudo apt-get install -y --no-install-recommends squashfs-tools xvfb imagemagick xkb-data \
+            libxcursor1 libxrandr2 libxi6 libxinerama1 libxrender1 libxkbcommon-x11-0 libxcb-xkb1 libvulkan1
+          python3 scripts/release/snap.py --arch ${{ matrix.arch }} --output dist
+      - name: Install the snap and check that it starts and paints a window
+        run: |
+          version="${{ needs.tag.outputs.version }}"
+          # The snap store is sometimes unreachable from runners: retry with a growing pause.
+          for snap in core24 mesa-2404; do
+            for attempt in 1 2 3 4 5 6; do
+              sudo snap install "$snap" && break
+              if [ "$attempt" = 6 ]; then exit 1; fi
+              sleep $((attempt * 30))
+            done
+          done
+          sudo snap install --dangerous dist/ascension_*.snap
+          sudo snap connect ascension:gpu-2404 mesa-2404:gpu-2404 || true
+          snap connections ascension
+          test "$(snap run ascension --version)" = "rise-of-man $version"
+          test "$(snap run ascension.rom --version | cut -d' ' -f1-2)" = "rom $version"
+          mkdir -p smoke
+          Xvfb :97 -screen 0 1280x800x24 &
+          sleep 2
+          # A default game that ends itself after 90 seconds.
+          (cd /tmp && env -u WAYLAND_DISPLAY DISPLAY=:97 snap run ascension --bench 90 --size 1280x800) > smoke/app.log 2>&1 &
+          pid=$!
+          sleep 45
+          kill -0 "$pid" || { cat smoke/app.log; exit 1; }
+          DISPLAY=:97 import -window root smoke/window.png
+          kill "$pid" || true
+          colours=$(convert smoke/window.png -format '%k' info:)
+          echo "distinct colours: $colours"
+          test "$colours" -gt 50 || { tail -50 smoke/app.log; exit 1; }
+      - name: Keep the snap check output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snap-smoke-${{ matrix.arch }}
+          path: smoke
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  desktop:
+    needs: tag
+    strategy:
+      # Every platform reports; publish still needs them all.
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-2022, target: x86_64-pc-windows-msvc, msix: x64 }
+          - { runner: windows-11-arm, target: aarch64-pc-windows-msvc, msix: arm64 }
+          - { runner: macos-26, target: aarch64-apple-darwin }
+          - { runner: macos-15-intel, target: x86_64-apple-darwin }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.99.1"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Windows compiler, static C runtime, libclang and the GPUI shader compiler
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "RUSTFLAGS=-C target-feature=+crt-static" >> $env:GITHUB_ENV
+          # CMake >= 3.15 selects its own MSVC runtime; Rust's /MT flag alone is not enough for raylib.
+          $toolchain = (Join-Path $env:GITHUB_WORKSPACE 'packaging/windows/static-crt.cmake').Replace('\','/')
+          "CMAKE_TOOLCHAIN_FILE=$toolchain" >> $env:GITHUB_ENV
+          $llvm = Join-Path $env:ProgramFiles 'LLVM\bin'
+          if (-not (Test-Path "$llvm\libclang.dll")) { throw 'LLVM libclang.dll is required for raylib bindgen' }
+          "LIBCLANG_PATH=$llvm" >> $env:GITHUB_ENV
+          $fxc = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Recurse -Filter fxc.exe |
+            Where-Object { $_.FullName -match '\\x64\\' } | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $fxc) { throw 'Windows SDK fxc.exe is required by GPUI shaders' }
+          "GPUI_FXC_PATH=$($fxc.FullName)" >> $env:GITHUB_ENV
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app -> target
+          key: release-${{ matrix.target }}
+      - name: Build
+        working-directory: app
+        shell: bash
+        run: cargo build --release --locked -p rom-app -p rom-cli
+      - name: Check the version from another folder
+        shell: bash
+        run: |
+          exe=""; [ "$RUNNER_OS" = Windows ] && exe=.exe
+          bin="$GITHUB_WORKSPACE/app/target/release"
+          cd "$RUNNER_TEMP"
+          "$bin/rise-of-man$exe" --version > version.txt || true
+          cat version.txt
+          test "$(tr -d '\r' < version.txt)" = "rise-of-man ${{ needs.tag.outputs.version }}"
+          "$bin/rom$exe" --version
+      - run: python scripts/release/portable.py --target ${{ matrix.target }}
+      - name: MSI and Store-associated MSIX (signed when the secrets exist)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          ASCENSION_PFX_B64: ${{ secrets.ASCENSION_PFX_B64 }}
+          ASCENSION_PFX_PASSWORD: ${{ secrets.ASCENSION_PFX_PASSWORD }}
+        run: ./packaging/windows/package.ps1 -Arch ${{ matrix.msix }} -Version "${{ needs.tag.outputs.version }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    needs: [tag, validate, linux, desktop]
+    if: needs.tag.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: |
+          cd dist
+          rm -f *.sha256
+          sha256sum * > SHA256SUMS.txt
+          ls -la
+      - name: Publish (marked latest)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.tag.outputs.version }}
+        run: |
+          gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && { echo "release $VERSION exists"; exit 1; }
+          cat > notes.md <<EOF
+          Ascension — Rise of Man $VERSION.
+
+          - Linux: \`ascension-$VERSION-linux-<arch>.AppImage\` (with zsync update information), the snap \`ascension_${VERSION}_<arch>.snap\`, or the portable \`.tar.gz\`.
+          - Windows: the \`.msi\` installer (Program Files, Start menu), the Store-associated \`.msix\`, or the portable \`.zip\`. A signed package comes with its public certificate (\`.cer\`) for sideloading.
+          - macOS: portable \`.tar.gz\` archives (unsigned).
+
+          Checksums: \`SHA256SUMS.txt\`.
+          EOF
+          sed -i 's/^          //' notes.md
+          gh release create "$VERSION" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --latest \
+            --title "Ascension $VERSION" --notes-file notes.md

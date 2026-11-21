@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ascension MSI (WiX 5): Program Files install, Start-menu shortcut, uninstall entry.
+     package.ps1 passes Version, Stage (the unpacked portable payload) and Icon. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Ascension" Manufacturer="K3D0" Version="$(var.Version)"
+           UpgradeCode="63B47573-C86C-4207-B473-740CABB8A6B5" Scope="perMachine" Compressed="yes" Language="1033">
+    <SummaryInformation Description="Ascension: Rise of Man" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Ascension is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Icon Id="AppIcon" SourceFile="$(var.Icon)" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/alfu32/ascension" />
+    <StandardDirectory Id="ProgramFiles6432Folder"><Directory Id="INSTALLFOLDER" Name="Ascension" /></StandardDirectory>
+    <Feature Id="Main" Title="Ascension" Level="1"><ComponentGroupRef Id="AscensionFiles" /><ComponentRef Id="MenuShortcut" /></Feature>
+    <StandardDirectory Id="ProgramMenuFolder"><Directory Id="AscensionMenu" Name="Ascension">
+      <Component Id="MenuShortcut" Guid="*">
+        <Shortcut Id="StartAscension" Name="Ascension" Description="Real-time strategy from early history to an age of galactic empires"
+                  Target="[INSTALLFOLDER]rise-of-man.exe" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
+        <Shortcut Id="StartServer" Name="Ascension game server" Arguments="--serve"
+                  Target="[INSTALLFOLDER]rise-of-man.exe" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
+        <RemoveFolder Id="RemoveAscensionMenu" On="uninstall" />
+        <RegistryValue Root="HKLM" Key="Software\K3D0\Ascension" Name="Installed" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </Directory></StandardDirectory>
+  </Package>
+  <Fragment><ComponentGroup Id="AscensionFiles" Directory="INSTALLFOLDER"><Files Include="$(var.Stage)\**" /></ComponentGroup></Fragment>
+</Wix>

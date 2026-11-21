@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.alfu32.ascension</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Ascension</name>
+  <summary>Real-time strategy from early history to an age of galactic empires</summary>
+  <description>
+    <p>Lead a people through fourteen ages: found cities on a round planet,
+    research at the library, trade on the market and raise armies, then build
+    starships, claim resource worlds and cross between star systems by charged
+    jumps along routes.</p>
+    <p>Nations grow into continental blocs and finally into united humanity.
+    Play against computer opponents or with others over a network server.</p>
+  </description>
+  <launchable type="desktop-id">ascension.desktop</launchable>
+  <provides>
+    <binary>rise-of-man</binary>
+  </provides>
+  <categories>
+    <category>Game</category>
+    <category>StrategyGame</category>
+  </categories>
+  <screenshots>
+    <screenshot type="default">
+      <caption>A city and its army on the home planet</caption>
+      <image>https://raw.githubusercontent.com/alfu32/ascension/main/app/docs/img/ai-army-at-rally.png</image>
+    </screenshot>
+  </screenshots>
+  <url type="homepage">https://github.com/alfu32/ascension</url>
+  <url type="bugtracker">https://github.com/alfu32/ascension/issues</url>
+  <content_rating type="oars-1.1">
+    <content_attribute id="violence-cartoon">mild</content_attribute>
+    <content_attribute id="social-chat">intense</content_attribute>
+  </content_rating>
+  <releases>
+    <release version="0.0.112" date="2026-11-21"/>
+  </releases>
+</component>
