@@ -270,6 +270,7 @@ mod tests {
         let marine = rules.id_of("unit.marine").unwrap();
         let mut notices = Notices::default();
         notices.update(world);
+        notices.alerts(world);
         for (dx, dy) in [(5_000, 0), (-5_000, 0), (0, 5_000)] {
             let unit = world.spawn(marine, foe, world.offset(at, dx, dy)).unwrap();
             world
@@ -288,6 +289,7 @@ mod tests {
         for _ in 0..200 {
             world.step();
             lines.extend(notices.update(world));
+            lines.extend(notices.alerts(world));
         }
         let told: Vec<_> = lines
             .iter()
@@ -313,6 +315,20 @@ mod tests {
             "{:?}",
             space.alerts
         );
+        // The line stays up as long as the marker, not the usual five seconds.
+        let mut controller = crate::selection::Controller::for_player(PLAYER);
+        controller.notify_alert(
+            world,
+            told[0].text.clone(),
+            told[0].about,
+            marker_ticks(world),
+        );
+        for _ in 0..150 {
+            world.step();
+        }
+        let mut hud = HudSnapshot::default();
+        controller.fill(world, &mut hud);
+        assert_eq!(hud.events, vec![told[0].text.clone()]);
         // Past the marker's life the markers are gone.
         for _ in 0..=marker_ticks(world) {
             world.step();
@@ -359,6 +375,7 @@ mod tests {
             .collect();
         let mut notices = Notices::default();
         notices.update(world);
+        notices.alerts(world);
         // The rim of the home system, far from anything of player one's.
         let target = world.system_edge(system, other).unwrap();
         for ship in &ships {
@@ -379,6 +396,7 @@ mod tests {
         for _ in 0..12_000 {
             world.step();
             lines.extend(notices.update(world));
+            lines.extend(notices.alerts(world));
             if ships
                 .iter()
                 .all(|s| world.entity(*s).is_some_and(|e| e.pos.body == star))
@@ -388,6 +406,7 @@ mod tests {
         }
         world.step();
         lines.extend(notices.update(world));
+        lines.extend(notices.alerts(world));
         let told: Vec<_> = lines
             .iter()
             .filter(|n| n.text.starts_with("Foreign ships entered"))

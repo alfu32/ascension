@@ -341,7 +341,8 @@ on the mini-map." The simulation raises the alerts (`World::alerts`, `rom-sim/sr
 interface words and marks them (`rom-app/src/alert_view.rs`).
 
 - **Under attack, from the first age.** When an enemy's blow damages a building or unit of the
-  player, the event line says where, in the notice look of every other event line:
+  player, the event line says where, in the notice look of every other event line (an alert
+  stays up as long as its marker, 10 s, where other lines stay 5 s):
   "Your capital is under attack", "Your city 3 is under attack" (cities are counted in the order
   they were founded; cities have no names yet), "Your army is under attack near your city 2"
   for units outside the player's territory, "… on Mars" off the home world, "Your ships are under

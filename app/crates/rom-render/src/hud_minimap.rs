@@ -498,17 +498,20 @@ pub fn alert_marks(
         };
         let [r, g, b, _] = alert.kind.colour();
         let fade = |a: f32| (a * strength).clamp(0.0, 255.0) as u8;
-        let dot = 4.0 * scale;
+        let dot = 5.0 * scale;
         marks.push(MapMark::Dot(
             Rect::new(at.0 - dot / 2.0, at.1 - dot / 2.0, dot, dot),
             [r, g, b, fade(255.0)],
         ));
-        let grow = (4.0 + 10.0 * pulse) * scale;
+        // A ring that grows from the dot to three times the steady ring's size and fades as it
+        // goes, and the steady ring, both two pixels wide.
+        let grow = (6.0 + 22.0 * pulse) * scale;
         let alpha = fade(255.0 * (1.0 - pulse));
+        let steady = 10.0 * scale;
         for step in [0.0, 1.0] {
             marks.push(MapMark::Ring(at, grow + step, [r, g, b, alpha]));
+            marks.push(MapMark::Ring(at, steady + step, [r, g, b, fade(230.0)]));
         }
-        marks.push(MapMark::Ring(at, 7.0 * scale, [r, g, b, fade(200.0)]));
     }
     marks
 }

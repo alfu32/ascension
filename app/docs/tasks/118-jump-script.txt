@@ -3,10 +3,13 @@
 # a Deep Space Tracking Station beside its capital; three corvettes of player two jump into its
 # home system from the nearest one. On arrival the event line says "Foreign ships entered the
 # ... system: 3 ships of ..." and an amber ring pulses round the home system on the star map and
-# its minimap (app/docs/img/118-jump-detected.png).
+# its minimap (app/docs/img/118-jump-detected.png; the event line is cut short at its width).
+# Fast to tick 500, then a quarter speed so the picture (--after 70, debug build) falls while
+# the alert is up: the corvettes come out at about tick 700.
 0 grant-age age.expansion
 0 place 1 bld.jump_detector @12,0
 0 jump-in 2 unit.corvette
 0 jump-in 2 unit.corvette
 0 jump-in 2 unit.corvette
 1 speed 400
+500 speed 25

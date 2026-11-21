@@ -783,6 +783,7 @@ fn run(
     let mut notices = Notices::for_player(me);
     let mut frames: BTreeMap<u32, Option<SpaceFrame>> = BTreeMap::new();
     notices.update(game.world());
+    notices.alerts(game.world());
     let computers = match &game {
         Game::Lead(core) => core.computers().players().collect(),
         Game::Follow(net) => net.computer_players().into_iter().collect(),
@@ -859,6 +860,7 @@ fn run(
                     frames.clear();
                     notices = Notices::for_player(me);
                     notices.update(net.core().world());
+                    notices.alerts(net.core().world());
                     net.report_done();
                     publish(
                         net.core().world(),
@@ -1117,6 +1119,11 @@ fn run(
                     Some(id) => controller.notify_about(world, notice.text, id),
                     None => controller.notify(world, notice.text),
                 }
+            }
+            // Alerts last in the line as long as their markers (task 118).
+            for notice in notices.alerts(world) {
+                let life = crate::alert_view::marker_ticks(world);
+                controller.notify_alert(world, notice.text, notice.about, life);
             }
             for line in ascension.update(world) {
                 controller.notify(world, line);

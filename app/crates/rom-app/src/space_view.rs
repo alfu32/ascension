@@ -678,6 +678,8 @@ pub struct Notices {
     struck: u64,
     /// The tick of player one's latest alert already told (task 118).
     alerted: u64,
+    /// Whether [`Notices::alerts`] has been called once.
+    alerts_started: bool,
     /// The person's player.
     me: PlayerId,
     started: bool,
@@ -726,6 +728,7 @@ impl Notices {
             held: BTreeSet::new(),
             struck: 0,
             alerted: 0,
+            alerts_started: false,
             me,
             started: false,
         }
@@ -828,15 +831,6 @@ impl Notices {
             .arrival_strikes()
             .last()
             .map_or(self.struck, |s| s.tick.max(self.struck));
-        // A city or army under attack, foreign ships jumping in (task 118).
-        if self.started {
-            notices.extend(crate::alert_view::alert_notices(
-                world,
-                self.me,
-                self.alerted,
-            ));
-        }
-        self.alerted = crate::alert_view::latest_alert_tick(world, self.me, self.alerted);
         self.charted = charted;
         let reach = world.players().find(|p| p.id == self.me).and_then(|p| {
             let age = rules.ages.get(&p.age)?;
@@ -855,6 +849,19 @@ impl Notices {
         self.reach = reach;
         self.started = true;
         notices
+    }
+
+    /// Player one's alerts raised since the last call (task 118): a city or army under attack,
+    /// foreign ships jumping in. The first call only remembers, as [`Notices::update`].
+    pub fn alerts(&mut self, world: &World) -> Vec<Notice> {
+        let lines = if self.alerts_started {
+            crate::alert_view::alert_notices(world, self.me, self.alerted)
+        } else {
+            Vec::new()
+        };
+        self.alerted = crate::alert_view::latest_alert_tick(world, self.me, self.alerted);
+        self.alerts_started = true;
+        lines
     }
 
     fn changes(&mut self, world: &World) -> Vec<String> {
