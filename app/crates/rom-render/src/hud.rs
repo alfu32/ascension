@@ -61,6 +61,11 @@ pub struct HudSnapshot {
     /// The entity the newest event is about (a ship that departed or arrived): clicking the
     /// event line flies the camera there.
     pub event_about: Option<u32>,
+    /// The entity the newest alert is about while its marker lasts (task 118): Backspace flies
+    /// the camera there.
+    pub alert_about: Option<u32>,
+    /// Alerts on the shown surface, marked on the minimap (task 118).
+    pub alerts: Vec<crate::HudAlert>,
     /// Rollover help, or empty for the default.
     pub help: String,
     /// Current selection.
@@ -188,6 +193,8 @@ impl Default for HudSnapshot {
             research: Vec::new(),
             events: Vec::new(),
             event_about: None,
+            alert_about: None,
+            alerts: Vec::new(),
             help: String::new(),
             selection: HudSelection::None,
             palette: None,

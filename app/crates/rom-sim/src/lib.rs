@@ -1,5 +1,6 @@
 //! Deterministic game simulation.
 
+mod alerts;
 mod ascension;
 mod attrition;
 mod avoidance;
@@ -50,6 +51,7 @@ mod vision;
 mod wealth;
 mod world;
 
+pub use alerts::{Alert, AlertKind};
 pub use ascension::AscensionProject;
 pub use capture::CaptureCountdown;
 pub use combat::{BLAST_MEMORY_TICKS, Blast, Wreck};

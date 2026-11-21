@@ -1326,6 +1326,43 @@ impl Scene {
                     let size = view.per_pixel(at, height) * pixels * (0.5 + k);
                     strike_flashes.push((at, size, (1.0 - k) * pass.detail * pass.space));
                 }
+                // Alerts (task 118): a pulsing ring at the planet attacked or where foreign
+                // ships jumped in.
+                let pulse = crate::space::alert_pulse();
+                for alert in state
+                    .snapshot
+                    .alerts
+                    .iter()
+                    .filter(|a| a.system == system_id)
+                {
+                    let at = match alert.body.and_then(|b| universe.body_index(b)) {
+                        Some(body) => bodies_placed.iter().find(|p| p.body == body).map(|p| p.pos),
+                        None => Some(free_frame_pos(alert.x, alert.y, outermost)),
+                    };
+                    let Some(at) = at else { continue };
+                    let at = [at[0], at[1] + unit * 0.5, at[2]];
+                    if !keeps(at) {
+                        continue;
+                    }
+                    let per_pixel = view.per_pixel(at, height);
+                    let [r, g, b, _] = alert.kind.colour();
+                    let strength = alert.strength() * detail;
+                    let alpha = |a: f32| (a * strength).clamp(0.0, 255.0) as u8;
+                    overlay.tris.extend(annulus(
+                        at,
+                        per_pixel * (18.0 + 30.0 * pulse),
+                        per_pixel * 2.5,
+                        [r, g, b, alpha(255.0 * (1.0 - pulse))],
+                        48,
+                    ));
+                    overlay.tris.extend(annulus(
+                        at,
+                        per_pixel * 22.0,
+                        per_pixel * 2.0,
+                        [r, g, b, alpha(220.0)],
+                        48,
+                    ));
+                }
                 // Ships between systems wait at the rim, toward the other end of their lane.
                 let size = (distance * 0.03).max(60.0);
                 for transit in &state.snapshot.transits {
@@ -1761,6 +1798,32 @@ impl Scene {
                     ));
                     overlay.tris.extend(face(
                         annulus(at, icon * 6.3, icon * 0.2, [r, g, b, 150], 6),
+                        at,
+                    ));
+                }
+                // Alerts (task 118): a pulsing ring round the system where a city is under
+                // attack or foreign ships jumped in.
+                let pulse = crate::space::alert_pulse();
+                for alert in &self.space_state.snapshot.alerts {
+                    let Some(index) = universe.system_index(alert.system) else {
+                        continue;
+                    };
+                    let [r, g, b, _] = alert.kind.colour();
+                    let strength = alert.strength();
+                    let alpha = |a: f32| (a * strength).clamp(0.0, 255.0) as u8;
+                    let at = space.map_positions[index];
+                    overlay.tris.extend(face(
+                        annulus(
+                            at,
+                            icon * (4.0 + 5.0 * pulse),
+                            icon * 0.45,
+                            [r, g, b, alpha(255.0 * (1.0 - pulse))],
+                            40,
+                        ),
+                        at,
+                    ));
+                    overlay.tris.extend(face(
+                        annulus(at, icon * 4.6, icon * 0.35, [r, g, b, alpha(230.0)], 40),
                         at,
                     ));
                 }

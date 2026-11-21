@@ -699,6 +699,9 @@ impl World {
         if alive && entity.hp <= 0 {
             entity.killer = Some(hit.owner);
         }
+        if damage > 0 {
+            self.note_attacked(target, hit.owner);
+        }
         if damage > 0 && self.entity(hit.attacker).is_some() {
             self.retaliate(target, hit.attacker);
         }

@@ -783,6 +783,7 @@ fn run(
     let mut notices = Notices::for_player(me);
     let mut frames: BTreeMap<u32, Option<SpaceFrame>> = BTreeMap::new();
     notices.update(game.world());
+    notices.alerts(game.world());
     let computers = match &game {
         Game::Lead(core) => core.computers().players().collect(),
         Game::Follow(net) => net.computer_players().into_iter().collect(),
@@ -859,6 +860,7 @@ fn run(
                     frames.clear();
                     notices = Notices::for_player(me);
                     notices.update(net.core().world());
+                    notices.alerts(net.core().world());
                     net.report_done();
                     publish(
                         net.core().world(),
@@ -921,6 +923,7 @@ fn run(
             publish_hud(
                 game.world(),
                 me,
+                viewed_body(game.world(), host.as_ref()),
                 net_line.as_ref(),
                 &controller,
                 bridge,
@@ -1003,6 +1006,7 @@ fn run(
             publish_hud(
                 game.world(),
                 me,
+                viewed_body(game.world(), host.as_ref()),
                 net_line.as_ref(),
                 &controller,
                 bridge,
@@ -1115,6 +1119,11 @@ fn run(
                     Some(id) => controller.notify_about(world, notice.text, id),
                     None => controller.notify(world, notice.text),
                 }
+            }
+            // Alerts last in the line as long as their markers (task 118).
+            for notice in notices.alerts(world) {
+                let life = crate::alert_view::marker_ticks(world);
+                controller.notify_alert(world, notice.text, notice.about, life);
             }
             for line in ascension.update(world) {
                 controller.notify(world, line);
@@ -1447,7 +1456,7 @@ fn publish(
     ascension: &AscensionView,
 ) {
     let sightings = world.visible_entities(me);
-    let body = host.map_or_else(|| world.surfaces()[0].body(), |h| h.viewed);
+    let body = viewed_body(world, host);
     if TerrainKnowledge::refresh(&mut memory.terrain, world, me, body) {
         let hidden = crate::terrain::hidden_terrain(world, me);
         bridge.publish_hidden_terrain(Arc::new(hidden));
@@ -1478,6 +1487,7 @@ fn publish(
     }
     let mut hud = crate::hud::snapshot_of(world, me);
     controller.fill(world, &mut hud);
+    crate::alert_view::fill_hud(world, me, body, &mut hud);
     ascension.fill(world, &mut hud, celestial_in_view(world, bridge));
     if let Some(line) = net_line {
         hud.banner.insert(0, line.clone());
@@ -1545,9 +1555,15 @@ fn focus_camera(world: &World, controller: &mut Controller, bridge: &RenderBridg
     }
 }
 
+/// The body whose surface the view shows: the planet the camera is on, or the only surface.
+fn viewed_body(world: &World, host: Option<&UniverseHost>) -> rom_sim::BodyId {
+    host.map_or_else(|| world.surfaces()[0].body(), |h| h.viewed)
+}
+
 fn publish_hud(
     world: &World,
     me: PlayerId,
+    body: rom_sim::BodyId,
     net_line: Option<&(String, [u8; 4])>,
     controller: &Controller,
     bridge: &RenderBridge,
@@ -1555,6 +1571,7 @@ fn publish_hud(
 ) {
     let mut hud = crate::hud::snapshot_of(world, me);
     controller.fill(world, &mut hud);
+    crate::alert_view::fill_hud(world, me, body, &mut hud);
     ascension.fill(world, &mut hud, celestial_in_view(world, bridge));
     if let Some(line) = net_line {
         hud.banner.insert(0, line.clone());

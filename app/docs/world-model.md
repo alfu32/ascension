@@ -355,7 +355,9 @@ shape that (values and tables in `database.md`, "Routes and jumps"):
   `tasks/111-*-script.txt`, universe seed 1, `--ai none`): `img/111-charging-in-place.png` (a
   fleet charging in open space near its star, far from the rim) and `img/111-arrival-inside.png`
   (four ships jumped home, out beside the home planet rather than at the rim).
-- **Jump inhibitors.** A building of the space age, on a planet: enemy ships in its star system
+- **Jump inhibitors.** A building of the age of expansion (since task 118; it came with the
+  first starships before: owner, issue #3, "it doesn't make sense to have them before you can even
+  travel in hyperspace"), on a planet: enemy ships in its star system
   may leave only back the way they came, charge half as long again, and are told why when another
   route is refused. Several do not stack; destroying the building frees them at once. A system so
   held shows a six-sided ring on the star map and a faint boundary at its rim; hovering it explains.
@@ -373,6 +375,18 @@ shape that (values and tables in `database.md`, "Routes and jumps"):
   ships: 1 destroyed", and the hover over the held system says how hard it strikes. Its answer is
   what destroys a building: bombardment by the line ships that survive the blow, or troops landed
   by a transport (1 500 hit points, it survives).
+- **Jump detectors (task 118).** The **Deep Space Tracking Station** (`bld.jump_detector`, fusion
+  age, 2 × 2, placed as the inhibitor is: own territory, plain ground; one per city's area) tells
+  its owner when ships of a player not allied with it jump into its star system: "Foreign ships
+  entered the Sol system: 3 ships of Romans (2)". It comes before any starship of the player's own,
+  because another race may reach the home system first. The ships are shown on the star map and
+  in the system for 10 s (`alert.marker_ticks`) though nothing else sees them, and a pulsing amber
+  ring marks where they came out. Several detectors give one line. From the starfaring age the
+  spaceport research **Survey Sensor Array** turns the survey ship into a sensor picket: one
+  standing still in a system's plane (no orders) sees arrivals within 40 tiles of it
+  (`et_detector.radius`) and raises the same alert. Detection changes nothing in the game but
+  what the player is told and shown. The station's first model: `img/118-detector-model.png`
+  (`bld.jump_detector@fusion`, for the owner's review).
 - **Interstellar trade.** From the age of abundance (**Interstellar Trade**), a space freighter
   runs a route to an own or allied city in another star system: lift off, charge, jump (to the
   partner's planet once its system is explored, to the edge the first time), cross, land,

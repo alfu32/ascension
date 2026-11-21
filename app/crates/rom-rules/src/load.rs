@@ -379,6 +379,7 @@ fn load_entity_type(conn: &Connection) -> Result<Vec<EntityType>, RulesError> {
             supply: None,
             view_scale: None,
             inhibitor: None,
+            detector: None,
             market: None,
             colony: None,
             weapons: Vec::new(),
@@ -648,6 +649,21 @@ fn load_et_inhibitor(conn: &Connection) -> Result<Vec<Inhibitor>, RulesError> {
                 charge_pct: row.get("charge_pct")?,
                 arrival_damage: row.get("arrival_damage")?,
                 arrival_radius: row.get("arrival_radius")?,
+            })
+        },
+    )
+}
+fn load_et_detector(conn: &Connection) -> Result<Vec<Detector>, RulesError> {
+    read(
+        conn,
+        "SELECT * FROM et_detector ORDER BY entity_type_id",
+        |row| {
+            let identity = format!("entity_type_id={:?}", row.get::<_, i64>("entity_type_id")?);
+            Ok(Detector {
+                entity_type_id: DefId(row.get("entity_type_id")?),
+                scope: enum_value(row, "scope", "et_detector", &identity)?,
+                radius: row.get("radius")?,
+                enabled: row.get("enabled")?,
             })
         },
     )
@@ -1448,6 +1464,10 @@ impl Rules {
         for row in load_et_inhibitor(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_inhibitor")?;
             entity.inhibitor = Some(row);
+        }
+        for row in load_et_detector(conn)? {
+            let entity = entity_mut(&mut rules, row.entity_type_id, "et_detector")?;
+            entity.detector = Some(row);
         }
         for row in load_et_colony(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_colony")?;

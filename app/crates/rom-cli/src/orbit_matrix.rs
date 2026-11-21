@@ -1230,7 +1230,10 @@ mod tests {
         for key in ["unit.space_frigate", "unit.space_cruiser"] {
             assert!((3..=5).contains(&volleys[key]), "{key}: {volleys:?}");
         }
-        assert!(volleys["unit.battleship"] < volleys["unit.space_cruiser"]);
+        assert!(
+            volleys["unit.battleship"] < volleys["unit.space_cruiser"],
+            "{volleys:?}"
+        );
         // A town levelled the same way twice.
         let ship = rules.id_of("unit.space_frigate").unwrap();
         let age = first_age_of("unit.space_frigate");

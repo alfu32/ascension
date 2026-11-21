@@ -249,6 +249,37 @@ mod tests {
     }
 
     #[test]
+    fn an_alert_pulses_at_its_place_and_fades_at_the_end() {
+        let area = Rect::new(0.0, 0.0, 200.0, 100.0);
+        let alert = |age| crate::HudAlert {
+            face: 0,
+            x: 50_000,
+            y: 25_000,
+            age_ticks: age,
+            life_ticks: 200,
+            kind: crate::AlertMark::Attack,
+        };
+        let rings = |marks: &[MapMark]| -> Vec<((f32, f32), f32, u8)> {
+            marks
+                .iter()
+                .filter_map(|m| match *m {
+                    MapMark::Ring(at, r, c) => Some((at, r, c[3])),
+                    _ => None,
+                })
+                .collect()
+        };
+        let small = alert_marks(&[alert(0)], (100, 50), area, None, 1.0, 0.0);
+        let large = alert_marks(&[alert(0)], (100, 50), area, None, 1.0, 0.5);
+        // At the point's place on the map, a ring that grows with the pulse.
+        assert!(rings(&small).iter().all(|(at, _, _)| *at == (100.0, 50.0)));
+        assert!(rings(&large)[0].1 > rings(&small)[0].1);
+        // Full strength while fresh, faded near the end, gone after it.
+        let late = alert_marks(&[alert(190)], (100, 50), area, None, 1.0, 0.0);
+        assert!(rings(&late)[0].2 < rings(&small)[0].2);
+        assert!(alert_marks(&[alert(200)], (100, 50), area, None, 1.0, 0.0).is_empty());
+    }
+
+    #[test]
     fn map_fits_the_view_keeping_its_aspect() {
         let view = Rect::new(690.0, 690.0, 240.0, 190.0);
         let fitted = fit_map(256, 256, view);
@@ -437,6 +468,49 @@ pub fn city_radius_marks(
             if (a.0 - b.0).abs() < area.w / 2.0 {
                 marks.push(MapMark::Line(a, b));
             }
+        }
+    }
+    marks
+}
+
+/// Pulsing rings at alerts on the shown surface (task 118): a bright dot and a ring that grows
+/// once a second, in the alert's colour, fading over the marker's last quarter.
+pub fn alert_marks(
+    alerts: &[crate::HudAlert],
+    size: (u32, u32),
+    area: Rect,
+    globe: Option<&crate::Globe>,
+    scale: f32,
+    pulse: f32,
+) -> Vec<MapMark> {
+    use crate::Footing;
+    let mut marks = Vec::new();
+    for alert in alerts {
+        let left = alert.life_ticks.saturating_sub(alert.age_ticks) as f32;
+        let strength = (left / (alert.life_ticks.max(4) as f32 / 4.0)).clamp(0.0, 1.0);
+        if strength <= 0.0 {
+            continue;
+        }
+        let (x, y) = (alert.x as f32 / 1000.0, alert.y as f32 / 1000.0);
+        let at = match globe {
+            Some(g) => dir_to_minimap(g.point(alert.face, x, y, (0.0, 0.0), 0.0), area),
+            None => tile_to_minimap(x, y, size, area),
+        };
+        let [r, g, b, _] = alert.kind.colour();
+        let fade = |a: f32| (a * strength).clamp(0.0, 255.0) as u8;
+        let dot = 5.0 * scale;
+        marks.push(MapMark::Dot(
+            Rect::new(at.0 - dot / 2.0, at.1 - dot / 2.0, dot, dot),
+            [r, g, b, fade(255.0)],
+        ));
+        // A ring that grows from the dot to three times the steady ring's size and fades as it
+        // goes, and the steady ring, both two pixels wide.
+        let grow = (6.0 + 22.0 * pulse) * scale;
+        let alpha = fade(255.0 * (1.0 - pulse));
+        let steady = 10.0 * scale;
+        for step in [0.0, 1.0] {
+            marks.push(MapMark::Ring(at, grow + step, [r, g, b, alpha]));
+            marks.push(MapMark::Ring(at, steady + step, [r, g, b, fade(230.0)]));
         }
     }
     marks
@@ -652,6 +726,43 @@ pub fn space_marks(
             let (x, y) = to_area(mark.at);
             marks.push(dot(x, y, 4.0, owner(mark.owner)));
         }
+    }
+    // Alerts (task 118): a pulsing ring at the system on the star map, at the planet or the
+    // arrival point in the system.
+    let pulse = crate::space::alert_pulse();
+    for alert in &space.alerts {
+        let at = if map {
+            scene
+                .system_index(alert.system)
+                .map(|i| zoom.map_positions()[i])
+        } else if zoom.system_id() == Some(alert.system) {
+            match alert.body.and_then(|b| scene.body_index(b)) {
+                Some(body) => zoom.placed().iter().find(|p| p.body == body).map(|p| p.pos),
+                None => Some(crate::space::free_frame_pos(
+                    alert.x,
+                    alert.y,
+                    scene.system_outermost(alert.system),
+                )),
+            }
+        } else {
+            None
+        };
+        let Some(at) = at else { continue };
+        let (x, y) = to_area(at);
+        let [r, g, b, _] = alert.kind.colour();
+        let strength = alert.strength();
+        let alpha = |a: f32| (a * strength).clamp(0.0, 255.0) as u8;
+        let grow = (5.0 + 10.0 * pulse) * layout.scale;
+        marks.push(MapMark::Ring(
+            (x, y),
+            grow,
+            [r, g, b, alpha(255.0 * (1.0 - pulse))],
+        ));
+        marks.push(MapMark::Ring(
+            (x, y),
+            7.0 * layout.scale,
+            [r, g, b, alpha(220.0)],
+        ));
     }
     // The part of the plane in view, a trapezoid for a tilted camera (cut off where the view
     // reaches toward the horizon; none on the free star map, which has no plane), and the

@@ -201,6 +201,44 @@ pub struct StrikeView {
     pub destroyed: bool,
 }
 
+/// An alert seen in space (task 118): a pulsing ring at the system on the star map, and at the
+/// planet or the arrival point in the system.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AlertView {
+    /// The system.
+    pub system: u32,
+    /// The planet it happened on, if on a planet's surface; else it is at `x`, `y`.
+    pub body: Option<u32>,
+    /// East offset in the system's plane, as [`StrikeView::x`].
+    pub x: f32,
+    /// South offset, as [`StrikeView::y`].
+    pub y: f32,
+    /// Game ticks since it was raised.
+    pub age_ticks: u32,
+    /// Game ticks the marker lasts.
+    pub life_ticks: u32,
+    /// Attack or arrival.
+    pub kind: crate::AlertMark,
+}
+
+impl AlertView {
+    /// How strongly the marker shows now, 1 when fresh and fading out over its last quarter.
+    pub fn strength(&self) -> f32 {
+        let left = self.life_ticks.saturating_sub(self.age_ticks) as f32;
+        (left / (self.life_ticks.max(4) as f32 / 4.0)).clamp(0.0, 1.0)
+    }
+}
+
+/// The phase of an alert marker's pulse, 0..1, from the wall clock (one pulse a second).
+pub fn alert_pulse() -> f32 {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    START
+        .get_or_init(std::time::Instant::now)
+        .elapsed()
+        .as_secs_f32()
+        .fract()
+}
+
 /// A blast of an area weapon on a planet, seen from space as a flash on its globe (task 75).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FlashView {
@@ -268,6 +306,8 @@ pub struct SpaceSnapshot {
     pub flashes: Vec<FlashView>,
     /// Blows of jump inhibitors on arriving ships the player sees, oldest first (task 104).
     pub strikes: Vec<StrikeView>,
+    /// The player's recent alerts, oldest first (task 118).
+    pub alerts: Vec<AlertView>,
     /// Ascensions under way anywhere, by player (task 76).
     pub countdowns: Vec<CountdownView>,
     /// The ascended players living on the celestial home, by player (task 76).

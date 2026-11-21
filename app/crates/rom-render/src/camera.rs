@@ -272,6 +272,8 @@ pub enum Key {
     /// Fly to the celestial home at the galactic centre (F6, task 76), where the star map
     /// reaches that far.
     CelestialHome,
+    /// Fly to what the newest alert is about (Backspace, task 118).
+    LatestAlert,
 }
 
 impl Key {
@@ -290,6 +292,7 @@ impl Key {
             "f3" => Some(Self::ToggleConstellations),
             "f4" => Some(Self::LevelView),
             "f6" => Some(Self::CelestialHome),
+            "backspace" => Some(Self::LatestAlert),
             "shift+up" => Some(Self::FlyUp),
             "shift+down" => Some(Self::FlyDown),
             _ => None,
@@ -331,7 +334,8 @@ impl Key {
             | Self::SkyFromSun
             | Self::ToggleConstellations
             | Self::LevelView
-            | Self::CelestialHome => None,
+            | Self::CelestialHome
+            | Self::LatestAlert => None,
         }
     }
 }

@@ -374,6 +374,8 @@ pub(crate) struct MinimapOverlays<'a> {
     pub cities: &'a [crate::hud::HudCityRadius],
     /// Whether latitude and longitude lines are on.
     pub graticule: bool,
+    /// Alerts on the shown surface: pulsing rings (task 118).
+    pub alerts: &'a [crate::HudAlert],
 }
 
 pub(crate) struct MinimapGpu {
@@ -492,7 +494,11 @@ impl MinimapGpu {
         orbit: Option<&OrbitCamera>,
         overlays: MinimapOverlays<'_>,
     ) {
-        let MinimapOverlays { cities, graticule } = overlays;
+        let MinimapOverlays {
+            cities,
+            graticule,
+            alerts,
+        } = overlays;
         let view = layout.rect(Region::MinimapView);
         d.draw_rectangle_rec(rectangle(view), Color::new(4, 6, 12, 255));
         let area = hud_minimap::fit_map(self.size.0, self.size.1, view);
@@ -570,6 +576,18 @@ impl MinimapGpu {
             &mut clip,
             layout,
             hud_minimap::city_radius_marks(cities, self.size, area, self.globe.as_deref()),
+        );
+        draw_marks(
+            &mut clip,
+            layout,
+            hud_minimap::alert_marks(
+                alerts,
+                self.size,
+                area,
+                self.globe.as_deref(),
+                layout.scale,
+                crate::space::alert_pulse(),
+            ),
         );
     }
 }

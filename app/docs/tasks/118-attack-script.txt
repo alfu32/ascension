@@ -1,0 +1,9 @@
+# Task 118: a city under attack, replayed by --script (universe mode, seed 1, --sun fixed,
+# 1280 x 800, --players 2 --ai none). Three companies of marines of player two stand five tiles
+# west of player one's capital and open fire on it: the event line says "Your capital is under
+# attack" and a red ring pulses on the minimap at the city (app/docs/img/118-under-attack.png).
+# Slowed to a fifth so the line is still up when the picture is taken (--after 3).
+0 place 2 unit.marine @-5,0
+0 place 2 unit.marine @-5,2
+0 place 2 unit.marine @-5,-2
+0 speed 20

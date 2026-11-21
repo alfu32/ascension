@@ -258,6 +258,8 @@ pub struct Controller {
     helpers: Vec<Helpers>,
     requeue: Vec<Requeue>,
     message: Option<(String, u64)>,
+    /// Ticks the event line's message stays: [`MESSAGE_TICKS`], or an alert's marker life.
+    message_life: u64,
     /// The entity the event line's message is about: clicking the line flies there.
     message_about: Option<EntityId>,
     focus: Option<Pos>,
@@ -605,6 +607,20 @@ impl Controller {
         self.message_about = Some(about);
     }
 
+    /// Puts an alert in the event line for `life` ticks (at least the usual five seconds);
+    /// clicking the line flies the camera to what it is about (task 118).
+    pub fn notify_alert(
+        &mut self,
+        world: &World,
+        text: impl Into<String>,
+        about: Option<EntityId>,
+        life: u64,
+    ) {
+        self.say(world, text);
+        self.message_about = about;
+        self.message_life = life.max(MESSAGE_TICKS);
+    }
+
     /// Player one's finished buildings that train units and are not cities.
     pub fn select_producers(&mut self, world: &World) {
         let me = self.me();
@@ -708,6 +724,7 @@ impl Controller {
     fn say(&mut self, world: &World, text: impl Into<String>) {
         self.message = Some((text.into(), world.tick()));
         self.message_about = None;
+        self.message_life = MESSAGE_TICKS;
     }
 
     fn mine<'w>(&self, world: &'w World, id: EntityId) -> Option<&'w Entity> {
@@ -2884,6 +2901,7 @@ impl Controller {
             for command in requeue.commands {
                 if world.submit(command).is_err() {
                     self.message = Some(("The order could not be restored".into(), tick));
+                    self.message_life = MESSAGE_TICKS;
                 }
             }
         }
@@ -2991,6 +3009,7 @@ impl Controller {
                 })
             {
                 self.message = Some(("Trade route ended: city lost".into(), world.tick()));
+                self.message_life = MESSAGE_TICKS;
             }
         }
         self.routes = next;
@@ -3449,7 +3468,7 @@ impl Controller {
             })
             .collect();
         if let Some((text, at)) = &self.message
-            && tick.saturating_sub(*at) <= MESSAGE_TICKS
+            && tick.saturating_sub(*at) <= self.message_life
         {
             hud.events.push(text.clone());
             hud.event_about = self.message_about.map(|id| id.0);

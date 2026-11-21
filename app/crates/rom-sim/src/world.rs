@@ -117,6 +117,8 @@ pub struct World {
     /// Recent blows of jump inhibitors on arriving ships, for the views (task 104; not hashed,
     /// not saved).
     pub(crate) strikes: Vec<crate::jumps::ArrivalStrike>,
+    /// Alerts of attacks and jump arrivals, for the views (task 118; not hashed, not saved).
+    pub(crate) alert: crate::alerts::AlertState,
     /// Stain lifetime and cap per surface, from the rules (task 80).
     pub(crate) stain_rules: crate::stains::StainRules,
     /// Buildings pulled down by their owners this tick (no stain); empty between ticks.
@@ -335,6 +337,7 @@ impl World {
             blasts: Vec::new(),
             wrecks: Vec::new(),
             strikes: Vec::new(),
+            alert: crate::alerts::AlertState::default(),
             stain_rules,
             razed: Vec::new(),
             market_rules,
@@ -1063,6 +1066,7 @@ impl World {
         self.seen.clear();
         self.fire_shots();
         self.land_projectiles();
+        self.raise_attack_alerts();
         self.apply_attrition();
         self.remove_dead();
         if !self.ascension.completing.is_empty() {
@@ -1070,6 +1074,7 @@ impl World {
         }
         self.fade_stains();
         self.forget_blasts();
+        self.forget_alerts();
         self.update_captures();
         self.remember_touched();
         self.update_claims();

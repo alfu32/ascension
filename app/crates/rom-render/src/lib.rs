@@ -83,9 +83,9 @@ pub use review::{Review, SheetView, WorldLabel};
 pub use rig::Activity;
 pub use rom_geo::SurfacePos;
 pub use space::{
-    ChargeView, ClaimState, ClaimView, ColonyView, CountdownView, FLASH_TICKS, FlashView, HoldView,
-    ResidenceView, ResourceBodyView, STRIKE_FLASH_TICKS, ShipView, SpaceSnapshot, StrikeView,
-    TransitView,
+    AlertView, ChargeView, ClaimState, ClaimView, ColonyView, CountdownView, FLASH_TICKS,
+    FlashView, HoldView, ResidenceView, ResourceBodyView, STRIKE_FLASH_TICKS, ShipView,
+    SpaceSnapshot, StrikeView, TransitView,
 };
 pub use stats::RenderStats;
 pub use sun::{SunClock, SunSettings};
@@ -105,9 +105,9 @@ pub use hud::{
     HudSelection, HudSnapshot,
 };
 pub use hud_model::{
-    ButtonState, HudBlast, HudButton, HudCard, HudCityRadius, HudMarker, HudPalette,
-    HudPaletteGroup, HudPatrol, HudPlacement, HudQueue, HudQueueItem, HudStain, HudTile,
-    HudTradeRoute, HudWealth, HudWreck, IconMark, MarkerKind, PaletteTab, ResearchCell,
+    AlertMark, ButtonState, HudAlert, HudBlast, HudButton, HudCard, HudCityRadius, HudMarker,
+    HudPalette, HudPaletteGroup, HudPatrol, HudPlacement, HudQueue, HudQueueItem, HudStain,
+    HudTile, HudTradeRoute, HudWealth, HudWreck, IconMark, MarkerKind, PaletteTab, ResearchCell,
     ResearchOverview, ResearchTrack, SLOT_KEYS, slot_of_key,
 };
 pub use pick::{

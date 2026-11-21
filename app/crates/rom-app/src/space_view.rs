@@ -203,10 +203,20 @@ pub fn space_snapshot_with(
         .map(|(id, frame)| (frame.body, (id, frame)))
         .collect();
     snapshot.strikes = strikes(me, world, &planes);
-    for sighting in sightings {
-        let Sighting::Live(e) = sighting else {
-            continue;
-        };
+    snapshot.alerts = crate::alert_view::space_alerts(world, me, &planes);
+    // Ships a detector saw jump in are shown a while though out of sight (task 118).
+    let live: Vec<&rom_sim::Entity> = sightings
+        .iter()
+        .filter_map(|s| match s {
+            Sighting::Live(e) => Some(*e),
+            Sighting::Remembered(_) => None,
+        })
+        .collect();
+    let revealed: Vec<&rom_sim::Entity> = crate::alert_view::revealed_ships(world, me, &planes)
+        .into_iter()
+        .filter(|e| !live.iter().any(|l| l.id == e.id))
+        .collect();
+    for e in live.into_iter().chain(revealed) {
         let Some(et) = rules.entity_type(e.type_id) else {
             continue;
         };
@@ -666,6 +676,10 @@ pub struct Notices {
     held: BTreeSet<rom_sim::OrderId>,
     /// The tick of the latest arrival strike already told (task 104).
     struck: u64,
+    /// The tick of player one's latest alert already told (task 118).
+    alerted: u64,
+    /// Whether [`Notices::alerts`] has been called once.
+    alerts_started: bool,
     /// The person's player.
     me: PlayerId,
     started: bool,
@@ -713,6 +727,8 @@ impl Notices {
             charted: BTreeSet::new(),
             held: BTreeSet::new(),
             struck: 0,
+            alerted: 0,
+            alerts_started: false,
             me,
             started: false,
         }
@@ -833,6 +849,19 @@ impl Notices {
         self.reach = reach;
         self.started = true;
         notices
+    }
+
+    /// Player one's alerts raised since the last call (task 118): a city or army under attack,
+    /// foreign ships jumping in. The first call only remembers, as [`Notices::update`].
+    pub fn alerts(&mut self, world: &World) -> Vec<Notice> {
+        let lines = if self.alerts_started {
+            crate::alert_view::alert_notices(world, self.me, self.alerted)
+        } else {
+            Vec::new()
+        };
+        self.alerted = crate::alert_view::latest_alert_tick(world, self.me, self.alerted);
+        self.alerts_started = true;
+        lines
     }
 
     fn changes(&mut self, world: &World) -> Vec<String> {

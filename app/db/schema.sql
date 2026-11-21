@@ -426,6 +426,20 @@ CREATE TABLE et_inhibitor (            -- jump inhibitor (task 70): holds enemy 
                                        -- system's plane) of the planet it stands on; 0 = no blow
 ) STRICT;
 
+CREATE TABLE et_detector (             -- jump detector (task 118): tells its owner of foreign
+                                       -- ships jumping into a star system
+  entity_type_id INTEGER PRIMARY KEY REFERENCES entity_type(id),
+  scope          TEXT NOT NULL DEFAULT 'system' CHECK (scope IN ('system','radius')),
+                                       -- 'system': every arrival in the star system of the
+                                       -- planet it stands on; 'radius': arrivals within `radius`
+                                       -- of it while it stands still in a system's plane
+  radius         INTEGER NOT NULL DEFAULT 0 CHECK (radius >= 0),
+                                       -- milli-tiles of the system's plane ('radius' scope)
+  enabled        INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1))
+                                       -- base of the entity stat `detector`: a type whose row
+                                       -- says 0 detects only once a modifier sets the stat to 1
+) STRICT;
+
 -- Market (task 107): its owner buys and sells lots of the tradeable resources here
 -- (orders `buy` and `sell`, subject = the resource) once a technology enables the rule
 -- 'market_trading'; every trade is paid in `currency_id`, which is itself not tradeable.
