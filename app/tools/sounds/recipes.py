@@ -35,12 +35,21 @@ def voiced(x, pitch=1.0, bright=1.0, loop=False):
     return x
 
 
+def gentle(x):
+    """Not too violent (owner's review): no harsh highs, a 3 ms softened attack."""
+    x = s.lowpass(x, 7000)
+    n = min(len(x), n_of(0.003))
+    x[:n] *= np.linspace(0, 1, n)
+    return x
+
+
 # ------------------------------------------------------------------ firing
 
 def fire(name):
     def make(r, p):
         x = FIRE[name](r, p)
-        return voiced(x, p["pitch"] * (1.08 - 0.16 * p.get("power", 0.5)), bright_of(p))
+        x = voiced(x, p["pitch"] * (1.08 - 0.16 * p.get("power", 0.5)), bright_of(p))
+        return gentle(x)
     return make
 
 
@@ -92,13 +101,14 @@ FIGHT = {
 
 def fight(name):
     def make(r, p):
-        return voiced(FIGHT[name](r), p["pitch"], 1.0)
+        return gentle(voiced(FIGHT[name](r), p["pitch"], 1.0))
     return make
 
 
 # ------------------------------------------------------------------ moving (loops)
 
 def footsteps(r, p):
+    """Soft steps on grass: a light, muffled tread with a little rustle, never quite regular."""
     L = 2.0
     out = np.zeros(n_of(L))
     cadence = 1.6 + 1.4 * p["speed"]
@@ -107,13 +117,18 @@ def footsteps(r, p):
         offset = r.uniform(0, L / steps)
         gain = 1.0 if f == 0 else r.uniform(0.4, 0.7)
         for k in range(steps):
-            m = n_of(0.2)
-            thud = s.lowpass(r.standard_normal(m), 220) * env_ad(m, 0.004, 0.03) * 3
-            crunch = s.bandpass(r.standard_normal(m), 1500, 7000) * env_ad(m, 0.01, 0.05) * r.uniform(0.25, 0.45)
-            place_wrap(out, (thud + crunch) * gain, offset + k * L / steps + r.uniform(-0.015, 0.015))
-            if p["age"] >= 3 and r.uniform() < 0.5:  # kit and equipment jingling
-                place_wrap(out, burst(r, 0.06, 2500, 8000, 0.003, 0.015, 0.08 * gain), offset + k * L / steps + 0.03)
+            place_wrap(out, soft_step(r) * gain * r.uniform(0.7, 1.0), offset + k * L / steps + r.uniform(-0.04, 0.04))
+            if p["age"] >= 3 and r.uniform() < 0.3:  # kit and equipment, faintly
+                place_wrap(out, burst(r, 0.06, 2000, 6000, 0.005, 0.015, 0.03 * gain), offset + k * L / steps + 0.03)
     return out
+
+
+def soft_step(r):
+    """One footfall on grass: a muffled heel and a little rustle."""
+    m = n_of(0.25)
+    heel = s.lowpass(r.standard_normal(m), 160) * env_ad(m, 0.012, 0.035) * 1.2
+    grass = s.bandpass(r.standard_normal(m), 900, 4500) * env_ad(m, 0.02, 0.06) * r.uniform(0.08, 0.16)
+    return heel + grass
 
 
 def hoofbeats(r, p):
@@ -136,39 +151,36 @@ def engine_tracked(r, p):
 
 
 def electric_drive(r, p):
+    """A calm electric drive: a soft low hum and a quiet rolling sound, no whine."""
     n = n_of(LOOP_MOVE)
-    f = 600 + 400 * p["speed"] + 100 * r.uniform()
-    ph = phase_of(f * (1 + 0.01 * wander(r, n, 4, -1, 1)))
-    out = (np.sin(ph) + 0.3 * np.sin(2 * ph) + 0.15 * np.sin(3 * ph)) * 0.1
-    out += cnoise(r, n, 80, 900) * 0.3 * (0.8 + 0.2 * wander(r, n, 8))
-    for k in range(6):
-        place_wrap(out, modal(r, [2200, 3500], [0.01, 0.006], [1, 0.5], 0.05, 0.2) * 0.05, r.uniform(0, LOOP_MOVE))
-    return out
+    f = qf(110 + 50 * p["speed"] + 20 * r.uniform(), LOOP_MOVE)
+    t = np.arange(n) / SR
+    out = (np.sin(2 * np.pi * f * t) + 0.25 * np.sin(4 * np.pi * f * t)) * 0.12 * (0.9 + 0.1 * wander(r, n, 4))
+    return out + cnoise(r, n, 60, 600) * 0.2 * (0.85 + 0.15 * wander(r, n, 6))
 
 
 def servo_walk(r, p):
+    """A machine walking: muffled metal footfalls and a faint, low servo hum."""
     L = 2.4
-    out = cnoise(r, n_of(L), 100, 800) * 0.05
-    steps = 4
-    for k in range(steps):
-        stomp = modal(r, [90, 240, 620], [0.06, 0.04, 0.02], [1, 0.5, 0.25], 0.4, 1.2, 1500)
-        place_wrap(out, stomp, k * L / steps)
-        m = n_of(0.3)
-        t = np.arange(m) / SR
-        whir = np.sin(2 * np.pi * np.cumsum(700 + 500 * t / t[-1]) / SR) * np.sin(np.pi * t / t[-1]) * 0.12
-        place_wrap(out, whir, k * L / steps + 0.18)
+    n = n_of(L)
+    t = np.arange(n) / SR
+    out = cnoise(r, n, 80, 600) * 0.05 + np.sin(2 * np.pi * qf(140, L) * t) * 0.03
+    for k in range(4):
+        stomp = s.lowpass(modal(r, [90, 240, 620], [0.06, 0.04, 0.02], [1, 0.5, 0.25], 0.4, 0.6, 1200), 2000)
+        place_wrap(out, stomp * 0.7, k * L / 4)
     return out
 
 
 def quad_buzz(r, p):
+    """A small drone: a soft, low whir of its rotors and moving air; steady, no sweep."""
     n = n_of(LOOP_MOVE)
     t = np.arange(n) / SR
+    base = qf(r.uniform(90, 120), LOOP_MOVE)
     out = np.zeros(n)
-    for _ in range(4):
-        f = qf(r.uniform(170, 230), LOOP_MOVE)
-        ph = 2 * np.pi * f * t + r.uniform(0, 6)
-        out += sum(np.sin(k * ph) / k for k in range(1, 10)) * 0.25
-    return s.cfilter(out, hi=3000) + cnoise(r, n, 300, 5000) * 0.2
+    for k, a in [(1, 1.0), (2, 0.35), (3, 0.12)]:
+        out += a * np.sin(2 * np.pi * base * k * t + r.uniform(0, 6))
+    out *= 0.15 * (0.92 + 0.08 * wander(r, n, 4))
+    return out + cnoise(r, n, 100, 1200, color=1) * 0.25
 
 
 def propeller(r, p):

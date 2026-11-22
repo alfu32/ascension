@@ -6,9 +6,11 @@
 # PYTHON   the authoring environment (README.md); default python3
 # VOICES=0 keep the committed voice files (and the buildings' spoken acknowledgments) and re-make
 #          only the synthesised sounds
+# ENCODE_ONLY=1 re-level and re-encode the WAV files already in <work-dir>/wav
 #
 # Steps: load the rules database (schema, seed, models) → assign.py writes plan.json and
-# assignment.json → synth.py and voices.py write WAV files → ffmpeg encodes Ogg Vorbis:
+# assignment.json → synth.py and voices.py write WAV files → level.py brings them to the
+# loudness targets (app/docs/sound.md) → ffmpeg encodes Ogg Vorbis:
 # voices mono 22.05 kHz quality 2, trimmed of leading and trailing silence; ambience stereo
 # 44.1 kHz quality 3; everything else mono 44.1 kHz quality 3. Bit-exact flags keep the output
 # identical between runs.
@@ -21,6 +23,7 @@ python=${PYTHON:-python3}
 voices=${VOICES:-1}
 work=${1:-$(mktemp -d)}
 mkdir -p "$work/wav" "$out"
+if [ "${ENCODE_ONLY:-0}" != 1 ]; then
 rm -f "$work"/wav/*.wav "$work/wav/manifest.tsv" "$work/rules.db"
 
 sqlite3 "$work/rules.db" < "$app/db/schema.sql"
@@ -35,6 +38,7 @@ if [ "$voices" = 1 ]; then
     rm -f "$out"/*.ogg
 else
     find "$out" -name '*.ogg' ! -name 'voice.*' ! -name 'ui.announcer.*' ! -name 'bld.*.select*' -delete
+fi
 fi
 
 encode() {
@@ -51,7 +55,9 @@ encode() {
         -fflags +bitexact -flags:a +bitexact -map_metadata -1 "$out/$name.ogg"
 }
 export -f encode
+rm -rf "$work/level"
+"$python" "$here/level.py" "$work/wav" "$work/level" > "$work/level.log"
 # Beds (bed.*) are only mixed under the buildings' acknowledgments, never shipped alone.
-find "$work/wav" -name '*.wav' ! -name 'bed.*' -print0 | xargs -0 -P 4 -I{} bash -c 'encode "$1" "$2"' _ {} "$out"
+find "$work/level" -name '*.wav' -print0 | xargs -0 -P 4 -I{} bash -c 'encode "$1" "$2"' _ {} "$out"
 cp "$work/wav/manifest.tsv" "$work/manifest.tsv"
 echo "$(ls "$out"/*.ogg | wc -l) sounds, $(du -sh "$out" | cut -f1) in $out"

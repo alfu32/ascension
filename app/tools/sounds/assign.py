@@ -206,7 +206,7 @@ def crew_of(u):
     if "civilian" in tags and u["builder"]:
         return "worker"
     if u["trader"] or ("civilian" in tags and mc != "foot"):
-        return "trader"
+        return "space_trader" if mc == "starship" else "trader"
     if u["healer"]:
         return "healer"
     if "civilian" in tags:
@@ -230,6 +230,7 @@ VOICES = {  # Kokoro's English voices by who speaks
     "worker": ["am_michael", "af_heart", "bm_george", "bf_emma", "am_liam", "bf_lily"],
     "civilian": ["af_heart", "bf_emma", "am_puck", "bf_alice", "af_bella"],
     "trader": ["am_puck", "bm_fable", "af_nova", "bf_alice"],
+    "space_trader": ["af_nova", "am_puck", "bf_alice"],
     "healer": ["bf_emma", "af_river", "am_eric", "bf_lily"],
     "soldier": ["bm_george", "am_michael", "am_fenrir", "bm_daniel", "am_liam", "bm_lewis", "af_kore", "am_eric"],
     "cavalry": ["bm_lewis", "am_fenrir", "bm_george", "am_adam", "af_jessica"],
@@ -243,12 +244,20 @@ VOICES = {  # Kokoro's English voices by who speaks
     "priest": ["im_nicola"],
     "scholar": ["if_sara"],
 }
-SPEED = {"cavalry": 1.12, "pilot": 1.08, "trooper": 1.05, "machine": 0.95, "ship": 0.98, "starship": 1.0}
+SPEED = {"cavalry": 1.08, "pilot": 1.05, "trooper": 1.03, "machine": 0.95, "ship": 0.98, "starship": 1.0,
+         "priest": 0.92, "scholar": 0.97}
+
+
+def calm(text):
+    """Lines are said firmly, never shouted (owner's review): exclamations become statements,
+    except a discovery's "Eureka!"."""
+    return text if text.startswith(("Eureka", "Inventum")) else text.replace("!", ".")
 
 SELECT = {
     "worker": ["Yes?", "{name}, ready to work.", "What needs doing?", "{name} here."],
     "civilian": ["Yes?", "{name} here.", "How can I help?", "At your service."],
     "trader": ["{name}, ready for business.", "Goods are loaded.", "Where shall we trade?", "{name} here."],
+    "space_trader": ["{name}. Cargo holds sealed.", "{name}, ready to haul.", "Freight on the way."],
     "healer": ["{name}, here to help.", "Who needs care?", "{name}, ready.", "Is anyone hurt?"],
     "soldier": ["{name}, ready.", "{name}, reporting.", "Your orders?", "{name}, standing by."],
     "cavalry": ["{name}, mounted and ready.", "{name}, in the saddle.", "Horses ready.", "{name}, awaiting orders."],
@@ -263,8 +272,8 @@ SELECT = {
 }
 # Who speaks Latin (owner's choice): the temple's priests and the university's scholars.
 LATIN = {
-    "priest": {"move": ["Eamus.", "In nomine Domini."], "attack": ["Deus vult!"], "research_done": ["Deo gratias."]},
-    "scholar": {"move": ["Procedamus.", "Eo."], "attack": ["Ad arma!"], "research_done": ["Scientia crescit."]},
+    "priest": {"move": ["Eamus.", "In nomine Domini."], "attack": ["Fiat voluntas tua."], "research_done": ["Deo gratias."]},
+    "scholar": {"move": ["Procedamus.", "Eo."], "attack": ["Ad arma."], "research_done": ["Scientia crescit."]},
 }
 MOVE = {
     "footsteps": ["Moving out.", "On my way.", "On the march.", "Forward."],
@@ -303,6 +312,7 @@ RESEARCH = {
     "worker": ["We've learned a better way.", "New tools, good."],
     "civilian": ["We have learned something new.", "Good news from the scholars."],
     "trader": ["Better roads, better trade.", "New ways to trade."],
+    "space_trader": ["New drives fitted. Faster runs.", "Cargo systems upgraded."],
     "healer": ["New remedies, thank you.", "We can heal better now."],
     "soldier": ["New drills learned.", "Better arms for us."],
     "cavalry": ["Better horses, better riders.", "Our horses are ready for more."],
@@ -344,7 +354,7 @@ def unit_sounds(u, plan, assign, voice):
     def say(event, text):
         sound = f"voice.{short}.{event}"
         plan.append({"name": sound, "kind": "voice", "voice": voice, "speed": speed, "fx": fx,
-                     "text": text.format(name=name)})
+                     "text": calm(text.format(name=name))})
         ev[event] = [sound]
 
     def make(event, recipe, params, count, loop=False):
@@ -452,10 +462,11 @@ STAFF = {
     "power": ("crew", "none", ["{name}. Output is stable.", "Engineer on duty."]),
     "town": ("civilian", "none", ["{name}. The people are listening.", "Mayor here. How may we serve?"]),
     "colony": ("starship", "radio", ["{name}, governor here.", "Colony governor. All is well."]),
-    "market": ("trader", "none", ["{name}. Buy and sell!", "Merchants ready to trade."]),
-    "post": ("soldier", "none", ["{name}. All quiet.", "The watch is set.", "{name}. Eyes on the road.",
-                                 "{name}. Guards at their posts.", "{name}. Nothing stirs."]),
-    "post_modern": ("crew", "radio", ["{name}, all quiet on the line.", "Sentry here. Nothing to report.",
+    "market": ("trader", "none", ["{name}. Buy and sell.", "Merchants ready to trade."]),
+    # Neutral status lines: a post never claims that nothing is happening (owner's review).
+    "post": ("soldier", "none", ["{name}. Awaiting orders.", "The walls are manned.", "The watch is set. What do you need?",
+                                 "{name}. Guards at their posts.", "{name}. Eyes on the road."]),
+    "post_modern": ("crew", "radio", ["{name}. Awaiting orders.", "The watch is set. What do you need?",
                                       "{name}. Guns manned and ready."]),
     "post_future": ("machine", "machine", ["{name} online. Scanning.", "Defences active."]),
     "sensor": ("crew", "radio", ["{name}. Scanning the sky.", "Sensors online. Listening.", "{name}, operator here.",
@@ -505,7 +516,7 @@ def building_sounds(b, plan, assign, voice):
             text = pick(key, f"{event}.{i}", lines) if count == 1 else lines[i % len(lines)]
             plan.append({"name": sound, "kind": "voice", "voice": voice_name, "fx": fx,
                          "speed": round(jitter(key, "speed", 0.92, 1.06), 3),
-                         "text": text.format(name=b["name"]), "over": bed})
+                         "text": calm(text.format(name=b["name"])), "over": bed})
         ev[event] = names
 
     # Select: the staff's acknowledgment over a second of the building at work.

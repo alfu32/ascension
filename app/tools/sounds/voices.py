@@ -34,7 +34,7 @@ SR = 24000
 ANNOUNCER = {
     "voice": "bf_emma", "speed": 1.0, "fx": "none",
     "lines": {
-        "under_attack": "We're under attack!",
+        "under_attack": "We're under attack.",
         "training_complete": "Training complete.",
         "construction_complete": "Construction complete.",
         "research_complete": "Research complete.",

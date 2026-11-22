@@ -667,18 +667,18 @@ def explosion_small(r):
     blast = lowpass(r.standard_normal(n), 2500) * env_ad(n, 0.001, 0.1)
     thump = np.sin(2 * np.pi * (70 - 30 * np.minimum(t, 0.3)) * t) * env_ad(n, 0.002, 0.15) * 1.2
     rumble = lowpass(brown(r, n), 200)
-    rumble = rumble / (np.std(rumble) or 1) * env_ad(n, 0.01, 0.35) * 0.4
-    return blast + thump + rumble + debris(r, n, 8, 0.15, 1.0)
+    rumble = rumble / (np.std(rumble) or 1) * env_ad(n, 0.01, 0.22) * 0.3
+    return blast + thump + rumble + debris(r, n, 5, 0.1, 0.6) * 0.6
 
 
 def explosion_large(r):
     n = n_of(3.5)
     t = np.arange(n) / SR
     rumble = lowpass(brown(r, n), 160)
-    rumble = rumble / (np.std(rumble) or 1) * env_ad(n, 0.01, 0.9) * 0.6
-    blast = lowpass(r.standard_normal(n), 3000) * env_ad(n, 0.002, 0.18)
+    rumble = rumble / (np.std(rumble) or 1) * env_ad(n, 0.01, 0.55) * 0.45
+    blast = lowpass(r.standard_normal(n), 2500) * env_ad(n, 0.002, 0.15)
     thump = np.sin(2 * np.pi * (55 - 25 * np.minimum(t, 0.4)) * t) * env_ad(n, 0.003, 0.25) * 1.5
-    return rumble + blast + thump + debris(r, n, 18, 0.3, 2.2)
+    return rumble + blast + thump + debris(r, n, 10, 0.2, 1.4) * 0.6
 
 
 def crossbow(r):
@@ -1126,21 +1126,27 @@ def brass(freqs, seconds, attack, release):
 
 
 def age_reached():
-    low = brass([130.81, 196.0, 261.63, 329.63], 1.6, 0.25, 0.4)
-    high = brass([174.61, 261.63, 349.23, 440.0, 523.25], 2.2, 0.2, 1.2)
-    n = n_of(0.6)
-    t = np.arange(n) / SR
-    drum = np.sin(2 * np.pi * (80 - 20 * t) * t) * env_ad(n, 0.002, 0.15) * 3
-    return sequence([(0, drum), (0.02, low), (1.1, high), (1.1, drum * 0.7)], 3.4)
+    """A new age: a warm chord swelling and rising a step, soft, with no brass edge."""
+    def pad(freqs, seconds, attack, release):
+        n = n_of(seconds)
+        t = np.arange(n) / SR
+        env = np.minimum(t / attack, 1) * np.minimum(np.maximum(seconds - t, 0) / release, 1)
+        x = sum(np.sin(2 * np.pi * f * t) + 0.3 * np.sin(4 * np.pi * f * t) + 0.08 * np.sin(6 * np.pi * f * t)
+                for f in freqs)
+        return x * env ** 1.5
+    low = pad([130.81, 196.0, 261.63, 329.63], 1.9, 0.6, 0.8)
+    high = pad([174.61, 261.63, 349.23, 440.0], 2.6, 0.7, 1.4)
+    return lowpass(sequence([(0, low), (1.2, high)], 3.9), 3000)
 
 
 def alert_attack():
-    def horn(f):
-        n = n_of(0.18)
-        t = np.arange(n) / SR
-        x = sum(np.sin(2 * np.pi * f * k * t) / k for k in range(1, 9, 2))
-        return lowpass(x, 3000) * np.minimum(t / 0.01, 1) * np.minimum((t[-1] - t) / 0.02, 1)
-    return sequence([(k * 0.2, horn(520 if k % 2 == 0 else 390)) for k in range(6)], 1.3)
+    """Under attack: a soft two-tone chime, twice; attention-getting, never a siren."""
+    def chime(f):
+        return note(f, 0.7, 0.25, ((1, 1.0), (2.0, 0.25), (3.0, 0.08)), attack=0.006)
+    parts = []
+    for k in range(2):
+        parts += [(k * 0.6, chime(659.25)), (k * 0.6 + 0.2, chime(523.25))]
+    return lowpass(sequence(parts, 1.6), 4000)
 
 
 def alert_arrival():
@@ -1182,6 +1188,11 @@ def main():
 
     # Shared activity: work at gather sites, impacts and the rotor for task 119. Each unit's and
     # building's own sounds come from the plan (assign.py, recipes.py).
+    import recipes
+
+    for i in range(3):
+        steps = recipes.footsteps(rng(13 + 100 * i), {"speed": 0.3, "age": 0, "figures": 1})
+        save(f"act.footsteps_grass.{i + 1}", steps, "loop", peak=0.85, rms=0.16)
     save("act.saw", saw(), "loop", peak=0.85, rms=0.16)
     save("act.rotor", rotor(), "loop", peak=0.85, rms=0.16)
     variants("act.hammer_wood", hammer_wood, 10, 3, peak=0.8)
@@ -1205,8 +1216,6 @@ def main():
     save("ui.alert_arrival", alert_arrival(), "once", **ui)
 
     if PLAN:
-        import recipes
-
         for e in json.loads(PLAN.read_text()):
             if e["kind"] != "synth":
                 continue

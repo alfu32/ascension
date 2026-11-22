@@ -10,6 +10,7 @@ See `app/docs/sound.md` for the sound list, the naming and the engine.
 | `synth.py` | the global sounds (ambience, shared activity, interface) and the building blocks: noise, oscillators, filters, struck objects, loops |
 | `recipes.py` | the per-type recipes used by the plan: firing, fighting, moving, buildings at work and their cues |
 | `voices.py` | speaks the plan's lines and the announcer's with Kokoro-82M (Apache-2.0) |
+| `level.py` | brings every file to its loudness target (voices −20, effects −23, interface −25, loops −26 LUFS; peaks ≤ −3 dBFS) |
 | `bake.sh` | runs them all and encodes Ogg Vorbis into `app/assets/sounds/` |
 | `check.py` | peaks, loudness, loop joints, and spectrogram contact sheets of the baked files |
 

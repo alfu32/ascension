@@ -1,8 +1,8 @@
 """Check the baked sounds and draw contact sheets of their spectrograms.
 
 For every .ogg: decoded peak (clipping), loudness (silence), leading silence, and for loops
-the joint: the step from the last sample to the first against the sound's own steps, and the
-loudness just before and after the joint. Writes report.tsv and sheet-NN.png (spectrograms,
+the joint: how far the first sample is from what the last two predict, against the largest such
+errors inside the sound, and the loudness just before and after the joint. Writes report.tsv and sheet-NN.png (spectrograms,
 64 per sheet) and joints-NN.png (each loop's last and first 0.1 s side by side) into <out-dir>.
 Needs ffmpeg and ImageMagick's montage.
 
@@ -44,11 +44,14 @@ def main():
         loop = name in loops or name.startswith(LOOP_PREFIX)
         joint = ""
         if loop:
-            steps = np.abs(np.diff(x))
-            ratio = abs(float(x[0] - x[-1])) / (float(np.percentile(steps, 99)) or 1e-9)
+            # The joint against the sound's own smoothness: how far the first sample is from
+            # what the last two predict, compared with the largest such errors inside the file.
+            pred = np.abs(x[2:] - 2 * x[1:-1] + x[:-2])
+            ratio = abs(float(x[0] - 2 * x[-1] + x[-2])) / (float(np.percentile(pred, 99.99)) or 1e-9)
             w = int(0.05 * sr)
             before, after = np.sqrt(np.mean(x[-w:] ** 2)), np.sqrt(np.mean(x[:w] ** 2))
-            level = abs(20 * np.log10((before + 1e-9) / (after + 1e-9)))
+            # A step in loudness counts only where both sides are sounding (not a gap between steps).
+            level = abs(20 * np.log10((before + 1e-9) / (after + 1e-9))) if min(before, after) > 0.1 * rms else 0.0
             joint = f"{ratio:.2f}/{level:.1f}dB"
             if ratio > 1.0 or level > 12:
                 problems.append(f"{name}: joint {joint}")
@@ -69,7 +72,7 @@ def main():
                         "showspectrumpic=s=320x100:legend=0:scale=log:fscale=log", "-frames:v", "1",
                         str(tiles / f"{name}.png")], check=True)
     with open(OUT / "report.tsv", "w") as r:
-        r.write("name\tbytes\tseconds\trate\tpeak\trms\tlead\tjoint(step-ratio/level)\n")
+        r.write("name\tbytes\tseconds\trate\tpeak\trms\tlead\tjoint(prediction-ratio/level)\n")
         for row in rows:
             r.write("{}\t{}\t{:.2f}\t{}\t{:.3f}\t{:.4f}\t{:.3f}\t{}\n".format(*row))
     sheet(OUT, "sheet", [(tiles / f"{row[0]}.png", row[0]) for row in rows])

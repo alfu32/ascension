@@ -379,7 +379,7 @@
   "name": "bld.market.select",
   "over": "bed.market.select",
   "speed": 0.981,
-  "text": "Market. Buy and sell!",
+  "text": "Market. Buy and sell.",
   "voice": "bf_alice"
  },
  {
@@ -516,7 +516,7 @@
   "kind": "voice",
   "name": "voice.citizen.attack",
   "speed": 1.044,
-  "text": "Have at you!",
+  "text": "Have at you.",
   "voice": "bf_lily"
  },
  {
@@ -664,7 +664,7 @@
   "kind": "voice",
   "name": "voice.scout.attack",
   "speed": 1.004,
-  "text": "Blades out!",
+  "text": "Blades out.",
   "voice": "af_kore"
  },
  {
@@ -758,7 +758,7 @@
   "kind": "voice",
   "name": "voice.slinger.attack",
   "speed": 1.022,
-  "text": "Let fly!",
+  "text": "Let fly.",
   "voice": "am_eric"
  },
  {
@@ -852,7 +852,7 @@
   "kind": "voice",
   "name": "voice.spearman.attack",
   "speed": 1.031,
-  "text": "Spears forward!",
+  "text": "Spears forward.",
   "voice": "bm_george"
  },
  {
@@ -1358,7 +1358,7 @@
   "name": "bld.tower.select",
   "over": "bed.tower.select",
   "speed": 1.032,
-  "text": "The watch is set.",
+  "text": "The walls are manned.",
   "voice": "am_michael"
  },
  {
@@ -1566,7 +1566,7 @@
   "kind": "voice",
   "name": "voice.archer.attack",
   "speed": 0.974,
-  "text": "Loose!",
+  "text": "Loose.",
   "voice": "am_fenrir"
  },
  {
@@ -1652,7 +1652,7 @@
   "kind": "voice",
   "name": "voice.caravan.move",
   "speed": 1.031,
-  "text": "Heave, move it!",
+  "text": "Heave, move it.",
   "voice": "bm_fable"
  },
  {
@@ -1681,7 +1681,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.cataphract.select",
-  "speed": 1.077,
+  "speed": 1.037,
   "text": "Cataphracts, awaiting orders.",
   "voice": "bm_george"
  },
@@ -1689,7 +1689,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.cataphract.move",
-  "speed": 1.077,
+  "speed": 1.037,
   "text": "Riding out.",
   "voice": "bm_george"
  },
@@ -1697,15 +1697,15 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.cataphract.attack",
-  "speed": 1.077,
-  "text": "Charge!",
+  "speed": 1.037,
+  "text": "Charge.",
   "voice": "bm_george"
  },
  {
   "fx": "none",
   "kind": "voice",
   "name": "voice.cataphract.research_done",
-  "speed": 1.077,
+  "speed": 1.037,
   "text": "Our horses are ready for more.",
   "voice": "bm_george"
  },
@@ -1768,7 +1768,7 @@
   "kind": "voice",
   "name": "voice.catapult.move",
   "speed": 0.986,
-  "text": "Heave, move it!",
+  "text": "Heave, move it.",
   "voice": "am_eric"
  },
  {
@@ -1776,7 +1776,7 @@
   "kind": "voice",
   "name": "voice.catapult.attack",
   "speed": 0.986,
-  "text": "Load the stones!",
+  "text": "Load the stones.",
   "voice": "am_eric"
  },
  {
@@ -1854,7 +1854,7 @@
   "kind": "voice",
   "name": "voice.hoplite.attack",
   "speed": 1.023,
-  "text": "Spears forward!",
+  "text": "Spears forward.",
   "voice": "bm_daniel"
  },
  {
@@ -1931,7 +1931,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.horseman.select",
-  "speed": 1.103,
+  "speed": 1.063,
   "text": "Horsemen, in the saddle.",
   "voice": "am_adam"
  },
@@ -1939,7 +1939,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.horseman.move",
-  "speed": 1.103,
+  "speed": 1.063,
   "text": "Riding out.",
   "voice": "am_adam"
  },
@@ -1947,15 +1947,15 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.horseman.attack",
-  "speed": 1.103,
-  "text": "Charge!",
+  "speed": 1.063,
+  "text": "Charge.",
   "voice": "am_adam"
  },
  {
   "fx": "none",
   "kind": "voice",
   "name": "voice.horseman.research_done",
-  "speed": 1.103,
+  "speed": 1.063,
   "text": "Our horses are ready for more.",
   "voice": "am_adam"
  },
@@ -2009,7 +2009,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.priest.select",
-  "speed": 1.032,
+  "speed": 0.952,
   "text": "Pax tecum.",
   "voice": "im_nicola"
  },
@@ -2017,7 +2017,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.priest.move",
-  "speed": 1.032,
+  "speed": 0.952,
   "text": "In nomine Domini.",
   "voice": "im_nicola"
  },
@@ -2025,7 +2025,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.priest.research_done",
-  "speed": 1.032,
+  "speed": 0.952,
   "text": "Deo gratias.",
   "voice": "im_nicola"
  },
@@ -2047,7 +2047,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.scholar.select",
-  "speed": 0.959,
+  "speed": 0.929,
   "text": "Adsum.",
   "voice": "if_sara"
  },
@@ -2055,7 +2055,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.scholar.move",
-  "speed": 0.959,
+  "speed": 0.929,
   "text": "Eo.",
   "voice": "if_sara"
  },
@@ -2063,7 +2063,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.scholar.research_done",
-  "speed": 0.959,
+  "speed": 0.929,
   "text": "Scientia crescit.",
   "voice": "if_sara"
  },
@@ -2102,7 +2102,7 @@
   "kind": "voice",
   "name": "voice.trireme.attack",
   "speed": 0.941,
-  "text": "Draw and loose!",
+  "text": "Draw and loose.",
   "voice": "bm_fable"
  },
  {
@@ -2194,7 +2194,7 @@
   "name": "bld.fort.select",
   "over": "bed.fort.select",
   "speed": 1.019,
-  "text": "The watch is set.",
+  "text": "The walls are manned.",
   "voice": "am_liam"
  },
  {
@@ -2335,7 +2335,7 @@
   "kind": "voice",
   "name": "voice.crossbowman.attack",
   "speed": 0.982,
-  "text": "Bolts away!",
+  "text": "Bolts away.",
   "voice": "bm_lewis"
  },
  {
@@ -2412,7 +2412,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.knight.select",
-  "speed": 1.145,
+  "speed": 1.105,
   "text": "Knights, awaiting orders.",
   "voice": "af_jessica"
  },
@@ -2420,7 +2420,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.knight.move",
-  "speed": 1.145,
+  "speed": 1.105,
   "text": "Spurs on.",
   "voice": "af_jessica"
  },
@@ -2428,15 +2428,15 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.knight.attack",
-  "speed": 1.145,
-  "text": "Charge!",
+  "speed": 1.105,
+  "text": "Charge.",
   "voice": "af_jessica"
  },
  {
   "fx": "none",
   "kind": "voice",
   "name": "voice.knight.research_done",
-  "speed": 1.145,
+  "speed": 1.105,
   "text": "Better horses, better riders.",
   "voice": "af_jessica"
  },
@@ -2490,7 +2490,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.light_cavalry.select",
-  "speed": 1.134,
+  "speed": 1.094,
   "text": "Light Cavalry, mounted and ready.",
   "voice": "bm_lewis"
  },
@@ -2498,7 +2498,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.light_cavalry.move",
-  "speed": 1.134,
+  "speed": 1.094,
   "text": "We ride.",
   "voice": "bm_lewis"
  },
@@ -2506,15 +2506,15 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.light_cavalry.attack",
-  "speed": 1.134,
-  "text": "Sabres, charge!",
+  "speed": 1.094,
+  "text": "Sabres, charge.",
   "voice": "bm_lewis"
  },
  {
   "fx": "none",
   "kind": "voice",
   "name": "voice.light_cavalry.research_done",
-  "speed": 1.134,
+  "speed": 1.094,
   "text": "Our horses are ready for more.",
   "voice": "bm_lewis"
  },
@@ -2585,7 +2585,7 @@
   "kind": "voice",
   "name": "voice.pikeman.attack",
   "speed": 0.971,
-  "text": "Spears forward!",
+  "text": "Spears forward.",
   "voice": "af_kore"
  },
  {
@@ -2717,7 +2717,7 @@
   "kind": "voice",
   "name": "voice.trebuchet.attack",
   "speed": 1.046,
-  "text": "Load the stones!",
+  "text": "Load the stones.",
   "voice": "bm_daniel"
  },
  {
@@ -2795,7 +2795,7 @@
   "kind": "voice",
   "name": "voice.war_galley.attack",
   "speed": 1.02,
-  "text": "Draw and loose!",
+  "text": "Draw and loose.",
   "voice": "am_onyx"
  },
  {
@@ -2889,7 +2889,7 @@
   "kind": "voice",
   "name": "voice.arquebusier.attack",
   "speed": 0.996,
-  "text": "Present arms, fire!",
+  "text": "Present arms, fire.",
   "voice": "am_eric"
  },
  {
@@ -2983,7 +2983,7 @@
   "kind": "voice",
   "name": "voice.bombard.attack",
   "speed": 0.992,
-  "text": "Run out the guns!",
+  "text": "Run out the guns.",
   "voice": "am_adam"
  },
  {
@@ -3061,7 +3061,7 @@
   "kind": "voice",
   "name": "voice.carrack.attack",
   "speed": 1.019,
-  "text": "Run out the guns!",
+  "text": "Run out the guns.",
   "voice": "bm_george"
  },
  {
@@ -3122,7 +3122,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.cuirassier.select",
-  "speed": 1.105,
+  "speed": 1.065,
   "text": "Horses ready.",
   "voice": "am_fenrir"
  },
@@ -3130,7 +3130,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.cuirassier.move",
-  "speed": 1.105,
+  "speed": 1.065,
   "text": "We ride.",
   "voice": "am_fenrir"
  },
@@ -3138,15 +3138,15 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.cuirassier.attack",
-  "speed": 1.105,
-  "text": "Sabres, charge!",
+  "speed": 1.065,
+  "text": "Sabres, charge.",
   "voice": "am_fenrir"
  },
  {
   "fx": "none",
   "kind": "voice",
   "name": "voice.cuirassier.research_done",
-  "speed": 1.105,
+  "speed": 1.065,
   "text": "Our horses are ready for more.",
   "voice": "am_fenrir"
  },
@@ -3200,7 +3200,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.hussar.select",
-  "speed": 1.089,
+  "speed": 1.049,
   "text": "Horses ready.",
   "voice": "bm_george"
  },
@@ -3208,23 +3208,23 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.hussar.move",
-  "speed": 1.089,
-  "text": "To horse!",
+  "speed": 1.049,
+  "text": "To horse.",
   "voice": "bm_george"
  },
  {
   "fx": "none",
   "kind": "voice",
   "name": "voice.hussar.attack",
-  "speed": 1.089,
-  "text": "Sabres, charge!",
+  "speed": 1.049,
+  "text": "Sabres, charge.",
   "voice": "bm_george"
  },
  {
   "fx": "none",
   "kind": "voice",
   "name": "voice.hussar.research_done",
-  "speed": 1.089,
+  "speed": 1.049,
   "text": "Our horses are ready for more.",
   "voice": "bm_george"
  },
@@ -3295,7 +3295,7 @@
   "kind": "voice",
   "name": "voice.musketeer.attack",
   "speed": 1.011,
-  "text": "Make ready, fire!",
+  "text": "Make ready, fire.",
   "voice": "bm_george"
  },
  {
@@ -3387,7 +3387,7 @@
   "name": "bld.bastion.select",
   "over": "bed.bastion.select",
   "speed": 1.003,
-  "text": "The watch is set.",
+  "text": "The walls are manned.",
   "voice": "am_michael"
  },
  {
@@ -3465,7 +3465,7 @@
   "name": "bld.star_fort.select",
   "over": "bed.star_fort.select",
   "speed": 0.995,
-  "text": "Star Fort. Nothing stirs.",
+  "text": "Star Fort. Eyes on the road.",
   "voice": "am_fenrir"
  },
  {
@@ -3537,7 +3537,7 @@
   "kind": "voice",
   "name": "voice.cannon.move",
   "speed": 0.97,
-  "text": "Heave, move it!",
+  "text": "Heave, move it.",
   "voice": "af_nicole"
  },
  {
@@ -3545,7 +3545,7 @@
   "kind": "voice",
   "name": "voice.cannon.attack",
   "speed": 0.97,
-  "text": "Run out the guns!",
+  "text": "Run out the guns.",
   "voice": "af_nicole"
  },
  {
@@ -3606,7 +3606,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.dragoon.select",
-  "speed": 1.104,
+  "speed": 1.064,
   "text": "Horses ready.",
   "voice": "am_adam"
  },
@@ -3614,7 +3614,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.dragoon.move",
-  "speed": 1.104,
+  "speed": 1.064,
   "text": "Spurs on.",
   "voice": "am_adam"
  },
@@ -3622,15 +3622,15 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.dragoon.attack",
-  "speed": 1.104,
-  "text": "Sabres, charge!",
+  "speed": 1.064,
+  "text": "Sabres, charge.",
   "voice": "am_adam"
  },
  {
   "fx": "none",
   "kind": "voice",
   "name": "voice.dragoon.research_done",
-  "speed": 1.104,
+  "speed": 1.064,
   "text": "Our horses are ready for more.",
   "voice": "am_adam"
  },
@@ -3739,7 +3739,7 @@
   "kind": "voice",
   "name": "voice.frigate.attack",
   "speed": 0.95,
-  "text": "Run out the guns!",
+  "text": "Run out the guns.",
   "voice": "af_aoede"
  },
  {
@@ -3817,7 +3817,7 @@
   "kind": "voice",
   "name": "voice.fusilier.attack",
   "speed": 1.03,
-  "text": "Present arms, fire!",
+  "text": "Present arms, fire.",
   "voice": "bm_daniel"
  },
  {
@@ -3894,7 +3894,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.lancer.select",
-  "speed": 1.073,
+  "speed": 1.033,
   "text": "Lancers, awaiting orders.",
   "voice": "af_jessica"
  },
@@ -3902,7 +3902,7 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.lancer.move",
-  "speed": 1.073,
+  "speed": 1.033,
   "text": "Spurs on.",
   "voice": "af_jessica"
  },
@@ -3910,15 +3910,15 @@
   "fx": "none",
   "kind": "voice",
   "name": "voice.lancer.attack",
-  "speed": 1.073,
-  "text": "Charge!",
+  "speed": 1.033,
+  "text": "Charge.",
   "voice": "af_jessica"
  },
  {
   "fx": "none",
   "kind": "voice",
   "name": "voice.lancer.research_done",
-  "speed": 1.073,
+  "speed": 1.033,
   "text": "Our horses are ready for more.",
   "voice": "af_jessica"
  },
@@ -3989,7 +3989,7 @@
   "kind": "voice",
   "name": "voice.light_infantry.attack",
   "speed": 1.027,
-  "text": "Present arms, fire!",
+  "text": "Present arms, fire.",
   "voice": "am_liam"
  },
  {
@@ -4083,7 +4083,7 @@
   "kind": "voice",
   "name": "voice.ranger.attack",
   "speed": 1.025,
-  "text": "Fix bayonets!",
+  "text": "Fix bayonets.",
   "voice": "bm_lewis"
  },
  {
@@ -4177,7 +4177,7 @@
   "kind": "voice",
   "name": "voice.ship_of_the_line.attack",
   "speed": 0.983,
-  "text": "Fire the guns!",
+  "text": "Fire the guns.",
   "voice": "bm_daniel"
  },
  {
@@ -4599,7 +4599,7 @@
   "kind": "voice",
   "name": "voice.anti_tank_rifleman.attack",
   "speed": 1.017,
-  "text": "Hit them hard!",
+  "text": "Hit them hard.",
   "voice": "af_kore"
  },
  {
@@ -4677,7 +4677,7 @@
   "kind": "voice",
   "name": "voice.armoured_car.attack",
   "speed": 0.993,
-  "text": "Firing!",
+  "text": "Firing.",
   "voice": "af_nicole"
  },
  {
@@ -4738,7 +4738,7 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.biplane.select",
-  "speed": 1.094,
+  "speed": 1.064,
   "text": "Biplanes, pilot standing by.",
   "voice": "af_nova"
  },
@@ -4746,7 +4746,7 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.biplane.move",
-  "speed": 1.094,
+  "speed": 1.064,
   "text": "Airborne.",
   "voice": "af_nova"
  },
@@ -4754,15 +4754,15 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.biplane.attack",
-  "speed": 1.094,
-  "text": "Guns firing!",
+  "speed": 1.064,
+  "text": "Guns firing.",
   "voice": "af_nova"
  },
  {
   "fx": "radio",
   "kind": "voice",
   "name": "voice.biplane.research_done",
-  "speed": 1.094,
+  "speed": 1.064,
   "text": "New tactics received.",
   "voice": "af_nova"
  },
@@ -4849,7 +4849,7 @@
   "kind": "voice",
   "name": "voice.field_gun.attack",
   "speed": 0.986,
-  "text": "Fire for effect!",
+  "text": "Fire for effect.",
   "voice": "am_eric"
  },
  {
@@ -4927,7 +4927,7 @@
   "kind": "voice",
   "name": "voice.ironclad.attack",
   "speed": 1.023,
-  "text": "Fire for effect!",
+  "text": "Fire for effect.",
   "voice": "bm_fable"
  },
  {
@@ -5005,7 +5005,7 @@
   "kind": "voice",
   "name": "voice.light_tank.attack",
   "speed": 1.039,
-  "text": "Gun up, firing!",
+  "text": "Gun up, firing.",
   "voice": "am_onyx"
  },
  {
@@ -5083,7 +5083,7 @@
   "kind": "voice",
   "name": "voice.machine_gunner.attack",
   "speed": 1.012,
-  "text": "Guns firing!",
+  "text": "Guns firing.",
   "voice": "am_eric"
  },
  {
@@ -5215,7 +5215,7 @@
   "kind": "voice",
   "name": "voice.rifleman.attack",
   "speed": 1.047,
-  "text": "Open fire!",
+  "text": "Open fire.",
   "voice": "bm_george"
  },
  {
@@ -5423,7 +5423,7 @@
   "name": "bld.fortress.select",
   "over": "bed.fortress.select",
   "speed": 0.934,
-  "text": "Sentry here. Nothing to report.",
+  "text": "The watch is set. What do you need?",
   "voice": "af_nicole"
  },
  {
@@ -5503,7 +5503,7 @@
   "kind": "voice",
   "name": "voice.bazooka_team.attack",
   "speed": 0.953,
-  "text": "Rocket away!",
+  "text": "Rocket away.",
   "voice": "am_michael"
  },
  {
@@ -5564,7 +5564,7 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.bomber.select",
-  "speed": 1.124,
+  "speed": 1.094,
   "text": "Pilot here.",
   "voice": "am_echo"
  },
@@ -5572,7 +5572,7 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.bomber.move",
-  "speed": 1.124,
+  "speed": 1.094,
   "text": "Heading out.",
   "voice": "am_echo"
  },
@@ -5580,15 +5580,15 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.bomber.attack",
-  "speed": 1.124,
-  "text": "On target, releasing!",
+  "speed": 1.094,
+  "text": "On target, releasing.",
   "voice": "am_echo"
  },
  {
   "fx": "radio",
   "kind": "voice",
   "name": "voice.bomber.research_done",
-  "speed": 1.124,
+  "speed": 1.094,
   "text": "Aircraft upgraded.",
   "voice": "am_echo"
  },
@@ -5659,7 +5659,7 @@
   "kind": "voice",
   "name": "voice.destroyer.attack",
   "speed": 1.01,
-  "text": "Fire for effect!",
+  "text": "Fire for effect.",
   "voice": "am_onyx"
  },
  {
@@ -5769,7 +5769,7 @@
   "kind": "voice",
   "name": "voice.dreadnought.attack",
   "speed": 1.0,
-  "text": "Battery, fire!",
+  "text": "Battery, fire.",
   "voice": "bm_george"
  },
  {
@@ -5830,7 +5830,7 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.fighter.select",
-  "speed": 1.125,
+  "speed": 1.095,
   "text": "Fighters, ready for take-off.",
   "voice": "bf_isabella"
  },
@@ -5838,7 +5838,7 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.fighter.move",
-  "speed": 1.125,
+  "speed": 1.095,
   "text": "Airborne.",
   "voice": "bf_isabella"
  },
@@ -5846,15 +5846,15 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.fighter.attack",
-  "speed": 1.125,
-  "text": "Suppressing fire!",
+  "speed": 1.095,
+  "text": "Suppressing fire.",
   "voice": "bf_isabella"
  },
  {
   "fx": "radio",
   "kind": "voice",
   "name": "voice.fighter.research_done",
-  "speed": 1.125,
+  "speed": 1.095,
   "text": "New tactics received.",
   "voice": "bf_isabella"
  },
@@ -5941,7 +5941,7 @@
   "kind": "voice",
   "name": "voice.flak_gun.attack",
   "speed": 0.962,
-  "text": "Guns on the sky!",
+  "text": "Guns on the sky.",
   "voice": "am_eric"
  },
  {
@@ -6019,7 +6019,7 @@
   "kind": "voice",
   "name": "voice.heavy_machine_gunner.attack",
   "speed": 1.033,
-  "text": "Suppressing fire!",
+  "text": "Suppressing fire.",
   "voice": "am_fenrir"
  },
  {
@@ -6113,7 +6113,7 @@
   "kind": "voice",
   "name": "voice.howitzer.attack",
   "speed": 1.032,
-  "text": "Fire for effect!",
+  "text": "Fire for effect.",
   "voice": "am_onyx"
  },
  {
@@ -6191,7 +6191,7 @@
   "kind": "voice",
   "name": "voice.infantry.attack",
   "speed": 1.029,
-  "text": "Engaging!",
+  "text": "Engaging.",
   "voice": "bm_daniel"
  },
  {
@@ -6323,7 +6323,7 @@
   "kind": "voice",
   "name": "voice.scout_car.attack",
   "speed": 1.014,
-  "text": "Hit them hard!",
+  "text": "Hit them hard.",
   "voice": "bm_daniel"
  },
  {
@@ -6401,7 +6401,7 @@
   "kind": "voice",
   "name": "voice.tank.attack",
   "speed": 0.969,
-  "text": "Gun up, firing!",
+  "text": "Gun up, firing.",
   "voice": "am_adam"
  },
  {
@@ -6479,7 +6479,7 @@
   "kind": "voice",
   "name": "voice.assault_infantry.attack",
   "speed": 1.033,
-  "text": "Engaging!",
+  "text": "Engaging.",
   "voice": "am_liam"
  },
  {
@@ -6573,7 +6573,7 @@
   "kind": "voice",
   "name": "voice.gun_drone.attack",
   "speed": 0.935,
-  "text": "Suppressing fire!",
+  "text": "Suppressing fire.",
   "voice": "am_echo"
  },
  {
@@ -6650,7 +6650,7 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.jet_fighter.select",
-  "speed": 1.079,
+  "speed": 1.049,
   "text": "Jet Fighters, pilot standing by.",
   "voice": "af_sarah"
  },
@@ -6658,7 +6658,7 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.jet_fighter.move",
-  "speed": 1.079,
+  "speed": 1.049,
   "text": "Heading out.",
   "voice": "af_sarah"
  },
@@ -6666,15 +6666,15 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.jet_fighter.attack",
-  "speed": 1.079,
-  "text": "Target locked!",
+  "speed": 1.049,
+  "text": "Target locked.",
   "voice": "af_sarah"
  },
  {
   "fx": "radio",
   "kind": "voice",
   "name": "voice.jet_fighter.research_done",
-  "speed": 1.079,
+  "speed": 1.049,
   "text": "New tactics received.",
   "voice": "af_sarah"
  },
@@ -6745,7 +6745,7 @@
   "kind": "voice",
   "name": "voice.main_battle_tank.attack",
   "speed": 1.011,
-  "text": "Target, fire!",
+  "text": "Target, fire.",
   "voice": "af_nicole"
  },
  {
@@ -6823,7 +6823,7 @@
   "kind": "voice",
   "name": "voice.missile_cruiser.attack",
   "speed": 0.973,
-  "text": "Target locked!",
+  "text": "Target locked.",
   "voice": "af_aoede"
  },
  {
@@ -6901,7 +6901,7 @@
   "kind": "voice",
   "name": "voice.missile_launcher.attack",
   "speed": 0.952,
-  "text": "Missiles away!",
+  "text": "Missiles away.",
   "voice": "am_eric"
  },
  {
@@ -6979,7 +6979,7 @@
   "kind": "voice",
   "name": "voice.missile_team.attack",
   "speed": 0.992,
-  "text": "Target locked!",
+  "text": "Target locked.",
   "voice": "bm_lewis"
  },
  {
@@ -7057,7 +7057,7 @@
   "kind": "voice",
   "name": "voice.recon_drone.attack",
   "speed": 0.931,
-  "text": "Blades on!",
+  "text": "Blades on.",
   "voice": "af_sky"
  },
  {
@@ -7189,7 +7189,7 @@
   "kind": "voice",
   "name": "voice.rocket_artillery.attack",
   "speed": 1.043,
-  "text": "Back blast clear!",
+  "text": "Back blast clear.",
   "voice": "am_onyx"
  },
  {
@@ -7250,7 +7250,7 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.strategic_bomber.select",
-  "speed": 1.127,
+  "speed": 1.097,
   "text": "Strategic Bombers, pilot standing by.",
   "voice": "am_liam"
  },
@@ -7258,7 +7258,7 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.strategic_bomber.move",
-  "speed": 1.127,
+  "speed": 1.097,
   "text": "Vector received.",
   "voice": "am_liam"
  },
@@ -7266,15 +7266,15 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.strategic_bomber.attack",
-  "speed": 1.127,
-  "text": "On target, releasing!",
+  "speed": 1.097,
+  "text": "On target, releasing.",
   "voice": "am_liam"
  },
  {
   "fx": "radio",
   "kind": "voice",
   "name": "voice.strategic_bomber.research_done",
-  "speed": 1.127,
+  "speed": 1.097,
   "text": "Aircraft upgraded.",
   "voice": "am_liam"
  },
@@ -7833,7 +7833,7 @@
   "kind": "voice",
   "name": "voice.combat_robot.attack",
   "speed": 0.94,
-  "text": "Open fire!",
+  "text": "Open fire.",
   "voice": "af_sky"
  },
  {
@@ -7927,7 +7927,7 @@
   "kind": "voice",
   "name": "voice.drone_bomber.attack",
   "speed": 0.901,
-  "text": "Bombs away!",
+  "text": "Bombs away.",
   "voice": "am_adam"
  },
  {
@@ -8005,7 +8005,7 @@
   "kind": "voice",
   "name": "voice.drone_cruiser.attack",
   "speed": 0.944,
-  "text": "Missiles away!",
+  "text": "Missiles away.",
   "voice": "af_alloy"
  },
  {
@@ -8083,7 +8083,7 @@
   "kind": "voice",
   "name": "voice.drone_fighter.attack",
   "speed": 0.941,
-  "text": "Missiles away!",
+  "text": "Missiles away.",
   "voice": "am_echo"
  },
  {
@@ -8161,7 +8161,7 @@
   "kind": "voice",
   "name": "voice.hovercraft.attack",
   "speed": 1.037,
-  "text": "Firing!",
+  "text": "Firing.",
   "voice": "bm_daniel"
  },
  {
@@ -8239,7 +8239,7 @@
   "kind": "voice",
   "name": "voice.robot_tank.attack",
   "speed": 0.952,
-  "text": "Gun up, firing!",
+  "text": "Gun up, firing.",
   "voice": "af_sky"
  },
  {
@@ -8597,7 +8597,7 @@
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.exo_trooper.select",
-  "speed": 1.047,
+  "speed": 1.027,
   "text": "Exo-Troopers, awaiting orders.",
   "voice": "am_fenrir"
  },
@@ -8605,7 +8605,7 @@
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.exo_trooper.move",
-  "speed": 1.047,
+  "speed": 1.027,
   "text": "Forward.",
   "voice": "am_fenrir"
  },
@@ -8613,15 +8613,15 @@
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.exo_trooper.attack",
-  "speed": 1.047,
-  "text": "Open fire!",
+  "speed": 1.027,
+  "text": "Open fire.",
   "voice": "am_fenrir"
  },
  {
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.exo_trooper.research_done",
-  "speed": 1.047,
+  "speed": 1.027,
   "text": "New gear, good.",
   "voice": "am_fenrir"
  },
@@ -8708,7 +8708,7 @@
   "kind": "voice",
   "name": "voice.fusion_tank.attack",
   "speed": 0.961,
-  "text": "Weapons hot!",
+  "text": "Weapons hot.",
   "voice": "af_nicole"
  },
  {
@@ -8802,7 +8802,7 @@
   "kind": "voice",
   "name": "voice.hover_frigate.attack",
   "speed": 0.969,
-  "text": "Weapons hot!",
+  "text": "Weapons hot.",
   "voice": "bm_daniel"
  },
  {
@@ -8879,7 +8879,7 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.interceptor.select",
-  "speed": 1.115,
+  "speed": 1.085,
   "text": "Interceptors, ready for take-off.",
   "voice": "af_nova"
  },
@@ -8887,7 +8887,7 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.interceptor.move",
-  "speed": 1.115,
+  "speed": 1.085,
   "text": "Heading out.",
   "voice": "af_nova"
  },
@@ -8895,15 +8895,15 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.interceptor.attack",
-  "speed": 1.115,
-  "text": "Plasma charged!",
+  "speed": 1.085,
+  "text": "Plasma charged.",
   "voice": "af_nova"
  },
  {
   "fx": "radio",
   "kind": "voice",
   "name": "voice.interceptor.research_done",
-  "speed": 1.115,
+  "speed": 1.085,
   "text": "Aircraft upgraded.",
   "voice": "af_nova"
  },
@@ -8990,7 +8990,7 @@
   "kind": "voice",
   "name": "voice.laser_battery.attack",
   "speed": 0.979,
-  "text": "Beams firing!",
+  "text": "Beams firing.",
   "voice": "am_eric"
  },
  {
@@ -9067,7 +9067,7 @@
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.pulse_gunner.select",
-  "speed": 1.006,
+  "speed": 0.986,
   "text": "Pulse Gunners, suited up.",
   "voice": "af_nicole"
  },
@@ -9075,7 +9075,7 @@
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.pulse_gunner.move",
-  "speed": 1.006,
+  "speed": 0.986,
   "text": "Moving out.",
   "voice": "af_nicole"
  },
@@ -9083,15 +9083,15 @@
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.pulse_gunner.attack",
-  "speed": 1.006,
-  "text": "Plasma charged!",
+  "speed": 0.986,
+  "text": "Plasma charged.",
   "voice": "af_nicole"
  },
  {
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.pulse_gunner.research_done",
-  "speed": 1.006,
+  "speed": 0.986,
   "text": "New gear, good.",
   "voice": "af_nicole"
  },
@@ -9178,7 +9178,7 @@
   "kind": "voice",
   "name": "voice.railgun_battery.attack",
   "speed": 1.025,
-  "text": "Firing the rails!",
+  "text": "Firing the rails.",
   "voice": "am_onyx"
  },
  {
@@ -9239,7 +9239,7 @@
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.railgun_team.select",
-  "speed": 1.084,
+  "speed": 1.064,
   "text": "Trooper standing by.",
   "voice": "am_echo"
  },
@@ -9247,7 +9247,7 @@
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.railgun_team.move",
-  "speed": 1.084,
+  "speed": 1.064,
   "text": "On my way.",
   "voice": "am_echo"
  },
@@ -9255,15 +9255,15 @@
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.railgun_team.attack",
-  "speed": 1.084,
-  "text": "Firing the rails!",
+  "speed": 1.064,
+  "text": "Firing the rails.",
   "voice": "am_echo"
  },
  {
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.railgun_team.research_done",
-  "speed": 1.084,
+  "speed": 1.064,
   "text": "New gear, good.",
   "voice": "am_echo"
  },
@@ -9473,7 +9473,7 @@
   "kind": "voice",
   "name": "voice.carrier.attack",
   "speed": 0.995,
-  "text": "Weapons free!",
+  "text": "Weapons free.",
   "voice": "bm_lewis"
  },
  {
@@ -9567,7 +9567,7 @@
   "kind": "voice",
   "name": "voice.corvette.attack",
   "speed": 0.971,
-  "text": "Rails charged, firing!",
+  "text": "Rails charged, firing.",
   "voice": "af_sky"
  },
  {
@@ -9677,7 +9677,7 @@
   "kind": "voice",
   "name": "voice.grav_skimmer.attack",
   "speed": 1.022,
-  "text": "Weapons hot!",
+  "text": "Weapons hot.",
   "voice": "am_adam"
  },
  {
@@ -9754,7 +9754,7 @@
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.marine.select",
-  "speed": 1.029,
+  "speed": 1.009,
   "text": "Marines, ready.",
   "voice": "am_onyx"
  },
@@ -9762,7 +9762,7 @@
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.marine.move",
-  "speed": 1.029,
+  "speed": 1.009,
   "text": "Forward.",
   "voice": "am_onyx"
  },
@@ -9770,15 +9770,15 @@
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.marine.attack",
-  "speed": 1.029,
-  "text": "Weapons hot!",
+  "speed": 1.009,
+  "text": "Weapons hot.",
   "voice": "am_onyx"
  },
  {
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.marine.research_done",
-  "speed": 1.029,
+  "speed": 1.009,
   "text": "Suit upgraded.",
   "voice": "am_onyx"
  },
@@ -9848,7 +9848,7 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.orbital_bomber.select",
-  "speed": 1.093,
+  "speed": 1.063,
   "text": "Orbital Bombers, pilot standing by.",
   "voice": "am_echo"
  },
@@ -9856,7 +9856,7 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.orbital_bomber.move",
-  "speed": 1.093,
+  "speed": 1.063,
   "text": "Vector received.",
   "voice": "am_echo"
  },
@@ -9864,15 +9864,15 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.orbital_bomber.attack",
-  "speed": 1.093,
-  "text": "Target locked!",
+  "speed": 1.063,
+  "text": "Target locked.",
   "voice": "am_echo"
  },
  {
   "fx": "radio",
   "kind": "voice",
   "name": "voice.orbital_bomber.research_done",
-  "speed": 1.093,
+  "speed": 1.063,
   "text": "Aircraft upgraded.",
   "voice": "am_echo"
  },
@@ -9958,7 +9958,7 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.orbital_fighter.select",
-  "speed": 1.066,
+  "speed": 1.036,
   "text": "Orbital Fighters, ready for take-off.",
   "voice": "bf_isabella"
  },
@@ -9966,7 +9966,7 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.orbital_fighter.move",
-  "speed": 1.066,
+  "speed": 1.036,
   "text": "On approach.",
   "voice": "bf_isabella"
  },
@@ -9974,15 +9974,15 @@
   "fx": "radio",
   "kind": "voice",
   "name": "voice.orbital_fighter.attack",
-  "speed": 1.066,
-  "text": "Missiles away!",
+  "speed": 1.036,
+  "text": "Missiles away.",
   "voice": "bf_isabella"
  },
  {
   "fx": "radio",
   "kind": "voice",
   "name": "voice.orbital_fighter.research_done",
-  "speed": 1.066,
+  "speed": 1.036,
   "text": "New tactics received.",
   "voice": "bf_isabella"
  },
@@ -10075,7 +10075,7 @@
   "kind": "voice",
   "name": "voice.space_freighter.select",
   "speed": 1.05,
-  "text": "Where shall we trade?",
+  "text": "Freight on the way.",
   "voice": "am_puck"
  },
  {
@@ -10091,7 +10091,7 @@
   "kind": "voice",
   "name": "voice.space_freighter.research_done",
   "speed": 1.05,
-  "text": "Better roads, better trade.",
+  "text": "New drives fitted. Faster runs.",
   "voice": "am_puck"
  },
  {
@@ -10129,7 +10129,7 @@
   "kind": "voice",
   "name": "voice.space_frigate.attack",
   "speed": 0.995,
-  "text": "Weapons free!",
+  "text": "Weapons free.",
   "voice": "bf_isabella"
  },
  {
@@ -10271,7 +10271,7 @@
   "kind": "voice",
   "name": "voice.survey_ship.attack",
   "speed": 1.031,
-  "text": "Weapons free!",
+  "text": "Weapons free.",
   "voice": "am_echo"
  },
  {
@@ -10434,7 +10434,7 @@
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.beam_trooper.select",
-  "speed": 1.008,
+  "speed": 0.988,
   "text": "Beam Troopers, ready.",
   "voice": "af_kore"
  },
@@ -10442,7 +10442,7 @@
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.beam_trooper.move",
-  "speed": 1.008,
+  "speed": 0.988,
   "text": "On my way.",
   "voice": "af_kore"
  },
@@ -10450,15 +10450,15 @@
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.beam_trooper.attack",
-  "speed": 1.008,
-  "text": "Weapons free!",
+  "speed": 0.988,
+  "text": "Weapons free.",
   "voice": "af_kore"
  },
  {
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.beam_trooper.research_done",
-  "speed": 1.008,
+  "speed": 0.988,
   "text": "New gear, good.",
   "voice": "af_kore"
  },
@@ -10545,7 +10545,7 @@
   "kind": "voice",
   "name": "voice.grav_tank.attack",
   "speed": 0.956,
-  "text": "Weapons free!",
+  "text": "Weapons free.",
   "voice": "am_eric"
  },
  {
@@ -10639,7 +10639,7 @@
   "kind": "voice",
   "name": "voice.space_cruiser.attack",
   "speed": 1.039,
-  "text": "Rails charged, firing!",
+  "text": "Rails charged, firing.",
   "voice": "bm_lewis"
  },
  {
@@ -10797,7 +10797,7 @@
   "kind": "voice",
   "name": "voice.battleship.attack",
   "speed": 1.003,
-  "text": "Weapons hot!",
+  "text": "Weapons hot.",
   "voice": "bf_isabella"
  },
  {
@@ -10922,7 +10922,7 @@
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.shock_marine.select",
-  "speed": 1.036,
+  "speed": 1.016,
   "text": "Shock Marines, awaiting orders.",
   "voice": "am_fenrir"
  },
@@ -10930,7 +10930,7 @@
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.shock_marine.move",
-  "speed": 1.036,
+  "speed": 1.016,
   "text": "On my way.",
   "voice": "am_fenrir"
  },
@@ -10938,15 +10938,15 @@
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.shock_marine.attack",
-  "speed": 1.036,
-  "text": "Plasma charged!",
+  "speed": 1.016,
+  "text": "Plasma charged.",
   "voice": "am_fenrir"
  },
  {
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.shock_marine.research_done",
-  "speed": 1.036,
+  "speed": 1.016,
   "text": "New gear, good.",
   "voice": "am_fenrir"
  },
