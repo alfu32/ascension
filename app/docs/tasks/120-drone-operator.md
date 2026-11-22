@@ -64,9 +64,26 @@ the drone cloud unit"
 4. Seed and model file; `rom-ai` uses it through army-composition data.
 5. Docs: `docs/` unit lists, `computer-player.md` (fight matrix row).
 
+## Known before starting (tasks 125 and 119, 0.0.120)
+
+- Baselines on main (0.0.120): tests 1319 passed / 6 ignored; playthrough hash 6795972991a038b4,
+  ascension hash 7a5187c0f9728141; fight matrix `strengths=263 unanswered=0` (the "255" below
+  is from before the rotorcraft); duel 20–0, mean_tick 54449.
+- Every unit type has its own sounds (`et_sound`, `app/docs/sound.md`). The operator needs its
+  `select`, `move`, `attack`, `research_done` lines (a soldier's voice, kept calm), a `moving`
+  loop (footsteps with a faint swarm hum), and a `fire` sound for a drone strike (a short
+  dive whine and a small blast, not violent). Make them as task 119 did:
+  `app/tools/sounds/README.md` ("Baking only new types"), the Python environment in the
+  scratchpad's `t120/`, `assign.py` → `assignment.json`, `seed.py`. Every existing file in
+  `app/assets/sounds/` stays byte-identical. If the sound director needs a sound for the cloud
+  itself (a swarm hum where the cloud is), add it through data, not by key.
+- Aircraft (task 123) have two planes (landed, airborne) and rotorcraft (119) hover; the drones
+  are not aircraft units, but "weapons that hit aircraft" must hit the cloud: use the same
+  target data the anti-air weapons use.
+
 ## Done when
 
-- Gate green; fight matrix `strengths=255 unanswered=0`; duel 20–0; new hashes reported with
+- Gate green; fight matrix `unanswered=0` (strengths may grow by the operator's rows); duel 20–0; new hashes reported with
   what moved.
 - A self-ending scripted fight (operators against riflemen, against a tank, against anti-air)
   with the outcome numbers and a screenshot you looked at: `app/docs/img/120-drone-cloud.png`.
