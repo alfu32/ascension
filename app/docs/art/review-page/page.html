@@ -174,25 +174,85 @@ const OVERVIEW = __OVERVIEW__;
 const ROUND = "__ROUND__";
 const SOUNDS = __SOUNDS__;
 const LIBRARY = __LIBRARY__;
-const EVENTS = [["select", "Selected"], ["move", "Move"], ["attack", "Attack"], ["build", "Build"], ["fire", "Firing"], ["fight", "Fighting"],
+const INDEX = __INDEX__;
+const EVENTS = [["select", "Selected"], ["move", "Move"], ["attack", "Attack"], ["build", "Build"], ["fire", "Firing"], ["fight", "Fighting"], ["moving", "Moving"],
   ["active", "Working"], ["train_done", "Unit ready"], ["build_done", "Build finished"], ["research_done", "Research finished"]];
 const soundState = {};
 const fileState = {};
 const player = new Audio();
 let playingBtn = null;
 player.addEventListener("ended", () => { if (playingBtn) playingBtn.setAttribute("aria-pressed", "false"); playingBtn = null; });
-function playSound(key, btn) {
-  if (playingBtn === btn && !player.paused) { player.pause(); btn.setAttribute("aria-pressed", "false"); playingBtn = null; return; }
+// Sounds bundled per type (INDEX: key -> [sprite, start, length]) play exactly their stretch
+// of the sprite through Web Audio; a sound without an index entry is its own file.
+let audioCtx = null;
+let current = null;
+const sprites = {};
+function stopCurrent() {
+  if (current) { try { current.stop(); } catch (_) {} current = null; }
+  if (!player.paused) player.pause();
   if (playingBtn) playingBtn.setAttribute("aria-pressed", "false");
-  player.src = `sounds/${key}.ogg`;
-  player.currentTime = 0;
-  player.play().then(() => { btn.setAttribute("aria-pressed", "true"); playingBtn = btn; }, () => { btn.setAttribute("aria-pressed", "false"); });
+  playingBtn = null;
+}
+function sprite(name) {
+  if (!sprites[name]) {
+    sprites[name] = fetch(`sounds/${name}.ogg`).then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+      .then((buf) => audioCtx.decodeAudioData(buf))
+      .catch((e) => { delete sprites[name]; throw e; });
+  }
+  return sprites[name];
+}
+async function playSound(key, btn) {
+  if (playingBtn === btn) { stopCurrent(); return; }
+  stopCurrent();
+  btn.setAttribute("aria-pressed", "true");
+  playingBtn = btn;
+  const at = INDEX[key];
+  if (!at) {
+    player.src = `sounds/${key}.ogg`;
+    player.currentTime = 0;
+    player.play().catch(() => { if (playingBtn === btn) stopCurrent(); });
+    return;
+  }
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") await audioCtx.resume();
+    const buffer = await sprite(at[0]);
+    if (playingBtn !== btn) return;
+    const src = audioCtx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(audioCtx.destination);
+    src.onended = () => { if (current === src) { current = null; if (playingBtn === btn) { btn.setAttribute("aria-pressed", "false"); playingBtn = null; } } };
+    current = src;
+    src.start(0, at[1], at[2]);
+  } catch (_) {
+    // Fallback: the audio element, seeked to the stretch and stopped after its length.
+    if (playingBtn !== btn) return;
+    player.src = `sounds/${at[0]}.ogg`;
+    player.addEventListener("loadedmetadata", () => {
+      player.currentTime = at[1];
+      player.play().then(() => {
+        const stopAt = setTimeout(() => { if (playingBtn === btn) stopCurrent(); }, at[2] * 1000);
+        player.addEventListener("pause", () => clearTimeout(stopAt), { once: true });
+      }, () => { btn.title = "Could not play " + key; if (playingBtn === btn) stopCurrent(); });
+    }, { once: true });
+  }
+}
+function eventLabel(ev) {
+  const known = EVENTS.find(([k]) => k === ev);
+  if (known) return known[1];
+  const slot = /^fire_slot(\d+)$/.exec(ev);
+  if (slot) return `Firing, weapon ${Number(slot[1]) + 1}`;
+  return ev.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 }
 function playButtons(entity) {
   const set = SOUNDS[entity] || {};
-  return el("div", { class: "plays" }, EVENTS.filter(([ev]) => set[ev]).map(([ev, label]) => {
-    const b = el("button", { class: "play", type: "button", "aria-pressed": "false", title: set[ev], text: label });
-    b.onclick = () => playSound(set[ev], b);
+  const order = EVENTS.map(([k]) => k);
+  const events = Object.keys(set).sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99) || a.localeCompare(b));
+  return el("div", { class: "plays" }, events.map((ev) => {
+    const keys = [].concat(set[ev]);
+    const b = el("button", { class: "play", type: "button", "aria-pressed": "false", title: keys.join(", "),
+      text: eventLabel(ev) + (keys.length > 1 ? ` ×${keys.length}` : "") });
+    b.onclick = () => playSound(keys[Math.floor(Math.random() * keys.length)], b);
     return b;
   }));
 }

@@ -263,20 +263,30 @@ AGES = ["ancient", "classical", "medieval", "gunpowder", "enlightenment", "indus
         "any"]
 models.sort(key=lambda m: (-m["round"], not m["id"].startswith("unit."), AGES.index(m["age"]) if m["age"] in AGES else 99, m["id"]))
 
-sounds, library = {}, []
+sounds, library, index = {}, [], {}
 if SOUND_DIR:
-    files = sorted(f.stem for f in SOUND_DIR.glob("*.ogg"))
+    # Made by sprites.py: every key -> [sprite, start, length]; the files are sounds/<sprite>.ogg.
+    index_file = SOUND_DIR / "sound-index.json"
+    if index_file.exists():
+        index = json.loads(index_file.read_text())
+        files = sorted(index)
+    else:
+        files = sorted(f.stem for f in SOUND_DIR.glob("*.ogg"))
     assignment = SOUND_DIR / "assignment.json"
     if assignment.exists():
         known = {m["entity"] for m in models}
-        sounds = {k: v for k, v in sorted(json.loads(assignment.read_text()).items()) if k in known}
-        missing = sorted({key for v in sounds.values() for key in v.values()} - set(files))
+        sounds = {k: {ev: ([x] if isinstance(x, str) else x) for ev, x in v.items()}
+                  for k, v in sorted(json.loads(assignment.read_text()).items()) if k in known}
+        missing = sorted({key for v in sounds.values() for keys in v.values() for key in keys} - set(files))
         if missing:
             sys.exit(f"assignment names sounds that are not in {SOUND_DIR}: {missing[:10]}")
     order = list(GROUPS)
     by_group = {}
     for f in files:
-        by_group.setdefault(f.split(".", 1)[0], []).append(f)
+        group = f.split(".", 1)[0]
+        if index and group not in ("ambient", "ui", "act"):
+            continue  # a type's own sounds are in its card
+        by_group.setdefault(group, []).append(f)
     for g in sorted(by_group, key=lambda g: (order.index(g) if g in order else 99, g)):
         library.append([GROUPS.get(g, g.capitalize()), by_group[g]])
 
@@ -286,8 +296,10 @@ page = (template
         .replace("__OVERVIEW__", json.dumps(OVERVIEW))
         .replace("__SOUNDS__", json.dumps(sounds))
         .replace("__LIBRARY__", json.dumps(library))
+        .replace("__INDEX__", json.dumps(index))
         .replace("__LEAD__", LEAD)
         .replace("__ROUND__", html.escape(ROUND))
         .replace("__VERSION__", html.escape(VERSION)))
 (here / "model-review.html").write_text(page)
-print("models", len(models), "types with sounds", len(sounds), "sound files", sum(len(k) for _, k in library))
+print("models", len(models), "types with sounds", len(sounds), "sounds", len(index) or len(files) if SOUND_DIR else 0,
+      "in the library", sum(len(k) for _, k in library))

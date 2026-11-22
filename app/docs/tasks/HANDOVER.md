@@ -54,6 +54,13 @@ pushed, tree clean). Read `CLAUDE.md` (it imports `AGENTS.md`), then
      `-`, fields `entity`, `status`, `note`) and the **Sound library** (collection
      `sound_files`, fields `sound`, `status`; collection `sound_groups`, fields `group`,
      `note`). The intro text per round is `LEADS` in `build.py`.
+     The page may hold at most 511 published files, so the ~950 sound files are bundled first:
+     `python3 -I sprites.py <folder with app/assets/sounds/*.ogg and assignment.json> <out>`
+     (ffmpeg; ~10 min) writes one Ogg per type (`sounds/<type key>.ogg`) and per shared group
+     (`sounds/shared.<group>.ogg`) and `sound-index.json` (key → sprite, start, length); pass
+     `<out>` as the fourth argument of `build.py` and publish `<out>/sounds/*` as `sounds/…`.
+     The page plays each stretch with Web Audio (an audio element as fallback); a value in
+     `assignment.json` is a list of variations, one played at random.
 4. **Locking approved models:** append `"<id>" = "<fingerprint>"` (from the
    manifest) to `app/docs/art/approved.toml`; the test
    `approved_models_are_unchanged` then guards them. Never change a locked
