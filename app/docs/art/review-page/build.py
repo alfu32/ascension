@@ -9,6 +9,17 @@ here = Path(sys.argv[1])
 manifest = json.loads((here / "models.json").read_text())
 ROUND = sys.argv[2] if len(sys.argv) > 2 else "1"
 VERSION = sys.argv[3] if len(sys.argv) > 3 else ""
+# Optional: a folder with the sound files (`<group>.<name>[.<n>].ogg`) and `assignment.json`
+# (unit key -> event -> sound key), task 124; published beside the page as `sounds/`.
+SOUND_DIR = Path(sys.argv[4]) if len(sys.argv) > 4 else None
+
+LEADS = {
+    "13": "Buildings and units built from parts inside the game. Round 13 brings one model: the <strong>relic site</strong> (task 82; <code>node.relics@any</code>), the holy place in the wild where priests collect relics for their temples. Set its status and write directions. Name a part as <code>model id/part</code>, for example <code>node.relics@any/reliquary</code>.",
+    "15": "Buildings and units built from parts inside the game, and now their sounds. Round 15 brings one model: the <strong>Deep Space Tracking Station</strong> (task 118; <code>bld.jump_detector@fusion</code>), the fusion-age building that watches its star system and raises an alert when foreign ships jump in: a radar dish on a mast over a plated base, with a beacon and a small equipment hut. Set its status and write directions; name a part as <code>model id/part</code>. Below the models, <strong>Unit sounds</strong> and the <strong>Sound library</strong> let you play and rate every sound (task 124).",
+}
+LEAD = LEADS.get(ROUND, "Buildings and units built from parts inside the game. Set each model's status and write directions; name a part as <code>model id/part</code>.")
+GROUPS = {"ambient": "Ambience", "bld": "Buildings at work", "act": "Unit activity", "fire": "Weapons",
+          "ui": "Interface", "voice": "Voices"}
 
 ROUND1 = {"bld.city@ancient", "bld.city@classical", "bld.barracks@ancient",
           "bld.library@ancient", "unit.citizen@any"}
@@ -22,7 +33,9 @@ ROUND14 = {"unit.survey_ship@starfaring", "unit.corvette@starfaring",
            "unit.space_freighter@starfaring", "unit.satellite@starfaring",
            "unit.orbital_fighter@starfaring", "unit.orbital_bomber@starfaring",
            "unit.ship_of_the_line@enlightenment", "unit.dreadnought@modern"}
-NAMES = {"bld.city": "City", "bld.woodcutter_camp": "Woodcutter's camp", "node.relics": "Relic site",
+# Task 118: the Deep Space Tracking Station, the fusion age's jump detector.
+ROUND15 = {"bld.jump_detector@fusion"}
+NAMES = {"bld.jump_detector": "Deep Space Tracking Station", "bld.city": "City", "bld.woodcutter_camp": "Woodcutter's camp", "node.relics": "Relic site",
          "unit.ship_of_the_line": "Man-of-war"}
 
 def name_of(entity):
@@ -152,7 +165,11 @@ OVERVIEW14 = [
     ("93-system-fleet", "System view at the bench framing: sixty ships of every class on the plane of the home system (<code>docs/tasks/93-bench-script.txt</code>), far versions at this distance"),
     ("93-sea", "The two new line ships at sea level beside their neighbours: frigate and man-of-war; destroyer and dreadnought"),
 ]
-OVERVIEW = OVERVIEW14 if ROUND == "14" else OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
+OVERVIEW15 = [
+    ("118-jump-detected", "What the station does: foreign ships jumped into the watched home system — the alert line and amber rings on the star map and its minimap"),
+    ("118-under-attack", "The other alert of task 118, for context: \"Your capital is under attack\" and a red ring on the minimap"),
+]
+OVERVIEW = OVERVIEW15 if ROUND == "15" else OVERVIEW14 if ROUND == "14" else OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
     ("gallery_ancient", "Ancient age, game camera: <code>--gallery ancient</code>"),
     ("gallery_classical", "Classical age, game camera: <code>--gallery classical</code>"),
     ("gallery_classical_close_team2", "Classical age, close, in player 2's blue to show where team colour sits"),
@@ -176,9 +193,11 @@ def round_of(m):
     (starfaring to galactic), 12 the jump inhibitor, the automated colony and the
     alternative lab look (approved: now the Auto Lab, bld.auto_lab@automation), 13 the relic
     site (task 82), 14 the higher-definition spaceships and the two line ships of task 92
-    (task 93)."""
+    (task 93), 15 the Deep Space Tracking Station (task 118)."""
     if m["id"] in ROUND1:
         return 1
+    if m["id"] in ROUND15:
+        return 15
     if m["id"] in ROUND14:
         return 14
     if m["id"] == "node.relics@any":
@@ -216,6 +235,7 @@ for m in manifest["models"]:
     models.append({
         "id": m["id"],
         "name": name_of(m["entity"]),
+        "entity": m["entity"],
         "round": round_of(m),
         "poses": [p for p in ("parts", "ages", "move", "attack", "work")
                   if (here / "img" / (m["id"].replace("@", "_") + "-" + p + ".jpg")).exists()],
@@ -243,11 +263,43 @@ AGES = ["ancient", "classical", "medieval", "gunpowder", "enlightenment", "indus
         "any"]
 models.sort(key=lambda m: (-m["round"], not m["id"].startswith("unit."), AGES.index(m["age"]) if m["age"] in AGES else 99, m["id"]))
 
+sounds, library, index = {}, [], {}
+if SOUND_DIR:
+    # Made by sprites.py: every key -> [sprite, start, length]; the files are sounds/<sprite>.ogg.
+    index_file = SOUND_DIR / "sound-index.json"
+    if index_file.exists():
+        index = json.loads(index_file.read_text())
+        files = sorted(index)
+    else:
+        files = sorted(f.stem for f in SOUND_DIR.glob("*.ogg"))
+    assignment = SOUND_DIR / "assignment.json"
+    if assignment.exists():
+        known = {m["entity"] for m in models}
+        sounds = {k: {ev: ([x] if isinstance(x, str) else x) for ev, x in v.items()}
+                  for k, v in sorted(json.loads(assignment.read_text()).items()) if k in known}
+        missing = sorted({key for v in sounds.values() for keys in v.values() for key in keys} - set(files))
+        if missing:
+            sys.exit(f"assignment names sounds that are not in {SOUND_DIR}: {missing[:10]}")
+    order = list(GROUPS)
+    by_group = {}
+    for f in files:
+        group = f.split(".", 1)[0]
+        if index and group not in ("ambient", "ui", "act"):
+            continue  # a type's own sounds are in its card
+        by_group.setdefault(group, []).append(f)
+    for g in sorted(by_group, key=lambda g: (order.index(g) if g in order else 99, g)):
+        library.append([GROUPS.get(g, g.capitalize()), by_group[g]])
+
 template = (here / "page.html").read_text()
 page = (template
         .replace("__MODELS__", json.dumps(models))
         .replace("__OVERVIEW__", json.dumps(OVERVIEW))
+        .replace("__SOUNDS__", json.dumps(sounds))
+        .replace("__LIBRARY__", json.dumps(library))
+        .replace("__INDEX__", json.dumps(index))
+        .replace("__LEAD__", LEAD)
         .replace("__ROUND__", html.escape(ROUND))
         .replace("__VERSION__", html.escape(VERSION)))
 (here / "model-review.html").write_text(page)
-print("models", len(models))
+print("models", len(models), "types with sounds", len(sounds), "sounds", len(index) or len(files) if SOUND_DIR else 0,
+      "in the library", sum(len(k) for _, k in library))

@@ -66,7 +66,8 @@ figcaption { font-size: 13px; color: var(--muted); }
 .model[data-status="approved"] { border-color: var(--ok); }
 .model[data-status="needs-work"] { border-color: var(--warn); }
 @media (max-width: 860px) { .model { grid-template-columns: minmax(0, 1fr); } }
-.pic { display: grid; gap: 8px; min-width: 0; }
+.pic { display: grid; gap: 8px; min-width: 0; align-content: start; }
+.pic img { width: 100%; height: auto; display: block; border-radius: 6px; border: 1px solid var(--line); background: var(--line); }
 .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
 .tabs button, .status button, .save {
   font: inherit; font-size: 13px; font-weight: 500; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
@@ -102,14 +103,38 @@ td .team { color: var(--gold); font-weight: 600; }
 .general { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 10px; }
 .offline { font-size: 13px; color: var(--warn); }
 @media (prefers-reduced-motion: no-preference) { .model { transition: border-color .2s; } }
+.sounds { display: grid; gap: 6px; }
+.plays { display: flex; flex-wrap: wrap; gap: 6px; }
+.play { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); padding: 4px 10px; border-radius: 999px; cursor: pointer; }
+.play::before { content: "\25B6\FE0E"; font-size: 10px; margin-right: 6px; color: var(--gold); }
+.play[aria-pressed="true"] { background: var(--gold-soft); border-color: var(--gold); }
+.snd-list { display: grid; gap: 10px; }
+.snd { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; grid-template-columns: minmax(180px, 220px) minmax(0, 1fr) minmax(0, 320px); gap: 10px 16px; align-items: start; }
+.snd[data-status="approved"] { border-color: var(--ok); }
+.snd[data-status="needs-work"] { border-color: var(--warn); }
+.snd .who { display: grid; gap: 2px; }
+.snd .who strong { font-weight: 600; }
+.snd .who a { font-size: 12px; color: var(--muted); }
+.snd textarea { min-height: 60px; }
+@media (max-width: 860px) { .snd { grid-template-columns: minmax(0, 1fr); } }
+.lib-group { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 10px; }
+.lib-group h3 { font-family: var(--display); font-weight: 400; font-size: 20px; margin: 0; }
+.lib-item { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.lib-item:last-of-type { border-bottom: none; }
+.lib-item .mono { font-size: 12px; color: var(--muted); min-width: 0; flex: 1 1 200px; word-break: break-word; }
+.mini button { font-size: 12px; padding: 2px 8px; }
+.snd-box { border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+.model[data-sound="approved"] .snd-box { border-color: var(--ok); }
+.model[data-sound="needs-work"] .snd-box { border-color: var(--warn); }
 </style>
 
 <div class="wrap">
   <header>
     <div class="eyebrow">Ascension · Rise of Man · review round __ROUND__ · __VERSION__</div>
     <h1>Model review</h1>
-    <p class="lead">Buildings and units built from parts inside the game. Round __ROUND__ brings one model: the <strong>relic site</strong> (task 82; <code>node.relics@any</code>), the holy place in the wild where priests collect relics for their temples. A broken fieldstone platform with a stone gateway, standing stones and a fallen column, around an altar under a wine-red cloth carrying a gilded reliquary, gold urns and two candles. It has no owner, so it wears no team colour. Set its status and write directions. Name a part as <code>model id/part</code>, for example <code>node.relics@any/reliquary</code>.</p>
+    <p class="lead">__LEAD__</p>
     <div class="tally" id="tally"></div>
+    <div class="tally" id="sound-tally" hidden></div>
     <p class="offline" id="offline" hidden>Saving is not available in this view. Open the page signed in to claude.ai, or send your directions in chat using the model ids.</p>
   </header>
 
@@ -123,6 +148,12 @@ td .team { color: var(--gold); font-weight: 600; }
 
   <h2 id="current-head">Round __ROUND__: to review</h2>
   <div id="models" style="display:grid;gap:22px"></div>
+
+  <section id="sound-section" hidden style="display:grid;gap:14px">
+    <h2>Sound library</h2>
+    <p class="lead" style="font-size:14px">The sounds of each unit and building are in its own card above, beside its model. Here: every sound file by group, for the sounds that belong to no single type (ambience, interface) and to find any file. Mark each one and write directions per group.</p>
+    <div id="library" style="display:grid;gap:14px"></div>
+  </section>
 
   <h2 id="earlier-head">Earlier rounds</h2>
   <p class="lead" style="font-size:14px;margin-top:-18px">Rounds 1 to 12 are approved and locked in the game repository; changing one of those needs your say. Approved models show only their main picture here.</p>
@@ -141,6 +172,90 @@ td .team { color: var(--gold); font-weight: 600; }
 const MODELS = __MODELS__;
 const OVERVIEW = __OVERVIEW__;
 const ROUND = "__ROUND__";
+const SOUNDS = __SOUNDS__;
+const LIBRARY = __LIBRARY__;
+const INDEX = __INDEX__;
+const EVENTS = [["select", "Selected"], ["move", "Move"], ["attack", "Attack"], ["build", "Build"], ["fire", "Firing"], ["fight", "Fighting"], ["moving", "Moving"],
+  ["active", "Working"], ["train_done", "Unit ready"], ["build_done", "Build finished"], ["research_done", "Research finished"]];
+const soundState = {};
+const fileState = {};
+const player = new Audio();
+let playingBtn = null;
+player.addEventListener("ended", () => { if (playingBtn) playingBtn.setAttribute("aria-pressed", "false"); playingBtn = null; });
+// Sounds bundled per type (INDEX: key -> [sprite, start, length]) play exactly their stretch
+// of the sprite through Web Audio; a sound without an index entry is its own file.
+let audioCtx = null;
+let current = null;
+const sprites = {};
+function stopCurrent() {
+  if (current) { try { current.stop(); } catch (_) {} current = null; }
+  if (!player.paused) player.pause();
+  if (playingBtn) playingBtn.setAttribute("aria-pressed", "false");
+  playingBtn = null;
+}
+function sprite(name) {
+  if (!sprites[name]) {
+    sprites[name] = fetch(`sounds/${name}.ogg`).then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+      .then((buf) => audioCtx.decodeAudioData(buf))
+      .catch((e) => { delete sprites[name]; throw e; });
+  }
+  return sprites[name];
+}
+async function playSound(key, btn) {
+  if (playingBtn === btn) { stopCurrent(); return; }
+  stopCurrent();
+  btn.setAttribute("aria-pressed", "true");
+  playingBtn = btn;
+  const at = INDEX[key];
+  if (!at) {
+    player.src = `sounds/${key}.ogg`;
+    player.currentTime = 0;
+    player.play().catch(() => { if (playingBtn === btn) stopCurrent(); });
+    return;
+  }
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") await audioCtx.resume();
+    const buffer = await sprite(at[0]);
+    if (playingBtn !== btn) return;
+    const src = audioCtx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(audioCtx.destination);
+    src.onended = () => { if (current === src) { current = null; if (playingBtn === btn) { btn.setAttribute("aria-pressed", "false"); playingBtn = null; } } };
+    current = src;
+    src.start(0, at[1], at[2]);
+  } catch (_) {
+    // Fallback: the audio element, seeked to the stretch and stopped after its length.
+    if (playingBtn !== btn) return;
+    player.src = `sounds/${at[0]}.ogg`;
+    player.addEventListener("loadedmetadata", () => {
+      player.currentTime = at[1];
+      player.play().then(() => {
+        const stopAt = setTimeout(() => { if (playingBtn === btn) stopCurrent(); }, at[2] * 1000);
+        player.addEventListener("pause", () => clearTimeout(stopAt), { once: true });
+      }, () => { btn.title = "Could not play " + key; if (playingBtn === btn) stopCurrent(); });
+    }, { once: true });
+  }
+}
+function eventLabel(ev) {
+  const known = EVENTS.find(([k]) => k === ev);
+  if (known) return known[1];
+  const slot = /^fire_slot(\d+)$/.exec(ev);
+  if (slot) return `Firing, weapon ${Number(slot[1]) + 1}`;
+  return ev.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+}
+function playButtons(entity) {
+  const set = SOUNDS[entity] || {};
+  const order = EVENTS.map(([k]) => k);
+  const events = Object.keys(set).sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99) || a.localeCompare(b));
+  return el("div", { class: "plays" }, events.map((ev) => {
+    const keys = [].concat(set[ev]);
+    const b = el("button", { class: "play", type: "button", "aria-pressed": "false", title: keys.join(", "),
+      text: eventLabel(ev) + (keys.length > 1 ? ` ×${keys.length}` : "") });
+    b.onclick = () => playSound(keys[Math.floor(Math.random() * keys.length)], b);
+    return b;
+  }));
+}
 const STATUSES = [["draft", "Draft"], ["needs-work", "Needs work"], ["approved", "Approved"]];
 const docId = (id) => id.replace(/[^a-z0-9]+/gi, "-");
 const state = {};
@@ -207,8 +322,25 @@ function render() {
     const save = el("button", { class: "save", type: "button", text: "Save directions" });
     const st = el("span", { class: "state" });
     save.onclick = () => saveNote(m.id, note.value);
-    const side = el("div", { class: "side" }, [head, dl, el("div", {}, [el("label", { text: "Status" })]), status,
-      el("label", { for: noteId, text: "Directions" }), note, el("div", { class: "row" }, [save, st])]);
+    let sounds = null;
+    if (SOUNDS[m.entity]) {
+      const sstatus = el("div", { class: "status mini", role: "group", "aria-label": "Sound status" });
+      const sbuttons = STATUSES.map(([v, label]) => {
+        const b = el("button", { type: "button", "data-v": v, "aria-pressed": v === "draft" ? "true" : "false", text: label });
+        b.onclick = () => writeSound(m.entity, { status: v });
+        sstatus.append(b);
+        return b;
+      });
+      const snote = el("textarea", { "aria-label": `Sound directions for ${m.entity}`, placeholder: `Sound directions for ${m.entity}, e.g. "move: younger voice; fire: less echo"`, style: "min-height:60px" });
+      const ssave = el("button", { class: "save", type: "button", text: "Save sound directions" });
+      const sst = el("span", { class: "state" });
+      ssave.onclick = () => writeSound(m.entity, { note: snote.value });
+      sounds = el("div", { class: "sounds snd-box" }, [el("label", { text: "Sounds" }), playButtons(m.entity), sstatus, snote, el("div", { class: "row" }, [ssave, sst])]);
+      const cards = soundState[m.entity] = soundState[m.entity] || { uis: [] };
+      cards.uis.push({ card, buttons: sbuttons, note: snote, st: sst });
+    }
+    const side = el("div", { class: "side" }, [head, dl, sounds, el("div", {}, [el("label", { text: "Model status" })]), status,
+      el("label", { for: noteId, text: "Model directions" }), note, el("div", { class: "row" }, [save, st])]);
 
     const rows = m.parts.map((p) => el("tr", {}, [
       el("td", { class: "mono", text: p.name }), el("td", { text: p.shape }), el("td", { text: p.material || "—" }),
@@ -221,6 +353,82 @@ function render() {
     host.append(card);
     m.ui = { card, buttons, note, st, save };
   }
+}
+
+function renderSounds() {
+  if (!Object.keys(SOUNDS).length && !LIBRARY.length) return;
+  document.getElementById("sound-section").hidden = false;
+  const lib = document.getElementById("library");
+  for (const [group, keys] of LIBRARY) {
+    const box = el("div", { class: "lib-group" }, [el("h3", { text: `${group} (${keys.length})` })]);
+    for (const key of keys) {
+      const b = el("button", { class: "play", type: "button", "aria-pressed": "false", text: "Play" });
+      b.onclick = () => playSound(key, b);
+      const status = el("div", { class: "status mini", role: "group", "aria-label": `Status of ${key}` });
+      const buttons = STATUSES.map(([v, label]) => {
+        const sb = el("button", { type: "button", "data-v": v, "aria-pressed": v === "draft" ? "true" : "false", text: label });
+        sb.onclick = () => writeFile(key, { status: v });
+        status.append(sb);
+        return sb;
+      });
+      box.append(el("div", { class: "lib-item" }, [b, el("span", { class: "mono", text: key }), status]));
+      fileState[key] = { ui: { buttons } };
+    }
+    const gid = "group-" + docId(group);
+    const note = el("textarea", { id: gid, placeholder: `Directions for ${group.toLowerCase()}` });
+    const save = el("button", { class: "save", type: "button", text: "Save directions" });
+    const st = el("span", { class: "state" });
+    save.onclick = async () => {
+      if (!db) { document.getElementById("offline").hidden = false; return; }
+      try { await db.doc("sound_groups/" + docId(group)).set({ group, note: note.value, updated: new Date().toISOString() }); st.textContent = "Saved " + new Date().toLocaleString(); }
+      catch (e) { st.textContent = "Not saved: " + (e && e.message ? e.message : "try again"); }
+    };
+    box.append(el("label", { for: gid, text: "Directions" }), note, el("div", { class: "row" }, [save, st]));
+    lib.append(box);
+    fileState["#" + group] = { note, st };
+  }
+  soundTally();
+}
+
+function soundTally() {
+  const counts = { draft: 0, "needs-work": 0, approved: 0 };
+  const types = Object.keys(SOUNDS);
+  const t = document.getElementById("sound-tally");
+  t.hidden = !types.length;
+  for (const e of types) counts[(soundState[e] && soundState[e].status) || "draft"]++;
+  t.replaceChildren(el("span", { class: "chip", text: `Sounds: ${types.length} unit and building types` }),
+    ...STATUSES.map(([v, label]) => el("span", { class: "chip " + v, text: `${counts[v]} ${label.toLowerCase()}` })));
+}
+
+function paintSound(entity) {
+  const s = soundState[entity];
+  if (!s || !s.uis) return;
+  const v = s.status || "draft";
+  for (const ui of s.uis) {
+    ui.card.dataset.sound = v;
+    ui.buttons.forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === v ? "true" : "false"));
+    if (document.activeElement !== ui.note && typeof s.note === "string") ui.note.value = s.note;
+    ui.st.textContent = s.updated ? "Saved " + new Date(s.updated).toLocaleString() : "";
+  }
+  soundTally();
+}
+
+async function writeSound(entity, patch) {
+  if (!db) { document.getElementById("offline").hidden = false; return; }
+  const { uis, ...old } = soundState[entity] || {};
+  const doc = { ...old, ...patch, entity, updated: new Date().toISOString() };
+  soundState[entity] = { ...doc, uis };
+  paintSound(entity);
+  try { await db.collection("sound_reviews").doc(docId(entity)).set(doc); }
+  catch (e) { for (const ui of uis) ui.st.textContent = "Not saved: " + (e && e.message ? e.message : "try again"); }
+}
+
+async function writeFile(key, patch) {
+  if (!db) { document.getElementById("offline").hidden = false; return; }
+  const doc = { sound: key, ...patch, updated: new Date().toISOString() };
+  fileState[key].status = doc.status;
+  fileState[key].ui.buttons.forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === doc.status ? "true" : "false"));
+  try { await db.collection("sound_files").doc(docId(key)).set(doc); } catch (_) { /* shown as not pressed on the next snapshot */ }
 }
 
 function paint(id) {
@@ -248,6 +456,7 @@ const saveNote = (id, text) => write(id, { note: text });
 async function boot() {
   render();
   tally();
+  renderSounds();
   const timer = setTimeout(() => { if (!db) document.getElementById("offline").hidden = false; }, 10000);
   let handle = null;
   try { handle = await window.claude?.use?.("db"); } catch (_) { handle = null; }
@@ -257,6 +466,15 @@ async function boot() {
   db.collection("reviews").onSnapshot((snap) => {
     for (const d of snap.docs) { const data = d.data(); if (data && data.model) { state[data.model] = data; if (MODELS.some((m) => m.id === data.model)) paint(data.model); } }
   }, () => { document.getElementById("offline").hidden = false; });
+  db.collection("sound_reviews").onSnapshot((snap) => {
+    for (const d of snap.docs) { const data = d.data(); if (data && data.entity && soundState[data.entity]) { soundState[data.entity] = { ...data, uis: soundState[data.entity].uis }; paintSound(data.entity); } }
+  }, () => {});
+  db.collection("sound_files").onSnapshot((snap) => {
+    for (const d of snap.docs) { const data = d.data(); const f = data && fileState[data.sound]; if (f) { f.status = data.status; f.ui.buttons.forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === (data.status || "draft") ? "true" : "false")); } }
+  }, () => {});
+  db.collection("sound_groups").onSnapshot((snap) => {
+    for (const d of snap.docs) { const data = d.data(); const g = data && fileState["#" + data.group]; if (g) { if (document.activeElement !== g.note) g.note.value = data.note || ""; if (data.updated) g.st.textContent = "Saved " + new Date(data.updated).toLocaleString(); } }
+  }, () => {});
   const gnote = document.getElementById("general-note");
   const gstate = document.getElementById("general-state");
   db.doc("general/round-" + ROUND).onSnapshot((d) => {
