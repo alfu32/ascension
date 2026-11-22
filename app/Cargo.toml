@@ -13,6 +13,7 @@ members = [
     "crates/rom-render",
     "crates/rom-app",
     "crates/rom-cli",
+    "crates/rom-audio",
 ]
 exclude = ["vendor"]
 resolver = "3"
@@ -38,6 +39,9 @@ raylib = "=6.0.0"
 resvg = { version = "=0.47.0", default-features = false }
 fontdue = "=0.9.5"
 image = { version = "=0.25.10", default-features = false, features = ["png"] }
+# Audio output (ALSA, WASAPI, CoreAudio) and the Ogg Vorbis decoder, for rom-audio.
+cpal = { version = "=0.18.2", default-features = false }
+lewton = { version = "=0.10.2", default-features = false, features = ["ogg"] }
 
 [patch.crates-io]
 # gpui-component 0.5.1 with highlighter and input-refresh fixes; see vendor/gpui-component/PATCHES.md.
@@ -54,4 +58,9 @@ opt-level = 3
 [profile.dev.package.rom-rules]
 opt-level = 3
 [profile.dev.package.rom-mapgen]
+opt-level = 3
+# Decoding every embedded sound at start-up (and in rom-audio's tests) needs an optimised decoder.
+[profile.dev.package.lewton]
+opt-level = 3
+[profile.dev.package.ogg]
 opt-level = 3

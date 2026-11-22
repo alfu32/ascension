@@ -54,6 +54,20 @@ changes the simulation, and nothing in `rom-sim` knows about sound.
 - **Settings**: the Sound section of the settings (master, effects, voice, ambient volume;
   mute when the window is not focused, on by default), saved with the other settings.
 
+## Known from task 124
+
+- `rom-audio` (cpal + lewton) is the engine: read `app/docs/sound.md` for its API, the buses
+  and default gains (master 0.8, effects 0.8, voice 1.0, ambient 0.6), voice limits and loop
+  slots. Loop files carry wrap-around padding and `LOOPSTART`/`LOOPLENGTH` comments; the engine
+  handles them.
+- Decoding every sound at start-up takes ~166 MB and a few seconds on the audio thread. Decide
+  whether that is acceptable for the game (measure the app's peak memory with and without
+  sound); if not, decode on first use as `sound.md` proposes.
+- Packaging: cpal needs ALSA at run time on Linux. Make the AppImage and the snap carry or
+  require `libasound.so.2` (snap: the `audio-playback` plug and the library from the base or
+  staged), and check the portable Windows build and the MSI/MSIX still start without a sound
+  device. CI already installs `libasound2-dev` for building.
+
 ## Build
 
 1. Schema and seed (lint views empty, `database.md`), loaded into `rom-rules`.
