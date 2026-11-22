@@ -2,7 +2,7 @@
 
 use crate::{Command, EntityId, Order, OrderStatus, PlayerId, Pos, SimError, World};
 use crate::{construction::footprint, movement::Walk, pathing::TileRect};
-use rom_rules::{Context, EntityClass, Layer, Weapon};
+use rom_rules::{Context, EntityClass, Layer, Weapon, WeaponTarget};
 
 #[derive(Debug, Clone)]
 pub(crate) struct PendingHit {
@@ -168,6 +168,10 @@ impl World {
         if self.orbit(id).is_some() {
             return Layer::Orbit;
         }
+        // An aircraft on or near the ground is a ground target (task 123).
+        if self.is_grounded(id) {
+            return Layer::Ground;
+        }
         let et = &self.rules.entity_types[&e.type_id];
         if et
             .movement
@@ -195,6 +199,22 @@ impl World {
                 self.rules.terrains[&terrain].layer
             }
         }
+    }
+
+    /// The row of `targets` (a weapon's layers) that reaches `id` where it is now: the row of
+    /// its layer, and for an aircraft on the ground, failing that, the air row (task 123: a
+    /// landed aircraft is a ground target that anti-air weapons still reach).
+    pub(crate) fn layer_row<'a>(
+        &self,
+        targets: &'a [WeaponTarget],
+        id: EntityId,
+    ) -> Option<&'a WeaponTarget> {
+        let layer = self.target_layer(id);
+        targets.iter().find(|t| t.layer == layer).or_else(|| {
+            self.is_grounded(id)
+                .then(|| targets.iter().find(|t| t.layer == Layer::Air))
+                .flatten()
+        })
     }
 
     /// Whether any weapon of `attacker` can aim at `target` where it stands now (its layer,
@@ -251,11 +271,7 @@ impl World {
         weapon: &Weapon,
         target: EntityId,
     ) -> bool {
-        if !weapon
-            .targets
-            .iter()
-            .any(|t| t.layer == self.target_layer(target))
-        {
+        if self.layer_row(&weapon.targets, target).is_none() {
             return false;
         }
         if weapon.orbit_only {
@@ -306,6 +322,10 @@ impl World {
     }
 
     pub(crate) fn can_fire_at(&self, id: EntityId, target: EntityId) -> bool {
+        // An aircraft fires only in the air (task 123).
+        if self.is_grounded(id) {
+            return false;
+        }
         let e = self.entity(id).expect("attacker");
         self.rules.entity_types[&e.type_id].weapons.iter().any(|w| {
             if !self.weapon_can_target(id, w, target) {
@@ -473,11 +493,8 @@ impl World {
             let owner = attacker.owner;
             let damage = self.effective_stat(id, "attack", weapon.damage).max(0);
             // How well the weapon hits this layer scales its accuracy.
-            let layer = self.target_layer(target_id);
-            let hit_pct = weapon
-                .targets
-                .iter()
-                .find(|t| t.layer == layer)
+            let hit_pct = self
+                .layer_row(&weapon.targets, target_id)
                 .map_or(100, |t| t.hit_pct);
             let accuracy = ((i128::from(weapon.accuracy_pct)
                 - i128::from(weapon.accuracy_falloff) * i128::from(distance) / 1000)
@@ -589,11 +606,7 @@ impl World {
             .find(|w| w.id == hit.weapon_id)
             .expect("projectile weapon")
             .clone();
-        if !weapon
-            .targets
-            .iter()
-            .any(|target| target.layer == self.target_layer(hit.target))
-        {
+        if self.layer_row(&weapon.targets, hit.target).is_none() {
             return;
         }
         let damage = self.hit_damage(hit, &weapon, hit.target);
@@ -639,10 +652,7 @@ impl World {
                 || (t.owner == PlayerId(0) && self.players[&t.owner].team == 0)
                 || !self.enemies(hit.owner, t.owner)
                 || self.orbit(target).is_some()
-                || !weapon
-                    .targets
-                    .iter()
-                    .any(|layer| layer.layer == self.target_layer(target))
+                || self.layer_row(&weapon.targets, target).is_none()
             {
                 continue;
             }

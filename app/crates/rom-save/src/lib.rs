@@ -15,10 +15,11 @@ use std::{collections::BTreeMap, fmt::Write as _, path::Path, sync::Arc};
 use thiserror::Error;
 
 /// Layout version of the PART B tables this crate writes and reads.
-pub const FORMAT: i64 = 14;
+pub const FORMAT: i64 = 15;
 
 /// The oldest layout this crate still reads: format 13 saves load without the match end, the
-/// players' counters and their history (task 117).
+/// players' counters and their history (task 117); formats 13 and 14 with every aircraft in the
+/// air (task 123).
 pub const OLDEST_FORMAT: i64 = 13;
 
 const PART_B: &str = include_str!("../../../db/schema.sql");

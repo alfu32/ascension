@@ -26,6 +26,10 @@ pub struct SunSettings {
     /// With `fixed`, put the light on the far side of the planet instead, so that point is at
     /// midnight (`--sun night`).
     pub midnight: bool,
+    /// With `fixed`, stand the light low in the sky over that point (about forty degrees up,
+    /// from the east and a little south), so shadows fall well beside what casts them
+    /// (`--sun low`).
+    pub low: bool,
 }
 
 impl Default for SunSettings {
@@ -35,6 +39,7 @@ impl Default for SunSettings {
             axial_tilt_mdeg: 0,
             fixed: false,
             midnight: false,
+            low: false,
         }
     }
 }
@@ -54,6 +59,23 @@ pub fn fixed_toward(home: [f32; 3]) -> [f32; 3] {
     };
     let north = cross(n, east);
     unit([0, 1, 2].map(|i| n[i] * 0.82 + east[i] * 0.42 + north[i] * 0.3))
+}
+
+/// The direction toward a light standing about forty degrees above the horizon at `home`, from
+/// the east and a little south (`--sun low`): over the first view the shadows fall to the
+/// left of what casts them and toward the camera.
+pub fn low_toward(home: [f32; 3]) -> [f32; 3] {
+    let n = unit(home);
+    if dot(n, n) < 0.5 {
+        return unit(FIXED_FALLBACK);
+    }
+    let east = if n[0].hypot(n[2]) < 1e-3 {
+        [1.0, 0.0, 0.0]
+    } else {
+        unit(cross([0.0, 1.0, 0.0], n))
+    };
+    let north = cross(n, east);
+    unit([0, 1, 2].map(|i| n[i] * 0.64 + east[i] * 0.7 - north[i] * 0.3))
 }
 
 /// Toward-light direction used when a planet has no home position.
@@ -96,7 +118,11 @@ impl SunClock {
         let Some(point) = point else {
             return self;
         };
-        self.fixed = fixed_toward(point);
+        self.fixed = if self.settings.low {
+            low_toward(point)
+        } else {
+            fixed_toward(point)
+        };
         if self.settings.midnight {
             self.fixed = self.fixed.map(|c| -c);
         }
@@ -416,6 +442,17 @@ mod tests {
         let view = unit([-0.6, 0.1, 0.5]);
         let over = SunClock::new(settings, Some(home())).fixed_over(Some(view));
         assert!(dot(over.toward(77), view) > 0.8);
+        // Low: well above the horizon, well below the zenith.
+        let low = SunClock::new(
+            SunSettings {
+                low: true,
+                ..settings
+            },
+            Some(home()),
+        )
+        .fixed_over(Some(view));
+        let up = dot(low.toward(3), view);
+        assert!((0.5..0.75).contains(&up), "{up}");
         let night = SunClock::new(
             SunSettings {
                 midnight: true,

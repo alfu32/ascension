@@ -17,6 +17,7 @@ use raylib::prelude::{
 use crate::camera::{Camera, CameraController, InputEvent, Key, PointerButton, TurnSettings};
 use crate::entities::{
     EntitySnapshot, EntityView, SnapshotPair, aloft_hulls, dress_ships, floor_ships, is_aloft_ship,
+    lift_aircraft,
 };
 use crate::globe::{Globe, PlanetScene};
 use crate::gpu_census::Census;
@@ -1038,6 +1039,18 @@ fn render_loop(shared: &Shared) {
         let ship_scales = Arc::clone(&lock(&shared.ship_scales));
         if let Some(globe) = globe.as_deref() {
             dress_ships(&mut blended, &ship_scales, globe);
+        }
+        // Aircraft fly in the air above the planet, and circle while idle (task 123).
+        let sim_seconds = (pair.render_tick(frame_start) / 20.0) as f32;
+        match (globe.as_deref(), scene.surface()) {
+            (Some(globe), _) => lift_aircraft(
+                &mut blended,
+                globe,
+                sim_seconds,
+                Some(globe.surface().n as f32),
+            ),
+            (None, Some(surface)) => lift_aircraft(&mut blended, surface, sim_seconds, None),
+            _ => {}
         }
         if let Some(clock) = &sun_clock {
             // Simulation time drives the light, so it follows game speed and pause.

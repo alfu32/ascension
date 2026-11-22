@@ -3313,3 +3313,52 @@ fn the_palette_paints_nothing_on_a_planet_the_painter_did_not_bring_to_life() {
     });
     assert!(ctl.brush_families(&world).is_empty());
 }
+
+/// Task 123: Land arms a pick for aircraft, the click lands them on open ground, and Take off
+/// (the Lift slot) sends a landed aircraft up; right-clicking an own airfield lands there.
+#[test]
+fn aircraft_land_with_the_land_pick_and_take_off() {
+    let mut fx = fixture();
+    let plane = fx.find(|et| et.movement.as_ref().is_some_and(|m| m.takeoff_ticks > 0));
+    let ticks = fx.world.takeoff_ticks(plane).unwrap() as usize;
+    let id = fx.spawn(plane, 1, 10, 10);
+    fx.select(&[id]);
+    fx.hud(HudRegionKind::PaletteTab, 1, PointerButton::Left, false);
+    let (_, actions) = fx.ctl.palette(&fx.world).unwrap();
+    assert!(actions.contains(&(6, Action::Land)));
+    assert!(
+        !actions.contains(&(5, Action::Lift)),
+        "airborne: nothing to take off from"
+    );
+    fx.hud(HudRegionKind::CommandSlot, 6, PointerButton::Left, false);
+    let land = fx.hud_snapshot().palette.unwrap().buttons;
+    assert!(
+        land.iter()
+            .any(|b| b.slot == 6 && b.armed && b.name == "Land")
+    );
+    assert!(fx.hud_snapshot().help.contains("airfield"));
+    fx.ground_click();
+    fx.step(1);
+    assert_eq!(fx.kinds(id), ["land"]);
+    fx.step(ticks + 200);
+    assert!(fx.world.is_aircraft_landed(id));
+    let (_, actions) = fx.ctl.palette(&fx.world).unwrap();
+    assert!(actions.contains(&(5, Action::Lift)));
+    assert!(
+        !actions.contains(&(6, Action::Land)),
+        "landed: nothing to land"
+    );
+    let buttons = fx.hud_snapshot().palette.unwrap().buttons;
+    assert!(buttons.iter().any(|b| b.slot == 5 && b.name == "Take off"));
+    fx.hud(HudRegionKind::CommandSlot, 5, PointerButton::Left, false);
+    fx.step(ticks + 1);
+    assert!(!fx.world.is_grounded(id));
+    // A right-click on an own airfield lands it there.
+    let airfield = fx.find(|et| fx.world.is_airfield_type(et.id));
+    let field = fx.spawn(airfield, 1, 20, 20);
+    let at = fx.world.entity(field).unwrap().pos;
+    let point = (at.x as f32 / 1000.0, at.y as f32 / 1000.0);
+    fx.rclick(Some(field), point, false);
+    fx.step(1);
+    assert_eq!(fx.kinds(id), ["land"]);
+}

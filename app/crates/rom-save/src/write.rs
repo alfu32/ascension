@@ -189,6 +189,12 @@ fn write_all(
             params![player.0, resource.0, pressure],
         )?;
     }
+    for (id, climbed) in &s.flight {
+        tx.execute(
+            "INSERT INTO entity_flight VALUES (?,?)",
+            params![id.0, *climbed as i64],
+        )?;
+    }
     write_entities(tx, s)?;
     write_space(tx, s)?;
     write_places(tx, s)?;

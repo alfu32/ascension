@@ -1090,6 +1090,8 @@ mod tests {
             altitude: 0.0,
             shot: None,
             spacecraft: false,
+            flight: 0.0,
+            aircraft: false,
             facing_deg: 0.0,
             hp_frac: 1.0,
             building: true,

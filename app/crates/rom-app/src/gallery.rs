@@ -214,6 +214,8 @@ fn place(
             altitude: 0.0,
             shot: None,
             spacecraft: false,
+            flight: 0.0,
+            aircraft: false,
             hp_frac: 1.0,
             building,
             footprint: et.map_or((1, 1), |t| (clamp(t.footprint_w), clamp(t.footprint_h))),
@@ -226,6 +228,7 @@ fn place(
             model: Some(rom_render::ModelRef {
                 index: u16::try_from(i).unwrap_or(u16::MAX),
                 size,
+                floor: 0.0,
             }),
             activity: if building {
                 rom_render::Activity::Idle

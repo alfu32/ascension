@@ -247,6 +247,9 @@ pub struct Controller {
     patrol: bool,
     /// The next city clicked becomes the selected traders' route partner (task 72).
     trade_pick: bool,
+    /// The next click on the ground (or an own airfield) is where the selected aircraft land
+    /// (task 123).
+    land_pick: bool,
     /// The next click on a planet's ground is where the ascended player descends (task 76).
     descend_pick: bool,
     /// The next right click on a moon or asteroid brings it to life (task 77).
@@ -309,6 +312,18 @@ fn climbs(world: &World, entity: &Entity) -> bool {
         && world.orbit(entity.id).is_none()
         && entity.container_id.is_none()
         && !in_space(world, entity)
+}
+
+/// Whether `entity` is an aircraft on or near the ground that can take off (task 123).
+fn takes_off(world: &World, entity: &Entity) -> bool {
+    world.is_aircraft_type(entity.type_id) && world.is_grounded(entity.id)
+}
+
+/// Whether `entity` is an aircraft that is not standing on the ground (task 123).
+fn can_land_aircraft(world: &World, entity: &Entity) -> bool {
+    world.is_aircraft_type(entity.type_id)
+        && entity.container_id.is_none()
+        && !world.is_aircraft_landed(entity.id)
 }
 
 /// Whether units of this type run trade routes (caravans, space freighters).
@@ -859,6 +874,7 @@ impl Controller {
                 self.attack_move = false;
                 self.patrol = false;
                 self.trade_pick = false;
+                self.land_pick = false;
             }
         }
     }
@@ -889,6 +905,15 @@ impl Controller {
         self.trade_pick &= !self.selected_traders(world).is_empty();
         if self.trade_pick {
             self.pick_trade_partner(world, entity.map(EntityId), mods.shift);
+            return;
+        }
+        // The pick ends once no aircraft that can land is selected any more.
+        self.land_pick &= self
+            .own_selected(world)
+            .iter()
+            .any(|e| can_land_aircraft(world, e));
+        if self.land_pick {
+            self.land_aircraft(world, Some(at), mods.shift);
             return;
         }
         if self.patrol {
@@ -1297,7 +1322,13 @@ impl Controller {
             Gather(EntityId, DefId),
             Carry(EntityId, u32),
             Trade(EntityId),
+            Airfield(Pos),
         }
+        // An own airfield is a landing place only for aircraft (task 123).
+        let flyers = self
+            .own_selected(world)
+            .iter()
+            .any(|e| world.is_aircraft_type(e.type_id));
         let kind = entity
             .map(EntityId)
             .and_then(|id| world.entity(id))
@@ -1320,6 +1351,12 @@ impl Controller {
                     && (world.is_landed(e.id) || world.orbit(e.id).is_some())
                 {
                     Kind::Board(e.id)
+                } else if flyers
+                    && e.owner == me
+                    && !e.neutralised
+                    && world.is_airfield_type(e.type_id)
+                {
+                    Kind::Airfield(e.pos)
                 } else if e.owner != PlayerId(0)
                     && e.build_progress.is_none()
                     && et.territory.as_ref().is_some_and(|t| t.is_city)
@@ -1374,6 +1411,12 @@ impl Controller {
                     if !world.passengers(id).is_empty() {
                         issued |= self.submit(world, id, "unload", None, None, Some(target), queue);
                     }
+                }
+                // Aircraft sent to an own airfield land on it (task 123).
+                Kind::Airfield(field)
+                    if world.is_aircraft_type(et.id) && !self.patrol && !self.attack_move =>
+                {
+                    issued |= self.submit(world, id, "land", None, None, Some(*field), queue);
                 }
                 Kind::Carry(node, tag)
                     if et.class == EntityClass::Unit && rules.has_tag(et.id, *tag) =>
@@ -1431,7 +1474,36 @@ impl Controller {
             self.attack_move = false;
             self.patrol = false;
             self.trade_pick = false;
+            self.land_pick = false;
         }
+    }
+
+    /// Lands the selected aircraft at `at` (open ground or an own airfield, each on a free spot
+    /// near it), or each where it is when `at` is `None` (task 123); the pick stays armed with
+    /// shift.
+    fn land_aircraft(&mut self, world: &mut OrderSink<'_>, at: Option<Pos>, shift: bool) {
+        let planes: Vec<(EntityId, Pos)> = self
+            .own_selected(world)
+            .iter()
+            .filter(|e| can_land_aircraft(world, e))
+            .map(|e| (e.id, e.pos))
+            .collect();
+        let mut landing = false;
+        for (id, here) in planes {
+            landing |= self.submit(
+                world,
+                id,
+                "land",
+                None,
+                None,
+                Some(at.unwrap_or(here)),
+                shift,
+            );
+        }
+        if landing && let Some(at) = at {
+            self.marker(world, at, MarkerKind::Move);
+        }
+        self.land_pick = shift && at.is_some();
     }
 
     /// The own selected units that run trade routes (caravans, space freighters).
@@ -2225,11 +2297,14 @@ impl Controller {
                 }
                 if own
                     .iter()
-                    .any(|e| world.is_landed(e.id) || climbs(world, e))
+                    .any(|e| world.is_landed(e.id) || climbs(world, e) || takes_off(world, e))
                 {
                     actions.push((5, Action::Lift));
                 }
-                if own.iter().any(|e| lands(world, e)) {
+                if own
+                    .iter()
+                    .any(|e| lands(world, e) || can_land_aircraft(world, e))
+                {
                     actions.push((6, Action::Land));
                 }
                 if armed_mover || own.iter().any(|e| world.orbit(e.id).is_some()) {
@@ -2381,6 +2456,8 @@ impl Controller {
             Action::Lift => {
                 button.name = if own.iter().any(|e| climbs(world, e)) {
                     "Climb to orbit"
+                } else if own.iter().any(|e| takes_off(world, e)) {
+                    "Take off"
                 } else {
                     "Lift off"
                 }
@@ -2390,6 +2467,7 @@ impl Controller {
             Action::Land => {
                 button.name = "Land".into();
                 button.icon = "icons/cmd_hold".into();
+                button.armed = self.land_pick;
             }
             Action::Patrol => {
                 button.name = "Patrol".into();
@@ -2531,13 +2609,30 @@ impl Controller {
                 self.patrol = !self.patrol;
                 self.attack_move = false;
                 self.trade_pick = false;
+                self.land_pick = false;
             }
             Action::TradeRoute => {
                 self.trade_pick = !self.trade_pick;
                 self.patrol = false;
                 self.attack_move = false;
+                self.land_pick = false;
             }
             Action::Land => {
+                // Aircraft land where the next click says; pressed again, where they are.
+                if self
+                    .own_selected(world)
+                    .iter()
+                    .any(|e| can_land_aircraft(world, e))
+                {
+                    if self.land_pick {
+                        self.land_aircraft(world, None, false);
+                    } else {
+                        self.land_pick = true;
+                        self.patrol = false;
+                        self.attack_move = false;
+                        self.trade_pick = false;
+                    }
+                }
                 let ids: Vec<EntityId> = self
                     .own_selected(world)
                     .iter()
@@ -2629,7 +2724,7 @@ impl Controller {
                 let ids: Vec<EntityId> = self
                     .own_selected(world)
                     .iter()
-                    .filter(|e| world.is_landed(e.id) || climbs(world, e))
+                    .filter(|e| world.is_landed(e.id) || climbs(world, e) || takes_off(world, e))
                     .map(|e| e.id)
                     .collect();
                 for id in ids {
@@ -3105,6 +3200,17 @@ impl Controller {
                 "Trade route, then a city on another planet; paid on each arrival"
             } else {
                 "Trade route, then another city; paid on each arrival"
+            }
+            .into();
+        }
+        // Aircraft (task 123): where Land puts them down, and how they take off.
+        if hud.help.is_empty() && own.iter().any(|e| world.is_aircraft_type(e.type_id)) {
+            hud.help = if self.land_pick {
+                "Click open ground to land there, or an own airfield to park beside it; press Land again to land where they are"
+            } else if own.iter().any(|e| takes_off(world, e)) {
+                "Take off sends them up; any move or attack takes off first. Landed they cannot fire"
+            } else {
+                "Land sets them down on open ground or beside an own airfield (right-click it); landed they cannot fire"
             }
             .into();
         }
@@ -3624,8 +3730,10 @@ fn rejection_message(
         ),
         SimError::NoRoomAboard => "No room aboard".into(),
         SimError::Aboard => "Aboard a ship in space: land it first".into(),
-        SimError::CannotLand => "Cannot land there: open ground only, outside enemy cities".into(),
-        SimError::NotLanded => "The ship has not landed".into(),
+        SimError::CannotLand => {
+            "Cannot land there: open ground only (aircraft also on an own airfield), ships outside enemy cities".into()
+        }
+        SimError::NotLanded => "Not on the ground".into(),
         SimError::CannotClimb => "Orbital craft climb from a planet's air to its orbit".into(),
         SimError::CraftInOrbit => {
             "Orbital craft hold their orbit: attack, board a carrier or come down".into()

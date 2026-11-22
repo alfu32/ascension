@@ -1806,6 +1806,10 @@ pub fn snapshot_on(
             .altitude_pct(entity.id)
             .map_or(0.0, |pct| ORBIT_HEIGHT * pct as f32 / 100.0);
         view.altitude = altitude;
+        // An aircraft is drawn at its share of its flight height (task 123).
+        let flight = world.flight_pct(entity.id);
+        view.aircraft = flight.is_some();
+        view.flight = flight.map_or(0.0, |pct| pct as f32 / 100.0);
         if let Some(orbit) = orbit {
             view.face = orbit.pos.face;
             view.x = orbit.pos.x as f32 / 1000.0;
@@ -1841,6 +1845,8 @@ pub fn snapshot_on(
                 altitude: 0.0,
                 shot: None,
                 spacecraft: false,
+                flight: 0.0,
+                aircraft: false,
                 hp_frac: 1.0,
                 building: true,
                 footprint: (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h)),
@@ -1888,6 +1894,8 @@ pub fn snapshot_on(
             altitude: 0.0,
             shot: None,
             spacecraft: false,
+            flight: 0.0,
+            aircraft: false,
             // No health bar over what is no longer there.
             hp_frac: 1.0,
             building: true,
@@ -2088,6 +2096,8 @@ fn view_of(
         altitude: 0.0,
         shot: None,
         spacecraft: false,
+        flight: 0.0,
+        aircraft: false,
         hp_frac: (entity.hp as f32 / et.hp.max(1) as f32).clamp(0.0, 1.0),
         building: et.class == EntityClass::Building,
         footprint: (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h)),

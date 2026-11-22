@@ -1,5 +1,6 @@
 //! Deterministic game simulation.
 
+mod aircraft;
 mod alerts;
 mod ascension;
 mod attrition;
@@ -51,6 +52,7 @@ mod vision;
 mod wealth;
 mod world;
 
+pub use aircraft::LANDING_MARGIN;
 pub use alerts::{Alert, AlertKind};
 pub use ascension::AscensionProject;
 pub use capture::CaptureCountdown;

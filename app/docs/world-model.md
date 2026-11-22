@@ -583,10 +583,54 @@ frame 7.1 ms (the frame time is the render thread's; the soot's fill on the GPU 
 presented frames). Rewriting the stain meshes when the stains in view change took 1.6–3.2 ms
 with 180 stains (two rewrites in the run).
 
+### Aircraft in the air, on the ground (task 123)
+
+Biplanes, fighters, jet and drone fighters, interceptors and the three bombers have two planes
+of action, like the orbital craft have the air and the orbit: the **ground** and the **air**
+above their planet. They never reach orbit by themselves; that stays the orbital craft's.
+
+- **In the air** (as before task 123 in the simulation): they fly over everything and only
+  weapons that hit the air reach them. They are drawn at a flight height of seven tiles over
+  the ground under them (their underside), about where the orbital craft hold over a planet and
+  well above the rooftops, bigger aircraft a little higher (half a tile per tile of length),
+  rising further over a building taller than that, with their shadows on the ground. Idle in the air they stay up and are drawn circling their
+  spot (presentation only).
+- **On the ground**: a landed aircraft stands on its tile, drawn on the ground. It cannot fire;
+  ground weapons reach it, and anti-air still does. When an enemy it can hit comes into sight
+  it scrambles (takes off, then attacks) as its stance says, like any idle unit. Ground units do not walk round it (it blocks nothing, less than a small vehicle).
+- **Taking off and landing** take the type's `takeoff_ticks` (60 for the biplane to 100 for
+  the strategic bomber). Taking off it rolls three tiles forward along its heading, faster and
+  faster, while it climbs; landing it glides the last three tiles onto its spot, slowing as it
+  comes down. Meanwhile it is hit as if landed and cannot fire.
+- **Orders.** **Land** (Order tab, hotkey S) arms a pick: click open ground and the selected
+  aircraft each land on a free tile near it, their wings clear of each other and of every
+  building (the reach of the drawn model and half a tile);
+  click an own airfield and they park on the ground beside it (its footprint holds the hangar
+  and the tower); press Land again to land them where they are. Right-clicking an own airfield
+  sends them to park beside it too. **Take off** (hotkey A)
+  sends landed ones up where they stand. A move, attack, attack-move or patrol given to a landed
+  aircraft takes off first and then carries out the order. Stopped in the middle of a take-off,
+  an aircraft settles back down.
+- **New aircraft** come out of the airfield landed beside it, on the nearest free spot, and
+  take off for their rally point if it has one. Computer players never land aircraft; theirs
+  take off with their ordinary orders (rally, guard, attack) or scramble at an enemy.
+- **Drawing.** The aircraft models are built flying (their fuselage stands well above the
+  model's origin); the view lowers each by the height of its underside (`ModelRef::floor`), so
+  a landed aircraft rests on the ground and an airborne one flies at its flight height. Airborne
+  aircraft are in the shadow pass like every model; seven tiles up their shadows fall well away
+  from them along the light (about six tiles under a high sun, ten under `--sun low`, a fixed
+  light some forty degrees up from the east), thin and soft on the grass at the shadow map's
+  resolution. Pictures (`tasks/123-aircraft-script.txt`, `--sun low`):
+  `img/123-jets-airborne.png` (three jets of each player fighting above the rooftops at the
+  south of a city, their shadows on the grass to the lower left, four more aircraft on their way
+  to the airfield) and `img/123-jets-landed.png` (two jets and two strategic bombers parked
+  beside the airfield, wings clear of the hangar and tower).
+
 ### Orbital craft, carriers and ground batteries (task 58)
 
 The airfield trains **orbital fighters** and **orbital bombers** from the
-starfaring age. They take off beside the airfield like other aircraft;
+starfaring age. They come out beside the airfield in the air (they never land; the
+other aircraft come out landed since task 123);
 **Climb to orbit** (or `lift`) takes them up to their planet's orbit by
 themselves, drawn climbing. In orbit they sit beside the ships there: fighters
 engage ships and craft in orbit (and aircraft while in the air), bombers strike

@@ -894,3 +894,31 @@ fn a_match_that_has_ended_with_its_history() {
     assert!(w.tally(P1).unwrap().defeated.is_some());
     check("ended", &rules, w, 60, |_| {});
 }
+
+/// Task 123: aircraft on the ground, taking off and coming down save and load with how far
+/// they have climbed, and both worlds fly on alike.
+#[test]
+fn aircraft_landed_taking_off_and_landing() {
+    let rules = rules();
+    let mut w = universe(&rules);
+    let kind = id(&w, "unit.interceptor");
+    let planes: Vec<_> = [(28_500, 40_500), (30_500, 40_500), (32_500, 40_500)]
+        .into_iter()
+        .map(|(x, y)| w.spawn(kind, P1, at(HOME, x, y)).unwrap())
+        .collect();
+    let field = at(HOME, 24_500, 44_500);
+    order(&mut w, planes[0], "land", None, Some(field));
+    order(&mut w, planes[1], "land", None, Some(field));
+    run_until(&mut w, 2000, |w| w.is_aircraft_landed(planes[0]));
+    order(&mut w, planes[0], "lift", None, None);
+    order(&mut w, planes[2], "land", None, Some(field));
+    run_until(&mut w, 2000, |w| {
+        w.flight_climbed(planes[2]).is_some_and(|c| c > 0) || w.is_aircraft_landed(planes[2])
+    });
+    ticks(&mut w, 5);
+    assert!(planes.iter().any(|p| w.is_grounded(*p)));
+    let next = planes[1];
+    check("aircraft", &rules, w, 300, move |w| {
+        order(w, next, "move", None, Some(at(HOME, 36_500, 36_500)));
+    });
+}

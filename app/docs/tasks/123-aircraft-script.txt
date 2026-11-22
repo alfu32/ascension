@@ -1,0 +1,45 @@
+# Task 123: jets fighting in the air over the south side of player one's city, their shadows
+# on the ground, then aircraft landed beside the airfield, replayed by --script (universe mode,
+# seed 1, --sun low so the shadows fall beside the aircraft, --players 2 --ai none,
+# --detail ultra, --size 1920x1080). Ticks are simulation ticks. Test-only setup lines first:
+# three jet fighters of each player are placed in the air south of the city and fight there;
+# two more jets and two strategic bombers of player one, placed beside the airfield, are
+# selected, the Land button pressed (Order tab, slot S) and the ground just south of the
+# airfield clicked: they fly there and park beside the airfield, wings clear of its hangar and
+# tower. From tick 300 the camera turns to the airfield.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun low --size 1920x1080
+#     --detail ultra --script app/docs/tasks/123-aircraft-script.txt --after 6 --screenshot air.png
+#   (the same with --after 24 for the aircraft landed at the airfield)
+0 grant-age age.information
+0 place 1 bld.market @-7,-5
+0 place 1 bld.factory @-8,4
+0 place 1 bld.university @7,-6
+0 place 1 bld.temple @8,5
+0 place 1 bld.tower @-3,8
+0 place 1 bld.library @3,-9
+0 place 1 bld.barracks @12,-1
+0 place 1 bld.granary @-12,-1
+0 place 1 bld.airfield @16,-12
+0 place 1 unit.jet_fighter @-3,16
+0 place 1 unit.jet_fighter @-1,19
+0 place 1 unit.jet_fighter @-3,22
+0 place 2 unit.jet_fighter @9,16
+0 place 2 unit.jet_fighter @7,19
+0 place 2 unit.jet_fighter @9,22
+0 place 1 unit.jet_fighter @22,-8
+0 place 1 unit.jet_fighter @22,-6
+0 place 1 unit.strategic_bomber @24,-10
+0 place 1 unit.strategic_bomber @24,-14
+1 speed 100
+2 cam wheel 2 900,600
+10 click aircraft4
+10 click aircraft5 shift
+10 click aircraft6 shift
+10 click aircraft7 shift
+11 hud tab 1
+12 hud slot 6
+13 click @16,-7
+300 cam drag 1450,300 940,420
+305 cam drag 520,700 940,400
+308 cam drag 1250,370 940,470
+310 cam wheel 1 940,470

@@ -599,6 +599,7 @@ mod tests {
         let model = crate::entities::ModelRef {
             index: 0,
             size: [2.0, 1.0, 7.0],
+            floor: 0.0,
         };
         let length = ship_true_length(Some(model), scales.of(2), 2.5);
         assert!((length - 7.0 * 3.0 * 2.5).abs() < 1e-4);

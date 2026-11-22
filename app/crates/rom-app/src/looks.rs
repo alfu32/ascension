@@ -294,9 +294,11 @@ impl ModelBook {
             }
         }
         let (_, index) = best?;
+        let entry = &self.entries[index];
         Some(ModelRef {
             index: u16::try_from(index).ok()?,
-            size: self.entries[index].size(),
+            size: entry.size(),
+            floor: entry.baked.bounds()[0][1].max(0.0) * entry.look.scale,
         })
     }
 
@@ -581,6 +583,7 @@ mod tests {
                 let model = rom_render::ModelRef {
                     index: 0,
                     size: entry.size(),
+                    floor: 0.0,
                 };
                 let length = ship_true_length(Some(model), scale, per_tile);
                 eprintln!(

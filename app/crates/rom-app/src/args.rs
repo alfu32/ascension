@@ -7,7 +7,7 @@ pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <f
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] [--ai <profile:difficulty,...|none>] [--watch] \
 [--map-size <width>x<height>] [--sphere <n>] [--single-planet] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
 [--universe] [--start-placement <separate|together>] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-chrome] [--no-hud] [--hud-scale <percent>] [--stats] \
-[--sun <orbit|fixed|midnight>] [--graticule <on|off>] [--grass <on|off>] [--detail <min|medium|max|ultra>] [--projectiles <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
+[--sun <orbit|fixed|low|midnight>] [--graticule <on|off>] [--grass <on|off>] [--detail <min|medium|max|ultra>] [--projectiles <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
 [--middle-drag <turn|pan>] [--invert-horizontal-turn] [--invert-vertical-turn] \
 [--gallery <all|units|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
 [--model <model id>] [--parts] [--pose <idle|move|attack|work>] [--anim-time <seconds>] \
@@ -128,6 +128,8 @@ pub struct Options {
     pub sun_fixed: bool,
     /// With `sun_fixed`, put the light on the far side, so the first view is at midnight.
     pub sun_midnight: bool,
+    /// With `sun_fixed`, stand the light low in the sky (`--sun low`, task 123).
+    pub sun_low: bool,
     /// Zoom out to the farthest the player's age allows at the start.
     pub zoom_out: bool,
     /// Start every player in the age with this ordinal (testing).
@@ -263,6 +265,7 @@ impl Default for Options {
             view: None,
             sun_fixed: false,
             sun_midnight: false,
+            sun_low: false,
             zoom_out: false,
             age: None,
             graticule: true,
@@ -452,17 +455,18 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             }
             "--sun" => {
                 let text = value("--sun")?;
-                (options.sun_fixed, options.sun_midnight) = match text.to_ascii_lowercase().as_str()
-                {
-                    "orbit" => (false, false),
-                    "fixed" => (true, false),
-                    "night" | "midnight" => (true, true),
-                    _ => {
-                        return Err(format!(
-                            "--sun expects orbit, fixed or midnight, got {text:?}"
-                        ));
-                    }
-                };
+                (options.sun_fixed, options.sun_midnight, options.sun_low) =
+                    match text.to_ascii_lowercase().as_str() {
+                        "orbit" => (false, false, false),
+                        "fixed" => (true, false, false),
+                        "low" => (true, false, true),
+                        "night" | "midnight" => (true, true, false),
+                        _ => {
+                            return Err(format!(
+                                "--sun expects orbit, fixed, low or midnight, got {text:?}"
+                            ));
+                        }
+                    };
             }
             "--graticule" => {
                 let text = value("--graticule")?;
@@ -996,6 +1000,8 @@ mod tests {
         let o = parse(args(&["--sun", "night"])).unwrap();
         assert!(o.sun_fixed && o.sun_midnight);
         assert_eq!(parse(args(&["--sun", "midnight"])).unwrap(), o);
+        let low = parse(args(&["--sun", "low"])).unwrap();
+        assert!(low.sun_fixed && low.sun_low && !low.sun_midnight);
         let o = parse(args(&[
             "--middle-drag",
             "pan",
