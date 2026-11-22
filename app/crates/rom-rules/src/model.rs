@@ -1308,6 +1308,8 @@ pub struct EntityType {
     pub market: Option<Market>,
     /// Attached `et_weapon` rows.
     pub weapons: Vec<Weapon>,
+    /// Attached `et_sound` rows: its own sounds per event (task 125; presentation only).
+    pub sounds: Vec<EntitySound>,
     /// Attached `placement_rule` rows.
     pub placement_rules: Vec<PlacementRule>,
     /// Attached `completion_bonus` rows.
@@ -1611,6 +1613,120 @@ pub struct ColonySite {
     pub site_type_id: DefId,
     /// The `cap` column: most of the type's line in the colony's area.
     pub cap: i64,
+}
+/// Closed rules vocabulary for SoundEvent: when a unit's or building's own sound plays
+/// (task 125). Presentation only; the simulation never reads it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SoundEvent {
+    /// SQL value `select`: its acknowledgment when selected.
+    Select,
+    /// SQL value `move`: its line when ordered to move.
+    Move,
+    /// SQL value `attack`: its line when ordered to attack.
+    Attack,
+    /// SQL value `build`: its line when ordered to build.
+    Build,
+    /// SQL value `build_done`: a construction finished.
+    BuildDone,
+    /// SQL value `research_done`: a research finished.
+    ResearchDone,
+    /// SQL value `train_done`: a unit trained.
+    TrainDone,
+    /// SQL value `fire`: a ranged weapon's shot.
+    Fire,
+    /// SQL value `fight`: a melee blow.
+    Fight,
+    /// SQL value `moving`: a loop while it moves.
+    Moving,
+    /// SQL value `active`: a building's loop while it works.
+    Active,
+}
+impl crate::load::SqlEnum for SoundEvent {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "select" => Some(Self::Select),
+            "move" => Some(Self::Move),
+            "attack" => Some(Self::Attack),
+            "build" => Some(Self::Build),
+            "build_done" => Some(Self::BuildDone),
+            "research_done" => Some(Self::ResearchDone),
+            "train_done" => Some(Self::TrainDone),
+            "fire" => Some(Self::Fire),
+            "fight" => Some(Self::Fight),
+            "moving" => Some(Self::Moving),
+            "active" => Some(Self::Active),
+            _ => None,
+        }
+    }
+}
+/// One `et_sound` row (presentation only).
+#[derive(Debug, Clone)]
+pub struct EntitySound {
+    /// The `event` column.
+    pub event: SoundEvent,
+    /// The `slot` column: the weapon slot of a `fire` sound.
+    pub slot: i64,
+    /// The `sound` column: a sound family's name (`unit.knight.fight`).
+    pub sound: String,
+    /// The `gain_pct` column.
+    pub gain_pct: i64,
+}
+/// Closed rules vocabulary for AmbienceView: where an ambience bed plays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum AmbienceView {
+    /// SQL value `surface`: over a planet.
+    Surface,
+    /// SQL value `space`: in the system and star-map views.
+    Space,
+}
+impl crate::load::SqlEnum for AmbienceView {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "surface" => Some(Self::Surface),
+            "space" => Some(Self::Space),
+            _ => None,
+        }
+    }
+}
+/// Closed rules vocabulary for Daylight: the side of the planet an ambience bed plays on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Daylight {
+    /// SQL value `any`.
+    Any,
+    /// SQL value `day`.
+    Day,
+    /// SQL value `night`.
+    Night,
+}
+impl crate::load::SqlEnum for Daylight {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "any" => Some(Self::Any),
+            "day" => Some(Self::Day),
+            "night" => Some(Self::Night),
+            _ => None,
+        }
+    }
+}
+/// One `ambience` row (presentation only).
+#[derive(Debug, Clone)]
+pub struct Ambience {
+    /// The `id` column.
+    pub id: u32,
+    /// The `sound` column: a sound family's name.
+    pub sound: String,
+    /// The `view` column.
+    pub view: AmbienceView,
+    /// The `layer` column: the share of ground in view on this layer.
+    pub layer: Option<Layer>,
+    /// The `terrain_id` column: the share of ground in view of this terrain.
+    pub terrain_id: Option<DefId>,
+    /// The `resource_id` column: the ground in view around gather sites of this resource.
+    pub resource_id: Option<DefId>,
+    /// The `light` column.
+    pub light: Daylight,
+    /// The `gain_pct` column.
+    pub gain_pct: i64,
 }
 /// One `et_view_scale` row (presentation only).
 #[derive(Debug, Clone)]
@@ -2234,6 +2350,9 @@ pub struct OrderKind {
     pub target: OrderTarget,
     /// The `note` column.
     pub note: String,
+    /// The `line` column: what a unit says when given this order (task 125); `None` says
+    /// nothing.
+    pub line: Option<SoundEvent>,
 }
 /// Complete PART A rules; all collections have deterministic iteration order.
 #[derive(Debug, Clone, Default)]
@@ -2347,6 +2466,8 @@ pub struct Rules {
     pub victories: BTreeMap<DefId, Victory>,
     /// Loaded `life_brush` rows, keyed by primary key (task 77).
     pub brushes: BTreeMap<DefId, LifeBrush>,
+    /// `ambience` rows by id (task 125; presentation only).
+    pub ambience: Vec<Ambience>,
     /// Production rows indexed by product.
     pub production_by_product: BTreeMap<DefId, Vec<Production>>,
 }

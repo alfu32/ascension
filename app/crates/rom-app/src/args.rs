@@ -8,6 +8,7 @@ pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <f
 [--map-size <width>x<height>] [--sphere <n>] [--single-planet] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
 [--universe] [--start-placement <separate|together>] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-chrome] [--no-hud] [--hud-scale <percent>] [--stats] \
 [--sun <orbit|fixed|low|midnight>] [--graticule <on|off>] [--grass <on|off>] [--detail <min|medium|max|ultra>] [--projectiles <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
+[--mute] [--volume <percent>] [--effects-volume <percent>] [--voice-volume <percent>] [--ambient-volume <percent>] [--mute-unfocused <on|off>] \
 [--middle-drag <turn|pan>] [--invert-horizontal-turn] [--invert-vertical-turn] \
 [--gallery <all|units|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
 [--model <model id>] [--parts] [--pose <idle|move|attack|work>] [--anim-time <seconds>] \
@@ -142,6 +143,10 @@ pub struct Options {
     pub detail: rom_render::Detail,
     /// Draw projectiles in flight (task 95).
     pub projectiles: bool,
+    /// No sound at all (`--mute`): benchmarks and CI (task 125).
+    pub mute: bool,
+    /// The Sound settings (task 125).
+    pub sound: crate::sound::Settings,
     /// The middle button pans and Shift + middle turns (`--middle-drag pan`); by default the
     /// middle button turns the view at every level.
     pub middle_drag_pans: bool,
@@ -272,6 +277,8 @@ impl Default for Options {
             grass: true,
             detail: rom_render::Detail::default(),
             projectiles: true,
+            mute: false,
+            sound: crate::sound::Settings::default(),
             middle_drag_pans: false,
             invert_horizontal_turn: false,
             invert_vertical_turn: false,
@@ -490,6 +497,25 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                     _ => return Err(format!("--grass expects on or off, got {text:?}")),
                 };
             }
+            "--mute" => options.mute = true,
+            "--volume" => options.sound.master = percent("--volume", value("--volume")?)?,
+            "--effects-volume" => {
+                options.sound.effects = percent("--effects-volume", value("--effects-volume")?)?;
+            }
+            "--voice-volume" => {
+                options.sound.voice = percent("--voice-volume", value("--voice-volume")?)?;
+            }
+            "--ambient-volume" => {
+                options.sound.ambient = percent("--ambient-volume", value("--ambient-volume")?)?;
+            }
+            "--mute-unfocused" => {
+                let text = value("--mute-unfocused")?;
+                options.sound.mute_unfocused = match text.to_ascii_lowercase().as_str() {
+                    "on" => true,
+                    "off" => false,
+                    _ => return Err(format!("--mute-unfocused expects on or off, got {text:?}")),
+                };
+            }
             "--projectiles" => {
                 let text = value("--projectiles")?;
                 options.projectiles = match text.to_ascii_lowercase().as_str() {
@@ -698,6 +724,7 @@ pub fn match_arguments(arguments: &[String]) -> Vec<String> {
             "--start-markers",
             "--parts",
             "--serve",
+            "--mute",
             "--help",
             "-h",
         ]
@@ -715,6 +742,16 @@ fn non_empty(name: &str, text: String) -> Result<String, String> {
         Err(format!("{name} expects a value, not an empty one"))
     } else {
         Ok(text)
+    }
+}
+
+/// A volume: a whole percent from 0 to 100.
+fn percent(name: &str, text: String) -> Result<u32, String> {
+    match text.trim().parse::<u32>() {
+        Ok(p) if p <= 100 => Ok(p),
+        _ => Err(format!(
+            "{name} expects a percent from 0 to 100, got {text:?}"
+        )),
     }
 }
 
@@ -1096,6 +1133,41 @@ mod tests {
         assert!(o.no_hud && o.stats);
         assert!(!o.no_chrome && !o.version);
         assert!(parse(args(&["--no-chrome"])).unwrap().no_chrome);
+        let defaults = parse(args(&[])).unwrap();
+        assert!(!defaults.mute);
+        assert_eq!(defaults.sound, crate::sound::Settings::default());
+        let sound = parse(args(&[
+            "--mute",
+            "--volume",
+            "40",
+            "--effects-volume",
+            "0",
+            "--voice-volume",
+            "100",
+            "--ambient-volume",
+            "75",
+            "--mute-unfocused",
+            "off",
+        ]))
+        .unwrap();
+        assert!(sound.mute);
+        assert_eq!(
+            sound.sound,
+            crate::sound::Settings {
+                master: 40,
+                effects: 0,
+                voice: 100,
+                ambient: 75,
+                mute_unfocused: false,
+            }
+        );
+        assert!(parse(args(&["--volume", "101"])).is_err());
+        assert!(parse(args(&["--voice-volume", "loud"])).is_err());
+        assert!(parse(args(&["--mute-unfocused", "maybe"])).is_err());
+        assert_eq!(
+            match_arguments(&args(&["--mute", "--seed", "3", "--volume", "20"])),
+            args(&["--seed", "3"])
+        );
         assert!(parse(args(&["--version"])).unwrap().version);
         assert_eq!(
             window_title(),

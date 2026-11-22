@@ -845,6 +845,7 @@ fn run(
                         NetEvent::Refused(text) => {
                             link.stats.rejected.fetch_add(1, Ordering::Relaxed);
                             controller.notify(world, text);
+                            memory.sound.refused();
                         }
                         NetEvent::Chat {
                             from,
@@ -970,13 +971,30 @@ fn run(
                 .count() as u32,
             Ordering::Relaxed,
         );
+        memory.sound.hold(game.world().tick());
         let picks = bridge.take_picks();
         let interacted = !picks.is_empty();
         picks_taken += picks.len() as u64;
+        let selected = controller.selection().to_vec();
+        let hud_clicks = picks
+            .iter()
+            .filter(|p| matches!(p, PickEvent::HudClick { .. }))
+            .count();
         for pick in picks {
             if handle_pick(&mut controller, &mut game.sink(&mut outbox), link, pick) {
                 toggle_pause(&game, &mut controller, link);
             }
+        }
+        if interacted {
+            let cues = controller.take_cues();
+            memory.sound.interaction(
+                game.world(),
+                me,
+                &selected,
+                controller.selection(),
+                hud_clicks,
+                &cues,
+            );
         }
         if let Game::Follow(net) = &game
             && !asked_to_keep_playing
@@ -1020,6 +1038,7 @@ fn run(
             if let Some(script) = script.as_mut() {
                 let mut chat = Vec::new();
                 let mut pauses = 0;
+                let selected = controller.selection().to_vec();
                 let world = &mut game.sink(&mut outbox);
                 for action in script.due_actions(world.tick()) {
                     match action {
@@ -1067,6 +1086,11 @@ fn run(
                         pauses += 1;
                     }
                 }
+                // A script's picks sound as the person's would.
+                let cues = controller.take_cues();
+                memory
+                    .sound
+                    .interaction(world, me, &selected, controller.selection(), 0, &cues);
                 for (channel, line) in chat {
                     say(&game, &mut ascension, channel, &line);
                 }
@@ -1113,6 +1137,8 @@ fn run(
                 host.take_new_planets(game.core_mut());
             }
             controller.after_step_with(&mut game.sink(&mut outbox));
+            // Orders the controller gives on its own (helpers, re-queues) make no sound.
+            controller.take_cues();
             let world = game.world();
             for notice in notices.update(world) {
                 match notice.about {
@@ -1395,6 +1421,8 @@ struct Memory {
     systems: Option<SystemIndex>,
     /// Tick and time of the last visibility map sent.
     vision: Option<(u64, Instant)>,
+    /// The sound of what is shown and done (task 125).
+    sound: crate::sound::Director,
 }
 
 /// A per-player view of resource terrain, refreshed on age and planet changes.
@@ -1462,6 +1490,14 @@ fn publish(
         bridge.publish_hidden_terrain(Arc::new(hidden));
     }
     let snapshot = snapshot_on(world, me, body, &sightings, models, &mut memory.motions);
+    memory.sound.observe(
+        world,
+        me,
+        body,
+        &snapshot,
+        bridge.view_state().level,
+        bridge.ear(),
+    );
     link.stats.tick.store(snapshot.tick, Ordering::Relaxed);
     link.stats
         .entities

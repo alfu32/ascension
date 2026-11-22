@@ -374,6 +374,11 @@ pub(crate) fn run(arguments: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    // The launcher's controls click (task 125), as loud as the Sound settings say.
+    crate::sound::install(
+        config.form.sound_settings(),
+        config.form.get("mute") == "true",
+    );
     let failed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let app_failed = failed.clone();
     application.run(move |cx: &mut App| {
@@ -426,6 +431,7 @@ pub(crate) fn run(arguments: &[String]) -> ExitCode {
         }
         cx.activate(true);
     });
+    crate::sound::shutdown();
     if failed.load(std::sync::atomic::Ordering::Relaxed) {
         ExitCode::FAILURE
     } else {

@@ -363,6 +363,45 @@ mod tests {
     }
 
     #[test]
+    fn sounds_load_into_the_rules() {
+        use crate::{AmbienceView, Daylight, Layer, Rules, SoundEvent};
+        let conn = build_rules_db(SCHEMA, SEED).expect("seed");
+        let rules = Rules::load(&conn).expect("rules");
+        let citizen = rules
+            .entity_types
+            .keys()
+            .copied()
+            .find(|id| rules.key(*id) == "unit.citizen")
+            .expect("unit.citizen");
+        let sounds = &rules.entity_types[&citizen].sounds;
+        let select = sounds
+            .iter()
+            .find(|s| s.event == SoundEvent::Select)
+            .expect("an acknowledgment");
+        assert_eq!(select.sound, "voice.citizen.select");
+        assert_eq!(select.gain_pct, 100);
+        assert!(sounds.iter().any(|s| s.event == SoundEvent::Fight));
+        // A second weapon's shot is its own row (slot 1).
+        assert!(rules.entity_types.values().any(|et| {
+            et.sounds
+                .iter()
+                .any(|s| s.event == SoundEvent::Fire && s.slot == 1)
+        }));
+        assert_eq!(rules.order_kinds["move"].line, Some(SoundEvent::Move));
+        assert_eq!(rules.order_kinds["attack"].line, Some(SoundEvent::Attack));
+        assert_eq!(rules.order_kinds["construct"].line, Some(SoundEvent::Build));
+        assert_eq!(rules.order_kinds["train"].line, None);
+        let waves = rules
+            .ambience
+            .iter()
+            .find(|a| a.sound == "ambient.waves")
+            .expect("waves");
+        assert_eq!(waves.layer, Some(Layer::Fluid));
+        assert!(rules.ambience.iter().any(|a| a.light == Daylight::Night));
+        assert!(rules.ambience.iter().any(|a| a.view == AmbienceView::Space));
+    }
+
+    #[test]
     fn broken_foreign_key_is_reported() {
         let seed =
             format!("{SEED}\nINSERT INTO cost(def_id, resource_id, amount) VALUES (1, 999999, 1);");

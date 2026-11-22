@@ -1,5 +1,6 @@
-//! The audio thread: decodes the sounds, opens the output device and feeds the mixer's output to
-//! it. Calls from the game only send commands; nothing here blocks the caller.
+//! The audio thread: opens the output device, decodes each sound the first time it is asked for
+//! and passes the game's commands on to the mixer in the device's callback. Calls from the game
+//! only send commands; nothing here blocks the caller.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -29,6 +30,7 @@ struct Shared {
     status: Mutex<EngineStatus>,
     running: AtomicBool,
     frames: AtomicU64,
+    decoded: AtomicU64,
 }
 
 impl Shared {
@@ -46,31 +48,30 @@ impl Shared {
 pub struct AudioEngine {
     commands: Option<Sender<Command>>,
     shared: Arc<Shared>,
-    stop: Option<Sender<()>>,
     thread: Option<JoinHandle<()>>,
 }
 
 impl AudioEngine {
-    /// Start the audio thread: it decodes every sound, opens the default output device and
-    /// plays. Returns at once; [`AudioEngine::status`] tells how it went. One-shots asked for
-    /// before the device runs are dropped; loops and volumes are kept.
+    /// Start the audio thread: it opens the default output device and plays, decoding each
+    /// sound when it is first asked for (the interface cues at once). Returns at once;
+    /// [`AudioEngine::status`] tells how it went. One-shots asked for before the device runs
+    /// are dropped; loops and volumes are kept.
     pub fn new() -> AudioEngine {
         let shared = Arc::new(Shared {
             status: Mutex::new(EngineStatus::Starting),
             running: AtomicBool::new(false),
             frames: AtomicU64::new(0),
+            decoded: AtomicU64::new(0),
         });
         let (commands, receiver) = mpsc::channel();
-        let (stop, stopped) = mpsc::channel();
         let thread_shared = Arc::clone(&shared);
         let thread = std::thread::Builder::new()
             .name("audio".into())
-            .spawn(move || run(receiver, stopped, thread_shared));
+            .spawn(move || run(receiver, thread_shared));
         match thread {
             Ok(handle) => AudioEngine {
                 commands: Some(commands),
                 shared,
-                stop: Some(stop),
                 thread: Some(handle),
             },
             Err(e) => AudioEngine::silent_because(format!("no audio thread: {e}")),
@@ -89,8 +90,8 @@ impl AudioEngine {
                 status: Mutex::new(EngineStatus::Silent { reason }),
                 running: AtomicBool::new(false),
                 frames: AtomicU64::new(0),
+                decoded: AtomicU64::new(0),
             }),
-            stop: None,
             thread: None,
         }
     }
@@ -107,6 +108,16 @@ impl AudioEngine {
     /// Frames sent to the device so far.
     pub fn frames_played(&self) -> u64 {
         self.shared.frames.load(Ordering::Relaxed)
+    }
+
+    /// Bytes of decoded samples the engine holds (sounds are decoded on first use).
+    pub fn decoded_bytes(&self) -> u64 {
+        self.shared.decoded.load(Ordering::Relaxed)
+    }
+
+    /// Whether the engine plays through a device.
+    pub fn is_running(&self) -> bool {
+        self.shared.running.load(Ordering::Acquire)
     }
 
     /// Volume settings, each 0…1.
@@ -134,7 +145,17 @@ impl AudioEngine {
     /// Put a sound in loop slot `slot` (0…[`crate::LOOP_SLOTS`]) at `gain`, cross-fading from
     /// what the slot held; `None` fades the slot out. The same sound again only changes the gain.
     pub fn set_loop(&self, slot: usize, sound: Option<SoundId>, gain: f32) {
-        self.send(Command::SetLoop { slot, sound, gain });
+        self.set_loop_at(slot, sound, Placement::centre(gain));
+    }
+
+    /// [`AudioEngine::set_loop`] with a pan: the loop's gain and stereo place, both eased.
+    pub fn set_loop_at(&self, slot: usize, sound: Option<SoundId>, placement: Placement) {
+        self.send(Command::SetLoop {
+            slot,
+            sound,
+            gain: placement.gain,
+            pan: placement.pan,
+        });
     }
 
     /// Silence every one-shot and loop.
@@ -158,7 +179,7 @@ impl Default for AudioEngine {
 
 impl Drop for AudioEngine {
     fn drop(&mut self) {
-        self.stop.take();
+        // The audio thread ends when the commands stop coming.
         self.commands.take();
         if let Some(handle) = self.thread.take() {
             let _ = handle.join();
@@ -166,18 +187,20 @@ impl Drop for AudioEngine {
     }
 }
 
-/// The audio thread's body: everything raylib- and simulation-free.
-fn run(commands: Receiver<Command>, stop: Receiver<()>, shared: Arc<Shared>) {
-    let threads = std::thread::available_parallelism().map_or(2, |n| n.get().min(4));
-    let bank = match SoundBank::decode_all(threads) {
-        Ok(bank) => Arc::new(bank),
-        Err(e) => {
-            shared.set(EngineStatus::Silent {
-                reason: format!("sound data: {e}"),
-            });
-            return;
+/// The audio thread's body: everything raylib- and simulation-free. It opens the device, then
+/// passes each command on to the callback once the sound it names is decoded, so the callback
+/// never decodes, blocks or allocates for a sound.
+fn run(commands: Receiver<Command>, shared: Arc<Shared>) {
+    let bank = Arc::new(SoundBank::lazy());
+    // The interface cues are small and should answer the first click at once.
+    for id in SoundId::all().filter(|id| id.name().starts_with("ui.")) {
+        if let Err(e) = bank.load(id) {
+            eprintln!("audio: {e}");
         }
-    };
+    }
+    shared
+        .decoded
+        .store(bank.memory_bytes() as u64, Ordering::Relaxed);
     let host = cpal::default_host();
     let Some(device) = host.default_output_device() else {
         shared.set(EngineStatus::Silent {
@@ -196,23 +219,52 @@ fn run(commands: Receiver<Command>, stop: Receiver<()>, shared: Arc<Shared>) {
     };
     let name = device.to_string();
     let rate = config.sample_rate();
+    let (to_callback, from_engine) = mpsc::channel();
     let stream = match config.sample_format() {
-        SampleFormat::F32 => open::<f32>(&device, config.into(), &bank, commands, &shared),
-        SampleFormat::I16 => open::<i16>(&device, config.into(), &bank, commands, &shared),
-        SampleFormat::U16 => open::<u16>(&device, config.into(), &bank, commands, &shared),
-        SampleFormat::I32 => open::<i32>(&device, config.into(), &bank, commands, &shared),
-        SampleFormat::F64 => open::<f64>(&device, config.into(), &bank, commands, &shared),
+        SampleFormat::F32 => open::<f32>(&device, config.into(), &bank, from_engine, &shared),
+        SampleFormat::I16 => open::<i16>(&device, config.into(), &bank, from_engine, &shared),
+        SampleFormat::U16 => open::<u16>(&device, config.into(), &bank, from_engine, &shared),
+        SampleFormat::I32 => open::<i32>(&device, config.into(), &bank, from_engine, &shared),
+        SampleFormat::F64 => open::<f64>(&device, config.into(), &bank, from_engine, &shared),
         other => Err(format!("sample format {other} is not supported")),
     };
-    match stream {
-        Ok(stream) => {
-            shared.set(EngineStatus::Running { device: name, rate });
-            // Keep the stream alive until the engine is dropped.
-            let _ = stop.recv();
-            drop(stream);
+    let stream = match stream {
+        Ok(stream) => stream,
+        Err(reason) => {
+            shared.set(EngineStatus::Silent { reason });
+            return;
         }
-        Err(reason) => shared.set(EngineStatus::Silent { reason }),
+    };
+    shared.set(EngineStatus::Running { device: name, rate });
+    // Until the engine is dropped: decode what a command needs, then hand it on.
+    while let Ok(command) = commands.recv() {
+        let needs = match command {
+            Command::Play { sound, .. } => Some(sound),
+            Command::SetLoop {
+                sound: Some(sound), ..
+            } => Some(sound),
+            _ => None,
+        };
+        if let Some(sound) = needs
+            && bank.pcm(sound).is_none()
+        {
+            match bank.load(sound) {
+                Ok(pcm) => {
+                    shared
+                        .decoded
+                        .fetch_add(pcm.samples.len() as u64 * 2, Ordering::Relaxed);
+                }
+                Err(e) => {
+                    eprintln!("audio: {e}");
+                    continue;
+                }
+            }
+        }
+        if to_callback.send(command).is_err() {
+            break;
+        }
     }
+    drop(stream);
 }
 
 fn open<T>(

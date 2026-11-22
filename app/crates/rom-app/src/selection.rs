@@ -278,6 +278,8 @@ pub struct Controller {
     helper_tries: u8,
     /// Ticks a research just ordered shows as started while its order is on its way.
     pending_ticks: u64,
+    /// What the person's orders did, for the sound (task 125): taken after each pick.
+    cues: Vec<crate::sound::UiCue>,
 }
 
 /// The person's player, player one unless the session says otherwise.
@@ -731,9 +733,13 @@ impl Controller {
     }
 
     /// Selected entity ids, ascending.
-    #[cfg(test)]
     pub fn selection(&self) -> &[EntityId] {
         &self.selection
+    }
+
+    /// What the orders given since the last call did, for the sound (task 125).
+    pub fn take_cues(&mut self) -> Vec<crate::sound::UiCue> {
+        std::mem::take(&mut self.cues)
     }
 
     // ----- helpers -------------------------------------------------------------------------
@@ -798,10 +804,15 @@ impl Controller {
                     self.pending_research.insert(def, world.tick());
                 }
                 self.ordered = true;
+                self.cues.push(crate::sound::UiCue::Ordered {
+                    executor,
+                    kind: kind.to_owned(),
+                });
                 true
             }
             Err(error) => {
                 self.say(world, rejection_message(world, self.me(), &error, subject));
+                self.cues.push(crate::sound::UiCue::Refused);
                 false
             }
         }
@@ -2943,6 +2954,7 @@ impl Controller {
             .collect();
         if builders.is_empty() {
             self.say(world, "No selected builder can build this");
+            self.cues.push(crate::sound::UiCue::Refused);
             return;
         }
         // Builders on another body cannot walk to the site.

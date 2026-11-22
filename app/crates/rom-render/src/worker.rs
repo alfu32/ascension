@@ -152,6 +152,8 @@ struct Shared {
     space: Mutex<Arc<SpaceSnapshot>>,
     ship_scales: Mutex<Arc<ShipScales>>,
     view_state: Mutex<ViewState>,
+    /// The planet camera for sound (task 125); `None` away from a planet.
+    ear: Mutex<Option<crate::ear::Ear>>,
     surface_request: Mutex<Option<u32>>,
     terrain_ready: AtomicBool,
     box_count: AtomicU32,
@@ -285,6 +287,12 @@ impl RenderBridge {
     /// What the camera looks at now.
     pub fn view_state(&self) -> ViewState {
         *lock(&self.shared.view_state)
+    }
+
+    /// The planet camera as sound places things (task 125): `None` in the system and star-map
+    /// views and before a planet is shown.
+    pub fn ear(&self) -> Option<crate::ear::Ear> {
+        *lock(&self.shared.ear)
     }
 
     /// The planet whose globe the camera asked for since the last call, once per request.
@@ -582,6 +590,7 @@ impl Shared {
             space: Mutex::new(Arc::new(SpaceSnapshot::default())),
             ship_scales: Mutex::new(Arc::new(ShipScales::default())),
             view_state: Mutex::new(ViewState::default()),
+            ear: Mutex::new(None),
             surface_request: Mutex::new(None),
             terrain_ready: AtomicBool::new(false),
             box_count: AtomicU32::new(0),
@@ -1305,6 +1314,21 @@ fn render_loop(shared: &Shared) {
                 _ => {}
             }
         }
+
+        // The listener for sound (task 125): the planet camera while the planet is in view.
+        let on_planet = zoom.as_ref().is_none_or(|z| z.level() <= Level::Globe);
+        let ear = match (orbit.as_ref(), globe.as_deref()) {
+            (Some(orbit), Some(globe)) if on_planet => {
+                let tick = pair.latest_tick().unwrap_or(0);
+                Some(crate::ear::Ear::of(
+                    orbit,
+                    globe,
+                    sun_clock.as_ref().map(|clock| clock.toward(tick)),
+                ))
+            }
+            _ => None,
+        };
+        *lock(&shared.ear) = ear;
 
         if layout.0 == 0 || layout.1 == 0 {
             thread::sleep(IDLE_WAIT);

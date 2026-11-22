@@ -71,6 +71,7 @@ jobs:
           workspaces: app -> target
           key: validate
       - run: python3 db/content/generate.py --check
+      - run: python3 tools/sounds/seed.py --check
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
@@ -115,9 +116,11 @@ jobs:
       - run: python3 scripts/release/portable.py --target ${{ matrix.target }}
       - name: Snap (core24, strict, mesa-2404 GPU content)
         run: |
-          # Runtime libraries the snap bundles (core24 and mesa-2404 lack them) and the XKB data.
+          # Runtime libraries the snap bundles (core24 and mesa-2404 lack them) and the XKB data;
+          # ALSA and its pulse plugin for the game's sound (task 125).
           sudo apt-get install -y --no-install-recommends squashfs-tools xvfb x11-utils imagemagick xkb-data \
-            libxcursor1 libxrandr2 libxi6 libxinerama1 libxrender1 libxkbcommon-x11-0 libxcb-xkb1 libvulkan1
+            libxcursor1 libxrandr2 libxi6 libxinerama1 libxrender1 libxkbcommon-x11-0 libxcb-xkb1 libvulkan1 \
+            libasound2t64 libasound2-plugins libpulse0
           python3 scripts/release/snap.py --arch ${{ matrix.arch }} --output dist
       - name: Install the snap and check that it starts and paints a window
         run: |
@@ -135,6 +138,8 @@ jobs:
           snap connections ascension
           test "$(snap run ascension --version)" = "rise-of-man $version"
           test "$(snap run ascension.rom --version | cut -d' ' -f1-2)" = "rom $version"
+          # The sound engine starts without a sound device (a runner has none) and says so.
+          snap run ascension --sound-check | tee /dev/stderr | grep -q '^sound: '
           mkdir -p smoke
           Xvfb :97 -screen 0 1280x800x24 -ac -noreset &
           sleep 2
@@ -231,6 +236,11 @@ jobs:
           cat version.txt
           test "$(tr -d '\r' < version.txt)" = "rise-of-man ${{ needs.tag.outputs.version }}"
           "$bin/rom$exe" --version
+          # The sound engine starts on a machine without a sound device (task 125): it says it is
+          # silent, or where it plays, and the game would play on.
+          "$bin/rise-of-man$exe" --sound-check > sound.txt
+          cat sound.txt
+          grep -q '^sound: ' sound.txt
       - run: python scripts/release/portable.py --target ${{ matrix.target }}
       - name: MSI and Store-associated MSIX (signed when the secrets exist)
         if: runner.os == 'Windows'

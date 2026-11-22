@@ -20,7 +20,9 @@
 //! `templeN` = own completed keepers, `marketN` = own completed buildings training route
 //! traders, `cityN` = own completed cities, `carrierN` = own claim-tag units,
 //! `traderN` = own route traders, `gatherN` = own completed gather buildings, `shipN` = own orbiting ships, `landedN` = own landed ships, `enemyN` = enemy non-city buildings
-//! on the home planet, `foecityN` = enemy cities there (task 75). `click` and `rclick` support these names and Shift.
+//! on the home planet, `foecityN` = enemy cities there (task 75), `armyN` = own armed units that
+//! do not build and `foeN` = enemy units on the home planet (task 125). `click` and `rclick`
+//! support these names and Shift.
 //! These component-based aliases replace a dependency on the last trained type.
 //!
 //! Space commands: `ships` selects every ship of player one, `producers` its finished
@@ -874,7 +876,7 @@ pub fn live_pick(
     }
     let (name, n) = [
         "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy", "gather",
-        "craft", "landed", "foecity", "aircraft",
+        "craft", "landed", "foecity", "aircraft", "army", "foe",
     ]
     .iter()
     .find_map(|name| {
@@ -890,64 +892,71 @@ pub fn live_pick(
             .as_ref()
             .is_some_and(|t| t.runs_routes)
     };
-    let entity =
-        world
-            .entities()
-            .filter(|e| e.container_id.is_none())
-            .filter(|e| {
-                let et = &rules.entity_types[&e.type_id];
-                if name == "relic" {
-                    return et
-                        .node
-                        .as_ref()
-                        .is_some_and(|n| n.claim_mode == ClaimMode::Carry);
+    let entity = world
+        .entities()
+        .filter(|e| e.container_id.is_none())
+        .filter(|e| {
+            let et = &rules.entity_types[&e.type_id];
+            if name == "relic" {
+                return et
+                    .node
+                    .as_ref()
+                    .is_some_and(|n| n.claim_mode == ClaimMode::Carry);
+            }
+            if name == "enemy" || name == "foecity" || name == "foe" {
+                let own = world.players().find(|p| p.id == player).map(|p| p.team);
+                let city = et.territory.as_ref().is_some_and(|t| t.is_city);
+                let hostile = Some(e.pos.body) == world.home_body(player)
+                    && e.owner != rom_sim::PlayerId(0)
+                    && world
+                        .players()
+                        .find(|p| p.id == e.owner)
+                        .is_some_and(|p| Some(p.team) != own);
+                if name == "foe" {
+                    return hostile && et.class == EntityClass::Unit;
                 }
-                if name == "enemy" || name == "foecity" {
-                    let own = world.players().find(|p| p.id == player).map(|p| p.team);
-                    let city = et.territory.as_ref().is_some_and(|t| t.is_city);
-                    return Some(e.pos.body) == world.home_body(player)
-                        && e.owner != rom_sim::PlayerId(0)
-                        && world
-                            .players()
-                            .find(|p| p.id == e.owner)
-                            .is_some_and(|p| Some(p.team) != own)
-                        && et.class == EntityClass::Building
-                        && city == (name == "foecity");
+                return hostile && et.class == EntityClass::Building && city == (name == "foecity");
+            }
+            if e.owner != player || e.build_progress.is_some() {
+                return false;
+            }
+            match name {
+                "ship" => world.orbit(e.id).is_some(),
+                "landed" => world.is_landed(e.id),
+                "craft" => world.is_craft_type(e.type_id),
+                "aircraft" => world.is_aircraft_type(e.type_id),
+                "temple" => et.keeper.is_some(),
+                "gather" => et.gather_site.is_some() && et.class == EntityClass::Building,
+                "market" => {
+                    et.class == EntityClass::Building
+                        && rules
+                            .production
+                            .get(&et.id)
+                            .into_iter()
+                            .flatten()
+                            .any(|r| r.mode == ProductionMode::Train && trader(r.product_def_id))
                 }
-                if e.owner != player || e.build_progress.is_some() {
-                    return false;
+                "city" => et.territory.as_ref().is_some_and(|t| t.is_city),
+                "army" => {
+                    et.class == EntityClass::Unit && !et.weapons.is_empty() && et.builder.is_none()
                 }
-                match name {
-                    "ship" => world.orbit(e.id).is_some(),
-                    "landed" => world.is_landed(e.id),
-                    "craft" => world.is_craft_type(e.type_id),
-                    "aircraft" => world.is_aircraft_type(e.type_id),
-                    "temple" => et.keeper.is_some(),
-                    "gather" => et.gather_site.is_some() && et.class == EntityClass::Building,
-                    "market" => {
-                        et.class == EntityClass::Building
-                            && rules.production.get(&et.id).into_iter().flatten().any(|r| {
-                                r.mode == ProductionMode::Train && trader(r.product_def_id)
+                "trader" => trader(et.id),
+                "carrier" => {
+                    et.class == EntityClass::Unit
+                        && rules.entity_types.values().any(|node| {
+                            node.node.as_ref().is_some_and(|node| {
+                                node.claim_mode == ClaimMode::Carry
+                                    && node
+                                        .claim_tag_id
+                                        .is_some_and(|tag| rules.has_tag(et.id, tag))
                             })
-                    }
-                    "city" => et.territory.as_ref().is_some_and(|t| t.is_city),
-                    "trader" => trader(et.id),
-                    "carrier" => {
-                        et.class == EntityClass::Unit
-                            && rules.entity_types.values().any(|node| {
-                                node.node.as_ref().is_some_and(|node| {
-                                    node.claim_mode == ClaimMode::Carry
-                                        && node
-                                            .claim_tag_id
-                                            .is_some_and(|tag| rules.has_tag(et.id, tag))
-                                })
-                            })
-                    }
-                    _ => false,
+                        })
                 }
-            })
-            .nth(n.wrapping_sub(1))
-            .ok_or_else(|| format!("there is no {target}"))?;
+                _ => false,
+            }
+        })
+        .nth(n.wrapping_sub(1))
+        .ok_or_else(|| format!("there is no {target}"))?;
     let pos = world.orbit(entity.id).map_or(entity.pos, |orbit| orbit.pos);
     let surface = SurfacePos {
         face: pos.face,

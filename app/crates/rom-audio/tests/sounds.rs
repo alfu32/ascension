@@ -23,7 +23,7 @@ fn every_sound_decodes() {
     let bank = SoundBank::decode_all(4).expect("every sound decodes");
     assert_eq!(bank.len(), SoundId::count());
     for id in SoundId::all() {
-        let pcm = bank.pcm(id);
+        let pcm = bank.pcm(id).expect("decoded");
         assert!(pcm.frames() > 100, "{} is too short", id.name());
         let expected = if id.bus() == Bus::Ambient { 2 } else { 1 };
         assert_eq!(pcm.channels, expected, "{} channels", id.name());

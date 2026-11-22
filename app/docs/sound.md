@@ -4,7 +4,7 @@ Every sound in the game is generated for it: effects are synthesised from noise,
 filters; voices are spoken by a text-to-speech model run once at authoring time. Nothing is
 recorded or taken from another work, and no model ships with the game. The files are Ogg Vorbis
 in `app/assets/sounds/`, embedded in the binary by `rom-audio` (task 124). Task 125 hooks them
-into the game.
+into the game: [What plays when](#what-plays-when-task-125).
 
 ## What there is
 
@@ -49,8 +49,8 @@ mixer counts variations of one sound together for its limits.
 | `fire` | armed buildings | the shot |
 
 `app/tools/sounds/assignment.json` lists, for every unit and building key in the rules, its
-sound per event (each a list of sound keys: one, or the variations). Task 125 turns it into
-rules data.
+sound per event (each a list of sound keys: one, or the variations). `tools/sounds/seed.py` turns
+it into the rules' `et_sound` rows (task 125, `docs/database.md` "Sounds").
 
 ### How sounds are chosen
 
@@ -106,7 +106,8 @@ voice 1.0, ambience 0.6. Task 125 applies the player's Sound settings on top.
 ### Ambience and interface
 
 Ambience: wind, waves, birds, field rustle (close to fields), crickets (night), forest (leaves, a
-woodpecker now and then). Interface: click (3), order (2), error, construction started and
+woodpecker now and then), and a quiet hum for the system and star-map views (`ambient.space`,
+task 125: a deep, slow drone with a faint airy hiss, `synth.py` `space()`). Interface: click (3), order (2), error, construction started and
 finished, research finished (and a later-age variant), age reached (a warm rising chord),
 alerts for attack (a soft two-tone chime) and arrival. Announcer: under attack, training complete, construction complete, research complete,
 a new age, arrival.
@@ -131,12 +132,16 @@ encoder's independent errors on the two sides of the joint never meet as a step.
 
 ## Engine (`rom-audio`)
 
-- `AudioEngine::new()` starts the audio thread (never the render or simulation thread). It
-  decodes every embedded sound into memory, opens the default output device through `cpal`
-  (ALSA on Linux, WASAPI on Windows, CoreAudio on macOS) and plays. It returns at once;
-  `status()` says `Starting`, `Running { device, rate }` or `Silent { reason }`. Without a
-  device the engine is silent and accepts every call, so the game runs on machines and CI
-  runners without sound. `AudioEngine::silent()` makes one on purpose.
+- `AudioEngine::new()` starts the audio thread (never the render or simulation thread). It opens
+  the default output device through `cpal` (ALSA on Linux, WASAPI on Windows, CoreAudio on macOS)
+  and plays. It returns at once; `status()` says `Starting`, `Running { device, rate }` or
+  `Silent { reason }`. Without a device the engine is silent and accepts every call, so the game
+  runs on machines and CI runners without sound. `AudioEngine::silent()` makes one on purpose.
+- **Decoding on first use** (task 125). The audio thread decodes each sound the first time a
+  command names it, then hands the command to the device's callback; the callback only reads
+  decoded samples (a `OnceLock` per sound) and never decodes, blocks or allocates for a sound. The
+  interface cues (`ui.`) are decoded at start-up. A first ambience bed takes a few tens of
+  milliseconds on the audio thread; a first shot or line a millisecond or two.
 - `set_volumes(master, effects, voice, ambient)`, each 0…1, starting at the gentle defaults
   above; the groups follow the name prefix (`voice.` and `ui.announcer.` are voice, `ambient.`
   ambience, the rest effects).
@@ -144,31 +149,86 @@ encoder's independent errors on the two sides of the joint never meet as a step.
   `PER_SOUND_LIMIT` = 4 copies of one sound (variations counted together). At a limit the new
   sound replaces the lowest-priority one playing (the oldest among equals) if that is not higher
   than its own, else it is dropped; a replaced sound fades out in 5 ms.
-- `set_loop(slot, sound, gain)`: `LOOP_SLOTS` = 16 slots for ambience, buildings at work and
-  moving units. A new sound cross-fades (equal power) over `CROSSFADE_SECONDS` = 1 s; the same
-  sound again only changes the gain; `None` fades the slot out.
+- **Ducking** (task 125). Voices (every sound of the voice group) and one-shots at
+  `FOREGROUND_PRIORITY` (200) or above (alerts, interface cues, the player's own cues) are the
+  foreground: while one plays the other effects, battles included, duck to `DUCK_GAIN` (0.45,
+  about −7 dB) within 40 ms and come back over 0.5 s, the ambience to 0.7; foreground effects are
+  not ducked.
+- **Master limiter** (task 125): a gain that falls within 2 ms when the mix's peak would pass
+  `LIMIT_LEVEL` (0.7, about −3 dBFS) and recovers over 0.25 s, then the soft clip that never
+  exceeds full scale.
+- `set_loop(slot, sound, gain)` and `set_loop_at(slot, sound, placement)` (with a pan, task 125):
+  `LOOP_SLOTS` = 16 slots for ambience, buildings at work and moving units. A new sound
+  cross-fades (equal power) over `CROSSFADE_SECONDS` = 1 s; the same sound again only changes the
+  gain and pan, both eased; `None` fades the slot out.
 - `Placement { gain, pan }` is computed by the caller; the crate knows no game types.
   `Listener { position, right, ref_distance, max_distance }.place(source, gain)` turns plain
   `f32` positions into one: full gain within the reference distance, inverse distance beyond it,
   silent at the maximum; pan from the source's direction along the listener's right.
 - `SoundId::from_name("unit.knight.fight.1")`, `SoundId::variants("unit.knight.fight")`.
-- The mixer resamples each sound to the device rate on the fly, eases volume changes, and ends
-  in a soft limiter that never exceeds full scale. Commands reach the audio callback through a
-  channel; the callback never blocks or allocates in steady state.
+- The mixer resamples each sound to the device rate on the fly and eases volume changes.
+  Commands reach the audio thread through a channel, and the callback through a second one.
 - Hear one sound: `cargo run -p rom-audio --example play -- <sound> [gain]` (no argument lists
-  the names).
-- Numbers (0.0.116 rules): 958 files, 16.9 MB embedded (voices 3.9 MB, unit effects 5.7 MB,
-  buildings 4.9 MB, ambience 1.8 MB, the rest 0.5 MB), about 34 minutes of audio. Decoded once
-  at start-up on the audio thread, they take about 166 MB of memory as 16-bit samples, and
-  decoding takes a few seconds on four threads; one-shots asked for meanwhile are dropped. If
-  that memory matters, decoding each sound on first use (on the audio thread, not in the
-  callback) is the next step.
+  the names). `rise-of-man --sound-check` starts the engine alone and prints where it plays or
+  why it is silent.
+- Numbers: 959 files, 17.4 MB embedded, about 34 minutes of audio; all of it decoded would be
+  about 166 MB of 16-bit samples, MEMORY_NOTE
 
-## What task 125 hooks up
+## What plays when (task 125)
 
-The engine created by the app; volumes from the Sound settings; `select`, `move`, `attack`,
-`build` voices on orders and selection (the selection's leader, not every unit); `fire` and
-`fight` from the simulation's attack events (a render-side event, never a simulation input);
-`moving` loops for the nearest moving units; `active` loops for buildings at work near the
-camera; `build_done`, `train_done`, `research_done` and the `ui.` cues; ambience by terrain and
-time of day under the camera; the assignment turned into rules rows.
+Presentation only: the sound follows the world, never feeds it. Nothing in `rom-sim` knows about
+sound; every choice comes from the rules' sound rows (`et_sound`, `ambience`, `order_kind.line`,
+`docs/database.md` "Sounds"), never from a key. `rom-app/src/sound.rs` owns the process's engine
+and the Sound settings (`docs/hud.md` "Sound"); its **director** (`sound/director.rs`) runs on the
+simulation thread beside the snapshots and only reads the world. The render thread publishes the
+listener, `rom_render::Ear`: the planet camera (eye, screen right, the point looked at, height),
+the sun's height over that point and 25 ground points spread over the view.
+
+**Interaction** (the person's own, centred):
+
+- A click on any HUD button, and on the launcher's controls: `ui.click` (quiet).
+- Selecting: the selection's leader (its first unit, else its first building) says its `select`
+  line. Giving an order: the first ordered unit says the line its order kind names
+  (`order_kind.line`: `move`, `attack`, `build`); an order without a line (training, research)
+  is answered by the click. One line every 0.6 s at most.
+- A refused order or placement: `ui.error`.
+- The person's own events: a construction started (`ui.construction_started`, at most every
+  1.5 s); finished (the building's `build_done`); a unit trained (its building's `train_done`);
+  a research finished (the researching building's `research_done`, else `ui.research_finished`);
+  a new age (`ui.age_reached`, then the announcer).
+- Alerts (task 118): an attack chimes `ui.alert_attack` and the announcer says "under attack" a
+  moment later, at most every 12 s; an arrival chimes `ui.alert_arrival` and the announcer.
+
+**Activity in view** (placed by the camera: louder near the middle of the view and the closer the
+camera, panned by screen position; a zoomed-out view hears a tenth at most):
+
+- Shots and blows: each entity's weapon fires when its cooldown restarts; its `fire` sound (by
+  weapon slot) or `fight` blow plays. A pass starts at most six, at most two of one sound, the
+  loudest first, and one sound restarts at most every 90 ms: a battle of 200 is its nearest few
+  shots of each kind, under the voices (ducking).
+- Loops (eight slots; the ambience has the other eight): moving units of a type share their
+  type's `moving` loop; buildings at work (producing, a gather site with workers or its own
+  income, a city) their `active` loop. Each loop sits at its loudest member's level and pan, a
+  little louder for many (at most 1.4×); the eight loudest play; they fade out when the world
+  stands still.
+- Construction sites hammer (`act.hammer_wood`) while their work goes on, the nearest two.
+
+**Ambience** follows the camera, cross-fading every 0.1 s: each `ambience` bed at the square
+root of its share of the 25 ground points (the fields: points within 7 tiles of a food gather
+site, the middle counting double), by day or by night at the point looked at (the light's height
+over it), fading out as the camera rises from 0.4 to 1.6 planet radii; the space hum fades in
+over the same span and plays alone in the system and star-map views.
+
+**The mix** ("not too violent"): voices at 0.85 of their file level, the person's cues 0.55,
+alerts 0.55, the announcer 0.75, shots and blows 0.5, moving loops 0.35, buildings at work 0.35,
+hammering 0.3, ambience 0.9 × each bed's `gain_pct`; on top, the engine's groups (master 0.8,
+effects 0.8, voice 1.0, ambience 0.6) times the Sound settings, the ducking and the limiter.
+
+### Checking the mix
+
+- `docs/tasks/125-sound-check-script.txt`: a self-ending scripted session (a city at work in the
+  Medieval Age, a training, a construction, orders, a small battle, then the camera rising to the
+  star map), for recording (`ffmpeg -f pulse` of the game's output) and listening.
+- `docs/tasks/125-sound-session-script.txt` writes the playable save "Sound check: a city and a
+  battle" (SAVE_NOTE).
+- `--mute` (or the launcher's Sound group) runs without sound: benchmarks and CI.

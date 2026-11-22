@@ -371,7 +371,8 @@ interface words and marks them (`rom-app/src/alert_view.rs`).
   in the field the nearest city of the player on that body. One alert per city (or the field
   near it, or a body without a city) per `alert.attack_repeat_ticks` (600 ticks, 30 s), counted
   from the alert: a battle is one line. Allies are not alerted about each other; the attacker
-  hears nothing. There is no sound cue: the HUD has no sound path yet.
+  hears nothing. A soft two-tone chime and the announcer ("Under attack") sound it, at most every
+  12 s (task 125); an arrival chimes too.
 - **Foreign ships jumping in.** A jump detector (`docs/world-model.md`, "Jump detectors") says
   "Foreign ships entered the Sol system: 3 ships of Romans (2)".
 - **Markers.** For `alert.marker_ticks` (200 ticks, 10 s) a ring pulses once a second at the
@@ -391,3 +392,28 @@ Screenshots (self-ending scripted runs): `img/118-under-attack.png` (`tasks/118-
 the event line and the red ring on the minimap) and `img/118-jump-detected.png`
 (`tasks/118-jump-script.txt`: the event line, the revealed ships and the amber ring on the star
 map).
+
+## Sound (task 125)
+
+What plays when is in `docs/sound.md`. In the HUD: a click on any HUD button (a quiet click), the
+selection's leader says its acknowledgment, an order is answered by the first ordered unit's line
+(at most one line every 0.6 s), a refused order or placement plays the error cue.
+
+**Settings.** The launcher's Advanced screen has a **Sound** group, saved with the other settings
+in `launcher.json`; every game the launcher starts (Play, Host, Join, Continue, a saved game) is
+given them, and its own controls click at that volume:
+
+| Control | Option | Default |
+| --- | --- | --- |
+| Master volume | `--volume <0–100>` | 100 |
+| Effects (weapons, work, movement, buildings, interface) | `--effects-volume <0–100>` | 100 |
+| Voices (unit lines, announcer) | `--voice-volume <0–100>` | 100 |
+| Ambience | `--ambient-volume <0–100>` | 100 |
+| Mute while the window is not focused | `--mute-unfocused <on|off>` | on |
+| No sound at all (benchmarks, CI) | `--mute` | off |
+
+Each volume scales the engine's gentle default mix (master 0.8, effects 0.8, voice 1.0, ambience
+0.6), so 100 is that mix. The game menu (Esc) has a **Sound volume** row (off, 25, 50, 75, 100 %)
+that changes the master volume at once for the match. `--sound-check` alone starts the sound
+engine without a window and prints whether it plays, and on which device, or why it is silent.
+

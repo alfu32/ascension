@@ -1,6 +1,7 @@
-//! Decoding the embedded Ogg Vorbis files into memory, once, at start-up.
+//! Decoding the embedded Ogg Vorbis files into memory: each on first use, or all at once.
 
 use std::io::Cursor;
+use std::sync::OnceLock;
 
 use lewton::inside_ogg::OggStreamReader;
 
@@ -97,13 +98,25 @@ pub fn decode(name: &str, bytes: &[u8]) -> Result<Pcm, DecodeError> {
     })
 }
 
-/// Every embedded sound, decoded, indexed by [`SoundId`].
+/// Every embedded sound, indexed by [`SoundId`]: decoded all at once ([`SoundBank::decode_all`])
+/// or each on first use ([`SoundBank::lazy`], [`SoundBank::load`]). Reading decoded samples
+/// ([`SoundBank::pcm`]) never blocks or allocates, so the audio callback may do it.
 pub struct SoundBank {
-    pcm: Vec<Pcm>,
+    pcm: Vec<OnceLock<Pcm>>,
     family: Vec<u16>,
 }
 
 impl SoundBank {
+    /// Every embedded sound, none decoded yet: [`SoundBank::load`] decodes one when it is first
+    /// asked for.
+    pub fn lazy() -> SoundBank {
+        let ids: Vec<SoundId> = SoundId::all().collect();
+        SoundBank {
+            pcm: ids.iter().map(|_| OnceLock::new()).collect(),
+            family: families(&ids),
+        }
+    }
+
     /// Decode every embedded sound, spread over `threads` threads.
     pub fn decode_all(threads: usize) -> Result<SoundBank, DecodeError> {
         let ids: Vec<SoundId> = SoundId::all().collect();
@@ -134,27 +147,38 @@ impl SoundBank {
 
     /// A bank of given samples (tests and tools); `pcm[i]` belongs to `ids[i]`.
     pub fn from_parts(ids: &[SoundId], pcm: Vec<Pcm>) -> SoundBank {
-        let mut families: Vec<&str> = ids.iter().map(|id| id.family()).collect();
-        families.sort_unstable();
-        families.dedup();
-        let family = ids
-            .iter()
-            .map(|id| families.binary_search(&id.family()).unwrap_or(0) as u16)
-            .collect();
-        SoundBank { pcm, family }
+        SoundBank {
+            pcm: pcm.into_iter().map(OnceLock::from).collect(),
+            family: families(ids),
+        }
     }
 
-    /// The samples of one sound.
-    pub fn pcm(&self, id: SoundId) -> &Pcm {
-        &self.pcm[id.index()]
+    /// The samples of one sound, decoding it now if it was not yet. Decoding takes up to a few
+    /// tens of milliseconds for a long loop: never call it from the audio callback.
+    pub fn load(&self, id: SoundId) -> Result<&Pcm, DecodeError> {
+        let Some(slot) = self.pcm.get(id.index()) else {
+            return Err(DecodeError::Empty {
+                name: id.name().to_owned(),
+            });
+        };
+        if let Some(pcm) = slot.get() {
+            return Ok(pcm);
+        }
+        let pcm = decode(id.name(), id.bytes())?;
+        Ok(slot.get_or_init(|| pcm))
+    }
+
+    /// The samples of one sound if it is decoded.
+    pub fn pcm(&self, id: SoundId) -> Option<&Pcm> {
+        self.pcm.get(id.index())?.get()
     }
 
     /// A number shared by the variations of one sound (`x.1`, `x.2` …).
     pub fn family(&self, id: SoundId) -> u16 {
-        self.family[id.index()]
+        self.family.get(id.index()).copied().unwrap_or(0)
     }
 
-    /// The number of sounds held.
+    /// The number of sounds held, decoded or not.
     pub fn len(&self) -> usize {
         self.pcm.len()
     }
@@ -164,8 +188,46 @@ impl SoundBank {
         self.pcm.is_empty()
     }
 
+    /// The number of sounds decoded so far.
+    pub fn decoded(&self) -> usize {
+        self.pcm.iter().filter(|p| p.get().is_some()).count()
+    }
+
     /// Bytes of decoded samples held in memory.
     pub fn memory_bytes(&self) -> usize {
-        self.pcm.iter().map(|p| p.samples.len() * 2).sum()
+        self.pcm
+            .iter()
+            .filter_map(OnceLock::get)
+            .map(|p| p.samples.len() * 2)
+            .sum()
+    }
+}
+
+/// The family number of each sound in `ids`: equal for the variations of one sound.
+fn families(ids: &[SoundId]) -> Vec<u16> {
+    let mut families: Vec<&str> = ids.iter().map(|id| id.family()).collect();
+    families.sort_unstable();
+    families.dedup();
+    ids.iter()
+        .map(|id| families.binary_search(&id.family()).unwrap_or(0) as u16)
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_lazy_bank_decodes_on_first_use_only() {
+        let bank = SoundBank::lazy();
+        assert_eq!(bank.len(), SoundId::count());
+        assert_eq!(bank.decoded(), 0);
+        let id = SoundId::from_name("ui.error").expect("ui.error");
+        assert!(bank.pcm(id).is_none());
+        let frames = bank.load(id).expect("decodes").frames();
+        assert!(frames > 100);
+        assert_eq!(bank.pcm(id).map(Pcm::frames), Some(frames));
+        assert_eq!(bank.decoded(), 1);
+        assert_eq!(bank.memory_bytes(), frames * 2);
     }
 }

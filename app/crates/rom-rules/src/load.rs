@@ -383,6 +383,7 @@ fn load_entity_type(conn: &Connection) -> Result<Vec<EntityType>, RulesError> {
             market: None,
             colony: None,
             weapons: Vec::new(),
+            sounds: Vec::new(),
             placement_rules: Vec::new(),
             completion_bonus: Vec::new(),
         })
@@ -1259,6 +1260,56 @@ fn load_order_kind(conn: &Connection) -> Result<Vec<OrderKind>, RulesError> {
             needs: row.get("needs")?,
             target: enum_value(row, "target", "order_kind", &identity)?,
             note: row.get("note")?,
+            line: {
+                let line: String = row.get("line")?;
+                if line.is_empty() {
+                    None
+                } else {
+                    Some(enum_value(row, "line", "order_kind", &identity)?)
+                }
+            },
+        })
+    })
+}
+fn load_et_sound(conn: &Connection) -> Result<Vec<(DefId, EntitySound)>, RulesError> {
+    read(
+        conn,
+        "SELECT * FROM et_sound ORDER BY entity_type_id, event, slot",
+        |row| {
+            let identity = format!(
+                "entity_type_id={:?}, event={:?}, slot={:?}",
+                row.get::<_, i64>("entity_type_id")?,
+                row.get::<_, String>("event")?,
+                row.get::<_, i64>("slot")?
+            );
+            Ok((
+                DefId(row.get("entity_type_id")?),
+                EntitySound {
+                    event: enum_value(row, "event", "et_sound", &identity)?,
+                    slot: row.get("slot")?,
+                    sound: row.get("sound")?,
+                    gain_pct: row.get("gain_pct")?,
+                },
+            ))
+        },
+    )
+}
+fn load_ambience(conn: &Connection) -> Result<Vec<Ambience>, RulesError> {
+    read(conn, "SELECT * FROM ambience ORDER BY id", |row| {
+        let identity = format!("id={:?}", row.get::<_, i64>("id")?);
+        let layer: Option<String> = row.get("layer")?;
+        Ok(Ambience {
+            id: row.get("id")?,
+            sound: row.get("sound")?,
+            view: enum_value(row, "view", "ambience", &identity)?,
+            layer: match layer {
+                Some(_) => Some(enum_value(row, "layer", "ambience", &identity)?),
+                None => None,
+            },
+            terrain_id: row.get::<_, Option<u32>>("terrain_id")?.map(DefId),
+            resource_id: row.get::<_, Option<u32>>("resource_id")?.map(DefId),
+            light: enum_value(row, "light", "ambience", &identity)?,
+            gain_pct: row.get("gain_pct")?,
         })
     })
 }
@@ -1478,6 +1529,11 @@ impl Rules {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_market")?;
             entity.market = Some(row);
         }
+        for (entity_type_id, row) in load_et_sound(conn)? {
+            let entity = entity_mut(&mut rules, entity_type_id, "et_sound")?;
+            entity.sounds.push(row);
+        }
+        rules.ambience = load_ambience(conn)?;
         for row in load_et_view_scale(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_view_scale")?;
             entity.view_scale = Some(row);

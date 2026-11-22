@@ -8,6 +8,10 @@ core24 provides libc, libstdc++ and xkbcommon; mesa-2404 provides OpenGL/EGL,
 the Vulkan drivers, libX11, libxcb and the Wayland client libraries.
 Everything else the binaries load is copied from the build host into
 $SNAP/usr/lib with its own dependencies, together with the XKB keyboard data.
+Sound (task 125): the game plays through ALSA (libasound, bundled), whose pulse
+plugin (bundled with libpulse) reaches the desktop's sound server, PulseAudio
+or PipeWire's pulse socket, through the audio-playback interface. Without it,
+or without a server, the game is silent and plays on.
 Requires `snap` (snapd) and mksquashfs.
 """
 
@@ -37,7 +41,13 @@ BUNDLE = (
     "libXinerama.so.1",
     "libXrender.so.1",
     "libvulkan.so.1",
+    # Sound (task 125): ALSA, and libpulse for its pulse plugin (ALSA_PLUGINS).
+    "libasound.so.2",
+    "libpulse.so.0",
 )
+# The ALSA plugins that send the game's sound to the desktop's sound server; copied into
+# $SNAP/usr/lib/alsa-lib and named in the ALSA configuration the launcher writes.
+ALSA_PLUGINS = ("libasound_module_pcm_pulse.so", "libasound_module_ctl_pulse.so")
 
 # Provided inside the snap's runtime: the core24 base or the mesa-2404 GPU content.
 PROVIDED = {
@@ -46,7 +56,7 @@ PROVIDED = {
     "libdl.so.2", "libpthread.so.0", "librt.so.1", "libgcc_s.so.1", "libstdc++.so.6",
     "libdbus-1.so.3", "libffi.so.8", "libxkbcommon.so.0", "libsystemd.so.0", "libbsd.so.0",
     "libmd.so.0", "libz.so.1", "liblzma.so.5", "libzstd.so.1", "liblz4.so.1", "libcap.so.2",
-    "libgcrypt.so.20", "libgpg-error.so.0", "libexpat.so.1",
+    "libgcrypt.so.20", "libgpg-error.so.0", "libexpat.so.1", "libmvec.so.1",
     # mesa-2404
     "libX11.so.6", "libX11-xcb.so.1", "libXau.so.6", "libXdmcp.so.6", "libXext.so.6",
     "libXfixes.so.3", "libXxf86vm.so.1", "libxcb.so.1", "libxcb-dri2.so.0", "libxcb-dri3.so.0",
@@ -84,7 +94,8 @@ apps:
     common-id: io.github.alfu32.ascension
     desktop: meta/gui/ascension.desktop
     # network: joining a server; network-bind: hosting a match or running a server.
-    plugs: [home, removable-media, desktop, desktop-legacy, wayland, x11, opengl, gpu-2404, network, network-bind]
+    # audio-playback: the game's sound (task 125).
+    plugs: [home, removable-media, desktop, desktop-legacy, wayland, x11, opengl, gpu-2404, network, network-bind, audio-playback]
   {cli}:
     command: bin/{cli}
     plugs: [home, removable-media, network, network-bind]
@@ -92,6 +103,20 @@ apps:
 
 LAUNCHER = """#!/bin/sh
 export LD_LIBRARY_PATH="$SNAP/usr/lib${{LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}}"
+# Sound (task 125): ALSA's default device is the pulse plugin, which talks to the desktop's
+# sound server (PulseAudio, or PipeWire's pulse socket) through the audio-playback interface.
+pulse="${{XDG_RUNTIME_DIR:-/nonexistent}}/../pulse/native"
+if [ -S "$pulse" ]; then
+  export PULSE_SERVER="unix:$pulse"
+fi
+alsa_conf="${{SNAP_USER_DATA:-${{TMPDIR:-/tmp}}}}/asound.conf"
+if printf '%s\\n' \\
+  "pcm_type.pulse {{ lib \\"$SNAP/usr/lib/alsa-lib/libasound_module_pcm_pulse.so\\" }}" \\
+  "ctl_type.pulse {{ lib \\"$SNAP/usr/lib/alsa-lib/libasound_module_ctl_pulse.so\\" }}" \\
+  "pcm.!default {{ type pulse }}" \\
+  "ctl.!default {{ type pulse }}" > "$alsa_conf" 2>/dev/null; then
+  export ALSA_CONFIG_PATH="$alsa_conf"
+fi
 if [ -d "$SNAP/usr/share/X11/xkb" ]; then
   export XKB_CONFIG_ROOT="$SNAP/usr/share/X11/xkb"
 fi
@@ -118,10 +143,35 @@ def host_library(soname: str) -> Path | None:
     return None
 
 
+# Where ldd found each library, for those outside the ldconfig cache (libpulsecommon lives in a
+# private folder of PulseAudio).
+LDD_PATHS: dict[str, Path] = {}
+
+
 def needed(lib: Path) -> list[str]:
     """Direct and indirect dependencies (sonames) of a library."""
     out = subprocess.run(["ldd", str(lib)], capture_output=True, text=True, check=True).stdout
-    return [line.split()[0] for line in out.splitlines() if line.strip() and "=>" in line]
+    names = []
+    for line in out.splitlines():
+        parts = line.split()
+        if line.strip() and "=>" in line:
+            names.append(parts[0])
+            if len(parts) > 2 and parts[2].startswith("/"):
+                LDD_PATHS.setdefault(parts[0], Path(parts[2]))
+    return names
+
+
+def host_alsa_plugins() -> dict[str, Path]:
+    """The ALSA pulse plugins on the build host (package libasound2-plugins)."""
+    lib = host_library("libasound.so.2")
+    if lib is None:
+        raise SystemExit("libasound.so.2 is not installed on the build host")
+    folder = lib.resolve().parent / "alsa-lib"
+    plugins = {name: folder / name for name in ALSA_PLUGINS}
+    missing = [name for name, path in plugins.items() if not path.is_file()]
+    if missing:
+        raise SystemExit(f"{', '.join(missing)} not in {folder}: install libasound2-plugins")
+    return plugins
 
 
 def library_closure(roots=BUNDLE, resolve=host_library, deps=needed) -> dict[str, Path]:
@@ -131,7 +181,7 @@ def library_closure(roots=BUNDLE, resolve=host_library, deps=needed) -> dict[str
         name = todo.pop()
         if name in out or name in PROVIDED:
             continue
-        path = resolve(name)
+        path = resolve(name) or LDD_PATHS.get(name)
         if path is None:
             raise SystemExit(f"{name} is not installed on the build host")
         out[name] = path
@@ -139,7 +189,8 @@ def library_closure(roots=BUNDLE, resolve=host_library, deps=needed) -> dict[str
     return out
 
 
-def stage(root: Path, version: str, arch: str, bin_dir: Path, libs: dict[str, Path], xkb: Path | None):
+def stage(root: Path, version: str, arch: str, bin_dir: Path, libs: dict[str, Path], xkb: Path | None,
+          plugins: dict[str, Path] | None = None):
     app = common.APP
     (root / "opt" / app).mkdir(parents=True)
     for b in BINARIES:
@@ -153,6 +204,10 @@ def stage(root: Path, version: str, arch: str, bin_dir: Path, libs: dict[str, Pa
     (root / "usr/lib").mkdir(parents=True)
     for name, path in sorted(libs.items()):
         shutil.copy2(path.resolve(), root / "usr/lib" / name)
+    if plugins:
+        (root / "usr/lib/alsa-lib").mkdir()
+        for name, path in sorted(plugins.items()):
+            shutil.copy2(path.resolve(), root / "usr/lib/alsa-lib" / name)
     if xkb is not None and xkb.is_dir():
         shutil.copytree(xkb, root / "usr/share/X11/xkb", symlinks=True)
     doc = root / "usr/share/doc" / app
@@ -182,7 +237,15 @@ def main():
     root = common.WORKSPACE / "target/snap/prime"
     if root.exists():
         shutil.rmtree(root)
-    stage(root, version, a.arch, a.bin_dir, library_closure(), a.xkb)
+    plugins = host_alsa_plugins()
+    roots = BUNDLE
+    libs = library_closure(roots)
+    # The plugins' own dependencies (libpulse's codecs and its private libpulsecommon).
+    for plugin in plugins.values():
+        for name in needed(plugin):
+            if name not in PROVIDED and name not in libs:
+                libs.update(library_closure((name,)))
+    stage(root, version, a.arch, a.bin_dir, libs, a.xkb, plugins)
     epoch = int(os.environ.get("SOURCE_DATE_EPOCH", "1767225600"))
     for p in sorted(root.rglob("*"), reverse=True):
         os.utime(p, (epoch, epoch), follow_symlinks=False)

@@ -1,0 +1,56 @@
+# Task 125: the sound check. A city at work in the Medieval Age, a training, a construction,
+# orders and a small battle beside the city, then the camera rises to the star map. Run with
+#   --universe --style map.many_worlds --seed 1 --players 2 --ai none --zoom-all
+#   --mute-unfocused off --size 1280x800 --bench 62 --script docs/tasks/125-sound-check-script.txt
+# and record the game's output meanwhile (docs/sound.md, "Checking the mix").
+0 grant-age age.medieval
+0 grant res.food 50000
+0 grant res.timber 50000
+0 grant res.metal 50000
+0 grant res.wealth 50000
+0 grant res.knowledge 50000
+0 place 1 bld.farm @7,5
+0 place 1 bld.farm @8,-6
+0 place 1 bld.barracks @-8,5
+0 place 1 bld.library @-8,-6
+0 place 1 unit.citizen @4,3
+0 place 1 unit.citizen @4,-3
+0 place 1 unit.citizen @5,0
+0 place 1 unit.knight @-1,9
+0 place 1 unit.knight @1,9
+0 place 1 unit.crossbowman @-2,10
+0 place 1 unit.crossbowman @0,10
+0 place 1 unit.crossbowman @2,10
+0 place 1 unit.pikeman @-1,11
+0 place 1 unit.pikeman @1,11
+0 place 2 unit.spearman @-2,24
+0 place 2 unit.spearman @0,24
+0 place 2 unit.spearman @2,24
+0 place 2 unit.hoplite @-1,25
+0 place 2 unit.hoplite @1,25
+0 place 2 unit.archer @-2,27
+0 place 2 unit.archer @0,27
+0 place 2 unit.archer @2,27
+30 box builders
+50 rclick gather1
+130 producers
+150 hud tab 2
+165 hud slot 0
+230 click builder1
+245 hud tab 0
+260 hud slot 3
+275 click @-4,-13
+380 click army1
+384 click army2 shift
+388 click army3 shift
+392 click army4 shift
+396 click army5 shift
+400 click army6 shift
+404 click army7 shift
+430 rclick foe1
+820 cam wheel -3 640,400
+880 cam wheel -3 640,400
+940 cam wheel -4 640,400
+1000 cam wheel -5 640,400
+1060 cam wheel -6 640,400
+1120 cam wheel -6 640,400

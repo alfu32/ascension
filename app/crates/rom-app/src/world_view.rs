@@ -84,9 +84,12 @@ impl WorldView {
         })
         .detach();
         cx.observe_window_activation(window, |view, window, _| {
-            if !window.is_window_active() {
+            let active = window.is_window_active();
+            if !active {
                 view.bridge.push_input(InputEvent::ReleaseAll);
             }
+            // The game falls silent while another window has the focus (a Sound setting).
+            crate::sound::set_focused(active);
         })
         .detach();
         let poll_bridge = bridge.clone();
