@@ -1478,7 +1478,7 @@ mod tests {
     #[test]
     fn projectile_models_point_forward_and_are_about_a_tile_long() {
         let looks = projectile_looks();
-        assert_eq!(looks.len(), 6);
+        assert_eq!(looks.len(), 7);
         for kind in ProjectileKind::ALL {
             if let Body::Model { index, .. } = kind.look().body {
                 assert!(usize::from(index) < looks.len(), "{kind:?}");
@@ -1495,12 +1495,40 @@ mod tests {
             let [lo, hi] = baked.bounds();
             let long = hi[2] - lo[2];
             assert!((0.8..=1.1).contains(&long), "{} is {long} long", look.id);
-            if look.id != "projectile.stone" {
+            // A stone is round and a drone of a cloud (task 120) square.
+            if look.id != "projectile.stone" && look.id != "projectile.drone" {
                 // Longer than wide, nose ahead.
                 assert!(hi[0] - lo[0] < long * 0.6, "{}", look.id);
                 assert!(hi[2] > 0.3 && lo[2] < -0.3, "{}", look.id);
             }
             assert!(baked.near.triangles() <= 160, "{}", look.id);
         }
+    }
+
+    /// Task 120: a cloud's drones circle its point, one model each, the same at the same moment.
+    #[test]
+    fn a_cloud_draws_its_drones_around_its_point() {
+        let flat = |_: f32, _: f32| 0.0;
+        let ground = FlatGround(&flat);
+        let mut operator = view(3, 4.0);
+        operator.cloud = Some(crate::CloudView {
+            drones: 5,
+            face: 0,
+            x: 9.0,
+            y: 10.0,
+        });
+        let views = [view(1, 2.0), operator];
+        let mut out = ProjectileGeometry::default();
+        drone_swarms(&views, 120.0, &ground, &mut out);
+        assert_eq!(out.models.len(), 5);
+        let centre = ground.point(0, 9.0, 10.0, (0.0, 0.0), CLOUD_LIFT);
+        for drone in &out.models {
+            assert_eq!(drone.model, DRONE_MODEL);
+            let off: f32 = (0..3).map(|k| (drone.origin[k] - centre[k]).powi(2)).sum();
+            assert!(off.sqrt() < 1.3, "{:?}", drone.origin);
+        }
+        let mut again = ProjectileGeometry::default();
+        drone_swarms(&views, 120.0, &ground, &mut again);
+        assert_eq!(out.models, again.models);
     }
 }
