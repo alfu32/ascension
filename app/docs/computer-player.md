@@ -1093,6 +1093,34 @@ Selling surplus pays for research and units sooner: matches end earlier and fewe
 The playthrough does not trade, so its hashes stay; `rom fight-matrix` is unchanged
 (`strengths=255 unanswered=0`).
 
+## Drone operators (task 120)
+
+The drone operator (information age, `docs/database.md` "Drone operators") outranges every foot
+soldier and vehicle of its age through its cloud (8 tiles against 4 to 6) and beats them:
+`rom fight-matrix --ages 7 --fight unit.drone_operator,<b>` (3 seeds, value left in ‰):
+
+| Against | Operators | The other side |
+| --- | --- | --- |
+| assault infantry | 1000, 1000, 1000 | 0, 0, 0 |
+| main battle tank | 868, 824, 824 | 0, 0, 0 |
+| missile launcher (anti-air) | 1000, 1000, 1000 | 0, 0, 0 |
+| rocket artillery | 0, 0, 0 | 723, 815, 861 |
+| strategic bomber | 0, 0, 0 | 1000, 1000, 1000 |
+
+Its answers are what reaches the operator itself: artillery from beyond its reach (rocket
+artillery, 13 tiles) and aircraft, which its drones cannot strike (strategic bomber in its age,
+drone bomber after). Anti-air thins the cloud (a missile launcher's hit brings down three
+drones) but cannot touch the operator, and its own crew falls to one drone each, so it holds the
+cloud off without winning. The matrix gains seven rows, one per age from the information age on
+(`drone_operator | city | strategic_bomber` or `drone_bomber`): `strengths=270 unanswered=0`
+(263 before).
+
+Computer players choose it through the ordinary army choice. `rom-ai` weighs a cloud weapon at
+the pace its operator issues drones (`et_drone_cloud.rebuild_ticks`, 120, when longer than the
+weapon's 10-tick reload) in `production::value`, `dps_against` and `view::strength`: a burst of
+sixteen drones is not a sustained rate. `rom duel --profiles balanced:moderate,balanced:easiest --seeds 1..20 --jobs 2`: 20–0, mean
+tick 54 449, as before: no duel reaches the information age.
+
 ## Simulation gaps found in part 2, and what task 65 did with them
 
 - **Closed: `explore`, `patrol`, `guard`.** `explore` walks to the nearest tile
