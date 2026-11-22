@@ -14,6 +14,7 @@ VERSION = sys.argv[3] if len(sys.argv) > 3 else ""
 SOUND_DIR = Path(sys.argv[4]) if len(sys.argv) > 4 else None
 
 LEADS = {
+    "16": "Buildings and units built from parts inside the game. Round 16 brings the <strong>rotorcraft</strong> (task 119, issue #3): the <strong>Attack Helicopter</strong> (modern, <code>unit.attack_helicopter@modern</code>) with a main and a tail rotor, the <strong>Gunship Helicopter</strong> (information, <code>unit.gunship_helicopter@information</code>) with stub wings and missile pods, and the <strong>Hover Gunship</strong> (automation, <code>unit.hover_gunship@automation</code>) on four ducted fans. They hover in place and lift off and land straight up. Each card plays the unit's own sounds (voices, rotor, shots). Set each model's status and write directions; name a part as <code>model id/part</code>.",
     "13": "Buildings and units built from parts inside the game. Round 13 brings one model: the <strong>relic site</strong> (task 82; <code>node.relics@any</code>), the holy place in the wild where priests collect relics for their temples. Set its status and write directions. Name a part as <code>model id/part</code>, for example <code>node.relics@any/reliquary</code>.",
     "15": "Buildings and units built from parts inside the game, and now their sounds. Round 15 brings one model: the <strong>Deep Space Tracking Station</strong> (task 118; <code>bld.jump_detector@fusion</code>), the fusion-age building that watches its star system and raises an alert when foreign ships jump in: a radar dish on a mast over a plated base, with a beacon and a small equipment hut. Set its status and write directions; name a part as <code>model id/part</code>. Below the models, <strong>Unit sounds</strong> and the <strong>Sound library</strong> let you play and rate every sound (task 124).",
 }
@@ -35,6 +36,8 @@ ROUND14 = {"unit.survey_ship@starfaring", "unit.corvette@starfaring",
            "unit.ship_of_the_line@enlightenment", "unit.dreadnought@modern"}
 # Task 118: the Deep Space Tracking Station, the fusion age's jump detector.
 ROUND15 = {"bld.jump_detector@fusion"}
+ROUND16 = {"unit.attack_helicopter@modern", "unit.gunship_helicopter@information",
+            "unit.hover_gunship@automation"}
 NAMES = {"bld.jump_detector": "Deep Space Tracking Station", "bld.city": "City", "bld.woodcutter_camp": "Woodcutter's camp", "node.relics": "Relic site",
          "unit.ship_of_the_line": "Man-of-war"}
 
@@ -169,7 +172,10 @@ OVERVIEW15 = [
     ("118-jump-detected", "What the station does: foreign ships jumped into the watched home system — the alert line and amber rings on the star map and its minimap"),
     ("118-under-attack", "The other alert of task 118, for context: \"Your capital is under attack\" and a red ring on the minimap"),
 ]
-OVERVIEW = OVERVIEW15 if ROUND == "15" else OVERVIEW14 if ROUND == "14" else OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
+OVERVIEW16 = [
+    ("119-rotorcraft", "The three rotorcraft hovering over a city of the information age (<code>docs/tasks/119-rotorcraft-script.txt</code>): attack helicopter, gunship and hover gunship"),
+]
+OVERVIEW = OVERVIEW16 if ROUND == "16" else OVERVIEW15 if ROUND == "15" else OVERVIEW14 if ROUND == "14" else OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
     ("gallery_ancient", "Ancient age, game camera: <code>--gallery ancient</code>"),
     ("gallery_classical", "Classical age, game camera: <code>--gallery classical</code>"),
     ("gallery_classical_close_team2", "Classical age, close, in player 2's blue to show where team colour sits"),
@@ -193,9 +199,11 @@ def round_of(m):
     (starfaring to galactic), 12 the jump inhibitor, the automated colony and the
     alternative lab look (approved: now the Auto Lab, bld.auto_lab@automation), 13 the relic
     site (task 82), 14 the higher-definition spaceships and the two line ships of task 92
-    (task 93), 15 the Deep Space Tracking Station (task 118)."""
+    (task 93), 15 the Deep Space Tracking Station (task 118), 16 the rotorcraft (task 119)."""
     if m["id"] in ROUND1:
         return 1
+    if m["id"] in ROUND16:
+        return 16
     if m["id"] in ROUND15:
         return 15
     if m["id"] in ROUND14:
