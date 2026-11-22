@@ -1,8 +1,9 @@
 """Check the baked sounds and draw contact sheets of their spectrograms.
 
 For every .ogg: decoded peak (clipping), loudness (silence), leading silence, and for loops
-the joint: how far the first sample is from what the last two predict, against the largest such
-errors inside the sound, and the loudness just before and after the joint. Writes report.tsv and sheet-NN.png (spectrograms,
+(files with LOOPSTART and LOOPLENGTH comments; the loop itself, without its padding) the joint as the engine plays it (the padding faded into the loop's start): the largest error of
+a sample against what the two before it predict, against the largest such errors inside the
+sound, and the loudness just before and after the joint. Writes report.tsv and sheet-NN.png (spectrograms,
 64 per sheet) and joints-NN.png (each loop's last and first 0.1 s side by side) into <out-dir>.
 Needs ffmpeg and ImageMagick's montage.
 
@@ -16,20 +17,25 @@ from pathlib import Path
 import numpy as np
 
 SOUNDS, PLAN, OUT = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
-LOOP_PREFIX = ("ambient.", "act.saw", "act.rotor")
+LOOP_PREFIX = ("ambient.", "act.saw", "act.rotor", "act.footsteps_grass")
+PEAK = 10 ** (-3 / 20)  # every file at most -3 dBFS (app/docs/sound.md)
 
 
 def decode(path):
+    """Mono samples, the rate, and the loop (start, length) in frames when the file has one."""
     raw = subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(path), "-f", "f32le", "-ac", "1", "-"],
                          check=True, capture_output=True).stdout
-    return np.frombuffer(raw, dtype="<f4"), int(subprocess.run(
-        ["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=sample_rate",
-         "-of", "csv=p=0", str(path)], check=True, capture_output=True, text=True).stdout.strip())
+    info = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
+                           "stream=sample_rate:stream_tags=LOOPSTART,LOOPLENGTH", "-of", "default=nw=1",
+                           str(path)], check=True, capture_output=True, text=True).stdout
+    fields = dict(line.replace("TAG:", "").split("=", 1) for line in info.splitlines() if "=" in line)
+    loop = (int(fields["LOOPSTART"]), int(fields["LOOPLENGTH"])) if "LOOPSTART" in fields else None
+    return np.frombuffer(raw, dtype="<f4"), int(fields["sample_rate"]), loop
 
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    loops = {e["name"] for e in json.loads(PLAN.read_text()) if e.get("loop")}
+    planned_loops = {e["name"] for e in json.loads(PLAN.read_text()) if e.get("loop")}
     files = sorted(SOUNDS.glob("*.ogg"))
     rows, problems = [], []
     tiles = OUT / "tiles"
@@ -37,17 +43,28 @@ def main():
     joint_tiles = []
     for f in files:
         name = f.stem
-        x, sr = decode(f)
+        x, sr, loop_points = decode(f)
         peak = float(np.max(np.abs(x)))
         rms = float(np.sqrt(np.mean(x**2)))
         lead = int(np.argmax(np.abs(x) > 0.01 * peak)) / sr
-        loop = name in loops or name.startswith(LOOP_PREFIX)
+        loop = loop_points is not None
+        if (name in planned_loops or name.startswith(LOOP_PREFIX)) and not loop:
+            problems.append(f"{name}: a loop without loop points")
         joint = ""
         if loop:
-            # The joint against the sound's own smoothness: how far the first sample is from
-            # what the last two predict, compared with the largest such errors inside the file.
+            # The engine plays only the loop itself and, at each wrap, fades the padding after
+            # the loop's end into its start over 1024 frames: judge the joint as it is heard.
+            start, length = loop_points
+            end = start + length
+            seam = min(1024, length // 4)
+            k = np.linspace(0, 1, seam, endpoint=False)
+            around = int(0.1 * sr)
+            heard = np.concatenate([x[end - around:end], (1 - k) * x[end:end + seam] + k * x[start:start + seam],
+                                    x[start + seam:start + around]])
+            x = x[start:end]
             pred = np.abs(x[2:] - 2 * x[1:-1] + x[:-2])
-            ratio = abs(float(x[0] - 2 * x[-1] + x[-2])) / (float(np.percentile(pred, 99.99)) or 1e-9)
+            seam_pred = np.abs(heard[2:] - 2 * heard[1:-1] + heard[:-2])
+            ratio = float(np.max(seam_pred)) / (float(np.max(pred)) or 1e-9)
             w = int(0.05 * sr)
             before, after = np.sqrt(np.mean(x[-w:] ** 2)), np.sqrt(np.mean(x[:w] ** 2))
             # A step in loudness counts only where both sides are sounding (not a gap between steps).
@@ -55,14 +72,14 @@ def main():
             joint = f"{ratio:.2f}/{level:.1f}dB"
             if ratio > 1.0 or level > 12:
                 problems.append(f"{name}: joint {joint}")
-            seg = np.concatenate([x[-int(0.1 * sr):], x[: int(0.1 * sr)]])
+            seg = heard
             jt = tiles / f"joint.{name}.png"
             subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-f", "f32le", "-ar", str(sr), "-ac", "1",
                             "-i", "-", "-filter_complex", "showwavespic=s=320x80:colors=white", "-frames:v", "1", str(jt)],
                            input=seg.astype("<f4").tobytes(), check=True)
             joint_tiles.append((jt, name))
-        if peak >= 0.999:
-            problems.append(f"{name}: clips (peak {peak:.3f})")
+        if peak > PEAK:
+            problems.append(f"{name}: peak {20 * np.log10(peak):.1f} dBFS, above -3")
         if rms < 0.003:
             problems.append(f"{name}: nearly silent (rms {rms:.4f})")
         if lead > 0.15 and not loop:

@@ -51,8 +51,14 @@ encode() {
         ambient.*) args=(-ac 2 -ar 44100 -q:a 3) ;;
         *) args=(-ac 1 -ar 44100 -q:a 3) ;;
     esac
+    # Loops carry their loop points (frames, without the padding level.py adds around them).
+    local tags=() loop
+    loop=$(awk -F'\t' -v n="$name" '$1 == n { print $2 " " $3 }' "$(dirname "$wav")/loops.tsv")
+    if [ -n "$loop" ]; then
+        tags=(-metadata "LOOPSTART=${loop% *}" -metadata "LOOPLENGTH=${loop#* }")
+    fi
     ffmpeg -nostdin -loglevel error -y -i "$wav" "${args[@]}" -c:a libvorbis \
-        -fflags +bitexact -flags:a +bitexact -map_metadata -1 "$out/$name.ogg"
+        -fflags +bitexact -flags:a +bitexact -map_metadata -1 "${tags[@]}" "$out/$name.ogg"
 }
 export -f encode
 rm -rf "$work/level"

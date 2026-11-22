@@ -61,7 +61,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends cmake clang libclang-dev pkg-config \
             libfontconfig1-dev libfreetype6-dev libx11-dev libxcursor-dev libxrandr-dev \
             libxinerama-dev libxi-dev libgl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-dev \
-            libwayland-dev libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev
+            libwayland-dev libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.99.1"
@@ -98,7 +98,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends cmake clang libclang-dev pkg-config \
             libfontconfig1-dev libfreetype6-dev libx11-dev libxcursor-dev libxrandr-dev \
             libxinerama-dev libxi-dev libgl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-dev \
-            libwayland-dev libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev zsync
+            libwayland-dev libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev zsync
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.99.1"

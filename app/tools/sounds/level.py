@@ -9,8 +9,15 @@ gating: loops by their mean loudness over the whole loop, one-shots and voices b
   interface cues (ui.)                                       -25
   loops (moving, buildings at work, ambience)                -26
 
-and no sample above -3.7 dBFS, which keeps the encoded files under -3 dBFS (Vorbis overshoots the
-source peak by up to 4 %).
+and no sample above -4.5 dBFS, which keeps the encoded files under -3 dBFS (Vorbis overshoots the
+source peak, most on sharp transients).
+
+Loops are written with LOOP_PAD frames of their own wrap-around before and after them, and their
+loop points go to loops.tsv (start and length in frames); bake.sh stores them in the Ogg file as
+the comments LOOPSTART and LOOPLENGTH. The engine plays only the loop itself; at each wrap it
+fades the frames after the loop's end (the padding, continuous with the end) into the loop's
+start, so the encoder's small, independent errors on either side of the joint never meet as a
+step.
 
 Run: python level.py <wav-dir> <out-dir>   (reads <wav-dir>/manifest.tsv; bed.* files are skipped)
 """
@@ -22,8 +29,9 @@ import numpy as np
 from scipy import signal
 
 SRC, DST = Path(sys.argv[1]), Path(sys.argv[2])
-PEAK = 10 ** (-3.7 / 20)
+PEAK = 10 ** (-4.5 / 20)
 TARGETS = {"voice": -20.0, "once": -23.0, "ui": -25.0, "loop": -26.0}
+LOOP_PAD = 4096
 
 
 def biquad_shelf(fs, f0=1681.974, gain_db=3.999843, q=0.7071752):
@@ -83,6 +91,7 @@ def target_of(name, kind):
 def main():
     DST.mkdir(parents=True, exist_ok=True)
     rows = [line.rstrip("\n").split("\t") for line in open(SRC / "manifest.tsv") if line.strip()]
+    loops = []
     for name, kind, _ in rows:
         if name.startswith("bed."):
             continue
@@ -94,6 +103,10 @@ def main():
         gain = 10 ** ((target_of(name, kind) - before) / 20)
         gain = min(gain, PEAK / (np.max(np.abs(x)) or 1))
         y = np.round(x * gain * 32767).astype("<i2")
+        if kind == "loop":
+            n = y.shape[1]
+            y = np.concatenate([y[:, n - LOOP_PAD:], y, y[:, :LOOP_PAD]], axis=1)
+            loops.append(f"{name}\t{LOOP_PAD}\t{n}\n")
         with wave.open(str(DST / f"{name}.wav"), "wb") as w:
             w.setnchannels(channels)
             w.setsampwidth(2)
@@ -101,6 +114,7 @@ def main():
             w.writeframes(y.T.copy().tobytes())
         print(f"{name:45s} {kind:5s} {before:6.1f} → {before + 20 * np.log10(gain):6.1f} LUFS")
     (DST / "manifest.tsv").write_text((SRC / "manifest.tsv").read_text())
+    (DST / "loops.tsv").write_text("".join(loops))
 
 
 if __name__ == "__main__":
