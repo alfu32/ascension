@@ -1184,6 +1184,7 @@ mod tests {
             flight: 0.0,
             aircraft: false,
             hover: crate::Hover::Circle,
+            cloud: None,
             activity: Default::default(),
         }
     }

@@ -194,6 +194,27 @@ impl Rules {
                     ),
                 });
             }
+            // A drone operator (task 120) moves, and its cloud reaches every target its weapons
+            // are said to reach: the operator stops at a weapon's range from the target and the
+            // cloud strikes from at most the leash beyond it.
+            if let Some(cloud) = &entity.drone_cloud {
+                let reach = cloud.leash.saturating_add(cloud.strike_range);
+                if entity.movement.is_none()
+                    || entity.weapons.is_empty()
+                    || entity
+                        .weapons
+                        .iter()
+                        .any(|w| w.range_max > reach || w.orbit_only)
+                {
+                    problems.push(Problem {
+                        message: format!(
+                            "drone cloud {} needs movement and weapons within leash + strike_range \
+                             ({reach}), none from orbit",
+                            self.label(entity.id)
+                        ),
+                    });
+                }
+            }
             for weapon in &entity.weapons {
                 if weapon.targets.is_empty() {
                     problems.push(Problem {

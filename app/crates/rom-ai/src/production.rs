@@ -73,6 +73,16 @@ pub(crate) fn needs_escort(rules: &Rules, type_id: DefId) -> bool {
         .is_some_and(|t| t.weapons.iter().any(|w| w.range_min > 0))
 }
 
+/// Ticks between two blows of `weapon` of `et` over a fight: its reload, or for a drone
+/// operator (task 120), whose every strike spends a drone, the time it takes to issue a new one
+/// when that is longer.
+pub(crate) fn interval(et: &rom_rules::EntityType, weapon: &rom_rules::Weapon) -> i64 {
+    let reload = weapon.cooldown_ticks.max(1);
+    et.drone_cloud
+        .as_ref()
+        .map_or(reload, |cloud| reload.max(cloud.rebuild_ticks))
+}
+
 /// The farthest any weapon of a type reaches, in milli-tiles.
 fn reach_of(rules: &Rules, type_id: DefId) -> i64 {
     rules.entity_types[&type_id]
@@ -94,7 +104,8 @@ fn dps_suffered(rules: &Rules, enemy: DefId, unit: DefId) -> i64 {
         .is_some_and(|m| rules.movement_classes[&m.movement_class_id].flies);
     let layer = if flies { Layer::Air } else { Layer::Ground };
     let reach = reach_of(rules, unit);
-    rules.entity_types[&enemy]
+    let attacker = &rules.entity_types[&enemy];
+    attacker
         .weapons
         .iter()
         .filter(|w| !w.orbit_only && w.targets.iter().any(|t| t.layer == layer))
@@ -104,7 +115,7 @@ fn dps_suffered(rules: &Rules, enemy: DefId, unit: DefId) -> i64 {
                 .armor_class_id
                 .map_or(100, |a| rules.damage_pct(w.damage_class_id, a));
             let hit = (w.damage * pct / 100 - target.armor).max(1);
-            hit * w.shots.max(1) * 2000 / w.cooldown_ticks.max(1)
+            hit * w.shots.max(1) * 2000 / interval(attacker, w)
         })
         .sum()
 }
@@ -116,13 +127,13 @@ pub(crate) fn dps_against(
     armor_class: Option<u32>,
     armor: i64,
 ) -> i64 {
-    rules.entity_types[&attacker]
-        .weapons
+    let et = &rules.entity_types[&attacker];
+    et.weapons
         .iter()
         .map(|w| {
             let pct = armor_class.map_or(100, |a| rules.damage_pct(w.damage_class_id, a));
             let hit = (w.damage * pct / 100 - armor).max(1);
-            hit * w.shots.max(1) * 2000 / w.cooldown_ticks.max(1)
+            hit * w.shots.max(1) * 2000 / interval(et, w)
         })
         .sum()
 }

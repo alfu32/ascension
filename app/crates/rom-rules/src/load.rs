@@ -381,6 +381,7 @@ fn load_entity_type(conn: &Connection) -> Result<Vec<EntityType>, RulesError> {
             inhibitor: None,
             detector: None,
             market: None,
+            drone_cloud: None,
             colony: None,
             weapons: Vec::new(),
             sounds: Vec::new(),
@@ -697,6 +698,23 @@ fn load_et_colony(conn: &Connection) -> Result<Vec<Colony>, RulesError> {
                 income: row.get("income")?,
                 site_share_pct: row.get("site_share_pct")?,
                 sites: sites.remove(&id).unwrap_or_default(),
+            })
+        },
+    )
+}
+fn load_et_drone_cloud(conn: &Connection) -> Result<Vec<DroneCloud>, RulesError> {
+    read(
+        conn,
+        "SELECT * FROM et_drone_cloud ORDER BY entity_type_id",
+        |row| {
+            Ok(DroneCloud {
+                entity_type_id: DefId(row.get("entity_type_id")?),
+                capacity: row.get("capacity")?,
+                leash: row.get("leash")?,
+                strike_range: row.get("strike_range")?,
+                rebuild_ticks: row.get("rebuild_ticks")?,
+                drone_hp: row.get("drone_hp")?,
+                drone_speed: row.get("drone_speed")?,
             })
         },
     )
@@ -1525,6 +1543,10 @@ impl Rules {
         for row in load_et_colony(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_colony")?;
             entity.colony = Some(row);
+        }
+        for row in load_et_drone_cloud(conn)? {
+            let entity = entity_mut(&mut rules, row.entity_type_id, "et_drone_cloud")?;
+            entity.drone_cloud = Some(row);
         }
         for row in load_et_market(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_market")?;

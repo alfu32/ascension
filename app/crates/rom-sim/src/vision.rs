@@ -240,8 +240,13 @@ impl World {
         if e.is_inside() && !self.allied(player, e.owner) {
             return false;
         }
+        // A drone operator is seen where its cloud is seen (task 120).
+        let cloud = self
+            .drone_cloud(e.id)
+            .filter(|c| c.drones > 0)
+            .map(|c| c.pos);
         self.allied(player, e.owner)
-            || [Some(e.pos), self.orbit(e.id).map(|orbit| orbit.pos)]
+            || [Some(e.pos), self.orbit(e.id).map(|orbit| orbit.pos), cloud]
                 .into_iter()
                 .flatten()
                 .any(|pos| {

@@ -168,6 +168,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             flight: 0.0,
             aircraft: false,
             hover: rom_render::Hover::Circle,
+            cloud: None,
         })
         .collect::<Vec<_>>();
     let camera = Camera {

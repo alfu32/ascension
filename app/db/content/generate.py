@@ -149,6 +149,8 @@ PROJECTILES = {
     'unit.drone_fighter': 'missile', 'unit.interceptor': 'plasma',
     'unit.attack_helicopter': 'bullet', 'unit.gunship_helicopter': 'missile',
     'unit.hover_gunship': 'missile',
+    # Task 120: the operator's weapon is its cloud's kamikaze drones.
+    'unit.drone_operator': 'drone',
     'unit.bomber': 'shell', 'unit.strategic_bomber': 'shell', 'unit.drone_bomber': 'shell',
     'unit.survey_ship': 'beam', 'unit.corvette': 'railgun', 'unit.space_frigate': 'beam',
     'unit.space_cruiser': 'railgun', 'unit.battleship': 'plasma', 'unit.carrier': 'beam',
@@ -169,6 +171,7 @@ PROJECTILES = {
 PROJECTILE_SPEED = {
     'arrow': 15000, 'bolt': 20000, 'stone': 10000, 'bullet': 40000, 'shell': 24000,
     'rocket': 16000, 'missile': 20000, 'torpedo': 8000, 'beam': 0, 'plasma': 30000, 'railgun': 0,
+    'drone': 10000,
 }
 # Weapons that fly at another speed than their kind, keyed like PROJECTILES. A howitzer lobs
 # its shell high to fall on the target, slower than the flat shot of a tank or a naval gun.
@@ -682,6 +685,7 @@ def generate():
     alerts_and_detectors(definition, row, tag, need, produce, cost, tech)
     aircraft_take_off(row, sql.append)
     rotorcraft_hover(row, tag)
+    drone_operator(definition, row, tag, need, produce, cost, weapon)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -1293,6 +1297,46 @@ def rotorcraft_hover(row, tag):
     for key in ROTORCRAFT:
         tag('unit.' + key, 'hover')
     tag('unit.hover_gunship', 'low_flight', 'drone')
+
+
+# Task 120 (owner, issue #3): the drone operator, foot infantry of the information age with a
+# cloud of kamikaze drones. One drone kills an infantry unit of its age (assault infantry: 205 hit
+# points, plate, armour 2: 210 - 2 = 208) and about ten destroy a main battle tank (328 hit points,
+# vehicle 18 %, armour 3: 37 - 3 = 34 a drone, ten drones). Fragmentation is a new damage class:
+# deadly to people, weak against armour, hulls, shields and buildings.
+DRONE_DAMAGE_CLASS = 'fragmentation'
+DRONE_MATRIX = {'vehicle': 18, 'hull': 18, 'structure': 10, 'shield': 10}
+# Capacity, leash and strike range (milli-tiles), ticks per new drone, damage that brings one
+# down, cloud speed (milli-tiles per second); the strike (damage, ticks between strikes) and the
+# operator's reach (leash + strike range) are its weapon.
+DRONE_CLOUD = dict(capacity=16, leash=7000, strike_range=1000, rebuild_ticks=120, drone_hp=8,
+                   drone_speed=5000)
+DRONE_STRIKE = (210, 10)
+
+
+def drone_operator(definition, row, tag, need, produce, cost, weapon):
+    """Task 120: the drone operator and its damage class. Written after every other definition so
+    earlier ids stay."""
+    row('damage_class', key=DRONE_DAMAGE_CLASS)
+    for armour, pct in DRONE_MATRIX.items():
+        row('damage_matrix', damage_class_id=Ref(DRONE_DAMAGE_CLASS, 'damage_class'),
+            armor_class_id=Ref(armour, 'armor_class'), pct=pct)
+    full, age = 'unit.drone_operator', AGES.index('information')
+    reach = DRONE_CLOUD['leash'] + DRONE_CLOUD['strike_range']
+    definition('entity_type', full, 'Drone Operators')
+    # The operator is one soldier with a controller: few hit points, light armour; he sees a tile
+    # beyond where his drones strike.
+    row('entity_type', id=Ref(full), **{'class': 'unit'}, ui_group='drone_operator', hp=130, armor=2,
+        armor_class_id=Ref('flesh', 'armor_class'), los=reach + 1000, pop_cost=2, build_ticks=400,
+        ramp_mode='per_type', first_age_id=Ref('age.' + AGES[age]))
+    tag(full, 'biological', 'military', 'infantry', 'passenger')
+    row('et_movement', entity_type_id=Ref(full), movement_class_id=Ref('foot', 'movement_class'), speed=1200)
+    damage, ticks = DRONE_STRIKE
+    weapon(full, damage, DRONE_DAMAGE_CLASS, reach, ['ground'], ticks)
+    row('et_drone_cloud', entity_type_id=Ref(full), **DRONE_CLOUD)
+    need(full, 'age.' + AGES[age])
+    produce('bld.barracks', full, 'train', 'units')
+    cost(full, {'food': 100, 'metal': 80, 'oil': 40}, True)
 
 
 # Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"
