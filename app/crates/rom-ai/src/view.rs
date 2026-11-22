@@ -463,7 +463,7 @@ pub(crate) fn strength(rules: &Rules, type_id: DefId) -> i64 {
     let dps: i64 = et
         .weapons
         .iter()
-        .map(|w| w.damage * w.shots.max(1) * 20 / w.cooldown_ticks.max(1))
+        .map(|w| w.damage * w.shots.max(1) * 20 / crate::production::interval(et, w))
         .sum();
     et.hp * dps / 100
 }

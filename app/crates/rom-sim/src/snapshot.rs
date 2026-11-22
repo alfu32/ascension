@@ -535,6 +535,8 @@ pub struct Snapshot {
     pub governors_paused: Vec<EntityId>,
     /// Aircraft on or near the ground and the ticks they have climbed, in id order (task 123).
     pub flight: Vec<(EntityId, u64)>,
+    /// The clouds of drone operators, in operator id order (task 120).
+    pub clouds: Vec<(EntityId, crate::Cloud)>,
     /// Dormant surfaces of resource bodies not yet brought to life, in body order (task 77).
     pub dormant: Vec<(BodyId, crate::DormantSurface)>,
     /// Bodies brought to life, in body order (task 77).
@@ -1037,6 +1039,7 @@ impl World {
                 .collect(),
             governors_paused: self.governors_paused.iter().copied().collect(),
             flight: self.flight.iter().map(|(id, c)| (*id, *c)).collect(),
+            clouds: self.clouds.iter().map(|(id, c)| (*id, *c)).collect(),
             dormant: self.life.dormant.iter().map(|(b, d)| (*b, *d)).collect(),
             living: self
                 .life
@@ -1088,6 +1091,7 @@ impl World {
             failures,
             governors_paused,
             flight,
+            clouds,
             dormant,
             living,
             market,
@@ -1487,6 +1491,29 @@ impl World {
                 return Err(bad("aircraft climbed past its flight height"));
             }
             world.flight.insert(id, climbed);
+        }
+        for (id, cloud) in clouds {
+            let capacity = world
+                .entity(id)
+                .and_then(|e| world.cloud_rules(e.type_id))
+                .ok_or_else(|| bad("drone cloud of an entity that is not an operator"))?
+                .capacity;
+            if i64::from(cloud.drones) > capacity
+                || world
+                    .surface(cloud.pos.body)
+                    .is_none_or(|s| !s.geo.contains(cloud.pos))
+                || world.clouds.insert(id, cloud).is_some()
+            {
+                return Err(bad(
+                    "drone cloud over capacity, off its surface or repeated",
+                ));
+            }
+        }
+        if world
+            .entities()
+            .any(|e| world.cloud_rules(e.type_id).is_some() && !world.clouds.contains_key(&e.id))
+        {
+            return Err(bad("drone operator without its cloud"));
         }
         for ((player, resource), pressure) in market {
             if pressure == 0

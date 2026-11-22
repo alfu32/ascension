@@ -1,0 +1,21 @@
+# Task 120: six drone operators of player one south-east of their city (out of the city's reach),
+# each pair facing one enemy group of player two seven tiles north of them: assault infantry
+# (west), a main battle tank (middle) and missile launchers, the anti-air (east). The operators
+# stay back while their clouds fly in and strike. Replayed by --script (universe mode, seed 1,
+# --sun low, --players 2 --ai none, --size 1600x900). Test-only setup lines first.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun low --size 1600x900
+#     --script app/docs/tasks/120-drone-cloud-script.txt --after 0.8 --screenshot drones.png
+0 grant-age age.information
+0 place 1 unit.drone_operator @14,14
+0 place 1 unit.drone_operator @16,14
+0 place 1 unit.drone_operator @19,14
+0 place 1 unit.drone_operator @21,14
+0 place 1 unit.drone_operator @24,14
+0 place 1 unit.drone_operator @26,14
+0 place 2 unit.assault_infantry @14,7
+0 place 2 unit.assault_infantry @16,6
+0 place 2 unit.assault_infantry @15,8
+0 place 2 unit.main_battle_tank @20,7
+0 place 2 unit.missile_launcher @24,6
+0 place 2 unit.missile_launcher @26,7
+1 speed 100

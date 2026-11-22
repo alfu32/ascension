@@ -287,6 +287,17 @@ impl World {
                 hash.u64(*climbed);
             }
         }
+        // Hashed only once a drone operator exists, so other worlds keep their hashes (task 120).
+        if !self.clouds.is_empty() {
+            hash.bytes(b"clouds");
+            hash.u64(self.clouds.len() as u64);
+            for (id, cloud) in &self.clouds {
+                hash.u32(id.0);
+                hash.u32(cloud.drones);
+                hash.pos(cloud.pos);
+                hash.u32(cloud.rebuild);
+            }
+        }
         // Hashed only once a player has traded, so other worlds keep their hashes (task 107).
         if !self.market.is_empty() {
             hash.bytes(b"market");

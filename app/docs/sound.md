@@ -33,9 +33,9 @@ mixer counts variations of one sound together for its limits.
 | `attack` | armed units | a line fitting its weapon ("Loose!", "Fix bayonets!", "Missiles away!") |
 | `build`, `build_done` | builders | lines |
 | `research_done` | every unit | a line: the unit hears of new research |
-| `fire` | units with a ranged weapon | the shot, 2–3 variations; `fire_slot<k>` for a second weapon |
+| `fire` | units with a ranged weapon | the shot, 2–3 variations; `fire_slot<k>` for a second weapon; a drone operator's strike is a short dive whine and a small blast (task 120) |
 | `fight` | units with a melee weapon | the blow, 2–3 variations |
-| `moving` | units that move | a loop: footsteps, hooves, wheels, engines, rotors, drives |
+| `moving` | units that move | a loop: footsteps, hooves, wheels, engines, rotors, drives; a drone operator's footsteps carry a faint swarm hum (task 120) |
 
 ### Building events
 

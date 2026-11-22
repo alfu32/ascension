@@ -3371,6 +3371,25 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.g
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.hover_gunship'),(SELECT id FROM tag WHERE key='hover'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.hover_gunship'),(SELECT id FROM tag WHERE key='low_flight'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.hover_gunship'),(SELECT id FROM tag WHERE key='drone'));
+INSERT INTO damage_class(key) VALUES ('fragmentation');
+INSERT INTO damage_matrix(damage_class_id,armor_class_id,pct) VALUES ((SELECT id FROM damage_class WHERE key='fragmentation'),(SELECT id FROM armor_class WHERE key='vehicle'),18);
+INSERT INTO damage_matrix(damage_class_id,armor_class_id,pct) VALUES ((SELECT id FROM damage_class WHERE key='fragmentation'),(SELECT id FROM armor_class WHERE key='hull'),18);
+INSERT INTO damage_matrix(damage_class_id,armor_class_id,pct) VALUES ((SELECT id FROM damage_class WHERE key='fragmentation'),(SELECT id FROM armor_class WHERE key='structure'),10);
+INSERT INTO damage_matrix(damage_class_id,armor_class_id,pct) VALUES ((SELECT id FROM damage_class WHERE key='fragmentation'),(SELECT id FROM armor_class WHERE key='shield'),10);
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.drone_operator','Drone Operators');
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),'unit','drone_operator',130,2,(SELECT id FROM armor_class WHERE key='flesh'),9000,2,400,'per_type',(SELECT id FROM def WHERE key='age.information'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),(SELECT id FROM tag WHERE key='biological'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),(SELECT id FROM tag WHERE key='military'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),(SELECT id FROM tag WHERE key='infantry'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),(SELECT id FROM tag WHERE key='passenger'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),(SELECT id FROM movement_class WHERE key='foot'),1200);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile,projectile_speed) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),210,(SELECT id FROM damage_class WHERE key='fragmentation'),8000,10,'drone',10000);
+INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.drone_operator')),'ground');
+INSERT INTO et_drone_cloud(entity_type_id,capacity,leash,strike_range,rebuild_ticks,drone_hp,drone_speed) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),16,7000,1000,120,8,5000);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.drone_operator'),'train','units_3',0,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),(SELECT id FROM def WHERE key='res.food'),100,2);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),(SELECT id FROM def WHERE key='res.metal'),80,1);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),(SELECT id FROM def WHERE key='res.oil'),40,1);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.1'),'research','research',1,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.civic.1'),'research','research',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.commerce.1'),'research','research',3,0);
@@ -4212,6 +4231,7 @@ INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FR
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.armour_belts'),(SELECT id FROM def WHERE key='age.fusion'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.jump_detector'),(SELECT id FROM def WHERE key='age.fusion'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.survey_sensor_array'),(SELECT id FROM def WHERE key='age.starfaring'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),(SELECT id FROM def WHERE key='age.information'),0);
 INSERT INTO constellation(id,abbr,name,genitive) VALUES (1,'And','Andromeda','Andromedae');
 INSERT INTO constellation(id,abbr,name,genitive) VALUES (2,'Ant','Antlia','Antliae');
 INSERT INTO constellation(id,abbr,name,genitive) VALUES (3,'Aps','Apus','Apodis');
@@ -5876,6 +5896,12 @@ WITH v(k,e,s,f,g) AS (VALUES
  ('unit.drone_fighter','moving',0,'unit.drone_fighter.moving',100),
  ('unit.drone_fighter','research_done',0,'voice.drone_fighter.research_done',100),
  ('unit.drone_fighter','select',0,'voice.drone_fighter.select',100),
+ ('unit.drone_operator','attack',0,'voice.drone_operator.attack',100),
+ ('unit.drone_operator','fire',0,'unit.drone_operator.fire',100),
+ ('unit.drone_operator','move',0,'voice.drone_operator.move',100),
+ ('unit.drone_operator','moving',0,'unit.drone_operator.moving',100),
+ ('unit.drone_operator','research_done',0,'voice.drone_operator.research_done',100),
+ ('unit.drone_operator','select',0,'voice.drone_operator.select',100),
  ('unit.exo_trooper','attack',0,'voice.exo_trooper.attack',100),
  ('unit.exo_trooper','fire',0,'unit.exo_trooper.fire',100),
  ('unit.exo_trooper','move',0,'voice.exo_trooper.move',100),

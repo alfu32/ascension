@@ -195,6 +195,20 @@ fn write_all(
             params![id.0, *climbed as i64],
         )?;
     }
+    for (id, cloud) in &s.clouds {
+        tx.execute(
+            "INSERT INTO entity_drone_cloud VALUES (?,?,?,?,?,?,?)",
+            params![
+                id.0,
+                cloud.drones,
+                cloud.pos.body.0,
+                cloud.pos.face,
+                cloud.pos.x,
+                cloud.pos.y,
+                cloud.rebuild
+            ],
+        )?;
+    }
     write_entities(tx, s)?;
     write_space(tx, s)?;
     write_places(tx, s)?;

@@ -1113,6 +1113,26 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
     } else {
         Vec::new()
     };
+    // Saves before format 16 (task 120) have no drone operators.
+    let clouds = if format >= 16 {
+        query_vec(
+            conn,
+            "SELECT entity_id, drones, x, y, face, body, rebuild FROM entity_drone_cloud \
+             ORDER BY entity_id",
+            |r| {
+                Ok((
+                    EntityId(uint(r, 0, "drone operator")?),
+                    rom_sim::Cloud {
+                        drones: uint(r, 1, "drones")?,
+                        pos: pos_at(r, 2)?,
+                        rebuild: uint(r, 6, "drone rebuild")?,
+                    },
+                ))
+            },
+        )?
+    } else {
+        Vec::new()
+    };
     Ok(Snapshot {
         tick,
         rng_state,
@@ -1199,6 +1219,7 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
         awake: flags(conn, "awake")?,
         governors_paused: flags(conn, "governor_paused")?,
         flight,
+        clouds,
         history,
         market: query_vec(
             conn,

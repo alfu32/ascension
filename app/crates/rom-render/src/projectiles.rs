@@ -62,6 +62,8 @@ pub enum ProjectileKind {
     Plasma,
     /// A rail shot: a bright streak that fades.
     Railgun,
+    /// A kamikaze drone diving from its cloud (task 120): a short streak and a small blast.
+    Drone,
 }
 
 /// What is drawn in flight.
@@ -123,7 +125,7 @@ const RAIL_COLOUR: [u8; 3] = [190, 230, 255];
 
 impl ProjectileKind {
     /// Every kind, in a fixed order.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Arrow,
         Self::Bolt,
         Self::Stone,
@@ -135,6 +137,7 @@ impl ProjectileKind {
         Self::Beam,
         Self::Plasma,
         Self::Railgun,
+        Self::Drone,
     ];
 
     /// The `et_weapon.projectile` value of this kind.
@@ -151,6 +154,7 @@ impl ProjectileKind {
             Self::Beam => "beam",
             Self::Plasma => "plasma",
             Self::Railgun => "railgun",
+            Self::Drone => "drone",
         }
     }
 
@@ -214,6 +218,16 @@ impl ProjectileKind {
                 Trail::None,
                 Impact::Spark,
                 false,
+            ),
+            Self::Drone => (
+                0.0,
+                Body::Streak {
+                    length: 0.6,
+                    colour: [255, 200, 120],
+                },
+                Trail::None,
+                Impact::Flash(0.6),
+                true,
             ),
         };
         Look {
@@ -452,7 +466,11 @@ impl Projectiles {
             }
             None => ground.point(shot.face, shot.x, shot.y, (0.0, 0.0), 0.5),
         };
-        let from = muzzle(view, ground);
+        // A drone operator's strike dives from its cloud (task 120).
+        let from = match view.cloud {
+            Some(cloud) => ground.point(cloud.face, cloud.x, cloud.y, (0.0, 0.0), CLOUD_LIFT),
+            None => muzzle(view, ground),
+        };
         let aloft = is_aloft(view) || target.is_some_and(is_aloft) || shot.altitude > 0.0;
         let ship = |v: &EntityView| is_aloft(v) && v.spacecraft;
         let large = ship(view) || target.is_some_and(ship) || shot.altitude > 0.0;
@@ -539,6 +557,56 @@ fn is_aloft(view: &EntityView) -> bool {
         return view.flight > 0.0;
     }
     view.altitude > 0.0
+}
+
+/// Height in tiles above the ground at which a drone cloud swirls (task 120).
+pub const CLOUD_LIFT: f32 = 1.6;
+/// Length a drone of a cloud is drawn, tiles.
+const DRONE_LENGTH: f32 = 0.22;
+/// Index of the drone among [`projectile_looks`].
+const DRONE_MODEL: u16 = 6;
+
+/// Adds the drones of every operator's cloud in `views` to `out` at render tick `now` (task 120):
+/// each circles the cloud's point at its own radius, height and pace, all taken from the
+/// operator's id and the drone's place in the cloud, so the swarm is the same on every frame of
+/// the same moment. Presentation only.
+pub fn drone_swarms(
+    views: &[EntityView],
+    now: f64,
+    ground: &dyn Footing,
+    out: &mut ProjectileGeometry,
+) {
+    for view in views {
+        let Some(cloud) = view.cloud.filter(|c| c.drones > 0) else {
+            continue;
+        };
+        let frame = ground.frame(cloud.face, cloud.x, cloud.y);
+        let centre = ground.point(cloud.face, cloud.x, cloud.y, (0.0, 0.0), CLOUD_LIFT);
+        for i in 0..u32::from(cloud.drones) {
+            let seed = view.id.rotate_left(7) ^ 0x5bd1_e995;
+            let radius = 0.35 + 0.7 * noise(seed, i * 4);
+            let pace = (0.05 + 0.05 * noise(seed, i * 4 + 1)) * if i % 2 == 0 { 1.0 } else { -1.0 };
+            let phase = std::f64::consts::TAU * f64::from(noise(seed, i * 4 + 2));
+            let angle = (now * f64::from(pace) + phase) as f32;
+            let bob =
+                0.25 * (noise(seed, i * 4 + 3) - 0.5) + 0.08 * (now as f32 * 0.21 + i as f32).sin();
+            let (sin, cos) = angle.sin_cos();
+            let origin: [f32; 3] = std::array::from_fn(|k| {
+                centre[k] + (frame.ex[k] * cos + frame.ey[k] * sin) * radius + frame.up[k] * bob
+            });
+            // Along its circle, the way it turns.
+            let sign = pace.signum();
+            let forward: [f32; 3] =
+                std::array::from_fn(|k| (frame.ey[k] * cos - frame.ex[k] * sin) * sign);
+            out.models.push(ProjectileInstance {
+                model: DRONE_MODEL,
+                origin,
+                forward,
+                up: frame.up,
+                length: DRONE_LENGTH,
+            });
+        }
+    }
 }
 
 /// Where a shot leaves `view`: high on a building, at the bow of a ship aloft, at the
@@ -1014,6 +1082,15 @@ pub fn projectile_looks() -> Vec<ModelLook> {
     let stone = material(Program::Stone, [0.52, 0.5, 0.46], [0.4, 0.38, 0.35]);
     let flame = material(Program::Emissive, [1.0, 0.62, 0.2], [1.0, 0.85, 0.4]);
     let dark = material(Program::Metal, [0.18, 0.19, 0.2], [0.12, 0.12, 0.13]);
+    let rotor = |name: &str, x: f32, z: f32| {
+        PartSpec::new(name, Shape::Cylinder, steel)
+            .knob("w", 0.3)
+            .knob("h", 0.02)
+            .knob("segments", 8.0)
+            .knob("x", x)
+            .knob("z", z)
+            .knob("y", 0.06)
+    };
     let fin = |name: &str, look: MaterialLook, z: f32, w: f32, d: f32, roll: f32| {
         PartSpec::new(name, Shape::Box, look)
             .knob("w", w)
@@ -1023,7 +1100,7 @@ pub fn projectile_looks() -> Vec<ModelLook> {
             .knob("z", z)
             .knob("roll", roll)
     };
-    let models: [(&str, Vec<PartSpec>); 6] = [
+    let models: [(&str, Vec<PartSpec>); 7] = [
         (
             "projectile.arrow",
             vec![
@@ -1127,6 +1204,27 @@ pub fn projectile_looks() -> Vec<ModelLook> {
                     .knob("pitch", -90.0),
             ],
         ),
+        // Task 120: a small quadrotor of a drone cloud, about a tile across before it is scaled.
+        (
+            "projectile.drone",
+            vec![
+                PartSpec::new("body", Shape::Box, dark)
+                    .knob("w", 0.3)
+                    .knob("d", 0.42)
+                    .knob("h", 0.14),
+                PartSpec::new("warhead", Shape::Box, olive)
+                    .knob("w", 0.18)
+                    .knob("d", 0.2)
+                    .knob("h", 0.1)
+                    .knob("y", -0.1),
+                fin("arms", dark, 0.0, 0.9, 0.06, 0.0).knob("yaw", 45.0),
+                fin("arms_cross", dark, 0.0, 0.9, 0.06, 0.0).knob("yaw", -45.0),
+                rotor("rotor_ne", 0.32, 0.32),
+                rotor("rotor_nw", -0.32, 0.32),
+                rotor("rotor_se", 0.32, -0.32),
+                rotor("rotor_sw", -0.32, -0.32),
+            ],
+        ),
     ];
     models
         .into_iter()
@@ -1158,6 +1256,7 @@ mod tests {
             flight: 0.0,
             aircraft: false,
             hover: crate::Hover::Circle,
+            cloud: None,
             hp_frac: 1.0,
             building: false,
             footprint: (1, 1),
@@ -1379,7 +1478,7 @@ mod tests {
     #[test]
     fn projectile_models_point_forward_and_are_about_a_tile_long() {
         let looks = projectile_looks();
-        assert_eq!(looks.len(), 6);
+        assert_eq!(looks.len(), 7);
         for kind in ProjectileKind::ALL {
             if let Body::Model { index, .. } = kind.look().body {
                 assert!(usize::from(index) < looks.len(), "{kind:?}");
@@ -1396,12 +1495,40 @@ mod tests {
             let [lo, hi] = baked.bounds();
             let long = hi[2] - lo[2];
             assert!((0.8..=1.1).contains(&long), "{} is {long} long", look.id);
-            if look.id != "projectile.stone" {
+            // A stone is round and a drone of a cloud (task 120) square.
+            if look.id != "projectile.stone" && look.id != "projectile.drone" {
                 // Longer than wide, nose ahead.
                 assert!(hi[0] - lo[0] < long * 0.6, "{}", look.id);
                 assert!(hi[2] > 0.3 && lo[2] < -0.3, "{}", look.id);
             }
             assert!(baked.near.triangles() <= 160, "{}", look.id);
         }
+    }
+
+    /// Task 120: a cloud's drones circle its point, one model each, the same at the same moment.
+    #[test]
+    fn a_cloud_draws_its_drones_around_its_point() {
+        let flat = |_: f32, _: f32| 0.0;
+        let ground = FlatGround(&flat);
+        let mut operator = view(3, 4.0);
+        operator.cloud = Some(crate::CloudView {
+            drones: 5,
+            face: 0,
+            x: 9.0,
+            y: 10.0,
+        });
+        let views = [view(1, 2.0), operator];
+        let mut out = ProjectileGeometry::default();
+        drone_swarms(&views, 120.0, &ground, &mut out);
+        assert_eq!(out.models.len(), 5);
+        let centre = ground.point(0, 9.0, 10.0, (0.0, 0.0), CLOUD_LIFT);
+        for drone in &out.models {
+            assert_eq!(drone.model, DRONE_MODEL);
+            let off: f32 = (0..3).map(|k| (drone.origin[k] - centre[k]).powi(2)).sum();
+            assert!(off.sqrt() < 1.3, "{:?}", drone.origin);
+        }
+        let mut again = ProjectileGeometry::default();
+        drone_swarms(&views, 120.0, &ground, &mut again);
+        assert_eq!(out.models, again.models);
     }
 }

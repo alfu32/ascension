@@ -217,6 +217,7 @@ fn place(
             flight: 0.0,
             aircraft: false,
             hover: rom_render::Hover::Circle,
+            cloud: None,
             hp_frac: 1.0,
             building,
             footprint: et.map_or((1, 1), |t| (clamp(t.footprint_w), clamp(t.footprint_h))),

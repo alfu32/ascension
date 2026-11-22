@@ -1857,6 +1857,16 @@ pub fn snapshot_on(
             rom_render::Hover::Circle
         };
         view.flight = flight.map_or(0.0, |pct| pct as f32 / 100.0);
+        // A drone operator's cloud (task 120), where it is on this body.
+        view.cloud = world
+            .drone_cloud(entity.id)
+            .filter(|c| c.pos.body == body)
+            .map(|c| rom_render::CloudView {
+                drones: u8::try_from(c.drones).unwrap_or(u8::MAX),
+                face: c.pos.face,
+                x: c.pos.x as f32 / 1000.0,
+                y: c.pos.y as f32 / 1000.0,
+            });
         if let Some(orbit) = orbit {
             view.face = orbit.pos.face;
             view.x = orbit.pos.x as f32 / 1000.0;
@@ -1895,6 +1905,7 @@ pub fn snapshot_on(
                 flight: 0.0,
                 aircraft: false,
                 hover: rom_render::Hover::Circle,
+                cloud: None,
                 hp_frac: 1.0,
                 building: true,
                 footprint: (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h)),
@@ -1945,6 +1956,7 @@ pub fn snapshot_on(
             flight: 0.0,
             aircraft: false,
             hover: rom_render::Hover::Circle,
+            cloud: None,
             // No health bar over what is no longer there.
             hp_frac: 1.0,
             building: true,
@@ -2000,6 +2012,7 @@ pub fn projectile_kind(projectile: rom_rules::Projectile) -> Option<rom_render::
         P::Beam => Kind::Beam,
         P::Plasma => Kind::Plasma,
         P::Railgun => Kind::Railgun,
+        P::Drone => Kind::Drone,
     })
 }
 
@@ -2148,6 +2161,7 @@ fn view_of(
         flight: 0.0,
         aircraft: false,
         hover: rom_render::Hover::Circle,
+        cloud: None,
         hp_frac: (entity.hp as f32 / et.hp.max(1) as f32).clamp(0.0, 1.0),
         building: et.class == EntityClass::Building,
         footprint: (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h)),

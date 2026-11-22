@@ -11107,6 +11107,85 @@
   "seed": 492321
  },
  {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.drone_operator.select",
+  "speed": 0.974,
+  "text": "Drones in the air, standing by.",
+  "voice": "af_kore"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.drone_operator.move",
+  "speed": 0.974,
+  "text": "Drones forward, I follow.",
+  "voice": "af_kore"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.drone_operator.attack",
+  "speed": 0.974,
+  "text": "Drones on the target.",
+  "voice": "af_kore"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.drone_operator.research_done",
+  "speed": 0.974,
+  "text": "New drills learned.",
+  "voice": "af_kore"
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.drone_operator.fire.1",
+  "params": {
+   "age": 7,
+   "pitch": 1.049,
+   "power": 1.0,
+   "reach": 0.533,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "drone_strike"
+  },
+  "recipe": "fire.drone_strike",
+  "seed": 400411
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.drone_operator.fire.2",
+  "params": {
+   "age": 7,
+   "pitch": 1.049,
+   "power": 1.0,
+   "reach": 0.533,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "drone_strike"
+  },
+  "recipe": "fire.drone_strike",
+  "seed": 452429
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.drone_operator.moving",
+  "params": {
+   "age": 7,
+   "figures": 1,
+   "pitch": 1.049,
+   "size": 0.167,
+   "speed": 0.2,
+   "swarm": 1
+  },
+  "recipe": "move.footsteps",
+  "seed": 487458
+ },
+ {
   "fx": "radio",
   "kind": "voice",
   "name": "voice.gunship_helicopter.select",

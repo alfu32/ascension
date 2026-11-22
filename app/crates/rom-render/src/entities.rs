@@ -39,6 +39,20 @@ pub enum Hover {
     Low,
 }
 
+/// The cloud of a drone operator (task 120), as the views draw it: up to its drones swirling
+/// round the cloud's point; the operator's strikes fly from there.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CloudView {
+    /// Drones in the cloud.
+    pub drones: u8,
+    /// Face of the cloud's point.
+    pub face: u8,
+    /// East position of the cloud's point, tiles.
+    pub x: f32,
+    /// South position of the cloud's point, tiles.
+    pub y: f32,
+}
+
 /// One entity as the render thread sees it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct EntityView {
@@ -68,6 +82,8 @@ pub struct EntityView {
     pub aircraft: bool,
     /// How an airborne aircraft holds a point (task 119): jets circle when idle, rotorcraft hover.
     pub hover: Hover,
+    /// A drone operator's cloud (task 120).
+    pub cloud: Option<CloudView>,
     /// Facing in degrees, clockwise from the positive x axis.
     pub facing_deg: f32,
     /// Hit points as a fraction of the maximum, 0 to 1.
@@ -240,7 +256,21 @@ pub fn interpolate(from: &EntityView, to: &EntityView, alpha: f32) -> EntityView
         y: from.y + (to.y - from.y) * alpha,
         facing_deg: lerp_angle(from.facing_deg, to.facing_deg, alpha),
         flight: from.flight + (to.flight - from.flight) * alpha,
+        cloud: blend_cloud(from.cloud, to.cloud, alpha),
         ..*to
+    }
+}
+
+/// A cloud's point moved from `from` towards `to` by `alpha` on one face; the newer one when it
+/// crossed a face edge or appeared.
+fn blend_cloud(from: Option<CloudView>, to: Option<CloudView>, alpha: f32) -> Option<CloudView> {
+    match (from, to) {
+        (Some(a), Some(b)) if a.face == b.face => Some(CloudView {
+            x: a.x + (b.x - a.x) * alpha,
+            y: a.y + (b.y - a.y) * alpha,
+            ..b
+        }),
+        _ => to,
     }
 }
 
@@ -280,6 +310,7 @@ pub fn interpolate_on(globe: &Globe, from: &EntityView, to: &EntityView, alpha: 
         y,
         facing_deg: facing,
         flight: from.flight + (to.flight - from.flight) * alpha,
+        cloud: blend_cloud(from.cloud, to.cloud, alpha),
         ..*to
     }
 }
@@ -1387,6 +1418,7 @@ mod tests {
             flight: 0.0,
             aircraft: false,
             hover: Hover::Circle,
+            cloud: None,
             activity: Default::default(),
         }
     }
@@ -1418,6 +1450,7 @@ mod tests {
             flight,
             aircraft: true,
             hover: Hover::Circle,
+            cloud: None,
             ..view(id, x, 10.0, 0.0)
         };
         let airborne = plane(1, 10.0, 1.0);
@@ -1721,6 +1754,7 @@ mod tests {
             flight: 0.0,
             aircraft: false,
             hover: Hover::Circle,
+            cloud: None,
             altitude,
             model: Some(ModelRef {
                 index: 0,

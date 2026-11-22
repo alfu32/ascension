@@ -102,6 +102,8 @@ pub struct World {
     /// Aircraft on or near the ground (task 123): ticks climbed toward their flight height,
     /// 0 when landed. Airborne aircraft have no entry.
     pub(crate) flight: BTreeMap<EntityId, u64>,
+    /// The clouds of drone operators (task 120), by operator.
+    pub(crate) clouds: BTreeMap<EntityId, crate::drones::Cloud>,
     /// Legs of space trade routes queued this tick in front of their routes; empty between
     /// ticks.
     pub(crate) legs: Vec<Order>,
@@ -113,6 +115,8 @@ pub struct World {
     pub(crate) types: crate::index::TypeIndex,
     /// The largest building footprint in the rules, in tiles across and down.
     pub(crate) max_footprint: (i64, i64),
+    /// The farthest any drone cloud of the rules flies from its operator, milli-tiles.
+    pub(crate) max_leash: i64,
     /// Recent blasts of area weapons, for the views (task 75; not hashed, not saved).
     pub(crate) blasts: Vec<crate::combat::Blast>,
     /// Buildings that fell lately, for the views (task 75; not hashed, not saved).
@@ -294,6 +298,7 @@ impl World {
             .fold((0, 0), |(w, h), et| {
                 (w.max(et.footprint_w.max(0)), h.max(et.footprint_h.max(0)))
             });
+        let max_leash = Self::max_leash_of(&rules);
         let stain_rules = crate::stains::StainRules::of(&rules);
         // Rules with a market need a complete, valid set of market constants (task 107).
         let market_rules = crate::market::MarketRules::of(&rules);
@@ -333,11 +338,13 @@ impl World {
             rallies: BTreeMap::new(),
             governors_paused: BTreeSet::new(),
             flight: BTreeMap::new(),
+            clouds: BTreeMap::new(),
             disbanded: Vec::new(),
             legs: Vec::new(),
             failures: BTreeMap::new(),
             types: crate::index::TypeIndex::default(),
             max_footprint,
+            max_leash,
             blasts: Vec::new(),
             wrecks: Vec::new(),
             strikes: Vec::new(),
@@ -573,6 +580,9 @@ impl World {
         if self.is_building(type_id) {
             self.index_building(id, pos, true);
         }
+        if !site {
+            self.refresh_cloud(id);
+        }
         Ok(id)
     }
 
@@ -629,6 +639,7 @@ impl World {
             self.release_city(id);
         }
         self.refresh_territory(id);
+        self.refresh_cloud(id);
     }
 
     /// Moves an entity between spatial cells of its surface after its position changed.
@@ -683,6 +694,7 @@ impl World {
         self.rallies.remove(&id);
         self.governors_paused.remove(&id);
         self.flight.remove(&id);
+        self.clouds.remove(&id);
         self.space.orbits.remove(&id);
         self.space.landed.remove(&id);
         self.space.arrivals.remove(&id);
@@ -1082,6 +1094,7 @@ impl World {
         self.separate_units(&moved);
         self.depart_ships();
         self.seen.clear();
+        self.fly_clouds();
         self.fire_shots();
         self.land_projectiles();
         self.raise_attack_alerts();

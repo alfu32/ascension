@@ -94,7 +94,22 @@ impl World {
             .values()
             .find(|t| t.key == "civilian")
             .map(|t| t.id);
-        let radius = range.saturating_add(extent).min(u64::from(u32::MAX)) as u32;
+        // A weapon that hits the air meets drone clouds up to their leash from their operators
+        // (task 120).
+        let leash = if !self.clouds.is_empty()
+            && et
+                .weapons
+                .iter()
+                .any(|w| w.targets.iter().any(|t| t.layer == rom_rules::Layer::Air))
+        {
+            self.max_leash.max(0) as u64
+        } else {
+            0
+        };
+        let radius = range
+            .saturating_add(extent)
+            .saturating_add(leash)
+            .min(u64::from(u32::MAX)) as u32;
         let mut candidates = self.entities_in_radius(e.pos, radius);
         if let Some(orbit) = self.orbit(id) {
             candidates.extend(self.entities_in_radius(orbit.pos, radius));
@@ -127,7 +142,7 @@ impl World {
                     || !self.sees_entity(e.owner, t)
                     || (t.owner == PlayerId(0) && self.players[&t.owner].team == 0)
                     || !self.enemies(e.owner, t.owner)
-                    || self.target_distance(self.attack_position(id, target), target) > range
+                    || self.engage_distance(id, self.attack_position(id, target), target) > range
                     || !et
                         .weapons
                         .iter()

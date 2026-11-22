@@ -940,6 +940,8 @@ pub enum Projectile {
     Plasma,
     /// SQL value `railgun`.
     Railgun,
+    /// SQL value `drone`: a kamikaze drone diving from its cloud (task 120).
+    Drone,
 }
 impl crate::load::SqlEnum for Projectile {
     fn parse(value: &str) -> Option<Self> {
@@ -956,6 +958,7 @@ impl crate::load::SqlEnum for Projectile {
             "beam" => Some(Self::Beam),
             "plasma" => Some(Self::Plasma),
             "railgun" => Some(Self::Railgun),
+            "drone" => Some(Self::Drone),
             _ => None,
         }
     }
@@ -1306,6 +1309,9 @@ pub struct EntityType {
     pub colony: Option<Colony>,
     /// Attached `et_market` row: its owner trades resources here (task 107).
     pub market: Option<Market>,
+    /// Attached `et_drone_cloud` row: it flies a cloud of kamikaze drones that carries its
+    /// weapons (task 120).
+    pub drone_cloud: Option<DroneCloud>,
     /// Attached `et_weapon` rows.
     pub weapons: Vec<Weapon>,
     /// Attached `et_sound` rows: its own sounds per event (task 125; presentation only).
@@ -1581,6 +1587,28 @@ pub struct Detector {
     pub radius: i64,
     /// The `enabled` column: the base of the entity stat `detector` (1 detects).
     pub enabled: i64,
+}
+/// One `et_drone_cloud` row (task 120): the unit is the operator of a cloud of kamikaze drones.
+/// Its weapons are the drones' strikes: each shot launches one drone from the cloud, which is
+/// spent; the shot's damage, interval and damage class are the weapon row's.
+#[derive(Debug, Clone)]
+pub struct DroneCloud {
+    /// The `entity_type_id` column.
+    pub entity_type_id: DefId,
+    /// The `capacity` column: the most drones the cloud holds (and holds when trained).
+    pub capacity: i64,
+    /// The `leash` column: the farthest the cloud flies from its operator, milli-tiles.
+    pub leash: i64,
+    /// The `strike_range` column: how near the cloud must be to a target to strike it,
+    /// milli-tiles (to its edge or footprint).
+    pub strike_range: i64,
+    /// The `rebuild_ticks` column: ticks the operator takes to issue a new drone while the
+    /// cloud is below capacity.
+    pub rebuild_ticks: i64,
+    /// The `drone_hp` column: damage that brings down one drone.
+    pub drone_hp: i64,
+    /// The `drone_speed` column: how fast the cloud flies, milli-tiles per second.
+    pub drone_speed: i64,
 }
 /// One `et_market` row: a building where its owner buys and sells lots of the tradeable
 /// resources (task 107).

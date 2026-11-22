@@ -306,7 +306,7 @@ CREATE TABLE et_weapon (               -- "attacks" (0..n per type)
   orbit_only     INTEGER NOT NULL DEFAULT 0 CHECK (orbit_only IN (0,1)), -- surface range below an orbiting attacker
   -- what the views draw in flight (task 95); presentation only, the simulation never reads it
   projectile     TEXT NOT NULL DEFAULT 'none' CHECK (projectile IN ('none','arrow','bolt','stone',
-                   'bullet','shell','rocket','missile','torpedo','beam','plasma','railgun')),
+                   'bullet','shell','rocket','missile','torpedo','beam','plasma','railgun','drone')),
   UNIQUE (entity_type_id, slot)
 ) STRICT;
 
@@ -458,6 +458,24 @@ CREATE TABLE et_detector (             -- jump detector (task 118): tells its ow
 CREATE TABLE et_market (
   entity_type_id INTEGER PRIMARY KEY REFERENCES entity_type(id),
   currency_id    INTEGER NOT NULL REFERENCES resource(id)
+) STRICT;
+
+-- Drone cloud (task 120): the unit is the operator of a cloud of kamikaze drones; the operator's
+-- hit points are the unit's, the cloud is part of its state (drones, where the cloud is). Its
+-- et_weapon rows are the drones' strikes: each shot launches one drone from the cloud at a target
+-- within `strike_range` of the cloud, and the drone is spent; damage, interval (cooldown_ticks),
+-- damage class and target layers are the weapon row's, through the normal damage path. A weapon's
+-- range_max is where the operator stops from its target and may be at most leash + strike_range.
+-- Weapons that hit the air reach the cloud while it holds drones (each hit brings down one drone
+-- per `drone_hp` of its damage) instead of the operator.
+CREATE TABLE et_drone_cloud (
+  entity_type_id INTEGER PRIMARY KEY REFERENCES entity_type(id),
+  capacity       INTEGER NOT NULL CHECK (capacity >= 1),       -- most drones; a new unit has all
+  leash          INTEGER NOT NULL CHECK (leash >= 0),          -- milli-tiles: farthest from the operator
+  strike_range   INTEGER NOT NULL CHECK (strike_range >= 0),   -- milli-tiles: cloud to target's edge
+  rebuild_ticks  INTEGER NOT NULL CHECK (rebuild_ticks >= 1),  -- a new drone while below capacity
+  drone_hp       INTEGER NOT NULL CHECK (drone_hp >= 1),       -- damage that brings down one drone
+  drone_speed    INTEGER NOT NULL CHECK (drone_speed >= 1)     -- milli-tiles per second
 ) STRICT;
 
 -- Automated colony (task 73): a city (et_territory.is_city) that does not count towards
@@ -1448,6 +1466,18 @@ CREATE TABLE entity_flag (
 CREATE TABLE entity_flight (
   entity_id INTEGER PRIMARY KEY,
   climbed   INTEGER NOT NULL CHECK (climbed >= 0)
+) STRICT;
+
+-- The cloud of a drone operator (task 120, format 16): drones left, where the cloud is (on the
+-- operator's body) and the ticks worked toward the next drone while below capacity.
+CREATE TABLE entity_drone_cloud (
+  entity_id INTEGER PRIMARY KEY,
+  drones    INTEGER NOT NULL CHECK (drones >= 0),
+  body      INTEGER NOT NULL,
+  face      INTEGER NOT NULL CHECK (face BETWEEN 0 AND 5),
+  x         INTEGER NOT NULL,              -- milli-tiles
+  y         INTEGER NOT NULL,
+  rebuild   INTEGER NOT NULL CHECK (rebuild >= 0)
 ) STRICT;
 
 -- A struck-down city held by an attacking team (task 67): the team and the tick

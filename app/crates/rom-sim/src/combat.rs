@@ -209,6 +209,12 @@ impl World {
         targets: &'a [WeaponTarget],
         id: EntityId,
     ) -> Option<&'a WeaponTarget> {
+        // A drone operator's cloud screens it from weapons that hit the air (task 120).
+        if self.has_drones(id)
+            && let Some(row) = targets.iter().find(|t| t.layer == Layer::Air)
+        {
+            return Some(row);
+        }
         let layer = self.target_layer(id);
         targets.iter().find(|t| t.layer == layer).or_else(|| {
             self.is_grounded(id)
@@ -252,7 +258,13 @@ impl World {
 
     pub(crate) fn weapon_range(&self, id: EntityId, weapon: &Weapon) -> u64 {
         let bonus = self.effective_stat(id, "range", 0);
-        (weapon.range_max.saturating_add(bonus)).max(0) as u64
+        let range = weapon.range_max.saturating_add(bonus);
+        // A drone operator stops no farther than its cloud reaches (task 120).
+        let range = match self.entity(id).and_then(|e| self.cloud_rules(e.type_id)) {
+            Some(cloud) => range.min(cloud.leash.saturating_add(cloud.strike_range)),
+            None => range,
+        };
+        range.max(0) as u64
     }
 
     pub(crate) fn attack_position(&self, id: EntityId, target: EntityId) -> Pos {
@@ -331,7 +343,7 @@ impl World {
             if !self.weapon_can_target(id, w, target) {
                 return false;
             }
-            let distance = self.target_distance(self.weapon_origin(id, w), target);
+            let distance = self.reach_distance(self.weapon_origin(id, w), w, target);
             distance >= w.range_min.max(0) as u64 && distance <= self.weapon_range(id, w)
         })
     }
@@ -476,7 +488,14 @@ impl World {
         weapons.sort_by_key(|w| (w.slot, w.id));
         let mut walked = false;
         for weapon in weapons {
-            let mut distance = self.target_distance(self.weapon_origin(id, &weapon), target_id);
+            // A weapon that hits the air meets a drone operator's cloud (task 120).
+            let cloud = self
+                .screens(&weapon, target_id)
+                .then(|| self.drone_cloud(target_id).map(|c| c.pos))
+                .flatten();
+            let target_pos = cloud.unwrap_or(target_pos);
+            let mut distance =
+                self.reach_distance(self.weapon_origin(id, &weapon), &weapon, target_id);
             if distance < weapon.range_min.max(0) as u64 {
                 continue;
             }
@@ -484,7 +503,7 @@ impl World {
             if let Some(point) = chase.filter(|_| distance > range && !walked) {
                 self.orbit_move(id, point);
                 walked = true;
-                distance = self.target_distance(self.weapon_origin(id, &weapon), target_id);
+                distance = self.reach_distance(self.weapon_origin(id, &weapon), &weapon, target_id);
             }
             if distance > range {
                 if !move_allowed || walked {
@@ -492,7 +511,8 @@ impl World {
                 }
                 let target = self.entity(target_id).expect("target");
                 let et = &self.rules.entity_types[&target.type_id];
-                let bounds = (et.class == EntityClass::Building).then(|| footprint(et, target_pos));
+                let bounds = (et.class == EntityClass::Building && cloud.is_none())
+                    .then(|| footprint(et, target_pos));
                 let goal = if let Some(b) = bounds {
                     let p = self.entity(id).expect("attacker").pos;
                     self.geo(target_pos.body)
@@ -514,7 +534,8 @@ impl World {
                 let exempt = bounds.map(|b| TileRect::covering(target_pos.face, b));
                 self.walk(id, order, goal, exempt, false);
                 walked = true;
-                distance = self.target_distance(self.entity(id).expect("attacker").pos, target_id);
+                distance =
+                    self.reach_distance(self.entity(id).expect("attacker").pos, &weapon, target_id);
                 if distance > range {
                     return;
                 }
@@ -522,6 +543,20 @@ impl World {
             if distance < weapon.range_min.max(0) as u64 {
                 continue;
             }
+            // A drone operator's strike flies from its cloud, once the cloud holds a drone and is
+            // close enough to the target (task 120); until then the operator holds its ground.
+            let strike = if self.cloud_rules(type_id).is_some() {
+                match self.cloud_strike(id, target_id) {
+                    Some(strike) => Some(strike),
+                    None => {
+                        order.movement = None;
+                        return;
+                    }
+                }
+            } else {
+                None
+            };
+            let distance = strike.map_or(distance, |(_, d)| d);
             let attacker = self.entity(id).expect("attacker");
             if attacker
                 .cooldowns
@@ -541,7 +576,10 @@ impl World {
                 * i128::from(hit_pct)
                 / 100)
                 .clamp(5, 100) as u32;
-            let origin = self.weapon_origin(id, &weapon);
+            let origin = strike.map_or_else(|| self.weapon_origin(id, &weapon), |(at, _)| at);
+            if strike.is_some() {
+                self.spend_drone(id);
+            }
             if weapon.orbit_only {
                 self.space
                     .orbits
@@ -649,6 +687,16 @@ impl World {
         if self.layer_row(&weapon.targets, hit.target).is_none() {
             return;
         }
+        // A weapon that hits the air brings down drones of an operator's cloud (task 120).
+        if self.screens(&weapon, hit.target) {
+            let damage = hit.damage.saturating_mul(weapon.shots.max(0));
+            self.down_drones(hit.target, damage);
+            self.note_attacked(hit.target, hit.owner);
+            if self.entity(hit.attacker).is_some() {
+                self.retaliate(hit.target, hit.attacker);
+            }
+            return;
+        }
         let damage = self.hit_damage(hit, &weapon, hit.target);
         self.damage_entity(hit.target, damage, hit);
         if weapon.splash_radius > 0 {
@@ -692,6 +740,7 @@ impl World {
                 || (t.owner == PlayerId(0) && self.players[&t.owner].team == 0)
                 || !self.enemies(hit.owner, t.owner)
                 || self.orbit(target).is_some()
+                || self.screens(weapon, target)
                 || self.layer_row(&weapon.targets, target).is_none()
             {
                 continue;

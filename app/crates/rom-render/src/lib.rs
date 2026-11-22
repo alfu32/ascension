@@ -59,8 +59,9 @@ pub use camera::{
 };
 pub use ear::{EAR_GRID, Ear};
 pub use entities::{
-    EntitySnapshot, EntityView, FlatGround, Footing, GroundFrame, Hover, ModelRef, OWNER_COLORS,
-    SnapshotPair, Surface, build_instances, build_instances_on, interpolate_on, owner_color,
+    CloudView, EntitySnapshot, EntityView, FlatGround, Footing, GroundFrame, Hover, ModelRef,
+    OWNER_COLORS, SnapshotPair, Surface, build_instances, build_instances_on, interpolate_on,
+    owner_color,
 };
 pub use globe::{ChunkSpec, Globe, PlanetScene, SurfaceHit, planet_radius, to_render};
 pub use gpu_census::GpuCensus;
