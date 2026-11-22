@@ -186,6 +186,7 @@ hit-point percentage. The first step of each line needs only its age and buildin
 | Warships | Dock | Triremes (1), War Galleys (2), Carracks (3), Frigates (4), Ironclads (5), Destroyers (6), Missile Cruisers (7), Drone Cruisers (8), Hover Frigates (9) |
 | Fighters | Airfield | Biplanes (5), Fighters (6), Jet Fighters (7), Drone Fighters (8), Interceptors (9) |
 | Bombers | Airfield | Bombers (6), Strategic Bombers (7), Drone Bombers (8) |
+| Rotorcraft | Airfield | Attack Helicopters (6), Gunship Helicopters (7), Hover Gunships (8) |
 | Starships | Spaceport | Survey Ship (10), Corvettes (10), Space Frigates (11), Space Cruisers (12), Battleships (13) |
 | Transport | Spaceport | Transport Ships (10): unarmed, carries 20 population; every other starship carries 1 (10) or 2 (11+) |
 | Orbital craft | Airfield | Orbital Fighters (10), Orbital Bombers (10): climb from the air to their planet's orbit by themselves and come back down; leave the planet only aboard a carrier |

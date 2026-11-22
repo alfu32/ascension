@@ -1584,6 +1584,15 @@ schema change, both lint views stay empty and the seed loads.
   load, with every aircraft in the air. The rules fingerprint changes, so earlier saves are
   refused as with any rules change.
 
+## Rotorcraft (task 119)
+
+Generated in `db/content/generate.py` (line `rotorcraft`, members marked `late` so earlier ids
+stay; `rotorcraft_hover()` adds the tags after every other definition). Units `unit.attack_helicopter`
+(modern), `unit.gunship_helicopter` (information), `unit.hover_gunship` (automation), `ui_group`
+`rotorcraft`, trained at the airfield, `aircraft` movement class with `takeoff_ticks` 30/36/24 and
+`landing_radius` 1600/2000/900 (the drawn models). Tags: `hover` (movement; all three), `low_flight`
+(movement) and `drone` on the hover gunship. No schema change.
+
 ## Bringing life (task 77)
 
 The rules, the state and the views are described in `docs/bringing-life.md`. Schema and seed
