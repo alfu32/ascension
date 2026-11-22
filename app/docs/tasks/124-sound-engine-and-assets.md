@@ -76,6 +76,63 @@ Apache-2.0, run once at authoring time; `ogg/`: the 56 results; `demo.ogg`).
   that the device opened and the stream ran).
 - Report: the list of files with sizes, the dependency chosen, what could not be verified.
 
+## Owner, 2026-11-21 (2)
+
+"each unit should have a sound for: selected, order move acknowledged, order attack acknowledged,
+order build acknowledged, order build finished, research finished in the libraries, units firing
+projectiles", and "firing and fighting sounds (for melee units/non ranged)". The owner listens to
+and validates the sounds per unit on the model review page.
+
+- Events for every unit type in the rules (all ages): `select`, `move`, `attack` (armed units),
+  `build` and `build_done` (units that construct), `research_done` (one cue, may vary by age),
+  `fire` (units with a ranged weapon; one sound per weapon/projectile kind, derived from the seed's
+  weapons, projectiles and damage classes, not from unit names) and `fight` (units with a melee
+  weapon: sword clash, spear thrust, club/axe blow, cavalry charge with blade, bayonet, energy
+  blade, power fist; chosen by weapon and damage data). A unit with both kinds may have both.
+  Voices may be shared between units of a kind (infantry, cavalry, vehicle crews, pilots, ship
+  crews, workers, future troopers), but every unit ends up with a full set.
+- `app/tools/sounds/assignment.json`, written by `app/tools/sounds/assign.py` from the rules
+  database (the sqlite load in `AGENTS.md`) by class, movement class, tags, weapon and damage
+  class, with per-key overrides only where the data cannot tell. Every sound key in it exists in
+  `app/assets/sounds/`. Task 125 turns it into seed rows; this task does not touch schema or seed.
+- Commit the first full set and assignment early so the review page can use them, then finish
+  the engine.
+
+## Owner, 2026-11-21 (3)
+
+"i imagined that the sound review will show all the sounds paired with the unit or building they
+belong to … it personalizes/gives more character/more individuality to each unit type". This
+replaces shared sets with individual sounds per type:
+
+- Every unit type has its own voice lines, in words that fit it and a voice chosen for it
+  (Kokoro's English voices, varied speed; machines, robots and drones processed, e.g. a radio
+  band-pass or a synthetic layer), and its own effects (firing, fighting, moving) made from the
+  synth recipes with parameters derived from the unit's data and a seed from its key. Shared
+  recipes are fine; shared files only for global cues (`ui.`, `ambient.`).
+- Every building type has its own `select`, `active` (a working loop, 6–10 s) and `build_done`,
+  and, where its data says so, `train_done` (it trains units) and `research_done` (it researches).
+- `assignment.json` covers units and buildings: `{ "<key>": { "<event>": … } }`; every type in the
+  rules is present with every event that applies to it.
+- Names: `voice.<type key without prefix>.<event>`, `unit.<…>.<event>[.<n>]`,
+  `bld.<…>.<event>[.<n>]`; global cues under `ui.`, ambience under `ambient.`.
+- Voices mono 22.05 kHz, Ogg quality 2–3; effects 44.1 kHz mono, quality 3. Budget for
+  `app/assets/sounds/` now 45 MB.
+
+## Owner, 2026-11-21 (4)
+
+- "each building should also have an acknowledgment sound on select": a short line from the
+  building's staff in a fitting voice (drill sergeant, scholar, farmer, foreman, a controller
+  over the radio), over a short characteristic sound of the place. Every building its own.
+- "make the temple sound religious (catholic), priests acknowledge in latin": the temple's
+  `select` is a priest's Latin acknowledgment ("Pax vobiscum.", "Dominus vobiscum.") with church
+  reverberation over a bell or a sung chord; its `active` a quiet chant hum (a synthesised vowel
+  drone, no melody from any recording) with a distant bell now and then; its `build_done` a peal
+  of bells. The priest units speak Latin for every line. Kokoro's Italian pipeline.
+- "the university and the scientist should also emit in latin": the university line's spoken
+  cues and its scholars' lines in scholarly Latin, another Italian voice, a library's drier room;
+  its `active` quiet study sounds (pages, a pen, a distant clock), no chant.
+- `app/docs/sound.md` notes the Latin as the owner's choice.
+
 Read first: `AGENTS.md`, `CLAUDE.md`, `app/docs/implementation-plan.md` (16.2),
 `research/04-hud-and-screens.md` (Sound settings), the sample scripts above,
 `.github/workflows/release.yaml`.

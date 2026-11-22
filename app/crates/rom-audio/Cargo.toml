@@ -1,0 +1,12 @@
+[package]
+name = "rom-audio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Sound playback and mixing on its own audio thread; the generated sounds are embedded."
+
+[dependencies]
+cpal.workspace = true
+lewton.workspace = true
+thiserror.workspace = true
