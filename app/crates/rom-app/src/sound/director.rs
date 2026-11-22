@@ -62,7 +62,6 @@ const ALERT_GAIN: f32 = 0.55;
 const ERROR_GAIN: f32 = 0.5;
 const WEAPON_GAIN: f32 = 0.5;
 const MOVING_GAIN: f32 = 0.35;
-const ACTIVE_GAIN: f32 = 0.35;
 const HAMMER_GAIN: f32 = 0.3;
 const AMBIENT_GAIN: f32 = 0.9;
 
@@ -592,8 +591,8 @@ impl Director {
         }
     }
 
-    /// Moving units, buildings at work and construction sites in view: the loops they ask for,
-    /// and the hammering of the sites.
+    /// Moving units and construction sites in view: the loops units ask for, and the hammering
+    /// of the sites. Buildings ask for no loop.
     #[allow(clippy::too_many_arguments)]
     fn work(
         &mut self,
@@ -605,8 +604,6 @@ impl Director {
         hearing: &Hearing,
         now: Instant,
     ) -> Vec<Want> {
-        let rules = world.rules();
-        let busy: BTreeSet<EntityId> = world.entities().filter_map(|e| e.work_site).collect();
         let mut wants: BTreeMap<(DefId, SoundEvent), Want> = BTreeMap::new();
         let mut hammering: Vec<(f32, f32)> = Vec::new();
         let mut sites = BTreeMap::new();
@@ -638,28 +635,8 @@ impl Director {
                     sites.insert(view.id, (progress, hammered));
                     continue;
                 }
-                let Some(entity) = world.entity(EntityId(view.id)) else {
-                    continue;
-                };
-                let Some(et) = rules.entity_type(entity.type_id) else {
-                    continue;
-                };
-                let producing = entity.orders().front().is_some_and(|o| {
-                    o.status == rom_sim::OrderStatus::Active
-                        && rules
-                            .order_kinds
-                            .get(&o.kind)
-                            .is_some_and(|k| k.needs == "producer")
-                });
-                let gathering = et
-                    .gather_site
-                    .as_ref()
-                    .is_some_and(|g| g.self_income > 0 || busy.contains(&entity.id));
-                let lived_in = et.territory.as_ref().is_some_and(|t| t.is_city);
-                if !(producing || gathering || lived_in) || entity.neutralised {
-                    continue;
-                }
-                SoundEvent::Active
+                // Buildings at work are silent (owner, issue #6): no work loop.
+                continue;
             } else if view.activity == Activity::Move {
                 SoundEvent::Moving
             } else {
@@ -699,12 +676,7 @@ impl Director {
             .into_values()
             .map(|mut w| {
                 // Many of a kind are a little louder than one, never much.
-                let base = if w.key.1 == SoundEvent::Moving {
-                    MOVING_GAIN
-                } else {
-                    ACTIVE_GAIN
-                };
-                w.gain *= base * (1.0 + 0.12 * (w.count as f32).ln()).min(1.4);
+                w.gain *= MOVING_GAIN * (1.0 + 0.12 * (w.count as f32).ln()).min(1.4);
                 w
             })
             .collect();

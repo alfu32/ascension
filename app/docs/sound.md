@@ -42,7 +42,7 @@ mixer counts variations of one sound together for its limits.
 | Event | Who has it | Sound |
 | --- | --- | --- |
 | `select` | every building | its staff's acknowledgment over a second of the building at work (the drill sergeant, the farmer, the foreman, the tower over the radio); the temple has 2 and the university line 3 variations |
-| `active` | every building | its work loop, 8 s |
+| `active` | every building | its work loop, 8 s; not played in the game (issue #6), kept for the review page |
 | `build_done` | every building | construction finished: tools of its age, then a short motif |
 | `train_done` | buildings that train units | a motif (horn, radio beep and chime, or synthesiser by age) |
 | `research_done` | buildings that research | a motif (bells, vibraphone or glass by age); spoken Latin at the university line |
@@ -209,9 +209,9 @@ camera, panned by screen position; a zoomed-out view hears a tenth at most):
   weapon slot) or `fight` blow plays. A pass starts at most six, at most two of one sound, the
   loudest first, and one sound restarts at most every 90 ms: a battle of 200 is its nearest few
   shots of each kind, under the voices (ducking).
-- Loops (eight slots; the ambience has the other eight): moving units of a type share their
-  type's `moving` loop; buildings at work (producing, a gather site with workers or its own
-  income, a city) their `active` loop. Each loop sits at its loudest member's level and pan, a
+- Loops (eight slots; the ambience has the other eight): only moving units have loops: units of
+  a type share their type's `moving` loop. Buildings at work are silent by the owner's choice
+  (issue #6, 2026-11-22); their `active` files stay for the model review page. Each loop sits at its loudest member's level and pan, a
   little louder for many (at most 1.4×); the eight loudest play; they fade out when the world
   stands still.
 - Construction sites hammer (`act.hammer_wood`) while their work goes on, the nearest two.
@@ -223,7 +223,7 @@ over it), fading out as the camera rises from 0.4 to 1.6 planet radii; the space
 over the same span and plays alone in the system and star-map views.
 
 **The mix** ("not too violent"): voices at 0.85 of their file level, the person's cues 0.55,
-alerts 0.55, the announcer 0.75, shots and blows 0.5, moving loops 0.35, buildings at work 0.35,
+alerts 0.55, the announcer 0.75, shots and blows 0.5, moving loops 0.35,
 hammering 0.3, ambience 0.9 × each bed's `gain_pct`; on top, the engine's groups (master 0.8,
 effects 0.8, voice 1.0, ambience 0.6) times the Sound settings, the ducking and the limiter.
 
