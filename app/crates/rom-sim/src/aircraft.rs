@@ -19,8 +19,9 @@ use rom_rules::{DefId, EntityClass, Layer, ProductionMode};
 
 /// How far from the point asked for the search for a landing spot reaches, in milli-tiles.
 const LANDING_SEARCH: i64 = 12_000;
-/// How far apart landed aircraft stand at least, milli-tiles (wing tip to wing tip).
-pub const LANDING_SPACING: i64 = 2_000;
+/// Room a parked aircraft keeps beyond its reach, to other aircraft and to buildings,
+/// milli-tiles.
+pub const LANDING_MARGIN: i64 = 500;
 
 impl World {
     /// Ticks an aircraft of this type takes to take off or land; `None` for a type that never
@@ -89,13 +90,27 @@ impl World {
                 .any(|p| p.mode == ProductionMode::Train && self.is_aircraft_type(p.product_def_id))
     }
 
-    /// Where an aircraft may land nearest `near` (a tile centre), within twelve tiles: ground
-    /// (no water, no mountain tagged `no_landing`) with no building on it or on the tiles round
-    /// it (so its wings stay clear of every building, an airfield's hangar and tower too: at an
-    /// airfield it parks beside it), at least [`LANDING_SPACING`] from every other aircraft that
-    /// stands, takes off or lands there or has chosen its spot. `aircraft` is the one asking,
-    /// whose own place does not count against it. Ties go to the lower tile.
-    pub fn landing_spot(&self, aircraft: Option<EntityId>, near: Pos) -> Option<Pos> {
+    /// How far an aircraft of this type reaches around its centre on the ground, milli-tiles:
+    /// its `et_movement.landing_radius` (half its drawn model's span or length; 500, half a
+    /// tile, for a type without one).
+    pub fn aircraft_reach(&self, type_id: DefId) -> i64 {
+        self.rules
+            .entity_type(type_id)
+            .and_then(|et| et.movement.as_ref())
+            .and_then(|m| m.landing_radius)
+            .unwrap_or(500)
+            .max(0)
+    }
+
+    /// Where an aircraft of type `kind` may land nearest `near` (a tile centre), within twelve
+    /// tiles: ground (no water, no mountain tagged `no_landing`) with no building within its
+    /// [`World::aircraft_reach`] and [`LANDING_MARGIN`] (and half a tile, as buildings hold whole
+    /// tiles), so its wings stay clear of every building, an airfield's hangar and tower too (at
+    /// an airfield it parks beside it); and as far from every other aircraft that stands, takes
+    /// off or lands there or has chosen its spot as both their reaches and the margin.
+    /// `aircraft` is the one asking, whose own place does not count against it. Ties go to the
+    /// lower tile.
+    pub fn landing_spot(&self, aircraft: Option<EntityId>, kind: DefId, near: Pos) -> Option<Pos> {
         let surface = self.surface(near.body)?;
         let geo = &surface.geo;
         geo.pos_index(near)?;
@@ -105,14 +120,16 @@ impl World {
             .values()
             .find(|t| t.key == "no_landing")
             .map(|t| t.id);
-        // Where other aircraft stand or are about to land.
+        let reach = self.aircraft_reach(kind);
+        // Where other aircraft stand or are about to land, and how far they reach.
         let mut taken = Vec::new();
         for e in self.entities() {
             if Some(e.id) == aircraft || e.pos.body != near.body || e.container_id.is_some() {
                 continue;
             }
+            let apart = reach + self.aircraft_reach(e.type_id) + LANDING_MARGIN;
             if self.flight.contains_key(&e.id) {
-                taken.push(e.pos);
+                taken.push((e.pos, apart));
             }
             if let Some(spot) = e
                 .orders
@@ -120,17 +137,13 @@ impl World {
                 .filter(|o| o.kind == "land" && self.is_aircraft_type(e.type_id))
                 .and_then(|o| o.home)
             {
-                taken.push(spot);
+                taken.push((spot, apart));
             }
         }
         let clear = |at: Pos| {
-            (-1..=1).all(|dy| {
-                (-1..=1).all(|dx| {
-                    let (next, _) = geo.offset(at, dx * 1000, dy * 1000);
-                    geo.pos_index(next)
-                        .is_none_or(|i| surface.pathing.occupancy[i] == 0)
-                })
-            })
+            geo.disc(at, reach + LANDING_MARGIN + 500)
+                .flatten()
+                .all(|i| surface.pathing.occupancy[i] == 0)
         };
         let mut candidates: Vec<(u128, usize)> = geo
             .disc(near, LANDING_SEARCH)
@@ -145,7 +158,7 @@ impl World {
                 && !rough.is_some_and(|tag| self.rules.has_tag(terrain_id, tag))
                 && taken
                     .iter()
-                    .all(|t| !geo.within(*t, centre, LANDING_SPACING - 1))
+                    .all(|(t, apart)| !geo.within(*t, centre, apart - 1))
                 && clear(centre);
             open.then_some(centre)
         })
@@ -161,7 +174,7 @@ impl World {
         match command.kind.as_str() {
             "land" => {
                 let at = command.target_pos.ok_or(SimError::WrongTargetShape)?;
-                if at.body != e.pos.body || self.landing_spot(Some(e.id), at).is_none() {
+                if at.body != e.pos.body || self.landing_spot(Some(e.id), e.type_id, at).is_none() {
                     return Err(SimError::CannotLand);
                 }
             }
@@ -229,8 +242,8 @@ impl World {
     /// the ground elsewhere it takes off first; over its spot it settles there.
     pub(crate) fn advance_air_landing(&mut self, id: EntityId, order: &mut Order) {
         let e = self.entity(id).expect("aircraft");
-        let pos = e.pos;
-        let Some(ticks) = self.takeoff_ticks(e.type_id) else {
+        let (pos, kind) = (e.pos, e.type_id);
+        let Some(ticks) = self.takeoff_ticks(kind) else {
             order.status = OrderStatus::Failed("unsupported".into());
             return;
         };
@@ -267,7 +280,7 @@ impl World {
             return;
         }
         let Some(spot) = order.home else {
-            let Some(spot) = self.landing_spot(Some(id), target) else {
+            let Some(spot) = self.landing_spot(Some(id), kind, target) else {
                 order.status = OrderStatus::Failed("no_landing".into());
                 return;
             };
@@ -281,7 +294,7 @@ impl World {
             return;
         }
         // Another aircraft took the spot meanwhile: it picks the next one near it.
-        if self.landing_spot(Some(id), spot) != Some(spot) {
+        if self.landing_spot(Some(id), kind, spot) != Some(spot) {
             order.home = None;
             order.target_pos = Some(spot);
             order.movement = None;
@@ -367,7 +380,7 @@ impl World {
         let producer = self.entity(producer)?;
         (self.is_aircraft_type(subject)
             && self.rules.entity_types[&producer.type_id].class == EntityClass::Building)
-            .then(|| self.landing_spot(None, near))
+            .then(|| self.landing_spot(None, subject, near))
             .flatten()
     }
 }

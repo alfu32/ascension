@@ -1240,6 +1240,13 @@ TAKEOFF_TICKS = {
 }
 # Ground an aircraft rolls along its heading while it takes off, and glides over while it lands.
 TAKEOFF_RUN = 3000
+# Half the larger horizontal extent (span or length) of each aircraft's drawn model, milli-tiles,
+# to the nearest hundred (`et_movement.landing_radius`): a parked aircraft keeps this clear of
+# buildings and of other aircraft. Measured from the composed models in db/models.
+AIRCRAFT_REACH = {
+    'biplane': 1400, 'fighter': 1400, 'jet_fighter': 1600, 'drone_fighter': 1200,
+    'interceptor': 2100, 'bomber': 2000, 'strategic_bomber': 2200, 'drone_bomber': 1900,
+}
 
 
 def aircraft_take_off(row, emit):
@@ -1248,7 +1255,8 @@ def aircraft_take_off(row, emit):
     row('game_constant', key='air.takeoff_run', value=TAKEOFF_RUN, unit='milli-tiles',
         note='ground an aircraft rolls along its heading while taking off, and glides over while landing')
     for key, ticks in TAKEOFF_TICKS.items():
-        emit(f"UPDATE et_movement SET takeoff_ticks={ticks} WHERE entity_type_id={val(Ref('unit.' + key))};")
+        emit(f"UPDATE et_movement SET takeoff_ticks={ticks},landing_radius={AIRCRAFT_REACH[key]} "
+             f"WHERE entity_type_id={val(Ref('unit.' + key))};")
 
 
 # Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"

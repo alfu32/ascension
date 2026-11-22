@@ -52,7 +52,7 @@ mod vision;
 mod wealth;
 mod world;
 
-pub use aircraft::LANDING_SPACING;
+pub use aircraft::LANDING_MARGIN;
 pub use alerts::{Alert, AlertKind};
 pub use ascension::AscensionProject;
 pub use capture::CaptureCountdown;

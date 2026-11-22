@@ -590,10 +590,10 @@ of action, like the orbital craft have the air and the orbit: the **ground** and
 above their planet. They never reach orbit by themselves; that stays the orbital craft's.
 
 - **In the air** (as before task 123 in the simulation): they fly over everything and only
-  weapons that hit the air reach them. They are drawn at a flight height of about four tiles
-  over the ground under them, above the tallest building in view, bigger aircraft a little
-  higher (half a tile per tile of length), well under an orbit (eight tiles and more), with
-  their shadows on the ground below. Idle in the air they stay up and are drawn circling their
+  weapons that hit the air reach them. They are drawn at a flight height of seven tiles over
+  the ground under them (their underside), about where the orbital craft hold over a planet and
+  well above the rooftops, bigger aircraft a little higher (half a tile per tile of length),
+  rising further over a building taller than that, with their shadows on the ground. Idle in the air they stay up and are drawn circling their
   spot (presentation only).
 - **On the ground**: a landed aircraft stands on its tile, drawn on the ground. It cannot fire;
   ground weapons reach it, and anti-air still does. When an enemy it can hit comes into sight
@@ -603,7 +603,8 @@ above their planet. They never reach orbit by themselves; that stays the orbital
   faster, while it climbs; landing it glides the last three tiles onto its spot, slowing as it
   comes down. Meanwhile it is hit as if landed and cannot fire.
 - **Orders.** **Land** (Order tab, hotkey S) arms a pick: click open ground and the selected
-  aircraft each land on a free tile near it, two tiles apart and a tile clear of any building;
+  aircraft each land on a free tile near it, their wings clear of each other and of every
+  building (the reach of the drawn model and half a tile);
   click an own airfield and they park on the ground beside it (its footprint holds the hangar
   and the tower); press Land again to land them where they are. Right-clicking an own airfield
   sends them to park beside it too. **Take off** (hotkey A)
@@ -615,11 +616,15 @@ above their planet. They never reach orbit by themselves; that stays the orbital
   take off with their ordinary orders (rally, guard, attack) or scramble at an enemy.
 - **Drawing.** The aircraft models are built flying (their fuselage stands well above the
   model's origin); the view lowers each by the height of its underside (`ModelRef::floor`), so
-  a landed aircraft rests on the ground and an airborne one flies at its flight height. Its
-  shadow falls on the ground a few tiles away along the light, faint under a high sun.
-  Pictures (`tasks/123-aircraft-script.txt`): `img/123-jets-airborne.png` (three jets of each
-  player fighting south of a city, more aircraft on their way to the airfield) and
-  `img/123-jets-landed.png` (two jets and two strategic bombers parked beside the airfield).
+  a landed aircraft rests on the ground and an airborne one flies at its flight height. Airborne
+  aircraft are in the shadow pass like every model; seven tiles up their shadows fall well away
+  from them along the light (about six tiles under a high sun, ten under `--sun low`, a fixed
+  light some forty degrees up from the east), thin and soft on the grass at the shadow map's
+  resolution. Pictures (`tasks/123-aircraft-script.txt`, `--sun low`):
+  `img/123-jets-airborne.png` (three jets of each player fighting above the rooftops at the
+  south of a city, their shadows on the grass to the lower left, four more aircraft on their way
+  to the airfield) and `img/123-jets-landed.png` (two jets and two strategic bombers parked
+  beside the airfield, wings clear of the hangar and tower).
 
 ### Orbital craft, carriers and ground batteries (task 58)
 

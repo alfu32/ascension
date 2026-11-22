@@ -1078,9 +1078,10 @@ fn spread_aloft(
 /// slender: about two fifths as wide as long).
 const SPREAD_SPACING: f32 = 0.45;
 
-/// Height above the ground at which aircraft fly over a planet, in tiles (task 123), well under
-/// an orbit ([`ORBIT_ALTITUDE`]); they rise over buildings taller than that.
-pub const FLIGHT_ALTITUDE: f32 = 4.0;
+/// Height above the ground at which aircraft fly over a planet, in tiles (task 123): about the
+/// height of the orbital craft over a planet ([`ORBIT_ALTITUDE`]), well above the rooftops; they
+/// rise over buildings taller than that.
+pub const FLIGHT_ALTITUDE: f32 = 7.0;
 /// How much higher an aircraft flies per tile of its drawn length: bigger aircraft higher.
 pub const FLIGHT_PER_TILE: f32 = 0.5;
 /// How far above a building the aircraft keep, tiles.

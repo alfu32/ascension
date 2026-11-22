@@ -273,7 +273,9 @@ CREATE TABLE et_movement (             -- "moves"
   landing_radius    INTEGER CHECK (landing_radius >= 0),
                                        -- task 72: milli-tiles; a landed ship covers the tiles whose
                                        -- centres lie within this radius of the tile it stands on
-                                       -- (stat `landing_radius`); NULL = that tile only
+                                       -- (stat `landing_radius`); NULL = that tile only.
+                                       -- An aircraft (task 123) keeps this radius, its drawn
+                                       -- model's reach, clear of buildings and other aircraft
   takeoff_ticks     INTEGER NOT NULL DEFAULT 0 CHECK (takeoff_ticks >= 0 AND (takeoff_ticks = 0 OR climb_ticks = 0))
                                        -- aircraft (task 123): ticks to take off from the ground into
                                        -- the air above its planet, and to land; 0 = never lands

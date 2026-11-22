@@ -369,17 +369,21 @@ fn aircraft_land_on_open_ground_or_an_own_airfield() {
             w.entity(bombers[0]).unwrap().pos,
             w.entity(bombers[1]).unwrap().pos,
         );
-        // Spaced at least two tiles apart, wing tip to wing tip.
-        assert!(w.distance(a, b).unwrap() >= rom_sim::LANDING_SPACING as u64);
+        // Wing tip to wing tip apart: both reaches and the margin.
+        let reach = w.aircraft_reach(id(&w, "unit.bomber"));
+        assert!(reach >= 1_500, "{reach}");
+        let apart = (2 * reach + rom_sim::LANDING_MARGIN) as u64;
+        assert!(w.distance(a, b).unwrap() >= apart);
         for p in [a, b] {
             assert!(ground_tile(&w, p));
-            assert!(w.distance(p, point).unwrap() <= 3_000, "{p:?}");
+            assert!(w.distance(p, point).unwrap() <= apart + 1_500, "{p:?}");
         }
-        // At the airfield it parks beside it, clear of its footprint (hangar and tower).
+        // At the airfield it parks beside it, its wings clear of the footprint (hangar, tower).
         let on_field = w.entity(bombers[2]).unwrap().pos;
         let dx = (on_field.x - field_pos.x).abs();
         let dy = (on_field.y - field_pos.y).abs();
-        assert!(dx.max(dy) > 3_000 && dx.max(dy) <= 6_000, "{on_field:?}");
+        assert!(i64::from(dx.max(dy)) >= 3_000 + reach, "{on_field:?}");
+        assert!(dx.max(dy) <= 9_000, "{on_field:?}");
         (landed, w.hash())
     };
     let first = play();

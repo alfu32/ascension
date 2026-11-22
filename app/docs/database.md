@@ -1541,9 +1541,15 @@ schema change, both lint views stay empty and the seed loads.
   `attack_move`, `patrol`, `guard`, `explore`, `enter`, …) takes off first.
 - **Landing spot** (`World::landing_spot`): the tile nearest the point, within twelve tiles,
   whose terrain is on the `ground` layer and not tagged `no_landing` (no water, no mountain),
-  with no building on it or on the eight tiles round it (the wings stay clear of every
-  building), and at least `LANDING_SPACING` (two tiles) from every other aircraft that stands,
-  takes off or lands there or whose `land` has chosen its spot; chosen in id order. An airfield
+  with no building tile within the aircraft's reach plus `LANDING_MARGIN` (half a tile) and
+  half a tile more (buildings hold whole tiles), so the wings stay clear of every building; and
+  as far from every other aircraft that stands, takes off or lands there or whose `land` has
+  chosen its spot as both their reaches and the margin; chosen in id order. The **reach** is
+  `et_movement.landing_radius` (existing column; for an aircraft: half the larger horizontal
+  extent of its drawn model, to the nearest hundred milli-tiles, from `AIRCRAFT_REACH` in the
+  generator: biplane and fighter 1 400, jet fighter 1 600, drone fighter 1 200, interceptor
+  2 100, bomber 2 000, strategic bomber 2 200, drone bomber 1 900). `rom-app`'s test that a
+  landing radius is the drawn model's half extent covers them. An airfield
   (a building that trains a type with `takeoff_ticks > 0`, from `production`; no key is read)
   is landed at by picking it: the aircraft park on the free ground beside it. Its own tiles hold
   its hangar and tower, which a landed model would cut through.
