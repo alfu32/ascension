@@ -1754,6 +1754,10 @@ pub fn snapshot_on(
         models.resolve(kind, *faction, *age)
     };
     let mut sources: BTreeMap<PlayerId, ActiveSources> = BTreeMap::new();
+    // Rotorcraft hold a point instead of circling it (tag `hover`), the low flyer lower still
+    // (tag `low_flight`; task 119).
+    let tag_id = |key: &str| rules.tags.values().find(|t| t.key == key).map(|t| t.id);
+    let (hover_tag, low_tag) = (tag_id("hover"), tag_id("low_flight"));
     let clamp_u8 = |value: i64| u8::try_from(value.clamp(0, 255)).unwrap_or(u8::MAX);
     let mut held = BTreeMap::<rom_sim::EntityId, u8>::new();
     for entity in world.entities() {
@@ -1845,6 +1849,13 @@ pub fn snapshot_on(
         // An aircraft is drawn at its share of its flight height (task 123).
         let flight = world.flight_pct(entity.id);
         view.aircraft = flight.is_some();
+        view.hover = if low_tag.is_some_and(|t| rules.has_tag(entity.type_id, t)) {
+            rom_render::Hover::Low
+        } else if hover_tag.is_some_and(|t| rules.has_tag(entity.type_id, t)) {
+            rom_render::Hover::Hold
+        } else {
+            rom_render::Hover::Circle
+        };
         view.flight = flight.map_or(0.0, |pct| pct as f32 / 100.0);
         if let Some(orbit) = orbit {
             view.face = orbit.pos.face;
@@ -1883,6 +1894,7 @@ pub fn snapshot_on(
                 spacecraft: false,
                 flight: 0.0,
                 aircraft: false,
+                hover: rom_render::Hover::Circle,
                 hp_frac: 1.0,
                 building: true,
                 footprint: (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h)),
@@ -1932,6 +1944,7 @@ pub fn snapshot_on(
             spacecraft: false,
             flight: 0.0,
             aircraft: false,
+            hover: rom_render::Hover::Circle,
             // No health bar over what is no longer there.
             hp_frac: 1.0,
             building: true,
@@ -2134,6 +2147,7 @@ fn view_of(
         spacecraft: false,
         flight: 0.0,
         aircraft: false,
+        hover: rom_render::Hover::Circle,
         hp_frac: (entity.hp as f32 / et.hp.max(1) as f32).clamp(0.0, 1.0),
         building: et.class == EntityClass::Building,
         footprint: (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h)),

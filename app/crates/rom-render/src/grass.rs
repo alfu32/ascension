@@ -1092,6 +1092,7 @@ mod tests {
             spacecraft: false,
             flight: 0.0,
             aircraft: false,
+            hover: crate::Hover::Circle,
             facing_deg: 0.0,
             hp_frac: 1.0,
             building: true,

@@ -498,6 +498,7 @@ pub fn build_overlays_on(
             spacecraft: false,
             flight: 0.0,
             aircraft: false,
+            hover: crate::Hover::Circle,
             activity: Default::default(),
         };
         out.building_ghost(origin, &view, line, false);
@@ -540,6 +541,7 @@ mod tests {
             spacecraft: false,
             flight: 0.0,
             aircraft: false,
+            hover: crate::Hover::Circle,
             activity: Default::default(),
         }
     }

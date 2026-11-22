@@ -59,7 +59,7 @@ pub use camera::{
 };
 pub use ear::{EAR_GRID, Ear};
 pub use entities::{
-    EntitySnapshot, EntityView, FlatGround, Footing, GroundFrame, ModelRef, OWNER_COLORS,
+    EntitySnapshot, EntityView, FlatGround, Footing, GroundFrame, Hover, ModelRef, OWNER_COLORS,
     SnapshotPair, Surface, build_instances, build_instances_on, interpolate_on, owner_color,
 };
 pub use globe::{ChunkSpec, Globe, PlanetScene, SurfaceHit, planet_radius, to_render};
