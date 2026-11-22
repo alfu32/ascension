@@ -28,6 +28,9 @@ OVERRIDES = {
     "unit.robot_tank": {"crew": "machine"},
 }
 
+# Unit classes added after the sounds were first heard: they take their voices after every other
+# type, so every earlier type keeps the voice (and the file) the owner listened to.
+ADDED_LATER = {"rotorcraft"}
 HISTORY_LAST_MELEE_BLADE = 2   # sword before gunpowder, bayonet from age 3
 RADIO_FROM_AGE = 5             # crews talk over the radio from the industrial age
 FUTURE_FROM_AGE = 8            # near-future troopers, drones, energy weapons
@@ -182,6 +185,8 @@ def move_recipe(u):
             return "orbital_craft"
         if "healer" in tags or (u["healer"] and "drone" in tags):
             return "quad_buzz"
+        if "hover" in tags:
+            return "rotor"
         return "propeller" if age <= 6 else "jet"
     if mc == "ship":
         if age <= 1:
@@ -285,6 +290,7 @@ MOVE = {
     "servo_walk": ["Relocating.", "Proceeding.", "Moving to coordinates.", "Walking."],
     "quad_buzz": ["Relocating.", "Flying to the point.", "Route set.", "On my way."],
     "propeller": ["Taking off.", "Heading out.", "Airborne.", "On my way."],
+    "rotor": ["Lifting off.", "Rotors turning.", "Heading out.", "On my way."],
     "jet": ["Heading out.", "Airborne.", "Vector received.", "On my way."],
     "orbital_craft": ["Climbing to orbit.", "Vector received.", "On approach.", "Heading out."],
     "ship_oars": ["Row! Row together!", "Oars out.", "Pull, men!", "Setting off."],
@@ -391,6 +397,8 @@ def unit_sounds(u, plan, assign, voice):
             ev[event] = make(event, f"{kind}.{recipe}", params, variants)
     if move_r:
         params = dict(base, speed=round(min(1.0, (u["speed"] or 1000) / 6000), 3), figures=u["figures"] or 1)
+        if "low_flight" in u["tags"]:
+            params["ducted"] = 1
         ev["moving"] = make("moving", f"move.{move_r}", params, 1, loop=True)
     assign[key] = ev
 
@@ -559,7 +567,7 @@ def main():
         n = seen.get(pool, h(pool) % len(VOICES[pool]))
         seen[pool] = n + 1
         return VOICES[pool][n % len(VOICES[pool])]
-    for t in sorted(types.values(), key=lambda t: (t["age"], t["key"])):
+    for t in sorted(types.values(), key=lambda t: (t["ui_group"] in ADDED_LATER, t["age"], t["key"])):
         if t["class"] == "unit":
             unit_sounds(t, plan, assign, next_voice(crew_of(t)))
         else:

@@ -1251,7 +1251,7 @@ def alerts_and_detectors(definition, row, tag, need, produce, cost, tech):
 TAKEOFF_TICKS = {
     'biplane': 60, 'fighter': 70, 'drone_fighter': 70, 'jet_fighter': 80, 'interceptor': 80,
     'bomber': 90, 'drone_bomber': 90, 'strategic_bomber': 100,
-    # Task 119: rotorcraft lift straight up, quickly; the crewless one is the quickest.
+    # Task 119: rotorcraft climb quickly; the crewless one is the quickest.
     'attack_helicopter': 30, 'gunship_helicopter': 36, 'hover_gunship': 24,
 }
 # Ground an aircraft rolls along its heading while it takes off, and glides over while it lands.
@@ -1262,8 +1262,8 @@ TAKEOFF_RUN = 3000
 AIRCRAFT_REACH = {
     'biplane': 1400, 'fighter': 1400, 'jet_fighter': 1600, 'drone_fighter': 1200,
     'interceptor': 2100, 'bomber': 2000, 'strategic_bomber': 2200, 'drone_bomber': 1900,
-    # Task 119: placeholder until the models are drawn; set from them below.
-    'attack_helicopter': 1500, 'gunship_helicopter': 1700, 'hover_gunship': 1300,
+    # Task 119: rotorcraft (the larger of main rotor or boom reach, from the drawn models).
+    'attack_helicopter': 1600, 'gunship_helicopter': 2000, 'hover_gunship': 900,
 }
 
 

@@ -3358,9 +3358,9 @@ UPDATE et_movement SET takeoff_ticks=80,landing_radius=2100 WHERE entity_type_id
 UPDATE et_movement SET takeoff_ticks=90,landing_radius=2000 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.bomber');
 UPDATE et_movement SET takeoff_ticks=90,landing_radius=1900 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.drone_bomber');
 UPDATE et_movement SET takeoff_ticks=100,landing_radius=2200 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.strategic_bomber');
-UPDATE et_movement SET takeoff_ticks=30,landing_radius=1500 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.attack_helicopter');
-UPDATE et_movement SET takeoff_ticks=36,landing_radius=1700 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.gunship_helicopter');
-UPDATE et_movement SET takeoff_ticks=24,landing_radius=1300 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.hover_gunship');
+UPDATE et_movement SET takeoff_ticks=30,landing_radius=1600 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.attack_helicopter');
+UPDATE et_movement SET takeoff_ticks=36,landing_radius=2000 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.gunship_helicopter');
+UPDATE et_movement SET takeoff_ticks=24,landing_radius=900 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.hover_gunship');
 INSERT INTO tag(key,category) VALUES ('hover','movement');
 INSERT INTO tag(key,category) VALUES ('low_flight','movement');
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.attack_helicopter'),(SELECT id FROM tag WHERE key='hover'));
@@ -5722,6 +5722,12 @@ WITH v(k,e,s,f,g) AS (VALUES
  ('unit.assault_infantry','moving',0,'unit.assault_infantry.moving',100),
  ('unit.assault_infantry','research_done',0,'voice.assault_infantry.research_done',100),
  ('unit.assault_infantry','select',0,'voice.assault_infantry.select',100),
+ ('unit.attack_helicopter','attack',0,'voice.attack_helicopter.attack',100),
+ ('unit.attack_helicopter','fire',0,'unit.attack_helicopter.fire',100),
+ ('unit.attack_helicopter','move',0,'voice.attack_helicopter.move',100),
+ ('unit.attack_helicopter','moving',0,'unit.attack_helicopter.moving',100),
+ ('unit.attack_helicopter','research_done',0,'voice.attack_helicopter.research_done',100),
+ ('unit.attack_helicopter','select',0,'voice.attack_helicopter.select',100),
  ('unit.battleship','attack',0,'voice.battleship.attack',100),
  ('unit.battleship','fire',0,'unit.battleship.fire',100),
  ('unit.battleship','fire',1,'unit.battleship.fire_slot1',100),
@@ -5931,6 +5937,12 @@ WITH v(k,e,s,f,g) AS (VALUES
  ('unit.gun_drone','moving',0,'unit.gun_drone.moving',100),
  ('unit.gun_drone','research_done',0,'voice.gun_drone.research_done',100),
  ('unit.gun_drone','select',0,'voice.gun_drone.select',100),
+ ('unit.gunship_helicopter','attack',0,'voice.gunship_helicopter.attack',100),
+ ('unit.gunship_helicopter','fire',0,'unit.gunship_helicopter.fire',100),
+ ('unit.gunship_helicopter','move',0,'voice.gunship_helicopter.move',100),
+ ('unit.gunship_helicopter','moving',0,'unit.gunship_helicopter.moving',100),
+ ('unit.gunship_helicopter','research_done',0,'voice.gunship_helicopter.research_done',100),
+ ('unit.gunship_helicopter','select',0,'voice.gunship_helicopter.select',100),
  ('unit.heavy_machine_gunner','attack',0,'voice.heavy_machine_gunner.attack',100),
  ('unit.heavy_machine_gunner','fire',0,'unit.heavy_machine_gunner.fire',100),
  ('unit.heavy_machine_gunner','move',0,'voice.heavy_machine_gunner.move',100),
@@ -5955,6 +5967,12 @@ WITH v(k,e,s,f,g) AS (VALUES
  ('unit.hover_frigate','moving',0,'unit.hover_frigate.moving',100),
  ('unit.hover_frigate','research_done',0,'voice.hover_frigate.research_done',100),
  ('unit.hover_frigate','select',0,'voice.hover_frigate.select',100),
+ ('unit.hover_gunship','attack',0,'voice.hover_gunship.attack',100),
+ ('unit.hover_gunship','fire',0,'unit.hover_gunship.fire',100),
+ ('unit.hover_gunship','move',0,'voice.hover_gunship.move',100),
+ ('unit.hover_gunship','moving',0,'unit.hover_gunship.moving',100),
+ ('unit.hover_gunship','research_done',0,'voice.hover_gunship.research_done',100),
+ ('unit.hover_gunship','select',0,'voice.hover_gunship.select',100),
  ('unit.hovercraft','attack',0,'voice.hovercraft.attack',100),
  ('unit.hovercraft','fire',0,'unit.hovercraft.fire',100),
  ('unit.hovercraft','move',0,'voice.hovercraft.move',100),

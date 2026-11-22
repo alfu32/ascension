@@ -187,6 +187,16 @@ def propeller(r, p):
     return s.propeller(seed_of(r))
 
 
+def rotor(r, p):
+    """A rotorcraft under way: blade slap, turbine whine and tail rotor (the shared `act.rotor`
+    with its own seed); a ducted-fan craft (`ducted`) keeps a little of it under the whir of
+    its fans."""
+    blades = s.rotor(seed_of(r))
+    if p.get("ducted"):
+        return 0.4 * blades + quad_buzz(r, p)
+    return blades
+
+
 def jet(r, p):
     return s.jet(seed_of(r))
 
@@ -236,7 +246,7 @@ def hover(r, p):
 MOVE = {
     "footsteps": footsteps, "hoofbeats": hoofbeats, "wheels_earth": wheels, "engine_wheeled": engine_wheeled,
     "engine_tracked": engine_tracked, "electric_drive": electric_drive, "servo_walk": servo_walk,
-    "quad_buzz": quad_buzz, "propeller": propeller, "jet": jet, "orbital_craft": orbital_craft,
+    "quad_buzz": quad_buzz, "propeller": propeller, "rotor": rotor, "jet": jet, "orbital_craft": orbital_craft,
     "ship_oars": ship_oars, "ship_sail": ship_sail, "ship_engine": ship_engine, "starship_hum": starship,
     "hover_hum": hover,
 }
