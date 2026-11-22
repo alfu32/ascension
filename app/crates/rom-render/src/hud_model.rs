@@ -490,6 +490,9 @@ pub struct HudPatrol {
     pub lift_milli: u32,
     /// The patrolling entity.
     pub entity: u32,
+    /// For one leg of a multi-point route: the owner whose colour it is drawn in, with a
+    /// marker at `from`; `None` for the plain back-and-forth patrol.
+    pub route_owner: Option<u8>,
 }
 
 /// A selected trader's route on the currently viewed surface.

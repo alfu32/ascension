@@ -576,6 +576,14 @@ Notes from task 60:
   building's technology is a step of its own before it. The seed's books were
   rewritten on that rule and now cover all four profiles (the old rows asked
   for a barracks before the technology that unlocks it).
+- **Patrol routes (task 126).** No new order kind, column or save field: the queued `patrol`
+  orders of one unit are the route. When the first of them starts and more patrol orders wait
+  behind it, an order for the start position joins the back of the queue once; on arrival at a
+  point the order finishes and a copy goes to the back, so the queue rotates and the unit
+  walks the loop forever. A lone patrol keeps its back-and-forth (`home` swap). Orbit patrols
+  are unchanged. An order other than a patrol queued behind a patrol is dropped when it would
+  be applied (counted as cancelled): the patrol never ends. A save in mid-loop carries the
+  rotated queue, so it continues from there.
 - **The income bonus is a granted handicap (task 64).** See "Handicaps" below.
 - **Order vocabulary (task 65).** `order_kind` gained `stance` (subject = a combat
   stance; applied when it leaves `pending`, the queue stays), so a computer
