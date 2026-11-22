@@ -83,6 +83,21 @@ def _catapult(r, p):
     return s.catapult(seed_of(r))
 
 
+def _drone_strike(r, p):
+    """A kamikaze drone (task 120): the whine of a small rotor diving, falling in pitch as it
+    nears, then a small, dull blast; short and not violent."""
+    dive = 0.45
+    n = n_of(dive + 0.9)
+    t = np.arange(n) / SR
+    f = np.where(t < dive, 980 - 420 * (t / dive) ** 1.5, 560.0)
+    rise = np.clip(t / dive, 0, 1) ** 2 * (t < dive)
+    whine = (np.sin(2 * np.pi * np.cumsum(f) / SR) + 0.3 * np.sin(4 * np.pi * np.cumsum(f) / SR)) * rise * 0.18
+    air = s.bandpass(r.standard_normal(n), 600, 3000) * rise * 0.12
+    blast = np.zeros(n)
+    place(blast, s.boom(r, 0.85, 0.35, 900, 0.06, 70, 0.25, 0.2) * 0.8, dive)
+    return whine + air + blast
+
+
 FIRE = {
     "bow": lambda r, p: s.bow(r), "crossbow": lambda r, p: s.crossbow(r), "sling": lambda r, p: s.sling(r),
     "catapult": _catapult, "musket": lambda r, p: s.musket(r), "rifle": _rifle, "machine_gun": _machine_gun,
@@ -90,6 +105,7 @@ FIRE = {
     "artillery": _artillery, "flak": lambda r, p: s.flak(r), "bomb_drop": lambda r, p: s.bomb_drop(r),
     "rocket": lambda r, p: s.rocket(r), "missile": _missile, "laser": lambda r, p: s.laser(r),
     "plasma": lambda r, p: s.plasma(r), "railgun": lambda r, p: s.railgun(r),
+    "drone_strike": _drone_strike,
 }
 
 FIGHT = {
@@ -120,7 +136,22 @@ def footsteps(r, p):
             place_wrap(out, soft_step(r) * gain * r.uniform(0.7, 1.0), offset + k * L / steps + r.uniform(-0.04, 0.04))
             if p["age"] >= 3 and r.uniform() < 0.3:  # kit and equipment, faintly
                 place_wrap(out, burst(r, 0.06, 2000, 6000, 0.005, 0.015, 0.03 * gain), offset + k * L / steps + 0.03)
+    if p.get("swarm"):
+        out += swarm_hum(r, L)
     return out
+
+
+def swarm_hum(r, seconds):
+    """A drone cloud overhead (task 120): a faint, many-voiced whir of small rotors, each a
+    little apart in pitch, slowly beating; periodic over `seconds`."""
+    n = n_of(seconds)
+    t = np.arange(n) / SR
+    out = np.zeros(n)
+    for k in range(6):
+        f = qf(r.uniform(150, 230), seconds)
+        out += (np.sin(2 * np.pi * f * t + r.uniform(0, 6)) + 0.3 * np.sin(4 * np.pi * f * t)) * r.uniform(0.6, 1.0)
+    out *= 0.012 * (0.85 + 0.15 * wander(r, n, 4))
+    return out + cnoise(r, n, 400, 2500, color=1) * 0.012
 
 
 def soft_step(r):

@@ -1257,6 +1257,27 @@
    "voice.drone_fighter.select"
   ]
  },
+ "unit.drone_operator": {
+  "attack": [
+   "voice.drone_operator.attack"
+  ],
+  "fire": [
+   "unit.drone_operator.fire.1",
+   "unit.drone_operator.fire.2"
+  ],
+  "move": [
+   "voice.drone_operator.move"
+  ],
+  "moving": [
+   "unit.drone_operator.moving"
+  ],
+  "research_done": [
+   "voice.drone_operator.research_done"
+  ],
+  "select": [
+   "voice.drone_operator.select"
+  ]
+ },
  "unit.exo_trooper": {
   "attack": [
    "voice.exo_trooper.attack"

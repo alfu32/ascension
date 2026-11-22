@@ -30,7 +30,7 @@ OVERRIDES = {
 
 # Unit classes added after the sounds were first heard: they take their voices after every other
 # type, so every earlier type keeps the voice (and the file) the owner listened to.
-ADDED_LATER = {"rotorcraft"}
+ADDED_LATER = {"rotorcraft", "drone_operator"}
 HISTORY_LAST_MELEE_BLADE = 2   # sword before gunpowder, bayonet from age 3
 RADIO_FROM_AGE = 5             # crews talk over the radio from the industrial age
 FUTURE_FROM_AGE = 8            # near-future troopers, drones, energy weapons
@@ -78,6 +78,7 @@ def load(db):
         t["market"] = has("et_market")
         t["keeper"] = has("et_keeper")
         t["detector"] = has("et_detector") or has("et_inhibitor")
+        t["cloud"] = has("et_drone_cloud")
         city = q("select is_city from et_territory where entity_type_id = ?", t["id"])
         t["city"] = bool(city and city[0][0])
         modes = {r[0] for r in q("select distinct mode from production where producer_type_id = ?", t["id"])}
@@ -116,6 +117,8 @@ def fire_recipe(u, w):
     p, dc, age = w["projectile"], w["damage_class"], u["age"]
     layers = set((w["layers"] or "").split(","))
     flies = u["move_class"] == "aircraft"
+    if p == "drone":
+        return "drone_strike"
     if p == "arrow":
         return "bow"
     if p == "bolt":
@@ -313,6 +316,12 @@ ATTACK = {
     "club_blow": ["Have at you!", "If I must!"], "cavalry_charge": ["Charge!", "Sabres, charge!"],
     "bayonet": ["Fix bayonets!", "Cold steel!"], "energy_blade": ["Blades on!", "Closing in!"],
     "power_fist": ["Engaging target.", "Close combat."],
+    "drone_strike": ["Drones away.", "Sending the swarm.", "Drones on the target."],
+}
+# A drone operator (task 120) speaks of its drones: a soldier's voice, calm.
+CLOUD_LINES = {
+    "select": ["Operator here, drones up.", "{name}, swarm ready.", "Drones in the air, standing by."],
+    "move": ["Moving, drones overhead.", "Drones forward, I follow.", "Swarm ahead, moving."],
 }
 RESEARCH = {
     "worker": ["We've learned a better way.", "New tools, good."],
@@ -370,9 +379,10 @@ def unit_sounds(u, plan, assign, voice):
                          "seed": h(key, f"{event}.{i}") % 1_000_000, "params": params})
         return names
 
-    say("select", pick(key, "select", SELECT[crew]))
+    say("select", pick(key, "select", CLOUD_LINES["select"] if u["cloud"] else SELECT[crew]))
     if move_r:
-        say("move", pick(key, "move", LATIN[crew]["move"] if crew in LATIN else MOVE[move_r]))
+        lines = CLOUD_LINES["move"] if u["cloud"] else LATIN[crew]["move"] if crew in LATIN else MOVE[move_r]
+        say("move", pick(key, "move", lines))
     ranged = [w for w in u["weapons"] if w["range_max"] > 0]
     melee = [w for w in u["weapons"] if w["range_max"] == 0]
     first = (ranged + melee)[0] if u["weapons"] else None
@@ -399,6 +409,8 @@ def unit_sounds(u, plan, assign, voice):
         params = dict(base, speed=round(min(1.0, (u["speed"] or 1000) / 6000), 3), figures=u["figures"] or 1)
         if "low_flight" in u["tags"]:
             params["ducted"] = 1
+        if u["cloud"]:
+            params["swarm"] = 1
         ev["moving"] = make("moving", f"move.{move_r}", params, 1, loop=True)
     assign[key] = ev
 

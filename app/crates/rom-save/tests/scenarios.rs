@@ -922,3 +922,26 @@ fn aircraft_landed_taking_off_and_landing() {
         order(w, next, "move", None, Some(at(HOME, 36_500, 36_500)));
     });
 }
+
+/// Task 120: drone operators with clouds mid-flight, part spent and rebuilding save and load
+/// with them, and both worlds fight on alike.
+#[test]
+fn drone_operators_with_their_clouds() {
+    let rules = rules();
+    let mut w = universe(&rules);
+    let kind = id(&w, "unit.drone_operator");
+    let operator = w.spawn(kind, P1, at(HOME, 28_500, 40_500)).unwrap();
+    let other = w.spawn(kind, P1, at(HOME, 30_500, 40_500)).unwrap();
+    let target = w
+        .spawn(id(&w, "unit.assault_infantry"), P2, at(HOME, 34_500, 40_500))
+        .unwrap();
+    order(&mut w, operator, "attack", Some(target), None);
+    order(&mut w, other, "move", None, Some(at(HOME, 30_500, 46_500)));
+    run_until(&mut w, 600, |w| w.entity(target).is_none());
+    ticks(&mut w, 7);
+    let cloud = *w.drone_cloud(operator).unwrap();
+    assert!(cloud.drones < 16 && cloud.rebuild > 0, "{cloud:?}");
+    check("drones", &rules, w, 300, move |w| {
+        order(w, other, "move", None, Some(at(HOME, 24_500, 40_500)));
+    });
+}
