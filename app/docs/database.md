@@ -1598,6 +1598,58 @@ stay; `rotorcraft_hover()` adds the tags after every other definition). Units `u
 `landing_radius` 1600/2000/900 (the drawn models) and `takeoff_run` 0 (they lift and land vertically). Tags: `hover` (movement; all three), `low_flight`
 (movement) and `drone` on the hover gunship. No schema change.
 
+## Drone operators (task 120)
+
+Owner, issue #3: an infantry unit that is "the operator" and "a cloud of drones, let's say 16";
+the cloud gets there first, the operator stays behind at the greatest distance allowed; each
+drone attacks and is spent (one kills or badly hurts an infantry unit, about ten destroy an
+armoured vehicle); the operator issues new drones continuously; to destroy the unit you must
+destroy the operator. Deliberate schema change; both lint views stay empty and the seed loads.
+
+- **New component table** `et_drone_cloud(entity_type_id, capacity, leash, strike_range,
+  rebuild_ticks, drone_hp, drone_speed)`: the most drones (a new unit has them all), the farthest
+  the cloud flies from its operator and how near a target it must be to strike (milli-tiles), the
+  ticks per new drone while below capacity, the damage that brings one drone down, and the
+  cloud's speed (milli-tiles per second). Read into `EntityType::drone_cloud` (`rom-rules`).
+- **The strike is the type's `et_weapon` row.** The card proposed `strike_ticks` and
+  `strike_damage` columns; they are the weapon's `cooldown_ticks` and `damage` instead, so the
+  strike goes through the normal damage path (damage class, armour, the `attack` and `range`
+  stats) and everything that reads weapons (automatic targeting, the computer players, the fight
+  matrix, the `fire` sound) sees it unchanged. Each shot needs a drone and the cloud within
+  `strike_range` of the target, flies from the cloud, and spends the drone. The weapon's
+  `range_max` is where the operator stops from its target: validated to be at most
+  `leash + strike_range` (and the `range` stat is capped there), with movement and no orbital
+  weapon (`Rules::validate`).
+- **Being shot down.** A weapon with an `air` row in `et_weapon_target` meets the cloud of an
+  operator whose cloud holds drones instead of the operator (`World::layer_row`): it aims at the
+  cloud and measures its reach to it; each hit brings down `damage × shots / drone_hp` drones (at
+  least one), not through the armour table; no splash on clouds. Weapons without an `air` row
+  must reach the operator. An operator is seen where its cloud is seen.
+- **Moving.** Each tick after the units have moved, a cloud flies toward the enemy its
+  operator's current order attacks (the nearest footprint point of a building), else the point
+  the order goes to, else the operator, never beyond the leash; aboard a carrier it waits. A
+  drone made for an empty cloud starts at the operator.
+- **Seed** (`db/content/generate.py`, `drone_operator()`, after every other definition so earlier
+  ids stay): damage class `fragmentation` (vehicle and hull 18 %, structure and shield 10 %, people
+  100 %); `unit.drone_operator` "Drone Operators", information age, barracks, `ui_group`
+  `drone_operator`, 130 hp, armour 2 (flesh), sight 9 tiles, population 2, 400 ticks, 100 food,
+  80 metal, 40 oil; foot, 1.2 tiles/s; weapon 210 fragmentation, reach 8 tiles, every 10 ticks,
+  ground only, projectile `drone` (new value of `et_weapon.projectile`, 10 tiles/s); cloud 16
+  drones, leash 7 tiles, strike range 1 tile, a drone every 120 ticks, 8 damage a drone, 5
+  tiles/s. One drone against assault infantry: 210 − 2 = 208 ≥ 205 hit points; against the main
+  battle tank 210 × 18 % − 3 = 34, ten drones for 328 hit points.
+- **State** (save format 16): `entity_drone_cloud(entity_id, drones, body, face, x, y, rebuild)`;
+  `World::drone_cloud`. Hashed while any cloud exists, so other worlds keep their hashes.
+  Formats 13 to 15 still load (they have no operators).
+- **Computer players** train it through the ordinary army choice; `rom-ai` counts a cloud
+  weapon at the pace its operator issues drones (`rebuild_ticks` when longer than the reload).
+- **Views.** `EntityView::cloud` (`CloudView`: drones and the cloud's point); the render thread
+  draws up to its drones as small quadrotors circling the point (offsets from the operator's id
+  and the render tick) and each strike as a streak from the cloud with a small blast.
+- **Sounds.** Its own lines, `fire` (recipe `drone_strike`: a dive whine and a small blast) and a
+  `moving` loop of footsteps with a faint swarm hum (the `swarm` parameter `assign.py` sets for
+  types with an `et_drone_cloud` row).
+
 ## Bringing life (task 77)
 
 The rules, the state and the views are described in `docs/bringing-life.md`. Schema and seed
@@ -1896,6 +1948,8 @@ back. No SQL runs in `rom-sim`.
 - **Rally points.** `entity_rally(entity_id, target_entity_id | x, y, face, body)`
   (task 64). Not part of the state hash while no producer has one, so worlds
   without rally points keep their hashes.
+- **Drone clouds of task 120 (format 16).** `entity_drone_cloud(entity_id, drones, body, face,
+  x, y, rebuild)` (see "Drone operators"). Formats 13 to 15 still load, without operators.
 - **Aircraft on the ground of task 123 (format 15).** `entity_flight(entity_id, climbed)` (see
   "Aircraft land and take off"). Formats 13 and 14 still load, with every aircraft in the air.
 - **The match end and report of task 117 (format 14).** `match_human`, `match_end`,
