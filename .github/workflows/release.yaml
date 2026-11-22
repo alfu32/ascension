@@ -120,7 +120,7 @@ jobs:
           # ALSA and its pulse plugin for the game's sound (task 125).
           sudo apt-get install -y --no-install-recommends squashfs-tools xvfb x11-utils imagemagick xkb-data \
             libxcursor1 libxrandr2 libxi6 libxinerama1 libxrender1 libxkbcommon-x11-0 libxcb-xkb1 libvulkan1 \
-            libasound2t64 libasound2-plugins libpulse0
+            libasound2 libasound2-plugins libpulse0
           python3 scripts/release/snap.py --arch ${{ matrix.arch }} --output dist
       - name: Install the snap and check that it starts and paints a window
         run: |
