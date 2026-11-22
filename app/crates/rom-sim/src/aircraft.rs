@@ -71,9 +71,16 @@ impl World {
         })
     }
 
-    /// Ground an aircraft rolls while it takes off and glides over while it lands, milli-tiles.
-    fn takeoff_run(&self) -> i64 {
-        self.rules.constant("air.takeoff_run").unwrap_or(0).max(0)
+    /// Ground an aircraft of this type rolls while it takes off and glides over while it lands,
+    /// milli-tiles: its `et_movement.takeoff_run`, else the constant `air.takeoff_run`.
+    fn takeoff_run(&self, type_id: DefId) -> i64 {
+        self.rules
+            .entity_type(type_id)
+            .and_then(|et| et.movement.as_ref())
+            .and_then(|m| m.takeoff_run)
+            .or_else(|| self.rules.constant("air.takeoff_run"))
+            .unwrap_or(0)
+            .max(0)
     }
 
     /// Whether buildings of this type are airfields: they train aircraft.
@@ -197,7 +204,7 @@ impl World {
         };
         let climbed = (climbed + 1).min(ticks);
         // Accelerating along the run: after `c` of `T` ticks it has rolled run * c² / T².
-        let run = self.takeoff_run();
+        let run = self.takeoff_run(e.type_id);
         let step = run * (2 * climbed as i64 - 1) / (ticks * ticks) as i64;
         self.roll(id, step);
         if climbed >= ticks {
@@ -285,7 +292,7 @@ impl World {
                 return;
             };
             order.home = Some(spot);
-            order.target_pos = Some(self.glide_start(pos, spot));
+            order.target_pos = Some(self.glide_start(kind, pos, spot));
             order.movement = None;
             return;
         };
@@ -307,9 +314,9 @@ impl World {
 
     /// Where an aircraft at `from` begins its glide onto `spot`: the run short of the spot, on
     /// the line from `from` (straight above the spot when it is already there).
-    fn glide_start(&self, from: Pos, spot: Pos) -> Pos {
+    fn glide_start(&self, kind: DefId, from: Pos, spot: Pos) -> Pos {
         let geo = self.geo(spot.body);
-        let run = self.takeoff_run();
+        let run = self.takeoff_run(kind);
         let Some((dx, dy)) = geo.vector(spot, from).filter(|v| *v != (0, 0)) else {
             return spot;
         };

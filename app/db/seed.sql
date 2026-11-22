@@ -3361,6 +3361,9 @@ UPDATE et_movement SET takeoff_ticks=100,landing_radius=2200 WHERE entity_type_i
 UPDATE et_movement SET takeoff_ticks=30,landing_radius=1600 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.attack_helicopter');
 UPDATE et_movement SET takeoff_ticks=36,landing_radius=2000 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.gunship_helicopter');
 UPDATE et_movement SET takeoff_ticks=24,landing_radius=900 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.hover_gunship');
+UPDATE et_movement SET takeoff_run=0 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.attack_helicopter');
+UPDATE et_movement SET takeoff_run=0 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.gunship_helicopter');
+UPDATE et_movement SET takeoff_run=0 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.hover_gunship');
 INSERT INTO tag(key,category) VALUES ('hover','movement');
 INSERT INTO tag(key,category) VALUES ('low_flight','movement');
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.attack_helicopter'),(SELECT id FROM tag WHERE key='hover'));

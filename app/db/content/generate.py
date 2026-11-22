@@ -1279,6 +1279,9 @@ def aircraft_take_off(row, emit):
     for key, ticks in TAKEOFF_TICKS.items():
         emit(f"UPDATE et_movement SET takeoff_ticks={ticks},landing_radius={AIRCRAFT_REACH[key]} "
              f"WHERE entity_type_id={val(Ref('unit.' + key))};")
+    # Task 119: rotorcraft climb and descend straight, without a roll.
+    for key in ROTORCRAFT:
+        emit(f"UPDATE et_movement SET takeoff_run=0 WHERE entity_type_id={val(Ref('unit.' + key))};")
 
 
 def rotorcraft_hover(row, tag):

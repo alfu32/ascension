@@ -276,10 +276,14 @@ CREATE TABLE et_movement (             -- "moves"
                                        -- (stat `landing_radius`); NULL = that tile only.
                                        -- An aircraft (task 123) keeps this radius, its drawn
                                        -- model's reach, clear of buildings and other aircraft
-  takeoff_ticks     INTEGER NOT NULL DEFAULT 0 CHECK (takeoff_ticks >= 0 AND (takeoff_ticks = 0 OR climb_ticks = 0))
+  takeoff_ticks     INTEGER NOT NULL DEFAULT 0 CHECK (takeoff_ticks >= 0 AND (takeoff_ticks = 0 OR climb_ticks = 0)),
                                        -- aircraft (task 123): ticks to take off from the ground into
                                        -- the air above its planet, and to land; 0 = never lands
                                        -- (always airborne). Never together with climb_ticks.
+  takeoff_run       INTEGER CHECK (takeoff_run >= 0)
+                                       -- task 119: milli-tiles an aircraft rolls along its heading
+                                       -- while taking off and glides over while landing; NULL = the
+                                       -- constant `air.takeoff_run`; 0 = straight up and down
 ) STRICT;
 
 CREATE TABLE et_weapon (               -- "attacks" (0..n per type)

@@ -266,3 +266,49 @@ fn the_line_is_one_class_each_member_replacing_the_one_before() {
     };
     assert!(vs_tank(line[1]) > vs_tank(line[0]) * 2);
 }
+
+#[test]
+fn rotorcraft_climb_and_descend_without_rolling() {
+    let rules = rules();
+    let play = || {
+        let mut w = world(&rules, "age.information");
+        let (_, craft) = train(&mut w, "unit.gunship_helicopter", 1);
+        let heli = craft[0];
+        let start = w.entity(heli).unwrap().pos;
+        // Taking off: its place never changes while it climbs.
+        order(&mut w, heli, "move", None, Some(at(0, 20_000, 20_000)));
+        let mut climbing = 0;
+        while w.is_grounded(heli) {
+            w.step();
+            if w.is_grounded(heli) {
+                assert_eq!(w.entity(heli).unwrap().pos, start, "rolled while lifting");
+                climbing += 1;
+            }
+            assert!(climbing < 200);
+        }
+        assert!(climbing > 5);
+        run_until(&mut w, 3000, |w| {
+            w.entity(heli).unwrap().orders().is_empty()
+        });
+        // Landing: it comes straight down onto the spot it flew to.
+        let over = w.entity(heli).unwrap().pos;
+        order(&mut w, heli, "land", None, Some(over));
+        let mut spot = None;
+        let mut descending = 0;
+        for _ in 0..3000 {
+            w.step();
+            if w.is_grounded(heli) {
+                let pos = w.entity(heli).unwrap().pos;
+                assert_eq!(*spot.get_or_insert(pos), pos, "glided while landing");
+                descending += 1;
+            }
+            if w.is_aircraft_landed(heli) {
+                break;
+            }
+        }
+        assert!(w.is_aircraft_landed(heli) && descending > 5);
+        w.hash()
+    };
+    let first = play();
+    assert_eq!(first, play());
+}
