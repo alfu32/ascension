@@ -1021,6 +1021,17 @@ impl World {
             if order.kind == "construct" {
                 self.create_site(&mut order);
             }
+            // A patrol never ends, so an order queued behind one could never run: it is refused.
+            if append
+                && order.kind != "patrol"
+                && self
+                    .entity(order.executor)
+                    .and_then(|e| e.orders.back())
+                    .is_some_and(|last| last.kind == "patrol")
+            {
+                self.stats.orders_cancelled += 1;
+                continue;
+            }
             if !append {
                 self.cancel_orders(order.executor);
             } else {

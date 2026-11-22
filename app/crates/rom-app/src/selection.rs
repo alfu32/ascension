@@ -245,6 +245,8 @@ pub struct Controller {
     attack_move: bool,
     /// The next right-click (or click) on the ground orders a patrol there.
     patrol: bool,
+    /// Whether the patrol pick already gave a point (Shift held): later points queue behind it.
+    patrol_started: bool,
     /// The next city clicked becomes the selected traders' route partner (task 72).
     trade_pick: bool,
     /// The next click on the ground (or an own airfield) is where the selected aircraft land
@@ -873,6 +875,7 @@ impl Controller {
                 self.brush = None;
                 self.attack_move = false;
                 self.patrol = false;
+                self.patrol_started = false;
                 self.trade_pick = false;
                 self.land_pick = false;
             }
@@ -919,10 +922,21 @@ impl Controller {
         if self.patrol {
             let ids: Vec<EntityId> = self.own_selected(world).iter().map(|e| e.id).collect();
             for id in ids {
-                self.submit(world, id, "patrol", None, None, Some(at), mods.shift);
+                // The first point starts a new route (or a plain patrol); with Shift held the
+                // pick stays on and each further point joins the loop.
+                self.submit(
+                    world,
+                    id,
+                    "patrol",
+                    None,
+                    None,
+                    Some(at),
+                    self.patrol_started,
+                );
             }
             self.marker(world, at, MarkerKind::Move);
             self.patrol = mods.shift;
+            self.patrol_started = mods.shift;
             return;
         }
         if self.attack_move {
@@ -1256,6 +1270,9 @@ impl Controller {
             .iter()
             .filter_map(|e| {
                 let order = e.orders().front().filter(|o| o.kind == "patrol")?;
+                if e.orders().iter().filter(|o| o.kind == "patrol").count() > 1 {
+                    return None;
+                }
                 let (from, to) = (order.home?, order.target_pos?);
                 if from.body != self.view.planet || to.body != self.view.planet {
                     return None;
@@ -1282,8 +1299,36 @@ impl Controller {
                     span_milli: span,
                     lift_milli: if orbit { ORBIT_LIFT_MILLI } else { 0 },
                     entity: e.id.0,
+                    route_owner: None,
                 })
             })
+            .chain(self.own_selected(world).into_iter().flat_map(|e| {
+                // A loop: the queued patrol points in order, and back from the last to the first.
+                let points: Vec<Pos> = e
+                    .orders()
+                    .iter()
+                    .filter(|o| o.kind == "patrol")
+                    .filter_map(|o| o.target_pos)
+                    .collect();
+                let owner = u8::try_from(e.owner.0).unwrap_or(u8::MAX);
+                let count = if points.len() > 1 { points.len() } else { 0 };
+                (0..count)
+                    .filter_map(|i| {
+                        let (from, to) = (points[i], points[(i + 1) % count]);
+                        if from.body != self.view.planet || to.body != self.view.planet {
+                            return None;
+                        }
+                        Some(rom_render::HudPatrol {
+                            from: surface(from),
+                            to: surface(to),
+                            span_milli: 1000,
+                            lift_milli: 0,
+                            entity: e.id.0,
+                            route_owner: Some(owner),
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            }))
             .collect()
     }
 
@@ -1473,6 +1518,7 @@ impl Controller {
             self.marker(world, at, kind);
             self.attack_move = false;
             self.patrol = false;
+            self.patrol_started = false;
             self.trade_pick = false;
             self.land_pick = false;
         }
@@ -2607,6 +2653,7 @@ impl Controller {
             Action::AttackMove => self.attack_move = !self.attack_move,
             Action::Patrol => {
                 self.patrol = !self.patrol;
+                self.patrol_started = false;
                 self.attack_move = false;
                 self.trade_pick = false;
                 self.land_pick = false;
@@ -3228,6 +3275,14 @@ impl Controller {
                 "Right-click to move within the orbit; Patrol circles the planet"
             }
             .into();
+        }
+        if self.patrol && hud.help.is_empty() {
+            hud.help = if self.patrol_started {
+                "Patrol route: hold Shift and click to add points, a plain click closes the loop"
+                    .into()
+            } else {
+                "Patrol: click a point; hold Shift to add more points and patrol the loop".into()
+            };
         }
         // A jump inhibitor says what it does to enemy ships (task 104), from its component.
         if hud.help.is_empty()

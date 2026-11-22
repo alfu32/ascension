@@ -195,6 +195,14 @@ Resume governor, Trade route (F), the combat stances on the bottom row; a market
 the middle row and Sell on the bottom row. Right-clicking an own airfield with aircraft
 selected lands them beside it.
 
+**Patrol routes (task 126).** Patrol, then click a point: the unit patrols between where it
+stood and the point. Holding Shift while clicking keeps the pick on and adds a point; the click
+without Shift gives the last one. The unit walks the closed loop start, point 1, point 2, ...,
+back to the start, again and again, fighting on the way like an attack move. A selected
+patrolling unit shows its route as thin lines in the player's colour with a small marker at each
+point. A plain order replaces the route; a Shift-queued order behind a patrol is refused (the
+patrol never ends, so it could never run).
+
 ## Controls
 
 Middle-button drag turns the view at every level: on a globe it turns the

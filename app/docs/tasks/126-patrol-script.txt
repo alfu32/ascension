@@ -1,0 +1,14 @@
+# Task 126: a patrol route of four points, replayed by --script (sphere match, seed 1,
+# --players 2 --ai none, --size 1920x1080). The first builder is selected, the Order tab opened
+# and Patrol (slot 7, hotkey D) pressed; three points are clicked with Shift held (the pick
+# stays on) and the fourth without it (it ends the pick). The builder walks the loop start,
+# point 1..4, start, ...; its route is drawn in the player's colour with a marker at each point.
+#   rise-of-man --seed 1 --players 2 --ai none --size 1920x1080 \
+#     --script app/docs/tasks/126-patrol-script.txt --after 4 --screenshot app/docs/img/126-patrol-route.png
+5 click builder1
+6 hud tab 1
+7 hud slot 7
+8 click @9,2 shift
+9 click @9,10 shift
+10 click @-3,12 shift
+11 click @-9,4

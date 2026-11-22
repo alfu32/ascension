@@ -182,6 +182,102 @@ fn a_patrol_walks_back_and_forth_and_fights_on_the_way() {
     assert!(w.stats().kills.get(&OWNER).copied().unwrap_or(0) >= 1);
 }
 
+/// The points of `spots` a unit comes within 1.5 tiles of, in the order it does, repeats
+/// merged, for `steps` ticks.
+fn visits(w: &mut World, unit: EntityId, spots: &[Pos], steps: u64) -> Vec<usize> {
+    let mut seen: Vec<usize> = Vec::new();
+    for _ in 0..steps {
+        w.step();
+        let at = w.entity(unit).unwrap().pos;
+        if let Some(i) = spots
+            .iter()
+            .position(|p| w.distance(at, *p).unwrap() < 1_500)
+            && seen.last() != Some(&i)
+        {
+            seen.push(i);
+        }
+    }
+    seen
+}
+
+fn route_world() -> (World, EntityId, [Pos; 4]) {
+    let mut w = world(rules(), false);
+    let start = Pos::flat(10_500, 10_500);
+    let unit = spawn(&mut w, "unit.spearman", OWNER, start);
+    let spots = [
+        start,
+        Pos::flat(30_500, 10_500),
+        Pos::flat(30_500, 30_500),
+        Pos::flat(10_500, 30_500),
+    ];
+    for p in &spots[1..] {
+        let mut patrol = order(unit, "patrol");
+        patrol.target_pos = Some(*p);
+        patrol.queue = true;
+        w.submit(patrol).unwrap();
+    }
+    (w, unit, spots)
+}
+
+#[test]
+fn queued_patrol_points_make_a_loop_walked_round_and_round() {
+    let w = twice(|| {
+        let (mut w, unit, spots) = route_world();
+        let seen = visits(&mut w, unit, &spots, 6000);
+        assert_eq!(seen[..9], [0, 1, 2, 3, 0, 1, 2, 3, 0], "{seen:?}");
+        assert!(
+            w.entity(unit)
+                .unwrap()
+                .orders()
+                .iter()
+                .all(|o| o.kind == "patrol")
+        );
+        assert_eq!(w.entity(unit).unwrap().orders().len(), 4);
+        w
+    });
+    let _ = w;
+}
+
+#[test]
+fn a_saved_loop_goes_on_from_the_middle() {
+    let (mut w, unit, spots) = route_world();
+    ticks(&mut w, 900);
+    let mut restored = World::restore(w.rules().clone(), w.snapshot()).unwrap();
+    assert_eq!(restored.hash(), w.hash());
+    let (a, b) = (
+        visits(&mut w, unit, &spots, 4000),
+        visits(&mut restored, unit, &spots, 4000),
+    );
+    assert_eq!(a, b);
+    assert!(a.len() >= 5, "{a:?}");
+    assert_eq!(restored.hash(), w.hash());
+}
+
+#[test]
+fn a_plain_order_replaces_the_route_and_a_queued_one_behind_it_is_refused() {
+    let (mut w, unit, spots) = route_world();
+    ticks(&mut w, 100);
+    let mut late = order(unit, "move");
+    late.target_pos = Some(Pos::flat(50_500, 50_500));
+    late.queue = true;
+    w.submit(late).unwrap();
+    ticks(&mut w, 1);
+    assert!(
+        w.entity(unit)
+            .unwrap()
+            .orders()
+            .iter()
+            .all(|o| o.kind == "patrol")
+    );
+    let mut plain = order(unit, "move");
+    plain.target_pos = Some(spots[2]);
+    w.submit(plain).unwrap();
+    ticks(&mut w, 2000);
+    let e = w.entity(unit).unwrap();
+    assert!(e.orders().is_empty());
+    assert!(w.distance(e.pos, spots[2]).unwrap() < 1_500);
+}
+
 #[test]
 fn a_guard_follows_its_ward_and_fights_off_what_comes_near() {
     let w = twice(|| {

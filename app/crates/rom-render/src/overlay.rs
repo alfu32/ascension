@@ -241,13 +241,28 @@ pub fn build_overlays_on(
             .filter(|a| *a > 0.0 && patrol.lift_milli > 0);
         let lift = drawn.unwrap_or(patrol.lift_milli as f32 / 1000.0).max(LIFT);
         let steps = ((span * 48.0).ceil() as usize).clamp(8, 512);
+        let colour = patrol
+            .route_owner
+            .map_or([90, 220, 255, 230], |o| rgba(owner_color(o)));
         for i in (0..steps).step_by(2) {
             let t = |n: usize| n as f32 / steps as f32 * span;
             out.line(
                 ground.route_point(patrol.from, patrol.to, t(i), lift),
                 ground.route_point(patrol.from, patrol.to, t(i + 1), lift),
-                [90, 220, 255, 230],
+                colour,
             );
+        }
+        // A route point of a loop gets a small marker: a ring on a post.
+        if patrol.route_owner.is_some() {
+            let o = Origin {
+                ground,
+                face: patrol.from.face,
+                x: patrol.from.x as f32 / 1000.0,
+                y: patrol.from.y as f32 / 1000.0,
+                altitude: 0.0,
+            };
+            out.ring(o, 0.45, colour);
+            out.line(o.at(0.0, 0.0, LIFT), o.at(0.0, 0.0, 1.0), colour);
         }
     }
     for route in &hud.trade_routes {

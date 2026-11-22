@@ -336,6 +336,12 @@ impl World {
         })
     }
 
+    /// Whether another patrol order waits behind the one being run: the unit is on a route.
+    pub(crate) fn patrol_follows(&self, id: EntityId) -> bool {
+        self.entity(id)
+            .is_some_and(|e| e.orders.iter().any(|o| o.kind == "patrol"))
+    }
+
     pub(crate) fn advance_combat(&mut self, id: EntityId, order: &mut Order) {
         order.progress_ticks += 1;
         let patrol = order.kind == "patrol";
@@ -347,6 +353,24 @@ impl World {
                 Some(orbit) => orbit.pos,
                 None => self.entity(id).expect("patroller").pos,
             });
+            // Several queued patrol points make a loop: the start joins them once, at the back.
+            if !in_orbit && self.patrol_follows(id) {
+                let mut start = order.clone();
+                start.target_pos = order.home;
+                start.target_entity = None;
+                start.status = OrderStatus::Queued;
+                start.progress_ticks = 0;
+                start.movement = None;
+                let queue = &mut self.entities[id.0 as usize]
+                    .as_mut()
+                    .expect("patroller")
+                    .orders;
+                // Every point of the loop now counts as started: the start is not added again.
+                for o in queue.iter_mut().filter(|o| o.kind == "patrol") {
+                    o.home = order.home;
+                }
+                queue.push_back(start);
+            }
         }
         if order.kind == "attack_move" || patrol {
             if order.target_entity.is_some_and(|target| {
@@ -367,6 +391,22 @@ impl World {
                     return;
                 }
                 if self.walk(id, order, goal, None, !patrol) == Walk::Arrived {
+                    // On a route this point goes to the back of the queue and the next one is
+                    // walked to: the queued patrol orders are the loop, in rotation.
+                    if patrol && self.patrol_follows(id) {
+                        let mut again = order.clone();
+                        again.status = OrderStatus::Queued;
+                        again.progress_ticks = 0;
+                        again.movement = None;
+                        again.target_entity = None;
+                        self.entities[id.0 as usize]
+                            .as_mut()
+                            .expect("patroller")
+                            .orders
+                            .push_back(again);
+                        order.status = OrderStatus::Done;
+                        return;
+                    }
                     match order.home.filter(|home| patrol && *home != goal) {
                         Some(home) => {
                             order.target_pos = Some(home);
