@@ -32,12 +32,25 @@ changes the simulation, and nothing in `rom-sim` knows about sound.
   buildings that produce or are under construction (their loop or hammering). Volume and pan
   from the camera distance and screen position; at most N sources at once, nearest first; a
   battle of 200 units must not become noise (group by kind and keep the nearest few).
+- **Every type has its own sounds** (owner, 2026-11-21: "sounds paired with the unit or
+  building they belong to … gives more character/more individuality to each unit type"): task
+  124's `app/tools/sounds/assignment.json` lists, for every unit and building key, its sound per
+  event — units `select`, `move`, `attack`, `build`, `fire` (ranged), `fight` (melee),
+  `build_done`, `research_done`; buildings `select`, `active` (working loop), `train_done`,
+  `build_done`, `research_done`. The owner approves them per type on the model review page; the
+  seed rows come from that file (a script turns it into SQL), with the owner's changes.
 - **Data, not names**: a table (proposal: `et_sound(entity_type_id, event, sound, gain)` with
   events `select`, `order`, `move`, `work`, `attack`, `death`, `active`, `build`; and a
   `voice_set` per entity type) — check `database.md` and propose the final shape in the
   report; sounds referred to by their file name key from task 124. Seed rows for every unit
   and building, filled by rules in `generate.py` where possible (by class, movement class,
   weapon damage type, resource) with per-key overrides only where needed.
+- **A gentle mix** (owner, 2026-11-22, after reviewing every sound: "things will be different
+  when mixing them with other sounds. the general idea is for them not to be too violent"):
+  default volumes low, battles never louder than speech, a limiter on the master bus, combat
+  sounds ducked under voice lines and alerts, and the owner judges the mix in a played match
+  before release — make a session the owner can play (a mid-game save with a battle and a
+  working city) and say how to start it.
 - **Settings**: the Sound section of the settings (master, effects, voice, ambient volume;
   mute when the window is not focused, on by default), saved with the other settings.
 

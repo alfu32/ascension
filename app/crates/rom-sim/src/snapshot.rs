@@ -533,6 +533,8 @@ pub struct Snapshot {
     pub failures: Vec<(PlayerId, Vec<crate::OrderFailure>)>,
     /// Automated colonies whose governor is paused, in id order.
     pub governors_paused: Vec<EntityId>,
+    /// Aircraft on or near the ground and the ticks they have climbed, in id order (task 123).
+    pub flight: Vec<(EntityId, u64)>,
     /// Dormant surfaces of resource bodies not yet brought to life, in body order (task 77).
     pub dormant: Vec<(BodyId, crate::DormantSurface)>,
     /// Bodies brought to life, in body order (task 77).
@@ -1034,6 +1036,7 @@ impl World {
                 .map(|(player, list)| (*player, list.iter().cloned().collect()))
                 .collect(),
             governors_paused: self.governors_paused.iter().copied().collect(),
+            flight: self.flight.iter().map(|(id, c)| (*id, *c)).collect(),
             dormant: self.life.dormant.iter().map(|(b, d)| (*b, *d)).collect(),
             living: self
                 .life
@@ -1084,6 +1087,7 @@ impl World {
             rallies,
             failures,
             governors_paused,
+            flight,
             dormant,
             living,
             market,
@@ -1474,6 +1478,16 @@ impl World {
             .collect();
         world.rallies = rallies.into_iter().collect();
         world.governors_paused = governors_paused.into_iter().collect();
+        for (id, climbed) in flight {
+            let ticks = world
+                .entity(id)
+                .and_then(|e| world.takeoff_ticks(e.type_id))
+                .ok_or_else(|| bad("flight of an entity that is not an aircraft"))?;
+            if climbed >= ticks {
+                return Err(bad("aircraft climbed past its flight height"));
+            }
+            world.flight.insert(id, climbed);
+        }
         for ((player, resource), pressure) in market {
             if pressure == 0
                 || !world.players.contains_key(&player)

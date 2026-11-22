@@ -281,8 +281,11 @@ struct Flight {
     to: [f32; 3],
     /// Away from the ground under the shooter.
     up: [f32; 3],
-    /// To or from what is aloft: a straight line, drawn larger.
+    /// To or from what is aloft: a straight line.
     aloft: bool,
+    /// To or from a ship aloft (ships are drawn larger): drawn larger too. Aircraft in the air
+    /// are not (task 123).
+    large: bool,
     count: u8,
 }
 
@@ -321,7 +324,7 @@ impl Flight {
     }
 
     fn scale(&self) -> f32 {
-        if self.aloft { ALOFT_SCALE } else { 1.0 }
+        if self.large { ALOFT_SCALE } else { 1.0 }
     }
 
     /// A number in [0, 1) that tells this flight's copies and flickers apart.
@@ -451,6 +454,8 @@ impl Projectiles {
         };
         let from = muzzle(view, ground);
         let aloft = is_aloft(view) || target.is_some_and(is_aloft) || shot.altitude > 0.0;
+        let ship = |v: &EntityView| is_aloft(v) && v.spacecraft;
+        let large = ship(view) || target.is_some_and(ship) || shot.altitude > 0.0;
         let (start, end) = flight_span(shot.kind, shot.fired_tick, shot.land_tick);
         if now >= end + IMPACT_TICKS {
             return;
@@ -466,6 +471,7 @@ impl Projectiles {
             to,
             up: ground.frame(view.face, view.x, view.y).up,
             aloft,
+            large,
             count: shot.count.clamp(1, MAX_VOLLEY),
         });
     }
@@ -529,6 +535,9 @@ fn find(views: &[EntityView], id: u32) -> Option<&EntityView> {
 }
 
 fn is_aloft(view: &EntityView) -> bool {
+    if view.aircraft {
+        return view.flight > 0.0;
+    }
     view.altitude > 0.0
 }
 
@@ -1146,6 +1155,8 @@ mod tests {
             altitude: 0.0,
             shot: None,
             spacecraft: false,
+            flight: 0.0,
+            aircraft: false,
             hp_frac: 1.0,
             building: false,
             footprint: (1, 1),

@@ -667,6 +667,7 @@ def generate():
     naval_manager(sql.append)
     market_trading(row, modifier, sql.append)
     alerts_and_detectors(definition, row, tag, need, produce, cost, tech)
+    aircraft_take_off(row, sql.append)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -1228,6 +1229,34 @@ def alerts_and_detectors(definition, row, tag, need, produce, cost, tech):
          {'wealth': 100 * (age + 1), 'knowledge': 50 * (age + 1)})
     row('modifier', source_def_id=Ref(full), target_def_id=Ref('unit.survey_ship'), stat_key='detector',
         op='set', value=1)
+
+
+# Task 123: ticks each aircraft takes to take off from the ground into the air, and to land
+# (`et_movement.takeoff_ticks`); bigger aircraft take longer. The repair drone hovers and never
+# lands (0), nor do the orbital craft, which climb to orbit instead (`climb_ticks`).
+TAKEOFF_TICKS = {
+    'biplane': 60, 'fighter': 70, 'drone_fighter': 70, 'jet_fighter': 80, 'interceptor': 80,
+    'bomber': 90, 'drone_bomber': 90, 'strategic_bomber': 100,
+}
+# Ground an aircraft rolls along its heading while it takes off, and glides over while it lands.
+TAKEOFF_RUN = 3000
+# Half the larger horizontal extent (span or length) of each aircraft's drawn model, milli-tiles,
+# to the nearest hundred (`et_movement.landing_radius`): a parked aircraft keeps this clear of
+# buildings and of other aircraft. Measured from the composed models in db/models.
+AIRCRAFT_REACH = {
+    'biplane': 1400, 'fighter': 1400, 'jet_fighter': 1600, 'drone_fighter': 1200,
+    'interceptor': 2100, 'bomber': 2000, 'strategic_bomber': 2200, 'drone_bomber': 1900,
+}
+
+
+def aircraft_take_off(row, emit):
+    """Task 123: jets and biplanes land and take off. Values only, no new definition, so every
+    id stays."""
+    row('game_constant', key='air.takeoff_run', value=TAKEOFF_RUN, unit='milli-tiles',
+        note='ground an aircraft rolls along its heading while taking off, and glides over while landing')
+    for key, ticks in TAKEOFF_TICKS.items():
+        emit(f"UPDATE et_movement SET takeoff_ticks={ticks},landing_radius={AIRCRAFT_REACH[key]} "
+             f"WHERE entity_type_id={val(Ref('unit.' + key))};")
 
 
 # Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"

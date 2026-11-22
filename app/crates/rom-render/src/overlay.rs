@@ -481,6 +481,8 @@ pub fn build_overlays_on(
             altitude: 0.0,
             shot: None,
             spacecraft: false,
+            flight: 0.0,
+            aircraft: false,
             activity: Default::default(),
         };
         out.building_ghost(origin, &view, line, false);
@@ -521,6 +523,8 @@ mod tests {
             altitude: 0.0,
             shot: None,
             spacecraft: false,
+            flight: 0.0,
+            aircraft: false,
             activity: Default::default(),
         }
     }

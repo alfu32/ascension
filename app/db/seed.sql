@@ -126,8 +126,8 @@ INSERT INTO order_kind(key,needs,target,note) VALUES
  ('claim','trader','entity','target = rare resource node'),
  ('enter','movement','entity','board a carrier: beside it when it has landed, or at an own spaceport below its orbit; orbital craft board one orbiting their planet'),
  ('unload','container','entity_or_point','landed: set passengers down around the carrier (a point: they walk there); in orbit: at the target own spaceport below, or a launching carrier launches its craft into its orbit'),
- ('land','movement','point','a carrier descends from orbit onto open ground of that planet, outside enemy cities; passengers come out and the carrier stays landed; an orbital craft comes down into the air above the point'),
- ('lift','movement','none','a landed carrier returns to orbit; an orbital craft climbs from its planet to that planet''s orbit'),
+ ('land','movement','point','a carrier descends from orbit onto open ground of that planet, outside enemy cities; passengers come out and the carrier stays landed; an orbital craft comes down into the air above the point; an aircraft (task 123) flies there and lands on open ground or an own airfield'),
+ ('lift','movement','none','a landed carrier returns to orbit; an orbital craft climbs from its planet to that planet''s orbit; a landed aircraft takes off into the air'),
  ('train','producer','def',''), ('research','producer','def',''), ('morph','','def','upgrade in place'),
  ('ability','energy','entity_or_point','subject = ability'), ('set_rally','producer','entity_or_point','units it trains walk to the point or entity; applied at once, the queue stays'),
  ('raze','','none','pull down an own building at once: an unfinished one refunds the work not done; not a finished city'), ('disband','movement','none','the unit leaves the match; no refund'),
@@ -3303,6 +3303,15 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.survey_sensor_array'),(SELECT id FROM def WHERE key='res.wealth'),1100,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.survey_sensor_array'),(SELECT id FROM def WHERE key='res.knowledge'),550,0);
 INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.survey_sensor_array'),(SELECT id FROM def WHERE key='unit.survey_ship'),'detector','set',1);
+INSERT INTO game_constant(key,value,unit,note) VALUES ('air.takeoff_run',3000,'milli-tiles','ground an aircraft rolls along its heading while taking off, and glides over while landing');
+UPDATE et_movement SET takeoff_ticks=60,landing_radius=1400 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.biplane');
+UPDATE et_movement SET takeoff_ticks=70,landing_radius=1400 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.fighter');
+UPDATE et_movement SET takeoff_ticks=70,landing_radius=1200 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.drone_fighter');
+UPDATE et_movement SET takeoff_ticks=80,landing_radius=1600 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.jet_fighter');
+UPDATE et_movement SET takeoff_ticks=80,landing_radius=2100 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.interceptor');
+UPDATE et_movement SET takeoff_ticks=90,landing_radius=2000 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.bomber');
+UPDATE et_movement SET takeoff_ticks=90,landing_radius=1900 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.drone_bomber');
+UPDATE et_movement SET takeoff_ticks=100,landing_radius=2200 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.strategic_bomber');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.1'),'research','research',1,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.civic.1'),'research','research',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.commerce.1'),'research','research',3,0);

@@ -165,6 +165,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             altitude: 0.0,
             shot: None,
             spacecraft: false,
+            flight: 0.0,
+            aircraft: false,
         })
         .collect::<Vec<_>>();
     let camera = Camera {

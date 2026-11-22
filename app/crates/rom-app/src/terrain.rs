@@ -200,6 +200,7 @@ pub fn sun_settings(rules: &Rules, options: &Options) -> SunSettings {
             .map_or(defaults.axial_tilt_mdeg, |v| v.clamp(-90_000, 90_000)),
         fixed: options.sun_fixed,
         midnight: options.sun_midnight,
+        low: options.sun_low,
     }
 }
 

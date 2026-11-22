@@ -99,6 +99,9 @@ pub struct World {
     pub(crate) rallies: BTreeMap<EntityId, crate::rally::Rally>,
     /// Automated colonies whose owner paused the governor (`pause_governor`).
     pub(crate) governors_paused: BTreeSet<EntityId>,
+    /// Aircraft on or near the ground (task 123): ticks climbed toward their flight height,
+    /// 0 when landed. Airborne aircraft have no entry.
+    pub(crate) flight: BTreeMap<EntityId, u64>,
     /// Legs of space trade routes queued this tick in front of their routes; empty between
     /// ticks.
     pub(crate) legs: Vec<Order>,
@@ -329,6 +332,7 @@ impl World {
             vision: Vision::default(),
             rallies: BTreeMap::new(),
             governors_paused: BTreeSet::new(),
+            flight: BTreeMap::new(),
             disbanded: Vec::new(),
             legs: Vec::new(),
             failures: BTreeMap::new(),
@@ -678,6 +682,7 @@ impl World {
         self.types.producers.remove(&id);
         self.rallies.remove(&id);
         self.governors_paused.remove(&id);
+        self.flight.remove(&id);
         self.space.orbits.remove(&id);
         self.space.landed.remove(&id);
         self.space.arrivals.remove(&id);
@@ -821,6 +826,7 @@ impl World {
             return Err(SimError::WrongTargetShape);
         }
         self.validate_craft(&command)?;
+        self.validate_aircraft(&command)?;
         self.validate_space_order(&command)?;
         self.validate_transport(&command)?;
         // Orbit can name a body's surface; an orbiting ship can attack that surface, and what
@@ -1033,6 +1039,7 @@ impl World {
             self.pace_formations(&applied);
         }
         self.acquire_attack_moves();
+        self.settle_aircraft();
         // `avoid.pos` mirrors every entity's position until the first move below.
         if self.has_enemies() {
             self.seen.clone_from(&self.avoid.pos);

@@ -373,6 +373,8 @@ impl World {
                     self.boarding_point(e, ship).ok_or(SimError::CannotBoard)?;
                 }
             }
+            // An aircraft's landing and take-off are checked with its other orders.
+            "land" | "lift" if self.is_aircraft_type(e.type_id) => {}
             "land" => {
                 let at = command.target_pos.ok_or(SimError::WrongTargetShape)?;
                 if self.is_craft_type(e.type_id) {
@@ -420,8 +422,12 @@ impl World {
 
     /// Advances one boarding, landing, lift-off or unloading order.
     pub(crate) fn advance_transport(&mut self, id: EntityId, order: &mut Order) {
-        let craft = self.is_craft_type(self.entity(id).expect("executor").type_id);
+        let type_id = self.entity(id).expect("executor").type_id;
+        let craft = self.is_craft_type(type_id);
+        let aircraft = self.is_aircraft_type(type_id);
         match order.kind.as_str() {
+            "land" if aircraft => self.advance_air_landing(id, order),
+            "lift" if aircraft => self.advance_take_off(id, order),
             "enter" => self.advance_enter(id, order),
             "land" if craft => self.advance_descent(id, order),
             "land" => self.advance_land(id, order),

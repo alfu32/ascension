@@ -84,7 +84,7 @@ pub(crate) struct Space {
 }
 
 /// Sine in millionths using the integer Bhaskara approximation on a half turn.
-fn sine(angle: i64) -> i64 {
+pub(crate) fn sine(angle: i64) -> i64 {
     let angle = angle.rem_euclid(360_000);
     let (sign, x) = if angle <= 180_000 {
         (1, angle)
