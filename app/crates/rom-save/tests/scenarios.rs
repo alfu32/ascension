@@ -933,7 +933,11 @@ fn drone_operators_with_their_clouds() {
     let operator = w.spawn(kind, P1, at(HOME, 28_500, 40_500)).unwrap();
     let other = w.spawn(kind, P1, at(HOME, 30_500, 40_500)).unwrap();
     let target = w
-        .spawn(id(&w, "unit.assault_infantry"), P2, at(HOME, 34_500, 40_500))
+        .spawn(
+            id(&w, "unit.assault_infantry"),
+            P2,
+            at(HOME, 34_500, 40_500),
+        )
         .unwrap();
     order(&mut w, operator, "attack", Some(target), None);
     order(&mut w, other, "move", None, Some(at(HOME, 30_500, 46_500)));
