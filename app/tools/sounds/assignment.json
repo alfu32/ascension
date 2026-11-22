@@ -1,0 +1,2716 @@
+{
+ "bld.airfield": {
+  "active": [
+   "bld.airfield.active"
+  ],
+  "build_done": [
+   "bld.airfield.build_done"
+  ],
+  "research_done": [
+   "bld.airfield.research_done"
+  ],
+  "select": [
+   "bld.airfield.select"
+  ],
+  "train_done": [
+   "bld.airfield.train_done"
+  ]
+ },
+ "bld.auto_colony": {
+  "active": [
+   "bld.auto_colony.active"
+  ],
+  "build_done": [
+   "bld.auto_colony.build_done"
+  ],
+  "select": [
+   "bld.auto_colony.select"
+  ]
+ },
+ "bld.auto_farm": {
+  "active": [
+   "bld.auto_farm.active"
+  ],
+  "build_done": [
+   "bld.auto_farm.build_done"
+  ],
+  "research_done": [
+   "bld.auto_farm.research_done"
+  ],
+  "select": [
+   "bld.auto_farm.select"
+  ]
+ },
+ "bld.auto_lab": {
+  "active": [
+   "bld.auto_lab.active"
+  ],
+  "build_done": [
+   "bld.auto_lab.build_done"
+  ],
+  "research_done": [
+   "bld.auto_lab.research_done.1",
+   "bld.auto_lab.research_done.2",
+   "bld.auto_lab.research_done.3"
+  ],
+  "select": [
+   "bld.auto_lab.select.1",
+   "bld.auto_lab.select.2",
+   "bld.auto_lab.select.3"
+  ],
+  "train_done": [
+   "bld.auto_lab.train_done"
+  ]
+ },
+ "bld.auto_mine": {
+  "active": [
+   "bld.auto_mine.active"
+  ],
+  "build_done": [
+   "bld.auto_mine.build_done"
+  ],
+  "research_done": [
+   "bld.auto_mine.research_done"
+  ],
+  "select": [
+   "bld.auto_mine.select"
+  ]
+ },
+ "bld.auto_oil_well": {
+  "active": [
+   "bld.auto_oil_well.active"
+  ],
+  "build_done": [
+   "bld.auto_oil_well.build_done"
+  ],
+  "research_done": [
+   "bld.auto_oil_well.research_done"
+  ],
+  "select": [
+   "bld.auto_oil_well.select"
+  ]
+ },
+ "bld.auto_woodcutter_camp": {
+  "active": [
+   "bld.auto_woodcutter_camp.active"
+  ],
+  "build_done": [
+   "bld.auto_woodcutter_camp.build_done"
+  ],
+  "research_done": [
+   "bld.auto_woodcutter_camp.research_done"
+  ],
+  "select": [
+   "bld.auto_woodcutter_camp.select"
+  ]
+ },
+ "bld.barracks": {
+  "active": [
+   "bld.barracks.active"
+  ],
+  "build_done": [
+   "bld.barracks.build_done"
+  ],
+  "research_done": [
+   "bld.barracks.research_done"
+  ],
+  "select": [
+   "bld.barracks.select"
+  ],
+  "train_done": [
+   "bld.barracks.train_done"
+  ]
+ },
+ "bld.bastion": {
+  "active": [
+   "bld.bastion.active"
+  ],
+  "build_done": [
+   "bld.bastion.build_done"
+  ],
+  "fire": [
+   "bld.bastion.fire"
+  ],
+  "research_done": [
+   "bld.bastion.research_done"
+  ],
+  "select": [
+   "bld.bastion.select"
+  ]
+ },
+ "bld.bunker": {
+  "active": [
+   "bld.bunker.active"
+  ],
+  "build_done": [
+   "bld.bunker.build_done"
+  ],
+  "fire": [
+   "bld.bunker.fire"
+  ],
+  "research_done": [
+   "bld.bunker.research_done"
+  ],
+  "select": [
+   "bld.bunker.select"
+  ]
+ },
+ "bld.citadel": {
+  "active": [
+   "bld.citadel.active"
+  ],
+  "build_done": [
+   "bld.citadel.build_done"
+  ],
+  "fire": [
+   "bld.citadel.fire"
+  ],
+  "research_done": [
+   "bld.citadel.research_done"
+  ],
+  "select": [
+   "bld.citadel.select"
+  ]
+ },
+ "bld.city": {
+  "active": [
+   "bld.city.active"
+  ],
+  "build_done": [
+   "bld.city.build_done"
+  ],
+  "fire": [
+   "bld.city.fire"
+  ],
+  "research_done": [
+   "bld.city.research_done"
+  ],
+  "select": [
+   "bld.city.select"
+  ],
+  "train_done": [
+   "bld.city.train_done"
+  ]
+ },
+ "bld.defence_turret": {
+  "active": [
+   "bld.defence_turret.active"
+  ],
+  "build_done": [
+   "bld.defence_turret.build_done"
+  ],
+  "fire": [
+   "bld.defence_turret.fire"
+  ],
+  "research_done": [
+   "bld.defence_turret.research_done"
+  ],
+  "select": [
+   "bld.defence_turret.select"
+  ]
+ },
+ "bld.dock": {
+  "active": [
+   "bld.dock.active"
+  ],
+  "build_done": [
+   "bld.dock.build_done"
+  ],
+  "research_done": [
+   "bld.dock.research_done"
+  ],
+  "select": [
+   "bld.dock.select"
+  ],
+  "train_done": [
+   "bld.dock.train_done"
+  ]
+ },
+ "bld.factory": {
+  "active": [
+   "bld.factory.active"
+  ],
+  "build_done": [
+   "bld.factory.build_done"
+  ],
+  "research_done": [
+   "bld.factory.research_done"
+  ],
+  "select": [
+   "bld.factory.select"
+  ],
+  "train_done": [
+   "bld.factory.train_done"
+  ]
+ },
+ "bld.farm": {
+  "active": [
+   "bld.farm.active"
+  ],
+  "build_done": [
+   "bld.farm.build_done"
+  ],
+  "research_done": [
+   "bld.farm.research_done"
+  ],
+  "select": [
+   "bld.farm.select"
+  ]
+ },
+ "bld.fort": {
+  "active": [
+   "bld.fort.active"
+  ],
+  "build_done": [
+   "bld.fort.build_done"
+  ],
+  "fire": [
+   "bld.fort.fire"
+  ],
+  "research_done": [
+   "bld.fort.research_done"
+  ],
+  "select": [
+   "bld.fort.select"
+  ]
+ },
+ "bld.fortress": {
+  "active": [
+   "bld.fortress.active"
+  ],
+  "build_done": [
+   "bld.fortress.build_done"
+  ],
+  "fire": [
+   "bld.fortress.fire"
+  ],
+  "research_done": [
+   "bld.fortress.research_done"
+  ],
+  "select": [
+   "bld.fortress.select"
+  ]
+ },
+ "bld.fusion_plant": {
+  "active": [
+   "bld.fusion_plant.active"
+  ],
+  "build_done": [
+   "bld.fusion_plant.build_done"
+  ],
+  "research_done": [
+   "bld.fusion_plant.research_done"
+  ],
+  "select": [
+   "bld.fusion_plant.select"
+  ]
+ },
+ "bld.granary": {
+  "active": [
+   "bld.granary.active"
+  ],
+  "build_done": [
+   "bld.granary.build_done"
+  ],
+  "research_done": [
+   "bld.granary.research_done"
+  ],
+  "select": [
+   "bld.granary.select"
+  ]
+ },
+ "bld.ground_battery": {
+  "active": [
+   "bld.ground_battery.active"
+  ],
+  "build_done": [
+   "bld.ground_battery.build_done"
+  ],
+  "fire": [
+   "bld.ground_battery.fire"
+  ],
+  "select": [
+   "bld.ground_battery.select"
+  ]
+ },
+ "bld.jump_detector": {
+  "active": [
+   "bld.jump_detector.active"
+  ],
+  "build_done": [
+   "bld.jump_detector.build_done"
+  ],
+  "select": [
+   "bld.jump_detector.select"
+  ]
+ },
+ "bld.jump_inhibitor": {
+  "active": [
+   "bld.jump_inhibitor.active"
+  ],
+  "build_done": [
+   "bld.jump_inhibitor.build_done"
+  ],
+  "select": [
+   "bld.jump_inhibitor.select"
+  ]
+ },
+ "bld.library": {
+  "active": [
+   "bld.library.active"
+  ],
+  "build_done": [
+   "bld.library.build_done"
+  ],
+  "research_done": [
+   "bld.library.research_done"
+  ],
+  "select": [
+   "bld.library.select"
+  ]
+ },
+ "bld.lumber_mill": {
+  "active": [
+   "bld.lumber_mill.active"
+  ],
+  "build_done": [
+   "bld.lumber_mill.build_done"
+  ],
+  "research_done": [
+   "bld.lumber_mill.research_done"
+  ],
+  "select": [
+   "bld.lumber_mill.select"
+  ]
+ },
+ "bld.market": {
+  "active": [
+   "bld.market.active"
+  ],
+  "build_done": [
+   "bld.market.build_done"
+  ],
+  "research_done": [
+   "bld.market.research_done"
+  ],
+  "select": [
+   "bld.market.select"
+  ],
+  "train_done": [
+   "bld.market.train_done"
+  ]
+ },
+ "bld.mine": {
+  "active": [
+   "bld.mine.active"
+  ],
+  "build_done": [
+   "bld.mine.build_done"
+  ],
+  "research_done": [
+   "bld.mine.research_done"
+  ],
+  "select": [
+   "bld.mine.select"
+  ]
+ },
+ "bld.oil_well": {
+  "active": [
+   "bld.oil_well.active"
+  ],
+  "build_done": [
+   "bld.oil_well.build_done"
+  ],
+  "research_done": [
+   "bld.oil_well.research_done"
+  ],
+  "select": [
+   "bld.oil_well.select"
+  ]
+ },
+ "bld.refinery": {
+  "active": [
+   "bld.refinery.active"
+  ],
+  "build_done": [
+   "bld.refinery.build_done"
+  ],
+  "research_done": [
+   "bld.refinery.research_done"
+  ],
+  "select": [
+   "bld.refinery.select"
+  ]
+ },
+ "bld.siege_workshop": {
+  "active": [
+   "bld.siege_workshop.active"
+  ],
+  "build_done": [
+   "bld.siege_workshop.build_done"
+  ],
+  "research_done": [
+   "bld.siege_workshop.research_done"
+  ],
+  "select": [
+   "bld.siege_workshop.select"
+  ],
+  "train_done": [
+   "bld.siege_workshop.train_done"
+  ]
+ },
+ "bld.smelter": {
+  "active": [
+   "bld.smelter.active"
+  ],
+  "build_done": [
+   "bld.smelter.build_done"
+  ],
+  "research_done": [
+   "bld.smelter.research_done"
+  ],
+  "select": [
+   "bld.smelter.select"
+  ]
+ },
+ "bld.spaceport": {
+  "active": [
+   "bld.spaceport.active"
+  ],
+  "build_done": [
+   "bld.spaceport.build_done"
+  ],
+  "research_done": [
+   "bld.spaceport.research_done"
+  ],
+  "select": [
+   "bld.spaceport.select"
+  ],
+  "train_done": [
+   "bld.spaceport.train_done"
+  ]
+ },
+ "bld.stable": {
+  "active": [
+   "bld.stable.active"
+  ],
+  "build_done": [
+   "bld.stable.build_done"
+  ],
+  "research_done": [
+   "bld.stable.research_done"
+  ],
+  "select": [
+   "bld.stable.select"
+  ],
+  "train_done": [
+   "bld.stable.train_done"
+  ]
+ },
+ "bld.star_fort": {
+  "active": [
+   "bld.star_fort.active"
+  ],
+  "build_done": [
+   "bld.star_fort.build_done"
+  ],
+  "fire": [
+   "bld.star_fort.fire"
+  ],
+  "research_done": [
+   "bld.star_fort.research_done"
+  ],
+  "select": [
+   "bld.star_fort.select"
+  ]
+ },
+ "bld.temple": {
+  "active": [
+   "bld.temple.active"
+  ],
+  "build_done": [
+   "bld.temple.build_done"
+  ],
+  "research_done": [
+   "bld.temple.research_done"
+  ],
+  "select": [
+   "bld.temple.select.1",
+   "bld.temple.select.2"
+  ],
+  "train_done": [
+   "bld.temple.train_done"
+  ]
+ },
+ "bld.tower": {
+  "active": [
+   "bld.tower.active"
+  ],
+  "build_done": [
+   "bld.tower.build_done"
+  ],
+  "fire": [
+   "bld.tower.fire"
+  ],
+  "research_done": [
+   "bld.tower.research_done"
+  ],
+  "select": [
+   "bld.tower.select"
+  ]
+ },
+ "bld.university": {
+  "active": [
+   "bld.university.active"
+  ],
+  "build_done": [
+   "bld.university.build_done"
+  ],
+  "research_done": [
+   "bld.university.research_done.1",
+   "bld.university.research_done.2",
+   "bld.university.research_done.3"
+  ],
+  "select": [
+   "bld.university.select.1",
+   "bld.university.select.2",
+   "bld.university.select.3"
+  ],
+  "train_done": [
+   "bld.university.train_done"
+  ]
+ },
+ "bld.vehicle_plant": {
+  "active": [
+   "bld.vehicle_plant.active"
+  ],
+  "build_done": [
+   "bld.vehicle_plant.build_done"
+  ],
+  "research_done": [
+   "bld.vehicle_plant.research_done"
+  ],
+  "select": [
+   "bld.vehicle_plant.select"
+  ],
+  "train_done": [
+   "bld.vehicle_plant.train_done"
+  ]
+ },
+ "bld.woodcutter_camp": {
+  "active": [
+   "bld.woodcutter_camp.active"
+  ],
+  "build_done": [
+   "bld.woodcutter_camp.build_done"
+  ],
+  "research_done": [
+   "bld.woodcutter_camp.research_done"
+  ],
+  "select": [
+   "bld.woodcutter_camp.select"
+  ]
+ },
+ "unit.anti_tank_rifleman": {
+  "attack": [
+   "voice.anti_tank_rifleman.attack"
+  ],
+  "fire": [
+   "unit.anti_tank_rifleman.fire.1",
+   "unit.anti_tank_rifleman.fire.2"
+  ],
+  "move": [
+   "voice.anti_tank_rifleman.move"
+  ],
+  "moving": [
+   "unit.anti_tank_rifleman.moving"
+  ],
+  "research_done": [
+   "voice.anti_tank_rifleman.research_done"
+  ],
+  "select": [
+   "voice.anti_tank_rifleman.select"
+  ]
+ },
+ "unit.archer": {
+  "attack": [
+   "voice.archer.attack"
+  ],
+  "fire": [
+   "unit.archer.fire.1",
+   "unit.archer.fire.2",
+   "unit.archer.fire.3"
+  ],
+  "move": [
+   "voice.archer.move"
+  ],
+  "moving": [
+   "unit.archer.moving"
+  ],
+  "research_done": [
+   "voice.archer.research_done"
+  ],
+  "select": [
+   "voice.archer.select"
+  ]
+ },
+ "unit.armoured_car": {
+  "attack": [
+   "voice.armoured_car.attack"
+  ],
+  "fire": [
+   "unit.armoured_car.fire.1",
+   "unit.armoured_car.fire.2"
+  ],
+  "move": [
+   "voice.armoured_car.move"
+  ],
+  "moving": [
+   "unit.armoured_car.moving"
+  ],
+  "research_done": [
+   "voice.armoured_car.research_done"
+  ],
+  "select": [
+   "voice.armoured_car.select"
+  ]
+ },
+ "unit.arquebusier": {
+  "attack": [
+   "voice.arquebusier.attack"
+  ],
+  "fire": [
+   "unit.arquebusier.fire.1",
+   "unit.arquebusier.fire.2",
+   "unit.arquebusier.fire.3"
+  ],
+  "move": [
+   "voice.arquebusier.move"
+  ],
+  "moving": [
+   "unit.arquebusier.moving"
+  ],
+  "research_done": [
+   "voice.arquebusier.research_done"
+  ],
+  "select": [
+   "voice.arquebusier.select"
+  ]
+ },
+ "unit.assault_infantry": {
+  "attack": [
+   "voice.assault_infantry.attack"
+  ],
+  "fire": [
+   "unit.assault_infantry.fire.1",
+   "unit.assault_infantry.fire.2",
+   "unit.assault_infantry.fire.3"
+  ],
+  "move": [
+   "voice.assault_infantry.move"
+  ],
+  "moving": [
+   "unit.assault_infantry.moving"
+  ],
+  "research_done": [
+   "voice.assault_infantry.research_done"
+  ],
+  "select": [
+   "voice.assault_infantry.select"
+  ]
+ },
+ "unit.battleship": {
+  "attack": [
+   "voice.battleship.attack"
+  ],
+  "fire": [
+   "unit.battleship.fire.1",
+   "unit.battleship.fire.2",
+   "unit.battleship.fire.3"
+  ],
+  "fire_slot1": [
+   "unit.battleship.fire_slot1.1",
+   "unit.battleship.fire_slot1.2",
+   "unit.battleship.fire_slot1.3"
+  ],
+  "move": [
+   "voice.battleship.move"
+  ],
+  "moving": [
+   "unit.battleship.moving"
+  ],
+  "research_done": [
+   "voice.battleship.research_done"
+  ],
+  "select": [
+   "voice.battleship.select"
+  ]
+ },
+ "unit.bazooka_team": {
+  "attack": [
+   "voice.bazooka_team.attack"
+  ],
+  "fire": [
+   "unit.bazooka_team.fire.1",
+   "unit.bazooka_team.fire.2"
+  ],
+  "move": [
+   "voice.bazooka_team.move"
+  ],
+  "moving": [
+   "unit.bazooka_team.moving"
+  ],
+  "research_done": [
+   "voice.bazooka_team.research_done"
+  ],
+  "select": [
+   "voice.bazooka_team.select"
+  ]
+ },
+ "unit.beam_trooper": {
+  "attack": [
+   "voice.beam_trooper.attack"
+  ],
+  "fire": [
+   "unit.beam_trooper.fire.1",
+   "unit.beam_trooper.fire.2",
+   "unit.beam_trooper.fire.3"
+  ],
+  "move": [
+   "voice.beam_trooper.move"
+  ],
+  "moving": [
+   "unit.beam_trooper.moving"
+  ],
+  "research_done": [
+   "voice.beam_trooper.research_done"
+  ],
+  "select": [
+   "voice.beam_trooper.select"
+  ]
+ },
+ "unit.biplane": {
+  "attack": [
+   "voice.biplane.attack"
+  ],
+  "fire": [
+   "unit.biplane.fire.1",
+   "unit.biplane.fire.2",
+   "unit.biplane.fire.3"
+  ],
+  "move": [
+   "voice.biplane.move"
+  ],
+  "moving": [
+   "unit.biplane.moving"
+  ],
+  "research_done": [
+   "voice.biplane.research_done"
+  ],
+  "select": [
+   "voice.biplane.select"
+  ]
+ },
+ "unit.bombard": {
+  "attack": [
+   "voice.bombard.attack"
+  ],
+  "fire": [
+   "unit.bombard.fire.1",
+   "unit.bombard.fire.2"
+  ],
+  "move": [
+   "voice.bombard.move"
+  ],
+  "moving": [
+   "unit.bombard.moving"
+  ],
+  "research_done": [
+   "voice.bombard.research_done"
+  ],
+  "select": [
+   "voice.bombard.select"
+  ]
+ },
+ "unit.bomber": {
+  "attack": [
+   "voice.bomber.attack"
+  ],
+  "fire": [
+   "unit.bomber.fire.1",
+   "unit.bomber.fire.2"
+  ],
+  "move": [
+   "voice.bomber.move"
+  ],
+  "moving": [
+   "unit.bomber.moving"
+  ],
+  "research_done": [
+   "voice.bomber.research_done"
+  ],
+  "select": [
+   "voice.bomber.select"
+  ]
+ },
+ "unit.cannon": {
+  "attack": [
+   "voice.cannon.attack"
+  ],
+  "fire": [
+   "unit.cannon.fire.1",
+   "unit.cannon.fire.2"
+  ],
+  "move": [
+   "voice.cannon.move"
+  ],
+  "moving": [
+   "unit.cannon.moving"
+  ],
+  "research_done": [
+   "voice.cannon.research_done"
+  ],
+  "select": [
+   "voice.cannon.select"
+  ]
+ },
+ "unit.caravan": {
+  "move": [
+   "voice.caravan.move"
+  ],
+  "moving": [
+   "unit.caravan.moving"
+  ],
+  "research_done": [
+   "voice.caravan.research_done"
+  ],
+  "select": [
+   "voice.caravan.select"
+  ]
+ },
+ "unit.cargo_drone": {
+  "move": [
+   "voice.cargo_drone.move"
+  ],
+  "moving": [
+   "unit.cargo_drone.moving"
+  ],
+  "research_done": [
+   "voice.cargo_drone.research_done"
+  ],
+  "select": [
+   "voice.cargo_drone.select"
+  ]
+ },
+ "unit.carrack": {
+  "attack": [
+   "voice.carrack.attack"
+  ],
+  "fire": [
+   "unit.carrack.fire.1",
+   "unit.carrack.fire.2"
+  ],
+  "move": [
+   "voice.carrack.move"
+  ],
+  "moving": [
+   "unit.carrack.moving"
+  ],
+  "research_done": [
+   "voice.carrack.research_done"
+  ],
+  "select": [
+   "voice.carrack.select"
+  ]
+ },
+ "unit.carrier": {
+  "attack": [
+   "voice.carrier.attack"
+  ],
+  "fire": [
+   "unit.carrier.fire.1",
+   "unit.carrier.fire.2",
+   "unit.carrier.fire.3"
+  ],
+  "move": [
+   "voice.carrier.move"
+  ],
+  "moving": [
+   "unit.carrier.moving"
+  ],
+  "research_done": [
+   "voice.carrier.research_done"
+  ],
+  "select": [
+   "voice.carrier.select"
+  ]
+ },
+ "unit.cataphract": {
+  "attack": [
+   "voice.cataphract.attack"
+  ],
+  "fight": [
+   "unit.cataphract.fight.1",
+   "unit.cataphract.fight.2"
+  ],
+  "move": [
+   "voice.cataphract.move"
+  ],
+  "moving": [
+   "unit.cataphract.moving"
+  ],
+  "research_done": [
+   "voice.cataphract.research_done"
+  ],
+  "select": [
+   "voice.cataphract.select"
+  ]
+ },
+ "unit.catapult": {
+  "attack": [
+   "voice.catapult.attack"
+  ],
+  "fire": [
+   "unit.catapult.fire.1",
+   "unit.catapult.fire.2"
+  ],
+  "move": [
+   "voice.catapult.move"
+  ],
+  "moving": [
+   "unit.catapult.moving"
+  ],
+  "research_done": [
+   "voice.catapult.research_done"
+  ],
+  "select": [
+   "voice.catapult.select"
+  ]
+ },
+ "unit.citizen": {
+  "attack": [
+   "voice.citizen.attack"
+  ],
+  "build": [
+   "voice.citizen.build"
+  ],
+  "build_done": [
+   "voice.citizen.build_done"
+  ],
+  "fight": [
+   "unit.citizen.fight.1",
+   "unit.citizen.fight.2",
+   "unit.citizen.fight.3"
+  ],
+  "move": [
+   "voice.citizen.move"
+  ],
+  "moving": [
+   "unit.citizen.moving"
+  ],
+  "research_done": [
+   "voice.citizen.research_done"
+  ],
+  "select": [
+   "voice.citizen.select"
+  ]
+ },
+ "unit.combat_robot": {
+  "attack": [
+   "voice.combat_robot.attack"
+  ],
+  "fire": [
+   "unit.combat_robot.fire.1",
+   "unit.combat_robot.fire.2",
+   "unit.combat_robot.fire.3"
+  ],
+  "move": [
+   "voice.combat_robot.move"
+  ],
+  "moving": [
+   "unit.combat_robot.moving"
+  ],
+  "research_done": [
+   "voice.combat_robot.research_done"
+  ],
+  "select": [
+   "voice.combat_robot.select"
+  ]
+ },
+ "unit.corvette": {
+  "attack": [
+   "voice.corvette.attack"
+  ],
+  "fire": [
+   "unit.corvette.fire.1",
+   "unit.corvette.fire.2"
+  ],
+  "fire_slot1": [
+   "unit.corvette.fire_slot1.1",
+   "unit.corvette.fire_slot1.2"
+  ],
+  "move": [
+   "voice.corvette.move"
+  ],
+  "moving": [
+   "unit.corvette.moving"
+  ],
+  "research_done": [
+   "voice.corvette.research_done"
+  ],
+  "select": [
+   "voice.corvette.select"
+  ]
+ },
+ "unit.crossbowman": {
+  "attack": [
+   "voice.crossbowman.attack"
+  ],
+  "fire": [
+   "unit.crossbowman.fire.1",
+   "unit.crossbowman.fire.2",
+   "unit.crossbowman.fire.3"
+  ],
+  "move": [
+   "voice.crossbowman.move"
+  ],
+  "moving": [
+   "unit.crossbowman.moving"
+  ],
+  "research_done": [
+   "voice.crossbowman.research_done"
+  ],
+  "select": [
+   "voice.crossbowman.select"
+  ]
+ },
+ "unit.cuirassier": {
+  "attack": [
+   "voice.cuirassier.attack"
+  ],
+  "fight": [
+   "unit.cuirassier.fight.1",
+   "unit.cuirassier.fight.2"
+  ],
+  "move": [
+   "voice.cuirassier.move"
+  ],
+  "moving": [
+   "unit.cuirassier.moving"
+  ],
+  "research_done": [
+   "voice.cuirassier.research_done"
+  ],
+  "select": [
+   "voice.cuirassier.select"
+  ]
+ },
+ "unit.destroyer": {
+  "attack": [
+   "voice.destroyer.attack"
+  ],
+  "fire": [
+   "unit.destroyer.fire.1",
+   "unit.destroyer.fire.2"
+  ],
+  "fire_slot1": [
+   "unit.destroyer.fire_slot1.1",
+   "unit.destroyer.fire_slot1.2"
+  ],
+  "move": [
+   "voice.destroyer.move"
+  ],
+  "moving": [
+   "unit.destroyer.moving"
+  ],
+  "research_done": [
+   "voice.destroyer.research_done"
+  ],
+  "select": [
+   "voice.destroyer.select"
+  ]
+ },
+ "unit.dragoon": {
+  "attack": [
+   "voice.dragoon.attack"
+  ],
+  "fight": [
+   "unit.dragoon.fight.1",
+   "unit.dragoon.fight.2"
+  ],
+  "move": [
+   "voice.dragoon.move"
+  ],
+  "moving": [
+   "unit.dragoon.moving"
+  ],
+  "research_done": [
+   "voice.dragoon.research_done"
+  ],
+  "select": [
+   "voice.dragoon.select"
+  ]
+ },
+ "unit.dreadnought": {
+  "attack": [
+   "voice.dreadnought.attack"
+  ],
+  "fire": [
+   "unit.dreadnought.fire.1",
+   "unit.dreadnought.fire.2"
+  ],
+  "move": [
+   "voice.dreadnought.move"
+  ],
+  "moving": [
+   "unit.dreadnought.moving"
+  ],
+  "research_done": [
+   "voice.dreadnought.research_done"
+  ],
+  "select": [
+   "voice.dreadnought.select"
+  ]
+ },
+ "unit.drone_bomber": {
+  "attack": [
+   "voice.drone_bomber.attack"
+  ],
+  "fire": [
+   "unit.drone_bomber.fire.1",
+   "unit.drone_bomber.fire.2"
+  ],
+  "move": [
+   "voice.drone_bomber.move"
+  ],
+  "moving": [
+   "unit.drone_bomber.moving"
+  ],
+  "research_done": [
+   "voice.drone_bomber.research_done"
+  ],
+  "select": [
+   "voice.drone_bomber.select"
+  ]
+ },
+ "unit.drone_cruiser": {
+  "attack": [
+   "voice.drone_cruiser.attack"
+  ],
+  "fire": [
+   "unit.drone_cruiser.fire.1",
+   "unit.drone_cruiser.fire.2"
+  ],
+  "move": [
+   "voice.drone_cruiser.move"
+  ],
+  "moving": [
+   "unit.drone_cruiser.moving"
+  ],
+  "research_done": [
+   "voice.drone_cruiser.research_done"
+  ],
+  "select": [
+   "voice.drone_cruiser.select"
+  ]
+ },
+ "unit.drone_fighter": {
+  "attack": [
+   "voice.drone_fighter.attack"
+  ],
+  "fire": [
+   "unit.drone_fighter.fire.1",
+   "unit.drone_fighter.fire.2"
+  ],
+  "move": [
+   "voice.drone_fighter.move"
+  ],
+  "moving": [
+   "unit.drone_fighter.moving"
+  ],
+  "research_done": [
+   "voice.drone_fighter.research_done"
+  ],
+  "select": [
+   "voice.drone_fighter.select"
+  ]
+ },
+ "unit.exo_trooper": {
+  "attack": [
+   "voice.exo_trooper.attack"
+  ],
+  "fire": [
+   "unit.exo_trooper.fire.1",
+   "unit.exo_trooper.fire.2",
+   "unit.exo_trooper.fire.3"
+  ],
+  "move": [
+   "voice.exo_trooper.move"
+  ],
+  "moving": [
+   "unit.exo_trooper.moving"
+  ],
+  "research_done": [
+   "voice.exo_trooper.research_done"
+  ],
+  "select": [
+   "voice.exo_trooper.select"
+  ]
+ },
+ "unit.field_gun": {
+  "attack": [
+   "voice.field_gun.attack"
+  ],
+  "fire": [
+   "unit.field_gun.fire.1",
+   "unit.field_gun.fire.2"
+  ],
+  "move": [
+   "voice.field_gun.move"
+  ],
+  "moving": [
+   "unit.field_gun.moving"
+  ],
+  "research_done": [
+   "voice.field_gun.research_done"
+  ],
+  "select": [
+   "voice.field_gun.select"
+  ]
+ },
+ "unit.fighter": {
+  "attack": [
+   "voice.fighter.attack"
+  ],
+  "fire": [
+   "unit.fighter.fire.1",
+   "unit.fighter.fire.2",
+   "unit.fighter.fire.3"
+  ],
+  "move": [
+   "voice.fighter.move"
+  ],
+  "moving": [
+   "unit.fighter.moving"
+  ],
+  "research_done": [
+   "voice.fighter.research_done"
+  ],
+  "select": [
+   "voice.fighter.select"
+  ]
+ },
+ "unit.flak_gun": {
+  "attack": [
+   "voice.flak_gun.attack"
+  ],
+  "fire": [
+   "unit.flak_gun.fire.1",
+   "unit.flak_gun.fire.2"
+  ],
+  "move": [
+   "voice.flak_gun.move"
+  ],
+  "moving": [
+   "unit.flak_gun.moving"
+  ],
+  "research_done": [
+   "voice.flak_gun.research_done"
+  ],
+  "select": [
+   "voice.flak_gun.select"
+  ]
+ },
+ "unit.freight_wagon": {
+  "move": [
+   "voice.freight_wagon.move"
+  ],
+  "moving": [
+   "unit.freight_wagon.moving"
+  ],
+  "research_done": [
+   "voice.freight_wagon.research_done"
+  ],
+  "select": [
+   "voice.freight_wagon.select"
+  ]
+ },
+ "unit.frigate": {
+  "attack": [
+   "voice.frigate.attack"
+  ],
+  "fire": [
+   "unit.frigate.fire.1",
+   "unit.frigate.fire.2"
+  ],
+  "move": [
+   "voice.frigate.move"
+  ],
+  "moving": [
+   "unit.frigate.moving"
+  ],
+  "research_done": [
+   "voice.frigate.research_done"
+  ],
+  "select": [
+   "voice.frigate.select"
+  ]
+ },
+ "unit.fusilier": {
+  "attack": [
+   "voice.fusilier.attack"
+  ],
+  "fire": [
+   "unit.fusilier.fire.1",
+   "unit.fusilier.fire.2",
+   "unit.fusilier.fire.3"
+  ],
+  "move": [
+   "voice.fusilier.move"
+  ],
+  "moving": [
+   "unit.fusilier.moving"
+  ],
+  "research_done": [
+   "voice.fusilier.research_done"
+  ],
+  "select": [
+   "voice.fusilier.select"
+  ]
+ },
+ "unit.fusion_tank": {
+  "attack": [
+   "voice.fusion_tank.attack"
+  ],
+  "fire": [
+   "unit.fusion_tank.fire.1",
+   "unit.fusion_tank.fire.2",
+   "unit.fusion_tank.fire.3"
+  ],
+  "move": [
+   "voice.fusion_tank.move"
+  ],
+  "moving": [
+   "unit.fusion_tank.moving"
+  ],
+  "research_done": [
+   "voice.fusion_tank.research_done"
+  ],
+  "select": [
+   "voice.fusion_tank.select"
+  ]
+ },
+ "unit.grav_skimmer": {
+  "attack": [
+   "voice.grav_skimmer.attack"
+  ],
+  "fire": [
+   "unit.grav_skimmer.fire.1",
+   "unit.grav_skimmer.fire.2",
+   "unit.grav_skimmer.fire.3"
+  ],
+  "move": [
+   "voice.grav_skimmer.move"
+  ],
+  "moving": [
+   "unit.grav_skimmer.moving"
+  ],
+  "research_done": [
+   "voice.grav_skimmer.research_done"
+  ],
+  "select": [
+   "voice.grav_skimmer.select"
+  ]
+ },
+ "unit.grav_tank": {
+  "attack": [
+   "voice.grav_tank.attack"
+  ],
+  "fire": [
+   "unit.grav_tank.fire.1",
+   "unit.grav_tank.fire.2",
+   "unit.grav_tank.fire.3"
+  ],
+  "move": [
+   "voice.grav_tank.move"
+  ],
+  "moving": [
+   "unit.grav_tank.moving"
+  ],
+  "research_done": [
+   "voice.grav_tank.research_done"
+  ],
+  "select": [
+   "voice.grav_tank.select"
+  ]
+ },
+ "unit.gun_drone": {
+  "attack": [
+   "voice.gun_drone.attack"
+  ],
+  "fire": [
+   "unit.gun_drone.fire.1",
+   "unit.gun_drone.fire.2",
+   "unit.gun_drone.fire.3"
+  ],
+  "move": [
+   "voice.gun_drone.move"
+  ],
+  "moving": [
+   "unit.gun_drone.moving"
+  ],
+  "research_done": [
+   "voice.gun_drone.research_done"
+  ],
+  "select": [
+   "voice.gun_drone.select"
+  ]
+ },
+ "unit.heavy_machine_gunner": {
+  "attack": [
+   "voice.heavy_machine_gunner.attack"
+  ],
+  "fire": [
+   "unit.heavy_machine_gunner.fire.1",
+   "unit.heavy_machine_gunner.fire.2",
+   "unit.heavy_machine_gunner.fire.3"
+  ],
+  "move": [
+   "voice.heavy_machine_gunner.move"
+  ],
+  "moving": [
+   "unit.heavy_machine_gunner.moving"
+  ],
+  "research_done": [
+   "voice.heavy_machine_gunner.research_done"
+  ],
+  "select": [
+   "voice.heavy_machine_gunner.select"
+  ]
+ },
+ "unit.hoplite": {
+  "attack": [
+   "voice.hoplite.attack"
+  ],
+  "fight": [
+   "unit.hoplite.fight.1",
+   "unit.hoplite.fight.2",
+   "unit.hoplite.fight.3"
+  ],
+  "move": [
+   "voice.hoplite.move"
+  ],
+  "moving": [
+   "unit.hoplite.moving"
+  ],
+  "research_done": [
+   "voice.hoplite.research_done"
+  ],
+  "select": [
+   "voice.hoplite.select"
+  ]
+ },
+ "unit.horseman": {
+  "attack": [
+   "voice.horseman.attack"
+  ],
+  "fight": [
+   "unit.horseman.fight.1",
+   "unit.horseman.fight.2"
+  ],
+  "move": [
+   "voice.horseman.move"
+  ],
+  "moving": [
+   "unit.horseman.moving"
+  ],
+  "research_done": [
+   "voice.horseman.research_done"
+  ],
+  "select": [
+   "voice.horseman.select"
+  ]
+ },
+ "unit.hover_frigate": {
+  "attack": [
+   "voice.hover_frigate.attack"
+  ],
+  "fire": [
+   "unit.hover_frigate.fire.1",
+   "unit.hover_frigate.fire.2",
+   "unit.hover_frigate.fire.3"
+  ],
+  "move": [
+   "voice.hover_frigate.move"
+  ],
+  "moving": [
+   "unit.hover_frigate.moving"
+  ],
+  "research_done": [
+   "voice.hover_frigate.research_done"
+  ],
+  "select": [
+   "voice.hover_frigate.select"
+  ]
+ },
+ "unit.hovercraft": {
+  "attack": [
+   "voice.hovercraft.attack"
+  ],
+  "fire": [
+   "unit.hovercraft.fire.1",
+   "unit.hovercraft.fire.2"
+  ],
+  "move": [
+   "voice.hovercraft.move"
+  ],
+  "moving": [
+   "unit.hovercraft.moving"
+  ],
+  "research_done": [
+   "voice.hovercraft.research_done"
+  ],
+  "select": [
+   "voice.hovercraft.select"
+  ]
+ },
+ "unit.howitzer": {
+  "attack": [
+   "voice.howitzer.attack"
+  ],
+  "fire": [
+   "unit.howitzer.fire.1",
+   "unit.howitzer.fire.2"
+  ],
+  "move": [
+   "voice.howitzer.move"
+  ],
+  "moving": [
+   "unit.howitzer.moving"
+  ],
+  "research_done": [
+   "voice.howitzer.research_done"
+  ],
+  "select": [
+   "voice.howitzer.select"
+  ]
+ },
+ "unit.hussar": {
+  "attack": [
+   "voice.hussar.attack"
+  ],
+  "fight": [
+   "unit.hussar.fight.1",
+   "unit.hussar.fight.2"
+  ],
+  "move": [
+   "voice.hussar.move"
+  ],
+  "moving": [
+   "unit.hussar.moving"
+  ],
+  "research_done": [
+   "voice.hussar.research_done"
+  ],
+  "select": [
+   "voice.hussar.select"
+  ]
+ },
+ "unit.infantry": {
+  "attack": [
+   "voice.infantry.attack"
+  ],
+  "fire": [
+   "unit.infantry.fire.1",
+   "unit.infantry.fire.2",
+   "unit.infantry.fire.3"
+  ],
+  "move": [
+   "voice.infantry.move"
+  ],
+  "moving": [
+   "unit.infantry.moving"
+  ],
+  "research_done": [
+   "voice.infantry.research_done"
+  ],
+  "select": [
+   "voice.infantry.select"
+  ]
+ },
+ "unit.interceptor": {
+  "attack": [
+   "voice.interceptor.attack"
+  ],
+  "fire": [
+   "unit.interceptor.fire.1",
+   "unit.interceptor.fire.2",
+   "unit.interceptor.fire.3"
+  ],
+  "move": [
+   "voice.interceptor.move"
+  ],
+  "moving": [
+   "unit.interceptor.moving"
+  ],
+  "research_done": [
+   "voice.interceptor.research_done"
+  ],
+  "select": [
+   "voice.interceptor.select"
+  ]
+ },
+ "unit.ironclad": {
+  "attack": [
+   "voice.ironclad.attack"
+  ],
+  "fire": [
+   "unit.ironclad.fire.1",
+   "unit.ironclad.fire.2"
+  ],
+  "move": [
+   "voice.ironclad.move"
+  ],
+  "moving": [
+   "unit.ironclad.moving"
+  ],
+  "research_done": [
+   "voice.ironclad.research_done"
+  ],
+  "select": [
+   "voice.ironclad.select"
+  ]
+ },
+ "unit.jet_fighter": {
+  "attack": [
+   "voice.jet_fighter.attack"
+  ],
+  "fire": [
+   "unit.jet_fighter.fire.1",
+   "unit.jet_fighter.fire.2"
+  ],
+  "move": [
+   "voice.jet_fighter.move"
+  ],
+  "moving": [
+   "unit.jet_fighter.moving"
+  ],
+  "research_done": [
+   "voice.jet_fighter.research_done"
+  ],
+  "select": [
+   "voice.jet_fighter.select"
+  ]
+ },
+ "unit.knight": {
+  "attack": [
+   "voice.knight.attack"
+  ],
+  "fight": [
+   "unit.knight.fight.1",
+   "unit.knight.fight.2"
+  ],
+  "move": [
+   "voice.knight.move"
+  ],
+  "moving": [
+   "unit.knight.moving"
+  ],
+  "research_done": [
+   "voice.knight.research_done"
+  ],
+  "select": [
+   "voice.knight.select"
+  ]
+ },
+ "unit.lancer": {
+  "attack": [
+   "voice.lancer.attack"
+  ],
+  "fight": [
+   "unit.lancer.fight.1",
+   "unit.lancer.fight.2"
+  ],
+  "move": [
+   "voice.lancer.move"
+  ],
+  "moving": [
+   "unit.lancer.moving"
+  ],
+  "research_done": [
+   "voice.lancer.research_done"
+  ],
+  "select": [
+   "voice.lancer.select"
+  ]
+ },
+ "unit.laser_battery": {
+  "attack": [
+   "voice.laser_battery.attack"
+  ],
+  "fire": [
+   "unit.laser_battery.fire.1",
+   "unit.laser_battery.fire.2",
+   "unit.laser_battery.fire.3"
+  ],
+  "move": [
+   "voice.laser_battery.move"
+  ],
+  "moving": [
+   "unit.laser_battery.moving"
+  ],
+  "research_done": [
+   "voice.laser_battery.research_done"
+  ],
+  "select": [
+   "voice.laser_battery.select"
+  ]
+ },
+ "unit.light_cavalry": {
+  "attack": [
+   "voice.light_cavalry.attack"
+  ],
+  "fight": [
+   "unit.light_cavalry.fight.1",
+   "unit.light_cavalry.fight.2"
+  ],
+  "move": [
+   "voice.light_cavalry.move"
+  ],
+  "moving": [
+   "unit.light_cavalry.moving"
+  ],
+  "research_done": [
+   "voice.light_cavalry.research_done"
+  ],
+  "select": [
+   "voice.light_cavalry.select"
+  ]
+ },
+ "unit.light_infantry": {
+  "attack": [
+   "voice.light_infantry.attack"
+  ],
+  "fire": [
+   "unit.light_infantry.fire.1",
+   "unit.light_infantry.fire.2",
+   "unit.light_infantry.fire.3"
+  ],
+  "move": [
+   "voice.light_infantry.move"
+  ],
+  "moving": [
+   "unit.light_infantry.moving"
+  ],
+  "research_done": [
+   "voice.light_infantry.research_done"
+  ],
+  "select": [
+   "voice.light_infantry.select"
+  ]
+ },
+ "unit.light_tank": {
+  "attack": [
+   "voice.light_tank.attack"
+  ],
+  "fire": [
+   "unit.light_tank.fire.1",
+   "unit.light_tank.fire.2"
+  ],
+  "move": [
+   "voice.light_tank.move"
+  ],
+  "moving": [
+   "unit.light_tank.moving"
+  ],
+  "research_done": [
+   "voice.light_tank.research_done"
+  ],
+  "select": [
+   "voice.light_tank.select"
+  ]
+ },
+ "unit.lorry": {
+  "move": [
+   "voice.lorry.move"
+  ],
+  "moving": [
+   "unit.lorry.moving"
+  ],
+  "research_done": [
+   "voice.lorry.research_done"
+  ],
+  "select": [
+   "voice.lorry.select"
+  ]
+ },
+ "unit.machine_gunner": {
+  "attack": [
+   "voice.machine_gunner.attack"
+  ],
+  "fire": [
+   "unit.machine_gunner.fire.1",
+   "unit.machine_gunner.fire.2",
+   "unit.machine_gunner.fire.3"
+  ],
+  "move": [
+   "voice.machine_gunner.move"
+  ],
+  "moving": [
+   "unit.machine_gunner.moving"
+  ],
+  "research_done": [
+   "voice.machine_gunner.research_done"
+  ],
+  "select": [
+   "voice.machine_gunner.select"
+  ]
+ },
+ "unit.main_battle_tank": {
+  "attack": [
+   "voice.main_battle_tank.attack"
+  ],
+  "fire": [
+   "unit.main_battle_tank.fire.1",
+   "unit.main_battle_tank.fire.2"
+  ],
+  "move": [
+   "voice.main_battle_tank.move"
+  ],
+  "moving": [
+   "unit.main_battle_tank.moving"
+  ],
+  "research_done": [
+   "voice.main_battle_tank.research_done"
+  ],
+  "select": [
+   "voice.main_battle_tank.select"
+  ]
+ },
+ "unit.marine": {
+  "attack": [
+   "voice.marine.attack"
+  ],
+  "fire": [
+   "unit.marine.fire.1",
+   "unit.marine.fire.2",
+   "unit.marine.fire.3"
+  ],
+  "move": [
+   "voice.marine.move"
+  ],
+  "moving": [
+   "unit.marine.moving"
+  ],
+  "research_done": [
+   "voice.marine.research_done"
+  ],
+  "select": [
+   "voice.marine.select"
+  ]
+ },
+ "unit.medic": {
+  "move": [
+   "voice.medic.move"
+  ],
+  "moving": [
+   "unit.medic.moving"
+  ],
+  "research_done": [
+   "voice.medic.research_done"
+  ],
+  "select": [
+   "voice.medic.select"
+  ]
+ },
+ "unit.merchant": {
+  "move": [
+   "voice.merchant.move"
+  ],
+  "moving": [
+   "unit.merchant.moving"
+  ],
+  "research_done": [
+   "voice.merchant.research_done"
+  ],
+  "select": [
+   "voice.merchant.select"
+  ]
+ },
+ "unit.missile_cruiser": {
+  "attack": [
+   "voice.missile_cruiser.attack"
+  ],
+  "fire": [
+   "unit.missile_cruiser.fire.1",
+   "unit.missile_cruiser.fire.2"
+  ],
+  "move": [
+   "voice.missile_cruiser.move"
+  ],
+  "moving": [
+   "unit.missile_cruiser.moving"
+  ],
+  "research_done": [
+   "voice.missile_cruiser.research_done"
+  ],
+  "select": [
+   "voice.missile_cruiser.select"
+  ]
+ },
+ "unit.missile_launcher": {
+  "attack": [
+   "voice.missile_launcher.attack"
+  ],
+  "fire": [
+   "unit.missile_launcher.fire.1",
+   "unit.missile_launcher.fire.2"
+  ],
+  "move": [
+   "voice.missile_launcher.move"
+  ],
+  "moving": [
+   "unit.missile_launcher.moving"
+  ],
+  "research_done": [
+   "voice.missile_launcher.research_done"
+  ],
+  "select": [
+   "voice.missile_launcher.select"
+  ]
+ },
+ "unit.missile_team": {
+  "attack": [
+   "voice.missile_team.attack"
+  ],
+  "fire": [
+   "unit.missile_team.fire.1",
+   "unit.missile_team.fire.2"
+  ],
+  "move": [
+   "voice.missile_team.move"
+  ],
+  "moving": [
+   "unit.missile_team.moving"
+  ],
+  "research_done": [
+   "voice.missile_team.research_done"
+  ],
+  "select": [
+   "voice.missile_team.select"
+  ]
+ },
+ "unit.musketeer": {
+  "attack": [
+   "voice.musketeer.attack"
+  ],
+  "fire": [
+   "unit.musketeer.fire.1",
+   "unit.musketeer.fire.2",
+   "unit.musketeer.fire.3"
+  ],
+  "move": [
+   "voice.musketeer.move"
+  ],
+  "moving": [
+   "unit.musketeer.moving"
+  ],
+  "research_done": [
+   "voice.musketeer.research_done"
+  ],
+  "select": [
+   "voice.musketeer.select"
+  ]
+ },
+ "unit.orbital_bomber": {
+  "attack": [
+   "voice.orbital_bomber.attack"
+  ],
+  "fire": [
+   "unit.orbital_bomber.fire.1",
+   "unit.orbital_bomber.fire.2"
+  ],
+  "fire_slot1": [
+   "unit.orbital_bomber.fire_slot1.1",
+   "unit.orbital_bomber.fire_slot1.2"
+  ],
+  "move": [
+   "voice.orbital_bomber.move"
+  ],
+  "moving": [
+   "unit.orbital_bomber.moving"
+  ],
+  "research_done": [
+   "voice.orbital_bomber.research_done"
+  ],
+  "select": [
+   "voice.orbital_bomber.select"
+  ]
+ },
+ "unit.orbital_fighter": {
+  "attack": [
+   "voice.orbital_fighter.attack"
+  ],
+  "fire": [
+   "unit.orbital_fighter.fire.1",
+   "unit.orbital_fighter.fire.2"
+  ],
+  "move": [
+   "voice.orbital_fighter.move"
+  ],
+  "moving": [
+   "unit.orbital_fighter.moving"
+  ],
+  "research_done": [
+   "voice.orbital_fighter.research_done"
+  ],
+  "select": [
+   "voice.orbital_fighter.select"
+  ]
+ },
+ "unit.pikeman": {
+  "attack": [
+   "voice.pikeman.attack"
+  ],
+  "fight": [
+   "unit.pikeman.fight.1",
+   "unit.pikeman.fight.2",
+   "unit.pikeman.fight.3"
+  ],
+  "move": [
+   "voice.pikeman.move"
+  ],
+  "moving": [
+   "unit.pikeman.moving"
+  ],
+  "research_done": [
+   "voice.pikeman.research_done"
+  ],
+  "select": [
+   "voice.pikeman.select"
+  ]
+ },
+ "unit.priest": {
+  "move": [
+   "voice.priest.move"
+  ],
+  "moving": [
+   "unit.priest.moving"
+  ],
+  "research_done": [
+   "voice.priest.research_done"
+  ],
+  "select": [
+   "voice.priest.select"
+  ]
+ },
+ "unit.pulse_gunner": {
+  "attack": [
+   "voice.pulse_gunner.attack"
+  ],
+  "fire": [
+   "unit.pulse_gunner.fire.1",
+   "unit.pulse_gunner.fire.2",
+   "unit.pulse_gunner.fire.3"
+  ],
+  "move": [
+   "voice.pulse_gunner.move"
+  ],
+  "moving": [
+   "unit.pulse_gunner.moving"
+  ],
+  "research_done": [
+   "voice.pulse_gunner.research_done"
+  ],
+  "select": [
+   "voice.pulse_gunner.select"
+  ]
+ },
+ "unit.railgun_battery": {
+  "attack": [
+   "voice.railgun_battery.attack"
+  ],
+  "fire": [
+   "unit.railgun_battery.fire.1",
+   "unit.railgun_battery.fire.2"
+  ],
+  "move": [
+   "voice.railgun_battery.move"
+  ],
+  "moving": [
+   "unit.railgun_battery.moving"
+  ],
+  "research_done": [
+   "voice.railgun_battery.research_done"
+  ],
+  "select": [
+   "voice.railgun_battery.select"
+  ]
+ },
+ "unit.railgun_team": {
+  "attack": [
+   "voice.railgun_team.attack"
+  ],
+  "fire": [
+   "unit.railgun_team.fire.1",
+   "unit.railgun_team.fire.2"
+  ],
+  "move": [
+   "voice.railgun_team.move"
+  ],
+  "moving": [
+   "unit.railgun_team.moving"
+  ],
+  "research_done": [
+   "voice.railgun_team.research_done"
+  ],
+  "select": [
+   "voice.railgun_team.select"
+  ]
+ },
+ "unit.ranger": {
+  "attack": [
+   "voice.ranger.attack"
+  ],
+  "fight": [
+   "unit.ranger.fight.1",
+   "unit.ranger.fight.2",
+   "unit.ranger.fight.3"
+  ],
+  "move": [
+   "voice.ranger.move"
+  ],
+  "moving": [
+   "unit.ranger.moving"
+  ],
+  "research_done": [
+   "voice.ranger.research_done"
+  ],
+  "select": [
+   "voice.ranger.select"
+  ]
+ },
+ "unit.recon_drone": {
+  "attack": [
+   "voice.recon_drone.attack"
+  ],
+  "fight": [
+   "unit.recon_drone.fight.1",
+   "unit.recon_drone.fight.2",
+   "unit.recon_drone.fight.3"
+  ],
+  "move": [
+   "voice.recon_drone.move"
+  ],
+  "moving": [
+   "unit.recon_drone.moving"
+  ],
+  "research_done": [
+   "voice.recon_drone.research_done"
+  ],
+  "select": [
+   "voice.recon_drone.select"
+  ]
+ },
+ "unit.repair_drone": {
+  "move": [
+   "voice.repair_drone.move"
+  ],
+  "moving": [
+   "unit.repair_drone.moving"
+  ],
+  "research_done": [
+   "voice.repair_drone.research_done"
+  ],
+  "select": [
+   "voice.repair_drone.select"
+  ]
+ },
+ "unit.rifleman": {
+  "attack": [
+   "voice.rifleman.attack"
+  ],
+  "fire": [
+   "unit.rifleman.fire.1",
+   "unit.rifleman.fire.2",
+   "unit.rifleman.fire.3"
+  ],
+  "move": [
+   "voice.rifleman.move"
+  ],
+  "moving": [
+   "unit.rifleman.moving"
+  ],
+  "research_done": [
+   "voice.rifleman.research_done"
+  ],
+  "select": [
+   "voice.rifleman.select"
+  ]
+ },
+ "unit.robot_tank": {
+  "attack": [
+   "voice.robot_tank.attack"
+  ],
+  "fire": [
+   "unit.robot_tank.fire.1",
+   "unit.robot_tank.fire.2"
+  ],
+  "move": [
+   "voice.robot_tank.move"
+  ],
+  "moving": [
+   "unit.robot_tank.moving"
+  ],
+  "research_done": [
+   "voice.robot_tank.research_done"
+  ],
+  "select": [
+   "voice.robot_tank.select"
+  ]
+ },
+ "unit.rocket_artillery": {
+  "attack": [
+   "voice.rocket_artillery.attack"
+  ],
+  "fire": [
+   "unit.rocket_artillery.fire.1",
+   "unit.rocket_artillery.fire.2"
+  ],
+  "move": [
+   "voice.rocket_artillery.move"
+  ],
+  "moving": [
+   "unit.rocket_artillery.moving"
+  ],
+  "research_done": [
+   "voice.rocket_artillery.research_done"
+  ],
+  "select": [
+   "voice.rocket_artillery.select"
+  ]
+ },
+ "unit.satellite": {
+  "move": [
+   "voice.satellite.move"
+  ],
+  "moving": [
+   "unit.satellite.moving"
+  ],
+  "research_done": [
+   "voice.satellite.research_done"
+  ],
+  "select": [
+   "voice.satellite.select"
+  ]
+ },
+ "unit.scholar": {
+  "move": [
+   "voice.scholar.move"
+  ],
+  "moving": [
+   "unit.scholar.moving"
+  ],
+  "research_done": [
+   "voice.scholar.research_done"
+  ],
+  "select": [
+   "voice.scholar.select"
+  ]
+ },
+ "unit.scout": {
+  "attack": [
+   "voice.scout.attack"
+  ],
+  "fight": [
+   "unit.scout.fight.1",
+   "unit.scout.fight.2",
+   "unit.scout.fight.3"
+  ],
+  "move": [
+   "voice.scout.move"
+  ],
+  "moving": [
+   "unit.scout.moving"
+  ],
+  "research_done": [
+   "voice.scout.research_done"
+  ],
+  "select": [
+   "voice.scout.select"
+  ]
+ },
+ "unit.scout_car": {
+  "attack": [
+   "voice.scout_car.attack"
+  ],
+  "fire": [
+   "unit.scout_car.fire.1",
+   "unit.scout_car.fire.2"
+  ],
+  "move": [
+   "voice.scout_car.move"
+  ],
+  "moving": [
+   "unit.scout_car.moving"
+  ],
+  "research_done": [
+   "voice.scout_car.research_done"
+  ],
+  "select": [
+   "voice.scout_car.select"
+  ]
+ },
+ "unit.ship_of_the_line": {
+  "attack": [
+   "voice.ship_of_the_line.attack"
+  ],
+  "fire": [
+   "unit.ship_of_the_line.fire.1",
+   "unit.ship_of_the_line.fire.2"
+  ],
+  "move": [
+   "voice.ship_of_the_line.move"
+  ],
+  "moving": [
+   "unit.ship_of_the_line.moving"
+  ],
+  "research_done": [
+   "voice.ship_of_the_line.research_done"
+  ],
+  "select": [
+   "voice.ship_of_the_line.select"
+  ]
+ },
+ "unit.shock_marine": {
+  "attack": [
+   "voice.shock_marine.attack"
+  ],
+  "fire": [
+   "unit.shock_marine.fire.1",
+   "unit.shock_marine.fire.2",
+   "unit.shock_marine.fire.3"
+  ],
+  "move": [
+   "voice.shock_marine.move"
+  ],
+  "moving": [
+   "unit.shock_marine.moving"
+  ],
+  "research_done": [
+   "voice.shock_marine.research_done"
+  ],
+  "select": [
+   "voice.shock_marine.select"
+  ]
+ },
+ "unit.slinger": {
+  "attack": [
+   "voice.slinger.attack"
+  ],
+  "fire": [
+   "unit.slinger.fire.1",
+   "unit.slinger.fire.2",
+   "unit.slinger.fire.3"
+  ],
+  "move": [
+   "voice.slinger.move"
+  ],
+  "moving": [
+   "unit.slinger.moving"
+  ],
+  "research_done": [
+   "voice.slinger.research_done"
+  ],
+  "select": [
+   "voice.slinger.select"
+  ]
+ },
+ "unit.space_cruiser": {
+  "attack": [
+   "voice.space_cruiser.attack"
+  ],
+  "fire": [
+   "unit.space_cruiser.fire.1",
+   "unit.space_cruiser.fire.2"
+  ],
+  "fire_slot1": [
+   "unit.space_cruiser.fire_slot1.1",
+   "unit.space_cruiser.fire_slot1.2"
+  ],
+  "move": [
+   "voice.space_cruiser.move"
+  ],
+  "moving": [
+   "unit.space_cruiser.moving"
+  ],
+  "research_done": [
+   "voice.space_cruiser.research_done"
+  ],
+  "select": [
+   "voice.space_cruiser.select"
+  ]
+ },
+ "unit.space_freighter": {
+  "move": [
+   "voice.space_freighter.move"
+  ],
+  "moving": [
+   "unit.space_freighter.moving"
+  ],
+  "research_done": [
+   "voice.space_freighter.research_done"
+  ],
+  "select": [
+   "voice.space_freighter.select"
+  ]
+ },
+ "unit.space_frigate": {
+  "attack": [
+   "voice.space_frigate.attack"
+  ],
+  "fire": [
+   "unit.space_frigate.fire.1",
+   "unit.space_frigate.fire.2",
+   "unit.space_frigate.fire.3"
+  ],
+  "fire_slot1": [
+   "unit.space_frigate.fire_slot1.1",
+   "unit.space_frigate.fire_slot1.2",
+   "unit.space_frigate.fire_slot1.3"
+  ],
+  "move": [
+   "voice.space_frigate.move"
+  ],
+  "moving": [
+   "unit.space_frigate.moving"
+  ],
+  "research_done": [
+   "voice.space_frigate.research_done"
+  ],
+  "select": [
+   "voice.space_frigate.select"
+  ]
+ },
+ "unit.spearman": {
+  "attack": [
+   "voice.spearman.attack"
+  ],
+  "fight": [
+   "unit.spearman.fight.1",
+   "unit.spearman.fight.2",
+   "unit.spearman.fight.3"
+  ],
+  "move": [
+   "voice.spearman.move"
+  ],
+  "moving": [
+   "unit.spearman.moving"
+  ],
+  "research_done": [
+   "voice.spearman.research_done"
+  ],
+  "select": [
+   "voice.spearman.select"
+  ]
+ },
+ "unit.strategic_bomber": {
+  "attack": [
+   "voice.strategic_bomber.attack"
+  ],
+  "fire": [
+   "unit.strategic_bomber.fire.1",
+   "unit.strategic_bomber.fire.2"
+  ],
+  "move": [
+   "voice.strategic_bomber.move"
+  ],
+  "moving": [
+   "unit.strategic_bomber.moving"
+  ],
+  "research_done": [
+   "voice.strategic_bomber.research_done"
+  ],
+  "select": [
+   "voice.strategic_bomber.select"
+  ]
+ },
+ "unit.supply_truck": {
+  "move": [
+   "voice.supply_truck.move"
+  ],
+  "moving": [
+   "unit.supply_truck.moving"
+  ],
+  "research_done": [
+   "voice.supply_truck.research_done"
+  ],
+  "select": [
+   "voice.supply_truck.select"
+  ]
+ },
+ "unit.supply_wagon": {
+  "move": [
+   "voice.supply_wagon.move"
+  ],
+  "moving": [
+   "unit.supply_wagon.moving"
+  ],
+  "research_done": [
+   "voice.supply_wagon.research_done"
+  ],
+  "select": [
+   "voice.supply_wagon.select"
+  ]
+ },
+ "unit.survey_ship": {
+  "attack": [
+   "voice.survey_ship.attack"
+  ],
+  "fire": [
+   "unit.survey_ship.fire.1",
+   "unit.survey_ship.fire.2",
+   "unit.survey_ship.fire.3"
+  ],
+  "move": [
+   "voice.survey_ship.move"
+  ],
+  "moving": [
+   "unit.survey_ship.moving"
+  ],
+  "research_done": [
+   "voice.survey_ship.research_done"
+  ],
+  "select": [
+   "voice.survey_ship.select"
+  ]
+ },
+ "unit.tank": {
+  "attack": [
+   "voice.tank.attack"
+  ],
+  "fire": [
+   "unit.tank.fire.1",
+   "unit.tank.fire.2"
+  ],
+  "move": [
+   "voice.tank.move"
+  ],
+  "moving": [
+   "unit.tank.moving"
+  ],
+  "research_done": [
+   "voice.tank.research_done"
+  ],
+  "select": [
+   "voice.tank.select"
+  ]
+ },
+ "unit.transport_ship": {
+  "move": [
+   "voice.transport_ship.move"
+  ],
+  "moving": [
+   "unit.transport_ship.moving"
+  ],
+  "research_done": [
+   "voice.transport_ship.research_done"
+  ],
+  "select": [
+   "voice.transport_ship.select"
+  ]
+ },
+ "unit.trebuchet": {
+  "attack": [
+   "voice.trebuchet.attack"
+  ],
+  "fire": [
+   "unit.trebuchet.fire.1",
+   "unit.trebuchet.fire.2"
+  ],
+  "move": [
+   "voice.trebuchet.move"
+  ],
+  "moving": [
+   "unit.trebuchet.moving"
+  ],
+  "research_done": [
+   "voice.trebuchet.research_done"
+  ],
+  "select": [
+   "voice.trebuchet.select"
+  ]
+ },
+ "unit.trireme": {
+  "attack": [
+   "voice.trireme.attack"
+  ],
+  "fire": [
+   "unit.trireme.fire.1",
+   "unit.trireme.fire.2",
+   "unit.trireme.fire.3"
+  ],
+  "move": [
+   "voice.trireme.move"
+  ],
+  "moving": [
+   "unit.trireme.moving"
+  ],
+  "research_done": [
+   "voice.trireme.research_done"
+  ],
+  "select": [
+   "voice.trireme.select"
+  ]
+ },
+ "unit.war_galley": {
+  "attack": [
+   "voice.war_galley.attack"
+  ],
+  "fire": [
+   "unit.war_galley.fire.1",
+   "unit.war_galley.fire.2",
+   "unit.war_galley.fire.3"
+  ],
+  "move": [
+   "voice.war_galley.move"
+  ],
+  "moving": [
+   "unit.war_galley.moving"
+  ],
+  "research_done": [
+   "voice.war_galley.research_done"
+  ],
+  "select": [
+   "voice.war_galley.select"
+  ]
+ },
+ "unit.worker_drone": {
+  "attack": [
+   "voice.worker_drone.attack"
+  ],
+  "build": [
+   "voice.worker_drone.build"
+  ],
+  "build_done": [
+   "voice.worker_drone.build_done"
+  ],
+  "fight": [
+   "unit.worker_drone.fight.1",
+   "unit.worker_drone.fight.2",
+   "unit.worker_drone.fight.3"
+  ],
+  "move": [
+   "voice.worker_drone.move"
+  ],
+  "moving": [
+   "unit.worker_drone.moving"
+  ],
+  "research_done": [
+   "voice.worker_drone.research_done"
+  ],
+  "select": [
+   "voice.worker_drone.select"
+  ]
+ }
+}
