@@ -51,6 +51,8 @@ pub fn run(options: &Options, arguments: &[String]) -> ExitCode {
     };
     bridge.publish_render_scale(options.scale);
     bridge.publish_hud_options(!options.no_hud, options.hud_scale);
+    // Sound (task 125): its own thread; silent with --mute or without a sound device.
+    crate::sound::install(options.sound, options.mute);
     // A network match (task 88) starts in the lobby; its world comes from the server's start.
     let network = options.connect.is_some() || options.host.is_some();
     let started = if options.gallery.is_some() || options.model.is_some() {
@@ -157,6 +159,7 @@ pub fn run(options: &Options, arguments: &[String]) -> ExitCode {
         server.stop();
     }
     worker.stop();
+    crate::sound::shutdown();
     ExitCode::from(exit_code.load(Ordering::Relaxed))
 }
 

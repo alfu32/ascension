@@ -337,6 +337,39 @@ fn right_click_enemy_attacks_and_ground_moves() {
 }
 
 #[test]
+fn orders_and_refusals_are_told_to_the_sound() {
+    let mut fx = fixture();
+    let t = fx.armed_other_than_builder();
+    let a = fx.spawn(t, 1, 10, 10);
+    let foe = fx.spawn(t, 2, 12, 12);
+    // Scripts name them `army1` and `foe1` (task 125).
+    let pick = crate::script::live_pick(&fx.world, PLAYER, "army1", false, false).unwrap();
+    fx.ctl.handle(&mut fx.world, pick);
+    assert_eq!(ids(&fx), vec![a.0]);
+    let pick = crate::script::live_pick(&fx.world, PLAYER, "foe1", true, false).unwrap();
+    fx.ctl.handle(&mut fx.world, pick);
+    assert_eq!(
+        fx.ctl.take_cues(),
+        vec![crate::sound::UiCue::Ordered {
+            executor: a,
+            kind: "attack".into()
+        }]
+    );
+    assert!(fx.ctl.take_cues().is_empty());
+    // Ordering a foreign unit's attack on itself is refused: the error cue.
+    fx.ctl.submit(
+        &mut OrderSink::Lead(&mut fx.world),
+        foe,
+        "attack",
+        None,
+        Some(a),
+        None,
+        false,
+    );
+    assert_eq!(fx.ctl.take_cues(), vec![crate::sound::UiCue::Refused]);
+}
+
+#[test]
 fn right_click_ground_with_a_producer_sets_its_rally_through_an_order() {
     let mut fx = fixture();
     let t = fx.producer_with(ProductionMode::Train);

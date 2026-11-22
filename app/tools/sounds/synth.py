@@ -370,6 +370,25 @@ def forest(seed=6):
     return chans
 
 
+def space(seed=7):
+    """The system and star-map views (task 125): a deep, slow drone with a faint airy hiss and a
+    far shimmer, quiet and never whining."""
+    r = rng(seed)
+    n = n_of(AMB)
+    t = np.arange(n) / SR
+    chans = []
+    for side in range(2):
+        drone = np.zeros(n)
+        for f, a in [(41.2, 1.0), (61.8, 0.55), (82.4, 0.4), (123.6, 0.18), (164.8, 0.08)]:
+            f = qf(f * (1 + 0.002 * side), AMB)
+            drone += a * np.sin(2 * np.pi * f * t + r.uniform(0, 6)) * (0.7 + 0.3 * wander(r, n, 6))
+        hiss = cnoise(r, n, 150, 1800, color=1) * 0.25 * (0.6 + 0.4 * wander(r, n, 5))
+        shimmer = sum(np.sin(2 * np.pi * qf(f, AMB) * t + r.uniform(0, 6)) for f in (1046.5, 1568.0, 2093.0))
+        shimmer = shimmer * 0.012 * wander(r, n, 4, 0.0, 1.0) ** 2
+        chans.append(cfilter(drone * 0.5 + hiss + shimmer, hi=4000))
+    return np.array(chans)
+
+
 # ---------------------------------------------------------------- movement (mono loops)
 
 
@@ -1185,6 +1204,7 @@ def main():
     save("ambient.field_rustle", field_rustle(), "loop", **amb)
     save("ambient.crickets", crickets(), "loop", peak=0.6, rms=0.08)
     save("ambient.forest", forest(), "loop", **amb)
+    save("ambient.space", space(), "loop", peak=0.6, rms=0.08)
 
     # Shared activity: work at gather sites, impacts and the rotor for task 119. Each unit's and
     # building's own sounds come from the plan (assign.py, recipes.py).

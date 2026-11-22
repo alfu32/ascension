@@ -2,4 +2,9 @@
 set -eu
 app_root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 export PATH="$app_root/usr/bin:$PATH"
+# Sound (task 125) plays through the system's ALSA library, as every desktop has it (AppImages
+# take it from the system so its plugins reach PulseAudio or PipeWire). Say so if it is missing.
+if command -v ldconfig >/dev/null 2>&1 && ! ldconfig -p 2>/dev/null | grep -q 'libasound\.so\.2 '; then
+  echo "Ascension needs the ALSA library libasound.so.2 (package alsa-lib, libasound2 or libasound2t64)." >&2
+fi
 exec "$app_root/usr/bin/rise-of-man" "$@"

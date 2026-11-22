@@ -686,6 +686,47 @@ CREATE TABLE et_view_scale (
   system_pct     INTEGER NOT NULL DEFAULT 100 CHECK (system_pct BETWEEN 10 AND 400)
 ) STRICT;
 
+-- ── A11b. Sounds (task 125) ─────────────────────────────────────────────────
+-- Presentation only: the simulation never reads them. A `sound` names a sound family in
+-- app/assets/sounds: a file name without `.ogg` and without its variation number. The game plays
+-- `<sound>` itself, or one of `<sound>.1`, `<sound>.2` … at random (docs/sound.md).
+
+-- Each unit's and building's own sounds, per event. The rows are generated from
+-- app/tools/sounds/assignment.json by app/tools/sounds/seed.py (the block between the
+-- `BEGIN GENERATED SOUNDS` markers in seed.sql). A type without a row for an event is silent
+-- there. Units: `select` (its acknowledgment), `move`, `attack`, `build` (its line when ordered:
+-- order_kind.line), `build_done`, `research_done` (lines), `fire` (a ranged weapon's shot, per
+-- et_weapon.slot), `fight` (a melee blow), `moving` (a loop while it moves). Buildings:
+-- `select`, `active` (its work loop), `build_done`, `train_done`, `research_done` (cues),
+-- `fire`.
+CREATE TABLE et_sound (
+  entity_type_id INTEGER NOT NULL REFERENCES entity_type(id),
+  event    TEXT NOT NULL CHECK (event IN ('select','move','attack','build','build_done',
+             'research_done','train_done','fire','fight','moving','active')),
+  slot     INTEGER NOT NULL DEFAULT 0 CHECK (slot >= 0), -- event 'fire': the et_weapon slot
+  sound    TEXT NOT NULL CHECK (sound GLOB '[a-z]*'),
+  gain_pct INTEGER NOT NULL DEFAULT 100 CHECK (gain_pct BETWEEN 0 AND 400),
+  PRIMARY KEY (entity_type_id, event, slot)
+) STRICT, WITHOUT ROWID;
+
+-- The ambience beds. `view` 'surface' beds play while the camera is over a planet, each at the
+-- share of the ground in view its row selects: a `layer` (ground, fluid), one terrain, or the
+-- gather sites of one resource (fields: around them); none of the three: everywhere. `light`
+-- keeps a bed to the day or the night side at the point looked at. They fade as the camera
+-- leaves the planet; `view` 'space' beds play in the system and star-map views instead.
+CREATE TABLE ambience (
+  id          INTEGER PRIMARY KEY,
+  sound       TEXT NOT NULL UNIQUE CHECK (sound GLOB '[a-z]*'),
+  view        TEXT NOT NULL DEFAULT 'surface' CHECK (view IN ('surface','space')),
+  layer       TEXT REFERENCES layer(key),
+  terrain_id  INTEGER REFERENCES terrain(id),
+  resource_id INTEGER REFERENCES resource(id),
+  light       TEXT NOT NULL DEFAULT 'any' CHECK (light IN ('any','day','night')),
+  gain_pct    INTEGER NOT NULL DEFAULT 100 CHECK (gain_pct BETWEEN 0 AND 400),
+  CHECK ((layer IS NOT NULL) + (terrain_id IS NOT NULL) + (resource_id IS NOT NULL) <= 1),
+  CHECK (view = 'surface' OR (layer IS NULL AND terrain_id IS NULL AND resource_id IS NULL))
+) STRICT;
+
 -- ── A12. Map styles and match options ───────────────────────────────────────
 -- A style is a recipe for a whole universe (and, for tests and skirmishes, a flat map).
 -- Universe knobs: which catalogue stars a universe takes (star_region and its numbers), what
@@ -867,7 +908,9 @@ CREATE TABLE order_kind (
   key    TEXT PRIMARY KEY,
   needs  TEXT NOT NULL DEFAULT '',     -- '', 'movement','weapon','builder','harvester','healer','trader','container','producer','energy','gather_site','colony','market'
   target TEXT NOT NULL CHECK (target IN ('none','point','entity','def','entity_or_point')),
-  note   TEXT NOT NULL DEFAULT ''
+  note   TEXT NOT NULL DEFAULT '',
+  -- the et_sound event a unit says when given an order of this kind (task 125); '' says none
+  line   TEXT NOT NULL DEFAULT '' CHECK (line IN ('','move','attack','build'))
 ) STRICT, WITHOUT ROWID;
 
 -- ════════════════════════════════════════════════════════════════════════════

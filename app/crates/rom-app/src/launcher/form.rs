@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use crate::args;
 
 /// Navigation labels in the same order as control group indices.
-pub(super) const GROUPS: [&str; 8] = [
+pub(super) const GROUPS: [&str; 9] = [
     "Game",
     "Window",
     "Camera and light",
@@ -17,11 +17,14 @@ pub(super) const GROUPS: [&str; 8] = [
     "Network",
     "Models",
     "Saved games",
+    "Sound",
 ];
 /// The group of model tools (export to and import from Meshcraft), which has no options.
 pub(super) const MODELS_GROUP: usize = 6;
 /// The group listing saved games, which has no options either.
 pub(super) const SAVES_GROUP: usize = 7;
+/// The Sound settings (task 125): every game the launcher starts takes them.
+pub(super) const SOUND_GROUP: usize = 8;
 
 /// One command-line option and its form presentation.
 pub(super) struct Control {
@@ -107,6 +110,12 @@ controls! {
     ("on-disconnect", 5, "pause-then-computer", "When a person drops: pause-then-computer, idle (units stand idle) or computer (at once).", false),
     ("wait-seconds", 5, "120", "How long a paused match waits for a dropped person, 1–86400 seconds.", false),
     ("autosave-minutes", 5, "5", "Server autosave interval in game minutes; 0 turns it off.", false),
+    ("volume", 8, "100", "Master volume, 0–100 percent of the game's gentle mix.", false),
+    ("effects-volume", 8, "100", "Weapons, work, movement, buildings and interface cues, 0–100 percent.", false),
+    ("voice-volume", 8, "100", "The units' lines and the announcer, 0–100 percent.", false),
+    ("ambient-volume", 8, "100", "Wind, sea, birds, crickets, forest and fields, 0–100 percent.", false),
+    ("mute-unfocused", 8, "on", "Silence the game while its window does not have the focus, on or off.", false),
+    ("mute", 8, "false", "No sound at all.", true),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -154,6 +163,26 @@ impl Form {
             out.push("--run".into());
         }
         out
+    }
+
+    /// The Sound settings as options: what every game the launcher starts is given.
+    pub fn sound_arguments(&self) -> Vec<String> {
+        let mut sound = Form::default();
+        for control in CONTROLS.iter().filter(|c| c.group == SOUND_GROUP) {
+            sound.set(control.flag, self.get(control.flag));
+        }
+        sound
+            .arguments()
+            .into_iter()
+            .filter(|a| a != "--run")
+            .collect()
+    }
+
+    /// The Sound settings as the launcher's own clicks use them.
+    pub fn sound_settings(&self) -> crate::sound::Settings {
+        args::parse(self.sound_arguments())
+            .map(|options| options.sound)
+            .unwrap_or_default()
     }
 
     /// Uses the game's existing parser as the form's validation contract.
@@ -559,6 +588,12 @@ mod tests {
             ("on-disconnect", "idle"),
             ("wait-seconds", "30"),
             ("autosave-minutes", "9"),
+            ("volume", "60"),
+            ("effects-volume", "50"),
+            ("voice-volume", "90"),
+            ("ambient-volume", "30"),
+            ("mute-unfocused", "off"),
+            ("mute", "true"),
         ];
         let mut form = Form::default();
         // Not listed: single-planet (excludes universe), host and serve (exclude connect).
@@ -623,7 +658,23 @@ mod tests {
             );
         }
         assert!(CONTROLS.iter().any(|c| c.flag == "script"));
-        assert_eq!(CONTROLS.len(), 60);
+        assert_eq!(CONTROLS.len(), 66);
+    }
+
+    #[test]
+    fn sound_settings_go_with_every_game() {
+        let mut form = Form::default();
+        assert!(form.sound_arguments().is_empty());
+        assert_eq!(form.sound_settings(), crate::sound::Settings::default());
+        form.set("volume", "40");
+        form.set("mute-unfocused", "off");
+        form.set("seed", "9");
+        assert_eq!(
+            form.sound_arguments(),
+            ["--volume", "40", "--mute-unfocused", "off"]
+        );
+        assert_eq!(form.sound_settings().master, 40);
+        assert!(!form.sound_settings().mute_unfocused);
     }
 
     #[test]

@@ -25,6 +25,7 @@ jobs:
             libxinerama-dev libxi-dev libgl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-dev \
             libwayland-dev libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev
       - run: python3 db/content/generate.py --check
+      - run: python3 tools/sounds/seed.py --check
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked

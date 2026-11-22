@@ -24,6 +24,7 @@ mod script;
 mod selection;
 mod shell;
 mod sim_thread;
+mod sound;
 mod space_view;
 mod style;
 mod terrain;
@@ -34,6 +35,10 @@ use std::process::ExitCode;
 
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
+    // Starts the audio engine alone and says how it went (packaging checks, task 125).
+    if arguments == ["--sound-check"] {
+        return sound::check();
+    }
     if launcher::requested(&arguments) {
         return launcher::run(&arguments);
     }
@@ -64,6 +69,9 @@ fn main() -> ExitCode {
         println!(
             "--load <file> continues a saved game, paused; --autosave <minutes> sets the autosave interval (default {}, 0 is off).",
             args::DEFAULT_AUTOSAVE_MINUTES
+        );
+        println!(
+            "--sound-check alone starts the sound engine without a window and prints whether it plays or why it is silent."
         );
         return ExitCode::SUCCESS;
     }

@@ -110,14 +110,24 @@ class SnapTests(unittest.TestCase):
             lib = t / "libXi.so.6"
             lib.write_text("")
             root = t / "prime"
-            snap.stage(root, "1.2.3", "aarch64", bins, {"libXi.so.6": lib}, None)
+            plugin = t / "libasound_module_pcm_pulse.so"
+            plugin.write_text("")
+            snap.stage(root, "1.2.3", "aarch64", bins, {"libXi.so.6": lib}, None,
+                       {"libasound_module_pcm_pulse.so": plugin})
             meta = (root / "meta/snap.yaml").read_text()
             for want in ("name: ascension\n", "version: '1.2.3'", "base: core24", "architectures: [arm64]",
                          "confinement: strict", "grade: stable", "default-provider: mesa-2404",
-                         "command: bin/rise-of-man\n", "command: bin/rom\n", "network-bind"):
+                         "command: bin/rise-of-man\n", "command: bin/rom\n", "network-bind",
+                         "audio-playback]"):
                 self.assertIn(want, meta)
             launcher = (root / "bin/rise-of-man").read_text()
             self.assertIn("gpu-2404-provider-wrapper", launcher)
+            # Sound (task 125): ALSA's default is the bundled pulse plugin.
+            self.assertIn('export ALSA_CONFIG_PATH="$alsa_conf"', launcher)
+            self.assertIn('lib \\"$SNAP/usr/lib/alsa-lib/libasound_module_pcm_pulse.so\\"', launcher)
+            self.assertIn('export PULSE_SERVER="unix:$pulse"', launcher)
+            self.assertTrue((root / "usr/lib/alsa-lib/libasound_module_pcm_pulse.so").is_file())
+            self.assertIn("libasound.so.2", snap.BUNDLE)
             self.assertIn('"$SNAP/opt/ascension/rise-of-man"', launcher)
             self.assertIn('LD_LIBRARY_PATH="$SNAP/usr/lib', launcher)
             self.assertTrue((root / "usr/lib/libXi.so.6").is_file())

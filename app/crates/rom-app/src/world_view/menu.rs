@@ -300,6 +300,40 @@ impl WorldView {
         row.into_any_element()
     }
 
+    /// The master volume (task 125): applied at once; the launcher's Sound settings keep the
+    /// rest.
+    fn sound_row(&self, cx: &mut Context<Self>) -> AnyElement {
+        let current = crate::sound::settings();
+        let mut row = div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .gap_2()
+            .child(div().text_color(rgb(MUTED)).child("Sound volume"));
+        for percent in [0, 25, 50, 75, 100] {
+            let label = if percent == 0 {
+                "off".to_owned()
+            } else {
+                format!("{percent} %")
+            };
+            row = row.child(
+                Button::new(SharedString::from(format!("menu-volume-{percent}")))
+                    .label(label)
+                    .small()
+                    .selected(current.master == percent)
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        crate::sound::set_settings(crate::sound::Settings {
+                            master: percent,
+                            ..crate::sound::settings()
+                        });
+                        crate::sound::click();
+                        cx.notify();
+                    })),
+            );
+        }
+        row.into_any_element()
+    }
+
     pub(super) fn render_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let menu = self.menu.as_ref()?;
         let heading = |text: &str| {
@@ -417,6 +451,7 @@ impl WorldView {
                             ),
                     )
                     .child(self.detail_row(cx))
+                    .child(self.sound_row(cx))
                     .child(
                         Button::new("menu-save")
                             .label("Save game")
@@ -470,6 +505,7 @@ impl WorldView {
                             ),
                     )
                     .child(self.detail_row(cx))
+                    .child(self.sound_row(cx))
                     .child(
                         Button::new("menu-save")
                             .label("Save game")

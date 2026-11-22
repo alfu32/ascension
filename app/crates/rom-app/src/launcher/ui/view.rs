@@ -1678,7 +1678,7 @@ impl Launcher {
 }
 
 /// The HUD icon of each option group, in `GROUPS` order.
-const GROUP_ICONS: [&str; 8] = [
+const GROUP_ICONS: [&str; 9] = [
     "flag",
     "menu",
     "centre",
@@ -1687,6 +1687,7 @@ const GROUP_ICONS: [&str; 8] = [
     "diplomacy",
     "cmd_repair",
     "pic_scroll",
+    "event",
 ];
 
 impl Launcher {

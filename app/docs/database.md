@@ -1,6 +1,6 @@
 # Game database
 
-Files: [`../db/schema.sql`](../db/schema.sql) (124 tables, 4 views),
+Files: [`../db/schema.sql`](../db/schema.sql) (136 tables, 4 views),
 [`../db/seed.sql`](../db/seed.sql) (the full generated content catalogue and hand-written
 world rules) and the model files in [`../db/models/`](../db/models/) (one per building or
 unit model, task 55; see §10a and `docs/models-in-meshcraft.md`), which load after the seed:
@@ -2049,3 +2049,43 @@ values from primary catalogues, never invented:
 `mat.ice` (Ice: the ice brushes and every planet's polar caps) is a pale glacier blue, #b3d3e8.
 Snowfields (`ter.snow`) and the snow on mountain peaks (`mat.mountain` `snow_material`) use the new
 `mat.snow`, the old white #e8eef2. Appended at the end of `seed.sql`, so earlier definition ids stay.
+
+## Sounds (task 125)
+
+Presentation only: the simulation never reads these rows, and nothing in `rom-sim` knows about
+sound. A `sound` value names a **sound family** of `app/assets/sounds/`: a file name without
+`.ogg` and without its variation number. `unit.knight.fight` plays one of `unit.knight.fight.1`,
+`.2`, `.3` at random; `voice.knight.select` is a file of its own. `docs/sound.md` says what plays
+when.
+
+- **`et_sound(entity_type_id, event, slot, sound, gain_pct)`**, primary key
+  `(entity_type_id, event, slot)`: each unit's and building's own sound per event. Events: units
+  `select`, `move`, `attack`, `build` (lines), `build_done`, `research_done` (lines), `fire` (a
+  ranged weapon's shot; `slot` is its `et_weapon.slot`), `fight` (a melee blow), `moving` (a loop
+  while it moves); buildings `select`, `active` (its work loop), `build_done`, `train_done`,
+  `research_done` (cues), `fire`. A type without a row for an event is silent there. `gain_pct`
+  (100 = the file's own level) is where the owner's changes after listening go.
+  The rows are **generated**: `app/tools/sounds/assign.py` chooses every type's sounds from its
+  data (class, tags, movement class, weapons, components, first age) and writes
+  `tools/sounds/assignment.json`; `python3 tools/sounds/seed.py` (from `app/`) turns that file
+  into the block between `-- BEGIN GENERATED SOUNDS` and `-- END GENERATED SOUNDS` at the end of
+  `seed.sql`, with the gains of its `GAINS` table; `--check` reports a stale block. The rows name
+  their type by key and fail the load if a key is missing. 763 rows for 140 types in 0.0.118.
+  The proposed `voice_set` column was not needed: each type's lines are its own files, spoken by
+  the voice `assign.py` chose for its kind of speaker, and only the person's own units speak.
+- **`ambience(id, sound, view, layer, terrain_id, resource_id, light, gain_pct)`**: the ambience
+  beds. `view` 'surface' beds play over a planet, each at the share of the ground in view its row
+  selects (a `layer`, one terrain, or the ground near gather sites of one resource; none of the
+  three: everywhere), on the day or night side (`light`), fading as the camera leaves the
+  planet; 'space' beds play in the system and star-map views. Seed: wind everywhere, waves over
+  `fluid`, birds by day and crickets by night over `ground`, the forest over `ter.forest`, the
+  rustle of fields near `res.food` gather sites, and `ambient.space`.
+- **`order_kind.line`** ('', `move`, `attack`, `build`): the `et_sound` event a unit says when
+  given an order of that kind; '' says nothing (training and research are answered by the HUD's
+  click). Set by `UPDATE`s in the seed's sounds section.
+
+The schema change keeps both lint views empty; `et_sound` and `ambience` add no definitions. The
+rules loader reads them into `EntityType::sounds`, `Rules::ambience` and `OrderKind::line`
+(`rom-rules`); the rules fingerprint changes with them, so saves made with earlier rules are refused, as
+after any rules change.
+

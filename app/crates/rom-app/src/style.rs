@@ -11,9 +11,9 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
 
 use gpui::{
-    App, Div, ElementId, FontWeight, ImageSource, InteractiveElement, IntoElement, ObjectFit,
-    ParentElement, RenderImage, SharedString, Stateful, Styled, StyledImage, div, img, px, rgb,
-    rgba,
+    App, Div, ElementId, FontWeight, ImageSource, InteractiveElement, IntoElement, MouseButton,
+    ObjectFit, ParentElement, RenderImage, SharedString, Stateful, Styled, StyledImage, div, img,
+    px, rgb, rgba,
 };
 use resvg::{tiny_skia, usvg};
 use rom_render::image::{Frame, RgbaImage, imageops};
@@ -588,11 +588,16 @@ pub fn button(
                 .child(SharedString::from(text.to_uppercase())),
         );
     if enabled {
-        button = button.cursor_pointer().child(hover_outline("rom-button"));
+        button = clicks(button.cursor_pointer().child(hover_outline("rom-button")));
     } else {
         button = button.opacity(0.4);
     }
     button
+}
+
+/// A control that clicks when pressed (task 125).
+fn clicks(control: Stateful<Div>) -> Stateful<Div> {
+    control.on_mouse_down(MouseButton::Left, |_, _, _| crate::sound::click())
 }
 
 /// A small square button (a stepper's − and +).
@@ -616,7 +621,7 @@ pub fn small_button(id: impl Into<ElementId>, glyph: &'static str, enabled: bool
                 .child(glyph),
         );
     if enabled {
-        button = button.cursor_pointer().child(hover_outline("rom-button"));
+        button = clicks(button.cursor_pointer().child(hover_outline("rom-button")));
     } else {
         button = button.opacity(0.35);
     }
@@ -641,6 +646,7 @@ pub fn choice(
         .h(px(32.))
         .px(px(11.))
         .cursor_pointer()
+        .on_mouse_down(MouseButton::Left, |_, _, _| crate::sound::click())
         .child(frame("cell"))
         .child(
             div()
@@ -985,6 +991,7 @@ pub fn tab(
         .pl(px(10.))
         .pr(px(14.))
         .cursor_pointer()
+        .on_mouse_down(MouseButton::Left, |_, _, _| crate::sound::click())
         .child(frame("cell"))
         .child(div().relative().child(icon(glyph, 22.)))
         .child(
@@ -1031,7 +1038,7 @@ pub fn play_button(
                 .child(SharedString::from(text.to_uppercase())),
         );
     if enabled {
-        button = button.cursor_pointer().child(hover_outline("rom-button"));
+        button = clicks(button.cursor_pointer().child(hover_outline("rom-button")));
     } else {
         button = button.opacity(0.4);
     }

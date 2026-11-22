@@ -15,7 +15,8 @@ mod table;
 pub use decode::{DecodeError, Pcm, SoundBank, decode};
 pub use engine::{AudioEngine, EngineStatus};
 pub use mixer::{
-    Admission, CROSSFADE_SECONDS, Command, LOOP_SLOTS, MAX_VOICES, Mixer, PER_SOUND_LIMIT, Volumes,
+    Admission, CROSSFADE_SECONDS, Command, DUCK_GAIN, FOREGROUND_PRIORITY, LIMIT_LEVEL, LOOP_SLOTS,
+    MAX_VOICES, Mixer, PER_SOUND_LIMIT, Volumes,
 };
 pub use placement::{Listener, Placement};
 pub use table::{Bus, SoundId};

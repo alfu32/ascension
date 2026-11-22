@@ -1,6 +1,6 @@
 //! The mixer: one-shot voices with priorities and limits, looping slots with cross-fades, three
-//! volume groups and a master. Pure and single-threaded: the audio callback owns one and feeds
-//! it commands; tests drive it directly.
+//! volume groups, ducking under the voices and alerts, and a master with a limiter. Pure and
+//! single-threaded: the audio callback owns one and feeds it commands; tests drive it directly.
 
 use std::sync::Arc;
 
@@ -16,6 +16,22 @@ pub const PER_SOUND_LIMIT: usize = 4;
 pub const LOOP_SLOTS: usize = 16;
 /// Seconds a loop takes to fade in or out when its slot changes sound.
 pub const CROSSFADE_SECONDS: f32 = 1.0;
+
+/// One-shots at this priority or higher are in the foreground with every voice (unit lines,
+/// the announcer): while one plays, the other effects and the ambience duck under it, and it
+/// is not ducked itself. Alerts and interface cues use it.
+pub const FOREGROUND_PRIORITY: u8 = 200;
+/// Gain of the effects (battles, work, movement) while a foreground sound plays: about −7 dB.
+pub const DUCK_GAIN: f32 = 0.45;
+/// Gain of the ambience while a foreground sound plays.
+const DUCK_AMBIENT_GAIN: f32 = 0.7;
+const DUCK_ATTACK_SECONDS: f32 = 0.04;
+const DUCK_RELEASE_SECONDS: f32 = 0.5;
+/// The master limiter holds the output's peaks at this level (about −3 dBFS) …
+pub const LIMIT_LEVEL: f32 = 0.7;
+/// … reaching it within this time when the mix gets loud, and letting go over the release.
+const LIMIT_ATTACK_SECONDS: f32 = 0.002;
+const LIMIT_RELEASE_SECONDS: f32 = 0.25;
 
 const RELEASE_SECONDS: f32 = 0.005;
 /// Frames (at the sound's rate) over which a loop's joint is smoothed: after each wrap the
@@ -94,11 +110,13 @@ pub enum Command {
         placement: Placement,
         priority: u8,
     },
-    /// Put `sound` in a loop slot at `gain` (cross-fading from what it held), or empty it.
+    /// Put `sound` in a loop slot at `gain` and `pan` (−1 left … 1 right), cross-fading from
+    /// what it held, or empty it.
     SetLoop {
         slot: usize,
         sound: Option<SoundId>,
         gain: f32,
+        pan: f32,
     },
     /// New volume settings.
     SetVolumes(Volumes),
@@ -126,6 +144,8 @@ struct Voice {
     left: f32,
     right: f32,
     priority: u8,
+    /// In the foreground (see [`FOREGROUND_PRIORITY`]): ducks the rest, is not ducked.
+    foreground: bool,
     serial: u64,
     /// Fading out after being replaced: the remaining level, falling to 0.
     release: Option<f32>,
@@ -140,6 +160,9 @@ struct LoopVoice {
     step: f64,
     gain: f32,
     gain_target: f32,
+    /// Left and right gains of the pan, and where they are easing to.
+    sides: [f32; 2],
+    sides_target: [f32; 2],
     fade: f32,
     fade_target: f32,
     /// Has wrapped at least once (the seam is smoothed only after a wrap).
@@ -162,7 +185,12 @@ pub struct Mixer {
     bus_gain: [f32; 3],
     master_gain: f32,
     serial: u64,
-    scratch: [[f32; CHUNK * 2]; 3],
+    /// Current gain of the ducked groups, easing towards 1 or [`DUCK_GAIN`].
+    duck: f32,
+    /// Current gain of the master limiter, at most 1.
+    limiter: f32,
+    /// Effects, voices, ambience and foreground effects of the chunk being mixed.
+    scratch: [[f32; CHUNK * 2]; 4],
 }
 
 impl Mixer {
@@ -180,7 +208,9 @@ impl Mixer {
             },
             master_gain: Volumes::default().master,
             serial: 0,
-            scratch: [[0.0; CHUNK * 2]; 3],
+            duck: 1.0,
+            limiter: 1.0,
+            scratch: [[0.0; CHUNK * 2]; 4],
         }
     }
 
@@ -194,14 +224,19 @@ impl Mixer {
             } => {
                 self.play(sound, placement, priority);
             }
-            Command::SetLoop { slot, sound, gain } => self.set_loop(slot, sound, gain),
+            Command::SetLoop {
+                slot,
+                sound,
+                gain,
+                pan,
+            } => self.set_loop(slot, sound, gain, pan),
             Command::SetVolumes(v) => self.volumes = v.clamped(),
             Command::StopAll => {
                 for v in &mut self.voices {
                     v.release.get_or_insert(1.0);
                 }
                 for slot in 0..LOOP_SLOTS {
-                    self.set_loop(slot, None, 0.0);
+                    self.set_loop(slot, None, 0.0, 0.0);
                 }
             }
         }
@@ -209,9 +244,10 @@ impl Mixer {
 
     /// Start a one-shot, subject to the per-sound and overall limits.
     pub fn play(&mut self, sound: SoundId, placement: Placement, priority: u8) -> Admission {
-        if sound.index() >= self.bank.len() {
+        // A sound not decoded (the engine decodes before it asks) is not played.
+        let Some(rate) = self.bank.pcm(sound).map(|pcm| pcm.rate) else {
             return Admission::Dropped;
-        }
+        };
         let family = self.bank.family(sound);
         let live = |v: &&Voice| v.release.is_none();
         let same = self
@@ -250,18 +286,19 @@ impl Mixer {
             // Never grow in the audio callback: cut the oldest fading voices first.
             self.voices.retain(|v| v.release.is_none());
         }
-        let pcm = self.bank.pcm(sound);
         let (left, right) = placement.clamped().channel_gains();
         self.serial += 1;
+        let bus = sound.bus();
         self.voices.push(Voice {
             sound,
             family,
-            bus: sound.bus(),
+            bus,
             pos: 0.0,
-            step: pcm.rate as f64 / self.rate as f64,
+            step: rate as f64 / self.rate as f64,
             left,
             right,
             priority,
+            foreground: bus == Bus::Voice || priority >= FOREGROUND_PRIORITY,
             serial: self.serial,
             release: None,
             done: false,
@@ -269,16 +306,19 @@ impl Mixer {
         admission
     }
 
-    fn set_loop(&mut self, slot: usize, sound: Option<SoundId>, gain: f32) {
+    fn set_loop(&mut self, slot: usize, sound: Option<SoundId>, gain: f32, pan: f32) {
         let Some(s) = self.slots.get_mut(slot) else {
             return;
         };
         let gain = if gain.is_finite() { gain.max(0.0) } else { 0.0 };
-        let sound = sound.filter(|id| id.index() < self.bank.len());
+        let (left, right) = Placement { gain: 1.0, pan }.clamped().channel_gains();
+        let sides = [left, right];
+        let sound = sound.filter(|id| self.bank.pcm(*id).is_some());
         if let (Some(active), Some(id)) = (&mut s.active, sound)
             && active.sound == id
         {
             active.gain_target = gain;
+            active.sides_target = sides;
             active.fade_target = 1.0;
             return;
         }
@@ -297,8 +337,7 @@ impl Mixer {
             }
             s.fading.push(old);
         }
-        if let Some(id) = sound {
-            let pcm = self.bank.pcm(id);
+        if let Some((id, pcm)) = sound.and_then(|id| Some((id, self.bank.pcm(id)?))) {
             let rate = pcm.rate;
             s.active = Some(LoopVoice {
                 sound: id,
@@ -307,6 +346,8 @@ impl Mixer {
                 step: rate as f64 / self.rate as f64,
                 gain,
                 gain_target: gain,
+                sides,
+                sides_target: sides,
                 fade: 0.0,
                 fade_target: 1.0,
                 wrapped: false,
@@ -347,9 +388,19 @@ impl Mixer {
         }
         let release_step = 1.0 / (RELEASE_SECONDS * self.rate as f32);
         let bank = Arc::clone(&self.bank);
+        let mut foreground = false;
         for v in &mut self.voices {
-            let buf = &mut self.scratch[bus_index(v.bus)];
-            v.done = mix_voice(bank.pcm(v.sound), v, &mut buf[..frames * 2], release_step);
+            foreground |= v.foreground && v.release.is_none();
+            let index = if v.foreground && v.bus == Bus::Effects {
+                FOREGROUND_INDEX
+            } else {
+                bus_index(v.bus)
+            };
+            let buf = &mut self.scratch[index];
+            v.done = match bank.pcm(v.sound) {
+                Some(pcm) => mix_voice(pcm, v, &mut buf[..frames * 2], release_step),
+                None => true,
+            };
         }
         self.voices.retain(|v| !v.done);
 
@@ -358,13 +409,9 @@ impl Mixer {
         for slot in &mut self.slots {
             for l in slot.active.iter_mut().chain(slot.fading.iter_mut()) {
                 let buf = &mut self.scratch[bus_index(l.bus)];
-                mix_loop(
-                    bank.pcm(l.sound),
-                    l,
-                    &mut buf[..frames * 2],
-                    fade_step,
-                    gain_step,
-                );
+                if let Some(pcm) = bank.pcm(l.sound) {
+                    mix_loop(pcm, l, &mut buf[..frames * 2], fade_step, gain_step);
+                }
             }
             slot.fading.retain(|l| l.fade > 0.0);
         }
@@ -376,21 +423,57 @@ impl Mixer {
             self.volumes.of(Bus::Voice),
             self.volumes.of(Bus::Ambient),
         ];
+        let rate = self.rate as f32;
+        let duck_target = if foreground { DUCK_GAIN } else { 1.0 };
+        let duck_k = 1.0
+            - (-1.0
+                / (if duck_target < self.duck {
+                    DUCK_ATTACK_SECONDS
+                } else {
+                    DUCK_RELEASE_SECONDS
+                } * rate))
+                .exp();
+        let attack_k = 1.0 - (-1.0 / (LIMIT_ATTACK_SECONDS * rate)).exp();
+        let release_k = 1.0 - (-1.0 / (LIMIT_RELEASE_SECONDS * rate)).exp();
         for f in 0..frames {
             for (g, t) in self.bus_gain.iter_mut().zip(targets) {
                 *g += (t - *g) * k;
             }
             self.master_gain += (self.volumes.master - self.master_gain) * k;
-            for c in 0..2 {
+            self.duck += (duck_target - self.duck) * duck_k;
+            let ambient_duck =
+                1.0 - (1.0 - self.duck) / (1.0 - DUCK_GAIN) * (1.0 - DUCK_AMBIENT_GAIN);
+            let mut mixed = [0.0f32; 2];
+            for (c, m) in mixed.iter_mut().enumerate() {
                 let i = f * 2 + c;
-                let mixed = self.scratch[0][i] * self.bus_gain[0]
+                *m = ((self.scratch[0][i] * self.duck + self.scratch[FOREGROUND_INDEX][i])
+                    * self.bus_gain[0]
                     + self.scratch[1][i] * self.bus_gain[1]
-                    + self.scratch[2][i] * self.bus_gain[2];
-                out[i] = limit(mixed * self.master_gain);
+                    + self.scratch[2][i] * self.bus_gain[2] * ambient_duck)
+                    * self.master_gain;
             }
+            // The limiter: a gain that falls fast when the peak would pass the level and
+            // recovers slowly; the soft clip after it only catches what its attack lets by.
+            let peak = mixed[0].abs().max(mixed[1].abs());
+            let wanted = if peak > LIMIT_LEVEL {
+                LIMIT_LEVEL / peak
+            } else {
+                1.0
+            };
+            let k = if wanted < self.limiter {
+                attack_k
+            } else {
+                release_k
+            };
+            self.limiter += (wanted - self.limiter) * k;
+            out[f * 2] = limit(mixed[0] * self.limiter);
+            out[f * 2 + 1] = limit(mixed[1] * self.limiter);
         }
     }
 }
+
+/// The scratch buffer of foreground effects (not ducked).
+const FOREGROUND_INDEX: usize = 3;
 
 fn bus_index(bus: Bus) -> usize {
     match bus {
@@ -471,6 +554,8 @@ fn mix_loop(pcm: &Pcm, l: &mut LoopVoice, buf: &mut [f32], fade_step: f32, gain_
     for frame in buf.as_chunks_mut::<2>().0 {
         l.fade = step_towards(l.fade, l.fade_target, fade_step);
         l.gain = step_towards(l.gain, l.gain_target, gain_step);
+        l.sides[0] = step_towards(l.sides[0], l.sides_target[0], gain_step);
+        l.sides[1] = step_towards(l.sides[1], l.sides_target[1], gain_step);
         if l.fade <= 0.0 && l.fade_target <= 0.0 {
             return;
         }
@@ -483,8 +568,8 @@ fn mix_loop(pcm: &Pcm, l: &mut LoopVoice, buf: &mut [f32], fade_step: f32, gain_
             a = pa + (a - pa) * w;
             b = pb + (b - pb) * w;
         }
-        frame[0] += a * level;
-        frame[1] += b * level;
+        frame[0] += a * level * l.sides[0];
+        frame[1] += b * level * l.sides[1];
         l.pos += l.step;
         if l.pos >= end {
             l.pos -= len;
@@ -619,6 +704,7 @@ mod tests {
             slot: 0,
             sound: Some(ids[0]),
             gain: 1.0,
+            pan: 0.0,
         });
         let mut out = vec![0.0; 2 * 48_000 * 2];
         m.render(&mut out);
@@ -628,6 +714,7 @@ mod tests {
             slot: 0,
             sound: Some(ids[1]),
             gain: 1.0,
+            pan: 0.0,
         });
         m.render(&mut out[..2 * 24_000]);
         // Mid-way through the cross-fade the sum stays near the steady level.
@@ -639,6 +726,7 @@ mod tests {
             slot: 0,
             sound: None,
             gain: 0.0,
+            pan: 0.0,
         });
         m.render(&mut out);
         assert!(out[out.len() - 2].abs() < 1e-6);
@@ -672,6 +760,7 @@ mod tests {
             slot: 3,
             sound: Some(ids[0]),
             gain: 1.0,
+            pan: 0.0,
         });
         let mut out = vec![0.0; 2 * 60_000];
         m.render(&mut out);
@@ -693,6 +782,88 @@ mod tests {
         let mut out = vec![0.0; 2 * 24_000];
         m.render(&mut out);
         assert!(out[out.len() - 2].abs() < 1e-4);
+    }
+
+    #[test]
+    fn voices_duck_the_effects_and_alerts_are_not_ducked() {
+        let mut m = mixer(96_000);
+        // Voices keyed but not heard, so the output is the effects alone.
+        m.apply(Command::SetVolumes(Volumes {
+            master: 1.0,
+            effects: 1.0,
+            voice: 0.0,
+            ambient: 1.0,
+        }));
+        m.bus_gain = [1.0, 0.0, 1.0];
+        let effect = SoundId::all().find(|id| id.bus() == Bus::Effects).unwrap();
+        let voice = SoundId::all().find(|id| id.bus() == Bus::Voice).unwrap();
+        let steady = 8_000.0 / 32_768.0;
+        m.play(effect, Placement::centre(1.0), 10);
+        let mut out = vec![0.0; 2 * 9_600];
+        m.render(&mut out);
+        assert!((out[out.len() - 2] - steady).abs() < 1e-3);
+        m.play(voice, Placement::centre(1.0), 10);
+        m.render(&mut out);
+        let ducked = out[out.len() - 2];
+        assert!((ducked - steady * DUCK_GAIN).abs() < 0.01, "{ducked}");
+        // A foreground effect (an alert) keeps its level beside the ducked one.
+        let alert = SoundId::all()
+            .filter(|id| id.bus() == Bus::Effects)
+            .find(|id| id.family() != effect.family())
+            .unwrap();
+        m.play(alert, Placement::centre(1.0), FOREGROUND_PRIORITY);
+        m.render(&mut out);
+        let both = out[out.len() - 2];
+        assert!((both - steady * (1.0 + DUCK_GAIN)).abs() < 0.01, "{both}");
+    }
+
+    #[test]
+    fn the_limiter_holds_loud_mixes_at_its_level() {
+        let mut m = mixer(96_000);
+        for id in distinct(64)
+            .into_iter()
+            .filter(|id| id.bus() == Bus::Effects)
+            .take(5)
+        {
+            m.play(id, Placement::centre(1.0), 1);
+        }
+        let mut out = vec![0.0; 2 * 9_600];
+        m.render(&mut out);
+        let settled = out[out.len() - 2];
+        assert!((settled - LIMIT_LEVEL).abs() < 0.01, "{settled}");
+        assert!(out.iter().all(|s| s.abs() <= 1.0));
+    }
+
+    #[test]
+    fn loops_take_their_pan() {
+        let mut m = mixer(4_800);
+        m.apply(Command::SetLoop {
+            slot: 2,
+            sound: Some(distinct(1)[0]),
+            gain: 1.0,
+            pan: 1.0,
+        });
+        let mut out = vec![0.0; 2 * 72_000];
+        m.render(&mut out);
+        let (left, right) = (out[out.len() - 2], out[out.len() - 1]);
+        assert!(left.abs() < 1e-4 && right > 0.3, "{left} {right}");
+    }
+
+    #[test]
+    fn sounds_not_decoded_are_not_played() {
+        let mut m = Mixer::new(Arc::new(SoundBank::lazy()), 48_000);
+        let id = distinct(1)[0];
+        assert_eq!(m.play(id, Placement::centre(1.0), 1), Admission::Dropped);
+        m.apply(Command::SetLoop {
+            slot: 0,
+            sound: Some(id),
+            gain: 1.0,
+            pan: 0.0,
+        });
+        assert_eq!(m.loop_sound(0), None);
+        let mut out = vec![1.0; 2 * 256];
+        m.render(&mut out);
+        assert!(out.iter().all(|s| *s == 0.0));
     }
 
     #[test]

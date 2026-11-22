@@ -5155,6 +5155,7 @@ dependencies = [
  "gpui-component",
  "resvg 0.47.0",
  "rom-ai",
+ "rom-audio",
  "rom-mapgen",
  "rom-match",
  "rom-models",

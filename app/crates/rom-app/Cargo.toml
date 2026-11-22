@@ -20,6 +20,8 @@ rom-sim = { path = "../rom-sim" }
 rom-ai = { path = "../rom-ai" }
 rom-save = { path = "../rom-save" }
 rom-match.workspace = true
+# Sound (task 125): the engine, its mixer and the embedded sounds.
+rom-audio = { path = "../rom-audio" }
 # Network play (task 88); `tls` for https:// servers.
 rom-net = { path = "../rom-net", features = ["tls"] }
 thiserror.workspace = true

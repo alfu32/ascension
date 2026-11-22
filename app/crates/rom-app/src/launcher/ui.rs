@@ -312,6 +312,7 @@ impl Launcher {
     fn change(&mut self, flag: &str, value: String, cx: &mut Context<Self>) {
         self.config.form.set(flag, value);
         self.save();
+        crate::sound::set_settings(self.config.form.sound_settings());
         cx.notify();
     }
 
@@ -803,6 +804,10 @@ impl Launcher {
                 if arguments == ["--run"] {
                     arguments.clear();
                 }
+                // The Sound settings go with every match (task 125).
+                if mode != Mode::Serve {
+                    arguments.extend(self.config.form.sound_arguments());
+                }
                 arguments.extend(self.append.iter().cloned());
                 if arguments.is_empty() {
                     arguments.push("--run".into());
@@ -830,7 +835,10 @@ impl Launcher {
             .rejoin_form(&token)
             .and_then(|form| form.validate().map(|_| form.arguments()))
         {
-            Ok(arguments) => self.spawn_game(arguments, cx),
+            Ok(mut arguments) => {
+                arguments.extend(self.config.form.sound_arguments());
+                self.spawn_game(arguments, cx)
+            }
             Err(error) => {
                 self.message = Some(error);
                 cx.notify();
