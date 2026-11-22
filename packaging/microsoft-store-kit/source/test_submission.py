@@ -107,7 +107,7 @@ class GeneratedListingTests(unittest.TestCase):
             for index, locale in enumerate(self.locales, start=4):
                 self.assertTrue(row[index], f'{field} is empty for {locale}')
         for index, locale in enumerate(self.locales, start=4):
-            self.assertEqual(self.rows['Title'][index], 'Ascension')
+            self.assertEqual(self.rows['Title'][index], 'ascension-rts-platform')
             want = ' '.join(line for line in records[locale]['ShortDescription'].splitlines() if line)
             self.assertEqual(self.rows['ShortDescription'][index], want, locale)
         self.assertEqual(self.rows['DesktopScreenshotCaption1'][self.header.index('en-us')],
@@ -135,7 +135,7 @@ class GeneratedListingTests(unittest.TestCase):
             self.assertEqual(png_size(kit.BASE / 'artwork' / f'{name}.png'), size)
 
     def test_title_is_the_package_display_name(self):
-        self.assertEqual(kit.identity()['displayName'], 'Ascension')
+        self.assertEqual(kit.identity()['displayName'], 'ascension-rts-platform')
         self.assertEqual(kit.identity()['storeId'], kit.STORE_ID)
 
     def test_text_files_per_locale(self):

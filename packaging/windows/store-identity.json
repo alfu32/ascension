@@ -4,7 +4,7 @@
   "publisherDisplayName": "K3D0",
   "packageFamilyName": "K3D0.ascension-rts-platform_tfmtd4yrk952g",
   "storeId": "9PHHR2KQKVJ2",
-  "displayName": "Ascension",
+  "displayName": "ascension-rts-platform",
   "executable": "rise-of-man.exe",
   "note": "Transcribed from packaging/msstore-identity.txt. PFN and Store ID are for validation; they are not AppxManifest elements. MSIX versions add versionMajorOffset to the major (the Store needs major >= 1): app 0.0.112 is package 1.0.112.0.",
   "versionMajorOffset": 1
