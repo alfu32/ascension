@@ -45,6 +45,12 @@ changes the simulation, and nothing in `rom-sim` knows about sound.
   report; sounds referred to by their file name key from task 124. Seed rows for every unit
   and building, filled by rules in `generate.py` where possible (by class, movement class,
   weapon damage type, resource) with per-key overrides only where needed.
+- **A gentle mix** (owner, 2026-11-22, after reviewing every sound: "things will be different
+  when mixing them with other sounds. the general idea is for them not to be too violent"):
+  default volumes low, battles never louder than speech, a limiter on the master bus, combat
+  sounds ducked under voice lines and alerts, and the owner judges the mix in a played match
+  before release — make a session the owner can play (a mid-game save with a battle and a
+  working city) and say how to start it.
 - **Settings**: the Sound section of the settings (master, effects, voice, ambient volume;
   mute when the window is not focused, on by default), saved with the other settings.
 
