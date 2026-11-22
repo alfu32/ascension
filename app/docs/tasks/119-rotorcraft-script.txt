@@ -1,0 +1,24 @@
+# Task 119: the three rotorcraft hanging in the air over the south side of player one's city
+# (an attack helicopter, a gunship helicopter and a hover gunship, two of each, placed in the
+# air; they hold their places instead of circling, the hover gunship lower), with two tanks of
+# player two on the ground below. Replayed by --script (universe mode, seed 1, --sun low,
+# --players 2 --ai none, --size 1600x900). Test-only setup lines first.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun low --size 1600x900
+#     --script app/docs/tasks/119-rotorcraft-script.txt --after 4 --screenshot rotors.png
+0 grant-age age.automation
+0 place 1 bld.market @-7,-5
+0 place 1 bld.factory @-8,4
+0 place 1 bld.university @7,-6
+0 place 1 bld.temple @8,5
+0 place 1 bld.tower @-3,8
+0 place 1 bld.barracks @12,-1
+0 place 1 unit.attack_helicopter @-3,12
+0 place 1 unit.attack_helicopter @-3,15
+0 place 1 unit.gunship_helicopter @1,12
+0 place 1 unit.gunship_helicopter @1,15
+0 place 1 unit.hover_gunship @5,12
+0 place 1 unit.hover_gunship @5,15
+0 place 2 unit.tank @-6,24
+0 place 2 unit.tank @0,24
+1 speed 100
+2 cam wheel 1 800,450

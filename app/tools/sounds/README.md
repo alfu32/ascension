@@ -37,6 +37,14 @@ The model and its voices download from Hugging Face on first use (about 330 MB);
 to keep that cache outside the repository too. Also needed: `sqlite3`, `ffmpeg` (with libvorbis)
 and, for `check.py`, ImageMagick's `montage`.
 
+Two more things the voice step needs here (found in task 119):
+
+- the espeak library looks for its data in `$HOME/espeak-ng-data`, whatever path misaki gives it:
+  run `voices.py` with `HOME` pointing at a folder holding a link `espeak-ng-data` to
+  `.../site-packages/espeakng_loader/espeak-ng-data` (the symlink above is then not needed);
+- misaki wants spaCy's English model: `uv pip install
+  https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl`.
+
 ## Making the sounds
 
 ```sh
@@ -54,3 +62,13 @@ in the rules gets its sounds on the next bake; `assign.py` chooses them from its
 
 Keep the total size of `app/assets/sounds/` within 45 MB: voices are mono 22.05 kHz at Vorbis
 quality 2, effects mono 44.1 kHz at quality 3, ambience stereo 44.1 kHz at quality 3.
+
+## Baking only new types
+
+A full bake re-makes every file. To add the sounds of a few new types and leave the heard ones
+byte-identical: run `assign.py` (it only adds entries; new classes go in `ADDED_LATER` so earlier
+voices do not shift), write the new entries of `plan.json` (those not in the committed one) to a
+filtered plan, then run `synth.py <wav> <filtered>`, `voices.py <wav> <filtered>` (with `HOME` as
+above), `level.py <wav> <level>`, and encode only the new files with the `encode` function of
+`bake.sh`. Check `git status` shows only new files in `app/assets/sounds/`, run
+`tools/sounds/seed.py`, and look at the new files with `check.py` on a folder holding just them.

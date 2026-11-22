@@ -11011,5 +11011,256 @@
   },
   "recipe": "move.footsteps",
   "seed": 418249
+ },
+ {
+  "fx": "radio",
+  "kind": "voice",
+  "name": "voice.attack_helicopter.select",
+  "speed": 1.064,
+  "text": "Attack Helicopters, pilot standing by.",
+  "voice": "af_sarah"
+ },
+ {
+  "fx": "radio",
+  "kind": "voice",
+  "name": "voice.attack_helicopter.move",
+  "speed": 1.064,
+  "text": "Heading out.",
+  "voice": "af_sarah"
+ },
+ {
+  "fx": "radio",
+  "kind": "voice",
+  "name": "voice.attack_helicopter.attack",
+  "speed": 1.064,
+  "text": "Guns firing.",
+  "voice": "af_sarah"
+ },
+ {
+  "fx": "radio",
+  "kind": "voice",
+  "name": "voice.attack_helicopter.research_done",
+  "speed": 1.064,
+  "text": "Aircraft upgraded.",
+  "voice": "af_sarah"
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.attack_helicopter.fire.1",
+  "params": {
+   "age": 6,
+   "pitch": 1.058,
+   "power": 0.433,
+   "reach": 0.267,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "machine_gun"
+  },
+  "recipe": "fire.machine_gun",
+  "seed": 326520
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.attack_helicopter.fire.2",
+  "params": {
+   "age": 6,
+   "pitch": 1.058,
+   "power": 0.433,
+   "reach": 0.267,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "machine_gun"
+  },
+  "recipe": "fire.machine_gun",
+  "seed": 699182
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.attack_helicopter.fire.3",
+  "params": {
+   "age": 6,
+   "pitch": 1.058,
+   "power": 0.433,
+   "reach": 0.267,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "machine_gun"
+  },
+  "recipe": "fire.machine_gun",
+  "seed": 221844
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.attack_helicopter.moving",
+  "params": {
+   "age": 6,
+   "figures": 1,
+   "pitch": 1.058,
+   "size": 0.167,
+   "speed": 0.4
+  },
+  "recipe": "move.rotor",
+  "seed": 492321
+ },
+ {
+  "fx": "radio",
+  "kind": "voice",
+  "name": "voice.gunship_helicopter.select",
+  "speed": 1.047,
+  "text": "Pilot here.",
+  "voice": "am_liam"
+ },
+ {
+  "fx": "radio",
+  "kind": "voice",
+  "name": "voice.gunship_helicopter.move",
+  "speed": 1.047,
+  "text": "Lifting off.",
+  "voice": "am_liam"
+ },
+ {
+  "fx": "radio",
+  "kind": "voice",
+  "name": "voice.gunship_helicopter.attack",
+  "speed": 1.047,
+  "text": "Target locked.",
+  "voice": "am_liam"
+ },
+ {
+  "fx": "radio",
+  "kind": "voice",
+  "name": "voice.gunship_helicopter.research_done",
+  "speed": 1.047,
+  "text": "New tactics received.",
+  "voice": "am_liam"
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.gunship_helicopter.fire.1",
+  "params": {
+   "age": 7,
+   "pitch": 0.993,
+   "power": 0.467,
+   "reach": 0.267,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "missile"
+  },
+  "recipe": "fire.missile",
+  "seed": 24214
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.gunship_helicopter.fire.2",
+  "params": {
+   "age": 7,
+   "pitch": 0.993,
+   "power": 0.467,
+   "reach": 0.267,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "missile"
+  },
+  "recipe": "fire.missile",
+  "seed": 443648
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.gunship_helicopter.moving",
+  "params": {
+   "age": 7,
+   "figures": 1,
+   "pitch": 0.993,
+   "size": 0.167,
+   "speed": 0.4
+  },
+  "recipe": "move.rotor",
+  "seed": 422176
+ },
+ {
+  "fx": "machine",
+  "kind": "voice",
+  "name": "voice.hover_gunship.select",
+  "speed": 0.909,
+  "text": "Hover Gunships, operational.",
+  "voice": "am_adam"
+ },
+ {
+  "fx": "machine",
+  "kind": "voice",
+  "name": "voice.hover_gunship.move",
+  "speed": 0.909,
+  "text": "Heading out.",
+  "voice": "am_adam"
+ },
+ {
+  "fx": "machine",
+  "kind": "voice",
+  "name": "voice.hover_gunship.attack",
+  "speed": 0.909,
+  "text": "Missiles away.",
+  "voice": "am_adam"
+ },
+ {
+  "fx": "machine",
+  "kind": "voice",
+  "name": "voice.hover_gunship.research_done",
+  "speed": 0.909,
+  "text": "Upgrade installed.",
+  "voice": "am_adam"
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.hover_gunship.fire.1",
+  "params": {
+   "age": 8,
+   "pitch": 1.103,
+   "power": 0.5,
+   "reach": 0.267,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "missile"
+  },
+  "recipe": "fire.missile",
+  "seed": 694723
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.hover_gunship.fire.2",
+  "params": {
+   "age": 8,
+   "pitch": 1.103,
+   "power": 0.5,
+   "reach": 0.267,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "missile"
+  },
+  "recipe": "fire.missile",
+  "seed": 835925
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.hover_gunship.moving",
+  "params": {
+   "age": 8,
+   "ducted": 1,
+   "figures": 1,
+   "pitch": 1.103,
+   "size": 0.167,
+   "speed": 0.4
+  },
+  "recipe": "move.rotor",
+  "seed": 897228
  }
 ]

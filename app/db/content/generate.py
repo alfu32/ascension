@@ -64,6 +64,9 @@ LINES = [
     ('warship', 'dock', 'trireme:Triremes:1|war_galley:War Galleys:2|carrack:Carracks:3|frigate:Frigates:4|ship_of_the_line:Men-of-War:4:late|ironclad:Ironclads:5|destroyer:Destroyers:6|dreadnought:Dreadnoughts:6:late|missile_cruiser:Missile Cruisers:7|drone_cruiser:Drone Cruisers:8|hover_frigate:Hover Frigates:9'),
     ('fighter', 'airfield', 'biplane:Biplanes:5|fighter:Fighters:6|jet_fighter:Jet Fighters:7|drone_fighter:Drone Fighters:8|interceptor:Interceptors:9'),
     ('bomber', 'airfield', 'bomber:Bombers:6|strategic_bomber:Strategic Bombers:7|drone_bomber:Drone Bombers:8'),
+    # Task 119: one class of rotorcraft; each member replaces the one before it. Defined late so
+    # the ids of earlier content stay stable.
+    ('rotorcraft', 'airfield', 'attack_helicopter:Attack Helicopters:6:late|gunship_helicopter:Gunship Helicopters:7:late|hover_gunship:Hover Gunships:8:late'),
     # The survey ship has a line of its own, so the corvette never supersedes it (task 73).
     ('survey', 'spaceport', 'survey_ship:Survey Ship:10'),
     ('starship', 'spaceport', 'corvette:Corvettes:10|space_frigate:Space Frigates:10|space_cruiser:Space Cruisers:11|battleship:Battleships:12'),
@@ -144,6 +147,8 @@ PROJECTILES = {
     'unit.drone_cruiser': 'missile', 'unit.hover_frigate': 'plasma',
     'unit.biplane': 'bullet', 'unit.fighter': 'bullet', 'unit.jet_fighter': 'missile',
     'unit.drone_fighter': 'missile', 'unit.interceptor': 'plasma',
+    'unit.attack_helicopter': 'bullet', 'unit.gunship_helicopter': 'missile',
+    'unit.hover_gunship': 'missile',
     'unit.bomber': 'shell', 'unit.strategic_bomber': 'shell', 'unit.drone_bomber': 'shell',
     'unit.survey_ship': 'beam', 'unit.corvette': 'railgun', 'unit.space_frigate': 'beam',
     'unit.space_cruiser': 'railgun', 'unit.battleship': 'plasma', 'unit.carrier': 'beam',
@@ -220,6 +225,8 @@ def unit_sight(line, key, age, reach):
     elif line == 'warship':
         # A warship sees at least as far as it shoots.
         tiles = max(8 + age // 3, reach // 1000)
+    elif line == 'rotorcraft':
+        tiles = 10
     elif line in ('fighter', 'bomber'):
         tiles = 13 if 'drone' in key else 12
     return tiles * 1000
@@ -458,7 +465,7 @@ def generate():
                 definition('entity_type', full, name)
             building = producer.split(',')[-1 if age >= 5 else 0]
             mounted = line in ('light_mounted', 'heavy_mounted')
-            aircraft = line in ('fighter', 'bomber')
+            aircraft = line in ('fighter', 'bomber', 'rotorcraft')
             support = line in ('civilian', 'scholar', 'merchant', 'caravan', 'priest', 'medic', 'repair', 'supply')
             spacecraft = line in ('starship', 'survey', 'transport')
             mechanical = (mounted and age >= 5) or line in ('caravan', 'siege', 'anti_air', 'repair', 'supply', 'warship') or spacecraft or aircraft or 'drone' in key or 'robot' in key
@@ -489,6 +496,12 @@ def generate():
                 hp, attack, cooldown, tiles, dead, speed, prices = SEA_CLASSES[series]
                 reach, dead_zone = SEA_REACH.get(key, tiles) * 1000, dead * 1000
                 dc, ac = 'explosive' if age >= 3 else 'pierce', 'hull'
+            elif line == 'rotorcraft':
+                # Task 119: slow for an aircraft, short reach, anti-ground. The gunship's missiles
+                # are explosive, which hurt tanks as bullets do not; the hover gunship is crewless.
+                hp, attack, reach, speed, dc, ac = 110, 14, 4000, 2400, 'explosive' if age >= 7 else 'bullet', 'vehicle'
+                cooldown = 20
+                prices = {'metal': 70, 'oil': 35}
             elif aircraft:
                 hp, attack, reach, speed, dc, ac = 150, 20, 5000, 4000, 'explosive' if line == 'bomber' else 'bullet', 'vehicle'
                 prices = {'metal': 80, 'oil': 40}
@@ -668,6 +681,7 @@ def generate():
     market_trading(row, modifier, sql.append)
     alerts_and_detectors(definition, row, tag, need, produce, cost, tech)
     aircraft_take_off(row, sql.append)
+    rotorcraft_hover(row, tag)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -1237,6 +1251,8 @@ def alerts_and_detectors(definition, row, tag, need, produce, cost, tech):
 TAKEOFF_TICKS = {
     'biplane': 60, 'fighter': 70, 'drone_fighter': 70, 'jet_fighter': 80, 'interceptor': 80,
     'bomber': 90, 'drone_bomber': 90, 'strategic_bomber': 100,
+    # Task 119: rotorcraft climb quickly; the crewless one is the quickest.
+    'attack_helicopter': 30, 'gunship_helicopter': 36, 'hover_gunship': 24,
 }
 # Ground an aircraft rolls along its heading while it takes off, and glides over while it lands.
 TAKEOFF_RUN = 3000
@@ -1246,7 +1262,13 @@ TAKEOFF_RUN = 3000
 AIRCRAFT_REACH = {
     'biplane': 1400, 'fighter': 1400, 'jet_fighter': 1600, 'drone_fighter': 1200,
     'interceptor': 2100, 'bomber': 2000, 'strategic_bomber': 2200, 'drone_bomber': 1900,
+    # Task 119: rotorcraft (the larger of main rotor or boom reach, from the drawn models).
+    'attack_helicopter': 1600, 'gunship_helicopter': 2000, 'hover_gunship': 900,
 }
+
+
+# Task 119: the rotorcraft line, oldest first.
+ROTORCRAFT = ['attack_helicopter', 'gunship_helicopter', 'hover_gunship']
 
 
 def aircraft_take_off(row, emit):
@@ -1257,6 +1279,20 @@ def aircraft_take_off(row, emit):
     for key, ticks in TAKEOFF_TICKS.items():
         emit(f"UPDATE et_movement SET takeoff_ticks={ticks},landing_radius={AIRCRAFT_REACH[key]} "
              f"WHERE entity_type_id={val(Ref('unit.' + key))};")
+    # Task 119: rotorcraft climb and descend straight, without a roll.
+    for key in ROTORCRAFT:
+        emit(f"UPDATE et_movement SET takeoff_run=0 WHERE entity_type_id={val(Ref('unit.' + key))};")
+
+
+def rotorcraft_hover(row, tag):
+    """Task 119: rotorcraft hold a point (tag `hover`: an idle one stays where it is, in the air,
+    instead of circling) and the crewless one flies low (tag `low_flight`) and is a drone. Tags
+    only, written after every other definition so earlier ids stay."""
+    row('tag', key='hover', category='movement')
+    row('tag', key='low_flight', category='movement')
+    for key in ROTORCRAFT:
+        tag('unit.' + key, 'hover')
+    tag('unit.hover_gunship', 'low_flight', 'drone')
 
 
 # Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"

@@ -585,6 +585,11 @@ with 180 stains (two rewrites in the run).
 
 ### Aircraft in the air, on the ground (task 123)
 
+Task 119 adds the rotorcraft (attack helicopters, gunship helicopters, hover gunships) to the
+same two planes. They need no simulation code: an airborne aircraft with no order already holds
+its place. Two tags (`hover`, `low_flight`) only change how it is drawn: it hangs where it is
+instead of circling, and the hover gunship hangs lower (`rom-render` `Hover`).
+
 Biplanes, fighters, jet and drone fighters, interceptors and the three bombers have two planes
 of action, like the orbital craft have the air and the orbit: the **ground** and the **air**
 above their planet. They never reach orbit by themselves; that stays the orbital craft's.

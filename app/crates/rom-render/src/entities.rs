@@ -27,6 +27,18 @@ const MIN_GAP: Duration = Duration::from_millis(5);
 /// Longest interval the interpolation stretches over.
 const MAX_INTERVAL: Duration = Duration::from_millis(1000);
 
+/// How an airborne aircraft is drawn while it holds a point (task 119).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Hover {
+    /// Idle, it flies a circle round its spot (a jet or a biplane).
+    #[default]
+    Circle,
+    /// It hangs where it is (a helicopter).
+    Hold,
+    /// It hangs where it is and flies lower than the rest (a ducted-fan craft).
+    Low,
+}
+
 /// One entity as the render thread sees it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct EntityView {
@@ -54,6 +66,8 @@ pub struct EntityView {
     /// An aircraft that lands and takes off (task 123): placed by [`lift_aircraft`] with its
     /// model's underside on the ground or at its flight height.
     pub aircraft: bool,
+    /// How an airborne aircraft holds a point (task 119): jets circle when idle, rotorcraft hover.
+    pub hover: Hover,
     /// Facing in degrees, clockwise from the positive x axis.
     pub facing_deg: f32,
     /// Hit points as a fraction of the maximum, 0 to 1.
@@ -1084,6 +1098,8 @@ const SPREAD_SPACING: f32 = 0.45;
 pub const FLIGHT_ALTITUDE: f32 = 7.0;
 /// How much higher an aircraft flies per tile of its drawn length: bigger aircraft higher.
 pub const FLIGHT_PER_TILE: f32 = 0.5;
+/// Share of the usual flight height at which a low-flying craft hangs (task 119).
+pub const LOW_FLIGHT_SHARE: f32 = 0.45;
 /// How far above a building the aircraft keep, tiles.
 const FLIGHT_CLEARANCE: f32 = 1.5;
 /// How far from a tall building's footprint an aircraft begins to rise over it, tiles.
@@ -1115,7 +1131,9 @@ pub(crate) fn lift_aircraft(
     // The buildings an aircraft must rise over: face, centre, half its footprint, height.
     let tall: Vec<(u8, f32, f32, f32, f32)> = views
         .iter()
-        .filter(|v| v.building && building_height(v) + FLIGHT_CLEARANCE > FLIGHT_ALTITUDE)
+        .filter(|v| {
+            v.building && building_height(v) + FLIGHT_CLEARANCE > FLIGHT_ALTITUDE * LOW_FLIGHT_SHARE
+        })
         .map(|v| {
             let half = f32::from(v.footprint.0.max(v.footprint.1)) * 0.5;
             (
@@ -1132,7 +1150,14 @@ pub(crate) fn lift_aircraft(
             continue;
         }
         let length = unit_width(view);
+        let share = if view.hover == Hover::Low {
+            LOW_FLIGHT_SHARE
+        } else {
+            1.0
+        };
+        let cruise = FLIGHT_ALTITUDE * share;
         if view.flight >= 1.0
+            && view.hover == Hover::Circle
             && view.activity == Activity::Idle
             && let Some(side) = face_side
         {
@@ -1159,13 +1184,13 @@ pub(crate) fn lift_aircraft(
             .map(|&(_, x, y, half, top)| {
                 let off = ((view.x - x).abs().max((view.y - y).abs()) - half).max(0.0);
                 let near = 1.0 - (off / FLIGHT_ROOF_REACH).min(1.0);
-                FLIGHT_ALTITUDE + (top - FLIGHT_ALTITUDE) * crate::layers::smoothstep(near)
+                cruise + (top - cruise).max(0.0) * crate::layers::smoothstep(near)
             })
-            .fold(FLIGHT_ALTITUDE, f32::max);
+            .fold(cruise, f32::max);
         let rise = crate::layers::smoothstep(view.flight.clamp(0.0, 1.0));
         // The model's underside at that height (on the ground when landed).
         let built = view.model.map_or(0.0, |m| m.floor);
-        view.altitude = floor + (base + FLIGHT_PER_TILE * length) * rise - built;
+        view.altitude = floor + (base + FLIGHT_PER_TILE * length * share) * rise - built;
     }
 }
 
@@ -1361,6 +1386,7 @@ mod tests {
             spacecraft: false,
             flight: 0.0,
             aircraft: false,
+            hover: Hover::Circle,
             activity: Default::default(),
         }
     }
@@ -1391,6 +1417,7 @@ mod tests {
         let plane = |id, x, flight| EntityView {
             flight,
             aircraft: true,
+            hover: Hover::Circle,
             ..view(id, x, 10.0, 0.0)
         };
         let airborne = plane(1, 10.0, 1.0);
@@ -1426,6 +1453,29 @@ mod tests {
         assert!((frame.origin[1] - 0.5).abs() < 1e-4, "{:?}", frame.origin);
         assert!(views[3].altitude >= 2.0 + tower_height.max(FLIGHT_ALTITUDE));
         assert!(views[3].altitude < ORBIT_ALTITUDE + 2.0 + tower_height);
+    }
+
+    #[test]
+    fn idle_rotorcraft_hang_in_place_and_the_low_flyer_hangs_lower() {
+        let ground = FlatGround(&|_, _| 2.0);
+        let craft = |id, hover| EntityView {
+            flight: 1.0,
+            aircraft: true,
+            hover,
+            ..view(id, 10.0, 10.0, 0.0)
+        };
+        let mut views = [
+            craft(1, Hover::Circle),
+            craft(2, Hover::Hold),
+            craft(3, Hover::Low),
+        ];
+        lift_aircraft(&mut views, &ground, 3.0, Some(64.0));
+        assert_ne!((views[0].x, views[0].y), (10.0, 10.0), "a jet circles");
+        for held in &views[1..] {
+            assert_eq!((held.x, held.y), (10.0, 10.0));
+        }
+        assert!((views[1].altitude - views[0].altitude).abs() < 1e-4);
+        assert!(views[2].altitude > 2.0 && views[2].altitude < views[1].altitude - 2.0);
     }
 
     #[test]
@@ -1670,6 +1720,7 @@ mod tests {
             spacecraft: true,
             flight: 0.0,
             aircraft: false,
+            hover: Hover::Circle,
             altitude,
             model: Some(ModelRef {
                 index: 0,

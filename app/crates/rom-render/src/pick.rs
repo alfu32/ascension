@@ -1183,6 +1183,7 @@ mod tests {
             spacecraft: false,
             flight: 0.0,
             aircraft: false,
+            hover: crate::Hover::Circle,
             activity: Default::default(),
         }
     }

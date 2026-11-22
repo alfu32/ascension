@@ -719,6 +719,28 @@
    "voice.assault_infantry.select"
   ]
  },
+ "unit.attack_helicopter": {
+  "attack": [
+   "voice.attack_helicopter.attack"
+  ],
+  "fire": [
+   "unit.attack_helicopter.fire.1",
+   "unit.attack_helicopter.fire.2",
+   "unit.attack_helicopter.fire.3"
+  ],
+  "move": [
+   "voice.attack_helicopter.move"
+  ],
+  "moving": [
+   "unit.attack_helicopter.moving"
+  ],
+  "research_done": [
+   "voice.attack_helicopter.research_done"
+  ],
+  "select": [
+   "voice.attack_helicopter.select"
+  ]
+ },
  "unit.battleship": {
   "attack": [
    "voice.battleship.attack"
@@ -1466,6 +1488,27 @@
    "voice.gun_drone.select"
   ]
  },
+ "unit.gunship_helicopter": {
+  "attack": [
+   "voice.gunship_helicopter.attack"
+  ],
+  "fire": [
+   "unit.gunship_helicopter.fire.1",
+   "unit.gunship_helicopter.fire.2"
+  ],
+  "move": [
+   "voice.gunship_helicopter.move"
+  ],
+  "moving": [
+   "unit.gunship_helicopter.moving"
+  ],
+  "research_done": [
+   "voice.gunship_helicopter.research_done"
+  ],
+  "select": [
+   "voice.gunship_helicopter.select"
+  ]
+ },
  "unit.heavy_machine_gunner": {
   "attack": [
    "voice.heavy_machine_gunner.attack"
@@ -1551,6 +1594,27 @@
   ],
   "select": [
    "voice.hover_frigate.select"
+  ]
+ },
+ "unit.hover_gunship": {
+  "attack": [
+   "voice.hover_gunship.attack"
+  ],
+  "fire": [
+   "unit.hover_gunship.fire.1",
+   "unit.hover_gunship.fire.2"
+  ],
+  "move": [
+   "voice.hover_gunship.move"
+  ],
+  "moving": [
+   "unit.hover_gunship.moving"
+  ],
+  "research_done": [
+   "voice.hover_gunship.research_done"
+  ],
+  "select": [
+   "voice.hover_gunship.select"
   ]
  },
  "unit.hovercraft": {

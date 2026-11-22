@@ -1340,6 +1340,8 @@ pub struct Movement {
     pub landing_radius: Option<i64>,
     /// Ticks an aircraft takes to take off into the air or to land; 0 = never lands.
     pub takeoff_ticks: i64,
+    /// Milli-tiles rolled while taking off and glided while landing; `None` = `air.takeoff_run`.
+    pub takeoff_run: Option<i64>,
 }
 /// One `et_weapon` row.
 #[derive(Debug, Clone)]

@@ -56,6 +56,7 @@ industrial age (age 5). Role tags as generated (`infantry`, `mounted`, `vehicle`
 | **warship** | Triremes (1), War Galleys (2), Carracks (3), Frigates (4), Ironclads (5), Destroyers (6), Missile Cruisers (7), Drone Cruisers (8), Hover Frigates (9) | dock | **every** sea role in one chain |
 | fighter | Biplanes (5), Fighters (6), Jet Fighters (7), Drone Fighters (8), Interceptors (9) | airfield | air superiority; land and take off (task 123: 60, 70, 80, 70, 80 ticks) |
 | bomber | Bombers (6), Strategic Bombers (7), Drone Bombers (8) | airfield | strikes the ground; land and take off (task 123: 90, 100, 90 ticks) |
+| rotorcraft | Attack Helicopters (6), Gunship Helicopters (7), Hover Gunships (8) | airfield | task 119: one class, each replaces the one before; anti-ground only, reach 4 tiles, slow (2.4 tiles/s), hold a point in the air (tag `hover`; the hover gunship also `low_flight` and a drone); lift off in 30, 36, 24 ticks; the gunships' missiles are explosive and hurt tanks; answered by flak guns, missile launchers and fighters |
 | survey | Survey Ship (10) | spaceport | a line of its own since task 73 |
 | **starship** | Corvettes (10), Space Frigates (11), Space Cruisers (12), Battleships (13) | spaceport | **every** warship role in space in one chain |
 | transport | Transport Ships (10) | spaceport | carries 20 population |

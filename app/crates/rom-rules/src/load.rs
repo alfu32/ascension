@@ -407,6 +407,7 @@ fn load_et_movement(conn: &Connection) -> Result<Vec<Movement>, RulesError> {
                 jump_charge_ticks: row.get("jump_charge_ticks")?,
                 landing_radius: row.get("landing_radius")?,
                 takeoff_ticks: row.get("takeoff_ticks")?,
+                takeoff_run: row.get("takeoff_run")?,
             })
         },
     )

@@ -1540,6 +1540,11 @@ schema change, both lint views stay empty and the seed loads.
   `Movement::takeoff_ticks`. Seed: biplane 60, fighter 70, drone fighter 70, jet fighter 80,
   interceptor 80, bomber 90, drone bomber 90, strategic bomber 100. The repair drone (also of the
   `aircraft` movement class) hovers and keeps 0; so do the orbital fighter and bomber.
+- **`et_movement.takeoff_run`** (task 119, nullable `INTEGER CHECK (takeoff_run >= 0)`): the
+  ground this type rolls while taking off and glides while landing, milli-tiles; NULL = the
+  constant `air.takeoff_run`; 0 = straight up and down (the three rotorcraft). Read by
+  `rom-rules` into `Movement::takeoff_run` and by `rom-sim/src/aircraft.rs` for the roll and the
+  glide; existing aircraft keep NULL.
 - **Constant** `air.takeoff_run` 3000 milli-tiles: the ground an aircraft rolls along its
   heading while it takes off (accelerating), and glides over while it lands (slowing).
 - **Orders.** No new kind: `land` (point) and `lift` (none) serve aircraft too, their notes
@@ -1583,6 +1588,15 @@ schema change, both lint views stay empty and the seed loads.
 - **Save format 15.** PART B table `entity_flight(entity_id, climbed)`; formats 13 and 14 still
   load, with every aircraft in the air. The rules fingerprint changes, so earlier saves are
   refused as with any rules change.
+
+## Rotorcraft (task 119)
+
+Generated in `db/content/generate.py` (line `rotorcraft`, members marked `late` so earlier ids
+stay; `rotorcraft_hover()` adds the tags after every other definition). Units `unit.attack_helicopter`
+(modern), `unit.gunship_helicopter` (information), `unit.hover_gunship` (automation), `ui_group`
+`rotorcraft`, trained at the airfield, `aircraft` movement class with `takeoff_ticks` 30/36/24 and
+`landing_radius` 1600/2000/900 (the drawn models) and `takeoff_run` 0 (they lift and land vertically). Tags: `hover` (movement; all three), `low_flight`
+(movement) and `drone` on the hover gunship. No schema change.
 
 ## Bringing life (task 77)
 
