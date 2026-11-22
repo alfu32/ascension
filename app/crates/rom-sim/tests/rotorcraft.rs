@@ -2,12 +2,11 @@
 //! hold a point in the air, hit the ground only, and are answered by anti-air. Every scenario
 //! runs twice and compares state hashes.
 
-
 use rom_geo::CubeSurface;
 use rom_rules::{BodyKind, DefId, Rules, build_rules_db};
 use rom_sim::{
-    BodyId, BodyInfo, Command, EntityId, PlanetSurface, Player, PlayerId, Pos,
-    SystemInfo, UniverseSetup, World,
+    BodyId, BodyInfo, Command, EntityId, PlanetSurface, Player, PlayerId, Pos, SystemInfo,
+    UniverseSetup, World,
 };
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -217,7 +216,11 @@ fn rotorcraft_hover_in_place_and_shoot_the_ground_only() {
             .spawn(id(&w, "unit.tank"), P2, at(0, held.x + 3_000, held.y))
             .unwrap();
         let jet = w
-            .spawn(id(&w, "unit.jet_fighter"), P2, at(0, held.x, held.y + 3_000))
+            .spawn(
+                id(&w, "unit.jet_fighter"),
+                P2,
+                at(0, held.x, held.y + 3_000),
+            )
             .unwrap();
         assert!(w.can_target(heli, tank));
         assert!(!w.can_target(heli, jet));
@@ -252,7 +255,11 @@ fn the_line_is_one_class_each_member_replacing_the_one_before() {
         assert!(w.is_aircraft_type(e.id));
     }
     // The gunship's missiles hurt tanks; the first helicopter's bullets barely do.
-    let tank = rules.entity_type(id(&w, "unit.tank")).unwrap().armor_class_id.unwrap();
+    let tank = rules
+        .entity_type(id(&w, "unit.tank"))
+        .unwrap()
+        .armor_class_id
+        .unwrap();
     let vs_tank = |e: &rom_rules::EntityType| {
         let weapon = &e.weapons[0];
         weapon.damage * rules.damage_pct(weapon.damage_class_id, tank) / 100

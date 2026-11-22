@@ -1131,7 +1131,9 @@ pub(crate) fn lift_aircraft(
     // The buildings an aircraft must rise over: face, centre, half its footprint, height.
     let tall: Vec<(u8, f32, f32, f32, f32)> = views
         .iter()
-        .filter(|v| v.building && building_height(v) + FLIGHT_CLEARANCE > FLIGHT_ALTITUDE * LOW_FLIGHT_SHARE)
+        .filter(|v| {
+            v.building && building_height(v) + FLIGHT_CLEARANCE > FLIGHT_ALTITUDE * LOW_FLIGHT_SHARE
+        })
         .map(|v| {
             let half = f32::from(v.footprint.0.max(v.footprint.1)) * 0.5;
             (
