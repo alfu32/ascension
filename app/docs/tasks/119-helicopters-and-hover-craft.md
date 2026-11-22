@@ -54,6 +54,19 @@ altitude. This card starts after 123 is merged: helicopters and the gunship use 
 and take off too; the hover gunship flies low), set through data. Show them in the air in the
 screenshot.
 
+## Known before starting (task 125, 0.0.119)
+
+Every unit type has its own sounds (`et_sound` rows, `app/docs/sound.md`, `database.md` "Sounds
+(task 125)"). The three new units need theirs: `select`, `move`, `attack` lines (a pilot over
+the radio for the helicopters; the hover gunship is crewless, a processed machine voice as the
+other drones), `fire` per weapon slot, and a `moving` loop from the rotor recipe (`act.` rotor,
+made for this task in 124). Make them as task 124 did: `app/tools/sounds/README.md` (a throwaway
+Python environment in the scratchpad's `t119/`, never committed), `assign.py` to update
+`assignment.json`, the bake for the new types only, then `python3 tools/sounds/seed.py`. Every
+existing file in `app/assets/sounds/` must stay byte-identical (check with `git status`); the
+owner has listened to them. Look at the new sounds' spectrograms with `tools/sounds/check.py`;
+no owner review is needed for sounds this time.
+
 ## Done when
 
 - Gate green; database lint views empty; the new units producible in their ages; fight matrix
