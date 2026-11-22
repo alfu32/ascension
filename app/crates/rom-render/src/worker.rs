@@ -60,6 +60,8 @@ pub const MAX_RENDER_SCALE: u32 = 100;
 const SHADE_CHUNKS_PER_FRAME: usize = 24;
 const FRAME_INTERVAL: Duration = Duration::from_nanos(16_666_667);
 const IDLE_WAIT: Duration = Duration::from_millis(16);
+/// How often the listener for sound is published (task 125).
+const EAR_INTERVAL: Duration = Duration::from_millis(50);
 
 /// Size of the render target for a canvas of `layout` pixels at `percent` scale.
 pub fn scaled_size(layout: (u32, u32), percent: u32) -> (u32, u32) {
@@ -689,6 +691,8 @@ fn render_loop(shared: &Shared) {
     let mut pending_universe: Option<(Arc<UniverseScene>, UniverseSettings)> = None;
     let mut zoom: Option<ZoomCamera> = None;
     let mut surface_requested: Option<u32> = None;
+    // When the listener for sound was last published (task 125).
+    let mut ear_at: Option<Instant> = None;
     let mut space_picker = SpacePicker::default();
     // The entity the camera keeps centred (the follow toggle).
     let mut follow: Option<u32> = None;
@@ -1315,20 +1319,24 @@ fn render_loop(shared: &Shared) {
             }
         }
 
-        // The listener for sound (task 125): the planet camera while the planet is in view.
+        // The listener for sound (task 125): the planet camera while the planet is in view,
+        // looked at again every EAR_INTERVAL (sound follows the view at a tenth of a second).
         let on_planet = zoom.as_ref().is_none_or(|z| z.level() <= Level::Globe);
-        let ear = match (orbit.as_ref(), globe.as_deref()) {
-            (Some(orbit), Some(globe)) if on_planet => {
-                let tick = pair.latest_tick().unwrap_or(0);
-                Some(crate::ear::Ear::of(
-                    orbit,
-                    globe,
-                    sun_clock.as_ref().map(|clock| clock.toward(tick)),
-                ))
-            }
-            _ => None,
-        };
-        *lock(&shared.ear) = ear;
+        if ear_at.is_none_or(|at: Instant| at.elapsed() >= EAR_INTERVAL) {
+            ear_at = Some(Instant::now());
+            let ear = match (orbit.as_ref(), globe.as_deref()) {
+                (Some(orbit), Some(globe)) if on_planet => {
+                    let tick = pair.latest_tick().unwrap_or(0);
+                    Some(crate::ear::Ear::of(
+                        orbit,
+                        globe,
+                        sun_clock.as_ref().map(|clock| clock.toward(tick)),
+                    ))
+                }
+                _ => None,
+            };
+            *lock(&shared.ear) = ear;
+        }
 
         if layout.0 == 0 || layout.1 == 0 {
             thread::sleep(IDLE_WAIT);

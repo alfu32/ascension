@@ -172,7 +172,10 @@ encoder's independent errors on the two sides of the joint never meet as a step.
   the names). `rise-of-man --sound-check` starts the engine alone and prints where it plays or
   why it is silent.
 - Numbers: 959 files, 17.4 MB embedded, about 34 minutes of audio; all of it decoded would be
-  about 166 MB of 16-bit samples, MEMORY_NOTE
+  about 166 MB of 16-bit samples, so they are decoded on first use. The game's peak memory in the
+  scripted check session (1280 × 800, `--bench 62`): 417–420 MB with `--mute`, 469–473 MB with
+  sound (what the session plays, the audio thread and the device), 610 MB when every sound was
+  decoded at start-up (measured with a build that did; task 125).
 
 ## What plays when (task 125)
 
@@ -230,5 +233,9 @@ effects 0.8, voice 1.0, ambience 0.6) times the Sound settings, the ducking and 
   Medieval Age, a training, a construction, orders, a small battle, then the camera rising to the
   star map), for recording (`ffmpeg -f pulse` of the game's output) and listening.
 - `docs/tasks/125-sound-session-script.txt` writes the playable save "Sound check: a city and a
-  battle" (SAVE_NOTE).
+  battle" at tick 300: the Medieval Age beside the capital, farms at work, a training and a
+  construction under way, the army in a fight with player two's (a computer player). It is a
+  normal save: open it from the launcher's Saved games, or `rise-of-man --load <file>` (it opens
+  paused; Esc or the pause button resumes). Saves keep the rules they were made with, so a
+  version with other rules refuses it; run the script again to make a new one.
 - `--mute` (or the launcher's Sound group) runs without sound: benchmarks and CI.

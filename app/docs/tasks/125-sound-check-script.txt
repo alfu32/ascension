@@ -16,30 +16,34 @@
 0 place 1 unit.citizen @4,3
 0 place 1 unit.citizen @4,-3
 0 place 1 unit.citizen @5,0
-0 place 1 unit.knight @-1,9
-0 place 1 unit.knight @1,9
-0 place 1 unit.crossbowman @-2,10
-0 place 1 unit.crossbowman @0,10
-0 place 1 unit.crossbowman @2,10
-0 place 1 unit.pikeman @-1,11
-0 place 1 unit.pikeman @1,11
-0 place 2 unit.spearman @-2,24
-0 place 2 unit.spearman @0,24
-0 place 2 unit.spearman @2,24
-0 place 2 unit.hoplite @-1,25
-0 place 2 unit.hoplite @1,25
-0 place 2 unit.archer @-2,27
-0 place 2 unit.archer @0,27
-0 place 2 unit.archer @2,27
+0 place 1 unit.knight @-1,5
+0 place 1 unit.knight @1,5
+0 place 1 unit.crossbowman @-2,6
+0 place 1 unit.crossbowman @0,6
+0 place 1 unit.crossbowman @2,6
+0 place 1 unit.pikeman @-1,7
+0 place 1 unit.pikeman @1,7
+0 place 2 unit.spearman @-2,14
+0 place 2 unit.spearman @0,14
+0 place 2 unit.spearman @2,14
+0 place 2 unit.hoplite @-3,15
+0 place 2 unit.hoplite @3,15
+0 place 2 unit.archer @-1,15
+0 place 2 unit.archer @1,15
+0 place 2 unit.archer @4,14
 30 box builders
-50 rclick gather1
+50 click builder1
+60 rclick gather1
+70 click builder2
+80 rclick gather2
 130 producers
 150 hud tab 2
 165 hud slot 0
-230 click builder1
+230 click builder3
 245 hud tab 0
-260 hud slot 3
-275 click @-4,-13
+260 hud slot 2
+275 click @-11,-1
+290 escape
 380 click army1
 384 click army2 shift
 388 click army3 shift

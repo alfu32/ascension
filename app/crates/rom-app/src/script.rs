@@ -772,7 +772,7 @@ fn camera_input(words: &[&str]) -> Result<Vec<rom_render::InputEvent>, String> {
 fn dynamic_name(word: &str) -> bool {
     [
         "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy", "gather",
-        "landing", "colony", "landed", "foecity", "aircraft",
+        "landing", "colony", "landed", "foecity", "aircraft", "army", "foe",
     ]
     .iter()
     .any(|prefix| {
