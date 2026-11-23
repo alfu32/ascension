@@ -26,9 +26,11 @@ the slots), `app/crates/rom-audio/` (engine, mixer), `app/crates/rom-app/src/sou
    given 41 MB, and check the release workflow's packages still build and stay within their
    size limits: `.github/workflows/release.yaml`, snap, MSIX, DMG). The game must still run
    without an audio device.
-2. **In the launcher**: the main title plays on the launcher's screens (quietly, looping with a
-   gap or moving on through the age themes; choose and say why), with a mute toggle that is
-   remembered. The settings show the music volume with the others.
+2. **In the launcher**: the owner (2026-11-23): "the main score on the launcher: i would continue
+   it by simply concatenating all the tunes and interludes in age order and roll back to the
+   beginning when they end". The launcher plays the title, then for each age from Ancient to
+   Galactic its theme followed by its whole interlude, then starts again from the title, with a
+   mute toggle that is remembered. The settings show the music volume with the others.
 3. **In a match** (the owner's design, `ages-story.md`):
    - when the viewing player reaches a new age, the age's **main theme** plays as its
      announcement (ducking the other sounds a little); in the first age, the Ancient theme
