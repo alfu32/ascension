@@ -19,6 +19,9 @@ for the pieces, and `app/docs/ages-story.md` for what each one says and why.
 | `master.py` | loudness (BS.1770), true-peak limit, Ogg Vorbis |
 | `cues.py` | `cues.json` from the scores' markers |
 | `bake.sh` | runs them all |
+| `album.py` | the complete work ("Ascension: Music of the Ages") and its release package, from the same scores and samples (see below) |
+| `scores/links/` | the few bars of new linking material the complete work needs between an interlude and the end of its theme (the complete work only) |
+| `cover.py` | the album cover, 3000 × 3000 px, from the HUD's vector art |
 
 ## Samples and licences
 
@@ -66,6 +69,34 @@ differs from `samples.lock`. After changing `instruments.py`, `--update-lock` re
 
 The work directory holds one WAV at a time (about 50 MB); keep it on disk, not in a RAM-backed
 `/tmp`. A render peaks at about 1.3 GB of memory (measured on the densest piece).
+
+## Making the complete work
+
+```sh
+cd app
+PYTHON=/path/to/music-env/bin/python
+$PYTHON tools/music/album.py --samples /path/to/music-samples \
+    /path/to/album-work /path/to/release-folder [--check /path/to/check-folder]
+$PYTHON tools/music/album.py /path/to/album-work /tmp/unused --plan    # timing only, no render
+```
+
+The work is the list `MOVEMENTS` at the top of `album.py`, one line per movement: where the
+theme is split (its hand-over), which interlude fragments are played, an optional link score,
+and the gaps of the three joins. Changing a movement is a one-line edit; run the command again.
+Renders are kept in `<album-work>/render/` while their score, `render.py`, `instruments.py` and
+`sfz.py` are unchanged, so only what changed is rendered again (43 renders the first time, about
+20–30 minutes; afterwards about 10). The release folder gets the complete work, one WAV per
+movement (24-bit, 44.1 kHz, stereo; the tracks rejoin into the complete file sample for sample),
+`tracklist.csv`, `release.md` and the cover. Mastering holds the whole work in memory: the run
+peaks at about 5.4 GB (measured), so run it in a scope of 6 GB or more. Two runs from scratch
+give byte-identical WAV files. Keep both folders on disk, not in a RAM-backed `/tmp`. The cover
+needs `librsvg` and
+`libcairo` (present with any desktop) and ImageMagick.
+
+`--check` writes into its folder: a spectrogram of every join (±10 s, six to a sheet), the
+loudness (BS.1770) and true peak of every track and of the work, ffmpeg's EBU R128 summary as a
+second opinion, the longest stretch below −60 dBFS and the short-term loudness either side of
+every join, whether the tracks rejoin into the complete file, and the files' SHA-256.
 
 ## How the renderer plays a score
 

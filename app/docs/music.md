@@ -110,6 +110,76 @@ In short (details in `app/tools/music/README.md`):
 The samples are never committed; `fetch_samples.py` downloads them from the official
 repositories and checks every file against `samples.lock` (SHA-256).
 
+## The complete work
+
+"Ascension: Music of the Ages" (working title) joins every piece into one continuous symphonic
+work of 15 movements, 48 minutes, in the game's order: the main title, then one movement per
+age. Made by `app/tools/music/album.py` from the same scores and samples; the 29 game files are
+not touched.
+
+**Form of a movement.** The age's main theme, its interlude, then the theme's ending. The theme
+is split in the score at its hand-over (`handover_at` in the cue sheet, the ending that "prepares
+the next age's opening" in the brief), so the age's closing bars come after the interlude and
+lead straight into the next age's theme, as written. The split is made on the notes, not on the
+audio: the part before it ends with its own hall tail, and notes sounding across it ring on in
+the body (and, if they still have two seconds or more to sound, start again on the ending's first
+beat). Where the hand-over marker would start the ending too abruptly after a soft interlude,
+the split moves back to the nearest musical seam:
+
+| Movement | Theme split | Why |
+| --- | --- | --- |
+| Gunpowder | 36 eighths before the hand-over | the ending begins with the call across the water and lets the galliard resume before the cannon, instead of starting on the cannon |
+| Enlightenment | 33 eighths before (the woodwind dialogue's pick-up) | the body ends on the Allegro's first full cadence; the ending builds through the dialogue into the tutti phrase Industrial quotes |
+| Information | 64 eighths before the final statement (the breakdown) | the ending grows from the strings alone through the third hook into the tutti, rather than starting on the tutti |
+| Starfaring | at the final statement | the hand-over marker falls on the choir's held E♭, four eighths into its last phrase |
+| Automation | at the hand-over, with a link | four bars (`scores/links/automation_link.py`) build the machine and the canon back up from the interlude to the tutti E♭ the ending starts with |
+
+**Interlude length.** Every movement plays its whole interlude: theme and interlude together
+come to 3–4 minutes, so no interlude needed shortening, and the interludes' phrases are kept
+whole. The main title (0:44) stands alone as the prelude, and Information comes to 2:52, its
+theme and interlude being the shortest pair; neither was padded with material the pieces do not
+have.
+
+**Joins.** No cross-fade gain ramps: the next part's first note comes a fixed gap after the
+previous part's last note ends (0.6 s after a theme's body or ending, 0.4 s after an interlude)
+and the hall's tail runs on under the entry. Track boundaries fall on the entry of each age's
+theme, so the album plays gapless and the tracks rejoin into the complete file sample for sample.
+
+**Mastering.** The game's balance is kept (themes −16 LUFS, interludes −23 LUFS, measured on each
+piece as a whole); one gain for the whole work brings it to −14 LUFS integrated, and a true-peak
+limiter (5 ms look-ahead, 120 ms release) holds the peaks at −1 dBTP. The quiet passages stay
+quiet: loudness range 15.5 LU (ffmpeg EBU R128). The price of −14 LUFS with a 7 LU gap between
+themes and interludes is limiting on the loudest tuttis: 164 s of the work are reduced by more
+than 1 dB, 46 s by more than 3 dB, at most 9 dB. `ALBUM_LUFS` in `album.py` is the one number to
+lower for less (about 1 dB less per LU).
+
+| # | Movement | Length |
+| --- | --- | --- |
+| 1 | Main Title | 0:44 |
+| 2 | Ancient Age | 3:27 |
+| 3 | Classical Age | 3:12 |
+| 4 | Medieval Age | 3:03 |
+| 5 | Gunpowder Age | 3:46 |
+| 6 | Enlightenment Age | 3:10 |
+| 7 | Industrial Age | 3:15 |
+| 8 | Modern Age | 3:21 |
+| 9 | Information Age | 2:52 |
+| 10 | Automation Age | 3:23 |
+| 11 | Fusion Age | 3:37 |
+| 12 | Starfaring Age | 3:24 |
+| 13 | Age of Expansion | 3:20 |
+| 14 | Age of Abundance | 3:56 |
+| 15 | Galactic Empires | 3:41 |
+| | Complete work | 48:13 |
+
+**Release package** (outside the repository, in
+`rise-of-man-authoring/release/music-of-the-ages/`): the complete work and the 15 movements as
+24-bit 44.1 kHz stereo WAV, `tracklist.csv`, `release.md` (credits, the AI-involvement statement,
+the sample licences and the owner's upload checklist) and the 3000 × 3000 cover (`cover.py`: the
+HUD's title emblem with the title and subtitle on its plaque, and the 14 age icons rising on an
+arc, in the HUD's navy and brass). Remade with the command in `app/tools/music/README.md`; a
+second run gives identical files.
+
 ## Total size
 
 All 29 `.ogg` files, the 29 `.mid` scores and `cues.json`: 40.8 MB (limit 60 MB); the music
