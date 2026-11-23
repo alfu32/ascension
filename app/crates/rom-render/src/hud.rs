@@ -114,6 +114,24 @@ pub struct HudSnapshot {
     pub panel: Option<HudPanel>,
     /// The chat: the channel tag, the line being typed, the latest lines and the history.
     pub chat: HudChat,
+    /// The new-age dialog over everything, while it is open (task 133).
+    pub age_dialog: Option<HudAgeDialog>,
+}
+
+/// The dialog that tells a new age's story (task 133): drawn over the world and the HUD until
+/// a click or a key closes it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HudAgeDialog {
+    /// The line above the name: the age's number and its era.
+    pub heading: String,
+    /// The age's name.
+    pub name: String,
+    /// What the age is remembered by.
+    pub subtitle: String,
+    /// The age's story, one paragraph.
+    pub story: String,
+    /// How to close it.
+    pub hint: String,
 }
 
 /// A line of the chat as drawn: who said it, in which channel, and how visible it still is.
@@ -220,6 +238,7 @@ impl Default for HudSnapshot {
             diplomacy: Vec::new(),
             panel: None,
             chat: HudChat::default(),
+            age_dialog: None,
         }
     }
 }
@@ -1880,7 +1899,124 @@ impl HudPainter {
             self.solid(drag, [63, 208, 255, 36]);
             self.frame(drag, (1.5 * l.scale).max(1.0), CYAN);
         }
+        if let Some(dialog) = &h.age_dialog {
+            self.age_dialog(l, dialog);
+        }
         &self.quads
+    }
+
+    /// `text` broken into lines no wider than `width` screen pixels at `size` × `factor`.
+    fn wrap(&self, text: &str, width: f32, size: TextSize, factor: f32) -> Vec<String> {
+        let ratio = self.scale / self.glyphs.scale * factor;
+        let mut lines = Vec::new();
+        let mut line = String::new();
+        for word in text.split_whitespace() {
+            let candidate = if line.is_empty() {
+                word.to_owned()
+            } else {
+                format!("{line} {word}")
+            };
+            if !line.is_empty() && self.glyphs.measure(&candidate, size) as f32 * ratio > width {
+                lines.push(std::mem::replace(&mut line, word.to_owned()));
+            } else {
+                line = candidate;
+            }
+        }
+        if !line.is_empty() {
+            lines.push(line);
+        }
+        lines
+    }
+
+    /// The new-age dialog (task 133): the world dimmed, a framed panel in the middle with the
+    /// age's number and era, its name, subtitle and story, and how to close it.
+    fn age_dialog(&mut self, l: &HudLayout, dialog: &HudAgeDialog) {
+        let s = l.scale.max(0.1);
+        let width = (820.0 * s).min(l.width - 32.0);
+        let margin = 56.0 * s;
+        const STORY_FACTOR: f32 = 1.12;
+        let story = self.wrap(
+            &dialog.story,
+            width - 2.0 * margin,
+            TextSize::Large,
+            STORY_FACTOR,
+        );
+        let line = 27.0 * s;
+        let height =
+            (40.0 + 26.0 + 52.0 + 30.0 + 34.0) * s + story.len() as f32 * line + (34.0 + 30.0) * s;
+        let x = ((l.width - width) / 2.0).max(0.0);
+        let y = ((l.height - height) / 2.0 - 40.0 * s).max(8.0);
+        self.solid(Rect::new(0.0, 0.0, l.width, l.height), [2, 4, 8, 120]);
+        let panel = Rect::new(x, y, width, height);
+        self.solid(panel, [12, 17, 24, 242]);
+        self.frame(panel, (3.0 * s).max(1.0), [184, 138, 69, 255]);
+        let inset = 7.0 * s;
+        self.frame(
+            Rect::new(
+                x + inset,
+                y + inset,
+                width - 2.0 * inset,
+                height - 2.0 * inset,
+            ),
+            (1.0 * s).max(1.0),
+            [232, 201, 138, 150],
+        );
+        let mut at = y + 40.0 * s;
+        let row = |at: f32, h: f32| Rect::new(x + margin, at, width - 2.0 * margin, h * s);
+        self.text(
+            &dialog.heading,
+            row(at, 26.0),
+            TextSize::Small,
+            Align::Centre,
+            CYAN,
+        );
+        at += 26.0 * s;
+        self.text_scaled(
+            &dialog.name,
+            row(at, 52.0),
+            (TextSize::Large, 2.0),
+            Align::Centre,
+            GOLD,
+        );
+        at += 52.0 * s;
+        self.text_scaled(
+            &dialog.subtitle,
+            row(at, 30.0),
+            (TextSize::Large, 1.1),
+            Align::Centre,
+            MUTED,
+        );
+        at += 30.0 * s;
+        // A thin cyan rule, the HUD's accent, between the title and the story.
+        let rule = 180.0 * s;
+        self.solid(
+            Rect::new(
+                x + (width - rule) / 2.0,
+                at + 14.0 * s,
+                rule,
+                (1.5 * s).max(1.0),
+            ),
+            [63, 208, 255, 200],
+        );
+        at += 34.0 * s;
+        for text in &story {
+            self.text_scaled(
+                text,
+                Rect::new(x + margin, at, width - 2.0 * margin, line),
+                (TextSize::Large, STORY_FACTOR),
+                Align::Centre,
+                WHITE,
+            );
+            at += line;
+        }
+        at += 34.0 * s;
+        self.text(
+            &dialog.hint,
+            row(at - 10.0 * s, 22.0),
+            TextSize::Small,
+            Align::Centre,
+            MUTED,
+        );
     }
 }
 
@@ -2029,5 +2165,52 @@ mod capital_card_tests {
             noted >= cyan + "Capital".len(),
             "the note under the title: {noted}"
         );
+    }
+
+    /// Task 133: the new-age dialog dims the screen and stands over everything, its story
+    /// wrapped inside the panel.
+    #[test]
+    fn the_age_dialog_is_drawn_last_with_its_story_wrapped() {
+        let l = HudLayout::new(1280, 800, None);
+        let mut p = HudPainter::bake(l.scale).expect("artwork bakes");
+        let plain = p.compose(&l, &HudSnapshot::default()).len();
+        let dialog = HudAgeDialog {
+            heading: "AGE 4 OF 13 · HISTORY".into(),
+            name: "Enlightenment Age".into(),
+            subtitle: "Reason against darkness".into(),
+            story: "Your scholars have turned their eyes from heaven to the world, and the world \
+                    has answered. Reason is the new faith; the printing presses never stop. \
+                    Mind the crowd at the palace gates: reason can be turned against kings."
+                .into(),
+            hint: "Click or press any key to continue".into(),
+        };
+        let shown = HudSnapshot {
+            age_dialog: Some(dialog.clone()),
+            ..HudSnapshot::default()
+        };
+        let quads = p.compose(&l, &shown).to_vec();
+        assert!(quads.len() > plain + 100);
+        // The dimming covers the whole screen, after everything the HUD drew before it.
+        let dim = &quads[plain];
+        assert_eq!((dim.dest.w, dim.dest.h), (1280.0, 800.0));
+        // The story takes several lines, each inside the panel.
+        let lines = p.wrap(&dialog.story, 600.0, TextSize::Large, 1.0);
+        assert!(lines.len() >= 3, "{lines:?}");
+        assert_eq!(
+            lines.join(" "),
+            dialog
+                .story
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+        let panel = quads[plain + 1].dest;
+        for q in &quads[plain + 1..] {
+            assert!(
+                q.dest.x >= panel.x - 0.5 && q.dest.right() <= panel.right() + 0.5,
+                "{:?} outside {panel:?}",
+                q.dest
+            );
+        }
     }
 }

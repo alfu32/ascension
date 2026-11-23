@@ -111,9 +111,11 @@ controls! {
     ("wait-seconds", 5, "120", "How long a paused match waits for a dropped person, 1–86400 seconds.", false),
     ("autosave-minutes", 5, "5", "Server autosave interval in game minutes; 0 turns it off.", false),
     ("volume", 8, "100", "Master volume, 0–100 percent of the game's gentle mix.", false),
-    ("effects-volume", 8, "100", "Weapons, work, movement, buildings and interface cues, 0–100 percent.", false),
-    ("voice-volume", 8, "100", "The units' lines and the announcer, 0–100 percent.", false),
-    ("ambient-volume", 8, "100", "Wind, sea, birds, crickets, forest and fields, 0–100 percent.", false),
+    ("music-volume", 8, "100", "The music: the launcher's, each age's theme and its interlude's fragments, 0–100 percent.", false),
+    ("units-volume", 8, "100", "Units: their voices, shots, blows and movement, 0–100 percent.", false),
+    ("buildings-volume", 8, "100", "Buildings: their lines, work, construction, training and research cues, 0–100 percent.", false),
+    ("environment-volume", 8, "100", "The environment: wind, sea, birds, crickets, forest, fields and space, 0–100 percent.", false),
+    ("announcements-volume", 8, "100", "Announcements: alerts, the announcer, age and research cues and the interface, 0–100 percent.", false),
     ("mute-unfocused", 8, "on", "Silence the game while its window does not have the focus, on or off.", false),
     ("mute", 8, "false", "No sound at all.", true),
 }
@@ -192,6 +194,30 @@ impl Form {
 
     fn from_json(value: &Value) -> Self {
         let mut form = Self::default();
+        // A form saved before task 133 holds the old Sound settings: the categories they stand
+        // for, unless the form already has its own.
+        let old = |flag: &str| {
+            value
+                .get(flag)
+                .and_then(Value::as_str)
+                .and_then(|t| t.trim().parse::<u32>().ok())
+                .filter(|p| *p <= 100)
+        };
+        let old = crate::sound::OldVolumes {
+            effects: old("effects-volume"),
+            voice: old("voice-volume"),
+            ambient: old("ambient-volume"),
+        };
+        if old.any() {
+            let mut settings = crate::sound::Settings::default();
+            old.migrate(&mut settings);
+            for (flag, _) in crate::sound::SLIDERS {
+                let percent = settings.get(flag).unwrap_or(100);
+                if percent != 100 {
+                    form.set(flag, percent.to_string());
+                }
+            }
+        }
         for control in CONTROLS {
             if let Some(text) = value.get(control.flag).and_then(Value::as_str)
                 && (!control.toggle || matches!(text, "true" | "false"))
@@ -200,6 +226,15 @@ impl Form {
             }
         }
         form
+    }
+
+    /// Takes the Sound sliders of `settings` (the in-match menu's, task 133).
+    pub fn set_sound(&mut self, settings: &crate::sound::Settings) {
+        for (flag, _) in crate::sound::SLIDERS {
+            if let Some(percent) = settings.get(flag) {
+                self.set(flag, percent.to_string());
+            }
+        }
     }
 }
 
@@ -358,7 +393,6 @@ pub(super) fn commands(executable: &Path, arguments: &[String]) -> [String; 2] {
     ]
 }
 
-#[derive(Default)]
 /// Last form and a bounded collection of named forms.
 pub(super) struct Config {
     /// Most recently edited form.
@@ -373,6 +407,22 @@ pub(super) struct Config {
     pub play_presets: Vec<super::presets::Preset>,
     /// The name of the preset tile chosen on the home screen; Play starts it.
     pub chosen: String,
+    /// Whether the launcher plays its music (task 133); the home screen's Music switch.
+    pub launcher_music: bool,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            form: Form::default(),
+            simple: Default::default(),
+            tokens: BTreeMap::new(),
+            presets: BTreeMap::new(),
+            play_presets: Vec::new(),
+            chosen: String::new(),
+            launcher_music: true,
+        }
+    }
 }
 
 impl Config {
@@ -408,6 +458,7 @@ impl Config {
                 .take(48)
                 .collect(),
             chosen: value["chosen"].as_str().unwrap_or_default().to_owned(),
+            launcher_music: value["launcher_music"].as_bool().unwrap_or(true),
         })
     }
 
@@ -440,6 +491,7 @@ impl Config {
             "presets": self.presets.iter().map(|(name, form)| (name, &form.values)).collect::<BTreeMap<_, _>>(),
             "play_presets": self.play_presets.iter().map(super::presets::Preset::json).collect::<Vec<_>>(),
             "chosen": self.chosen,
+            "launcher_music": self.launcher_music,
         });
         let text = serde_json::to_vec_pretty(&value).map_err(|e| e.to_string())?;
         let parent = path.parent().ok_or("configuration path has no parent")?;
@@ -589,9 +641,11 @@ mod tests {
             ("wait-seconds", "30"),
             ("autosave-minutes", "9"),
             ("volume", "60"),
-            ("effects-volume", "50"),
-            ("voice-volume", "90"),
-            ("ambient-volume", "30"),
+            ("music-volume", "40"),
+            ("units-volume", "50"),
+            ("buildings-volume", "90"),
+            ("environment-volume", "30"),
+            ("announcements-volume", "70"),
             ("mute-unfocused", "off"),
             ("mute", "true"),
         ];
@@ -658,7 +712,7 @@ mod tests {
             );
         }
         assert!(CONTROLS.iter().any(|c| c.flag == "script"));
-        assert_eq!(CONTROLS.len(), 66);
+        assert_eq!(CONTROLS.len(), 68);
     }
 
     #[test]
@@ -675,6 +729,52 @@ mod tests {
         );
         assert_eq!(form.sound_settings().master, 40);
         assert!(!form.sound_settings().mute_unfocused);
+    }
+
+    #[test]
+    fn old_sound_settings_are_migrated_and_new_ones_round_trip() {
+        let dir = std::env::temp_dir().join(format!("rom-launcher-sound-{}", std::process::id()));
+        let path = dir.join("launcher.json");
+        std::fs::create_dir_all(&dir).unwrap();
+        // A form saved before task 133.
+        std::fs::write(
+            &path,
+            r#"{"form":{"volume":"70","effects-volume":"40","voice-volume":"90","ambient-volume":"20","mute-unfocused":"off"}}"#,
+        )
+        .unwrap();
+        let mut config = Config::load(&path).unwrap();
+        let settings = config.form.sound_settings();
+        assert_eq!(
+            settings,
+            crate::sound::Settings {
+                master: 70,
+                music: 100,
+                units: 40,
+                buildings: 40,
+                environment: 20,
+                announcements: 100,
+                mute_unfocused: false,
+            }
+        );
+        assert!(config.launcher_music);
+        // Saved again, it holds the categories only, and reads back the same.
+        config.launcher_music = false;
+        config.form.set("music-volume", "35");
+        config.save(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("effects-volume") && text.contains("units-volume"));
+        let loaded = Config::load(&path).unwrap();
+        assert_eq!(loaded.form, config.form);
+        assert_eq!(loaded.form.sound_settings().music, 35);
+        assert!(!loaded.launcher_music);
+        // The in-match menu's sliders go into the form.
+        let mut form = Form::default();
+        form.set_sound(&crate::sound::Settings {
+            announcements: 5,
+            ..crate::sound::Settings::default()
+        });
+        assert_eq!(form.sound_arguments(), ["--announcements-volume", "5"]);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

@@ -6,13 +6,42 @@ include!(concat!(env!("OUT_DIR"), "/sounds.rs"));
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SoundId(pub(crate) u16);
 
-/// The volume group a sound plays in, from its name: `voice.` and `ui.announcer.` are voices,
-/// `ambient.` is ambience, everything else is effects.
+/// The mixer's categories (task 133): each has its own slider in the Sound settings. The
+/// music, the fifth, is its own channel ([`crate::MusicPlayer`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Category {
+    /// Units' voices, shots, blows and movement.
+    Units,
+    /// Buildings' lines, work sounds, construction, and their trained and researched cues.
+    Buildings,
+    /// The ambience beds.
+    Environment,
+    /// Alerts, the announcer, age and research announcements and the interface cues.
+    Announcements,
+}
+
+impl Category {
+    /// Every category, in slider order.
+    pub const ALL: [Category; 4] = [
+        Category::Units,
+        Category::Buildings,
+        Category::Environment,
+        Category::Announcements,
+    ];
+
+    /// The index in [`Category::ALL`].
+    pub fn index(self) -> usize {
+        self as usize
+    }
+}
+
+/// How a sound is levelled in the gentle mix, from its name: spoken lines (`voice.` and
+/// `ui.announcer.`), ambience beds (`ambient.`) and every other effect.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Bus {
+pub enum Kind {
     /// Weapons, movement, buildings, interface cues.
-    Effects,
-    /// Unit voices and the announcer.
+    Effect,
+    /// Unit voices and the announcer: in the foreground, never ducked.
     Voice,
     /// Ambience beds.
     Ambient,
@@ -59,15 +88,32 @@ impl SoundId {
         family_of(self.name())
     }
 
-    /// The volume group of this sound.
-    pub fn bus(self) -> Bus {
+    /// How this sound is levelled, from its name.
+    pub fn kind(self) -> Kind {
         let name = self.name();
         if name.starts_with("voice.") || name.starts_with("ui.announcer.") {
-            Bus::Voice
+            Kind::Voice
         } else if name.starts_with("ambient.") {
-            Bus::Ambient
+            Kind::Ambient
         } else {
-            Bus::Effects
+            Kind::Effect
+        }
+    }
+
+    /// The category a sound plays in when the caller names none, from its name: `bld.` is
+    /// buildings, `ambient.` the environment, `ui.` announcements, the rest (`voice.`, `unit.`,
+    /// `act.`) units. The game's director names the category of each cue from the rules (who
+    /// plays it), which wins.
+    pub fn category(self) -> Category {
+        let name = self.name();
+        if name.starts_with("bld.") {
+            Category::Buildings
+        } else if name.starts_with("ambient.") {
+            Category::Environment
+        } else if name.starts_with("ui.") {
+            Category::Announcements
+        } else {
+            Category::Units
         }
     }
 

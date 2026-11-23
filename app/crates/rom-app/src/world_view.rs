@@ -57,6 +57,8 @@ pub struct WorldView {
     wheel_gate: WheelGate,
     /// When the view was made: the clock of the wheel gate.
     created: Instant,
+    /// The press that closed the new-age dialog (task 133): its release is not the world's.
+    swallow_release: Cell<bool>,
 }
 
 impl WorldView {
@@ -128,6 +130,7 @@ impl WorldView {
             display_arguments,
             wheel_gate: WheelGate::default(),
             created: Instant::now(),
+            swallow_release: Cell::new(false),
         }
     }
 
@@ -188,6 +191,16 @@ impl WorldView {
             MouseButton::Middle => PointerButton::Middle,
             _ => return,
         };
+        // A press closes the new-age dialog (task 133); neither it nor its release reaches the
+        // world.
+        if down && self.sim.age_dialog_open() {
+            self.sim.close_age_dialog();
+            self.swallow_release.set(true);
+            return;
+        }
+        if !down && self.swallow_release.replace(false) {
+            return;
+        }
         let (x, y) = self.canvas_point(position, window);
         let mods = Modifiers {
             shift: modifiers.shift,
@@ -255,6 +268,13 @@ impl WorldView {
         if self.menu_open() {
             if event.keystroke.key == "escape" {
                 self.menu_back(window, cx);
+            }
+            return;
+        }
+        // Any key closes the new-age dialog (task 133), and does nothing else.
+        if self.sim.age_dialog_open() {
+            if !is_modifier(&event.keystroke.key) {
+                self.sim.close_age_dialog();
             }
             return;
         }
@@ -473,6 +493,14 @@ impl Render for WorldView {
 }
 
 /// Small GPUI panel drawn above the frame image.
+/// Keys that only modify others (a dialog waits for a real key).
+fn is_modifier(key: &str) -> bool {
+    matches!(
+        key,
+        "shift" | "control" | "alt" | "platform" | "function" | "capslock"
+    )
+}
+
 fn stats_overlay(
     stats: RenderStats,
     scale: u32,

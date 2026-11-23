@@ -105,8 +105,8 @@ pub use worker::{
 pub use zoom::Level;
 
 pub use hud::{
-    CHAT_HISTORY_ROWS, HudChat, HudChatHistory, HudChatLine, HudPanel, HudResearch, HudResource,
-    HudSelection, HudSnapshot,
+    CHAT_HISTORY_ROWS, HudAgeDialog, HudChat, HudChatHistory, HudChatLine, HudPanel, HudResearch,
+    HudResource, HudSelection, HudSnapshot,
 };
 pub use hud_model::{
     AlertMark, ButtonState, HudAlert, HudBlast, HudButton, HudCapital, HudCard, HudCityRadius,

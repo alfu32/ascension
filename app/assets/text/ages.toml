@@ -1,0 +1,116 @@
+# The ages as the new-age dialog shows them (task 133): each age's name and subtitle as
+# `docs/ages-story.md` heads it, its story (the italic paragraph there, written for humanity)
+# and its music (the main theme that announces it, the interlude whose fragments follow).
+# Kept in step with the document: rom-app's tests compare them. The game reads it by ordinal.
+
+[[age]]
+ordinal = 0
+name = "Ancient"
+subtitle = "the first cities"
+theme = "ancient.theme"
+interlude = "ancient.interlude"
+story = """Your people have stopped wandering. Grain is stored against the winter, a scribe counts it, and a wall rises around the houses. Whoever holds the granary holds the city. Build, count and defend: this is where every empire begins."""
+
+[[age]]
+ordinal = 1
+name = "Classical"
+subtitle = "the city becomes a state"
+theme = "classical.theme"
+interlude = "classical.interlude"
+story = """Your city has become a state. Laws are carved in stone, coins carry your ruler's face and roads carry your soldiers to the edge of the known world. Temples rise and priests tend both the sick and the faithful. Glory is within reach, and so is every enemy beyond the walls."""
+
+[[age]]
+ordinal = 2
+name = "Medieval"
+subtitle = "faith and the castle"
+theme = "medieval.theme"
+interlude = "medieval.interlude"
+story = """The empire has fallen, but the faith remains. Your lords hold the land from their castles, your knights ride under oath and your bells call the hours. Stone cathedrals reach for heaven. Beyond the walls, famine and plague wait their turn."""
+
+[[age]]
+ordinal = 3
+name = "Gunpowder"
+subtitle = "the first age of discovery"
+theme = "gunpowder.theme"
+interlude = "gunpowder.interlude"
+story = """Powder and shot have broken the castle walls and your ships have crossed the ocean. New coasts, new peoples, new riches: the world is larger than your fathers knew and smaller than your rivals would like. The first city on a new continent must touch the shore. Claim it before someone else does."""
+
+[[age]]
+ordinal = 4
+name = "Enlightenment"
+subtitle = "reason against darkness"
+theme = "enlightenment.theme"
+interlude = "enlightenment.interlude"
+story = """Your scholars have turned their eyes from heaven to the world, and the world has answered. Universities flourish, laws are argued instead of decreed, and your soldiers march in lines to the drum. Reason is a weapon now. Use it before your rivals do."""
+
+[[age]]
+ordinal = 5
+name = "Industrial"
+subtitle = "steam, rail and plenty"
+theme = "industrial.theme"
+interlude = "industrial.interlude"
+story = """Coal burns in your furnaces and rails tie your cities together. Factories turn out more than any craftsman ever could, oil is pumped from the ground, and the first machines take to the air. Your people have never had so much. The smoke over your cities is the price."""
+
+[[age]]
+ordinal = 6
+name = "Modern"
+subtitle = "mass production, 1905–1968"
+theme = "modern.theme"
+interlude = "modern.interlude"
+story = """Your factories turn out tanks as easily as motor cars, all of them identical. Armies are counted in millions, ships carry aircraft, and rockets carry warheads. This is the age of the masses. Every one of your citizens is a worker, a soldier, a voter and a target."""
+
+[[age]]
+ordinal = 7
+name = "Information"
+subtitle = "the network and the custom"
+theme = "information.theme"
+interlude = "information.interlude"
+story = """Information is your most valuable resource. Markets move at the speed of light, robots build what your citizens order to measure, and drones fly where no pilot has to. Everything can be known, and anything can be sold, including what people believe."""
+
+[[age]]
+ordinal = 8
+name = "Automation"
+subtitle = "the machines take over the work"
+theme = "automation.theme"
+interlude = "automation.interlude"
+story = """Your machines no longer need you to tell them what to do. Robots work the fields and the mines without rest, and armies of machines answer to an intelligence that thinks faster than any general. Nations have merged into blocs to keep up. The work is done. What are your people for now?"""
+
+[[age]]
+ordinal = 9
+name = "Fusion"
+subtitle = "the sun on earth"
+theme = "fusion.theme"
+interlude = "fusion.interlude"
+story = """Your scientists have lit a star inside a machine. Energy is now a resource like metal or food, and whoever commands it commands the world. Your vehicles fly, dive and climb to the edge of space. The fire is yours. Make sure it does not burn you."""
+
+[[age]]
+ordinal = 10
+name = "Starfaring"
+subtitle = "the second age of discovery"
+theme = "starfaring.theme"
+interlude = "starfaring.interlude"
+story = """Your ships have broken free of your world. The blocs are one now: Humanity, together for the first time, looking up at a sky full of worlds no one has walked on. Out there are resources for the taking and, perhaps, others who got there first. This is your second age of discovery."""
+
+[[age]]
+ordinal = 11
+name = "Expansion"
+subtitle = "colonies, fleets and trade lanes"
+theme = "expansion.theme"
+interlude = "expansion.interlude"
+story = """Colonies now dot a dozen worlds, linked by trade lanes your fleets keep open. Each new settlement learns its own sky and sings its own songs, and some are starting to forget the old home. Expand, connect and defend the lanes: an empire among the stars is made of distances."""
+
+[[age]]
+ordinal = 12
+name = "Abundance"
+subtitle = "when nothing costs anything"
+theme = "abundance.theme"
+interlude = "abundance.interlude"
+story = """Nothing costs anything any more. Food, metal, energy: there is enough of everything for everyone. What is left to want? Time still passes, buildings still take time to raise, and rivals still have ambitions. Plenty has not ended history. It has only changed what history is about."""
+
+[[age]]
+ordinal = 13
+name = "Galactic Empires"
+subtitle = "the finale, and ascension"
+theme = "galactic.theme"
+interlude = "galactic.interlude"
+story = """Humanity rules the stars, and humanity is divided again. Empires span whole systems and raise wonders that can be seen from other worlds. Rome rose and fell; so will they. But for those who have learned everything there is to learn, there is another way: ascend, leave it all behind, and begin again."""

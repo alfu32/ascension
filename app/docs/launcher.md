@@ -83,6 +83,19 @@ screen; `ROM_LAUNCHER_PRESET=<name>` chooses a tile and puts it in the forms;
 `ROM_LAUNCHER_MENU=1` opens the advanced menu; `ROM_LAUNCHER_GROUP=<n>` opens a group;
 `ROM_LAUNCHER_SIZE=1920x1080` opens the window at that size.
 
+## Music and the mixer (task 133)
+
+The launcher plays the main score, quietly: the main title, then each age's main theme and its
+whole interlude in age order, and back to the title, without end (the owner's choice;
+`docs/music.md`, "In the game"); it fades out while a game it started runs and begins again from
+the title afterwards. The **Music** switch on the home row (and **Launcher music** at the end of
+the advanced Sound group) turns it off; it is kept in `launcher.json` as `launcher_music`. The
+Sound group's volumes are sliders, one per category of the mixer (Master, Music, Units, Buildings,
+Environment, Announcements; `docs/sound.md`), applied to the launcher's own sounds at once and
+given to every game. A game's menu changes them too and writes them back to `launcher.json`; the
+open launcher takes them when that game ends. A `launcher.json` from before task 133 keeps its
+old effects, voice and ambience values as the categories they stand for.
+
 ## The simple launcher (task 87)
 
 (Task 112 replaced the four large choices with the Play button and match tiles above; the

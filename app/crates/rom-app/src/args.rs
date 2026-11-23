@@ -8,7 +8,7 @@ pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <f
 [--map-size <width>x<height>] [--sphere <n>] [--single-planet] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
 [--universe] [--start-placement <separate|together>] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-chrome] [--no-hud] [--hud-scale <percent>] [--stats] \
 [--sun <orbit|fixed|low|midnight>] [--graticule <on|off>] [--grass <on|off>] [--detail <min|medium|max|ultra>] [--projectiles <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
-[--mute] [--volume <percent>] [--effects-volume <percent>] [--voice-volume <percent>] [--ambient-volume <percent>] [--mute-unfocused <on|off>] \
+[--mute] [--volume <percent>] [--music-volume <percent>] [--units-volume <percent>] [--buildings-volume <percent>] [--environment-volume <percent>] [--announcements-volume <percent>] [--mute-unfocused <on|off>] \
 [--middle-drag <turn|pan>] [--invert-horizontal-turn] [--invert-vertical-turn] \
 [--gallery <all|units|age|entity key|model id>] [--gallery-view <game|front|side|top|close>] [--team <n>] \
 [--model <model id>] [--parts] [--pose <idle|move|attack|work>] [--anim-time <seconds>] \
@@ -360,6 +360,11 @@ impl Options {
 pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> {
     let mut options = Options::default();
     let mut args = args.into_iter();
+    // The Sound options before task 133 (still read: older command lines), and the sliders
+    // given by name, which win over what the old ones stand for.
+    let mut old = crate::sound::OldVolumes::default();
+    let mut sliders = crate::sound::Settings::default();
+    let mut given = Vec::new();
     while let Some(arg) = args.next() {
         let mut value = |name: &str| args.next().ok_or_else(|| format!("{name} needs a value"));
         match arg.as_str() {
@@ -498,15 +503,24 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                 };
             }
             "--mute" => options.mute = true,
-            "--volume" => options.sound.master = percent("--volume", value("--volume")?)?,
+            "--volume"
+            | "--music-volume"
+            | "--units-volume"
+            | "--buildings-volume"
+            | "--environment-volume"
+            | "--announcements-volume" => {
+                let flag = &arg[2..];
+                sliders.set(flag, percent(&arg, value(&arg)?)?);
+                given.push(flag.to_owned());
+            }
             "--effects-volume" => {
-                options.sound.effects = percent("--effects-volume", value("--effects-volume")?)?;
+                old.effects = Some(percent("--effects-volume", value("--effects-volume")?)?);
             }
             "--voice-volume" => {
-                options.sound.voice = percent("--voice-volume", value("--voice-volume")?)?;
+                old.voice = Some(percent("--voice-volume", value("--voice-volume")?)?);
             }
             "--ambient-volume" => {
-                options.sound.ambient = percent("--ambient-volume", value("--ambient-volume")?)?;
+                old.ambient = Some(percent("--ambient-volume", value("--ambient-volume")?)?);
             }
             "--mute-unfocused" => {
                 let text = value("--mute-unfocused")?;
@@ -663,6 +677,12 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             }
             "-h" | "--help" => options.help = true,
             other => return Err(format!("unknown argument {other:?}")),
+        }
+    }
+    old.migrate(&mut options.sound);
+    for flag in &given {
+        if let Some(percent) = sliders.get(flag) {
+            options.sound.set(flag, percent);
         }
     }
     if options.single_planet && options.universe {
@@ -1140,12 +1160,16 @@ mod tests {
             "--mute",
             "--volume",
             "40",
-            "--effects-volume",
+            "--music-volume",
+            "10",
+            "--units-volume",
             "0",
-            "--voice-volume",
+            "--buildings-volume",
             "100",
-            "--ambient-volume",
+            "--environment-volume",
             "75",
+            "--announcements-volume",
+            "60",
             "--mute-unfocused",
             "off",
         ]))
@@ -1155,14 +1179,35 @@ mod tests {
             sound.sound,
             crate::sound::Settings {
                 master: 40,
-                effects: 0,
-                voice: 100,
-                ambient: 75,
+                music: 10,
+                units: 0,
+                buildings: 100,
+                environment: 75,
+                announcements: 60,
                 mute_unfocused: false,
             }
         );
+        // The options before task 133 still parse, as the categories they stand for; a
+        // category given by name wins, wherever it stands.
+        let old = parse(args(&[
+            "--units-volume",
+            "90",
+            "--effects-volume",
+            "50",
+            "--voice-volume",
+            "80",
+            "--ambient-volume",
+            "30",
+        ]))
+        .unwrap();
+        assert_eq!(
+            (old.sound.units, old.sound.buildings, old.sound.environment),
+            (90, 50, 30)
+        );
+        assert_eq!((old.sound.music, old.sound.announcements), (100, 100));
         assert!(parse(args(&["--volume", "101"])).is_err());
         assert!(parse(args(&["--voice-volume", "loud"])).is_err());
+        assert!(parse(args(&["--music-volume", "-1"])).is_err());
         assert!(parse(args(&["--mute-unfocused", "maybe"])).is_err());
         assert_eq!(
             match_arguments(&args(&["--mute", "--seed", "3", "--volume", "20"])),

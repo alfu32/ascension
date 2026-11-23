@@ -100,8 +100,10 @@ where the peak limit rules:
 | loops (moving, buildings at work, ambience) | −26 LUFS |
 | every file | peak ≤ −3 dBFS |
 
-The engine starts from a gentle mix to match (`Volumes::default()`): master 0.8, effects 0.8,
-voice 1.0, ambience 0.6. Task 125 applies the player's Sound settings on top.
+The engine starts from a gentle mix to match: master 0.8 (`Volumes::default()`), and under it
+each kind of sound at its level, voices 1.0 (`VOICE_LEVEL`), effects 0.8 (`EFFECT_LEVEL`),
+ambience 0.6 (`AMBIENT_LEVEL`), music 0.5 (`MUSIC_LEVEL`). The player's Sound settings (task
+125; the categories of task 133, below) apply on top.
 
 ### Ambience and interface
 
@@ -142,10 +144,12 @@ encoder's independent errors on the two sides of the joint never meet as a step.
   decoded samples (a `OnceLock` per sound) and never decodes, blocks or allocates for a sound. The
   interface cues (`ui.`) are decoded at start-up. A first ambience bed takes a few tens of
   milliseconds on the audio thread; a first shot or line a millisecond or two.
-- `set_volumes(master, effects, voice, ambient)`, each 0…1, starting at the gentle defaults
-  above; the groups follow the name prefix (`voice.` and `ui.announcer.` are voice, `ambient.`
-  ambience, the rest effects).
-- `play(sound, placement, priority)` plays a one-shot. Limits: `MAX_VOICES` = 24 at once and
+- `set_volumes(Volumes { master, music, units, buildings, environment, announcements })`, each
+  0…1 (task 133): the master and one slider per category, see [The mixer's
+  categories](#the-mixers-categories-task-133). The gentle mix's levels by kind of sound (voice,
+  effect, ambience: from the name prefix, `SoundId::kind`) stay under the sliders.
+- `play(sound, placement, priority)` plays a one-shot in its own category
+  (`SoundId::category`, from its name); `play_as(category, …)` names the category. Limits: `MAX_VOICES` = 24 at once and
   `PER_SOUND_LIMIT` = 4 copies of one sound (variations counted together). At a limit the new
   sound replaces the lowest-priority one playing (the oldest among equals) if that is not higher
   than its own, else it is dropped; a replaced sound fades out in 5 ms.
@@ -157,10 +161,15 @@ encoder's independent errors on the two sides of the joint never meet as a step.
 - **Master limiter** (task 125): a gain that falls within 2 ms when the mix's peak would pass
   `LIMIT_LEVEL` (0.7, about −3 dBFS) and recovers over 0.25 s, then the soft clip that never
   exceeds full scale.
-- `set_loop(slot, sound, gain)` and `set_loop_at(slot, sound, placement)` (with a pan, task 125):
+- `set_loop(slot, sound, gain)`, `set_loop_at(slot, sound, placement)` (with a pan, task 125)
+  and `set_loop_as(category, …)` (task 133):
   `LOOP_SLOTS` = 16 slots for ambience, buildings at work and moving units. A new sound
   cross-fades (equal power) over `CROSSFADE_SECONDS` = 1 s; the same sound again only changes the
   gain and pan, both eased; `None` fades the slot out.
+- Music (task 133, `docs/music.md` "In the game"): `play_music(MusicPlay { track, start, end,
+  fade_in, fade_out, gain })` and `stop_music(fade)` on the music channel, streamed by the
+  music thread; `duck(gain)` eases the units, buildings and environment to `gain` while an
+  age's theme plays; `music_now()` says what plays.
 - `Placement { gain, pan }` is computed by the caller; the crate knows no game types.
   `Listener { position, right, ref_distance, max_distance }.place(source, gain)` turns plain
   `f32` positions into one: full gain within the reference distance, inverse distance beyond it,
@@ -198,7 +207,8 @@ the sun's height over that point and 25 ground points spread over the view.
 - The person's own events: a construction started (`ui.construction_started`, at most every
   1.5 s); finished (the building's `build_done`); a unit trained (its building's `train_done`);
   a research finished (the researching building's `research_done`, else `ui.research_finished`);
-  a new age (`ui.age_reached`, then the announcer).
+  a new age (the age's main theme, task 133, and the announcer; `ui.age_reached` is no longer
+  played).
 - Alerts (task 118): an attack chimes `ui.alert_attack` and the announcer says "under attack" a
   moment later, at most every 12 s; an arrival chimes `ui.alert_arrival` and the announcer.
 
@@ -224,8 +234,38 @@ over the same span and plays alone in the system and star-map views.
 
 **The mix** ("not too violent"): voices at 0.85 of their file level, the person's cues 0.55,
 alerts 0.55, the announcer 0.75, shots and blows 0.5, moving loops 0.35,
-hammering 0.3, ambience 0.9 × each bed's `gain_pct`; on top, the engine's groups (master 0.8,
-effects 0.8, voice 1.0, ambience 0.6) times the Sound settings, the ducking and the limiter.
+hammering 0.3, ambience 0.9 × each bed's `gain_pct`; on top, the engine's levels (master 0.8;
+voices 1.0, effects 0.8, ambience 0.6, music 0.5) times the Sound settings' categories, the
+ducking and the limiter.
+
+## The mixer's categories (task 133)
+
+The owner (2026-11-23): "put a volume mixer button in settings for each type of sound: units,
+buildings, environment and announcements". With the master and the music, six sliders, each
+0–100 %, in the launcher's Sound settings and in the in-match menu (`docs/hud.md`, "Sound"):
+
+| Category | What answers to it | How the game knows |
+| --- | --- | --- |
+| Master | everything | — |
+| Music | the launcher's music, the ages' themes, the interludes' fragments | the music channel |
+| Units | units' lines (`select`, `move`, `attack`, `build`, `research_done` …), shots, blows, moving loops | the sound rows of a type whose class is not `building` |
+| Buildings | buildings' lines (`select`), work, `build_done`, `train_done`, `research_done`, `fire`; the hammering of construction sites | the sound rows of a `building` type; construction is the buildings' |
+| Environment | the ambience beds, on the ground and in space | the `ambience` rows |
+| Announcements | alerts, the announcer (under attack, arrival, a new age …), the interface cues (clicks, orders, errors, construction started, research finished) | the `ui.` cues |
+
+The director names each cue's category from the rules: who plays it (`SoundBook`, `Cue::category`,
+from the entity class), never from a key. A sound played without one takes the category of its
+name (`SoundId::category`: `bld.` buildings, `ambient.` environment, `ui.` announcements, the rest
+units). The mixer keeps two buffers per category (ducked, foreground) and the music's; each
+category's sum is scaled by its slider, eased, before the master and the limiter. While an age's
+theme plays, the units, buildings and environment duck to 0.7 (`Command::Duck`); the
+announcements and the music do not.
+
+Settings from before task 133 are read as the categories they stand for, never louder than
+before: effects → units and buildings, voice → units (units take the lower of effects and
+voice, as they had both), ambience → environment. That holds for an old `launcher.json` and
+for the old options `--effects-volume`, `--voice-volume` and `--ambient-volume`, which still
+parse (a category given by its own option wins).
 
 ### Checking the mix
 

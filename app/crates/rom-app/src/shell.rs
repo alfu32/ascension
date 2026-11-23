@@ -575,6 +575,10 @@ fn start_simulation(
             saving,
             paused: options.load.is_some(),
             journals: None,
+            // An interactive game: the new-age dialog holds it while open (task 133).
+            dialog_holds: options.script.is_none()
+                && options.bench_seconds.is_none()
+                && options.screenshot.is_none(),
         },
     )
     .map_err(|error| format!("could not start the simulation thread: {error}"))

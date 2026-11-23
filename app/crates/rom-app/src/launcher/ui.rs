@@ -12,6 +12,7 @@ use gpui::{
 use gpui_component::{
     input::{InputEvent, InputState},
     select::{SearchableVec, SelectEvent, SelectState},
+    slider::{SliderEvent, SliderState},
 };
 
 use super::form::{CONTROLS, Config, Form, GROUPS, command_line, preset};
@@ -99,6 +100,13 @@ pub(super) struct Launcher {
     carousel: usize,
     /// Whether the advanced launcher's "…" menu is open.
     menu_open: bool,
+    /// The launcher's music (task 133) and when it began.
+    music: crate::sound::music::LauncherMusic,
+    music_began: Instant,
+    /// The Sound group's volumes as sliders (task 133), by option name.
+    volume_sliders: BTreeMap<&'static str, Entity<SliderState>>,
+    /// The form's editors must be made again (a game changed the Sound settings).
+    stale_fields: bool,
 }
 
 /// Lists this short are drawn as a row of choices; longer ones as a dropdown.
@@ -166,6 +174,10 @@ impl Launcher {
             play_preset_name: cx.new(|cx| InputState::new(window, cx).placeholder("Preset name")),
             carousel: 0,
             menu_open: false,
+            music: crate::sound::music::LauncherMusic::new(),
+            music_began: Instant::now(),
+            volume_sliders: BTreeMap::new(),
+            stale_fields: false,
         };
         // The bundled scripts live beside the settings, where a game can read them.
         if let Err(error) = scripts::install(&this.path) {
@@ -229,12 +241,27 @@ impl Launcher {
                                 }
                             }
                         }
-                        // A game remembers seat tokens for the Join form's Rejoin (task 88).
-                        if let Ok(on_disk) = Config::load(&this.path)
-                            && on_disk.tokens != this.config.tokens
-                        {
-                            this.config.tokens = on_disk.tokens;
-                            changed = true;
+                        // A game remembers seat tokens for the Join form's Rejoin (task 88), and
+                        // the Sound settings changed in its menu (task 133).
+                        if let Ok(on_disk) = Config::load(&this.path) {
+                            if on_disk.tokens != this.config.tokens {
+                                this.config.tokens = on_disk.tokens;
+                                changed = true;
+                            }
+                            let sound = on_disk.form.sound_settings();
+                            if changed && sound != this.config.form.sound_settings() {
+                                this.config.form.set_sound(&sound);
+                                crate::sound::set_settings(this.config.form.sound_settings());
+                                this.stale_fields = true;
+                            }
+                        }
+                        // The launcher's music (task 133): held while a game runs or while
+                        // the person has turned it off.
+                        let running = this.processes.iter().any(|p| !p.finished);
+                        let wanted = this.config.launcher_music && !running;
+                        let actions = this.music.tick(this.music_began.elapsed(), wanted);
+                        if let Some(engine) = crate::sound::engine() {
+                            crate::sound::music::perform(&engine, &actions);
                         }
                         if changed {
                             cx.notify();
@@ -328,6 +355,37 @@ impl Launcher {
         let generation = self.generation;
         self.fields.clear();
         self.subscriptions.clear();
+        // The Sound group's volumes are sliders (task 133).
+        self.volume_sliders.clear();
+        for (flag, _) in crate::sound::SLIDERS {
+            let value = self
+                .config
+                .form
+                .get(flag)
+                .trim()
+                .parse::<f32>()
+                .unwrap_or(100.)
+                .clamp(0., 100.);
+            let slider = cx.new(|_| {
+                SliderState::new()
+                    .min(0.)
+                    .max(100.)
+                    .step(1.)
+                    .default_value(value)
+            });
+            self.subscriptions.push(cx.subscribe_in(
+                &slider,
+                window,
+                move |this, _, event: &SliderEvent, _, cx| {
+                    let SliderEvent::Change(value) = event;
+                    let text = (value.end().round().clamp(0., 100.) as u32).to_string();
+                    if this.generation == generation && this.config.form.get(flag) != text {
+                        this.change(flag, text, cx);
+                    }
+                },
+            ));
+            self.volume_sliders.insert(flag, slider);
+        }
         for (index, control) in CONTROLS.iter().enumerate() {
             let flag = control.flag;
             let input = if control.toggle {
@@ -1062,6 +1120,9 @@ impl Launcher {
 
 impl Render for Launcher {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if std::mem::take(&mut self.stale_fields) {
+            self.prepare(window, cx);
+        }
         let body = match self.screen {
             Screen::Home => self.render_home(cx),
             Screen::Form(mode) => self.render_form(mode, window, cx),

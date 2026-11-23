@@ -5,7 +5,8 @@
 //!   is answered by the first ordered unit's line (`order_kind.line`), at most one line every
 //!   [`LINE_INTERVAL`]; a refused order plays the error cue.
 //! - The person's own events: a construction started and finished, a unit trained, a research
-//!   finished, a new age; alerts (task 118) chime and the announcer says what happened.
+//!   finished, a new age (the announcer; the age's theme announces it, task 133); alerts (task
+//!   118) chime and the announcer says what happened.
 //! - Activity in view: shots and blows, moving units, buildings at work and construction, placed
 //!   by the camera ([`rom_render::Ear`]): louder near the centre and the closer the camera,
 //!   panned by screen position; a battle plays its nearest few shots of each kind.
@@ -16,7 +17,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use rom_audio::{AudioEngine, LOOP_SLOTS, Listener, Placement, SoundId};
+use rom_audio::{AudioEngine, Category, LOOP_SLOTS, Listener, Placement, SoundId};
 use rom_render::{Activity, Ear, EntitySnapshot, Level};
 use rom_rules::{AmbienceView, Daylight, DefId, SoundEvent};
 use rom_sim::{AlertKind, BodyId, EntityId, OrderId, PlayerId, World};
@@ -238,7 +239,7 @@ impl Director {
                 gain: placement.gain * cue.gain,
                 ..placement
             };
-            engine.play(id, placement, priority);
+            engine.play_as(cue.category, id, placement, priority);
         }
     }
 
@@ -409,7 +410,8 @@ impl Director {
             None => Self::play_named(engine, fallback, CUE_GAIN, CUE_PRIORITY),
         };
         if next.age != prev.age {
-            Self::play_named(engine, "ui.age_reached", CUE_GAIN, ALERT_PRIORITY);
+            // The age's main theme announces it (task 133, the match's music); the announcer
+            // says it too.
             if let Some(id) = variant(&family("ui.announcer.age_reached")) {
                 self.pending
                     .push((now + ANNOUNCER_DELAY * 2, id, ANNOUNCER_GAIN));
@@ -587,7 +589,7 @@ impl Director {
                 gain: gain * WEAPON_GAIN * cue.gain,
                 pan,
             };
-            engine.play(id, placement, activity_priority(gain));
+            engine.play_as(cue.category, id, placement, activity_priority(gain));
         }
     }
 
@@ -669,7 +671,8 @@ impl Director {
                     gain: gain * HAMMER_GAIN,
                     pan,
                 };
-                engine.play(id, placement, activity_priority(gain));
+                // Construction is the buildings' (task 133).
+                engine.play_as(Category::Buildings, id, placement, activity_priority(gain));
             }
         }
         let mut wants: Vec<Want> = wants
@@ -714,7 +717,12 @@ impl Director {
                 },
             };
             // The cue's first file: a loop keeps its file while it plays.
-            engine.set_loop_at(BED_SLOTS + at, cue.variants.first().copied(), placement);
+            engine.set_loop_as(
+                cue.category,
+                BED_SLOTS + at,
+                cue.variants.first().copied(),
+                placement,
+            );
         }
     }
 
@@ -769,7 +777,7 @@ impl Director {
             let id = *file.get_or_insert_with(|| {
                 bed.cue.variants.first().copied().expect("a cue has a file")
             });
-            engine.set_loop(slot, Some(id), *level);
+            engine.set_loop_as(bed.cue.category, slot, Some(id), Placement::centre(*level));
         }
     }
 }

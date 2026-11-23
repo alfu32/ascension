@@ -362,6 +362,16 @@ pub struct SimLink {
     end: EndSlot,
     /// A remaining human chose to keep playing after the end.
     keep_playing: Arc<AtomicBool>,
+    /// The new-age dialog (task 133): the simulation thread opens it, the window closes it.
+    age_dialog: Arc<Mutex<AgeDialogSlot>>,
+}
+
+/// The new-age dialog while it is open, and a count of its changes (the HUD is published again
+/// when it changes).
+#[derive(Debug, Default)]
+struct AgeDialogSlot {
+    open: Option<rom_render::HudAgeDialog>,
+    changes: u64,
 }
 
 /// Where the simulation thread leaves the end of the match, and whether the window has yet to
@@ -420,6 +430,34 @@ impl SimLink {
         }
     }
 
+    /// Whether the new-age dialog is open (task 133).
+    pub fn age_dialog_open(&self) -> bool {
+        self.age_dialog.lock().is_ok_and(|slot| slot.open.is_some())
+    }
+
+    /// A click or a key closes the new-age dialog.
+    pub fn close_age_dialog(&self) {
+        if let Ok(mut slot) = self.age_dialog.lock()
+            && slot.open.take().is_some()
+        {
+            slot.changes += 1;
+        }
+    }
+
+    fn open_age_dialog(&self, dialog: rom_render::HudAgeDialog) {
+        if let Ok(mut slot) = self.age_dialog.lock() {
+            slot.open = Some(dialog);
+            slot.changes += 1;
+        }
+    }
+
+    /// The dialog to draw and the count of its changes.
+    fn age_dialog(&self) -> (Option<rom_render::HudAgeDialog>, u64) {
+        self.age_dialog
+            .lock()
+            .map_or((None, 0), |slot| (slot.open.clone(), slot.changes))
+    }
+
     /// The chat as the window left it, with the history's scroll kept inside a log of `len`
     /// lines, and the lines sent since the last call.
     fn take_chat(&self, len: usize) -> (ChatInput, Vec<(Channel, String)>) {
@@ -451,6 +489,7 @@ impl SimLink {
             net: None,
             end: Arc::default(),
             keep_playing: Arc::default(),
+            age_dialog: Arc::default(),
         }
     }
 
@@ -619,6 +658,9 @@ pub struct Extras {
     pub paused: bool,
     /// Receives every tick's journal and the world's hash after the step (tests; a host).
     pub journals: Option<Sender<(Journal, u64)>>,
+    /// The new-age dialog holds a standalone match while it is open (task 133): an interactive
+    /// game; never a scripted, timed or network one.
+    pub dialog_holds: bool,
 }
 
 /// Owns the simulation thread; dropping it stops and joins the thread.
@@ -676,6 +718,7 @@ impl SimThread {
             net,
             end: Arc::default(),
             keep_playing: Arc::default(),
+            age_dialog: Arc::default(),
         };
         let thread_link = link.clone();
         let thread = thread::Builder::new()
@@ -688,6 +731,7 @@ impl SimThread {
                     host,
                     extras.saving,
                     extras.journals,
+                    extras.dialog_holds,
                     &thread_link,
                     &inbox,
                     &request_inbox,
@@ -738,12 +782,20 @@ fn run(
     mut host: Option<UniverseHost>,
     saving: Option<SaveSetup>,
     journals: Option<Sender<(Journal, u64)>>,
+    dialog_holds: bool,
     link: &SimLink,
     inbox: &Receiver<Command>,
     requests: &Receiver<SaveRequest>,
     bridge: &RenderBridge,
 ) {
     let me = game.me();
+    // The new-age dialog holds only a standalone match (task 133).
+    let dialog_holds = dialog_holds && matches!(game, Game::Lead(_));
+    let holding = |link: &SimLink| dialog_holds && link.age_dialog_open();
+    let mut ages = AgeWatch::default();
+    let mut dialog_seen = 0;
+    // The match's music (task 133): every loop turn, paused or not.
+    let mut music = crate::sound::music::Conductor::default();
     let following = matches!(game, Game::Follow(_));
     let autosave_every = saving
         .as_ref()
@@ -788,6 +840,7 @@ fn run(
         Game::Lead(core) => core.computers().players().collect(),
         Game::Follow(net) => net.computer_players().into_iter().collect(),
     };
+    ages.reached(game.world(), me, link);
     let mut ascension = AscensionView::new(computers, me);
     if let Some(text) = saving
         .as_ref()
@@ -830,7 +883,7 @@ fn run(
                     speed = current;
                     step.set_speed(speed);
                 }
-                if link.paused() || held(&game, link) {
+                if link.paused() || held(&game, link) || holding(link) {
                     0
                 } else {
                     step.advance(elapsed)
@@ -929,6 +982,7 @@ fn run(
                 &controller,
                 bridge,
                 &ascension,
+                link,
             );
         }
         if let Some(host) = host.as_mut() {
@@ -972,6 +1026,8 @@ fn run(
             Ordering::Relaxed,
         );
         memory.sound.hold(game.world().tick());
+        music.turn(game.world(), me);
+        ages.reached(game.world(), me, link);
         let picks = bridge.take_picks();
         let interacted = !picks.is_empty();
         picks_taken += picks.len() as u64;
@@ -1020,7 +1076,9 @@ fn run(
                 line_changed = true;
             }
         }
-        if (interacted || typing || line_changed) && ticks == 0 {
+        let changes = link.age_dialog().1;
+        let dialog_changed = std::mem::replace(&mut dialog_seen, changes) != changes;
+        if (interacted || typing || line_changed || dialog_changed) && ticks == 0 {
             publish_hud(
                 game.world(),
                 me,
@@ -1029,10 +1087,11 @@ fn run(
                 &controller,
                 bridge,
                 &ascension,
+                link,
             );
         }
         for _ in 0..ticks {
-            if held(&game, link) {
+            if held(&game, link) || holding(link) {
                 break;
             }
             if let Some(script) = script.as_mut() {
@@ -1154,6 +1213,7 @@ fn run(
             for line in ascension.update(world) {
                 controller.notify(world, line);
             }
+            ages.reached(world, me, link);
             note_end(&game, saving.as_ref(), script.as_ref(), link);
             let world = game.world();
             focus_camera(world, &mut controller, bridge);
@@ -1243,6 +1303,35 @@ fn run(
             }
         } else {
             thread::yield_now();
+        }
+    }
+}
+
+/// The viewing player's age, to open the new-age dialog when it changes (task 133).
+#[derive(Debug, Default)]
+struct AgeWatch {
+    ordinal: Option<i64>,
+}
+
+impl AgeWatch {
+    /// Notes `me`'s age; when it changed since the last look (never at the first), the dialog
+    /// of the new age opens.
+    fn reached(&mut self, world: &World, me: PlayerId, link: &SimLink) {
+        let Some(ordinal) = world
+            .players()
+            .find(|p| p.id == me)
+            .and_then(|p| world.rules().ages.get(&p.age))
+            .map(|a| a.ordinal)
+        else {
+            return;
+        };
+        if self
+            .ordinal
+            .replace(ordinal)
+            .is_some_and(|was| was != ordinal)
+            && let Some(dialog) = crate::ages::dialog(world.rules(), ordinal)
+        {
+            link.open_age_dialog(dialog);
         }
     }
 }
@@ -1522,6 +1611,7 @@ fn publish(
         bridge.publish_vision(Arc::new(memory.fog.build_on(world, me, body)));
     }
     let mut hud = crate::hud::snapshot_of(world, me);
+    hud.age_dialog = link.age_dialog().0;
     controller.fill(world, &mut hud);
     crate::alert_view::fill_hud(world, me, body, &mut hud);
     ascension.fill(world, &mut hud, celestial_in_view(world, bridge));
@@ -1596,6 +1686,7 @@ fn viewed_body(world: &World, host: Option<&UniverseHost>) -> rom_sim::BodyId {
     host.map_or_else(|| world.surfaces()[0].body(), |h| h.viewed)
 }
 
+#[allow(clippy::too_many_arguments)] // what one HUD is made of
 fn publish_hud(
     world: &World,
     me: PlayerId,
@@ -1604,8 +1695,10 @@ fn publish_hud(
     controller: &Controller,
     bridge: &RenderBridge,
     ascension: &AscensionView,
+    link: &SimLink,
 ) {
     let mut hud = crate::hud::snapshot_of(world, me);
+    hud.age_dialog = link.age_dialog().0;
     controller.fill(world, &mut hud);
     crate::alert_view::fill_hud(world, me, body, &mut hud);
     ascension.fill(world, &mut hud, celestial_in_view(world, bridge));
@@ -2987,6 +3080,7 @@ mod save_tests {
                 saving: Some(setup),
                 paused: true,
                 journals: None,
+                dialog_holds: false,
             },
         )
         .expect("thread");
@@ -3056,6 +3150,7 @@ mod save_tests {
                 saving: Some(setup),
                 paused: false,
                 journals: None,
+                dialog_holds: false,
             },
         )
         .expect("thread");

@@ -110,6 +110,48 @@ In short (details in `app/tools/music/README.md`):
 The samples are never committed; `fetch_samples.py` downloads them from the official
 repositories and checks every file against `samples.lock` (SHA-256).
 
+## In the game (task 133)
+
+The pieces are **embedded in the binary** by `rom-audio` as the sounds are (its `build.rs`
+writes a table of every `.ogg` in `app/assets/music/` and the cue sheet), so every package
+stays one executable and nothing can go missing beside it. They are **streamed**: a piece is
+decoded on the engine's music thread as it plays, a few thousand frames ahead, never whole (the
+49 minutes would be about 500 MB decoded). A fragment starts with a seek to the page before it
+and the exact frame from the page's granule position (`rom-audio/src/music.rs`).
+
+- **One music channel**, separate from the effect voices and the loops: a new piece cross-fades
+  from what plays (over its own fade-in), a stop fades out, equal-power curves. The music thread
+  renders blocks of 1024 frames into a pool of six that the device callback mixes in and hands
+  back, so the callback never decodes, waits or allocates. The music has its own slider (Sound
+  settings) and level in the mix (`MUSIC_LEVEL` 0.5, as the themes are mastered at −16 LUFS),
+  and dips like the ambience under the voices. Without an audio device the engine is silent and
+  accepts every music call.
+- **The match** (the owner's design, `ages-story.md`; `rom-app/src/sound/music.rs`,
+  `MatchMusic`). When the person's player reaches a new age, the age's **main theme** plays as
+  its announcement (the announcer says it too; the old chime is gone), and the units,
+  buildings and environment duck to 0.7 while it plays. The match opens with its starting
+  age's theme (the Ancient theme in a match from the first age). Afterwards the age's
+  **interlude continues in fragments only**: one fragment of `cues.json` now and then, with
+  its own fades, at 0.45 of its level, then 30–90 s of silence (varied), never the same
+  fragment twice running, never the whole interlude. Music never plays over itself: a new
+  age fades what plays out over 2.5 s, then its theme begins. The choices of fragment and
+  silence use a presentation random source seeded from the clock, never the simulation's; the
+  music follows the world and never feeds it. It runs on the simulation thread every loop
+  turn, paused or not; leaving the match fades it out.
+- **The launcher** (`LauncherMusic`), the owner's choice (2026-11-23): "the main score on the
+  launcher: i would continue it by simply concatenating all the tunes and interludes in age
+  order and roll back to the beginning when they end." So the launcher plays the main title,
+  then for each age, Ancient to Galactic Empires, its main theme followed by its whole
+  interlude (29 pieces, about 49 minutes), then the title again, without end, at 0.6 of their
+  level. There are no gaps beyond the files' own tails: each piece begins 1 s before the one
+  playing ends and the two cross-fade over that second. It is held (faded out) while a game the
+  launcher started runs, and begins again from the title afterwards. The home screen's
+  **Music** switch (also in the advanced Sound group) turns it off and is remembered in
+  `launcher.json` (`launcher_music`); the Music slider sets its volume.
+- **Checking it**: `ROM_MUSIC_LOG=1` prints each piece the music thread starts (name, from and
+  to, fades, gain), fades out and ends. `cargo run -p rom-audio --example play -- <piece>
+  [start]` streams one piece for up to 20 s.
+
 ## The complete work
 
 "Ascension: Music of the Ages" (working title) joins every piece into one continuous symphonic
@@ -184,3 +226,10 @@ second run gives identical files.
 
 All 29 `.ogg` files, the 29 `.mid` scores and `cues.json`: 40.8 MB (limit 60 MB); the music
 lasts 49 minutes (16 minutes of main themes and title, 33 of interludes).
+
+Since task 133 the 29 `.ogg` files and `cues.json` (about 40.6 MB; the scores are not shipped)
+are embedded in the game binary: the release build of `rise-of-man` went from 89.5 MB to
+131 MB on this machine, and every package of the release workflow grows by about the same
+41 MB (Vorbis does not compress further), so the 0.0.125 packages of 30–42 MB become about
+71–84 MB (the portable Linux archive built here: 84.6 MB). The workflow sets no size limit, and
+none of its stores is near one.

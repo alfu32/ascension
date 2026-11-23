@@ -444,8 +444,21 @@ pub fn display_arguments(arguments: &[String]) -> Vec<String> {
     let mut rest = arguments.iter();
     while let Some(argument) = rest.next() {
         match argument.as_str() {
-            "--size" | "--scale" | "--hud-scale" | "--grass" | "--detail" | "--projectiles"
-            | "--volume" | "--effects-volume" | "--voice-volume" | "--ambient-volume"
+            "--size"
+            | "--scale"
+            | "--hud-scale"
+            | "--grass"
+            | "--detail"
+            | "--projectiles"
+            | "--volume"
+            | "--music-volume"
+            | "--units-volume"
+            | "--buildings-volume"
+            | "--environment-volume"
+            | "--announcements-volume"
+            | "--effects-volume"
+            | "--voice-volume"
+            | "--ambient-volume"
             | "--mute-unfocused" => {
                 if let Some(value) = rest.next() {
                     kept.extend([argument.clone(), value.clone()]);

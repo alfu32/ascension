@@ -1,10 +1,36 @@
 //! Hear one sound: `cargo run -p rom-audio --example play -- <sound> [gain]`.
 //! Without arguments it lists the sound names. Loops (`ambient.`, `.moving`, `.active`) play for
-//! four seconds; one-shots play to their end.
+//! four seconds; one-shots play to their end. A piece of music (`title`, `ancient.theme`, task
+//! 133) plays from `[start]` seconds for up to 20 seconds, streamed as in the game.
 
 use std::time::{Duration, Instant};
 
-use rom_audio::{AudioEngine, EngineStatus, Placement, SoundId, decode};
+use rom_audio::{AudioEngine, EngineStatus, MusicId, MusicPlay, Placement, SoundId, decode};
+
+fn music(track: MusicId, start: f32) {
+    let engine = AudioEngine::new();
+    let began = Instant::now();
+    while engine.status() == EngineStatus::Starting && began.elapsed() < Duration::from_secs(30) {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    println!("engine: {:?}", engine.status());
+    let seconds = (track.seconds() - start).clamp(0.0, 20.0);
+    engine.play_music(MusicPlay {
+        start,
+        end: Some(start + seconds),
+        fade_in: 0.5,
+        fade_out: 1.0,
+        ..MusicPlay::whole(track, 1.0)
+    });
+    for _ in 0..(seconds * 2.0) as usize {
+        std::thread::sleep(Duration::from_millis(500));
+        if let Some(now) = engine.music_now() {
+            println!("{} at {:.1} s", now.track.name(), now.seconds);
+        }
+    }
+    std::thread::sleep(Duration::from_millis(600));
+    println!("frames sent to the device: {}", engine.frames_played());
+}
 
 fn main() {
     let mut args = std::env::args().skip(1);
@@ -12,9 +38,18 @@ fn main() {
         for id in SoundId::all() {
             println!("{}", id.name());
         }
+        for id in MusicId::all() {
+            println!("{} (music, {:.0} s)", id.name(), id.seconds());
+        }
         return;
     };
-    let gain: f32 = args.next().and_then(|g| g.parse().ok()).unwrap_or(0.3);
+    let second: Option<f32> = args.next().and_then(|g| g.parse().ok());
+    if let Some(track) = MusicId::from_name(&name) {
+        // For music the second argument is where to start, in seconds.
+        music(track, second.unwrap_or(0.0));
+        return;
+    }
+    let gain = second.unwrap_or(0.3);
     let Some(sound) = SoundId::from_name(&name) else {
         eprintln!("no sound named {name}; run without arguments for the list");
         std::process::exit(2);

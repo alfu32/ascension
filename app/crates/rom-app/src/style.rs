@@ -214,6 +214,9 @@ pub fn install(cx: &mut App) {
     colors.muted_foreground = rgb(MUTED).into();
     colors.selection = rgba(0x3fd0ff55).into();
     colors.caret = rgb(CYAN).into();
+    // The mixer's sliders (task 133): a gold track and thumb.
+    colors.slider_bar = rgb(GOLD).into();
+    colors.slider_thumb = rgb(GOLD_M).into();
     colors.scrollbar_thumb = rgba(0xb88a4599).into();
     colors.scrollbar_thumb_hover = rgb(GOLD_M).into();
     theme.font_family = FONT.into();
