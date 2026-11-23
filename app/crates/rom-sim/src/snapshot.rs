@@ -430,6 +430,8 @@ pub struct HitSnapshot {
     pub target: EntityId,
     /// Damage.
     pub damage: i64,
+    /// The drone of the target's grid it aims at (task 128); `None` for the target itself.
+    pub drone: Option<u8>,
 }
 
 /// A firing decision not yet rolled.
@@ -535,7 +537,7 @@ pub struct Snapshot {
     pub governors_paused: Vec<EntityId>,
     /// Aircraft on or near the ground and the ticks they have climbed, in id order (task 123).
     pub flight: Vec<(EntityId, u64)>,
-    /// The clouds of drone operators, in operator id order (task 120).
+    /// The grids of drone operators, in operator id order (tasks 120, 128).
     pub clouds: Vec<(EntityId, crate::Cloud)>,
     /// Dormant surfaces of resource bodies not yet brought to life, in body order (task 77).
     pub dormant: Vec<(BodyId, crate::DormantSurface)>,
@@ -618,6 +620,7 @@ fn hit_snapshot(h: &PendingHit) -> HitSnapshot {
         weapon_id: h.weapon_id,
         target: h.target,
         damage: h.damage,
+        drone: h.drone,
     }
 }
 
@@ -630,6 +633,7 @@ fn hit_from(h: &HitSnapshot) -> PendingHit {
         weapon_id: h.weapon_id,
         target: h.target,
         damage: h.damage,
+        drone: h.drone,
     }
 }
 
@@ -1493,20 +1497,27 @@ impl World {
             world.flight.insert(id, climbed);
         }
         for (id, cloud) in clouds {
-            let capacity = world
+            let full = world
                 .entity(id)
                 .and_then(|e| world.cloud_rules(e.type_id))
-                .ok_or_else(|| bad("drone cloud of an entity that is not an operator"))?
-                .capacity;
-            if i64::from(cloud.drones) > capacity
-                || world
-                    .surface(cloud.pos.body)
-                    .is_none_or(|s| !s.geo.contains(cloud.pos))
+                .map(|c| crate::Cloud::full(c.capacity))
+                .ok_or_else(|| bad("drone cloud of an entity that is not an operator"))?;
+            let on_surface = |pos: Pos| {
+                pos.body == cloud.pos.body
+                    && world.surface(pos.body).is_some_and(|s| s.geo.contains(pos))
+            };
+            if cloud.ready & !full != 0
+                || cloud.facing >= 360
+                || !on_surface(cloud.pos)
+                || cloud.joining.is_some_and(|j| {
+                    j.slot >= 64
+                        || full >> j.slot & 1 == 0
+                        || cloud.ready >> j.slot & 1 == 1
+                        || !on_surface(j.pos)
+                })
                 || world.clouds.insert(id, cloud).is_some()
             {
-                return Err(bad(
-                    "drone cloud over capacity, off its surface or repeated",
-                ));
+                return Err(bad("drone grid over capacity, off its surface or repeated"));
             }
         }
         if world

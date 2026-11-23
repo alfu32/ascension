@@ -3383,9 +3383,9 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.d
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),(SELECT id FROM movement_class WHERE key='foot'),1200);
-INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile,projectile_speed) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),210,(SELECT id FROM damage_class WHERE key='fragmentation'),8000,10,'drone',10000);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile,projectile_speed) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),210,(SELECT id FROM damage_class WHERE key='fragmentation'),8000,5,'drone',4000);
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.drone_operator')),'ground');
-INSERT INTO et_drone_cloud(entity_type_id,capacity,leash,strike_range,rebuild_ticks,drone_hp,drone_speed) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),16,7000,1000,120,8,5000);
+INSERT INTO et_drone_cloud(entity_type_id,capacity,leash,strike_range,rebuild_ticks,drone_speed,spacing,hover) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),16,7000,1000,120,5000,600,1500);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='unit.drone_operator'),'train','units_3',0,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),(SELECT id FROM def WHERE key='res.food'),100,2);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),(SELECT id FROM def WHERE key='res.metal'),80,1);

@@ -1,0 +1,23 @@
+# Task 128: four drone operators of player one south-east of their city (out of the city's
+# reach). One stands idle in the west, its grid of sixteen drones hovering over it; the other
+# three each face one enemy group of player two seven tiles north of them: assault infantry
+# (west), a main battle tank (middle) and missile launchers, the anti-air (east). The attacking
+# operators stay back while their grids fly forward over their targets and send one drone at
+# each enemy. Replayed by --script (universe mode, seed 1, --sun low, --players 2 --ai none,
+# --size 1600x900). Test-only setup lines first.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun low --size 1600x900
+#     --script app/docs/tasks/128-drone-grid-script.txt --after 2.5 --screenshot grid.png
+0 grant-age age.information
+0 place 1 unit.drone_operator @6,19
+0 place 1 unit.drone_operator @15,15
+0 place 1 unit.drone_operator @21,15
+0 place 1 unit.drone_operator @27,15
+0 place 2 unit.assault_infantry @14,7
+0 place 2 unit.assault_infantry @16,6
+0 place 2 unit.assault_infantry @15,8
+0 place 2 unit.main_battle_tank @21,7
+0 place 2 unit.missile_launcher @26,6
+0 place 2 unit.missile_launcher @28,7
+1 look @17,12
+1 cam wheel 5 800,450
+2 speed 50

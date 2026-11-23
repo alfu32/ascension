@@ -1771,12 +1771,13 @@ pub fn snapshot_on(
             *count = count.saturating_add(1);
         }
     }
-    // The newest hit of each weapon still on its way, with its target and landing tick.
-    let mut in_flight = BTreeMap::<(u32, u32), (u32, u64)>::new();
+    // The newest hit of each weapon still on its way, with its target, landing tick and the
+    // drone of the target's grid it flies at (task 128).
+    let mut in_flight = BTreeMap::<(u32, u32), InFlight>::new();
     for hit in world.hits_in_flight() {
         in_flight.insert(
             (hit.attacker.0, hit.weapon_id),
-            (hit.target.0, hit.land_tick),
+            (hit.target.0, hit.land_tick, hit.drone),
         );
     }
     let mut views: Vec<EntityView> = Vec::with_capacity(sightings.len());
@@ -1857,15 +1858,29 @@ pub fn snapshot_on(
             rom_render::Hover::Circle
         };
         view.flight = flight.map_or(0.0, |pct| pct as f32 / 100.0);
-        // A drone operator's cloud (task 120), where it is on this body.
+        // A drone operator's grid (tasks 120, 128), where it is on this body.
         view.cloud = world
             .drone_cloud(entity.id)
             .filter(|c| c.pos.body == body)
-            .map(|c| rom_render::CloudView {
-                drones: u8::try_from(c.drones).unwrap_or(u8::MAX),
+            .zip(world.cloud_rules(entity.type_id))
+            .map(|(c, rules)| rom_render::CloudView {
                 face: c.pos.face,
                 x: c.pos.x as f32 / 1000.0,
                 y: c.pos.y as f32 / 1000.0,
+                facing_deg: f32::from(c.facing),
+                side: u8::try_from(rules.side()).unwrap_or(u8::MAX),
+                spacing: rules.spacing as f32 / 1000.0,
+                hover: rules.hover as f32 / 1000.0,
+                ready: c.ready,
+                left: 0,
+                joining: c.joining.map(|j| {
+                    (
+                        j.slot,
+                        j.pos.face,
+                        j.pos.x as f32 / 1000.0,
+                        j.pos.y as f32 / 1000.0,
+                    )
+                }),
             });
         if let Some(orbit) = orbit {
             view.face = orbit.pos.face;
@@ -2020,11 +2035,15 @@ pub fn projectile_kind(projectile: rom_rules::Projectile) -> Option<rom_render::
 /// weapon throws, at what, and the ticks the simulation fired it in and lands it in. Read from
 /// the weapon's cooldown and the hits `in_flight` (the newest per attacker and weapon: target
 /// and landing tick); presentation only.
+/// The newest hit of a weapon on its way: its target, landing tick and the drone of the target's
+/// grid it flies at.
+type InFlight = (u32, u64, Option<u8>);
+
 fn recent_shot(
     world: &World,
     entity: &Entity,
     places: &BTreeMap<u32, (Pos, f32, u64)>,
-    in_flight: &BTreeMap<(u32, u32), (u32, u64)>,
+    in_flight: &BTreeMap<(u32, u32), InFlight>,
 ) -> Option<rom_render::ShotView> {
     let et = &world.rules().entity_types[&entity.type_id];
     let weapons = et
@@ -2047,11 +2066,32 @@ fn recent_shot(
         .front()
         .filter(|o| matches!(o.kind.as_str(), "attack" | "attack_move" | "patrol"))
         .and_then(|o| o.target_entity);
-    let aimed = ordered.or(entity.aim);
-    let target = aimed.and_then(|id| world.entity(id));
+    // A hit of this shot on its way names its own target: a drone operator sends drones at
+    // enemies other than the ordered one, and a shot at a drone flies to the drone (task 128).
+    let flying = in_flight
+        .get(&(entity.id.0, weapon.id))
+        .filter(|&&(_, land, _)| land > fired)
+        .copied();
+    let aimed = flying
+        .map(|(target, _, _)| rom_sim::EntityId(target))
+        .or(ordered)
+        .or(entity.aim);
+    let drone = flying.and_then(|(target, _, slot)| {
+        let slot = slot?;
+        let (_, at) = world
+            .drones_of(rom_sim::EntityId(target))
+            .into_iter()
+            .find(|(s, _)| *s == slot)?;
+        let rules = world.cloud_rules(world.entity(rom_sim::EntityId(target))?.type_id)?;
+        Some((at, rules.hover as f32 / 1000.0))
+    });
+    let target = aimed
+        .filter(|_| drone.is_none())
+        .and_then(|id| world.entity(id));
     // Where it struck: the target; where it stood at the last snapshot when the shot killed it
     // at once; or the ground point of a shot from orbit.
     let (at, altitude) = match (target, aimed) {
+        _ if drone.is_some() => drone.map(|(at, _)| (at, 0.0))?,
         (Some(t), _) => place_of(world, t),
         (None, Some(id)) => places.get(&id.0).map(|&(at, height, _)| (at, height))?,
         (None, None) => (
@@ -2065,11 +2105,9 @@ fn recent_shot(
     };
     // The simulation's own landing tick while the hit is on its way (task 102); measured again
     // for a shot that missed (no hit flies), and none for one that hit at once.
-    let landing = in_flight
-        .get(&(entity.id.0, weapon.id))
-        .filter(|&&(at, land)| Some(at) == aimed.map(|id| id.0) && land > fired);
+    let landing = flying.filter(|&(at, _, _)| Some(at) == aimed.map(|id| id.0));
     let travel = match (landing, target) {
-        (Some(&(_, land)), _) => land - fired,
+        (Some((_, land, _)), _) => land - fired,
         (None, Some(t)) if weapon.projectile_speed > 0 => travel_ticks(world, entity, weapon, t)?,
         _ => 0,
     };
@@ -2078,11 +2116,12 @@ fn recent_shot(
     }
     Some(rom_render::ShotView {
         kind,
-        target: aimed.map(|id| id.0),
+        target: aimed.filter(|_| drone.is_none()).map(|id| id.0),
         face: at.face,
         x: at.x as f32 / 1000.0,
         y: at.y as f32 / 1000.0,
         altitude,
+        lift: drone.map_or(0.0, |(_, hover)| hover),
         fired_tick: fired,
         land_tick: fired + travel,
         count: u8::try_from(weapon.shots.clamp(1, 255)).unwrap_or(1),

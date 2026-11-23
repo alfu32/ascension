@@ -1588,28 +1588,52 @@ pub struct Detector {
     /// The `enabled` column: the base of the entity stat `detector` (1 detects).
     pub enabled: i64,
 }
-/// One `et_drone_cloud` row (task 120): the unit is the operator of a cloud of kamikaze drones.
-/// Its weapons are the drones' strikes: each shot launches one drone from the cloud, which is
+/// One `et_drone_cloud` row (tasks 120, 128): the unit is the operator of a grid of kamikaze
+/// drones. Its weapons are the drones' strikes: each shot sends one drone from its slot, which is
 /// spent; the shot's damage, interval and damage class are the weapon row's.
 #[derive(Debug, Clone)]
 pub struct DroneCloud {
     /// The `entity_type_id` column.
     pub entity_type_id: DefId,
-    /// The `capacity` column: the most drones the cloud holds (and holds when trained).
+    /// The `capacity` column: the grid's slots (1 to 64), all filled when the unit is trained.
     pub capacity: i64,
-    /// The `leash` column: the farthest the cloud flies from its operator, milli-tiles.
+    /// The `leash` column: the farthest the grid's centre flies from its operator, milli-tiles.
     pub leash: i64,
-    /// The `strike_range` column: how near the cloud must be to a target to strike it,
-    /// milli-tiles (to its edge or footprint).
+    /// The `strike_range` column: how near the grid's centre must be to a target to send a
+    /// drone at it, milli-tiles (to its edge or footprint).
     pub strike_range: i64,
     /// The `rebuild_ticks` column: ticks the operator takes to issue a new drone while the
-    /// cloud is below capacity.
+    /// grid is below capacity.
     pub rebuild_ticks: i64,
-    /// The `drone_hp` column: damage that brings down one drone.
-    pub drone_hp: i64,
-    /// The `drone_speed` column: how fast the cloud flies, milli-tiles per second.
+    /// The `drone_speed` column: how fast the grid and a joining drone fly, milli-tiles per
+    /// second.
     pub drone_speed: i64,
+    /// The `spacing` column: milli-tiles between neighbouring slots.
+    pub spacing: i64,
+    /// The `hover` column: milli-tiles above the ground the grid flies.
+    pub hover: i64,
 }
+
+impl DroneCloud {
+    /// Slots along a side of the square grid: the ceiling of the square root of the capacity.
+    pub fn side(&self) -> i64 {
+        let capacity = self.capacity.clamp(1, 64);
+        (1..=8).find(|n| n * n >= capacity).unwrap_or(8)
+    }
+
+    /// Where slot `slot` lies from the grid's centre, milli-tiles `(ahead, right)` of the way
+    /// the grid faces: rows filled from the front, each from the left.
+    pub fn slot_offset(&self, slot: u32) -> (i64, i64) {
+        let side = self.side();
+        let (row, column) = (i64::from(slot) / side, i64::from(slot) % side);
+        let spacing = self.spacing.max(0);
+        (
+            (side - 1 - 2 * row) * spacing / 2,
+            (2 * column - (side - 1)) * spacing / 2,
+        )
+    }
+}
+
 /// One `et_market` row: a building where its owner buys and sells lots of the tradeable
 /// resources (task 107).
 #[derive(Debug, Clone)]

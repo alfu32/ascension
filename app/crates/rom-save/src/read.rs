@@ -157,7 +157,7 @@ pub fn read(path: &Path, rules: &Arc<Rules>) -> Result<(World, MatchInfo, AiStat
             rules_fingerprint: fingerprint,
         });
     }
-    let snapshot = snapshot(&conn)?;
+    let snapshot = snapshot(&conn, rules)?;
     let world = World::restore(rules.clone(), snapshot)?;
     Ok((world, head.info, ai_states(&conn)?))
 }
@@ -201,6 +201,7 @@ fn hit_at(row: &Row, i: usize) -> Result<HitSnapshot, SaveError> {
         weapon_id: uint(row, i + 4, "weapon")?,
         target: EntityId(uint(row, i + 5, "hit target")?),
         damage: int(row, i + 6)?,
+        drone: None,
     })
 }
 
@@ -742,7 +743,7 @@ fn tally(conn: &Connection, players: &mut [PlayerSnapshot]) -> Result<TallyTable
     Ok((humans, end, history))
 }
 
-fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
+fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
     let (mut snap_stats, victory, scalars) = {
         let mut stmt = conn.prepare(
             "SELECT tick, next_entity_id, next_order_id, rng_state, transits_done, ownable_tiles, viewer_slots, elimination, outcome_team, outcome_rule, outcome_tick, stat_trade_trips, stat_cities_captured, stat_orders_done, stat_orders_failed, stat_orders_cancelled, stat_orders_no_path, stat_orders_unsupported, stat_orders_no_slot, stat_orders_target_gone FROM match",
@@ -1113,19 +1114,55 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
     } else {
         Vec::new()
     };
-    // Saves before format 16 (task 120) have no drone operators.
-    let clouds = if format >= 16 {
+    // Saves before format 16 (task 120) have no drone operators; format 16 saves load with every
+    // grid full and facing east (task 128).
+    let clouds = if format >= 17 {
         query_vec(
             conn,
-            "SELECT entity_id, drones, x, y, face, body, rebuild FROM entity_drone_cloud \
-             ORDER BY entity_id",
+            "SELECT entity_id, x, y, face, body, facing, ready, rebuild, join_slot, join_x, \
+             join_y, join_face, body FROM entity_drone_cloud ORDER BY entity_id",
             |r| {
                 Ok((
                     EntityId(uint(r, 0, "drone operator")?),
                     rom_sim::Cloud {
-                        drones: uint(r, 1, "drones")?,
-                        pos: pos_at(r, 2)?,
-                        rebuild: uint(r, 6, "drone rebuild")?,
+                        pos: pos_at(r, 1)?,
+                        facing: uint(r, 5, "grid facing")?,
+                        ready: int(r, 6)? as u64,
+                        rebuild: uint(r, 7, "drone rebuild")?,
+                        joining: match ouint::<u8>(r, 8, "joining slot")? {
+                            Some(slot) => Some(rom_sim::Joining {
+                                slot,
+                                pos: pos_at(r, 9)?,
+                            }),
+                            None => None,
+                        },
+                    },
+                ))
+            },
+        )?
+    } else if format >= 16 {
+        let capacity = |id: EntityId| {
+            entities_on_map
+                .iter()
+                .find(|e| e.id == id)
+                .and_then(|e| rules.entity_type(e.type_id))
+                .and_then(|t| t.drone_cloud.as_ref())
+                .map_or(0, |c| c.capacity)
+        };
+        query_vec(
+            conn,
+            "SELECT entity_id, x, y, face, body, rebuild FROM entity_drone_cloud \
+             ORDER BY entity_id",
+            |r| {
+                let id = EntityId(uint(r, 0, "drone operator")?);
+                Ok((
+                    id,
+                    rom_sim::Cloud {
+                        pos: pos_at(r, 1)?,
+                        facing: 0,
+                        ready: rom_sim::Cloud::full(capacity(id)),
+                        rebuild: uint(r, 5, "drone rebuild")?,
+                        joining: None,
                     },
                 ))
             },
@@ -1133,6 +1170,8 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
     } else {
         Vec::new()
     };
+    // Shots at a drone of a grid (task 128, format 17).
+    let drone_column = if format >= 17 { "drone" } else { "NULL" };
     Ok(Snapshot {
         tick,
         rng_state,
@@ -1164,18 +1203,30 @@ fn snapshot(conn: &Connection) -> Result<Snapshot, SaveError> {
             .collect(),
         hits: query_vec(
             conn,
-            "SELECT land_tick, attacker_id, owner_id, source_type_id, weapon_id, target_id, damage FROM pending_hit ORDER BY seq",
-            |r| hit_at(r, 0),
+            &format!(
+                "SELECT land_tick, attacker_id, owner_id, source_type_id, weapon_id, target_id, damage, {drone_column} FROM pending_hit ORDER BY seq"
+            ),
+            |r| {
+                Ok(HitSnapshot {
+                    drone: ouint(r, 7, "drone")?,
+                    ..hit_at(r, 0)?
+                })
+            },
         )?,
         shots: query_vec(
             conn,
-            "SELECT origin_x, origin_y, origin_face, origin_body, target_x, target_y, target_face, target_body, accuracy, land_tick, attacker_id, owner_id, source_type_id, weapon_id, target_id, damage FROM pending_shot ORDER BY seq",
+            &format!(
+                "SELECT origin_x, origin_y, origin_face, origin_body, target_x, target_y, target_face, target_body, accuracy, land_tick, attacker_id, owner_id, source_type_id, weapon_id, target_id, damage, {drone_column} FROM pending_shot ORDER BY seq"
+            ),
             |r| {
                 Ok(ShotSnapshot {
                     origin: pos_at(r, 0)?,
                     target_pos: pos_at(r, 4)?,
                     accuracy: uint(r, 8, "accuracy")?,
-                    hit: hit_at(r, 9)?,
+                    hit: HitSnapshot {
+                        drone: ouint(r, 16, "drone")?,
+                        ..hit_at(r, 9)?
+                    },
                 })
             },
         )?,

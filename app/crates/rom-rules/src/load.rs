@@ -713,8 +713,9 @@ fn load_et_drone_cloud(conn: &Connection) -> Result<Vec<DroneCloud>, RulesError>
                 leash: row.get("leash")?,
                 strike_range: row.get("strike_range")?,
                 rebuild_ticks: row.get("rebuild_ticks")?,
-                drone_hp: row.get("drone_hp")?,
                 drone_speed: row.get("drone_speed")?,
+                spacing: row.get("spacing")?,
+                hover: row.get("hover")?,
             })
         },
     )

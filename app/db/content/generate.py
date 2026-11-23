@@ -171,7 +171,7 @@ PROJECTILES = {
 PROJECTILE_SPEED = {
     'arrow': 15000, 'bolt': 20000, 'stone': 10000, 'bullet': 40000, 'shell': 24000,
     'rocket': 16000, 'missile': 20000, 'torpedo': 8000, 'beam': 0, 'plasma': 30000, 'railgun': 0,
-    'drone': 10000,
+    'drone': 4000,
 }
 # Weapons that fly at another speed than their kind, keyed like PROJECTILES. A howitzer lobs
 # its shell high to fall on the target, slower than the flat shot of a tank or a naval gun.
@@ -1306,12 +1306,16 @@ def rotorcraft_hover(row, tag):
 # deadly to people, weak against armour, hulls, shields and buildings.
 DRONE_DAMAGE_CLASS = 'fragmentation'
 DRONE_MATRIX = {'vehicle': 18, 'hull': 18, 'structure': 10, 'shield': 10}
-# Capacity, leash and strike range (milli-tiles), ticks per new drone, damage that brings one
-# down, cloud speed (milli-tiles per second); the strike (damage, ticks between strikes) and the
-# operator's reach (leash + strike range) are its weapon.
-DRONE_CLOUD = dict(capacity=16, leash=7000, strike_range=1000, rebuild_ticks=120, drone_hp=8,
-                   drone_speed=5000)
-DRONE_STRIKE = (210, 10)
+# Task 128 (owner, round 17): the drones fly in a square grid (16: four by four) 0.6 tiles apart
+# and 1.5 tiles up, over the operator at rest and deployed forward on the target in an attack;
+# every drone is one target that a single hit brings down (no drone hit points). Capacity, leash,
+# strike range (grid centre to the target's edge), spacing and hover in milli-tiles, ticks per new
+# drone, grid speed in milli-tiles per second; the strike (damage, ticks between drones sent) and
+# the operator's reach (leash + strike range) are its weapon. A drone leaves every 5 ticks (four a
+# second) and dives at 4 tiles a second (`PROJECTILE_SPEED`), so one or two are in the air at once.
+DRONE_CLOUD = dict(capacity=16, leash=7000, strike_range=1000, rebuild_ticks=120, drone_speed=5000,
+                   spacing=600, hover=1500)
+DRONE_STRIKE = (210, 5)
 
 
 def drone_operator(definition, row, tag, need, produce, cost, weapon):

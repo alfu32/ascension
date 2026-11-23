@@ -94,8 +94,8 @@ impl World {
             .values()
             .find(|t| t.key == "civilian")
             .map(|t| t.id);
-        // A weapon that hits the air meets drone clouds up to their leash from their operators
-        // (task 120).
+        // A weapon that hits the air meets the drones of a grid up to its leash and width from
+        // their operator (tasks 120, 128).
         let leash = if !self.clouds.is_empty()
             && et
                 .weapons
@@ -327,11 +327,10 @@ impl World {
         {
             return;
         }
-        if !self.rules.entity_types[&e.type_id]
-            .weapons
-            .iter()
-            .any(|w| self.layer_row(&w.targets, attacker).is_some())
-        {
+        if !self.rules.entity_types[&e.type_id].weapons.iter().any(|w| {
+            self.layer_row(&w.targets, attacker).is_some()
+                || self.drone_row(&w.targets, attacker).is_some()
+        }) {
             return;
         }
         let home = (self.combat_behavior(id) == "defensive").then_some(e.pos);

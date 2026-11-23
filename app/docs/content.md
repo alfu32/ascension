@@ -177,7 +177,7 @@ hit-point percentage. The first step of each line needs only its age and buildin
 | Anti-armour | Barracks | Anti-Tank Riflemen (5), Bazooka Teams (6), Missile Teams (7), Railgun Teams (9) |
 | Scout | Barracks | Scouts (0), Rangers (4), Recon Drones (7) |
 | Medic | Barracks | Medics (5) |
-| Drone operator | Barracks | Drone Operators (7): one soldier and a cloud of 16 kamikaze drones (task 120) |
+| Drone operator | Barracks | Drone Operators (7): one soldier and a grid of 16 kamikaze drones (tasks 120, 128) |
 | Light mounted | Stable → Vehicle Plant | Horsemen (1), Light Cavalry (2), Hussars (3), Dragoons (4), Armoured Cars (5), Scout Cars (6), Hovercraft (8), Grav Skimmers (10) |
 | Heavy mounted | Stable → Vehicle Plant | Cataphracts (1), Knights (2), Cuirassiers (3), Lancers (4), Light Tanks (5), Tanks (6), Main Battle Tanks (7), Robot Tanks (8), Fusion Tanks (9), Grav Tanks (11) |
 | Siege | Siege Workshop → Factory | Catapults (1), Trebuchets (2), Bombards (3), Cannons (4), Field Guns (5), Howitzers (6), Rocket Artillery (7), Railgun Batteries (9) |

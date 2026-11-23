@@ -1600,6 +1600,9 @@ stay; `rotorcraft_hover()` adds the tags after every other definition). Units `u
 
 ## Drone operators (task 120)
 
+Task 128 turned the cloud into a grid of drones that are targets of their own and dropped
+`drone_hp`; see "The drone grid (task 128)" below for what changed. As built in task 120:
+
 Owner, issue #3: an infantry unit that is "the operator" and "a cloud of drones, let's say 16";
 the cloud gets there first, the operator stays behind at the greatest distance allowed; each
 drone attacks and is spent (one kills or badly hurts an infantry unit, about ten destroy an
@@ -1649,6 +1652,61 @@ destroy the operator. Deliberate schema change; both lint views stay empty and t
 - **Sounds.** Its own lines, `fire` (recipe `drone_strike`: a dive whine and a small blast) and a
   `moving` loop of footsteps with a faint swarm hum (the `swarm` parameter `assign.py` sets for
   types with an `et_drone_cloud` row).
+
+## The drone grid (task 128)
+
+Owner, review round 17: the drones hover above the operator "in a rectangular grid of 9 or 16",
+deploy forward to the attacked target, "one drone attacks one enemy unit"; "all parts of the unit
+are targetable, drones are targetable individually", constantly replenished while the operator
+lives; "only the operator takes hit points"; the model review shows the grid. Deliberate schema
+change; both lint views stay empty and the seed loads.
+
+- **`et_drone_cloud`** loses `drone_hp` (a drone has no hit points: one hit brings it down) and
+  gains `spacing` and `hover` (milli-tiles between neighbouring slots and above the ground);
+  `capacity` is now 1 to 64 (the slots are bits of a word; `CHECK` and `Rules::validate`).
+  `DroneCloud::side` is ⌈√capacity⌉ and `DroneCloud::slot_offset(slot)` gives a slot's place
+  ahead and right of the grid's centre: rows from the front, each from the left, `spacing`
+  apart, centred.
+- **State** (`rom_sim::Cloud`): the grid's centre (it flies as task 120's cloud did: to the
+  attacked enemy, ahead on a move, over the operator at rest, never beyond the leash), its
+  `facing` (degrees, turning toward the way it flies at most 15° a tick, `TURN_PER_TICK`; it
+  keeps its facing while still), `ready` (bit k: slot k holds a drone), the drone `joining`
+  (slot and position) and `rebuild`. Slot positions are the offsets turned by the facing, in
+  milli-tiles (`World::drones_of`).
+- **Strikes.** A shot of the operator's weapon sends one drone at one enemy within
+  `strike_range` of the grid's centre: the ordered target first, then the nearest visible enemy
+  (distance, then id), passing over an enemy that the drones its owner already sent (hits and
+  shots of operator weapons on their way) will kill by the damage path's numbers. The drone in
+  the slot nearest that enemy leaves; it dives `√(ground² + hover²)` at the weapon's
+  `projectile_speed` and is spent.
+- **Targets.** No screening any more (`World::layer_row` reaches the operator as any foot
+  soldier). `World::drone_row`: a weapon with an `air` row reaches each drone in a slot or
+  joining one (not those diving). `World::aim_part` chooses: a weapon that hits only the air the
+  nearest drone; only the ground, the operator; both, the operator on an ordered attack and the
+  nearer of the operator and its nearest drone otherwise (the operator on a tie). The shot
+  carries the drone's slot (`PendingHit::drone`); its hit brings that drone down whatever the
+  damage and splashes nothing; a slot emptied meanwhile is a miss.
+- **Replenishing.** Below capacity a new drone every `rebuild_ticks` takes off from the operator
+  for the first empty slot and flies there at `drone_speed`; a drone due while another is still
+  on its way puts that one in its slot. An operator's end (death or disbanding) ends its grid
+  and the drones it sent (`despawn` drops its hits and shots).
+- **Seed.** `et_drone_cloud`: 16 drones (four by four), leash 7 tiles, strike range 1 tile,
+  a drone every 120 ticks, 5 tiles/s, spacing 0.6 tiles, hover 1.5 tiles. The weapon sends a
+  drone every 5 ticks (four a second; task 120 sent one every 10), and the dive flies at 4
+  tiles/s (`PROJECTILE_SPEED['drone']`, 10 before), about 8 ticks from a slot above the target,
+  so one or two drones are in the air at once. Damage unchanged: one drone for assault infantry,
+  ten for the main battle tank.
+- **State, save format 17.** `entity_drone_cloud(entity_id, body, face, x, y, facing, ready,
+  rebuild, join_slot, join_face, join_x, join_y)`; `pending_hit` and `pending_shot` gain
+  `drone` (NULL for a shot at the unit itself). Format 16 saves load with every grid full and
+  facing east. Hashed while any grid exists; a hit's drone only when it has one, so worlds
+  without operators keep their hashes.
+- **Views.** `CloudView` carries the centre, facing, side, spacing, hover, the ready slots, the
+  joining drone and, while blending two snapshots, the slots whose drone left (where a dive
+  starts). The render thread draws a quadrotor of the part kit (owner-coloured body, crossed
+  arms, four turning rotors, a small charge) 0.3 tiles across (the card's 0.18 read as specks) in every slot, bobbing gently,
+  instanced with the projectile models (`ProjectileInstance::team` and `phase`). The gallery and
+  the model sheet draw an operator with its full grid from its type's `et_drone_cloud` row.
 
 ## Bringing life (task 77)
 
@@ -1948,6 +2006,9 @@ back. No SQL runs in `rom-sim`.
 - **Rally points.** `entity_rally(entity_id, target_entity_id | x, y, face, body)`
   (task 64). Not part of the state hash while no producer has one, so worlds
   without rally points keep their hashes.
+- **Drone grids of task 128 (format 17).** `entity_drone_cloud(entity_id, body, face, x, y,
+  facing, ready, rebuild, join_slot, join_face, join_x, join_y)`, `pending_hit.drone`,
+  `pending_shot.drone` (see "The drone grid"). Format 16 saves load with every grid full.
 - **Drone clouds of task 120 (format 16).** `entity_drone_cloud(entity_id, drones, body, face,
   x, y, rebuild)` (see "Drone operators"). Formats 13 to 15 still load, without operators.
 - **Aircraft on the ground of task 123 (format 15).** `entity_flight(entity_id, climbed)` (see

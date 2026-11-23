@@ -14,8 +14,8 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::entities::{
-    EntityView, Footing, GroundFrame, building_height, entity_frame, heading_of, unit_height,
-    unit_width,
+    CloudView, EntityView, Footing, GroundFrame, building_height, entity_frame, heading_of,
+    unit_height, unit_width,
 };
 use crate::models::{ModelLook, ModelSpec, PartSpec, Shape};
 use crate::overlay::{Line3, Tri3};
@@ -255,6 +255,9 @@ pub struct ShotView {
     pub y: f32,
     /// Height of the target above sea level when it is aloft, tiles; 0 on the ground.
     pub altitude: f32,
+    /// Height above the ground of a point in the air the shot flies to without a target entity
+    /// (a drone of a grid, task 128), tiles; 0 otherwise.
+    pub lift: f32,
     /// Tick the simulation fired it in.
     pub fired_tick: u64,
     /// Tick the simulation lands it in; the same as `fired_tick` for a hit at once.
@@ -360,6 +363,11 @@ pub struct ProjectileInstance {
     pub up: [f32; 3],
     /// Length drawn, tiles.
     pub length: f32,
+    /// The owner colour its owner-coloured faces wear (a drone of a grid, task 128); grey for
+    /// projectiles.
+    pub team: [f32; 3],
+    /// Where in its idle cycle it is, 0 to 1 (a drone's rotors, task 128).
+    pub phase: f32,
 }
 
 /// What the projectiles of one frame draw.
@@ -464,11 +472,14 @@ impl Projectiles {
             None if shot.altitude > 0.0 => {
                 ground.datum_point(shot.face, shot.x, shot.y, (0.0, 0.0), shot.altitude)
             }
+            None if shot.lift > 0.0 => {
+                ground.point(shot.face, shot.x, shot.y, (0.0, 0.0), shot.lift)
+            }
             None => ground.point(shot.face, shot.x, shot.y, (0.0, 0.0), 0.5),
         };
-        // A drone operator's strike dives from its cloud (task 120).
+        // A drone operator's strike dives from its grid (tasks 120, 128).
         let from = match view.cloud {
-            Some(cloud) => ground.point(cloud.face, cloud.x, cloud.y, (0.0, 0.0), CLOUD_LIFT),
+            Some(cloud) => launch_point(&cloud, ground, to),
             None => muzzle(view, ground),
         };
         let aloft = is_aloft(view) || target.is_some_and(is_aloft) || shot.altitude > 0.0;
@@ -559,51 +570,86 @@ fn is_aloft(view: &EntityView) -> bool {
     view.altitude > 0.0
 }
 
-/// Height in tiles above the ground at which a drone cloud swirls (task 120).
-pub const CLOUD_LIFT: f32 = 1.6;
-/// Length a drone of a cloud is drawn, tiles.
-const DRONE_LENGTH: f32 = 0.22;
+/// Size a drone of a grid is drawn, tiles across (task 128): the card's 0.18 read as specks at
+/// the normal camera height, so half a slot's spacing.
+pub const DRONE_SIZE: f32 = 0.3;
 /// Index of the drone among [`projectile_looks`].
 const DRONE_MODEL: u16 = 6;
+/// Height in tiles of a drone's gentle bob.
+const DRONE_BOB: f32 = 0.05;
 
-/// Adds the drones of every operator's cloud in `views` to `out` at render tick `now` (task 120):
-/// each circles the cloud's point at its own radius, height and pace, all taken from the
-/// operator's id and the drone's place in the cloud, so the swarm is the same on every frame of
-/// the same moment. Presentation only.
-pub fn drone_swarms(
+/// Where slot `slot` of `cloud` is drawn, standing on `ground`: its place in the grid, lifted
+/// to the grid's height, bobbing a little at render tick `now` (from the slot alone, the same
+/// on every frame of the same moment).
+fn slot_point(cloud: &CloudView, ground: &dyn Footing, slot: u32, now: f64) -> [f32; 3] {
+    let frame = ground.frame(cloud.face, cloud.x, cloud.y);
+    let (dx, dy) = cloud.slot_delta(slot);
+    let bob = DRONE_BOB * (now as f32 * 0.12 + slot as f32 * 1.7).sin();
+    frame.at([dx, cloud.hover + bob, dy])
+}
+
+/// Where a drone that dives at `to` leaves `cloud`: the slot nearest `to` among those whose
+/// drone just left (else among those holding one), else the grid's centre.
+fn launch_point(cloud: &CloudView, ground: &dyn Footing, to: [f32; 3]) -> [f32; 3] {
+    let slots = if cloud.left != 0 {
+        cloud.left
+    } else {
+        cloud.ready
+    };
+    (0..64_u32)
+        .filter(|slot| slots >> slot & 1 == 1)
+        .map(|slot| slot_point(cloud, ground, slot, 0.0))
+        .min_by(|a, b| length(sub(*a, to)).total_cmp(&length(sub(*b, to))))
+        .unwrap_or_else(|| ground.point(cloud.face, cloud.x, cloud.y, (0.0, 0.0), cloud.hover))
+}
+
+/// Adds the drones of every operator's grid in `views` to `out` at render tick `now` (task 128):
+/// a quadrotor in each slot that holds a drone, facing the way the grid faces, in its owner's
+/// colour, bobbing gently, its rotors a little out of step with its neighbours'; the drone on its
+/// way to its slot where it flies. Everything comes from the view, the tick and the slot.
+/// Presentation only.
+pub fn drone_grids(
     views: &[EntityView],
     now: f64,
     ground: &dyn Footing,
     out: &mut ProjectileGeometry,
 ) {
     for view in views {
-        let Some(cloud) = view.cloud.filter(|c| c.drones > 0) else {
+        let Some(cloud) = view.cloud.filter(|c| c.drones() > 0) else {
             continue;
         };
         let frame = ground.frame(cloud.face, cloud.x, cloud.y);
-        let centre = ground.point(cloud.face, cloud.x, cloud.y, (0.0, 0.0), CLOUD_LIFT);
-        for i in 0..u32::from(cloud.drones) {
-            let seed = view.id.rotate_left(7) ^ 0x5bd1_e995;
-            let radius = 0.35 + 0.7 * noise(seed, i * 4);
-            let pace = (0.05 + 0.05 * noise(seed, i * 4 + 1)) * if i % 2 == 0 { 1.0 } else { -1.0 };
-            let phase = std::f64::consts::TAU * f64::from(noise(seed, i * 4 + 2));
-            let angle = (now * f64::from(pace) + phase) as f32;
-            let bob =
-                0.25 * (noise(seed, i * 4 + 3) - 0.5) + 0.08 * (now as f32 * 0.21 + i as f32).sin();
-            let (sin, cos) = angle.sin_cos();
-            let origin: [f32; 3] = std::array::from_fn(|k| {
-                centre[k] + (frame.ex[k] * cos + frame.ey[k] * sin) * radius + frame.up[k] * bob
-            });
-            // Along its circle, the way it turns.
-            let sign = pace.signum();
-            let forward: [f32; 3] =
-                std::array::from_fn(|k| (frame.ey[k] * cos - frame.ex[k] * sin) * sign);
+        let (sin, cos) = cloud.facing_deg.to_radians().sin_cos();
+        let forward: [f32; 3] = std::array::from_fn(|k| frame.ex[k] * cos + frame.ey[k] * sin);
+        let team = crate::entities::owner_color(view.owner);
+        let phase = |slot: u32| (slot as f32 * 0.37 + view.id as f32 * 0.13).fract();
+        for slot in (0..64_u32).filter(|slot| cloud.ready >> slot & 1 == 1) {
             out.models.push(ProjectileInstance {
                 model: DRONE_MODEL,
-                origin,
+                origin: slot_point(&cloud, ground, slot, now),
                 forward,
                 up: frame.up,
-                length: DRONE_LENGTH,
+                length: DRONE_SIZE,
+                team,
+                phase: phase(slot),
+            });
+        }
+        if let Some((slot, face, x, y)) = cloud.joining {
+            let at = ground.point(face, x, y, (0.0, 0.0), cloud.hover);
+            let to = slot_point(&cloud, ground, u32::from(slot), now);
+            let way = sub(to, at);
+            out.models.push(ProjectileInstance {
+                model: DRONE_MODEL,
+                origin: at,
+                forward: if length(way) > 1e-3 {
+                    normalize(way)
+                } else {
+                    forward
+                },
+                up: frame.up,
+                length: DRONE_SIZE,
+                team,
+                phase: phase(u32::from(slot)),
             });
         }
     }
@@ -767,6 +813,8 @@ fn one_projectile(f: &Flight, look: &Look, t: f32, scale: f32, out: &mut Project
                 forward: dir,
                 up: f.up,
                 length: length * scale,
+                team: [0.5; 3],
+                phase: 0.0,
             });
             match look.trail {
                 Trail::None => {}
@@ -1082,14 +1130,16 @@ pub fn projectile_looks() -> Vec<ModelLook> {
     let stone = material(Program::Stone, [0.52, 0.5, 0.46], [0.4, 0.38, 0.35]);
     let flame = material(Program::Emissive, [1.0, 0.62, 0.2], [1.0, 0.85, 0.4]);
     let dark = material(Program::Metal, [0.18, 0.19, 0.2], [0.12, 0.12, 0.13]);
+    // A drone's rotor: a two-bladed propeller lying face up, turning all the time.
     let rotor = |name: &str, x: f32, z: f32| {
-        PartSpec::new(name, Shape::Cylinder, steel)
-            .knob("w", 0.3)
-            .knob("h", 0.02)
-            .knob("segments", 8.0)
+        PartSpec::new(name, Shape::Propeller, steel)
+            .knob("w", 0.36)
+            .knob("blades", 2.0)
+            .knob("chord", 0.06)
+            .knob("pitch", -90.0)
             .knob("x", x)
             .knob("z", z)
-            .knob("y", 0.06)
+            .knob("y", 0.08)
     };
     let fin = |name: &str, look: MaterialLook, z: f32, w: f32, d: f32, roll: f32| {
         PartSpec::new(name, Shape::Box, look)
@@ -1204,25 +1254,29 @@ pub fn projectile_looks() -> Vec<ModelLook> {
                     .knob("pitch", -90.0),
             ],
         ),
-        // Task 120: a small quadrotor of a drone cloud, about a tile across before it is scaled.
+        // Task 128: a quadrotor of a drone grid, about a tile across before it is scaled: a body
+        // in its owner's colour, two crossed arms, four rotors turning, a small charge below.
         (
             "projectile.drone",
             vec![
-                PartSpec::new("body", Shape::Box, dark)
-                    .knob("w", 0.3)
-                    .knob("d", 0.42)
-                    .knob("h", 0.14),
-                PartSpec::new("warhead", Shape::Box, olive)
-                    .knob("w", 0.18)
+                PartSpec {
+                    team: true,
+                    ..PartSpec::new("body", Shape::Box, olive)
+                        .knob("w", 0.4)
+                        .knob("d", 0.44)
+                        .knob("h", 0.16)
+                },
+                PartSpec::new("charge", Shape::Box, dark)
+                    .knob("w", 0.16)
                     .knob("d", 0.2)
-                    .knob("h", 0.1)
-                    .knob("y", -0.1),
-                fin("arms", dark, 0.0, 0.9, 0.06, 0.0).knob("yaw", 45.0),
-                fin("arms_cross", dark, 0.0, 0.9, 0.06, 0.0).knob("yaw", -45.0),
-                rotor("rotor_ne", 0.32, 0.32),
-                rotor("rotor_nw", -0.32, 0.32),
-                rotor("rotor_se", 0.32, -0.32),
-                rotor("rotor_sw", -0.32, -0.32),
+                    .knob("h", 0.08)
+                    .knob("y", -0.08),
+                fin("arms", dark, 0.0, 0.82, 0.06, 0.0).knob("yaw", 45.0),
+                fin("arms_cross", dark, 0.0, 0.82, 0.06, 0.0).knob("yaw", -45.0),
+                rotor("rotor_ne", 0.29, 0.29),
+                rotor("rotor_nw", -0.29, 0.29),
+                rotor("rotor_se", 0.29, -0.29),
+                rotor("rotor_sw", -0.29, -0.29),
             ],
         ),
     ];
@@ -1279,6 +1333,7 @@ mod tests {
             x: 20.0,
             y: 10.0,
             altitude: 0.0,
+            lift: 0.0,
             fired_tick: fired,
             land_tick: land,
             count: 1,
@@ -1505,30 +1560,52 @@ mod tests {
         }
     }
 
-    /// Task 120: a cloud's drones circle its point, one model each, the same at the same moment.
+    /// Task 128: a grid draws one quadrotor per drone in its slots, the drone on its way where it
+    /// flies, in its owner's colour, the same at the same moment; a dive starts at the slot its
+    /// drone left.
     #[test]
-    fn a_cloud_draws_its_drones_around_its_point() {
+    fn a_grid_draws_its_drones_in_their_slots() {
         let flat = |_: f32, _: f32| 0.0;
         let ground = FlatGround(&flat);
         let mut operator = view(3, 4.0);
-        operator.cloud = Some(crate::CloudView {
-            drones: 5,
+        let cloud = crate::CloudView {
             face: 0,
             x: 9.0,
             y: 10.0,
-        });
+            facing_deg: 0.0,
+            side: 4,
+            spacing: 0.6,
+            hover: 1.5,
+            ready: 0b1011,
+            left: 0,
+            joining: Some((2, 0, 5.0, 10.0)),
+        };
+        operator.cloud = Some(cloud);
         let views = [view(1, 2.0), operator];
         let mut out = ProjectileGeometry::default();
-        drone_swarms(&views, 120.0, &ground, &mut out);
-        assert_eq!(out.models.len(), 5);
-        let centre = ground.point(0, 9.0, 10.0, (0.0, 0.0), CLOUD_LIFT);
+        drone_grids(&views, 120.0, &ground, &mut out);
+        assert_eq!(out.models.len(), 4);
+        let team = crate::entities::owner_color(operator.owner);
         for drone in &out.models {
             assert_eq!(drone.model, DRONE_MODEL);
-            let off: f32 = (0..3).map(|k| (drone.origin[k] - centre[k]).powi(2)).sum();
-            assert!(off.sqrt() < 1.3, "{:?}", drone.origin);
+            assert_eq!(drone.team, team);
+            assert!((drone.origin[1] - 1.5).abs() <= DRONE_BOB + 1e-4);
         }
+        // Slot 0 is the front row's left: ahead (east) 0.9 and to the left (north) 0.9.
+        assert!((out.models[0].origin[0] - 9.9).abs() < 1e-3);
+        assert!((out.models[0].origin[2] - 9.1).abs() < 1e-3);
+        // The joining drone flies from where it is toward its slot.
+        assert!((out.models[3].origin[0] - 5.0).abs() < 1e-3);
         let mut again = ProjectileGeometry::default();
-        drone_swarms(&views, 120.0, &ground, &mut again);
+        drone_grids(&views, 120.0, &ground, &mut again);
         assert_eq!(out.models, again.models);
+        // A drone that left slot 3 dives from there.
+        let left = crate::CloudView {
+            ready: 0b0011,
+            left: 0b1000,
+            ..cloud
+        };
+        let from = launch_point(&left, &ground, [0.0, 0.0, 0.0]);
+        assert!((from[0] - 9.9).abs() < 1e-3 && (from[2] - 10.9).abs() < 1e-3);
     }
 }

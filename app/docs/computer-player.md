@@ -1121,6 +1121,31 @@ weapon's 10-tick reload) in `production::value`, `dps_against` and `view::streng
 sixteen drones is not a sustained rate. `rom duel --profiles balanced:moderate,balanced:easiest --seeds 1..20 --jobs 2`: 20–0, mean
 tick 54 449, as before: no duel reaches the information age.
 
+## The drone grid (task 128)
+
+Task 128 put the drones in a 4 × 4 grid (`docs/database.md`, "The drone grid"): one drone per
+enemy, a drone sent every 5 ticks instead of 10 (four a second, one or two in the air at once,
+a 16-drone grid spent in four seconds), every drone a target of its own that one anti-air hit
+brings down (a missile launcher's hit brought down three of task 120's drones), the operator a
+target for everything that hits the ground. One drone still kills assault infantry and ten the
+main battle tank (counted in `rom-sim`'s `drone_cloud` tests). `rom fight-matrix --ages 7
+--fight unit.drone_operator,<b>` (3 seeds, value left in ‰):
+
+| Against | Operators | The other side |
+| --- | --- | --- |
+| assault infantry | 1000, 1000, 957 | 0, 0, 0 |
+| main battle tank | 912, 912, 912 | 0, 0, 0 |
+| missile launcher (anti-air) | 1000, 1000, 1000 | 0, 0, 0 |
+| rocket artillery | 0, 0, 0 | 677, 769, 815 |
+| strategic bomber | 0, 0, 0 | 1000, 1000, 1000 |
+| gunship helicopter | 0, 0, 0 | 1000, 1000, 1000 |
+
+The answers are unchanged: artillery from beyond the operator's reach and aircraft, which its
+drones cannot strike. The counter rule holds with no re-tuning beyond the strike pace:
+`rom fight-matrix` `strengths=270 unanswered=0`, the same seven `drone_operator` rows.
+`rom duel --profiles balanced:moderate,balanced:easiest --seeds 1..20 --jobs 2`: 20–0, mean tick
+54 449, as before: no duel reaches the information age.
+
 ## Simulation gaps found in part 2, and what task 65 did with them
 
 - **Closed: `explore`, `patrol`, `guard`.** `explore` walks to the nearest tile
