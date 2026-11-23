@@ -213,8 +213,8 @@ theme, so the album plays gapless and the tracks rejoin into the complete file s
 piece as a whole); one gain for the whole work brings it to −14 LUFS integrated, and a true-peak
 limiter (5 ms look-ahead, 120 ms release) holds the peaks at −1 dBTP. The quiet passages stay
 quiet: loudness range 15.5 LU (ffmpeg EBU R128). The price of −14 LUFS with a 7 LU gap between
-themes and interludes is limiting on the loudest tuttis: 164 s of the work are reduced by more
-than 1 dB, 46 s by more than 3 dB, at most 9 dB. `ALBUM_LUFS` in `album.py` is the one number to
+themes and interludes is limiting on the loudest tuttis: 160 s of the work are reduced by more
+than 1 dB, 45 s by more than 3 dB, at most 9 dB. `ALBUM_LUFS` in `album.py` is the one number to
 lower for less (about 1 dB less per LU).
 
 | # | Movement | Length |
