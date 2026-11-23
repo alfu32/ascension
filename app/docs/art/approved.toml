@@ -184,6 +184,7 @@
 "unit.drone_bomber@automation" = "bbf1d44420118382"
 "unit.drone_cruiser@automation" = "106636a272f25357"
 "unit.drone_fighter@automation" = "f10af2ad3694af64"
+"unit.drone_operator@information" = "fb4e907294ac64b4"
 "unit.exo_trooper@fusion" = "614596cc110238c1"
 "unit.field_gun@industrial" = "8abe0a1341acc935"
 "unit.fighter@modern" = "24fdc2ce88ff141b"
