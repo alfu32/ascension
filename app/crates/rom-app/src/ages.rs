@@ -99,8 +99,11 @@ pub fn dialog(rules: &Rules, ordinal: i64) -> Option<rom_render::HudAgeDialog> {
         subtitle = first.to_uppercase() + &subtitle[1..];
     }
     Some(rom_render::HudAgeDialog {
+        // Counted from one for the player: the Ancient age is age 1 of 14.
         heading: format!(
-            "AGE {ordinal} OF {last}  ·  {}",
+            "AGE {} OF {}  ·  {}",
+            ordinal + 1,
+            last + 1,
             era_name(age.era).to_uppercase()
         ),
         name: rules.def(age.id).name.clone(),
@@ -164,7 +167,7 @@ mod tests {
             assert!(
                 dialog
                     .heading
-                    .starts_with(&format!("AGE {} OF 13", age.ordinal))
+                    .starts_with(&format!("AGE {} OF 14", age.ordinal + 1))
             );
         }
         let first = dialog(&rules, 0).unwrap();
