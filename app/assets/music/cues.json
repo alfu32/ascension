@@ -1,0 +1,676 @@
+{
+ "abundance.interlude": {
+  "fragments": [
+   {
+    "end": 22.5,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 0.0
+   },
+   {
+    "end": 45.0,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 22.5
+   },
+   {
+    "end": 67.5,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 45.0
+   },
+   {
+    "end": 90.0,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 67.5
+   },
+   {
+    "end": 112.5,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 90.0
+   },
+   {
+    "end": 135.0,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 112.5
+   },
+   {
+    "end": 157.5,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 135.0
+   }
+  ]
+ },
+ "abundance.theme": {
+  "handover_at": 62.818,
+  "theme_at": 5.455
+ },
+ "ancient.interlude": {
+  "fragments": [
+   {
+    "end": 24.0,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 0.0
+   },
+   {
+    "end": 48.0,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 24.0
+   },
+   {
+    "end": 72.0,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 48.0
+   },
+   {
+    "end": 96.0,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 72.0
+   },
+   {
+    "end": 120.0,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 96.0
+   },
+   {
+    "end": 144.0,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 120.0
+   }
+  ]
+ },
+ "ancient.theme": {
+  "handover_at": 55.872,
+  "theme_at": 2.5
+ },
+ "automation.interlude": {
+  "fragments": [
+   {
+    "end": 20.87,
+    "fade_in": 0.3,
+    "fade_out": 2.5,
+    "start": 0.0
+   },
+   {
+    "end": 41.739,
+    "fade_in": 0.3,
+    "fade_out": 2.5,
+    "start": 20.87
+   },
+   {
+    "end": 62.609,
+    "fade_in": 0.3,
+    "fade_out": 2.5,
+    "start": 41.739
+   },
+   {
+    "end": 83.478,
+    "fade_in": 0.3,
+    "fade_out": 2.5,
+    "start": 62.609
+   },
+   {
+    "end": 104.348,
+    "fade_in": 0.3,
+    "fade_out": 2.5,
+    "start": 83.478
+   },
+   {
+    "end": 125.217,
+    "fade_in": 0.3,
+    "fade_out": 2.5,
+    "start": 104.348
+   },
+   {
+    "end": 146.087,
+    "fade_in": 0.3,
+    "fade_out": 2.5,
+    "start": 125.217
+   }
+  ]
+ },
+ "automation.theme": {
+  "handover_at": 43.929,
+  "theme_at": 4.286
+ },
+ "classical.interlude": {
+  "fragments": [
+   {
+    "end": 16.8,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 0.0
+   },
+   {
+    "end": 33.6,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 16.8
+   },
+   {
+    "end": 50.4,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 33.6
+   },
+   {
+    "end": 67.2,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 50.4
+   },
+   {
+    "end": 84.0,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 67.2
+   },
+   {
+    "end": 100.8,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 84.0
+   },
+   {
+    "end": 117.6,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 100.8
+   },
+   {
+    "end": 134.4,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 117.6
+   }
+  ]
+ },
+ "classical.theme": {
+  "handover_at": 48.511,
+  "theme_at": 0.0
+ },
+ "enlightenment.interlude": {
+  "fragments": [
+   {
+    "end": 19.565,
+    "fade_in": 0.5,
+    "fade_out": 2.5,
+    "start": 0.0
+   },
+   {
+    "end": 39.13,
+    "fade_in": 0.5,
+    "fade_out": 2.5,
+    "start": 19.565
+   },
+   {
+    "end": 58.696,
+    "fade_in": 0.5,
+    "fade_out": 2.5,
+    "start": 39.13
+   },
+   {
+    "end": 78.261,
+    "fade_in": 0.5,
+    "fade_out": 2.5,
+    "start": 58.696
+   },
+   {
+    "end": 97.826,
+    "fade_in": 0.5,
+    "fade_out": 2.5,
+    "start": 78.261
+   },
+   {
+    "end": 117.391,
+    "fade_in": 0.5,
+    "fade_out": 2.5,
+    "start": 97.826
+   },
+   {
+    "end": 136.957,
+    "fade_in": 0.5,
+    "fade_out": 2.5,
+    "start": 117.391
+   }
+  ]
+ },
+ "enlightenment.theme": {
+  "handover_at": 41.181,
+  "theme_at": 0.0
+ },
+ "expansion.interlude": {
+  "fragments": [
+   {
+    "end": 15.75,
+    "fade_in": 0.6,
+    "fade_out": 3.0,
+    "start": 0.0
+   },
+   {
+    "end": 33.75,
+    "fade_in": 0.6,
+    "fade_out": 3.0,
+    "start": 15.75
+   },
+   {
+    "end": 51.75,
+    "fade_in": 0.6,
+    "fade_out": 3.0,
+    "start": 33.75
+   },
+   {
+    "end": 67.5,
+    "fade_in": 0.6,
+    "fade_out": 3.0,
+    "start": 51.75
+   },
+   {
+    "end": 85.5,
+    "fade_in": 0.6,
+    "fade_out": 3.0,
+    "start": 67.5
+   },
+   {
+    "end": 103.5,
+    "fade_in": 0.6,
+    "fade_out": 3.0,
+    "start": 85.5
+   },
+   {
+    "end": 119.25,
+    "fade_in": 0.6,
+    "fade_out": 3.0,
+    "start": 103.5
+   },
+   {
+    "end": 137.25,
+    "fade_in": 0.6,
+    "fade_out": 3.0,
+    "start": 119.25
+   }
+  ]
+ },
+ "expansion.theme": {
+  "handover_at": 54.453,
+  "theme_at": 2.0
+ },
+ "fusion.interlude": {
+  "fragments": [
+   {
+    "end": 24.0,
+    "fade_in": 1.2,
+    "fade_out": 3.0,
+    "start": 0.0
+   },
+   {
+    "end": 48.0,
+    "fade_in": 1.2,
+    "fade_out": 3.0,
+    "start": 24.0
+   },
+   {
+    "end": 72.0,
+    "fade_in": 1.2,
+    "fade_out": 3.0,
+    "start": 48.0
+   },
+   {
+    "end": 96.0,
+    "fade_in": 1.2,
+    "fade_out": 3.0,
+    "start": 72.0
+   },
+   {
+    "end": 120.0,
+    "fade_in": 1.2,
+    "fade_out": 3.0,
+    "start": 96.0
+   },
+   {
+    "end": 144.0,
+    "fade_in": 1.2,
+    "fade_out": 3.0,
+    "start": 120.0
+   }
+  ]
+ },
+ "fusion.theme": {
+  "handover_at": 55.556,
+  "theme_at": 13.333
+ },
+ "galactic.interlude": {
+  "fragments": [
+   {
+    "end": 22.759,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 0.0
+   },
+   {
+    "end": 45.517,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 22.759
+   },
+   {
+    "end": 68.276,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 45.517
+   },
+   {
+    "end": 91.035,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 68.276
+   },
+   {
+    "end": 113.793,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 91.035
+   },
+   {
+    "end": 136.552,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 113.793
+   }
+  ]
+ },
+ "galactic.theme": {
+  "handover_at": 70.564,
+  "theme_at": 0.0
+ },
+ "gunpowder.interlude": {
+  "fragments": [
+   {
+    "end": 24.0,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 0.0
+   },
+   {
+    "end": 48.0,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 24.0
+   },
+   {
+    "end": 72.0,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 48.0
+   },
+   {
+    "end": 96.0,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 72.0
+   },
+   {
+    "end": 120.0,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 96.0
+   },
+   {
+    "end": 144.0,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 120.0
+   }
+  ]
+ },
+ "gunpowder.theme": {
+  "handover_at": 67.731,
+  "theme_at": 1.5
+ },
+ "industrial.interlude": {
+  "fragments": [
+   {
+    "end": 25.455,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 0.0
+   },
+   {
+    "end": 50.909,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 25.455
+   },
+   {
+    "end": 76.364,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 50.909
+   },
+   {
+    "end": 101.818,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 76.364
+   },
+   {
+    "end": 127.273,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 101.818
+   },
+   {
+    "end": 152.727,
+    "fade_in": 0.8,
+    "fade_out": 3.0,
+    "start": 127.273
+   }
+  ]
+ },
+ "industrial.theme": {
+  "handover_at": 38.715,
+  "theme_at": 5.362
+ },
+ "information.interlude": {
+  "fragments": [
+   {
+    "end": 16.0,
+    "fade_in": 0.5,
+    "fade_out": 2.5,
+    "start": 0.0
+   },
+   {
+    "end": 32.0,
+    "fade_in": 0.5,
+    "fade_out": 2.5,
+    "start": 16.0
+   },
+   {
+    "end": 48.0,
+    "fade_in": 0.5,
+    "fade_out": 2.5,
+    "start": 32.0
+   },
+   {
+    "end": 64.0,
+    "fade_in": 0.5,
+    "fade_out": 2.5,
+    "start": 48.0
+   },
+   {
+    "end": 80.0,
+    "fade_in": 0.5,
+    "fade_out": 2.5,
+    "start": 64.0
+   },
+   {
+    "end": 96.0,
+    "fade_in": 0.5,
+    "fade_out": 2.5,
+    "start": 80.0
+   },
+   {
+    "end": 112.0,
+    "fade_in": 0.5,
+    "fade_out": 2.5,
+    "start": 96.0
+   },
+   {
+    "end": 128.0,
+    "fade_in": 0.5,
+    "fade_out": 2.5,
+    "start": 112.0
+   }
+  ]
+ },
+ "information.theme": {
+  "handover_at": 37.059,
+  "theme_at": 3.529
+ },
+ "medieval.interlude": {
+  "fragments": [
+   {
+    "end": 21.818,
+    "fade_in": 0.6,
+    "fade_out": 3.5,
+    "start": 0.0
+   },
+   {
+    "end": 43.636,
+    "fade_in": 0.6,
+    "fade_out": 3.5,
+    "start": 21.818
+   },
+   {
+    "end": 65.455,
+    "fade_in": 0.6,
+    "fade_out": 3.5,
+    "start": 43.636
+   },
+   {
+    "end": 87.273,
+    "fade_in": 0.6,
+    "fade_out": 3.5,
+    "start": 65.455
+   },
+   {
+    "end": 109.091,
+    "fade_in": 0.6,
+    "fade_out": 3.5,
+    "start": 87.273
+   },
+   {
+    "end": 130.909,
+    "fade_in": 0.6,
+    "fade_out": 3.5,
+    "start": 109.091
+   }
+  ]
+ },
+ "medieval.theme": {
+  "handover_at": 45.2,
+  "theme_at": 0.75
+ },
+ "modern.interlude": {
+  "fragments": [
+   {
+    "end": 25.714,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 0.0
+   },
+   {
+    "end": 51.429,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 25.714
+   },
+   {
+    "end": 77.143,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 51.429
+   },
+   {
+    "end": 102.857,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 77.143
+   },
+   {
+    "end": 128.571,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 102.857
+   },
+   {
+    "end": 154.286,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 128.571
+   }
+  ]
+ },
+ "modern.theme": {
+  "handover_at": 37.925,
+  "theme_at": 0.0
+ },
+ "starfaring.interlude": {
+  "fragments": [
+   {
+    "end": 21.429,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 0.0
+   },
+   {
+    "end": 42.857,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 21.429
+   },
+   {
+    "end": 64.286,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 42.857
+   },
+   {
+    "end": 85.714,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 64.286
+   },
+   {
+    "end": 107.143,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 85.714
+   },
+   {
+    "end": 128.571,
+    "fade_in": 1.0,
+    "fade_out": 3.0,
+    "start": 107.143
+   }
+  ]
+ },
+ "starfaring.theme": {
+  "handover_at": 69.176,
+  "theme_at": 0.857
+ },
+ "title": {
+  "handover_at": 38.465,
+  "theme_at": 0.0
+ }
+}
