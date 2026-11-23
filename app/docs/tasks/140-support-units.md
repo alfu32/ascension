@@ -3,7 +3,8 @@
 Owner (chat, 2026-11-23), verbatim: "medics and supply wagons are considered civilian units and i cannot select them
 together with military units, lets change that." "supply wagons repair vehicles and medics heal
 people, priests heal personnel units and citizens too." "citizens can repair buildings at no
-cost." "supply wagons cancel attritional damage around them on a certain area."
+cost." "supply wagons cancel attritional damage around them on a certain area." "citizens shouldnt
+remain idle as long as constructions are unfinished."
 
 Crates: `rom-sim` (healing, repair, attrition), `rom-app` (selection rules), seed and schema
 (authorised here: say every column you add), `rom-ai` through data. Implementer: Claude (Opus).
@@ -22,8 +23,16 @@ Crates: `rom-sim` (healing, repair, attrition), `rom-app` (selection rules), see
    enemies.
 3. **Citizens repair buildings at no cost**: a damaged own building is repaired by citizens
    (the builder's repair order, `et_builder.repair_pct`) without spending resources; check what
-   repair costs today and make it free; idle citizens near a damaged building may repair it on
-   their own only if that is how builders already behave (do not add new automation).
+   repair costs today and make it free.
+3b. **Citizens do not stay idle while construction is unfinished** (owner, 2026-11-23: "citizens
+   shouldn't remain idle as long as constructions are unfinished (this way the player can place
+   multiple build orders and then let the citizen(s) take care of them)"): a builder that
+   finishes its site, or is idle, goes on to the nearest unfinished own construction site (then,
+   when none is left, to a damaged own building to repair, if that is cheap to add), within a
+   sensible radius of where it is (say it; e.g. its city's territory), until none are left; a
+   citizen the player has given a gather or other order keeps that order. Deterministic (nearest
+   by distance, ties by entity id). The idle-worker count and alert then only count truly idle
+   citizens.
 4. **Attrition relief**: an own supply unit cancels attritional damage (`rom-sim/src/attrition.rs`,
    damage taken in enemy territory) for own units within a radius (data: e.g. a new
    `et_supply_aura(radius)` row or a column on the supply type; 8 tiles to start). Allies too if
