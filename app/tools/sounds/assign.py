@@ -28,10 +28,10 @@ OVERRIDES = {
     "unit.robot_tank": {"crew": "machine"},
 }
 
-# Unit classes added after the sounds were first heard, by batch: they take their voices after
-# every other type and every earlier batch, so every earlier type keeps the voice (and the file)
-# the owner listened to.
-ADDED_LATER = {"rotorcraft": 1, "drone_operator": 1, "space_probe": 2}
+# Unit classes (ui group) or single types (key) added after the sounds were first heard, by batch:
+# they take their voices after every other type and every earlier batch, so every earlier type
+# keeps the voice (and the file) the owner listened to.
+ADDED_LATER = {"rotorcraft": 1, "drone_operator": 1, "space_probe": 2, "bld.nuclear_reactor": 3}
 HISTORY_LAST_MELEE_BLADE = 2   # sword before gunpowder, bayonet from age 3
 RADIO_FROM_AGE = 5             # crews talk over the radio from the industrial age
 FUTURE_FROM_AGE = 8            # near-future troopers, drones, energy weapons
@@ -580,7 +580,7 @@ def main():
         n = seen.get(pool, h(pool) % len(VOICES[pool]))
         seen[pool] = n + 1
         return VOICES[pool][n % len(VOICES[pool])]
-    for t in sorted(types.values(), key=lambda t: (ADDED_LATER.get(t["ui_group"], 0), t["age"], t["key"])):
+    for t in sorted(types.values(), key=lambda t: (ADDED_LATER.get(t["key"], ADDED_LATER.get(t["ui_group"], 0)), t["age"], t["key"])):
         if t["class"] == "unit":
             unit_sounds(t, plan, assign, next_voice(crew_of(t)))
         else:

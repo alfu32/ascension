@@ -35,7 +35,7 @@ The content is too large to type by hand row by row. It is **generated**:
 | 4 | Enlightenment | `age.enlightenment` | planetary |
 | 5 | Industrial | `age.industrial` | planetary |
 | 6 | Modern | `age.modern` | planetary |
-| 7 | Information | `age.information` | planetary |
+| 7 | Freedom (called Information until task 146) | `age.information` | planetary |
 | 8 | Automation | `age.automation` | planetary |
 | 9 | Fusion | `age.fusion` | interplanetary (home system seen, view only) |
 | 10 | Starfaring | `age.starfaring` | interplanetary |
@@ -89,7 +89,7 @@ Unified Theory.
 | Metal | 1 | Mine (slots from nearby mountains) | Citizen |
 | Knowledge | 1 | University (7 scholar slots, one per city) | Scholar |
 | Oil | 5 | Oil Well (on oil deposits) | Citizen |
-| Energy | 9 | Fusion Plant (no workers; fixed income) | — |
+| Energy | 8 | Nuclear Reactor (age 8), Fusion Plant (age 9); no workers, fixed income | — |
 
 Priests carry one relic at a time to the nearest completed own temple with room
 (up to five relics). Each kept relic produces 20 wealth per income period,
@@ -132,7 +132,8 @@ per-city limits). Page = command-palette page.
 | Smelter | economic | 2 | Science 2 | metal upgrades |
 | Oil Well | economic | 5 | — | oil site |
 | Refinery | economic | 5 | Science 5 | oil upgrades |
-| Fusion Plant | economic | 9 | Science 9 | energy (fixed income) |
+| Nuclear Reactor | economic | 8 | Science 8 | energy (fixed income, 35 a period); becomes the Fusion Plant when its owner reaches age 9 (task 146) |
+| Fusion Plant | economic | 9 | Science 9 | energy (fixed income, 40 a period) |
 | Barracks | military | 0 | Military 1 | foot units |
 | Tower | military | 1 | Military 1 | defends; attrition upgrades (classical since task 71: no siege answers it in the first age) |
 | Dock | military | 0 | Commerce 1, next to sea | ships |
@@ -160,6 +161,16 @@ Building upgrades along the ages (research at the building, `upgrade_type`):
 Tower → Bastion (4) → Bunker (6) → Defence Turret (8); Fort → Star Fort (4) →
 Fortress (6) → Citadel (9). The Stable keeps training its old line until a
 Vehicle Plant exists; the Vehicle Plant trains the armour line from age 5.
+
+Nuclear Reactor → Fusion Plant (task 146) needs no research at the building: the advance to
+the Fusion age carries the `upgrade_type` effect, so every reactor of the player, finished or
+being built, becomes a fusion plant when it reaches age 9 (keeping its hit-point percentage).
+From then on the reactor leaves the build menu (it is superseded) and fusion plants are built
+directly. The reactor costs 160 timber and 80 metal, takes 350 ticks, has 2,700 hit points and
+yields 35 energy a period, between the Oil Well (120 and 60, 275 ticks, 30 oil with three
+workers) and the Fusion Plant (200 and 100, 375 ticks, 3,420 hit points, 40 energy). Nothing
+spends energy in the Automation age: it is stored for the Fusion age (the Deep Space Tracking
+Station) and the starships, or sold at the market.
 
 ## 5. Units
 

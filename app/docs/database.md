@@ -218,7 +218,7 @@ continues to describe gameplay tiers.
 
 `age.view_range` is the largest ground half-width in milli-tiles while the
 camera is bound to the home planet: 60,000 in the first age, 320,000 in the
-Information Age, 450,000 in Automation, and zero from Fusion on. These are
+Freedom Age, 450,000 in Automation, and zero from Fusion on. These are
 the ground limits passed to the camera; task 41 supersedes the earlier
 separate whole-globe-only age.
 
@@ -1759,8 +1759,9 @@ knowledge, `300 + 50 × age` ticks (Orbital Survey 800 / 400 / 650, Deep Space S
   satellites, probes and the Orbital Survey. Their stats and `first_age_id` stay those of the
   starfaring age (it names the age of their look); the views draw a type its owner builds before
   the age of its first look with that look. The satellite now costs 150 metal and 100 oil
-  (energy comes in the fusion age). A ship bound to its orbit may be launched before the space
-  age (`World::may_launch`); every other launch still needs it.
+  (energy came in the fusion age then; since task 146 it comes in the automation age). A ship
+  bound to its orbit may be launched before the space age (`World::may_launch`); every other
+  launch still needs it.
 - **PART B, save format 18.** `player_contact(player_id, other_id)` and `capital_known(player_id,
   owner_id, level, city_id, pos_x, pos_y, pos_face, pos_body)`. Saves of formats 13 to 17 load
   without them: players meet again as they see each other, and research reveals at once. The
@@ -2089,6 +2090,44 @@ all `pierce`), so it is a column of its own:
   wasted); no speed needed changing. Screenshots: `img/102-archers.png`, `img/102-shells.png`
   (scripts `tasks/102-*-script.txt`).
 - `torpedo` is in the vocabulary and drawn, but no weapon uses it yet (there is no submarine).
+
+## A building that changes at an age advance (task 146)
+
+No schema change. The owner (2026-11-23): "we should have energy collecting building before the
+fusion age (lets make a nuclear reactor that will become a fusion reactor in the age before
+fusion)". `bld.nuclear_reactor` (Nuclear Reactor) is built from the automation age (`age.automation`
+and `tech.science.8`), one per city, on the fusion plant's 4 × 4 footprint and plain ground, and
+yields energy without workers (`et_gather_site.self_income` 35; the fusion plant's is 40).
+`res.energy.first_age_id` is now `age.automation` (it was `age.fusion`), so energy shows from
+that age on.
+
+- **The change is an effect of the age technology.** `tech.age.fusion` carries a second
+  `tech_effect` row besides its `set_age`: `upgrade_type` from `bld.nuclear_reactor` to
+  `bld.fusion_plant`. Completing any research applies its `upgrade_type` rows to every entity of
+  the researching player of the `from` type (`World::complete_research`), so the age advance
+  changes each reactor, finished or under construction, into a fusion plant in place, keeping its
+  hit-point percentage, as the research at a gather site does for the automated sites. No code
+  knows the keys.
+- **Its line.** `bld.fusion_plant.upgrades_from_id` is the reactor: the plant is the next step
+  of the reactor's line (the computer players' catalogue and the colony caps read lines, never
+  keys).
+- **Superseded at Fusion.** The reactor has no worker slots, so the researched `upgrade_type`
+  takes it out of the build menu (`Rules::is_superseded_building`); fusion plants are built
+  directly from then on. A player who starts in the fusion age or later never sees it.
+- **Look.** `bld.nuclear_reactor@automation` (white composite: a containment building under a
+  team-coloured dome, a hyperbolic cooling tower with a team crown, a vaulted turbine hall and a
+  switchyard); from the fusion age the entity is a fusion plant and wears its look. Its sounds are
+  its own (`tools/sounds`, appended after every other type).
+
+The rules fingerprint changes with the new rows. `generate.py` writes the reactor after every
+other definition (`nuclear_reactor`), so every earlier id stays.
+
+## The Freedom age (task 146)
+
+The owner (2026-11-23): "the information age should be called the freedom age". Only names
+change: `def.name` of `age.information` is "Freedom Age" and of `tech.age.information` "Advance
+to Freedom" (the generator's `AGE_NAMES`); the key `age.information`, the model ids
+`…@information` and the music files `information.*` keep their names.
 
 ## Placement and resource discovery (task 41)
 

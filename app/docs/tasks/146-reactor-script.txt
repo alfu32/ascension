@@ -1,0 +1,23 @@
+# Task 146: the nuclear reactor of the Automation age becomes the fusion plant at the Fusion
+# age (universe mode, seed 1, --sun fixed, 1280 x 800, --players 2 --ai none). Player one starts
+# in the Automation age with its research done (every level-9 track included) and a reactor
+# beside its capital, selected: img/146-reactor.png (--after 4) shows it and the energy it
+# yields. The library then researches the advance to the Fusion age at ten times the speed;
+# when it completes, the reactor becomes a fusion plant where it stood and the new-age dialog
+# opens over it: img/146-fusion-age-dialog.png (--after 12), the selection now a Fusion Plant
+# yielding 40 energy (no script line closes the dialog). Run with
+#   --universe --seed 1 --players 2 --ai none --sun fixed --size 1280x800
+#   --script docs/tasks/146-reactor-script.txt --screenshot <file> --after <seconds>
+0 grant-age age.automation
+0 research-all 1
+0 grant res.food 50000
+0 grant res.knowledge 50000
+0 place 1 bld.library @9,0
+0 place 1 bld.nuclear_reactor @-9,2
+1 speed 100
+2 click gather1
+60 researchers
+61 hud tab 3
+62 hud slot 10
+63 click gather1
+64 speed 1000

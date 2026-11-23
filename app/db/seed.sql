@@ -138,7 +138,7 @@ INSERT INTO def(kind,key,name,sort) VALUES
  ('age','age.ancient','Ancient Age',0), ('age','age.classical','Classical Age',1),
  ('age','age.medieval','Medieval Age',2), ('age','age.gunpowder','Gunpowder Age',3),
  ('age','age.enlightenment','Enlightenment Age',4), ('age','age.industrial','Industrial Age',5),
- ('age','age.modern','Modern Age',6), ('age','age.information','Information Age',7),
+ ('age','age.modern','Modern Age',6), ('age','age.information','Freedom Age',7),
  ('age','age.automation','Automation Age',8), ('age','age.fusion','Fusion Age',9),
  ('age','age.starfaring','Starfaring Age',10), ('age','age.expansion','Age of Expansion',11),
  ('age','age.abundance','Age of Abundance',12), ('age','age.galactic','Galactic Empires',13);
@@ -167,7 +167,7 @@ INSERT INTO def(id,kind,key,name)
 WITH v(k,kind,ab,cap,tr,age) AS (VALUES
   ('res.food','base','F',1,1,NULL), ('res.timber','base','T',1,1,NULL), ('res.metal','base','M',1,1,'age.classical'),
   ('res.wealth','base','W',1,0,NULL), ('res.knowledge','base','K',0,0,'age.classical'), ('res.oil','base','O',1,1,'age.industrial'),
-  ('res.energy','base','E',1,1,'age.fusion'), ('rare.horses','rare','Ho',0,0,NULL)
+  ('res.energy','base','E',1,1,'age.automation'), ('rare.horses','rare','Ho',0,0,NULL)
  )
 INSERT INTO resource(id,kind,abbrev,rate_capped,tradeable,first_age_id)
  SELECT d.id, v.kind, v.ab, v.cap, v.tr, (SELECT id FROM def WHERE key=v.age) FROM v JOIN def d ON d.key=v.k;
@@ -2702,7 +2702,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.age.modern'),(SELECT id FROM def WHERE key='res.food'),1500,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.age.modern'),(SELECT id FROM def WHERE key='res.knowledge'),1500,0);
 INSERT INTO tech_effect(tech_id,effect,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.modern'),'set_age',(SELECT id FROM def WHERE key='age.modern'));
-INSERT INTO def(kind,key,name) VALUES ('tech','tech.age.information','Advance to Information');
+INSERT INTO def(kind,key,name) VALUES ('tech','tech.age.information','Advance to Freedom');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.age.information'),'age','',7,1800);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.age.information'),(SELECT id FROM def WHERE key='res.food'),1750,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.age.information'),(SELECT id FROM def WHERE key='res.knowledge'),1750,0);
@@ -3423,6 +3423,21 @@ INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHE
 INSERT INTO tech_effect(tech_id,effect,rule_key) VALUES ((SELECT id FROM def WHERE key='tech.total_network'),'enable_rule','all_capitals');
 INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.satellite'),20,(SELECT id FROM damage_class WHERE key='kinetic'),80000,20,'railgun');
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.satellite')),'orbit');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','bld.nuclear_reactor','Nuclear Reactor');
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.nuclear_reactor'),'building','economic',2700,3,(SELECT id FROM armor_class WHERE key='structure'),17000,4,4,350,'per_type','per_city',1,(SELECT id FROM def WHERE key='age.automation'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.nuclear_reactor'),(SELECT id FROM tag WHERE key='building'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.nuclear_reactor'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.nuclear_reactor'),(SELECT id FROM tag WHERE key='gather'));
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.nuclear_reactor'),(SELECT id FROM def WHERE key='res.timber'),160,3);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.nuclear_reactor'),(SELECT id FROM def WHERE key='res.metal'),80,1);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='bld.nuclear_reactor'),'construct','economic_2',0,1);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.nuclear_reactor'),'construct','economic_2',0,1);
+INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.nuclear_reactor'),'in_city_radius');
+INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.nuclear_reactor'),'in_own_territory');
+INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.nuclear_reactor'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
+INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_max,slots_per_node,node_radius,needs_node_terrain_id,self_income) VALUES ((SELECT id FROM def WHERE key='bld.nuclear_reactor'),(SELECT id FROM def WHERE key='res.energy'),0,0,0,0,NULL,35);
+UPDATE entity_type SET upgrades_from_id=(SELECT id FROM def WHERE key='bld.nuclear_reactor') WHERE id=(SELECT id FROM def WHERE key='bld.fusion_plant');
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.fusion'),'upgrade_type',(SELECT id FROM def WHERE key='bld.nuclear_reactor'),(SELECT id FROM def WHERE key='bld.fusion_plant'));
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.1'),'research','research',1,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.civic.1'),'research','research',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.commerce.1'),'research','research',3,0);
@@ -4277,6 +4292,8 @@ INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FR
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.long_range_imaging'),(SELECT id FROM def WHERE key='age.expansion'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.long_range_imaging'),(SELECT id FROM def WHERE key='tech.deep_space_survey'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.total_network'),(SELECT id FROM def WHERE key='age.galactic'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.nuclear_reactor'),(SELECT id FROM def WHERE key='age.automation'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.nuclear_reactor'),(SELECT id FROM def WHERE key='tech.science.8'),1);
 INSERT INTO constellation(id,abbr,name,genitive) VALUES (1,'And','Andromeda','Andromedae');
 INSERT INTO constellation(id,abbr,name,genitive) VALUES (2,'Ant','Antlia','Antliae');
 INSERT INTO constellation(id,abbr,name,genitive) VALUES (3,'Aps','Apus','Apodis');
@@ -5705,6 +5722,9 @@ WITH v(k,e,s,f,g) AS (VALUES
  ('bld.mine','build_done',0,'bld.mine.build_done',100),
  ('bld.mine','research_done',0,'bld.mine.research_done',100),
  ('bld.mine','select',0,'bld.mine.select',100),
+ ('bld.nuclear_reactor','active',0,'bld.nuclear_reactor.active',100),
+ ('bld.nuclear_reactor','build_done',0,'bld.nuclear_reactor.build_done',100),
+ ('bld.nuclear_reactor','select',0,'bld.nuclear_reactor.select',100),
  ('bld.oil_well','active',0,'bld.oil_well.active',100),
  ('bld.oil_well','build_done',0,'bld.oil_well.build_done',100),
  ('bld.oil_well','research_done',0,'bld.oil_well.research_done',100),

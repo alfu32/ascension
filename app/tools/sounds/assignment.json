@@ -417,6 +417,17 @@
    "bld.mine.select"
   ]
  },
+ "bld.nuclear_reactor": {
+  "active": [
+   "bld.nuclear_reactor.active"
+  ],
+  "build_done": [
+   "bld.nuclear_reactor.build_done"
+  ],
+  "select": [
+   "bld.nuclear_reactor.select"
+  ]
+ },
  "bld.oil_well": {
   "active": [
    "bld.oil_well.active"

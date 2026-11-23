@@ -1,7 +1,7 @@
--- bld.city@information: Information city (mesh.city_information)
+-- bld.city@information: Freedom city (mesh.city_information)
 -- One composed model; loaded after seed.sql by `rom build-rules` and the game.
 -- Edit here or in Meshcraft: docs/models-in-meshcraft.md.
-INSERT INTO def(kind,key,name) VALUES ('mesh','mesh.city_information','Information city');
+INSERT INTO def(kind,key,name) VALUES ('mesh','mesh.city_information','Freedom city');
 INSERT INTO mesh(id,generator,params,baked) SELECT id,'composed','{}',1 FROM def WHERE key='mesh.city_information';
 WITH v(name,shape,mat,team,attach,params) AS (VALUES
   ('yard','plinth','mat.concrete',0,'','{"w":6.4,"d":6.4,"h":0.05,"steps":1,"tint":"#c0bcb2"}'),

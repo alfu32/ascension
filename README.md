@@ -85,9 +85,9 @@ merchant fleets earn wealth on trade routes, at home and, later, between star sy
 | 4 | Enlightenment | line infantry, universities |
 | 5 | Industrial | oil, factories, medics, the first aircraft |
 | 6 | Modern | tanks, carriers, missiles |
-| 7 | Information | drones in the air, at sea and on the ground |
-| 8 | Automation | robot workers and soldiers; nations merge into continental blocs |
-| 9 | Fusion | energy; craft that fly, dive and reach near orbit |
+| 7 | Freedom | drones in the air, at sea and on the ground |
+| 8 | Automation | robot workers and soldiers; nuclear power; nations merge into continental blocs |
+| 9 | Fusion | fusion power; craft that fly, dive and reach near orbit |
 | 10 | Starfaring | the spaceport and the space drive: the second age of discovery; the blocs unite as humanity |
 | 11 | Expansion | colonies on other worlds, trade between systems, fleets |
 | 12 | Abundance | everything costs nothing; building still takes time |

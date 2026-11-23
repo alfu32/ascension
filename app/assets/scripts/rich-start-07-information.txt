@@ -1,5 +1,5 @@
-# Rich start: Information Age
-# Start in the Information Age with its research done and plenty of every resource.
+# Rich start: Freedom Age
+# Start in the Freedom Age with its research done and plenty of every resource.
 # Bundled with the launcher (task 112), from docs/tasks/rich-start-07-information-script.txt.
 # Only you get the research and the resources.
 0 grant-age age.information

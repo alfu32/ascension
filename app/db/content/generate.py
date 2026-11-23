@@ -12,6 +12,16 @@ SEED = Path(__file__).resolve().parents[1] / 'seed.sql'
 BEGIN = '-- BEGIN GENERATED CONTENT'
 END = '-- END GENERATED CONTENT'
 AGES = 'ancient classical medieval gunpowder enlightenment industrial modern information automation fusion starfaring expansion abundance galactic'.split()
+# Ages whose name is not their key (task 146, owner 2026-11-23: "the information age should be
+# called the freedom age"); the key stays.
+AGE_NAMES = {'information': 'Freedom'}
+
+
+def age_name(age):
+    """Display name of age `age` (an index into AGES)."""
+    return AGE_NAMES.get(AGES[age], AGES[age].title())
+
+
 TRACKS = {
     'military': 'Militia|Drill|Standing Army|Conscription|Professional Army|Combined Arms|Mechanised Warfare|Network Warfare|Autonomous Command|Orbital Doctrine|Fleet Doctrine|Grand Strategy|Total Defence',
     'civic': 'Chiefdom|City State|Kingdom|Charter|Constitution|Nation State|Federation|Information Society|Planned Society|Continental Union|Interplanetary Law|Commonwealth|Galactic Charter',
@@ -629,7 +639,7 @@ def generate():
             prices['knowledge'] = 250 * age
         if age >= 12:
             prices = {}
-        tech(key, 'Advance to ' + AGES[age].title(), age - 1, 'library', 600 + 200 * (age - 1), prices, 'age', level=age)
+        tech(key, 'Advance to ' + age_name(age), age - 1, 'library', 600 + 200 * (age - 1), prices, 'age', level=age)
         # An age advance needs all four track levels of its row, one prerequisite group each.
         for group, track in enumerate(TRACKS, 1):
             need(key, f'tech.{track}.{age}', group)
@@ -697,6 +707,7 @@ def generate():
     drone_operator(definition, row, tag, need, produce, cost, weapon)
     capital_reveal(definition, row, tag, need, produce, cost, tech)
     armed_satellites(weapon)
+    nuclear_reactor(definition, row, tag, need, produce, cost, sql.append)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -815,8 +826,9 @@ def orbit_units(definition, row, tag, need, produce, cost):
         build_ticks=300, ramp_mode='per_type', first_age_id=Ref('age.starfaring'))
     tag(full, 'mechanical', 'orbit_bound')
     row('et_movement', entity_type_id=Ref(full), movement_class_id=Ref('starship', 'movement_class'), speed=1500)
-    # Task 130: launched from the information age on, so it is paid in oil (energy comes in the
-    # fusion age); its stats and look stay those of the starfaring age.
+    # Task 130: launched from the information age on, so it is paid in oil (energy came in the
+    # fusion age then, in the automation age since task 146); its stats and look stay those of
+    # the starfaring age.
     need(full, 'age.' + SATELLITE_AGE)
     produce('bld.spaceport', full, 'train', 'units')
     cost(full, SATELLITE_PRICES, True)
@@ -1422,6 +1434,47 @@ def armed_satellites(weapon):
     definition so earlier weapon ids stay."""
     w = SATELLITE_WEAPON
     weapon('unit.satellite', w['damage'], w['damage_class'], w['reach'] * 1000, ['orbit'], w['reload'])
+
+
+# Task 146 (owner, 2026-11-23): "we should have energy collecting building before the fusion age
+# (lets make a nuclear reactor that will become a fusion reactor in the age before fusion)". The
+# reactor is built from the automation age, without workers, and the advance to the fusion age
+# turns every reactor of its owner into the fusion plant (an `upgrade_type` effect of the age
+# technology, `docs/database.md`). Its price, time and output lie between the oil well's (120
+# timber and 60 metal, 275 ticks, 30 oil a period with three workers) and the fusion plant's (200
+# and 100, 375 ticks, 40 energy); one per city, on the fusion plant's footprint, so the plant
+# it becomes stands where it stood.
+REACTOR = dict(age='automation', track='science.8', hp=2700, size=4, build_ticks=350,
+               prices={'timber': 160, 'metal': 80}, energy=35, becomes='bld.fusion_plant')
+
+
+def nuclear_reactor(definition, row, tag, need, produce, cost, emit):
+    """Task 146: the nuclear reactor and its change into the fusion plant. Written after every
+    other definition so earlier ids stay."""
+    r = REACTOR
+    full, age, size = 'bld.nuclear_reactor', AGES.index(r['age']), r['size']
+    definition('entity_type', full, 'Nuclear Reactor')
+    row('entity_type', id=Ref(full), **{'class': 'building'}, ui_group='economic', hp=r['hp'], armor=3,
+        armor_class_id=Ref('structure', 'armor_class'), los=building_sight(age, size), footprint_w=size,
+        footprint_h=size, build_ticks=r['build_ticks'], ramp_mode='per_type', limit_scope='per_city',
+        limit_count=1, first_age_id=Ref('age.' + AGES[age]))
+    tag(full, 'building', 'mechanical', 'gather')
+    need(full, 'age.' + AGES[age])
+    need(full, 'tech.' + r['track'], 1)
+    cost(full, r['prices'], True)
+    for builder in ('citizen', 'worker_drone'):
+        produce('unit.' + builder, full, 'construct', 'economic')
+    for rule in ('in_city_radius', 'in_own_territory'):
+        row('placement_rule', entity_type_id=Ref(full), rule=rule)
+    row('placement_rule', entity_type_id=Ref(full), rule='on_terrain', ref_def_id=Ref('ter.plain'))
+    row('et_gather_site', entity_type_id=Ref(full), resource_id=Ref('res.energy'), slots_base=0, slots_max=0,
+        slots_per_node=0, node_radius=0, needs_node_terrain_id=None, self_income=r['energy'])
+    # The fusion plant is the next step of the reactor's line; the advance to the fusion age
+    # changes the reactors already standing (and those being built) into it.
+    emit(f"UPDATE entity_type SET upgrades_from_id={val(Ref(full))} WHERE id={val(Ref(r['becomes']))};")
+    following = 'tech.age.' + AGES[age + 1]
+    row('tech_effect', tech_id=Ref(following), effect='upgrade_type', from_def_id=Ref(full),
+        target_def_id=Ref(r['becomes']))
 
 
 # Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"

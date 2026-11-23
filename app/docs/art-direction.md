@@ -50,6 +50,7 @@ Each building has one **signature element** that names its job at a glance:
 | Stable | long low barn with a fenced paddock |
 | Mine | headframe over a shaft, spoil heap |
 | Smelter / factory | chimneys (smoke later) |
+| Nuclear reactor | a hyperbolic cooling tower beside a domed containment building |
 | Automated colony | a glass-domed hub under a tall relay mast ringed with light, a drone on its pad |
 
 Units: silhouette by role — spear (long vertical line), bow (curve), shield
@@ -219,6 +220,15 @@ a pale streak that fades. Each leaves a small effect where it lands: dust for ar
 stones, sparks for bullets and rail shots, a flash and smoke for shells, rockets, missiles and
 torpedoes, a glow for beams and plasma. Streaks, beams and glows are drawn with additive
 blending.
+
+Task 146 adds the **nuclear reactor** of the automation age (`bld.nuclear_reactor@automation`,
+4 × 4, the fusion plant's footprint) with no new shape or material: on white paving, a
+containment building of white composite under a team-coloured dome, with a team band, a dark glass band, a cyan light strip
+at its foot, a crane rail round the dome and a light at its top; a hyperbolic cooling tower, the
+tallest part (2.55 tiles), its flared crown in team colour, a lit rim round its mouth; a vaulted
+turbine hall with a team fascia and a glass band, a solar strip on the vault; a steam line and a
+duct to the hall, two transformers and a pylon, and a banner. From the fusion age the building is
+a fusion plant and wears that look.
 
 ## Budgets
 

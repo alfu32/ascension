@@ -1371,3 +1371,56 @@ fn loads_the_market_and_rejects_a_tradeable_currency() {
         "{problems:?}"
     );
 }
+
+/// Task 146: the nuclear reactor brings energy from the automation age and becomes the fusion
+/// plant through the advance to the fusion age; the information age is shown as Freedom.
+#[test]
+fn the_reactor_becomes_the_fusion_plant_at_the_fusion_age() {
+    let rules = seed();
+    assert!(rules.validate().is_empty());
+    let id = |key: &str| rules.id_of(key).unwrap();
+    let (reactor, plant) = (id("bld.nuclear_reactor"), id("bld.fusion_plant"));
+    let energy = id("res.energy");
+    assert_eq!(
+        rules.resources[&energy].first_age_id,
+        Some(id("age.automation"))
+    );
+    let site = |def| rules.entity_types[&def].gather_site.as_ref().unwrap();
+    assert_eq!(site(reactor).resource_id, energy);
+    assert!(site(reactor).slots_max == 0 && site(reactor).self_income > 0);
+    assert!(site(reactor).self_income < site(plant).self_income);
+    assert_eq!(
+        rules.entity_types[&reactor].footprint_w,
+        rules.entity_types[&plant].footprint_w
+    );
+    assert_eq!(rules.entity_types[&plant].upgrades_from_id, Some(reactor));
+    // Buildable in the automation age with its science level, not before.
+    let owned = Owned::new();
+    let automation = sources(&rules, &["age.automation", "tech.science.8"]);
+    assert!(rules.is_unlocked(reactor, &automation, &owned));
+    assert!(!rules.is_unlocked(reactor, &sources(&rules, &["age.information"]), &owned));
+    assert!(!rules.is_superseded_building(reactor, &automation));
+    // The advance to the fusion age changes it into the fusion plant and takes it off the menu.
+    let advance = id("tech.age.fusion");
+    assert!(rules.tech_effects[&advance].iter().any(|e| {
+        e.effect == rom_rules::TechEffectKind::UpgradeType
+            && e.from_def_id == Some(reactor)
+            && e.target_def_id == Some(plant)
+    }));
+    let fusion = sources(
+        &rules,
+        &[
+            "age.fusion",
+            "tech.age.fusion",
+            "tech.science.8",
+            "tech.science.9",
+        ],
+    );
+    assert!(rules.is_superseded_building(reactor, &fusion));
+    assert!(rules.is_unlocked(plant, &fusion, &owned));
+    assert_eq!(rules.def(id("age.information")).name, "Freedom Age");
+    assert_eq!(
+        rules.def(id("tech.age.information")).name,
+        "Advance to Freedom"
+    );
+}
