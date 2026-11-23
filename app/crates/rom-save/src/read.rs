@@ -1170,6 +1170,43 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
     } else {
         Vec::new()
     };
+    // First contacts and known capitals (task 130, format 18); earlier saves have none.
+    let (contacts, capitals_known) = if format >= 18 {
+        (
+            query_vec(
+                conn,
+                "SELECT player_id, other_id FROM player_contact ORDER BY player_id, other_id",
+                |r| {
+                    Ok((
+                        PlayerId(uint(r, 0, "contact player")?),
+                        PlayerId(uint(r, 1, "contact other")?),
+                    ))
+                },
+            )?,
+            query_vec(
+                conn,
+                "SELECT player_id, owner_id, level, city_id, pos_x, pos_y, pos_face, pos_body \
+                 FROM capital_known ORDER BY player_id, owner_id",
+                |r| {
+                    let level = uint::<u8>(r, 2, "capital level")?;
+                    Ok((
+                        (
+                            PlayerId(uint(r, 0, "capital viewer")?),
+                            PlayerId(uint(r, 1, "capital owner")?),
+                        ),
+                        rom_sim::CapitalMemory {
+                            level: rom_sim::CapitalLevel::from_number(level)
+                                .ok_or_else(|| bad("capital level"))?,
+                            city: EntityId(uint(r, 3, "capital city")?),
+                            pos: pos_at(r, 4)?,
+                        },
+                    ))
+                },
+            )?,
+        )
+    } else {
+        (Vec::new(), Vec::new())
+    };
     // Shots at a drone of a grid (task 128, format 17).
     let drone_column = if format >= 17 { "drone" } else { "NULL" };
     Ok(Snapshot {
@@ -1272,6 +1309,8 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
         flight,
         clouds,
         history,
+        contacts,
+        capitals_known,
         market: query_vec(
             conn,
             "SELECT player_id, resource_id, pressure FROM market_pressure ORDER BY player_id, resource_id",

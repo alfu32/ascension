@@ -968,3 +968,35 @@ fn drone_operators_with_their_clouds() {
         order(w, other, "move", None, Some(at(HOME, 24_500, 40_500)));
     });
 }
+
+/// Task 130: first contacts, a capital known by research and the surveyed planet's buildings save
+/// and load with them, and both worlds carry on alike (player two loses its capital after the
+/// load, which the network learns at once).
+#[test]
+fn contacts_and_known_capitals() {
+    let rules = rules();
+    let mut w = universe(&rules);
+    let far_side = Pos {
+        face: 3,
+        ..at(HOME, 30_500, 30_500)
+    };
+    let capital = w.place_for_setup(id(&w, "bld.city"), P2, far_side).unwrap();
+    // Player two's citizen in sight of player one's city: player one meets player two.
+    w.spawn(id(&w, "unit.citizen"), P2, at(HOME, 30_500, 26_500))
+        .unwrap();
+    ticks(&mut w, 3);
+    assert!(w.has_met(P1, P2));
+    // Both players hold every technology, Total Network and the survey among them.
+    let known = w.known_capitals(P1);
+    assert!(
+        known
+            .iter()
+            .any(|c| c.owner == P2 && c.level == rom_sim::CapitalLevel::City),
+        "{known:?}"
+    );
+    assert!(w.surveys(P1, HOME));
+    assert!(w.remembered_buildings(P1).any(|b| b.id == capital));
+    check("capitals", &rules, w, 200, move |w| {
+        w.despawn(capital).unwrap();
+    });
+}

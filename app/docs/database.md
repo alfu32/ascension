@@ -904,6 +904,7 @@ reads a key. Rules of thumb, in tiles:
 | space_cruiser | 25 |
 | survey_ship | 27 |
 | battleship, carrier | 28 |
+| space_probe (task 130) | 40 |
 | satellite | 96 |
 
 | Building | Sight | Footprint | Weapon range | First age |
@@ -1008,8 +1009,8 @@ Screenshots (scripts `tasks/68-*-script.txt`): `img/sight-tower-firing.png`,
   between the two planets in the system plane. It runs the route as legs queued in
   front of the `trade` order (lift off, fly into orbit above the next city, land beside
   it, deliver within 14 tiles of it).
-- **Satellite** (`unit.satellite`, spaceport, starfaring): launched into orbit above
-  its spaceport, no weapon, 150 HP, sight 96 tiles. The new tag `orbit_bound` keeps it
+- **Satellite** (`unit.satellite`, spaceport, starfaring; information since task 130):
+  launched into orbit above its spaceport, no weapon, 150 HP, sight 96 tiles. The new tag `orbit_bound` keeps it
   there: only `stop`, `stance`, `disband`, `launch`, `attack` and moves within the
   orbit are accepted (`SimError::BoundToOrbit`); it cannot land (only carriers and
   route traders that fly can).
@@ -1707,6 +1708,69 @@ change; both lint views stay empty and the seed loads.
   arms, four turning rotors, a small charge) 0.3 tiles across (the card's 0.18 read as specks) in every slot, bobbing gently,
   instanced with the projectile models (`ProjectileInstance::team` and `phase`). The gallery and
   the model sheet draw an operator with its full grid from its type's `et_drone_cloud` row.
+
+## Capitals revealed by research (task 130)
+
+Owner (2026-11-23): every player's own capital is always known; an adversary's capital city,
+planet and star system are revealed gradually by research, from the information age to the last.
+Everything is data: four new `tech_effect` rows of `effect = 'enable_rule'` and one added to
+Unification, no new effect kind and no code that reads a technology's key.
+
+| Age | Research (producer) | `rule_key` | Reveals |
+| --- | --- | --- | --- |
+| any | — | — | own and allied capitals in full, always |
+| information | Orbital Survey (spaceport; needs a satellite owned) | `planet_survey` | every building on the player's home planet, kept current as if seen; units stay in the fog. Shared with the team, as sight is |
+| starfaring | Unification (library, exists) | `capital_system` | the capital **system** of every player met |
+| starfaring | Deep Space Survey (spaceport; after Orbital Survey) | `capital_planet` | the **planet**, where the system is known |
+| expansion | Long-range Imaging (spaceport; after Deep Space Survey) | `capital_city` | the **city**, where the planet is known |
+| galactic | Total Network (Deep Space Tracking Station, the jump detector of task 118) | `all_capitals` | every capital at city level, met or not |
+
+Costs and times follow the other spaceport research: `100 × (age + 1)` wealth, `50 × (age + 1)`
+knowledge, `300 + 50 × age` ticks (Orbital Survey 800 / 400 / 650, Deep Space Survey 1 100 / 550
+/ 800, Long-range Imaging 1 200 / 600 / 850, Total Network 1 400 / 700 / 950).
+
+- **First contact.** A player has met another once it, or a member of its team, has seen a unit or
+  building of the other (`World::has_met`, `World::contacts`), or knows one of its buildings by a
+  survey. It is one way: a capital is revealed to the player who saw, not to the one seen (a
+  scout watched from a city has not met the city's owner). Contacts are kept for good; allies
+  have always met. Checked at the end of every tick.
+- **Survey.** `World::surveys(player, body)`: a member of the player's team holds
+  `planet_survey` and has `body` as its home planet. On such a surface every foreign building
+  (sites and capitals too) is in the player's memory of buildings (`remembered_buildings`,
+  `visible_entities` as `Remembered`), refreshed whenever a building there is placed, changes
+  owner or type, or goes, exactly as for a tile in sight; the surface's buildings are all
+  remembered the tick the survey starts. Units are never shown by it.
+- **Capital knowledge.** `World::known_capitals(viewer) -> Vec<KnownCapital>` by owner: level
+  (`System` < `Planet` < `City`, each implying the coarser), system, body (from planet level),
+  city id and position (city level only; `None` above), and whether the viewer sees the city
+  now. Own and allied capitals are always at city level. An enemy capital: the level research
+  gives (above; Unification needs a contact), raised to city level by sight (the city in view
+  now, or remembered, which includes a survey). **Research keeps what it reveals current at
+  once** (a capital destroyed is dropped, a replaced capital is followed); what sight alone
+  showed stays where it was last known until the viewer sees that place again without it. A
+  capital taken by another team keeps its place and its owner's capital it remains
+  (`World::capital`).
+- **The space probe** (`unit.space_probe`, spaceport, information age): 80 hit points, unarmed,
+  sight 40 tiles, 8 tiles a second, 80 metal and 40 oil, bound to its planet's orbit (tag
+  `orbit_bound`) like the satellite. Patrolled round the planet it sweeps a band 80 tiles wide.
+- **Spaceport in the information age.** `bld.spaceport` and `unit.satellite` need the
+  information age (their `prerequisite` rows); every other ship and research of the spaceport
+  keeps its starfaring or later prerequisite, so from information to fusion it offers only
+  satellites, probes and the Orbital Survey. Their stats and `first_age_id` stay those of the
+  starfaring age (it names the age of their look); the views draw a type its owner builds before
+  the age of its first look with that look. The satellite now costs 150 metal and 100 oil
+  (energy comes in the fusion age). A ship bound to its orbit may be launched before the space
+  age (`World::may_launch`); every other launch still needs it.
+- **PART B, save format 18.** `player_contact(player_id, other_id)` and `capital_known(player_id,
+  owner_id, level, city_id, pos_x, pos_y, pos_face, pos_body)`. Saves of formats 13 to 17 load
+  without them: players meet again as they see each other, and research reveals at once. The
+  surveys are derived from the research and are not saved.
+- **State hash.** Contacts and known capitals are hashed only once there are any, so worlds
+  where nobody has met anybody keep their hashes.
+- **Computer players** research the new technologies through the existing research manager
+  (side research by worth) and build the spaceport and the tracking station as other buildings;
+  they do not train probes. Their attack targeting already values a capital it remembers; a
+  capital known only by research is not yet an attack goal (docs/computer-player.md).
 
 ## Bringing life (task 77)
 

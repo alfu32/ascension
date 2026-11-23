@@ -45,6 +45,10 @@ BUILDINGS = [
     ('airfield', 'Airfield', 'military', 5, 'military.6', 1800, 200, 6, 0),
     ('spaceport', 'Spaceport', 'military', 10, '', 2500, 300, 8, 0),
 ]
+# Task 130 (owner, 2026-11-23): buildings that may be built before the age their stats and look
+# are of. The spaceport opens in the information age with satellites and space probes only; its
+# other ships keep their own starfaring prerequisite.
+BUILDABLE_FROM = {'spaceport': 'information'}
 # line, producer (switch at age 5), steps key:name:age
 LINES = [
     ('infantry', 'barracks', 'spearman:Spearmen:0|hoplite:Hoplites:1|pikeman:Pikemen:2|musketeer:Musketeers:3|fusilier:Fusiliers:4|rifleman:Riflemen:5|infantry:Infantry:6|assault_infantry:Assault Infantry:7|combat_robot:Combat Robots:8|exo_trooper:Exo-Troopers:9|marine:Marines:10|shock_marine:Shock Marines:12'),
@@ -194,6 +198,9 @@ RESEARCH = [
 ORBIT_ALTITUDE = 8      # tiles above the ground at which ships hold orbit (as drawn)
 ARMED_SIGHT_PCT = 150   # an armed building sees this share of its weapon's maximum range
 SATELLITE_SIGHT = 96
+# Task 130: the satellite comes with the spaceport in the information age.
+SATELLITE_AGE = 'information'
+SATELLITE_PRICES = {'metal': 150, 'oil': 100}
 # Siege cannot depress its aim onto what stands beside it (task 71): units that close in are
 # safe from it, so cavalry and sallies answer siege.
 SIEGE_DEAD_ZONE = 3000
@@ -385,7 +392,7 @@ def generate():
             build_ticks=150 + 25 * age, ramp_mode='per_type', limit_scope='per_city' if limit else 'none',
             limit_count=limit, first_age_id=Ref('age.' + AGES[age]))
         tag(full, 'building', 'mechanical')
-        need(full, 'age.' + AGES[age])
+        need(full, 'age.' + BUILDABLE_FROM.get(key, AGES[age]))
         if track:
             need(full, 'tech.' + track, 1)
         prices = {'timber': timber}
@@ -686,6 +693,7 @@ def generate():
     aircraft_take_off(row, sql.append)
     rotorcraft_hover(row, tag)
     drone_operator(definition, row, tag, need, produce, cost, weapon)
+    capital_reveal(definition, row, tag, need, produce, cost, tech)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -804,9 +812,11 @@ def orbit_units(definition, row, tag, need, produce, cost):
         build_ticks=300, ramp_mode='per_type', first_age_id=Ref('age.starfaring'))
     tag(full, 'mechanical', 'orbit_bound')
     row('et_movement', entity_type_id=Ref(full), movement_class_id=Ref('starship', 'movement_class'), speed=1500)
-    need(full, 'age.starfaring')
+    # Task 130: launched from the information age on, so it is paid in oil (energy comes in the
+    # fusion age); its stats and look stay those of the starfaring age.
+    need(full, 'age.' + SATELLITE_AGE)
     produce('bld.spaceport', full, 'train', 'units')
-    cost(full, {'metal': 150, 'energy': 100}, True)
+    cost(full, SATELLITE_PRICES, True)
     for key, planet, system in (('unit.space_freighter', 300, 35), ('unit.satellite', 220, 25)):
         row('et_view_scale', entity_type_id=Ref(key), planet_pct=planet, system_pct=system)
 
@@ -1341,6 +1351,57 @@ def drone_operator(definition, row, tag, need, produce, cost, weapon):
     need(full, 'age.' + AGES[age])
     produce('bld.barracks', full, 'train', 'units')
     cost(full, {'food': 100, 'metal': 80, 'oil': 40}, True)
+
+
+# Task 130 (owner, 2026-11-23; docs/database.md "Capitals revealed by research"): the space probe,
+# an orbital scout of the information age, and the research that reveals the planet's buildings and
+# the other players' capitals step by step. The probe is bound to its planet's orbit like the
+# satellite, sees less and flies far faster: patrolled round the planet, it sweeps a band of it.
+PROBE = dict(hp=80, sight=40, speed=8000, build_ticks=200, prices={'metal': 80, 'oil': 40},
+             view=(220, 25))
+# key, name, age, producer, the rule it enables (`tech_effect.rule_key`), further prerequisites.
+REVEAL_RESEARCH = [
+    # Every building on the player's own planet, kept current (units stay in the fog); needs a
+    # satellite owned when the research starts.
+    ('orbital_survey', 'Orbital Survey', 'information', 'spaceport', 'planet_survey', ['unit.satellite']),
+    # The planet of each capital whose system is known.
+    ('deep_space_survey', 'Deep Space Survey', 'starfaring', 'spaceport', 'capital_planet', ['tech.orbital_survey']),
+    # The city of each capital whose planet is known.
+    ('long_range_imaging', 'Long-range Imaging', 'expansion', 'spaceport', 'capital_city', ['tech.deep_space_survey']),
+    # Every capital, met or not: research at the Deep Space Tracking Station (the jump detector).
+    ('total_network', 'Total Network', 'galactic', 'jump_detector', 'all_capitals', []),
+]
+# The library's Unification also reveals the capital system of every player met.
+UNIFICATION_RULE = 'capital_system'
+
+
+def capital_reveal(definition, row, tag, need, produce, cost, tech):
+    """Task 130: the space probe and the research that reveals planets' buildings and capitals.
+    Written after every other definition so earlier ids stay."""
+    full, age = 'unit.space_probe', AGES.index('information')
+    definition('entity_type', full, 'Space Probes')
+    row('entity_type', id=Ref(full), **{'class': 'unit'}, ui_group='space_probe', hp=PROBE['hp'], armor=0,
+        armor_class_id=Ref('shield', 'armor_class'), los=PROBE['sight'] * 1000, pop_cost=1,
+        build_ticks=PROBE['build_ticks'], ramp_mode='per_type', first_age_id=Ref('age.' + AGES[age]))
+    tag(full, 'mechanical', 'orbit_bound')
+    row('et_movement', entity_type_id=Ref(full), movement_class_id=Ref('starship', 'movement_class'),
+        speed=PROBE['speed'])
+    need(full, 'age.' + AGES[age])
+    produce('bld.spaceport', full, 'train', 'units')
+    cost(full, PROBE['prices'], True)
+    planet, system = PROBE['view']
+    row('et_view_scale', entity_type_id=Ref(full), planet_pct=planet, system_pct=system)
+    row('tech_effect', tech_id=Ref('tech.unification'), effect='enable_rule', rule_key=UNIFICATION_RULE)
+    # The Deep Space Tracking Station researches Total Network.
+    row('et_producer', entity_type_id=Ref('bld.jump_detector'))
+    for key, name, age_key, producer, rule, needs in REVEAL_RESEARCH:
+        age = AGES.index(age_key)
+        full = 'tech.' + key
+        tech(full, name, age, producer, 300 + age * 50,
+             {'wealth': 100 * (age + 1), 'knowledge': 50 * (age + 1)})
+        for requirement in needs:
+            need(full, requirement, 1)
+        row('tech_effect', tech_id=Ref(full), effect='enable_rule', rule_key=rule)
 
 
 # Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"

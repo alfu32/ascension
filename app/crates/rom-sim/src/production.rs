@@ -283,7 +283,7 @@ impl World {
             return;
         }
         let pos = beside.unwrap_or(front);
-        if launch && !self.space_age(order.player) {
+        if launch && !self.may_launch(order.player, subject) {
             order.status = OrderStatus::Blocked("space_age".into());
             return;
         }

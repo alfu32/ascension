@@ -1533,7 +1533,7 @@ fn publish(
         let model = world
             .players()
             .find(|p| p.id.0 == u32::from(wreck.owner))
-            .and_then(|p| models.resolve(rom_rules::DefId(wreck.kind), p.faction, p.age));
+            .and_then(|p| models.resolve_any(rom_rules::DefId(wreck.kind), p.faction, p.age));
         if let Some(model) = model {
             wreck.height = (model.size[1].max(0.2) * 1000.0) as i32;
         }
@@ -1546,7 +1546,7 @@ fn publish(
             .find(|s| s.id.0 == stain.id)
             .and_then(|s| {
                 let p = world.players().find(|p| p.id == s.owner)?;
-                models.resolve(s.type_id, p.faction, p.age)
+                models.resolve_any(s.type_id, p.faction, p.age)
             });
         let Some(model) = model else { continue };
         if stain.building {
@@ -1749,9 +1749,11 @@ pub fn snapshot_on(
         .players()
         .map(|p| (p.id, (p.faction, p.age)))
         .collect();
+    // A type its owner may build before the age of its first look (the spaceport and the
+    // satellite of the information age, task 130) is drawn with that look.
     let model_of = |owner: PlayerId, kind: rom_rules::DefId| {
         let (faction, age) = looks.get(&owner)?;
-        models.resolve(kind, *faction, *age)
+        models.resolve_any(kind, *faction, *age)
     };
     let mut sources: BTreeMap<PlayerId, ActiveSources> = BTreeMap::new();
     // Rotorcraft hold a point instead of circling it (tag `hover`), the low flyer lower still

@@ -315,6 +315,12 @@ orbital ship only when they have an `orbit` target layer (task 58, below).
 - **Satellite** (spaceport, starfaring): launched into orbit above its spaceport,
   unarmed, sees 96 tiles (an eighth of a median planet's circumference); it moves only
   within its orbit and cannot land.
+- **Spaceport in the information age** (task 130): the spaceport opens in the information
+  age offering only satellites and space probes (a fast orbital scout, 40 tiles of sight,
+  that sweeps the planet on a patrol) and the Orbital Survey (every building on the home
+  planet, no units); both ships go up into the home planet's orbit before the space age and
+  never leave it. Its other ships still arrive in the starfaring age. See `database.md`,
+  "Capitals revealed by research".
 - **Sight from orbit** grows with altitude and hull size (16 to 28 tiles, the survey
   ship more); see `database.md`, "Sight".
 

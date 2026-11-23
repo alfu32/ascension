@@ -157,7 +157,7 @@ impl World {
             || port.owner != ship.owner
             || port.build_progress.is_some()
             || !trains_ship
-            || !self.space_age(ship.owner)
+            || !self.may_launch(ship.owner, ship.type_id)
             || self.can_stand(ship.type_id, ship.pos)
             || !self.can_stand(ship.type_id, marker)
             || self.target_distance(ship.pos, port.id)
@@ -383,6 +383,13 @@ impl World {
     }
     pub(crate) fn space_age(&self, player: PlayerId) -> bool {
         self.space_rank(player) >= 1
+    }
+
+    /// Whether `player` may launch a ship of `type_id` into its planet's orbit: in the space
+    /// age, or before it a ship bound to that orbit (tag `orbit_bound`: the satellite and the
+    /// space probe of the information age never leave it; task 130).
+    pub(crate) fn may_launch(&self, player: PlayerId, type_id: DefId) -> bool {
+        self.space_age(player) || self.is_orbit_bound(type_id)
     }
     pub(crate) fn check_space_placement(
         &self,
