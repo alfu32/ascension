@@ -268,13 +268,20 @@ pub struct HudLayout {
     pub scale: f32,
 }
 
+/// The largest automatic scale: the one a 1280 × 800 window gets (the owner, 2026-11-23: the top
+/// and bottom bars stop growing there; a larger window shows more of the world instead).
+pub const MAX_AUTO_SCALE: f32 = 1280.0 / DESIGN_WIDTH;
+
 impl HudLayout {
-    /// Layout for a `width` × `height` frame; `percent` overrides the automatic scale.
+    /// Layout for a `width` × `height` frame; `percent` overrides the automatic scale, which fits
+    /// the design into the frame but never exceeds [`MAX_AUTO_SCALE`].
     pub fn new(width: u32, height: u32, percent: Option<u32>) -> Self {
         let (width, height) = (width as f32, height as f32);
         let scale = match percent {
             Some(percent) => percent.clamp(25, 400) as f32 / 100.0,
-            None => (width / DESIGN_WIDTH).min(height / DESIGN_HEIGHT),
+            None => (width / DESIGN_WIDTH)
+                .min(height / DESIGN_HEIGHT)
+                .min(MAX_AUTO_SCALE),
         };
         Self {
             width,
@@ -446,14 +453,15 @@ mod tests {
 
     #[test]
     fn regions_scale_uniformly_and_anchor_to_edges() {
-        // 16:9 at the design size: every rectangle equals its design rectangle.
-        let design = HudLayout::new(1672, 941, None);
+        // At 100 % every rectangle equals its design rectangle (the automatic scale stops at
+        // 1280 × 800's, so these layout tests pin 100 %).
+        let design = HudLayout::new(1672, 941, Some(100));
         assert_eq!(design.scale, 1.0);
         for region in Region::ALL {
             assert_eq!(design.rect(region), region.design());
         }
-        // Wider than the design: the scale follows the height, side groups stick to the sides.
-        let wide = HudLayout::new(2400, 941, None);
+        // Wider than the design: side groups stick to the sides.
+        let wide = HudLayout::new(2400, 941, Some(100));
         assert_eq!(wide.scale, 1.0);
         let caps = wide.rect(Region::CapsBlock);
         let buttons = wide.rect(Region::Buttons);
@@ -504,6 +512,17 @@ mod tests {
     }
 
     #[test]
+    fn the_automatic_scale_stops_growing_at_1280_by_800() {
+        let at_1280 = HudLayout::new(1280, 800, None).scale;
+        assert_eq!(at_1280, MAX_AUTO_SCALE);
+        for (width, height) in [(1920, 1080), (2560, 1440), (3840, 2160)] {
+            assert_eq!(HudLayout::new(width, height, None).scale, at_1280);
+        }
+        assert!(HudLayout::new(1024, 640, None).scale < at_1280);
+        assert_eq!(HudLayout::new(3840, 2160, Some(150)).scale, 1.5);
+    }
+
+    #[test]
     fn minimap_view_lies_inside_its_frame() {
         for (width, height) in [(1672, 941), (1280, 720), (1280, 800), (2560, 1080)] {
             let layout = HudLayout::new(width, height, None);
@@ -536,7 +555,7 @@ mod tests {
 
     #[test]
     fn command_grid_has_15_slots_with_the_specified_pitch() {
-        let layout = HudLayout::new(1672, 941, None);
+        let layout = HudLayout::new(1672, 941, Some(100));
         let mut slots = Vec::new();
         for row in 0..GRID_ROWS {
             for col in 0..GRID_COLUMNS {
@@ -565,7 +584,7 @@ mod tests {
 
     #[test]
     fn world_area_sits_between_bar_and_groups() {
-        let layout = HudLayout::new(1672, 941, None);
+        let layout = HudLayout::new(1672, 941, Some(100));
         let area = layout.world_area();
         assert_eq!((area.y, area.bottom()), (130.0, 672.0));
     }

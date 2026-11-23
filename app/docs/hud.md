@@ -165,6 +165,9 @@ decorations: move, minimise, maximise, resize, close come from the window manage
 button goes through the same exit path as Quit. `--no-chrome` (launcher: Window tab, "No chrome")
 opens a bare window. The title bar is outside the drawn area, so `--size`, `--screenshot` and
 `--bench` give the same image size in both modes.
+The automatic scale fits the design into the window but stops growing at the scale a
+1280 × 800 window gets (0.77 of design pixels; owner, 2026-11-23): on a larger window the top
+and bottom bars keep that height and the world gets the extra room.
 `--hud-scale 25..200` overrides the automatic scale as a percentage of design
 pixels (and follows the internal render scale). Oversized explicit scales can
 crop panels. Diagnostic GPUI text is hidden unless `--stats` is supplied.
