@@ -514,7 +514,12 @@ impl World {
 
     /// Sets every passenger of `carrier` down around the footprint `bounds` at `at`, each on
     /// its own free tile its movement class can use, nearest first, in id order.
-    fn unload_around(&mut self, carrier: EntityId, at: Pos, bounds: [i64; 4]) -> Vec<EntityId> {
+    pub(crate) fn unload_around(
+        &mut self,
+        carrier: EntityId,
+        at: Pos,
+        bounds: [i64; 4],
+    ) -> Vec<EntityId> {
         let passengers = self.passengers(carrier);
         let mut used = std::collections::BTreeSet::new();
         for &unit in &passengers {

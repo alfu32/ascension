@@ -228,7 +228,9 @@ impl World {
             && e.container_id.is_none()
             && self.player_status(e.owner) != Some(crate::PlayerStatus::Defeated)
             && self.has_enemies()
-            && e.orders.front().is_none_or(|o| o.kind != "attack");
+            && e.orders
+                .front()
+                .is_none_or(|o| o.kind != "attack" && o.kind != "attack_ground");
         let (owner, old) = (e.owner, e.aim);
         let mut aim = old.filter(|target| {
             ready

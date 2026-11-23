@@ -37,6 +37,14 @@ const NETWORK_HELPER_TRIES: u8 = 200;
 const NETWORK_PENDING_TICKS: u64 = 40;
 /// Units trained by a Shift click.
 const SHIFT_BATCH: usize = 5;
+/// Where the Delete button sits on the Order tab: the last slot (B), or the first free one of
+/// `DELETE_SLOTS` when a market's trades fill it.
+const DELETE_SLOT: usize = 14;
+const DELETE_SLOTS: [usize; 3] = [14, 4, 9];
+/// Where Attack ground sits on the Order tab (G).
+const GROUND_SLOT: usize = 9;
+/// The character the window sends for the Delete key (task 142).
+pub const DELETE_KEY: char = '\u{7f}';
 /// Combat stance behaviours offered as buttons, in this order.
 const STANCE_BEHAVIORS: [&str; 4] = ["aggressive", "defensive", "stand_ground", "hold_fire"];
 
@@ -111,6 +119,14 @@ enum Action {
     Buy(DefId),
     /// The selected market sells one lot of a resource (task 107).
     Sell(DefId),
+    /// The next point clicked is fired at by the selected units' projectile weapons (task 142).
+    AttackGround,
+    /// The selected own units and buildings leave; a finished building asks first (task 142).
+    Delete,
+    /// The answer to "Delete?": yes.
+    DeleteYes,
+    /// The answer to "Delete?": no.
+    DeleteNo,
     /// An ascended player picks open land of a habitable planet to descend onto (task 76).
     Descend,
     /// An ascended player picks a moon or asteroid to bring to life (task 77).
@@ -249,6 +265,13 @@ pub struct Controller {
     patrol_started: bool,
     /// The next city clicked becomes the selected traders' route partner (task 72).
     trade_pick: bool,
+    /// The next click on the ground is fired at by the selected units (task 142).
+    ground_pick: bool,
+    /// A delete waiting for its "yes": the entities it takes and the slot of its button.
+    delete_confirm: Option<(Vec<EntityId>, usize)>,
+    /// The person chose the Order tab for this selection: it stays open even when deleting is
+    /// all it offers.
+    order_chosen: bool,
     /// The next click on the ground (or an own airfield) is where the selected aircraft land
     /// (task 123).
     land_pick: bool,
@@ -770,6 +793,10 @@ impl Controller {
     fn set_selection(&mut self, mut ids: Vec<EntityId>) {
         ids.sort();
         ids.dedup();
+        if ids != self.selection {
+            self.delete_confirm = None;
+            self.order_chosen = false;
+        }
         self.selection = ids;
         self.foreign = None;
         self.page = None;
@@ -889,6 +916,8 @@ impl Controller {
                 self.patrol_started = false;
                 self.trade_pick = false;
                 self.land_pick = false;
+                self.ground_pick = false;
+                self.delete_confirm = None;
             }
         }
     }
@@ -928,6 +957,12 @@ impl Controller {
             .any(|e| can_land_aircraft(world, e));
         if self.land_pick {
             self.land_aircraft(world, Some(at), mods.shift);
+            return;
+        }
+        // The pick ends once nothing selected can fire at the ground any more.
+        self.ground_pick &= !self.ground_attackers(world).is_empty();
+        if self.ground_pick {
+            self.attack_ground(world, at, mods.shift);
             return;
         }
         if self.patrol {
@@ -1369,6 +1404,12 @@ impl Controller {
         if self.placement.take().is_some() {
             return;
         }
+        // Armed for the ground, a right click fires there too.
+        self.ground_pick &= !self.ground_attackers(world).is_empty();
+        if self.ground_pick {
+            self.attack_ground(world, target, mods.shift);
+            return;
+        }
         let rules = world.rules().clone();
         enum Kind {
             Ground,
@@ -1532,6 +1573,89 @@ impl Controller {
             self.patrol_started = false;
             self.trade_pick = false;
             self.land_pick = false;
+        }
+    }
+
+    /// Whether the next click on the ground fires at it (task 142).
+    pub fn aiming(&self, world: &World) -> bool {
+        self.ground_pick && !self.ground_attackers(world).is_empty()
+    }
+
+    /// The selected own units whose weapons can fire at the ground (task 142).
+    fn ground_attackers(&self, world: &World) -> Vec<EntityId> {
+        self.own_selected(world)
+            .iter()
+            .filter(|e| world.attacks_ground(e.type_id))
+            .map(|e| e.id)
+            .collect()
+    }
+
+    /// Orders every selected unit that can fire at the ground at `at`; Shift queues the order
+    /// and keeps the pick on for another point.
+    fn attack_ground(&mut self, world: &mut OrderSink<'_>, at: Pos, shift: bool) {
+        let mut issued = false;
+        for id in self.ground_attackers(world) {
+            issued |= self.submit(world, id, "attack_ground", None, None, Some(at), shift);
+        }
+        if issued {
+            self.marker(world, at, MarkerKind::Ground);
+        }
+        self.ground_pick = shift;
+    }
+
+    /// The selected own entities that may be deleted now, in id order.
+    fn deletable(&self, world: &World) -> Vec<EntityId> {
+        let me = self.me();
+        self.own_selected(world)
+            .iter()
+            .filter(|e| e.owner == me && world.can_delete(e.id))
+            .map(|e| e.id)
+            .collect()
+    }
+
+    /// The Delete key or button: deletes the selected own units and unfinished buildings at
+    /// once; a finished building in the selection asks "Delete?" first, and a second Delete
+    /// answers yes.
+    fn delete_selected(&mut self, world: &mut OrderSink<'_>) {
+        let ids = self.deletable(world);
+        if ids.is_empty() {
+            if !self.own_selected(world).is_empty() {
+                self.say(
+                    world,
+                    rejection_message(world, self.me(), &SimError::CannotDelete, None),
+                );
+            }
+            return;
+        }
+        let finished = ids.iter().any(|id| {
+            world.entity(*id).is_some_and(|e| {
+                rules_class(world, e) == EntityClass::Building && e.build_progress.is_none()
+            })
+        });
+        if finished
+            && self
+                .delete_confirm
+                .as_ref()
+                .is_none_or(|(asked, _)| *asked != ids)
+        {
+            let slot = self
+                .palette(world)
+                .and_then(|(_, actions)| {
+                    actions
+                        .iter()
+                        .find(|(_, a)| matches!(a, Action::Delete))
+                        .map(|(s, _)| *s)
+                })
+                .unwrap_or(DELETE_SLOT);
+            self.delete_confirm = Some((ids, slot));
+            self.attack_move = false;
+            self.patrol = false;
+            self.ground_pick = false;
+            return;
+        }
+        self.delete_confirm = None;
+        for id in ids {
+            self.submit(world, id, "delete", None, None, None, false);
         }
     }
 
@@ -1848,6 +1972,10 @@ impl Controller {
     }
 
     fn hotkey(&mut self, world: &mut OrderSink<'_>, ch: char, mods: Modifiers) {
+        if ch == DELETE_KEY {
+            self.delete_selected(world);
+            return;
+        }
         if let Some(group) = ch.to_digit(10).map(|d| d as usize) {
             if mods.ctrl {
                 let own: Vec<EntityId> = self.own_selected(world).iter().map(|e| e.id).collect();
@@ -1940,6 +2068,7 @@ impl Controller {
                     if palette.tabs[index] {
                         self.tab = tab;
                         self.page = None;
+                        self.order_chosen = tab == PaletteTab::Order;
                     } else if !palette.tab_notes[index].is_empty() {
                         // A closed tab says why it is closed.
                         let note = palette.tab_notes[index].clone();
@@ -2285,19 +2414,36 @@ impl Controller {
             && own
                 .iter()
                 .all(|e| e.owner == me && world.market_currency(e.id).is_some());
+        let deletable = self.deletable(world);
+        let orders = can_move || has_workers || has_colony || markets;
+        // Delete (task 142) opens the Order tab of any selection, but a building whose only
+        // order is Delete still opens on its own pages unless the person chose Order.
+        let delete_only = !orders && !deletable.is_empty();
         let tabs = [
             !build_pages.is_empty(),
-            can_move || has_workers || has_colony || markets,
+            orders || delete_only,
             !train_pages.is_empty(),
             !research_pages.is_empty(),
         ];
-        let tab = if tabs[self.tab.index()] {
+        let confirming = self
+            .delete_confirm
+            .as_ref()
+            .filter(|(asked, _)| *asked == deletable)
+            .map(|(_, slot)| *slot);
+        let open = |t: PaletteTab| tabs[t.index()] && !(t == PaletteTab::Order && delete_only);
+        let tab = if confirming.is_some() {
+            PaletteTab::Order
+        } else if tabs[self.tab.index()] && (open(self.tab) || self.order_chosen) {
             self.tab
         } else {
             PaletteTab::ALL
                 .into_iter()
-                .find(|t| tabs[t.index()])
-                .unwrap_or_default()
+                .find(|t| open(*t))
+                .unwrap_or(if delete_only {
+                    PaletteTab::Order
+                } else {
+                    PaletteTab::default()
+                })
         };
         let mut palette = HudPalette {
             tab,
@@ -2333,6 +2479,12 @@ impl Controller {
                 palette.page = page;
                 palette.page_name = name;
                 actions = entries;
+            }
+            PaletteTab::Order if confirming.is_some() => {
+                // "Delete?" takes the card: yes where Delete was, no beside it.
+                let yes = confirming.unwrap_or(DELETE_SLOT);
+                actions.push((yes, Action::DeleteYes));
+                actions.push((yes.saturating_sub(1), Action::DeleteNo));
             }
             PaletteTab::Order => {
                 actions.push((0, Action::Stop));
@@ -2402,6 +2554,19 @@ impl Controller {
                         actions.push((10 + n, Action::Stance(stance.id)));
                     }
                 }
+                let free = |actions: &[(usize, Action)], slot: usize| {
+                    actions.iter().all(|(s, _)| *s != slot)
+                };
+                if own.iter().any(|e| world.attacks_ground(e.type_id))
+                    && free(&actions, GROUND_SLOT)
+                {
+                    actions.push((GROUND_SLOT, Action::AttackGround));
+                }
+                if !deletable.is_empty()
+                    && let Some(slot) = DELETE_SLOTS.into_iter().find(|s| free(&actions, *s))
+                {
+                    actions.push((slot, Action::Delete));
+                }
             }
         }
         for (slot, action) in &actions {
@@ -2460,6 +2625,24 @@ impl Controller {
             }
             Action::Stop => {
                 button.name = "Stop".into();
+                button.icon = "icons/cmd_stop".into();
+            }
+            Action::AttackGround => {
+                button.name = "Attack ground: fire at a point".into();
+                button.icon = "icons/cmd_attack_ground".into();
+                button.armed = self.ground_pick;
+            }
+            Action::Delete => {
+                button.name = delete_label(world, &self.deletable(world));
+                button.icon = "icons/cmd_delete".into();
+            }
+            Action::DeleteYes => {
+                button.name = "Delete? Yes".into();
+                button.icon = "icons/cmd_delete".into();
+                button.armed = true;
+            }
+            Action::DeleteNo => {
+                button.name = "No, keep it".into();
                 button.icon = "icons/cmd_stop".into();
             }
             Action::Descend => {
@@ -2662,10 +2845,27 @@ impl Controller {
                 self.attack_move = false;
             }
             Action::AttackMove => self.attack_move = !self.attack_move,
+            Action::AttackGround => {
+                self.ground_pick = !self.ground_pick;
+                self.patrol = false;
+                self.attack_move = false;
+                self.trade_pick = false;
+                self.land_pick = false;
+            }
+            Action::Delete => self.delete_selected(world),
+            Action::DeleteYes => {
+                if let Some((ids, _)) = self.delete_confirm.take() {
+                    for id in ids {
+                        self.submit(world, id, "delete", None, None, None, false);
+                    }
+                }
+            }
+            Action::DeleteNo => self.delete_confirm = None,
             Action::Patrol => {
                 self.patrol = !self.patrol;
                 self.patrol_started = false;
                 self.attack_move = false;
+                self.ground_pick = false;
                 self.trade_pick = false;
                 self.land_pick = false;
             }
@@ -3232,6 +3432,21 @@ impl Controller {
         let rules = world.rules();
         hud.data_tab = self.data_tab;
         hud.help = self.wealth_help(world).unwrap_or_default();
+        // Task 142: the question a delete asks, and the ground pick.
+        if let Some((ids, _)) = self
+            .delete_confirm
+            .as_ref()
+            .filter(|(asked, _)| *asked == self.deletable(world))
+        {
+            hud.help = format!(
+                "{}? Yes or Delete again removes it; No or Escape keeps it",
+                delete_label(world, ids).replace(" (Del)", "")
+            );
+        } else if self.ground_pick && !self.ground_attackers(world).is_empty() {
+            hud.help =
+                "Attack ground: click a point to fire at it until stopped; hold Shift to queue more points"
+                    .into();
+        }
         if hud.help.is_empty() && self.trade_pick && !self.selected_traders(world).is_empty() {
             hud.help = self.trade_hint(world);
         }
@@ -3552,6 +3767,27 @@ impl Controller {
                 from: None,
             })
             .collect();
+        // Where the selected units fire at the ground (task 142), with a line from each.
+        for e in self.own_selected(world) {
+            let Some(at) = e
+                .orders()
+                .front()
+                .filter(|o| o.kind == "attack_ground")
+                .and_then(|o| o.target_pos)
+                .filter(|p| p.body == self.view.planet)
+            else {
+                continue;
+            };
+            let from = world.orbit(e.id).map_or(e.pos, |o| o.pos);
+            hud.markers.push(HudMarker {
+                face: at.face,
+                x: at.x,
+                y: at.y,
+                kind: MarkerKind::Ground,
+                age_ticks: 0,
+                from: (from.body == at.body).then_some((from.face, from.x, from.y)),
+            });
+        }
         for (producer, rally) in world.rallies() {
             if !self.selection.contains(&producer) {
                 continue;
@@ -3667,6 +3903,33 @@ impl Controller {
 /// What a jump inhibitor does, from its `et_inhibitor` row (task 104).
 /// A market button (task 107): the resource's picture, the trade and its price now, and why
 /// it cannot be pressed (no research, not enough to pay or to sell).
+/// The Delete button's name: what goes and, for construction sites, what comes back.
+fn delete_label(world: &World, ids: &[EntityId]) -> String {
+    let rules = world.rules();
+    let mut back: BTreeMap<DefId, i64> = BTreeMap::new();
+    for id in ids {
+        for (resource, amount) in world.delete_refund(*id) {
+            *back.entry(resource).or_default() += amount;
+        }
+    }
+    let what = match ids {
+        [one] => world
+            .entity(*one)
+            .map_or_else(String::new, |e| format!(" {}", rules.def(e.type_id).name)),
+        _ => format!(" {} selected", ids.len()),
+    };
+    if back.is_empty() {
+        format!("Delete{what} (Del)")
+    } else {
+        let refund = back
+            .iter()
+            .map(|(resource, amount)| format!("{amount} {}", rules.def(*resource).name))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("Delete{what} (Del): {refund} back")
+    }
+}
+
 fn trade_button(
     world: &World,
     me: PlayerId,
@@ -3801,6 +4064,11 @@ fn rejection_message(
             crate::hud::rule_tech_name(world, rom_sim::RULE_MARKET_TRADING)
         ),
         SimError::NotTradeable => "That resource is not traded at the market".into(),
+        SimError::CannotDelete => "A finished city cannot be deleted: it can only be captured".into(),
+        SimError::NoGroundWeapon => {
+            "Only weapons that throw a projectile fire at the ground, where they can hit".into()
+        }
+        SimError::PassengersAboard => "Units are aboard: land the ship first".into(),
         SimError::InsufficientResources
             if subject.is_some_and(|r| world.rules().resources.contains_key(&r)) =>
         {

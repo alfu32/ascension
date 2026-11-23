@@ -355,6 +355,9 @@ pub struct SimLink {
     chat: Arc<Mutex<ChatInput>>,
     /// Whether the person's player is ascended: only then is the celestial channel open.
     ascended: Arc<AtomicBool>,
+    /// Whether a click on the ground is about to fire at it (task 142): the window shows a
+    /// crosshair.
+    aiming: Arc<AtomicBool>,
     /// Set in a network match.
     net: Option<Arc<NetInfo>>,
     /// The match's end and its report, once reached (task 117); `fresh` until the window
@@ -430,6 +433,11 @@ impl SimLink {
         }
     }
 
+    /// Whether the next click on the ground fires at it (task 142).
+    pub fn aiming(&self) -> bool {
+        self.aiming.load(Ordering::Relaxed)
+    }
+
     /// Whether the new-age dialog is open (task 133).
     pub fn age_dialog_open(&self) -> bool {
         self.age_dialog.lock().is_ok_and(|slot| slot.open.is_some())
@@ -486,6 +494,7 @@ impl SimLink {
             stop: Arc::new(AtomicBool::new(false)),
             chat: Arc::default(),
             ascended: Arc::default(),
+            aiming: Arc::default(),
             net: None,
             end: Arc::default(),
             keep_playing: Arc::default(),
@@ -715,6 +724,7 @@ impl SimThread {
             stop: Arc::new(AtomicBool::new(false)),
             chat: Arc::default(),
             ascended: Arc::default(),
+            aiming: Arc::default(),
             net,
             end: Arc::default(),
             keep_playing: Arc::default(),
@@ -1128,7 +1138,18 @@ fn run(
                         }
                         ScriptAction::ChatKeys(keys) => {
                             for key in keys {
-                                link.chat_key(key);
+                                // As in the window: Delete the chat does not take deletes
+                                // the selection (task 142).
+                                let delete = key == ChatKey::Delete;
+                                if !link.chat_key(key) && delete {
+                                    let pick = PickEvent::Hotkey {
+                                        ch: crate::selection::DELETE_KEY,
+                                        modifiers: Default::default(),
+                                    };
+                                    if handle_pick(&mut controller, world, link, pick) {
+                                        pauses += 1;
+                                    }
+                                }
                             }
                         }
                         ScriptAction::Visit(body) => bridge.fly_to_body(body),
@@ -1613,6 +1634,8 @@ fn publish(
     let mut hud = crate::hud::snapshot_of(world, me);
     hud.age_dialog = link.age_dialog().0;
     controller.fill(world, &mut hud);
+    link.aiming
+        .store(controller.aiming(world), Ordering::Relaxed);
     crate::alert_view::fill_hud(world, me, body, &mut hud);
     ascension.fill(world, &mut hud, celestial_in_view(world, bridge));
     if let Some(line) = net_line {
@@ -1700,6 +1723,8 @@ fn publish_hud(
     let mut hud = crate::hud::snapshot_of(world, me);
     hud.age_dialog = link.age_dialog().0;
     controller.fill(world, &mut hud);
+    link.aiming
+        .store(controller.aiming(world), Ordering::Relaxed);
     crate::alert_view::fill_hud(world, me, body, &mut hud);
     ascension.fill(world, &mut hud, celestial_in_view(world, bridge));
     if let Some(line) = net_line {
@@ -1872,7 +1897,7 @@ pub fn snapshot_on(
     for hit in world.hits_in_flight() {
         in_flight.insert(
             (hit.attacker.0, hit.weapon_id),
-            (hit.target.0, hit.land_tick, hit.drone),
+            (hit.target.0, hit.land_tick, hit.drone, hit.ground),
         );
     }
     let mut views: Vec<EntityView> = Vec::with_capacity(sightings.len());
@@ -2132,7 +2157,9 @@ pub fn projectile_kind(projectile: rom_rules::Projectile) -> Option<rom_render::
 /// and landing tick); presentation only.
 /// The newest hit of a weapon on its way: its target, landing tick and the drone of the target's
 /// grid it flies at.
-type InFlight = (u32, u64, Option<u8>);
+/// A hit on its way: its target, landing tick, the drone it flies at and, for a shot at the
+/// ground (task 142), the point.
+type InFlight = (u32, u64, Option<u8>, Option<Pos>);
 
 fn recent_shot(
     world: &World,
@@ -2165,13 +2192,55 @@ fn recent_shot(
     // enemies other than the ordered one, and a shot at a drone flies to the drone (task 128).
     let flying = in_flight
         .get(&(entity.id.0, weapon.id))
-        .filter(|&&(_, land, _)| land > fired)
+        .filter(|&&(_, land, _, _)| land > fired)
         .copied();
+    // A shot at the ground (task 142) flies at its point, not at anyone.
+    let ground = flying.and_then(|(_, _, _, at)| at).or_else(|| {
+        entity
+            .orders()
+            .front()
+            .filter(|o| o.kind == "attack_ground")
+            .and_then(|o| o.target_pos)
+    });
+    if let Some(at) = ground {
+        let from = match world.orbit(entity.id) {
+            Some(orbit) if weapon.orbit_only => orbit.pos,
+            _ => entity.pos,
+        };
+        let travel = match flying {
+            Some((_, land, _, Some(_))) => land - fired,
+            _ => {
+                let rate = world
+                    .rules()
+                    .constant("sim.ticks_per_second")
+                    .unwrap_or(20)
+                    .max(1);
+                world.distance(from, at).map_or(0, |d| {
+                    (d * rate as u64 / weapon.projectile_speed.max(1) as u64).max(1)
+                })
+            }
+        };
+        if since > travel + SHOT_WINDOW {
+            return None;
+        }
+        return Some(rom_render::ShotView {
+            kind,
+            target: None,
+            face: at.face,
+            x: at.x as f32 / 1000.0,
+            y: at.y as f32 / 1000.0,
+            altitude: 0.0,
+            lift: 0.0,
+            fired_tick: fired,
+            land_tick: fired + travel,
+            count: u8::try_from(weapon.shots.clamp(1, 255)).unwrap_or(1),
+        });
+    }
     let aimed = flying
-        .map(|(target, _, _)| rom_sim::EntityId(target))
+        .map(|(target, _, _, _)| rom_sim::EntityId(target))
         .or(ordered)
         .or(entity.aim);
-    let drone = flying.and_then(|(target, _, slot)| {
+    let drone = flying.and_then(|(target, _, slot, _)| {
         let slot = slot?;
         let (_, at) = world
             .drones_of(rom_sim::EntityId(target))
@@ -2200,9 +2269,9 @@ fn recent_shot(
     };
     // The simulation's own landing tick while the hit is on its way (task 102); measured again
     // for a shot that missed (no hit flies), and none for one that hit at once.
-    let landing = flying.filter(|&(at, _, _)| Some(at) == aimed.map(|id| id.0));
+    let landing = flying.filter(|&(at, _, _, _)| Some(at) == aimed.map(|id| id.0));
     let travel = match (landing, target) {
-        (Some((_, land, _)), _) => land - fired,
+        (Some((_, land, _, _)), _) => land - fired,
         (None, Some(t)) if weapon.projectile_speed > 0 => travel_ticks(world, entity, weapon, t)?,
         _ => 0,
     };

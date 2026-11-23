@@ -792,10 +792,12 @@ fn write_entities(tx: &Transaction, s: &Snapshot) -> Result<(), SaveError> {
     };
     for (seq, h) in s.hits.iter().enumerate() {
         let (land, attacker, owner, source, weapon, target, damage, drone) = hit(h);
+        let g = opos(h.ground);
         tx.execute(
-            "INSERT INTO pending_hit VALUES (?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO pending_hit VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             params![
-                seq as i64, land, attacker, owner, source, weapon, target, damage, drone
+                seq as i64, land, attacker, owner, source, weapon, target, damage, drone, g[0],
+                g[1], g[2], g[3]
             ],
         )?;
     }

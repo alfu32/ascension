@@ -198,6 +198,20 @@ Resume governor, Trade route (F), the combat stances on the bottom row; a market
 the middle row and Sell on the bottom row. Right-clicking an own airfield with aircraft
 selected lands them beside it.
 
+**Delete, attack ground (task 142).** **Attack ground** (G; a reticle over the ground, `icons/cmd_attack_ground`) shows for units
+whose weapons throw a projectile; it arms a pick with a crosshair cursor, and the next click (or
+right click) on the ground orders every such unit to fire at that point until stopped, walking
+into reach first (a ship in orbit fires at the ground below with its surface weapons). Shift
+queues the point and keeps the pick on. A selected unit's ground target is drawn as a red reticle
+with a line from the unit. **Delete** (the Delete key, or the button with a bin, `icons/cmd_delete`, in the last slot, B; a
+market's trades push it to T or G) removes the selected own units and buildings. A construction
+site gives back its price × the work not done (the button names the amount); anything else
+gives nothing back. A finished building asks first: the card shows **Delete? Yes** in the
+button's place and **No, keep it** beside it, the help line names what goes, and a second Delete
+also answers yes; Escape, No or another selection keeps it. A finished city cannot be deleted. A
+building whose only order is Delete keeps opening on its own tab; its Order tab, once chosen,
+stays open for that selection. Script: `key delete` presses the Delete key.
+
 **Patrol routes (task 126).** Patrol, then click a point: the unit patrols between where it
 stood and the point. Holding Shift while clicking keeps the pick on and adds a point; the click
 without Shift gives the last one. The unit walks the closed loop start, point 1, point 2, ...,

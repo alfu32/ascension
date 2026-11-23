@@ -906,6 +906,29 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
                             || et.territory.as_ref().is_some_and(|t| t.capturable)
                     );
                 }
+                // A finished city is captured, never deleted (task 142).
+                Err(SimError::CannotDelete) => {
+                    assert_eq!(kind.key, "delete");
+                    assert!(et.territory.as_ref().is_some_and(|t| t.capturable));
+                }
+                // Only weapons that throw a projectile attack the ground (task 142), and a ship's
+                // orbital weapons only from orbit.
+                Err(SimError::NoGroundWeapon) => {
+                    assert_eq!(kind.key, "attack_ground");
+                    assert!(
+                        !world.attacks_ground(et.id)
+                            || et
+                                .weapons
+                                .iter()
+                                .filter(|w| w.projectile_speed > 0
+                                    && w.targets
+                                        .iter()
+                                        .any(|t| t.layer == rom_rules::Layer::Ground))
+                                .all(|w| w.orbit_only),
+                        "{}",
+                        rules.key(et.id)
+                    );
+                }
                 // A market reaches the trade's own checks (task 107, tests/market.rs): this
                 // player has not researched trading.
                 Err(SimError::NeedsMarketTrading) => {

@@ -108,6 +108,7 @@ impl World {
             {
                 Err(SimError::CannotRaze)
             }
+            "delete" => self.check_delete(executor.id),
             "guard" => {
                 let ward = command
                     .target_entity
@@ -140,9 +141,9 @@ impl World {
     }
 
     /// Applies a `raze` order as it leaves `pending`. An unfinished building is given up and
-    /// `economy.cancel_refund_pct` of its base price, for the work not yet done, comes
-    /// back; a finished one that cannot be captured is pulled down. Either way it falls
-    /// with the dead of this tick.
+    /// its price for the work not yet done comes back, as `delete` refunds it (task 142); a
+    /// finished one that cannot be captured is pulled down. Either way it falls with the dead
+    /// of this tick.
     pub(crate) fn apply_raze(&mut self, order: &Order) {
         let Some(e) = self.entity(order.executor) else {
             self.stats.orders_cancelled += 1;
@@ -153,27 +154,9 @@ impl World {
             self.stats.orders_cancelled += 1;
             return;
         }
-        if let Some(done) = progress {
-            let total = self
-                .rules
-                .build_ticks(type_id, &self.players[&owner].active_sources())
-                .max(1);
-            let left = (total - i64::from(done)).clamp(0, total);
-            let pct = self
-                .rules
-                .constant("economy.cancel_refund_pct")
-                .expect("refund");
-            let price =
-                self.rules
-                    .cost_of_ramped(type_id, &self.players[&owner].active_sources(), 0);
-            let player = self.players.get_mut(&owner).expect("owner");
-            for (resource, amount) in price {
-                let back = (i128::from(amount) * i128::from(pct) / 100 * i128::from(left)
-                    / i128::from(total))
-                .clamp(0, i128::from(i64::MAX)) as i64;
-                let balance = player.resources.entry(resource).or_default();
-                *balance = balance.saturating_add(back);
-            }
+        if progress.is_some() {
+            let refund = self.delete_refund(order.executor);
+            self.credit(owner, &refund);
         }
         let e = self.entities[order.executor.0 as usize]
             .as_mut()

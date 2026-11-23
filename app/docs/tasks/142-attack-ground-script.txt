@@ -1,0 +1,18 @@
+# Task 142: catapults bombard a point on the ground, replayed by --script (sphere match, seed 1,
+# --players 2 --ai none, --size 1920x1080). Three catapults of player one stand south-west of the
+# city; they are selected (Shift-clicks on armyN), the Order tab opened, Attack ground (slot 9,
+# hotkey G) pressed and open ground east of the city clicked: they walk into reach and fire
+# stones at the point until stopped, nobody there. The red reticle marks the point, with a line
+# from each selected catapult. (With an enemy there, idle citizens join the fight and the
+# picture shows them, not the order.)
+#   rise-of-man --seed 1 --players 2 --ai none --size 1920x1080 \
+#     --script app/docs/tasks/142-attack-ground-script.txt --after 15 --screenshot app/docs/img/142-attack-ground.png
+0 place 1 unit.catapult @-3,6
+0 place 1 unit.catapult @-3,8
+0 place 1 unit.catapult @-3,10
+5 click army1
+6 click army2 shift
+7 click army3 shift
+8 hud tab 1
+9 hud slot 9
+10 click @13,3

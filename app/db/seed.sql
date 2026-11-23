@@ -131,7 +131,9 @@ INSERT INTO order_kind(key,needs,target,note) VALUES
  ('train','producer','def',''), ('research','producer','def',''), ('morph','','def','upgrade in place'),
  ('ability','energy','entity_or_point','subject = ability'), ('set_rally','producer','entity_or_point','units it trains walk to the point or entity; applied at once, the queue stays'),
  ('raze','','none','pull down an own building at once: an unfinished one refunds the work not done; not a finished city'), ('disband','movement','none','the unit leaves the match; no refund'),
- ('release','gather_site','none','every worker inside a gather building leaves it');
+ ('release','gather_site','none','every worker inside a gather building leaves it'),
+ ('delete','','none','task 142: an own unit or building leaves at once; a construction site refunds its price for the work not done, a queue comes back, units inside come out; not a finished city'),
+ ('attack_ground','weapon','point','task 142: weapons that throw a projectile fire at the point (from orbit at the planet below), moving into range first, until stopped');
 
 -- ── defs ────────────────────────────────────────────────────────────────────
 INSERT INTO def(kind,key,name,sort) VALUES
@@ -5565,7 +5567,7 @@ UPDATE material SET params='{"base_colour":"#b3d3e8"}'
 -- et_sound event of each order kind.
 UPDATE order_kind SET line='move' WHERE key IN ('move','orbit','travel','patrol','explore','carry',
  'enter','land','lift','harvest','heal','trade','claim','unload');
-UPDATE order_kind SET line='attack' WHERE key IN ('attack','attack_move','guard');
+UPDATE order_kind SET line='attack' WHERE key IN ('attack','attack_move','guard','attack_ground');
 UPDATE order_kind SET line='build' WHERE key IN ('construct','repair');
 -- The ambience beds (docs/sound.md): wind everywhere, waves over the sea, birds by day and
 -- crickets by night over land, the forest over its trees, the rustle of fields around the

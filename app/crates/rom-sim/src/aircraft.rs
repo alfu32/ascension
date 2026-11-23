@@ -400,6 +400,7 @@ pub(crate) fn takes_off_for(kind: &str) -> bool {
         "move"
             | "attack"
             | "attack_move"
+            | "attack_ground"
             | "patrol"
             | "guard"
             | "explore"

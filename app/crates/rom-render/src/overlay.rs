@@ -465,6 +465,28 @@ pub fn build_overlays_on(
                     colour,
                 );
             }
+            MarkerKind::Ground => {
+                // A reticle: two rings and four ticks pointing in, gap at the centre.
+                out.ring(origin, 0.9, RED);
+                out.ring(origin, 0.35, RED);
+                for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)] {
+                    out.line(
+                        origin.at(dx * 1.25, dy * 1.25, LIFT),
+                        origin.at(dx * 0.55, dy * 0.55, LIFT),
+                        RED,
+                    );
+                }
+                if let Some((face, fx, fy)) = marker.from {
+                    let unit = Origin {
+                        ground,
+                        face,
+                        x: fx as f32 / 1000.0,
+                        y: fy as f32 / 1000.0,
+                        altitude: 0.0,
+                    };
+                    out.line(unit.at(0.0, 0.0, LIFT), origin.at(0.0, 0.0, LIFT), RED);
+                }
+            }
             MarkerKind::Rally => {
                 let step = |dx: f32, h: f32| -> [f32; 3] {
                     std::array::from_fn(|i| base[i] + frame.up[i] * h + frame.ex[i] * dx)

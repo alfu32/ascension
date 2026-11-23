@@ -1,0 +1,23 @@
+# Task 142: ships leaving a spaceport go to its rally point, replayed by --script (universe
+# match, seed 1, --players 2 --ai none, --size 1920x1080). Player one starts in the starfaring
+# age with a spaceport; it is selected (`producers`), the ground east of the city right-clicked
+# for its rally point, and a survey ship (slot 0) and a satellite (slot 8, bound to its orbit)
+# queued on its Train tab at four times the speed. Each ship launches into orbit above the spaceport, then moves within the orbit to above
+# the rally point and stays there, as units leaving a barracks walk to theirs.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --size 1920x1080 \
+#     --script app/docs/tasks/142-spaceport-rally-script.txt --after 22 --screenshot app/docs/img/142-spaceport-rally.png
+0 grant-age age.starfaring
+0 grant res.food 100000
+0 grant res.timber 100000
+0 grant res.metal 100000
+0 grant res.wealth 100000
+0 grant res.knowledge 100000
+0 grant res.oil 100000
+0 grant res.energy 100000
+0 place 1 bld.spaceport @-10,0
+5 producers
+6 rclick @16,4
+7 hud tab 2
+8 hud slot 0
+9 hud slot 8
+10 speed 400

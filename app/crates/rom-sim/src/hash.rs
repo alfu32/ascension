@@ -368,6 +368,11 @@ impl World {
             if let Some(slot) = hit.drone {
                 hash.bytes(&[b'd', slot]);
             }
+            // Only shots at the ground carry their point, so other worlds keep their hashes.
+            if let Some(at) = hit.ground {
+                hash.bytes(b"g");
+                hash.pos(at);
+            }
         }
         // These buffers are empty between ticks, but cover them for internal hashes too.
         hash.u64(self.seen.len() as u64);
@@ -401,6 +406,11 @@ impl World {
             // Only shots at a drone carry more, so other worlds keep their hashes (task 128).
             if let Some(slot) = hit.drone {
                 hash.bytes(&[b'd', slot]);
+            }
+            // Only shots at the ground carry their point, so other worlds keep their hashes.
+            if let Some(at) = hit.ground {
+                hash.bytes(b"g");
+                hash.pos(at);
             }
         }
         hash.u64(self.avoid.awake.len() as u64);

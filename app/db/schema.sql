@@ -1614,7 +1614,9 @@ CREATE TABLE pending_hit (
   weapon_id INTEGER NOT NULL,
   target_id INTEGER NOT NULL,
   damage INTEGER NOT NULL,
-  drone INTEGER                            -- the drone of the target's grid it aims at (format 17)
+  drone INTEGER,                           -- the drone of the target's grid it aims at (format 17)
+  -- a shot of `attack_ground` (task 142, format 19): the point it flies at; target_id is 0
+  ground_x INTEGER, ground_y INTEGER, ground_face INTEGER, ground_body INTEGER
 ) STRICT;
 
 CREATE TABLE pending_shot (
@@ -1630,6 +1632,7 @@ CREATE TABLE pending_shot (
   target_id INTEGER NOT NULL,
   damage INTEGER NOT NULL,
   drone INTEGER                            -- the drone of the target's grid it aims at (format 17)
+  -- a shot of `attack_ground` (task 142) has target_id 0 and flies at target_x..target_body
 ) STRICT;
 
 -- System space: where each body sits on its system's plane, the neutral marker

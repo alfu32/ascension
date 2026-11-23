@@ -1000,3 +1000,47 @@ fn contacts_and_known_capitals() {
         w.despawn(capital).unwrap();
     });
 }
+
+/// Task 142: catapults bombarding a point with a stone in flight, and a site half built, save and
+/// load with them; both worlds bombard and delete alike.
+#[test]
+fn shots_at_the_ground_in_flight_and_a_site_deleted_after_the_load() {
+    let rules = rules();
+    let mut w = universe(&rules);
+    let kind = id(&w, "unit.catapult");
+    let point = at(HOME, 40_500, 40_500);
+    let catapults: Vec<_> = [28_500, 30_500]
+        .into_iter()
+        .map(|y| w.spawn(kind, P1, at(HOME, 24_500, y)).unwrap())
+        .collect();
+    w.spawn(id(&w, "bld.farm"), P2, point).unwrap();
+    for c in &catapults {
+        order(&mut w, *c, "attack_ground", None, Some(point));
+    }
+    run_until(&mut w, 2000, |w| {
+        w.hits_in_flight().any(|h| h.ground == Some(point))
+    });
+    // A builder far from its site: the site stands unfinished when the world is saved.
+    let builder = w
+        .spawn(id(&w, "unit.citizen"), P1, at(HOME, 2_500, 32_500))
+        .unwrap();
+    let barracks = id(&w, "bld.barracks");
+    w.submit(Command {
+        subject: Some(barracks),
+        target_pos: Some(at(HOME, 14_500, 32_500)),
+        ..command(&w, builder, "construct")
+    })
+    .unwrap();
+    w.step();
+    run_until(&mut w, 100, |w| {
+        w.hits_in_flight().any(|h| h.ground == Some(point))
+    });
+    let site = w
+        .entities()
+        .find(|e| e.type_id == barracks && e.build_progress.is_some())
+        .map(|e| e.id)
+        .expect("an unfinished site");
+    check("ground", &rules, w, 300, move |w| {
+        order(w, site, "delete", None, None);
+    });
+}

@@ -1,0 +1,9 @@
+# Task 142: deleting a finished building asks first, replayed by --script (sphere match, seed 1,
+# --players 2 --ai none, --size 1920x1080). A barracks of player one is selected (`producers`)
+# and the Delete key pressed: the command card shows "Delete? Yes" in the Delete button's place
+# and "No, keep it" beside it, and the help line names what goes.
+#   rise-of-man --seed 1 --players 2 --ai none --size 1920x1080 \
+#     --script app/docs/tasks/142-delete-script.txt --after 4 --screenshot app/docs/img/142-delete-confirm.png
+0 place 1 bld.barracks @8,-2
+5 producers
+7 key delete
