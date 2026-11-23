@@ -25,6 +25,9 @@ The current state of every task is in `app/docs/tasks/STATUS.md`.
   planets and resource bodies; the camera zooms continuously from surface to
   star map once a player reaches the space age, and is bound to the home
   planet before that. Each race's home planet is in its own system.
+  Owner, 2026-11-23 (task 138): the view of the player's own star system
+  opens one age sooner, in the Fusion age (view only; travel and the star map
+  as before).
 - Resource planets are claimed by keeping a starship beside them; planetary
   terrains host buildings and ground battles.
 - Identity ladder: historical nation (ages 0–7) → continental bloc (8–9) →
