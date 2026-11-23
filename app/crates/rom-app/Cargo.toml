@@ -26,5 +26,7 @@ rom-audio = { path = "../rom-audio" }
 rom-net = { path = "../rom-net", features = ["tls"] }
 thiserror.workspace = true
 serde_json = "=1.0.154"
+# The ages' stories and music (task 133, `assets/text/ages.toml`).
+toml = "=0.8.23"
 # The launcher, lobby and server window rasterise the HUD chrome as the HUD atlas does.
 resvg.workspace = true

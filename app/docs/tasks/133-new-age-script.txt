@@ -1,0 +1,18 @@
+# Task 133, shot as img/133-new-age-dialog.png: the Classical Age reached in a universe match
+# (seed 1, --sun fixed, 1280 x 800, --players 2 --ai none): the Ancient research done before
+# the first tick, the library researches the advance
+# at ten times the speed, the age's theme starts and the new-age dialog tells its story. Run with
+#   --universe --seed 1 --players 2 --ai none --sun fixed --size 1280x800
+#   --script docs/tasks/133-new-age-script.txt --screenshot <file> --after 9
+# (a scripted run is never held by the dialog; an interactive game is, until a click or a key).
+0 research-all 1
+0 grant res.food 50000
+0 grant res.timber 50000
+0 grant res.wealth 50000
+0 place 1 bld.library @9,0
+1 speed 100
+5 researchers
+6 hud tab 3
+7 hud slot 0
+8 speed 1000
+640 speed 100

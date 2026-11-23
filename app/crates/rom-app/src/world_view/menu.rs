@@ -10,6 +10,7 @@ use gpui_component::{
     Disableable, Selectable, Sizable,
     button::{Button, ButtonVariants},
     input::{Input, InputEvent, InputState},
+    slider::{Slider, SliderEvent, SliderState},
 };
 use rom_render::InputEvent as WorldInput;
 
@@ -50,6 +51,9 @@ pub(super) struct Menu {
     /// The end of the match, once the dialog has shown it.
     end: Option<Arc<EndNotice>>,
     _subscription: Option<Subscription>,
+    /// The mixer's sliders (task 133): option name, label and slider.
+    mixer: Vec<(&'static str, &'static str, Entity<SliderState>)>,
+    _mixer_subscriptions: Vec<Subscription>,
 }
 
 impl WorldView {
@@ -95,6 +99,7 @@ impl WorldView {
             return;
         }
         self.bridge.push_input(WorldInput::ReleaseAll);
+        let (mixer, subscriptions) = self.mixer_sliders(window, cx);
         self.menu = Some(Menu {
             page: Page::Main,
             was_paused: self.sim.paused(),
@@ -104,6 +109,8 @@ impl WorldView {
             entries: Vec::new(),
             end: None,
             _subscription: None,
+            mixer,
+            _mixer_subscriptions: subscriptions,
         });
         // A network match is everyone's: the menu does not hold it (the pause button does).
         if self.sim.network().is_none() {
@@ -300,38 +307,84 @@ impl WorldView {
         row.into_any_element()
     }
 
-    /// The master volume (task 125): applied at once; the launcher's Sound settings keep the
-    /// rest.
-    fn sound_row(&self, cx: &mut Context<Self>) -> AnyElement {
+    /// The mixer's sliders (task 133), one per category, at the settings in use.
+    #[allow(clippy::type_complexity)]
+    fn mixer_sliders(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> (
+        Vec<(&'static str, &'static str, Entity<SliderState>)>,
+        Vec<Subscription>,
+    ) {
         let current = crate::sound::settings();
-        let mut row = div()
-            .flex()
-            .flex_row()
-            .items_center()
-            .gap_2()
-            .child(div().text_color(rgb(MUTED)).child("Sound volume"));
-        for percent in [0, 25, 50, 75, 100] {
-            let label = if percent == 0 {
-                "off".to_owned()
-            } else {
-                format!("{percent} %")
-            };
-            row = row.child(
-                Button::new(SharedString::from(format!("menu-volume-{percent}")))
-                    .label(label)
-                    .small()
-                    .selected(current.master == percent)
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        crate::sound::set_settings(crate::sound::Settings {
-                            master: percent,
-                            ..crate::sound::settings()
-                        });
-                        crate::sound::click();
+        let mut sliders = Vec::new();
+        let mut subscriptions = Vec::new();
+        for (flag, label) in crate::sound::SLIDERS {
+            let value = current.get(flag).unwrap_or(100) as f32;
+            let slider = cx.new(|_| {
+                SliderState::new()
+                    .min(0.)
+                    .max(100.)
+                    .step(1.)
+                    .default_value(value)
+            });
+            subscriptions.push(cx.subscribe_in(
+                &slider,
+                window,
+                move |_, _, event: &SliderEvent, _, cx| {
+                    let SliderEvent::Change(value) = event;
+                    let percent = value.end().round().clamp(0., 100.) as u32;
+                    let mut settings = crate::sound::settings();
+                    if settings.get(flag) != Some(percent) {
+                        settings.set(flag, percent);
+                        // Applied at once, and kept with the launcher's settings for the next
+                        // game.
+                        crate::sound::set_settings(settings);
+                        if let Err(error) = crate::launcher::remember_sound(&settings) {
+                            eprintln!("rise-of-man: could not keep the Sound settings: {error}");
+                        }
                         cx.notify();
-                    })),
+                    }
+                },
+            ));
+            sliders.push((flag, label, slider));
+        }
+        (sliders, subscriptions)
+    }
+
+    /// The mixer (task 133): Master, Music, Units, Buildings, Environment and Announcements,
+    /// each 0–100 %, applied at once and kept for the next game.
+    fn sound_rows(&self, menu: &Menu) -> AnyElement {
+        let current = crate::sound::settings();
+        let mut rows = div()
+            .flex()
+            .flex_col()
+            .gap_1()
+            .child(div().text_color(rgb(MUTED)).child("Sound"));
+        for (flag, label, slider) in &menu.mixer {
+            let percent = current.get(flag).unwrap_or(100);
+            rows = rows.child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .gap_3()
+                    .child(div().w(px(120.)).child(*label))
+                    .child(div().flex_1().child(Slider::new(slider)))
+                    .child(
+                        div()
+                            .w(px(48.))
+                            .text_color(rgb(if percent == 0 { MUTED } else { GOLD }))
+                            .child(if percent == 0 {
+                                "off".to_owned()
+                            } else {
+                                format!("{percent} %")
+                            }),
+                    ),
             );
         }
-        row.into_any_element()
+        rows.into_any_element()
     }
 
     pub(super) fn render_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
@@ -346,7 +399,7 @@ impl WorldView {
         let mut panel = div()
             .id("game-menu")
             .w(px(if report { REPORT_WIDTH + 40. } else { 560. }))
-            .max_h(px(if report { 900. } else { 560. }))
+            .max_h(px(if report { 900. } else { 760. }))
             .overflow_y_scroll()
             .flex()
             .flex_col()
@@ -451,7 +504,7 @@ impl WorldView {
                             ),
                     )
                     .child(self.detail_row(cx))
-                    .child(self.sound_row(cx))
+                    .child(self.sound_rows(menu))
                     .child(
                         Button::new("menu-save")
                             .label("Save game")
@@ -505,7 +558,7 @@ impl WorldView {
                             ),
                     )
                     .child(self.detail_row(cx))
-                    .child(self.sound_row(cx))
+                    .child(self.sound_rows(menu))
                     .child(
                         Button::new("menu-save")
                             .label("Save game")

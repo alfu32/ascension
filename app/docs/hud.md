@@ -451,14 +451,49 @@ given them, and its own controls click at that volume:
 | Control | Option | Default |
 | --- | --- | --- |
 | Master volume | `--volume <0–100>` | 100 |
-| Effects (weapons, work, movement, buildings, interface) | `--effects-volume <0–100>` | 100 |
-| Voices (unit lines, announcer) | `--voice-volume <0–100>` | 100 |
-| Ambience | `--ambient-volume <0–100>` | 100 |
+| Music (task 133) | `--music-volume <0–100>` | 100 |
+| Units: voices, shots, blows, movement | `--units-volume <0–100>` | 100 |
+| Buildings: lines, work, construction, training and research cues | `--buildings-volume <0–100>` | 100 |
+| Environment: the ambience beds | `--environment-volume <0–100>` | 100 |
+| Announcements: alerts, announcer, interface | `--announcements-volume <0–100>` | 100 |
 | Mute while the window is not focused | `--mute-unfocused <on|off>` | on |
 | No sound at all (benchmarks, CI) | `--mute` | off |
 
-Each volume scales the engine's gentle default mix (master 0.8, effects 0.8, voice 1.0, ambience
-0.6), so 100 is that mix. The game menu (Esc) has a **Sound volume** row (off, 25, 50, 75, 100 %)
-that changes the master volume at once for the match. `--sound-check` alone starts the sound
-engine without a window and prints whether it plays, and on which device, or why it is silent.
+Task 133 made the volumes the mixer's categories (`docs/sound.md`, "The mixer's categories"):
+each a slider 0–100 % in the launcher's Sound group, applied at once. Each scales the engine's
+gentle default mix (master 0.8; voices 1.0, effects 0.8, ambience 0.6, music 0.5 under it), so
+100 is that mix. The old options and saved values (effects, voice, ambience) are read as the
+categories they stand for. The group ends with the **Launcher music** switch (also on the home
+screen), which only the launcher uses. The game menu (Esc) has the same six sliders, applied at
+once and kept in `launcher.json` for the next game (the open launcher takes them when the game
+ends). `--sound-check` alone starts the sound engine without a window and prints whether it
+plays, and on which device, or why it is silent.
+
+## The new-age dialog (task 133)
+
+When the person's player reaches a new age, the age's main theme plays (`docs/music.md`, "In the
+game") and a dialog tells the age's story, drawn by the HUD (raylib) over everything:
+
+- the world and the HUD dimmed; a navy panel with the gold frame and an inner gold line, 820
+  design pixels wide, in the middle of the screen;
+- "AGE 4 OF 13 · HISTORY" in cyan (the age's ordinal, the last ordinal, its era from the
+  rules); the age's name from the rules ("Enlightenment Age") large in gold; its subtitle from
+  `docs/ages-story.md` ("Reason against darkness"); a short cyan rule;
+- its story, the italic paragraph of that age in `docs/ages-story.md`, wrapped and centred in
+  white; "Click or press any key to continue" in grey.
+
+The subtitles, stories and each age's music are in `app/assets/text/ages.toml`, embedded and
+read by ordinal (`rom-app/src/ages.rs`); a test keeps it in step with the document. The
+simulation thread opens the dialog when the player's age changes (never at the start of a
+match: the starting age's theme plays without it) and publishes it in `HudSnapshot::age_dialog`;
+a click anywhere or any key (modifiers aside) closes it and does nothing else. In a standalone
+interactive game it **holds the match** while open, as the menu does (no tick runs; the music
+plays on); in a network match it never holds (the match is everyone's), and a scripted, timed
+(`--bench`) or screenshot run is not held either. An age reached while the dialog is open
+replaces it.
+
+Screenshots: `img/133-new-age-dialog.png` (`tasks/133-new-age-script.txt`), the mixer in the
+launcher's Sound group (`img/133-launcher-mixer.png`, an old `launcher.json` of effects 60, voice
+80, ambience 40 read as units 60, buildings 60, environment 40), the home screen's Music switch
+(`img/133-launcher-music.png`) and the game menu's mixer (`img/133-match-mixer.png`).
 

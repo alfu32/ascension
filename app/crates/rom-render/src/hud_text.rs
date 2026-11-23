@@ -106,12 +106,13 @@ pub struct GlyphAtlas {
 fn characters() -> impl Iterator<Item = char> {
     (0x20_u32..=0x7e)
         .chain(0xa0..=0xff)
-        .chain([0x2014, 0x2192])
+        .chain([0x2013, 0x2014, 0x2192])
         .filter_map(char::from_u32)
 }
 
 impl GlyphAtlas {
-    /// Rasterises Basic Latin, Latin-1, the em dash and the route arrow at both HUD sizes.
+    /// Rasterises Basic Latin, Latin-1, the en and em dashes and the route arrow at both HUD
+    /// sizes.
     pub fn bake(scale: f32) -> Self {
         let font = Font::from_bytes(FONT_BYTES, FontSettings::default())
             .expect("the bundled font is a valid TrueType file");

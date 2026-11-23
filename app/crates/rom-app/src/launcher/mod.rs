@@ -326,6 +326,15 @@ pub(crate) fn remember_token(url: &str, token: &str) -> Result<(), String> {
     config.save_tokens(&path)
 }
 
+/// Keeps the Sound sliders changed in a match's menu (task 133) with the launcher's settings, so
+/// the next game and the launcher take them.
+pub(crate) fn remember_sound(settings: &crate::sound::Settings) -> Result<(), String> {
+    let path = config_path()?;
+    let mut config = Config::load(&path)?;
+    config.form.set_sound(settings);
+    config.save(&path)
+}
+
 /// Opens the launcher without starting raylib or a simulation.
 pub(crate) fn run(arguments: &[String]) -> ExitCode {
     // Launcher-only --after is a timer for visual inspection; it is never forwarded to a child.

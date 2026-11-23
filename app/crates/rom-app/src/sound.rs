@@ -1,9 +1,11 @@
-//! Sound in the game (task 125): the audio engine of the process, the player's Sound settings,
-//! and the director that turns what happens into sounds. Presentation only: nothing here feeds
+//! Sound in the game (task 125): the audio engine of the process, the player's Sound settings
+//! (the mixer's categories since task 133), the director that turns what happens into sounds,
+//! and the music of the launcher and the match (task 133). Presentation only: nothing here feeds
 //! the simulation, and the simulation knows nothing of sound.
 
 mod book;
 mod director;
+pub mod music;
 
 use std::sync::{Arc, Mutex};
 
@@ -11,17 +13,22 @@ pub use director::{Director, UiCue};
 
 use rom_audio::{AudioEngine, Placement, SoundId, Volumes};
 
-/// The Sound settings, each volume 0–100 percent of the gentle default mix.
+/// The Sound settings (task 133: the owner's categories), each volume 0–100 percent of the
+/// gentle default mix.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Settings {
     /// Everything.
     pub master: u32,
-    /// Weapons, work, movement, buildings and interface cues.
-    pub effects: u32,
-    /// Unit lines and the announcer.
-    pub voice: u32,
+    /// The music: the launcher's, the ages' themes and the interludes' fragments.
+    pub music: u32,
+    /// Units' voices, shots, blows and movement.
+    pub units: u32,
+    /// Buildings' lines, work sounds, construction, and their trained and researched cues.
+    pub buildings: u32,
     /// The ambience beds.
-    pub ambient: u32,
+    pub environment: u32,
+    /// Alerts, the announcer, age and research announcements and the interface cues.
+    pub announcements: u32,
     /// Silence the game while its window is not focused.
     pub mute_unfocused: bool,
 }
@@ -30,13 +37,111 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             master: 100,
-            effects: 100,
-            voice: 100,
-            ambient: 100,
+            music: 100,
+            units: 100,
+            buildings: 100,
+            environment: 100,
+            announcements: 100,
             mute_unfocused: true,
         }
     }
 }
+
+/// The Sound settings before task 133: effects (weapons, work, movement, buildings, interface),
+/// voices (unit lines, announcer) and ambience, each a percent.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct OldVolumes {
+    /// `effects-volume`.
+    pub effects: Option<u32>,
+    /// `voice-volume`.
+    pub voice: Option<u32>,
+    /// `ambient-volume`.
+    pub ambient: Option<u32>,
+}
+
+impl OldVolumes {
+    /// Whether any old value was given.
+    pub fn any(&self) -> bool {
+        self.effects.is_some() || self.voice.is_some() || self.ambient.is_some()
+    }
+
+    /// The categories the old values stand for, never louder than before: units heard both
+    /// the effects (shots, steps) and the voices (lines), so they take the lower of the two;
+    /// buildings take the effects; the environment the ambience. The announcements and the
+    /// music keep their own values.
+    pub fn migrate(&self, into: &mut Settings) {
+        let effects = self.effects.unwrap_or(100);
+        let voice = self.voice.unwrap_or(100);
+        if self.effects.is_some() || self.voice.is_some() {
+            into.units = effects.min(voice);
+        }
+        if let Some(effects) = self.effects {
+            into.buildings = effects;
+        }
+        if let Some(ambient) = self.ambient {
+            into.environment = ambient;
+        }
+    }
+}
+
+impl Settings {
+    /// The engine's volumes for these settings (`silent`: the window is not focused and the
+    /// settings say to mute then).
+    pub fn volumes(&self, silent: bool) -> Volumes {
+        let base = Volumes::default();
+        let pct = |p: u32| p.min(100) as f32 / 100.0;
+        Volumes {
+            master: if silent {
+                0.0
+            } else {
+                base.master * pct(self.master)
+            },
+            music: base.music * pct(self.music),
+            units: base.units * pct(self.units),
+            buildings: base.buildings * pct(self.buildings),
+            environment: base.environment * pct(self.environment),
+            announcements: base.announcements * pct(self.announcements),
+        }
+    }
+
+    /// The volume of a slider by its option name (`volume`, `music-volume`, …).
+    pub fn get(&self, flag: &str) -> Option<u32> {
+        Some(match flag {
+            "volume" => self.master,
+            "music-volume" => self.music,
+            "units-volume" => self.units,
+            "buildings-volume" => self.buildings,
+            "environment-volume" => self.environment,
+            "announcements-volume" => self.announcements,
+            _ => return None,
+        })
+    }
+
+    /// Sets a slider by its option name; false for another name.
+    pub fn set(&mut self, flag: &str, percent: u32) -> bool {
+        let percent = percent.min(100);
+        match flag {
+            "volume" => self.master = percent,
+            "music-volume" => self.music = percent,
+            "units-volume" => self.units = percent,
+            "buildings-volume" => self.buildings = percent,
+            "environment-volume" => self.environment = percent,
+            "announcements-volume" => self.announcements = percent,
+            _ => return false,
+        }
+        true
+    }
+}
+
+/// The sliders of the mixer: option name and label, in order.
+pub const SLIDERS: [(&str, &str); 6] = [
+    ("volume", "Master"),
+    ("music-volume", "Music"),
+    ("units-volume", "Units"),
+    ("buildings-volume", "Buildings"),
+    ("environment-volume", "Environment"),
+    ("announcements-volume", "Announcements"),
+];
 
 struct State {
     engine: Arc<AudioEngine>,
@@ -105,20 +210,9 @@ fn apply() {
     let Some(state) = guard.as_ref() else {
         return;
     };
-    let base = Volumes::default();
     let s = state.settings;
-    let pct = |p: u32| p.min(100) as f32 / 100.0;
     let silent = s.mute_unfocused && !state.focused;
-    state.engine.set_volumes(
-        if silent {
-            0.0
-        } else {
-            base.master * pct(s.master)
-        },
-        base.effects * pct(s.effects),
-        base.voice * pct(s.voice),
-        base.ambient * pct(s.ambient),
-    );
+    state.engine.set_volumes(s.volumes(silent));
 }
 
 /// `--sound-check`: starts the engine alone, waits for it and prints whether it plays (the
@@ -147,7 +241,8 @@ pub fn click() {
     if let Some(engine) = engine() {
         let clicks = book::family("ui.click");
         if let Some(id) = clicks.get(pick(clicks.len())) {
-            engine.play(
+            engine.play_as(
+                rom_audio::Category::Announcements,
                 *id,
                 Placement::centre(CLICK_GAIN),
                 rom_audio::FOREGROUND_PRIORITY,
@@ -188,6 +283,48 @@ mod tests {
         set_focused(false);
         set_focused(true);
         assert_eq!(settings(), Settings::default());
+    }
+
+    #[test]
+    fn old_volumes_map_to_the_categories() {
+        let mut settings = Settings::default();
+        OldVolumes::default().migrate(&mut settings);
+        assert_eq!(settings, Settings::default());
+        OldVolumes {
+            effects: Some(50),
+            voice: Some(90),
+            ambient: Some(30),
+        }
+        .migrate(&mut settings);
+        assert_eq!(
+            (settings.units, settings.buildings, settings.environment),
+            (50, 50, 30)
+        );
+        assert_eq!((settings.music, settings.announcements), (100, 100));
+        let mut settings = Settings::default();
+        OldVolumes {
+            voice: Some(20),
+            ..OldVolumes::default()
+        }
+        .migrate(&mut settings);
+        assert_eq!((settings.units, settings.buildings), (20, 100));
+    }
+
+    #[test]
+    fn sliders_read_and_write_their_settings() {
+        let mut settings = Settings::default();
+        for (i, (flag, _)) in SLIDERS.iter().enumerate() {
+            assert!(settings.set(flag, i as u32 * 10));
+        }
+        for (i, (flag, _)) in SLIDERS.iter().enumerate() {
+            assert_eq!(settings.get(flag), Some(i as u32 * 10));
+        }
+        assert!(!settings.set("mute", 3));
+        let v = settings.volumes(false);
+        assert_eq!(v.master, 0.0);
+        assert!((v.announcements - 0.5).abs() < 1e-6);
+        assert_eq!(settings.volumes(true).master, 0.0);
+        assert!((Settings::default().volumes(false).master - 0.8).abs() < 1e-6);
     }
 
     #[test]

@@ -11,10 +11,12 @@ use gpui::{
 };
 use gpui_component::input::Input;
 use gpui_component::select::Select;
+use gpui_component::slider::Slider;
 use gpui_component::{Sizable, StyledExt};
 
 use super::super::form::{
-    CONTROLS, Form, GROUPS, HIDDEN, MODELS_GROUP, PRESETS, SAVES_GROUP, commands, preset,
+    CONTROLS, Form, GROUPS, HIDDEN, MODELS_GROUP, PRESETS, SAVES_GROUP, SOUND_GROUP, commands,
+    preset,
 };
 use super::super::models;
 use super::super::presets::Preset;
@@ -577,6 +579,48 @@ impl Launcher {
         grid.into_any_element()
     }
 
+    /// The launcher's own music switch (task 133), remembered in its settings.
+    fn music_switch(&self, id: &'static str, cx: &mut Context<Self>) -> AnyElement {
+        let on = self.config.launcher_music;
+        style::toggle(id, on, "Music")
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.config.launcher_music = !on;
+                this.save();
+                cx.notify();
+            }))
+            .into_any_element()
+    }
+
+    /// The Sound group's last row: the launcher's music switch.
+    fn launcher_music_row(&self, cx: &mut Context<Self>) -> AnyElement {
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(6.))
+            .py(px(10.))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(14.))
+                    .child(
+                        div()
+                            .w(px(190.))
+                            .flex_shrink_0()
+                            .text_size(px(13.))
+                            .text_color(rgb(style::GOLD))
+                            .child("Launcher music"),
+                    )
+                    .child(self.music_switch("advanced-music", cx)),
+            )
+            .child(div().pl(px(204.)).child(style::hint(
+                "The main title, then each age's theme and interlude in age order, round and round, \
+                 while the launcher is open and no game runs. Not a game option: the launcher \
+                 keeps it.",
+            )))
+            .into_any_element()
+    }
+
     pub(super) fn render_home(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let chosen = self.find_preset(&self.config.chosen);
         let hero = style::hero(250.).child(
@@ -647,6 +691,8 @@ impl Launcher {
         }
         others = others
             .child(div().w(px(16.)))
+            .child(self.music_switch("home-music", cx))
+            .child(div().w(px(8.)))
             .child(
                 style::button("home-advanced", "Advanced …", Look::Plain, true).on_click(
                     cx.listener(|this, _, window, cx| this.go(Screen::Advanced, window, cx)),
@@ -832,7 +878,31 @@ impl Launcher {
         } else {
             control.default
         };
-        let editor: AnyElement = if flag == "style" {
+        let editor: AnyElement = if let Some(slider) = self.volume_sliders.get(flag) {
+            // A volume of the mixer (task 133): a slider and its value.
+            let percent = value.trim().parse::<u32>().unwrap_or(100);
+            div()
+                .flex()
+                .items_center()
+                .gap(px(14.))
+                .child(div().flex_1().min_w_0().child(Slider::new(slider)))
+                .child(
+                    div()
+                        .w(px(56.))
+                        .text_size(px(14.))
+                        .text_color(rgb(if percent == 0 {
+                            style::MUTED
+                        } else {
+                            style::GOLD
+                        }))
+                        .child(if percent == 0 {
+                            "off".to_owned()
+                        } else {
+                            format!("{percent} %")
+                        }),
+                )
+                .into_any_element()
+        } else if flag == "style" {
             self.advanced_map_cards(index, &value, cx)
         } else if flag == "script" {
             self.advanced_script(index, &value, cx)
@@ -1565,12 +1635,16 @@ impl Launcher {
         } else if self.group == SAVES_GROUP {
             vec![self.saves_panel(cx)]
         } else {
-            CONTROLS
+            let mut rows = CONTROLS
                 .iter()
                 .enumerate()
                 .filter(|(_, c)| c.group == self.group && !HIDDEN.contains(&c.flag))
                 .map(|(i, _)| self.row(i, cx))
-                .collect::<Vec<_>>()
+                .collect::<Vec<_>>();
+            if self.group == SOUND_GROUP {
+                rows.push(self.launcher_music_row(cx));
+            }
+            rows
         };
         let arguments = launched.arguments();
         let [binary_command, cargo_command] = commands(&self.executable, &arguments);

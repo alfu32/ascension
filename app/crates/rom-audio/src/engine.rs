@@ -1,19 +1,27 @@
 //! The audio thread: opens the output device, decodes each sound the first time it is asked for
-//! and passes the game's commands on to the mixer in the device's callback. Calls from the game
-//! only send commands; nothing here blocks the caller.
+//! and passes the game's commands on to the mixer in the device's callback. The music has a
+//! thread of its own (task 133) that streams the pieces into blocks the callback mixes in. Calls
+//! from the game only send commands; nothing here blocks the caller.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample};
 
 use crate::decode::SoundBank;
-use crate::mixer::{Command, Mixer, Volumes};
+use crate::mixer::{Command, Mixer, MusicFeed, Volumes};
+use crate::music::{MusicCommand, MusicNow, MusicPlay, MusicPlayer};
 use crate::placement::Placement;
-use crate::table::SoundId;
+use crate::table::{Category, SoundId};
+
+/// Frames in one block of music handed to the callback.
+const MUSIC_BLOCK: usize = 1024;
+/// Blocks in the music's pool: how far the music thread renders ahead (about 0.14 s at 44.1 kHz).
+const MUSIC_BLOCKS: usize = 6;
 
 /// What the engine is doing.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -31,9 +39,20 @@ struct Shared {
     running: AtomicBool,
     frames: AtomicU64,
     decoded: AtomicU64,
+    music: Mutex<Option<MusicNow>>,
 }
 
 impl Shared {
+    fn new(status: EngineStatus) -> Shared {
+        Shared {
+            status: Mutex::new(status),
+            running: AtomicBool::new(false),
+            frames: AtomicU64::new(0),
+            decoded: AtomicU64::new(0),
+            music: Mutex::new(None),
+        }
+    }
+
     fn set(&self, status: EngineStatus) {
         self.running.store(
             matches!(status, EngineStatus::Running { .. }),
@@ -57,12 +76,7 @@ impl AudioEngine {
     /// [`AudioEngine::status`] tells how it went. One-shots asked for before the device runs
     /// are dropped; loops and volumes are kept.
     pub fn new() -> AudioEngine {
-        let shared = Arc::new(Shared {
-            status: Mutex::new(EngineStatus::Starting),
-            running: AtomicBool::new(false),
-            frames: AtomicU64::new(0),
-            decoded: AtomicU64::new(0),
-        });
+        let shared = Arc::new(Shared::new(EngineStatus::Starting));
         let (commands, receiver) = mpsc::channel();
         let thread_shared = Arc::clone(&shared);
         let thread = std::thread::Builder::new()
@@ -86,12 +100,7 @@ impl AudioEngine {
     fn silent_because(reason: String) -> AudioEngine {
         AudioEngine {
             commands: None,
-            shared: Arc::new(Shared {
-                status: Mutex::new(EngineStatus::Silent { reason }),
-                running: AtomicBool::new(false),
-                frames: AtomicU64::new(0),
-                decoded: AtomicU64::new(0),
-            }),
+            shared: Arc::new(Shared::new(EngineStatus::Silent { reason })),
             thread: None,
         }
     }
@@ -120,42 +129,80 @@ impl AudioEngine {
         self.shared.running.load(Ordering::Acquire)
     }
 
-    /// Volume settings, each 0…1.
-    pub fn set_volumes(&self, master: f32, effects: f32, voice: f32, ambient: f32) {
-        self.send(Command::SetVolumes(Volumes {
-            master,
-            effects,
-            voice,
-            ambient,
-        }));
+    /// The volume settings: the master and each category's slider, each 0…1.
+    pub fn set_volumes(&self, volumes: Volumes) {
+        self.send(Command::SetVolumes(volumes));
     }
 
-    /// Play a one-shot. `priority`: higher wins when the per-sound or overall voice limit is
-    /// reached (see [`crate::MAX_VOICES`], [`crate::PER_SOUND_LIMIT`]).
+    /// Play a one-shot in its own category ([`SoundId::category`]). `priority`: higher wins
+    /// when the per-sound or overall voice limit is reached (see [`crate::MAX_VOICES`],
+    /// [`crate::PER_SOUND_LIMIT`]).
     pub fn play(&self, sound: SoundId, placement: Placement, priority: u8) {
+        self.play_as(sound.category(), sound, placement, priority);
+    }
+
+    /// [`AudioEngine::play`] in `category`: the game names who plays a sound.
+    pub fn play_as(&self, category: Category, sound: SoundId, placement: Placement, priority: u8) {
         if self.shared.running.load(Ordering::Acquire) {
             self.send(Command::Play {
                 sound,
                 placement,
                 priority,
+                category,
             });
         }
     }
 
-    /// Put a sound in loop slot `slot` (0…[`crate::LOOP_SLOTS`]) at `gain`, cross-fading from
-    /// what the slot held; `None` fades the slot out. The same sound again only changes the gain.
+    /// Put a sound in loop slot `slot` (0…[`crate::LOOP_SLOTS`]) at `gain`, in its own
+    /// category, cross-fading from what the slot held; `None` fades the slot out. The same
+    /// sound again only changes the gain.
     pub fn set_loop(&self, slot: usize, sound: Option<SoundId>, gain: f32) {
         self.set_loop_at(slot, sound, Placement::centre(gain));
     }
 
     /// [`AudioEngine::set_loop`] with a pan: the loop's gain and stereo place, both eased.
     pub fn set_loop_at(&self, slot: usize, sound: Option<SoundId>, placement: Placement) {
+        let category = sound.map_or(Category::Units, SoundId::category);
+        self.set_loop_as(category, slot, sound, placement);
+    }
+
+    /// [`AudioEngine::set_loop_at`] in `category`.
+    pub fn set_loop_as(
+        &self,
+        category: Category,
+        slot: usize,
+        sound: Option<SoundId>,
+        placement: Placement,
+    ) {
         self.send(Command::SetLoop {
             slot,
             sound,
             gain: placement.gain,
             pan: placement.pan,
+            category,
         });
+    }
+
+    /// Play a piece of music (or a part of it) on the music channel; what plays there fades
+    /// out over the new piece's fade-in. Kept while the device opens; nothing without one.
+    pub fn play_music(&self, play: MusicPlay) {
+        self.send(Command::Music(MusicCommand::Play(play)));
+    }
+
+    /// Fade the music out over `fade` seconds.
+    pub fn stop_music(&self, fade: f32) {
+        self.send(Command::Music(MusicCommand::Stop { fade }));
+    }
+
+    /// Duck the units, buildings and environment to `gain` (1 = not ducked), easing over about
+    /// half a second: an age's theme announcing the age.
+    pub fn duck(&self, gain: f32) {
+        self.send(Command::Duck(gain));
+    }
+
+    /// What the music channel plays, as far as it is rendered; `None` in silence.
+    pub fn music_now(&self) -> Option<MusicNow> {
+        *self.shared.music.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Silence every one-shot and loop.
@@ -220,12 +267,19 @@ fn run(commands: Receiver<Command>, shared: Arc<Shared>) {
     let name = device.to_string();
     let rate = config.sample_rate();
     let (to_callback, from_engine) = mpsc::channel();
+    // The music's block pool: the callback returns each block it has played.
+    let (to_mixer, blocks) = mpsc::sync_channel(MUSIC_BLOCKS);
+    let (spent, from_mixer) = mpsc::sync_channel(MUSIC_BLOCKS);
+    for _ in 0..MUSIC_BLOCKS {
+        let _ = spent.try_send(vec![0.0f32; MUSIC_BLOCK * 2].into_boxed_slice());
+    }
+    let feed = MusicFeed::new(blocks, spent);
     let stream = match config.sample_format() {
-        SampleFormat::F32 => open::<f32>(&device, config.into(), &bank, from_engine, &shared),
-        SampleFormat::I16 => open::<i16>(&device, config.into(), &bank, from_engine, &shared),
-        SampleFormat::U16 => open::<u16>(&device, config.into(), &bank, from_engine, &shared),
-        SampleFormat::I32 => open::<i32>(&device, config.into(), &bank, from_engine, &shared),
-        SampleFormat::F64 => open::<f64>(&device, config.into(), &bank, from_engine, &shared),
+        SampleFormat::F32 => open::<f32>(&device, config.into(), &bank, from_engine, feed, &shared),
+        SampleFormat::I16 => open::<i16>(&device, config.into(), &bank, from_engine, feed, &shared),
+        SampleFormat::U16 => open::<u16>(&device, config.into(), &bank, from_engine, feed, &shared),
+        SampleFormat::I32 => open::<i32>(&device, config.into(), &bank, from_engine, feed, &shared),
+        SampleFormat::F64 => open::<f64>(&device, config.into(), &bank, from_engine, feed, &shared),
         other => Err(format!("sample format {other} is not supported")),
     };
     let stream = match stream {
@@ -235,9 +289,30 @@ fn run(commands: Receiver<Command>, shared: Arc<Shared>) {
             return;
         }
     };
+    let (to_music, music_commands) = mpsc::channel();
+    let music_shared = Arc::clone(&shared);
+    let log = std::env::var_os("ROM_MUSIC_LOG").is_some_and(|v| !v.is_empty());
+    let music = std::thread::Builder::new()
+        .name("music".into())
+        .spawn(move || {
+            music_thread(
+                MusicPlayer::new(rate, log),
+                &music_commands,
+                &to_mixer,
+                &from_mixer,
+                &music_shared,
+            )
+        });
+    if let Err(e) = &music {
+        eprintln!("audio: no music thread: {e}");
+    }
     shared.set(EngineStatus::Running { device: name, rate });
     // Until the engine is dropped: decode what a command needs, then hand it on.
     while let Ok(command) = commands.recv() {
+        if let Command::Music(music) = command {
+            let _ = to_music.send(music);
+            continue;
+        }
         let needs = match command {
             Command::Play { sound, .. } => Some(sound),
             Command::SetLoop {
@@ -264,7 +339,53 @@ fn run(commands: Receiver<Command>, shared: Arc<Shared>) {
             break;
         }
     }
+    drop(to_music);
+    if let Ok(handle) = music {
+        let _ = handle.join();
+    }
     drop(stream);
+}
+
+/// The music thread's body: carries out the music commands and renders blocks ahead of the
+/// callback, as many as the pool holds; waits for a command while nothing plays.
+fn music_thread(
+    mut player: MusicPlayer,
+    commands: &Receiver<MusicCommand>,
+    to_mixer: &SyncSender<Box<[f32]>>,
+    from_mixer: &Receiver<Box<[f32]>>,
+    shared: &Shared,
+) {
+    loop {
+        loop {
+            let command = if player.is_idle() {
+                match commands.recv() {
+                    Ok(command) => command,
+                    Err(_) => return,
+                }
+            } else {
+                match commands.try_recv() {
+                    Ok(command) => command,
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => return,
+                }
+            };
+            if let Err(e) = player.apply(command) {
+                eprintln!("audio: {e}");
+            }
+            *shared.music.lock().unwrap_or_else(|e| e.into_inner()) = player.now();
+        }
+        match from_mixer.recv_timeout(Duration::from_millis(10)) {
+            Ok(mut block) => {
+                player.render(&mut block);
+                *shared.music.lock().unwrap_or_else(|e| e.into_inner()) = player.now();
+                if to_mixer.send(block).is_err() {
+                    return;
+                }
+            }
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => return,
+        }
+    }
 }
 
 fn open<T>(
@@ -272,6 +393,7 @@ fn open<T>(
     config: cpal::StreamConfig,
     bank: &Arc<SoundBank>,
     commands: Receiver<Command>,
+    music: MusicFeed,
     shared: &Arc<Shared>,
 ) -> Result<cpal::Stream, String>
 where
@@ -282,6 +404,7 @@ where
         return Err("the device has no output channels".into());
     }
     let mut mixer = Mixer::new(Arc::clone(bank), config.sample_rate);
+    mixer.attach_music(music);
     let mut stereo = vec![0.0f32; 4096];
     let counter = Arc::clone(shared);
     let stream = device

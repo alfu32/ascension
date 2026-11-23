@@ -3,16 +3,28 @@
 
 use std::collections::BTreeMap;
 
-use rom_audio::SoundId;
-use rom_rules::{AmbienceView, Daylight, DefId, Layer, Rules, SoundEvent};
+use rom_audio::{Category, SoundId};
+use rom_rules::{AmbienceView, Daylight, DefId, EntityClass, Layer, Rules, SoundEvent};
 
-/// One sound of the rules: its variations (one played at random) and its gain.
+/// One sound of the rules: its variations (one played at random), its gain and the mixer's
+/// category it plays in (task 133: who plays it, from the rules).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cue {
     /// The files of the sound family, one or more.
     pub variants: Vec<SoundId>,
     /// The row's gain, 1 = the file's own level.
     pub gain: f32,
+    /// The slider it answers to.
+    pub category: Category,
+}
+
+/// The category of a type's sounds: a building's are the buildings', every other type's (units,
+/// wildlife) the units'.
+pub fn category_of(class: EntityClass) -> Category {
+    match class {
+        EntityClass::Building => Category::Buildings,
+        _ => Category::Units,
+    }
 }
 
 /// An ambience bed of the rules.
@@ -63,7 +75,7 @@ impl SoundBook {
     /// Resolves the sound rows of `rules`.
     pub fn new(rules: &Rules) -> SoundBook {
         let mut book = SoundBook::default();
-        let mut cue = |name: &str, gain_pct: i64| {
+        let mut cue = |name: &str, gain_pct: i64, category: Category| {
             let variants = family(name);
             if variants.is_empty() {
                 book.missing.push(name.to_owned());
@@ -72,19 +84,20 @@ impl SoundBook {
             Some(Cue {
                 variants,
                 gain: gain_pct.max(0) as f32 / 100.0,
+                category,
             })
         };
         let mut types = BTreeMap::new();
         for (id, et) in &rules.entity_types {
             for row in &et.sounds {
-                if let Some(c) = cue(&row.sound, row.gain_pct) {
+                if let Some(c) = cue(&row.sound, row.gain_pct, category_of(et.class)) {
                     types.insert((*id, row.event, row.slot), c);
                 }
             }
         }
         let mut beds = Vec::new();
         for row in &rules.ambience {
-            if let Some(c) = cue(&row.sound, row.gain_pct) {
+            if let Some(c) = cue(&row.sound, row.gain_pct, Category::Environment) {
                 beds.push(Bed {
                     cue: c,
                     view: row.view,
@@ -165,6 +178,57 @@ mod tests {
         assert_eq!(book.line("attack_move"), Some(SoundEvent::Attack));
         assert_eq!(book.line("construct"), Some(SoundEvent::Build));
         assert_eq!(book.line("train"), None);
+    }
+
+    /// Task 133: every cue of the rules answers to the right slider: a unit's (its lines,
+    /// shots, blows and movement) to Units, a building's (its lines, work, construction,
+    /// training and research cues) to Buildings, the beds to Environment.
+    #[test]
+    fn every_cue_routes_to_its_category() {
+        let rules = rules();
+        let book = SoundBook::new(&rules);
+        let mut seen = std::collections::BTreeSet::new();
+        for ((id, event, _), cue) in &book.types {
+            let et = &rules.entity_types[id];
+            let expected = match et.class {
+                EntityClass::Building => Category::Buildings,
+                _ => Category::Units,
+            };
+            assert_eq!(cue.category, expected, "{} {event:?}", rules.key(*id));
+            seen.insert((cue.category, *event));
+        }
+        for (category, event) in [
+            (Category::Units, SoundEvent::Select),
+            (Category::Units, SoundEvent::Moving),
+            (Category::Units, SoundEvent::Fight),
+            (Category::Buildings, SoundEvent::Select),
+            (Category::Buildings, SoundEvent::BuildDone),
+            (Category::Buildings, SoundEvent::TrainDone),
+            (Category::Buildings, SoundEvent::ResearchDone),
+        ] {
+            assert!(seen.contains(&(category, event)), "{category:?} {event:?}");
+        }
+        assert!(
+            book.beds
+                .iter()
+                .all(|b| b.cue.category == Category::Environment)
+        );
+        // The interface cues and the announcer are announcements by their names.
+        for name in [
+            "ui.click",
+            "ui.error",
+            "ui.alert_attack",
+            "ui.announcer.age_reached",
+            "ui.research_finished",
+            "ui.construction_started",
+        ] {
+            assert!(
+                family(name)
+                    .iter()
+                    .all(|id| id.category() == Category::Announcements),
+                "{name}"
+            );
+        }
     }
 
     #[test]
