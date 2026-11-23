@@ -1,0 +1,11 @@
+[Unit]
+Description=Ascension public site (site/serve.py on 127.0.0.1:18090), behind nginx at https://ascension-euw-1.duckdns.org/
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 -I %h/ascension-site/serve.py --root %h/ascension-site/current --port 18090
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

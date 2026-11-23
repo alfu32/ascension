@@ -54,38 +54,41 @@ project on GitHub, and that no page carries an email address.
 
 ## Publishing
 
-`site/deploy.sh` (from the repository root) builds if `site/dist/` is missing, uploads it with
-`rsync` over ssh to a new folder `/var/www/ascension-site/releases/<time>` (unchanged files are
-hard links to the previous upload) and switches the symlink `/var/www/ascension-site/current` to
-it in one rename. The last five uploads are kept; `site/deploy.sh --rollback` switches back to
-the previous one. `site/deploy.sh --build` rebuilds first.
+The site lives in the server user's home, like the other web services there. `site/deploy.sh`
+(from the repository root) builds if `site/dist/` is missing, uploads it with `rsync` over ssh to
+a new folder `~/ascension-site/releases/<time>` (unchanged files are hard links to the previous
+upload) and switches the symlink `~/ascension-site/current` to it in one rename. The last five
+uploads are kept; `site/deploy.sh --rollback` switches back to the previous one.
+`site/deploy.sh --build` rebuilds first.
+
+The site is served by `site/serve.py` (Python standard library: pages revalidated, hashed files
+kept for a year, byte ranges for audio, the security headers) as the user service
+`ascension-site.service` (`site/systemd/`) on `127.0.0.1:18090`. Each deploy copies `serve.py`
+and the unit beside the site, enables the service and restarts it when either changed; a new
+upload needs no restart (the server resolves `current` on every request).
 
 The host and key default to the project's server; `ASCENSION_SITE_HOST` and
 `ASCENSION_SITE_KEY` override them.
 
 ## One-time setup on the server (the owner, with sudo)
 
-The site needs a folder the `ubuntu` user owns and nginx can read, and the new nginx site. The
-game server keeps its paths: nginx proxies `/ws` (the WebSocket every game client connects to:
-a client given `https://ascension-euw-1.duckdns.org/` connects to `wss://…/ws`) and `/status`
-to `rom serve` on `127.0.0.1:7400` exactly as before, with the same upgrade headers and one-hour
-timeouts; every other path is the site.
+Only nginx needs sudo. The game server keeps its paths: nginx proxies `/ws` (the WebSocket every
+game client connects to: a client given `https://ascension-euw-1.duckdns.org/` connects to
+`wss://…/ws`) and `/status` to `rom serve` on `127.0.0.1:7400` exactly as before, with the same
+upgrade headers and one-hour timeouts; every other path goes to the site's service.
 
 ```sh
-# 1. the site's folder, owned by ubuntu, readable by nginx (www-data)
-sudo install -d -o ubuntu -g ubuntu -m 755 /var/www/ascension-site
-
-# 2. from a development machine: publish the site once (so "current" exists), and copy the
-#    new nginx site beside the old one
+# 1. from a development machine: publish the site (starts its service), and copy the new nginx
+#    site beside the old one
 site/deploy.sh
 scp -i ~/oraci/ed25519-oraci-1 site/nginx/ascension.conf ubuntu@89.168.88.241:ascension-nginx/ascension.conf.site
 
-# 3. on the server: keep the old config, install the new one, check it, reload
+# 2. on the server: keep the old config, install the new one, check it, reload
 cp /etc/nginx/sites-available/ascension.conf ~/ascension-nginx/ascension.conf.before-site
 sudo install -m 644 ~/ascension-nginx/ascension.conf.site /etc/nginx/sites-available/ascension.conf
 sudo nginx -t && sudo systemctl reload nginx
 
-# 4. check: the site, the game server's status, and a game client joining
+# 3. check: the site, the game server's status, and a game client joining
 curl -sI https://ascension-euw-1.duckdns.org/ | head -n 5
 curl -s https://ascension-euw-1.duckdns.org/status | head -n 5
 ```
