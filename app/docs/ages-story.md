@@ -25,7 +25,7 @@ new-age dialog. The game's text is written for humanity; the Reptilians and Avia
 ladder under their own names. Ages 8–9 (continental blocs) are humanity's alone.
 
 **Status of the music** (from the owner's first session, 2026-11-22): the Classical, Medieval,
-Enlightenment, Industrial, Modern and Information pieces exist as sketches (scores in code,
+Enlightenment, Industrial, Modern and Freedom pieces exist as sketches (scores in code,
 synthesised, with General MIDI files). The owner accepted them. The Ancient and Gunpowder ages
 of the game's ladder, and ages 8–13, are new here. A heroic, age-less statement of the theme
 (the sketch: solo trumpet, then brass over galloping strings) is the **main title** of the game
@@ -245,7 +245,7 @@ repeated note for note three times with a growing orchestra: identical repetitio
 production. Then a hollow tutti unison, and a snare left alone at the end. (v1, a minimalist
 loop with a drum kit and sound effects, was rejected.)
 
-**Hand-over.** The snare alone, and silence, out of which the Information age's rippling strings
+**Hand-over.** The snare alone, and silence, out of which the Freedom age's rippling strings
 begin.
 
 **Interlude.** A low string chorale of the theme, soft and slow, with a muffled snare far off.
@@ -254,7 +254,10 @@ begin.
 are counted in millions, ships carry aircraft, and rockets carry warheads. This is the age of
 the masses. Every one of your citizens is a worker, a soldier, a voter and a target."
 
-## 7. Information — the network and the custom
+## 7. Freedom — the network and the custom
+
+The age's key is `age.information` and its music keeps the name `information.*`: it was
+called the Information age until the owner renamed it (2026-11-23, task 146).
 
 **Forces.** *Social:* networks, advertising, the screen in every hand. *Economic:* finance,
 marketing, robotised plants, additive manufacturing; the mass product becomes custom.
@@ -301,7 +304,7 @@ machine against a single human voice.
 **Art form.** Process music within the symphony. Systems that run by themselves (canons,
 phasing, augmentation) set against a solo instrument that breathes.
 
-**The theme.** The Information age's climbing arpeggio becomes a process: the strings run it as
+**The theme.** The Freedom age's climbing arpeggio becomes a process: the strings run it as
 a perfect, unvarying machine, and the theme enters as a strict canon. Each section of the
 orchestra copies the theme exactly, a bar after the last and then at half speed, a machine
 copying itself until the texture is dense and faultless. Over it, a solo cello plays the theme
@@ -468,7 +471,7 @@ the cycle. The music sums up everything and then lets it go.
 **The theme.** The strings answer Abundance's unfinished question, and the whole orchestra joins
 them in a vast tutti of the theme. Then history passes in review in the orchestra, each age a few bars in its own colours:
 the Ancient drone and reed pipe, the Classical lyre (harp), the Medieval bell, the Gunpowder consort,
-the Enlightenment Allegro, the Industrial train, the Modern march, the Information hook, the
+the Enlightenment Allegro, the Industrial train, the Modern march, the Freedom hook, the
 Automation canon, the Fusion glow, the Starfaring choir, the Expansion march. All of it is
 gathered into one last tutti of the theme, the grandest in the game.
 

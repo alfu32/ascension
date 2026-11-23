@@ -1,4 +1,4 @@
-# Test start: the Information Age (age 7), everything researchable in it already researched, and plenty
+# Test start: the Freedom Age (age 7), everything researchable in it already researched, and plenty
 # of every resource for player one (all applied before the first tick).
 # Use: env -u WAYLAND_DISPLAY target/release/rise-of-man <your usual options> --script docs/tasks/rich-start-07-information-script.txt
 # Researched: every technology unlocked by this age at any building, the age advances up to it,

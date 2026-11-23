@@ -11432,5 +11432,53 @@
   },
   "recipe": "move.starship_hum",
   "seed": 510073
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bed.nuclear_reactor.select",
+  "params": {
+   "active": "power_auto",
+   "age": 8,
+   "pitch": 0.971,
+   "size": 0.5
+  },
+  "recipe": "bld.select",
+  "seed": 573410
+ },
+ {
+  "fx": "machine",
+  "kind": "voice",
+  "name": "bld.nuclear_reactor.select",
+  "over": "bed.nuclear_reactor.select",
+  "speed": 0.992,
+  "text": "Nuclear Reactor, operational.",
+  "voice": "am_echo"
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "bld.nuclear_reactor.active",
+  "params": {
+   "active": "power_auto",
+   "age": 8,
+   "pitch": 0.971,
+   "size": 0.5
+  },
+  "recipe": "active.power_auto",
+  "seed": 259040
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bld.nuclear_reactor.build_done",
+  "params": {
+   "active": "power_auto",
+   "age": 8,
+   "pitch": 0.971,
+   "size": 0.5
+  },
+  "recipe": "bld.build_done",
+  "seed": 503545
  }
 ]

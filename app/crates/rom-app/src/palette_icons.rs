@@ -357,7 +357,10 @@ mod tests {
                 }
                 _ => {}
             }
-            for effect in effects.filter(|e| e.effect == TechEffectKind::UpgradeType) {
+            // An age advance that also upgrades a building (the reactor at Fusion, task 146)
+            // keeps the age's emblem; the other upgrades show the new building.
+            let upgrades = effects.filter(|e| e.effect == TechEffectKind::UpgradeType);
+            for effect in upgrades.filter(|_| row.kind != TechKind::Age) {
                 let new = effect.target_def_id.unwrap();
                 let model = book.resolve_any(new, faction, age).map(|m| m.index);
                 assert!(model.is_some(), "{}", rules.key(new));

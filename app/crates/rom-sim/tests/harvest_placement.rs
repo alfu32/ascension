@@ -124,11 +124,13 @@ fn try_build(w: &mut World, building: DefId, at: Pos) -> (Result<Pos, SimError>,
     });
     let order_ok = submitted.is_ok();
     if let (Err(preview), Err(order)) = (&preview, &submitted) {
-        // The order may be refused earlier (locked, wrong builder); never later than the preview.
+        // The order may be refused earlier (locked, wrong builder, or superseded by a later
+        // building: the reactor once the fusion plant is known); never later than the preview.
         assert!(
             order == preview
                 || *order == SimError::ProductionUnavailable
-                || *order == SimError::Locked,
+                || *order == SimError::Locked
+                || *order == SimError::Superseded,
             "{building:?}: preview {preview:?}, order {order:?}"
         );
     }
