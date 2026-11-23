@@ -178,7 +178,11 @@ impl World {
     }
 
     /// The visions of the player's team on one surface.
-    fn team_vision(&self, player: PlayerId, slot: usize) -> impl Iterator<Item = &PlayerVision> {
+    pub(crate) fn team_vision(
+        &self,
+        player: PlayerId,
+        slot: usize,
+    ) -> impl Iterator<Item = &PlayerVision> {
         let team = self.players.get(&player).map(|p| p.team);
         let vision = &self.surfaces[slot].vision;
         self.players
@@ -434,7 +438,8 @@ impl World {
         self.remember_tile(slot, tile);
     }
 
-    /// Makes every player who sees the tile remember exactly the foreign buildings on it.
+    /// Makes every player who sees the tile, or knows the surface by a survey (task 130),
+    /// remember exactly the foreign buildings on it.
     pub(crate) fn remember_tile(&mut self, slot: usize, tile: u32) {
         let players: Vec<PlayerId> = self.players.keys().copied().collect();
         let here: Vec<EntityId> = self.surfaces[slot]
@@ -446,7 +451,7 @@ impl World {
             .copied()
             .collect();
         for player in players {
-            if !self.visible_index(player, slot, tile as usize) {
+            if !self.visible_index(player, slot, tile as usize) && !self.surveyed(player, slot) {
                 continue;
             }
             let snapshots: Vec<RememberedBuilding> = here

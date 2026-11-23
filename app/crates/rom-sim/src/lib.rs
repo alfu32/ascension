@@ -18,6 +18,7 @@ mod hash;
 mod healing;
 mod income;
 mod index;
+mod intel;
 mod jumps;
 mod life;
 mod map;
@@ -62,6 +63,10 @@ pub use drones::{Cloud, Joining, TURN_PER_TICK};
 pub use entity::{Entity, EntityId, Player, PlayerId};
 pub use geometry::Topology;
 pub use income::Income;
+pub use intel::{
+    CapitalLevel, CapitalMemory, KnownCapital, RULE_ALL_CAPITALS, RULE_CAPITAL_CITY,
+    RULE_CAPITAL_PLANET, RULE_CAPITAL_SYSTEM, RULE_PLANET_SURVEY,
+};
 pub use jumps::{
     ArrivalBlow, ArrivalStrike, Inhibition, JumpCharge, RULE_INTERSTELLAR_TRADE,
     RULE_ROUTE_SENSORS, RULE_ROUTE_SURVEY,

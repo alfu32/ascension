@@ -60,6 +60,9 @@ pub struct World {
     /// Dormant surfaces of resource bodies and the bodies brought to life (task 77).
     pub(crate) life: crate::life::LifeState,
     pub(crate) capture: crate::capture::CaptureState,
+    /// First contacts and what each player knows of the others' capitals (task 130; hashed,
+    /// saved); the surveys in it are derived.
+    pub(crate) intel: crate::intel::IntelState,
     /// Per-player statistics and their history (task 117; hashed, saved).
     pub(crate) tally: crate::tally::TallyState,
     pub(crate) hits: Vec<crate::combat::PendingHit>,
@@ -310,6 +313,7 @@ impl World {
             ascension,
             life: crate::life::LifeState::default(),
             capture: crate::capture::CaptureState::default(),
+            intel: crate::intel::IntelState::default(),
             tally: crate::tally::TallyState::default(),
             hits: Vec::new(),
             shots: Vec::new(),
@@ -1112,6 +1116,7 @@ impl World {
         self.forget_alerts();
         self.update_captures();
         self.remember_touched();
+        self.update_intel();
         self.update_claims();
         self.reveal_routes();
         self.pay_income();

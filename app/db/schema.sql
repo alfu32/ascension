@@ -580,7 +580,10 @@ CREATE TABLE tech_effect (
   rule_key  TEXT NOT NULL DEFAULT '',        -- enable_rule: 'market_trading' (task 107: buy and
                                              -- sell at an et_market), 'sea_transport','ally_los' …
                                              -- used (task 70): 'route_sensors', 'route_survey',
-                                             -- 'interstellar_trade' (database.md, "Routes and jumps")
+                                             -- 'interstellar_trade' (database.md, "Routes and jumps");
+                                             -- (task 130) 'planet_survey', 'capital_system',
+                                             -- 'capital_planet', 'capital_city', 'all_capitals'
+                                             -- (database.md, "Capitals revealed by research")
   amount    INTEGER NOT NULL DEFAULT 0
 ) STRICT;
 CREATE INDEX tech_effect_by_tech ON tech_effect(tech_id);
@@ -1254,6 +1257,29 @@ CREATE TABLE market_pressure (
   resource_id INTEGER NOT NULL REFERENCES resource(id),
   pressure    INTEGER NOT NULL,
   PRIMARY KEY (player_id, resource_id)
+) STRICT, WITHOUT ROWID;
+
+-- First contact (task 130, format 18): `player_id` (or its team) has seen a unit or building of
+-- `other_id`, or known one of its buildings by a survey. One way: the other may not have met it.
+CREATE TABLE player_contact (
+  player_id INTEGER NOT NULL REFERENCES player(id),
+  other_id  INTEGER NOT NULL REFERENCES player(id),
+  PRIMARY KEY (player_id, other_id)
+) STRICT, WITHOUT ROWID;
+
+-- An enemy capital as a player knows it (task 130, format 18): the level (1 its star system,
+-- 2 its planet, 3 the city), the city and where it stood when last known. Own and allied
+-- capitals are always known in full and have no row.
+CREATE TABLE capital_known (
+  player_id INTEGER NOT NULL REFERENCES player(id),
+  owner_id  INTEGER NOT NULL REFERENCES player(id),
+  level     INTEGER NOT NULL CHECK (level BETWEEN 1 AND 3),
+  city_id   INTEGER NOT NULL,
+  pos_x     INTEGER NOT NULL,              -- milli-tiles
+  pos_y     INTEGER NOT NULL,
+  pos_face  INTEGER NOT NULL CHECK (pos_face BETWEEN 0 AND 5),
+  pos_body  INTEGER NOT NULL,
+  PRIMARY KEY (player_id, owner_id)
 ) STRICT, WITHOUT ROWID;
 
 -- How a match ends (task 117; docs/ascension.md "How a match ends"). The players people play,

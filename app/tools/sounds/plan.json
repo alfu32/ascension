@@ -8594,6 +8594,19 @@
   "seed": 228714
  },
  {
+  "kind": "synth",
+  "loop": false,
+  "name": "bld.jump_detector.research_done",
+  "params": {
+   "active": "sensor",
+   "age": 9,
+   "pitch": 0.962,
+   "size": 0.25
+  },
+  "recipe": "bld.research_done",
+  "seed": 352469
+ },
+ {
   "fx": "helmet",
   "kind": "voice",
   "name": "voice.exo_trooper.select",
@@ -11341,5 +11354,43 @@
   },
   "recipe": "move.rotor",
   "seed": 897228
+ },
+ {
+  "fx": "machine",
+  "kind": "voice",
+  "name": "voice.space_probe.select",
+  "speed": 0.958,
+  "text": "Space Probes online.",
+  "voice": "af_alloy"
+ },
+ {
+  "fx": "machine",
+  "kind": "voice",
+  "name": "voice.space_probe.move",
+  "speed": 0.958,
+  "text": "Plotting a course.",
+  "voice": "af_alloy"
+ },
+ {
+  "fx": "machine",
+  "kind": "voice",
+  "name": "voice.space_probe.research_done",
+  "speed": 0.958,
+  "text": "Firmware updated.",
+  "voice": "af_alloy"
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.space_probe.moving",
+  "params": {
+   "age": 7,
+   "figures": 1,
+   "pitch": 1.106,
+   "size": 0.167,
+   "speed": 1.0
+  },
+  "recipe": "move.starship_hum",
+  "seed": 510073
  }
 ]

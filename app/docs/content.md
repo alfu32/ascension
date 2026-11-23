@@ -142,7 +142,7 @@ per-city limits). Page = command-palette page.
 | Factory | military | 5 | Military 5 | replaces the Siege Workshop's line (vehicles, artillery, drones) |
 | Vehicle Plant | military | 5 | Military 5 | replaces the Stable's line (armour) |
 | Airfield | military | 5 | Military 6 | aircraft |
-| Spaceport | military | 10 | — | starships |
+| Spaceport | military | 7 (task 130; its look and stats of age 10) | — | from age 7 Satellites, Space Probes and the Orbital Survey; starships from age 10 |
 | Ground Battery | military | 10 | — | fires on enemy ships and craft in the orbit above (14 tiles to their ground point) |
 
 City growth. Each Civic level multiplies the city's `border_radius` and
@@ -190,6 +190,7 @@ hit-point percentage. The first step of each line needs only its age and buildin
 | Rotorcraft | Airfield | Attack Helicopters (6), Gunship Helicopters (7), Hover Gunships (8) |
 | Starships | Spaceport | Survey Ship (10), Corvettes (10), Space Frigates (11), Space Cruisers (12), Battleships (13) |
 | Transport | Spaceport | Transport Ships (10): unarmed, carries 20 population; every other starship carries 1 (10) or 2 (11+) |
+| Orbital watch | Spaceport | Satellites (7; 10 until task 130): unarmed, 96 tiles of sight from the orbit above the spaceport; Space Probes (7, task 130): unarmed, 40 tiles of sight, 8 tiles a second, sweeps the planet on a patrol. Both bound to their planet's orbit |
 | Orbital craft | Airfield | Orbital Fighters (10), Orbital Bombers (10): climb from the air to their planet's orbit by themselves and come back down; leave the planet only aboard a carrier |
 | Carrier | Spaceport | Carriers (10): carries 10 orbital craft and launches them into the orbit it holds |
 | Civilian | City | Citizens (0), Worker Drones (8) |
@@ -214,6 +215,9 @@ units ride starships; workers landed on a planet found its colony).
 | Temple | Religion (1), Theology (3), Philosophy (5) | temple `border_radius` +2000; city `hp` +25 % |
 | Tower | Militia Training (1), Allegiance (2), Patriotism (5), Nationalism (7) | `attrition_dealt` +25 % each |
 | Fort | Fortification (2), Bombardment (4), Strategic Reserves (6) | fort `border_radius` +3000; fort `range` +1 tile |
+| Spaceport | Orbital Survey (7, needs a Satellite), Deep Space Survey (10), Long-range Imaging (11) | task 130: every building of the home planet; the planet, then the city, of each capital whose system is known (`database.md`, "Capitals revealed by research") |
+| Deep Space Tracking Station | Total Network (13) | task 130: every capital, city, planet and system |
+| Library | Unification (10, exists) | task 130 adds: the capital system of each player met |
 | each gather site | Automation (8) | converts the site to its automated version |
 
 ## 7. Simulation and interface rules this content needs

@@ -547,6 +547,12 @@ pub struct Snapshot {
     pub market: Vec<((PlayerId, DefId), i64)>,
     /// The sampled history of every player, in tick then player order (task 117).
     pub history: Vec<crate::HistorySample>,
+    /// First contacts: (player, other) once the player has seen something of the other, in
+    /// order (task 130).
+    pub contacts: Vec<(PlayerId, PlayerId)>,
+    /// Enemy capitals as each player knows them: (player, owner) and what it knows, in order
+    /// (task 130).
+    pub capitals_known: Vec<((PlayerId, PlayerId), crate::CapitalMemory)>,
 }
 
 const RULES: [VictoryRule; 8] = [
@@ -1053,6 +1059,8 @@ impl World {
                 .collect(),
             market: self.market_pressures().collect(),
             history: self.tally.history.clone(),
+            contacts: self.intel.contacts.iter().copied().collect(),
+            capitals_known: self.capital_memories().collect(),
         }
     }
 
@@ -1100,6 +1108,8 @@ impl World {
             living,
             market,
             history,
+            contacts,
+            capitals_known,
         } = snapshot;
         let mut world = Self::empty(
             rules.clone(),
@@ -1563,6 +1573,33 @@ impl World {
             .into_iter()
             .map(|(player, list)| (player, list.into_iter().collect()))
             .collect();
+        for (viewer, other) in contacts {
+            if viewer == other
+                || !world.players.contains_key(&viewer)
+                || !world.players.contains_key(&other)
+                || !world.intel.contacts.insert((viewer, other))
+            {
+                return Err(bad("contact of an unknown player, or repeated"));
+            }
+        }
+        for ((viewer, owner), memory) in capitals_known {
+            if viewer == owner
+                || !world.players.contains_key(&viewer)
+                || !world.players.contains_key(&owner)
+                || world.slot_of(memory.pos.body).is_none()
+                || world
+                    .intel
+                    .capitals
+                    .insert((viewer, owner), memory)
+                    .is_some()
+            {
+                return Err(bad(
+                    "known capital of an unknown player or surface, or repeated",
+                ));
+            }
+        }
+        // Derived: the surveys the research gives (their buildings are in the saved memories).
+        world.intel.surveys = world.surveys_now();
         world.rebuild_type_index();
         world.hits = hits.iter().map(hit_from).collect();
         world.shots = shots

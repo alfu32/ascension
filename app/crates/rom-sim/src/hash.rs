@@ -316,6 +316,24 @@ impl World {
                 hash.bytes(&pressure.to_le_bytes());
             }
         }
+        // Hashed only once a player has met another, so worlds without contacts keep their
+        // hashes (task 130).
+        if !self.intel.contacts.is_empty() || !self.intel.capitals.is_empty() {
+            hash.bytes(b"intel");
+            hash.u64(self.intel.contacts.len() as u64);
+            for (viewer, other) in &self.intel.contacts {
+                hash.u32(viewer.0);
+                hash.u32(other.0);
+            }
+            hash.u64(self.intel.capitals.len() as u64);
+            for ((viewer, owner), m) in &self.intel.capitals {
+                hash.u32(viewer.0);
+                hash.u32(owner.0);
+                hash.bytes(&[m.level.number()]);
+                hash.u32(m.city.0);
+                hash.pos(m.pos);
+            }
+        }
         hash.u64(self.pending.len() as u64);
         for (order, append) in &self.pending {
             hash.order(order);

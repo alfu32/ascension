@@ -340,6 +340,9 @@
   "build_done": [
    "bld.jump_detector.build_done"
   ],
+  "research_done": [
+   "bld.jump_detector.research_done"
+  ],
   "select": [
    "bld.jump_detector.select"
   ]
@@ -2575,6 +2578,20 @@
   ],
   "select": [
    "voice.space_frigate.select"
+  ]
+ },
+ "unit.space_probe": {
+  "move": [
+   "voice.space_probe.move"
+  ],
+  "moving": [
+   "unit.space_probe.moving"
+  ],
+  "research_done": [
+   "voice.space_probe.research_done"
+  ],
+  "select": [
+   "voice.space_probe.select"
   ]
  },
  "unit.spearman": {

@@ -189,6 +189,27 @@ fn write_all(
             params![player.0, resource.0, pressure],
         )?;
     }
+    for (player, other) in &s.contacts {
+        tx.execute(
+            "INSERT INTO player_contact VALUES (?,?)",
+            params![player.0, other.0],
+        )?;
+    }
+    for ((player, owner), m) in &s.capitals_known {
+        tx.execute(
+            "INSERT INTO capital_known VALUES (?,?,?,?,?,?,?,?)",
+            params![
+                player.0,
+                owner.0,
+                m.level.number(),
+                m.city.0,
+                m.pos.x,
+                m.pos.y,
+                m.pos.face,
+                m.pos.body.0
+            ],
+        )?;
+    }
     for (id, climbed) in &s.flight {
         tx.execute(
             "INSERT INTO entity_flight VALUES (?,?)",

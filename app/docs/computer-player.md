@@ -1146,6 +1146,19 @@ drones cannot strike. The counter rule holds with no re-tuning beyond the strike
 `rom duel --profiles balanced:moderate,balanced:easiest --seeds 1..20 --jobs 2`: 20–0, mean tick
 54 449, as before: no duel reaches the information age.
 
+## Capitals revealed by research (task 130)
+
+Nothing in `rom-ai` changed. The research manager offers the new technologies (Orbital Survey,
+Deep Space Survey, Long-range Imaging, Total Network) as side research by their worth, like
+every technology without modifiers; the construction manager builds the spaceport from the
+information age and the Deep Space Tracking Station as other buildings that research something;
+the Orbital Survey waits for a satellite, which the space manager trains from the starfaring age
+(its wishes start there). Space probes are not trained. The army already doubles the value of
+an enemy capital it knows by sight or by the survey (`World::capital` on a remembered city);
+`World::known_capitals` is there for a brain that wants a capital known only by research as a
+goal (its planet or system to head for), which is left for later: it would send armies and
+fleets across systems toward a city nobody has seen.
+
 ## Simulation gaps found in part 2, and what task 65 did with them
 
 - **Closed: `explore`, `patrol`, `guard`.** `explore` walks to the nearest tile
