@@ -146,7 +146,7 @@ INSERT INTO age(id,ordinal,era,map_scale)
  SELECT id, sort,
    CASE WHEN sort<=7 THEN 'history' WHEN sort<=9 THEN 'near_future' WHEN sort<=12 THEN 'stellar'
         ELSE 'galactic' END,
-   CASE WHEN sort<=9 THEN 'planetary' WHEN sort=10 THEN 'interplanetary'
+   CASE WHEN sort<=8 THEN 'planetary' WHEN sort<=10 THEN 'interplanetary'
         ELSE 'interstellar' END
  FROM def WHERE kind='age';
 WITH v(k,r) AS (VALUES ('age.ancient',30000), ('age.classical',36000), ('age.medieval',42000),

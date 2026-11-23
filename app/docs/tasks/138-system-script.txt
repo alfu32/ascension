@@ -1,0 +1,4 @@
+# Task 138: a Fusion player (age 9) in the home system (universe mode, seed 1, --sun fixed,
+# 1280 x 800, --players 2 --ai none, --age 9, no --zoom-all, --view system,home --after 3),
+# shot as img/138-system.png: the home star system seen from the Fusion age.
+1 speed 100
