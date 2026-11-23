@@ -1,14 +1,15 @@
 # The public site
 
-The static site at https://ascension-euw-1.duckdns.org/ (task 135): the project's README as the
-home page, the privacy policy, the story of the ages with each age's main theme, every unit and
-building model, and every sound. No cookies, no analytics, no scripts or fonts from elsewhere.
+The static site at https://ascension-euw-1.duckdns.org/ (tasks 135 and 136): the project's README
+as the home page, the privacy policy, and the catalogue: the ages in the game's order, each with
+its story and main theme, then its models with their sounds. No cookies, no analytics, no
+scripts or fonts from elsewhere.
 
 | File | What |
 | --- | --- |
 | `build.py` | builds the site from the repository into `dist/` (ignored by git) |
 | `templates/page.html` | the page shell: header, navigation, footer |
-| `static/site.css`, `static/site.js` | the look (navy and brass, light and dark) and the sound and music players |
+| `static/site.css`, `static/site.js` | the look (navy and brass, light and dark; the catalogue in the model review page's layout) and the sound and music players |
 | `deploy.sh` | uploads `dist/` to the server and switches to it atomically |
 | `nginx/ascension.conf` | the server's nginx site: the static site and the game server's two paths |
 
@@ -18,12 +19,14 @@ building model, and every sound. No cookies, no analytics, no scripts or fonts f
 | --- | --- |
 | `index.html` | `README.md`; its pictures converted to WebP, links to files in the repository turned into links to GitHub |
 | `privacy.html` | `packaging/microsoft-store-kit/documentation/PRIVACY.md` (the Store listing's privacy URL) |
-| `story.html` | `app/docs/ages-story.md`: the theme and, for each age, its story and reasoning, with `app/assets/music/<age>.theme.ogg` and the main title `title.ogg`; the production notes are left out (the build stops if one gets through) |
-| `units.html` | the gallery manifest and every model's sheet from the game (`rise-of-man --model <id> --screenshot`), names and ages as the model review page gives them |
-| `sounds.html` | `app/tools/sounds/assignment.json` and the review page's sound sprites (`app/docs/art/review-page/sprites.py`), plus the shared cues |
+| `catalogue.html` | the model review page's presentation without its review elements. The main title (`app/assets/music/title.ogg`) opens it; then one chapter per age in the game's order: its number, name and era, its story (`app/assets/text/ages.toml`, the italic "Story" of `app/docs/ages-story.md`) and its main theme (`app/assets/music/<age>.theme.ogg`), then its models by kind (units, buildings, sites). Each model's card has its sheet from the game (`rise-of-man --model <id> --screenshot`), its facts and its type's sounds (`app/tools/sounds/assignment.json`, played from the review page's sprites, `app/docs/art/review-page/sprites.py`). A chapter for the models of every age and the shared cues close it |
+| `story.html`, `units.html`, `sounds.html` | task 135's pages, now a plain link to the catalogue for old links |
 
 `build.py` runs the review page's own `build.py` on the manifest and reads back the data it puts
-in that page (models, names, ages, the sound index), then leaves every review element out.
+in that page (models, names, ages, the sounds of each type, the shared cues, the sound index),
+then writes the cards itself without the review elements: no status or verdict buttons, notes or
+directions, fingerprints, model ids as text, rounds, overview pictures or database. The build
+stops if the catalogue's text carries a review word or a model id.
 Pictures, sounds, music, styles and scripts get a content hash in their file name, so the
 server can let browsers keep them for a year while the pages are always revalidated.
 
@@ -46,11 +49,13 @@ Options: `--cache <dir>` (default `site/cache/`, ignored by git) keeps the model
 sound sprites and the converted pictures between runs. A model's sheet is taken again only when
 its fingerprint changes; `--refresh-pictures` takes them all again (after a change to the
 renderer). The first run takes the sheets of every model (a few seconds each) and bundles the
-sounds (about ten minutes); later runs take a minute. `--limit N` builds the units page with the
+sounds (about ten minutes); later runs take a minute. `--limit N` builds the catalogue with the
 first N models only, for a quick look.
 
 The build checks every internal link, anchor and file, that no link leaves for anywhere but the
-project on GitHub, and that no page carries an email address.
+project on GitHub, that no page carries an email address, a server path or address or a key's
+name, that every audio player has `preload="none"`, and that no page uses an inline style (the
+server's content policy blocks them).
 
 ## Publishing
 
