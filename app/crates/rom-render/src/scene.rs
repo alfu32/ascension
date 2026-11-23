@@ -26,7 +26,7 @@ use crate::looks::{SceneLooks, lod_weight};
 use crate::materials::{SurfaceSlots, chunk_attributes, surface_slots};
 use crate::orbit::OrbitCamera;
 use crate::overlay::{OverlayGeometry, build_overlays, build_overlays_on};
-use crate::projectiles::{ProjectileGeometry, Projectiles, drone_swarms, projectile_looks};
+use crate::projectiles::{ProjectileGeometry, Projectiles, drone_grids, projectile_looks};
 use crate::sun;
 use crate::terrain::{
     ChunkMesh, RELIEF, STAR_COUNT, TerrainScene, TileKind, build_sea_chunks_with_specs,
@@ -815,8 +815,8 @@ impl Scene {
                 self.projectiles
                     .build(render_tick, &mut self.projectile_geometry);
             }
-            // Drone clouds are part of their units: drawn whether projectiles show or not.
-            drone_swarms(
+            // Drone grids are part of their units: drawn whether projectiles show or not.
+            drone_grids(
                 views,
                 render_tick,
                 &*gpu.globe,
@@ -856,7 +856,7 @@ impl Scene {
                     self.projectiles
                         .build(render_tick, &mut self.projectile_geometry);
                 }
-                drone_swarms(views, render_tick, surface, &mut self.projectile_geometry);
+                drone_grids(views, render_tick, surface, &mut self.projectile_geometry);
             }
             None => {
                 self.overlay.lines.clear();
@@ -2063,7 +2063,7 @@ impl Scene {
             for p in &geometry.models {
                 let index = base.saturating_add(p.model);
                 if let Some((transform, near)) = models.instance_at(
-                    index, p.origin, p.forward, p.up, p.length, [0.5; 3], 0.0, eye,
+                    index, p.origin, p.forward, p.up, p.length, p.team, p.phase, eye,
                 ) {
                     self.projectile_instances.push((index, near, transform));
                 }

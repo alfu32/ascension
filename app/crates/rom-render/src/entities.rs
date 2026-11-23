@@ -39,18 +39,58 @@ pub enum Hover {
     Low,
 }
 
-/// The cloud of a drone operator (task 120), as the views draw it: up to its drones swirling
-/// round the cloud's point; the operator's strikes fly from there.
+/// The grid of a drone operator (tasks 120 and 128), as the views draw it: a square of slots
+/// `spacing` apart hovering `hover` above its centre, turned the way it faces, a small quadrotor
+/// in each slot that holds a drone; the operator's strikes dive from there.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CloudView {
-    /// Drones in the cloud.
-    pub drones: u8,
-    /// Face of the cloud's point.
+    /// Face of the grid's centre.
     pub face: u8,
-    /// East position of the cloud's point, tiles.
+    /// East position of the grid's centre, tiles.
     pub x: f32,
-    /// South position of the cloud's point, tiles.
+    /// South position of the grid's centre, tiles.
     pub y: f32,
+    /// The way the grid faces, degrees clockwise from the positive x axis of its face.
+    pub facing_deg: f32,
+    /// Slots along a side of the square.
+    pub side: u8,
+    /// Tiles between neighbouring slots.
+    pub spacing: f32,
+    /// Tiles above the ground.
+    pub hover: f32,
+    /// The slots holding a drone: bit k for slot k.
+    pub ready: u64,
+    /// The slots whose drone left since the snapshot before (set while blending): where a
+    /// drone that dives now starts.
+    pub left: u64,
+    /// The drone flying to its slot: the slot, its face and its east and south position, tiles.
+    pub joining: Option<(u8, u8, f32, f32)>,
+}
+
+impl CloudView {
+    /// Drones drawn in the grid: in their slots and on their way to one.
+    pub fn drones(&self) -> u32 {
+        self.ready.count_ones() + u32::from(self.joining.is_some())
+    }
+
+    /// Where slot `slot` lies from the centre, tiles `(ahead, right)` of the way the grid faces:
+    /// rows from the front, each from the left (the simulation's `DroneCloud::slot_offset`).
+    pub fn slot_offset(&self, slot: u32) -> (f32, f32) {
+        let side = u32::from(self.side.max(1));
+        let (row, column) = ((slot / side) as f32, (slot % side) as f32);
+        let last = (side - 1) as f32;
+        (
+            (last - 2.0 * row) * self.spacing / 2.0,
+            (2.0 * column - last) * self.spacing / 2.0,
+        )
+    }
+
+    /// Slot `slot`'s offset from the centre along the face's x and y axes, tiles.
+    pub fn slot_delta(&self, slot: u32) -> (f32, f32) {
+        let (ahead, right) = self.slot_offset(slot);
+        let (sin, cos) = self.facing_deg.to_radians().sin_cos();
+        (ahead * cos - right * sin, ahead * sin + right * cos)
+    }
 }
 
 /// One entity as the render thread sees it.
@@ -261,13 +301,25 @@ pub fn interpolate(from: &EntityView, to: &EntityView, alpha: f32) -> EntityView
     }
 }
 
-/// A cloud's point moved from `from` towards `to` by `alpha` on one face; the newer one when it
+/// A grid's centre and facing moved from `from` towards `to` by `alpha` on one face (its
+/// joining drone too), and the slots whose drones left between them; the newer one when it
 /// crossed a face edge or appeared.
 fn blend_cloud(from: Option<CloudView>, to: Option<CloudView>, alpha: f32) -> Option<CloudView> {
     match (from, to) {
         (Some(a), Some(b)) if a.face == b.face => Some(CloudView {
             x: a.x + (b.x - a.x) * alpha,
             y: a.y + (b.y - a.y) * alpha,
+            facing_deg: lerp_angle(a.facing_deg, b.facing_deg, alpha),
+            left: a.ready & !b.ready,
+            joining: match (a.joining, b.joining) {
+                (Some(ja), Some(jb)) if ja.0 == jb.0 && ja.1 == jb.1 => Some((
+                    jb.0,
+                    jb.1,
+                    ja.2 + (jb.2 - ja.2) * alpha,
+                    ja.3 + (jb.3 - ja.3) * alpha,
+                )),
+                (_, joining) => joining,
+            },
             ..b
         }),
         _ => to,

@@ -293,8 +293,16 @@ impl World {
             hash.u64(self.clouds.len() as u64);
             for (id, cloud) in &self.clouds {
                 hash.u32(id.0);
-                hash.u32(cloud.drones);
                 hash.pos(cloud.pos);
+                hash.u32(u32::from(cloud.facing));
+                hash.u64(cloud.ready);
+                match cloud.joining {
+                    Some(j) => {
+                        hash.bytes(&[1, j.slot]);
+                        hash.pos(j.pos);
+                    }
+                    None => hash.bytes(&[0]),
+                }
                 hash.u32(cloud.rebuild);
             }
         }
@@ -338,6 +346,10 @@ impl World {
             hash.u32(hit.weapon_id);
             hash.u32(hit.target.0);
             hash.bytes(&hit.damage.to_le_bytes());
+            // Only shots at a drone carry more, so other worlds keep their hashes (task 128).
+            if let Some(slot) = hit.drone {
+                hash.bytes(&[b'd', slot]);
+            }
         }
         // These buffers are empty between ticks, but cover them for internal hashes too.
         hash.u64(self.seen.len() as u64);
@@ -368,6 +380,10 @@ impl World {
             hash.u32(hit.weapon_id);
             hash.u32(hit.target.0);
             hash.bytes(&hit.damage.to_le_bytes());
+            // Only shots at a drone carry more, so other worlds keep their hashes (task 128).
+            if let Some(slot) = hit.drone {
+                hash.bytes(&[b'd', slot]);
+            }
         }
         hash.u64(self.avoid.awake.len() as u64);
         for id in &self.avoid.awake {

@@ -103,13 +103,41 @@ pub struct Layout {
     pub extent: [f32; 3],
 }
 
-/// The footprint (x, z) a model takes in the gallery.
+/// The footprint (x, z) a model takes in the gallery: a drone operator's grid included.
 fn footprint(rules: &Rules, entry: &ModelEntry) -> (f32, f32) {
     let size = entry.size();
     let (w, h) = rules
         .entity_type(entry.entity)
         .map_or((1, 1), |t| (t.footprint_w, t.footprint_h));
-    (size[0].max(w as f32), size[2].max(h as f32))
+    let grid = grid_of(rules, entry, 0.0, 0.0).map_or(0.0, |g| g.side as f32 * g.spacing);
+    (
+        size[0].max(w as f32).max(grid),
+        size[2].max(h as f32).max(grid),
+    )
+}
+
+/// The full grid of drones of a drone operator's model (task 128), hovering over (`x`, `z`) and
+/// facing the way the gallery's units face, from its type's `et_drone_cloud` row; `None` for a
+/// model of any other type.
+fn grid_of(rules: &Rules, entry: &ModelEntry, x: f32, z: f32) -> Option<rom_render::CloudView> {
+    let cloud = rules.entity_type(entry.entity)?.drone_cloud.as_ref()?;
+    let capacity = cloud.capacity.clamp(1, 64) as u32;
+    Some(rom_render::CloudView {
+        face: 0,
+        x,
+        y: z,
+        facing_deg: 90.0,
+        side: u8::try_from(cloud.side()).unwrap_or(u8::MAX),
+        spacing: cloud.spacing as f32 / 1000.0,
+        hover: cloud.hover as f32 / 1000.0,
+        ready: if capacity == 64 {
+            u64::MAX
+        } else {
+            (1_u64 << capacity) - 1
+        },
+        left: 0,
+        joining: None,
+    })
 }
 
 /// Places the `chosen` models in rows (a new row when the class changes), on a flat map, owned
@@ -184,7 +212,8 @@ fn place(
             lines[line] = centre + half;
             placed.push((i, centre, z + depth / 2.0, line));
             x += slot + GAP;
-            tallest = tallest.max(book.entries[i].size()[1]);
+            let hover = grid_of(rules, &book.entries[i], 0.0, 0.0).map_or(0.0, |g| g.hover + 0.2);
+            tallest = tallest.max(book.entries[i].size()[1]).max(hover);
         }
         width = width.max(x - GAP);
         z += depth + GAP + 1.0 + lines.len().saturating_sub(1) as f32 * label_line;
@@ -217,7 +246,8 @@ fn place(
             flight: 0.0,
             aircraft: false,
             hover: rom_render::Hover::Circle,
-            cloud: None,
+            // A drone operator shows its whole grid (task 128).
+            cloud: grid_of(rules, entry, x, z),
             hp_frac: 1.0,
             building,
             footprint: et.map_or((1, 1), |t| (clamp(t.footprint_w), clamp(t.footprint_h))),

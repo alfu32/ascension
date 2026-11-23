@@ -694,7 +694,11 @@ impl World {
         self.rallies.remove(&id);
         self.governors_paused.remove(&id);
         self.flight.remove(&id);
-        self.clouds.remove(&id);
+        // An operator's death ends its grid and the drones it sent (task 128).
+        if self.clouds.remove(&id).is_some() {
+            self.hits.retain(|h| h.attacker != id);
+            self.shots.retain(|s| s.hit.attacker != id);
+        }
         self.space.orbits.remove(&id);
         self.space.landed.remove(&id);
         self.space.arrivals.remove(&id);

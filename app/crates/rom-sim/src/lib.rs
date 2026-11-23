@@ -58,7 +58,7 @@ pub use alerts::{Alert, AlertKind};
 pub use ascension::AscensionProject;
 pub use capture::CaptureCountdown;
 pub use combat::{BLAST_MEMORY_TICKS, Blast, Wreck};
-pub use drones::Cloud;
+pub use drones::{Cloud, Joining, TURN_PER_TICK};
 pub use entity::{Entity, EntityId, Player, PlayerId};
 pub use geometry::Topology;
 pub use income::Income;

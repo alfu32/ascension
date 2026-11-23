@@ -196,16 +196,24 @@ fn write_all(
         )?;
     }
     for (id, cloud) in &s.clouds {
+        let join = cloud
+            .joining
+            .map(|j| (j.slot, j.pos.face, j.pos.x, j.pos.y));
         tx.execute(
-            "INSERT INTO entity_drone_cloud VALUES (?,?,?,?,?,?,?)",
+            "INSERT INTO entity_drone_cloud VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             params![
                 id.0,
-                cloud.drones,
                 cloud.pos.body.0,
                 cloud.pos.face,
                 cloud.pos.x,
                 cloud.pos.y,
-                cloud.rebuild
+                cloud.facing,
+                cloud.ready as i64,
+                cloud.rebuild,
+                join.map(|j| j.0),
+                join.map(|j| j.1),
+                join.map(|j| j.2),
+                join.map(|j| j.3)
             ],
         )?;
     }
@@ -758,22 +766,23 @@ fn write_entities(tx: &Transaction, s: &Snapshot) -> Result<(), SaveError> {
             h.weapon_id,
             h.target.0,
             h.damage,
+            h.drone,
         )
     };
     for (seq, h) in s.hits.iter().enumerate() {
-        let (land, attacker, owner, source, weapon, target, damage) = hit(h);
+        let (land, attacker, owner, source, weapon, target, damage, drone) = hit(h);
         tx.execute(
-            "INSERT INTO pending_hit VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO pending_hit VALUES (?,?,?,?,?,?,?,?,?)",
             params![
-                seq as i64, land, attacker, owner, source, weapon, target, damage
+                seq as i64, land, attacker, owner, source, weapon, target, damage, drone
             ],
         )?;
     }
     for (seq, shot) in s.shots.iter().enumerate() {
-        let (land, attacker, owner, source, weapon, target, damage) = hit(&shot.hit);
+        let (land, attacker, owner, source, weapon, target, damage, drone) = hit(&shot.hit);
         let (o, t) = (pos(shot.origin), pos(shot.target_pos));
         tx.execute(
-            "INSERT INTO pending_shot VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO pending_shot VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             params![
                 seq as i64,
                 o[0],
@@ -791,7 +800,8 @@ fn write_entities(tx: &Transaction, s: &Snapshot) -> Result<(), SaveError> {
                 source,
                 weapon,
                 target,
-                damage
+                damage,
+                drone
             ],
         )?;
     }

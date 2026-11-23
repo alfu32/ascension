@@ -923,8 +923,9 @@ fn aircraft_landed_taking_off_and_landing() {
     });
 }
 
-/// Task 120: drone operators with clouds mid-flight, part spent and rebuilding save and load
-/// with them, and both worlds fight on alike.
+/// Tasks 120 and 128: drone operators with grids mid-flight, part spent, a drone on its way to its
+/// slot and a missile on its way to a drone save and load with them, and both worlds fight on
+/// alike.
 #[test]
 fn drone_operators_with_their_clouds() {
     let rules = rules();
@@ -942,9 +943,27 @@ fn drone_operators_with_their_clouds() {
     order(&mut w, operator, "attack", Some(target), None);
     order(&mut w, other, "move", None, Some(at(HOME, 30_500, 46_500)));
     run_until(&mut w, 600, |w| w.entity(target).is_none());
-    ticks(&mut w, 7);
-    let cloud = *w.drone_cloud(operator).unwrap();
-    assert!(cloud.drones < 16 && cloud.rebuild > 0, "{cloud:?}");
+    let launcher = w
+        .spawn(
+            id(&w, "unit.missile_launcher"),
+            P2,
+            at(HOME, 30_500, 52_500),
+        )
+        .unwrap();
+    // Both operators hold their drones back: one would bring the launcher down.
+    let hold = id(&w, "stance.hold_fire");
+    for unit in [operator, other] {
+        w.set_stance(P1, unit, hold).unwrap();
+    }
+    order(&mut w, launcher, "attack", Some(other), None);
+    run_until(&mut w, 3000, |w| {
+        [operator, other]
+            .iter()
+            .any(|id| w.drone_cloud(*id).unwrap().joining.is_some())
+            && w.hits_in_flight().any(|h| h.drone.is_some())
+    });
+    let cloud = *w.drone_cloud(other).unwrap();
+    assert!(cloud.ready.count_ones() < 16, "{cloud:?}");
     check("drones", &rules, w, 300, move |w| {
         order(w, other, "move", None, Some(at(HOME, 24_500, 40_500)));
     });

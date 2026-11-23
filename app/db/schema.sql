@@ -460,22 +460,25 @@ CREATE TABLE et_market (
   currency_id    INTEGER NOT NULL REFERENCES resource(id)
 ) STRICT;
 
--- Drone cloud (task 120): the unit is the operator of a cloud of kamikaze drones; the operator's
--- hit points are the unit's, the cloud is part of its state (drones, where the cloud is). Its
--- et_weapon rows are the drones' strikes: each shot launches one drone from the cloud at a target
--- within `strike_range` of the cloud, and the drone is spent; damage, interval (cooldown_ticks),
--- damage class and target layers are the weapon row's, through the normal damage path. A weapon's
--- range_max is where the operator stops from its target and may be at most leash + strike_range.
--- Weapons that hit the air reach the cloud while it holds drones (each hit brings down one drone
--- per `drone_hp` of its damage) instead of the operator.
+-- Drone grid (tasks 120, 128): the unit is the operator of a grid of kamikaze drones; only the
+-- operator has hit points, the grid is part of its state (which slots hold a drone, where the grid
+-- is and which way it faces). The grid is square, ceil(sqrt(capacity)) slots a side, `spacing`
+-- apart, filled row by row from the front, drawn `hover` above the ground. Its et_weapon rows are
+-- the drones' strikes: each shot sends one drone from its slot at an enemy within `strike_range`
+-- of the grid's centre, and the drone is spent; damage, interval (cooldown_ticks), damage class
+-- and target layers are the weapon row's, through the normal damage path. A weapon's range_max is
+-- where the operator stops from its target and may be at most leash + strike_range. Every drone
+-- is a target of its own for weapons that hit the air, and one hit brings it down; the operator
+-- is a target like any foot soldier.
 CREATE TABLE et_drone_cloud (
   entity_type_id INTEGER PRIMARY KEY REFERENCES entity_type(id),
-  capacity       INTEGER NOT NULL CHECK (capacity >= 1),       -- most drones; a new unit has all
-  leash          INTEGER NOT NULL CHECK (leash >= 0),          -- milli-tiles: farthest from the operator
-  strike_range   INTEGER NOT NULL CHECK (strike_range >= 0),   -- milli-tiles: cloud to target's edge
+  capacity       INTEGER NOT NULL CHECK (capacity BETWEEN 1 AND 64), -- slots; a new unit has all
+  leash          INTEGER NOT NULL CHECK (leash >= 0),          -- milli-tiles: grid centre from the operator
+  strike_range   INTEGER NOT NULL CHECK (strike_range >= 0),   -- milli-tiles: grid centre to target's edge
   rebuild_ticks  INTEGER NOT NULL CHECK (rebuild_ticks >= 1),  -- a new drone while below capacity
-  drone_hp       INTEGER NOT NULL CHECK (drone_hp >= 1),       -- damage that brings down one drone
-  drone_speed    INTEGER NOT NULL CHECK (drone_speed >= 1)     -- milli-tiles per second
+  drone_speed    INTEGER NOT NULL CHECK (drone_speed >= 1),    -- milli-tiles per second
+  spacing        INTEGER NOT NULL CHECK (spacing >= 0),        -- milli-tiles between neighbouring slots
+  hover          INTEGER NOT NULL CHECK (hover >= 0)           -- milli-tiles above the ground
 ) STRICT;
 
 -- Automated colony (task 73): a city (et_territory.is_city) that does not count towards
@@ -1468,16 +1471,23 @@ CREATE TABLE entity_flight (
   climbed   INTEGER NOT NULL CHECK (climbed >= 0)
 ) STRICT;
 
--- The cloud of a drone operator (task 120, format 16): drones left, where the cloud is (on the
--- operator's body) and the ticks worked toward the next drone while below capacity.
+-- The grid of a drone operator (tasks 120 and 128, format 17): where its centre is (on the
+-- operator's body), which way it faces (degrees clockwise from +x of its face), the slots holding
+-- a drone (bit k for slot k), the ticks worked toward the next drone while below capacity, and the
+-- drone flying from the operator to its slot (slot and position, NULL when none).
 CREATE TABLE entity_drone_cloud (
   entity_id INTEGER PRIMARY KEY,
-  drones    INTEGER NOT NULL CHECK (drones >= 0),
   body      INTEGER NOT NULL,
   face      INTEGER NOT NULL CHECK (face BETWEEN 0 AND 5),
   x         INTEGER NOT NULL,              -- milli-tiles
   y         INTEGER NOT NULL,
-  rebuild   INTEGER NOT NULL CHECK (rebuild >= 0)
+  facing    INTEGER NOT NULL CHECK (facing BETWEEN 0 AND 359),
+  ready     INTEGER NOT NULL,              -- slot bits (64 slots at most, stored as signed)
+  rebuild   INTEGER NOT NULL CHECK (rebuild >= 0),
+  join_slot INTEGER CHECK (join_slot BETWEEN 0 AND 63),
+  join_face INTEGER CHECK (join_face BETWEEN 0 AND 5),
+  join_x    INTEGER,
+  join_y    INTEGER
 ) STRICT;
 
 -- A struck-down city held by an attacking team (task 67): the team and the tick
@@ -1577,7 +1587,8 @@ CREATE TABLE pending_hit (
   source_type_id INTEGER NOT NULL,
   weapon_id INTEGER NOT NULL,
   target_id INTEGER NOT NULL,
-  damage INTEGER NOT NULL
+  damage INTEGER NOT NULL,
+  drone INTEGER                            -- the drone of the target's grid it aims at (format 17)
 ) STRICT;
 
 CREATE TABLE pending_shot (
@@ -1591,7 +1602,8 @@ CREATE TABLE pending_shot (
   source_type_id INTEGER NOT NULL,
   weapon_id INTEGER NOT NULL,
   target_id INTEGER NOT NULL,
-  damage INTEGER NOT NULL
+  damage INTEGER NOT NULL,
+  drone INTEGER                            -- the drone of the target's grid it aims at (format 17)
 ) STRICT;
 
 -- System space: where each body sits on its system's plane, the neutral marker
