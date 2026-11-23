@@ -215,6 +215,10 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../assets/hud/icons/chat.svg"),
     ),
     (
+        "icons/capital",
+        include_str!("../../../assets/hud/icons/capital.svg"),
+    ),
+    (
         "icons/cities",
         include_str!("../../../assets/hud/icons/cities.svg"),
     ),
@@ -877,6 +881,7 @@ mod tests {
             "res_energy",
             "commerce",
             "population",
+            "capital",
             "cities",
             "research",
             "clock",

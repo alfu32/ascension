@@ -393,6 +393,51 @@ the event line and the red ring on the minimap) and `img/118-jump-detected.png`
 (`tasks/118-jump-script.txt`: the event line, the revealed ships and the amber ring on the star
 map).
 
+## Capital markers (task 131)
+
+Every capital the player knows is marked, at the level it is known (`World::known_capitals`,
+task 130) and nothing finer. The own capital (and an ally's) is always known in full, from the
+first tick.
+
+| Known by | Star map | System view | World view and minimap |
+| --- | --- | --- | --- |
+| its system | the emblem left of the star | — | — |
+| its planet | the emblem left of the star | the emblem above the planet and a thin ring round it | — |
+| its city | the emblem left of the star | the emblem above the planet and a thin ring round it | the emblem over the city, a band round it, the emblem on the minimap |
+
+- **The emblem** is one vector icon, `icons/capital` (a crowned star), authored white and grey
+  with a heavy dark outline in `assets/hud/generate.py` and tinted with the owner's colour when
+  drawn, so the outline stays dark on any ground. It is drawn on the 2D batch after the world,
+  with the health bars, so terrain and buildings never hide it; over a city it stands above the
+  city's model (above a remembered city's last known place when the city is not drawn), keeps
+  one size on screen from the closest camera to the whole-planet view and is hidden only past
+  the planet's horizon. Several capitals on one planet or in one system stand side by side.
+- **The band** round a capital city lies on the ground in the owner's colour, 1.5 tiles outside
+  the city's economic radius (the circle a selected city shows).
+- **Remembered** capitals (known at city level, not in sight now) use the same emblem and band,
+  faded and greyed, at the place last known.
+- On the star map the emblems stand left of the star, clear of its colony rings; the system's
+  name and its ship marks stay on the right, and labels give way to emblems (the pointer's
+  tooltip excepted).
+- **The selection panel** titles a selected capital "<name> — Capital" in gold ("Capital" under
+  the title when the name leaves no room), and the help line says what losing it means under
+  the capital elimination rules ("Your capital: if an enemy holds it long enough, you lose the
+  game"; sudden death: "if an enemy takes it"). Under conquest elimination a capital is a city
+  like any other and the help line says nothing of it.
+
+The views read it from the world the simulation thread already holds: `HudSnapshot::capitals`
+(city level, on the shown planet) and `SpaceSnapshot::capitals` (every known capital's system
+and, from the planet level, its planet), built in `rom-app/src/capital_view.rs`.
+
+Screenshots (self-ending scripted runs, `rise-of-man --universe --players 2 --ai none --seed 1
+--sun fixed --size 1280x800`): `img/131-capital-world.png`, `img/131-capital-globe.png` and
+`img/131-capital-system.png` (`tasks/131-own-capital-script.txt`, the own capital at the normal
+camera height, from the globe and in the home system), `img/131-capital-starmap.png`
+(`tasks/131-known-capitals-script.txt`: Total Network, the home system and player two's marked),
+`img/131-capital-remembered.png` and `img/131-capital-minimap.png`
+(`tasks/131-remembered-capital-script.txt`, `--start-placement together`: player two's capital
+known but out of sight, faded on the ground and on the minimap).
+
 ## Sound (task 125)
 
 What plays when is in `docs/sound.md`. In the HUD: a click on any HUD button (a quiet click), the

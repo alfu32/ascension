@@ -1421,6 +1421,7 @@ fn render_loop(shared: &Shared) {
             hud_layout.scale = percent as f32 / 100.0 * size.0 as f32 / layout.0 as f32;
         }
         scene.bar_scale = hud_layout.scale.round().max(1.0);
+        scene.emblem_scale = hud_layout.scale;
         scene.projection_centre_y = if hud_visible {
             crate::hud_minimap::ndc_centre_y(hud_layout.world_area(), size.1 as f32)
         } else {
@@ -1591,14 +1592,25 @@ fn render_loop(shared: &Shared) {
                                     alerts: &hud_snapshot.alerts,
                                 },
                             );
+                            // Capitals over every other mark, inside the minimap's picture.
+                            let emblems = map.capital_emblems(&hud_layout, &hud_snapshot.capitals);
+                            hud.draw_minimap_emblems(&mut drawing, &hud_layout, &emblems);
                         }
                     }
                 }
-                // Health bars lie on the picture, under the HUD and the names.
+                // Health bars lie on the picture, under the HUD and the names; the capital
+                // emblems over the bars.
                 scene.draw_bars(&mut drawing);
+                hud.draw_emblems(&mut drawing, scene.screen_emblems());
                 if zoom.is_some() {
                     // Each label carries the weight of the frame it belongs to.
-                    hud.draw_labels(&mut drawing, &hud_layout, scene.space_labels(), 1.0);
+                    hud.draw_labels(
+                        &mut drawing,
+                        &hud_layout,
+                        scene.space_labels(),
+                        1.0,
+                        scene.screen_emblems(),
+                    );
                 }
                 hud.draw(&mut drawing, &hud_layout, &hud_snapshot, &hud_overlay);
                 if let Some(zoom) = &zoom {

@@ -84,6 +84,8 @@ pub struct HudSnapshot {
     pub overview: ResearchOverview,
     /// City circles on the current surface.
     pub city_radii: Vec<HudCityRadius>,
+    /// Capitals known at city level on the current surface, by owner (task 131).
+    pub capitals: Vec<crate::HudCapital>,
     /// Own wealth economy totals.
     pub wealth: crate::HudWealth,
     /// Selected traders' routes on the current surface.
@@ -205,6 +207,7 @@ impl Default for HudSnapshot {
             data_tab: 0,
             overview: ResearchOverview::default(),
             city_radii: Vec::new(),
+            capitals: Vec::new(),
             trade_targets: Vec::new(),
             wealth: Default::default(),
             trade_routes: Vec::new(),
@@ -631,6 +634,12 @@ impl HudPainter {
                 colour: WHITE,
             });
         }
+    }
+
+    /// Whether `text` fits the width of `area` without being shortened.
+    fn fits(&self, text: &str, area: Rect, size: TextSize) -> bool {
+        let ratio = self.scale / self.glyphs.scale;
+        self.glyphs.measure(text, size) as f32 <= area.w / ratio
     }
 
     fn text(&mut self, text: &str, area: Rect, size: TextSize, align: Align, colour: [u8; 4]) {
@@ -1203,19 +1212,25 @@ impl HudPainter {
                         icon,
                     ),
                 );
+                let name_area = l.map(R, Rect::new(995.0, 808.0, 125.0, 18.0));
+                // A capital says so in its title (task 131), or under it when the title has no
+                // room for it.
+                let titled = format!("{} \u{2014} Capital", card.name);
+                let title_fits = card.capital && self.fits(&titled, name_area, TextSize::Small);
                 self.text(
-                    &card.name,
-                    l.map(R, Rect::new(995.0, 808.0, 125.0, 18.0)),
+                    if title_fits { &titled } else { &card.name },
+                    name_area,
                     TextSize::Small,
                     Align::Centre,
-                    WHITE,
+                    if card.capital { GOLD } else { WHITE },
                 );
-                let note = if card.foreign {
-                    "Foreign".to_owned()
-                } else if let Some(pct) = card.progress_pct {
-                    format!("Building {pct}%")
-                } else {
-                    String::new()
+                let note = match (card.capital && !title_fits, card.foreign) {
+                    (true, true) => "Foreign capital".to_owned(),
+                    (true, false) => "Capital".to_owned(),
+                    (false, true) => "Foreign".to_owned(),
+                    (false, false) => card
+                        .progress_pct
+                        .map_or_else(String::new, |pct| format!("Building {pct}%")),
                 };
                 if !note.is_empty() {
                     self.text(
@@ -1955,5 +1970,64 @@ mod cover_tests {
             let share = area / (width * height) as f32;
             assert!(share > 0.2, "{width}x{height}: cover {share}");
         }
+    }
+}
+
+#[cfg(test)]
+mod capital_card_tests {
+    use super::*;
+
+    fn card(name: &str, capital: bool) -> HudCard {
+        HudCard {
+            icon: "icons/pic_house".to_owned(),
+            name: name.to_owned(),
+            foreign: false,
+            capital,
+            hp: (100, 100),
+            attack: None,
+            armour: None,
+            range: None,
+            garrison: None,
+            workers: None,
+            wealth: Vec::new(),
+            progress_pct: None,
+            inside: Vec::new(),
+        }
+    }
+
+    /// Glyph quads drawn in `colour` for a selected `card`.
+    fn glyphs_in(p: &mut HudPainter, l: &HudLayout, card: HudCard, colour: [u8; 4]) -> usize {
+        let h = HudSnapshot {
+            selection: HudSelection::Single(Box::new(card)),
+            ..HudSnapshot::default()
+        };
+        p.compose(l, &h)
+            .iter()
+            .filter(|q| matches!(q.texture, HudTexture::Glyphs) && q.colour == colour)
+            .count()
+    }
+
+    /// Task 131: a selected capital's title reads "<name> — Capital" in gold; a name too long
+    /// for that keeps its title and says "Capital" under it.
+    #[test]
+    fn a_capital_says_so_in_its_title_or_under_it() {
+        let l = HudLayout::new(1672, 941, None);
+        let mut p = HudPainter::bake(l.scale).expect("artwork bakes");
+        let plain = glyphs_in(&mut p, &l, card("City", false), GOLD);
+        let titled = glyphs_in(&mut p, &l, card("City", true), GOLD);
+        // "City — Capital" in gold (shadows aside): its letters and the dash.
+        assert!(titled >= plain + 12, "{plain} -> {titled}");
+        let cyan = glyphs_in(&mut p, &l, card("City", false), CYAN);
+        assert_eq!(
+            glyphs_in(&mut p, &l, card("City", true), CYAN),
+            cyan,
+            "no note"
+        );
+        let long = "Metropolitan Administrative Centre";
+        let noted = glyphs_in(&mut p, &l, card(long, true), CYAN);
+        assert!(
+            noted >= cyan + "Capital".len(),
+            "the note under the title: {noted}"
+        );
     }
 }

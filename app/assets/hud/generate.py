@@ -520,6 +520,7 @@ def icons():
     I["brush_elevation"] = P("M2 56 L22 18 L32 34 L42 12 L62 56Z") + P("M22 18 L28 29 L22 26 L17 28Z", "#f4f1e8", 1.2) + P("M42 12 L49 25 L42 22 L36 24Z", "#f4f1e8", 1.2)
     I["brush_biome"] = P("M32 4 L52 34 H40 L54 50 H10 L24 34 H12Z", "#5c9a3c") + P("M28 50 H36 V62 H28Z", "#8a5a2a")
     I.update(research_icons())
+    I["capital"] = capital_emblem()
     for name, art in I.items():
         write("icons", name, 64, 64, art, ICON_DEFS)
     # Task 91: the mark of an upgrade, drawn small over a model picture; rasterised at its own
@@ -672,6 +673,22 @@ def research_icons():
     )
     I["tech_ability"] = P(star_path(28, 34, 24, 7, 4)) + P(star_path(50, 12, 9, 3, 4)) + P(star_path(52, 50, 6, 2.2, 4))
     return I
+
+
+def capital_emblem():
+    """Task 131: the capital emblem, a crowned star. Drawn white and light grey with a heavy
+    dark outline: the game tints it with the owner's colour, so the fill takes that colour and
+    the outline stays dark on any ground."""
+    white, grey = "#ffffff", "#c4c4c4"
+    star = star_path(32, 43, 19.5, 8.5)
+    crown = "M14 27 L11 10 L22 17 L32 6 L42 17 L53 10 L50 27Z"
+    band = "M14 26 H50 V32 H14Z"
+    out = "".join(P(d, OUT, 9) for d in (star, crown, band))
+    out += P(star, white, 2.4) + P(star_path(32, 43, 9.5, 4), grey, 1.6)
+    out += P(crown, white, 2.4) + P(band, grey, 2.4)
+    for x, y in ((11, 10), (32, 6), (53, 10)):
+        out += C(x, y, 3.2, white, 1.8)
+    return out
 
 
 def upgrade_mark():

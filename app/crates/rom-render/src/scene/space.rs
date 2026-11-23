@@ -19,9 +19,10 @@ use crate::layers::{
     apparent_share, morph_size, plane_unit, ship_on_screen, ship_true_length, system_detail,
 };
 use crate::space::{
-    FIGURE_DASH, MapLineKind, SpaceHover, SpaceSnapshot, annulus, arc, chevron, chevron3,
-    claim_rings, class_marker, colony_rings, diamond, facing, free_frame_pos, map_colony_rings,
-    map_mark_scale, map_ship_marks, ship_frame_pos, star_map_lines, sticky_groups, transit_at_rim,
+    FIGURE_DASH, MapLineKind, SpaceHover, SpaceSnapshot, annulus, arc, capital_rings, chevron,
+    chevron3, claim_rings, class_marker, colony_rings, diamond, facing, free_frame_pos,
+    map_colony_rings, map_mark_scale, map_ship_marks, ship_frame_pos, star_map_lines,
+    sticky_groups, transit_at_rim,
 };
 use crate::universe::{
     ACCRETION_RGB, BodyViewKind, CELESTIAL_RGB, MAP_RADIUS, PlacedBody, SYSTEM_RADIUS,
@@ -514,6 +515,7 @@ impl Scene {
             space.labels.clear();
         }
         self.screen_bars.clear();
+        self.screen_emblems.clear();
         let height = target.texture.height as f32;
         // The loaded globe is drawn as itself while it is more than a few pixels wide; the
         // system draws it as a small sphere below that.
@@ -707,6 +709,8 @@ impl Scene {
         let bar_look = view.view((width, height), self.projection_centre_y);
         let mut ship_bars: Vec<crate::bars::ScreenBar> = Vec::new();
         let mut icons: Vec<([f32; 3], f32, String, f32)> = Vec::new();
+        // Where a planet with known capitals stands, its drawn radius in pixels and the owners.
+        let mut capital_spots: Vec<([f32; 3], f32, Vec<u8>)> = Vec::new();
         let keeps = |p: [f32; 3]| part.keeps(view.distance_to(p));
         let loaded = zoom.surface_body();
         // The loaded globe hides the stretch of a ring that runs through it.
@@ -778,6 +782,16 @@ impl Scene {
                 .zip(&bodies_placed)
                 .map(|((px, &per), p)| drawn_pixels(px, p.room, per) * per)
                 .collect();
+            // Planets holding a known capital (task 131): the emblems go above them.
+            if known && part.first() {
+                for ((placed, &radius), &per) in bodies_placed.iter().zip(&drawn).zip(&per_pixels) {
+                    let body = &universe.bodies[placed.body];
+                    let owners = crate::capitals::planet_owners(&state.snapshot.capitals, body.id);
+                    if !owners.is_empty() {
+                        capital_spots.push((placed.pos, radius / per, owners));
+                    }
+                }
+            }
             // How much larger than true a body is drawn, for the rings about it.
             let grown = |body: u32| -> f32 {
                 universe
@@ -998,6 +1012,25 @@ impl Scene {
                             [ring.centre[0], 0.4, ring.centre[2]],
                             ring.radius * grown(ring.body),
                             thickness * 0.8,
+                            [r, g, b, (240.0 * detail) as u8],
+                            96,
+                        ));
+                    }
+                }
+                // Capitals (task 131): a thin ring in the owner's colour round the planet,
+                // inside its colony rings.
+                if known {
+                    for ring in capital_rings(
+                        &universe,
+                        &bodies_placed,
+                        &state.snapshot.capitals,
+                        system_id,
+                    ) {
+                        let [r, g, b] = ring.colour;
+                        overlay.tris.extend(annulus(
+                            [ring.centre[0], 0.4, ring.centre[2]],
+                            ring.radius * grown(ring.body),
+                            thickness * 0.4,
                             [r, g, b, (240.0 * detail) as u8],
                             96,
                         ));
@@ -1479,6 +1512,24 @@ impl Scene {
         }
         let look = view.view((width, height), self.projection_centre_y);
         let here = universe.systems.get(pass.index).map(|s| s.id);
+        // The emblem of each capital on a planet, side by side above it.
+        if detail > 0.02 {
+            let size = crate::capitals::SPACE_EMBLEM * self.emblem_scale;
+            let gap = crate::capitals::EMBLEM_GAP * self.emblem_scale;
+            for (at, radius, owners) in capital_spots {
+                let Some((x, y, _)) = look.project(at) else {
+                    continue;
+                };
+                let above = y - radius - 4.0 * self.emblem_scale - size / 2.0;
+                self.screen_emblems.extend(crate::capitals::row(
+                    &owners,
+                    (x, above),
+                    size,
+                    gap,
+                    detail,
+                ));
+            }
+        }
         // The icon of a resource body's resource stands beside it at every zoom of the system.
         for (at, radius, icon, per_pixel) in icons {
             let Some((x, y, _)) = look.project(at) else {
@@ -1878,6 +1929,24 @@ impl Scene {
                 HALO_SIZE.max(view.distance() * 0.1) / 2.0 / depth * height / (2.0 * look.tan());
             let home = space.tints[i];
             let known = self.space_state.snapshot.knows(system.id);
+            // Capitals known there (task 131): their emblems in a row left of the star, clear
+            // of its colony rings, its name and its ships on the right.
+            let owners =
+                crate::capitals::system_owners(&self.space_state.snapshot.capitals, system.id);
+            if !owners.is_empty() {
+                let scale = self.emblem_scale;
+                let per_pixel = view.per_pixel(space.map_positions[i], height).max(1e-9);
+                let rings = icon * 3.9 / per_pixel;
+                let clear = (halo_pixels * 0.5).max(rings) + 3.0 * scale;
+                let opacity = detail * map_depth(&view, space.map_positions[i], zoom.sky_active());
+                self.screen_emblems.extend(crate::capitals::row_leftward(
+                    &owners,
+                    (x - clear, y),
+                    crate::capitals::SPACE_EMBLEM * scale,
+                    crate::capitals::EMBLEM_GAP * scale,
+                    opacity,
+                ));
+            }
             let rgb = match (home, known) {
                 (_, false) => [130, 140, 155],
                 (Some(tint), true) => tint,

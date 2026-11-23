@@ -1,0 +1,7 @@
+# Task 131: player one's own capital, marked from the first tick (universe mode, seed 1,
+# --sun fixed, 1280 x 800, --players 2 --ai none). Taken at the normal camera height
+# (img/131-capital-world.png: the crowned star in the player's colour over the city, the band
+# round it, the emblem on the minimap), from the globe (--view globe,home,
+# img/131-capital-globe.png) and in the home system (--view system,home,
+# img/131-capital-system.png: the emblem above the home planet and its thin ring).
+1 speed 100

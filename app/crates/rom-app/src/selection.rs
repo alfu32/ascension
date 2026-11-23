@@ -3316,6 +3316,18 @@ impl Controller {
                         any new order cancels the charge"
                 .into();
         }
+        // A capital's help line says what losing it means (task 131).
+        if hud.help.is_empty() {
+            let single = match own.as_slice() {
+                [one] => Some(*one),
+                [] => self.foreign.and_then(|id| present(world, id)),
+                _ => None,
+            };
+            if let Some(help) = single.and_then(|e| crate::capital_view::capital_help(world, me, e))
+            {
+                hud.help = help;
+            }
+        }
         if hud.help.is_empty()
             && own.iter().any(|e| {
                 rules.entity_types[&e.type_id]
@@ -3334,6 +3346,7 @@ impl Controller {
         );
         selected.sort_unstable();
         hud.selected = selected;
+        let known_capitals = world.known_capitals(me);
         let card = |e: &Entity, foreign: bool| {
             let et = &rules.entity_types[&e.type_id];
             let attack = et.weapons.iter().map(|w| w.damage).max();
@@ -3346,6 +3359,7 @@ impl Controller {
                 icon: icon_of(et).to_owned(),
                 name: rules.display_name(e.type_id, faction).to_owned(),
                 foreign,
+                capital: crate::capital_view::is_known_capital(&known_capitals, e.id),
                 hp: (e.hp, e.max_hp),
                 attack: attack.map(|a| a.to_string()),
                 armour: (et.armor > 0).then(|| et.armor.to_string()),
@@ -3608,6 +3622,7 @@ impl Controller {
                 .iter()
                 .any(|r| r.rule == rom_rules::PlacementKind::InCityRadius)
         });
+        hud.capitals = crate::capital_view::shown_capitals(world, me, self.view.planet);
         hud.city_radii = world
             .entities()
             .filter(|e| e.pos.body == self.view.planet)

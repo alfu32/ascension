@@ -335,6 +335,7 @@ pub fn space_snapshot_with(
     snapshot.countdowns = crate::ascension_view::countdowns(world, me);
     snapshot.residences = crate::ascension_view::residences(world, me);
     snapshot.colonies = colonies(me, world);
+    snapshot.capitals = crate::capital_view::space_capitals(&world.known_capitals(me));
     snapshot.charted = Some(world.known_routes(me));
     snapshot.charges = charges(me, world, &snapshot.ships);
     snapshot.holds = holds(me, world, index);
