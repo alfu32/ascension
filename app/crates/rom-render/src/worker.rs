@@ -486,8 +486,8 @@ impl RenderBridge {
         *lock(&self.shared.focus_surface) = Some(at);
     }
 
-    /// Hands the render thread the newest visibility and territory map; it darkens unexplored
-    /// and out-of-view tiles and tints the borders. Replaces any map not yet taken.
+    /// Hands the render thread the newest visibility and territory map; it dims every tile out
+    /// of view (terrain is always known) and tints the borders. Replaces any map not yet taken.
     pub fn publish_vision(&self, vision: Arc<VisionMap>) {
         *lock(&self.shared.vision) = Some(vision);
     }
