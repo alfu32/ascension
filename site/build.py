@@ -237,6 +237,12 @@ def slug(text: str) -> str:
 
 def home(dist: Dist, ctx: dict, cache: Path):
     text = (REPO / "README.md").read_text()
+    # The owner (2026-11-23): no download link or button on the site, only the GitHub link at
+    # the end of every page. The README's centred download line is left out here.
+    text, n = re.subn(r'<p align="center">\s*<a href="[^"]*/releases/latest">.*?</p>\s*', "", text,
+                      count=1, flags=re.S)
+    if n != 1:
+        sys.exit("README.md: the download line to leave out was not found")
     body = md(text)
     web = cache / "readme"
     web.mkdir(parents=True, exist_ok=True)
