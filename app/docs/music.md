@@ -58,6 +58,28 @@ What every piece does, following the owner's rules:
   from their conventions (organum, pavane and galliard, Alberti bass, process canon, overtone
   harmony).
 
+### The main title's last statement (task 139)
+
+The owner heard something "fall off" about two thirds into the title (29–38 s, the statement
+with the lift). Measured on the render, the strongest attacks there fell on the off-beats: the
+gallop's first note (0.24 s) is just too long for the renderer's spiccato samples, so it played
+the soft-attack sustained sample while its two sixteenths played crisp spiccato, and the violas'
+three-note gallop was the loudest part of the passage. Over it the trombones, tuba and bassoons
+re-struck the same E♭ chord every half bar, the timpani struck every half bar (two drums at once
+on the last), and six parts doubled the melody. Where the bridge joins the statement, the first
+violins' last D, and the horns' and second violins' chord, sounded under their own pick-up.
+
+The passage is now lighter: the melody in the violins (firsts an octave up), horns and trumpet;
+the gallop in the cellos alone, every note short and the beat accented; the violas hold the
+harmony; trombones and tuba enter only for the ♭VI–♭VII–I lift, each chord held, not re-struck;
+the timpani mark the first beat and the chords of the lift. Flutes, oboes and bassoons rest until
+the unison close. On the render the beat now leads (attack strength on the beat 2.8 against 2.5
+and 2.7 on the two sixteenths; before, 3.0 against 3.6 and 3.5) and the first violins' melody
+stands about 3.5 dB further out of the accompaniment. The rest of the piece is unchanged: the
+first statement's gallop has the same long first note but is lighter, and was approved as it is.
+A score that wants a crisp gallop at this tempo keeps its first note at 0.2 s or less
+(`short_gallop` in `title.py`).
+
 ## Cue sheet (`app/assets/music/cues.json`)
 
 Written by `tools/music/cues.py` from the markers in the scores. Seconds from the start of the
@@ -191,8 +213,8 @@ theme, so the album plays gapless and the tracks rejoin into the complete file s
 piece as a whole); one gain for the whole work brings it to −14 LUFS integrated, and a true-peak
 limiter (5 ms look-ahead, 120 ms release) holds the peaks at −1 dBTP. The quiet passages stay
 quiet: loudness range 15.5 LU (ffmpeg EBU R128). The price of −14 LUFS with a 7 LU gap between
-themes and interludes is limiting on the loudest tuttis: 164 s of the work are reduced by more
-than 1 dB, 46 s by more than 3 dB, at most 9 dB. `ALBUM_LUFS` in `album.py` is the one number to
+themes and interludes is limiting on the loudest tuttis: 160 s of the work are reduced by more
+than 1 dB, 45 s by more than 3 dB, at most 9 dB. `ALBUM_LUFS` in `album.py` is the one number to
 lower for less (about 1 dB less per LU).
 
 | # | Movement | Length |
