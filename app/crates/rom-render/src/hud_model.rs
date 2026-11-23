@@ -122,6 +122,26 @@ pub struct ResearchOverview {
     pub ages: Vec<ResearchCell>,
 }
 
+/// A capital city the player knows at city level on the shown surface (task 131): its emblem
+/// stands over it, a ring in its owner's colour lies round it and the minimap marks it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HudCapital {
+    /// The city's entity id: the emblem stands on its model when the city is drawn.
+    pub city: u32,
+    /// Whose capital it is.
+    pub owner: u8,
+    /// Surface face.
+    pub face: u8,
+    /// Centre in milli-tiles, where the city stood when last known.
+    pub x: i32,
+    /// Centre in milli-tiles.
+    pub y: i32,
+    /// Radius of the ring on the ground in milli-tiles.
+    pub ring: i64,
+    /// Not in sight now: remembered at its last known place, drawn faded.
+    pub remembered: bool,
+}
+
 /// A city radius to draw on the current surface.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HudCityRadius {
@@ -362,6 +382,8 @@ pub struct HudCard {
     pub name: String,
     /// True for an entity of another owner: shown, but without orders.
     pub foreign: bool,
+    /// A capital city the player knows as one (task 131): its title says so.
+    pub capital: bool,
     /// Current and maximum hit points.
     pub hp: (i64, i64),
     /// Attack value text, when the type has a weapon.

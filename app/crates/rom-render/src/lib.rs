@@ -10,6 +10,7 @@
 
 mod bars;
 mod camera;
+mod capitals;
 mod ear;
 mod entities;
 pub mod features;
@@ -86,9 +87,9 @@ pub use review::{Review, SheetView, WorldLabel};
 pub use rig::Activity;
 pub use rom_geo::SurfacePos;
 pub use space::{
-    AlertView, ChargeView, ClaimState, ClaimView, ColonyView, CountdownView, FLASH_TICKS,
-    FlashView, HoldView, ResidenceView, ResourceBodyView, STRIKE_FLASH_TICKS, ShipView,
-    SpaceSnapshot, StrikeView, TransitView,
+    AlertView, CapitalView, ChargeView, ClaimState, ClaimView, ColonyView, CountdownView,
+    FLASH_TICKS, FlashView, HoldView, ResidenceView, ResourceBodyView, STRIKE_FLASH_TICKS,
+    ShipView, SpaceSnapshot, StrikeView, TransitView,
 };
 pub use stats::RenderStats;
 pub use sun::{SunClock, SunSettings};
@@ -108,10 +109,10 @@ pub use hud::{
     HudSelection, HudSnapshot,
 };
 pub use hud_model::{
-    AlertMark, ButtonState, HudAlert, HudBlast, HudButton, HudCard, HudCityRadius, HudMarker,
-    HudPalette, HudPaletteGroup, HudPatrol, HudPlacement, HudQueue, HudQueueItem, HudStain,
-    HudTile, HudTradeRoute, HudWealth, HudWreck, IconMark, MarkerKind, PaletteTab, ResearchCell,
-    ResearchOverview, ResearchTrack, SLOT_KEYS, slot_of_key,
+    AlertMark, ButtonState, HudAlert, HudBlast, HudButton, HudCapital, HudCard, HudCityRadius,
+    HudMarker, HudPalette, HudPaletteGroup, HudPatrol, HudPlacement, HudQueue, HudQueueItem,
+    HudStain, HudTile, HudTradeRoute, HudWealth, HudWreck, IconMark, MarkerKind, PaletteTab,
+    ResearchCell, ResearchOverview, ResearchTrack, SLOT_KEYS, slot_of_key,
 };
 pub use pick::{
     Ground, HudRegionKind, HudTarget, PickContext, PickController, PickEvent, View, flat_surface,

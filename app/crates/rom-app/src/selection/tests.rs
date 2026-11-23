@@ -3395,3 +3395,63 @@ fn aircraft_land_with_the_land_pick_and_take_off() {
     fx.step(1);
     assert_eq!(fx.kinds(id), ["land"]);
 }
+
+/// Task 131: the person's own capital is marked from the first tick: on its planet's ground
+/// and minimap, and in the selection panel, whose help says what losing it means; an enemy
+/// capital nobody has found is not marked anywhere.
+#[test]
+fn the_own_capital_is_marked_from_the_first_tick_and_an_unknown_one_is_not() {
+    let (mut ctl, mut game) = sphere_fixture();
+    let world = &mut game.world;
+    world.step();
+    let start = game.starts.iter().find(|s| s.player == PLAYER).unwrap();
+    let capital = world.capital(PLAYER).expect("a capital");
+    let body = world.entity(capital).unwrap().pos.body;
+    ctl.set_view(ViewCtx {
+        planet: body,
+        ..ViewCtx::default()
+    });
+    let mut hud = HudSnapshot::default();
+    ctl.fill(world, &mut hud);
+    assert_eq!(hud.capitals.len(), 1, "{:?}", hud.capitals);
+    let own = hud.capitals[0];
+    assert_eq!(own.city, capital.0);
+    assert_eq!(own.owner, PLAYER.0 as u8);
+    assert_eq!((own.face, own.x, own.y), {
+        let at = world.entity(capital).unwrap().pos;
+        (at.face, at.x, at.y)
+    });
+    assert!(!own.remembered);
+    assert!(own.ring > world.city_economic_radius(capital));
+    assert_eq!(start.player, PLAYER);
+    // The enemy's capital is unknown: neither its city nor its planet nor its system shows.
+    let enemy = game
+        .starts
+        .iter()
+        .find(|s| s.player != PLAYER)
+        .map(|s| s.player)
+        .unwrap();
+    assert!(world.capital(enemy).is_some());
+    let space = crate::capital_view::space_capitals(&world.known_capitals(PLAYER));
+    assert!(space.iter().all(|c| c.owner == PLAYER.0 as u8), "{space:?}");
+    // Selected, its card names it a capital and the help line says what losing it means.
+    ctl.handle(
+        world,
+        PickEvent::Click {
+            world_point: (0.0, 0.0),
+            surface: flat_surface((0.0, 0.0)),
+            entity: Some(capital.0),
+            modifiers: Modifiers::default(),
+            double: false,
+            on_screen: Vec::new(),
+        },
+    );
+    let mut hud = HudSnapshot::default();
+    ctl.fill(world, &mut hud);
+    let HudSelection::Single(card) = hud.selection else {
+        panic!("one city selected");
+    };
+    assert!(card.capital);
+    assert!(hud.help.starts_with("Your capital"), "{}", hud.help);
+    assert!(hud.help.contains("lose the game"), "{}", hud.help);
+}

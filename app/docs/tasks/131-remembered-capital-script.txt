@@ -1,0 +1,10 @@
+# Task 131: an enemy capital known but out of sight (universe mode, --start-placement together,
+# seed 1, --sun fixed, 1280 x 800, --players 2 --ai none, --zoom-all). Player one starts in the
+# Galactic Empires age with Total Network: player two's capital, on the same planet, is known
+# at city level without being seen. At tick 20 a click on its faded emblem on the minimap brings
+# the camera there: the same emblem and band, faded and greyed, stand over the fogged ground at
+# its last known place (img/131-capital-remembered.png).
+0 grant-age age.galactic
+0 grant-tech tech.total_network
+1 speed 100
+20 cam click 654,691

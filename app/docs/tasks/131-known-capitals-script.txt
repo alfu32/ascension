@@ -1,0 +1,7 @@
+# Task 131: every capital known (universe mode, seed 1, --sun fixed, 1280 x 800, --players 2
+# --ai none, --zoom-all, --view starmap,home). Player one starts in the Galactic Empires age
+# with Total Network, which reveals every player's capital city, planet and system: the star
+# map marks the home system and player two's (img/131-capital-starmap.png).
+0 grant-age age.galactic
+0 grant-tech tech.total_network
+1 speed 100

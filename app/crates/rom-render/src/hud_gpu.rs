@@ -1,4 +1,5 @@
 //! GPU resources owned exclusively by the render thread.
+use crate::capitals::ScreenEmblem;
 use crate::hud::{HudOverlay, HudPainter, HudSnapshot, HudTexture};
 use crate::hud_layout::{HudLayout, Rect, Region, scale_needs_rebake};
 use crate::hud_minimap::{self, MapMark};
@@ -21,6 +22,10 @@ pub(crate) struct HudGpu {
     /// When the batch of pictures on its way back was drawn, and how long drawing took.
     icon_batch: Option<(std::time::Instant, std::time::Duration)>,
 }
+
+/// Where the capital emblems rank among the labels that compete for room: after the pointer's
+/// tooltip, before everything else.
+const EMBLEM_PRIORITY: f32 = -4.5;
 
 /// Most model pictures rendered in one frame: a full palette page.
 const ICONS_PER_FRAME: usize = 15;
@@ -210,8 +215,46 @@ impl HudGpu {
         layout: &HudLayout,
         labels: &[SpaceLabel],
         alpha: f32,
+        avoid: &[ScreenEmblem],
     ) {
-        self.draw_labels_in(d, layout, labels, alpha, true);
+        self.draw_labels_avoiding(d, layout, labels, alpha, true, avoid);
+    }
+
+    /// Draws the capital emblems of the minimap, kept inside its picture.
+    pub(crate) fn draw_minimap_emblems(
+        &self,
+        d: &mut impl RaylibDraw,
+        layout: &HudLayout,
+        emblems: &[ScreenEmblem],
+    ) {
+        let view = layout.rect(Region::MinimapView);
+        let mut clip = d.begin_scissor_mode(
+            view.x.ceil() as i32,
+            view.y.ceil() as i32,
+            view.w.floor() as i32,
+            view.h.floor() as i32,
+        );
+        self.draw_emblems(&mut clip, emblems);
+    }
+
+    /// Draws the capital emblems (task 131): the HUD's crowned star tinted with each owner's
+    /// colour, its dark outline kept.
+    pub(crate) fn draw_emblems(&self, d: &mut impl RaylibDraw, emblems: &[ScreenEmblem]) {
+        let Some(rect) = self.painter.artwork.rect(crate::capitals::EMBLEM_ICON) else {
+            return;
+        };
+        let source = Rectangle::new(rect.x as f32, rect.y as f32, rect.w as f32, rect.h as f32);
+        for e in emblems {
+            let [r, g, b] = e.rgb;
+            d.draw_texture_pro(
+                &self.artwork,
+                source,
+                rectangle(e.rect()),
+                Vector2::zero(),
+                0.0,
+                Color::new(r, g, b, e.alpha),
+            );
+        }
     }
 
     /// Draws labels; with `in_world` only those over the world area between the HUD bars.
@@ -222,6 +265,19 @@ impl HudGpu {
         labels: &[SpaceLabel],
         alpha: f32,
         in_world: bool,
+    ) {
+        self.draw_labels_avoiding(d, layout, labels, alpha, in_world, &[]);
+    }
+
+    /// [`Self::draw_labels_in`], leaving out the labels that would cover one of `avoid`.
+    fn draw_labels_avoiding(
+        &mut self,
+        d: &mut impl RaylibDraw,
+        layout: &HudLayout,
+        labels: &[SpaceLabel],
+        alpha: f32,
+        in_world: bool,
+        avoid: &[ScreenEmblem],
     ) {
         if labels.is_empty() || alpha <= 0.01 {
             return;
@@ -238,7 +294,7 @@ impl HudGpu {
         let height = atlas.line_height(TextSize::Small) as f32 * ratio;
         // An icon is a square a little taller than the text line, in front of the text.
         let icon_side = height * 1.3;
-        let boxes: Vec<_> = labels
+        let mut boxes: Vec<_> = labels
             .iter()
             .map(|l| {
                 let text = if l.text.is_empty() {
@@ -255,9 +311,17 @@ impl HudGpu {
                 (l.x, l.y - h, text + icon, h, l.priority)
             })
             .collect();
+        // The emblems are kept before any label but the pointer's tooltip (priority -5 and
+        // below): a label that would cover one gives way.
+        boxes.extend(avoid.iter().map(|e| {
+            let r = e.rect();
+            (r.x, r.y, r.w, r.h, EMBLEM_PRIORITY)
+        }));
         let mut quads = Vec::new();
         for index in hud_minimap::declutter(&boxes) {
-            let label = &labels[index];
+            let Some(label) = labels.get(index) else {
+                continue;
+            };
             let mut text_x = label.x;
             if let Some(rect) = label
                 .icon
@@ -485,6 +549,23 @@ impl MinimapGpu {
             eprintln!("rom-render: minimap shading: {error}");
         }
     }
+    /// The capital emblems on this minimap (task 131), in picture pixels.
+    pub(crate) fn capital_emblems(
+        &self,
+        layout: &HudLayout,
+        capitals: &[crate::HudCapital],
+    ) -> Vec<ScreenEmblem> {
+        let view = layout.rect(Region::MinimapView);
+        let area = hud_minimap::fit_map(self.size.0, self.size.1, view);
+        hud_minimap::capital_emblems(
+            capitals,
+            self.size,
+            area,
+            self.globe.as_deref(),
+            layout.scale,
+        )
+    }
+
     pub(crate) fn draw(
         &self,
         d: &mut impl RaylibDraw,

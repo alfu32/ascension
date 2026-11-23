@@ -473,6 +473,36 @@ pub fn city_radius_marks(
     marks
 }
 
+/// The capital emblems on either surface's minimap (task 131): at each capital's place, larger
+/// than a building's dot, faded for one remembered under the fog.
+pub(crate) fn capital_emblems(
+    capitals: &[crate::HudCapital],
+    size: (u32, u32),
+    area: Rect,
+    globe: Option<&crate::Globe>,
+    scale: f32,
+) -> Vec<crate::capitals::ScreenEmblem> {
+    use crate::Footing;
+    capitals
+        .iter()
+        .map(|c| {
+            let (x, y) = (c.x as f32 / 1000.0, c.y as f32 / 1000.0);
+            let at = match globe {
+                Some(g) => dir_to_minimap(g.point(c.face, x, y, (0.0, 0.0), 0.0), area),
+                None => tile_to_minimap(x, y, size, area),
+            };
+            let (rgb, alpha) = crate::capitals::emblem_colour(c.owner, c.remembered);
+            crate::capitals::ScreenEmblem {
+                x: at.0,
+                y: at.1,
+                size: crate::capitals::MINIMAP_EMBLEM * scale,
+                rgb,
+                alpha,
+            }
+        })
+        .collect()
+}
+
 /// Pulsing rings at alerts on the shown surface (task 118): a bright dot and a ring that grows
 /// once a second, in the alert's colour, fading over the marker's last quarter.
 pub fn alert_marks(

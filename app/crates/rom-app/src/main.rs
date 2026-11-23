@@ -7,6 +7,7 @@ mod alert_view;
 mod args;
 mod ascension_view;
 mod bench;
+mod capital_view;
 mod chat;
 mod computer;
 mod demo;

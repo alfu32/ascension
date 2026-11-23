@@ -38,6 +38,8 @@ pub struct OverlayGeometry {
 }
 
 const RING_SEGMENTS: usize = 28;
+/// Width of the band round a capital, in tiles.
+const CAPITAL_BAND: f32 = 0.35;
 const LIFT: f32 = 0.07;
 const MARKER_TICKS: f32 = 10.0;
 const GREEN: [u8; 4] = [70, 230, 90, 255];
@@ -106,6 +108,26 @@ impl OverlayGeometry {
             })
             .collect();
         self.ground_loop(o, &points, colour);
+    }
+
+    /// A band `width` tiles wide round the origin with a line along each edge, so it shows as
+    /// a band near and a line far: the ring round a capital (task 131).
+    fn band(&mut self, o: Origin, radius: f32, width: f32, colour: [u8; 4]) {
+        let count = ((radius * std::f32::consts::TAU).ceil() as usize).max(48);
+        let (inner, outer) = (radius - width / 2.0, radius + width / 2.0);
+        let mut fill = colour;
+        fill[3] = (u16::from(colour[3]) * 3 / 4) as u8;
+        for i in 0..count {
+            let a = i as f32 / count as f32 * std::f32::consts::TAU;
+            let b = (i + 1) as f32 / count as f32 * std::f32::consts::TAU;
+            let at = |r: f32, t: f32| o.at(r * t.cos(), r * t.sin(), LIFT + 0.02);
+            self.quad(
+                [at(inner, a), at(outer, a), at(outer, b), at(inner, b)],
+                fill,
+            );
+            self.line(at(inner, a), at(inner, b), colour);
+            self.line(at(outer, a), at(outer, b), colour);
+        }
     }
 
     fn dashed_ring(&mut self, o: Origin, radius: f32, colour: [u8; 4]) {
@@ -305,6 +327,25 @@ pub fn build_overlays_on(
             });
         out.ring(o, radius, gold);
         out.line(o.at(0.0, 0.0, LIFT), o.at(0.0, 0.0, 1.4), gold);
+    }
+    // Capitals (task 131): a band in the owner's colour round the city, outside its economic
+    // radius; faded for a capital remembered under the fog.
+    for capital in &hud.capitals {
+        let origin = Origin {
+            ground,
+            face: capital.face,
+            x: capital.x as f32 / 1000.0,
+            y: capital.y as f32 / 1000.0,
+            altitude: 0.0,
+        };
+        let (rgb, alpha) = crate::capitals::emblem_colour(capital.owner, capital.remembered);
+        let alpha = if capital.remembered { alpha / 2 } else { 230 };
+        out.band(
+            origin,
+            capital.ring as f32 / 1000.0,
+            CAPITAL_BAND,
+            [rgb[0], rgb[1], rgb[2], alpha],
+        );
     }
     for city in &hud.city_radii {
         let origin = Origin {
@@ -703,6 +744,41 @@ mod tests {
             for p in [line.a, line.b] {
                 assert!(((p[0] - 20.0).hypot(p[2] - 30.0) - radius).abs() < 1e-4);
                 assert_eq!(p[1], LIFT);
+            }
+        }
+    }
+
+    /// Task 131: a band in the owner's colour round each capital, outside the city's radius;
+    /// fainter for a capital remembered under the fog.
+    #[test]
+    fn a_capital_wears_a_band_in_its_owners_colour() {
+        let capital = |owner: u8, remembered: bool| crate::HudCapital {
+            city: 5,
+            owner,
+            face: 0,
+            x: 20_000,
+            y: 30_000,
+            ring: 17_500,
+            remembered,
+        };
+        let mut out = OverlayGeometry::default();
+        build_overlays(&[], &|_, _| 0.0, &HudSnapshot::default(), 0.0, &mut out);
+        assert!(out.lines.is_empty() && out.tris.is_empty());
+        for remembered in [false, true] {
+            let hud = HudSnapshot {
+                capitals: vec![capital(2, remembered)],
+                ..HudSnapshot::default()
+            };
+            build_overlays(&[], &|_, _| 0.0, &hud, 0.0, &mut out);
+            assert!(!out.tris.is_empty() && !out.lines.is_empty());
+            let (rgb, _) = crate::capitals::emblem_colour(2, remembered);
+            for line in &out.lines {
+                assert_eq!(line.colour[..3], rgb);
+                assert_eq!(line.colour[3] < 200, remembered, "{:?}", line.colour);
+                for p in [line.a, line.b] {
+                    let r = (p[0] - 20.0).hypot(p[2] - 30.0);
+                    assert!((r - 17.5).abs() <= CAPITAL_BAND / 2.0 + 1e-3, "{r}");
+                }
             }
         }
     }

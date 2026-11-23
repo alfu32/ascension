@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use crate::bars::{self, BarAnchor, ScreenBar};
 use crate::camera::Camera;
+use crate::capitals::{self, EmblemAnchor, ScreenEmblem};
 use crate::entities::{EntityView, Footing, Surface, build_instances_with_casters_on};
 use crate::features::{BakedFeatures, crop_instances};
 use crate::globe::{ChunkBounds, CullView, Globe, PlanetScene};
@@ -298,6 +299,14 @@ pub(crate) struct Scene {
     bar_anchors: Vec<BarAnchor>,
     /// The bars placed on the last picture, in render-target pixels, for the 2D batch.
     screen_bars: Vec<ScreenBar>,
+    /// The HUD scale: the size of the capital emblems (task 131).
+    pub(crate) emblem_scale: f32,
+    /// Where the emblems of the capitals on the shown surface hang, from the last
+    /// `prepare_overlays`.
+    capital_anchors: Vec<EmblemAnchor>,
+    /// The capital emblems placed on the last picture, in render-target pixels: over cities,
+    /// beside planets and beside stars.
+    screen_emblems: Vec<ScreenEmblem>,
     box_mesh: Mesh,
     ground_mesh: Mesh,
     star_mesh: Option<Mesh>,
@@ -713,6 +722,9 @@ impl Scene {
             bar_scale: 1.0,
             bar_anchors: Vec::new(),
             screen_bars: Vec::new(),
+            emblem_scale: 1.0,
+            capital_anchors: Vec::new(),
+            screen_emblems: Vec::new(),
             box_mesh: Mesh::gen_mesh_cube(thread, 1.0, 1.0, 1.0),
             ground_mesh: Mesh::gen_mesh_plane(thread, GROUND_TILES, GROUND_TILES, 1, 1),
             star_mesh,
@@ -809,6 +821,12 @@ impl Scene {
         }
         if let (Some(gpu), Some(orbit)) = (&self.globe, orbit) {
             build_overlays_on(views, &*gpu.globe, orbit.right(), hud, &mut self.overlay);
+            capitals::anchors(
+                &hud.capitals,
+                &self.bar_anchors,
+                &*gpu.globe,
+                &mut self.capital_anchors,
+            );
             if self.show_projectiles {
                 self.projectiles
                     .update(render_tick, latest_tick, views, &*gpu.globe);
@@ -850,6 +868,12 @@ impl Scene {
                     camera_yaw,
                     &mut self.overlay,
                 );
+                capitals::anchors(
+                    &hud.capitals,
+                    &self.bar_anchors,
+                    surface,
+                    &mut self.capital_anchors,
+                );
                 if self.show_projectiles {
                     self.projectiles
                         .update(render_tick, latest_tick, views, surface);
@@ -861,6 +885,7 @@ impl Scene {
             None => {
                 self.overlay.lines.clear();
                 self.overlay.tris.clear();
+                self.capital_anchors.clear();
                 self.projectiles.clear();
                 self.projectile_geometry = ProjectileGeometry::default();
             }
@@ -1488,6 +1513,7 @@ impl Scene {
         orbit: &OrbitCamera,
     ) {
         self.screen_bars.clear();
+        self.screen_emblems.clear();
         let eye = GlobeEye::of_orbit(orbit);
         if let Some(frame) = self.globe_backdrop(rl, thread, target, orbit, &eye) {
             self.globe_world(rl, thread, target, orbit, &eye, &frame);
@@ -1712,11 +1738,22 @@ impl Scene {
             self.bar_scale,
             &mut self.screen_bars,
         );
+        capitals::project(
+            &self.capital_anchors,
+            view,
+            self.emblem_scale,
+            &mut self.screen_emblems,
+        );
     }
 
     /// Draws the bars of the last picture as one batch of rectangles over it, in pixels.
     pub(crate) fn draw_bars(&self, d: &mut impl RaylibDraw) {
         bars::draw(d, &self.screen_bars, self.bar_scale);
+    }
+
+    /// The capital emblems of the last picture (task 131), drawn with the HUD's artwork.
+    pub(crate) fn screen_emblems(&self) -> &[ScreenEmblem] {
+        &self.screen_emblems
     }
 
     /// Turns `views` into instance transforms for the next draw; without a terrain nothing is drawn.
@@ -1830,6 +1867,7 @@ impl Scene {
         }));
         let size = (target.texture.width as f32, target.texture.height as f32);
         self.screen_bars.clear();
+        self.screen_emblems.clear();
         if self.terrain.is_some() {
             let look = crate::pick::View::new(camera, size, self.projection_centre_y);
             self.collect_bars(&look);

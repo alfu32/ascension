@@ -88,6 +88,18 @@ pub struct ClaimView {
     pub owner: u8,
 }
 
+/// A capital as the player knows it (task 131): its system always, its planet from the planet
+/// level on. The star map marks the system, the system view the planet.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CapitalView {
+    /// Whose capital it is.
+    pub owner: u8,
+    /// Its star system.
+    pub system: u32,
+    /// Its planet, when known.
+    pub body: Option<u32>,
+}
+
 /// A habitable planet where a player has a city.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ColonyView {
@@ -293,6 +305,8 @@ pub struct SpaceSnapshot {
     pub transits: Vec<TransitView>,
     /// Planets with cities, anywhere, that the player knows of; by system, body and owner.
     pub colonies: Vec<ColonyView>,
+    /// The capitals the player knows, by owner (task 131).
+    pub capitals: Vec<CapitalView>,
     /// The systems the player knows, ascending ids; `None` before the first report (all shown).
     pub known: Option<Vec<u32>>,
     /// The routes the player has charted, as system pairs (lower id first), ascending; `None`
@@ -1194,6 +1208,43 @@ pub fn colony_rings(
     out
 }
 
+/// The thin rings round the planets of `system` that hold a known capital (task 131), one per
+/// owner, in the owner's colour, inside the colony rings.
+pub fn capital_rings(
+    scene: &UniverseScene,
+    placed: &[PlacedBody],
+    capitals: &[CapitalView],
+    system: u32,
+) -> Vec<ClaimRing> {
+    let mut out: Vec<ClaimRing> = Vec::new();
+    for (body, owner) in capitals
+        .iter()
+        .filter(|c| c.system == system)
+        .filter_map(|c| Some((c.body?, c.owner)))
+    {
+        let Some(at) = scene
+            .body_index(body)
+            .and_then(|index| placed.iter().find(|p| p.body == index))
+        else {
+            continue;
+        };
+        let rank = out.iter().filter(|r| r.body == body).count() as f32;
+        let [r, g, b] = owner_color(owner);
+        out.push(ClaimRing {
+            body,
+            centre: at.pos,
+            radius: at.radius * (CAPITAL_RING + CAPITAL_RING_STEP * rank),
+            colour: [r, g, b].map(|c| (c * 255.0).round() as u8),
+        });
+    }
+    out
+}
+
+/// Radius of a capital's ring in planet radii: inside the colony rings.
+pub const CAPITAL_RING: f32 = 1.4;
+/// How much wider each further capital's ring on the same planet is, in planet radii.
+pub const CAPITAL_RING_STEP: f32 = 0.12;
+
 /// Radius of a colony ring in planet radii.
 pub const COLONY_RING: f32 = 1.8;
 /// How much wider each further owner's ring on the same planet is, in planet radii.
@@ -1791,6 +1842,56 @@ mod tests {
         assert_eq!(tris.len(), 48);
         assert!(tris.iter().all(|t| t.colour == [1, 2, 3, 255]));
         assert!(claim_rings(&scene, &placed, &[]).is_empty());
+    }
+
+    /// Task 131: a capital known by its planet rings that planet in its owner's colour, inside
+    /// the colony rings, one ring per owner; one known only by its system rings nothing.
+    #[test]
+    fn a_capital_planet_wears_a_thin_ring_per_owner() {
+        let scene = sample_scene();
+        let placed = scene.place_system(1);
+        let capitals = [
+            CapitalView {
+                owner: 1,
+                system: 1,
+                body: Some(2),
+            },
+            CapitalView {
+                owner: 3,
+                system: 1,
+                body: Some(2),
+            },
+            // Known by its system only: no planet to ring.
+            CapitalView {
+                owner: 2,
+                system: 1,
+                body: None,
+            },
+            // Another system's planet.
+            CapitalView {
+                owner: 4,
+                system: 2,
+                body: Some(6),
+            },
+        ];
+        let rings = capital_rings(&scene, &placed, &capitals, 1);
+        assert_eq!(rings.len(), 2, "{rings:?}");
+        let at = placed
+            .iter()
+            .find(|p| p.body == scene.body_index(2).unwrap())
+            .unwrap();
+        let colour_of = |owner: u8| owner_color(owner).map(|c| (c * 255.0).round() as u8);
+        assert_eq!(rings[0].colour, colour_of(1));
+        assert_eq!(rings[1].colour, colour_of(3));
+        for ring in &rings {
+            assert_eq!(ring.centre, at.pos);
+            assert!(ring.radius > at.radius && ring.radius < at.radius * COLONY_RING);
+        }
+        assert!(
+            rings[1].radius > rings[0].radius,
+            "side by side, not on top"
+        );
+        assert!(capital_rings(&scene, &placed, &capitals[2..3], 1).is_empty());
     }
 
     fn transit(id: u32, from: u32, to: u32, progress: f32) -> TransitView {
