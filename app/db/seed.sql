@@ -3421,6 +3421,8 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.total_network'),(SELECT id FROM def WHERE key='res.wealth'),1400,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.total_network'),(SELECT id FROM def WHERE key='res.knowledge'),700,0);
 INSERT INTO tech_effect(tech_id,effect,rule_key) VALUES ((SELECT id FROM def WHERE key='tech.total_network'),'enable_rule','all_capitals');
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile) VALUES ((SELECT id FROM def WHERE key='unit.satellite'),20,(SELECT id FROM damage_class WHERE key='kinetic'),80000,20,'railgun');
+INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.satellite')),'orbit');
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.1'),'research','research',1,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.civic.1'),'research','research',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.commerce.1'),'research','research',3,0);
@@ -6253,6 +6255,8 @@ WITH v(k,e,s,f,g) AS (VALUES
  ('unit.rocket_artillery','moving',0,'unit.rocket_artillery.moving',100),
  ('unit.rocket_artillery','research_done',0,'voice.rocket_artillery.research_done',100),
  ('unit.rocket_artillery','select',0,'voice.rocket_artillery.select',100),
+ ('unit.satellite','attack',0,'voice.satellite.attack',100),
+ ('unit.satellite','fire',0,'unit.satellite.fire',100),
  ('unit.satellite','move',0,'voice.satellite.move',100),
  ('unit.satellite','moving',0,'unit.satellite.moving',100),
  ('unit.satellite','research_done',0,'voice.satellite.research_done',100),

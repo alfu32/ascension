@@ -10064,10 +10064,50 @@
  {
   "fx": "machine",
   "kind": "voice",
+  "name": "voice.satellite.attack",
+  "speed": 0.941,
+  "text": "Rails charged, firing.",
+  "voice": "af_sky"
+ },
+ {
+  "fx": "machine",
+  "kind": "voice",
   "name": "voice.satellite.research_done",
   "speed": 0.941,
   "text": "Upgrade installed.",
   "voice": "af_sky"
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.satellite.fire.1",
+  "params": {
+   "age": 10,
+   "pitch": 1.028,
+   "power": 0.333,
+   "reach": 1.0,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "railgun"
+  },
+  "recipe": "fire.railgun",
+  "seed": 378617
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.satellite.fire.2",
+  "params": {
+   "age": 10,
+   "pitch": 1.028,
+   "power": 0.333,
+   "reach": 1.0,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "railgun"
+  },
+  "recipe": "fire.railgun",
+  "seed": 380399
  },
  {
   "kind": "synth",

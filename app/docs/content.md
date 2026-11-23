@@ -190,7 +190,7 @@ hit-point percentage. The first step of each line needs only its age and buildin
 | Rotorcraft | Airfield | Attack Helicopters (6), Gunship Helicopters (7), Hover Gunships (8) |
 | Starships | Spaceport | Survey Ship (10), Corvettes (10), Space Frigates (11), Space Cruisers (12), Battleships (13) |
 | Transport | Spaceport | Transport Ships (10): unarmed, carries 20 population; every other starship carries 1 (10) or 2 (11+) |
-| Orbital watch | Spaceport | Satellites (7; 10 until task 130): unarmed, 96 tiles of sight from the orbit above the spaceport; Space Probes (7, task 130): unarmed, 40 tiles of sight, 8 tiles a second, sweeps the planet on a patrol. Both bound to their planet's orbit |
+| Orbital watch | Spaceport | Satellites (7; 10 until task 130): 96 tiles of sight from the orbit above the spaceport; armed since task 134 against what orbits their planet within 80 tiles (20 kinetic a second: a probe falls in under four seconds, two satellites destroy each other in seven, a starship's armour stops most of it); Space Probes (7, task 130): unarmed, 40 tiles of sight, 8 tiles a second, sweeps the planet on a patrol. Both bound to their planet's orbit |
 | Orbital craft | Airfield | Orbital Fighters (10), Orbital Bombers (10): climb from the air to their planet's orbit by themselves and come back down; leave the planet only aboard a carrier |
 | Carrier | Spaceport | Carriers (10): carries 10 orbital craft and launches them into the orbit it holds |
 | Civilian | City | Citizens (0), Worker Drones (8) |

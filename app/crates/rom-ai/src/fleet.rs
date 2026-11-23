@@ -70,8 +70,8 @@ pub(crate) struct Ships {
     pub launcher: Option<DefId>,
     /// The orbital craft with the most strength per resource.
     pub craft: Option<DefId>,
-    /// The unarmed ship that sees farthest and neither claims, carries nor trades: a
-    /// satellite that watches a planet from its orbit (task 68).
+    /// The ship that sees farthest and neither claims, carries nor trades, unarmed or bound to
+    /// its orbit: a satellite that watches a planet from its orbit (tasks 68 and 134).
     pub watcher: Option<DefId>,
 }
 
@@ -104,7 +104,7 @@ enum Kind {
     Transport,
     /// A carrier that launches orbital craft.
     Launcher,
-    /// Anything else: unarmed ships that carry nobody.
+    /// Anything else: unarmed ships that carry nobody, and ships bound to their orbit.
     Other,
 }
 
@@ -115,6 +115,9 @@ fn kind(view: &View<'_>, tags: &BTreeSet<u32>, type_id: DefId) -> Kind {
         Kind::Launcher
     } else if et.weapons.is_empty() && view.world.is_carrier_type(type_id) {
         Kind::Transport
+    } else if view.world.is_orbit_bound(type_id) {
+        // Armed or not, it never leaves its planet's orbit to escort, claim or strike.
+        Kind::Other
     } else if !et.weapons.is_empty() || claims(view, tags, type_id) {
         Kind::Ship
     } else {

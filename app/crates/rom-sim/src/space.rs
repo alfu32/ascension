@@ -106,6 +106,29 @@ impl World {
         self.rules.map_scales[&age.map_scale].rank
     }
 
+    /// Puts a complete spacecraft for match setup into the orbit of the planet below `above`,
+    /// over that point, as a launch from a spaceport there would (task 134: a satellite, bound
+    /// to its orbit, takes no order that brings it there from space).
+    pub fn launch_for_setup(
+        &mut self,
+        type_id: DefId,
+        owner: PlayerId,
+        above: Pos,
+    ) -> Result<EntityId, SimError> {
+        if !self.is_spacecraft_type(type_id)
+            || self.body(above.body).map(|b| b.kind) != Some(BodyKind::Habitable)
+            || self.body_position(above.body).is_none()
+        {
+            return Err(SimError::CannotEnterSpace);
+        }
+        let id = self.spawn(type_id, owner, above)?;
+        self.begin_orbit(id, above);
+        // As a launch within a tick: the ship leaves the surface for its body's marker.
+        let marker = self.entity(id).expect("launched ship").pos;
+        self.relocate(id, above, marker);
+        Ok(id)
+    }
+
     pub(crate) fn begin_orbit(&mut self, id: EntityId, pos: Pos) {
         let marker = self.body_position(pos.body).expect("body marker");
         self.space.orbits.insert(

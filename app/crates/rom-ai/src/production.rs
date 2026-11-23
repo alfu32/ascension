@@ -19,7 +19,8 @@ const RALLY_MARGIN: i64 = 3000;
 pub(crate) const RALLY_CLEAR: i32 = 3;
 
 /// Whether a type fights for a living: an armed, moving unit that neither works, builds,
-/// trades nor carries.
+/// trades nor carries, and is not bound to the orbit it is launched into (an armed satellite
+/// watches its planet; the space manager trains it, task 134).
 pub(crate) fn is_military(rules: &Rules, type_id: DefId) -> bool {
     rules.entity_types.get(&type_id).is_some_and(|t| {
         t.class == EntityClass::Unit
@@ -29,7 +30,16 @@ pub(crate) fn is_military(rules: &Rules, type_id: DefId) -> bool {
             && t.builder.is_none()
             && t.trader.is_none()
             && t.container.is_none()
-    })
+    }) && !orbit_bound(rules, type_id)
+}
+
+/// Whether a type never leaves the orbit it is launched into (tag `orbit_bound`).
+pub(crate) fn orbit_bound(rules: &Rules, type_id: DefId) -> bool {
+    rules
+        .tags
+        .values()
+        .find(|t| t.key == "orbit_bound")
+        .is_some_and(|tag| rules.has_tag(type_id, tag.id))
 }
 
 /// Whether a unit type can move on the ground its player's capital stands on (orbital craft,
