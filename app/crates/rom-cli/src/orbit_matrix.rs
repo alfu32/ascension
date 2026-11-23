@@ -273,7 +273,8 @@ fn at(x: i32, y: i32) -> Pos {
 }
 
 /// Puts one entity of `unit` for `owner` above or on `pos`: a building or a ground unit there,
-/// a ship sent into the orbit above it, a craft on the ground there, climbing.
+/// a ship sent into the orbit above it (one bound to its orbit, a satellite, launched straight
+/// into it, as from a spaceport below), a craft on the ground there, climbing.
 fn field(world: &mut World, unit: DefId, owner: PlayerId, pos: Pos) -> Result<EntityId, String> {
     let key = world.rules().key(unit).to_string();
     match place_of(world, unit) {
@@ -283,6 +284,9 @@ fn field(world: &mut World, unit: DefId, owner: PlayerId, pos: Pos) -> Result<En
             world.spawn(unit, owner, pos)
         }
         .map_err(|e| format!("{key}: {e}")),
+        Place::Ship if world.is_orbit_bound(unit) => world
+            .launch_for_setup(unit, owner, pos)
+            .map_err(|e| format!("{key}: {e}")),
         Place::Ship => {
             let marker = world.body_position(PLANET).ok_or("no planet marker")?;
             let id = world
@@ -418,7 +422,9 @@ fn value_left(world: &World, list: &[(EntityId, i64)], owner: PlayerId) -> (i64,
     (value * 1000 / start.max(1), alive)
 }
 
-/// The farthest `a` reaches `b` across the planet and its orbit, centre to centre.
+/// The farthest `a` reaches `b` across the planet and its orbit, centre to centre; no farther
+/// than half a face, as far as anything reaches on a cube planet (a satellite's reach, task
+/// 134, is longer than that here).
 fn reach(world: &World, a: DefId, b: DefId) -> i64 {
     let rules = world.rules();
     let (pa, pb) = (place_of(world, a), place_of(world, b));
@@ -436,7 +442,7 @@ fn reach(world: &World, a: DefId, b: DefId) -> i64 {
             .max()
             .unwrap_or(0)
     };
-    range + extent(rules, b)
+    range.min(N as i64 * 500) + extent(rules, b)
 }
 
 /// One fight of `first` against `second` at equal cost over the planet: the share of their

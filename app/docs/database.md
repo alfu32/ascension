@@ -1010,7 +1010,7 @@ Screenshots (scripts `tasks/68-*-script.txt`): `img/sight-tower-firing.png`,
   front of the `trade` order (lift off, fly into orbit above the next city, land beside
   it, deliver within 14 tiles of it).
 - **Satellite** (`unit.satellite`, spaceport, starfaring; information since task 130):
-  launched into orbit above its spaceport, no weapon, 150 HP, sight 96 tiles. The new tag `orbit_bound` keeps it
+  launched into orbit above its spaceport, no weapon (one since task 134: "Armed satellites"), 150 HP, sight 96 tiles. The new tag `orbit_bound` keeps it
   there: only `stop`, `stance`, `disband`, `launch`, `attack` and moves within the
   orbit are accepted (`SimError::BoundToOrbit`); it cannot land (only carriers and
   route traders that fly can).
@@ -1771,6 +1771,89 @@ knowledge, `300 + 50 × age` ticks (Orbital Survey 800 / 400 / 650, Deep Space S
   (side research by worth) and build the spaceport and the tracking station as other buildings;
   they do not train probes. Their attack targeting already values a capital it remembers; a
   capital known only by research is not yet an attack goal (docs/computer-player.md).
+
+## Armed satellites (task 134)
+
+Owner (2026-11-23), asked what should counter satellites and probes before the starfaring age:
+"satelites can attack". The satellite fights for the orbit over its planet; whether it should also
+fire at the ground or the air is not decided (below).
+
+**The weapon** (data only: one `et_weapon` row and its `et_weapon_target` row, generated last by
+`armed_satellites()` in `db/content/generate.py`, so every earlier weapon id stays):
+
+| Damage | Class | Reach | Reload | Layer | Projectile |
+| --- | --- | --- | --- | --- | --- |
+| 20 | `kinetic` (shield 100 %) | 80 tiles, along the orbit | 20 ticks (1 s) | `orbit` | `railgun`, instant |
+
+What it does to each target, per hit after armour (`damage_matrix`, flat armour, at least 1):
+
+| Target | Hit points, armour | Per hit | Falls after |
+| --- | --- | --- | --- |
+| space probe | 80, 0 | 20 | 4 hits (3 s) |
+| satellite | 150, 0 | 20 | 8 hits (7 s) |
+| corvette, space freighter | 800 / 500, 3 | 17 | 47 / 30 hits |
+| survey ship, space frigate, transport ship | 3 to 5 armour | 15 | |
+| space cruiser, carrier | 6 | 14 | |
+| battleship | 8 | 12 | |
+| orbital fighter, orbital bomber (vehicle: kinetic 40 %) | 4 | 4 | |
+
+A satellite deals a starfaring starship at most 17 a second; the ground battery deals a corvette
+517 every 2 s (258 a second) from 20 tiles. Measured in `rom-sim/tests/armed_satellites.rs` on a
+median planet (192 tiles a face): a probe that flies into reach falls 66 ticks later (the first
+shot waits for the shared acquisition pass, every 10 ticks); two satellites 50 tiles apart destroy
+each other in the same tick, 141 ticks after the fight starts; a probe 90 tiles away (in sight, out
+of reach) and a soldier on the ground below are never fired at.
+
+**Reach along the orbit** (`rom-sim`, the one rule this needed). Every entity in a planet's orbit
+stands at the planet's marker in system space, so ship against ship in one orbit measured 0 and
+every weapon reached the whole orbit; a satellite with this weapon would have shot down every probe
+over the planet. A ship bound to its orbit (tag `orbit_bound`: the satellite, the probe) now
+measures its reach from its ground point to the target's (`World::bound_origin`, used by the aim,
+the reach check and the automatic search), fires only from that orbit (not from the ground
+before its launch) and reaches only what orbits its own planet: never a ship over a moon or a
+neighbouring planet, nothing in open space, nothing on the ground. Every
+other ship measures as before. On a cube planet nothing reaches beyond half a face, so on planets
+smaller than the median the reach is that half face. An ordered attack moves the satellite along
+its orbit toward its target (the existing chase in orbit); an idle one fires on what comes into
+reach and stays put. The automatic search of a ship in orbit no longer looks at the ground below
+it unless it has a weapon that strikes the ground (`orbit_only`): nothing it found there could be
+hit, so no result changes.
+
+**Setup.** `World::launch_for_setup(type, owner, above)` puts a spacecraft straight into the
+orbit above a point, as a launch from a spaceport there would; `rom fight-matrix` fields
+satellites with it (a ship bound to its orbit refuses the `orbit` order that brings other ships in
+from space), and measures any reach no farther than half a face of its planet. The matrix's
+observer (the farthest-seeing unit that lets both sides see the field) was the farthest-seeing
+unarmed unit, the satellite; it is now the farthest-seeing unit with no weapon at the ground, the
+water or the air, still the satellite. Picked by "unarmed" it became the space probe (40 tiles),
+the sides lost sight of each other and 33 ground strengths went unanswered.
+
+**Computer players** (`rom-ai`): a ship bound to its orbit is the space manager's watcher,
+armed or not (`fleet::Kind::Other`), so one satellite is still trained over each planet with a
+spaceport and none is sent to escort, claim or strike; it is not a military unit for the army and
+production managers (`production::is_military`). They use the weapon through the data: their
+satellites fire on enemy satellites, probes and ships in reach. An enemy satellite they see now
+counts among the enemy ships the warship is chosen against.
+
+**Not done: ground and air.** The weapon has only the `orbit` layer. To also strike the ground, a
+second row (slot 1, `orbit_only`, layer `ground`, as the starships' bombardment); the air from
+orbit would need the `air` layer reached from orbit, which the simulation does not measure today
+(from orbit only `orbit_only` weapons reach the planet's surface).
+
+**Measured.** `rom fight-matrix`: `strengths=270 unanswered=0`, the same rows as 0.0.125. The
+satellite (first age starfaring, the age of its look) is in the orbit and ship-against-ship rosters
+from that age on; it outranges every ship and beats none at equal cost (3 seeds of the starfaring
+age, `--orbit-fight`: 0‰ left against the corvette, the orbital fighter and the survey ship, which
+keep 1000‰), so it is no strength and no answer, and the ground battery still answers every ship
+that bombards. `rom duel` moderate–easiest, seeds 1–20: 20–0, mean tick 54 449, as before (no duel
+reaches the information age).
+
+**Effect.** Rules fingerprint and the playthrough and ascension hashes move with the data: the
+playthrough's flat test map has no orbit, so the satellite it trains stays on the ground beside its
+spaceport, and being armed it now counts in the player's army (`World::army_size`, the match
+report's peak army, which is hashed). The code of this task on the earlier data gives the earlier
+hashes. Sounds: `unit.satellite.fire` (two variations, `fire.railgun`) and the line
+`voice.satellite.attack`, baked alone (`tools/sounds/README.md`); every existing file is unchanged.
 
 ## Bringing life (task 77)
 

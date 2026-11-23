@@ -47,8 +47,9 @@ pub struct Setup {
     pub faction: DefId,
     /// Plain ground every fighter in the matrix can stand on.
     pub terrain: DefId,
-    /// The unarmed type that sees farthest, placed far off each side; none when the rules
-    /// have no unarmed unit.
+    /// The type that sees farthest among those that cannot fire on the ground, the water or the
+    /// air (unarmed, or armed only at the orbit and space: the satellite, task 134), placed far
+    /// off each side; none when the rules have no such unit.
     pub observer: Option<DefId>,
 }
 
@@ -306,7 +307,15 @@ pub fn setup(rules: &Rules) -> Result<Setup, String> {
     let observer = rules
         .entity_types
         .values()
-        .filter(|et| et.class == EntityClass::Unit && et.weapons.is_empty())
+        .filter(|et| {
+            et.class == EntityClass::Unit
+                && et.weapons.iter().all(|w| {
+                    !w.orbit_only
+                        && w.targets
+                            .iter()
+                            .all(|t| matches!(t.layer, Layer::Orbit | Layer::Space))
+                })
+        })
         .max_by_key(|et| (et.los, std::cmp::Reverse(et.id)))
         .map(|et| et.id);
     Ok(Setup {

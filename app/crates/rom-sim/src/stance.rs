@@ -112,9 +112,13 @@ impl World {
             .min(u64::from(u32::MAX)) as u32;
         let mut candidates = self.entities_in_radius(e.pos, radius);
         if let Some(orbit) = self.orbit(id) {
-            candidates.extend(self.entities_in_radius(orbit.pos, radius));
-            candidates.sort_unstable();
-            candidates.dedup();
+            // From orbit only a weapon that strikes the ground below reaches the surface: a
+            // satellite's long reach (task 134) need not search the ground under it.
+            if et.weapons.iter().any(|w| w.orbit_only) {
+                candidates.extend(self.entities_in_radius(orbit.pos, radius));
+                candidates.sort_unstable();
+                candidates.dedup();
+            }
         } else if et
             .weapons
             .iter()

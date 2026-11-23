@@ -505,8 +505,9 @@ when no idle one is near. Traders that fly (the space freighter: a spacecraft wi
 system, up to half the route limit, and run a route to an own city on another planet
 of their system; walking traders keep routes on one planet (before, the best trader by
 income was taken for every route, so a freighter would have been trained for a route
-it cannot run). A satellite (the unarmed ship that sees farthest and neither claims,
-carries nor trades) is wished for over every planet with a spaceport. Cities, towers and
+it cannot run). A satellite (the ship that sees farthest and neither claims, carries nor
+trades, unarmed or bound to its orbit: armed since task 134, it is still the watcher and never
+a warship or an army unit) is wished for over every planet with a spaceport. Cities, towers and
 forts that fire count at full strength in the measured defence.
 
 ## Every strength has an answer; armies that break a city (task 71)

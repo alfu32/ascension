@@ -2379,6 +2379,13 @@
   ]
  },
  "unit.satellite": {
+  "attack": [
+   "voice.satellite.attack"
+  ],
+  "fire": [
+   "unit.satellite.fire.1",
+   "unit.satellite.fire.2"
+  ],
   "move": [
    "voice.satellite.move"
   ],

@@ -159,6 +159,8 @@ PROJECTILES = {
     'unit.survey_ship': 'beam', 'unit.corvette': 'railgun', 'unit.space_frigate': 'beam',
     'unit.space_cruiser': 'railgun', 'unit.battleship': 'plasma', 'unit.carrier': 'beam',
     'unit.orbital_fighter': 'missile', 'unit.orbital_bomber': 'missile',
+    # Task 134: the satellite's interceptor fires a slug at what shares its orbit.
+    'unit.satellite': 'railgun',
     # Bombardment from orbit (slot 1, `orbit_only`).
     ('unit.corvette', 1): 'missile', ('unit.space_frigate', 1): 'beam',
     ('unit.space_cruiser', 1): 'railgun', ('unit.battleship', 1): 'plasma',
@@ -694,6 +696,7 @@ def generate():
     rotorcraft_hover(row, tag)
     drone_operator(definition, row, tag, need, produce, cost, weapon)
     capital_reveal(definition, row, tag, need, produce, cost, tech)
+    armed_satellites(weapon)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -1402,6 +1405,23 @@ def capital_reveal(definition, row, tag, need, produce, cost, tech):
         for requirement in needs:
             need(full, requirement, 1)
         row('tech_effect', tech_id=Ref(full), effect='enable_rule', rule_key=rule)
+
+
+
+# Task 134 (owner, 2026-11-23: "satelites can attack"): the satellite fights for the orbit over
+# its planet. Its weapon reaches only the `orbit` layer (enemy satellites, space probes and
+# whatever else orbits the planet), as far as a little short of its sight, so a watcher at the
+# edge of what it sees is not yet in reach. Light kinetic slugs, instant (`railgun`): a probe
+# (80 hit points, no armour) falls to the fourth, a satellite (150) to the eighth; a starship's
+# armour stops most of each (a corvette takes 17 a second, the ground battery deals it 258).
+SATELLITE_WEAPON = dict(damage=20, damage_class='kinetic', reach=80, reload=20)
+
+
+def armed_satellites(weapon):
+    """Task 134: the satellite's weapon at the `orbit` layer. Written after every other
+    definition so earlier weapon ids stay."""
+    w = SATELLITE_WEAPON
+    weapon('unit.satellite', w['damage'], w['damage_class'], w['reach'] * 1000, ['orbit'], w['reload'])
 
 
 # Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"

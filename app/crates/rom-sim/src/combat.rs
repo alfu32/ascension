@@ -156,13 +156,26 @@ impl World {
     }
 
     /// Where `id` aims at `target`: the ground point below an orbiting target when `id` stands
-    /// on the planet it orbits, otherwise where the target was seen.
+    /// on the planet it orbits or is bound to that orbit itself, otherwise where the target was
+    /// seen.
     pub(crate) fn aim_pos(&self, id: EntityId, target: EntityId) -> Pos {
         let from = self.entity(id).expect("attacker").pos;
         match self.orbit(target) {
             Some(orbit) if self.orbit(id).is_none() && orbit.body == from.body => orbit.pos,
+            Some(orbit) if self.bound_origin(id, target).is_some() => orbit.pos,
             _ => self.seen_pos(target),
         }
+    }
+
+    /// The ground point of `id` when it is bound to its orbit (tag `orbit_bound`, task 134) and
+    /// `target` orbits the same planet: such a ship measures its reach along that orbit, from
+    /// its ground point to the target's, where every other ship in the orbit reaches the whole
+    /// of it.
+    fn bound_origin(&self, id: EntityId, target: EntityId) -> Option<Pos> {
+        let orbit = self.orbit(id)?;
+        let e = self.entity(id)?;
+        (self.is_orbit_bound(e.type_id) && self.orbit(target).is_some_and(|t| t.body == orbit.body))
+            .then_some(orbit.pos)
     }
 
     pub(crate) fn target_layer(&self, id: EntityId) -> Layer {
@@ -265,6 +278,9 @@ impl World {
     }
 
     pub(crate) fn attack_position(&self, id: EntityId, target: EntityId) -> Pos {
+        if let Some(origin) = self.bound_origin(id, target) {
+            return origin;
+        }
         let attacker = self.entity(id).expect("attacker");
         self.orbit(id)
             .filter(|orbit| {
@@ -293,6 +309,11 @@ impl World {
                         .entity(target)
                         .is_some_and(|t| t.pos.body == orbit.body)
             });
+        }
+        // A ship bound to its orbit fires only from that orbit, at what shares it (task 134):
+        // not from the ground before its launch, not beyond its planet's orbit.
+        if self.is_orbit_bound(self.entity(id).expect("attacker").type_id) {
+            return self.bound_origin(id, target).is_some();
         }
         // From a planet's surface (or its air) up at what orbits that planet.
         if self.orbit(id).is_none() && self.across_orbit(id, target) {
@@ -325,11 +346,12 @@ impl World {
         crate::integer_sqrt(squared)
     }
 
-    fn weapon_origin(&self, id: EntityId, weapon: &Weapon) -> Pos {
+    fn weapon_origin(&self, id: EntityId, weapon: &Weapon, target: EntityId) -> Pos {
         if weapon.orbit_only {
             self.orbit(id).expect("orbital weapon").pos
         } else {
-            self.entity(id).expect("attacker").pos
+            self.bound_origin(id, target)
+                .unwrap_or_else(|| self.entity(id).expect("attacker").pos)
         }
     }
 
@@ -343,7 +365,7 @@ impl World {
             if !self.weapon_can_target(id, w, target) {
                 return false;
             }
-            self.aim_part(self.weapon_origin(id, w), w, target, false)
+            self.aim_part(self.weapon_origin(id, w, target), w, target, false)
                 .is_some_and(|aim| {
                     aim.distance >= w.range_min.max(0) as u64
                         && aim.distance <= self.weapon_range(id, w)
@@ -501,7 +523,7 @@ impl World {
                         distance: u64::MAX,
                     })
             };
-            let mut aim = aim_from(self, self.weapon_origin(id, &weapon));
+            let mut aim = aim_from(self, self.weapon_origin(id, &weapon, target_id));
             let mut distance = aim.distance;
             if distance < weapon.range_min.max(0) as u64 {
                 continue;
@@ -510,7 +532,7 @@ impl World {
             if let Some(point) = chase.filter(|_| distance > range && !walked) {
                 self.orbit_move(id, point);
                 walked = true;
-                aim = aim_from(self, self.weapon_origin(id, &weapon));
+                aim = aim_from(self, self.weapon_origin(id, &weapon, target_id));
                 distance = aim.distance;
             }
             if distance > range {
@@ -594,7 +616,8 @@ impl World {
                 * i128::from(hit_pct)
                 / 100)
                 .clamp(5, 100) as u32;
-            let origin = strike.map_or_else(|| self.weapon_origin(id, &weapon), |s| s.origin);
+            let origin =
+                strike.map_or_else(|| self.weapon_origin(id, &weapon, hit_target), |s| s.origin);
             if let Some(strike) = strike {
                 self.launch_drone(id, strike.slot);
             }
