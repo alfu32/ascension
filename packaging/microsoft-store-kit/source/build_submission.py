@@ -16,6 +16,7 @@ import hashlib
 import html
 import json
 from pathlib import Path
+import re
 import shutil
 
 BASE = Path(__file__).resolve().parents[1]
@@ -152,6 +153,36 @@ a{{color:#3fd0ff}}h1,h2{{line-height:1.2;color:#e8c98a}}figure{{margin:25px 0;pa
 </style>{body}</html>'''
 
 
+def inline(text):
+    """Escapes a line of the policy and renders its **bold** and `code`."""
+    text = html.escape(text)
+    text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+    return re.sub(r'`(.+?)`', r'<code>\1</code>', text)
+
+
+def write_privacy():
+    """documentation/privacy.html from PRIVACY.md (headings, paragraphs, lists whose items
+    wrap over several lines)."""
+    privacy = (BASE / 'documentation/PRIVACY.md').read_text()
+    body = ''
+    for paragraph in privacy.strip().split('\n\n'):
+        if paragraph.startswith('# '):
+            body += '<h1>' + inline(paragraph[2:]) + '</h1>'
+        elif paragraph.startswith('## '):
+            body += '<h2>' + inline(paragraph[3:]) + '</h2>'
+        elif paragraph.startswith('- '):
+            items = []
+            for line in paragraph.splitlines():
+                if line.startswith('- '):
+                    items.append(line[2:])
+                else:
+                    items[-1] += ' ' + line.strip()
+            body += '<ul>' + ''.join('<li>' + inline(item) + '</li>' for item in items) + '</ul>'
+        else:
+            body += '<p>' + inline(' '.join(paragraph.split())) + '</p>'
+    (BASE / 'documentation/privacy.html').write_text(document('Ascension Privacy Policy', body), encoding='utf-8')
+
+
 def main():
     from PIL import Image
     shots = json.loads((SOURCE / 'screenshots.json').read_text())['screenshots']
@@ -215,18 +246,7 @@ def main():
                  f'alt="{html.escape(item["caption"])}"><figcaption><strong>{item["slot"]}. {html.escape(item["caption"])}'
                  f'</strong><br><code>{item["file"]}</code> from <code>{item["source"]}</code></figcaption></figure>')
     (BASE / 'documentation/screenshots.html').write_text(document('Ascension screenshots', body), encoding='utf-8')
-    privacy = (BASE / 'documentation/PRIVACY.md').read_text()
-    body = ''
-    for paragraph in privacy.strip().split('\n\n'):
-        if paragraph.startswith('# '):
-            body += '<h1>' + html.escape(paragraph[2:]) + '</h1>'
-        elif paragraph.startswith('## '):
-            body += '<h2>' + html.escape(paragraph[3:]) + '</h2>'
-        elif paragraph.startswith('- '):
-            body += '<ul>' + ''.join('<li>' + html.escape(line[2:]) + '</li>' for line in paragraph.splitlines()) + '</ul>'
-        else:
-            body += '<p>' + html.escape(paragraph) + '</p>'
-    (BASE / 'documentation/privacy.html').write_text(document('Ascension Privacy Policy', body), encoding='utf-8')
+    write_privacy()
     write_json(BASE / 'screenshots-manifest.json', manifest)
     coverage = [{key: record[key] for key in ('locale', 'language', 'translation_status')} for record in records]
     write_json(BASE / 'language-coverage.json', coverage)
