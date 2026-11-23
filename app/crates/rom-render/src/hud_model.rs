@@ -443,6 +443,9 @@ pub enum MarkerKind {
     Attack,
     /// Rally point of a selected producer (cyan).
     Rally,
+    /// A point the selected units fire at, `attack_ground` (task 142): a red reticle, with a
+    /// line from the unit when `from` is set.
+    Ground,
 }
 
 /// A short-lived marker on the ground.

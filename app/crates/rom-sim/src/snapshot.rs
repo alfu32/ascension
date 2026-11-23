@@ -432,6 +432,8 @@ pub struct HitSnapshot {
     pub damage: i64,
     /// The drone of the target's grid it aims at (task 128); `None` for the target itself.
     pub drone: Option<u8>,
+    /// The ground point a shot of `attack_ground` flies at (task 142); `target` is then id 0.
+    pub ground: Option<Pos>,
 }
 
 /// A firing decision not yet rolled.
@@ -627,6 +629,7 @@ fn hit_snapshot(h: &PendingHit) -> HitSnapshot {
         target: h.target,
         damage: h.damage,
         drone: h.drone,
+        ground: h.ground,
     }
 }
 
@@ -640,6 +643,7 @@ fn hit_from(h: &HitSnapshot) -> PendingHit {
         target: h.target,
         damage: h.damage,
         drone: h.drone,
+        ground: h.ground,
     }
 }
 

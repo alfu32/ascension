@@ -8,6 +8,7 @@ mod avoidance;
 mod capture;
 mod colony;
 mod combat;
+mod commands;
 mod construction;
 mod drones;
 mod economy;
@@ -338,6 +339,12 @@ pub enum SimError {
     /// `raze` takes an own building; a finished city cannot be razed.
     #[error("cannot raze that")]
     CannotRaze,
+    /// `delete` takes an own unit or building; a finished city cannot be deleted (task 142).
+    #[error("a finished city cannot be deleted")]
+    CannotDelete,
+    /// `attack_ground` needs a weapon that throws a projectile at the ground there (task 142).
+    #[error("no weapon that can fire at the ground there")]
+    NoGroundWeapon,
     /// A movement order's subject must be a formation.
     #[error("unknown formation")]
     UnknownFormation,

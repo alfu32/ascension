@@ -85,7 +85,8 @@ impl World {
             });
         if self.is_orbit_bound(e.type_id) {
             return match command.kind.as_str() {
-                "stop" | "stance" | "disband" | "launch" | "attack" => Ok(()),
+                "stop" | "stance" | "disband" | "delete" | "launch" | "attack"
+                | "attack_ground" => Ok(()),
                 "move" | "attack_move" | "patrol" if within => Ok(()),
                 _ => Err(SimError::BoundToOrbit),
             };

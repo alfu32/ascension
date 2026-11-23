@@ -526,12 +526,15 @@ fn palette_lists_production_rows_for_selected_type() {
         .count();
     assert_eq!(palette.buttons.len(), train_rows);
     assert!(!palette.tabs[PaletteTab::Build.index()]);
-    // A unit with a weapon gets ORDER with stop, attack-move, patrol and the four stances.
-    let armed = fx.spawn(fx.armed_other_than_builder(), 1, 20, 20);
+    // A unit with a weapon gets ORDER with stop, attack-move, patrol, the four stances and
+    // Delete (task 142; Attack ground too when it throws projectiles).
+    let kind = fx.armed_other_than_builder();
+    let armed = fx.spawn(kind, 1, 20, 20);
     fx.click(armed, false);
     let palette = fx.hud_snapshot().palette.expect("palette");
     assert_eq!(palette.tab, PaletteTab::Order);
-    assert_eq!(palette.buttons.len(), 3 + STANCE_BEHAVIORS.len());
+    let ground = usize::from(fx.world.attacks_ground(kind));
+    assert_eq!(palette.buttons.len(), 4 + STANCE_BEHAVIORS.len() + ground);
 }
 
 #[test]
@@ -3061,14 +3064,21 @@ fn market_script_sells_and_buys_through_the_palette() {
 #[test]
 fn a_stance_button_gives_an_order() {
     let mut fx = fixture();
-    let armed = fx.spawn(fx.armed_other_than_builder(), 1, 20, 20);
+    let kind = fx.armed_other_than_builder();
+    let armed = fx.spawn(kind, 1, 20, 20);
     fx.click(armed, false);
     let mut previous = fx.world.entity(armed).unwrap().stance;
     let palette = fx.hud_snapshot().palette.expect("palette");
-    assert_eq!(palette.buttons.len(), 3 + STANCE_BEHAVIORS.len());
+    // Stop, attack-move, patrol, the stances, Delete and, for a thrower, Attack ground.
+    let ground = usize::from(fx.world.attacks_ground(kind));
+    assert_eq!(palette.buttons.len(), 4 + STANCE_BEHAVIORS.len() + ground);
     fx.world.record_accepted(true);
     let mut stances = std::collections::BTreeSet::new();
-    for button in &palette.buttons[3..] {
+    for button in palette
+        .buttons
+        .iter()
+        .filter(|b| (10..14).contains(&b.slot))
+    {
         fx.hud(
             HudRegionKind::CommandSlot,
             button.slot,
@@ -3454,4 +3464,147 @@ fn the_own_capital_is_marked_from_the_first_tick_and_an_unknown_one_is_not() {
     assert!(card.capital);
     assert!(hud.help.starts_with("Your capital"), "{}", hud.help);
     assert!(hud.help.contains("lose the game"), "{}", hud.help);
+}
+
+fn press_delete(fx: &mut Fx) {
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Hotkey {
+            ch: DELETE_KEY,
+            modifiers: Modifiers::default(),
+        },
+    );
+}
+
+/// Task 142: the Delete key removes own units at once; a finished building asks first, on the
+/// command card, and a second Delete (or Yes) answers; Escape keeps it; a city stays.
+#[test]
+fn delete_removes_units_and_asks_before_a_finished_building() {
+    let mut fx = fixture();
+    let soldier = fx.armed_other_than_builder();
+    let unit = fx.spawn(soldier, 1, 10, 10);
+    let other = fx.spawn(soldier, 1, 12, 10);
+    fx.select(&[unit, other]);
+    let hud = fx.hud_snapshot();
+    let palette = hud.palette.expect("orders");
+    assert!(
+        palette
+            .buttons
+            .iter()
+            .any(|b| b.slot == DELETE_SLOT && b.name.starts_with("Delete")),
+        "a Delete button in the last slot"
+    );
+    press_delete(&mut fx);
+    fx.step(1);
+    assert!(fx.world.entity(unit).is_none() && fx.world.entity(other).is_none());
+
+    let barracks_t = fx.find(|et| {
+        et.class == EntityClass::Building
+            && et.producer.is_some()
+            && et.territory.is_none()
+            && et.market.is_none()
+            && fx
+                .rules
+                .production
+                .get(&et.id)
+                .is_some_and(|rows| rows.iter().any(|r| r.mode == ProductionMode::Train))
+    });
+    let barracks = fx.spawn(barracks_t, 1, 20, 20);
+    fx.click(barracks, false);
+    // Its own page opens first, as before.
+    assert_eq!(fx.hud_snapshot().palette.unwrap().tab, PaletteTab::Train);
+    press_delete(&mut fx);
+    fx.step(1);
+    assert!(fx.world.entity(barracks).is_some(), "it asks first");
+    let hud = fx.hud_snapshot();
+    let palette = hud.palette.expect("the question");
+    assert_eq!(palette.tab, PaletteTab::Order);
+    let names: Vec<(usize, &str)> = palette
+        .buttons
+        .iter()
+        .map(|b| (b.slot, b.name.as_str()))
+        .collect();
+    assert_eq!(
+        names,
+        vec![
+            (DELETE_SLOT, "Delete? Yes"),
+            (DELETE_SLOT - 1, "No, keep it")
+        ]
+    );
+    assert!(hud.help.contains("Delete"), "{}", hud.help);
+    // No keeps it.
+    fx.hud(
+        HudRegionKind::CommandSlot,
+        DELETE_SLOT - 1,
+        PointerButton::Left,
+        false,
+    );
+    fx.step(1);
+    assert!(fx.world.entity(barracks).is_some());
+    assert_eq!(fx.hud_snapshot().palette.unwrap().tab, PaletteTab::Train);
+    // Escape keeps it too.
+    press_delete(&mut fx);
+    fx.ctl.handle(&mut fx.world, PickEvent::Escape);
+    fx.step(1);
+    assert!(fx.world.entity(barracks).is_some());
+    // Delete twice: gone.
+    press_delete(&mut fx);
+    press_delete(&mut fx);
+    fx.step(1);
+    assert!(fx.world.entity(barracks).is_none());
+
+    // A finished city cannot be deleted.
+    let city_t = fx.find(|et| et.territory.as_ref().is_some_and(|t| t.is_city));
+    let city = fx.spawn(city_t, 1, 40, 40);
+    fx.click(city, false);
+    press_delete(&mut fx);
+    fx.step(1);
+    assert!(fx.world.entity(city).is_some());
+    assert!(
+        fx.hud_snapshot().events.iter().any(|e| e.contains("city")),
+        "it says why"
+    );
+}
+
+/// Task 142: Attack ground arms a pick for units that throw projectiles; the next click on the
+/// ground orders them to fire there, and the target is drawn with a line from each unit.
+#[test]
+fn attack_ground_arms_a_pick_and_orders_the_point() {
+    let mut fx = fixture();
+    let world = &fx.world;
+    let thrower =
+        fx.find(|et| et.movement.is_some() && et.builder.is_none() && world.attacks_ground(et.id));
+    let melee = fx.find(|et| {
+        et.movement.is_some()
+            && et.builder.is_none()
+            && !et.weapons.is_empty()
+            && et.weapons.iter().all(|w| w.range_max == 0)
+    });
+    let a = fx.spawn(thrower, 1, 10, 10);
+    let b = fx.spawn(melee, 1, 12, 10);
+    fx.select(&[a, b]);
+    let palette = fx.hud_snapshot().palette.expect("orders");
+    assert_eq!(palette.tab, PaletteTab::Order);
+    assert!(palette.buttons.iter().any(|btn| btn.slot == GROUND_SLOT));
+    assert!(!fx.ctl.aiming(&fx.world));
+    fx.hud(
+        HudRegionKind::CommandSlot,
+        GROUND_SLOT,
+        PointerButton::Left,
+        false,
+    );
+    assert!(fx.ctl.aiming(&fx.world));
+    fx.ground_click();
+    assert!(!fx.ctl.aiming(&fx.world), "a plain click ends the pick");
+    assert_eq!(fx.ctl.selection().len(), 2, "the click selects nothing");
+    fx.step(1);
+    assert_eq!(fx.kinds(a), vec!["attack_ground"]);
+    assert!(fx.kinds(b).is_empty(), "a blow cannot be thrown");
+    let hud = fx.hud_snapshot();
+    assert!(
+        hud.markers
+            .iter()
+            .any(|m| m.kind == MarkerKind::Ground && m.from.is_some()),
+        "the target is drawn"
+    );
 }

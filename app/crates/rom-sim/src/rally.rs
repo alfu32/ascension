@@ -112,8 +112,9 @@ impl World {
     }
 
     /// Sends a unit a producer just trained to the producer's rally point: a harvester to a
-    /// gather site it can work harvests there, anything else walks. Nothing happens without
-    /// a rally point, for a unit that cannot move, or when the point is on another body.
+    /// gather site it can work harvests there, anything else walks; a ship a spaceport launched
+    /// moves within its orbit to above the point. Nothing happens without a rally point, for a
+    /// unit that cannot move, or when the point is on another body.
     pub(crate) fn send_to_rally(&mut self, producer: EntityId, unit: EntityId) {
         let Some(rally) = self.rally(producer) else {
             return;
@@ -146,7 +147,10 @@ impl World {
                 pos
             }
         };
-        if goal.body == body {
+        // A ship in orbit moves within its orbit to above the point (task 142): it stays in
+        // orbit and never lands there.
+        let orbiting = self.orbit(unit).is_some_and(|o| o.body == goal.body);
+        if goal.body == body || orbiting {
             let _ = self.submit(order("move", None, Some(goal)));
         }
     }

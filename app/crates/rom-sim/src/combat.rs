@@ -15,6 +15,9 @@ pub(crate) struct PendingHit {
     pub damage: i64,
     /// The drone of the target's grid the shot aims at (task 128); `None` for the unit itself.
     pub drone: Option<u8>,
+    /// The ground point a shot of `attack_ground` flies at (task 142); its `target` is then
+    /// [`crate::commands::GROUND`].
+    pub ground: Option<Pos>,
 }
 
 /// How long a blast or a fallen building is kept for the views, in ticks (one game minute).
@@ -106,6 +109,11 @@ impl World {
     }
 
     pub(crate) fn validate_combat_order(&self, command: &Command) -> Result<(), SimError> {
+        if command.kind == "attack_ground"
+            && let Some(at) = command.target_pos
+        {
+            self.validate_attack_ground(command.executor, at)?;
+        }
         if command.kind == "attack" {
             let target = command
                 .target_entity
@@ -663,6 +671,7 @@ impl World {
                     target: hit_target,
                     damage,
                     drone,
+                    ground: None,
                 },
             });
             return;
@@ -713,6 +722,10 @@ impl World {
     }
 
     fn impact(&mut self, hit: &PendingHit) {
+        if let Some(at) = hit.ground {
+            self.impact_ground(hit, at);
+            return;
+        }
         let Some(impact) = self
             .entity(hit.target)
             .filter(|e| !e.neutralised && self.enemies(hit.owner, e.owner))
@@ -746,6 +759,62 @@ impl World {
         }
     }
 
+    /// A shot at the ground lands (task 142): the enemy standing on the point (a unit within its
+    /// radius, a building whose footprint covers it; the nearest, then the lowest id) takes the
+    /// hit, and a splash reaches every other enemy around as from any hit.
+    fn impact_ground(&mut self, hit: &PendingHit, at: Pos) {
+        let weapon = self.rules.entity_types[&hit.source_type]
+            .weapons
+            .iter()
+            .find(|w| w.id == hit.weapon_id)
+            .expect("projectile weapon")
+            .clone();
+        let reach = self.splash_reach(0);
+        let victim = self
+            .entities_in_radius(at, reach)
+            .into_iter()
+            .filter(|&id| {
+                let t = self.entity(id).expect("entity in radius");
+                t.hp > 0
+                    && !t.neutralised
+                    && t.container_id.is_none()
+                    && !(t.owner == PlayerId(0) && self.players[&t.owner].team == 0)
+                    && self.enemies(hit.owner, t.owner)
+                    && self.orbit(id).is_none()
+                    && self.layer_row(&weapon.targets, id).is_some()
+                    && self.edge_distance(at, id) == 0
+            })
+            .min_by_key(|&id| {
+                let pos = self.entity(id).expect("victim").pos;
+                (self.geo(at.body).distance(at, pos).unwrap_or(u64::MAX), id)
+            });
+        let mut hit = hit.clone();
+        if let Some(victim) = victim {
+            hit.target = victim;
+            let damage = self.hit_damage(&hit, &weapon, victim);
+            self.damage_entity(victim, damage, &hit);
+        }
+        if weapon.splash_radius > 0 {
+            self.splash(&hit, &weapon, at);
+        }
+    }
+
+    /// How far around a point entities whose footprint or edge comes within `radius` of it can
+    /// stand: buildings are found by their centre, units by their own.
+    fn splash_reach(&self, radius: i64) -> u32 {
+        let reach = radius
+            + (self.max_footprint.0 + self.max_footprint.1).max(0) * 500
+            + self
+                .rules
+                .entity_types
+                .values()
+                .map(|t| t.radius)
+                .max()
+                .unwrap_or(0)
+                .max(0);
+        reach.min(i64::from(u32::MAX)) as u32
+    }
+
     /// The area of a weapon with `splash_radius` (task 75): every other enemy within the radius
     /// of the impact, on a layer the weapon hits, takes `splash_pct` of what the hit would do
     /// to it, falling linearly from the centre to nothing at the edge. Distance is measured to
@@ -760,17 +829,7 @@ impl World {
             source_type: hit.source_type,
         });
         // Buildings are found by their centre: reach as far as the largest half footprint.
-        let reach = radius
-            + (self.max_footprint.0 + self.max_footprint.1).max(0) * 500
-            + self
-                .rules
-                .entity_types
-                .values()
-                .map(|t| t.radius)
-                .max()
-                .unwrap_or(0)
-                .max(0);
-        let reach = reach.min(i64::from(u32::MAX)) as u32;
+        let reach = self.splash_reach(radius);
         for target in self.entities_in_radius(impact, reach) {
             let Some(t) = self.entity(target) else {
                 continue;
@@ -861,7 +920,9 @@ impl World {
                 .map(|e| (e.pos.body, e.pos.face, e.pos.x, e.pos.y));
             let target = self
                 .entity(hit.target)
-                .map(|e| (e.pos.body, e.pos.face, e.pos.x, e.pos.y));
+                .map(|e| e.pos)
+                .or(hit.ground)
+                .map(|p| (p.body, p.face, p.x, p.y));
             (origin, target, hit.source_type, hit.weapon_id, hit.damage)
         });
         for hit in &landing {

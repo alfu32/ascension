@@ -39,6 +39,17 @@ impl World {
 
     /// Prices a subject with owned and queued ramp counts before applying modifiers.
     pub fn price(&self, player: PlayerId, def: DefId) -> Vec<(DefId, i64)> {
+        self.price_less(player, def, 0)
+    }
+
+    /// What an own construction site of `def` was priced at: the price with that site left out
+    /// of the ramp count (task 142).
+    pub(crate) fn site_price(&self, player: PlayerId, def: DefId) -> Vec<(DefId, i64)> {
+        self.price_less(player, def, 1)
+    }
+
+    /// The price of `def` with `less` of the player's own left out of the ramp count.
+    fn price_less(&self, player: PlayerId, def: DefId, less: i64) -> Vec<(DefId, i64)> {
         let sources = self.active_sources(player);
         let n = self.rules.entity_type(def).map_or(0, |et| {
             self.count_subjects(Some(player), |id| match et.ramp_mode {
@@ -51,7 +62,7 @@ impl World {
             })
         });
         self.rules
-            .cost_of_ramped(def, &sources, u64::try_from(n).unwrap_or(0))
+            .cost_of_ramped(def, &sources, u64::try_from(n - less).unwrap_or(0))
     }
 
     pub(crate) fn all_orders(&self) -> impl Iterator<Item = &Order> {

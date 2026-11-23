@@ -77,7 +77,7 @@ impl World {
                 }
                 "move" | "construct" | "repair" | "harvest" | "attack" | "attack_move" | "heal"
                 | "orbit" | "travel" | "launch" | "carry" | "trade" | "enter" | "land" | "lift"
-                | "unload" | "explore" | "patrol" | "guard" => {
+                | "unload" | "explore" | "patrol" | "guard" | "attack_ground" => {
                     if worked {
                         self.entities[id.0 as usize]
                             .as_mut()
@@ -118,6 +118,8 @@ impl World {
                         self.advance_travel(id, &mut order);
                     } else if matches!(order.kind.as_str(), "attack" | "attack_move" | "patrol") {
                         self.advance_combat(id, &mut order);
+                    } else if order.kind == "attack_ground" {
+                        self.advance_attack_ground(id, &mut order);
                     } else if order.kind == "explore" {
                         self.advance_explore(id, &mut order);
                     } else if order.kind == "guard" {

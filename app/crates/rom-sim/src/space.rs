@@ -218,6 +218,11 @@ impl World {
         {
             self.begin_orbit(id, pos);
             order.status = OrderStatus::Done;
+            // A ship the spaceport just trained goes on to the spaceport's rally point, as a
+            // unit leaving a barracks does (task 142); it was launched before it could.
+            if let Some(port) = order.target_entity {
+                self.send_to_rally(port, id);
+            }
         }
     }
 

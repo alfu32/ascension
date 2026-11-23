@@ -856,6 +856,13 @@ impl World {
             && command
                 .target_entity
                 .is_some_and(|target| self.across_orbit(command.executor, target));
+        // A ship in orbit fires at the ground of the planet below (task 142).
+        let orbital_ground = command.kind == "attack_ground"
+            && self.orbit(command.executor).is_some_and(|orbit| {
+                command
+                    .target_pos
+                    .is_some_and(|p| p.body == orbit.body && self.geo(orbit.body).contains(p))
+            });
         // Within the orbit it holds a ship moves, attack-moves and patrols over its planet.
         let orbit_move = matches!(command.kind.as_str(), "move" | "attack_move" | "patrol")
             && self.orbit(command.executor).is_some_and(|orbit| {
@@ -868,6 +875,7 @@ impl World {
             command.kind.as_str(),
             "travel" | "orbit" | "enter" | "land" | "unload" | "trade"
         ) || orbital_attack
+            || orbital_ground
             || orbit_move;
         if !cross_body
             && (command.target_pos.is_some_and(|pos| pos.body != body)
@@ -1021,6 +1029,11 @@ impl World {
             }
             if order.kind == "raze" {
                 self.apply_raze(&order);
+                continue;
+            }
+            // Deleting is immediate too (task 142).
+            if order.kind == "delete" {
+                self.apply_delete(&order);
                 continue;
             }
             // A trade at the market happens at once, at the price of that moment (task 107).

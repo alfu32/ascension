@@ -13,8 +13,10 @@
 //! Entities are `city`, `builder1`..`builderN`, `builders` (in `box`) or `#id`; points are
 //! `@dx,dy` (tiles from the city centre, across face edges on a sphere) or `x,y` (tiles on the
 //! city's face). Other commands: `rclick`,
-//! `key <char> [ctrl] [shift]`, `escape`; `hud` takes `tab`, `arrow`, `slot`, `queue`, `tile`,
-//! `family` (a brush family listed beside the palette, task 114).
+//! `key <char> [ctrl] [shift]` (`key delete` presses the Delete key: the chat's when it has the
+//! keyboard, else it deletes the selection, task 142), `escape`;
+//! `hud` takes `tab`, `arrow`, `slot`, `queue`, `tile`, `family` (a brush family listed beside
+//! the palette, task 114).
 //!
 //! Live names (resolved at the step, in entity id order): `relicN` = free carry nodes,
 //! `templeN` = own completed keepers, `marketN` = own completed buildings training route

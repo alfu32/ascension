@@ -2365,3 +2365,44 @@ rules loader reads them into `EntityType::sounds`, `Rules::ambience` and `OrderK
 (`rom-rules`); the rules fingerprint changes with them, so saves made with earlier rules are refused, as
 after any rules change.
 
+
+## Delete, attack ground and the spaceport's rally point (task 142)
+
+Two order kinds (`order_kind` rows; no other rules data):
+
+- **`delete`** (`needs` '', target none): an own unit or building leaves at once, at the next
+  tick boundary, like `raze` and `set_rally` a setting rather than a queue entry. A construction
+  site refunds its price × the share of the work not done × `economy.cancel_refund_pct` (100),
+  rounded down per resource (`World::delete_refund`); a finished building or a unit refunds
+  nothing. A producer's queue and pending orders are refunded as a cancel refunds them, workers
+  inside a gather building come out, and a landed carrier sets its passengers down first; a
+  carrier with units aboard that has not landed refuses (`PassengersAboard`), and so does a
+  finished city (`CannotDelete`: it is captured, never removed). A unit is removed at once; a
+  building falls with the dead of the tick, as a razed one: no stain, no killer, no kill or
+  plunder. The price is the one the site was charged: its type's ramped price with the site
+  itself left out of the ramp count. `raze` now refunds the same amount (before, it used the
+  unramped base price; both agree for a player's first building of a type).
+- **`attack_ground`** (`needs` weapon, target point, line `attack`): every weapon that throws a
+  projectile fires at the point — `projectile_speed` > 0 (instant beams and railguns do not
+  qualify: their hit is a ray at a target), a reach (`range_max` > 0), not `consumed`, and an
+  `et_weapon_target` row for the layer of the ground there (`ground` on land, `fluid` on water).
+  Drone operators send their drones at enemies and do not attack the ground. A ship in orbit
+  uses its `orbit_only` weapons at the planet below; elsewhere the other weapons, on the unit's
+  own body, never from a ship bound to its orbit. The unit walks (in orbit: moves its ground
+  point) until the point is within the reach of one of them, then stands and fires its first
+  ready weapon in slot order, every reload, until stopped or given another order; an immobile
+  shooter out of reach fails with `out_of_range`. A shot is rolled like any other (accuracy,
+  falloff, the layer's `hit_pct`); it lands on the enemy standing on the point (a unit within its
+  radius, a building whose footprint covers it), and its splash, if any, reaches enemies around
+  the point as from any hit. Splash never hurts own or allied units, so neither does this.
+- **Spaceport rally point.** A ship a spaceport trains is launched into orbit before it is
+  free to move, and the rally point was only applied to units that came out on the ground: it
+  was skipped for every launched ship. A ship now goes on to the rally point when its launch
+  ends: in orbit, it moves within the orbit to above the point (or the entity) on the ground and
+  stays in orbit there. This holds for ships bound to their orbit and for those that can travel;
+  none lands. Orbital craft and aircraft come out on the ground and walk or fly there as before.
+- **PART B, save format 19.** `pending_hit` gains `ground_x, ground_y, ground_face, ground_body`
+  (NULL for a hit on an entity); a shot at the ground has `target_id` 0, no entity's id.
+  `pending_shot` is unchanged: such a shot flies at its `target_*` point. Formats 13 to 18 load
+  without shots at the ground. The state hash adds the point only for shots at the ground, so
+  other worlds keep their hashes.

@@ -202,6 +202,7 @@ fn hit_at(row: &Row, i: usize) -> Result<HitSnapshot, SaveError> {
         target: EntityId(uint(row, i + 5, "hit target")?),
         damage: int(row, i + 6)?,
         drone: None,
+        ground: None,
     })
 }
 
@@ -1209,6 +1210,12 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
     };
     // Shots at a drone of a grid (task 128, format 17).
     let drone_column = if format >= 17 { "drone" } else { "NULL" };
+    // Shots at the ground (task 142, format 19).
+    let ground_columns = if format >= 19 {
+        "ground_x, ground_y, ground_face, ground_body"
+    } else {
+        "NULL, NULL, NULL, NULL"
+    };
     Ok(Snapshot {
         tick,
         rng_state,
@@ -1241,11 +1248,12 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
         hits: query_vec(
             conn,
             &format!(
-                "SELECT land_tick, attacker_id, owner_id, source_type_id, weapon_id, target_id, damage, {drone_column} FROM pending_hit ORDER BY seq"
+                "SELECT land_tick, attacker_id, owner_id, source_type_id, weapon_id, target_id, damage, {drone_column}, {ground_columns} FROM pending_hit ORDER BY seq"
             ),
             |r| {
                 Ok(HitSnapshot {
                     drone: ouint(r, 7, "drone")?,
+                    ground: opos_at(r, 8)?,
                     ..hit_at(r, 0)?
                 })
             },
@@ -1256,13 +1264,18 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
                 "SELECT origin_x, origin_y, origin_face, origin_body, target_x, target_y, target_face, target_body, accuracy, land_tick, attacker_id, owner_id, source_type_id, weapon_id, target_id, damage, {drone_column} FROM pending_shot ORDER BY seq"
             ),
             |r| {
+                let target_pos = pos_at(r, 4)?;
+                let hit = hit_at(r, 9)?;
+                // A shot at the ground (task 142) aims at no entity and flies at its point.
+                let ground = (hit.target == EntityId(0)).then_some(target_pos);
                 Ok(ShotSnapshot {
                     origin: pos_at(r, 0)?,
-                    target_pos: pos_at(r, 4)?,
+                    target_pos,
                     accuracy: uint(r, 8, "accuracy")?,
                     hit: HitSnapshot {
                         drone: ouint(r, 16, "drone")?,
-                        ..hit_at(r, 9)?
+                        ground,
+                        ..hit
                     },
                 })
             },

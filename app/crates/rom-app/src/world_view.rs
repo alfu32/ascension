@@ -312,6 +312,18 @@ impl WorldView {
             "space" if event.keystroke.modifiers.shift => self
                 .bridge
                 .push_input(InputEvent::KeyDown(Key::FollowSelection)),
+            // Delete removes the selection (task 142); the selection turns it into orders.
+            "delete" => {
+                let modifiers = &event.keystroke.modifiers;
+                self.bridge.push_input(InputEvent::Hotkey {
+                    ch: crate::selection::DELETE_KEY,
+                    mods: Modifiers {
+                        shift: modifiers.shift,
+                        ctrl: modifiers.control,
+                        alt: modifiers.alt,
+                    },
+                });
+            }
             name => {
                 if let Some(key) = Key::from_keystroke(name, event.keystroke.modifiers.shift) {
                     self.bridge.push_input(InputEvent::KeyDown(key));
@@ -377,9 +389,13 @@ impl Render for WorldView {
                 self.sim.report(),
             )
         });
-        // A hand over what a double click enters (a planet, a star, a system).
+        // A hand over what a double click enters (a planet, a star, a system); a crosshair while
+        // a click fires at the ground.
         let cursor = if self.bridge.pointer_hand() {
             CursorStyle::PointingHand
+        } else if self.sim.aiming() {
+            // Attack ground is armed (task 142).
+            CursorStyle::Crosshair
         } else {
             CursorStyle::Arrow
         };

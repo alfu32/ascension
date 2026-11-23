@@ -235,12 +235,20 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../assets/hud/icons/cmd_attack_move.svg"),
     ),
     (
+        "icons/cmd_attack_ground",
+        include_str!("../../../assets/hud/icons/cmd_attack_ground.svg"),
+    ),
+    (
         "icons/cmd_build",
         include_str!("../../../assets/hud/icons/cmd_build.svg"),
     ),
     (
         "icons/cmd_cancel",
         include_str!("../../../assets/hud/icons/cmd_cancel.svg"),
+    ),
+    (
+        "icons/cmd_delete",
+        include_str!("../../../assets/hud/icons/cmd_delete.svg"),
     ),
     (
         "icons/cmd_follow",
