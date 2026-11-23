@@ -17,8 +17,16 @@ brush-size cursor if cheap. Implementer: Claude agent (Sonnet).
   drag: interpolate between frames along the surface; no duplicate orders for the same tile in
   one stroke), each sample a `paint` order as a click makes now. A click without a drag still
   paints one dab.
-- While painting, the drag does not move the camera or start a selection box; Escape still
-  puts the brush down; right-click still does what it does now.
+- **Camera manipulation stays exactly as it is across the whole game** (owner, 2026-11-23: "mind
+  that brush drag painting might conflict with panning, it's important that we keep camera
+  manipulation the same across the entire game"): the middle-button drag (turn and tilt),
+  Shift + middle-button drag (pan), the wheel, edge scrolling, the keys and the minimap do the
+  same with a brush selected as without one. The stroke takes only the **left-button drag**,
+  which otherwise draws a selection box: with a brush selected that drag paints instead (and
+  no selection box starts). Check every camera binding in `world_view.rs` and say in the report
+  that none changed; add a test that, with a brush selected, the camera inputs still move the
+  camera and a left drag paints. Escape still puts the brush down; right-click still does what
+  it does now.
 - Orders per second stay bounded (say the cap) so a long stroke cannot flood the order queue or
   a network session; the simulation stays deterministic (orders as now).
 - Docs: `app/docs/bringing-life.md` ("Painting": strokes), `app/docs/hud.md` if it describes the
