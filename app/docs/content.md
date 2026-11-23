@@ -37,8 +37,8 @@ The content is too large to type by hand row by row. It is **generated**:
 | 6 | Modern | `age.modern` | planetary |
 | 7 | Information | `age.information` | planetary |
 | 8 | Automation | `age.automation` | planetary |
-| 9 | Fusion | `age.fusion` | planetary |
-| 10 | Starfaring | `age.starfaring` | interstellar |
+| 9 | Fusion | `age.fusion` | interplanetary (home system seen, view only) |
+| 10 | Starfaring | `age.starfaring` | interplanetary |
 | 11 | Expansion | `age.expansion` | interstellar |
 | 12 | Abundance | `age.abundance` | interstellar |
 | 13 | Galactic Empires | `age.galactic` | interstellar |

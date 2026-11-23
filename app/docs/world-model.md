@@ -260,8 +260,8 @@ was not opened, its order is tested).
 
 | Tier rank | Camera and reach | First seeded age |
 | --- | --- | --- |
-| 0, planetary | home planet, positive `view_range` limits ground half-width; zero shows the globe | ancient; fusion first has zero range |
-| 1, interplanetary | home system, ships may move and orbit within that system | starfaring |
+| 0, planetary | home planet, positive `view_range` limits ground half-width; zero shows the globe | ancient; fusion has zero range |
+| 1, interplanetary | home system seen from fusion (view only: the spaceport trains only orbit-bound satellites and probes until starfaring); ships may move and orbit within that system from starfaring | fusion |
 | 2, interstellar | star map and route travel between systems | expansion |
 
 Research updates the existing camera's limit immediately without moving it.

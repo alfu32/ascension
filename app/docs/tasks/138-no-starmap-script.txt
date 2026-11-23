@@ -1,0 +1,7 @@
+# Task 138: the same Fusion player turns the wheel far past the system (universe mode, seed 1,
+# --sun fixed, 1280 x 800, --players 2 --ai none, --age 9, no --zoom-all, --view system,home
+# --after 6), shot as img/138-no-starmap.png: the camera stays at the system, the star map
+# stays out of reach.
+1 speed 100
+200 cam wheel -30 632,355
+210 cam wheel -30 632,355

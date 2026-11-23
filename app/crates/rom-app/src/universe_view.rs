@@ -136,9 +136,10 @@ mod tests {
             assert_eq!(max_level(&rules, by_ordinal(n)), Level::Globe);
             last = range;
         }
-        // Zero view range allows the whole globe; the map-scale tier still caps space zoom.
+        // Zero view range allows the whole globe; the map-scale tier caps space zoom, and
+        // from Fusion (task 138) the home system can be seen.
         assert_eq!(view_range(&rules, by_ordinal(9)), 0);
-        assert_eq!(max_level(&rules, by_ordinal(9)), Level::Globe);
+        assert_eq!(max_level(&rules, by_ordinal(9)), Level::System);
         assert_eq!(max_level(&rules, by_ordinal(10)), Level::System);
         assert_eq!(max_level(&rules, by_ordinal(11)), Level::StarMap);
         assert_eq!(view_range(&rules, DefId(u32::MAX)), 0);
