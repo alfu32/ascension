@@ -4,12 +4,17 @@ From the accepted sketch: the bare statement, the melody over galloping strings,
 ♭VI–♭VII–I lift and the unison close. Strings carry the melody and the gallop; the trumpet is one
 voice inside the tutti; a quiet woodwind episode keeps it from being a fanfare.
 
+The opening (task 149) lets the listener hear the theme first and pure: the violins alone in
+unison over a soft pedal, then the first statement with only held chords under its first bar.
+The gallop comes in from the second bar, in the cellos alone, soft and short with the beat
+leading; the horns join the line for its second half. The build-up comes after the theme.
+
 The last statement (task 139) is deliberately lighter than a full tutti: the melody in the
 violins, horns and trumpet; the gallop in the cellos alone, every note short so the beat leads;
 the violas holding the harmony; trombones and tuba only from the lift. Flutes, oboes, bassoons
 and the full orchestra are saved for the unison close.
 """
-from common import Score, chord, chord_at, gallop, harmony, root
+from common import THEME, Score, chord, chord_at, gallop, harmony, root
 
 
 def short_gallop(part, t0, t1, prog, lo, v=70, n=2):
@@ -38,6 +43,7 @@ def held(prog, end):
 
 STMT1 = ("Bb4:1 | Bb4:2 Eb4:1 Eb4:3 F4:1 G4:1 | Bb4:3 Ab4:1 G4:1 F4:2 Eb5:1 | "
          "Eb5:2 Ab4:1 Ab4:3 Bb4:1 C5:1 | Db5:3 Eb5:1 F5:3 r:1")
+STMT1_SECOND_HALF = "Eb5:1 | Eb5:2 Ab4:1 Ab4:3 Bb4:1 C5:1 | Db5:3 Eb5:1 F5:3 r:1"  # from eighth 31
 EPISODE = ("Bb4:1 | Bb4:2 Eb4:1 Eb4:3 F4:1 G4:1 | Ab4:3 G4:1 F4:2 Eb4:1 F4:1 | "
            "G4:3 Bb4:1 Eb5:2 D5:1 C5:1 | Bb4:7")
 BRIDGE = "G5:3 F5:1 Eb5:2 C5:2 | Ab5:3 G5:1 F5:2 D5:2"
@@ -49,35 +55,41 @@ FINAL = "Bb4:1 | Bb4:2 Eb4:1 Eb4:12"
 def build():
     s = Score("title", "Ascension - Main title", 92)
     s.mark(0, "hall 2.6")
-    # ---------------------------------------------------------- the theme, bare, in the strings
+    # ---------------------------------------------------------- the theme, bare: the violins alone
     s.mark(0, "theme")
-    for k, sh, v in (("vn1", 0, 74), ("vn2", 0, 70), ("vla", -12, 66)):
-        s[k].line(0, "Bb4:1 Bb4:3 r:3 Bb4:1 Bb4:2 Eb4:1 Eb4:4", v=v, shift=sh, art=0.95)
-        s[k].dyn((0, 70), (8, 88), (15, 80))
-    s["cb"].note(0, 15, "Eb2", 50).dyn((0, 60), (15, 75))
-    s["vc"].note(4, 11, "Eb3", 46).dyn((0, 55), (15, 75))
-    s["hn"].chord(11, 4, [55, 58, 63], 50).dyn((11, 50), (15, 80))
-    s["timp"].note(11, 4, "Eb2", 60)
+    # one voice: the two violin sections in unison, nothing else moving; a soft pedal below and
+    # the horns' chord under the last E♭ as the hinge into the statement
+    for k, v in (("vn1", 84), ("vn2", 80)):
+        s[k].line(0, THEME, v=v, art=0.95)
+        s[k].dyn((0, 84), (8, 96), (15, 90))
+    s["cb"].note(0, 15, "Eb2", 46).dyn((0, 54), (15, 62))
+    s["hn"].chord(11, 4, [55, 58, 63], 46).dyn((11, 46), (15, 66))
     s.set_tempo(14, 100)
 
-    # ---------------------------------------------------------- statement over the gallop
+    # ---------------------------------------------------------- statement, the gallop under it
     A = 16
     prog1 = [(16, 4, "Eb"), (20, 4, "Eb"), (24, 4, "Eb"), (28, 4, "Bb"), (32, 4, "Ab"),
              (36, 4, "Ab"), (40, 4, "Db"), (44, 4, "Bb")]
-    end1 = s["vn1"].line(A - 1, STMT1, v=86)
-    s["vn2"].line(A - 1, STMT1, v=74)
-    s["hn"].line(A - 1, STMT1, v=62, shift=-12)
+    # the melody in the violins in unison; the horns join it, an octave down, for its second half
+    end1 = s["vn1"].line(A - 1, STMT1, v=94)
+    s["vn2"].line(A - 1, STMT1, v=86)
     s["vn1"].dyn((15, 92), (40, 104), (47, 96))
-    s["vn2"].dyn((15, 88), (47, 96))
-    gallop(s["vla"], A, end1, prog1, 55, v=72)
-    gallop(s["vc"], A, end1, prog1, 43, v=70, n=2)
-    s["vla"].dyn((16, 80), (47, 96))
-    s["vc"].dyn((16, 80), (47, 96))
-    for t, d, name in prog1:
-        s["cb"].note(t, 1.6, root(name), 80)
-        s["cb"].note(t + 2, 1.6, root(name), 70)
-    s["cb"].dyn((16, 90))
-    s["timp"].note(16, 1, "Eb2", 70).note(32, 1, "Bb2", 62)
+    s["vn2"].dyn((15, 90), (47, 98))
+    s["hn"].line(31, STMT1_SECOND_HALF, v=58, shift=-12)
+    s["hn"].dyn((31, 66), (47, 80))
+    # under its first bar only held chords, so the theme's own rhythm is the only one; the violas
+    # hold the harmony throughout
+    harmony(s, held(prog1, end1 - 1), {"vla": (55, 2)}, v=62)
+    s["vla"].dyn((16, 66), (47, 80))
+    s["cb"].note(A, 7.5, root("Eb"), 58)
+    # the gallop from the second bar: the cellos alone, every note short, the beat leading
+    short_gallop(s["vc"], A + 8, end1, prog1, 43, v=46)
+    s["vc"].dyn((24, 60), (47, 80))
+    for t, d, name in prog1[2:]:
+        s["cb"].note(t, 1.6, root(name), 66)
+        s["cb"].note(t + 2, 1.6, root(name), 58)
+    s["cb"].dyn((16, 70), (24, 76), (47, 86))
+    s["timp"].note(16, 1, "Eb2", 58).note(32, 1, "Bb2", 58)
 
     # ---------------------------------------------------------- woodwind episode, quiet
     E = 48
