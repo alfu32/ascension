@@ -3,8 +3,38 @@
 From the accepted sketch: the bare statement, the melody over galloping strings, the bridge, the
 ♭VI–♭VII–I lift and the unison close. Strings carry the melody and the gallop; the trumpet is one
 voice inside the tutti; a quiet woodwind episode keeps it from being a fanfare.
+
+The last statement (task 139) is deliberately lighter than a full tutti: the melody in the
+violins, horns and trumpet; the gallop in the cellos alone, every note short so the beat leads;
+the violas holding the harmony; trombones and tuba only from the lift. Flutes, oboes, bassoons
+and the full orchestra are saved for the unison close.
 """
-from common import Score, chord, gallop, harmony, root
+from common import Score, chord, chord_at, gallop, harmony, root
+
+
+def short_gallop(part, t0, t1, prog, lo, v=70, n=2):
+    """The gallop with every note short enough for the spiccato samples (0.18 s at 100 bpm) and
+    the accent on the beat, so the two sixteenths never sound like the main stroke."""
+    t = t0
+    while t < t1 - 1e-6:
+        tones = chord(chord_at(prog, t), lo)[:n]
+        for off, d, dv in ((0, 0.6, 10), (1, 0.42, -4), (1.5, 0.42, -8)):
+            if t + off < t1 - 1e-6:
+                part.chord(t + off, d, tones, v + dv)
+        t += 2
+
+
+def held(prog, end):
+    """A progression with repeated chords tied into one, the last one ending at ``end``."""
+    out = []
+    for t, d, name in prog:
+        if out and out[-1][2] == name:
+            out[-1] = (out[-1][0], t + d - out[-1][0], name)
+        else:
+            out.append((t, d, name))
+    t, _, name = out[-1]
+    out[-1] = (t, end - t, name)
+    return out
 
 STMT1 = ("Bb4:1 | Bb4:2 Eb4:1 Eb4:3 F4:1 G4:1 | Bb4:3 Ab4:1 G4:1 F4:2 Eb5:1 | "
          "Eb5:2 Ab4:1 Ab4:3 Bb4:1 C5:1 | Db5:3 Eb5:1 F5:3 r:1")
@@ -69,10 +99,15 @@ def build():
     # ---------------------------------------------------------- bridge: the violins sing
     B = 80
     prog3 = [(80, 4, "Cm"), (84, 4, "Ab"), (88, 4, "Fm"), (92, 4, "Bb")]
-    s["vn1"].line(B, BRIDGE, v=84)
+    # the last D slurs into the statement's pick-up instead of sounding under it
+    s["vn1"].line(B, BRIDGE.replace("D5:2", "D5:1"), v=84)
     s["vn1"].dyn((80, 84), (95, 108))
     s["fl"].line(B, BRIDGE, v=60, shift=12)
-    harmony(s, prog3, {"hn": (55, 3), "vla": (55, 2), "vn2": (63, 2)}, v=66)
+    harmony(s, prog3[:-1], {"hn": (55, 3), "vla": (55, 2), "vn2": (63, 2)}, v=66)
+    # the last chord: horns and second violins let go for the pick-up they play (a held note
+    # of the same pitch would swallow it)
+    harmony(s, [(92, 3, "Bb")], {"hn": (55, 3), "vn2": (63, 2)}, v=66)
+    harmony(s, [(92, 4, "Bb")], {"vla": (55, 2)}, v=66)
     for k in ("hn", "vla", "vn2"):
         s[k].dyn((80, 76), (95, 100))
     gallop(s["vc"], B, 96, prog3, 43, v=66, n=2)
@@ -86,24 +121,29 @@ def build():
     C = 96
     prog4 = [(96, 4, "Eb"), (100, 4, "Eb"), (104, 4, "Eb"), (108, 4, "Ab"), (112, 4, "Cb"),
              (116, 4, "Db"), (120, 4, "Eb"), (124, 4, "Eb")]
+    # the melody: violins (the firsts an octave up), horns an octave down, the trumpet inside
     end4 = s["vn1"].line(C - 1, STMT2, v=100, shift=12)
     s["vn2"].line(C - 1, STMT2, v=96)
-    s["tpt"].line(C - 1, STMT2, v=74)
+    s["tpt"].line(C - 1, STMT2, v=70)
     s["hn"].line(C - 1, STMT2, v=82, shift=-12)
-    s["fl"].line(C - 1, STMT2, v=74, shift=12)
-    s["ob"].line(C - 1, STMT2, v=66)
     s["vn1"].dyn((95, 104), (127, 116))
-    gallop(s["vla"], C, end4, prog4, 55, v=84)
-    gallop(s["vc"], C, end4, prog4, 43, v=84, n=2)
-    s["vla"].dyn((95, 100))
+    # the gallop in one section only, lighter, the beat leading; the violas hold the harmony
+    short_gallop(s["vc"], C, end4 - 1, prog4, 43, v=76)
+    s["vc"].chord(end4 - 1, 0.6, chord("Eb", 43)[:2], 86)
     s["vc"].dyn((95, 100))
-    harmony(s, prog4, {"tbn": (46, 2), "tuba": "root", "bn": (46, 2)}, v=70)
-    s["tbn"].dyn((96, 80), (127, 100))
+    harmony(s, held(prog4, end4 - 0.5), {"vla": (55, 2)}, v=70)
+    # trombones and tuba join for the lift (♭VI–♭VII–I), each chord held, not re-struck
+    lift = held([x for x in prog4 if x[0] >= 108], end4)
+    harmony(s, lift, {"tbn": (46, 2), "tuba": "root"}, v=70)
+    s["tbn"].dyn((108, 76), (127, 100))
     for t, d, name in prog4:
         s["cb"].note(t, 1.6, root(name), 92)
-        s["cb"].note(t + 2, 1.6, root(name), 80)
-        s["timp"].note(t, 1, root(name, 41, 52), 76)
-    s["timp"].note(122, 1, "Bb2", 70).note(124, 1, "Bb2", 78)
+        s["cb"].note(t + 2, min(1.6, end4 - t - 2), root(name), 80)  # clear of the pick-up
+    # timpani on the first beat and on each chord of the lift, then the dominant into the close
+    for t, d, name in prog4:
+        if t == C or 108 <= t < 124:
+            s["timp"].note(t, 1, root(name, 41, 52), 76)
+    s["timp"].note(124, 1, "Bb2", 78)
 
     # ---------------------------------------------------------- the theme in unison, and the chord
     D = 128
