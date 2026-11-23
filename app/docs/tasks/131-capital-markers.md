@@ -17,6 +17,17 @@ Empires upgrade Total Network reveals all. This task marks exactly what `known_c
 at the level it says: a system-level capital marks only its system on the star map, a
 planet-level one also its planet, a city-level one also the city.
 
+## Known before starting (task 130, release 0.0.124)
+
+- `World::known_capitals(viewer)` (`rom-sim/src/intel.rs`): per owner the level (system, planet,
+  city), the system, the body (planet level and up), the city and its position (city level only),
+  and whether it is visible now. Own and allied capitals at city level always. The views get it
+  through the world the sim thread already reads (`rom-app/src/sim_thread.rs`).
+- Total Network is a research at the existing Deep Space Tracking Station (`bld.jump_detector`),
+  not a new building.
+- Baselines on main (0.0.124): tests 1339 passed / 6 ignored; playthrough 7e76f479ddb35b66,
+  ascension 522a00b42b24ed73; fight matrix 270/0; duel 20–0; rules 44ec2cf65bf109a9; save 18.
+
 ## What exists
 
 - `World::capital(player)` (`rom-sim/src/capture.rs`): each player's capital city (its first
