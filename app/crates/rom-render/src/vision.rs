@@ -11,10 +11,9 @@ pub const EXPLORED: u8 = 1;
 /// Tile in view now.
 pub const VISIBLE: u8 = 2;
 
-/// Brightness of an unexplored tile.
-const UNEXPLORED_LIGHT: f32 = 0.32;
-/// Brightness of an explored tile that is not in view.
-const EXPLORED_LIGHT: f32 = 0.72;
+/// Brightness of a tile that is not in view now, seen before or not: terrain is always known,
+/// so ground never seen is drawn like ground seen before (task 137).
+const OUT_OF_SIGHT_LIGHT: f32 = 0.72;
 /// How strongly a border tile takes its owner's colour.
 const BORDER_TINT: f32 = 0.8;
 /// How strongly the inside of a territory takes its owner's colour.
@@ -49,8 +48,7 @@ impl VisionMap {
     /// The multiplier of each colour channel for tile `index`.
     pub fn tile_shade(&self, index: usize) -> [f32; 3] {
         let light = match self.state[index] {
-            UNEXPLORED => UNEXPLORED_LIGHT,
-            EXPLORED => EXPLORED_LIGHT,
+            UNEXPLORED | EXPLORED => OUT_OF_SIGHT_LIGHT,
             _ => 1.0,
         };
         let owner = self.owner[index];
@@ -166,11 +164,21 @@ mod tests {
         let map = map();
         assert!(map.is_valid());
         let (dark, dim, bright) = (map.tile_shade(0), map.tile_shade(1), map.tile_shade(2));
-        assert!(dark[0] < dim[0] && dim[0] < bright[0]);
+        assert_eq!(dark, dim);
+        assert!(dim[0] < bright[0]);
         assert_eq!(bright, [1.0; 3]);
         // A border tile is tinted towards its owner (red) without being darker than visible.
         let border = map.tile_shade(3);
         assert!(border[0] > border[1] && border[0] > border[2]);
+    }
+
+    #[test]
+    fn unexplored_terrain_shades_like_ground_seen_before() {
+        let map = map();
+        assert_eq!(map.tile_shade(0), map.tile_shade(1));
+        assert_eq!(map.tile_shade(0), [OUT_OF_SIGHT_LIGHT; 3]);
+        assert_eq!(map.tile_shade(4), map.tile_shade(5));
+        assert!(map.tile_shade(0)[0] < map.tile_shade(2)[0]);
     }
 
     #[test]
@@ -186,8 +194,7 @@ mod tests {
         let luma = |tile: usize| u32::from(out[tile * 4]) + u32::from(out[tile * 4 + 1]);
         for (tile, state) in map.state.iter().enumerate() {
             let expected = match *state {
-                UNEXPLORED => 2.0 * 255.0 * UNEXPLORED_LIGHT,
-                EXPLORED => 2.0 * 255.0 * EXPLORED_LIGHT,
+                UNEXPLORED | EXPLORED => 2.0 * 255.0 * OUT_OF_SIGHT_LIGHT,
                 _ => 2.0 * 255.0,
             };
             if map.owner[tile] == 0 {
@@ -195,7 +202,8 @@ mod tests {
             }
             assert_eq!(out[tile * 4 + 3], 255);
         }
-        assert!(luma(0) < luma(1) && luma(1) < luma(2));
+        assert_eq!(luma(0), luma(1));
+        assert!(luma(1) < luma(2));
     }
 
     #[test]
