@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Build the public site of Ascension into site/dist/ (task 135).
+"""Build the public site of Ascension into site/dist/ (tasks 135 and 136).
 
     python3 site/build.py [--binary app/target/release/rise-of-man] [--cache site/cache]
 
-Pages: index.html (README.md), privacy.html (the Store's privacy policy), story.html (the ages
-and their main themes), units.html (every model's sheet), sounds.html (every type's sounds and
-the shared cues). The model data, names and sound sprites come from the model review page's own
-scripts (app/docs/art/review-page/build.py and sprites.py) run on the game's
-`--gallery-manifest`; the pictures from `rise-of-man --model <id> --screenshot`. Pictures,
-sprites and converted images are kept in the cache folder between runs.
+Pages: index.html (README.md), privacy.html (the Store's privacy policy) and catalogue.html: the
+model review page's presentation without its review elements, one chapter per age with the
+age's story and main theme above its models, each model's card with its sheet and its sounds,
+and the shared cues. story.html, units.html and sounds.html (task 135) are plain links to it.
+The model data, names and sound sprites come from the model review page's own scripts
+(app/docs/art/review-page/build.py and sprites.py) run on the game's `--gallery-manifest`; the
+pictures from `rise-of-man --model <id> --screenshot`; the ages from app/assets/text/ages.toml.
+Pictures, sprites and converted images are kept in the cache folder between runs.
 
 Needs: Python 3 with `markdown` (see site/README.md), ffmpeg, an X11 display for the game's
 screenshots, and a release build of rom-app.
@@ -23,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 from pathlib import Path
 from string import Template
 
@@ -47,10 +50,14 @@ EVENTS = [("select", "Selected"), ("move", "Move"), ("attack", "Attack"), ("buil
           ("fire", "Firing"), ("fight", "Fighting"), ("moving", "Moving"), ("active", "Working"),
           ("train_done", "Unit ready"), ("build_done", "Build finished"),
           ("research_done", "Research finished")]
-# Words that mark the story document's internal production notes; none may reach the page.
-PRIVATE_WORDS = re.compile(r"\b(owner|sketch(es)?|accepted|rejected|v1|v2|verdict)\b", re.I)
-NAV = [("story.html", "Story"), ("units.html", "Units & buildings"), ("sounds.html", "Sounds"),
-       ("privacy.html", "Privacy")]
+NAV = [("index.html", "Home"), ("catalogue.html", "Catalogue"), ("privacy.html", "Privacy")]
+# What the review page carries and the public page must not: its review elements and the
+# authoring words around them, model ids as text, and anything private.
+REVIEW_WORDS = re.compile(r"\b(review|round|fingerprint|verdict|approved|draft|needs work|"
+                          r"directions?|status|owner|sketch(es)?|copy id)\b", re.I)
+MODEL_ID = re.compile(r"\b(unit|bld|node)\.[a-z0-9_]+(@[a-z~0-9_]+)?")
+PRIVATE = re.compile(r"claude\.ai|/home/|/var/|/etc/|ubuntu@|\b\d{1,3}(\.\d{1,3}){3}\b|"
+                     r"oraci|ed25519", re.I)
 
 
 def log(*args):
@@ -202,7 +209,7 @@ def page(dist: Dist, ctx: dict, name: str, title: str, description: str, content
          main_class="", scripts=""):
     nav = "\n      ".join(
         f'<a href="{href}"{" aria-current=\"page\"" if href == name else ""}>{label}</a>'
-        for href, label in NAV)
+        for href, label in NAV if not (href == "index.html" == name))
     text = Template((SITE / "templates" / "page.html").read_text()).substitute(
         title=html.escape(title), description=html.escape(description), favicon=ctx["favicon"],
         css=ctx["css"], emblem=ctx["emblem"], nav=nav, page=name.removesuffix(".html"),
@@ -270,159 +277,21 @@ def privacy(dist: Dist, ctx: dict):
          f'<article class="md">\n{body}\n</article>', "prose")
 
 
-def parse_story():
-    """The public part of app/docs/ages-story.md: the theme, and per age its name, era, story
-    and reasoning. The production notes (status, the rules for the pieces, what comes next)
-    stay out."""
-    text = (APP / "docs" / "ages-story.md").read_text()
-    head, _, rest = text.partition("\n---\n")
-    theme = head.split("\n\n")[1].strip()
-    theme = theme.replace("The owner whistled it:", "It begins as a whistled tune:")
-    ages_text = rest.split("\n---\n")[0]
+def load_ages():
+    """The fourteen ages as the game's new-age dialog tells them (app/assets/text/ages.toml, kept
+    in step with app/docs/ages-story.md): key, number from one, name, era and story."""
+    rows = tomllib.loads((APP / "assets" / "text" / "ages.toml").read_text())["age"]
     ages = []
-    for block in re.split(r"^## ", ages_text, flags=re.M)[1:]:
-        title, _, body = block.partition("\n")
-        m = re.match(r"(\d+)\. (.+?) — (.+)$", title.strip())
-        if not m:
-            sys.exit(f"ages-story.md: unexpected age heading {title!r}")
-        story = re.search(r'^\*Story:\* "(.*?)"\s*$', body, re.M | re.S)
-        if not story:
-            sys.exit(f"ages-story.md: no story for {title!r}")
-        parts = []
-        for para in re.split(r"\n\s*\n", body[:story.start()].strip()):
-            pm = re.match(r"\*\*(.+?)\*\*\s*(\*\([^)]*\)\*\.?)?\s*(.*)$", para.strip(), re.S)
-            if not pm:
-                sys.exit(f"ages-story.md: unexpected paragraph in {title!r}: {para[:60]!r}")
-            label = pm.group(1).rstrip(".").strip()
-            if label.lower() == "interlude":
-                continue  # the interlude is not on the page; its main theme is
-            parts.append((label, clean(pm.group(3))))
-        ages.append({"n": int(m.group(1)), "name": m.group(2), "era": m.group(3),
-                     "story": " ".join(story.group(1).split()), "parts": parts})
-    if len(ages) != 14:
-        sys.exit(f"ages-story.md: expected 14 ages, found {len(ages)}")
-    return clean(theme), ages
-
-
-def clean(text: str) -> str:
-    """Remove the production notes the story carries in parentheses."""
-    text = re.sub(r"\s*\((v\d[^)]*)\)", "", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
-
-
-def inline_md(text: str) -> str:
-    out = md(text).strip()
-    return out
-
-
-def story(dist: Dist, ctx: dict):
-    theme, ages = parse_story()
-    music = APP / "assets" / "music"
-    title_src = dist.asset(music / "title.ogg", "music", "title")
-    for a in ages:
-        key = AGES[a["n"]]
-        a["key"] = key
-        a["audio"] = dist.asset(music / f"{key}.theme.ogg", "music", f"{key}.theme")
-    nav = "".join(f'<li><a href="#age-{a["key"]}">{a["n"]}. {html.escape(a["name"])}</a></li>'
-                  for a in ages)
-    out = [f'''<header class="story-intro">
-  <p class="eyebrow">The story and the music</p>
-  <h1>Fourteen ages, one theme</h1>
-  <div class="lead">{inline_md(theme)}</div>
-  <p>Each age has its own story, shown when your people reach it, and its own main theme: the same
-  two notes in the musical language of the age. Below, for every age: the forces at work, what
-  the age is remembered for, how it sees itself, the art it speaks in, and how the theme sounds.</p>
-  <div class="player">
-    <span class="label">Main title — the theme, heroic and without an age</span>
-    <audio controls preload="none" src="{title_src}"></audio>
-  </div>
-  <ul class="agenav">{nav}</ul>
-</header>''']
-    for a in ages:
-        rows = "".join(f"<dt>{html.escape(label)}</dt><dd>{inline_md(text)}</dd>"
-                       for label, text in a["parts"])
-        out.append(f'''<section class="age" id="age-{a["key"]}">
-  <h2><span class="num">{a["n"]}</span>{html.escape(a["name"])}<span class="era">{html.escape(a["era"])}</span></h2>
-  <blockquote class="tale"><p>{html.escape(a["story"])}</p></blockquote>
-  <div class="player">
-    <span class="label">Main theme of the {html.escape(a["name"])} age</span>
-    <audio controls preload="none" src="{a["audio"]}"></audio>
-  </div>
-  <dl>{rows}</dl>
-</section>''')
-    content = "\n".join(out)
-    leak = PRIVATE_WORDS.search(re.sub(r"<[^>]+>", " ", content))
-    if leak:
-        sys.exit(f"story.html would carry a production note: {leak.group(0)!r} near "
-                 f"{content[max(0, leak.start() - 80):leak.end() + 80]!r}")
-    page(dist, ctx, "story.html", "The story — Ascension",
-         "The fourteen ages of Ascension, their stories, and the main theme of each age.",
-         content, "prose", ctx["js_tag"])
-    return {a["key"]: a["name"] for a in ages}
-
-
-def age_label(key: str, names: dict) -> str:
-    return names.get(key, "Every age" if key == "any" else key.capitalize())
-
-
-def entity_id(entity: str) -> str:
-    return "e-" + slug(entity)
-
-
-def units(dist: Dist, ctx: dict, data: dict, binary: Path, cache: Path, names: dict,
-          fingerprints: dict, refresh: bool, limit: int | None):
-    models = data["MODELS"]
-    if limit:
-        models = models[:limit]
-    by_age: dict[str, dict[str, list]] = {}
-    for m in models:
-        kind = m["entity"].split(".", 1)[0]
-        by_age.setdefault(m["age"], {}).setdefault(kind, []).append(m)
-    order = sorted(by_age, key=lambda a: AGES.index(a) if a in AGES else 99)
-    first_card = {}
-    jump, blocks = [], []
-    total = 0
-    for age in order:
-        label = age_label(age, names)
-        count = sum(len(v) for v in by_age[age].values())
-        total += count
-        jump.append(f'<li><a href="#{age}">{html.escape(label)}<span class="n">{count}</span></a></li>')
-        sections = []
-        for kind in sorted(by_age[age], key=lambda k: list(KINDS).index(k) if k in KINDS else 9):
-            cards = []
-            for m in sorted(by_age[age][kind], key=lambda m: (m["name"], m["id"])):
-                pics = sheet(binary, cache, m, fingerprints[m["id"]], refresh)
-                urls = {w: dist.asset(p, "img/models", m["img"]) for w, p in pics.items()}
-                w, h = image_size(pics[SHEET_WIDTHS[-1]])
-                srcset = ", ".join(f"{u} {wd}w" for wd, u in urls.items())
-                card_id = "m-" + slug(m["id"])
-                first_card.setdefault(m["entity"], card_id)
-                sounds = ""
-                if m["entity"] in ctx["has_sounds"]:
-                    sounds = (f'<p class="links"><a href="sounds.html#{entity_id(m["entity"])}">'
-                              f'Hear its sounds</a></p>')
-                alt = f"{m['name']}, {KIND_ONE.get(kind, kind)} of the {label} age: game camera, front, side and close views"
-                cards.append(f'''<article class="card" id="{card_id}">
-  <a class="pic" href="{urls[SHEET_WIDTHS[-1]]}"><img src="{urls[SHEET_WIDTHS[0]]}" srcset="{srcset}" sizes="(max-width: 960px) 100vw, 580px" width="{w}" height="{h}" loading="lazy" decoding="async" alt="{html.escape(alt)}"></a>
-  <div class="body"><h3>{html.escape(m["name"])}</h3><p class="meta">{html.escape(KIND_ONE.get(kind, kind).capitalize())} · {html.escape(label)}</p>{sounds}</div>
-</article>''')
-            sections.append(f'<h3 class="kind">{KINDS.get(kind, kind)}</h3>\n<div class="grid">\n'
-                            + "\n".join(cards) + "\n</div>")
-        blocks.append(f'<section class="age-block" id="{age}"><h2>{html.escape(label)}'
-                      f'<small>{count} models</small></h2>\n' + "\n".join(sections) + "</section>")
-    content = f'''<header>
-  <p class="eyebrow">Units &amp; buildings</p>
-  <h1>Every model in the game</h1>
-  <p class="lead">Buildings and units are built from parts inside the game and baked before play.
-  Each sheet shows a model four ways: from the game's camera, from the front, from the side and
-  close up. Buildings change their look as their owner advances through the ages.</p>
-  <ul class="jump">{"".join(jump)}</ul>
-</header>
-{"".join(blocks)}'''
-    page(dist, ctx, "units.html", "Units & buildings — Ascension",
-         f"All {total} building and unit models of Ascension, age by age.", content)
-    return first_card, total
+    for row in sorted(rows, key=lambda r: r["ordinal"]):
+        key = row["theme"].split(".", 1)[0]
+        if AGES[row["ordinal"]] != key:
+            sys.exit(f"ages.toml: age {row['ordinal']} is {key!r}, the site expects "
+                     f"{AGES[row['ordinal']]!r}")
+        ages.append({"key": key, "n": row["ordinal"] + 1, "name": row["name"],
+                     "era": row["subtitle"], "story": " ".join(row["story"].split())})
+    if len(ages) != len(AGES) - 1:
+        sys.exit(f"ages.toml: expected {len(AGES) - 1} ages, found {len(ages)}")
+    return ages
 
 
 def sound_label(key: str) -> str:
@@ -449,81 +318,180 @@ def play_button(label: str, keys: list) -> str:
             f'data-keys="{html.escape(" ".join(keys))}">{html.escape(label)}{x}</button>')
 
 
-def sounds_page(dist: Dist, ctx: dict, data: dict, sprites: Path, names: dict, first_card: dict):
-    assignment = json.loads((APP / "tools" / "sounds" / "assignment.json").read_text())
-    index = data["INDEX"]
-    urls = {}
-    for sprite in sorted({v[0] for v in index.values()}):
-        urls[sprite] = dist.asset(sprites / "sounds" / f"{sprite}.ogg", "sounds", sprite)
-    # Name and first age per type, from the models; a type without a model keeps its key's name.
-    info = {}
-    for m in data["MODELS"]:
-        age = m["age"]
-        old = info.get(m["entity"])
-        if not old or AGES.index(age) < AGES.index(old["age"]):
-            info[m["entity"]] = {"name": m["name"], "age": age}
+def sound_box(events: dict) -> str:
+    """A type's own sounds as the review page's card shows them: one button per event."""
     order = [k for k, _ in EVENTS]
-    groups: dict[str, list] = {}
-    for entity in sorted(assignment):
-        events = {ev: ([x] if isinstance(x, str) else x) for ev, x in assignment[entity].items()}
-        missing = [k for keys in events.values() for k in keys if k not in index]
-        if missing:
-            sys.exit(f"{entity}: sounds missing from the sprites: {missing[:5]}")
-        meta = info.get(entity) or {"name": entity.split(".", 1)[1].replace("_", " ").capitalize(),
-                                    "age": "any"}
-        kind = entity.split(".", 1)[0]
-        buttons = "".join(play_button(event_label(ev), events[ev]) for ev in sorted(
-            events, key=lambda e: ((order.index(e) if e in order else 98), e)))
-        model = (f'<a href="units.html#{first_card[entity]}">See the model</a>'
-                 if entity in first_card else "")
-        card = f'''<article class="snd" id="{entity_id(entity)}">
-  <div class="who"><h3>{html.escape(meta["name"])}</h3><span class="meta">{KIND_ONE.get(kind, kind).capitalize()} · {html.escape(age_label(meta["age"], names))}</span>{model}</div>
-  <div class="plays">{buttons}</div>
+    buttons = "".join(play_button(event_label(ev), events[ev]) for ev in sorted(
+        events, key=lambda e: ((order.index(e) if e in order else 98), e)))
+    return (f'<div class="snd-box"><span class="label">Sounds</span>'
+            f'<div class="plays">{buttons}</div></div>')
+
+
+def model_card(dist: Dist, binary: Path, cache: Path, m: dict, age_name: str, fingerprint: str,
+               refresh: bool, sounds: dict) -> str:
+    """One model as the review page's card shows it, with no review element: the sheet on the
+    left; the name, the facts and the type's own sounds on the right."""
+    kind = KIND_ONE.get(m["entity"].split(".", 1)[0], "model")
+    pics = sheet(binary, cache, m, fingerprint, refresh)
+    urls = {w: dist.asset(p, "img/models", m["img"]) for w, p in pics.items()}
+    w, h = image_size(pics[SHEET_WIDTHS[-1]])
+    srcset = ", ".join(f"{u} {wd}w" for wd, u in urls.items())
+    alt = f"{m['name']}, {kind} of the {age_name} age: game camera, front, side and close views"
+    size = m["size"]
+    facts = [("Kind", kind.capitalize()), ("Age", age_name),
+             ("Triangles", f"{m['near']:,} near · {m['far']:,} far"),
+             ("Size (tiles)", f"{size[0]:g} × {size[2]:g} × {size[1]:g} high"),
+             ("Parts", str(len(m["parts"])))]
+    dl = "".join(f"<dt>{k}</dt><dd>{html.escape(v)}</dd>" for k, v in facts)
+    snd = sound_box(sounds[m["entity"]]) if m["entity"] in sounds else ""
+    big, small = urls[SHEET_WIDTHS[-1]], urls[SHEET_WIDTHS[0]]
+    return f'''<article class="model" id="m-{slug(m["id"])}">
+  <a class="pic" href="{big}"><img src="{small}" srcset="{srcset}" sizes="(max-width: 860px) 100vw, 700px" width="{w}" height="{h}" loading="lazy" decoding="async" alt="{html.escape(alt)}"></a>
+  <div class="side"><h4>{html.escape(m["name"])}</h4><dl>{dl}</dl>{snd}</div>
 </article>'''
-        groups.setdefault(meta["age"], []).append((list(KINDS).index(kind) if kind in KINDS else 9,
-                                                   meta["name"], card))
+
+
+def catalogue(dist: Dist, ctx: dict, data: dict, binary: Path, cache: Path, sprites: Path,
+              fingerprints: dict, refresh: bool, limit: int | None):
+    """The model review page's presentation for everyone: one chapter per age in the game's
+    order (its number, name and era, its story, its main theme, then its models by kind, each
+    card with its sounds), a chapter for the models of every age, and the shared cues."""
+    ages = load_ages()
+    music = APP / "assets" / "music"
+    title_src = dist.asset(music / "title.ogg", "music", "title")
+    sounds, index = data["SOUNDS"], data["INDEX"]
+    assigned = set(json.loads((APP / "tools" / "sounds" / "assignment.json").read_text()))
+    if assigned - set(sounds):
+        sys.exit(f"types with sounds but no model: {sorted(assigned - set(sounds))[:5]}")
+    missing = sorted({k for ev in sounds.values() for keys in ev.values() for k in keys}
+                     - set(index))
+    if missing:
+        sys.exit(f"sounds missing from the sprites: {missing[:5]}")
+    models = data["MODELS"][:limit] if limit else data["MODELS"]
+    by_age: dict[str, dict[str, list]] = {}
+    for m in models:
+        if m["age"] not in AGES:
+            sys.exit(f"{m['id']}: unknown age {m['age']!r}")
+        by_age.setdefault(m["age"], {}).setdefault(m["entity"].split(".", 1)[0], []).append(m)
+    chapters = ages + [{"key": "any", "n": None, "name": "Every age",
+                        "era": "from the first cities to the stars",
+                        "story": "The people and places that keep one look from the first age "
+                                 "to the last."}]
     jump, blocks = [], []
-    for age in sorted(groups, key=lambda a: AGES.index(a) if a in AGES else 99):
-        label = age_label(age, names)
-        cards = [c for _, _, c in sorted(groups[age])]
-        jump.append(f'<li><a href="#{age}">{html.escape(label)}<span class="n">{len(cards)}</span></a></li>')
-        blocks.append(f'<section class="age-block" id="{age}"><h2>{html.escape(label)}'
-                      f'<small>{len(cards)} types</small></h2>\n<div class="snd-list">\n'
-                      + "\n".join(cards) + "\n</div></section>")
+    for a in chapters:
+        groups = by_age.get(a["key"], {})
+        count = sum(len(v) for v in groups.values())
+        num = f'<span class="num">{a["n"]}</span>' if a["n"] else ""
+        jump.append(f'<li><a href="#age-{a["key"]}">{num}{html.escape(a["name"])}'
+                    f'<span class="n">{count}</span></a></li>')
+        if a["n"]:
+            theme = dist.asset(music / f"{a['key']}.theme.ogg", "music", f"{a['key']}.theme")
+            tale = f'<blockquote class="tale"><p>{html.escape(a["story"])}</p></blockquote>'
+            player = f'''<div class="player">
+    <span class="label">Main theme of the {html.escape(a["name"])} age</span>
+    <audio controls preload="none" src="{theme}"></audio>
+  </div>'''
+        else:
+            tale, player = f'<p class="lead">{html.escape(a["story"])}</p>', ""
+        parts = []
+        for kind in sorted(groups, key=lambda k: list(KINDS).index(k) if k in KINDS else 9):
+            cards = [model_card(dist, binary, cache, m, a["name"], fingerprints[m["id"]], refresh,
+                                sounds)
+                     for m in sorted(groups[kind], key=lambda m: (m["name"], m["id"]))]
+            parts.append(f'<h3 class="kind">{KINDS.get(kind, kind.capitalize())}'
+                         f'<small>{len(cards)}</small></h3>\n<div class="models">\n'
+                         + "\n".join(cards) + "\n</div>")
+        blocks.append(f'''<section class="chapter" id="age-{a["key"]}">
+<header class="chapter-head">
+  <h2>{num}<span class="name">{html.escape(a["name"])}</span><span class="era">{html.escape(a["era"])}</span></h2>
+  {tale}
+  {player}
+</header>
+{"".join(parts)}
+</section>''')
     shared = []
     for group, keys in data["LIBRARY"]:
         buttons = "".join(play_button(sound_label(k), [k]) for k in keys)
         shared.append(f'<div class="lib-group"><h3>{html.escape(group)}</h3>'
                       f'<div class="plays">{buttons}</div></div>')
+    urls = {}
+    for sprite in sorted({v[0] for v in index.values()}):
+        urls[sprite] = dist.asset(sprites / "sounds" / f"{sprite}.ogg", "sounds", sprite)
     sound_data = json.dumps({"index": index, "urls": urls}, separators=(",", ":"))
-    content = f'''<header>
-  <p class="eyebrow">Sounds</p>
-  <h1>What every unit and building sounds like</h1>
-  <p class="lead">Every sound in the game is made for it: effects are synthesised, voices spoken
-  by a speech model at authoring time. Each unit and building type has its own lines and effects;
-  press a button to hear one (where there are several variations, one is chosen at random, as in
-  the game).</p>
-  <p class="nojs">The sound buttons need JavaScript.</p>
-  <ul class="jump"><li><a href="#shared">Shared cues</a></li>{"".join(jump)}</ul>
+    content = f'''<header class="intro">
+  <p class="eyebrow">Ascension · Rise of Man · version {html.escape(ctx["version"])}</p>
+  <h1>The ages and their models</h1>
+  <p class="lead">Every building and unit in the game, age by age. Models are built from parts
+  inside the game and baked before play; buildings change their look as their player advances
+  through the ages. Each age opens with its story, as the game tells it when your people reach
+  that age, and its main theme: the same two notes in the musical language of the age.</p>
+  <div class="player">
+    <span class="label">Main title — the theme, heroic and without an age</span>
+    <audio controls preload="none" src="{title_src}"></audio>
+  </div>
+  <ul class="jump">{"".join(jump)}<li><a href="#shared">Shared cues</a></li></ul>
 </header>
+<section class="how" aria-label="How to read the cards">
+  <div><strong>Views</strong>Each sheet shows a model four ways: from the game's camera, from
+  the front, from the side and close up. Open the picture to see it larger.</div>
+  <div><strong>Sounds</strong>A unit's or building's card plays its own voices and effects; where
+  there are several variations, one is chosen at random, as in the game.<span class="nojs"> The
+  sound buttons need JavaScript.</span></div>
+  <div><strong>Made for the game</strong>Every sound is made for it: effects are synthesised,
+  voices spoken by a speech model at authoring time.</div>
+</section>
 {"".join(blocks)}
-<section class="age-block" id="shared"><h2>Shared cues<small>ambience, interface, activity</small></h2>
-<p>The sounds that belong to no single type: the ambience of the world, the interface and its
-announcer, and the activity of units at work.</p>
+<section class="chapter" id="shared">
+<header class="chapter-head">
+  <h2><span class="name">Shared cues</span><span class="era">ambience, interface, activity</span></h2>
+  <p class="lead">The sounds that belong to no single type: the ambience of the world, the
+  interface and its announcer, and the activity of units at work.</p>
+</header>
+<div class="lib">
 {"".join(shared)}
+</div>
 </section>
 <script type="application/json" id="sound-data">{sound_data.replace("</", "<\\/")}</script>'''
-    page(dist, ctx, "sounds.html", "Sounds — Ascension",
-         "The voices and effects of every unit and building of Ascension, and the shared cues.",
-         content, "", ctx["js_tag"])
-    return len(assignment), len(index)
+    check_public(content, "catalogue.html")
+    page(dist, ctx, "catalogue.html", "Catalogue — Ascension",
+         f"The fourteen ages of Ascension, each with its story and main theme, and all "
+         f"{len(models)} building and unit models with their sounds.",
+         content, "catalogue", ctx["js_tag"])
+    return len(models), len(sounds), len(index)
+
+
+def moved(dist: Dist, ctx: dict):
+    """The pages task 135 published, now one: a plain link to the catalogue for old links."""
+    for name, what in (("story.html", "The story of the ages is"),
+                       ("units.html", "The units and buildings are"),
+                       ("sounds.html", "The sounds are")):
+        page(dist, ctx, name, "Moved to the catalogue — Ascension",
+             f"{what} now part of the catalogue of Ascension.",
+             f'''<header>
+  <p class="eyebrow">Moved</p>
+  <h1>{what} now in the catalogue</h1>
+  <p class="lead">The ages with their stories and music, every unit and building with its
+  sounds, and the shared cues are now one page: <a href="catalogue.html">the catalogue</a>.</p>
+</header>''', "prose")
 
 
 # ---------------------------------------------------------------- checks
 
 
+def check_public(content: str, name: str):
+    """The catalogue's text carries none of the review page's elements and no model id."""
+    text = re.sub(r'<script type="application/json".*?</script>', " ", content, flags=re.S)
+    text = html.unescape(re.sub(r"<[^>]+>", " ", text))
+    for pattern, what in ((REVIEW_WORDS, "a review element"), (MODEL_ID, "a model id")):
+        m = pattern.search(text)
+        if m:
+            sys.exit(f"{name} would carry {what}: {m.group(0)!r} near "
+                     f"{text[max(0, m.start() - 80):m.end() + 80]!r}")
+
+
 def check_links(dist: Path):
-    """Every internal link and file exists; nothing points at the private review page."""
+    """Every internal link and file exists; nothing points at the private review page; no page
+    carries an email address, a server path or address, or a key's name."""
     bad = []
     for f in sorted(dist.glob("*.html")):
         text = f.read_text()
@@ -547,11 +515,17 @@ def check_links(dist: Path):
         if re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", re.sub(r"<[^>]+>", " ", text)):
             for m in re.findall(r"[\w.+-]+@[\w-]+\.[a-z]{2,}", re.sub(r"<[^>]+>", " ", text)):
                 bad.append(f"{f.name}: looks like an email address: {m}")
+        for m in PRIVATE.finditer(text):
+            bad.append(f"{f.name}: private: {text[max(0, m.start() - 40):m.end() + 40]!r}")
+        if re.search(r'<audio(?![^>]*preload="none")', text):
+            bad.append(f"{f.name}: an audio player without preload=\"none\"")
+        if re.search(r'\bstyle="', text):
+            bad.append(f"{f.name}: an inline style (the server's policy blocks them)")
     data = json.loads(re.search(r'id="sound-data">(.*?)</script>',
-                                (dist / "sounds.html").read_text(), re.S).group(1).replace("<\\/", "</"))
+                                (dist / "catalogue.html").read_text(), re.S).group(1).replace("<\\/", "</"))
     for url in data["urls"].values():
         if not (dist / url).exists():
-            bad.append(f"sounds.html: missing sprite {url}")
+            bad.append(f"catalogue.html: missing sprite {url}")
     if bad:
         sys.exit("link check failed:\n  " + "\n  ".join(bad[:40]))
 
@@ -596,15 +570,13 @@ def main():
     fingerprints = {m["id"]: m["fingerprint"] for m in json.loads(models_json.read_text())["models"]}
     sprites = sound_sprites(cache)
     data = review_data(models_json, sprites)
-    ctx["has_sounds"] = set(json.loads((APP / "tools" / "sounds" / "assignment.json").read_text()))
 
     home(dist, ctx, cache)
     privacy(dist, ctx)
-    names = story(dist, ctx)
     log(f"model sheets ({len(data['MODELS'])}) ...")
-    first_card, n_models = units(dist, ctx, data, binary, cache, names, fingerprints,
-                                 args.refresh_pictures, args.limit)
-    n_types, n_sounds = sounds_page(dist, ctx, data, sprites, names, first_card)
+    n_models, n_types, n_sounds = catalogue(dist, ctx, data, binary, cache, sprites, fingerprints,
+                                            args.refresh_pictures, args.limit)
+    moved(dist, ctx)
     check_links(dist.root)
     size = sum(f.stat().st_size for f in dist.root.rglob("*") if f.is_file())
     print(f"site: {dist.root} — {n_models} models, {n_types} types with {n_sounds} sounds, "

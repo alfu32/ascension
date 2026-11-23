@@ -1,8 +1,8 @@
-// Ascension public site: one piece of music at a time, and the sound buttons of the sounds page.
+// Ascension public site: one piece of music at a time, and the catalogue's sound buttons.
 "use strict";
 document.documentElement.classList.add("js");
 
-// Starting one player pauses the others (the story page's music).
+// Starting one player pauses the others (the ages' main themes and the sound buttons).
 document.addEventListener("play", (event) => {
   for (const audio of document.querySelectorAll("audio")) {
     if (audio !== event.target) audio.pause();

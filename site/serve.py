@@ -8,7 +8,7 @@ proxies every path except the game server's /ws and /status to it. Python standa
   every request, so a new upload is live at once without a restart.
 - Pages are revalidated on every visit (`no-cache` with Last-Modified); pictures, sounds, music,
   styles and scripts carry a content hash in their names and are kept for a year.
-- `/story` serves `story.html`; byte ranges are answered (206) so audio can seek.
+- `/catalogue` serves `catalogue.html`; byte ranges are answered (206) so audio can seek.
 - Security headers on every answer: everything from this site, nothing from anywhere else.
 """
 
