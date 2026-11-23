@@ -52,7 +52,8 @@ def svg():
            '<linearGradient id="letters" x1="0" y1="0" x2="0" y2="1">'
            '<stop offset="0" stop-color="#f6e2ad"/><stop offset="0.5" stop-color="#e0b866"/>'
            '<stop offset="1" stop-color="#a8742e"/></linearGradient>',
-           '<filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="18"/></filter>',
+           '<filter id="soft" x="-20%" y="-20%" width="140%" height="140%">'
+           '<feGaussianBlur stdDeviation="18"/></filter>',
            "</defs>",
            f'<rect width="{SIZE}" height="{SIZE}" fill="url(#bg)"/>']
     # faint orbits behind everything, in the HUD's cyan
@@ -61,7 +62,9 @@ def svg():
                    f'stroke="#3fd0ff" stroke-opacity="{op}" stroke-width="{4 - k}" transform="rotate(-8 1500 1350)"/>')
     # the brass frame: bevel, dark line, panel edge
     m = 70
-    out.append(f'<path d="{chamfer(m, m, SIZE - m, SIZE - m, 110)} {chamfer(m + 34, m + 34, SIZE - m - 34, SIZE - m - 34, 96)}" '
+    outer = chamfer(m, m, SIZE - m, SIZE - m, 110)
+    inner_edge = chamfer(m + 34, m + 34, SIZE - m - 34, SIZE - m - 34, 96)
+    out.append(f'<path d="{outer} {inner_edge}" '
                'fill="url(#bevel)" fill-rule="evenodd" stroke="#2e1e0a" stroke-width="4"/>')
     out.append(f'<path d="{chamfer(m + 46, m + 46, SIZE - m - 46, SIZE - m - 46, 90)}" fill="none" '
                'stroke="url(#bevelr)" stroke-width="6" stroke-opacity="0.8"/>')
@@ -70,7 +73,8 @@ def svg():
     vw = float(box.split()[2])
     scale = 2440 / vw
     ex, ey = (SIZE - vw * scale) / 2, 300
-    out.append(f'<ellipse cx="1500" cy="{ey + 70 * scale:.0f}" rx="1150" ry="420" fill="#3fd0ff" opacity="0.06" filter="url(#soft)"/>')
+    out.append(f'<ellipse cx="1500" cy="{ey + 70 * scale:.0f}" rx="1150" ry="420" fill="#3fd0ff" opacity="0.06" '
+               'filter="url(#soft)"/>')
     out.append(f'<g transform="translate({ex:.1f} {ey:.1f}) scale({scale:.4f})">{body}</g>')
     # as on the game's title emblem: the title above the plaque's line, the subtitle below it
     line_y = ey + 71 * scale

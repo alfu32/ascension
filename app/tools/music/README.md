@@ -85,10 +85,12 @@ theme is split (its hand-over), which interlude fragments are played, an optiona
 and the gaps of the three joins. Changing a movement is a one-line edit; run the command again.
 Renders are kept in `<album-work>/render/` while their score, `render.py`, `instruments.py` and
 `sfz.py` are unchanged, so only what changed is rendered again (43 renders the first time, about
-20 minutes). The release folder gets the complete work, one WAV per movement (24-bit, 44.1 kHz,
-stereo; the tracks rejoin into the complete file sample for sample), `tracklist.csv`,
-`release.md` and the cover. Mastering holds the whole work in memory: the run peaks at about
-5 GB. Keep both folders on disk, not in a RAM-backed `/tmp`. The cover needs `librsvg` and
+20–30 minutes; afterwards about 10). The release folder gets the complete work, one WAV per
+movement (24-bit, 44.1 kHz, stereo; the tracks rejoin into the complete file sample for sample),
+`tracklist.csv`, `release.md` and the cover. Mastering holds the whole work in memory: the run
+peaks at about 5.4 GB (measured), so run it in a scope of 6 GB or more. Two runs from scratch
+give byte-identical WAV files. Keep both folders on disk, not in a RAM-backed `/tmp`. The cover
+needs `librsvg` and
 `libcairo` (present with any desktop) and ImageMagick.
 
 `--check` writes into its folder: a spectrogram of every join (±10 s, six to a sheet), the
