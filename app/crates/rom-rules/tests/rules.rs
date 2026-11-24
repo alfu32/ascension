@@ -1132,8 +1132,9 @@ fn every_line_has_one_first_step_and_continuous_ages() {
     }
     // 27 since task 73 gave the survey ship a line of its own; 33 since task 92 made four
     // classes of the warships and four of the starships; 34 since task 119 added the rotorcraft;
-    // 35 since task 120 added the drone operator; 36 since task 130 added the space probe.
-    assert_eq!(lines.len(), 36);
+    // 35 since task 120 added the drone operator; 36 since task 130 added the space probe; 37
+    // since task 141 added the militia.
+    assert_eq!(lines.len(), 37);
     for (line, steps) in lines {
         let roots: Vec<_> = steps
             .iter()
@@ -1159,6 +1160,41 @@ fn every_line_has_one_first_step_and_continuous_ages() {
         }
         assert_eq!(visited.len(), steps.len(), "disconnected {line}");
     }
+}
+
+/// Task 141: workers name the first step of their militia line, and each militia step leads
+/// back to the workers' line; a call-up into a builder is refused.
+#[test]
+fn loads_the_call_up_and_refuses_a_militia_that_builds() {
+    let r = seed();
+    let id = |key: &str| r.id_of(key).unwrap();
+    for worker in ["unit.citizen", "unit.worker_drone"] {
+        let call_up = r.entity_types[&id(worker)].call_up.as_ref().unwrap();
+        assert_eq!(call_up.militia_type_id, id("unit.militia_ancient"));
+    }
+    for militia in [
+        "unit.militia_ancient",
+        "unit.militia_industrial",
+        "unit.militia_abundance",
+    ] {
+        assert_eq!(r.militia_worker(id(militia)), Some(id("unit.citizen")));
+    }
+    assert_eq!(r.militia_worker(id("unit.citizen")), None);
+    assert_eq!(r.militia_worker(id("unit.spearman")), None);
+    assert!(r.validate().is_empty());
+    let conn = seed_db();
+    conn.execute_batch(
+        "INSERT INTO et_builder(entity_type_id) SELECT id FROM def WHERE key='unit.militia_ancient';",
+    )
+    .unwrap();
+    let r = Rules::load(&conn).unwrap();
+    assert!(
+        r.validate()
+            .iter()
+            .any(|p| p.message.contains("call-up of")),
+        "{:?}",
+        r.validate()
+    );
 }
 
 #[test]

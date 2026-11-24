@@ -3747,3 +3747,83 @@ fn a_stroke_between_two_points_is_a_series_of_dabs_without_gaps() {
     };
     assert_eq!(stroke_samples(pos(5000, 5000), other, 1000), vec![other]);
 }
+
+fn press_key(fx: &mut Fx, ch: char) {
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Hotkey {
+            ch,
+            modifiers: Modifiers::default(),
+        },
+    );
+}
+
+/// Task 141: militia fall in with the army; citizens are called up from the command card (F)
+/// and stood down again (R), only inside the borders.
+#[test]
+fn militia_go_with_the_army_and_are_called_up_and_stood_down_from_the_card() {
+    let mut fx = fixture();
+    fx.spawn(fx.key("bld.city"), 1, 20, 20);
+    let soldier = fx.spawn(fx.key("unit.spearman"), 1, 20, 26);
+    let militia = fx.spawn(fx.key("unit.militia_ancient"), 1, 21, 26);
+    let citizen = fx.spawn(fx.key("unit.citizen"), 1, 22, 26);
+    fx.boxed(&[soldier, militia, citizen], false);
+    assert_eq!(
+        ids(&fx),
+        vec![soldier.0, militia.0],
+        "militia go with the army"
+    );
+
+    fx.boxed(&[citizen], false);
+    // A citizen's card opens on its Build tab; the orders are on the Order tab.
+    fx.hud(HudRegionKind::PaletteTab, 1, PointerButton::Left, false);
+    let palette = fx.hud_snapshot().palette.expect("orders");
+    assert_eq!(palette.tab, PaletteTab::Order);
+    let call = palette
+        .buttons
+        .iter()
+        .find(|b| b.slot == CALL_UP_SLOTS[0])
+        .expect("Call up in F");
+    assert_eq!(call.name, "Call up as militia: Levies");
+    assert!(call.state.enabled());
+    press_key(&mut fx, 'f');
+    fx.step(1);
+    assert_eq!(
+        fx.world.entity(citizen).unwrap().type_id,
+        fx.key("unit.militia_ancient")
+    );
+    assert_eq!(ids(&fx), vec![citizen.0], "it stays selected");
+
+    let palette = fx.hud_snapshot().palette.expect("orders");
+    let stand = palette
+        .buttons
+        .iter()
+        .find(|b| b.slot == STAND_DOWN_SLOTS[0])
+        .expect("Stand down in R");
+    assert_eq!(stand.name, "Stand down: Citizens again");
+    assert!(palette.buttons.iter().all(|b| b.slot != CALL_UP_SLOTS[0]));
+    press_key(&mut fx, 'r');
+    fx.step(1);
+    assert_eq!(
+        fx.world.entity(citizen).unwrap().type_id,
+        fx.key("unit.citizen")
+    );
+
+    // Outside the borders the button says why, and pressing it orders nothing.
+    let far = fx.spawn(fx.key("unit.citizen"), 1, 62, 62);
+    fx.boxed(&[far], false);
+    fx.hud(HudRegionKind::PaletteTab, 1, PointerButton::Left, false);
+    let palette = fx.hud_snapshot().palette.expect("orders");
+    let call = palette
+        .buttons
+        .iter()
+        .find(|b| b.slot == CALL_UP_SLOTS[0])
+        .expect("Call up in F");
+    assert!(call.state.reason().contains("borders"), "{:?}", call.state);
+    press_key(&mut fx, 'f');
+    fx.step(1);
+    assert_eq!(
+        fx.world.entity(far).unwrap().type_id,
+        fx.key("unit.citizen")
+    );
+}

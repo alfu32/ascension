@@ -2036,6 +2036,270 @@
    "voice.merchant.select"
   ]
  },
+ "unit.militia_abundance": {
+  "attack": [
+   "voice.militia_abundance.attack"
+  ],
+  "fire": [
+   "unit.militia_abundance.fire.1",
+   "unit.militia_abundance.fire.2",
+   "unit.militia_abundance.fire.3"
+  ],
+  "move": [
+   "voice.militia_abundance.move"
+  ],
+  "moving": [
+   "unit.militia_abundance.moving"
+  ],
+  "research_done": [
+   "voice.militia_abundance.research_done"
+  ],
+  "select": [
+   "voice.militia_abundance.select"
+  ]
+ },
+ "unit.militia_ancient": {
+  "attack": [
+   "voice.militia_ancient.attack"
+  ],
+  "fight": [
+   "unit.militia_ancient.fight.1",
+   "unit.militia_ancient.fight.2",
+   "unit.militia_ancient.fight.3"
+  ],
+  "move": [
+   "voice.militia_ancient.move"
+  ],
+  "moving": [
+   "unit.militia_ancient.moving"
+  ],
+  "research_done": [
+   "voice.militia_ancient.research_done"
+  ],
+  "select": [
+   "voice.militia_ancient.select"
+  ]
+ },
+ "unit.militia_automation": {
+  "attack": [
+   "voice.militia_automation.attack"
+  ],
+  "fire": [
+   "unit.militia_automation.fire.1",
+   "unit.militia_automation.fire.2",
+   "unit.militia_automation.fire.3"
+  ],
+  "move": [
+   "voice.militia_automation.move"
+  ],
+  "moving": [
+   "unit.militia_automation.moving"
+  ],
+  "research_done": [
+   "voice.militia_automation.research_done"
+  ],
+  "select": [
+   "voice.militia_automation.select"
+  ]
+ },
+ "unit.militia_classical": {
+  "attack": [
+   "voice.militia_classical.attack"
+  ],
+  "fight": [
+   "unit.militia_classical.fight.1",
+   "unit.militia_classical.fight.2",
+   "unit.militia_classical.fight.3"
+  ],
+  "move": [
+   "voice.militia_classical.move"
+  ],
+  "moving": [
+   "unit.militia_classical.moving"
+  ],
+  "research_done": [
+   "voice.militia_classical.research_done"
+  ],
+  "select": [
+   "voice.militia_classical.select"
+  ]
+ },
+ "unit.militia_enlightenment": {
+  "attack": [
+   "voice.militia_enlightenment.attack"
+  ],
+  "fire": [
+   "unit.militia_enlightenment.fire.1",
+   "unit.militia_enlightenment.fire.2",
+   "unit.militia_enlightenment.fire.3"
+  ],
+  "move": [
+   "voice.militia_enlightenment.move"
+  ],
+  "moving": [
+   "unit.militia_enlightenment.moving"
+  ],
+  "research_done": [
+   "voice.militia_enlightenment.research_done"
+  ],
+  "select": [
+   "voice.militia_enlightenment.select"
+  ]
+ },
+ "unit.militia_fusion": {
+  "attack": [
+   "voice.militia_fusion.attack"
+  ],
+  "fire": [
+   "unit.militia_fusion.fire.1",
+   "unit.militia_fusion.fire.2",
+   "unit.militia_fusion.fire.3"
+  ],
+  "move": [
+   "voice.militia_fusion.move"
+  ],
+  "moving": [
+   "unit.militia_fusion.moving"
+  ],
+  "research_done": [
+   "voice.militia_fusion.research_done"
+  ],
+  "select": [
+   "voice.militia_fusion.select"
+  ]
+ },
+ "unit.militia_gunpowder": {
+  "attack": [
+   "voice.militia_gunpowder.attack"
+  ],
+  "fire": [
+   "unit.militia_gunpowder.fire.1",
+   "unit.militia_gunpowder.fire.2",
+   "unit.militia_gunpowder.fire.3"
+  ],
+  "move": [
+   "voice.militia_gunpowder.move"
+  ],
+  "moving": [
+   "unit.militia_gunpowder.moving"
+  ],
+  "research_done": [
+   "voice.militia_gunpowder.research_done"
+  ],
+  "select": [
+   "voice.militia_gunpowder.select"
+  ]
+ },
+ "unit.militia_industrial": {
+  "attack": [
+   "voice.militia_industrial.attack"
+  ],
+  "fire": [
+   "unit.militia_industrial.fire.1",
+   "unit.militia_industrial.fire.2",
+   "unit.militia_industrial.fire.3"
+  ],
+  "move": [
+   "voice.militia_industrial.move"
+  ],
+  "moving": [
+   "unit.militia_industrial.moving"
+  ],
+  "research_done": [
+   "voice.militia_industrial.research_done"
+  ],
+  "select": [
+   "voice.militia_industrial.select"
+  ]
+ },
+ "unit.militia_information": {
+  "attack": [
+   "voice.militia_information.attack"
+  ],
+  "fire": [
+   "unit.militia_information.fire.1",
+   "unit.militia_information.fire.2",
+   "unit.militia_information.fire.3"
+  ],
+  "move": [
+   "voice.militia_information.move"
+  ],
+  "moving": [
+   "unit.militia_information.moving"
+  ],
+  "research_done": [
+   "voice.militia_information.research_done"
+  ],
+  "select": [
+   "voice.militia_information.select"
+  ]
+ },
+ "unit.militia_medieval": {
+  "attack": [
+   "voice.militia_medieval.attack"
+  ],
+  "fight": [
+   "unit.militia_medieval.fight.1",
+   "unit.militia_medieval.fight.2",
+   "unit.militia_medieval.fight.3"
+  ],
+  "move": [
+   "voice.militia_medieval.move"
+  ],
+  "moving": [
+   "unit.militia_medieval.moving"
+  ],
+  "research_done": [
+   "voice.militia_medieval.research_done"
+  ],
+  "select": [
+   "voice.militia_medieval.select"
+  ]
+ },
+ "unit.militia_modern": {
+  "attack": [
+   "voice.militia_modern.attack"
+  ],
+  "fire": [
+   "unit.militia_modern.fire.1",
+   "unit.militia_modern.fire.2",
+   "unit.militia_modern.fire.3"
+  ],
+  "move": [
+   "voice.militia_modern.move"
+  ],
+  "moving": [
+   "unit.militia_modern.moving"
+  ],
+  "research_done": [
+   "voice.militia_modern.research_done"
+  ],
+  "select": [
+   "voice.militia_modern.select"
+  ]
+ },
+ "unit.militia_starfaring": {
+  "attack": [
+   "voice.militia_starfaring.attack"
+  ],
+  "fire": [
+   "unit.militia_starfaring.fire.1",
+   "unit.militia_starfaring.fire.2",
+   "unit.militia_starfaring.fire.3"
+  ],
+  "move": [
+   "voice.militia_starfaring.move"
+  ],
+  "moving": [
+   "unit.militia_starfaring.moving"
+  ],
+  "research_done": [
+   "voice.militia_starfaring.research_done"
+  ],
+  "select": [
+   "voice.militia_starfaring.select"
+  ]
+ },
  "unit.missile_cruiser": {
   "attack": [
    "voice.missile_cruiser.attack"

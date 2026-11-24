@@ -1299,6 +1299,8 @@ pub struct EntityType {
     pub energy: Option<Energy>,
     /// Attached `et_supply` rows.
     pub supply: Option<Supply>,
+    /// Attached `et_call_up` row: a worker that is called up as militia (task 141).
+    pub call_up: Option<CallUp>,
     /// Attached `et_view_scale` row: how large it is drawn in the space views.
     pub view_scale: Option<ViewScale>,
     /// Attached `et_inhibitor` row: holds enemy ships in its star system.
@@ -1560,6 +1562,14 @@ pub struct Supply {
     pub radius: i64,
     /// The `stock` column.
     pub stock: Option<i64>,
+}
+/// One `et_call_up` row: a worker that is called up as militia and stood down again (task 141).
+#[derive(Debug, Clone)]
+pub struct CallUp {
+    /// The worker type.
+    pub entity_type_id: DefId,
+    /// The first step of its militia line.
+    pub militia_type_id: DefId,
 }
 /// One `et_inhibitor` row: a jump inhibitor.
 #[derive(Debug, Clone)]

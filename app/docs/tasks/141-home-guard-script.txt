@@ -1,0 +1,10 @@
+# Task 141: in the industrial age the militia carries rifles, replayed by --script (sphere match,
+# seed 1, --players 2 --ai none, --age 5, --size 1920x1080; on a sphere match `--age` sets the
+# starting age, `grant-age` only a universe match's). Player one's starting builders are
+# box-selected and called up (Order tab, F): they become Home Guard with rifles where they stood,
+# and their card offers Attack ground (G) and Stand down (R).
+#   rise-of-man --seed 1 --players 2 --ai none --age 5 --size 1920x1080 \
+#     --script app/docs/tasks/141-home-guard-script.txt --after 4 --screenshot app/docs/img/141-home-guard.png
+5 box builders
+8 hud tab 1
+12 key f
