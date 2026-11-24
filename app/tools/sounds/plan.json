@@ -12608,5 +12608,341 @@
   },
   "recipe": "move.footsteps",
   "seed": 664605
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bed.palisade.select",
+  "params": {
+   "active": "post",
+   "age": 0,
+   "pitch": 1.116,
+   "size": 0.125
+  },
+  "recipe": "bld.select",
+  "seed": 920381
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "bld.palisade.select",
+  "over": "bed.palisade.select",
+  "speed": 0.96,
+  "text": "Palisade. Eyes on the road.",
+  "voice": "am_eric"
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "bld.palisade.active",
+  "params": {
+   "active": "post",
+   "age": 0,
+   "pitch": 1.116,
+   "size": 0.125
+  },
+  "recipe": "active.post",
+  "seed": 166655
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bld.palisade.build_done",
+  "params": {
+   "active": "post",
+   "age": 0,
+   "pitch": 1.116,
+   "size": 0.125
+  },
+  "recipe": "bld.build_done",
+  "seed": 51266
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bed.palisade_gate.select",
+  "params": {
+   "active": "post",
+   "age": 0,
+   "pitch": 1.112,
+   "size": 0.125
+  },
+  "recipe": "bld.select",
+  "seed": 38723
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "bld.palisade_gate.select",
+  "over": "bed.palisade_gate.select",
+  "speed": 1.02,
+  "text": "The walls are manned.",
+  "voice": "bm_george"
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "bld.palisade_gate.active",
+  "params": {
+   "active": "post",
+   "age": 0,
+   "pitch": 1.112,
+   "size": 0.125
+  },
+  "recipe": "active.post",
+  "seed": 141569
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bld.palisade_gate.build_done",
+  "params": {
+   "active": "post",
+   "age": 0,
+   "pitch": 1.112,
+   "size": 0.125
+  },
+  "recipe": "bld.build_done",
+  "seed": 184863
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bed.stone_wall.select",
+  "params": {
+   "active": "post",
+   "age": 1,
+   "pitch": 0.99,
+   "size": 0.125
+  },
+  "recipe": "bld.select",
+  "seed": 483628
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "bld.stone_wall.select",
+  "over": "bed.stone_wall.select",
+  "speed": 0.939,
+  "text": "Stone Wall. Awaiting orders.",
+  "voice": "am_michael"
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "bld.stone_wall.active",
+  "params": {
+   "active": "post",
+   "age": 1,
+   "pitch": 0.99,
+   "size": 0.125
+  },
+  "recipe": "active.post",
+  "seed": 430382
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bld.stone_wall.build_done",
+  "params": {
+   "active": "post",
+   "age": 1,
+   "pitch": 0.99,
+   "size": 0.125
+  },
+  "recipe": "bld.build_done",
+  "seed": 336178
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bed.wall_gate.select",
+  "params": {
+   "active": "post",
+   "age": 1,
+   "pitch": 1.127,
+   "size": 0.125
+  },
+  "recipe": "bld.select",
+  "seed": 422627
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "bld.wall_gate.select",
+  "over": "bed.wall_gate.select",
+  "speed": 1.023,
+  "text": "Wall Gate. Guards at their posts.",
+  "voice": "am_fenrir"
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "bld.wall_gate.active",
+  "params": {
+   "active": "post",
+   "age": 1,
+   "pitch": 1.127,
+   "size": 0.125
+  },
+  "recipe": "active.post",
+  "seed": 690401
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bld.wall_gate.build_done",
+  "params": {
+   "active": "post",
+   "age": 1,
+   "pitch": 1.127,
+   "size": 0.125
+  },
+  "recipe": "bld.build_done",
+  "seed": 188239
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bed.checkpoint.select",
+  "params": {
+   "active": "post_modern",
+   "age": 5,
+   "pitch": 1.124,
+   "size": 0.125
+  },
+  "recipe": "bld.select",
+  "seed": 595537
+ },
+ {
+  "fx": "radio",
+  "kind": "voice",
+  "name": "bld.checkpoint.select",
+  "over": "bed.checkpoint.select",
+  "speed": 0.978,
+  "text": "Checkpoint. Awaiting orders.",
+  "voice": "af_nicole"
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "bld.checkpoint.active",
+  "params": {
+   "active": "post_modern",
+   "age": 5,
+   "pitch": 1.124,
+   "size": 0.125
+  },
+  "recipe": "active.post_modern",
+  "seed": 512979
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bld.checkpoint.build_done",
+  "params": {
+   "active": "post_modern",
+   "age": 5,
+   "pitch": 1.124,
+   "size": 0.125
+  },
+  "recipe": "bld.build_done",
+  "seed": 673641
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bed.defensive_line.select",
+  "params": {
+   "active": "post_modern",
+   "age": 5,
+   "pitch": 1.012,
+   "size": 0.125
+  },
+  "recipe": "bld.select",
+  "seed": 576239
+ },
+ {
+  "fx": "radio",
+  "kind": "voice",
+  "name": "bld.defensive_line.select",
+  "over": "bed.defensive_line.select",
+  "speed": 0.924,
+  "text": "Defensive Line. Guns manned and ready.",
+  "voice": "am_eric"
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "bld.defensive_line.active",
+  "params": {
+   "active": "post_modern",
+   "age": 5,
+   "pitch": 1.012,
+   "size": 0.125
+  },
+  "recipe": "active.post_modern",
+  "seed": 326893
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bld.defensive_line.build_done",
+  "params": {
+   "active": "post_modern",
+   "age": 5,
+   "pitch": 1.012,
+   "size": 0.125
+  },
+  "recipe": "bld.build_done",
+  "seed": 363666
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bed.minefield.select",
+  "params": {
+   "active": "post_modern",
+   "age": 5,
+   "pitch": 1.145,
+   "size": 0.125
+  },
+  "recipe": "bld.select",
+  "seed": 673677
+ },
+ {
+  "fx": "radio",
+  "kind": "voice",
+  "name": "bld.minefield.select",
+  "over": "bed.minefield.select",
+  "speed": 0.994,
+  "text": "Minefield. Awaiting orders.",
+  "voice": "am_onyx"
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "bld.minefield.active",
+  "params": {
+   "active": "post_modern",
+   "age": 5,
+   "pitch": 1.145,
+   "size": 0.125
+  },
+  "recipe": "active.post_modern",
+  "seed": 504143
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "bld.minefield.build_done",
+  "params": {
+   "active": "post_modern",
+   "age": 5,
+   "pitch": 1.145,
+   "size": 0.125
+  },
+  "recipe": "bld.build_done",
+  "seed": 747908
  }
 ]

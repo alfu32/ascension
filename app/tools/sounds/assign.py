@@ -31,7 +31,8 @@ OVERRIDES = {
 # Unit classes (ui group) or single types (key) added after the sounds were first heard, by batch:
 # they take their voices after every other type and every earlier batch, so every earlier type
 # keeps the voice (and the file) the owner listened to.
-ADDED_LATER = {"rotorcraft": 1, "drone_operator": 1, "space_probe": 2, "bld.nuclear_reactor": 3, "militia": 4}
+ADDED_LATER = {"rotorcraft": 1, "drone_operator": 1, "space_probe": 2, "bld.nuclear_reactor": 3, "militia": 4,
+               "fortification": 5}
 HISTORY_LAST_MELEE_BLADE = 2   # sword before gunpowder, bayonet from age 3
 RADIO_FROM_AGE = 5             # crews talk over the radio from the industrial age
 FUTURE_FROM_AGE = 8            # near-future troopers, drones, energy weapons
@@ -80,6 +81,7 @@ def load(db):
         t["keeper"] = has("et_keeper")
         t["detector"] = has("et_detector") or has("et_inhibitor")
         t["cloud"] = has("et_drone_cloud")
+        t["fortification"] = has("et_fortification") or has("et_minefield")
         city = q("select is_city from et_territory where entity_type_id = ?", t["id"])
         t["city"] = bool(city and city[0][0])
         modes = {r[0] for r in q("select distinct mode from production where producer_type_id = ?", t["id"])}
@@ -451,7 +453,8 @@ def active_recipe(b):
         if tags.get("mounted", 0) > tags.get("infantry", 0):
             return "stable"
         return "drill_yard"
-    if b["weapons"]:
+    # Walls, gates and minefields (task 147) are manned like a guard post.
+    if b["weapons"] or b["fortification"]:
         return "post_future" if future else ("post_modern" if b["age"] >= RADIO_FROM_AGE else "post")
     stat = b["research_stat"]
     if stat.startswith("income."):
