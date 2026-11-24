@@ -58,6 +58,28 @@ What every piece does, following the owner's rules:
   from their conventions (organum, pavane and galliard, Alberti bass, process canon, overtone
   harmony).
 
+### The main title's opening (task 149)
+
+The owner heard the opening's gallop "too strong", skewing the rhythm and covering the theme
+just where the listener first takes notice of it. Measured on the render (0–15 s): in the first
+statement the violas' three-note gallop was the loudest part (−2.5 dB of the sum of parts,
+the first violins' melody −12.2 dB), the melody and its doublings sat 9.2 dB under the
+accompaniment, and the strongest attacks fell on the two sixteenths (onset strength 2.16 and
+2.13 against 1.83 on the beat): the same cause as in the last statement below, the gallop's
+long first note playing the soft sustained sample. Before it, the bare theme was in three
+octaves with the violas loudest, under a timpani roll and a horn chord.
+
+The opening is now built in steps. The theme first, bare: the two violin sections in unison
+alone, over a soft pedal in the basses, the horns' chord only under its last note. Then the
+first statement in the violins in unison, with only held chords under its first bar (violas
+and basses), so the theme's own rhythm is the only one heard. The gallop comes in from the
+second bar, in the cellos alone, soft, every note short and the beat leading (`short_gallop`);
+the horns join the melody an octave down for its second half, and the expression grows into
+the woodwind episode. On the render the melody now stands 3.1 dB over the rest in the first
+statement (5.3 dB in its first bar; 11.3 dB in the bare theme, against 5.7), the beat leads
+(0.87 against 0.82 and 0.83 on the sixteenths), and four parts play the bare theme instead of
+seven. From the episode on the score is unchanged.
+
 ### The main title's last statement (task 139)
 
 The owner heard something "fall off" about two thirds into the title (29–38 s, the statement
@@ -75,10 +97,10 @@ harmony; trombones and tuba enter only for the ♭VI–♭VII–I lift, each cho
 the timpani mark the first beat and the chords of the lift. Flutes, oboes and bassoons rest until
 the unison close. On the render the beat now leads (attack strength on the beat 2.8 against 2.5
 and 2.7 on the two sixteenths; before, 3.0 against 3.6 and 3.5) and the first violins' melody
-stands about 3.5 dB further out of the accompaniment. The rest of the piece is unchanged: the
-first statement's gallop has the same long first note but is lighter, and was approved as it is.
-A score that wants a crisp gallop at this tempo keeps its first note at 0.2 s or less
-(`short_gallop` in `title.py`).
+stands about 3.5 dB further out of the accompaniment. The rest of the piece was unchanged then;
+the first statement's gallop had the same fault and was fixed by task 149 (above). A score that
+wants a crisp gallop at this tempo keeps its first note at 0.2 s or less (`short_gallop` in
+`title.py`).
 
 ## Cue sheet (`app/assets/music/cues.json`)
 
@@ -178,8 +200,11 @@ and the exact frame from the page's granule position (`rom-audio/src/music.rs`).
 
 "Ascension: Music of the Ages" (working title) joins every piece into one continuous symphonic
 work of 15 movements, 48 minutes, in the game's order: the main title, then one movement per
-age. Made by `app/tools/music/album.py` from the same scores and samples; the 29 game files are
-not touched.
+age. The release artist is **Ascension RTS** (the owner, 2026-11-23). Made by
+`app/tools/music/album.py` from the same scores and samples; the 29 game files are not touched.
+The movements carry the ages' names as the game shows them: track 9 is "Freedom Age" (the
+Information age's name in the game since task 146), made from the `information.*` pieces, whose
+file names stay as they are.
 
 **Form of a movement.** The age's main theme, its interlude, then the theme's ending. The theme
 is split in the score at its hand-over (`handover_at` in the cue sheet, the ending that "prepares
@@ -194,13 +219,13 @@ the split moves back to the nearest musical seam:
 | --- | --- | --- |
 | Gunpowder | 36 eighths before the hand-over | the ending begins with the call across the water and lets the galliard resume before the cannon, instead of starting on the cannon |
 | Enlightenment | 33 eighths before (the woodwind dialogue's pick-up) | the body ends on the Allegro's first full cadence; the ending builds through the dialogue into the tutti phrase Industrial quotes |
-| Information | 64 eighths before the final statement (the breakdown) | the ending grows from the strings alone through the third hook into the tutti, rather than starting on the tutti |
+| Freedom (`information.theme`) | 64 eighths before the final statement (the breakdown) | the ending grows from the strings alone through the third hook into the tutti, rather than starting on the tutti |
 | Starfaring | at the final statement | the hand-over marker falls on the choir's held E♭, four eighths into its last phrase |
 | Automation | at the hand-over, with a link | four bars (`scores/links/automation_link.py`) build the machine and the canon back up from the interlude to the tutti E♭ the ending starts with |
 
 **Interlude length.** Every movement plays its whole interlude: theme and interlude together
 come to 3–4 minutes, so no interlude needed shortening, and the interludes' phrases are kept
-whole. The main title (0:44) stands alone as the prelude, and Information comes to 2:52, its
+whole. The main title (0:44) stands alone as the prelude, and Freedom comes to 2:52, its
 theme and interlude being the shortest pair; neither was padded with material the pieces do not
 have.
 
@@ -212,9 +237,9 @@ theme, so the album plays gapless and the tracks rejoin into the complete file s
 **Mastering.** The game's balance is kept (themes −16 LUFS, interludes −23 LUFS, measured on each
 piece as a whole); one gain for the whole work brings it to −14 LUFS integrated, and a true-peak
 limiter (5 ms look-ahead, 120 ms release) holds the peaks at −1 dBTP. The quiet passages stay
-quiet: loudness range 15.5 LU (ffmpeg EBU R128). The price of −14 LUFS with a 7 LU gap between
-themes and interludes is limiting on the loudest tuttis: 160 s of the work are reduced by more
-than 1 dB, 45 s by more than 3 dB, at most 9 dB. `ALBUM_LUFS` in `album.py` is the one number to
+quiet: loudness range 15.6 LU (ffmpeg EBU R128). The price of −14 LUFS with a 7 LU gap between
+themes and interludes is limiting on the loudest tuttis: 163 s of the work are reduced by more
+than 1 dB, 47 s by more than 3 dB, at most 9 dB. `ALBUM_LUFS` in `album.py` is the one number to
 lower for less (about 1 dB less per LU).
 
 | # | Movement | Length |
@@ -227,7 +252,7 @@ lower for less (about 1 dB less per LU).
 | 6 | Enlightenment Age | 3:10 |
 | 7 | Industrial Age | 3:15 |
 | 8 | Modern Age | 3:21 |
-| 9 | Information Age | 2:52 |
+| 9 | Freedom Age | 2:52 |
 | 10 | Automation Age | 3:23 |
 | 11 | Fusion Age | 3:37 |
 | 12 | Starfaring Age | 3:24 |

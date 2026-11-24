@@ -56,7 +56,7 @@ from render import parse_score  # noqa: E402
 
 SR = 44100
 TITLE = "Ascension: Music of the Ages"
-ARTIST = "[artist name]"  # the owner's artist name, to fill in before upload
+ARTIST = "Ascension RTS"  # the release artist (owner, 2026-11-23)
 ALBUM_LUFS = -14.0
 CEILING_DBTP = -1.0
 PIECE_LUFS = {"theme": -16.0, "interlude": -23.0}  # the game's balance (bake.sh)
@@ -78,7 +78,7 @@ MOVEMENTS = [
     ("Enlightenment Age", "enlightenment.theme", "handover-33", None, None,         (0.6, 0.4, 0.6)),
     ("Industrial Age",    "industrial.theme",    "handover",    None, None,         (0.6, 0.4, 0.6)),
     ("Modern Age",        "modern.theme",        "handover",    None, None,         (0.6, 0.4, 0.6)),
-    ("Information Age",   "information.theme",   "final-64",    None, None,         (0.6, 0.4, 0.6)),
+    ("Freedom Age",       "information.theme",   "final-64",    None, None,         (0.6, 0.4, 0.6)),
     ("Automation Age",    "automation.theme",    "handover",    None, "automation", (0.6, 0.4, 0.6)),
     ("Fusion Age",        "fusion.theme",        "handover",    None, None,         (0.6, 0.4, 0.6)),
     ("Starfaring Age",    "starfaring.theme",    "final",       None, None,         (0.6, 0.4, 0.6)),
@@ -607,7 +607,7 @@ quoted.
 
 ## What the owner does
 
-1. Choose the release artist name and fill it in above (and in the distributor's form).
+1. Enter the release artist, {ARTIST}, in the distributor's form.
 2. Open an account with a distributor that delivers to the streaming services (for example one
    that serves Spotify, Apple Music, YouTube Music, Amazon Music, Deezer and Tidal).
 3. Create an album release: title "{TITLE}", the {len(rows)} track files in order, the cover,
