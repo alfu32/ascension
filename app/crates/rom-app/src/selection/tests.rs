@@ -3303,7 +3303,8 @@ fn every_brush_is_in_the_ascended_palette_by_its_family() {
     // The hint names the brush in hand; without one, the families.
     let mut hud = HudSnapshot::default();
     ctl.fill(&world, &mut hud);
-    assert!(hud.help.contains("Click the ground"), "{}", hud.help);
+    assert!(hud.help.contains("drag on the ground"), "{}", hud.help);
+    assert!(hud.painting, "a brush in hand: the left drag paints");
     ctl.brush = None;
     ctl.fill(&world, &mut hud);
     assert!(
@@ -3608,4 +3609,32 @@ fn attack_ground_arms_a_pick_and_orders_the_point() {
             .any(|m| m.kind == MarkerKind::Ground && m.from.is_some()),
         "the target is drawn"
     );
+}
+
+/// Task 150: the dabs of a stroke between two points are evenly spaced, none beyond the end.
+#[test]
+fn a_stroke_between_two_points_is_a_series_of_dabs_without_gaps() {
+    let pos = |x: i32, y: i32| Pos {
+        x,
+        y,
+        face: 0,
+        body: BodyId(0),
+    };
+    let dabs = stroke_samples(pos(1000, 1000), pos(8000, 1000), 2000);
+    let xs: Vec<i32> = dabs.iter().map(|d| d.x).collect();
+    assert_eq!(xs, vec![3000, 5000, 7000]);
+    assert!(dabs.iter().all(|d| d.y == 1000));
+    // A diagonal: every dab is one spacing from the last.
+    let diagonal = stroke_samples(pos(0, 0), pos(6000, 8000), 2500);
+    assert_eq!(diagonal.len(), 4);
+    assert_eq!((diagonal[0].x, diagonal[0].y), (1500, 2000));
+    assert_eq!((diagonal[3].x, diagonal[3].y), (6000, 8000));
+    // Shorter than a spacing: nothing yet (the next move continues from the last dab).
+    assert!(stroke_samples(pos(0, 0), pos(900, 0), 1000).is_empty());
+    // Across a face edge only the end counts.
+    let other = Pos {
+        face: 1,
+        ..pos(0, 0)
+    };
+    assert_eq!(stroke_samples(pos(5000, 5000), other, 1000), vec![other]);
 }

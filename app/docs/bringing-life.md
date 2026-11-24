@@ -44,6 +44,19 @@ the production queue stands, and a click on one shows its brushes in the slots (
 `docs/hud.md` "The ascended palette"); each click on the ground is a `paint` order (subject: the brush; target: the point), applied at the next tick by
 the simulation, deterministic and saved. Escape puts the brush down.
 
+**Strokes (task 150).** With a brush in hand the left button paints along its drag instead of
+drawing a selection box: press, drag, release. The press lays a dab where it lands (a click
+without a drag is one dab); each move lays more along the straight line on the surface from the
+last dab to the cursor, one every brush radius (never closer than one tile), so a fast drag
+leaves no gap, and the distance not yet covered carries to the next move. A tile is dabbed once
+per stroke. Each dab is an ordinary `paint` order. The orders are capped: at most 16 per pointer
+event and 60 per game second (20 ticks); what the cap holds back is laid by later moves from the
+last dab given, and a stroke ends at the first refusal (the brush is put down, as for a click).
+Across a face edge the line is not followed: the dab goes where the cursor is. Every camera
+control is the same with a brush in hand (middle-button turn and tilt, Shift + middle-button pan,
+wheel, edge scrolling, keys, minimap); only the left drag changes. Right-click does what it does
+without a brush.
+
 A stroke (`World::apply_paint`) covers the tiles whose centres lie within the brush's `radius`:
 
 | Height op | Effect on a tile `d` from the centre, `w = (r - d) / r`, `s = smoothstep(w)` |
@@ -127,6 +140,7 @@ Scripts in `docs/tasks/77-*-script.txt` (universe mode, seed 1, `--players 2 --a
 | `life-before.png` | `77-before`: player one ascended; the ore asteroid of its home system, unclaimed |
 | `life-after.png` | `77-after`: the same asteroid brought to life: a small planet, "Gamma Canis Minoris belt c (planet)", the event line |
 | `life-land.png` | `77-land`: its globe, barren rock, with a continent painted (nine strokes of "Land, wide") |
+| `150-stroke.png` | `150-stroke` (`tasks/150-stroke-script.txt`, `--after 80`; `brush-down`, `brush-move`, `brush-up` script lines): one S-shaped brush stroke of "Land, wide", pressed, dragged and released, laid as a continuous band of land |
 | `life-water.png` | `77-water`: an ocean around it and shallows off its coast |
 | `life-mountains.png` | `77-mountains`: a snow-capped mountain range, a second massif on the coast, a hill |
 | `life-forest.png` | `77-forest`: woods of every size and a desert |

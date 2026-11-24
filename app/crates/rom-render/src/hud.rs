@@ -96,6 +96,8 @@ pub struct HudSnapshot {
     pub trade_targets: Vec<u32>,
     /// The building footprint being placed.
     pub placement: Option<HudPlacement>,
+    /// A brush is in hand: the left button paints along its drag instead of selecting (task 150).
+    pub painting: bool,
     /// Recent blasts of area weapons on the shown surface (task 75).
     pub blasts: Vec<crate::HudBlast>,
     /// Buildings that fell lately on the shown surface (task 75).
@@ -222,6 +224,7 @@ impl Default for HudSnapshot {
             selected: Vec::new(),
             markers: Vec::new(),
             placement: None,
+            painting: false,
             data_tab: 0,
             overview: ResearchOverview::default(),
             city_radii: Vec::new(),
