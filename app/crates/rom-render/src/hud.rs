@@ -86,6 +86,10 @@ pub struct HudSnapshot {
     pub city_radii: Vec<HudCityRadius>,
     /// Capitals known at city level on the current surface, by owner (task 131).
     pub capitals: Vec<crate::HudCapital>,
+    /// The names of the cities shown on the current surface (task 144).
+    pub city_names: Vec<crate::HudCityName>,
+    /// The rename field while it has the keyboard (task 144).
+    pub rename: Option<crate::HudRename>,
     /// Own wealth economy totals.
     pub wealth: crate::HudWealth,
     /// Selected traders' routes on the current surface.
@@ -229,6 +233,8 @@ impl Default for HudSnapshot {
             overview: ResearchOverview::default(),
             city_radii: Vec::new(),
             capitals: Vec::new(),
+            city_names: Vec::new(),
+            rename: None,
             trade_targets: Vec::new(),
             wealth: Default::default(),
             trade_routes: Vec::new(),
@@ -248,6 +254,9 @@ impl Default for HudSnapshot {
 
 /// Characters of the draft shown around the caret.
 const CHAT_WINDOW: usize = 34;
+/// The selection panel's heading, in design pixels of the bottom-right group: a city's name
+/// stands there, and its rename field (task 144).
+pub(crate) const SELECTION_HEADING: Rect = Rect::new(998.0, 681.0, 320.0, 21.0);
 /// Rows of the open chat history.
 pub const CHAT_HISTORY_ROWS: usize = 14;
 
@@ -294,6 +303,8 @@ pub struct HudOverlay {
     /// Help about what the pointer rests on in the world, or about the level shown: shown when
     /// no HUD element is hovered and the simulation has no help of its own.
     pub world_help: Option<(String, String)>,
+    /// The city under the pointer on the minimap (task 144): its name and whose it is.
+    pub minimap_city: Option<(String, String)>,
 }
 
 /// CPU artwork and font atlases with the common HUD composition code.
@@ -883,9 +894,28 @@ impl HudPainter {
                 .as_ref()
                 .and_then(|p| p.groups.get(index))
                 .map_or_else(Default::default, |g| (g.name.clone(), g.note.clone())),
+            Some(HudTarget {
+                region: K::CityName,
+                ..
+            }) => match &h.selection {
+                HudSelection::Single(card) => (
+                    card.title.clone().unwrap_or_default(),
+                    "Click to rename the city".to_owned(),
+                ),
+                _ => Default::default(),
+            },
+            // The city under the pointer on the minimap (task 144).
+            Some(HudTarget {
+                region: K::Minimap, ..
+            }) => overlay.minimap_city.clone().unwrap_or_default(),
             _ => Default::default(),
         };
-        let (first, second) = if !first.is_empty() {
+        let (first, second) = if h.rename.is_some() {
+            (
+                "Rename the city".to_owned(),
+                "Enter keeps the name, Escape cancels".to_owned(),
+            )
+        } else if !first.is_empty() {
             (first, second)
         } else if !h.help.is_empty() {
             // A hint of two lines is split at its line break.
@@ -1215,13 +1245,28 @@ impl HudPainter {
                 );
             }
             HudSelection::Single(card) => {
-                self.text(
-                    "SELECTION",
-                    l.map(R, Rect::new(998.0, 681.0, 320.0, 21.0)),
-                    TextSize::Large,
-                    Align::Centre,
-                    WHITE,
-                );
+                let heading = l.map(R, SELECTION_HEADING);
+                match (&h.rename, &card.title) {
+                    // The rename field (task 144): the draft with its caret on a dark field.
+                    (Some(field), _) if card.renamable => {
+                        self.solid(heading, [8, 12, 20, 230]);
+                        let chars: Vec<char> = field.draft.chars().collect();
+                        let caret = field.caret.min(chars.len());
+                        let mut shown: String = chars[..caret].iter().collect();
+                        shown.push('|');
+                        shown.extend(&chars[caret..]);
+                        self.text(&shown, heading, TextSize::Large, Align::Centre, CYAN);
+                    }
+                    // A city is headed by its name (task 144).
+                    (_, Some(title)) => self.text(
+                        title,
+                        heading,
+                        TextSize::Large,
+                        Align::Centre,
+                        if card.capital { GOLD } else { WHITE },
+                    ),
+                    _ => self.text("SELECTION", heading, TextSize::Large, Align::Centre, WHITE),
+                }
                 let tile = l.map(R, Rect::new(1008.0, 708.0, 104.0, 94.0));
                 self.art("chrome/tile", tile);
                 let icon = 64.0 * s;
@@ -2123,6 +2168,8 @@ mod capital_card_tests {
             name: name.to_owned(),
             foreign: false,
             capital,
+            title: None,
+            renamable: false,
             hp: (100, 100),
             attack: None,
             armour: None,
@@ -2169,6 +2216,54 @@ mod capital_card_tests {
             noted >= cyan + "Capital".len(),
             "the note under the title: {noted}"
         );
+    }
+
+    /// Task 144: a city is headed by its name instead of "SELECTION"; while its rename field is
+    /// open the heading is the draft with a caret, and a click on it is the city's name.
+    #[test]
+    fn a_city_is_headed_by_its_name_and_renamed_there() {
+        let l = HudLayout::new(1672, 941, None);
+        let mut p = HudPainter::bake(l.scale).expect("artwork bakes");
+        let mut city = card("City", false);
+        let plain = glyphs_in(&mut p, &l, city.clone(), WHITE);
+        city.title = Some("Roma".into());
+        city.renamable = true;
+        let titled = glyphs_in(&mut p, &l, city.clone(), WHITE);
+        // "SELECTION" gives way to "Roma" (shadows drawn in black).
+        assert_eq!(plain - titled, "SELECTION".len() - "Roma".len());
+        let field = |draft: &str| HudSnapshot {
+            selection: HudSelection::Single(Box::new(city.clone())),
+            rename: Some(crate::HudRename {
+                draft: draft.into(),
+                caret: 4,
+            }),
+            ..HudSnapshot::default()
+        };
+        let cyan = |p: &mut HudPainter, h: &HudSnapshot| {
+            p.compose(&l, h)
+                .iter()
+                .filter(|q| matches!(q.texture, HudTexture::Glyphs) && q.colour == CYAN)
+                .count()
+        };
+        let open = cyan(&mut p, &field("Nova Roma"));
+        let closed = glyphs_in(&mut p, &l, city.clone(), CYAN);
+        assert!(open >= closed + "NovaRoma|".len(), "{closed} -> {open}");
+        // The heading is the name's click target for an own city only.
+        let heading = l.map(Group::BottomRight, SELECTION_HEADING);
+        let (x, y) = (heading.x + heading.w / 2.0, heading.y + heading.h / 2.0);
+        let target = |card: HudCard| {
+            let h = HudSnapshot {
+                selection: HudSelection::Single(Box::new(card)),
+                ..HudSnapshot::default()
+            };
+            crate::pick::hud_target(&l, &h, (64, 64), x, y).map(|t| t.region)
+        };
+        assert_eq!(
+            target(city.clone()),
+            Some(crate::pick::HudRegionKind::CityName)
+        );
+        city.renamable = false;
+        assert_eq!(target(city), Some(crate::pick::HudRegionKind::Panel));
     }
 
     /// Task 133: the new-age dialog dims the screen and stands over everything, its story

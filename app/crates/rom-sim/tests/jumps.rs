@@ -125,6 +125,7 @@ fn order(
         target_entity,
         target_pos,
         queue: false,
+        text: None,
     })
 }
 
@@ -451,6 +452,7 @@ fn a_queued_route_under_an_inhibitor_fails_when_it_comes_up() {
         target_entity: None,
         target_pos: Some(to),
         queue: true,
+        text: None,
     })
     .unwrap();
     run(&mut w, 3);
@@ -700,6 +702,7 @@ fn a_freighter_trades_between_star_systems_after_the_research() {
             target_entity: None,
             target_pos: None,
             queue: false,
+            text: None,
         })
         .unwrap();
         run_until(&mut w, 3000, |w| {
@@ -742,6 +745,7 @@ fn an_inhibitor_holds_a_freighter_like_any_ship() {
         target_entity: None,
         target_pos: None,
         queue: false,
+        text: None,
     })
     .unwrap();
     run_until(&mut w, 3000, |w| {

@@ -76,6 +76,7 @@ impl World {
                 target_entity: None,
                 target_pos: Some(target),
                 queue: false,
+                text: None,
             })?;
         }
         Ok(world)
@@ -122,6 +123,7 @@ impl World {
                     target_entity: None,
                     target_pos: Some(Pos::flat(target, y)),
                     queue: false,
+                    text: None,
                 })?;
             }
         }
@@ -243,6 +245,7 @@ impl World {
                 target_entity: None,
                 target_pos: Some(target),
                 queue: false,
+                text: None,
             })?;
         }
         Ok(world)
@@ -307,6 +310,7 @@ impl World {
                     target_entity: None,
                     target_pos: Some(target),
                     queue: false,
+                    text: None,
                 })?;
             }
         }
@@ -389,6 +393,7 @@ impl World {
                 target_entity: Some(target),
                 target_pos: None,
                 queue: false,
+                text: None,
             })?;
         }
         Ok(world)
@@ -747,6 +752,7 @@ impl Playthrough {
                         target_entity: None,
                         target_pos: pos,
                         queue: false,
+                        text: None,
                     })
                     .is_ok()
                 {
@@ -798,6 +804,7 @@ impl Playthrough {
             target_entity: None,
             target_pos: None,
             queue: false,
+            text: None,
         })?;
         let limit = self.world.tick() + self.world.ascension_duration(player, tech) + 100;
         while !self.world.is_ascended(player) {
@@ -819,6 +826,7 @@ impl Playthrough {
             target_entity: None,
             target_pos: Some(site),
             queue: false,
+            text: None,
         })?;
         self.world.step();
         if self.world.is_ascended(player) {
@@ -1009,6 +1017,7 @@ impl World {
                 target_entity: Some(relic),
                 target_pos: None,
                 queue: false,
+                text: None,
             })?;
         }
         for (n, trader) in traders.into_iter().enumerate() {
@@ -1021,6 +1030,7 @@ impl World {
                 target_entity: Some(target),
                 target_pos: None,
                 queue: false,
+                text: None,
             })?;
         }
         Ok(w)
@@ -1171,6 +1181,7 @@ mod content_tests {
             target_entity: None,
             target_pos: Some(pos),
             queue: true,
+            text: None,
         };
         let before = a.world.hash();
         assert_eq!(a.world.submit(order.clone()), Err(SimError::Locked));
@@ -1204,6 +1215,7 @@ mod content_tests {
             target_entity: None,
             target_pos: None,
             queue: true,
+            text: None,
         };
         assert_eq!(a.world.submit(order.clone()), Err(SimError::Locked));
         a.world
@@ -1262,6 +1274,7 @@ mod content_tests {
                     target_entity: Some(farm),
                     target_pos: None,
                     queue: false,
+                    text: None,
                 })
                 .unwrap();
             a.world.step();
@@ -1275,6 +1288,7 @@ mod content_tests {
                     target_entity: None,
                     target_pos: None,
                     queue: true,
+                    text: None,
                 })
                 .unwrap();
             for _ in 0..700 {
@@ -1338,7 +1352,8 @@ mod content_tests {
                 subject: r.id_of("unit.spearman"),
                 target_entity: None,
                 target_pos: None,
-                queue: true
+                queue: true,
+                text: None
             }),
             Err(SimError::Obsolete)
         );
@@ -1378,6 +1393,7 @@ mod content_tests {
                     target_entity: None,
                     target_pos: None,
                     queue: true,
+                    text: None,
                 })
                 .unwrap();
             for _ in 0..400 {

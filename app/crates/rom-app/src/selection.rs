@@ -903,6 +903,7 @@ impl Controller {
             target_entity,
             target_pos,
             queue,
+            text: None,
         };
         match world.submit(command) {
             Ok(_) => {
@@ -1161,6 +1162,7 @@ impl Controller {
             target_entity: None,
             target_pos: Some(at),
             queue: false,
+            text: None,
         };
         match world.submit(command) {
             Ok(_) => {
@@ -1191,6 +1193,7 @@ impl Controller {
             target_entity: Some(marker),
             target_pos: None,
             queue: false,
+            text: None,
         };
         match world.submit(command) {
             Ok(_) => {
@@ -1290,6 +1293,7 @@ impl Controller {
             target_entity: None,
             target_pos: Some(at),
             queue: false,
+            text: None,
         };
         match world.submit(command) {
             Ok(_) => {
@@ -3373,6 +3377,7 @@ impl Controller {
                 target_entity: None,
                 target_pos: None,
                 queue: true,
+                text: None,
             })
             .collect();
         if self.submit(world, id, "stop", None, None, None, false) && !keep.is_empty() {
@@ -3899,6 +3904,8 @@ impl Controller {
                 name: rules.display_name(e.type_id, faction).to_owned(),
                 foreign,
                 capital: crate::capital_view::is_known_capital(&known_capitals, e.id),
+                title: world.city_name(e.id).map(str::to_owned),
+                renamable: !foreign && world.city_name(e.id).is_some(),
                 hp: (e.hp, e.max_hp),
                 attack: attack.map(|a| a.to_string()),
                 armour: (et.armor > 0).then(|| et.armor.to_string()),
@@ -4187,6 +4194,7 @@ impl Controller {
                 .any(|r| r.rule == rom_rules::PlacementKind::InCityRadius)
         });
         hud.capitals = crate::capital_view::shown_capitals(world, me, self.view.planet);
+        hud.city_names = crate::city_view::shown_names(world, me, self.view.planet, &hud.capitals);
         hud.city_radii = world
             .entities()
             .filter(|e| e.pos.body == self.view.planet)

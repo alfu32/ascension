@@ -88,7 +88,7 @@ the right, the minimap to the bottom centre. Rectangles are `x, y, w, h`.
 
 | Region | Rect | Content |
 | --- | --- | --- |
-| Selection panel | 978, 672, 360, 258 | title line (`SELECTION` or `MULTIPLE SELECTION · n selected`) |
+| Selection panel | 978, 672, 360, 258 | title line (`SELECTION`, a city's name, or `MULTIPLE SELECTION · n selected`) |
 | Portrait | 995, 702, 125, 148 | tile of the selected type |
 | Stat rows | 1138, 708, 180, 24 each; pitch 24; six rows | icon, LABEL, value: HP, attack, armour, range, garrison, workers — rows that do not apply are hidden |
 | Sub-slots | 998, 860, 48 × 46; pitch 55; six | garrisoned units / abilities |
@@ -470,6 +470,39 @@ camera height, from the globe and in the home system), `img/131-capital-starmap.
 `img/131-capital-remembered.png` and `img/131-capital-minimap.png`
 (`tasks/131-remembered-capital-script.txt`, `--start-placement together`: player two's capital
 known but out of sight, faded on the ground and on the minimap).
+
+## City names (task 144)
+
+Every city has a name (`World::city_name`; the lists and the rules are in `database.md`, "City
+names"). The views show it in four places:
+
+- **Over the city.** The name stands over every own and allied city on the shown surface, and
+  over another player's city while its ground is in sight, in the owner's colour (lightened as
+  the emblem is) with a dark shadow. It hangs where a capital's emblem would, centred over the
+  city; a capital's name stands to the right of its emblem, level with it. Names are labels of
+  the 2D batch (`HudGpu::draw_city_names`): they give way to the emblems and to the pointer's
+  tooltip, and two names that would cover each other keep only one. `HudSnapshot::city_names`,
+  built in `rom-app/src/city_view.rs`.
+- **On the minimap's tooltip.** With the pointer on a city's dot on the surface minimap (within
+  nine pixels), the help line reads the city's name and whose it is ("Your capital", "City of
+  Ashscale Brood (2)").
+- **On the selection panel.** A selected city's name heads the panel instead of `SELECTION`
+  (gold for a capital). For an own city the heading is the **rename field**: a click on it
+  (`HudRegionKind::CityName`; a script's `hud name 0`) opens it on a dark ground, holding the
+  name with the caret at its end; it takes every key while open (characters, paste,
+  Backspace, Delete, arrows, Home, End). Enter gives the `rename_city` order with the name typed
+  (a blank name renames nothing), Escape closes it, and so does a change of selection. The
+  help line says "Enter keeps the name, Escape cancels". The command card is untouched: the
+  Order tab's pages and Alt+1..9 stay the formations'.
+- **In alerts and the match report.** "Your capital Roma is under attack", "Ostia is under
+  attack", "Your army is under attack near Ostia"; route lines ("Next: land beside Ostia"). The
+  match report lists each player's cities by name, the capital first and marked.
+
+Screenshots (self-ending scripted runs, `rise-of-man --universe --players 2 --ai none --seed 1
+--sun fixed --size 1280x800`): `img/144-city-name.png` (`tasks/144-city-name-script.txt`),
+`img/144-rename-field.png` (`tasks/144-rename-script.txt`), `img/144-renamed.png`
+(`tasks/144-renamed-script.txt`), `img/144-alert.png` (`tasks/144-alert-script.txt`) and
+`img/144-minimap.png` (`tasks/144-minimap-script.txt`).
 
 ## Sound (task 125)
 

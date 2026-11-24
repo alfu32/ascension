@@ -16,7 +16,8 @@
 //! `key <char> [ctrl] [shift] [alt]` (`key delete` presses the Delete key: the chat's when it has the
 //! keyboard, else it deletes the selection, task 142), `escape`;
 //! `hud` takes `tab`, `arrow`, `slot`, `queue`, `tile`, `family` (a brush family listed beside
-//! the palette, task 114). `brush-down <point>`, `brush-move <point>` and `brush-up` press,
+//! the palette, task 114), `name` (the selected own city's name: opens its rename field, which
+//! then takes `type` and `key` as the chat does, task 144). `brush-down <point>`, `brush-move <point>` and `brush-up` press,
 //! drag and release the left button with a brush in hand (task 150).
 //!
 //! Live names (resolved at the step, in entity id order): `relicN` = free carry nodes,
@@ -165,6 +166,7 @@ pub fn ascend(
             target_entity: None,
             target_pos: None,
             queue: false,
+            text: None,
         })
         .map(|_| ())
         .map_err(|e| format!("ascend: {e}"))
@@ -613,6 +615,7 @@ fn parse_line(
                 "tile" => HudRegionKind::SelectionTile,
                 "inside" => HudRegionKind::InsideWorker,
                 "insideall" => HudRegionKind::InsideWorkerAll,
+                "name" => HudRegionKind::CityName,
                 other => return Err(format!("unknown HUD region {other:?}")),
             };
             let index = arg(1)?

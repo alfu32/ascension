@@ -397,6 +397,7 @@ fn the_class_chosen_beats_the_enemy_ships_at_equal_cost() {
                     target_entity: None,
                     target_pos: Some(at),
                     queue: false,
+                    text: None,
                 })
                 .unwrap();
         }

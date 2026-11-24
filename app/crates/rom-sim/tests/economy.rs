@@ -96,6 +96,7 @@ fn command(world: &World, executor: EntityId, kind: &str, subject: &str) -> Comm
         target_entity: None,
         target_pos: None,
         queue: true,
+        text: None,
     }
 }
 fn train(
@@ -127,6 +128,7 @@ fn stop(world: &mut World, executor: EntityId) {
             target_entity: None,
             target_pos: None,
             queue: false,
+            text: None,
         })
         .unwrap();
 }
@@ -140,6 +142,7 @@ fn help(world: &mut World, builder: EntityId, site: EntityId) {
             target_entity: Some(site),
             target_pos: None,
             queue: true,
+            text: None,
         })
         .unwrap();
 }

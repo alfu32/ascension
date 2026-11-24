@@ -65,6 +65,7 @@ fn move_command(executor: EntityId, target: Pos, queue: bool) -> Command {
         target_entity: None,
         target_pos: Some(target),
         queue,
+        text: None,
     }
 }
 
@@ -77,6 +78,7 @@ fn untargeted(executor: EntityId, kind: &str, queue: bool) -> Command {
         target_entity: None,
         target_pos: None,
         queue,
+        text: None,
     }
 }
 
@@ -865,6 +867,9 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
             if kind.key == "stance" {
                 command.subject = rules.id_of("stance.defensive");
             }
+            if kind.key == rom_sim::RENAME_CITY {
+                command.text = Some("Nova Roma".into());
+            }
             if matches!(kind.key.as_str(), "buy" | "sell") {
                 command.subject = rules.id_of("res.food");
             }
@@ -941,6 +946,11 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
                 Err(SimError::CannotCallUp) => {
                     assert_eq!(kind.key, "call_up");
                     assert!(et.call_up.is_none());
+                }
+                // Only a city is renamed (task 144, `city_names_tests`).
+                Err(SimError::NotACity) => {
+                    assert_eq!(kind.key, rom_sim::RENAME_CITY);
+                    assert!(!et.territory.as_ref().is_some_and(|t| t.is_city));
                 }
                 Err(SimError::CannotStandDown) => {
                     assert_eq!(kind.key, "stand_down");

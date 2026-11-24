@@ -47,6 +47,9 @@ pub enum HudRegionKind {
     InsideWorkerAll,
     /// The minimap picture.
     Minimap,
+    /// The name heading the selection panel for an own city: a click opens the rename field
+    /// (task 144).
+    CityName,
     /// Minimap button: zoom in, zoom out, centre on selection, signal.
     MinimapButton,
     /// One of the five data tabs.
@@ -565,6 +568,16 @@ pub fn hud_target(
                 return target(HudRegionKind::InsideWorker, i);
             }
         }
+        if card.renamable
+            && layout
+                .map(
+                    crate::hud_layout::Group::BottomRight,
+                    crate::hud::SELECTION_HEADING,
+                )
+                .contains(x, y)
+        {
+            return target(HudRegionKind::CityName, 0);
+        }
     }
     if layout
         .map(
@@ -759,6 +772,11 @@ impl PickController {
     /// Whether a ground drag currently owns the pointer.
     pub fn is_panning(&self) -> bool {
         self.pan.is_some()
+    }
+
+    /// Where the pointer is, in canvas pixels.
+    pub fn pointer(&self) -> Option<(f32, f32)> {
+        self.pointer
     }
 
     /// The HUD element under the pointer, for rollover help.

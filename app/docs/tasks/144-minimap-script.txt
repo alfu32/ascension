@@ -1,0 +1,6 @@
+# Task 144: the minimap's tooltip names a city, replayed by --script (universe mode, seed 1,
+# --sun fixed, 1280 x 800, --players 2 --ai none). The pointer rests on the capital's emblem on
+# the minimap: the help line reads "Roma" and "Your capital" (app/docs/img/144-minimap.png).
+#   rise-of-man --universe --seed 1 --sun fixed --players 2 --ai none --size 1280x800 \
+#     --script app/docs/tasks/144-minimap-script.txt --after 3 --screenshot app/docs/img/144-minimap.png
+5 cam point 684,672

@@ -31,6 +31,8 @@ pub(crate) struct Territory {
     pub radii: BTreeMap<EntityId, i64>,
     /// Completed, active non-city buildings that widen cities: owner and position.
     pub widening: BTreeMap<EntityId, (PlayerId, Pos)>,
+    /// The name of every city in `cities` (task 144).
+    pub names: BTreeMap<EntityId, String>,
 }
 
 /// One surface's incrementally maintained border grid.
@@ -218,9 +220,11 @@ impl World {
             .is_some_and(|e| self.is_city_type(e.type_id));
         if is_city {
             self.territory.cities.insert(id);
+            self.name_city(id);
         } else {
             self.territory.cities.remove(&id);
             self.territory.radii.remove(&id);
+            self.territory.names.remove(&id);
         }
         let widening = self.entity(id).and_then(|e| {
             let counts = self.rules.entity_types[&e.type_id].class == EntityClass::Building

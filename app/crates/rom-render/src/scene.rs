@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use crate::bars::{self, BarAnchor, ScreenBar};
 use crate::camera::Camera;
-use crate::capitals::{self, EmblemAnchor, ScreenEmblem};
+use crate::capitals::{self, EmblemAnchor, NameAnchor, ScreenEmblem, ScreenName};
 use crate::entities::{EntityView, Footing, Surface, build_instances_with_casters_on};
 use crate::features::{BakedFeatures, crop_instances};
 use crate::globe::{ChunkBounds, CullView, Globe, PlanetScene};
@@ -304,6 +304,10 @@ pub(crate) struct Scene {
     /// Where the emblems of the capitals on the shown surface hang, from the last
     /// `prepare_overlays`.
     capital_anchors: Vec<EmblemAnchor>,
+    /// Where the names of the cities on the shown surface hang (task 144).
+    name_anchors: Vec<NameAnchor>,
+    /// The city names placed on the last picture, in render-target pixels.
+    screen_names: Vec<ScreenName>,
     /// The capital emblems placed on the last picture, in render-target pixels: over cities,
     /// beside planets and beside stars.
     screen_emblems: Vec<ScreenEmblem>,
@@ -724,6 +728,8 @@ impl Scene {
             screen_bars: Vec::new(),
             emblem_scale: 1.0,
             capital_anchors: Vec::new(),
+            name_anchors: Vec::new(),
+            screen_names: Vec::new(),
             screen_emblems: Vec::new(),
             box_mesh: Mesh::gen_mesh_cube(thread, 1.0, 1.0, 1.0),
             ground_mesh: Mesh::gen_mesh_plane(thread, GROUND_TILES, GROUND_TILES, 1, 1),
@@ -827,6 +833,12 @@ impl Scene {
                 &*gpu.globe,
                 &mut self.capital_anchors,
             );
+            capitals::name_anchors(
+                &hud.city_names,
+                &self.bar_anchors,
+                &*gpu.globe,
+                &mut self.name_anchors,
+            );
             if self.show_projectiles {
                 self.projectiles
                     .update(render_tick, latest_tick, views, &*gpu.globe);
@@ -874,6 +886,12 @@ impl Scene {
                     surface,
                     &mut self.capital_anchors,
                 );
+                capitals::name_anchors(
+                    &hud.city_names,
+                    &self.bar_anchors,
+                    surface,
+                    &mut self.name_anchors,
+                );
                 if self.show_projectiles {
                     self.projectiles
                         .update(render_tick, latest_tick, views, surface);
@@ -886,6 +904,7 @@ impl Scene {
                 self.overlay.lines.clear();
                 self.overlay.tris.clear();
                 self.capital_anchors.clear();
+                self.name_anchors.clear();
                 self.projectiles.clear();
                 self.projectile_geometry = ProjectileGeometry::default();
             }
@@ -1514,6 +1533,7 @@ impl Scene {
     ) {
         self.screen_bars.clear();
         self.screen_emblems.clear();
+        self.screen_names.clear();
         let eye = GlobeEye::of_orbit(orbit);
         if let Some(frame) = self.globe_backdrop(rl, thread, target, orbit, &eye) {
             self.globe_world(rl, thread, target, orbit, &eye, &frame);
@@ -1744,6 +1764,12 @@ impl Scene {
             self.emblem_scale,
             &mut self.screen_emblems,
         );
+        capitals::project_names(
+            &self.name_anchors,
+            view,
+            self.emblem_scale,
+            &mut self.screen_names,
+        );
     }
 
     /// Draws the bars of the last picture as one batch of rectangles over it, in pixels.
@@ -1754,6 +1780,11 @@ impl Scene {
     /// The capital emblems of the last picture (task 131), drawn with the HUD's artwork.
     pub(crate) fn screen_emblems(&self) -> &[ScreenEmblem] {
         &self.screen_emblems
+    }
+
+    /// The city names of the last picture (task 144), drawn as labels by the HUD.
+    pub(crate) fn screen_names(&self) -> &[ScreenName] {
+        &self.screen_names
     }
 
     /// Turns `views` into instance transforms for the next draw; without a terrain nothing is drawn.
@@ -1868,6 +1899,7 @@ impl Scene {
         let size = (target.texture.width as f32, target.texture.height as f32);
         self.screen_bars.clear();
         self.screen_emblems.clear();
+        self.screen_names.clear();
         if self.terrain.is_some() {
             let look = crate::pick::View::new(camera, size, self.projection_centre_y);
             self.collect_bars(&look);

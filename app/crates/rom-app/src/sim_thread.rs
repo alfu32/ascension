@@ -19,6 +19,7 @@ use rom_sim::{BodyId, Command, Entity, OrderStatus, PlayerId, Pos, Sighting, Top
 
 use crate::ascension_view::AscensionView;
 use crate::chat::{Channel, ChatInput, ChatKey, ChatLog};
+use crate::city_view::RenameField;
 use crate::computer::ComputerPlayers;
 use crate::demo::DemoDriver;
 use crate::net::play::{NetEvent, NetPlay};
@@ -353,6 +354,8 @@ pub struct SimLink {
     stop: Arc<AtomicBool>,
     /// The keyboard side of the chat (tasks 76 and 94), shared with the simulation thread.
     chat: Arc<Mutex<ChatInput>>,
+    /// The rename field of the selection panel (task 144), shared with the simulation thread.
+    rename: Arc<Mutex<RenameField>>,
     /// Whether the person's player is ascended: only then is the celestial channel open.
     ascended: Arc<AtomicBool>,
     /// Whether a click on the ground is about to fire at it (task 142): the window shows a
@@ -412,6 +415,46 @@ impl SimLink {
         self.chat
             .lock()
             .is_ok_and(|mut chat| chat.key(key, celestial))
+    }
+
+    /// Offers a key to the rename field (task 144); returns whether it took it (while it is open
+    /// it takes every key).
+    pub fn rename_key(&self, key: ChatKey) -> bool {
+        self.rename.lock().is_ok_and(|mut field| field.key(key))
+    }
+
+    /// Whether the rename field has the keyboard.
+    pub fn rename_focused(&self) -> bool {
+        self.rename.lock().is_ok_and(|field| field.focused())
+    }
+
+    /// Opens the rename field on `city`, holding its present name.
+    fn rename_open(&self, city: rom_sim::EntityId, name: &str, max: usize) {
+        if let Ok(mut field) = self.rename.lock() {
+            field.open(city, name, max);
+        }
+    }
+
+    /// The field as the window left it: what the panel draws and the name chosen with Enter
+    /// since the last call, with its city. A field whose city is not `selected` alone closes.
+    fn take_rename(
+        &self,
+        selected: &[rom_sim::EntityId],
+    ) -> (
+        Option<rom_render::HudRename>,
+        Option<(rom_sim::EntityId, String)>,
+    ) {
+        self.rename.lock().map_or((None, None), |mut field| {
+            if field.city().is_some_and(|city| selected != [city]) {
+                field.close();
+            }
+            (field.view(), field.take_done())
+        })
+    }
+
+    /// What the panel draws of the rename field.
+    fn rename_view(&self) -> Option<rom_render::HudRename> {
+        self.rename.lock().ok().and_then(|field| field.view())
     }
 
     /// Whether the chat has the keyboard.
@@ -493,6 +536,7 @@ impl SimLink {
             speed: Arc::new(AtomicU32::new(100)),
             stop: Arc::new(AtomicBool::new(false)),
             chat: Arc::default(),
+            rename: Arc::default(),
             ascended: Arc::default(),
             aiming: Arc::default(),
             net: None,
@@ -723,6 +767,7 @@ impl SimThread {
             speed: Arc::new(AtomicU32::new(speed_pct.max(1))),
             stop: Arc::new(AtomicBool::new(false)),
             chat: Arc::default(),
+            rename: Arc::default(),
             ascended: Arc::default(),
             aiming: Arc::default(),
             net,
@@ -818,6 +863,8 @@ fn run(
     let mut window_ticks = 0_u32;
     let mut thoughts = (0_u32, Duration::ZERO, Duration::ZERO);
     let mut picks_taken = 0_u64;
+    // The rename field as last published (task 144).
+    let mut renamed_field = None;
     // Ticks stepped since the last snapshot, and when that was sent.
     let mut unpublished = false;
     let mut published_at = Instant::now();
@@ -966,6 +1013,16 @@ fn run(
         }
         let typing = input != ascension.input;
         ascension.input = input;
+        // The rename field (task 144): the name chosen goes as the person's order.
+        let (field, renamed) = link.take_rename(controller.selection());
+        let typing = typing || field != renamed_field;
+        renamed_field = field;
+        if let Some((city, name)) = renamed {
+            let order = crate::city_view::rename_order(me, city, name);
+            if let Err(error) = game.sink(&mut outbox).submit(order) {
+                controller.notify(game.world(), format!("Cannot rename the city: {error}"));
+            }
+        }
         while let Ok(request) = requests.try_recv() {
             let text = match &game {
                 Game::Lead(core) => write_save(
@@ -1149,7 +1206,12 @@ fn run(
                                 // As in the window: Delete the chat does not take deletes
                                 // the selection (task 142).
                                 let delete = key == ChatKey::Delete;
-                                if !link.chat_key(key) && delete {
+                                let took = if link.rename_focused() {
+                                    link.rename_key(key)
+                                } else {
+                                    link.chat_key(key)
+                                };
+                                if !took && delete {
                                     let pick = PickEvent::Hotkey {
                                         ch: crate::selection::DELETE_KEY,
                                         modifiers: Default::default(),
@@ -1501,6 +1563,25 @@ fn handle_pick(
             _ => {}
         }
     }
+    // While the rename field has the keyboard, so do the game's keys (a script's `key`).
+    if link.rename_focused() {
+        match &pick {
+            PickEvent::Hotkey { ch, modifiers } => {
+                let ch = if modifiers.shift {
+                    ch.to_ascii_uppercase()
+                } else {
+                    *ch
+                };
+                link.rename_key(ChatKey::Char(ch));
+                return false;
+            }
+            PickEvent::Escape => {
+                link.rename_key(ChatKey::Escape);
+                return false;
+            }
+            _ => {}
+        }
+    }
     if let PickEvent::HudClick {
         region: HudRegionKind::ChatLine,
         button: PointerButton::Left,
@@ -1508,6 +1589,23 @@ fn handle_pick(
     } = &pick
     {
         link.chat_open();
+        return false;
+    }
+    // A click on an own city's name opens the rename field (task 144).
+    if let PickEvent::HudClick {
+        region: HudRegionKind::CityName,
+        button: PointerButton::Left,
+        ..
+    } = &pick
+    {
+        if let [city] = controller.selection()
+            && let Some(name) = world.city_name(*city)
+            && world
+                .entity(*city)
+                .is_some_and(|e| e.owner == controller.me())
+        {
+            link.rename_open(*city, name, world.city_name_max_chars());
+        }
         return false;
     }
     if let PickEvent::HudClick {
@@ -1641,6 +1739,7 @@ fn publish(
     }
     let mut hud = crate::hud::snapshot_of(world, me);
     hud.age_dialog = link.age_dialog().0;
+    hud.rename = link.rename_view();
     controller.fill(world, &mut hud);
     link.aiming
         .store(controller.aiming(world), Ordering::Relaxed);
@@ -1730,6 +1829,7 @@ fn publish_hud(
 ) {
     let mut hud = crate::hud::snapshot_of(world, me);
     hud.age_dialog = link.age_dialog().0;
+    hud.rename = link.rename_view();
     controller.fill(world, &mut hud);
     link.aiming
         .store(controller.aiming(world), Ordering::Relaxed);
@@ -2662,6 +2762,7 @@ mod tests {
                 target_entity: None,
                 target_pos: Some(goal),
                 queue: false,
+                text: None,
             })
             .expect("move");
         let mut seen = Vec::new();
@@ -2711,6 +2812,7 @@ mod tests {
                 target_entity: Some(foe),
                 target_pos: None,
                 queue: false,
+                text: None,
             })
             .expect("attack");
         let mut fought = Vec::new();
@@ -3061,6 +3163,7 @@ mod terrain_knowledge_tests {
                     target_entity: None,
                     target_pos: None,
                     queue: false,
+                    text: None,
                 })
                 .unwrap();
             for _ in 0..10 {
@@ -3421,6 +3524,7 @@ mod save_tests {
                     target_entity: None,
                     target_pos: Some(Pos::flat(33_500, 34_000)),
                     queue: false,
+                    text: None,
                 })
                 .expect("move");
             world
@@ -3432,6 +3536,7 @@ mod save_tests {
                     target_entity: Some(walker),
                     target_pos: None,
                     queue: false,
+                    text: None,
                 })
                 .expect("attack");
             let mut motions = Motions::default();

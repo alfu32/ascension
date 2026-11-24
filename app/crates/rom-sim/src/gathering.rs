@@ -285,6 +285,7 @@ impl World {
                         target_entity: Some(site),
                         target_pos: None,
                         queue: false,
+                        text: None,
                     })
                     .is_ok()
             {
@@ -355,6 +356,7 @@ impl World {
                     target_entity: Some(site),
                     target_pos: None,
                     queue: false,
+                    text: None,
                 };
                 if self.submit(command).is_ok() {
                     claims.entry(site).or_default().insert(id);

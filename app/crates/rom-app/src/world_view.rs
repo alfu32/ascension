@@ -242,8 +242,18 @@ impl WorldView {
     }
 
     /// Offers a key to the chat; returns whether the chat took it. With the keyboard focused it
-    /// takes every key, so no game hotkey or camera key moves while a line is typed.
+    /// takes every key, so no game hotkey or camera key moves while a line is typed. The rename
+    /// field of the selection panel (task 144) takes the keys first while it is open.
     fn chat_key(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) -> bool {
+        if self.sim.rename_focused() {
+            let key = Self::chat_key_of(event, || {
+                cx.read_from_clipboard().and_then(|item| item.text())
+            });
+            if let Some(key) = key {
+                self.sim.rename_key(key);
+            }
+            return true;
+        }
         let focused = self.sim.chat_focused();
         let key = Self::chat_key_of(event, || {
             cx.read_from_clipboard().and_then(|item| item.text())

@@ -60,6 +60,7 @@ fn order(
         target_entity: target,
         target_pos: pos,
         queue: false,
+        text: None,
     }
 }
 

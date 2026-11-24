@@ -87,6 +87,7 @@ fn found(w: &mut World, pos: Pos) -> (Result<Pos, SimError>, Result<(), SimError
             target_entity: None,
             target_pos: Some(pos),
             queue: false,
+            text: None,
         })
         .map(|_| ());
     (preview, order)

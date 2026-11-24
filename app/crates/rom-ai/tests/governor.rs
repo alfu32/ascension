@@ -168,6 +168,7 @@ fn a_paused_governor_waits_and_one_without_means_says_what_it_needs() {
         target_entity: None,
         target_pos: None,
         queue: false,
+        text: None,
     })
     .unwrap();
     run(&mut w, 400);
@@ -289,6 +290,7 @@ fn a_brain_builds_a_colony_and_keeps_its_governor_on() {
                         target_entity: None,
                         target_pos: None,
                         queue: false,
+                        text: None,
                     })
                     .unwrap();
             }

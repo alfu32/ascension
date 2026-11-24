@@ -53,6 +53,7 @@ fn order(w: &mut World, id: EntityId, kind: &str, target: Option<EntityId>) {
         target_entity: target,
         target_pos: None,
         queue: false,
+        text: None,
     })
     .unwrap();
 }

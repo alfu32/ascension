@@ -810,6 +810,10 @@ impl World {
     }
 
     fn submit_now(&mut self, mut command: Command) -> Result<OrderId, SimError> {
+        // A city's new name is a setting given at once (task 144).
+        if command.kind == crate::city_names::RENAME_CITY {
+            return self.submit_rename(command);
+        }
         // An ascended player's only order needs no executor (task 76).
         if command.kind == "descend" {
             return self.submit_descent(command);

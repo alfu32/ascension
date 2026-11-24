@@ -1,0 +1,14 @@
+# Task 144: the rename field, replayed by --script (universe mode, seed 1, --sun fixed,
+# 1280 x 800, --players 2 --ai none). The capital is selected and its name on the selection
+# panel clicked: the heading becomes the field, holding "Roma" with the caret at its end; Home
+# and "Nova " typed before it leave "Nova |Roma", and the help line says Enter keeps the name
+# (app/docs/img/144-rename-field.png). A second run presses Enter as well: the city is "Nova
+# Roma" over the world and on the panel (app/docs/img/144-renamed.png, with
+# 144-renamed-script.txt).
+#   rise-of-man --universe --seed 1 --sun fixed --players 2 --ai none --size 1280x800 \
+#     --script app/docs/tasks/144-rename-script.txt --after 3 --screenshot app/docs/img/144-rename-field.png
+5 click city
+7 hud name 0
+9 key home
+10 type Nova
+11 key space

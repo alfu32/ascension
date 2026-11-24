@@ -1,0 +1,12 @@
+# Task 144: a renamed capital, replayed by --script (universe mode, seed 1, --sun fixed,
+# 1280 x 800, --players 2 --ai none): as 144-rename-script.txt, then Enter. The rename_city
+# order goes through the simulation; "Nova Roma" stands over the city beside its emblem and
+# heads the panel (app/docs/img/144-renamed.png).
+#   rise-of-man --universe --seed 1 --sun fixed --players 2 --ai none --size 1280x800 \
+#     --script app/docs/tasks/144-renamed-script.txt --after 3 --screenshot app/docs/img/144-renamed.png
+5 click city
+7 hud name 0
+9 key home
+10 type Nova
+11 key space
+12 key enter

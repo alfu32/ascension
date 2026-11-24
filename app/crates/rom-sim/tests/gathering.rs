@@ -92,6 +92,7 @@ fn command(worker: EntityId, kind: &str) -> Command {
         target_entity: None,
         target_pos: None,
         queue: false,
+        text: None,
     }
 }
 fn harvest(worker: EntityId, site: EntityId) -> Command {

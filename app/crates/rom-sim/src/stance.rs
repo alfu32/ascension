@@ -195,6 +195,7 @@ impl World {
                 target_entity: Some(target),
                 target_pos: None,
                 queue: false,
+                text: None,
             })
             .is_ok()
         {

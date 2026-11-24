@@ -27,6 +27,8 @@ pub struct Command {
     pub target_pos: Option<Pos>,
     /// Append when true; replace existing orders when false.
     pub queue: bool,
+    /// Free text: the new name of a `rename_city` order (task 144); None for every other kind.
+    pub text: Option<String>,
 }
 
 /// Order lifecycle; terminal states are counted and immediately discarded.

@@ -515,6 +515,9 @@ pub struct Snapshot {
     pub cities: Vec<EntityId>,
     /// Economic radius per city.
     pub city_radii: Vec<(EntityId, i64)>,
+    /// City names in city id order (task 144); a city left out is named on restore, from its
+    /// owner's list in id order (a save from before city names).
+    pub city_names: Vec<(EntityId, String)>,
     /// Non-city buildings widening cities: owner and position.
     pub widening: Vec<(EntityId, PlayerId, Pos)>,
     /// Income terms each entity contributes: player, resource, amount.
@@ -1022,6 +1025,12 @@ impl World {
                 .collect(),
             cities: self.territory.cities.iter().copied().collect(),
             city_radii: self.territory.radii.iter().map(|(k, v)| (*k, *v)).collect(),
+            city_names: self
+                .territory
+                .names
+                .iter()
+                .map(|(id, name)| (*id, name.clone()))
+                .collect(),
             widening: self
                 .territory
                 .widening
@@ -1095,6 +1104,7 @@ impl World {
             emitters,
             cities,
             city_radii,
+            city_names,
             widening,
             income_terms,
             idle,
@@ -1420,6 +1430,10 @@ impl World {
                 .iter()
                 .filter_map(|p| p.owned_tiles.map(|n| (p.player.id, n)))
                 .collect(),
+            names: city_names
+                .into_iter()
+                .filter(|(id, _)| cities.contains(id))
+                .collect(),
             cities: cities.into_iter().collect(),
             radii: city_radii.into_iter().collect(),
             widening: widening
@@ -1615,6 +1629,7 @@ impl World {
                 hit: hit_from(&s.hit),
             })
             .collect();
+        world.name_unnamed_cities();
         Ok(world)
     }
 }

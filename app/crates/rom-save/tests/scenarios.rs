@@ -646,6 +646,7 @@ fn an_ascension_under_way_then_an_ascended_player_descending() {
         target_entity: None,
         target_pos: None,
         queue: false,
+        text: None,
     })
     .unwrap();
     ticks(&mut w, 100);
@@ -664,6 +665,7 @@ fn an_ascension_under_way_then_an_ascended_player_descending() {
             target_entity: None,
             target_pos: Some(Pos::flat(30_500, 30_500)),
             queue: false,
+            text: None,
         })
         .unwrap();
     });
@@ -764,6 +766,7 @@ fn a_moon_brought_to_life_saved_in_the_middle_of_its_painting() {
         target_entity: None,
         target_pos: None,
         queue: false,
+        text: None,
     };
     let marker = w.body_marker(MOON).unwrap();
     w.submit(Command {

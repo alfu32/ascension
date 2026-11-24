@@ -703,6 +703,7 @@ mod tests {
                 target_entity: None,
                 target_pos: Some(at),
                 queue: false,
+                text: None,
             })
             .unwrap();
         world.step();

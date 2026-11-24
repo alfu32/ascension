@@ -168,6 +168,7 @@ impl<'a> Plan<'a> {
             target_entity,
             target_pos,
             queue: false,
+            text: None,
         });
         true
     }

@@ -347,6 +347,7 @@ fn support_walks_with_an_attack_move_and_builders_mend_on_right_click() {
             target_entity: Some(farm),
             target_pos: None,
             queue: false,
+            text: None,
         })
         .expect("attack");
     for _ in 0..400 {
@@ -535,6 +536,7 @@ fn right_click_site_helps_build() {
             target_entity: None,
             target_pos: Some(at(30, 30)),
             queue: false,
+            text: None,
         })
         .expect("construct");
     fx.step(1);
@@ -827,6 +829,7 @@ fn placement_check_reports_valid_and_invalid() {
         target_entity: None,
         target_pos: Some(pos),
         queue: false,
+        text: None,
     };
     assert!(fx.world.submit(command(free)).is_ok());
     assert_eq!(
@@ -1915,9 +1918,15 @@ fn right_click_city_with_trader_issues_trade() {
     );
     fx.ctl.hovered = Some(target);
     let offer = fx.world.trade_offer(PLAYER, trader, target).unwrap();
+    // Cities by their names (task 144).
+    let there = fx.world.city_name(target).unwrap().to_owned();
+    let here = fx.world.city_name(home).unwrap().to_owned();
     assert_eq!(
         fx.hud_snapshot().help,
-        format!("Trade route to City 2: +{} per trip", offer.per_trip_income)
+        format!(
+            "Trade route to {there}: +{} per trip",
+            offer.per_trip_income
+        )
     );
     fx.rclick(Some(target), (50.5, 20.5), false);
     fx.step(1);
@@ -1940,11 +1949,11 @@ fn right_click_city_with_trader_issues_trade() {
     assert_eq!(
         card.wealth[0],
         format!(
-            "Route: City 1 → City 2, +{} per trip",
+            "Route: {here} → {there}, +{} per trip",
             route.per_trip_income
         )
     );
-    assert_eq!(card.wealth[1], "Next: walk to City 2");
+    assert_eq!(card.wealth[1], format!("Next: walk to {there}"));
     // The direction changes on arrival, with no dependency on path detours.
     for _ in 0..1200 {
         fx.step(1);
@@ -2005,8 +2014,11 @@ fn trade_route_button_picks_a_partner_city() {
     assert_eq!(hud.trade_targets, vec![target.0]);
     fx.ctl.hovered = Some(near);
     let help = fx.hud_snapshot().help;
+    let name = fx.world.city_name(near).unwrap().to_owned();
     assert!(
-        help.starts_with("No trade route to City 3: too close for a trade route"),
+        help.starts_with(&format!(
+            "No trade route to {name}: too close for a trade route"
+        )),
         "{help}"
     );
     // A click on the ground keeps the pick open; a click on the city takes the route.
@@ -3323,6 +3335,7 @@ fn painter_world(alive: bool) -> (World, BodyId, BodyId) {
                 target_entity: Some(marker),
                 target_pos: None,
                 queue: false,
+                text: None,
             })
             .expect("bring life");
         world.step();

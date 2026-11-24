@@ -504,6 +504,9 @@ pub struct WireCommand {
     /// Appended to the executor's queue rather than replacing it.
     #[serde(default)]
     pub queue: bool,
+    /// Free text: a city's new name (task 144).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
 }
 
 impl From<&Command> for WireCommand {
@@ -516,6 +519,7 @@ impl From<&Command> for WireCommand {
             target_entity: command.target_entity.map(|e| e.0),
             target_pos: command.target_pos.map(WirePos::from),
             queue: command.queue,
+            text: command.text.clone(),
         }
     }
 }
@@ -530,6 +534,7 @@ impl From<WireCommand> for Command {
             target_entity: command.target_entity.map(EntityId),
             target_pos: command.target_pos.map(Pos::from),
             queue: command.queue,
+            text: command.text,
         }
     }
 }
@@ -618,11 +623,24 @@ mod tests {
             target_entity: None,
             target_pos: Some(Pos::on(BodyId(4), 3, -1200, 560)),
             queue: true,
+            text: None,
+        };
+        // A city's new name crosses the wire as the order's text (task 144).
+        let rename = Command {
+            player: PlayerId(2),
+            executor: EntityId(5),
+            kind: rom_sim::RENAME_CITY.into(),
+            subject: None,
+            target_entity: None,
+            target_pos: None,
+            queue: false,
+            text: Some("Nova Roma".into()),
         };
         let journal = Journal {
             tick: 41,
             entries: vec![
                 Entry::Order(command.clone()),
+                Entry::Order(rename),
                 Entry::SurfaceAdded {
                     body: BodyId(12),
                     revealed_for: vec![PlayerId(1), PlayerId(3)],

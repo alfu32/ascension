@@ -2193,6 +2193,8 @@ back. No SQL runs in `rom-sim`.
 - **Rally points.** `entity_rally(entity_id, target_entity_id | x, y, face, body)`
   (task 64). Not part of the state hash while no producer has one, so worlds
   without rally points keep their hashes.
+- **City names of task 144 (format 20).** `city.name` (see "City names"). Formats 13 to 19
+  load with their cities named from their owners' lists in id order.
 - **Drone grids of task 128 (format 17).** `entity_drone_cloud(entity_id, body, face, x, y,
   facing, ready, rebuild, join_slot, join_face, join_x, join_y)`, `pending_hit.drone`,
   `pending_shot.drone` (see "The drone grid"). Format 16 saves load with every grid full.
@@ -2599,3 +2601,40 @@ line etc."
   to its place; avoidance between everyone else is unchanged.
 - **PART B: nothing new.** The place is the order's point and the pace its `pace`; the save
   format stays 19.
+
+## City names (task 144)
+
+Owner (2026-11-23): "let the cities have names"; nation lists, renamable.
+
+- **PART A: no new table.** The existing `faction_name` pool with `kind = 'city'` holds the
+  lists: 20 names for each of the fourteen human nations (real names of each people's cities,
+  in the people's own or period form where it reads well: `Roma`, `Athenai`, `Camulodunum`,
+  `Waset`, `Kerma`, `Pasargadae`, `Chang'an`, `Heian-kyo`, `Pataliputra`, `Karakorum`,
+  `Tenochtitlan`, `Cusco`, `Ngaruawahia`, …; ASCII only, so the HUD's font has every letter) and
+  20 invented names in one sound for each brood and flight (`Kesharak` for Ashscale, `Glumrak`
+  for Mirefang, `Ithral` for Sunstone, `Teeliri` for Highwind, `Rhusish` for Reedmarsh,
+  `Krevai` for Stormcrest). `seq` 1 is the capital's. Blocs and races have no list.
+- **New `order_kind` `rename_city`** (target `none`, no component): an own city (a site too)
+  takes the name in the order's text at once. `Command` (and the network's `WireCommand`)
+  gains `text`, used by this order only. The name is cleaned: control characters and invisible
+  format marks (zero-width, direction overrides) dropped, every run of white space one space,
+  ends trimmed, at most **`city.name_max_chars`** characters (new constant, 24). A name that
+  cleans to nothing is refused (`EmptyName`), as are another player's city (`ForeignOwner`) and
+  anything that is not a city (`NotACity`). Like a stance it is a setting: it is applied when
+  submitted, takes an order id, has no cost and never enters a queue; the journal carries the
+  command, so every machine renames alike.
+- **Naming** (`rom-sim` `city_names.rs`). A city is named when it enters the city index (placed,
+  as a site or finished, or spawned at setup): the first name of its owner's list that no city
+  in the match carries, so two players of one nation never share a name and a renamed city's
+  old name is free again. The list is the player's starting faction's (`origin_faction`), or
+  the first faction up its ladder with one, then the present faction's: a bloc and united
+  humanity go on with the nation's names. When the list runs out the names come round as
+  "New <name>", then "New <name> 2", "New <name> 3", …; a faction without any list numbers its
+  cities after the city type ("City 1", …). The capital keeps the first name; a captured city
+  keeps its name; a city that is gone frees its own.
+- **State.** `Territory::names` (city id → name), in the state hash after the city index, in the
+  snapshot (`WorldSnapshot::city_names`) and in the save.
+- **PART B, `city.name` (format 20).** The name beside the city's economic radius. Formats 13
+  to 19 load with every city named on restore from its owner's list in id order (the capital,
+  the lowest id, keeps the first name); `World::restore` names any city the snapshot leaves
+  without one.

@@ -164,6 +164,7 @@ CREATE TABLE faction_transition (
   PRIMARY KEY (from_faction_id, to_faction_id)
 ) STRICT, WITHOUT ROWID;
 
+-- Task 144: the 'city' pool of a nation names its cities in `seq` order (`rom-sim` `city_names.rs`).
 CREATE TABLE faction_name (            -- leader / city / planet name pools
   faction_id INTEGER NOT NULL REFERENCES faction(id),
   kind       TEXT NOT NULL CHECK (kind IN ('leader','city','planet','ship')),
@@ -1674,7 +1675,8 @@ CREATE TABLE emitter (                  -- completed entities pushing borders
 
 CREATE TABLE city (                     -- city entities, complete or sites
   entity_id INTEGER PRIMARY KEY,
-  economic_radius INTEGER                -- milli-tiles; NULL when not computed
+  economic_radius INTEGER,               -- milli-tiles; NULL when not computed
+  name      TEXT                         -- task 144 (format 20); NULL in older saves: named on load
 ) STRICT;
 
 CREATE TABLE city_widener (             -- completed non-city buildings that widen cities

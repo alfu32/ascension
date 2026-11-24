@@ -204,6 +204,7 @@ impl World {
             target_entity: order.target_entity,
             target_pos: None,
             queue: false,
+            text: None,
         };
         let Ok(pos) = self.launch_site(&command) else {
             order.status = OrderStatus::Failed("launch_site".into());

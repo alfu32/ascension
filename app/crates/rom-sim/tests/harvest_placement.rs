@@ -121,6 +121,7 @@ fn try_build(w: &mut World, building: DefId, at: Pos) -> (Result<Pos, SimError>,
         target_entity: None,
         target_pos: Some(at),
         queue: false,
+        text: None,
     });
     let order_ok = submitted.is_ok();
     if let (Err(preview), Err(order)) = (&preview, &submitted) {

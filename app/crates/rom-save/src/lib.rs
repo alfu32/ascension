@@ -15,14 +15,15 @@ use std::{collections::BTreeMap, fmt::Write as _, path::Path, sync::Arc};
 use thiserror::Error;
 
 /// Layout version of the PART B tables this crate writes and reads.
-pub const FORMAT: i64 = 19;
+pub const FORMAT: i64 = 20;
 
 /// The oldest layout this crate still reads: format 13 saves load without the match end, the
 /// players' counters and their history (task 117); formats 13 and 14 with every aircraft in the
 /// air (task 123); formats 13 to 15 without drone operators (task 120); format 16 with every
 /// drone grid full (task 128); formats 13 to 17 without first contacts and known capitals
 /// (task 130: players meet again as they see each other); formats 13 to 18 had no shots at the
-/// ground (task 142).
+/// ground (task 142); formats 13 to 19 name no city (task 144: the cities are named on load from
+/// their owners' lists in id order).
 pub const OLDEST_FORMAT: i64 = 13;
 
 const PART_B: &str = include_str!("../../../db/schema.sql");

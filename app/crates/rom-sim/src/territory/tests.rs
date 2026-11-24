@@ -73,6 +73,7 @@ fn construct(w: &mut World, owner: PlayerId, key: &str, pos: Pos) -> Result<(), 
         target_entity: None,
         target_pos: Some(pos),
         queue: false,
+        text: None,
     })
     .map(|_| ())
 }
@@ -108,6 +109,7 @@ fn border_grows_from_a_completed_city_only() {
         target_entity: None,
         target_pos: Some(at(20_500, 30_500)),
         queue: false,
+        text: None,
     })
     .unwrap();
     w.step();

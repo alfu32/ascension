@@ -329,6 +329,7 @@ fn order(
             target_entity: target,
             target_pos: pos,
             queue: false,
+            text: None,
         })
         .map(|_| ())
         .map_err(|e| format!("{kind}: {e}"))

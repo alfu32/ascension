@@ -61,4 +61,13 @@ fn the_report_ranks_every_player_in_every_aspect_with_its_history() {
         "{text}"
     );
     assert!(text.contains("end: not ended"), "{text}");
+    // Task 144: every player's capital by its name, first in its line of cities.
+    for p in &report.players {
+        let capital = p.capital.clone().expect("a capital");
+        assert!(p.cities.contains(&capital), "{p:?}");
+        assert!(
+            text.contains(&format!("{}: {capital} (capital)", p.label())),
+            "{text}"
+        );
+    }
 }

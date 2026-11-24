@@ -937,7 +937,15 @@ fn write_places(tx: &Transaction, s: &Snapshot) -> Result<(), SaveError> {
             .iter()
             .find(|(id, _)| id == city)
             .map(|(_, r)| *r);
-        tx.execute("INSERT INTO city VALUES (?,?)", params![city.0, radius])?;
+        let name = s
+            .city_names
+            .iter()
+            .find(|(id, _)| id == city)
+            .map(|(_, n)| n.as_str());
+        tx.execute(
+            "INSERT INTO city VALUES (?,?,?)",
+            params![city.0, radius, name],
+        )?;
     }
     for (id, owner, at) in &s.widening {
         let p = pos(*at);

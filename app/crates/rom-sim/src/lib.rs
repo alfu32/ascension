@@ -6,6 +6,7 @@ mod ascension;
 mod attrition;
 mod avoidance;
 mod capture;
+mod city_names;
 mod colony;
 mod combat;
 mod commands;
@@ -61,6 +62,7 @@ pub use aircraft::LANDING_MARGIN;
 pub use alerts::{Alert, AlertKind};
 pub use ascension::AscensionProject;
 pub use capture::CaptureCountdown;
+pub use city_names::{RENAME_CITY, clean_city_name};
 pub use combat::{BLAST_MEMORY_TICKS, Blast, Wreck};
 pub use drones::{Cloud, Joining, TURN_PER_TICK};
 pub use entity::{Entity, EntityId, Player, PlayerId};
@@ -393,10 +395,18 @@ pub enum SimError {
     /// territory.
     #[error("militia are called up and stood down only inside own territory")]
     MilitiaOutsideTerritory,
+    /// Task 144: only an own city (or city site) is renamed.
+    #[error("only an own city can be renamed")]
+    NotACity,
+    /// Task 144: a city's name keeps at least one printable character.
+    #[error("a city needs a name")]
+    EmptyName,
 }
 
 #[cfg(test)]
 mod ascension_tests;
+#[cfg(test)]
+mod city_names_tests;
 #[cfg(test)]
 mod life_tests;
 #[cfg(test)]
