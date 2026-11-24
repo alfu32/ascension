@@ -421,7 +421,7 @@ impl OrbitController {
                     self.held[index] = false;
                 }
             }
-            InputEvent::Hotkey { .. } | InputEvent::Escape => {}
+            InputEvent::Hotkey { .. } | InputEvent::Escape | InputEvent::PointAt { .. } => {}
             InputEvent::ReleaseAll => {
                 self.held = [false; 4];
                 self.rotating = false;

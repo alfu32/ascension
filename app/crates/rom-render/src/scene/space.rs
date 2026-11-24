@@ -1218,6 +1218,23 @@ impl Scene {
                         );
                         overlay.tris.extend(ring);
                     }
+                    // The ship under the pointer wears its side's colour outside the selection
+                    // ring; the target of an order just given flashes in the order's (task 151).
+                    let pointer_rings = self
+                        .pointer_marks
+                        .hover_of(ship.id)
+                        .map(|c| (c, 6.0))
+                        .into_iter()
+                        .chain(self.pointer_marks.flash_of(ship.id).map(|c| (c, 10.0)));
+                    for ([r, g, b, _], gap) in pointer_rings {
+                        overlay.tris.extend(annulus(
+                            [at[0], 0.65, at[2]],
+                            ring_radius + per_pixel * gap,
+                            (per_pixel * 3.0).max(thickness * 0.8),
+                            [r, g, b, mark],
+                            32,
+                        ));
+                    }
                     if selected || ship.hp_frac < 0.999 {
                         let anchor = BarAnchor {
                             id: ship.id,
@@ -1803,6 +1820,25 @@ impl Scene {
                 if chosen {
                     overlay.tris.extend(face(
                         annulus(at, icon * 2.0, icon * 0.3, [63, 208, 255, 255], 28),
+                        at,
+                    ));
+                }
+                // The mark under the pointer, and the target of an order just given (task 151).
+                let hovered = mark
+                    .ids
+                    .iter()
+                    .find_map(|id| self.pointer_marks.hover_of(*id));
+                let flashed = mark
+                    .ids
+                    .iter()
+                    .find_map(|id| self.pointer_marks.flash_of(*id));
+                for ([r, g, b, _], radius) in hovered
+                    .map(|c| (c, 2.5))
+                    .into_iter()
+                    .chain(flashed.map(|c| (c, 3.0)))
+                {
+                    overlay.tris.extend(face(
+                        annulus(at, icon * radius, icon * 0.3, [r, g, b, 255], 32),
                         at,
                     ));
                 }

@@ -1,0 +1,18 @@
+# Task 151: an enemy ship under the pointer in system space, replayed by --script (universe mode,
+# --style map.many_worlds, seed 1, --players 2 --ai none --zoom-all --sun fixed --view system,
+# 1280 x 800, crawling at --speed 1). A corvette of each player in player one's home system; the
+# own one is selected, the camera focuses it and comes three wheel steps closer; the pointer is
+# put on the enemy corvette: a red ring outside its marker, the attack badge, its name in red
+# under the pointer and "Enemy · Corvettes (…) · hp" on the help line.
+#   rise-of-man --universe --style map.many_worlds --seed 1 --players 2 --ai none --zoom-all \
+#     --sun fixed --view system --size 1280x800 --speed 1 \
+#     --script app/docs/tasks/151-system-script.txt --after 30 --screenshot app/docs/img/151-system.png
+0 grant-age age.galactic
+0 place-space 1 unit.corvette 52,-9
+0 place-space 2 unit.corvette 60,-4
+0 ships
+1 cam focus
+2 cam wheel 3 585,345
+3 point foeship1
+# Again, in case the window's own pointer events moved it meanwhile.
+4 point foeship1

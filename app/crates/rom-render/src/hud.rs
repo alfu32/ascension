@@ -122,6 +122,11 @@ pub struct HudSnapshot {
     pub chat: HudChat,
     /// The new-age dialog over everything, while it is open (task 133).
     pub age_dialog: Option<HudAgeDialog>,
+    /// The entity the pointer rests on in the world, its side and what a right click on it
+    /// does (task 151).
+    pub pointer: Option<crate::HudPointer>,
+    /// Targets of orders just given by a right click, flashing (task 151).
+    pub flashes: Vec<crate::HudFlash>,
 }
 
 /// The dialog that tells a new age's story (task 133): drawn over the world and the HUD until
@@ -248,6 +253,8 @@ impl Default for HudSnapshot {
             panel: None,
             chat: HudChat::default(),
             age_dialog: None,
+            pointer: None,
+            flashes: Vec::new(),
         }
     }
 }
@@ -305,6 +312,20 @@ pub struct HudOverlay {
     pub world_help: Option<(String, String)>,
     /// The city under the pointer on the minimap (task 144): its name and whose it is.
     pub minimap_city: Option<(String, String)>,
+    /// The entity the render thread's own pick finds under the pointer this frame (task 151):
+    /// the snapshot's [`HudSnapshot::pointer`] is shown only while it names the same entity.
+    pub pointed: Option<u32>,
+    /// Where the pointer is, in the same pixels as the layout: the order badge stands beside it.
+    pub pointer_at: Option<(f32, f32)>,
+}
+
+impl HudOverlay {
+    /// The snapshot's pointer entry, while the render thread's pick agrees with it.
+    pub fn pointer<'a>(&self, h: &'a HudSnapshot) -> Option<&'a crate::HudPointer> {
+        h.pointer
+            .as_ref()
+            .filter(|p| self.hover.is_none() && self.pointed == Some(p.entity))
+    }
 }
 
 /// CPU artwork and font atlases with the common HUD composition code.
@@ -814,6 +835,35 @@ impl HudPainter {
         }
     }
 
+    /// The order a right click gives, in a small tile beside the pointer, framed in the side's
+    /// colour of the entity under it (task 151). Nothing when the pointer is on nothing the
+    /// selection can act on.
+    fn order_badge(&mut self, l: &HudLayout, h: &HudSnapshot, overlay: &HudOverlay) {
+        let (Some(pointer), Some((x, y))) = (overlay.pointer(h), overlay.pointer_at) else {
+            return;
+        };
+        let Some(badge) = pointer.badge else {
+            return;
+        };
+        let s = l.scale;
+        let size = 30.0 * s;
+        // Above and right of the pointer: clear of the arrow, which hangs below and right of
+        // its tip, and of the tooltip that space draws under it.
+        let tile = Rect::new(x + 12.0 * s, y - 10.0 * s - size, size, size);
+        self.solid(tile, [12, 17, 24, 225]);
+        self.frame(tile, (2.0 * s).max(1.0), pointer.side.colour());
+        let inset = 4.0 * s;
+        self.art(
+            badge.icon(),
+            Rect::new(
+                tile.x + inset,
+                tile.y + inset,
+                size - 2.0 * inset,
+                size - 2.0 * inset,
+            ),
+        );
+    }
+
     /// Two-line rollover help: the hovered item's name, then its price and blocking reason.
     fn help_block(&mut self, l: &HudLayout, h: &HudSnapshot, overlay: &HudOverlay) {
         use crate::pick::HudRegionKind as K;
@@ -917,6 +967,15 @@ impl HudPainter {
             )
         } else if !first.is_empty() {
             (first, second)
+        } else if let Some(pointer) = overlay.pointer(h) {
+            // The entity under the pointer (task 151): whose it is, what it is, its health;
+            // then what a right click on it does, else the simulation's own help.
+            let second = if pointer.hint.is_empty() {
+                h.help.split('\n').next().unwrap_or("").to_owned()
+            } else {
+                pointer.hint.clone()
+            };
+            (pointer.text.clone(), second)
         } else if !h.help.is_empty() {
             // A hint of two lines is split at its line break.
             h.help.split_once('\n').map_or_else(
@@ -1948,6 +2007,7 @@ impl HudPainter {
             self.solid(drag, [63, 208, 255, 36]);
             self.frame(drag, (1.5 * l.scale).max(1.0), CYAN);
         }
+        self.order_badge(l, h, overlay);
         if let Some(dialog) = &h.age_dialog {
             self.age_dialog(l, dialog);
         }
@@ -2264,6 +2324,70 @@ mod capital_card_tests {
         );
         city.renamable = false;
         assert_eq!(target(city), Some(crate::pick::HudRegionKind::Panel));
+    }
+
+    /// Task 151: the help line names the entity under the pointer, and a badge beside the
+    /// pointer shows the right click's order, framed in the side's colour, only while the
+    /// render thread's pick agrees with the snapshot.
+    #[test]
+    fn the_hovered_entity_is_named_and_badged_only_while_the_pick_agrees() {
+        let l = HudLayout::new(1672, 941, None);
+        let mut p = HudPainter::bake(l.scale).expect("artwork bakes");
+        let h = HudSnapshot {
+            pointer: Some(crate::HudPointer {
+                entity: 9,
+                side: crate::Side::Enemy,
+                badge: Some(crate::OrderBadge::Attack),
+                text: "Enemy · Spearman (Romans) · 80/100".into(),
+                hint: "Right-click: attack".into(),
+            }),
+            ..HudSnapshot::default()
+        };
+        let count = |p: &mut HudPainter, overlay: &HudOverlay| {
+            let quads = p.compose_with(&l, &h, overlay);
+            let white = quads
+                .iter()
+                .filter(|q| matches!(q.texture, HudTexture::Glyphs) && q.colour == WHITE)
+                .count();
+            let framed = quads
+                .iter()
+                .filter(|q| {
+                    matches!(q.texture, HudTexture::Solid)
+                        && q.colour == crate::Side::Enemy.colour()
+                })
+                .count();
+            (white, framed)
+        };
+        let elsewhere = HudOverlay {
+            pointed: Some(8),
+            pointer_at: Some((600.0, 400.0)),
+            ..HudOverlay::default()
+        };
+        let agreed = HudOverlay {
+            pointed: Some(9),
+            ..elsewhere.clone()
+        };
+        let (white_off, framed_off) = count(&mut p, &elsewhere);
+        let (white_on, framed_on) = count(&mut p, &agreed);
+        assert_eq!(
+            framed_off, 0,
+            "no badge while the pick names another entity"
+        );
+        assert_eq!(
+            framed_on, 4,
+            "the badge's frame: four sides in the enemy's red"
+        );
+        // The line replaces the default "Rollover an item..." text with the entity's.
+        assert_ne!(white_on, white_off);
+        // A HUD element under the pointer wins the help line and hides the badge.
+        let over_hud = HudOverlay {
+            hover: Some(HudTarget {
+                region: crate::pick::HudRegionKind::Panel,
+                index: 0,
+            }),
+            ..agreed
+        };
+        assert_eq!(count(&mut p, &over_hud).1, 0);
     }
 
     /// Task 133: the new-age dialog dims the screen and stands over everything, its story

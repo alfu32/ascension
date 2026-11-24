@@ -92,22 +92,29 @@ impl OverlayGeometry {
         self.tri([v[0], v[2], v[3]], colour);
     }
 
-    /// A closed polyline lying on the ground, given as offsets from the origin.
-    fn ground_loop(&mut self, o: Origin, offsets: &[(f32, f32)], colour: [u8; 4]) {
-        for i in 0..offsets.len() {
-            let (a, b) = (offsets[i], offsets[(i + 1) % offsets.len()]);
-            self.line(o.at(a.0, a.1, LIFT), o.at(b.0, b.1, LIFT), colour);
+    fn ring(&mut self, o: Origin, radius: f32, colour: [u8; 4]) {
+        let at = |i: usize| {
+            let angle = i as f32 / RING_SEGMENTS as f32 * std::f32::consts::TAU;
+            o.at(radius * angle.cos(), radius * angle.sin(), LIFT)
+        };
+        for i in 0..RING_SEGMENTS {
+            self.line(at(i), at((i + 1) % RING_SEGMENTS), colour);
         }
     }
 
-    fn ring(&mut self, o: Origin, radius: f32, colour: [u8; 4]) {
-        let points: Vec<_> = (0..RING_SEGMENTS)
-            .map(|i| {
-                let angle = i as f32 / RING_SEGMENTS as f32 * std::f32::consts::TAU;
-                (radius * angle.cos(), radius * angle.sin())
-            })
-            .collect();
-        self.ground_loop(o, &points, colour);
+    /// Four corner brackets round a rectangle on the ground: the hover outline of a building.
+    fn brackets(&mut self, o: Origin, min: (f32, f32), max: (f32, f32), colour: [u8; 4]) {
+        let arm = ((max.0 - min.0).min(max.1 - min.1) * 0.3).max(0.25);
+        for (cx, cy, sx, sy) in [
+            (min.0, min.1, 1.0, 1.0),
+            (max.0, min.1, -1.0, 1.0),
+            (max.0, max.1, -1.0, -1.0),
+            (min.0, max.1, 1.0, -1.0),
+        ] {
+            let corner = o.at(cx, cy, LIFT);
+            self.line(corner, o.at(cx + sx * arm, cy, LIFT), colour);
+            self.line(corner, o.at(cx, cy + sy * arm, LIFT), colour);
+        }
     }
 
     /// A band `width` tiles wide round the origin with a line along each edge, so it shows as
@@ -204,22 +211,86 @@ impl OverlayGeometry {
 
     /// A rectangle outline on the ground, sampled every tile so it follows slopes and curvature.
     fn rect_outline(&mut self, o: Origin, min: (f32, f32), max: (f32, f32), colour: [u8; 4]) {
-        let mut points = Vec::new();
         let steps = |a: f32, b: f32| ((b - a).abs().ceil() as usize).max(1);
         let (nx, ny) = (steps(min.0, max.0), steps(min.1, max.1));
-        for i in 0..nx {
-            points.push((min.0 + (max.0 - min.0) * i as f32 / nx as f32, min.1));
+        let count = 2 * (nx + ny);
+        let point = |k: usize| {
+            let k = k % count;
+            let (x, y) = if k < nx {
+                (min.0 + (max.0 - min.0) * k as f32 / nx as f32, min.1)
+            } else if k < nx + ny {
+                (max.0, min.1 + (max.1 - min.1) * (k - nx) as f32 / ny as f32)
+            } else if k < 2 * nx + ny {
+                (
+                    max.0 - (max.0 - min.0) * (k - nx - ny) as f32 / nx as f32,
+                    max.1,
+                )
+            } else {
+                (
+                    min.0,
+                    max.1 - (max.1 - min.1) * (k - 2 * nx - ny) as f32 / ny as f32,
+                )
+            };
+            o.at(x, y, LIFT)
+        };
+        for k in 0..count {
+            self.line(point(k), point(k + 1), colour);
         }
-        for i in 0..ny {
-            points.push((max.0, min.1 + (max.1 - min.1) * i as f32 / ny as f32));
+    }
+}
+
+/// Adds the pointer's marks to a frame's overlay (task 151): the hovered entity's outline in its
+/// side's colour, a ring a little outside the selection ring (corner brackets beyond the outline
+/// of a building), and the flashing ring of an order's target. Sized to the entity as drawn,
+/// ships held at their floor above the planet included. Allocates nothing.
+pub(crate) fn pointer_marks(
+    views: &[EntityView],
+    ground: &dyn Footing,
+    marks: &crate::pointer::PointerMarks,
+    out: &mut OverlayGeometry,
+) {
+    let rings = marks
+        .hover
+        .iter()
+        .map(|&(id, colour)| (id, colour, false))
+        .chain(marks.flashes.iter().map(|&(id, colour)| (id, colour, true)));
+    for (id, colour, flash) in rings {
+        let Ok(index) = views.binary_search_by_key(&id, |v| v.id) else {
+            continue;
+        };
+        let view = &views[index];
+        let origin = Origin {
+            ground,
+            face: view.face,
+            x: view.x,
+            y: view.y,
+            altitude: view.altitude,
+        };
+        if view.building {
+            let (w, h) = (
+                f32::from(view.footprint.0.max(1)) / 2.0,
+                f32::from(view.footprint.1.max(1)) / 2.0,
+            );
+            if flash {
+                for pad in [0.3, 0.38, 0.46] {
+                    out.rect_outline(origin, (-w - pad, -h - pad), (w + pad, h + pad), colour);
+                }
+            } else {
+                for pad in [0.32, 0.4] {
+                    out.brackets(origin, (-w - pad, -h - pad), (w + pad, h + pad), colour);
+                }
+            }
+        } else {
+            let radius = unit_width(view) * 0.75 + if flash { 0.3 } else { 0.18 };
+            let extras: &[f32] = if flash {
+                &[0.0, 0.05, 0.1, 0.15]
+            } else {
+                &[0.0, 0.04, 0.08]
+            };
+            for extra in extras {
+                out.ring(origin, radius + extra, colour);
+            }
         }
-        for i in 0..nx {
-            points.push((max.0 - (max.0 - min.0) * i as f32 / nx as f32, max.1));
-        }
-        for i in 0..ny {
-            points.push((min.0, max.1 - (max.1 - min.1) * i as f32 / ny as f32));
-        }
-        self.ground_loop(o, &points, colour);
     }
 }
 

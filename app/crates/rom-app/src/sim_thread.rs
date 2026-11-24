@@ -1224,6 +1224,26 @@ fn run(
                         }
                         ScriptAction::Visit(body) => bridge.fly_to_body(body),
                         ScriptAction::Look(at) => bridge.focus_surface(at),
+                        ScriptAction::PointAt { target, dx, dy } => {
+                            let id = match target.strip_prefix('#') {
+                                Some(id) => id.parse().map_err(|_| format!("bad id {target}")),
+                                None => crate::script::live_pick(world, me, &target, false, false)
+                                    .and_then(|pick| match pick {
+                                        PickEvent::Click {
+                                            entity: Some(id), ..
+                                        } => Ok(id),
+                                        _ => Err(format!("{target} is not an entity")),
+                                    }),
+                            };
+                            match id {
+                                Ok(entity) => bridge.push_input(rom_render::InputEvent::PointAt {
+                                    entity,
+                                    dx,
+                                    dy,
+                                }),
+                                Err(error) => controller.notify(world, error),
+                            }
+                        }
                         ScriptAction::Input(events) => {
                             for event in events {
                                 bridge.push_input(event);

@@ -394,6 +394,17 @@ pub enum InputEvent {
     Escape,
     /// Forget every held key and button (for example when the window loses focus).
     ReleaseAll,
+    /// Move the pointer onto an entity as it is drawn now, `dx`, `dy` canvas pixels from the
+    /// centre of its pick box (a script's `point`, task 151); the render thread turns it into
+    /// [`InputEvent::PointerMoved`].
+    PointAt {
+        /// Entity id.
+        entity: u32,
+        /// Horizontal offset in pixels.
+        dx: f32,
+        /// Vertical offset in pixels.
+        dy: f32,
+    },
 }
 
 /// Turns input events and elapsed time into camera movement.
@@ -470,7 +481,7 @@ impl CameraController {
                     self.held[index] = false;
                 }
             }
-            InputEvent::Hotkey { .. } | InputEvent::Escape => {}
+            InputEvent::Hotkey { .. } | InputEvent::Escape | InputEvent::PointAt { .. } => {}
             InputEvent::ReleaseAll => {
                 self.held = [false; 4];
                 self.rotating = false;

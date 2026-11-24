@@ -374,6 +374,8 @@ pub(crate) struct Scene {
     space: Option<space::SpaceGpu>,
     /// What is in space, and which ships are selected, for the next draw.
     space_state: space::SpaceState,
+    /// The hover ring and the order flashes of this frame (task 151), on the planet and in space.
+    pointer_marks: crate::pointer::PointerMarks,
     entity_transforms: Vec<Matrix>,
     /// Entity bodies only; health bars are not instances and never cast shadows.
     entity_casters: Vec<Matrix>,
@@ -775,6 +777,7 @@ impl Scene {
             globe: None,
             space: None,
             space_state: space::SpaceState::default(),
+            pointer_marks: crate::pointer::PointerMarks::default(),
             entity_transforms: Vec::new(),
             entity_casters: Vec::new(),
             caster_ranges: Vec::new(),
@@ -811,6 +814,16 @@ impl Scene {
         self.terrain.as_ref().map(|t| &t.surface)
     }
 
+    /// Takes the hover ring (an entity and its side's colour) and the order flashes of this
+    /// frame (task 151): the overlays and the space layers draw them.
+    pub(crate) fn set_pointer_marks(
+        &mut self,
+        hover: Option<(u32, [u8; 4])>,
+        flashes: &[crate::HudFlash],
+    ) {
+        self.pointer_marks.update(hover, flashes);
+    }
+
     /// Builds the selection, marker and placement overlays for the next draw, and the
     /// projectiles in flight at `render_tick` (task 95) from the snapshot of `latest_tick`.
     pub(crate) fn prepare_overlays(
@@ -827,6 +840,12 @@ impl Scene {
         }
         if let (Some(gpu), Some(orbit)) = (&self.globe, orbit) {
             build_overlays_on(views, &*gpu.globe, orbit.right(), hud, &mut self.overlay);
+            crate::overlay::pointer_marks(
+                views,
+                &*gpu.globe,
+                &self.pointer_marks,
+                &mut self.overlay,
+            );
             capitals::anchors(
                 &hud.capitals,
                 &self.bar_anchors,
@@ -878,6 +897,12 @@ impl Scene {
                     &|x, y| surface.height(x, y),
                     hud,
                     camera_yaw,
+                    &mut self.overlay,
+                );
+                crate::overlay::pointer_marks(
+                    views,
+                    &crate::entities::FlatGround(&|x, y| surface.height(x, y)),
+                    &self.pointer_marks,
                     &mut self.overlay,
                 );
                 capitals::anchors(

@@ -1318,18 +1318,19 @@ pub fn plane_point(view: &View, px: f32, py: f32) -> Option<[f32; 3]> {
 }
 
 /// The ship nearest to `cursor` among `ships` whose pick box reaches it: within its
-/// [`ShipPoint::reach`] on screen, and at least `reach_px`.
+/// [`ShipPoint::reach`] on screen (the drawn size, never under [`SHIP_PICK_PIXELS`]), plus
+/// `slack` pixels that forgive a pointer just beside it (task 151); nearest first, ties by id.
 pub fn nearest_ship(
     view: &View,
     ships: &[ShipPoint],
     cursor: (f32, f32),
-    reach_px: f32,
+    slack: f32,
 ) -> Option<u32> {
     ships
         .iter()
         .filter_map(|ship| {
             let (x, y, _) = view.project(ship.at)?;
-            let reach = ship.reach.max(reach_px).max(SHIP_PICK_PIXELS);
+            let reach = ship.reach.max(SHIP_PICK_PIXELS) + slack.max(0.0);
             let (dx, dy) = ((x - cursor.0).abs(), (y - cursor.1).abs());
             // The pick box is square about the ship's centre.
             (dx <= reach && dy <= reach).then_some((dx.hypot(dy), ship.id))
@@ -1439,6 +1440,9 @@ pub struct SpaceContext<'a> {
     pub scene: &'a UniverseScene,
     /// The system's outermost orbit, for ground points.
     pub outermost: f32,
+    /// Pixels beyond a ship's pick box that still take it ([`crate::PICK_SLACK`] at the HUD's
+    /// scale).
+    pub slack: f32,
 }
 
 impl SpaceContext<'_> {
@@ -1448,7 +1452,7 @@ impl SpaceContext<'_> {
     }
 
     fn ship_at(&self, cursor: (f32, f32)) -> Option<u32> {
-        nearest_ship(&self.view, self.ships, cursor, 0.0)
+        nearest_ship(&self.view, self.ships, cursor, self.slack)
     }
 
     /// Every ship drawn at the same mark as `id` (a fleet beside a system on the star map).
@@ -2227,6 +2231,7 @@ mod tests {
             markers: &markers,
             scene: &scene,
             outermost,
+            slack: 0.0,
         };
         let mut picker = SpacePicker::default();
         let (x, y) = at(10);
@@ -2508,6 +2513,12 @@ mod tests {
             Some(4)
         );
         assert_eq!(nearest_ship(&view, &[small], (x + 14.0, y), 0.0), None);
+        // A pointer just beside the pick box takes it within the slack (task 151).
+        assert_eq!(nearest_ship(&view, &[small], (x + 14.0, y), 8.0), Some(4));
+        assert_eq!(
+            nearest_ship(&view, &[small], (x + SHIP_PICK_PIXELS + 9.0, y), 8.0),
+            None
+        );
         // A dragged box that touches a large ship's hull takes it; a small one needs its centre.
         let touching = Rect::new(x + 100.0, y - 10.0, 80.0, 20.0);
         assert_eq!(ships_in_rect(&view, &[big], touching), vec![4]);
@@ -2576,6 +2587,7 @@ mod tests {
             markers: &markers,
             scene: &scene,
             outermost: 1.0,
+            slack: 0.0,
         };
         let (x, y, _) = view.project(positions[1]).unwrap();
         let mut picker = SpacePicker::default();
