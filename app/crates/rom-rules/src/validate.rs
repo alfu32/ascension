@@ -202,6 +202,52 @@ impl Rules {
                     ),
                 });
             }
+            // Task 147: fortifications and minefields are one-tile buildings; a segment's gate
+            // is a gate, and a gate names none.
+            if (entity.fortification.is_some() || entity.minefield.is_some())
+                && (entity.class != crate::EntityClass::Building
+                    || entity.footprint_w != 1
+                    || entity.footprint_h != 1
+                    || (entity.fortification.is_some() && entity.minefield.is_some()))
+            {
+                problems.push(Problem {
+                    message: format!(
+                        "{} must be a building of one tile, and a fortification or a minefield, \
+                         not both",
+                        self.label(entity.id)
+                    ),
+                });
+            }
+            if let Some(f) = &entity.fortification {
+                let gate_ok = match (f.gate, f.gate_type_id) {
+                    (_, None) => true,
+                    (false, Some(gate)) => self
+                        .entity_types
+                        .get(&gate)
+                        .and_then(|g| g.fortification.as_ref())
+                        .is_some_and(|g| g.gate),
+                    (true, Some(_)) => false,
+                };
+                if !gate_ok {
+                    problems.push(Problem {
+                        message: format!(
+                            "fortification {}: a segment's gate_type_id must name a gate, and a \
+                             gate names none",
+                            self.label(entity.id)
+                        ),
+                    });
+                }
+            }
+            if let Some(m) = &entity.minefield
+                && !self.damage_classes.contains_key(&m.damage_class_id)
+            {
+                problems.push(Problem {
+                    message: format!(
+                        "minefield {} names an unknown damage class",
+                        self.label(entity.id)
+                    ),
+                });
+            }
             if entity.keeper.as_ref().is_some_and(|k| k.capacity < 1) {
                 problems.push(Problem {
                     message: format!("keeper {} capacity must be positive", self.label(entity.id)),

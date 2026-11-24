@@ -381,6 +381,8 @@ fn load_entity_type(conn: &Connection) -> Result<Vec<EntityType>, RulesError> {
             view_scale: None,
             inhibitor: None,
             detector: None,
+            fortification: None,
+            minefield: None,
             market: None,
             drone_cloud: None,
             colony: None,
@@ -650,6 +652,32 @@ fn load_et_call_up(conn: &Connection) -> Result<Vec<CallUp>, RulesError> {
             Ok(CallUp {
                 entity_type_id: DefId(row.get("entity_type_id")?),
                 militia_type_id: DefId(row.get("militia_type_id")?),
+            })
+        },
+    )
+}
+fn load_et_fortification(conn: &Connection) -> Result<Vec<Fortification>, RulesError> {
+    read(
+        conn,
+        "SELECT * FROM et_fortification ORDER BY entity_type_id",
+        |row| {
+            Ok(Fortification {
+                entity_type_id: DefId(row.get("entity_type_id")?),
+                gate: row.get::<_, i64>("gate")? != 0,
+                gate_type_id: row.get::<_, Option<u32>>("gate_type_id")?.map(DefId),
+            })
+        },
+    )
+}
+fn load_et_minefield(conn: &Connection) -> Result<Vec<Minefield>, RulesError> {
+    read(
+        conn,
+        "SELECT * FROM et_minefield ORDER BY entity_type_id",
+        |row| {
+            Ok(Minefield {
+                entity_type_id: DefId(row.get("entity_type_id")?),
+                damage: row.get("damage")?,
+                damage_class_id: row.get("damage_class_id")?,
             })
         },
     )
@@ -1557,6 +1585,14 @@ impl Rules {
         for row in load_et_detector(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_detector")?;
             entity.detector = Some(row);
+        }
+        for row in load_et_fortification(conn)? {
+            let entity = entity_mut(&mut rules, row.entity_type_id, "et_fortification")?;
+            entity.fortification = Some(row);
+        }
+        for row in load_et_minefield(conn)? {
+            let entity = entity_mut(&mut rules, row.entity_type_id, "et_minefield")?;
+            entity.minefield = Some(row);
         }
         for row in load_et_colony(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_colony")?;

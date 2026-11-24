@@ -717,6 +717,7 @@ def generate():
     armed_satellites(weapon)
     nuclear_reactor(definition, row, tag, need, produce, cost, sql.append)
     militia(definition, row, tag, need, weapon)
+    fortifications(definition, row, tag, need, produce, cost, modifier)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -727,6 +728,8 @@ def generate():
                 ui_page=page, ui_col=grid_columns.index(track or 'age'), ui_row=age % 3)
         else:
             produce('bld.' + building, key, 'research', 'projects' if kind == 'project' else 'research')
+    # Task 147's research takes the next free place, so no earlier button moves.
+    produce('bld.' + MINE_DETECTORS['building'], MINE_DETECTORS['key'], 'research', 'research')
     # Upgraded producers retain their whole palette, including subsequent upgrades.
     for base, steps in building_variants:
         for key, _ in steps:
@@ -1541,6 +1544,108 @@ def militia(definition, row, tag, need, weapon):
         previous = key
     for worker in MILITIA_WORKERS:
         row('et_call_up', entity_type_id=Ref('unit.' + worker), militia_type_id=Ref(steps[0][0]))
+
+
+# Task 147 (owner, 2026-11-23): fortifications from palisades through walls (classical to
+# enlightenment) to defensive lines (industrial to fusion), dragged as lines of one-tile
+# segments with gates, and minefields from the industrial age. Each kind is one type whose
+# look follows its owner's age; the advance into a kind's first age changes the segments and
+# gates of the kind before into it (as the reactor becomes the fusion plant), and the later ages
+# of a kind add hit points, armour and build time through modifiers of their advances.
+# segment key, name, gate key, gate name, first age, last age, hit points, more a later age,
+# armour, prices of a segment, build ticks
+FORTIFICATIONS = [
+    ('palisade', 'Palisade', 'palisade_gate', 'Palisade Gate', 'ancient', 'ancient', 500, 0, 2,
+     {'timber': 10}, 60),
+    ('stone_wall', 'Stone Wall', 'wall_gate', 'Wall Gate', 'classical', 'enlightenment', 1500, 300, 4,
+     {'timber': 12, 'metal': 6}, 100),
+    ('defensive_line', 'Defensive Line', 'checkpoint', 'Checkpoint', 'industrial', 'fusion', 2600, 300, 8,
+     {'timber': 8, 'metal': 14}, 90),
+]
+FORTIFICATION_TRACK = 'military.1'      # the palisade's research, as the barracks'
+FORTIFICATION_SIGHT = 3000              # a sentry on the wall
+FORTIFICATION_TICKS_PER_AGE = 10        # build ticks a later age of a kind adds
+GATE_HP_PCT, GATE_PRICE_PCT, GATE_TICKS_PCT = 150, 300, 200
+# The minefield: one mine per tile, hidden from enemies, spent on the first enemy ground unit
+# over it. Its damage grows by MINE_DAMAGE_PER_AGE with every age after its first.
+MINEFIELD = dict(key='minefield', name='Minefield', age='industrial', hp=100, damage=140,
+                 damage_class='explosive', build_ticks=40, prices={'timber': 5, 'metal': 15})
+MINE_DAMAGE_PER_AGE = 12
+MINE_LAST_AGE = 'fusion'
+# What sees a mine: units tagged MINE_DETECTOR_TAG once their owner has researched the mine
+# detectors at the barracks, within MINE_DETECTION_RADIUS of it.
+MINE_DETECTORS = dict(key='tech.mine_detectors', name='Mine Detectors', age='industrial',
+                      building='barracks', ticks=400, prices={'food': 100, 'metal': 150})
+MINE_DETECTOR_TAG = 'infantry'
+MINE_DETECTION_RADIUS = 4000
+
+
+def fortifications(definition, row, tag, need, produce, cost, modifier):
+    """Task 147: palisades, walls, defensive lines, their gates, the minefield and the research
+    that detects mines. Written after every other definition so earlier ids stay."""
+    row('tag', key='fortification', category='structure')
+    row('stat', key='mine_detection', scope='entity',
+        note='1 when the entity sees enemy mines within mine.detection_radius (task 147)')
+    row('game_constant', key='mine.detection_radius', value=MINE_DETECTION_RADIUS, unit='milli-tiles',
+        note='how far a unit with the stat mine_detection sees enemy mines (task 147)')
+    kinds = [(seg, gate) for seg, _, gate, *_ in FORTIFICATIONS]
+    for seg, name, gate, gate_name, *_ in FORTIFICATIONS:
+        definition('entity_type', 'bld.' + seg, name)
+        definition('entity_type', 'bld.' + gate, gate_name)
+    definition('entity_type', 'bld.' + MINEFIELD['key'], MINEFIELD['name'])
+
+    def building(full, hp, armour, ticks, first, sight, previous):
+        row('entity_type', id=Ref(full), **{'class': 'building'}, ui_group='fortification', hp=hp, armor=armour,
+            armor_class_id=Ref('structure', 'armor_class'), los=sight, footprint_w=1, footprint_h=1,
+            build_ticks=ticks, ramp_mode='none', limit_scope='none', limit_count=0,
+            upgrades_from_id=Ref(previous) if previous else None, first_age_id=Ref('age.' + AGES[first]))
+        need(full, 'age.' + AGES[first])
+        for builder in ('citizen', 'worker_drone'):
+            produce('unit.' + builder, full, 'construct', 'fortification')
+        row('placement_rule', entity_type_id=Ref(full), rule='in_own_territory')
+        row('placement_rule', entity_type_id=Ref(full), rule='on_terrain', ref_def_id=Ref('ter.plain'))
+
+    previous = (None, None)
+    for (seg, _, gate, _, first, last, hp, more, armour, prices, ticks), (old_seg, old_gate) in \
+            zip(FORTIFICATIONS, [previous] + kinds[:-1]):
+        first, last = AGES.index(first), AGES.index(last)
+        for full, pct, price_pct, ticks_pct, old in (('bld.' + seg, 100, 100, 100, old_seg),
+                                                     ('bld.' + gate, GATE_HP_PCT, GATE_PRICE_PCT, GATE_TICKS_PCT, old_gate)):
+            building(full, hp * pct // 100, armour, ticks * ticks_pct // 100, first, FORTIFICATION_SIGHT,
+                     'bld.' + old if old else None)
+            tag(full, 'building', 'mechanical', 'fortification')
+            cost(full, {r: n * price_pct // 100 for r, n in prices.items()})
+            if first == 0:
+                need(full, 'tech.' + FORTIFICATION_TRACK, 1)
+            if old:
+                # The advance into this kind's first age changes the standing ones into it.
+                row('tech_effect', tech_id=Ref('tech.age.' + AGES[first]), effect='upgrade_type',
+                    from_def_id=Ref('bld.' + old), target_def_id=Ref(full))
+            for age in range(first + 1, last + 1):
+                advance = 'tech.age.' + AGES[age]
+                row('modifier', source_def_id=Ref(advance), target_def_id=Ref(full), stat_key='hp', op='add',
+                    value=more * pct // 100)
+                row('modifier', source_def_id=Ref(advance), target_def_id=Ref(full), stat_key='armor', op='add', value=1)
+                row('modifier', source_def_id=Ref(advance), target_def_id=Ref(full), stat_key='build_time', op='add',
+                    value=FORTIFICATION_TICKS_PER_AGE * ticks_pct // 100)
+        row('et_fortification', entity_type_id=Ref('bld.' + gate), gate=1)
+        row('et_fortification', entity_type_id=Ref('bld.' + seg), gate=0, gate_type_id=Ref('bld.' + gate))
+    m = MINEFIELD
+    full, first, last = 'bld.' + m['key'], AGES.index(m['age']), AGES.index(MINE_LAST_AGE)
+    building(full, m['hp'], 0, m['build_ticks'], first, 0, None)
+    tag(full, 'building', 'mechanical')
+    cost(full, m['prices'])
+    row('et_minefield', entity_type_id=Ref(full), damage=m['damage'],
+        damage_class_id=Ref(m['damage_class'], 'damage_class'))
+    for age in range(first + 1, last + 1):
+        row('modifier', source_def_id=Ref('tech.age.' + AGES[age]), target_def_id=Ref(full), stat_key='attack',
+            op='add', value=MINE_DAMAGE_PER_AGE)
+    d = MINE_DETECTORS
+    definition('tech', d['key'], d['name'])
+    row('tech', id=Ref(d['key']), kind='upgrade', track='', level=0, research_ticks=d['ticks'])
+    need(d['key'], 'age.' + d['age'])
+    cost(d['key'], d['prices'])
+    modifier(d['key'], 'mine_detection', 1, 'add', MINE_DETECTOR_TAG)
 
 
 # Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"

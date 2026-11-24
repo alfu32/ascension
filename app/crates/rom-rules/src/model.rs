@@ -1316,6 +1316,10 @@ pub struct EntityType {
     pub inhibitor: Option<Inhibitor>,
     /// Attached `et_detector` row: tells its owner of foreign ships jumping in (task 118).
     pub detector: Option<Detector>,
+    /// Attached `et_fortification` row: a segment or gate laid along a line (task 147).
+    pub fortification: Option<Fortification>,
+    /// Attached `et_minefield` row: a hidden mine spent on the first enemy over it (task 147).
+    pub minefield: Option<Minefield>,
     /// Attached `et_colony` row and its `et_colony_site` rows: an automated colony.
     pub colony: Option<Colony>,
     /// Attached `et_market` row: its owner trades resources here (task 107).
@@ -1594,6 +1598,26 @@ pub struct Inhibitor {
     /// The `arrival_radius` column: how near its planet, in milli-tiles of the system's plane,
     /// an arrival must be to be struck (task 111).
     pub arrival_radius: i64,
+}
+/// One `et_fortification` row: a segment or gate of a fortification line (task 147).
+#[derive(Debug, Clone)]
+pub struct Fortification {
+    /// The `entity_type_id` column.
+    pub entity_type_id: DefId,
+    /// Whether the units of its owner's team pass through it.
+    pub gate: bool,
+    /// A segment's gate, laid in its line; None on a gate.
+    pub gate_type_id: Option<DefId>,
+}
+/// One `et_minefield` row: a mine on one tile, hidden from enemies (task 147).
+#[derive(Debug, Clone)]
+pub struct Minefield {
+    /// The `entity_type_id` column.
+    pub entity_type_id: DefId,
+    /// Damage to the enemy unit that sets it off, before the stat `attack` modifiers.
+    pub damage: i64,
+    /// The `damage_class_id` column.
+    pub damage_class_id: u32,
 }
 /// One `et_detector` row: a jump detector (task 118).
 #[derive(Debug, Clone)]
