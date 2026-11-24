@@ -4,9 +4,10 @@
 INSERT INTO def(kind,key,name) VALUES ('mesh','mesh.checkpoint_information','Barrier checkpoint');
 INSERT INTO mesh(id,generator,params,baked) SELECT id,'composed','{}',1 FROM def WHERE key='mesh.checkpoint_information';
 WITH v(name,shape,mat,team,attach,params) AS (VALUES
-  ('block_l','box','mat.precast',0,'','{"x":-0.4,"w":0.2,"d":0.5,"h":0.7,"taper":0.45}'),
-  ('booth','box','mat.smart_glass',0,'','{"x":0.36,"z":-0.22,"w":0.28,"d":0.3,"h":0.85}'),
-  ('booth_roof','flat_roof','mat.cloth',1,'','{"x":0.36,"y":0.85,"z":-0.22,"w":0.28,"d":0.3,"t":0.06,"overhang":0.05}'),
+  ('bed','box','mat.precast',0,'','{"w":0.96,"d":0.86,"h":0.02}'),
+  ('block_l','box','mat.precast',0,'','{"x":-0.39,"w":0.2,"d":0.5,"h":0.7,"taper":0.45}'),
+  ('booth','box','mat.smart_glass',0,'','{"x":0.35,"z":-0.22,"w":0.28,"d":0.3,"h":0.85}'),
+  ('booth_roof','flat_roof','mat.cloth',1,'','{"x":0.35,"y":0.85,"z":-0.22,"w":0.28,"d":0.3,"t":0.05,"overhang":0.0}'),
   ('boom','box','mat.white_metal',0,'','{"x":-0.02,"y":0.7,"w":0.8,"d":0.05,"h":0.05}'),
   ('boom_stripe','box','mat.signal_red',0,'','{"x":-0.22,"y":0.695,"w":0.14,"d":0.06,"h":0.06,"repeat":2,"dx":0.36}'),
   ('camera','box','mat.steel',0,'','{"x":0.36,"y":0.91,"z":-0.1,"w":0.08,"d":0.12,"h":0.06,"far":0}'))

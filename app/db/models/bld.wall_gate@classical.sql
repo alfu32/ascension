@@ -4,9 +4,13 @@
 INSERT INTO def(kind,key,name) VALUES ('mesh','mesh.wall_gate_classical','Classical gate');
 INSERT INTO mesh(id,generator,params,baked) SELECT id,'composed','{}',1 FROM def WHERE key='mesh.wall_gate_classical';
 WITH v(name,shape,mat,team,attach,params) AS (VALUES
-  ('arch','arch','mat.ashlar',0,'','{"w":1.0,"h":2.3,"t":0.7,"span":0.62,"spring":1.35,"segments":8}'),
-  ('entablature','box','mat.limestone',0,'','{"y":2.3,"w":1.0,"d":0.78,"h":0.16}'),
-  ('parapet','crenellation','mat.limestone',0,'','{"y":2.46,"z":0.27,"w":1.0,"h":0.3,"t":0.14,"merlon":0.25}'),
+  ('bed','box','mat.limestone',0,'','{"w":0.96,"d":0.86,"h":0.02}'),
+  ('arch','arch','mat.ashlar',0,'','{"w":0.98,"h":2.3,"t":0.7,"span":0.62,"spring":1.35,"segments":8}'),
+  ('entablature','box','mat.limestone',0,'','{"y":2.3,"w":0.98,"d":0.78,"h":0.16}'),
+  ('frieze','box','mat.cloth',1,'','{"y":2.3,"z":0.4,"w":0.98,"d":0.02,"h":0.16}'),
+  ('frieze_back','box','mat.cloth',1,'','{"y":2.3,"z":-0.4,"w":0.98,"d":0.02,"h":0.16}'),
+  ('walk_cloth','box','mat.cloth',1,'','{"y":2.46,"w":0.98,"d":0.36,"h":0.02}'),
+  ('parapet','crenellation','mat.limestone',0,'','{"y":2.46,"z":0.27,"w":0.98,"h":0.3,"t":0.14,"merlon":0.25}'),
   ('doors','box','mat.bronze',0,'','{"z":-0.2,"w":0.6,"d":0.05,"h":1.3,"far":0}'),
   ('banner_l','banner','mat.cloth',1,'','{"x":-0.4,"y":2.46,"z":-0.1,"h":0.8,"fw":0.3,"fh":0.4}'))
 INSERT INTO mesh_part(mesh_id,name,shape,material_id,team,attach,params)
