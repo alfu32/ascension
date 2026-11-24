@@ -1093,13 +1093,21 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
     )? {
         terms.entry(id).or_default().push((key, amount));
     }
-    let radii_rows = query_vec(
-        conn,
-        "SELECT entity_id, economic_radius FROM city ORDER BY entity_id",
-        |r| Ok((EntityId(uint(r, 0, "city")?), oint(r, 1)?)),
-    )?;
     // Format 13 saves (before task 117) have no humans, end, counters or history.
     let format: i64 = conn.query_row("SELECT format FROM match", [], |r| r.get(0))?;
+    // Saves before format 20 (task 144) name no city: the world names them on restore.
+    let name_column = if format >= 20 { "name" } else { "NULL" };
+    let radii_rows = query_vec(
+        conn,
+        &format!("SELECT entity_id, economic_radius, {name_column} FROM city ORDER BY entity_id"),
+        |r| {
+            Ok((
+                EntityId(uint(r, 0, "city")?),
+                oint(r, 1)?,
+                r.get::<_, Option<String>>(2)?,
+            ))
+        },
+    )?;
     let (humans, end, history) = if format >= 14 {
         tally(conn, &mut players)?
     } else {
@@ -1298,10 +1306,14 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
                 ))
             },
         )?,
-        cities: radii_rows.iter().map(|(id, _)| *id).collect(),
+        cities: radii_rows.iter().map(|(id, _, _)| *id).collect(),
         city_radii: radii_rows
             .iter()
-            .filter_map(|(id, radius)| radius.map(|r| (*id, r)))
+            .filter_map(|(id, radius, _)| radius.map(|r| (*id, r)))
+            .collect(),
+        city_names: radii_rows
+            .iter()
+            .filter_map(|(id, _, name)| name.clone().map(|n| (*id, n)))
             .collect(),
         widening: query_vec(
             conn,

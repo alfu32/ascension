@@ -131,6 +131,7 @@ fn order(
         target_entity,
         target_pos,
         queue: false,
+        text: None,
     })
 }
 
@@ -410,6 +411,7 @@ fn may_build(rules: &Arc<Rules>, age: &str, building: &str) -> Result<(), SimErr
         target_entity: None,
         target_pos: Some(ground(38, 38)),
         queue: false,
+        text: None,
     })
     .map(|_| ())
 }

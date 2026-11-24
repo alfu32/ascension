@@ -673,6 +673,7 @@ impl World {
                         target_entity: None,
                         target_pos: Some(goal),
                         queue: false,
+                        text: None,
                     });
                 }
             }

@@ -33,7 +33,9 @@ use crate::mailbox::{Frame, FrameMailbox, FramePixels};
 use crate::orbit::{
     HOME_DISTANCE, OrbitCamera, OrbitController, dir_from_lon_lat, lon_lat_of, pan_index,
 };
-use crate::pick::{PickContext, PickController, PickEvent, canvas_view, canvas_view_orbit};
+use crate::pick::{
+    HudRegionKind, PickContext, PickController, PickEvent, canvas_view, canvas_view_orbit,
+};
 use crate::pixels::rgba_to_bgra_flipped;
 use crate::readback::{AsyncReadback, ReadyFrame};
 use crate::response::{ResponseProbe, ResponseTimes};
@@ -1560,8 +1562,26 @@ fn render_loop(shared: &Shared) {
                             None => level_help(zoom.level(), zoom.cap(), turn.middle_pans),
                         },
                     });
+                    let hover = picker.hover(&ctx);
+                    // The city under the pointer on the surface's minimap (task 144).
+                    let on_surface = zoom
+                        .as_ref()
+                        .is_none_or(|zoom| zoom.level() < Level::System);
+                    let minimap_city = hover
+                        .filter(|h| h.region == HudRegionKind::Minimap && on_surface)
+                        .and_then(|_| picker.pointer())
+                        .zip(minimap.as_ref())
+                        .and_then(|((x, y), map)| {
+                            map.city_at(
+                                &hud_layout,
+                                &hud_snapshot.city_names,
+                                (x * ratio, y * ratio),
+                            )
+                        })
+                        .map(|c| (c.name.clone(), c.about.clone()));
                     HudOverlay {
-                        hover: picker.hover(&ctx),
+                        hover,
+                        minimap_city,
                         drag_box: picker
                             .drag_rect()
                             .or_else(|| space_picker.drag_rect())
@@ -1602,6 +1622,13 @@ fn render_loop(shared: &Shared) {
                 // emblems over the bars.
                 scene.draw_bars(&mut drawing);
                 hud.draw_emblems(&mut drawing, scene.screen_emblems());
+                // City names over the world, beside the capitals' emblems (task 144).
+                hud.draw_city_names(
+                    &mut drawing,
+                    &hud_layout,
+                    scene.screen_names(),
+                    scene.screen_emblems(),
+                );
                 if zoom.is_some() {
                     // Each label carries the weight of the frame it belongs to.
                     hud.draw_labels(

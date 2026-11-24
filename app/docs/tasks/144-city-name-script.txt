@@ -1,0 +1,7 @@
+# Task 144: player one's capital by its name, replayed by --script (universe mode, seed 1,
+# --sun fixed, 1280 x 800, --players 2 --ai none). The capital is selected: its name "Roma"
+# stands over it beside the capital's emblem in the player's colour, and heads the selection
+# panel in gold (app/docs/img/144-city-name.png).
+#   rise-of-man --universe --seed 1 --sun fixed --players 2 --ai none --size 1280x800 \
+#     --script app/docs/tasks/144-city-name-script.txt --after 3 --screenshot app/docs/img/144-city-name.png
+5 click city

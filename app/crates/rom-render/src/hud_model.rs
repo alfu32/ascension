@@ -142,6 +142,36 @@ pub struct HudCapital {
     pub remembered: bool,
 }
 
+/// A city's name over it on the shown surface (task 144): an own city, or one in sight.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HudCityName {
+    /// The city's entity id: the name stands over its model when the city is drawn.
+    pub city: u32,
+    /// Its owner, whose colour the name takes.
+    pub owner: u8,
+    /// Surface face.
+    pub face: u8,
+    /// Centre in milli-tiles.
+    pub x: i32,
+    /// Centre in milli-tiles.
+    pub y: i32,
+    /// The name.
+    pub name: String,
+    /// A capital the player knows: the name stands beside its emblem.
+    pub capital: bool,
+    /// Whose it is, in words, for the minimap's tooltip: "Your capital", "City of Ada".
+    pub about: String,
+}
+
+/// The rename field on the selection panel while it has the keyboard (task 144).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HudRename {
+    /// The name being typed.
+    pub draft: String,
+    /// The caret's place in the draft, in characters.
+    pub caret: usize,
+}
+
 /// A city radius to draw on the current surface.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HudCityRadius {
@@ -384,6 +414,10 @@ pub struct HudCard {
     pub foreign: bool,
     /// A capital city the player knows as one (task 131): its title says so.
     pub capital: bool,
+    /// A city's name (task 144): the panel's heading, instead of "SELECTION".
+    pub title: Option<String>,
+    /// An own city: a click on its name opens the rename field (task 144).
+    pub renamable: bool,
     /// Current and maximum hit points.
     pub hp: (i64, i64),
     /// Attack value text, when the type has a weapon.

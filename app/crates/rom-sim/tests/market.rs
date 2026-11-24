@@ -89,6 +89,7 @@ fn trade(world: &World, market: EntityId, kind: &str, resource: &str) -> Command
         target_entity: None,
         target_pos: None,
         queue: false,
+        text: None,
     }
 }
 
@@ -312,6 +313,7 @@ fn an_unfinished_market_does_not_trade() {
             target_entity: None,
             target_pos: Some(Pos::flat(16_000, 8000)),
             queue: false,
+            text: None,
         })
         .unwrap();
     world.step();

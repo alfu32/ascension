@@ -113,6 +113,10 @@ pub struct ReportPlayer {
     pub age_ordinal: i64,
     /// Ascensions.
     pub ascensions: u32,
+    /// The name of its capital, while the capital stands (task 144).
+    pub capital: Option<String>,
+    /// The names of the cities it holds at the report's tick, in founding (id) order (task 144).
+    pub cities: Vec<String>,
     /// Its rank in every aspect, in [`Aspect::ALL`] order: 1 for the leaders.
     pub ranks: Vec<u32>,
 }
@@ -218,6 +222,15 @@ impl MatchReport {
                     age: (rules.def(age.id).name.clone(), reached),
                     age_ordinal: age.ordinal,
                     ascensions: world.ascensions(p.id),
+                    capital: world
+                        .capital(p.id)
+                        .and_then(|c| world.city_name(c))
+                        .map(str::to_owned),
+                    cities: world
+                        .city_names()
+                        .filter(|(id, _)| world.entity(*id).is_some_and(|e| e.owner == p.id))
+                        .map(|(_, name)| name.to_owned())
+                        .collect(),
                     ranks: Vec::new(),
                 }
             })
@@ -450,7 +463,26 @@ impl MatchReport {
                 .collect();
             let _ = writeln!(out, "{}", line.join(" | ").trim_end());
         }
+        let _ = writeln!(out, "cities:");
+        for p in &self.players {
+            let _ = writeln!(out, "  {}: {}", p.label(), self.cities_text(p));
+        }
         out
+    }
+
+    /// The cities a player holds, its capital first and marked: "Roma (capital), Ostia"; "none".
+    pub fn cities_text(&self, p: &ReportPlayer) -> String {
+        let capital = p.capital.as_ref().filter(|c| p.cities.contains(c));
+        let mut names: Vec<String> = capital
+            .map(|c| format!("{c} (capital)"))
+            .into_iter()
+            .collect();
+        names.extend(p.cities.iter().filter(|c| Some(*c) != capital).cloned());
+        if names.is_empty() {
+            "none".to_owned()
+        } else {
+            names.join(", ")
+        }
     }
 }
 

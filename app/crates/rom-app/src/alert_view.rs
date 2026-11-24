@@ -1,4 +1,4 @@
-//! Alerts as the person sees them (task 118): the event line ("Your capital is under attack",
+//! Alerts as the person sees them (task 118): the event line ("Ostia is under attack",
 //! "Foreign ships entered the Sol system: 3 ships of Romans (2)"), the pulsing marker on the
 //! minimap and on the star map, the ships an arrival reveals, and what Backspace flies to.
 
@@ -105,7 +105,13 @@ fn attack_text(
         Some(city) => {
             let place = format!("{}{planet}", city_label(world, me, city));
             if field {
-                format!("{who} under attack near {}", lower_first(&place))
+                // "near your capital Roma", "near Ostia".
+                let near = if place.starts_with("Your ") {
+                    lower_first(&place)
+                } else {
+                    place
+                };
+                format!("{who} under attack near {near}")
             } else {
                 format!("{place} is under attack")
             }
@@ -121,10 +127,18 @@ fn attack_text(
     }
 }
 
-/// "Your capital", or "Your city 3": the cities of `me` counted in the order they were founded.
+/// "Your capital Roma", or "Ostia": a city by its name (task 144). A city without one is "Your
+/// capital", or "Your city 3" with the cities of `me` counted in the order they were founded.
 pub fn city_label(world: &World, me: PlayerId, city: EntityId) -> String {
+    let name = world.city_name(city);
     if world.capital(me) == Some(city) {
-        return "Your capital".to_owned();
+        return match name {
+            Some(name) => format!("Your capital {name}"),
+            None => "Your capital".to_owned(),
+        };
+    }
+    if let Some(name) = name {
+        return name.to_owned();
     }
     let rank = world
         .entities()
@@ -282,6 +296,7 @@ mod tests {
                     target_entity: None,
                     target_pos: Some(at),
                     queue: false,
+                    text: None,
                 })
                 .unwrap();
         }
@@ -296,7 +311,9 @@ mod tests {
             .filter(|n| n.text.contains("under attack"))
             .collect();
         assert_eq!(told.len(), 1, "{lines:?}");
-        assert_eq!(told[0].text, "Your capital is under attack");
+        // The capital by its name (task 144).
+        let name = world.city_name(capital).unwrap();
+        assert_eq!(told[0].text, format!("Your capital {name} is under attack"));
         assert!(told[0].about.is_some());
         let mut hud = HudSnapshot::default();
         fill_hud(world, PLAYER, home, &mut hud);
@@ -388,6 +405,7 @@ mod tests {
                     target_entity: None,
                     target_pos: Some(target),
                     queue: false,
+                    text: None,
                 })
                 .unwrap();
         }

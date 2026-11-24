@@ -67,8 +67,33 @@ pub fn report_element(report: &MatchReport, me: Option<PlayerId>, width: f32) ->
         .w(px(width))
         .child(facts_row)
         .child(ranking(report, me))
+        .child(cities(report))
         .child(charts(report, width))
         .into_any_element()
+}
+
+/// The cities each player holds, by name, its capital first (task 144).
+fn cities(report: &MatchReport) -> AnyElement {
+    let mut list = div()
+        .flex()
+        .flex_col()
+        .gap_1()
+        .px_2()
+        .child(div().text_xs().text_color(rgb(GOLD)).child("Cities"));
+    for p in &report.players {
+        list = list.child(
+            div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .gap_2()
+                .text_sm()
+                .child(div().size(px(10.)).rounded(px(2.)).bg(rgb(colour(p.id))))
+                .child(div().flex_none().text_color(rgb(TEXT)).child(p.label()))
+                .child(div().text_color(rgb(MUTED)).child(report.cities_text(p))),
+        );
+    }
+    list.into_any_element()
 }
 
 /// The ranking table: one row per player, a column per aspect with its rank.

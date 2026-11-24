@@ -83,6 +83,7 @@ fn command(w: &World, executor: EntityId, kind: &str, target: Option<EntityId>) 
         target_entity: target,
         target_pos: None,
         queue: false,
+        text: None,
     }
 }
 fn capture(w: &mut World) -> EntityId {

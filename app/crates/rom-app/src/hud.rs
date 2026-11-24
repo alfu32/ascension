@@ -335,9 +335,12 @@ fn system_name(world: &World, id: u32) -> String {
         .map_or_else(|| format!("system {id}"), |s| s.name.clone())
 }
 
-/// "City 3": cities carry no names in the data, so they are numbered by type in id order;
-/// "City lost" when it is gone.
+/// A city by its name (task 144); "City 3", numbered by type in id order, for one without a
+/// name; "City lost" when it is gone.
 pub(crate) fn city_label(world: &World, id: rom_sim::EntityId) -> String {
+    if let Some(name) = world.city_name(id) {
+        return name.to_owned();
+    }
     let rules = world.rules();
     world.entity(id).map_or_else(
         || "City lost".into(),
@@ -678,6 +681,7 @@ mod tests {
             target_entity,
             target_pos: None,
             queue: false,
+            text: None,
         }
     }
     #[test]

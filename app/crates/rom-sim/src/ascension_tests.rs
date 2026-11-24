@@ -93,6 +93,7 @@ fn research(w: &mut World, library: EntityId, tech: DefId) -> Result<crate::Orde
         target_entity: None,
         target_pos: None,
         queue: false,
+        text: None,
     })
 }
 
@@ -105,6 +106,7 @@ fn descend(w: &mut World, player: PlayerId, at: Pos) -> Result<crate::OrderId, S
         target_entity: None,
         target_pos: Some(at),
         queue: false,
+        text: None,
     })
 }
 

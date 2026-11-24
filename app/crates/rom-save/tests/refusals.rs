@@ -140,3 +140,40 @@ fn a_format_13_save_loads_without_the_report_tables() {
     ));
     std::fs::remove_file(&path).unwrap();
 }
+
+/// Task 144: a save keeps the cities' names, a renamed one included; a format 19 save (before
+/// city names) loads with every city named from its owner's list in id order.
+#[test]
+fn city_names_are_saved_and_a_format_19_save_names_its_cities() {
+    let rules = rules();
+    let mut w = World::wealth_scenario(rules.clone(), 1, true).unwrap();
+    ticks(&mut w, 10);
+    let listed: Vec<(rom_sim::EntityId, String)> = w
+        .city_names()
+        .map(|(id, name)| (id, name.to_owned()))
+        .collect();
+    assert!(listed.len() >= 2, "{listed:?}");
+    let (city, _) = listed[0];
+    w.submit(rom_sim::Command {
+        text: Some("Caput Mundi".into()),
+        ..command(&w, city, rom_sim::RENAME_CITY)
+    })
+    .unwrap();
+    let path = temp_path("format19");
+    rom_save::save(&path, &w, &info(&w), &ai()).unwrap();
+    let (loaded, _, _) = rom_save::load(&path, &rules).unwrap();
+    assert_eq!(loaded.city_name(city), Some("Caput Mundi"));
+    assert_eq!(loaded.hash(), w.hash());
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch("ALTER TABLE city DROP COLUMN name; UPDATE match SET format = 19;")
+            .unwrap();
+    }
+    let (old, _, _) = rom_save::load(&path, &rules).unwrap();
+    let named: Vec<(rom_sim::EntityId, String)> = old
+        .city_names()
+        .map(|(id, name)| (id, name.to_owned()))
+        .collect();
+    assert_eq!(named, listed);
+    std::fs::remove_file(&path).unwrap();
+}

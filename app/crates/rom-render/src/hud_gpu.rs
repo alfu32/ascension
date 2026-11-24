@@ -26,6 +26,8 @@ pub(crate) struct HudGpu {
 /// Where the capital emblems rank among the labels that compete for room: after the pointer's
 /// tooltip, before everything else.
 const EMBLEM_PRIORITY: f32 = -4.5;
+/// Where the city names rank (task 144): after the emblems, before the labels of space.
+const NAME_PRIORITY: f32 = -4.0;
 
 /// Most model pictures rendered in one frame: a full palette page.
 const ICONS_PER_FRAME: usize = 15;
@@ -218,6 +220,38 @@ impl HudGpu {
         avoid: &[ScreenEmblem],
     ) {
         self.draw_labels_avoiding(d, layout, labels, alpha, true, avoid);
+    }
+
+    /// Draws the city names over the world (task 144) in their owners' colours: centred over a
+    /// city, beside a capital's emblem; a name that would cover an emblem gives way.
+    pub(crate) fn draw_city_names(
+        &mut self,
+        d: &mut impl RaylibDraw,
+        layout: &HudLayout,
+        names: &[crate::capitals::ScreenName],
+        avoid: &[ScreenEmblem],
+    ) {
+        if names.is_empty() {
+            return;
+        }
+        let atlas = &self.painter.glyphs;
+        let ratio = layout.scale / atlas.scale;
+        let labels: Vec<SpaceLabel> = names
+            .iter()
+            .map(|n| {
+                let width = atlas.measure(&n.text, TextSize::Small) as f32 * ratio;
+                let [r, g, b] = n.rgb;
+                SpaceLabel {
+                    text: n.text.clone(),
+                    icon: None,
+                    x: if n.centred { n.x - width / 2.0 } else { n.x },
+                    y: n.y,
+                    colour: [r, g, b, 255],
+                    priority: NAME_PRIORITY,
+                }
+            })
+            .collect();
+        self.draw_labels_avoiding(d, layout, &labels, 1.0, true, avoid);
     }
 
     /// Draws the capital emblems of the minimap, kept inside its picture.
@@ -549,6 +583,35 @@ impl MinimapGpu {
             eprintln!("rom-render: minimap shading: {error}");
         }
     }
+    /// The city of `names` under the point (`x`, `y`) of this minimap, in picture pixels: the
+    /// nearest within a few pixels of its dot (task 144).
+    pub(crate) fn city_at<'a>(
+        &self,
+        layout: &HudLayout,
+        names: &'a [crate::HudCityName],
+        (x, y): (f32, f32),
+    ) -> Option<&'a crate::HudCityName> {
+        use crate::Footing;
+        let view = layout.rect(Region::MinimapView);
+        let area = hud_minimap::fit_map(self.size.0, self.size.1, view);
+        let reach = 9.0 * layout.scale;
+        names
+            .iter()
+            .filter_map(|c| {
+                let (cx, cy) = (c.x as f32 / 1000.0, c.y as f32 / 1000.0);
+                let at = match self.globe.as_deref() {
+                    Some(g) => {
+                        hud_minimap::dir_to_minimap(g.point(c.face, cx, cy, (0.0, 0.0), 0.0), area)
+                    }
+                    None => hud_minimap::tile_to_minimap(cx, cy, self.size, area),
+                };
+                let d = (at.0 - x).powi(2) + (at.1 - y).powi(2);
+                (d <= reach * reach).then_some((d, c))
+            })
+            .min_by(|a, b| a.0.total_cmp(&b.0))
+            .map(|(_, c)| c)
+    }
+
     /// The capital emblems on this minimap (task 131), in picture pixels.
     pub(crate) fn capital_emblems(
         &self,

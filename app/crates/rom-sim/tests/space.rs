@@ -128,6 +128,7 @@ fn command(w: &World, ship: EntityId, kind: &str) -> Command {
         target_entity: None,
         target_pos: None,
         queue: false,
+        text: None,
     }
 }
 fn ship(w: &mut World, player: u32, pos: Pos) -> EntityId {

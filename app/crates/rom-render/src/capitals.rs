@@ -6,7 +6,7 @@
 
 use crate::bars::{BarAnchor, behind_sphere};
 use crate::entities::{Footing, owner_color};
-use crate::hud_model::HudCapital;
+use crate::hud_model::{HudCapital, HudCityName};
 use crate::pick::View;
 use crate::space::CapitalView;
 
@@ -23,6 +23,9 @@ pub(crate) const EMBLEM_GAP: f32 = 2.0;
 /// Pixels between the top of the city's model and the emblem's lower edge, at HUD scale 1:
 /// room for the health bar.
 const RISE: f32 = 10.0;
+/// How far below the emblem's centre a capital's name has its baseline, in pixels at HUD
+/// scale 1: the name's letters stand level with the emblem.
+const NAME_DROP: f32 = 5.0;
 /// Height above the ground the emblem stands at when the city itself is not drawn, in tiles.
 const FALLBACK_TOP: f32 = 2.0;
 /// Opacity of a remembered capital's marks, out of 255.
@@ -90,24 +93,114 @@ pub(crate) fn anchors(
 ) {
     out.clear();
     for capital in capitals {
-        let drawn = bars.iter().find(|b| b.id == capital.city);
-        let (at, ground_radius) = match drawn {
-            Some(bar) => (bar.at, bar.ground_radius),
-            None => {
-                let (x, y) = (capital.x as f32 / 1000.0, capital.y as f32 / 1000.0);
-                let at = ground.point(capital.face, x, y, (0.0, 0.0), FALLBACK_TOP);
-                let radius = ground.is_round().then(|| {
-                    let floor = ground.frame(capital.face, x, y).origin;
-                    floor.iter().map(|c| c * c).sum::<f32>().sqrt()
-                });
-                (at, radius)
-            }
-        };
+        let (at, ground_radius) = anchor_point(
+            capital.city,
+            (capital.face, capital.x, capital.y),
+            bars,
+            ground,
+        );
         out.push(EmblemAnchor {
             at,
             ground_radius,
             owner: capital.owner,
             remembered: capital.remembered,
+        });
+    }
+}
+
+/// Where a mark over a city hangs: over its model when it is drawn, else a little above the
+/// ground at `place` (face, milli-tiles); and the ground's radius under it on a round ground.
+fn anchor_point(
+    city: u32,
+    (face, x, y): (u8, i32, i32),
+    bars: &[BarAnchor],
+    ground: &dyn Footing,
+) -> ([f32; 3], Option<f32>) {
+    if let Some(bar) = bars.iter().find(|b| b.id == city) {
+        return (bar.at, bar.ground_radius);
+    }
+    let (x, y) = (x as f32 / 1000.0, y as f32 / 1000.0);
+    let at = ground.point(face, x, y, (0.0, 0.0), FALLBACK_TOP);
+    let radius = ground.is_round().then(|| {
+        let floor = ground.frame(face, x, y).origin;
+        floor.iter().map(|c| c * c).sum::<f32>().sqrt()
+    });
+    (at, radius)
+}
+
+/// Where a city's name hangs (task 144): the same point as a capital's emblem.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct NameAnchor {
+    pub(crate) mark: EmblemAnchor,
+    pub(crate) name: String,
+    pub(crate) capital: bool,
+}
+
+/// A city's name placed on the picture (task 144): `x` is its centre, or for a capital its left
+/// edge beside the emblem; `y` its baseline, in pixels.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ScreenName {
+    pub(crate) x: f32,
+    pub(crate) y: f32,
+    pub(crate) centred: bool,
+    pub(crate) text: String,
+    pub(crate) rgb: [u8; 3],
+}
+
+/// The anchors of the city names on the shown surface, as [`anchors`] places emblems.
+pub(crate) fn name_anchors(
+    names: &[HudCityName],
+    bars: &[BarAnchor],
+    ground: &dyn Footing,
+    out: &mut Vec<NameAnchor>,
+) {
+    out.clear();
+    for city in names {
+        let (at, ground_radius) =
+            anchor_point(city.city, (city.face, city.x, city.y), bars, ground);
+        out.push(NameAnchor {
+            mark: EmblemAnchor {
+                at,
+                ground_radius,
+                owner: city.owner,
+                remembered: false,
+            },
+            name: city.name.clone(),
+            capital: city.capital,
+        });
+    }
+}
+
+/// Places the names of `anchors` on `view`: over the city, or beside a capital's emblem;
+/// hidden where its emblem would be. `scale` is the HUD scale.
+pub(crate) fn project_names(
+    anchors: &[NameAnchor],
+    view: &View,
+    scale: f32,
+    out: &mut Vec<ScreenName>,
+) {
+    let mut emblems = Vec::with_capacity(1);
+    for a in anchors {
+        emblems.clear();
+        project(std::slice::from_ref(&a.mark), view, scale, &mut emblems);
+        let Some(e) = emblems.first() else {
+            continue;
+        };
+        let (x, y, centred) = if a.capital {
+            (
+                e.x + e.size / 2.0 + EMBLEM_GAP * 2.0 * scale,
+                e.y + NAME_DROP * scale,
+                false,
+            )
+        } else {
+            (e.x, e.y + e.size / 2.0, true)
+        };
+        out.push(ScreenName {
+            x,
+            y,
+            centred,
+            text: a.name.clone(),
+            rgb: e.rgb,
         });
     }
 }
@@ -248,6 +341,52 @@ mod tests {
             (800.0, 600.0),
             0.0,
         )
+    }
+
+    /// Task 144: a city's name stands centred over it where an emblem would; a capital's to the
+    /// right of its emblem, level with it, in the owner's colour.
+    #[test]
+    fn names_stand_over_cities_and_beside_capitals_emblems() {
+        let flat = |_: f32, _: f32| 0.0;
+        let ground = FlatGround(&flat);
+        let name = |city: u32, x: i32, capital: bool| HudCityName {
+            city,
+            owner: 2,
+            face: 0,
+            x,
+            y: 12_000,
+            name: format!("City {city}"),
+            capital,
+            about: String::new(),
+        };
+        let mut anchors_out = Vec::new();
+        name_anchors(
+            &[name(3, 6_000, false), name(4, 14_000, true)],
+            &[],
+            &ground,
+            &mut anchors_out,
+        );
+        let mut names = Vec::new();
+        project_names(&anchors_out, &view(), 1.0, &mut names);
+        let mut emblems = Vec::new();
+        project(
+            &anchors_out.iter().map(|a| a.mark).collect::<Vec<_>>(),
+            &view(),
+            1.0,
+            &mut emblems,
+        );
+        assert_eq!((names.len(), emblems.len()), (2, 2));
+        let (plain, capital) = (&names[0], &names[1]);
+        assert!(plain.centred && !capital.centred);
+        assert_eq!(plain.x, emblems[0].x, "centred over the city");
+        assert!(plain.y <= emblems[0].y + emblems[0].size / 2.0 + 0.01);
+        assert!(
+            capital.x > emblems[1].x + emblems[1].size / 2.0,
+            "beside the emblem"
+        );
+        assert!((capital.y - emblems[1].y).abs() < emblems[1].size / 2.0);
+        assert_eq!(capital.rgb, emblem_colour(2, false).0);
+        assert_eq!(capital.text, "City 4");
     }
 
     #[test]

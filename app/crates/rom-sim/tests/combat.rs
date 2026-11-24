@@ -75,6 +75,7 @@ fn lines(rules: Arc<Rules>, seed: u64, sizes: [u32; 2], reverse: bool) -> World 
                     ..Pos::default()
                 }),
                 queue: false,
+                text: None,
             })
             .unwrap();
         }

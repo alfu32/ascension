@@ -114,6 +114,7 @@ fn command(w: &World, executor: EntityId, kind: &str) -> Command {
         target_entity: None,
         target_pos: None,
         queue: false,
+        text: None,
     }
 }
 

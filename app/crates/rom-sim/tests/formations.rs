@@ -100,6 +100,7 @@ fn march(w: &mut World, formation: &str, kind: &str) -> Vec<(EntityId, &'static 
             target_entity: None,
             target_pos: Some(Pos::flat(40_500, 32_500)),
             queue: false,
+            text: None,
         })
         .unwrap();
     }
@@ -267,6 +268,7 @@ fn the_formation_is_the_orders_and_survives_a_snapshot() {
         target_entity: None,
         target_pos: Some(Pos::flat(9_500, 5_500)),
         queue: false,
+        text: None,
     };
     assert_eq!(w.submit(order.clone()), Err(SimError::UnknownFormation));
     order.kind = "move".into();
@@ -301,6 +303,7 @@ fn a_formation_turned_about_marches_back_in_order() {
                 target_entity: None,
                 target_pos: Some(Pos::flat(12_500, 32_500)),
                 queue: false,
+                text: None,
             })
             .unwrap();
         }

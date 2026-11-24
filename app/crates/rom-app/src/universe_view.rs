@@ -420,6 +420,7 @@ mod match_tests {
                     target_entity: None,
                     target_pos: None,
                     queue: false,
+                    text: None,
                 })
                 .unwrap();
             for _ in 0..10 {

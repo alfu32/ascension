@@ -516,6 +516,7 @@ impl Scene {
         }
         self.screen_bars.clear();
         self.screen_emblems.clear();
+        self.screen_names.clear();
         let height = target.texture.height as f32;
         // The loaded globe is drawn as itself while it is more than a few pixels wide; the
         // system draws it as a small sphere below that.

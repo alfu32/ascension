@@ -225,6 +225,7 @@ mod tests {
                 target_entity: None,
                 target_pos: None,
                 queue: true,
+                text: None,
             })
             .unwrap();
             w.step();

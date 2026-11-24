@@ -44,6 +44,7 @@ fn command(executor: EntityId, kind: &str, target: EntityId) -> Command {
         subject: None,
         target_pos: None,
         queue: false,
+        text: None,
     }
 }
 fn ticks(w: &mut World, count: u64) {

@@ -309,6 +309,7 @@ impl World {
                             target_entity: Some(producer),
                             target_pos: None,
                             queue: false,
+                            text: None,
                         })
                         .is_err()
                 {

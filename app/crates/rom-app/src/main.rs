@@ -10,6 +10,7 @@ mod ascension_view;
 mod bench;
 mod capital_view;
 mod chat;
+mod city_view;
 mod computer;
 mod demo;
 mod gallery;

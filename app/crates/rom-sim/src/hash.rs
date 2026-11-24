@@ -853,6 +853,11 @@ impl StateHash {
         for id in &territory.cities {
             self.u32(id.0);
         }
+        self.u64(territory.names.len() as u64);
+        for (id, name) in &territory.names {
+            self.u32(id.0);
+            self.text(name);
+        }
         let vision = &world.vision;
         self.u64(vision.viewers.len() as u64);
         for viewer in &vision.viewers {
@@ -1001,6 +1006,7 @@ mod tests {
             target_entity: None,
             target_pos: Some(Pos::default()),
             queue: true,
+            text: None,
         };
         world.submit(command).unwrap();
         world.step();

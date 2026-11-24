@@ -134,6 +134,7 @@ impl ScriptSetup {
                     target_entity: None,
                     target_pos: target,
                     queue: false,
+                    text: None,
                 })
                 .map_err(|e| e.to_string())?;
         }
@@ -225,6 +226,7 @@ impl ScriptSetup {
                     target_entity: None,
                     target_pos: Some(target),
                     queue: false,
+                    text: None,
                 })
                 .map_err(|e| e.to_string())?;
         }

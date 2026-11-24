@@ -130,6 +130,7 @@ pub fn descend(world: &World, me: PlayerId) -> Option<Command> {
         target_entity: None,
         target_pos: Some(site),
         queue: false,
+        text: None,
     })
 }
 

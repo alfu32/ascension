@@ -230,6 +230,7 @@ pub fn governor_orders(world: &World, player: PlayerId) -> Vec<Command> {
             target_entity,
             target_pos,
             queue: false,
+            text: None,
         };
         match status.waiting {
             Waiting::Building(_) => {

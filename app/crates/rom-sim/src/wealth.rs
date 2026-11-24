@@ -267,6 +267,7 @@ impl World {
             target_entity: Some(city),
             target_pos: None,
             queue: false,
+            text: None,
         })?;
         let mut info = route.info;
         info.per_trip_income = self.delivery_income(player, route.resource, info.per_trip_income);
