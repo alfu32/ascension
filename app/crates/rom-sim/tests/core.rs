@@ -936,6 +936,16 @@ fn every_vocabulary_kind_validates_its_component_and_target() {
                     assert!(et.market.is_some());
                     accepted = true;
                 }
+                // Only workers with a call-up are called up and only militia stand down
+                // (task 141, `militia_tests`).
+                Err(SimError::CannotCallUp) => {
+                    assert_eq!(kind.key, "call_up");
+                    assert!(et.call_up.is_none());
+                }
+                Err(SimError::CannotStandDown) => {
+                    assert_eq!(kind.key, "stand_down");
+                    assert!(rules.militia_worker(et.id).is_none());
+                }
                 Err(SimError::InvalidGuardTarget) => {
                     assert_eq!(kind.key, "guard");
                     assert_eq!(id, patient);

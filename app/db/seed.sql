@@ -135,7 +135,9 @@ INSERT INTO order_kind(key,needs,target,note) VALUES
  ('raze','','none','pull down an own building at once: an unfinished one refunds the work not done; not a finished city'), ('disband','movement','none','the unit leaves the match; no refund'),
  ('release','gather_site','none','every worker inside a gather building leaves it'),
  ('delete','','none','task 142: an own unit or building leaves at once; a construction site refunds its price for the work not done, a queue comes back, units inside come out; not a finished city'),
- ('attack_ground','weapon','point','task 142: weapons that throw a projectile fire at the point (from orbit at the planet below), moving into range first, until stopped');
+ ('attack_ground','weapon','point','task 142: weapons that throw a projectile fire at the point (from orbit at the planet below), moving into range first, until stopped'),
+ ('call_up','','none','task 141: a worker with an et_call_up row becomes militia (the newest militia step its player has unlocked) at once and for nothing, inside its owner''s territory; orders cleared, health share kept'),
+ ('stand_down','','none','task 141: militia become their worker again (the newest unlocked step of its line) at once, inside their owner''s territory; orders cleared, health share kept');
 
 -- ── defs ────────────────────────────────────────────────────────────────────
 INSERT INTO def(kind,key,name,sort) VALUES
@@ -3446,6 +3448,127 @@ INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FR
 INSERT INTO et_gather_site(entity_type_id,resource_id,slots_base,slots_max,slots_per_node,node_radius,needs_node_terrain_id,self_income) VALUES ((SELECT id FROM def WHERE key='bld.nuclear_reactor'),(SELECT id FROM def WHERE key='res.energy'),0,0,0,0,NULL,35);
 UPDATE entity_type SET upgrades_from_id=(SELECT id FROM def WHERE key='bld.nuclear_reactor') WHERE id=(SELECT id FROM def WHERE key='bld.fusion_plant');
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.fusion'),'upgrade_type',(SELECT id FROM def WHERE key='bld.nuclear_reactor'),(SELECT id FROM def WHERE key='bld.fusion_plant'));
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.militia_ancient','Levies');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.militia_classical','Levies');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.militia_medieval','Levies');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.militia_gunpowder','Militia');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.militia_enlightenment','Militia');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.militia_industrial','Home Guard');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.militia_modern','Home Guard');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.militia_information','Home Guard');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.militia_automation','Civil Defence');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.militia_fusion','Civil Defence');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.militia_starfaring','Planetary Guard');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','unit.militia_abundance','Planetary Guard');
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_ancient'),'unit','militia',60,0,(SELECT id FROM armor_class WHERE key='flesh'),5000,1,0,'none',NULL,(SELECT id FROM def WHERE key='age.ancient'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_ancient'),(SELECT id FROM tag WHERE key='biological'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_ancient'),(SELECT id FROM tag WHERE key='military'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_ancient'),(SELECT id FROM tag WHERE key='infantry'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_ancient'),(SELECT id FROM tag WHERE key='passenger'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_ancient'),(SELECT id FROM movement_class WHERE key='foot'),1300);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.militia_ancient'),5,(SELECT id FROM damage_class WHERE key='melee'),0,30);
+INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.militia_ancient')),'ground');
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_classical'),'unit','militia',69,0,(SELECT id FROM armor_class WHERE key='flesh'),5000,1,0,'none',(SELECT id FROM def WHERE key='unit.militia_ancient'),(SELECT id FROM def WHERE key='age.classical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_classical'),(SELECT id FROM tag WHERE key='biological'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_classical'),(SELECT id FROM tag WHERE key='military'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_classical'),(SELECT id FROM tag WHERE key='infantry'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_classical'),(SELECT id FROM tag WHERE key='passenger'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_classical'),(SELECT id FROM movement_class WHERE key='foot'),1300);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.militia_classical'),6,(SELECT id FROM damage_class WHERE key='melee'),0,30);
+INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.militia_classical')),'ground');
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.classical'),'upgrade_type',(SELECT id FROM def WHERE key='unit.militia_ancient'),(SELECT id FROM def WHERE key='unit.militia_classical'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_medieval'),'unit','militia',78,0,(SELECT id FROM armor_class WHERE key='flesh'),5000,1,0,'none',(SELECT id FROM def WHERE key='unit.militia_classical'),(SELECT id FROM def WHERE key='age.medieval'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_medieval'),(SELECT id FROM tag WHERE key='biological'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_medieval'),(SELECT id FROM tag WHERE key='military'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_medieval'),(SELECT id FROM tag WHERE key='infantry'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_medieval'),(SELECT id FROM tag WHERE key='passenger'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_medieval'),(SELECT id FROM movement_class WHERE key='foot'),1300);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.militia_medieval'),6,(SELECT id FROM damage_class WHERE key='melee'),0,30);
+INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.militia_medieval')),'ground');
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.medieval'),'upgrade_type',(SELECT id FROM def WHERE key='unit.militia_classical'),(SELECT id FROM def WHERE key='unit.militia_medieval'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_gunpowder'),'unit','militia',87,0,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,0,'none',(SELECT id FROM def WHERE key='unit.militia_medieval'),(SELECT id FROM def WHERE key='age.gunpowder'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_gunpowder'),(SELECT id FROM tag WHERE key='biological'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_gunpowder'),(SELECT id FROM tag WHERE key='military'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_gunpowder'),(SELECT id FROM tag WHERE key='infantry'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_gunpowder'),(SELECT id FROM tag WHERE key='passenger'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_gunpowder'),(SELECT id FROM movement_class WHERE key='foot'),1300);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile,projectile_speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_gunpowder'),7,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet',40000);
+INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.militia_gunpowder')),'ground');
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.gunpowder'),'upgrade_type',(SELECT id FROM def WHERE key='unit.militia_medieval'),(SELECT id FROM def WHERE key='unit.militia_gunpowder'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_enlightenment'),'unit','militia',96,0,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,0,'none',(SELECT id FROM def WHERE key='unit.militia_gunpowder'),(SELECT id FROM def WHERE key='age.enlightenment'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_enlightenment'),(SELECT id FROM tag WHERE key='biological'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_enlightenment'),(SELECT id FROM tag WHERE key='military'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_enlightenment'),(SELECT id FROM tag WHERE key='infantry'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_enlightenment'),(SELECT id FROM tag WHERE key='passenger'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_enlightenment'),(SELECT id FROM movement_class WHERE key='foot'),1300);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile,projectile_speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_enlightenment'),8,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet',40000);
+INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.militia_enlightenment')),'ground');
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.enlightenment'),'upgrade_type',(SELECT id FROM def WHERE key='unit.militia_gunpowder'),(SELECT id FROM def WHERE key='unit.militia_enlightenment'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_industrial'),'unit','militia',105,0,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,0,'none',(SELECT id FROM def WHERE key='unit.militia_enlightenment'),(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_industrial'),(SELECT id FROM tag WHERE key='biological'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_industrial'),(SELECT id FROM tag WHERE key='military'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_industrial'),(SELECT id FROM tag WHERE key='infantry'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_industrial'),(SELECT id FROM tag WHERE key='passenger'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_industrial'),(SELECT id FROM movement_class WHERE key='foot'),1300);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile,projectile_speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_industrial'),9,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet',40000);
+INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.militia_industrial')),'ground');
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.industrial'),'upgrade_type',(SELECT id FROM def WHERE key='unit.militia_enlightenment'),(SELECT id FROM def WHERE key='unit.militia_industrial'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_modern'),'unit','militia',114,0,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,0,'none',(SELECT id FROM def WHERE key='unit.militia_industrial'),(SELECT id FROM def WHERE key='age.modern'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_modern'),(SELECT id FROM tag WHERE key='biological'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_modern'),(SELECT id FROM tag WHERE key='military'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_modern'),(SELECT id FROM tag WHERE key='infantry'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_modern'),(SELECT id FROM tag WHERE key='passenger'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_modern'),(SELECT id FROM movement_class WHERE key='foot'),1300);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile,projectile_speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_modern'),10,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet',40000);
+INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.militia_modern')),'ground');
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.modern'),'upgrade_type',(SELECT id FROM def WHERE key='unit.militia_industrial'),(SELECT id FROM def WHERE key='unit.militia_modern'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_information'),'unit','militia',123,0,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,0,'none',(SELECT id FROM def WHERE key='unit.militia_modern'),(SELECT id FROM def WHERE key='age.information'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_information'),(SELECT id FROM tag WHERE key='biological'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_information'),(SELECT id FROM tag WHERE key='military'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_information'),(SELECT id FROM tag WHERE key='infantry'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_information'),(SELECT id FROM tag WHERE key='passenger'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_information'),(SELECT id FROM movement_class WHERE key='foot'),1300);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile,projectile_speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_information'),10,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet',40000);
+INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.militia_information')),'ground');
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.information'),'upgrade_type',(SELECT id FROM def WHERE key='unit.militia_modern'),(SELECT id FROM def WHERE key='unit.militia_information'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_automation'),'unit','militia',132,0,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,0,'none',(SELECT id FROM def WHERE key='unit.militia_information'),(SELECT id FROM def WHERE key='age.automation'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_automation'),(SELECT id FROM tag WHERE key='biological'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_automation'),(SELECT id FROM tag WHERE key='military'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_automation'),(SELECT id FROM tag WHERE key='infantry'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_automation'),(SELECT id FROM tag WHERE key='passenger'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_automation'),(SELECT id FROM movement_class WHERE key='foot'),1300);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile,projectile_speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_automation'),11,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet',40000);
+INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.militia_automation')),'ground');
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.automation'),'upgrade_type',(SELECT id FROM def WHERE key='unit.militia_information'),(SELECT id FROM def WHERE key='unit.militia_automation'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_fusion'),'unit','militia',141,0,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,0,'none',(SELECT id FROM def WHERE key='unit.militia_automation'),(SELECT id FROM def WHERE key='age.fusion'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_fusion'),(SELECT id FROM tag WHERE key='biological'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_fusion'),(SELECT id FROM tag WHERE key='military'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_fusion'),(SELECT id FROM tag WHERE key='infantry'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_fusion'),(SELECT id FROM tag WHERE key='passenger'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_fusion'),(SELECT id FROM movement_class WHERE key='foot'),1300);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile,projectile_speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_fusion'),12,(SELECT id FROM damage_class WHERE key='bullet'),5000,30,'bullet',40000);
+INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.militia_fusion')),'ground');
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.fusion'),'upgrade_type',(SELECT id FROM def WHERE key='unit.militia_automation'),(SELECT id FROM def WHERE key='unit.militia_fusion'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_starfaring'),'unit','militia',150,0,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,0,'none',(SELECT id FROM def WHERE key='unit.militia_fusion'),(SELECT id FROM def WHERE key='age.starfaring'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_starfaring'),(SELECT id FROM tag WHERE key='biological'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_starfaring'),(SELECT id FROM tag WHERE key='military'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_starfaring'),(SELECT id FROM tag WHERE key='infantry'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_starfaring'),(SELECT id FROM tag WHERE key='passenger'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_starfaring'),(SELECT id FROM movement_class WHERE key='foot'),1300);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile,projectile_speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_starfaring'),13,(SELECT id FROM damage_class WHERE key='energy'),5000,30,'plasma',30000);
+INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.militia_starfaring')),'ground');
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.starfaring'),'upgrade_type',(SELECT id FROM def WHERE key='unit.militia_fusion'),(SELECT id FROM def WHERE key='unit.militia_starfaring'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_abundance'),'unit','militia',168,0,(SELECT id FROM armor_class WHERE key='flesh'),6000,1,0,'none',(SELECT id FROM def WHERE key='unit.militia_starfaring'),(SELECT id FROM def WHERE key='age.abundance'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_abundance'),(SELECT id FROM tag WHERE key='biological'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_abundance'),(SELECT id FROM tag WHERE key='military'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_abundance'),(SELECT id FROM tag WHERE key='infantry'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.militia_abundance'),(SELECT id FROM tag WHERE key='passenger'));
+INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_abundance'),(SELECT id FROM movement_class WHERE key='foot'),1300);
+INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks,projectile,projectile_speed) VALUES ((SELECT id FROM def WHERE key='unit.militia_abundance'),15,(SELECT id FROM damage_class WHERE key='energy'),5000,30,'plasma',30000);
+INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.militia_abundance')),'ground');
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.abundance'),'upgrade_type',(SELECT id FROM def WHERE key='unit.militia_starfaring'),(SELECT id FROM def WHERE key='unit.militia_abundance'));
+INSERT INTO et_call_up(entity_type_id,militia_type_id) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='unit.militia_ancient'));
+INSERT INTO et_call_up(entity_type_id,militia_type_id) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='unit.militia_ancient'));
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.1'),'research','research',1,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.civic.1'),'research','research',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.commerce.1'),'research','research',3,0);
@@ -4302,6 +4425,18 @@ INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FR
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.total_network'),(SELECT id FROM def WHERE key='age.galactic'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.nuclear_reactor'),(SELECT id FROM def WHERE key='age.automation'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.nuclear_reactor'),(SELECT id FROM def WHERE key='tech.science.8'),1);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.militia_ancient'),(SELECT id FROM def WHERE key='age.ancient'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.militia_classical'),(SELECT id FROM def WHERE key='age.classical'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.militia_medieval'),(SELECT id FROM def WHERE key='age.medieval'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.militia_gunpowder'),(SELECT id FROM def WHERE key='age.gunpowder'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.militia_enlightenment'),(SELECT id FROM def WHERE key='age.enlightenment'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.militia_industrial'),(SELECT id FROM def WHERE key='age.industrial'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.militia_modern'),(SELECT id FROM def WHERE key='age.modern'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.militia_information'),(SELECT id FROM def WHERE key='age.information'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.militia_automation'),(SELECT id FROM def WHERE key='age.automation'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.militia_fusion'),(SELECT id FROM def WHERE key='age.fusion'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.militia_starfaring'),(SELECT id FROM def WHERE key='age.starfaring'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.militia_abundance'),(SELECT id FROM def WHERE key='age.abundance'),0);
 INSERT INTO constellation(id,abbr,name,genitive) VALUES (1,'And','Andromeda','Andromedae');
 INSERT INTO constellation(id,abbr,name,genitive) VALUES (2,'Ant','Antlia','Antliae');
 INSERT INTO constellation(id,abbr,name,genitive) VALUES (3,'Aps','Apus','Apodis');
@@ -6184,6 +6319,78 @@ WITH v(k,e,s,f,g) AS (VALUES
  ('unit.merchant','moving',0,'unit.merchant.moving',100),
  ('unit.merchant','research_done',0,'voice.merchant.research_done',100),
  ('unit.merchant','select',0,'voice.merchant.select',100),
+ ('unit.militia_abundance','attack',0,'voice.militia_abundance.attack',100),
+ ('unit.militia_abundance','fire',0,'unit.militia_abundance.fire',100),
+ ('unit.militia_abundance','move',0,'voice.militia_abundance.move',100),
+ ('unit.militia_abundance','moving',0,'unit.militia_abundance.moving',100),
+ ('unit.militia_abundance','research_done',0,'voice.militia_abundance.research_done',100),
+ ('unit.militia_abundance','select',0,'voice.militia_abundance.select',100),
+ ('unit.militia_ancient','attack',0,'voice.militia_ancient.attack',100),
+ ('unit.militia_ancient','fight',0,'unit.militia_ancient.fight',100),
+ ('unit.militia_ancient','move',0,'voice.militia_ancient.move',100),
+ ('unit.militia_ancient','moving',0,'unit.militia_ancient.moving',100),
+ ('unit.militia_ancient','research_done',0,'voice.militia_ancient.research_done',100),
+ ('unit.militia_ancient','select',0,'voice.militia_ancient.select',100),
+ ('unit.militia_automation','attack',0,'voice.militia_automation.attack',100),
+ ('unit.militia_automation','fire',0,'unit.militia_automation.fire',100),
+ ('unit.militia_automation','move',0,'voice.militia_automation.move',100),
+ ('unit.militia_automation','moving',0,'unit.militia_automation.moving',100),
+ ('unit.militia_automation','research_done',0,'voice.militia_automation.research_done',100),
+ ('unit.militia_automation','select',0,'voice.militia_automation.select',100),
+ ('unit.militia_classical','attack',0,'voice.militia_classical.attack',100),
+ ('unit.militia_classical','fight',0,'unit.militia_classical.fight',100),
+ ('unit.militia_classical','move',0,'voice.militia_classical.move',100),
+ ('unit.militia_classical','moving',0,'unit.militia_classical.moving',100),
+ ('unit.militia_classical','research_done',0,'voice.militia_classical.research_done',100),
+ ('unit.militia_classical','select',0,'voice.militia_classical.select',100),
+ ('unit.militia_enlightenment','attack',0,'voice.militia_enlightenment.attack',100),
+ ('unit.militia_enlightenment','fire',0,'unit.militia_enlightenment.fire',100),
+ ('unit.militia_enlightenment','move',0,'voice.militia_enlightenment.move',100),
+ ('unit.militia_enlightenment','moving',0,'unit.militia_enlightenment.moving',100),
+ ('unit.militia_enlightenment','research_done',0,'voice.militia_enlightenment.research_done',100),
+ ('unit.militia_enlightenment','select',0,'voice.militia_enlightenment.select',100),
+ ('unit.militia_fusion','attack',0,'voice.militia_fusion.attack',100),
+ ('unit.militia_fusion','fire',0,'unit.militia_fusion.fire',100),
+ ('unit.militia_fusion','move',0,'voice.militia_fusion.move',100),
+ ('unit.militia_fusion','moving',0,'unit.militia_fusion.moving',100),
+ ('unit.militia_fusion','research_done',0,'voice.militia_fusion.research_done',100),
+ ('unit.militia_fusion','select',0,'voice.militia_fusion.select',100),
+ ('unit.militia_gunpowder','attack',0,'voice.militia_gunpowder.attack',100),
+ ('unit.militia_gunpowder','fire',0,'unit.militia_gunpowder.fire',100),
+ ('unit.militia_gunpowder','move',0,'voice.militia_gunpowder.move',100),
+ ('unit.militia_gunpowder','moving',0,'unit.militia_gunpowder.moving',100),
+ ('unit.militia_gunpowder','research_done',0,'voice.militia_gunpowder.research_done',100),
+ ('unit.militia_gunpowder','select',0,'voice.militia_gunpowder.select',100),
+ ('unit.militia_industrial','attack',0,'voice.militia_industrial.attack',100),
+ ('unit.militia_industrial','fire',0,'unit.militia_industrial.fire',100),
+ ('unit.militia_industrial','move',0,'voice.militia_industrial.move',100),
+ ('unit.militia_industrial','moving',0,'unit.militia_industrial.moving',100),
+ ('unit.militia_industrial','research_done',0,'voice.militia_industrial.research_done',100),
+ ('unit.militia_industrial','select',0,'voice.militia_industrial.select',100),
+ ('unit.militia_information','attack',0,'voice.militia_information.attack',100),
+ ('unit.militia_information','fire',0,'unit.militia_information.fire',100),
+ ('unit.militia_information','move',0,'voice.militia_information.move',100),
+ ('unit.militia_information','moving',0,'unit.militia_information.moving',100),
+ ('unit.militia_information','research_done',0,'voice.militia_information.research_done',100),
+ ('unit.militia_information','select',0,'voice.militia_information.select',100),
+ ('unit.militia_medieval','attack',0,'voice.militia_medieval.attack',100),
+ ('unit.militia_medieval','fight',0,'unit.militia_medieval.fight',100),
+ ('unit.militia_medieval','move',0,'voice.militia_medieval.move',100),
+ ('unit.militia_medieval','moving',0,'unit.militia_medieval.moving',100),
+ ('unit.militia_medieval','research_done',0,'voice.militia_medieval.research_done',100),
+ ('unit.militia_medieval','select',0,'voice.militia_medieval.select',100),
+ ('unit.militia_modern','attack',0,'voice.militia_modern.attack',100),
+ ('unit.militia_modern','fire',0,'unit.militia_modern.fire',100),
+ ('unit.militia_modern','move',0,'voice.militia_modern.move',100),
+ ('unit.militia_modern','moving',0,'unit.militia_modern.moving',100),
+ ('unit.militia_modern','research_done',0,'voice.militia_modern.research_done',100),
+ ('unit.militia_modern','select',0,'voice.militia_modern.select',100),
+ ('unit.militia_starfaring','attack',0,'voice.militia_starfaring.attack',100),
+ ('unit.militia_starfaring','fire',0,'unit.militia_starfaring.fire',100),
+ ('unit.militia_starfaring','move',0,'voice.militia_starfaring.move',100),
+ ('unit.militia_starfaring','moving',0,'unit.militia_starfaring.moving',100),
+ ('unit.militia_starfaring','research_done',0,'voice.militia_starfaring.research_done',100),
+ ('unit.militia_starfaring','select',0,'voice.militia_starfaring.select',100),
  ('unit.missile_cruiser','attack',0,'voice.missile_cruiser.attack',100),
  ('unit.missile_cruiser','fire',0,'unit.missile_cruiser.fire',100),
  ('unit.missile_cruiser','move',0,'voice.missile_cruiser.move',100),

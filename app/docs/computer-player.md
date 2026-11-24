@@ -1162,6 +1162,29 @@ an enemy capital it knows by sight or by the survey (`World::capital` on a remem
 goal (its planet or system to head for), which is left for later: it would send armies and
 fleets across systems toward a city nobody has seen.
 
+## Militia (task 141)
+
+Nothing in `rom-ai` changed: the computer player does not call up militia yet. It could, with
+the orders a person has (`call_up`, `stand_down`), but doing it well is more than a few lines:
+
+- *When*: the alarm (`attacked`) already says a city is hurt or intruders outnumber the army at
+  home; the call-up would take the workers inside that city's borders, after the difficulty's
+  reaction time.
+- *Who leads them*: a militia is a fighter by its data (armed, neither builds nor gathers), so
+  `production::is_military` and `army::fighters` already count it and the army manager would
+  take it into its armies and march it away; it must instead be held at the city it defends,
+  where it can stand down (a stand-down is refused outside the borders).
+- *Afterwards*: once the alarm is over every militia inside the borders stands down; the
+  economy manager must not train workers to replace the called-up ones meanwhile (they are
+  not workers while they are militia), or it overshoots when they come back.
+
+Until then the computer player owns no militia, so its armies, economy and the duel are as
+before; the rules change only shifts later definition ids. A person's militia it meets are
+soldiers to it: it sees their weapons and strength like any unit's.
+Measured with the militia in the rules: `rom fight-matrix` `strengths=270 unanswered=0` (the
+militia has no production row, so it is not in the rosters); `rom duel --profiles
+balanced:moderate,balanced:easiest --seeds 1..20 --jobs 2`: 20–0, mean tick 53 613, as before.
+
 ## Simulation gaps found in part 2, and what task 65 did with them
 
 - **Closed: `explore`, `patrol`, `guard`.** `explore` walks to the nearest tile

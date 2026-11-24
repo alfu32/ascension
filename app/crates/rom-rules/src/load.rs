@@ -377,6 +377,7 @@ fn load_entity_type(conn: &Connection) -> Result<Vec<EntityType>, RulesError> {
             territory: None,
             energy: None,
             supply: None,
+            call_up: None,
             view_scale: None,
             inhibitor: None,
             detector: None,
@@ -637,6 +638,18 @@ fn load_et_supply(conn: &Connection) -> Result<Vec<Supply>, RulesError> {
                 entity_type_id: DefId(row.get("entity_type_id")?),
                 radius: row.get("radius")?,
                 stock: row.get("stock")?,
+            })
+        },
+    )
+}
+fn load_et_call_up(conn: &Connection) -> Result<Vec<CallUp>, RulesError> {
+    read(
+        conn,
+        "SELECT * FROM et_call_up ORDER BY entity_type_id",
+        |row| {
+            Ok(CallUp {
+                entity_type_id: DefId(row.get("entity_type_id")?),
+                militia_type_id: DefId(row.get("militia_type_id")?),
             })
         },
     )
@@ -1532,6 +1545,10 @@ impl Rules {
         for row in load_et_supply(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_supply")?;
             entity.supply = Some(row);
+        }
+        for row in load_et_call_up(conn)? {
+            let entity = entity_mut(&mut rules, row.entity_type_id, "et_call_up")?;
+            entity.call_up = Some(row);
         }
         for row in load_et_inhibitor(conn)? {
             let entity = entity_mut(&mut rules, row.entity_type_id, "et_inhibitor")?;

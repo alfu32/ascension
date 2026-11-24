@@ -90,6 +90,10 @@ const DELETE_SLOT: usize = 14;
 const DELETE_SLOTS: [usize; 3] = [14, 4, 9];
 /// Where Attack ground sits on the Order tab (G).
 const GROUND_SLOT: usize = 9;
+/// Where Call up sits on the Order tab (F), or the first free slot after it (task 141).
+const CALL_UP_SLOTS: [usize; 4] = [8, 4, 6, 2];
+/// Where Stand down sits on the Order tab (R), or the first free slot after it.
+const STAND_DOWN_SLOTS: [usize; 4] = [3, 4, 6, 2];
 /// The character the window sends for the Delete key (task 142).
 pub const DELETE_KEY: char = '\u{7f}';
 /// Combat stance behaviours offered as buttons, in this order.
@@ -174,6 +178,10 @@ enum Action {
     DeleteYes,
     /// The answer to "Delete?": no.
     DeleteNo,
+    /// The selected workers are called up as militia (task 141).
+    CallUp,
+    /// The selected militia stand down into workers again (task 141).
+    StandDown,
     /// An ascended player picks open land of a habitable planet to descend onto (task 76).
     Descend,
     /// An ascended player picks a moon or asteroid to bring to life (task 77).
@@ -1802,6 +1810,24 @@ impl Controller {
             .collect()
     }
 
+    /// The selected own units a `call_up` (workers with a call-up) or `stand_down` (militia)
+    /// applies to, wherever they stand (task 141).
+    fn militia_units(&self, world: &World, kind: &str) -> Vec<EntityId> {
+        let me = self.me();
+        self.own_selected(world)
+            .iter()
+            .filter(|e| {
+                e.owner == me
+                    && if kind == rom_sim::CALL_UP {
+                        world.calls_up(e.type_id)
+                    } else {
+                        world.is_militia_type(e.type_id)
+                    }
+            })
+            .map(|e| e.id)
+            .collect()
+    }
+
     /// The Delete key or button: deletes the selected own units and unfinished buildings at
     /// once; a finished building in the selection asks "Delete?" first, and a second Delete
     /// answers yes.
@@ -2751,6 +2777,17 @@ impl Controller {
                 {
                     actions.push((GROUND_SLOT, Action::AttackGround));
                 }
+                // Call up and stand down (task 141), before Delete takes the last free slot.
+                for (action, kind, slots) in [
+                    (Action::CallUp, rom_sim::CALL_UP, CALL_UP_SLOTS),
+                    (Action::StandDown, rom_sim::STAND_DOWN, STAND_DOWN_SLOTS),
+                ] {
+                    if !self.militia_units(world, kind).is_empty()
+                        && let Some(slot) = slots.into_iter().find(|s| free(&actions, *s))
+                    {
+                        actions.push((slot, action));
+                    }
+                }
                 if !deletable.is_empty()
                     && let Some(slot) = DELETE_SLOTS.into_iter().find(|s| free(&actions, *s))
                 {
@@ -2833,6 +2870,35 @@ impl Controller {
             Action::DeleteNo => {
                 button.name = "No, keep it".into();
                 button.icon = "icons/cmd_stop".into();
+            }
+            Action::CallUp | Action::StandDown => {
+                let kind = if action == Action::CallUp {
+                    rom_sim::CALL_UP
+                } else {
+                    rom_sim::STAND_DOWN
+                };
+                let units = self.militia_units(world, kind);
+                let ready = units
+                    .iter()
+                    .find_map(|id| world.militia_change(*id, kind).ok());
+                let becomes = ready.map(|t| rules.display_name(t, faction).to_owned());
+                let (name, icon) = match (action, becomes) {
+                    (Action::CallUp, Some(name)) => {
+                        (format!("Call up as militia: {name}"), "icons/pic_shield")
+                    }
+                    (Action::CallUp, None) => ("Call up as militia".into(), "icons/pic_shield"),
+                    (_, Some(name)) => (format!("Stand down: {name} again"), "icons/pic_person"),
+                    (_, None) => ("Stand down".into(), "icons/pic_person"),
+                };
+                (button.name, button.icon) = (name, icon.into());
+                if ready.is_none()
+                    && let Some(id) = units.first()
+                    && let Err(error) = world.militia_change(*id, kind)
+                {
+                    button.state = ButtonState::Locked {
+                        reason: rejection_message(world, me, &error, None),
+                    };
+                }
             }
             Action::Descend => {
                 button.name = "Descend: a city on open land".into();
@@ -3050,6 +3116,23 @@ impl Controller {
                 }
             }
             Action::DeleteNo => self.delete_confirm = None,
+            Action::CallUp | Action::StandDown => {
+                let kind = if action == Action::CallUp {
+                    rom_sim::CALL_UP
+                } else {
+                    rom_sim::STAND_DOWN
+                };
+                // Only those that stand inside the borders are ordered; the button says why
+                // when none does.
+                let ready: Vec<EntityId> = self
+                    .militia_units(world, kind)
+                    .into_iter()
+                    .filter(|id| world.militia_change(*id, kind).is_ok())
+                    .collect();
+                for id in ready {
+                    self.submit(world, id, kind, None, None, None, false);
+                }
+            }
             Action::Patrol => {
                 self.patrol = !self.patrol;
                 self.patrol_started = false;
@@ -4231,6 +4314,11 @@ fn rejection_message(
             format!("Deposit revealed in {}", world.rules().def(*age).name)
         }
         SimError::NotInOwnTerritory => "Outside your borders".into(),
+        SimError::MilitiaOutsideTerritory => {
+            "Militia are called up and stood down only inside your borders".into()
+        }
+        SimError::CannotCallUp => "Only workers can be called up as militia".into(),
+        SimError::CannotStandDown => "Only militia stand down".into(),
         SimError::CannotDescend => "Choose open land of a habitable planet".into(),
         SimError::NoDormantSurface => {
             "Only a moon or asteroid not yet brought to life can be brought to life".into()

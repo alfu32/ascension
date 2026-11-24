@@ -11480,5 +11480,1133 @@
   },
   "recipe": "bld.build_done",
   "seed": 503545
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_ancient.select",
+  "speed": 0.953,
+  "text": "Levies, standing by.",
+  "voice": "am_eric"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_ancient.move",
+  "speed": 0.953,
+  "text": "On the march.",
+  "voice": "am_eric"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_ancient.attack",
+  "speed": 0.953,
+  "text": "Spears forward.",
+  "voice": "am_eric"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_ancient.research_done",
+  "speed": 0.953,
+  "text": "Better arms for us.",
+  "voice": "am_eric"
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_ancient.fight.1",
+  "params": {
+   "age": 0,
+   "pitch": 1.111,
+   "power": 0.083,
+   "reach": 0.0,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "spear_thrust"
+  },
+  "recipe": "fight.spear_thrust",
+  "seed": 16036
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_ancient.fight.2",
+  "params": {
+   "age": 0,
+   "pitch": 1.111,
+   "power": 0.083,
+   "reach": 0.0,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "spear_thrust"
+  },
+  "recipe": "fight.spear_thrust",
+  "seed": 949362
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_ancient.fight.3",
+  "params": {
+   "age": 0,
+   "pitch": 1.111,
+   "power": 0.083,
+   "reach": 0.0,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "spear_thrust"
+  },
+  "recipe": "fight.spear_thrust",
+  "seed": 886600
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.militia_ancient.moving",
+  "params": {
+   "age": 0,
+   "figures": 1,
+   "pitch": 1.111,
+   "size": 0.167,
+   "speed": 0.217
+  },
+  "recipe": "move.footsteps",
+  "seed": 222491
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_classical.select",
+  "speed": 1.005,
+  "text": "Your orders?",
+  "voice": "bm_george"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_classical.move",
+  "speed": 1.005,
+  "text": "On the march.",
+  "voice": "bm_george"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_classical.attack",
+  "speed": 1.005,
+  "text": "At them.",
+  "voice": "bm_george"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_classical.research_done",
+  "speed": 1.005,
+  "text": "New drills learned.",
+  "voice": "bm_george"
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_classical.fight.1",
+  "params": {
+   "age": 1,
+   "pitch": 1.15,
+   "power": 0.1,
+   "reach": 0.0,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "spear_thrust"
+  },
+  "recipe": "fight.spear_thrust",
+  "seed": 861814
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_classical.fight.2",
+  "params": {
+   "age": 1,
+   "pitch": 1.15,
+   "power": 0.1,
+   "reach": 0.0,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "spear_thrust"
+  },
+  "recipe": "fight.spear_thrust",
+  "seed": 57440
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_classical.fight.3",
+  "params": {
+   "age": 1,
+   "pitch": 1.15,
+   "power": 0.1,
+   "reach": 0.0,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "spear_thrust"
+  },
+  "recipe": "fight.spear_thrust",
+  "seed": 66522
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.militia_classical.moving",
+  "params": {
+   "age": 1,
+   "figures": 1,
+   "pitch": 1.15,
+   "size": 0.167,
+   "speed": 0.217
+  },
+  "recipe": "move.footsteps",
+  "seed": 25206
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_medieval.select",
+  "speed": 0.952,
+  "text": "Levies, standing by.",
+  "voice": "am_michael"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_medieval.move",
+  "speed": 0.952,
+  "text": "On the march.",
+  "voice": "am_michael"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_medieval.attack",
+  "speed": 0.952,
+  "text": "Spears forward.",
+  "voice": "am_michael"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_medieval.research_done",
+  "speed": 0.952,
+  "text": "New drills learned.",
+  "voice": "am_michael"
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_medieval.fight.1",
+  "params": {
+   "age": 2,
+   "pitch": 1.019,
+   "power": 0.1,
+   "reach": 0.0,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "spear_thrust"
+  },
+  "recipe": "fight.spear_thrust",
+  "seed": 254484
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_medieval.fight.2",
+  "params": {
+   "age": 2,
+   "pitch": 1.019,
+   "power": 0.1,
+   "reach": 0.0,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "spear_thrust"
+  },
+  "recipe": "fight.spear_thrust",
+  "seed": 907586
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_medieval.fight.3",
+  "params": {
+   "age": 2,
+   "pitch": 1.019,
+   "power": 0.1,
+   "reach": 0.0,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "spear_thrust"
+  },
+  "recipe": "fight.spear_thrust",
+  "seed": 527928
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.militia_medieval.moving",
+  "params": {
+   "age": 2,
+   "figures": 1,
+   "pitch": 1.019,
+   "size": 0.167,
+   "speed": 0.217
+  },
+  "recipe": "move.footsteps",
+  "seed": 634978
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_gunpowder.select",
+  "speed": 1.039,
+  "text": "Militia, reporting.",
+  "voice": "am_fenrir"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_gunpowder.move",
+  "speed": 1.039,
+  "text": "Forward.",
+  "voice": "am_fenrir"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_gunpowder.attack",
+  "speed": 1.039,
+  "text": "Make ready, fire.",
+  "voice": "am_fenrir"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_gunpowder.research_done",
+  "speed": 1.039,
+  "text": "New drills learned.",
+  "voice": "am_fenrir"
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_gunpowder.fire.1",
+  "params": {
+   "age": 3,
+   "pitch": 1.188,
+   "power": 0.117,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "musket"
+  },
+  "recipe": "fire.musket",
+  "seed": 602581
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_gunpowder.fire.2",
+  "params": {
+   "age": 3,
+   "pitch": 1.188,
+   "power": 0.117,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "musket"
+  },
+  "recipe": "fire.musket",
+  "seed": 558019
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_gunpowder.fire.3",
+  "params": {
+   "age": 3,
+   "pitch": 1.188,
+   "power": 0.117,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "musket"
+  },
+  "recipe": "fire.musket",
+  "seed": 485433
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.militia_gunpowder.moving",
+  "params": {
+   "age": 3,
+   "figures": 1,
+   "pitch": 1.188,
+   "size": 0.167,
+   "speed": 0.217
+  },
+  "recipe": "move.footsteps",
+  "seed": 7982
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_enlightenment.select",
+  "speed": 1.044,
+  "text": "Militia, reporting.",
+  "voice": "bm_daniel"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_enlightenment.move",
+  "speed": 1.044,
+  "text": "On my way.",
+  "voice": "bm_daniel"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_enlightenment.attack",
+  "speed": 1.044,
+  "text": "Make ready, fire.",
+  "voice": "bm_daniel"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_enlightenment.research_done",
+  "speed": 1.044,
+  "text": "Better arms for us.",
+  "voice": "bm_daniel"
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_enlightenment.fire.1",
+  "params": {
+   "age": 4,
+   "pitch": 1.04,
+   "power": 0.133,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "musket"
+  },
+  "recipe": "fire.musket",
+  "seed": 236057
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_enlightenment.fire.2",
+  "params": {
+   "age": 4,
+   "pitch": 1.04,
+   "power": 0.133,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "musket"
+  },
+  "recipe": "fire.musket",
+  "seed": 954063
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_enlightenment.fire.3",
+  "params": {
+   "age": 4,
+   "pitch": 1.04,
+   "power": 0.133,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "musket"
+  },
+  "recipe": "fire.musket",
+  "seed": 462133
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.militia_enlightenment.moving",
+  "params": {
+   "age": 4,
+   "figures": 1,
+   "pitch": 1.04,
+   "size": 0.167,
+   "speed": 0.217
+  },
+  "recipe": "move.footsteps",
+  "seed": 217515
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_industrial.select",
+  "speed": 0.972,
+  "text": "Home Guard, standing by.",
+  "voice": "am_liam"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_industrial.move",
+  "speed": 0.972,
+  "text": "On the march.",
+  "voice": "am_liam"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_industrial.attack",
+  "speed": 0.972,
+  "text": "Open fire.",
+  "voice": "am_liam"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_industrial.research_done",
+  "speed": 0.972,
+  "text": "New drills learned.",
+  "voice": "am_liam"
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_industrial.fire.1",
+  "params": {
+   "age": 5,
+   "pitch": 1.07,
+   "power": 0.15,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "rifle"
+  },
+  "recipe": "fire.rifle",
+  "seed": 831783
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_industrial.fire.2",
+  "params": {
+   "age": 5,
+   "pitch": 1.07,
+   "power": 0.15,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "rifle"
+  },
+  "recipe": "fire.rifle",
+  "seed": 608369
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_industrial.fire.3",
+  "params": {
+   "age": 5,
+   "pitch": 1.07,
+   "power": 0.15,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "rifle"
+  },
+  "recipe": "fire.rifle",
+  "seed": 565771
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.militia_industrial.moving",
+  "params": {
+   "age": 5,
+   "figures": 1,
+   "pitch": 1.07,
+   "size": 0.167,
+   "speed": 0.217
+  },
+  "recipe": "move.footsteps",
+  "seed": 997336
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_modern.select",
+  "speed": 1.028,
+  "text": "Home Guard, ready.",
+  "voice": "bm_lewis"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_modern.move",
+  "speed": 1.028,
+  "text": "Moving out.",
+  "voice": "bm_lewis"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_modern.attack",
+  "speed": 1.028,
+  "text": "Engaging.",
+  "voice": "bm_lewis"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_modern.research_done",
+  "speed": 1.028,
+  "text": "Better arms for us.",
+  "voice": "bm_lewis"
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_modern.fire.1",
+  "params": {
+   "age": 6,
+   "pitch": 0.993,
+   "power": 0.167,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "rifle"
+  },
+  "recipe": "fire.rifle",
+  "seed": 133032
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_modern.fire.2",
+  "params": {
+   "age": 6,
+   "pitch": 0.993,
+   "power": 0.167,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "rifle"
+  },
+  "recipe": "fire.rifle",
+  "seed": 137470
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_modern.fire.3",
+  "params": {
+   "age": 6,
+   "pitch": 0.993,
+   "power": 0.167,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "rifle"
+  },
+  "recipe": "fire.rifle",
+  "seed": 540356
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.militia_modern.moving",
+  "params": {
+   "age": 6,
+   "figures": 1,
+   "pitch": 0.993,
+   "size": 0.167,
+   "speed": 0.217
+  },
+  "recipe": "move.footsteps",
+  "seed": 982613
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_information.select",
+  "speed": 0.993,
+  "text": "Home Guard, reporting.",
+  "voice": "af_kore"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_information.move",
+  "speed": 0.993,
+  "text": "On my way.",
+  "voice": "af_kore"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_information.attack",
+  "speed": 0.993,
+  "text": "Open fire.",
+  "voice": "af_kore"
+ },
+ {
+  "fx": "none",
+  "kind": "voice",
+  "name": "voice.militia_information.research_done",
+  "speed": 0.993,
+  "text": "New drills learned.",
+  "voice": "af_kore"
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_information.fire.1",
+  "params": {
+   "age": 7,
+   "pitch": 1.047,
+   "power": 0.167,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "rifle"
+  },
+  "recipe": "fire.rifle",
+  "seed": 746781
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_information.fire.2",
+  "params": {
+   "age": 7,
+   "pitch": 1.047,
+   "power": 0.167,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "rifle"
+  },
+  "recipe": "fire.rifle",
+  "seed": 819595
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_information.fire.3",
+  "params": {
+   "age": 7,
+   "pitch": 1.047,
+   "power": 0.167,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "rifle"
+  },
+  "recipe": "fire.rifle",
+  "seed": 223089
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.militia_information.moving",
+  "params": {
+   "age": 7,
+   "figures": 1,
+   "pitch": 1.047,
+   "size": 0.167,
+   "speed": 0.217
+  },
+  "recipe": "move.footsteps",
+  "seed": 575166
+ },
+ {
+  "fx": "helmet",
+  "kind": "voice",
+  "name": "voice.militia_automation.select",
+  "speed": 1.004,
+  "text": "Civil Defence, ready.",
+  "voice": "af_nicole"
+ },
+ {
+  "fx": "helmet",
+  "kind": "voice",
+  "name": "voice.militia_automation.move",
+  "speed": 1.004,
+  "text": "On the march.",
+  "voice": "af_nicole"
+ },
+ {
+  "fx": "helmet",
+  "kind": "voice",
+  "name": "voice.militia_automation.attack",
+  "speed": 1.004,
+  "text": "Engaging.",
+  "voice": "af_nicole"
+ },
+ {
+  "fx": "helmet",
+  "kind": "voice",
+  "name": "voice.militia_automation.research_done",
+  "speed": 1.004,
+  "text": "New gear, good.",
+  "voice": "af_nicole"
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_automation.fire.1",
+  "params": {
+   "age": 8,
+   "pitch": 1.129,
+   "power": 0.183,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "rifle"
+  },
+  "recipe": "fire.rifle",
+  "seed": 146056
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_automation.fire.2",
+  "params": {
+   "age": 8,
+   "pitch": 1.129,
+   "power": 0.183,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "rifle"
+  },
+  "recipe": "fire.rifle",
+  "seed": 291486
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_automation.fire.3",
+  "params": {
+   "age": 8,
+   "pitch": 1.129,
+   "power": 0.183,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "rifle"
+  },
+  "recipe": "fire.rifle",
+  "seed": 509604
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.militia_automation.moving",
+  "params": {
+   "age": 8,
+   "figures": 1,
+   "pitch": 1.129,
+   "size": 0.167,
+   "speed": 0.217
+  },
+  "recipe": "move.footsteps",
+  "seed": 226489
+ },
+ {
+  "fx": "helmet",
+  "kind": "voice",
+  "name": "voice.militia_fusion.select",
+  "speed": 1.052,
+  "text": "Trooper standing by.",
+  "voice": "am_echo"
+ },
+ {
+  "fx": "helmet",
+  "kind": "voice",
+  "name": "voice.militia_fusion.move",
+  "speed": 1.052,
+  "text": "Moving out.",
+  "voice": "am_echo"
+ },
+ {
+  "fx": "helmet",
+  "kind": "voice",
+  "name": "voice.militia_fusion.attack",
+  "speed": 1.052,
+  "text": "Engaging.",
+  "voice": "am_echo"
+ },
+ {
+  "fx": "helmet",
+  "kind": "voice",
+  "name": "voice.militia_fusion.research_done",
+  "speed": 1.052,
+  "text": "New gear, good.",
+  "voice": "am_echo"
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_fusion.fire.1",
+  "params": {
+   "age": 9,
+   "pitch": 1.051,
+   "power": 0.2,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "rifle"
+  },
+  "recipe": "fire.rifle",
+  "seed": 783734
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_fusion.fire.2",
+  "params": {
+   "age": 9,
+   "pitch": 1.051,
+   "power": 0.2,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "rifle"
+  },
+  "recipe": "fire.rifle",
+  "seed": 700704
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_fusion.fire.3",
+  "params": {
+   "age": 9,
+   "pitch": 1.051,
+   "power": 0.2,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "rifle"
+  },
+  "recipe": "fire.rifle",
+  "seed": 577050
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.militia_fusion.moving",
+  "params": {
+   "age": 9,
+   "figures": 1,
+   "pitch": 1.051,
+   "size": 0.167,
+   "speed": 0.217
+  },
+  "recipe": "move.footsteps",
+  "seed": 815123
+ },
+ {
+  "fx": "helmet",
+  "kind": "voice",
+  "name": "voice.militia_starfaring.select",
+  "speed": 0.985,
+  "text": "Planetary Guard, ready.",
+  "voice": "am_onyx"
+ },
+ {
+  "fx": "helmet",
+  "kind": "voice",
+  "name": "voice.militia_starfaring.move",
+  "speed": 0.985,
+  "text": "Forward.",
+  "voice": "am_onyx"
+ },
+ {
+  "fx": "helmet",
+  "kind": "voice",
+  "name": "voice.militia_starfaring.attack",
+  "speed": 0.985,
+  "text": "Weapons hot.",
+  "voice": "am_onyx"
+ },
+ {
+  "fx": "helmet",
+  "kind": "voice",
+  "name": "voice.militia_starfaring.research_done",
+  "speed": 0.985,
+  "text": "Suit upgraded.",
+  "voice": "am_onyx"
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_starfaring.fire.1",
+  "params": {
+   "age": 10,
+   "pitch": 1.147,
+   "power": 0.217,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "plasma"
+  },
+  "recipe": "fire.plasma",
+  "seed": 453592
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_starfaring.fire.2",
+  "params": {
+   "age": 10,
+   "pitch": 1.147,
+   "power": 0.217,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "plasma"
+  },
+  "recipe": "fire.plasma",
+  "seed": 864910
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_starfaring.fire.3",
+  "params": {
+   "age": 10,
+   "pitch": 1.147,
+   "power": 0.217,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "plasma"
+  },
+  "recipe": "fire.plasma",
+  "seed": 550708
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.militia_starfaring.moving",
+  "params": {
+   "age": 10,
+   "figures": 1,
+   "pitch": 1.147,
+   "size": 0.167,
+   "speed": 0.217
+  },
+  "recipe": "move.footsteps",
+  "seed": 547388
+ },
+ {
+  "fx": "helmet",
+  "kind": "voice",
+  "name": "voice.militia_abundance.select",
+  "speed": 0.986,
+  "text": "Planetary Guard, ready.",
+  "voice": "af_kore"
+ },
+ {
+  "fx": "helmet",
+  "kind": "voice",
+  "name": "voice.militia_abundance.move",
+  "speed": 0.986,
+  "text": "On my way.",
+  "voice": "af_kore"
+ },
+ {
+  "fx": "helmet",
+  "kind": "voice",
+  "name": "voice.militia_abundance.attack",
+  "speed": 0.986,
+  "text": "Weapons hot.",
+  "voice": "af_kore"
+ },
+ {
+  "fx": "helmet",
+  "kind": "voice",
+  "name": "voice.militia_abundance.research_done",
+  "speed": 0.986,
+  "text": "New gear, good.",
+  "voice": "af_kore"
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_abundance.fire.1",
+  "params": {
+   "age": 12,
+   "pitch": 1.067,
+   "power": 0.25,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "plasma"
+  },
+  "recipe": "fire.plasma",
+  "seed": 629240
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_abundance.fire.2",
+  "params": {
+   "age": 12,
+   "pitch": 1.067,
+   "power": 0.25,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "plasma"
+  },
+  "recipe": "fire.plasma",
+  "seed": 980206
+ },
+ {
+  "kind": "synth",
+  "loop": false,
+  "name": "unit.militia_abundance.fire.3",
+  "params": {
+   "age": 12,
+   "pitch": 1.067,
+   "power": 0.25,
+   "reach": 0.333,
+   "size": 0.167,
+   "splash": 0.0,
+   "weapon": "plasma"
+  },
+  "recipe": "fire.plasma",
+  "seed": 455444
+ },
+ {
+  "kind": "synth",
+  "loop": true,
+  "name": "unit.militia_abundance.moving",
+  "params": {
+   "age": 12,
+   "figures": 1,
+   "pitch": 1.067,
+   "size": 0.167,
+   "speed": 0.217
+  },
+  "recipe": "move.footsteps",
+  "seed": 664605
  }
 ]

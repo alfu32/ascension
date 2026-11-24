@@ -178,6 +178,39 @@ impl Rules {
         })
     }
 
+    /// The first step of the upgrade line `def` belongs to (`upgrades_from_id` followed back).
+    pub fn line_root(&self, def: DefId) -> DefId {
+        let mut current = def;
+        let mut visited = std::collections::BTreeSet::new();
+        while visited.insert(current) {
+            match self
+                .entity_types
+                .get(&current)
+                .and_then(|e| e.upgrades_from_id)
+            {
+                Some(previous) => current = previous,
+                None => break,
+            }
+        }
+        current
+    }
+
+    /// The worker line a militia type stands down into (task 141): the first step of the line
+    /// of the workers whose `et_call_up` names the first step of `def`'s line (the lowest id
+    /// when several lines do). `None` when `def` is no militia.
+    pub fn militia_worker(&self, def: DefId) -> Option<DefId> {
+        let root = self.line_root(def);
+        self.entity_types
+            .values()
+            .filter(|e| {
+                e.call_up
+                    .as_ref()
+                    .is_some_and(|c| c.militia_type_id == root)
+            })
+            .map(|e| self.line_root(e.id))
+            .min()
+    }
+
     /// Whether a building type has left the build menu (task 92): a research among `active`
     /// upgrades it in place (`tech_effect` `upgrade_type` from it), and it is not a site worked
     /// by people (`et_gather_site.slots_max > 0`), which stays buildable beside its successor.

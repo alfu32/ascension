@@ -547,7 +547,8 @@ fn weapons_use_slot_order_and_skip_minimum_range() {
     let mut w = world("UPDATE et_weapon SET slot=2,range_max=10000,damage=20 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.spearman');
         INSERT INTO et_weapon(entity_type_id,slot,damage,damage_class_id,range_min,range_max,cooldown_ticks)
         SELECT id,0,5,1,3000,10000,10 FROM def WHERE key='unit.spearman';
-        INSERT INTO et_weapon_target SELECT id,'ground',100 FROM et_weapon WHERE slot=0 AND damage=5;");
+        INSERT INTO et_weapon_target SELECT id,'ground',100 FROM et_weapon WHERE slot=0 AND damage=5
+         AND entity_type_id=(SELECT id FROM def WHERE key='unit.spearman');");
     let a = spawn(&mut w, "unit.spearman", 1, at(10000, 10000));
     let b = spawn(&mut w, "unit.citizen", 2, at(15000, 10000));
     attack(&mut w, a, b);

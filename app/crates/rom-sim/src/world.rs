@@ -908,6 +908,12 @@ impl World {
         self.validate_combat_order(&command)?;
         self.validate_rally_and_disband(&command)?;
         self.validate_tactics(&command)?;
+        if matches!(
+            command.kind.as_str(),
+            crate::militia::CALL_UP | crate::militia::STAND_DOWN
+        ) {
+            self.militia_change(command.executor, &command.kind)?;
+        }
         self.validate_trade_order(&command)?;
         let payment = self.validate_economy_order(&mut command)?;
         let next = self
@@ -1036,6 +1042,14 @@ impl World {
             // Deleting is immediate too (task 142).
             if order.kind == "delete" {
                 self.apply_delete(&order);
+                continue;
+            }
+            // So are calling up militia and standing them down (task 141).
+            if matches!(
+                order.kind.as_str(),
+                crate::militia::CALL_UP | crate::militia::STAND_DOWN
+            ) {
+                self.apply_militia(&order);
                 continue;
             }
             // A trade at the market happens at once, at the price of that moment (task 107).

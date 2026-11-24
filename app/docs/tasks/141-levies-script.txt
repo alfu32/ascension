@@ -1,0 +1,9 @@
+# Task 141: citizens called up become Levies, replayed by --script (sphere match, seed 1,
+# --players 2 --ai none, --size 1920x1080). Player one's starting builders are box-selected, the
+# Order tab opened and F pressed: they become Levies with spears where they stood, still
+# selected, and the card offers "Stand down: Citizens again" in slot R.
+#   rise-of-man --seed 1 --players 2 --ai none --size 1920x1080 \
+#     --script app/docs/tasks/141-levies-script.txt --after 4 --screenshot app/docs/img/141-levies.png
+5 box builders
+8 hud tab 1
+12 key f

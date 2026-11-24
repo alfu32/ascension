@@ -25,6 +25,7 @@ mod life;
 mod map;
 mod market;
 mod math;
+mod militia;
 mod movement;
 mod orbit_motion;
 mod orbital;
@@ -76,6 +77,7 @@ pub use life::{DormantSurface, Living};
 pub use map::MapGrid;
 pub use market::{MarketQuote, RULE_MARKET_TRADING};
 pub use math::{Pos, integer_sqrt};
+pub use militia::{CALL_UP, STAND_DOWN};
 pub use order::{Command, Order, OrderFailure, OrderId, OrderKindKey, OrderStatus};
 pub use pathing::PathStats;
 pub use placement::CITY_SITE_RADIUS;
@@ -380,12 +382,24 @@ pub enum SimError {
     /// Task 107: the subject is not traded at the market (or not yet known to the player).
     #[error("that resource is not traded at the market")]
     NotTradeable,
+    /// Task 141: only a worker with a call-up (`et_call_up`) is called up as militia.
+    #[error("this unit cannot be called up as militia")]
+    CannotCallUp,
+    /// Task 141: only militia stand down.
+    #[error("only militia stand down")]
+    CannotStandDown,
+    /// Task 141: a unit is called up or stood down only while it stands on its owner's
+    /// territory.
+    #[error("militia are called up and stood down only inside own territory")]
+    MilitiaOutsideTerritory,
 }
 
 #[cfg(test)]
 mod ascension_tests;
 #[cfg(test)]
 mod life_tests;
+#[cfg(test)]
+mod militia_tests;
 #[cfg(test)]
 mod support_tests;
 #[cfg(test)]

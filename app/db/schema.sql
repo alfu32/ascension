@@ -417,6 +417,16 @@ CREATE TABLE et_supply (               -- supply wagon / tender / fleet auxiliar
   stock          INTEGER             -- NULL = unlimited
 ) STRICT;
 
+-- Task 141: a worker that is called up as militia (order `call_up`) and stood down again
+-- (`stand_down`), instantly and for nothing, inside its owner's territory. The militia line is
+-- an upgrade line of its own (`upgrades_from_id`), stepped by the age advances (`upgrade_type`);
+-- a call-up makes the newest step the player has unlocked, a stand-down the newest unlocked step
+-- of the worker's own line. Health keeps its share of the maximum both ways.
+CREATE TABLE et_call_up (
+  entity_type_id  INTEGER PRIMARY KEY REFERENCES entity_type(id), -- the worker
+  militia_type_id INTEGER NOT NULL REFERENCES entity_type(id)     -- first step of its militia line
+) STRICT;
+
 CREATE TABLE et_inhibitor (            -- jump inhibitor (task 70): holds enemy ships where it stands
   entity_type_id INTEGER PRIMARY KEY REFERENCES entity_type(id),
   reach          TEXT NOT NULL DEFAULT 'system' CHECK (reach IN ('system')),
@@ -1700,7 +1710,8 @@ SELECT d.key FROM entity_type e JOIN def d ON d.id = e.id
 WHERE e.class IN ('unit','building')
   AND e.id NOT IN (SELECT product_def_id FROM production)
   AND e.id NOT IN (SELECT target_def_id FROM tech_effect WHERE effect IN ('upgrade_type','spawn') AND target_def_id IS NOT NULL)
-  AND e.id NOT IN (SELECT effect_def_id FROM ability WHERE effect_def_id IS NOT NULL);
+  AND e.id NOT IN (SELECT effect_def_id FROM ability WHERE effect_def_id IS NOT NULL)
+  AND e.id NOT IN (SELECT militia_type_id FROM et_call_up);
 
 -- Command-panel contents per producer.
 CREATE VIEW v_production AS

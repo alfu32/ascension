@@ -176,6 +176,32 @@ impl Rules {
                     ),
                 });
             }
+            // Task 141: a worker called up becomes a moving, armed unit that neither builds nor
+            // gathers, and it is a unit itself.
+            if let Some(call_up) = &entity.call_up
+                && (entity.class != crate::EntityClass::Unit
+                    || entity.movement.is_none()
+                    || self
+                        .entity_types
+                        .get(&call_up.militia_type_id)
+                        .is_none_or(|m| {
+                            m.class != crate::EntityClass::Unit
+                                || m.movement.is_none()
+                                || m.weapons.is_empty()
+                                || m.builder.is_some()
+                                || !m.harvester.is_empty()
+                                || m.call_up.is_some()
+                        }))
+            {
+                problems.push(Problem {
+                    message: format!(
+                        "call-up of {}: a moving unit becomes {}, which must move, be armed, \
+                         and neither build, gather nor be called up",
+                        self.label(entity.id),
+                        self.label(call_up.militia_type_id)
+                    ),
+                });
+            }
             if entity.keeper.as_ref().is_some_and(|k| k.capacity < 1) {
                 problems.push(Problem {
                     message: format!("keeper {} capacity must be positive", self.label(entity.id)),
@@ -399,6 +425,15 @@ impl Rules {
                     active.insert(row.product_def_id);
                 } else {
                     owned.insert(row.product_def_id);
+                }
+            }
+            // A worker called up makes its militia (task 141).
+            for entity in self.entity_types.values() {
+                if let Some(call_up) = &entity.call_up
+                    && owned.contains(&entity.id)
+                    && self.is_unlocked(call_up.militia_type_id, &active, &owned)
+                {
+                    owned.insert(call_up.militia_type_id);
                 }
             }
             for effect in self.tech_effects.values().flatten() {

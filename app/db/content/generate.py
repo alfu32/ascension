@@ -716,6 +716,7 @@ def generate():
     capital_reveal(definition, row, tag, need, produce, cost, tech)
     armed_satellites(weapon)
     nuclear_reactor(definition, row, tag, need, produce, cost, sql.append)
+    militia(definition, row, tag, need, weapon)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -1483,6 +1484,63 @@ def nuclear_reactor(definition, row, tag, need, produce, cost, emit):
     following = 'tech.age.' + AGES[age + 1]
     row('tech_effect', tech_id=Ref(following), effect='upgrade_type', from_def_id=Ref(full),
         target_def_id=Ref(r['becomes']))
+
+
+# Task 141 (owner, 2026-11-23): citizens are called up as militia and stood down again, free
+# and at once inside their own territory. The militia is a line of its own with a step for every
+# step of the line infantry, in that step's age: the same weapon (damage class, reach, reload,
+# projectile) at MILITIA_PCT of its damage, MILITIA_PCT of its hit points, no armour and no plate,
+# the citizen's pace and population. It gathers and builds nothing. The advance to a step's age
+# changes the militia standing into that step, as the reactor becomes the fusion plant.
+MILITIA_PCT = 60
+# Display names of the steps by the age they begin in; a step keeps the latest name at or before
+# its age.
+MILITIA_NAMES = {0: 'Levies', 3: 'Militia', 5: 'Home Guard', 8: 'Civil Defence', 10: 'Planetary Guard'}
+# The workers that are called up (`et_call_up`): the steps of the civilian line.
+MILITIA_WORKERS = ('citizen', 'worker_drone')
+
+
+def militia_steps():
+    """The militia steps (key, name, age, hit points, damage, reach, damage class), one per
+    step of the line infantry and derived from it."""
+    steps = []
+    infantry = next(s for line, _, s in LINES if line == 'infantry')
+    for step in infantry.split('|'):
+        key, _, age, *_ = step.split(':')
+        age = int(age)
+        scale = lambda n: n * (100 + 15 * age) // 100  # noqa: E731 - the infantry's own scale
+        reach = 0 if age <= 2 else 5000
+        dc = 'energy' if age >= 10 else 'bullet' if age >= 3 else 'melee'
+        name = MILITIA_NAMES[max(a for a in MILITIA_NAMES if a <= age)]
+        steps.append(('unit.militia_' + AGES[age], name, age, scale(100) * MILITIA_PCT // 100,
+                      scale(9) * MILITIA_PCT // 100, reach, dc, 'unit.' + key))
+    return steps
+
+
+def militia(definition, row, tag, need, weapon):
+    """Task 141: the militia line and the link from each worker to it. Written after every other
+    definition so earlier ids stay."""
+    steps = militia_steps()
+    for key, name, *_ in steps:
+        definition('entity_type', key, name)
+    previous = None
+    for key, name, age, hp, damage, reach, dc, infantry in steps:
+        row('entity_type', id=Ref(key), **{'class': 'unit'}, ui_group='militia', hp=hp, armor=0,
+            armor_class_id=Ref('flesh', 'armor_class'), los=unit_sight('infantry', infantry, age, reach),
+            pop_cost=1, build_ticks=0, ramp_mode='none', upgrades_from_id=Ref(previous) if previous else None,
+            first_age_id=Ref('age.' + AGES[age]))
+        tag(key, 'biological', 'military', 'infantry', 'passenger')
+        row('et_movement', entity_type_id=Ref(key), movement_class_id=Ref('foot', 'movement_class'), speed=1300)
+        if reach:
+            PROJECTILES[key] = PROJECTILES[infantry]
+        weapon(key, damage, dc, reach, ['ground'], 30)
+        need(key, 'age.' + AGES[age])
+        if previous:
+            row('tech_effect', tech_id=Ref('tech.age.' + AGES[age]), effect='upgrade_type',
+                from_def_id=Ref(previous), target_def_id=Ref(key))
+        previous = key
+    for worker in MILITIA_WORKERS:
+        row('et_call_up', entity_type_id=Ref('unit.' + worker), militia_type_id=Ref(steps[0][0]))
 
 
 # Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"

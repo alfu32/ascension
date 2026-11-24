@@ -205,6 +205,7 @@ hit-point percentage. The first step of each line needs only its age and buildin
 | Orbital craft | Airfield | Orbital Fighters (10), Orbital Bombers (10): climb from the air to their planet's orbit by themselves and come back down; leave the planet only aboard a carrier |
 | Carrier | Spaceport | Carriers (10): carries 10 orbital craft and launches them into the orbit it holds |
 | Civilian | City | Citizens (0), Worker Drones (8) |
+| Militia | called up from workers (task 141) | Levies (0, 1, 2), Militia (3, 4), Home Guard (5, 6, 7), Civil Defence (8, 9), Planetary Guard (10, 12) |
 | Scholar | University | Scholars (1) |
 | Merchant | Market | Merchants (0) |
 | Priest | Temple | Priests (1) |
@@ -219,6 +220,35 @@ and repair drones are selected with the army (a box or a double click on soldier
 other workers and priests stay out of it. Citizens and worker drones mend damaged own buildings
 for nothing, at a quarter of their building pace, and an idle one goes by itself to the
 nearest unfinished own site (then a damaged own building) within 40 tiles.
+
+**Militia (task 141).** Owner, 2026-11-23: citizens are called up as militia and stood down
+again, free, in any age, near an own city. Citizens and worker drones (`et_call_up`) are called
+up at once and for nothing while they stand inside their own borders (order `call_up`, F on
+the Order tab of their command card); militia stand down into the newest worker step the same way (`stand_down`,
+R). Health keeps its share; orders are cleared; the unit keeps its place. A militia fights,
+gathers and builds nothing, goes with the army in a box selection, and the advance to an age
+re-arms the militia standing. One step per step of the line infantry, with that step's weapon at
+60 % of its damage and 60 % of its hit points, no armour and no plate, the citizen's pace (1300)
+and population (1); reload 30 ticks (a citizen: 2 melee every 40 ticks, 40 hit points, armour 0):
+
+| Age | Militia | Hit points | Damage | Reach | Its age's infantry (hp, damage, armour 2, plate from 1) |
+| --- | --- | --- | --- | --- | --- |
+| 0 | Levies | 60 | 5 melee | — | Spearmen 100, 9 (flesh) |
+| 1 | Levies | 69 | 6 melee | — | Hoplites 115, 10 |
+| 2 | Levies | 78 | 6 melee | — | Pikemen 130, 11 |
+| 3 | Militia | 87 | 7 bullet | 5 | Musketeers 145, 13 |
+| 4 | Militia | 96 | 8 bullet | 5 | Fusiliers 160, 14 |
+| 5 | Home Guard | 105 | 9 bullet | 5 | Riflemen 175, 15 |
+| 6 | Home Guard | 114 | 10 bullet | 5 | Infantry 190, 17 |
+| 7 | Home Guard | 123 | 10 bullet | 5 | Assault Infantry 205, 18 |
+| 8 | Civil Defence | 132 | 11 bullet | 5 | Combat Robots 220, 19 |
+| 9 | Civil Defence | 141 | 12 bullet | 5 | Exo-Troopers 235, 21 |
+| 10, 11 | Planetary Guard | 150 | 13 energy | 5 | Marines 250, 22 |
+| 12, 13 | Planetary Guard | 168 | 15 energy | 5 | Shock Marines 280, 25 |
+
+Five militia beat five citizens and lose to five infantry of their age (tested in the ancient
+and industrial ages, `rom-sim` `militia_tests`). The militia is free, so it has no place in the
+fight matrix, which compares types at equal price.
 
 Submarines, generals, spies and colony ships are left out until the
 simulation supports stealth, auras and their own mechanics; adding them later

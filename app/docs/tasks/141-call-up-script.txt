@@ -1,0 +1,7 @@
+# Task 141: the command card of citizens offers the call-up, replayed by --script (sphere match,
+# seed 1, --players 2 --ai none, --size 1920x1080). Player one's starting builders are
+# box-selected and the Order tab opened: "Call up as militia: Levies" sits in slot F.
+#   rise-of-man --seed 1 --players 2 --ai none --size 1920x1080 \
+#     --script app/docs/tasks/141-call-up-script.txt --after 3 --screenshot app/docs/img/141-call-up-card.png
+5 box builders
+8 hud tab 1
