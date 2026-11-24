@@ -2734,5 +2734,8 @@ interface, the drawing of joined segments and the computer player's use of them 
   `bld.defensive_line@industrial` (earth parapet, sandbags, barbed wire), `@modern` (wire coils,
   concrete tank traps), `@information` (precast barrier, fence), `@automation` (composite panels,
   sensor post), `@fusion` (pylon and glowing field); the gates of each age; `bld.minefield@` the
-  five ages from industrial. **Sounds**: the `post` family (`tools/sounds/assign.py`: walls, gates
+  five ages from industrial. A palisade or wall still standing in a later age (one granted that
+  age without its advance) wears the look of the kind built then, so every building has a look
+  for each era (`bld.palisade@medieval` is the curtain wall's, `@industrial` the trench line's,
+  and so on: 41 files in all). **Sounds**: the `post` family (`tools/sounds/assign.py`: walls, gates
   and mines are manned like a guard post), baked for the new types only.
