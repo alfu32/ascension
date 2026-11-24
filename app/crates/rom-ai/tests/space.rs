@@ -360,26 +360,16 @@ fn the_warship_class_follows_the_enemy_ships_seen() {
     let rules = common::rules();
     // The survey ship is trained for the claims first; the escort is the pick.
     let survey = rules.id_of("unit.survey_ship").unwrap();
-    // Warships the player has, and those it has put in training: the pick is what is measured.
-    // (Task 140: the enemy cruisers' bombardment can wreck the spaceport before the first
-    // cruiser is out, depending on where the builders stand.)
     let warships = |w: &World| -> BTreeMap<rom_rules::DefId, usize> {
-        let warship = |type_id| {
-            let et = &rules.entity_types[&type_id];
-            w.is_spacecraft_type(type_id)
-                && et.container.as_ref().is_none_or(|c| !c.launches)
-                && !et.weapons.is_empty()
-                && type_id != survey
-        };
         let mut out = BTreeMap::new();
         for e in w.entities().filter(|e| e.owner == ME) {
-            if warship(e.type_id) {
+            let et = &rules.entity_types[&e.type_id];
+            if w.is_spacecraft_type(e.type_id)
+                && et.container.as_ref().is_none_or(|c| !c.launches)
+                && !et.weapons.is_empty()
+                && e.type_id != survey
+            {
                 *out.entry(e.type_id).or_default() += 1;
-            }
-            for order in e.orders().iter().filter(|o| o.kind == "train") {
-                if let Some(subject) = order.subject.filter(|s| warship(*s)) {
-                    *out.entry(subject).or_default() += 1;
-                }
             }
         }
         out
@@ -463,4 +453,38 @@ fn a_jump_aims_outside_a_known_enemy_inhibitors_radius() {
     // A body far from it is aimed at directly.
     let rock = w.body_position(BodyId(3)).unwrap();
     assert_eq!(rom_ai::jump_target(&w, ME, BodyId(3)), Some(rock));
+}
+
+/// Task 152: a spaceport the player loses is built again, where it stood when that ground is
+/// still free; the same match twice gives the same state.
+#[test]
+fn a_lost_spaceport_is_rebuilt() {
+    let rules = common::rules();
+    let port_type = rules.id_of("bld.spaceport").unwrap();
+    let play = || {
+        let mut w = world(&rules);
+        let mut brain = Brain::new(Arc::clone(&rules), ME, "balanced", "tougher", 61).unwrap();
+        run(&mut w, &mut brain, 600);
+        let (port, stood) = w
+            .entities()
+            .find(|e| e.owner == ME && e.type_id == port_type)
+            .map(|e| (e.id, e.pos))
+            .expect("a spaceport");
+        w.despawn(port).unwrap();
+        let mut again = None;
+        for _ in 0..60 {
+            run(&mut w, &mut brain, 100);
+            again = w
+                .entities()
+                .find(|e| e.owner == ME && e.type_id == port_type && e.build_progress.is_none())
+                .map(|e| e.pos);
+            if again.is_some() {
+                break;
+            }
+        }
+        let again = again.unwrap_or_else(|| panic!("no spaceport again by tick {}", w.tick()));
+        assert_eq!(again, stood, "rebuilt elsewhere though its ground was free");
+        (w.hash(), brain.save())
+    };
+    assert_eq!(play(), play());
 }

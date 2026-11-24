@@ -455,3 +455,65 @@ fn formations_spread_the_advance() {
     );
     assert!(goals(&spread) >= 4, "the formation did not spread the army");
 }
+
+/// Task 152: enemy soldiers inside an undefended city's borders make the player call up some
+/// of its workers there as militia (never all of them), who stay out of the armies and stand
+/// down again once the borders are quiet; the same raid twice gives the same state.
+#[test]
+fn a_raided_city_calls_up_militia_and_stands_them_down() {
+    let rules = common::rules();
+    let unit = soldier(&rules);
+    let militia = |w: &World| -> Vec<EntityId> {
+        w.entities()
+            .filter(|e| e.owner == ME && rules.militia_worker(e.type_id).is_some())
+            .map(|e| e.id)
+            .collect()
+    };
+    let workers = |w: &World| {
+        w.entities()
+            .filter(|e| e.owner == ME && w.calls_up(e.type_id))
+            .count()
+    };
+    let raid = || {
+        let players = [("balanced", "tougher"), ("balanced", "tougher")];
+        let (mut world, mut brains) = common::plain(&rules, 3, &players);
+        run_first(&mut world, &mut brains, 600);
+        assert!(militia(&world).is_empty(), "militia before any raid");
+        // Enemy soldiers walk into the town, beyond the reach of the city's own weapons.
+        spawn(&mut world, THEM, unit, 3, Pos::flat(46_500, 62_500));
+        let raiders: Vec<EntityId> = world
+            .entities()
+            .filter(|e| e.owner == THEM && e.type_id == unit)
+            .map(|e| e.id)
+            .collect();
+        let mut most = 0;
+        for _ in 0..30 {
+            run_first(&mut world, &mut brains, 20);
+            let called = militia(&world);
+            most = most.max(called.len());
+            // Held at the city: never in an army.
+            for (_, army) in brains[0].armies() {
+                assert!(called.iter().all(|m| !army.members.contains(&m.0)));
+            }
+            assert!(
+                called.len() <= (called.len() + workers(&world)) / 2,
+                "more than half the workers called up"
+            );
+        }
+        assert!(most > 0, "no militia called up");
+        // The raiders leave (or fall); the borders stay quiet and the militia stand down.
+        for raider in raiders {
+            if world.entity(raider).is_some() {
+                world.despawn(raider).unwrap();
+            }
+        }
+        run_first(&mut world, &mut brains, 1200);
+        assert!(
+            militia(&world).is_empty(),
+            "militia still under arms: {:?}",
+            militia(&world)
+        );
+        (most, world.hash(), brains[0].save())
+    };
+    assert_eq!(raid(), raid());
+}

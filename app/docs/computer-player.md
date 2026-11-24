@@ -75,9 +75,12 @@ Scores (higher first):
 | 440 + `mil.army_share_pct` + deficit | military unit |
 | 430 + 2 × `mil.army_share_pct` | first military producer of a kind |
 | 560–580 | trader, and the building that trains it, once two cities can trade |
+| 880 | a site that earns energy by itself while the plans spend more energy than comes in (task 152) |
+| 600 | such a site while a city has none (task 152) |
 | 300–550 | other technologies, by what they improve |
 | 220–520 | other buildings, by what they produce, research or unlock |
 | 260 + `mil.defense_share_pct` | towers and forts, `defense_share / 25` per city |
+| as above, at least 300 | a lost building put back; a lost producer as the best wish for what it makes (task 152) |
 
 ## Managers
 
@@ -1164,7 +1167,7 @@ fleets across systems toward a city nobody has seen.
 
 ## Militia (task 141)
 
-Nothing in `rom-ai` changed: the computer player does not call up militia yet. It could, with
+Task 141 changed nothing in `rom-ai`; task 152 (below) calls up militia as sketched here. It could, with
 the orders a person has (`call_up`, `stand_down`), but doing it well is more than a few lines:
 
 - *When*: the alarm (`attacked`) already says a city is hurt or intruders outnumber the army at
@@ -1184,6 +1187,97 @@ soldiers to it: it sees their weapons and strength like any unit's.
 Measured with the militia in the rules: `rom fight-matrix` `strengths=270 unanswered=0` (the
 militia has no production row, so it is not in the rosters); `rom duel --profiles
 balanced:moderate,balanced:easiest --seeds 1..20 --jobs 2`: 20–0, mean tick 53 613, as before.
+
+## Rebuilding, energy and militia (task 152)
+
+Three gaps found while merging tasks 140, 141 and 146 (`rebuild.rs`, `economy.rs`, `militia.rs`).
+
+**Rebuilding what was lost.** Every thought the brain compares its finished buildings with those
+of the thought before (memory: `standing`, by entity id, type and place). One missing now was
+destroyed or taken (one it pulled down itself, `unbox`, is forgotten first); its line (the first
+type of its upgrade line) is remembered with how many the line held before the loss and where the
+lost one stood (`lost`). Cities and automated colonies are left to their own wishes. While the
+line holds fewer than that (unfinished ones count; at most what its per-city or per-player limit
+allows):
+
+- the line is wished for, after every other manager has wished, at the construction manager's
+  score for one more of it (`construction::score`), or 300 when that manager would want no more;
+  a producer whose products are wished for now (the product itself, or for a building that
+  trains military units another military unit of the same element, for one that trains
+  spacecraft another spacecraft) ranks as the best of those wishes. A line the construction
+  manager wishes for already keeps that one wish, raised the same way; gather sites are left to
+  the economy, which places them by the slots and income it lacks.
+- Any building of the line, whoever wishes for it, goes first where a lost one stood, when that
+  ground is still free (`sites::at_spot`: no known building in the way, room in the city's
+  per-city limit, the simulation's placement preview), else to the nearest legal place as
+  always. The spots are kept for the line as loosely as the next site of a resource
+  (`Hold::Next`): other buildings take them only when nothing else fits.
+
+The spaceport of the task 140 test is rebuilt by the space manager's and the construction
+manager's existing wishes; what was missing was the place. In `the_warship_class_follows_the_enemy_ships_seen` the
+loosening of task 140 is reverted: it counts finished warships again, and that holds (it held on
+main at the start of this task too: the bombardment no longer wrecks the spaceport before the
+first cruiser in that scenario).
+
+**Energy.** A base resource that no unit gathers but that sites needing no workers earn
+(`et_gather_site` with `slots_max` 0 and a `self_income`: the nuclear reactor from the Automation
+age, the fusion plant it becomes in the Fusion age) now counts in the economy, with no workers
+given to it. Once every manager has wished, the economy wants income of it proportional to what
+the plans spend of it: the price in it of this thought's wishes plus what earlier wishes lacked
+(the smoothed demand), brought in over 10 income periods (`SPEND_PERIODS`, five game minutes); the
+sites wanted are the working ones plus enough for the shortfall at the type's own income, and at
+least one per city, as far as the type's limit allows (one per city for the reactor). While the
+plans spend more than comes in the site is wished for at 880 and saved for (as the first site of
+a resource); otherwise, while a city lacks one, at 600 (with the technologies, below the gather
+sites that feed the workers). The upgrade to the fusion plant is the simulation's; the line counts
+as one. Before this, the price of the first reactor was kept back from every purchase from the
+Automation age on (`Plan::with_first_sites`) and never spent.
+
+**Militia.** A city is *raided* while armed enemy units seen lately stand in its town (its
+economic radius and four tiles beyond, where its workers and sites are) or it lost hit points
+since the last thought (`raids`: when it began, when the last sign was). Not its whole border: a
+city's border reaches 40 tiles, and a first version that called up against intruders anywhere
+inside it sent workers after raiders far from their town and lost them (duel seed 9: workers
+fell from 38 to 24, and the match was drawn). After the difficulty's `reaction_ticks` from the first sign,
+while intruders are there, workers that can be called up (`World::militia_change`) inside the
+city's economic radius are called up, nearest to the intruders first, until the defence of the
+town (the fighters in it, its militia, and its armed buildings, the city's own guns included,
+that have an intruder within their reach) is 150 % of the intruders' strength (`CALL_UP_PCT`),
+but never more than half of the workers inside that radius (`MAX_SHARE_PCT`, militia already out
+included): the rest keep the economy going. Each militia is the city's (`militia`, by entity id): never enlisted in an
+army (`army::fighters` and the army's population leave militia out), it attack-moves to the
+intruder nearest the city while the raid lasts, and walks back to the city when it strayed. When
+no sign of an attack has been seen for 600 ticks (`STAND_DOWN_TICKS`, half a game minute) it
+stands down where it is inside the own territory (one outside walks home first), and the economy
+sends the worker back to work. Workers called up count as workers for the economy (`eco.militia`
+in the worker total and in the hands of the worker types that can be called up), so none is
+trained to replace them. The sim's under-attack alerts (task 118) are not read: they are neither
+saved nor hashed, so a brain restored from a save would not see them.
+
+Memory layout version 5 adds the buildings standing and lost, the militia and the raids; versions
+1 to 4 still read.
+
+### Measured (task 152)
+
+`rom duel --seeds 1..20 --jobs 2` (conquest, flat two-player maps, 108 000-tick limit):
+
+| Profiles | Main before (0.0.132) | Task 152 | Task 152 without militia (trial) |
+| --- | --- | --- | --- |
+| `balanced:moderate,balanced:easiest` | 20–0, mean tick 52 405 | 20–0, mean tick 57 678 | 19–0, 1 draw (seed 14), mean tick 51 818 |
+| `balanced:moderate,balanced:moderate` | | 11–9, no draws, mean tick 61 709 | |
+
+No duel reaches the Automation age, so energy plays no part in them; what moves them is the
+militia and, less, the rebuilding. The losing side now calls up its workers when a wave reaches
+its town: against the trial without militia, conquests in seeds 2, 6, 10, 16 and 17 come 7 to
+14 game minutes later, in seeds 5, 8 and 11 earlier. Seed 14, the slowest, is won at tick
+103 472, close to the limit; without militia it is drawn. A first version that called up against
+intruders anywhere inside the 40-tile border drew seeds 9 and 14 (18–0): in seed 9 the moderate
+player had 10 workers under arms against raiders far from its towns, and its workers fell from
+38 to 24 while its age stalled.
+
+`rom fight-matrix`: `strengths=270 unanswered=0`, as before (it fights without brains).
+`rom playthrough --seed 1` (the simulation's own bot, no brain): `hash=572e8c1fd9800f8c` and
+ascension `ascended_tick=59544 hash=f787a8ee44aec6a6` on the main this task started from, unchanged.
 
 ## Simulation gaps found in part 2, and what task 65 did with them
 
@@ -1326,6 +1420,10 @@ fighters stood near the stand-in's capital then.
   the armies on land; against enemy line ships the class chosen sinks them at equal cost; the
   same sea match twice gives equal hashes; `sea_duel_report` (ignored) plays the 10-seed sea
   duel of task 97.
+- Task 152: `space.rs` `a_lost_spaceport_is_rebuilt` (a destroyed spaceport goes up again where it
+  stood, twice alike); `managers.rs` `an_automation_age_start_builds_energy_sites` (a reactor and
+  energy income, twice alike); `military.rs` `a_raided_city_calls_up_militia_and_stands_them_down`
+  (at most half the workers, never in an army, all stood down once quiet, twice alike).
 - `crates/rom-ai/tests/ages.rs` — the second age in the ordinary run; every
   profile to the third age on seeds 1–5 with
   `cargo test --release -p rom-ai --test ages -- --ignored`.

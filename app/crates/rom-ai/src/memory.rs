@@ -15,9 +15,11 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Version of the byte layout written by `Memory::to_bytes`. Version 1 (task 60) is the
 /// same layout without the armies, the scouting record and the fleet; version 2 (task 61)
 /// ends after the fleet, without the age clock (task 65); version 3 ends after the age
-/// clock, without the measured defences, the enemy peak and the rally moves (task 67). All
-/// still read. The navy (task 97) is one more role code in the same layout.
-pub(crate) const VERSION: u32 = 4;
+/// clock, without the measured defences, the enemy peak and the rally moves (task 67);
+/// version 4 ends after the rally moves, without the buildings standing and lost, the militia
+/// and the raided cities (task 152). All still read. The navy (task 97) is one more role code
+/// in the same layout.
+pub(crate) const VERSION: u32 = 5;
 
 /// What an army is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -143,6 +145,25 @@ pub struct EnemySighting {
     pub building: bool,
 }
 
+/// A line of buildings the player lost and puts back (task 152).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) struct Lost {
+    /// Finished buildings the line held before its latest loss.
+    pub had: i64,
+    /// Where the lost ones stood, oldest first.
+    pub spots: Vec<Pos>,
+}
+
+/// An own city with enemies inside its borders lately (task 152).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct Raid {
+    /// The tick the threat was first seen.
+    pub since: u64,
+    /// The tick an armed enemy was last seen inside the borders, or the city last lost hit
+    /// points.
+    pub last: u64,
+}
+
 /// Counters of a brain's activity, for reports and tests.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct BrainStats {
@@ -222,6 +243,14 @@ pub(crate) struct Memory {
     pub rally_moves: u32,
     /// Tick of the last such move.
     pub rally_since: u64,
+    /// Own finished buildings at the last thought: type and place, by entity id.
+    pub standing: BTreeMap<u32, (DefId, Pos)>,
+    /// Lines of buildings lost and not yet put back, by the first type of the line.
+    pub lost: BTreeMap<u32, Lost>,
+    /// Called-up militia, by entity id, and the city each defends.
+    pub militia: BTreeMap<u32, u32>,
+    /// Own cities with enemies inside their borders lately, by city id.
+    pub raids: BTreeMap<u32, Raid>,
 }
 
 fn put_pos(w: &mut Writer, pos: Pos) {
@@ -345,6 +374,22 @@ impl Memory {
         w.u64(self.enemy_peak.1);
         w.u32(self.rally_moves);
         w.u64(self.rally_since);
+        put_map(&mut w, &self.standing, |w, (type_id, pos)| {
+            w.u32(type_id.0);
+            put_pos(w, *pos);
+        });
+        put_map(&mut w, &self.lost, |w, lost| {
+            w.i64(lost.had);
+            w.u32(lost.spots.len() as u32);
+            for spot in &lost.spots {
+                put_pos(w, *spot);
+            }
+        });
+        put_map(&mut w, &self.militia, |w, city| w.u32(*city));
+        put_map(&mut w, &self.raids, |w, raid| {
+            w.u64(raid.since);
+            w.u64(raid.last);
+        });
         w.0
     }
 
@@ -456,6 +501,28 @@ impl Memory {
             rally_moves = r.u32()?;
             rally_since = r.u64()?;
         }
+        let mut standing = BTreeMap::new();
+        let mut lost = BTreeMap::new();
+        let mut militia = BTreeMap::new();
+        let mut raids = BTreeMap::new();
+        if version >= 5 {
+            standing = get_map(&mut r, |r| Ok((DefId(r.u32()?), get_pos(r)?)))?;
+            lost = get_map(&mut r, |r| {
+                let had = r.i64()?;
+                let mut spots = Vec::new();
+                for _ in 0..r.len()? {
+                    spots.push(get_pos(r)?);
+                }
+                Ok(Lost { had, spots })
+            })?;
+            militia = get_map(&mut r, |r| r.u32())?;
+            raids = get_map(&mut r, |r| {
+                Ok(Raid {
+                    since: r.u64()?,
+                    last: r.u64()?,
+                })
+            })?;
+        }
         if !r.is_done() {
             return Err(AiError::CorruptState);
         }
@@ -489,6 +556,10 @@ impl Memory {
             enemy_peak,
             rally_moves,
             rally_since,
+            standing,
+            lost,
+            militia,
+            raids,
         })
     }
 }
@@ -564,8 +635,40 @@ mod tests {
             enemy_peak: (40, 330),
             rally_moves: 2,
             rally_since: 345,
+            standing: [(80, (DefId(52), Pos::flat(12_500, 9_500)))].into(),
+            lost: [(
+                52,
+                Lost {
+                    had: 2,
+                    spots: vec![Pos::flat(20_500, 9_500)],
+                },
+            )]
+            .into(),
+            militia: [(90, 4)].into(),
+            raids: [(
+                4,
+                Raid {
+                    since: 300,
+                    last: 420,
+                },
+            )]
+            .into(),
         }
     }
+
+    /// The sample as an older layout wrote it: without what task 152 added.
+    fn before_152() -> Memory {
+        Memory {
+            standing: BTreeMap::new(),
+            lost: BTreeMap::new(),
+            militia: BTreeMap::new(),
+            raids: BTreeMap::new(),
+            ..sample()
+        }
+    }
+
+    /// Bytes of the four empty collections task 152 appended.
+    const EMPTY_152: usize = 4 * 4;
 
     #[test]
     fn memory_survives_its_byte_form() {
@@ -577,7 +680,7 @@ mod tests {
 
     #[test]
     fn the_first_layout_still_reads() {
-        let mut memory = sample();
+        let mut memory = before_152();
         memory.armies.clear();
         memory.looked.clear();
         memory.unreachable.clear();
@@ -593,14 +696,14 @@ mod tests {
         let mut bytes = memory.to_bytes();
         // Version 1 ended after the counters: five empty collections, an absent tick,
         // the age clock, the empty defences, the enemy peak and the rally moves follow now.
-        bytes.truncate(bytes.len() - 5 * 4 - 9 - 12 - 4 - 16 - 12);
+        bytes.truncate(bytes.len() - 5 * 4 - 9 - 12 - 4 - 16 - 12 - EMPTY_152);
         bytes[..4].copy_from_slice(&1_u32.to_le_bytes());
         assert_eq!(Memory::from_bytes(&bytes).unwrap(), memory);
     }
 
     #[test]
     fn the_second_layout_still_reads() {
-        let mut memory = sample();
+        let mut memory = before_152();
         memory.age = 0;
         memory.age_since = 0;
         memory.defence.clear();
@@ -610,14 +713,14 @@ mod tests {
         let mut bytes = memory.to_bytes();
         // Version 2 ended after the intruder tick; the age clock, the (empty) defences, the
         // enemy peak and the rally moves follow it now.
-        bytes.truncate(bytes.len() - 12 - 4 - 16 - 12);
+        bytes.truncate(bytes.len() - 12 - 4 - 16 - 12 - EMPTY_152);
         bytes[..4].copy_from_slice(&2_u32.to_le_bytes());
         assert_eq!(Memory::from_bytes(&bytes).unwrap(), memory);
     }
 
     #[test]
     fn the_third_layout_still_reads() {
-        let mut memory = sample();
+        let mut memory = before_152();
         memory.defence.clear();
         memory.enemy_peak = (0, 0);
         memory.rally_moves = 0;
@@ -625,8 +728,19 @@ mod tests {
         let mut bytes = memory.to_bytes();
         // Version 3 ended after the age clock; the defences, the enemy peak and the rally
         // moves follow it.
-        bytes.truncate(bytes.len() - 4 - 16 - 12);
+        bytes.truncate(bytes.len() - 4 - 16 - 12 - EMPTY_152);
         bytes[..4].copy_from_slice(&3_u32.to_le_bytes());
+        assert_eq!(Memory::from_bytes(&bytes).unwrap(), memory);
+    }
+
+    #[test]
+    fn the_fourth_layout_still_reads() {
+        let memory = before_152();
+        let mut bytes = memory.to_bytes();
+        // Version 4 ended after the rally moves; the buildings standing and lost, the militia
+        // and the raided cities follow them.
+        bytes.truncate(bytes.len() - EMPTY_152);
+        bytes[..4].copy_from_slice(&4_u32.to_le_bytes());
         assert_eq!(Memory::from_bytes(&bytes).unwrap(), memory);
     }
 

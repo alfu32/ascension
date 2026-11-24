@@ -590,6 +590,34 @@ pub(crate) fn find_site(view: &View<'_>, ground: &Ground, subject: DefId) -> Sit
     }
 }
 
+/// A site exactly at `at`, where a lost building of the line stood (task 152): the ground must
+/// still be free of what the player knows (no lane is asked for: a building stood there), the
+/// city covering it must have room for the line, and the simulation must allow it.
+pub(crate) fn at_spot(view: &View<'_>, ground: &Ground, subject: DefId, at: Pos) -> Site {
+    let Some(needs) = Needs::of(view, subject) else {
+        return Site::Nowhere;
+    };
+    let Some(pos) = fits(
+        view,
+        ground,
+        &needs,
+        at,
+        false,
+        needs.own_territory,
+        Keep::Nothing,
+    ) else {
+        return Site::Nowhere;
+    };
+    let root = view.cat.root_of(subject);
+    if needs.et.limit_scope == LimitScope::PerCity
+        && covering_city(view, pos)
+            .is_some_and(|c| line_in_city(view, ground, root, c) >= needs.et.limit_count)
+    {
+        return Site::Nowhere;
+    }
+    ground.preview(view, subject, pos)
+}
+
 /// Whether a building at `pos` would cut a way through: the free tiles around its footprint
 /// (no building, ground the workers can walk) form more than one stretch, and more than one
 /// of the regions they lead to is more than a small pocket, without those regions meeting

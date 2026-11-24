@@ -33,6 +33,8 @@ pub(crate) struct Catalogue {
     /// Fighting unit types that move on water and on no ground: warships, the naval
     /// manager's (task 97).
     pub sea_units: BTreeSet<DefId>,
+    /// Militia: every type of an upgrade line a worker is called up into (task 152).
+    pub militia: BTreeSet<DefId>,
 }
 
 impl Catalogue {
@@ -94,6 +96,18 @@ impl Catalogue {
                 c.node_terrains.extend(site.needs_node_terrain_id);
             }
         }
+        let militia_roots: BTreeSet<DefId> = rules
+            .entity_types
+            .values()
+            .filter_map(|t| t.call_up.as_ref())
+            .map(|c| c.militia_type_id)
+            .collect();
+        c.militia = c
+            .root
+            .iter()
+            .filter(|(_, root)| militia_roots.contains(root))
+            .map(|(id, _)| *id)
+            .collect();
         for (tech, effects) in &rules.tech_effects {
             for effect in effects {
                 match (effect.effect, effect.target_def_id, effect.from_def_id) {
@@ -128,6 +142,11 @@ impl Catalogue {
     /// Whether a type is a warship: it fights, and moves on water only.
     pub fn is_sea_unit(&self, id: DefId) -> bool {
         self.sea_units.contains(&id)
+    }
+
+    /// Whether a type is militia: a worker called up, who stands down into one again.
+    pub fn is_militia(&self, id: DefId) -> bool {
+        self.militia.contains(&id)
     }
 
     /// The first type of the upgrade line `id` belongs to.

@@ -64,7 +64,7 @@ fn role(view: &View<'_>, building: DefId) -> Role {
 }
 
 /// Building types an own builder can construct now, one per upgrade line.
-fn constructible(view: &View<'_>) -> Vec<DefId> {
+pub(crate) fn constructible(view: &View<'_>) -> Vec<DefId> {
     let rules = view.rules;
     let mut seen = BTreeSet::new();
     let mut out = Vec::new();
@@ -100,8 +100,6 @@ pub(crate) fn wishes(
 ) {
     let rules = view.rules;
     let cities = view.cities.iter().filter(|c| c.complete).count() as i64;
-    let army_target = view.pop_cap * weights.army_share / 100;
-    let army = army_pop(view);
     let bombarded = crate::view::bombarded_bodies(view);
     let threatened = view
         .cities
@@ -170,39 +168,7 @@ pub(crate) fn wishes(
         if have >= limit {
             continue;
         }
-        let role = role(view, building);
-        let need = needed
-            .iter()
-            .any(|n| view.cat.root_of(*n) == view.cat.root_of(building));
-        let score = if need && have == 0 {
-            950
-        } else if role.researches_ages && have < cities {
-            if have == 0 { 950 } else { 380 }
-        } else if role.trains_military {
-            if have == 0 {
-                430 + weights.army_share * 2
-            } else if army_target - army >= 10 && have < 1 + army_target / 25 {
-                300
-            } else {
-                continue;
-            }
-        } else if role.trains_traders {
-            if have == 0 && can_trade(view) {
-                580
-            } else {
-                continue;
-            }
-        } else if role.researches && have == 0 {
-            520
-        } else if role.defends {
-            if have < weights.defense_share * cities / 25 {
-                260 + weights.defense_share
-            } else {
-                continue;
-            }
-        } else if have == 0 {
-            if role.unlocks { 360 } else { 220 }
-        } else {
+        let Some(score) = score(view, weights, needed, building, have) else {
             continue;
         };
         wishes.push(Wish {
@@ -212,4 +178,53 @@ pub(crate) fn wishes(
             opening: false,
         });
     }
+}
+
+/// The score of one more building of type `building` when the player has `have` of its line,
+/// by what it produces, researches or unlocks; `None` when the plan wants no more of it.
+/// `needed` are the buildings the age path waits for.
+pub(crate) fn score(
+    view: &View<'_>,
+    weights: &Weights,
+    needed: &BTreeSet<DefId>,
+    building: DefId,
+    have: i64,
+) -> Option<i64> {
+    let cities = view.cities.iter().filter(|c| c.complete).count() as i64;
+    let role = role(view, building);
+    let need = needed
+        .iter()
+        .any(|n| view.cat.root_of(*n) == view.cat.root_of(building));
+    Some(if need && have == 0 {
+        950
+    } else if role.researches_ages && have < cities {
+        if have == 0 { 950 } else { 380 }
+    } else if role.trains_military {
+        let army_target = view.pop_cap * weights.army_share / 100;
+        if have == 0 {
+            430 + weights.army_share * 2
+        } else if army_target - army_pop(view) >= 10 && have < 1 + army_target / 25 {
+            300
+        } else {
+            return None;
+        }
+    } else if role.trains_traders {
+        if have == 0 && can_trade(view) {
+            580
+        } else {
+            return None;
+        }
+    } else if role.researches && have == 0 {
+        520
+    } else if role.defends {
+        if have < weights.defense_share * cities / 25 {
+            260 + weights.defense_share
+        } else {
+            return None;
+        }
+    } else if have == 0 {
+        if role.unlocks { 360 } else { 220 }
+    } else {
+        return None;
+    })
 }

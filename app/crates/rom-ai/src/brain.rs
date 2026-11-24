@@ -6,9 +6,9 @@ use crate::{
     catalogue::Catalogue,
     construction, economy, fleet, market,
     memory::Memory,
-    navy, opening,
+    militia, navy, opening,
     plan::{Plan, RETRY_TICKS, Wish},
-    production, research,
+    production, rebuild, research,
     view::{self, View, operational},
 };
 use rom_rules::{AiDifficulty, AiOpeningStep, DefId, Rules};
@@ -364,6 +364,17 @@ impl Brain {
         view::remember(&mut memory.enemies, world, self.player, d.sees_all);
         production::note_enemy_peak(&view, memory);
         let threatened = attacked(&view, memory);
+        // Cities that lost hit points since the last thought: their militia are called up.
+        let hurt: BTreeSet<u32> = view
+            .cities
+            .iter()
+            .filter(|c| {
+                view.world
+                    .entity(c.id)
+                    .is_some_and(|e| memory.city_hp.get(&c.id.0).is_some_and(|hp| e.hp < *hp))
+            })
+            .map(|c| c.id.0)
+            .collect();
         memory.city_hp = view
             .cities
             .iter()
@@ -398,9 +409,11 @@ impl Brain {
             memory.age_since = tick;
         }
 
+        // Buildings lost since the last thought are put back (task 152).
+        rebuild::notice(&view, memory);
         let mut plan = Plan::new(view, allowed, memory);
         if let Some(at) = boxed_at {
-            unbox(&mut plan, at);
+            unbox(&mut plan, memory, at);
         }
         crate::ascension::ascend(&mut plan, memory);
         let slip =
@@ -437,6 +450,9 @@ impl Brain {
         army::wishes(&plan.view, &self.weights, memory, &mut wishes);
         navy::wishes(&plan.view, &self.weights, &sea, &mut wishes);
         fleet::wishes(&plan.view, &self.weights, memory, &mut wishes);
+        // What the plans spend of energy, and what was lost, are known once everyone wished.
+        economy::unattended_wishes(&plan.view, &eco, memory, &mut wishes);
+        rebuild::wishes(&plan.view, &self.weights, &needed, memory, &mut wishes);
         // Highest score first; equal scores keep the managers' order.
         wishes.sort_by_key(|w| std::cmp::Reverse(w.score));
         // A mistake of judgement: the runner-up is served before the best. What the brain
@@ -452,6 +468,8 @@ impl Brain {
             blunder: d.mistake_pct > 0
                 && i64::from(rng.range(0, 120_000)) < d.mistake_pct * d.think_interval_ticks.max(1),
         };
+        // A raided city calls up its workers before anything else is ordered (task 152).
+        militia::command(&mut plan, memory, d, &hurt);
         // Under attack, or with an army on the march, the armies take their orders first:
         // a wave sent off a few units a thought arrives piecemeal and is lost. Marching takes
         // at most two thirds of the budget, so training and the workers go on.
@@ -506,7 +524,7 @@ impl Brain {
 
 /// Opens a way out for units boxed in by the player's own buildings: the nearest building
 /// other than a city or a gather site within `UNBOX_REACH` of them is pulled down.
-fn unbox(plan: &mut Plan<'_>, at: rom_sim::Pos) {
+fn unbox(plan: &mut Plan<'_>, memory: &mut Memory, at: rom_sim::Pos) {
     let view = &plan.view;
     let building = view
         .own
@@ -521,8 +539,11 @@ fn unbox(plan: &mut Plan<'_>, at: rom_sim::Pos) {
         })
         .min_by_key(|e| (view.distance(e.pos, at), e.id))
         .map(|e| e.id);
-    if let Some(building) = building {
-        plan.order(building, "raze", None, None, None);
+    if let Some(building) = building
+        && plan.order(building, "raze", None, None, None)
+    {
+        // Pulled down on purpose: not lost, not put back.
+        rebuild::forget(memory, building.0);
     }
 }
 
