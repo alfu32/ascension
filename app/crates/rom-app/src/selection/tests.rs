@@ -2095,6 +2095,7 @@ fn wealth_screenshot_script_reaches_capture_without_a_window() {
         hud.wealth.per_trip
     );
     assert_eq!(hud.wealth.routes, 1);
+    assert!(hud.wealth.per_period > 0, "the trader's income is shown");
     assert_eq!(hud.cities.0, 2);
     assert_eq!(hud.data_tab, 2);
     assert_eq!(hud.trade_routes.len(), 1);

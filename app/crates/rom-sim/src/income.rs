@@ -13,6 +13,9 @@ pub struct Income {
     pub effective: i64,
     /// Whether the commerce cap reduces the modified rate.
     pub capped: bool,
+    /// Expected trade deliveries per period (caravans, merchants, fleets); not in `effective`,
+    /// which is what is paid as gathering income. Deliveries bypass the cap.
+    pub trade: i64,
 }
 
 /// One contribution to a player's raw rate of one resource.
@@ -38,7 +41,9 @@ pub(crate) struct EconomyIndex {
 impl World {
     /// Returns a base resource's current rate, or zero for unknown players/resources.
     pub fn income(&self, player: PlayerId, resource: DefId) -> Income {
-        self.modified_income(player, resource, self.raw_rate(player, resource))
+        let mut income = self.modified_income(player, resource, self.raw_rate(player, resource));
+        income.trade = self.trade_income(player, resource);
+        income
     }
 
     fn raw_rate(&self, player: PlayerId, resource: DefId) -> i64 {
@@ -212,6 +217,7 @@ impl World {
             raw,
             effective,
             capped: effective < modified,
+            trade: 0,
         }
     }
 

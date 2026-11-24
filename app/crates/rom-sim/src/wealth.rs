@@ -426,6 +426,69 @@ impl World {
         }
     }
 
+    /// Expected trade income of `player` in `resource` per income period: each own trader's
+    /// delivery times the deliveries its speed allows per period (`speed * period / tick_rate`
+    /// divided by the route length, flight only for freighters), plus the partner share (one
+    /// delivery per round trip) of other players' traders running to the player's cities.
+    pub fn trade_income(&self, player: PlayerId, resource: DefId) -> i64 {
+        let period = self
+            .rules
+            .constant("economy.income_period_ticks")
+            .expect("validated income period");
+        let mut total: i128 = 0;
+        for e in self
+            .entities()
+            .chain(self.space.transits.values().map(|t| &t.entity))
+        {
+            let Some(order) = e.orders.front().filter(|o| o.status == OrderStatus::Active) else {
+                continue;
+            };
+            let Some(route) = &order.route else { continue };
+            if route.resource != resource || route.info.length == 0 {
+                continue;
+            }
+            let base = self.rules.entity_types[&e.type_id]
+                .movement
+                .as_ref()
+                .map_or(0, |m| m.speed);
+            let speed = i128::from(self.effective_stat(e.id, "speed", base).max(0));
+            let pay = i128::from(self.delivery_income(
+                order.player,
+                resource,
+                route.info.per_trip_income,
+            ));
+            // A walker turns round within reach of the city's edge, so a leg is the route's
+            // length less each city's half-extent and reach; a freighter flies the full length.
+            let leg = if self.is_spacecraft_type(e.type_id) {
+                i128::from(route.info.length)
+            } else {
+                let reach = self.rules.constant("build.reach").expect("validated reach");
+                let half = |id: EntityId| {
+                    self.entity(id).map_or(0, |c| {
+                        let et = &self.rules.entity_types[&c.type_id];
+                        (et.footprint_w + et.footprint_h) * 250
+                    })
+                };
+                let walked = route.info.length as i64
+                    - half(route.info.home)
+                    - half(route.info.target)
+                    - 2 * reach;
+                i128::from(walked.max(1000))
+            };
+            // payment * deliveries per period, deliveries = speed * period / tick_rate / leg
+            let per_period = pay * speed * i128::from(period) / (i128::from(self.tick_rate) * leg);
+            if order.player == player {
+                total += per_period;
+            } else if self
+                .entity(route.info.target)
+                .is_some_and(|t| t.owner == player)
+            {
+                total += per_period / 2;
+            }
+        }
+        total.clamp(0, i128::from(i64::MAX)) as i64
+    }
+
     fn delivery_income(&self, player: PlayerId, resource: DefId, income: i64) -> i64 {
         let stat = self
             .rules

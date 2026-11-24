@@ -225,7 +225,8 @@ fn worker_adds_exact_income_over_one_period() {
         Income {
             raw: 10,
             effective: 10,
-            capped: false
+            capped: false,
+            trade: 0
         }
     );
 }
@@ -284,7 +285,8 @@ fn commerce_cap_limits_capped_resources_only() {
         Income {
             raw: 10,
             effective: 6,
-            capped: true
+            capped: true,
+            trade: 0
         }
     );
     assert!(!w.income(OWNER, id(&w, "res.knowledge")).capped);
@@ -542,7 +544,8 @@ fn missing_income_stat_preserves_raw_and_incomplete_self_income_does_not_pay() {
         Income {
             raw: 600,
             effective: 70,
-            capped: true
+            capped: true,
+            trade: 0
         }
     );
     let period = constant(&w, "economy.income_period_ticks");

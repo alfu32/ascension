@@ -320,7 +320,8 @@ fn kept_relics_use_income_modifiers_and_commerce_cap() {
         crate::Income {
             raw: 100,
             effective: 70,
-            capped: true
+            capped: true,
+            trade: 0
         }
     );
     let before = balance(&w, P);
@@ -410,4 +411,56 @@ fn caravan_upgrade_refreshes_active_and_pending_route_income() {
         assert!(w.stats.trade_trips > 0);
         assert_eq!(balance(&w, P), w.stats.trade_trips as i64 * 27);
     }
+}
+
+#[test]
+fn trade_rate_matches_wealth_received_over_a_long_run() {
+    let mut w = setup("");
+    let (_, _, _) = route(&mut w);
+    let wealth = w.rules.id_of("res.wealth").unwrap();
+    let income = w.income(P, wealth);
+    assert_eq!(income.raw, 0);
+    ticks(&mut w, 1);
+    let income = w.income(P, wealth);
+    assert!(income.trade > 0, "a trader on a route earns");
+    assert_eq!(income.effective, 0, "trade is not paid as gathering");
+    let before = balance(&w, P);
+    ticks(&mut w, 12_000);
+    let received = (balance(&w, P) - before) as f64;
+    let expected = (income.trade * 12_000 / 600) as f64;
+    assert!(
+        (received - expected).abs() <= expected * 0.15,
+        "received {received}, rate predicts {expected}"
+    );
+}
+
+#[test]
+fn a_partner_shares_the_trade_rate_and_a_stopped_trader_earns_none() {
+    let mut w = setup("");
+    let a = spawn(&mut w, "bld.city", 16500, 32500);
+    let b = w
+        .spawn(
+            w.rules.id_of("bld.city").unwrap(),
+            PlayerId(2),
+            Pos::flat(46500, 32500),
+        )
+        .unwrap();
+    let unit = spawn(&mut w, "unit.merchant", 11500, 32500);
+    let _ = a;
+    w.submit(command(unit, "trade", b)).unwrap();
+    ticks(&mut w, 1);
+    let wealth = w.rules.id_of("res.wealth").unwrap();
+    let (own, partner) = (
+        w.income(P, wealth).trade,
+        w.income(PlayerId(2), wealth).trade,
+    );
+    assert!(own > 0 && partner == own / 2);
+    w.submit(Command {
+        target_entity: None,
+        kind: "stop".into(),
+        ..command(unit, "stop", unit)
+    })
+    .unwrap();
+    ticks(&mut w, 1);
+    assert_eq!(w.income(P, wealth).trade, 0);
 }

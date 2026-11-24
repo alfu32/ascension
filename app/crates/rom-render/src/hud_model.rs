@@ -497,6 +497,8 @@ pub struct HudWealth {
     pub limit: i64,
     /// Total income per arrival over the routes.
     pub per_trip: i64,
+    /// Expected trade income per income period, over every base resource.
+    pub per_period: i64,
 }
 
 /// A selected unit's patrol on the currently viewed surface: the great circle through its two
