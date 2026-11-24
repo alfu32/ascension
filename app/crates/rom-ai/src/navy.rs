@@ -836,6 +836,11 @@ fn mend(plan: &mut Plan<'_>, hurt: &[&Entity], home: Pos) {
                         hurt.iter()
                             .any(|s| rules.has_tag(s.type_id, h.target_tag_id))
                     })
+                // Only a mender that reaches ships on the water: not a supply cart (task 140).
+                && rules.entity_types[&e.type_id].movement.as_ref().is_some_and(|m| {
+                    rules.movement_classes[&m.movement_class_id].flies
+                        || view.cat.is_sea_unit(e.type_id)
+                })
         })
         .collect();
     let mut orders: Vec<(EntityId, &str, Option<EntityId>, Option<Pos>)> = Vec::new();

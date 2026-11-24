@@ -193,7 +193,7 @@ hit-point percentage. The first step of each line needs only its age and buildin
 | Heavy mounted | Stable → Vehicle Plant | Cataphracts (1), Knights (2), Cuirassiers (3), Lancers (4), Light Tanks (5), Tanks (6), Main Battle Tanks (7), Robot Tanks (8), Fusion Tanks (9), Grav Tanks (11) |
 | Siege | Siege Workshop → Factory | Catapults (1), Trebuchets (2), Bombards (3), Cannons (4), Field Guns (5), Howitzers (6), Rocket Artillery (7), Railgun Batteries (9) |
 | Anti-air | Factory | Flak Guns (6), Missile Launchers (7), Laser Batteries (9) |
-| Supply | Siege Workshop → Factory | Supply Wagons (2), Supply Trucks (5) |
+| Supply | Siege Workshop → Factory | Supply Wagons (2), Supply Trucks (5): cancel attrition for their own side within 8 tiles; repair vehicles (`mechanical`) within 3 tiles, 4 hp a second (wagons) and 8 (trucks), task 140 |
 | Repair | Factory | Repair Drones (7) |
 | Warships | Dock | Triremes (1), War Galleys (2), Carracks (3), Frigates (4), Ironclads (5), Destroyers (6), Missile Cruisers (7), Drone Cruisers (8), Hover Frigates (9) |
 | Fighters | Airfield | Biplanes (5), Fighters (6), Jet Fighters (7), Drone Fighters (8), Interceptors (9) |
@@ -208,6 +208,17 @@ hit-point percentage. The first step of each line needs only its age and buildin
 | Scholar | University | Scholars (1) |
 | Merchant | Market | Merchants (0) |
 | Priest | Temple | Priests (1) |
+
+**Support units (task 140).** Who heals whom is data: `et_healer.target_tag_id`. Medics
+(8 hp a second, 3 tiles, one energy a hit point) and priests (4 hp a second, 5 tiles) heal every
+`biological` unit of their side and of allies: soldiers, citizens and other civilians. Repair
+drones (8 hp a second) and supply wagons and trucks (4 and 8) mend `mechanical` units: siege
+engines, vehicles, aircraft, ships within reach, and each other. A healer never heals itself
+or an enemy, and heals on its own only while it stands without orders. Medics, supply carts
+and repair drones are selected with the army (a box or a double click on soldiers); citizens,
+other workers and priests stay out of it. Citizens and worker drones mend damaged own buildings
+for nothing, at a quarter of their building pace, and an idle one goes by itself to the
+nearest unfinished own site (then a damaged own building) within 40 tiles.
 
 Submarines, generals, spies and colony ships are left out until the
 simulation supports stealth, auras and their own mechanics; adding them later

@@ -1,0 +1,20 @@
+# Task 140: farm sites placed through one citizen's queue (two of the four clicks land, the
+# others are refused: another building occupies the footprint); the other starting citizens
+# leave their idle spot by themselves (after citizen.auto_build_delay_ticks, two seconds) and
+# work on the site nearest them while the ordered citizen works through its queue.
+#   rise-of-man --seed 1 --players 2 --ai none --size 1600x900 \
+#     --script app/docs/tasks/140-builders-script.txt --after 9 --screenshot app/docs/img/140-builders-at-work.png
+0 grant res.food 5000
+0 grant res.timber 5000
+5 click builder1
+6 hud tab 0
+7 hud slot 1
+9 hover @-10,2
+10 click @-10,2 shift
+19 hover @-10,10
+20 click @-10,10 shift
+29 hover @0,11
+30 click @0,11 shift
+39 hover @7,9
+40 click @7,9
+41 escape

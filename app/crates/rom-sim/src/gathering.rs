@@ -158,7 +158,69 @@ impl World {
                 && e.container_id.is_none()
                 && e.build_progress.is_none()
                 && !pending.contains(&id)
-                && !self.rules.entity_types[&e.type_id].harvester.is_empty()
+                && {
+                    let et = &self.rules.entity_types[&e.type_id];
+                    !et.harvester.is_empty() || (et.builder.is_some() && et.movement.is_some())
+                }
+        })
+    }
+
+    /// The own building an idle builder goes to (task 140): the nearest unfinished site, else
+    /// the nearest damaged building, within `citizen.auto_build_radius` of where it stands, on
+    /// its body and over ground it can cross; ties go to the lower id.
+    fn auto_build_target(&self, id: EntityId) -> Option<EntityId> {
+        let worker = self.entity(id)?;
+        self.rules.entity_types[&worker.type_id].builder.as_ref()?;
+        let radius = self
+            .rules
+            .constant("citizen.auto_build_radius")
+            .expect("validated radius");
+        let geo = self.geo(worker.pos.body);
+        let owner = worker.owner;
+        let nearest = |candidates: &mut dyn Iterator<Item = &crate::Entity>| {
+            candidates
+                .filter(|b| {
+                    b.pos.body == worker.pos.body
+                        && b.hp > 0
+                        && !b.neutralised
+                        && b.assimilation_until.is_none()
+                        && geo.within(worker.pos, b.pos, radius)
+                        && self.reachable(worker.type_id, worker.pos, b.pos) == Some(true)
+                })
+                .map(|b| (geo.rank_distance(worker.pos, b.pos), b.id))
+                .min()
+                .map(|(_, b)| b)
+        };
+        let types = |sites: bool| -> Vec<DefId> {
+            if sites {
+                self.types
+                    .sites
+                    .range((owner, DefId(0))..=(owner, DefId(u32::MAX)))
+                    .map(|((_, t), _)| *t)
+                    .collect()
+            } else {
+                self.types
+                    .of(owner)
+                    .map(|(t, _)| t)
+                    .filter(|t| {
+                        self.rules.entity_types[t].class == rom_rules::EntityClass::Building
+                    })
+                    .collect()
+            }
+        };
+        let site = nearest(
+            &mut types(true)
+                .into_iter()
+                .flat_map(|t| self.own_of_type(owner, t))
+                .filter(|b| b.build_progress.is_some()),
+        );
+        site.or_else(|| {
+            nearest(
+                &mut types(false)
+                    .into_iter()
+                    .flat_map(|t| self.own_of_type(owner, t))
+                    .filter(|b| b.build_progress.is_none() && b.hp < b.max_hp),
+            )
         })
     }
 
@@ -200,17 +262,46 @@ impl World {
                 }
             }
         }
+        let build_delay = self
+            .rules
+            .constant("citizen.auto_build_delay_ticks")
+            .expect("validated delay")
+            .max(1) as u64;
         let mut claims: Option<BTreeMap<EntityId, BTreeSet<EntityId>>> = None;
         let idle: Vec<_> = self.economy.idle.iter().copied().collect();
         for id in idle {
             let worker = self.entities[id.0 as usize].as_mut().expect("idle worker");
             worker.idle_ticks += 1;
-            if worker.idle_ticks < delay {
+            let (owner, ticks) = (worker.owner, worker.idle_ticks);
+            // A builder never stands idle while own building work is left nearby (task 140).
+            if ticks % build_delay == 0
+                && let Some(site) = self.auto_build_target(id)
+                && self
+                    .submit(Command {
+                        player: owner,
+                        executor: id,
+                        kind: "repair".into(),
+                        subject: None,
+                        target_entity: Some(site),
+                        target_pos: None,
+                        queue: false,
+                    })
+                    .is_ok()
+            {
                 continue;
             }
-            worker.idle_ticks = 0;
+            if ticks < delay {
+                continue;
+            }
+            self.entities[id.0 as usize]
+                .as_mut()
+                .expect("idle worker")
+                .idle_ticks = 0;
             let worker = self.entity(id).expect("worker");
             let harvester = &self.rules.entity_types[&worker.type_id].harvester;
+            if harvester.is_empty() {
+                continue;
+            }
             let candidates: Vec<_> = self
                 .economy
                 .sites

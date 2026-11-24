@@ -262,7 +262,9 @@ leads them as the army `Navy`.
 - **Repair.** A ship below 40 % of its hit points goes home to the harbour. When the player
   can train a unit that heals ships and reaches them on the water (the repair drone), one is
   kept and mends the most damaged ship at home; a ship there stays until 85 %. Before such a
-  unit, nothing mends a ship: a damaged ship keeps the harbour.
+  unit, nothing mends a ship: a damaged ship keeps the harbour. Only such a unit is sent to
+  mend: supply carts, which mend vehicles since task 140, cannot reach ships and are left with
+  the army.
 
 ### Measured (task 97)
 

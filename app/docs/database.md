@@ -54,7 +54,7 @@ def ─┬─ age            ordinal, era, map scale
      │  (unit, building├─ et_weapon        attacks          (+ et_weapon_target)
      │   node, pickup, ├─ et_builder       builds, repairs
      │   wildlife)     ├─ et_harvester     harvests         (works at an et_gather_site)
-     │                 ├─ et_healer        heals            (priest, medic, repair drone)
+     │                 ├─ et_healer        heals            (priest, medic, repair drone, supply cart)
      │                 ├─ et_trader        runs city-to-city delivery routes
      │                 ├─ et_keeper        keeps carried nodes
      │                 ├─ et_container     garrison / transport / carrier
@@ -103,7 +103,7 @@ build time). What an entity can *do* is the set of `et_*` rows it owns:
 | attacks | `et_weapon` |
 | builds, repairs | `et_builder` |
 | harvests | `et_harvester` + the building's `et_gather_site` |
-| heals | `et_healer` (target tag *biological* → priest/medic, *mechanical* → repair drone) |
+| heals | `et_healer` (target tag *biological* → priest/medic, *mechanical* → repair drone, supply wagon/truck) |
 | runs wealth delivery routes | `et_trader` |
 | keeps carried nodes | `et_keeper` |
 | takes production and research orders | `et_producer` |
@@ -2445,3 +2445,58 @@ Two order kinds (`order_kind` rows; no other rules data):
   `pending_shot` is unchanged: such a shot flies at its `target_*` point. Formats 13 to 18 load
   without shots at the ground. The state hash adds the point only for shots at the ground, so
   other worlds keep their hashes.
+
+## Support units, free repair and builders that do not stand idle (task 140)
+
+No new table or column. Rules data:
+
+- **Supply carts repair vehicles.** `unit.supply_wagon` and `unit.supply_truck` gain an
+  `et_healer` row (target tag `mechanical`, range 3000, no energy; 4 hp a second for the wagon
+  of the medieval age, 8 for the truck of the industrial age, as the medic and the repair drone)
+  and the `healer` role tag. Medics and priests already healed every `biological` unit
+  (soldiers and citizens alike); unchanged. A healer heals no enemy and never itself.
+- **Attrition relief.** `et_supply.radius` of both carts is 8000 (was 6000). The attrition code
+  (`rom-sim/src/attrition.rs`) already let an own supply unit cancel enemy-territory damage
+  within that radius; it stays own-only: an ally's cart does not shield (as before, tested).
+- **Two constants.** `citizen.auto_build_delay_ticks` (40, two seconds) and
+  `citizen.auto_build_radius` (40000 milli-tiles, a city's border radius), both validated by
+  `World::new`.
+- **Mending is slow because it is free.** `et_builder.repair_pct` of citizens and worker drones
+  is 25 (was the default 100, unused): a builder mends a building's full hit points in four of
+  its build times (a 150-tick farm of 400 hp: 2 hp every 3 ticks; a city of 1200 hp: 2 hp a
+  tick). At 100 a few citizens kept a besieged city whole, and a 20-seed duel ended in a draw.
+  The automated colony keeps 100.
+
+Simulation:
+
+- **Mending a building.** A `repair` order on a finished, damaged own building (no longer
+  `unsupported`) walks the builder to it and restores, each tick, the building's `max_hp` ×
+  `et_builder.repair_pct` / 100 / its build time (`build_time` stat), with the remainder kept in
+  the order's `build_remainder`: at 25 a builder mends a building from nothing in four build
+  times; several builders add up. It costs nothing. The order is done when the building is whole; a
+  repair of a whole building is done at once. A struck-down city keeps its own restore path, and
+  units are not mended by builders.
+- **Idle builders.** A builder that can move (citizens, worker drones) is now tracked as idle
+  work even without a harvester component. Every `citizen.auto_build_delay_ticks` of standing
+  idle it looks for the nearest own unfinished site, else the nearest own damaged building (not
+  struck down, not being assimilated), on its body, within `citizen.auto_build_radius` of where
+  it stands and in the stretch of ground its movement class can cross (`World::reachable`); ties
+  go to the lower entity id. It is given a `repair` order to it (joining the site, or mending).
+  Only then, after `citizen.auto_work_delay_ticks` as before, does it look for a gather slot. A
+  unit with any order (a gather order included) is not idle and keeps it. So a player may place
+  several sites and leave them to the citizens around. The game has no idle-worker counter; the
+  computer player's `idle_workers` summary counts units without orders, so builders sent to a
+  site no longer count.
+
+Interface (`rom-app/src/selection.rs`): a box that holds armed soldiers keeps the units *of the
+army*: armed units that are not workers (no builder, harvester or trader component) and the
+unarmed movers with a healer or supply component that are not tagged `civilian` (medics, supply
+carts, repair drones; priests are civilians). Citizens, worker drones and priests stay out
+(citizens are armed, so before this they were boxed with soldiers). Ctrl keeps everything, a
+box without soldiers keeps everything, control groups keep any mix. A double click on a soldier
+takes the soldiers of its type and the support units on screen. An attack-move sends the
+unarmed members of a selection as a move. A right click on a damaged own building with builders
+selected gives them `repair` (before a gather order on a damaged gather building).
+
+The computer player's naval manager no longer sends a healer that cannot reach ships on the
+water (a supply cart now heals `mechanical`) to mend them.
