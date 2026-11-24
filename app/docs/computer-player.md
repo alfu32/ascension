@@ -1339,3 +1339,8 @@ nothing better waits, so it may lay one wall segment, one gate and one mine in a
 is one upgrade line, so never more while they stand). No data column keeps a constructible
 building out of its catalogue without keeping it from people too; part 147b teaches it to lay
 lines (never walling itself in) and minefields, and to break or go round an enemy's.
+
+Measured (20 seeds, balanced:moderate against balanced:easiest): 18–0 with 2 draws (seeds 5 and
+14), mean tick 52052. The same rules without the construct rows of the seven new types give 20–0,
+mean tick 52405, as before the task: the draws come from the players' one palisade and gate (their
+first wave in seed 5 is lost after the match has drifted), not from the simulation.

@@ -2705,7 +2705,8 @@ interface, the drawing of joined segments and the computer player's use of them 
   from the entities (rebuilt on restore, not hashed); a restored queued search takes the team of
   its first waiter.
 - **Mines.** A mine occupies no tile (units walk over it; it is not pushed out of the way of a
-  site), but stands in the building index, so nothing is built on it. It is hidden from every
+  site), but stands in the building index, so nothing is built on it (an enemy placing a building
+  on a hidden mine is refused too, as on any occupied tile). It is hidden from every
   player outside its owner's team (`World::visible_entities`, attack orders (`TargetHidden`),
   automatic targets, building memory and planet surveys) unless a unit of that player's team
   with `mine_detection` > 0 stands within `mine.detection_radius`; an ascended player sees every
@@ -2723,6 +2724,10 @@ interface, the drawing of joined segments and the computer player's use of them 
   building line it has none of at a low score when nothing better waits, so it may lay one
   segment, one gate and one mine in a match; no data column keeps a constructible building out
   of its catalogue without also keeping it from people. Part 147b teaches it lines and mines.
+  Measured (20 seeds, balanced:moderate against balanced:easiest): 18–0 with 2 draws (seeds 5
+  and 14), mean tick 52052; with the same rules less the construct rows of these seven types
+  20–0, mean tick 52405, exactly as before the task, so the simulation changes alone move no
+  duel: the two draws come from the computer players laying their one palisade and gate.
 - **Looks** (`db/models/`): a model per kind and age, segments spanning their tile along x so
   neighbours join end to end (the interface turns them along the line): `bld.palisade@ancient`;
   `bld.stone_wall@classical`, `@medieval`, `@gunpowder`, `@enlightenment`;
