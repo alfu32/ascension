@@ -391,6 +391,11 @@ impl World {
                             if closing(a, slot.id) || closing(slot.id, a) {
                                 continue;
                             }
+                            // Members of one formation on the march pass through each other
+                            // to their places (task 143).
+                            if self.marching_together(a, slot.id) {
+                                continue;
+                            }
                             // The other unit's push turns into its own face's frame.
                             let (bx, by) = rotate((x, y), geo.turns(pa.face, slot.pos.face));
                             pushes.push((slot.id, bx, by));
@@ -424,6 +429,26 @@ impl World {
             }
         }
         self.avoid.awake = next_awake;
+    }
+
+    /// Whether two units march in one formation: their front orders are one player's walk of
+    /// one tick naming one formation, not yet fighting.
+    fn marching_together(&self, a: EntityId, b: EntityId) -> bool {
+        let march = |id: EntityId| {
+            self.entity(id)?.orders.front().filter(|o| {
+                o.pace.is_some()
+                    && o.target_entity.is_none()
+                    && matches!(o.kind.as_str(), "move" | "attack_move" | "patrol")
+                    && o.subject
+                        .is_some_and(|f| self.rules.formations.contains_key(&f))
+            })
+        };
+        match (march(a), march(b)) {
+            (Some(x), Some(y)) => {
+                (x.player, x.subject, x.issued_tick) == (y.player, y.subject, y.issued_tick)
+            }
+            _ => false,
+        }
     }
 
     /// Moves a unit by a push unless that would enter an impassable tile; tries each axis alone.

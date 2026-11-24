@@ -3827,3 +3827,88 @@ fn militia_go_with_the_army_and_are_called_up_and_stood_down_from_the_card() {
         fx.key("unit.citizen")
     );
 }
+
+/// Task 143: a group's orders name its formation, Square until another is picked on the Order
+/// tab's Formation page (or with Alt and a digit); picking one forms the group up at once.
+#[test]
+fn a_group_walks_in_the_formation_picked_square_until_then() {
+    let mut fx = fixture();
+    let a = fx.spawn(fx.key("unit.spearman"), 1, 10, 10);
+    let b = fx.spawn(fx.key("unit.archer"), 1, 11, 10);
+    let c = fx.spawn(fx.key("unit.medic"), 1, 12, 10);
+    let subject = |fx: &Fx, id: EntityId| {
+        let order = &fx.world.entity(id).expect("alive").orders()[0];
+        (order.subject, order.target_pos)
+    };
+    fx.select(&[a, b, c]);
+    let palette = fx.hud_snapshot().palette.expect("orders");
+    assert_eq!(
+        (palette.tab, palette.pages, palette.page),
+        (PaletteTab::Order, 2, 0)
+    );
+    // The second page: Square, Compact, Circle, Line and Double line on the first row.
+    fx.hud(HudRegionKind::PaletteArrow, 1, PointerButton::Left, false);
+    let palette = fx.hud_snapshot().palette.expect("formations");
+    assert_eq!(palette.page_name, "Formation");
+    let names: Vec<&str> = (0..5)
+        .map(|slot| {
+            palette
+                .buttons
+                .iter()
+                .find(|btn| btn.slot == slot)
+                .map_or("", |btn| btn.name.as_str())
+        })
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "Formation: Square (Alt+1)",
+            "Formation: Compact (Alt+2)",
+            "Formation: Circle (Alt+3)",
+            "Formation: Line (Alt+4)",
+            "Formation: Double Line (Alt+5)"
+        ]
+    );
+    assert!(palette.buttons.iter().any(|btn| btn.slot == 0 && btn.armed));
+    // A right click sends the group in a square, each to its own place.
+    fx.rclick(None, (30.0, 10.0), false);
+    fx.step(1);
+    let square = fx.key("form.square");
+    let (sa, pa) = subject(&fx, a);
+    let (sb, pb) = subject(&fx, b);
+    assert_eq!((sa, sb), (Some(square), Some(square)));
+    assert_ne!(pa, pb);
+    // Alt+4 picks the line: the walking group re-forms in one rank.
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Hotkey {
+            ch: '4',
+            modifiers: Modifiers {
+                alt: true,
+                ..Modifiers::default()
+            },
+        },
+    );
+    fx.step(1);
+    let line = fx.key("form.line");
+    assert_eq!(subject(&fx, a).0, Some(line));
+    assert_eq!(subject(&fx, c).0, Some(line));
+    let hud = fx.hud_snapshot().palette.expect("formations");
+    assert!(hud.buttons.iter().any(|btn| btn.slot == 3 && btn.armed));
+    // The slot key on the Formation page picks too (Q: Square); the group order after names it.
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Hotkey {
+            ch: 'q',
+            modifiers: Modifiers::default(),
+        },
+    );
+    fx.rclick(None, (20.0, 20.0), false);
+    fx.step(1);
+    assert_eq!(subject(&fx, b).0, Some(square));
+    // One unit alone names no formation.
+    fx.select(&[a]);
+    fx.rclick(None, (25.0, 25.0), false);
+    fx.step(1);
+    assert_eq!(subject(&fx, a).0, None);
+}

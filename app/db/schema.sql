@@ -658,7 +658,8 @@ CREATE TABLE ability_grant (
 CREATE TABLE formation (
   id        INTEGER PRIMARY KEY REFERENCES def(id),
   shape     TEXT NOT NULL CHECK (shape IN ('line','column','wedge','square','echelon_left',
-                                           'echelon_right','envelop','refused','sparse','mob','sphere')),
+                                           'echelon_right','envelop','refused','sparse','mob','sphere',
+                                           'compact','circle','double_line')),
   rank_ratio_pct INTEGER NOT NULL DEFAULT 400, -- width : depth
   spacing_pct    INTEGER NOT NULL DEFAULT 100,
   ranged_behind  INTEGER NOT NULL DEFAULT 1,   -- melee front, ranged/support rear

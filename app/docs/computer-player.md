@@ -1216,9 +1216,13 @@ balanced:moderate,balanced:easiest --seeds 1..20 --jobs 2`: 20–0, mean tick 53
   skips targets its units could never walk to.
 - **Closed: formation movement at the slowest speed.** `move`, `attack_move`
   and `patrol` may name a formation as subject; the orders one player gives in
-  one tick with one kind and formation walk at the slowest member's speed
+  one tick with one formation walk at the slowest member's speed
   (`order.pace`) when the formation `keeps_slowest`. A brain that
-  `uses_formations` names its line formation when the army advances.
+  `uses_formations` names its line formation when the army advances; it gives
+  each member its own point, so the simulation's layout of a group sent to one
+  point (task 143) applies only where the advance has no direction and sends
+  them all to the goal: they then stand in one rank about it. The line row's
+  `spacing_pct` is 130 since then, so the advance's ranks stand 30 % wider.
 - **Closed: start fairness in map generation** (see "Fair starts" below).
 - **Left out: garrisoning to heal** (optional in the card): `enter` still boards
   carriers only.

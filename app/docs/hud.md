@@ -212,6 +212,18 @@ also answers yes; Escape, No or another selection keeps it. A finished city cann
 building whose only order is Delete keeps opening on its own tab; its Order tab, once chosen,
 stays open for that selection. Script: `key delete` presses the Delete key.
 
+**Formations (task 143).** A selection with units that move has a second page on the Order tab,
+**Formation** (the page arrows, or its slot keys once open): Square (Q), Compact (W), Circle (E),
+Line (R), Double line (T), then Column, Wedge, Echelon left and right, Sparse, Envelop, Refused
+and Mob (`icons/form_*`, dots with a chevron at the front). Alt+1 to Alt+9 pick the first nine
+from any tab. The picked one is lit and stays for later selections until another is picked;
+Square until then. Picking one forms the selection up at once: units standing or walking go
+into it about the middle of where they are bound (an attack move stays one), ships holding a
+body beside it take their places there again; units at work or fighting take it with their
+next order. Every order a right click, attack-move, patrol, Orbit or Travel gives to two or
+more movers names it, and the simulation lays the group out (`docs/database.md`, task 143).
+Script: `key 4 alt`.
+
 **Patrol routes (task 126).** Patrol, then click a point: the unit patrols between where it
 stood and the point. Holding Shift while clicking keeps the pick on and adds a point; the click
 without Shift gives the last one. The unit walks the closed loop start, point 1, point 2, ...,

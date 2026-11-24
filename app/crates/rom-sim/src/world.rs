@@ -1096,6 +1096,7 @@ impl World {
                 .push_back(order);
         }
         if !applied.is_empty() {
+            self.form_up(&applied);
             self.pace_formations(&applied);
         }
         self.acquire_attack_moves();
