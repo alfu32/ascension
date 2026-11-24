@@ -1,0 +1,20 @@
+# Task 140: a box over an army takes its medics and supply carts, not the citizens beside it.
+# Industrial age; soldiers, two medics, two supply trucks, a tank to mend and three citizens
+# stand south of the city; one box (eight tiles around the first soldier) selects them.
+#   rise-of-man --seed 1 --players 2 --ai none --size 1600x900 \
+#     --script app/docs/tasks/140-army-script.txt --after 3 --screenshot app/docs/img/140-army-selection.png
+0 grant-age age.industrial
+0 place 1 unit.rifleman @-2,9
+0 place 1 unit.rifleman @0,9
+0 place 1 unit.rifleman @2,9
+0 place 1 unit.machine_gunner @-1,11
+0 place 1 unit.machine_gunner @1,11
+0 place 1 unit.light_tank @3,12
+0 place 1 unit.medic @-2,12
+0 place 1 unit.medic @0,13
+0 place 1 unit.supply_truck @-3,14
+0 place 1 unit.supply_truck @2,14
+0 place 1 unit.citizen @-4,10
+0 place 1 unit.citizen @4,10
+0 place 1 unit.citizen @0,15
+10 box-near army1 8

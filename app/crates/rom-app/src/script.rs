@@ -25,7 +25,8 @@
 //! `traderN` = own route traders, `gatherN` = own completed gather buildings, `shipN` = own orbiting ships, `landedN` = own landed ships, `enemyN` = enemy non-city buildings
 //! on the home planet, `foecityN` = enemy cities there (task 75), `armyN` = own armed units that
 //! do not build and `foeN` = enemy units on the home planet (task 125). `click` and `rclick`
-//! support these names and Shift.
+//! support these names and Shift. `box-near <live name> <tiles> [ctrl]` box-selects whatever
+//! stands within that many tiles of the named entity, as a mouse box would (task 140).
 //! These component-based aliases replace a dependency on the last trained type.
 //!
 //! Space commands: `ships` selects every ship of player one, `producers` its finished
@@ -100,6 +101,12 @@ pub enum ScriptAction {
     SelectProducers,
     /// Select finished producers that offer track research.
     SelectResearchers,
+    /// Box-select everything within `tiles` of a named live entity (task 140).
+    BoxNear {
+        target: String,
+        tiles: u32,
+        ctrl: bool,
+    },
     /// Resolve a named entity against the live world and replay a click.
     EntityPick {
         target: String,
@@ -355,6 +362,25 @@ impl Script {
                 {
                     let key = crate::chat::ChatKey::from_name(words[2]).expect("checked above");
                     actions.push((tick, ScriptAction::ChatKeys(vec![key])));
+                    continue;
+                }
+                (Some(tick), Some("box-near")) => {
+                    let target = words.get(2).filter(|w| dynamic_name(w));
+                    let tiles = words.get(3).and_then(|t| t.parse::<u32>().ok());
+                    let (Some(target), Some(tiles)) = (target, tiles) else {
+                        return Err(format!(
+                            "line {}: box-near needs a live name and a number of tiles",
+                            number + 1
+                        ));
+                    };
+                    actions.push((
+                        tick,
+                        ScriptAction::BoxNear {
+                            target: (*target).to_owned(),
+                            tiles,
+                            ctrl: words.contains(&"ctrl"),
+                        },
+                    ));
                     continue;
                 }
                 (Some(tick), Some("quicksave")) => {
@@ -848,6 +874,41 @@ fn live_point(
 }
 
 /// Resolve a screenshot alias using components, without bypassing normal pick/order handling.
+/// A box over everything within `tiles` of a named live entity, on its body (task 140).
+pub fn live_box(
+    world: &rom_sim::World,
+    player: rom_sim::PlayerId,
+    target: &str,
+    tiles: u32,
+    ctrl: bool,
+) -> Result<PickEvent, String> {
+    let PickEvent::Click {
+        entity: Some(centre),
+        ..
+    } = live_pick(world, player, target, false, false)?
+    else {
+        return Err(format!("{target} is not an entity"));
+    };
+    let at = world
+        .entity(rom_sim::EntityId(centre))
+        .ok_or_else(|| format!("there is no {target}"))?
+        .pos;
+    let reach = u64::from(tiles) * 1000;
+    let entities = world
+        .entities()
+        .filter(|e| e.container_id.is_none())
+        .filter(|e| world.distance(at, e.pos).is_some_and(|d| d <= reach))
+        .map(|e| e.id.0)
+        .collect();
+    Ok(PickEvent::BoxSelect {
+        entities,
+        modifiers: Modifiers {
+            ctrl,
+            ..Modifiers::default()
+        },
+    })
+}
+
 pub fn live_pick(
     world: &rom_sim::World,
     player: rom_sim::PlayerId,

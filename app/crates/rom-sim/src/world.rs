@@ -253,6 +253,8 @@ impl World {
             ("economy.income_period_ticks", 1, i64::MAX),
             ("player.commerce_cap.base", 0, i64::MAX),
             ("citizen.auto_work_delay_ticks", 0, i64::MAX),
+            ("citizen.auto_build_delay_ticks", 1, i64::MAX),
+            ("citizen.auto_build_radius", 0, i64::MAX),
             ("player.caravan_limit.base", 0, i64::MAX),
             ("trade.route_unit", 1, i64::MAX),
             ("trade.min_route", 1, i64::MAX),

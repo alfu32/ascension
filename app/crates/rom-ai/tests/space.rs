@@ -358,16 +358,26 @@ fn the_warship_class_follows_the_enemy_ships_seen() {
     let rules = common::rules();
     // The survey ship is trained for the claims first; the escort is the pick.
     let survey = rules.id_of("unit.survey_ship").unwrap();
+    // Warships the player has, and those it has put in training: the pick is what is measured.
+    // (Task 140: the enemy cruisers' bombardment can wreck the spaceport before the first
+    // cruiser is out, depending on where the builders stand.)
     let warships = |w: &World| -> BTreeMap<rom_rules::DefId, usize> {
-        let mut out = BTreeMap::new();
-        for e in w.entities().filter(|e| e.owner == ME) {
-            let et = &rules.entity_types[&e.type_id];
-            if w.is_spacecraft_type(e.type_id)
+        let warship = |type_id| {
+            let et = &rules.entity_types[&type_id];
+            w.is_spacecraft_type(type_id)
                 && et.container.as_ref().is_none_or(|c| !c.launches)
                 && !et.weapons.is_empty()
-                && e.type_id != survey
-            {
+                && type_id != survey
+        };
+        let mut out = BTreeMap::new();
+        for e in w.entities().filter(|e| e.owner == ME) {
+            if warship(e.type_id) {
                 *out.entry(e.type_id).or_default() += 1;
+            }
+            for order in e.orders().iter().filter(|o| o.kind == "train") {
+                if let Some(subject) = order.subject.filter(|s| warship(*s)) {
+                    *out.entry(subject).or_default() += 1;
+                }
             }
         }
         out

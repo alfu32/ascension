@@ -74,8 +74,14 @@ impl Fx {
     }
     fn unarmed(&self) -> DefId {
         self.find(|et| {
-            et.class == EntityClass::Unit && et.movement.is_some() && et.weapons.is_empty()
+            et.class == EntityClass::Unit
+                && et.movement.is_some()
+                && et.weapons.is_empty()
+                && !supports_army(&self.rules, et)
         })
+    }
+    fn key(&self, key: &str) -> DefId {
+        self.rules.id_of(key).expect("definition")
     }
     fn producer_with(&self, mode: ProductionMode) -> DefId {
         self.find(|et| {
@@ -264,6 +270,99 @@ fn box_prefers_military_unless_ctrl() {
         },
     );
     assert_eq!(ids(&fx), vec![armed.0, plain.0]);
+}
+
+#[test]
+fn box_takes_medics_and_supply_carts_with_soldiers_not_workers() {
+    let mut fx = fixture();
+    let soldier = fx.spawn(fx.key("unit.spearman"), 1, 10, 10);
+    let medic = fx.spawn(fx.key("unit.medic"), 1, 11, 10);
+    let wagon = fx.spawn(fx.key("unit.supply_wagon"), 1, 12, 10);
+    let citizen = fx.spawn(fx.key("unit.citizen"), 1, 13, 10);
+    let priest = fx.spawn(fx.key("unit.priest"), 1, 14, 10);
+    let all = [soldier, medic, wagon, citizen, priest];
+    fx.boxed(&all, false);
+    assert_eq!(ids(&fx), vec![soldier.0, medic.0, wagon.0]);
+    // Without soldiers in the box nothing is left out; Ctrl keeps everything.
+    fx.boxed(&[medic, citizen, priest], false);
+    assert_eq!(ids(&fx), vec![medic.0, citizen.0, priest.0]);
+    fx.boxed(&all, true);
+    assert_eq!(ids(&fx).len(), 5);
+    // A double click on a soldier takes the soldiers of its type and the support on screen.
+    let archer = fx.spawn(fx.key("unit.slinger"), 1, 15, 10);
+    let other = fx.spawn(fx.key("unit.spearman"), 1, 16, 10);
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Click {
+            world_point: (0.0, 0.0),
+            surface: flat_surface((0.0, 0.0)),
+            entity: Some(soldier.0),
+            modifiers: Modifiers::default(),
+            double: true,
+            on_screen: vec![
+                soldier.0, medic.0, wagon.0, citizen.0, priest.0, archer.0, other.0,
+            ],
+        },
+    );
+    assert_eq!(ids(&fx), vec![soldier.0, medic.0, wagon.0, other.0]);
+    // A double click on a medic takes the medics only.
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Click {
+            world_point: (0.0, 0.0),
+            surface: flat_surface((0.0, 0.0)),
+            entity: Some(medic.0),
+            modifiers: Modifiers::default(),
+            double: true,
+            on_screen: vec![soldier.0, medic.0, wagon.0],
+        },
+    );
+    assert_eq!(ids(&fx), vec![medic.0]);
+}
+
+#[test]
+fn support_walks_with_an_attack_move_and_builders_mend_on_right_click() {
+    let mut fx = fixture();
+    let soldier = fx.spawn(fx.key("unit.spearman"), 1, 10, 10);
+    let medic = fx.spawn(fx.key("unit.medic"), 1, 11, 10);
+    fx.boxed(&[soldier, medic], false);
+    fx.ctl.attack_move = true;
+    fx.ground_click();
+    fx.step(1);
+    assert_eq!(fx.kinds(soldier), ["attack_move"]);
+    assert_eq!(fx.kinds(medic), ["move"]);
+    assert!(
+        !fx.ctl.take_cues().contains(&crate::sound::UiCue::Refused),
+        "the medic is not refused"
+    );
+    // An enemy knocks a farm about; a citizen sent to it mends it.
+    let farm = fx.spawn(fx.key("bld.farm"), 1, 30, 30);
+    let foe = fx.spawn(fx.key("unit.spearman"), 2, 33, 30);
+    fx.world
+        .submit(Command {
+            player: PlayerId(2),
+            executor: foe,
+            kind: "attack".into(),
+            subject: None,
+            target_entity: Some(farm),
+            target_pos: None,
+            queue: false,
+        })
+        .expect("attack");
+    for _ in 0..400 {
+        let f = fx.world.entity(farm).expect("farm");
+        if f.hp < f.max_hp {
+            break;
+        }
+        fx.step(1);
+    }
+    let f = fx.world.entity(farm).expect("farm");
+    assert!(f.hp < f.max_hp);
+    let citizen = fx.spawn(fx.key("unit.citizen"), 1, 26, 30);
+    fx.click(citizen, false);
+    fx.rclick(Some(farm), (30.0, 30.0), false);
+    fx.step(1);
+    assert_eq!(fx.kinds(citizen)[0], "repair");
 }
 
 #[test]
@@ -1608,6 +1707,8 @@ fn task_30_scripts_reach_the_capture_states_without_a_window() {
                     ScriptAction::SelectCraft => ctl.select_own_craft(&game.world),
                     ScriptAction::SelectProducers => ctl.select_producers(&game.world),
                     ScriptAction::SelectShips => ctl.select_own_ships(&game.world),
+                    // No scene here boxes near a live name (task 140).
+                    ScriptAction::BoxNear { .. } => {}
                     ScriptAction::EntityPick {
                         target,
                         right,
@@ -2048,6 +2149,8 @@ fn wealth_screenshot_script_reaches_capture_without_a_window() {
                 ScriptAction::SelectCraft => ctl.select_own_craft(&game.world),
                 ScriptAction::SelectProducers => ctl.select_producers(&game.world),
                 ScriptAction::SelectShips => ctl.select_own_ships(&game.world),
+                // No scene here boxes near a live name (task 140).
+                ScriptAction::BoxNear { .. } => {}
                 ScriptAction::EntityPick {
                     target,
                     right,
@@ -2257,6 +2360,8 @@ fn orbital_review_script_trains_launches_selects_and_bombards_through_picks() {
                 ScriptAction::SelectCraft => ctl.select_own_craft(&game.world),
                 ScriptAction::SelectProducers => ctl.select_producers(&game.world),
                 ScriptAction::SelectShips => ctl.select_own_ships(&game.world),
+                // No scene here boxes near a live name (task 140).
+                ScriptAction::BoxNear { .. } => {}
                 ScriptAction::EntityPick {
                     target,
                     right,
@@ -2547,6 +2652,8 @@ fn colony_script_run() -> (crate::match_setup::Match, Controller, BodyId, u64) {
                 ScriptAction::SelectCraft => ctl.select_own_craft(world),
                 ScriptAction::SelectProducers => ctl.select_producers(world),
                 ScriptAction::SelectShips => ctl.select_own_ships(world),
+                // No scene here boxes near a live name (task 140).
+                ScriptAction::BoxNear { .. } => {}
                 ScriptAction::EntityPick {
                     target,
                     right,
@@ -2735,6 +2842,8 @@ fn orbital_combat_script(
                 ScriptAction::SelectCraft => ctl.select_own_craft(&game.world),
                 ScriptAction::SelectProducers => ctl.select_producers(&game.world),
                 ScriptAction::SelectShips => ctl.select_own_ships(&game.world),
+                // No scene here boxes near a live name (task 140).
+                ScriptAction::BoxNear { .. } => {}
                 ScriptAction::EntityPick {
                     target,
                     right,

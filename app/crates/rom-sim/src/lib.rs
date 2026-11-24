@@ -387,6 +387,8 @@ mod ascension_tests;
 #[cfg(test)]
 mod life_tests;
 #[cfg(test)]
+mod support_tests;
+#[cfg(test)]
 mod tally_tests;
 #[cfg(test)]
 mod victory_tests;

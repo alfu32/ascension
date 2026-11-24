@@ -577,7 +577,9 @@ def generate():
                 damage, tiles, reload = DESTROYER_AA
                 weapon(full, scale(damage), 'explosive', tiles * 1000, ['air'], reload, slot=1)
             if line == 'civilian':
-                row('et_builder', entity_type_id=Ref(full))
+                # Task 140: mending is free, so it is slow: a quarter of the building pace (the
+                # full hit points in four build times); several builders add up.
+                row('et_builder', entity_type_id=Ref(full), build_pct=100, repair_pct=25)
                 for resource in ('food', 'timber', 'metal', 'oil'):
                     row('et_harvester', entity_type_id=Ref(full), resource_id=Ref('res.' + resource), amount=10)
             if line == 'scholar':
@@ -597,7 +599,13 @@ def generate():
                 if line != 'repair':
                     row('et_energy', entity_type_id=Ref(full), max=100, regen_per_second=2)
             if line == 'supply':
-                row('et_supply', entity_type_id=Ref(full), radius=6000)
+                # Task 140: supply carts repair vehicles (mechanical) as the repair drone does, at
+                # the priest's rate in the medieval age and the drone's rate from the industrial
+                # age, and cancel attrition for their own side within eight tiles.
+                tag(full, 'healer')
+                row('et_healer', entity_type_id=Ref(full), target_tag_id=Ref('mechanical', 'tag'),
+                    hp_per_second=4 if age < 5 else 8, range=3000, energy_per_hp=0, can_convert=0)
+                row('et_supply', entity_type_id=Ref(full), radius=8000)
             if spacecraft:
                 # Carriers: a transport takes a company, every other starship one or two squads
                 # (population, one unit each).

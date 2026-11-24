@@ -22,6 +22,8 @@ INSERT INTO game_constant(key,value,unit,note) VALUES
  ('victory.capital_hold_ticks',2400,'ticks','continuous enemy capital occupation before defeat'),
  ('unit.respond_range',12000,'milli-tiles','aggressive stance acquisition'),
  ('citizen.auto_work_delay_ticks',200,'ticks','idle workers look for work after this'),
+ ('citizen.auto_build_delay_ticks',40,'ticks','task 140: an idle builder looks for an unfinished or damaged own building after this'),
+ ('citizen.auto_build_radius',40000,'milli-tiles','task 140: how far from where it stands an idle builder looks (a city''s border radius)'),
  ('city.spacing',20000,'milli-tiles','minimum distance between cities; below a city border radius so a second city fits inside the first one''s borders'),
  ('city.radius_per_building',400,'milli-tiles','economic radius a city gains per completed own building inside it'),
  ('city.radius_from_buildings_max',8000,'milli-tiles','cap on the economic radius gained from buildings'),
@@ -1913,7 +1915,9 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.s
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.supply_wagon'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.supply_wagon'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.supply_wagon'),(SELECT id FROM movement_class WHERE key='wheeled'),1300);
-INSERT INTO et_supply(entity_type_id,radius) VALUES ((SELECT id FROM def WHERE key='unit.supply_wagon'),6000);
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.supply_wagon'),(SELECT id FROM tag WHERE key='healer'));
+INSERT INTO et_healer(entity_type_id,target_tag_id,hp_per_second,range,energy_per_hp,can_convert) VALUES ((SELECT id FROM def WHERE key='unit.supply_wagon'),(SELECT id FROM tag WHERE key='mechanical'),4,3000,0,0);
+INSERT INTO et_supply(entity_type_id,radius) VALUES ((SELECT id FROM def WHERE key='unit.supply_wagon'),8000);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.siege_workshop'),(SELECT id FROM def WHERE key='unit.supply_wagon'),'train','units',4,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.supply_wagon'),(SELECT id FROM def WHERE key='res.wealth'),52,1);
 INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,pop_cost,build_ticks,ramp_mode,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='unit.supply_truck'),'unit','supply',120,2,(SELECT id FROM armor_class WHERE key='flesh'),5000,1,275,'per_type',(SELECT id FROM def WHERE key='unit.supply_wagon'),(SELECT id FROM def WHERE key='age.industrial'));
@@ -1921,7 +1925,9 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.s
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.supply_truck'),(SELECT id FROM tag WHERE key='military'));
 INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.supply_truck'),(SELECT id FROM tag WHERE key='passenger'));
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.supply_truck'),(SELECT id FROM movement_class WHERE key='wheeled'),1300);
-INSERT INTO et_supply(entity_type_id,radius) VALUES ((SELECT id FROM def WHERE key='unit.supply_truck'),6000);
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.supply_truck'),(SELECT id FROM tag WHERE key='healer'));
+INSERT INTO et_healer(entity_type_id,target_tag_id,hp_per_second,range,energy_per_hp,can_convert) VALUES ((SELECT id FROM def WHERE key='unit.supply_truck'),(SELECT id FROM tag WHERE key='mechanical'),8,3000,0,0);
+INSERT INTO et_supply(entity_type_id,radius) VALUES ((SELECT id FROM def WHERE key='unit.supply_truck'),8000);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.factory'),(SELECT id FROM def WHERE key='unit.supply_truck'),'train','units',2,1);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='unit.supply_truck'),(SELECT id FROM def WHERE key='res.wealth'),70,1);
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.up.supply_truck','Upgrade to Supply Trucks');
@@ -2247,7 +2253,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.c
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM movement_class WHERE key='foot'),1300);
 INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),2,(SELECT id FROM damage_class WHERE key='melee'),0,40);
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.citizen')),'ground');
-INSERT INTO et_builder(entity_type_id) VALUES ((SELECT id FROM def WHERE key='unit.citizen'));
+INSERT INTO et_builder(entity_type_id,build_pct,repair_pct) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),100,25);
 INSERT INTO et_harvester(entity_type_id,resource_id,amount) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='res.food'),10);
 INSERT INTO et_harvester(entity_type_id,resource_id,amount) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='res.timber'),10);
 INSERT INTO et_harvester(entity_type_id,resource_id,amount) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='res.metal'),10);
@@ -2262,7 +2268,7 @@ INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='unit.w
 INSERT INTO et_movement(entity_type_id,movement_class_id,speed) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM movement_class WHERE key='foot'),1300);
 INSERT INTO et_weapon(entity_type_id,damage,damage_class_id,range_max,cooldown_ticks) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),4,(SELECT id FROM damage_class WHERE key='melee'),0,40);
 INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.worker_drone')),'ground');
-INSERT INTO et_builder(entity_type_id) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'));
+INSERT INTO et_builder(entity_type_id,build_pct,repair_pct) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),100,25);
 INSERT INTO et_harvester(entity_type_id,resource_id,amount) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='res.food'),10);
 INSERT INTO et_harvester(entity_type_id,resource_id,amount) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='res.timber'),10);
 INSERT INTO et_harvester(entity_type_id,resource_id,amount) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='res.metal'),10);

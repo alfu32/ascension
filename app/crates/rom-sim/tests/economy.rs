@@ -377,12 +377,13 @@ fn build_farm(helping: bool) -> u64 {
     let mut w = world();
     town(&mut w, OWNER, at(56_500, 56_500));
     let worker = spawn(&mut w, "unit.citizen", at(7000, 10_000));
-    let other = spawn(&mut w, "unit.citizen", at(7000, 10_000));
+    // Task 140: an idle citizen nearby would join the site by itself; alone means alone.
+    let other = helping.then(|| spawn(&mut w, "unit.citizen", at(7000, 10_000)));
     w.submit(construction(&w, worker, "bld.farm", at(10_000, 10_000)))
         .unwrap();
     w.step();
     let farm = site(&w, "bld.farm");
-    if helping {
+    if let Some(other) = other {
         help(&mut w, other, farm);
     }
     finish(&mut w, worker);
@@ -742,9 +743,12 @@ fn construction_fractional_work_and_cancelled_sites_can_be_resumed() {
     assert_eq!(w.entity(farm).unwrap().build_progress, Some(149));
     w.step();
     assert_eq!(w.entity(farm).unwrap().build_progress, None);
+    // Task 140: a repair of a whole building is done at once (it mends damaged ones).
+    let done = w.stats().orders_done;
     help(&mut w, worker, farm);
     w.step();
-    assert_eq!(w.stats().orders_unsupported, 1);
+    assert_eq!(w.stats().orders_unsupported, 0);
+    assert_eq!(w.stats().orders_done, done + 1);
 }
 
 #[test]

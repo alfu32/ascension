@@ -249,6 +249,50 @@ impl World {
         self.economy.dirty.insert(id);
     }
 
+    /// One tick of a builder mending a damaged own building (task 140), free of cost: each
+    /// builder restores `repair_pct` % of the building's hit points over its build time.
+    fn advance_mending(&mut self, builder: EntityId, order: &mut Order) {
+        let site = self
+            .entity(order.target_entity.expect("repair target"))
+            .expect("checked target");
+        let et = &self.rules.entity_types[&site.type_id];
+        if et.class != EntityClass::Building
+            || site.neutralised
+            || site.assimilation_until.is_some()
+        {
+            order.status = OrderStatus::Failed("unsupported".into());
+            return;
+        }
+        if site.hp >= site.max_hp {
+            order.status = OrderStatus::Done;
+            return;
+        }
+        let (site_id, at, bounds) = (site.id, site.pos, footprint(et, site.pos));
+        let total = self
+            .rules
+            .build_ticks(site.type_id, &self.players[&site.owner].active_sources())
+            .max(1);
+        if !self.approach(builder, order, at, bounds) {
+            return;
+        }
+        let et = &self.rules.entity_types[&self.entity(builder).expect("builder").type_id];
+        let Some(component) = et.builder.as_ref() else {
+            order.status = OrderStatus::Failed("unsupported".into());
+            return;
+        };
+        let site = self.entity(site_id).expect("site");
+        let per_hp = 100 * i128::from(total);
+        let work = i128::from(site.max_hp) * i128::from(component.repair_pct.max(0))
+            + i128::from(order.build_remainder);
+        order.build_remainder = (work % per_hp) as i64;
+        order.progress_ticks += 1;
+        let site = self.entities[site_id.0 as usize].as_mut().expect("site");
+        site.hp = (i128::from(site.hp) + work / per_hp).min(i128::from(site.max_hp)) as i64;
+        if site.hp >= site.max_hp {
+            order.status = OrderStatus::Done;
+        }
+    }
+
     pub(crate) fn advance_construction(&mut self, builder: EntityId, order: &mut Order) {
         let Some(site) = order.target_entity.and_then(|id| self.entity(id)) else {
             order.status = OrderStatus::Failed("target_gone".into());
@@ -273,6 +317,11 @@ impl World {
             return;
         }
         if site.build_progress.is_none() {
+            // A repair given for a standing building (no site work recorded) mends it.
+            if order.kind == "repair" && order.total_ticks.is_none() {
+                self.advance_mending(builder, order);
+                return;
+            }
             order.status = if order.kind == "construct" || order.total_ticks.is_some() {
                 OrderStatus::Done
             } else {

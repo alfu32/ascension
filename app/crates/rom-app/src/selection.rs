@@ -402,6 +402,26 @@ fn can_land_aircraft(world: &World, entity: &Entity) -> bool {
         && !world.is_aircraft_landed(entity.id)
 }
 
+/// Whether units of this type go with an army (task 140): unarmed movers that heal or keep
+/// supply and are not civilians (medics, supply carts, repair drones; not priests).
+fn supports_army(rules: &Rules, et: &EntityType) -> bool {
+    et.class == EntityClass::Unit
+        && et.movement.is_some()
+        && et.weapons.is_empty()
+        && (et.healer.is_some() || et.supply.is_some())
+        && !rules
+            .tags
+            .values()
+            .any(|t| t.key == "civilian" && rules.has_tag(et.id, t.id))
+}
+
+/// Whether units of this type belong in a military selection (task 140): armed units that
+/// are not workers (builders, harvesters, traders), and the units that support them.
+fn of_the_army(rules: &Rules, et: &EntityType) -> bool {
+    let worker = et.builder.is_some() || !et.harvester.is_empty() || et.trader.is_some();
+    et.class == EntityClass::Unit && !worker && (!et.weapons.is_empty() || supports_army(rules, et))
+}
+
 /// Whether units of this type run trade routes (caravans, space freighters).
 fn runs_routes(world: &World, type_id: DefId) -> bool {
     world.rules().entity_types[&type_id]
@@ -1045,8 +1065,14 @@ impl Controller {
             let ids: Vec<EntityId> = self.own_selected(world).iter().map(|e| e.id).collect();
             for id in ids {
                 let orbital_target = entity.filter(|_| world.orbit(id).is_some()).map(EntityId);
+                // Unarmed members of the army (medics, supply carts) walk along (task 140).
+                let unarmed = world
+                    .entity(id)
+                    .is_some_and(|e| world.rules().entity_types[&e.type_id].weapons.is_empty());
                 let (kind, point) = if orbital_target.is_some() {
                     ("attack", None)
+                } else if unarmed {
+                    ("move", Some(target))
                 } else {
                     ("attack_move", Some(target))
                 };
@@ -1072,10 +1098,20 @@ impl Controller {
         }
         let type_id = clicked.type_id;
         if double {
+            // Soldiers of a type bring the medics and supply carts on screen along (task 140).
+            let rules = world.rules();
+            let clicked_et = &rules.entity_types[&type_id];
+            let with_support = of_the_army(rules, clicked_et) && !supports_army(rules, clicked_et);
             let same: Vec<EntityId> = on_screen
                 .iter()
                 .map(|n| EntityId(*n))
-                .filter(|n| self.mine(world, *n).is_some_and(|e| e.type_id == type_id))
+                .filter(|n| {
+                    self.mine(world, *n).is_some_and(|e| {
+                        e.type_id == type_id
+                            || (with_support
+                                && supports_army(rules, &rules.entity_types[&e.type_id]))
+                    })
+                })
                 .collect();
             let mut next = if mods.shift {
                 self.selection.clone()
@@ -1337,12 +1373,15 @@ impl Controller {
             .filter_map(|n| self.mine(world, EntityId(*n)))
             .filter(|e| rules.entity_types[&e.type_id].class == EntityClass::Unit)
             .collect();
-        let armed = units
+        // A box that holds soldiers takes the army: soldiers and their medics and supply carts,
+        // not the citizens and other workers among them (task 140).
+        let army = |e: &Entity| of_the_army(rules, &rules.entity_types[&e.type_id]);
+        let military = units
             .iter()
-            .any(|e| !rules.entity_types[&e.type_id].weapons.is_empty());
+            .any(|e| army(e) && !rules.entity_types[&e.type_id].weapons.is_empty());
         let mut next: Vec<EntityId> = units
             .iter()
-            .filter(|e| mods.ctrl || !armed || !rules.entity_types[&e.type_id].weapons.is_empty())
+            .filter(|e| mods.ctrl || !military || army(e))
             .map(|e| e.id)
             .collect();
         if mods.shift {
@@ -1595,6 +1634,18 @@ impl Controller {
                     Kind::Ground
                 }
             });
+        // A damaged own building (finished, not struck down) that builders can mend.
+        let mend = entity
+            .map(EntityId)
+            .and_then(|id| world.entity(id))
+            .filter(|e| {
+                e.owner == me
+                    && rules.entity_types[&e.type_id].class == EntityClass::Building
+                    && e.build_progress.is_none()
+                    && !e.neutralised
+                    && e.hp < e.max_hp
+            })
+            .map(|e| e.id);
         let mut selected: Vec<EntityId> = self.own_selected(world).iter().map(|e| e.id).collect();
         // An order given to a gather building applies to every worker inside it.
         let inside: Vec<EntityId> = selected
@@ -1658,6 +1709,14 @@ impl Controller {
                 }
                 Kind::Site(site) if et.builder.is_some() => {
                     issued |= self.submit(world, id, "repair", None, Some(*site), None, queue);
+                }
+                // Builders mend a damaged own building for free, a gather building too: they go
+                // back to work there by themselves once it is whole (task 140).
+                _ if et.builder.is_some()
+                    && et.movement.is_some()
+                    && let Some(building) = mend =>
+                {
+                    issued |= self.submit(world, id, "repair", None, Some(building), None, queue);
                 }
                 Kind::Gather(site, resource)
                     if et.harvester.iter().any(|h| h.resource_id == *resource) =>

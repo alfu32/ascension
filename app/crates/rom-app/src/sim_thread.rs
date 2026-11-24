@@ -1115,6 +1115,14 @@ fn run(
                         ScriptAction::SelectCraft => controller.select_own_craft(world),
                         ScriptAction::SelectProducers => controller.select_producers(world),
                         ScriptAction::SelectResearchers => controller.select_researchers(world),
+                        ScriptAction::BoxNear {
+                            target,
+                            tiles,
+                            ctrl,
+                        } => match crate::script::live_box(world, me, &target, tiles, ctrl) {
+                            Ok(pick) => controller.handle_with(world, pick),
+                            Err(error) => controller.notify(world, error),
+                        },
                         ScriptAction::EntityPick {
                             target,
                             right,
