@@ -77,14 +77,11 @@ fn constructible(view: &View<'_>) -> Vec<DefId> {
         for row in rules.production.get(producer).into_iter().flatten() {
             let building = row.product_def_id;
             if row.mode == ProductionMode::Construct
-                && rules
-                    .entity_types
-                    .get(&building)
-                    .is_some_and(|t| {
-                        t.class == EntityClass::Building
-                            && t.fortification.is_none()
-                            && t.minefield.is_none()
-                    })
+                && rules.entity_types.get(&building).is_some_and(|t| {
+                    t.class == EntityClass::Building
+                        && t.fortification.is_none()
+                        && t.minefield.is_none()
+                })
                 && seen.insert(building)
                 && view.unlocked(building)
                 && !view.obsolete(building)
