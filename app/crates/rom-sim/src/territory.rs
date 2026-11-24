@@ -227,7 +227,11 @@ impl World {
             self.territory.names.remove(&id);
         }
         let widening = self.entity(id).and_then(|e| {
-            let counts = self.rules.entity_types[&e.type_id].class == EntityClass::Building
+            let et = &self.rules.entity_types[&e.type_id];
+            // A wall segment, a gate or a mine is no building of the town (task 147).
+            let counts = et.class == EntityClass::Building
+                && et.fortification.is_none()
+                && et.minefield.is_none()
                 && !is_city
                 && e.build_progress.is_none()
                 && !e.neutralised;

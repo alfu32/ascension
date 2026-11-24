@@ -1,5 +1,6 @@
 //! Neutralisation, city ownership and assimilation.
 
+use crate::construction::footprint;
 use crate::{EntityId, PlayerId, World};
 use rom_rules::EntityClass;
 use std::{
@@ -145,13 +146,22 @@ impl World {
         self.release_site_workers(id);
         self.rallies.remove(&id);
         let e = self.entity(id).expect("transferred entity");
-        let (old, type_id, site) = (e.owner, e.type_id, e.build_progress.is_some());
+        let (old, type_id, site, pos) = (e.owner, e.type_id, e.build_progress.is_some(), e.pos);
         self.types.remove(old, type_id, id, site);
         self.index_entity(owner, type_id, id, site);
         self.entities[id.0 as usize]
             .as_mut()
             .expect("transferred entity")
             .owner = owner;
+        // A gate opens to its new owner's team (task 147).
+        let et = &self.rules.entity_types[&type_id];
+        if et.fortification.as_ref().is_some_and(|f| f.gate) {
+            let (before, after) = (self.side_of(old), self.side_of(owner));
+            let slot = self.slot(pos.body);
+            let pathing = &mut self.surfaces[slot].pathing;
+            pathing.occupy(et, pos.face, footprint(et, pos), false, before);
+            pathing.occupy(et, pos.face, footprint(et, pos), true, after);
+        }
         self.refresh_entity_stats(id);
         self.refresh_site(id);
         let e = self.entity(id).expect("transferred entity");

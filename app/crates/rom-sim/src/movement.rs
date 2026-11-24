@@ -38,6 +38,9 @@ impl World {
             return Walk::Failed;
         };
         let pos = self.entity(id).expect("walker").pos;
+        // Gates open to the walker's team (task 147).
+        let side = self.side_of(self.entity(id).expect("walker").owner);
+        let side = Some(side);
         let slot = self.slot(pos.body);
         let surface = &mut self.surfaces[slot];
         let (geo, pathing) = (&surface.geo, &mut surface.pathing);
@@ -58,7 +61,7 @@ impl World {
                 } else {
                     goal
                 };
-                if pathing.passable(motion.class, geo.tile_of(candidate), None) {
+                if pathing.passable_as(motion.class, side, geo.tile_of(candidate), None) {
                     candidate
                 } else {
                     goal
@@ -76,13 +79,14 @@ impl World {
                 request: None,
                 repaths: 0,
             };
-            if pathing.line_clear(motion.class, pos, own, exempt) {
+            if pathing.line_clear_as(motion.class, side, pos, own, exempt) {
                 state.distance = geo
                     .ceil_distance(pos, own)
                     .expect("clear lines are in reach");
             } else {
                 // Group members search for the shared goal; each ends at its own point.
-                state.request = Some(pathing.request((id, order.id), motion.class, pos, goal));
+                state.request =
+                    Some(pathing.request((id, order.id), motion.class, side, pos, goal));
             }
             order.movement = Some(state);
         }
@@ -128,9 +132,9 @@ impl World {
             // Rounding can tilt a short step across a corner the planned segment misses;
             // such a step is fine while the segment itself is still clear.
             let clear = next.is_some_and(|next| {
-                pathing.line_clear(motion.class, entity.pos, next, exempt)
-                    || (pathing.passable(motion.class, geo.tile_of(next), exempt)
-                        && pathing.line_clear(motion.class, state.origin, target, exempt))
+                pathing.line_clear_as(motion.class, side, entity.pos, next, exempt)
+                    || (pathing.passable_as(motion.class, side, geo.tile_of(next), exempt)
+                        && pathing.line_clear_as(motion.class, side, state.origin, target, exempt))
             });
             if !clear {
                 if state.repaths >= MAX_REPATHS {
@@ -139,7 +143,7 @@ impl World {
                 }
                 let repaths = state.repaths + 1;
                 let own = state.goal;
-                let request = pathing.request((id, order.id), motion.class, entity.pos, own);
+                let request = pathing.request((id, order.id), motion.class, side, entity.pos, own);
                 pathing.stats.repaths += 1;
                 *state = MoveState {
                     origin: entity.pos,
@@ -331,12 +335,12 @@ impl World {
                 }
                 points.extend(found.tiles[1..].iter().map(|t| geo.tile_centre(*t)));
                 let last = points.last().copied().unwrap_or(pos);
-                if pathing.line_clear(class, last, own, None) {
+                if pathing.line_clear_as(class, request.side, last, own, None) {
                     points.push(own);
                 } else if points.is_empty() {
                     points.push(geo.tile_centre(end));
                 }
-                Some(pathing.smooth(class, pos, &points))
+                Some(pathing.smooth(class, request.side, pos, &points))
             };
             let entity = self.entities[waiter.0.0 as usize]
                 .as_mut()

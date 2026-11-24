@@ -120,6 +120,8 @@ pub struct World {
     pub(crate) max_footprint: (i64, i64),
     /// The farthest any drone cloud of the rules flies from its operator, milli-tiles.
     pub(crate) max_leash: i64,
+    /// The minefield types of the rules, in id order (task 147).
+    pub(crate) mine_types: Vec<DefId>,
     /// Recent blasts of area weapons, for the views (task 75; not hashed, not saved).
     pub(crate) blasts: Vec<crate::combat::Blast>,
     /// Buildings that fell lately, for the views (task 75; not hashed, not saved).
@@ -304,6 +306,20 @@ impl World {
                 (w.max(et.footprint_w.max(0)), h.max(et.footprint_h.max(0)))
             });
         let max_leash = Self::max_leash_of(&rules);
+        // Minefield types, in id order (task 147); rules with one name how far mines are seen.
+        let mine_types: Vec<DefId> = rules
+            .entity_types
+            .values()
+            .filter(|et| et.minefield.is_some())
+            .map(|et| et.id)
+            .collect();
+        if !mine_types.is_empty()
+            && rules
+                .constant("mine.detection_radius")
+                .is_none_or(|v| v < 0)
+        {
+            return Err(SimError::InvalidRules("mine.detection_radius"));
+        }
         let stain_rules = crate::stains::StainRules::of(&rules);
         // Rules with a market need a complete, valid set of market constants (task 107).
         let market_rules = crate::market::MarketRules::of(&rules);
@@ -351,6 +367,7 @@ impl World {
             types: crate::index::TypeIndex::default(),
             max_footprint,
             max_leash,
+            mine_types,
             blasts: Vec::new(),
             wrecks: Vec::new(),
             strikes: Vec::new(),
@@ -569,12 +586,13 @@ impl World {
         self.note_capital(id);
         self.refresh_entity_stats(id);
         self.next_entity_id = next;
+        let side = self.side_of(owner);
         let surface = &mut self.surfaces[slot];
         surface.spatial.insert(id, pos);
         let et = &self.rules.entity_types[&type_id];
         surface
             .pathing
-            .occupy(et, pos.face, footprint(et, pos), true);
+            .occupy(et, pos.face, footprint(et, pos), true, side);
         self.avoid.set(id, Motion::of(&self.rules, type_id), pos);
         if et.gather_site.is_some() {
             self.economy.sites.insert(id);
@@ -600,11 +618,12 @@ impl World {
         self.types.remove(owner, old, id, site);
         self.index_entity(owner, new, id, site);
         let slot = self.slot(pos.body);
+        let side = self.side_of(owner);
         let pathing = &mut self.surfaces[slot].pathing;
         let before = &self.rules.entity_types[&old];
-        pathing.occupy(before, pos.face, footprint(before, pos), false);
+        pathing.occupy(before, pos.face, footprint(before, pos), false, side);
         let after = &self.rules.entity_types[&new];
-        pathing.occupy(after, pos.face, footprint(after, pos), true);
+        pathing.occupy(after, pos.face, footprint(after, pos), true, side);
         let motion = self
             .walks(id)
             .then(|| Motion::of(&self.rules, new))
@@ -712,12 +731,13 @@ impl World {
         self.capture.assimilating.remove(&id);
         self.capture.sieges.remove(&id);
         let slot = self.slot(entity.pos.body);
+        let side = self.side_of(entity.owner);
         let surface = &mut self.surfaces[slot];
         surface.spatial.remove(id, entity.pos);
         let et = &self.rules.entity_types[&entity.type_id];
         surface
             .pathing
-            .occupy(et, entity.pos.face, footprint(et, entity.pos), false);
+            .occupy(et, entity.pos.face, footprint(et, entity.pos), false, side);
         self.avoid.set(id, None, entity.pos);
         self.economy.idle.remove(&id);
         self.economy.dirty.remove(&id);
@@ -1134,6 +1154,7 @@ impl World {
         }
         self.run_path_searches();
         self.separate_units(&moved);
+        self.trip_mines();
         self.depart_ships();
         self.seen.clear();
         self.fly_clouds();

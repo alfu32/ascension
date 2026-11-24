@@ -1214,6 +1214,7 @@ impl World {
                     class: r.class,
                     start: tile_of(r.start),
                     goal: tile_of(r.goal),
+                    side: None,
                     waiters: r.waiters,
                 })
                 .collect();
@@ -1330,6 +1331,7 @@ impl World {
         for id in &ids {
             let e = world.entity(*id).expect("restored entity");
             let (type_id, pos, container) = (e.type_id, e.pos, e.container_id);
+            let side = world.side_of(e.owner);
             let Some(slot) = world.slot_of(pos.body) else {
                 return Err(bad("entity on a body without a surface"));
             };
@@ -1342,7 +1344,7 @@ impl World {
             let et = &rules.entity_types[&type_id];
             world.surfaces[slot]
                 .pathing
-                .occupy(et, pos.face, footprint(et, pos), true);
+                .occupy(et, pos.face, footprint(et, pos), true, side);
             let motion = (container.is_none() && world.walks(*id))
                 .then(|| Motion::of(&rules, type_id))
                 .flatten();
@@ -1630,6 +1632,24 @@ impl World {
             })
             .collect();
         world.name_unnamed_cities();
+        // A queued search is for its walkers' team, whose gates it passes (task 147): the
+        // team of the first walker still there, as when it was asked for.
+        for slot in 0..world.surfaces.len() {
+            let sides: Vec<Option<u32>> = world.surfaces[slot]
+                .pathing
+                .queue
+                .iter()
+                .map(|r| {
+                    r.waiters
+                        .iter()
+                        .find_map(|(id, _)| world.entity(*id))
+                        .map(|e| world.side_of(e.owner))
+                })
+                .collect();
+            for (request, side) in world.surfaces[slot].pathing.queue.iter_mut().zip(sides) {
+                request.side = side;
+            }
+        }
         Ok(world)
     }
 }

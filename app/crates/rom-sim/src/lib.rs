@@ -15,6 +15,7 @@ mod drones;
 mod economy;
 mod entity;
 mod formation;
+mod fortification;
 mod gathering;
 mod geometry;
 mod hash;
@@ -66,6 +67,7 @@ pub use city_names::{RENAME_CITY, clean_city_name};
 pub use combat::{BLAST_MEMORY_TICKS, Blast, Wreck};
 pub use drones::{Cloud, Joining, TURN_PER_TICK};
 pub use entity::{Entity, EntityId, Player, PlayerId};
+pub use fortification::{LineSite, MAX_LINE_SITES};
 pub use geometry::Topology;
 pub use income::Income;
 pub use intel::{
@@ -102,7 +104,7 @@ use rom_rules::DefId;
 use thiserror::Error;
 
 /// Invalid setup or input, rejected without changing simulation state.
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum SimError {
     /// Carry requires a free carry-mode node or the executor's current cargo.
     #[error("invalid carry target")]
@@ -401,12 +403,20 @@ pub enum SimError {
     /// Task 144: a city's name keeps at least one printable character.
     #[error("a city needs a name")]
     EmptyName,
+    /// Task 147: a line is laid of a fortification segment, a minefield of a mine.
+    #[error("not a fortification segment or a minefield")]
+    NotALine,
+    /// Task 147: a line or minefield lays at most `MAX_LINE_SITES` sites.
+    #[error("too long a line or too large a minefield")]
+    LineTooLong,
 }
 
 #[cfg(test)]
 mod ascension_tests;
 #[cfg(test)]
 mod city_names_tests;
+#[cfg(test)]
+mod fortification_tests;
 #[cfg(test)]
 mod life_tests;
 #[cfg(test)]

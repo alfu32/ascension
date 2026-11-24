@@ -315,6 +315,7 @@ impl World {
     fn survey_shows(&self, viewer: PlayerId, e: &Entity) -> bool {
         e.container_id.is_none()
             && self.is_building(e.type_id)
+            && !self.hidden_mine(viewer, e)
             && self
                 .slot_of(e.pos.body)
                 .is_some_and(|slot| self.surveyed(viewer, slot))
