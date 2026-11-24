@@ -14,6 +14,7 @@ VERSION = sys.argv[3] if len(sys.argv) > 3 else ""
 SOUND_DIR = Path(sys.argv[4]) if len(sys.argv) > 4 else None
 
 LEADS = {
+    "18": "Buildings and units built from parts inside the game. Round 18 brings the <strong>militia</strong> (task 141, release 0.0.131): citizens called up for free inside your own borders and stood down again, one step per age, from the ancient <strong>Levies</strong> with a spear to the <strong>Planetary Guard</strong> (<code>unit.militia_&lt;age&gt;@&lt;age&gt;</code>). Each wears the citizen's clothes with the weapon and headgear of its age (picture above, enlarged). Also the <strong>Nuclear Reactor</strong> (task 146, <code>bld.nuclear_reactor@automation</code>), which becomes the fusion plant. Each card plays the unit's own sounds. Set each model's status and write directions; name a part as <code>model id/part</code>.",
     "17": "Buildings and units built from parts inside the game. Round 17 brings the <strong>Drone Operator</strong> (task 120, issue #3; <code>unit.drone_operator@information</code>): a soldier with a helmet and visor holding a tablet controller, a radio mast and a spare drone on the pack. Updated after your round 17 verdict (task 128, release 0.0.123): the drones now fly in a visible 4×4 grid hovering above the operator, the model sheet shows the grid, and in play the grid deploys forward over the target and each drone dives at its own enemy (picture above). Sounds were approved. Its card plays its own sounds (a calm soldier's voice, the swarm, a drone strike). Set the model's status and write directions; name a part as <code>model id/part</code>.",
     "16": "Buildings and units built from parts inside the game. Round 16 brings the <strong>rotorcraft</strong> (task 119, issue #3): the <strong>Attack Helicopter</strong> (modern, <code>unit.attack_helicopter@modern</code>) with a main and a tail rotor, the <strong>Gunship Helicopter</strong> (information, <code>unit.gunship_helicopter@information</code>) with stub wings and missile pods, and the <strong>Hover Gunship</strong> (automation, <code>unit.hover_gunship@automation</code>) on four ducted fans. They hover in place and lift off and land straight up. Each card plays the unit's own sounds (voices, rotor, shots). Set each model's status and write directions; name a part as <code>model id/part</code>.",
     "13": "Buildings and units built from parts inside the game. Round 13 brings one model: the <strong>relic site</strong> (task 82; <code>node.relics@any</code>), the holy place in the wild where priests collect relics for their temples. Set its status and write directions. Name a part as <code>model id/part</code>, for example <code>node.relics@any/reliquary</code>.",
@@ -40,6 +41,10 @@ ROUND15 = {"bld.jump_detector@fusion"}
 ROUND16 = {"unit.attack_helicopter@modern", "unit.gunship_helicopter@information",
             "unit.hover_gunship@automation"}
 ROUND17 = {"unit.drone_operator@information"}
+# Task 141: the militia line; task 146: the nuclear reactor.
+ROUND18 = {"bld.nuclear_reactor@automation"} | {f"unit.militia_{a}@{a}" for a in (
+    "ancient", "classical", "medieval", "gunpowder", "enlightenment", "industrial", "modern",
+    "information", "automation", "fusion", "starfaring", "abundance")}
 NAMES = {"bld.jump_detector": "Deep Space Tracking Station", "bld.city": "City", "bld.woodcutter_camp": "Woodcutter's camp", "node.relics": "Relic site",
          "unit.ship_of_the_line": "Man-of-war"}
 
@@ -180,7 +185,10 @@ OVERVIEW16 = [
 OVERVIEW17 = [
     ("120-drone-cloud", "Drone operators (red, front) with their grids: one idle with its 4×4 grid hovering above it, three with their grids deployed over infantry, a tank and a missile launcher (top), and the dives a moment later (bottom) (<code>docs/tasks/128-drone-grid-script.txt</code>)"),
 ]
-OVERVIEW = OVERVIEW17 if ROUND == "17" else OVERVIEW16 if ROUND == "16" else OVERVIEW15 if ROUND == "15" else OVERVIEW14 if ROUND == "14" else OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
+OVERVIEW18 = [
+    ("141-militia-lineup", "The twelve militia steps, ancient to abundance, from the front (each enlarged from its model sheet)"),
+]
+OVERVIEW = OVERVIEW18 if ROUND == "18" else OVERVIEW17 if ROUND == "17" else OVERVIEW16 if ROUND == "16" else OVERVIEW15 if ROUND == "15" else OVERVIEW14 if ROUND == "14" else OVERVIEW13 if ROUND == "13" else OVERVIEW12 if ROUND == "12" else OVERVIEW11 if ROUND == "11" else OVERVIEW10 if ROUND == "10" else OVERVIEW9 if ROUND == "9" else OVERVIEW8 if ROUND == "8" else OVERVIEW7 if ROUND == "7" else OVERVIEW6 if ROUND == "6" else OVERVIEW5 if ROUND == "5" else OVERVIEW4 if ROUND == "4" else OVERVIEW3 if ROUND == "3" else [
     ("gallery_ancient", "Ancient age, game camera: <code>--gallery ancient</code>"),
     ("gallery_classical", "Classical age, game camera: <code>--gallery classical</code>"),
     ("gallery_classical_close_team2", "Classical age, close, in player 2's blue to show where team colour sits"),
@@ -204,9 +212,12 @@ def round_of(m):
     (starfaring to galactic), 12 the jump inhibitor, the automated colony and the
     alternative lab look (approved: now the Auto Lab, bld.auto_lab@automation), 13 the relic
     site (task 82), 14 the higher-definition spaceships and the two line ships of task 92
-    (task 93), 15 the Deep Space Tracking Station (task 118), 16 the rotorcraft (task 119), 17 the drone operator (task 120)."""
+    (task 93), 15 the Deep Space Tracking Station (task 118), 16 the rotorcraft (task 119), 17 the drone operator (task 120), 18 the militia (task 141) and the nuclear reactor
+    (task 146)."""
     if m["id"] in ROUND1:
         return 1
+    if m["id"] in ROUND18:
+        return 18
     if m["id"] in ROUND17:
         return 17
     if m["id"] in ROUND16:
