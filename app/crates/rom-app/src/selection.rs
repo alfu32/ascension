@@ -23,6 +23,53 @@ pub const PLAYER: PlayerId = PlayerId(1);
 /// Ticks an order marker stays visible: half a second.
 const MARKER_TICKS: u64 = 10;
 /// Ticks within which a second press of a group digit centres the camera.
+/// The fewest milli-tiles between two dabs of one stroke: one tile, so a small brush does not
+/// stack orders on a tile (task 150).
+const STROKE_MIN_SPACING: i64 = 1000;
+/// Paint orders a stroke may give per game second (20 ticks), whatever the mouse does: a long
+/// stroke cannot flood the order queue or a network session (task 150).
+pub const STROKE_ORDERS_PER_SECOND: u32 = 60;
+/// Paint orders one pointer event may give: a fast drag across the screen is spread over the
+/// next events instead of one burst (task 150).
+const STROKE_ORDERS_PER_EVENT: usize = 16;
+/// The ticks in one game second.
+const STROKE_WINDOW_TICKS: u64 = 20;
+
+/// A brush stroke in progress (task 150).
+#[derive(Clone, Debug)]
+struct BrushStroke {
+    /// Where the last dab went: the next ones are laid from here.
+    last: Pos,
+    /// The tiles already painted by this stroke: a tile is dabbed once per stroke.
+    tiles: BTreeSet<(BodyId, u8, i32, i32)>,
+    /// The game second the order budget counts in, as its first tick.
+    window: u64,
+    /// Orders given in that second.
+    given: u32,
+}
+
+/// The dab positions from `from` (already painted) to `to`, `spacing` milli-tiles apart along
+/// the straight line on the surface, the last one no farther than `to`. Across a face edge or
+/// onto another body the line is not followed: only `to` itself is returned.
+fn stroke_samples(from: Pos, to: Pos, spacing: i64) -> Vec<Pos> {
+    if from.face != to.face || from.body != to.body {
+        return vec![to];
+    }
+    let (dx, dy) = (
+        i64::from(to.x) - i64::from(from.x),
+        i64::from(to.y) - i64::from(from.y),
+    );
+    let length = (dx * dx + dy * dy).isqrt();
+    let spacing = spacing.max(1);
+    (1..=length / spacing)
+        .map(|i| Pos {
+            x: (i64::from(from.x) + dx * i * spacing / length) as i32,
+            y: (i64::from(from.y) + dy * i * spacing / length) as i32,
+            ..from
+        })
+        .collect()
+}
+
 const GROUP_DOUBLE_TICKS: u64 = 10;
 /// Fewest ticks between two placement checks.
 const PLACEMENT_CHECK_TICKS: u64 = 3;
@@ -281,6 +328,8 @@ pub struct Controller {
     life_pick: bool,
     /// Clicks on the ground of the planet shown paint with this brush (task 77).
     brush: Option<DefId>,
+    /// The brush stroke under way: the left button is held on the ground (task 150).
+    stroke: Option<BrushStroke>,
     placement: Option<Placement>,
     markers: Vec<Marker>,
     helpers: Vec<Helpers>,
@@ -875,6 +924,11 @@ impl Controller {
                 entities,
                 modifiers,
             } => self.box_select(world, &entities, modifiers),
+            PickEvent::Stroke { surface, start, .. } => {
+                let at = self.pos_of(surface);
+                self.stroke_to(world, at, start);
+            }
+            PickEvent::StrokeEnd => self.stroke = None,
             PickEvent::RightClick {
                 surface,
                 entity,
@@ -911,6 +965,7 @@ impl Controller {
                 self.descend_pick = false;
                 self.life_pick = false;
                 self.brush = None;
+                self.stroke = None;
                 self.attack_move = false;
                 self.patrol = false;
                 self.patrol_started = false;
@@ -1103,8 +1158,79 @@ impl Controller {
         }
     }
 
+    /// The brush in hand (tests of other modules).
+    #[cfg(test)]
+    pub(crate) fn brush_in_hand(&self) -> Option<DefId> {
+        self.brush
+    }
+
+    /// Whether a brush stroke is under way (tests of other modules).
+    #[cfg(test)]
+    pub(crate) fn stroking(&self) -> bool {
+        self.stroke.is_some()
+    }
+
+    /// The left button went down (`start`) or moved on with a brush in hand (task 150): paints
+    /// a dab at `at` and, on a move, one every brush size along the way from the last dab, so
+    /// a fast drag leaves no gap. At most [`STROKE_ORDERS_PER_SECOND`] orders a game second and
+    /// [`STROKE_ORDERS_PER_EVENT`] an event; what the budget holds back is laid by the next move,
+    /// from the last dab given.
+    fn stroke_to(&mut self, world: &mut OrderSink<'_>, at: Pos, start: bool) {
+        let Some(brush) = self.brush.filter(|_| !self.view.in_space) else {
+            self.stroke = None;
+            return;
+        };
+        let tick = world.tick();
+        let spacing = world
+            .rules()
+            .brushes
+            .get(&brush)
+            .map_or(STROKE_MIN_SPACING, |b| b.radius.max(STROKE_MIN_SPACING));
+        let start = start || self.stroke.is_none();
+        if start {
+            self.stroke = Some(BrushStroke {
+                last: at,
+                tiles: BTreeSet::new(),
+                window: tick,
+                given: 0,
+            });
+        }
+        let stroke = self.stroke.as_mut().expect("just set");
+        let samples = if start {
+            vec![at]
+        } else {
+            stroke_samples(stroke.last, at, spacing)
+        };
+        let mut dabs = Vec::new();
+        for dab in samples {
+            if tick.saturating_sub(stroke.window) >= STROKE_WINDOW_TICKS {
+                stroke.window = tick;
+                stroke.given = 0;
+            }
+            if dabs.len() >= STROKE_ORDERS_PER_EVENT || stroke.given >= STROKE_ORDERS_PER_SECOND {
+                break;
+            }
+            stroke.last = dab;
+            if stroke.tiles.insert((
+                dab.body,
+                dab.face,
+                dab.x.div_euclid(1000),
+                dab.y.div_euclid(1000),
+            )) {
+                stroke.given += 1;
+                dabs.push(dab);
+            }
+        }
+        for dab in dabs {
+            if !self.paint(world, brush, dab) {
+                self.stroke = None;
+                break;
+            }
+        }
+    }
+
     /// One stroke of `brush` at `at` on the planet shown (task 77), or why it cannot be.
-    fn paint(&mut self, world: &mut OrderSink<'_>, brush: DefId, at: Pos) {
+    fn paint(&mut self, world: &mut OrderSink<'_>, brush: DefId, at: Pos) -> bool {
         let me = self.me();
         let command = Command {
             player: me,
@@ -1116,11 +1242,15 @@ impl Controller {
             queue: false,
         };
         match world.submit(command) {
-            Ok(_) => self.ordered = true,
+            Ok(_) => {
+                self.ordered = true;
+                true
+            }
             Err(error) => {
                 self.brush = None;
                 let text = rejection_message(world, self.me(), &error, Some(brush));
                 self.say(world, text);
+                false
             }
         }
     }
@@ -1172,7 +1302,7 @@ impl Controller {
         }
         if let Some(brush) = self.brush {
             return Some(format!(
-                "{}\nClick the ground to paint; Escape puts the brush down",
+                "{}\nClick or drag on the ground to paint; Escape puts the brush down",
                 brush_label(world.rules(), brush)
             ));
         }
@@ -2783,7 +2913,7 @@ impl Controller {
                     self.say(
                         world,
                         format!(
-                            "{}: click the ground to paint, Escape to stop",
+                            "{}: click or drag the ground to paint, Escape to stop",
                             rules.def(def).name
                         ),
                     );
@@ -3828,6 +3958,10 @@ impl Controller {
                 hud.help = rejection_message(world, self.me(), &reason, Some(p.def));
             }
         }
+        hud.painting = self.brush.is_some()
+            && !self.view.in_space
+            && self.placement.is_none()
+            && !self.descend_pick;
         hud.placement = self.placement.as_ref().and_then(|p| {
             p.centre.map(|c| HudPlacement {
                 face: c.face,

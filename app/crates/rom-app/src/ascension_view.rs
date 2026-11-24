@@ -591,6 +591,35 @@ mod tests {
             .filter(|(a, b)| a != b)
             .count();
         assert!(changed > 400, "{changed} tiles painted");
+        // Task 150: with the brush still in hand a press, a drag and a release lay a dab every
+        // brush size along the path: no gaps, and going back over it gives no repeats.
+        let brush = ctl.brush_in_hand().expect("the brush stays in hand");
+        let spacing = world.rules().brushes[&brush].radius.max(1000);
+        let first = 4_000;
+        let end = first + 2 * spacing + 500;
+        let at = |x: i64| PickEvent::Stroke {
+            world_point: (x as f32 / 1000.0, 32.0),
+            surface: SurfacePos {
+                face: 0,
+                x,
+                y: 32_000,
+            },
+            start: x == first,
+        };
+        let before = world.living(rock).unwrap().strokes;
+        for event in [
+            at(first),
+            at(end),
+            at(end),
+            at(first + 1),
+            PickEvent::StrokeEnd,
+        ] {
+            ctl.handle(&mut world, event);
+        }
+        world.step();
+        let laid = world.living(rock).unwrap().strokes - before;
+        assert_eq!(laid, 3, "the press and one dab per {spacing}");
+        assert!(!ctl.stroking(), "the release ends the stroke");
     }
 
     #[test]

@@ -16,7 +16,8 @@
 //! `key <char> [ctrl] [shift]` (`key delete` presses the Delete key: the chat's when it has the
 //! keyboard, else it deletes the selection, task 142), `escape`;
 //! `hud` takes `tab`, `arrow`, `slot`, `queue`, `tile`, `family` (a brush family listed beside
-//! the palette, task 114).
+//! the palette, task 114). `brush-down <point>`, `brush-move <point>` and `brush-up` press,
+//! drag and release the left button with a brush in hand (task 150).
 //!
 //! Live names (resolved at the step, in entity id order): `relicN` = free carry nodes,
 //! `templeN` = own completed keepers, `marketN` = own completed buildings training route
@@ -597,6 +598,15 @@ fn parse_line(
                 modifiers,
             }
         }
+        "brush-down" | "brush-move" => {
+            let (world_point, surface) = point(arg(0)?, context, offset)?;
+            PickEvent::Stroke {
+                world_point,
+                surface,
+                start: command == "brush-down",
+            }
+        }
+        "brush-up" => PickEvent::StrokeEnd,
         "hover" => {
             let (world_point, surface) = point(arg(0)?, context, offset)?;
             PickEvent::Hover {

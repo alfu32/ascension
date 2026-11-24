@@ -93,6 +93,18 @@ pub enum PickEvent {
         /// Modifiers held.
         modifiers: Modifiers,
     },
+    /// With a brush in hand (`HudSnapshot::painting`): the left button went down on the ground
+    /// (`start`) or moved on while held. No selection box is drawn for such a press.
+    Stroke {
+        /// Ground point under the cursor.
+        world_point: (f32, f32),
+        /// The same point as a surface position.
+        surface: SurfacePos,
+        /// True for the press, false for a move with the button held.
+        start: bool,
+    },
+    /// The left button of a brush stroke was released, or the stroke was cancelled.
+    StrokeEnd,
     /// A right click in the world or on the minimap.
     RightClick {
         /// Ground point under the cursor, or the entity's position when the ray missed.
@@ -739,6 +751,8 @@ pub struct PickController {
     last_inside: Option<(u64, usize)>,
     last_hover: Option<(f32, f32)>,
     pan: Option<(PointerButton, f32, f32)>,
+    /// A brush stroke is under way: the left button is held with a brush in hand.
+    brushing: bool,
 }
 
 impl PickController {
@@ -808,6 +822,16 @@ impl PickController {
                     return out;
                 }
                 self.pointer = Some((x, y));
+                if self.brushing
+                    && !self.over_hud(ctx, x, y)
+                    && let Some((world_point, surface)) = ctx.ground_hit(x, y)
+                {
+                    out.push(PickEvent::Stroke {
+                        world_point,
+                        surface,
+                        start: false,
+                    });
+                }
                 if let Some(press) = &mut self.press
                     && (x - press.x).hypot(y - press.y) > DRAG_PIXELS
                 {
@@ -818,6 +842,7 @@ impl PickController {
             InputEvent::PointerLeft => {
                 self.pointer = None;
                 self.pan = None;
+                self.end_stroke(&mut out);
             }
             InputEvent::ButtonDown { button, x, y, mods } => {
                 self.pointer = Some((x, y));
@@ -846,6 +871,7 @@ impl PickController {
                 mods,
             } => {
                 self.pointer = Some((x, y));
+                self.end_stroke(&mut out);
                 if let Some(press) = self.press.take() {
                     self.finish_press(press, (x, y), mods, ctx, &mut out);
                 }
@@ -858,10 +884,17 @@ impl PickController {
             InputEvent::ReleaseAll => {
                 self.press = None;
                 self.pan = None;
+                self.end_stroke(&mut out);
             }
             _ => {}
         }
         out
+    }
+
+    fn end_stroke(&mut self, out: &mut Vec<PickEvent>) {
+        if std::mem::take(&mut self.brushing) {
+            out.push(PickEvent::StrokeEnd);
+        }
     }
 
     fn hover_event(&mut self, ctx: &PickContext, x: f32, y: f32, out: &mut Vec<PickEvent>) {
@@ -908,6 +941,19 @@ impl PickController {
             return;
         }
         match button {
+            PointerButton::Left if ctx.hud.painting => {
+                // The left drag paints instead of drawing a selection box; every other button
+                // and the camera keys keep their jobs.
+                self.press = None;
+                self.brushing = true;
+                if let Some((world_point, surface)) = ctx.ground_hit(x, y) {
+                    out.push(PickEvent::Stroke {
+                        world_point,
+                        surface,
+                        start: true,
+                    });
+                }
+            }
             PointerButton::Left => {
                 self.press = Some(Press {
                     x,
@@ -1475,6 +1521,108 @@ mod tests {
             }
             other => panic!("unexpected {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_left_drag_with_a_brush_paints_and_the_camera_keeps_its_buttons() {
+        let cam = camera();
+        let hud = HudSnapshot {
+            painting: true,
+            ..HudSnapshot::default()
+        };
+        let entities = vec![unit_view(1, 50.0, 60.0)];
+        let ctx = context(&entities, &hud, &cam);
+        let mut controller = PickController::default();
+        let mut camera = cam;
+        let (x0, y0) = (800.0, 450.0);
+        let button = |button, x, y, down| {
+            let mods = Modifiers::default();
+            if down {
+                InputEvent::ButtonDown { button, x, y, mods }
+            } else {
+                InputEvent::ButtonUp { button, x, y, mods }
+            }
+        };
+        let starts = |events: &[PickEvent]| {
+            events
+                .iter()
+                .filter_map(|e| match e {
+                    PickEvent::Stroke { start, .. } => Some(Some(*start)),
+                    PickEvent::StrokeEnd => Some(None),
+                    PickEvent::Hover { .. } => None,
+                    other => panic!("unexpected {other:?}"),
+                })
+                .collect::<Vec<_>>()
+        };
+        let mut events =
+            controller.handle(button(PointerButton::Left, x0, y0, true), &ctx, &mut camera);
+        for step in 1..=3 {
+            events.extend(controller.handle(
+                InputEvent::PointerMoved {
+                    x: x0 + 40.0 * step as f32,
+                    y: y0,
+                },
+                &ctx,
+                &mut camera,
+            ));
+            assert!(controller.drag_rect().is_none(), "no selection box");
+        }
+        events.extend(controller.handle(
+            button(PointerButton::Left, x0 + 120.0, y0, false),
+            &ctx,
+            &mut camera,
+        ));
+        let kinds = starts(&events);
+        assert_eq!(kinds.first(), Some(&Some(true)), "{events:?}");
+        assert_eq!(kinds.last(), Some(&None), "{events:?}");
+        assert!(kinds[1..kinds.len() - 1].iter().all(|k| *k == Some(false)));
+        assert_eq!(kinds.iter().filter(|k| **k == Some(false)).count(), 3);
+        assert_eq!(camera.target, cam.target, "painting moves no camera");
+        // The middle-button drag still pans, with the brush in hand.
+        let mut controller = PickController::default();
+        assert!(
+            controller
+                .handle(
+                    button(PointerButton::Middle, x0, y0, true),
+                    &ctx,
+                    &mut camera
+                )
+                .is_empty()
+        );
+        assert!(controller.is_panning());
+        let out = controller.handle(
+            InputEvent::PointerMoved {
+                x: x0 + 80.0,
+                y: y0 + 30.0,
+            },
+            &ctx,
+            &mut camera,
+        );
+        assert!(
+            out.iter().all(|e| matches!(e, PickEvent::Hover { .. })),
+            "a pan paints nothing: {out:?}"
+        );
+        assert_ne!(camera.target, cam.target, "the middle drag pans");
+        controller.handle(
+            button(PointerButton::Middle, x0 + 80.0, y0 + 30.0, false),
+            &ctx,
+            &mut camera,
+        );
+        assert!(!controller.is_panning());
+        // Without a brush the same left drag still draws the selection box.
+        let plain = HudSnapshot::default();
+        let ctx = context(&entities, &plain, &cam);
+        let mut controller = PickController::default();
+        controller.handle(button(PointerButton::Left, x0, y0, true), &ctx, &mut camera);
+        controller.handle(
+            InputEvent::PointerMoved {
+                x: x0 + 40.0,
+                y: y0,
+            },
+            &ctx,
+            &mut camera,
+        );
+        assert!(controller.drag_rect().is_some());
     }
 
     #[test]

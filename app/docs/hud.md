@@ -341,6 +341,10 @@ a planet it brought to life and no city stands there.
   terrain, such as hills) and its size as one to three rising bars at the right: its rank by
   radius among the brushes of the same family, terrain, node and height (small, wide, huge).
   `IconMark::Brush`. Rollover: "Desert, wide · wide brush, 18 tiles across".
+- **Brush strokes (task 150).** With a brush in hand the left button press, drag and release on
+  the ground paints along the path (`HudSnapshot::painting`; the picker sends `PickEvent::Stroke`
+  and `StrokeEnd` and draws no selection box). The other buttons, the wheel, the keys, edge
+  scrolling and the minimap keep their camera jobs. See `docs/bringing-life.md` "Painting".
 - **Says what to do.** With the BUILD tab open the hint line names the families ("Paint land,
   water, mountains, biomes and deposits", then "Pick a family on the right, then a brush (Q to
   B), and click the ground"), or the brush in hand and how to put it down. A hint holding a

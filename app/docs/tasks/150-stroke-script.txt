@@ -1,0 +1,30 @@
+# Task 150, a brush stroke: as 77-land-script.txt up to the brush in hand (Land, wide), then the left
+# button is pressed on the ground, dragged along an S-shaped path (each move is a pointer event, a
+# few ticks apart: the stroke lays a dab every brush radius between them) and released.
+# Stops at tick 3 900.
+0 grant-age age.galactic
+0 ascension-ready 1
+0 place 1 bld.library @12,0
+5 ascend 1
+6 speed 1000
+3560 speed 100
+3645 hud slot 1
+3650 orbit rock1
+3660 visit rock1
+3790 look 0:32,32
+3800 hud tab 0
+3805 hud slot 1
+3810 brush-down 0:20,32
+3814 brush-move 0:26,28
+3818 brush-move 0:32,26
+3822 brush-move 0:38,28
+3826 brush-move 0:42,32
+3830 brush-move 0:38,36
+3834 brush-move 0:32,38
+3838 brush-move 0:26,40
+3842 brush-move 0:22,44
+3846 brush-move 0:26,48
+3850 brush-move 0:32,50
+3854 brush-move 0:40,50
+3858 brush-up
+3880 speed 1
