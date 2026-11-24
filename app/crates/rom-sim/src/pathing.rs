@@ -95,6 +95,10 @@ pub(crate) struct PathRequest {
     pub waiters: Vec<(EntityId, OrderId)>,
 }
 
+/// What makes two path requests of one tick one search: class, team, start face and 4×4
+/// bucket, goal tile.
+type SharedKey = (u32, Option<u32>, u8, i32, i32, Tile);
+
 /// The in-progress search for the request at the front of the queue.
 #[derive(Debug, Clone)]
 pub(crate) struct Search {
@@ -146,7 +150,7 @@ pub(crate) struct Pathing {
     space: Vec<[i32; 3]>,
     // Per-tick group registry, emptied at the end of every tick.
     spread: BTreeMap<(u8, i32, i32), u32>,
-    shared: BTreeMap<(u32, Option<u32>, u8, i32, i32, Tile), u64>,
+    shared: BTreeMap<SharedKey, u64>,
     /// Landmass labels per movement class over the terrain alone, made when first asked
     /// for: derived from the map, which never changes, so not part of the state.
     components: std::sync::Mutex<BTreeMap<u32, std::sync::Arc<Vec<u32>>>>,
