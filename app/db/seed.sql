@@ -112,10 +112,10 @@ INSERT INTO movement_class(key,flies) VALUES
  ('foot',0),('wheeled',0),('ship',0),('submarine',0),('aircraft',1),('amphibious',0),('starship',0);
 
 INSERT INTO order_kind(key,needs,target,note) VALUES
- ('stop','','none',''), ('move','movement','entity_or_point','entity target = follow; subject = formation (optional): one order batch walks at its slowest member''s pace when the formation keeps_slowest'),
+ ('stop','','none',''), ('move','movement','entity_or_point','entity target = follow; subject = formation (optional): one order batch to one point takes the formation''s places about it and, when it keeps_slowest, arrives together at its slowest member''s pace'),
  ('launch','movement','entity','launch from a completed own producer'),
- ('orbit','movement','entity_or_point','body marker or holding point'),
- ('travel','movement','point','target point body = destination system star body; coordinates ignored'),
+ ('orbit','movement','entity_or_point','body marker or holding point; subject = formation (optional): the group holds its places about it'),
+ ('travel','movement','point','target point body = destination system star body; the ships come out at the point in an explored system; subject = formation (optional)'),
  ('attack','weapon','entity',''), ('attack_move','weapon','point','subject = formation (optional), as for move'),
  ('patrol','movement','point','walk between the start and the point and back, fighting like attack_move; subject = formation (optional)'),
  ('guard','weapon','entity','stay beside an own or allied entity and fight off enemies near it'),
@@ -292,6 +292,15 @@ INSERT INTO def(kind,key,name) VALUES
  ('formation','form.echelon_right','Echelon Right'), ('formation','form.envelop','Envelop'),
  ('formation','form.refused','Refused Flanks'), ('formation','form.sparse','Sparse'), ('formation','form.mob','Mob');
 INSERT INTO formation(id,shape) SELECT id, substr(key,6) FROM def WHERE kind='formation';
+-- Task 143: a block's width is sqrt(members × rank_ratio_pct / 100); line and double line are one
+-- and two ranks whatever the ratio (the line row's 400 is the computer players' advance).
+UPDATE formation SET rank_ratio_pct=100 WHERE shape IN ('square','sparse','mob');
+-- Ranks a little over a tile apart read as ranks on screen; compact (70 %) is the tight one.
+UPDATE formation SET spacing_pct=130 WHERE shape IN ('line','column','wedge','square','echelon_left',
+  'echelon_right','envelop','refused');
+UPDATE formation SET rank_ratio_pct=25 WHERE shape='column';
+UPDATE formation SET spacing_pct=200 WHERE shape='sparse';
+UPDATE formation SET spacing_pct=70, ranged_behind=0 WHERE shape='mob';
 
 INSERT INTO def(kind,key,name) VALUES
  ('stance','stance.aggressive','Aggressive'), ('stance','stance.defensive','Defensive'),
@@ -6617,5 +6626,20 @@ WITH v(k,e,s,f,g) AS (VALUES
 INSERT INTO et_sound(entity_type_id,event,slot,sound,gain_pct)
  SELECT (SELECT id FROM def WHERE key=v.k), v.e, v.s, v.f, v.g FROM v;
 -- END GENERATED SOUNDS
+
+-- ── formations a player picks (task 143) ────────────────────────────────────
+-- Compact: a tight block at the least spacing; circle: rings round the point, ranged and support
+-- inside; double line: two ranks.
+INSERT INTO def(kind,key,name) VALUES
+ ('formation','form.compact','Compact'), ('formation','form.circle','Circle'),
+ ('formation','form.double_line','Double Line');
+-- Ships above a planet are drawn several times their size: their formation spacing there is
+-- this share of it.
+INSERT INTO game_constant(key,value,unit,note) VALUES
+ ('formation.orbit_spacing_pct',400,'%','formation spacing of ships in orbit over a planet, of et_movement.formation_spacing');
+INSERT INTO formation(id,shape,rank_ratio_pct,spacing_pct) VALUES
+ ((SELECT id FROM def WHERE key='form.compact'),'compact',100,70),
+ ((SELECT id FROM def WHERE key='form.circle'),'circle',100,130),
+ ((SELECT id FROM def WHERE key='form.double_line'),'double_line',100,130);
 
 COMMIT;

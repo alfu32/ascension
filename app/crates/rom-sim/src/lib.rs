@@ -13,6 +13,7 @@ mod construction;
 mod drones;
 mod economy;
 mod entity;
+mod formation;
 mod gathering;
 mod geometry;
 mod hash;

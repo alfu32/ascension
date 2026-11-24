@@ -291,6 +291,58 @@ pub const SOURCES: &[(&str, &str)] = &[
         include_str!("../../../assets/hud/icons/cmd_unload.svg"),
     ),
     (
+        "icons/form_circle",
+        include_str!("../../../assets/hud/icons/form_circle.svg"),
+    ),
+    (
+        "icons/form_column",
+        include_str!("../../../assets/hud/icons/form_column.svg"),
+    ),
+    (
+        "icons/form_compact",
+        include_str!("../../../assets/hud/icons/form_compact.svg"),
+    ),
+    (
+        "icons/form_double_line",
+        include_str!("../../../assets/hud/icons/form_double_line.svg"),
+    ),
+    (
+        "icons/form_echelon_left",
+        include_str!("../../../assets/hud/icons/form_echelon_left.svg"),
+    ),
+    (
+        "icons/form_echelon_right",
+        include_str!("../../../assets/hud/icons/form_echelon_right.svg"),
+    ),
+    (
+        "icons/form_envelop",
+        include_str!("../../../assets/hud/icons/form_envelop.svg"),
+    ),
+    (
+        "icons/form_line",
+        include_str!("../../../assets/hud/icons/form_line.svg"),
+    ),
+    (
+        "icons/form_mob",
+        include_str!("../../../assets/hud/icons/form_mob.svg"),
+    ),
+    (
+        "icons/form_refused",
+        include_str!("../../../assets/hud/icons/form_refused.svg"),
+    ),
+    (
+        "icons/form_sparse",
+        include_str!("../../../assets/hud/icons/form_sparse.svg"),
+    ),
+    (
+        "icons/form_square",
+        include_str!("../../../assets/hud/icons/form_square.svg"),
+    ),
+    (
+        "icons/form_wedge",
+        include_str!("../../../assets/hud/icons/form_wedge.svg"),
+    ),
+    (
         "icons/commerce",
         include_str!("../../../assets/hud/icons/commerce.svg"),
     ),

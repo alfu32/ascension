@@ -1,0 +1,28 @@
+# Task 143: a fleet in orbit takes a square, not a circle. Galactic age; sixteen ships of four
+# classes are put into the orbit of the home planet scattered north of the city, all selected
+# and sent with a right click to the point above the open ground east of the city: they fly
+# there and hold a square (the default formation), four ranks: corvettes in front, then frigates,
+# cruisers and the battleships, whose guns reach farthest, at the back; the camera then backs off
+# three steps. Before this task they met over the one point and the views fanned them out in a ring.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/143-fleet-orbit-script.txt --after 35 --screenshot app/docs/img/143-fleet-orbit.png
+0 grant-age age.galactic
+0 place-orbit 1 unit.corvette @-12,-14
+0 place-orbit 1 unit.corvette @-9,-16
+0 place-orbit 1 unit.corvette @-6,-13
+0 place-orbit 1 unit.corvette @-3,-17
+0 place-orbit 1 unit.space_frigate @-12,-19
+0 place-orbit 1 unit.space_frigate @-8,-21
+0 place-orbit 1 unit.space_frigate @-4,-20
+0 place-orbit 1 unit.space_frigate @0,-18
+0 place-orbit 1 unit.space_cruiser @-13,-24
+0 place-orbit 1 unit.space_cruiser @-9,-26
+0 place-orbit 1 unit.space_cruiser @-5,-25
+0 place-orbit 1 unit.space_cruiser @-1,-23
+0 place-orbit 1 unit.battleship @-11,-29
+0 place-orbit 1 unit.battleship @-7,-31
+0 place-orbit 1 unit.battleship @-3,-30
+0 place-orbit 1 unit.battleship @1,-28
+10 ships
+20 rclick @10,2
+300 cam wheel -3 800,450

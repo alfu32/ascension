@@ -641,6 +641,12 @@ pub enum FormationShape {
     Mob,
     /// SQL value `sphere`.
     Sphere,
+    /// SQL value `compact`.
+    Compact,
+    /// SQL value `circle`.
+    Circle,
+    /// SQL value `double_line`.
+    DoubleLine,
 }
 impl crate::load::SqlEnum for FormationShape {
     fn parse(value: &str) -> Option<Self> {
@@ -656,6 +662,9 @@ impl crate::load::SqlEnum for FormationShape {
             "sparse" => Some(Self::Sparse),
             "mob" => Some(Self::Mob),
             "sphere" => Some(Self::Sphere),
+            "compact" => Some(Self::Compact),
+            "circle" => Some(Self::Circle),
+            "double_line" => Some(Self::DoubleLine),
             _ => None,
         }
     }

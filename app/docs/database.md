@@ -2545,3 +2545,57 @@ gathers, so it counts in the army (`World::army_size`), is boxed with soldiers
 military unit for the computer player, and is left out of `rom fight-matrix` (it has no
 production row and no price: a fight at equal cost does not apply to a free unit).
 
+
+## Formations a player picks (task 143)
+
+Owner (2026-11-23): "big ship formations ... are disposed in a circle which sometimes is not
+convenient, lets have more ships and troops formations: square, compact, circle, line, double
+line etc."
+
+- **PART A, `formation.shape` CHECK** gains `compact`, `circle` and `double_line`, with three
+  rows at the end of the seed: `form.compact` (spacing 70 %), `form.circle` and
+  `form.double_line` (130 %). `rank_ratio_pct` of `square`, `sparse` and `mob` is now 100
+  (square blocks), of `column` 25 (a block half as wide as deep). `spacing_pct` is 130 for
+  every shape but compact (70), sparse (200) and mob (70, no `ranged_behind`): at 750
+  milli-tiles the drawn soldiers stand shoulder to shoulder and the ranks do not read.
+  `form.line` keeps its ratio 400: the computer players' advance reads it, and now marches
+  30 % wider (`docs/computer-player.md`). `FormationShape` gains the three values.
+- **New constant `formation.orbit_spacing_pct` (400).** Ships above a planet are drawn two to
+  three times their size (`et_view_scale.planet_pct`); in orbit (or entering it) a member's
+  spacing is this share of its `formation_spacing`, so the hulls do not overlap and the views do
+  not fan them out. In a system's space the plain spacing holds.
+- **What a shape lays out** (`rom-sim` `formation.rs`, `formation_ranks`): `line` one rank,
+  `double_line` two, `wedge` one at the point then three, five, … a rank; `circle` (and
+  `sphere`) one ring of up to twelve whose circumference gives each its spacing, rings a spacing
+  apart (outer first) beyond; every other shape a block `ceil(sqrt(n × rank_ratio_pct / 100))`
+  wide, `envelop` with its flanks bent forward, `refused` back, an echelon receding to its
+  side. The spacing is the largest `et_movement.formation_spacing` of the members times
+  `spacing_pct`, at least the widest collision diameter plus 50 milli-tiles. The centre stands
+  on the goal; the ranks face from the group's centre to the goal (along the first member's
+  facing when it stands there already).
+- **Orders.** `move`, `attack_move`, `patrol`, now also `orbit` and `travel`, may name a
+  formation as subject (anything else is `UnknownFormation`). When orders are applied, one
+  player's orders of one tick naming one formation with one target make a group; with
+  `ranged_behind` the members go close fighters first (no weapon reach), then ranged by reach,
+  then unarmed, each set farthest-ahead first; each rank takes its members left to right as they
+  stand. Each order's point becomes the member's place (`target_pos`), so the save and the
+  state hash carry it as before. A place the member cannot stand on (water, a building, off the
+  map) gives it the nearest free spot of the formation's lattice within three spacings (behind
+  it first), or the goal when there is none. Ships in orbit are placed on the planet below; `orbit` of a habitable planet
+  enters its orbit at the places about the order's point (the middle of face 0 by default);
+  `orbit` of any other body keeps the marker as target and adds the ship's own place, half the
+  holding reach out on the group's side and facing the body, within reach of it (only places
+  that are get one): the ship walks there and holds within 250 milli-tiles of it, walking back
+  when pushed off. `travel` places the ships about the point in the destination system, facing
+  away from the edge they jump in by (an unexplored system still brings them in at its edge).
+- **Pace.** A walking formation that `keeps_slowest` arrives together: the member with the
+  farthest to go walks at the slowest member's speed, the others slower by how much nearer
+  they are, never below a quarter of it (`order.pace`). Orders naming a formation that are not
+  laid out together (the computer player's advance gives every member its own point) keep the
+  old pace: one player's orders of one tick and formation at the slowest member's speed; the
+  kind no longer separates them, so an attack move's unarmed members walk with it.
+- **Passing through.** Members of one formation on the march (front orders of one player, tick
+  and formation, not fighting) do not push each other apart, so a rank can pass through another
+  to its place; avoidance between everyone else is unchanged.
+- **PART B: nothing new.** The place is the order's point and the pace its `pace`; the save
+  format stays 19.

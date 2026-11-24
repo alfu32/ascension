@@ -536,7 +536,14 @@ impl World {
             .rules
             .constant("space.orbit_reach")
             .expect("space reach");
-        if let Some(node) = order
+        // A ship holding a body in formation (task 143) keeps to its own place beside it: the
+        // order names the body and that place. It walks all the way there, and again only
+        // when pushed off it.
+        let place =
+            orbit_body.is_none() && order.target_entity.is_some() && order.target_pos.is_some();
+        if place {
+            reach = crate::formation::HOLD_SLACK;
+        } else if let Some(node) = order
             .target_entity
             .and_then(|t| self.entity(t))
             .and_then(|e| self.rules.entity_types[&e.type_id].node.as_ref())
@@ -546,7 +553,11 @@ impl World {
             reach = reach.min(node.claim_radius);
         }
         let pos = self.entity(id).expect("ship").pos;
-        if !self.geo(pos.body).within(pos, goal, reach) {
+        if place && order.movement.is_some() {
+            if self.walk(id, order, goal, None, false) == crate::movement::Walk::Arrived {
+                order.movement = None;
+            }
+        } else if !self.geo(pos.body).within(pos, goal, reach) {
             self.walk(id, order, goal, None, false);
         } else {
             order.movement = None;

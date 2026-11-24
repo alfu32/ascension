@@ -20,8 +20,8 @@ const GUARD_SLACK: u64 = 3000;
 /// How far around its ward a guard looks for enemies, in milli-tiles.
 const GUARD_WATCH: u64 = 8000;
 
-/// One formation: player, order kind, formation and tick of issue.
-type FormationKey = (PlayerId, String, DefId, u64);
+/// One formation's pace: player, formation and tick of issue.
+type FormationKey = (PlayerId, DefId, u64);
 
 /// Tile offsets within `EXPLORE_TILES`, nearest first (ties in a fixed order).
 fn explore_offsets() -> &'static [(i32, i32)] {
@@ -119,7 +119,7 @@ impl World {
                 }
                 Ok(())
             }
-            "move" | "attack_move" | "patrol"
+            "move" | "attack_move" | "patrol" | "orbit" | "travel"
                 if command
                     .subject
                     .is_some_and(|f| !self.rules.formations.contains_key(&f)) =>
@@ -169,8 +169,9 @@ impl World {
     }
 
     /// Gives the movement orders applied this tick that name a formation keeping to its
-    /// slowest member the pace of that member: orders of one player, kind, formation and
-    /// tick of issue make one formation.
+    /// slowest member the pace of that member: orders of one player, formation and tick of
+    /// issue make one formation, whatever their kind (the unarmed members of an attack move
+    /// walk with it; task 143).
     pub(crate) fn pace_formations(&mut self, applied: &[(EntityId, crate::OrderId)]) {
         let mut groups: BTreeMap<FormationKey, Vec<(EntityId, crate::OrderId)>> = BTreeMap::new();
         for (executor, id) in applied {
@@ -180,8 +181,10 @@ impl World {
             else {
                 continue;
             };
+            // A formation laid out about a shared goal has its pace already (task 143).
             let Some(formation) = order.subject.filter(|f| {
-                matches!(order.kind.as_str(), "move" | "attack_move" | "patrol")
+                order.pace.is_none()
+                    && matches!(order.kind.as_str(), "move" | "attack_move" | "patrol")
                     && self
                         .rules
                         .formations
@@ -191,12 +194,7 @@ impl World {
                 continue;
             };
             groups
-                .entry((
-                    order.player,
-                    order.kind.clone(),
-                    formation,
-                    order.issued_tick,
-                ))
+                .entry((order.player, formation, order.issued_tick))
                 .or_default()
                 .push((*executor, *id));
         }

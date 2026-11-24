@@ -13,7 +13,7 @@
 //! Entities are `city`, `builder1`..`builderN`, `builders` (in `box`) or `#id`; points are
 //! `@dx,dy` (tiles from the city centre, across face edges on a sphere) or `x,y` (tiles on the
 //! city's face). Other commands: `rclick`,
-//! `key <char> [ctrl] [shift]` (`key delete` presses the Delete key: the chat's when it has the
+//! `key <char> [ctrl] [shift] [alt]` (`key delete` presses the Delete key: the chat's when it has the
 //! keyboard, else it deletes the selection, task 142), `escape`;
 //! `hud` takes `tab`, `arrow`, `slot`, `queue`, `tile`, `family` (a brush family listed beside
 //! the palette, task 114). `brush-down <point>`, `brush-move <point>` and `brush-up` press,
@@ -539,6 +539,7 @@ fn parse_line(
         match *word {
             "shift" => modifiers.shift = true,
             "ctrl" => modifiers.ctrl = true,
+            "alt" => modifiers.alt = true,
             "double" => double = true,
             "left" => button = PointerButton::Left,
             "right" => button = PointerButton::Right,

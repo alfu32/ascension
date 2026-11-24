@@ -188,6 +188,8 @@ enum Action {
     BringLife,
     /// The brush an ascended player paints the planet it brought to life with (task 77).
     Brush(DefId),
+    /// The formation of the selection's group orders, and the selection forms up (task 143).
+    Formation(DefId),
 }
 
 /// What the camera shows, as far as turning picks into orders needs it.
@@ -360,6 +362,8 @@ pub struct Controller {
     pending_ticks: u64,
     /// What the person's orders did, for the sound (task 125): taken after each pick.
     cues: Vec<crate::sound::UiCue>,
+    /// The formation picked for group orders (task 143); Square until one is.
+    formation: Option<DefId>,
 }
 
 /// The person's player, player one unless the session says otherwise.
@@ -1050,6 +1054,7 @@ impl Controller {
         }
         if self.patrol {
             let ids: Vec<EntityId> = self.own_selected(world).iter().map(|e| e.id).collect();
+            let formation = self.group_formation(world);
             for id in ids {
                 // The first point starts a new route (or a plain patrol); with Shift held the
                 // pick stays on and each further point joins the loop.
@@ -1057,7 +1062,7 @@ impl Controller {
                     world,
                     id,
                     "patrol",
-                    None,
+                    formation,
                     None,
                     Some(at),
                     self.patrol_started,
@@ -1071,20 +1076,21 @@ impl Controller {
         if self.attack_move {
             let target = at;
             let ids: Vec<EntityId> = self.own_selected(world).iter().map(|e| e.id).collect();
+            let formation = self.group_formation(world);
             for id in ids {
                 let orbital_target = entity.filter(|_| world.orbit(id).is_some()).map(EntityId);
                 // Unarmed members of the army (medics, supply carts) walk along (task 140).
                 let unarmed = world
                     .entity(id)
                     .is_some_and(|e| world.rules().entity_types[&e.type_id].weapons.is_empty());
-                let (kind, point) = if orbital_target.is_some() {
-                    ("attack", None)
+                let (kind, point, subject) = if orbital_target.is_some() {
+                    ("attack", None, None)
                 } else if unarmed {
-                    ("move", Some(target))
+                    ("move", Some(target), formation)
                 } else {
-                    ("attack_move", Some(target))
+                    ("attack_move", Some(target), formation)
                 };
-                self.submit(world, id, kind, None, orbital_target, point, mods.shift);
+                self.submit(world, id, kind, subject, orbital_target, point, mods.shift);
             }
             self.marker(world, target, MarkerKind::Move);
             self.attack_move = mods.shift;
@@ -1662,6 +1668,8 @@ impl Controller {
             .filter(|id| !selected.contains(id))
             .collect();
         selected.extend(inside);
+        // A group walks in the formation picked for it (task 143).
+        let formation = self.group_formation(world);
         let mut issued = false;
         for id in selected {
             let Some(e) = world.entity(id) else {
@@ -1690,7 +1698,7 @@ impl Controller {
                     } else {
                         "move"
                     };
-                    issued |= self.submit(world, id, kind, None, None, Some(target), queue);
+                    issued |= self.submit(world, id, kind, formation, None, Some(target), queue);
                 }
                 // A landed carrier sends its passengers to the clicked point.
                 Kind::Ground if world.is_landed(id) => {
@@ -1739,7 +1747,7 @@ impl Controller {
                     } else {
                         "move"
                     };
-                    issued |= self.submit(world, id, kind, None, None, Some(target), queue);
+                    issued |= self.submit(world, id, kind, formation, None, Some(target), queue);
                 }
                 _ => {
                     if et.producer.as_ref().is_some_and(|p| p.has_rally) {
@@ -2023,7 +2031,8 @@ impl Controller {
             self.say(world, "That body cannot be orbited");
             return false;
         };
-        self.submit(world, ship, "orbit", None, Some(marker), None, queue)
+        let formation = self.group_formation(world);
+        self.submit(world, ship, "orbit", formation, Some(marker), None, queue)
     }
 
     fn order_travel(
@@ -2040,7 +2049,8 @@ impl Controller {
             self.say(world, "That system cannot be reached");
             return false;
         };
-        self.submit(world, ship, "travel", None, None, Some(at), queue)
+        let formation = self.group_formation(world);
+        self.submit(world, ship, "travel", formation, None, Some(at), queue)
     }
 
     /// A right click in space: attack a ship, orbit a body, travel to a system or move. A body or
@@ -2072,6 +2082,7 @@ impl Controller {
             .view
             .frame
             .map(|f| f.pos_of(surface.x as f32 / 1000.0, surface.y as f32 / 1000.0));
+        let formation = self.group_formation(world);
         for id in ships {
             let armed = world
                 .entity(id)
@@ -2089,7 +2100,7 @@ impl Controller {
                 if elsewhere(world, body)
                     && let Some(at) = world.body_position(body)
                 {
-                    self.submit(world, id, "travel", None, None, Some(at), mods.shift);
+                    self.submit(world, id, "travel", formation, None, Some(at), mods.shift);
                 } else {
                     self.order_orbit(world, id, body, mods.shift);
                 }
@@ -2101,7 +2112,7 @@ impl Controller {
                 } else {
                     "move"
                 };
-                self.submit(world, id, kind, None, None, Some(at), mods.shift);
+                self.submit(world, id, kind, formation, None, Some(at), mods.shift);
             }
         }
     }
@@ -2189,6 +2200,18 @@ impl Controller {
     fn hotkey(&mut self, world: &mut OrderSink<'_>, ch: char, mods: Modifiers) {
         if ch == DELETE_KEY {
             self.delete_selected(world);
+            return;
+        }
+        // Alt+1 to Alt+9 pick a formation for the movers selected (task 143).
+        if mods.alt
+            && !mods.ctrl
+            && let Some(digit) = ch.to_digit(10)
+        {
+            if !self.movers(world).is_empty()
+                && let Some(formation) = self.formation_hotkey(world, digit)
+            {
+                self.pick_formation(world, formation);
+            }
             return;
         }
         if let Some(group) = ch.to_digit(10).map(|d| d as usize) {
@@ -2666,6 +2689,24 @@ impl Controller {
             pages: 1,
             ..HudPalette::default()
         };
+        // Movers have a second page of orders: their formations (task 143).
+        let offered_formations = formations::offered(rules);
+        let formation_page = if tab == PaletteTab::Order
+            && confirming.is_none()
+            && can_move
+            && !offered_formations.is_empty()
+        {
+            palette.pages = 2;
+            palette.page = self.page.unwrap_or(0).min(1);
+            palette.page_name = if palette.page == 1 {
+                "Formation".into()
+            } else {
+                "Orders".into()
+            };
+            palette.page == 1
+        } else {
+            false
+        };
         let mut actions: Vec<(usize, Action)> = Vec::new();
         let research_default = library_default_page(rules, player.age, &research_pages);
         let production = |pages: &[PageRows],
@@ -2694,6 +2735,11 @@ impl Controller {
                 palette.page = page;
                 palette.page_name = name;
                 actions = entries;
+            }
+            PaletteTab::Order if formation_page => {
+                for (slot, formation) in offered_formations.into_iter().enumerate().take(15) {
+                    actions.push((slot, Action::Formation(formation)));
+                }
             }
             PaletteTab::Order if confirming.is_some() => {
                 // "Delete?" takes the card: yes where Delete was, no beside it.
@@ -2987,6 +3033,11 @@ impl Controller {
                 button.icon = "icons/cmd_attack_move".into();
                 button.armed = self.attack_move;
             }
+            Action::Formation(formation) => {
+                button.name = formations::label(rules, formation);
+                button.icon = formations::icon(rules, formation).into();
+                button.armed = self.formation(world) == Some(formation);
+            }
             Action::Stance(id) => {
                 button.name = rules.def(id).name.clone();
                 button.icon = stance_icon(&rules.stances[&id].behavior).into();
@@ -3261,6 +3312,7 @@ impl Controller {
                     self.submit(world, id, "lift", None, None, None, false);
                 }
             }
+            Action::Formation(formation) => self.pick_formation(world, formation),
             Action::Stance(stance) => {
                 let ids: Vec<EntityId> = self
                     .own_selected(world)
@@ -4421,5 +4473,6 @@ fn rejection_message(
     }
 }
 
+mod formations;
 #[cfg(test)]
 mod tests;

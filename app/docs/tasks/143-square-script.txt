@@ -1,0 +1,27 @@
+# Task 143: a mixed group forms a square. Ancient age; six spearmen, six archers and three medics
+# stand in a crowd south-west of the city; one box selects them, the Order tab's second page
+# (Formation: Square armed, the default) is opened and the ground beside the city right-clicked.
+# They walk there in a square facing the way they went: spearmen in front, archers behind them,
+# the medics at the back.
+#   rise-of-man --seed 1 --players 2 --ai none --size 1600x900 \
+#     --script app/docs/tasks/143-square-script.txt --after 36 --screenshot app/docs/img/143-square.png
+0 place 1 unit.medic @-9,9
+0 place 1 unit.spearman @-8,8
+0 place 1 unit.archer @-7,8
+0 place 1 unit.spearman @-6,9
+0 place 1 unit.archer @-8,10
+0 place 1 unit.medic @-7,10
+0 place 1 unit.spearman @-6,11
+0 place 1 unit.archer @-9,11
+0 place 1 unit.spearman @-8,12
+0 place 1 unit.archer @-7,12
+0 place 1 unit.spearman @-9,13
+0 place 1 unit.medic @-6,13
+0 place 1 unit.archer @-8,14
+0 place 1 unit.spearman @-7,14
+0 place 1 unit.archer @-6,7
+10 box-near army1 8
+12 hud tab 1
+14 hud arrow 1
+20 rclick @3,7
+620 cam wheel 6 650,360

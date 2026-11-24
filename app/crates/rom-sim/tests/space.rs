@@ -764,3 +764,104 @@ fn ships_in_orbit_and_system_space_can_see_and_fight_each_other() {
     assert!(w.entity(orbiter).unwrap().hp < before.0);
     assert!(w.entity(enemy).unwrap().hp < before.1);
 }
+
+/// Nine survey ships in a crowd at `at`, all of player one.
+fn fleet(w: &mut World, at: Pos) -> Vec<EntityId> {
+    (0..9)
+        .map(|n| {
+            let pos = w.offset(at, (n % 3) * 400, (n / 3) * 400);
+            ship(w, 1, pos)
+        })
+        .collect()
+}
+
+/// Gives each ship `kind` to `target` with the square formation, in one tick.
+fn in_square(
+    w: &mut World,
+    ships: &[EntityId],
+    kind: &str,
+    target: (Option<EntityId>, Option<Pos>),
+) {
+    let square = w.rules().id_of("form.square").unwrap();
+    for ship in ships {
+        w.submit(Command {
+            subject: Some(square),
+            target_entity: target.0,
+            target_pos: target.1,
+            ..command(w, *ship, kind)
+        })
+        .unwrap();
+    }
+}
+
+fn apart(w: &World, points: &[Pos], least: u64) {
+    for (i, a) in points.iter().enumerate() {
+        for b in &points[i + 1..] {
+            assert!(w.distance(*a, *b).unwrap() >= least, "{a:?} {b:?}");
+        }
+    }
+}
+
+/// Task 143: a fleet moved, holding a body or entering a planet's orbit takes the formation
+/// named in its orders instead of crowding on one point; twice from one start, equal hashes.
+#[test]
+fn fleets_keep_their_formation_in_space_and_in_orbit() {
+    let run = || {
+        let mut w = world();
+        let spacing = w.rules().entity_types[&w.rules().id_of("unit.survey_ship").unwrap()]
+            .movement
+            .as_ref()
+            .unwrap()
+            .formation_spacing as u64;
+        let star = w.body_position(BodyId(1)).unwrap();
+        // Moved in system space: a square about the point.
+        let crowd = w.offset(star, -30_000, 20_000);
+        let ships = fleet(&mut w, crowd);
+        let goal = w.offset(star, -10_000, 20_000);
+        in_square(&mut w, &ships, "move", (None, Some(goal)));
+        run(&mut w, 400);
+        let at: Vec<Pos> = ships.iter().map(|s| w.entity(*s).unwrap().pos).collect();
+        apart(&w, &at, spacing - 10);
+        assert!(
+            at.iter()
+                .all(|p| w.distance(*p, goal).unwrap() <= 2 * spacing)
+        );
+        // Holding an asteroid: each its own place, all within reach, the body claimed.
+        let marker = w.body_marker(BodyId(3));
+        in_square(&mut w, &ships, "orbit", (marker, None));
+        run(&mut w, 600);
+        let rock = w.body_position(BodyId(3)).unwrap();
+        let reach = w.rules().constant("space.orbit_reach").unwrap() as u64;
+        let at: Vec<Pos> = ships.iter().map(|s| w.entity(*s).unwrap().pos).collect();
+        apart(&w, &at, spacing - 10);
+        assert!(
+            at.iter().all(|p| w.distance(*p, rock).unwrap() <= reach),
+            "{at:?}"
+        );
+        assert_eq!(claimant(&w, 3), Some(PlayerId(1)));
+        // Into the home planet's orbit: a square of points below, not one.
+        let planet = w.body_marker(BodyId(2));
+        in_square(&mut w, &ships, "orbit", (planet, None));
+        run(&mut w, 900);
+        let below: Vec<Pos> = ships.iter().map(|s| w.orbit(*s).unwrap().pos).collect();
+        apart(&w, &below, spacing - 10);
+        // Sent on to another system: each order names its own point there.
+        let there = Pos {
+            body: w.space_of(2).unwrap(),
+            ..w.body_position(BodyId(11)).unwrap()
+        };
+        in_square(&mut w, &ships, "travel", (None, Some(there)));
+        w.step();
+        let mut points: Vec<Pos> = ships
+            .iter()
+            .filter_map(|s| w.entity(*s))
+            .filter_map(|e| e.orders().front().and_then(|o| o.target_pos))
+            .collect();
+        points.sort_by_key(|p| (p.x, p.y));
+        points.dedup();
+        assert_eq!(points.len(), ships.len());
+        w
+    };
+    let (a, b) = (run(), run());
+    assert_eq!(a.hash(), b.hash());
+}
