@@ -63,7 +63,9 @@ fn role(view: &View<'_>, building: DefId) -> Role {
     }
 }
 
-/// Building types an own builder can construct now, one per upgrade line.
+/// Building types an own builder can construct now, one per upgrade line. Walls, gates and
+/// minefields are left out: they are laid along lines, which the computer player does not do
+/// yet (task 147b).
 fn constructible(view: &View<'_>) -> Vec<DefId> {
     let rules = view.rules;
     let mut seen = BTreeSet::new();
@@ -78,7 +80,11 @@ fn constructible(view: &View<'_>) -> Vec<DefId> {
                 && rules
                     .entity_types
                     .get(&building)
-                    .is_some_and(|t| t.class == EntityClass::Building)
+                    .is_some_and(|t| {
+                        t.class == EntityClass::Building
+                            && t.fortification.is_none()
+                            && t.minefield.is_none()
+                    })
                 && seen.insert(building)
                 && view.unlocked(building)
                 && !view.obsolete(building)
