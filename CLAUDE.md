@@ -127,6 +127,13 @@ grep -rniE "<reference game names>" . --include='*.md' --include='*.sql' --inclu
 
 Bump `version`, commit, tag without a `v` prefix, push branch and tag.
 
+Release notes (owner, issue #153, 2026-11-24): once the Release workflow has published
+the release, put a short changelog of what players will notice and one or two screenshots
+from the task's `app/docs/img/` at the top of its notes (`gh release edit <version>
+--notes-file`), keeping the workflow's download text below. Link the pictures from the tag
+(`https://raw.githubusercontent.com/alfu32/ascension/<version>/app/docs/img/<file>.png`), not
+as release assets.
+
 Standing instruction from the owner: **always commit, tag and push** finished,
 verified work to `main` without asking. This covers ordinary forward commits
 only — never force pushes, history rewrites or tag deletion.
