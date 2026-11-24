@@ -557,6 +557,7 @@ pub fn snapshot_of(world: &World, player_id: PlayerId) -> HudSnapshot {
             .trade_routes(player.id)
             .map(|r| r.per_trip_income)
             .sum(),
+        per_period: 0,
     };
     let sources = player.active_sources();
     let ordinal = rules.ages[&player.age].ordinal;
@@ -571,7 +572,7 @@ pub fn snapshot_of(world: &World, player_id: PlayerId) -> HudSnapshot {
                 icon,
                 label: rules.def(r.id).name.clone(),
                 amount: player.resources.get(&r.id).copied().unwrap_or(0),
-                rate: income.effective,
+                rate: income.effective + income.trade,
                 capped: income.capped,
                 visible: r
                     .first_age_id
@@ -579,6 +580,12 @@ pub fn snapshot_of(world: &World, player_id: PlayerId) -> HudSnapshot {
             }
         })
         .collect();
+    result.wealth.per_period = rules
+        .resources
+        .values()
+        .filter(|r| r.kind == ResourceKind::Base)
+        .map(|r| world.income(player.id, r.id).trade)
+        .sum();
     let cap = rules.player_stat(
         "commerce_cap",
         rules

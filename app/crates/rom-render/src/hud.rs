@@ -1860,6 +1860,7 @@ impl HudPainter {
                 format!("Relics kept: {}", h.wealth.relics),
                 format!("Routes: {} / {}", h.wealth.routes, h.wealth.limit),
                 format!("+{} per trip", h.wealth.per_trip),
+                format!("Trade: +{} per period", h.wealth.per_period),
             ]
             .iter()
             .enumerate()
