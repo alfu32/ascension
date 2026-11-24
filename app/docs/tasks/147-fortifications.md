@@ -14,6 +14,26 @@ Crates: `rom-sim` (segment buildings, blocking, gates, mines), `rom-app` (the dr
 if small, else a note), seed and schema (authorised), model files, sounds. Implementer: Claude
 (Opus). The biggest card of this batch: plan it in steps and commit each.
 
+## Split in two parts (orchestrator, 2026-11-24, to run beside tasks 151 and 152)
+
+- **147a — simulation, data, models, sounds** (this run): `rom-sim`, `rom-rules` if a new
+  component needs loading, seed and schema, `app/db/models/` (one model file per segment type
+  and age, gates, mines; `rom-models`/`rom-kit` only if a new part shape is needed), sounds
+  (`app/tools/sounds/README.md`, "Baking only new types"; existing files byte-identical).
+  A new order `build_line` (or the existing `construct` with a list of points: say which) takes
+  the polyline a drag would give and lays the segment and gate sites along the ground; the
+  minefield order takes a rectangle. Everything is tested in the simulation (scenarios run twice
+  with equal hashes). Screenshots: model sheets via `rise-of-man --model <id>` (existing paths)
+  and, if the existing script commands can give the orders, an in-match picture; otherwise say
+  so (147b takes the in-match pictures). **Do not touch** `rom-app`, `rom-render`, `rom-ai`:
+  other agents work there. The computer player must not be harmed: it ignores the new
+  buildings until 147b (its build plan picks by score; make sure walls and mines score nothing
+  for it, through data if possible, else report).
+- **147b — the drag placement and drawing, the computer player** (after 151 and 152 merge):
+  `rom-app` (drag a line, gates on the line, drag a rectangle for mines), `rom-render` (joined
+  segments, minefield shown to its owner only), `rom-ai` (builds walls and mines through data;
+  never walls itself in), the in-match screenshots.
+
 ## What changes
 
 - **The fortification line**: palisade (Ancient? the owner says "from palisades": give the
