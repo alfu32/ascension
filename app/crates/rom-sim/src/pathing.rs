@@ -90,8 +90,14 @@ pub(crate) struct PathRequest {
     pub class: u32,
     pub start: Tile,
     pub goal: Tile,
+    /// The walkers' team: the gates of that team are open to the search (task 147).
+    pub side: Option<u32>,
     pub waiters: Vec<(EntityId, OrderId)>,
 }
+
+/// What makes two path requests of one tick one search: class, team, start face and 4×4
+/// bucket, goal tile.
+type SharedKey = (u32, Option<u32>, u8, i32, i32, Tile);
 
 /// The in-progress search for the request at the front of the queue.
 #[derive(Debug, Clone)]
@@ -121,6 +127,9 @@ pub(crate) struct Pathing {
     classes: BTreeMap<u32, ClassGrid>,
     /// Number of building footprints covering each tile; one value until a building stands.
     pub occupancy: Tiles<u32>,
+    /// The team whose units pass each tile of a gate (task 147); derived from the gates
+    /// standing, like `occupancy`.
+    pub gates: BTreeMap<u32, u32>,
     pub queue: VecDeque<PathRequest>,
     pub search: Option<Search>,
     pub next_request: u64,
@@ -141,7 +150,7 @@ pub(crate) struct Pathing {
     space: Vec<[i32; 3]>,
     // Per-tick group registry, emptied at the end of every tick.
     spread: BTreeMap<(u8, i32, i32), u32>,
-    shared: BTreeMap<(u32, u8, i32, i32, Tile), u64>,
+    shared: BTreeMap<SharedKey, u64>,
     /// Landmass labels per movement class over the terrain alone, made when first asked
     /// for: derived from the map, which never changes, so not part of the state.
     components: std::sync::Mutex<BTreeMap<u32, std::sync::Arc<Vec<u32>>>>,
@@ -231,6 +240,7 @@ impl Pathing {
             geo,
             classes,
             occupancy: Tiles::uniform(0, tiles),
+            gates: BTreeMap::new(),
             queue: VecDeque::new(),
             search: None,
             next_request: 1,
@@ -321,11 +331,13 @@ impl Pathing {
         self.classes.get(&class).is_some_and(|grid| grid.flies)
     }
 
-    /// Adds or removes one building footprint on a face from the occupancy layer.
-    pub fn occupy(&mut self, et: &EntityType, face: u8, bounds: [i64; 4], add: bool) {
-        if et.class != EntityClass::Building {
+    /// Adds or removes one building footprint on a face from the occupancy layer. A minefield
+    /// blocks nothing; a gate's tiles stay open to the units of `side`, its owner's team.
+    pub fn occupy(&mut self, et: &EntityType, face: u8, bounds: [i64; 4], add: bool, side: u32) {
+        if et.class != EntityClass::Building || et.minefield.is_some() {
             return;
         }
+        let gate = et.fortification.as_ref().is_some_and(|f| f.gate);
         let rect = TileRect::covering(face, bounds);
         let (width, height) = self.geo.face_size();
         for y in rect.y0.max(0)..rect.y1.min(height) {
@@ -337,6 +349,11 @@ impl Pathing {
                     self.occupancy[index] += 1;
                 } else {
                     self.occupancy[index] -= 1;
+                }
+                if gate && add {
+                    self.gates.insert(index as u32, side);
+                } else if gate {
+                    self.gates.remove(&(index as u32));
                 }
             }
         }
@@ -352,20 +369,55 @@ impl Pathing {
 
     /// Whether a class may enter a tile; `exempt` lifts building occupancy only.
     pub fn passable(&self, class: u32, tile: Tile, exempt: Option<TileRect>) -> bool {
+        self.passable_as(class, None, tile, exempt)
+    }
+
+    /// Whether no building stops a unit of `side` on the tile at `index`: none stands there,
+    /// or the only one is a gate of that side (task 147).
+    #[inline]
+    fn unblocked(&self, index: usize, side: Option<u32>) -> bool {
+        self.occupancy[index] == 0
+            || (side.is_some()
+                && self.occupancy[index] == 1
+                && !self.gates.is_empty()
+                && self.gates.get(&(index as u32)).copied() == side)
+    }
+
+    /// [`Pathing::passable`] for a unit of team `side`, which the gates of that team let in.
+    pub fn passable_as(
+        &self,
+        class: u32,
+        side: Option<u32>,
+        tile: Tile,
+        exempt: Option<TileRect>,
+    ) -> bool {
         let (Some(grid), Some(index)) = (self.classes.get(&class), self.geo.index_of(tile)) else {
             return false;
         };
         grid.flies
             || (grid.pct[index] > 0
-                && (self.occupancy[index] == 0 || exempt.is_some_and(|r| r.contains(tile))))
+                && (self.unblocked(index, side) || exempt.is_some_and(|r| r.contains(tile))))
     }
 
-    /// Whether every tile the segment touches after its first is passable,
-    /// treating exact corner crossings as touching both side tiles.
-    /// Tiles are half-open, so a point on a boundary belongs to the higher tile.
-    /// On the cube the segment is drawn in the start's face plane across at most one
-    /// edge; it is blocked beyond half a face and where it enters a corner's gap.
+    /// `line_clear_as` with every gate shut.
+    #[cfg(test)]
     pub fn line_clear(&self, class: u32, from: Pos, to: Pos, exempt: Option<TileRect>) -> bool {
+        self.line_clear_as(class, None, from, to, exempt)
+    }
+
+    /// Whether every tile the segment touches after its first is passable to a unit of team
+    /// `side` (the gates of that team let it in), treating exact corner crossings as touching
+    /// both side tiles. Tiles are half-open, so a point on a boundary belongs to the higher
+    /// tile. On the cube the segment is drawn in the start's face plane across at most one
+    /// edge; it is blocked beyond half a face and where it enters a corner's gap.
+    pub fn line_clear_as(
+        &self,
+        class: u32,
+        side: Option<u32>,
+        from: Pos,
+        to: Pos,
+        exempt: Option<TileRect>,
+    ) -> bool {
         let Some((dx, dy)) = self.geo.vector(from, to) else {
             return false;
         };
@@ -395,7 +447,7 @@ impl Pathing {
             };
             grid.flies
                 || (grid.pct[index] > 0
-                    && (self.occupancy[index] == 0
+                    && (self.unblocked(index, side)
                         || exempt.is_some_and(|r| r.contains(self.geo.tile_at(index)))))
         };
         let (sx, sy) = (dx.signum() as i32, dy.signum() as i32);
@@ -447,12 +499,13 @@ impl Pathing {
         (tx, ty) == (ex, ey)
     }
 
-    /// Drops each waypoint whose neighbours see each other across passable tiles.
-    pub fn smooth(&self, class: u32, from: Pos, points: &[Pos]) -> Vec<Pos> {
+    /// Drops each waypoint whose neighbours see each other across tiles passable to `side`.
+    pub fn smooth(&self, class: u32, side: Option<u32>, from: Pos, points: &[Pos]) -> Vec<Pos> {
         let mut out = Vec::new();
         let mut anchor = from;
         for (i, point) in points.iter().enumerate() {
-            if i + 1 < points.len() && self.line_clear(class, anchor, points[i + 1], None) {
+            if i + 1 < points.len() && self.line_clear_as(class, side, anchor, points[i + 1], None)
+            {
                 continue;
             }
             out.push(*point);
@@ -489,11 +542,13 @@ impl Pathing {
         index
     }
 
-    /// Queues a search, sharing one made this tick from the same 4×4 bucket to the same goal tile.
+    /// Queues a search for a walker of team `side`, sharing one made this tick from the same
+    /// 4×4 bucket to the same goal tile by the same team.
     pub fn request(
         &mut self,
         waiter: (EntityId, OrderId),
         class: u32,
+        side: Option<u32>,
         from: Pos,
         goal: Pos,
     ) -> u64 {
@@ -501,6 +556,7 @@ impl Pathing {
         let goal = self.geo.tile_of(goal);
         let key = (
             class,
+            side,
             start.face,
             start.x.div_euclid(4),
             start.y.div_euclid(4),
@@ -519,6 +575,7 @@ impl Pathing {
             class,
             start,
             goal,
+            side,
             waiters: vec![waiter],
         });
         self.shared.insert(key, id);
@@ -549,9 +606,9 @@ impl Pathing {
     }
 
     /// Open tile nearest the anchor (ties by index); the start tile always counts as open.
-    fn nearest_open(&self, class: u32, anchor: Tile, start: u32) -> Option<u32> {
+    fn nearest_open(&self, class: u32, side: Option<u32>, anchor: Tile, start: u32) -> Option<u32> {
         if !self.geo.is_flat() {
-            return self.nearest_open_cube(class, anchor, start);
+            return self.nearest_open_cube(class, side, anchor, start);
         }
         let (width, height) = self.geo.face_size();
         let span = width.max(height);
@@ -569,7 +626,7 @@ impl Pathing {
                     let Some(index) = self.geo.index_of(tile) else {
                         continue;
                     };
-                    if index as u32 != start && !self.passable(class, tile, None) {
+                    if index as u32 != start && !self.passable_as(class, side, tile, None) {
                         continue;
                     }
                     let (dx, dy) = (i64::from(x - anchor.x), i64::from(y - anchor.y));
@@ -585,7 +642,13 @@ impl Pathing {
 
     /// Breadth-first rings over the cube's neighbours; once an open tile is found, a few
     /// more rings decide the nearest in space (ties by index).
-    fn nearest_open_cube(&self, class: u32, anchor: Tile, start: u32) -> Option<u32> {
+    fn nearest_open_cube(
+        &self,
+        class: u32,
+        side: Option<u32>,
+        anchor: Tile,
+        start: u32,
+    ) -> Option<u32> {
         let origin = self.geo.index_of(anchor).expect("clamped anchor");
         let mut seen = vec![false; self.geo.tiles()];
         seen[origin] = true;
@@ -595,7 +658,9 @@ impl Pathing {
         let mut depth = 0_u32;
         while !ring.is_empty() && depth <= stop_after {
             for &index in &ring {
-                if index == start || self.passable(class, self.geo.tile_at(index as usize), None) {
+                if index == start
+                    || self.passable_as(class, side, self.geo.tile_at(index as usize), None)
+                {
                     let key = (self.space_distance_squared(index, origin as u32), index);
                     if best.is_none_or(|b| key < b) {
                         best = Some(key);
@@ -625,17 +690,19 @@ impl Pathing {
     /// Initialises the search for the front request.
     pub fn begin(&mut self) {
         let request = self.queue.front().expect("queued request");
-        let (id, class, goal) = (request.id, request.class, request.goal);
+        let (id, class, goal, side) = (request.id, request.class, request.goal, request.side);
         let start = self
             .geo
             .index_of(request.start)
             .expect("units stand on the map") as u32;
         let anchor = self.geo.clamp_tile(goal);
-        let goal_open = self.geo.index_of(goal).is_some() && self.passable(class, goal, None);
+        let goal_open =
+            self.geo.index_of(goal).is_some() && self.passable_as(class, side, goal, None);
         let target = if goal_open {
             self.geo.index_of(anchor).expect("clamped") as u32
         } else {
-            self.nearest_open(class, anchor, start).unwrap_or(start)
+            self.nearest_open(class, side, anchor, start)
+                .unwrap_or(start)
         };
         self.workspace();
         self.generation = self.generation.wrapping_add(1);
@@ -667,19 +734,24 @@ impl Pathing {
     /// Expands up to `budget` nodes; returns the nodes used and the result once finished.
     pub fn advance(&mut self, budget: u64) -> (u64, Option<Found>) {
         let mut search = self.search.take().expect("active search");
-        let (class, goal) = {
+        let (class, goal, side) = {
             let request = self.queue.front().expect("searched request");
-            (request.class, request.goal)
+            (request.class, request.goal, request.side)
         };
         let grid = &self.classes[&class];
         let geo = &self.geo;
         let flat = geo.is_flat();
         let anchor = geo.index_of(search.anchor).expect("clamped anchor") as u32;
         let (width, height) = geo.face_size();
-        let occupancy = &self.occupancy;
+        let (occupancy, gates) = (&self.occupancy, &self.gates);
         let open_tile = |index: u32| -> bool {
             index != u32::MAX
-                && (grid.flies || (grid.pct[index as usize] > 0 && occupancy[index as usize] == 0))
+                && (grid.flies
+                    || (grid.pct[index as usize] > 0
+                        && (occupancy[index as usize] == 0
+                            || (side.is_some()
+                                && occupancy[index as usize] == 1
+                                && gates.get(&index).copied() == side))))
         };
         let target = search.target;
         let generation = search.generation;
@@ -863,6 +935,7 @@ mod tests {
             class,
             start: tile(start),
             goal: tile(goal),
+            side: None,
             waiters: Vec::new(),
         });
         grid.begin();
@@ -986,7 +1059,7 @@ mod tests {
         let (mut grid, class) = setup(&[".....", ".###.", ".###.", ".###.", "....."]);
         let found = find(&mut grid, class, (0, 4), (4, 0));
         let points: Vec<Pos> = coords_of(&found)[1..].iter().map(|t| centre(*t)).collect();
-        let smooth = grid.smooth(class, centre((0, 4)), &points);
+        let smooth = grid.smooth(class, None, centre((0, 4)), &points);
         assert!(points.len() >= 6);
         assert_eq!(smooth.len(), 2);
         assert_eq!(smooth.last(), points.last());
@@ -1003,7 +1076,7 @@ mod tests {
             if points.is_empty() {
                 continue;
             }
-            let smooth = grid.smooth(class, start, &points);
+            let smooth = grid.smooth(class, None, start, &points);
             removed += points.len() - smooth.len();
             assert_eq!(smooth.last(), points.last());
             let mut from = start;

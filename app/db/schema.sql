@@ -428,6 +428,26 @@ CREATE TABLE et_call_up (
   militia_type_id INTEGER NOT NULL REFERENCES entity_type(id)     -- first step of its militia line
 ) STRICT;
 
+-- Task 147: a fortification laid tile by tile along a dragged line (a palisade, a wall, a
+-- defensive line). Its one-tile footprint blocks movement like any building, for its own side
+-- too; a gate (`gate` = 1) lets the units of its owner's team through and stops everyone else.
+CREATE TABLE et_fortification (
+  entity_type_id INTEGER PRIMARY KEY REFERENCES entity_type(id),
+  gate           INTEGER NOT NULL DEFAULT 0 CHECK (gate IN (0,1)),
+  gate_type_id   INTEGER REFERENCES entity_type(id)  -- a segment's gate, laid in its line;
+                                                     -- NULL on a gate
+) STRICT;
+
+-- Task 147: a minefield tile. It does not block movement; it is hidden from every player
+-- outside its owner's team unless one of their units with the entity stat `mine_detection`
+-- stands within `mine.detection_radius`. The first enemy ground unit on its tile takes
+-- `damage` (the entity stat `attack`) of `damage_class_id`, and the mine is spent.
+CREATE TABLE et_minefield (
+  entity_type_id  INTEGER PRIMARY KEY REFERENCES entity_type(id),
+  damage          INTEGER NOT NULL CHECK (damage > 0),
+  damage_class_id INTEGER NOT NULL REFERENCES damage_class(id)
+) STRICT;
+
 CREATE TABLE et_inhibitor (            -- jump inhibitor (task 70): holds enemy ships where it stands
   entity_type_id INTEGER PRIMARY KEY REFERENCES entity_type(id),
   reach          TEXT NOT NULL DEFAULT 'system' CHECK (reach IN ('system')),

@@ -244,6 +244,10 @@ impl World {
         if e.is_inside() && !self.allied(player, e.owner) {
             return false;
         }
+        // So is a mine, unless a detector of the player's team stands near (task 147).
+        if self.hidden_mine(player, e) {
+            return false;
+        }
         // A drone operator is seen where its grid is seen (task 120).
         let cloud = self
             .drone_cloud(e.id)
@@ -457,7 +461,7 @@ impl World {
             let snapshots: Vec<RememberedBuilding> = here
                 .iter()
                 .filter_map(|id| self.entity(*id))
-                .filter(|e| !self.allied(player, e.owner))
+                .filter(|e| !self.allied(player, e.owner) && !self.hidden_mine(player, e))
                 .map(|e| RememberedBuilding {
                     id: e.id,
                     type_id: e.type_id,

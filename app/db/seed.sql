@@ -3580,6 +3580,145 @@ INSERT INTO et_weapon_target(weapon_id,layer) VALUES ((SELECT id FROM et_weapon 
 INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.abundance'),'upgrade_type',(SELECT id FROM def WHERE key='unit.militia_starfaring'),(SELECT id FROM def WHERE key='unit.militia_abundance'));
 INSERT INTO et_call_up(entity_type_id,militia_type_id) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='unit.militia_ancient'));
 INSERT INTO et_call_up(entity_type_id,militia_type_id) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='unit.militia_ancient'));
+INSERT INTO tag(key,category) VALUES ('fortification','structure');
+INSERT INTO stat(key,scope,note) VALUES ('mine_detection','entity','1 when the entity sees enemy mines within mine.detection_radius (task 147)');
+INSERT INTO game_constant(key,value,unit,note) VALUES ('mine.detection_radius',4000,'milli-tiles','how far a unit with the stat mine_detection sees enemy mines (task 147)');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','bld.palisade','Palisade');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','bld.palisade_gate','Palisade Gate');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','bld.stone_wall','Stone Wall');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','bld.wall_gate','Wall Gate');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','bld.defensive_line','Defensive Line');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','bld.checkpoint','Checkpoint');
+INSERT INTO def(kind,key,name) VALUES ('entity_type','bld.minefield','Minefield');
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.palisade'),'building','fortification',500,2,(SELECT id FROM armor_class WHERE key='structure'),3000,1,1,60,'none','none',0,NULL,(SELECT id FROM def WHERE key='age.ancient'));
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='bld.palisade'),'construct','fortification',0,0);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.palisade'),'construct','fortification',0,0);
+INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.palisade'),'in_own_territory');
+INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.palisade'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.palisade'),(SELECT id FROM tag WHERE key='building'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.palisade'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.palisade'),(SELECT id FROM tag WHERE key='fortification'));
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.palisade'),(SELECT id FROM def WHERE key='res.timber'),10,0);
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.palisade_gate'),'building','fortification',750,2,(SELECT id FROM armor_class WHERE key='structure'),3000,1,1,120,'none','none',0,NULL,(SELECT id FROM def WHERE key='age.ancient'));
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='bld.palisade_gate'),'construct','fortification',1,0);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.palisade_gate'),'construct','fortification',1,0);
+INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.palisade_gate'),'in_own_territory');
+INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.palisade_gate'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.palisade_gate'),(SELECT id FROM tag WHERE key='building'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.palisade_gate'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.palisade_gate'),(SELECT id FROM tag WHERE key='fortification'));
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.palisade_gate'),(SELECT id FROM def WHERE key='res.timber'),30,0);
+INSERT INTO et_fortification(entity_type_id,gate) VALUES ((SELECT id FROM def WHERE key='bld.palisade_gate'),1);
+INSERT INTO et_fortification(entity_type_id,gate,gate_type_id) VALUES ((SELECT id FROM def WHERE key='bld.palisade'),0,(SELECT id FROM def WHERE key='bld.palisade_gate'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.stone_wall'),'building','fortification',1500,4,(SELECT id FROM armor_class WHERE key='structure'),3000,1,1,100,'none','none',0,(SELECT id FROM def WHERE key='bld.palisade'),(SELECT id FROM def WHERE key='age.classical'));
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='bld.stone_wall'),'construct','fortification',2,0);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.stone_wall'),'construct','fortification',2,0);
+INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.stone_wall'),'in_own_territory');
+INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.stone_wall'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.stone_wall'),(SELECT id FROM tag WHERE key='building'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.stone_wall'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.stone_wall'),(SELECT id FROM tag WHERE key='fortification'));
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.stone_wall'),(SELECT id FROM def WHERE key='res.timber'),12,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.stone_wall'),(SELECT id FROM def WHERE key='res.metal'),6,0);
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.classical'),'upgrade_type',(SELECT id FROM def WHERE key='bld.palisade'),(SELECT id FROM def WHERE key='bld.stone_wall'));
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.medieval'),(SELECT id FROM def WHERE key='bld.stone_wall'),'hp','add',300);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.medieval'),(SELECT id FROM def WHERE key='bld.stone_wall'),'armor','add',1);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.medieval'),(SELECT id FROM def WHERE key='bld.stone_wall'),'build_time','add',10);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.gunpowder'),(SELECT id FROM def WHERE key='bld.stone_wall'),'hp','add',300);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.gunpowder'),(SELECT id FROM def WHERE key='bld.stone_wall'),'armor','add',1);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.gunpowder'),(SELECT id FROM def WHERE key='bld.stone_wall'),'build_time','add',10);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.enlightenment'),(SELECT id FROM def WHERE key='bld.stone_wall'),'hp','add',300);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.enlightenment'),(SELECT id FROM def WHERE key='bld.stone_wall'),'armor','add',1);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.enlightenment'),(SELECT id FROM def WHERE key='bld.stone_wall'),'build_time','add',10);
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.wall_gate'),'building','fortification',2250,4,(SELECT id FROM armor_class WHERE key='structure'),3000,1,1,200,'none','none',0,(SELECT id FROM def WHERE key='bld.palisade_gate'),(SELECT id FROM def WHERE key='age.classical'));
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='bld.wall_gate'),'construct','fortification',3,0);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.wall_gate'),'construct','fortification',3,0);
+INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.wall_gate'),'in_own_territory');
+INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.wall_gate'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.wall_gate'),(SELECT id FROM tag WHERE key='building'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.wall_gate'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.wall_gate'),(SELECT id FROM tag WHERE key='fortification'));
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.wall_gate'),(SELECT id FROM def WHERE key='res.timber'),36,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.wall_gate'),(SELECT id FROM def WHERE key='res.metal'),18,0);
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.classical'),'upgrade_type',(SELECT id FROM def WHERE key='bld.palisade_gate'),(SELECT id FROM def WHERE key='bld.wall_gate'));
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.medieval'),(SELECT id FROM def WHERE key='bld.wall_gate'),'hp','add',450);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.medieval'),(SELECT id FROM def WHERE key='bld.wall_gate'),'armor','add',1);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.medieval'),(SELECT id FROM def WHERE key='bld.wall_gate'),'build_time','add',20);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.gunpowder'),(SELECT id FROM def WHERE key='bld.wall_gate'),'hp','add',450);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.gunpowder'),(SELECT id FROM def WHERE key='bld.wall_gate'),'armor','add',1);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.gunpowder'),(SELECT id FROM def WHERE key='bld.wall_gate'),'build_time','add',20);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.enlightenment'),(SELECT id FROM def WHERE key='bld.wall_gate'),'hp','add',450);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.enlightenment'),(SELECT id FROM def WHERE key='bld.wall_gate'),'armor','add',1);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.enlightenment'),(SELECT id FROM def WHERE key='bld.wall_gate'),'build_time','add',20);
+INSERT INTO et_fortification(entity_type_id,gate) VALUES ((SELECT id FROM def WHERE key='bld.wall_gate'),1);
+INSERT INTO et_fortification(entity_type_id,gate,gate_type_id) VALUES ((SELECT id FROM def WHERE key='bld.stone_wall'),0,(SELECT id FROM def WHERE key='bld.wall_gate'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.defensive_line'),'building','fortification',2600,8,(SELECT id FROM armor_class WHERE key='structure'),3000,1,1,90,'none','none',0,(SELECT id FROM def WHERE key='bld.stone_wall'),(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='bld.defensive_line'),'construct','fortification',4,0);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.defensive_line'),'construct','fortification',4,0);
+INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.defensive_line'),'in_own_territory');
+INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.defensive_line'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.defensive_line'),(SELECT id FROM tag WHERE key='building'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.defensive_line'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.defensive_line'),(SELECT id FROM tag WHERE key='fortification'));
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.defensive_line'),(SELECT id FROM def WHERE key='res.timber'),8,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.defensive_line'),(SELECT id FROM def WHERE key='res.metal'),14,0);
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.industrial'),'upgrade_type',(SELECT id FROM def WHERE key='bld.stone_wall'),(SELECT id FROM def WHERE key='bld.defensive_line'));
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.modern'),(SELECT id FROM def WHERE key='bld.defensive_line'),'hp','add',300);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.modern'),(SELECT id FROM def WHERE key='bld.defensive_line'),'armor','add',1);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.modern'),(SELECT id FROM def WHERE key='bld.defensive_line'),'build_time','add',10);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.information'),(SELECT id FROM def WHERE key='bld.defensive_line'),'hp','add',300);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.information'),(SELECT id FROM def WHERE key='bld.defensive_line'),'armor','add',1);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.information'),(SELECT id FROM def WHERE key='bld.defensive_line'),'build_time','add',10);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.automation'),(SELECT id FROM def WHERE key='bld.defensive_line'),'hp','add',300);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.automation'),(SELECT id FROM def WHERE key='bld.defensive_line'),'armor','add',1);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.automation'),(SELECT id FROM def WHERE key='bld.defensive_line'),'build_time','add',10);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.fusion'),(SELECT id FROM def WHERE key='bld.defensive_line'),'hp','add',300);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.fusion'),(SELECT id FROM def WHERE key='bld.defensive_line'),'armor','add',1);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.fusion'),(SELECT id FROM def WHERE key='bld.defensive_line'),'build_time','add',10);
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.checkpoint'),'building','fortification',3900,8,(SELECT id FROM armor_class WHERE key='structure'),3000,1,1,180,'none','none',0,(SELECT id FROM def WHERE key='bld.wall_gate'),(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='bld.checkpoint'),'construct','fortification',0,1);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.checkpoint'),'construct','fortification',0,1);
+INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.checkpoint'),'in_own_territory');
+INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.checkpoint'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.checkpoint'),(SELECT id FROM tag WHERE key='building'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.checkpoint'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.checkpoint'),(SELECT id FROM tag WHERE key='fortification'));
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.checkpoint'),(SELECT id FROM def WHERE key='res.timber'),24,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.checkpoint'),(SELECT id FROM def WHERE key='res.metal'),42,0);
+INSERT INTO tech_effect(tech_id,effect,from_def_id,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.industrial'),'upgrade_type',(SELECT id FROM def WHERE key='bld.wall_gate'),(SELECT id FROM def WHERE key='bld.checkpoint'));
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.modern'),(SELECT id FROM def WHERE key='bld.checkpoint'),'hp','add',450);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.modern'),(SELECT id FROM def WHERE key='bld.checkpoint'),'armor','add',1);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.modern'),(SELECT id FROM def WHERE key='bld.checkpoint'),'build_time','add',20);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.information'),(SELECT id FROM def WHERE key='bld.checkpoint'),'hp','add',450);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.information'),(SELECT id FROM def WHERE key='bld.checkpoint'),'armor','add',1);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.information'),(SELECT id FROM def WHERE key='bld.checkpoint'),'build_time','add',20);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.automation'),(SELECT id FROM def WHERE key='bld.checkpoint'),'hp','add',450);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.automation'),(SELECT id FROM def WHERE key='bld.checkpoint'),'armor','add',1);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.automation'),(SELECT id FROM def WHERE key='bld.checkpoint'),'build_time','add',20);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.fusion'),(SELECT id FROM def WHERE key='bld.checkpoint'),'hp','add',450);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.fusion'),(SELECT id FROM def WHERE key='bld.checkpoint'),'armor','add',1);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.fusion'),(SELECT id FROM def WHERE key='bld.checkpoint'),'build_time','add',20);
+INSERT INTO et_fortification(entity_type_id,gate) VALUES ((SELECT id FROM def WHERE key='bld.checkpoint'),1);
+INSERT INTO et_fortification(entity_type_id,gate,gate_type_id) VALUES ((SELECT id FROM def WHERE key='bld.defensive_line'),0,(SELECT id FROM def WHERE key='bld.checkpoint'));
+INSERT INTO entity_type(id,class,ui_group,hp,armor,armor_class_id,los,footprint_w,footprint_h,build_ticks,ramp_mode,limit_scope,limit_count,upgrades_from_id,first_age_id) VALUES ((SELECT id FROM def WHERE key='bld.minefield'),'building','fortification',100,0,(SELECT id FROM armor_class WHERE key='structure'),0,1,1,40,'none','none',0,NULL,(SELECT id FROM def WHERE key='age.industrial'));
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='bld.minefield'),'construct','fortification',1,1);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='unit.worker_drone'),(SELECT id FROM def WHERE key='bld.minefield'),'construct','fortification',1,1);
+INSERT INTO placement_rule(entity_type_id,rule) VALUES ((SELECT id FROM def WHERE key='bld.minefield'),'in_own_territory');
+INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FROM def WHERE key='bld.minefield'),'on_terrain',(SELECT id FROM def WHERE key='ter.plain'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.minefield'),(SELECT id FROM tag WHERE key='building'));
+INSERT INTO def_tag(def_id,tag_id) VALUES ((SELECT id FROM def WHERE key='bld.minefield'),(SELECT id FROM tag WHERE key='mechanical'));
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.minefield'),(SELECT id FROM def WHERE key='res.timber'),5,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='bld.minefield'),(SELECT id FROM def WHERE key='res.metal'),15,0);
+INSERT INTO et_minefield(entity_type_id,damage,damage_class_id) VALUES ((SELECT id FROM def WHERE key='bld.minefield'),140,(SELECT id FROM damage_class WHERE key='explosive'));
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.modern'),(SELECT id FROM def WHERE key='bld.minefield'),'attack','add',12);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.information'),(SELECT id FROM def WHERE key='bld.minefield'),'attack','add',12);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.automation'),(SELECT id FROM def WHERE key='bld.minefield'),'attack','add',12);
+INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.age.fusion'),(SELECT id FROM def WHERE key='bld.minefield'),'attack','add',12);
+INSERT INTO def(kind,key,name) VALUES ('tech','tech.mine_detectors','Mine Detectors');
+INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.mine_detectors'),'upgrade','',0,400);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.mine_detectors'),(SELECT id FROM def WHERE key='res.food'),100,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.mine_detectors'),(SELECT id FROM def WHERE key='res.metal'),150,0);
+INSERT INTO modifier(source_def_id,stat_key,op,value,target_tag_id) VALUES ((SELECT id FROM def WHERE key='tech.mine_detectors'),'mine_detection','add',1,(SELECT id FROM tag WHERE key='infantry'));
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.1'),'research','research',1,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.civic.1'),'research','research',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.commerce.1'),'research','research',3,0);
@@ -3771,6 +3910,7 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='tech.automated_route_survey'),'research','research',1,1);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.ascension'),'research','projects',2,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.jump_detector'),(SELECT id FROM def WHERE key='tech.total_network'),'research','research',0,0);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='tech.mine_detectors'),'research','research_2',0,2);
 INSERT OR IGNORE INTO production SELECT (SELECT id FROM def WHERE key='bld.bastion'),product_def_id,mode,ui_page,ui_col,ui_row FROM production WHERE producer_type_id=(SELECT id FROM def WHERE key='bld.tower');
 INSERT OR IGNORE INTO production SELECT (SELECT id FROM def WHERE key='bld.bunker'),product_def_id,mode,ui_page,ui_col,ui_row FROM production WHERE producer_type_id=(SELECT id FROM def WHERE key='bld.tower');
 INSERT OR IGNORE INTO production SELECT (SELECT id FROM def WHERE key='bld.defence_turret'),product_def_id,mode,ui_page,ui_col,ui_row FROM production WHERE producer_type_id=(SELECT id FROM def WHERE key='bld.tower');
@@ -4448,6 +4588,16 @@ INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FR
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.militia_fusion'),(SELECT id FROM def WHERE key='age.fusion'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.militia_starfaring'),(SELECT id FROM def WHERE key='age.starfaring'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.militia_abundance'),(SELECT id FROM def WHERE key='age.abundance'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.palisade'),(SELECT id FROM def WHERE key='age.ancient'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.palisade'),(SELECT id FROM def WHERE key='tech.military.1'),1);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.palisade_gate'),(SELECT id FROM def WHERE key='age.ancient'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.palisade_gate'),(SELECT id FROM def WHERE key='tech.military.1'),1);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.stone_wall'),(SELECT id FROM def WHERE key='age.classical'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.wall_gate'),(SELECT id FROM def WHERE key='age.classical'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.defensive_line'),(SELECT id FROM def WHERE key='age.industrial'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.checkpoint'),(SELECT id FROM def WHERE key='age.industrial'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.minefield'),(SELECT id FROM def WHERE key='age.industrial'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.mine_detectors'),(SELECT id FROM def WHERE key='age.industrial'),0);
 INSERT INTO constellation(id,abbr,name,genitive) VALUES (1,'And','Andromeda','Andromedae');
 INSERT INTO constellation(id,abbr,name,genitive) VALUES (2,'Ant','Antlia','Antliae');
 INSERT INTO constellation(id,abbr,name,genitive) VALUES (3,'Aps','Apus','Apodis');
@@ -6208,6 +6358,9 @@ WITH v(k,e,s,f,g) AS (VALUES
  ('bld.bunker','fire',0,'bld.bunker.fire',100),
  ('bld.bunker','research_done',0,'bld.bunker.research_done',100),
  ('bld.bunker','select',0,'bld.bunker.select',100),
+ ('bld.checkpoint','active',0,'bld.checkpoint.active',100),
+ ('bld.checkpoint','build_done',0,'bld.checkpoint.build_done',100),
+ ('bld.checkpoint','select',0,'bld.checkpoint.select',100),
  ('bld.citadel','active',0,'bld.citadel.active',100),
  ('bld.citadel','build_done',0,'bld.citadel.build_done',100),
  ('bld.citadel','fire',0,'bld.citadel.fire',100),
@@ -6224,6 +6377,9 @@ WITH v(k,e,s,f,g) AS (VALUES
  ('bld.defence_turret','fire',0,'bld.defence_turret.fire',100),
  ('bld.defence_turret','research_done',0,'bld.defence_turret.research_done',100),
  ('bld.defence_turret','select',0,'bld.defence_turret.select',100),
+ ('bld.defensive_line','active',0,'bld.defensive_line.active',100),
+ ('bld.defensive_line','build_done',0,'bld.defensive_line.build_done',100),
+ ('bld.defensive_line','select',0,'bld.defensive_line.select',100),
  ('bld.dock','active',0,'bld.dock.active',100),
  ('bld.dock','build_done',0,'bld.dock.build_done',100),
  ('bld.dock','research_done',0,'bld.dock.research_done',100),
@@ -6284,6 +6440,9 @@ WITH v(k,e,s,f,g) AS (VALUES
  ('bld.mine','build_done',0,'bld.mine.build_done',100),
  ('bld.mine','research_done',0,'bld.mine.research_done',100),
  ('bld.mine','select',0,'bld.mine.select',100),
+ ('bld.minefield','active',0,'bld.minefield.active',100),
+ ('bld.minefield','build_done',0,'bld.minefield.build_done',100),
+ ('bld.minefield','select',0,'bld.minefield.select',100),
  ('bld.nuclear_reactor','active',0,'bld.nuclear_reactor.active',100),
  ('bld.nuclear_reactor','build_done',0,'bld.nuclear_reactor.build_done',100),
  ('bld.nuclear_reactor','select',0,'bld.nuclear_reactor.select',100),
@@ -6291,6 +6450,12 @@ WITH v(k,e,s,f,g) AS (VALUES
  ('bld.oil_well','build_done',0,'bld.oil_well.build_done',100),
  ('bld.oil_well','research_done',0,'bld.oil_well.research_done',100),
  ('bld.oil_well','select',0,'bld.oil_well.select',100),
+ ('bld.palisade','active',0,'bld.palisade.active',100),
+ ('bld.palisade','build_done',0,'bld.palisade.build_done',100),
+ ('bld.palisade','select',0,'bld.palisade.select',100),
+ ('bld.palisade_gate','active',0,'bld.palisade_gate.active',100),
+ ('bld.palisade_gate','build_done',0,'bld.palisade_gate.build_done',100),
+ ('bld.palisade_gate','select',0,'bld.palisade_gate.select',100),
  ('bld.refinery','active',0,'bld.refinery.active',100),
  ('bld.refinery','build_done',0,'bld.refinery.build_done',100),
  ('bld.refinery','research_done',0,'bld.refinery.research_done',100),
@@ -6319,6 +6484,9 @@ WITH v(k,e,s,f,g) AS (VALUES
  ('bld.star_fort','fire',0,'bld.star_fort.fire',100),
  ('bld.star_fort','research_done',0,'bld.star_fort.research_done',100),
  ('bld.star_fort','select',0,'bld.star_fort.select',100),
+ ('bld.stone_wall','active',0,'bld.stone_wall.active',100),
+ ('bld.stone_wall','build_done',0,'bld.stone_wall.build_done',100),
+ ('bld.stone_wall','select',0,'bld.stone_wall.select',100),
  ('bld.temple','active',0,'bld.temple.active',100),
  ('bld.temple','build_done',0,'bld.temple.build_done',100),
  ('bld.temple','research_done',0,'bld.temple.research_done',100),
@@ -6339,6 +6507,9 @@ WITH v(k,e,s,f,g) AS (VALUES
  ('bld.vehicle_plant','research_done',0,'bld.vehicle_plant.research_done',100),
  ('bld.vehicle_plant','select',0,'bld.vehicle_plant.select',100),
  ('bld.vehicle_plant','train_done',0,'bld.vehicle_plant.train_done',100),
+ ('bld.wall_gate','active',0,'bld.wall_gate.active',100),
+ ('bld.wall_gate','build_done',0,'bld.wall_gate.build_done',100),
+ ('bld.wall_gate','select',0,'bld.wall_gate.select',100),
  ('bld.woodcutter_camp','active',0,'bld.woodcutter_camp.active',100),
  ('bld.woodcutter_camp','build_done',0,'bld.woodcutter_camp.build_done',100),
  ('bld.woodcutter_camp','research_done',0,'bld.woodcutter_camp.research_done',100),

@@ -455,13 +455,18 @@ impl World {
     fn push_unit(&mut self, id: EntityId, x: i64, y: i64) -> bool {
         let motion = self.avoid.ground(id).expect("ground unit");
         let from = self.entity(id).expect("pushed unit").pos;
+        let side = Some(self.side_of(self.entity(id).expect("pushed unit").owner));
         let slot = self.slot(from.body);
         let surface = &self.surfaces[slot];
         let target = [(x, y), (x, 0), (0, y)]
             .into_iter()
             .filter(|(x, y)| *x != 0 || *y != 0)
             .map(|(x, y)| surface.geo.offset(from, x, y))
-            .find(|(to, _)| surface.pathing.line_clear(motion.class, from, *to, None));
+            .find(|(to, _)| {
+                surface
+                    .pathing
+                    .line_clear_as(motion.class, side, from, *to, None)
+            });
         let Some((to, turns)) = target else {
             return false;
         };

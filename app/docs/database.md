@@ -1,6 +1,6 @@
 # Game database
 
-Files: [`../db/schema.sql`](../db/schema.sql) (136 tables, 4 views),
+Files: [`../db/schema.sql`](../db/schema.sql) (143 tables, 4 views),
 [`../db/seed.sql`](../db/seed.sql) (the full generated content catalogue and hand-written
 world rules) and the model files in [`../db/models/`](../db/models/) (one per building or
 unit model, task 55; see §10a and `docs/models-in-meshcraft.md`), which load after the seed:
@@ -2638,3 +2638,104 @@ Owner (2026-11-23): "let the cities have names"; nation lists, renamable.
   to 19 load with every city named on restore from its owner's list in id order (the capital,
   the lowest id, keeps the first name); `World::restore` names any city the snapshot leaves
   without one.
+
+## Fortifications and minefields (task 147)
+
+Owner (2026-11-23): palisades, then walls from the classical to the enlightenment age, then
+defensive lines (trench, tank traps, barbed wire) from the industrial to the fusion age, dragged
+as lines with gates; minefields from the industrial age, hidden from enemies, sparing own units.
+Part 147a (this section) is the simulation, the data, the models and the sounds; the drag in the
+interface, the drawing of joined segments and the computer player's use of them are part 147b.
+
+- **PART A, two component tables.** `et_fortification(entity_type_id, gate, gate_type_id)`: a
+  one-tile building laid along a line; `gate` = 1 lets the units of its owner's team through, a
+  segment's `gate_type_id` names the gate laid in its line. `et_minefield(entity_type_id, damage,
+  damage_class_id)`: a one-tile mine. The rules loader puts them in `EntityType::fortification`
+  and `::minefield`; validation refuses either on anything but a building of one tile, both on one
+  type, a segment whose gate is not a gate, a gate naming a gate, and an unknown damage class.
+  New stat `mine_detection` (entity) and constant `mine.detection_radius` (4000), checked by
+  `World::new` when the rules have a minefield; new tag `fortification`. Both lint views stay
+  empty.
+- **The content** (`db/content/generate.py`, `fortifications()`, written after every other
+  definition so every earlier id stays). One type per kind, its look following its owner's age
+  (`entity_visual`), page `fortification` of the builders' palette:
+
+  | Kind | Segment | Gate | Ages | Hit points | Armour | Build ticks | Price |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | palisade | `bld.palisade` | `bld.palisade_gate` | ancient (with Military 1) | 500 | 2 | 60 | 10 timber |
+  | stone wall | `bld.stone_wall` | `bld.wall_gate` | classical to enlightenment | 1500, +300 an age | 4, +1 an age | 100, +10 an age | 12 timber, 6 metal |
+  | defensive line | `bld.defensive_line` | `bld.checkpoint` | industrial to fusion | 2600, +300 an age | 8, +1 an age | 90, +10 an age | 8 timber, 14 metal |
+
+  A gate has 150 % of its segment's hit points, three times its price and twice its build time.
+  All are `structure` armour (siege and artillery, `explosive` at 200 %, break them; arrows do
+  next to nothing), 3 tiles of sight, no ramp, no limit, `in_own_territory` on plain ground. The
+  later ages of a kind are `modifier` rows of the age advances (`hp`, `armor`, `build_time`, `add`,
+  on the exact type). The advance into a kind's first age carries an `upgrade_type` from the
+  kind before (palisade → stone wall at the classical advance, stone wall → defensive line at
+  the industrial one; gates alike), so the standing ones change in place keeping their health's
+  share, as the reactor becomes the fusion plant, and the old kind is superseded in the build
+  menu. Each kind's types are one upgrade line (`upgrades_from_id`).
+- **The minefield** `bld.minefield` (industrial): 100 hit points, armour 0, 40 build ticks,
+  5 timber and 15 metal a mine, no sight. Damage 140 `explosive` (80 × f(5), the formula of
+  `content.md`), +12 with each later advance to the fusion age (`attack` modifiers). **Mine
+  Detectors** (`tech.mine_detectors`, industrial, at the barracks, 100 food and 150 metal, 400
+  ticks; its button takes the next free place so no other moves) gives the `infantry` tag
+  `mine_detection` +1: infantry, ranged foot, anti-armour teams and scouts then see enemy mines
+  within `mine.detection_radius`.
+- **Laying a line: the order is `construct`, one per site.** `Command` cannot carry a list of
+  points (its shape is shared with the interface and the computer player), so a line is no new
+  order kind: `World::line_sites(player, segment, points, gates)` takes the polyline a drag gives
+  and returns its sites (`LineSite`: subject, tile centre, facing along the line, and the result
+  of the same placement check `construct` makes): the tiles each straight stretch crosses,
+  eight-connected, each once, in drag order, the site nearest each point of `gates` taking the
+  segment's gate type. The interface orders one `construct` for each site it keeps (the first
+  replacing, the rest queued on the builder); each site is laid when its order is applied, paid
+  at submission like any building, and other builders join through the idle-builder search of
+  task 140. `World::minefield_sites(player, mine, a, b)` does the same for the rectangle of tiles
+  between two corners, one mine a tile, row by row. Both refuse a type that is not a segment or a
+  mine (`NotALine`), more than `MAX_LINE_SITES` (256) sites (`LineTooLong`), a stretch across
+  bodies (`OtherBody`) or into a cube corner's gap (`CrossesFaceEdge`).
+- **Blocking and gates.** A segment's tile counts in the path occupancy like any building's, for
+  its own side too. Eight-connected diagonal segments leave no gap: a path step never cuts a
+  corner between two blocked tiles, and a straight walk through an exact corner touches both.
+  A gate's tile is also in `Pathing::gates` (tile → its owner's team): the search, the straight
+  walk, the waypoint smoothing and the pushes of a unit whose owner is of that team pass it;
+  everyone else finds it shut. Path requests carry the team (`PathRequest::side`) and are shared
+  only within it. A captured gate (`change_owner`) opens to its new team. The gate map is derived
+  from the entities (rebuilt on restore, not hashed); a restored queued search takes the team of
+  its first waiter.
+- **Mines.** A mine occupies no tile (units walk over it; it is not pushed out of the way of a
+  site), but stands in the building index, so nothing is built on it (an enemy placing a building
+  on a hidden mine is refused too, as on any occupied tile). It is hidden from every
+  player outside its owner's team (`World::visible_entities`, attack orders (`TargetHidden`),
+  automatic targets, building memory and planet surveys) unless a unit of that player's team
+  with `mine_detection` > 0 stands within `mine.detection_radius`; an ascended player sees every
+  mine. Each tick, after movement, a finished mine with an enemy ground unit on its tile (a
+  moving unit of another team, not in the air, not in orbit, not aboard; not the neutral player's)
+  goes off: the unit of lowest id there takes `attack` (from `et_minefield.damage`) × the damage
+  matrix − its armour (at least `combat.min_damage`), the mine leaves a blast for the views
+  (`World::blasts`) and is removed (no wreck, no loss counted). Mines in id order. Splash and
+  detected mines can be attacked like any building.
+- **Not a town's building.** Segments, gates and mines do not widen a city's economic radius
+  (`city.radius_per_building`).
+- **PART B: nothing new.** Walls, gates and mines are ordinary buildings; the save format stays
+  20 and the state hash covers them as any entity.
+- **The computer player** reads none of this yet. Its construction manager builds the first of a
+  building line it has none of at a low score when nothing better waits, so it may lay one
+  segment, one gate and one mine in a match; no data column keeps a constructible building out
+  of its catalogue without also keeping it from people. Part 147b teaches it lines and mines.
+  Measured (20 seeds, balanced:moderate against balanced:easiest): 18–0 with 2 draws (seeds 5
+  and 14), mean tick 52052; with the same rules less the construct rows of these seven types
+  20–0, mean tick 52405, exactly as before the task, so the simulation changes alone move no
+  duel: the two draws come from the computer players laying their one palisade and gate.
+- **Looks** (`db/models/`): a model per kind and age, segments spanning their tile along x so
+  neighbours join end to end (the interface turns them along the line): `bld.palisade@ancient`;
+  `bld.stone_wall@classical`, `@medieval`, `@gunpowder`, `@enlightenment`;
+  `bld.defensive_line@industrial` (earth parapet, sandbags, barbed wire), `@modern` (wire coils,
+  concrete tank traps), `@information` (precast barrier, fence), `@automation` (composite panels,
+  sensor post), `@fusion` (pylon and glowing field); the gates of each age; `bld.minefield@` the
+  five ages from industrial. A palisade or wall still standing in a later age (one granted that
+  age without its advance) wears the look of the kind built then, so every building has a look
+  for each era (`bld.palisade@medieval` is the curtain wall's, `@industrial` the trench line's,
+  and so on: 41 files in all). **Sounds**: the `post` family (`tools/sounds/assign.py`: walls, gates
+  and mines are manned like a guard post), baked for the new types only.

@@ -1,0 +1,65 @@
+# Task 147a: a modern defensive line (trench, sandbags, barbed wire coils, tank traps) south
+# of the city with a checkpoint, and a minefield in front of it, which only its owner sees.
+# Riflemen of player one behind the line; player two's tanks beyond the mines.
+#   rise-of-man --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/147-line-script.txt --after 8 --screenshot app/docs/img/147-line.png
+0 grant-age age.modern
+0 place 1 bld.defensive_line @-10,7
+0 place 1 bld.defensive_line @-9,7
+0 place 1 bld.defensive_line @-8,7
+0 place 1 bld.defensive_line @-7,7
+0 place 1 bld.defensive_line @-6,7
+0 place 1 bld.defensive_line @-5,7
+0 place 1 bld.defensive_line @-4,7
+0 place 1 bld.defensive_line @-3,7
+0 place 1 bld.defensive_line @-2,7
+0 place 1 bld.defensive_line @-1,7
+0 place 1 bld.defensive_line @0,7
+0 place 1 bld.defensive_line @1,7
+0 place 1 bld.checkpoint @2,7
+0 place 1 bld.defensive_line @3,7
+0 place 1 bld.defensive_line @4,7
+0 place 1 bld.defensive_line @5,7
+0 place 1 bld.defensive_line @6,7
+0 place 1 bld.defensive_line @7,7
+0 place 1 bld.defensive_line @8,7
+0 place 1 bld.defensive_line @9,7
+0 place 1 bld.defensive_line @10,7
+0 place 1 bld.minefield @-7,9
+0 place 1 bld.minefield @-6,9
+0 place 1 bld.minefield @-5,9
+0 place 1 bld.minefield @-4,9
+0 place 1 bld.minefield @-3,9
+0 place 1 bld.minefield @-2,9
+0 place 1 bld.minefield @-1,9
+0 place 1 bld.minefield @0,9
+0 place 1 bld.minefield @1,9
+0 place 1 bld.minefield @2,9
+0 place 1 bld.minefield @3,9
+0 place 1 bld.minefield @4,9
+0 place 1 bld.minefield @5,9
+0 place 1 bld.minefield @6,9
+0 place 1 bld.minefield @7,9
+0 place 1 bld.minefield @-7,10
+0 place 1 bld.minefield @-6,10
+0 place 1 bld.minefield @-5,10
+0 place 1 bld.minefield @-4,10
+0 place 1 bld.minefield @-3,10
+0 place 1 bld.minefield @-2,10
+0 place 1 bld.minefield @-1,10
+0 place 1 bld.minefield @0,10
+0 place 1 bld.minefield @1,10
+0 place 1 bld.minefield @2,10
+0 place 1 bld.minefield @3,10
+0 place 1 bld.minefield @4,10
+0 place 1 bld.minefield @5,10
+0 place 1 bld.minefield @6,10
+0 place 1 bld.minefield @7,10
+0 place 1 unit.infantry @-4,5
+0 place 1 unit.infantry @-2,5
+0 place 1 unit.infantry @0,5
+0 place 1 unit.infantry @4,5
+0 place 2 unit.tank @-5,16
+0 place 2 unit.tank @0,16
+0 place 2 unit.tank @5,16
+100 cam wheel -1 800,450

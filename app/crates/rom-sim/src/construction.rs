@@ -191,6 +191,10 @@ impl World {
         let Some(site) = self.entity(building) else {
             return;
         };
+        // A mine blocks nothing: units stay where they stand (task 147).
+        if self.mine_types.contains(&site.type_id) {
+            return;
+        }
         let (at, bounds) = (
             site.pos,
             footprint(&self.rules.entity_types[&site.type_id], site.pos),
