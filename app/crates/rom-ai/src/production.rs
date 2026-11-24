@@ -224,11 +224,12 @@ pub(crate) fn dearness(view: &View<'_>, def: DefId) -> i64 {
     weighed.max(base / 4).max(1)
 }
 
-/// Population of own military units, with those in training.
+/// Population of own military units, with those in training; called-up militia are workers
+/// for a while, not the army.
 pub(crate) fn army_pop(view: &View<'_>) -> i64 {
     view.have
         .iter()
-        .filter(|(t, _)| is_military(view.rules, **t))
+        .filter(|(t, _)| is_military(view.rules, **t) && !view.cat.is_militia(**t))
         .map(|(t, n)| view.rules.entity_types[t].pop_cost * n)
         .sum()
 }

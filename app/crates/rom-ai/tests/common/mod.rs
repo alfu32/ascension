@@ -166,6 +166,23 @@ pub fn age_ordinal(world: &World, player: PlayerId) -> i64 {
 /// mountain) beside each city, and for each player a city with five builders
 /// and 500 of every base resource. Player one's city is at tile 48,48, player two's at 80,80.
 pub fn plain(rules: &Arc<Rules>, seed: u64, players: &[(&str, &str)]) -> (World, Vec<Brain>) {
+    let age = rules
+        .ages
+        .values()
+        .min_by_key(|a| (a.ordinal, a.id))
+        .expect("age")
+        .id;
+    plain_in(rules, seed, players, age, &[])
+}
+
+/// The world of `plain`, with every player starting in `age` and knowing `techs`.
+pub fn plain_in(
+    rules: &Arc<Rules>,
+    seed: u64,
+    players: &[(&str, &str)],
+    age: DefId,
+    techs: &[DefId],
+) -> (World, Vec<Brain>) {
     use rom_sim::{MapGrid, Pos};
     let node_terrains: Vec<DefId> = rules
         .entity_types
@@ -206,12 +223,6 @@ pub fn plain(rules: &Arc<Rules>, seed: u64, players: &[(&str, &str)]) -> (World,
         .filter(|r| r.kind == ResourceKind::Base)
         .map(|r| (r.id, 500))
         .collect();
-    let age = rules
-        .ages
-        .values()
-        .min_by_key(|a| (a.ordinal, a.id))
-        .expect("age")
-        .id;
     let factions = factions(rules, players.len());
     let player = |id: u32, faction: DefId| Player {
         id: PlayerId(id),
@@ -226,8 +237,9 @@ pub fn plain(rules: &Arc<Rules>, seed: u64, players: &[(&str, &str)]) -> (World,
         techs: id
             .checked_sub(1)
             .and_then(|i| rom_ai::handicap_tech(rules, players[i as usize].1))
-            .map(|tech| (tech, 1))
             .into_iter()
+            .chain(if id == 0 { &[][..] } else { techs }.iter().copied())
+            .map(|tech| (tech, 1))
             .collect(),
     };
     let all: Vec<Player> = std::iter::once(player(0, factions[0]))

@@ -66,13 +66,14 @@ const SIEGE_PER: usize = 6;
 const SCOUT_SCORE: i64 = 700;
 
 /// Own ground fighters that can take orders now, in id order: no spacecraft, no orbital
-/// craft, no warships (the naval manager's).
+/// craft, no warships (the naval manager's), no militia (held at their city, task 152).
 pub(crate) fn fighters<'a>(view: &View<'a>) -> Vec<&'a Entity> {
     view.own
         .iter()
         .copied()
         .filter(|e| {
             is_military(view.rules, e.type_id)
+                && !view.cat.is_militia(e.type_id)
                 && operational(e)
                 && e.hp > 0
                 && e.container_id.is_none()

@@ -3,7 +3,7 @@
 
 use crate::{
     memory::Memory,
-    sites::{Ground, Hold, Site, find_city_site, find_site, node_spot},
+    sites::{Ground, Hold, Site, at_spot, find_city_site, find_site, node_spot},
     view::View,
 };
 use rom_rules::{DefId, LimitScope, ProductionMode, ResourceKind};
@@ -83,6 +83,9 @@ pub(crate) struct Plan<'a> {
     /// Node terrains a new city should be near: those of resources with no room for another
     /// site around the cities.
     pub city_terrains: BTreeSet<DefId>,
+    /// Where lost buildings stood, by the first type of their line: a building of the line
+    /// goes there first when the ground is free (task 152).
+    pub rebuild_at: BTreeMap<DefId, Vec<Pos>>,
 }
 
 impl<'a> Plan<'a> {
@@ -99,6 +102,7 @@ impl<'a> Plan<'a> {
             keep: BTreeMap::new(),
             keep_for: BTreeSet::new(),
             city_terrains: BTreeSet::new(),
+            rebuild_at: crate::rebuild::spots(memory),
         }
         .with_first_sites(memory)
     }
@@ -405,11 +409,35 @@ impl<'a> Plan<'a> {
         if !ground.reserved_done {
             ground.reserved_done = true;
             reserve_first_sites(&self.view, ground, memory, situation);
+            // The places of lost buildings are kept for their lines as loosely as the next
+            // site of a resource: other buildings take them only when there is no other room.
+            for (root, spots) in &self.rebuild_at {
+                if let Some(et) = self.view.rules.entity_types.get(root) {
+                    for spot in spots {
+                        ground.reserve(et, *spot, Hold::Next);
+                    }
+                }
+            }
         }
-        let site = if is_city {
-            find_city_site(&self.view, ground, building, &self.city_terrains)
-        } else {
-            find_site(&self.view, ground, building)
+        // Where a lost building of the line stood, if the ground is still free.
+        let mut again = Site::Nowhere;
+        if !is_city {
+            for spot in self
+                .rebuild_at
+                .get(&self.view.cat.root_of(building))
+                .into_iter()
+                .flatten()
+            {
+                again = at_spot(&self.view, ground, building, *spot);
+                if again != Site::Nowhere {
+                    break;
+                }
+            }
+        }
+        let site = match again {
+            Site::At(_) => again,
+            _ if is_city => find_city_site(&self.view, ground, building, &self.city_terrains),
+            _ => find_site(&self.view, ground, building),
         };
         let site = match site {
             Site::At(site) => site,

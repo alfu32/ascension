@@ -23,6 +23,15 @@ const STARVED_SITE_SCORE: i64 = 1100;
 /// Ticks between demand updates and between workers moved from one resource to another, so
 /// that a brain that thinks often does not keep its workers walking.
 pub(crate) const PACE_TICKS: u64 = 100;
+/// Income periods in which a resource earned only from sites without workers (energy) should
+/// bring in what the plans spend of it (task 152).
+const SPEND_PERIODS: i64 = 10;
+/// Score of such a site while a city lacks one and the income covers the plans: with the
+/// technologies, below the gather sites that feed the workers.
+const UNATTENDED_SCORE: i64 = 600;
+/// Score of such a site while the plans spend more than comes in: as the first site of a
+/// resource, and saved for.
+const UNATTENDED_SHORT_SCORE: i64 = 880;
 
 /// The state of one resource's gathering.
 #[derive(Debug, Clone, Default)]
@@ -42,6 +51,9 @@ pub(crate) struct Gathering {
     /// Its sites are full, the commerce cap would pay for more hands and the plans lack it,
     /// but no further site fits around the cities: the resource waits for another city.
     pub stuck: bool,
+    /// Nobody gathers it: it comes only from sites that need no workers (energy from
+    /// reactors, task 152).
+    pub unattended: bool,
 }
 
 /// The economy as assessed for one thought.
@@ -50,8 +62,10 @@ pub(crate) struct Economy {
     pub resources: BTreeMap<DefId, Gathering>,
     /// Workers the profile wants in total.
     pub worker_target: i64,
-    /// Workers owned or in training.
+    /// Workers owned or in training, with the workers called up as militia (they come back).
     pub workers: i64,
+    /// Workers called up as militia.
+    pub militia: i64,
     /// Free slots per site after everything inbound and planned.
     pub free: BTreeMap<EntityId, i64>,
 }
@@ -118,7 +132,18 @@ pub(crate) fn assess(view: &View<'_>, weights: &Weights, memory: &Memory) -> Eco
             .harvesters
             .get(&resource.id)
             .is_some_and(|types| types.iter().any(|t| rules.is_available(*t, view.faction)));
-        if !harvested {
+        // A resource nobody gathers counts when sites that need no workers earn it.
+        let unattended = !harvested
+            && view
+                .cat
+                .gather_sites
+                .get(&resource.id)
+                .into_iter()
+                .flatten()
+                .filter(|s| rules.is_available(**s, view.faction))
+                .filter_map(|s| rules.entity_types[s].gather_site.as_ref())
+                .any(|g| g.slots_max == 0 && g.self_income > 0);
+        if !harvested && !unattended {
             continue;
         }
         let site_type = site_type(view, memory, resource.id);
@@ -127,6 +152,7 @@ pub(crate) fn assess(view: &View<'_>, weights: &Weights, memory: &Memory) -> Eco
             Gathering {
                 expandable: site_type.is_some(),
                 site_type,
+                unattended,
                 ..Gathering::default()
             },
         );
@@ -176,18 +202,25 @@ pub(crate) fn assess(view: &View<'_>, weights: &Weights, memory: &Memory) -> Eco
             }
         }
     }
+    eco.militia = view.cat.militia.iter().map(|t| view.count(*t)).sum();
     eco.workers = rules
         .entity_types
         .values()
         .filter(|t| !t.harvester.is_empty())
         .map(|t| view.count(t.id))
-        .sum();
+        .sum::<i64>()
+        + eco.militia;
 
     // The most workers a resource can use: its commerce cap, or its sites when no more fit.
     let cap = view.commerce_cap();
     let mut most: BTreeMap<DefId, i64> = BTreeMap::new();
     let mut stuck: BTreeMap<DefId, bool> = BTreeMap::new();
     for (resource, g) in &eco.resources {
+        if g.unattended {
+            // No hands to give it.
+            most.insert(*resource, 0);
+            continue;
+        }
         let row = &rules.resources[resource];
         let income = view.world.income(view.me, *resource);
         let per_worker = view
@@ -355,7 +388,8 @@ fn worker_types(view: &View<'_>) -> Vec<(DefId, BTreeSet<DefId>)> {
 pub(crate) fn wishes(view: &View<'_>, eco: &Economy, late: bool, wishes: &mut Vec<Wish>) {
     let rules = view.rules;
     for g in eco.resources.values() {
-        let Some(site) = g.site_type else {
+        // Sites that need no workers are wished for by what the plans spend (`unattended`).
+        let Some(site) = g.site_type.filter(|_| !g.unattended) else {
             continue;
         };
         let spec = rules.entity_types[&site]
@@ -434,11 +468,18 @@ pub(crate) fn wishes(view: &View<'_>, eco: &Economy, late: bool, wishes: &mut Ve
             .filter_map(|r| eco.resources.get(r))
             .map(|g| g.desired.min(g.slots))
             .sum();
+        // Workers called up as militia come back: none is trained to replace them.
+        let called_up = if rules.entity_types[&worker].call_up.is_some() {
+            eco.militia
+        } else {
+            0
+        };
         let hands: i64 = worker_types(view)
             .iter()
             .filter(|(_, other)| other.iter().any(|r| harvests.contains(r)))
             .map(|(t, _)| view.count(*t))
-            .sum();
+            .sum::<i64>()
+            + called_up;
         let spare = if rules.entity_types[&worker].builder.is_some() {
             1 + unfinished.min(2)
         } else {
@@ -480,6 +521,73 @@ pub(crate) fn wishes(view: &View<'_>, eco: &Economy, late: bool, wishes: &mut Ve
                 opening: false,
             });
         }
+    }
+}
+
+/// Wishes for sites of resources nobody gathers, which sites that need no workers earn (energy:
+/// the nuclear reactor, later the fusion plant), made after every other manager has wished
+/// (task 152). The plans want income proportional to what they spend of the resource: the
+/// price of this thought's wishes and what earlier ones lacked, brought in over
+/// `SPEND_PERIODS` income periods; and at least one such site per city once one can be built,
+/// as far as the type's limit allows. While the plans spend more than comes in, the site is
+/// wished for as the first site of a resource and saved for.
+pub(crate) fn unattended_wishes(
+    view: &View<'_>,
+    eco: &Economy,
+    memory: &Memory,
+    wishes: &mut Vec<Wish>,
+) {
+    let rules = view.rules;
+    let cities = view.cities.iter().filter(|c| c.complete).count() as i64;
+    for (resource, g) in eco.resources.iter().filter(|(_, g)| g.unattended) {
+        let Some(site) = g.site_type else {
+            continue;
+        };
+        let et = &rules.entity_types[&site];
+        let per_site = et.gather_site.as_ref().map_or(0, |s| s.self_income);
+        let income = view.world.income(view.me, *resource);
+        if per_site <= 0 || income.capped {
+            continue;
+        }
+        let spend: i64 = wishes
+            .iter()
+            .flat_map(|w| view.price(w.act.subject()))
+            .filter(|(paid, _)| paid == resource)
+            .map(|(_, amount)| amount)
+            .sum::<i64>()
+            + memory.demand.get(&resource.0).copied().unwrap_or(0).max(0);
+        let need = (spend + SPEND_PERIODS - 1) / SPEND_PERIODS;
+        let root = view.cat.root_of(site);
+        let have = view.line_count(site);
+        let working = view
+            .own
+            .iter()
+            .filter(|e| view.cat.root_of(e.type_id) == root && operational(e))
+            .count() as i64;
+        let short = need > income.effective;
+        let for_spend = if short {
+            working + (need - income.effective + per_site - 1) / per_site
+        } else {
+            0
+        };
+        let allowed = match et.limit_scope {
+            rom_rules::LimitScope::PerCity => et.limit_count * cities,
+            rom_rules::LimitScope::PerPlayer | rom_rules::LimitScope::PerMatch => et.limit_count,
+            _ => i64::MAX,
+        };
+        if have >= cities.max(for_spend).min(allowed) {
+            continue;
+        }
+        wishes.push(Wish {
+            score: if short {
+                UNATTENDED_SHORT_SCORE
+            } else {
+                UNATTENDED_SCORE
+            },
+            act: Act::Construct(site),
+            reserve: short,
+            opening: false,
+        });
     }
 }
 

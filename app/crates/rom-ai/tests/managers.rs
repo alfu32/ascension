@@ -425,3 +425,65 @@ fn unknown_profiles_and_difficulties_are_refused() {
         }
     }
 }
+
+/// Task 152: a player that starts in the Automation age builds the energy site of its age (a
+/// building that earns energy by itself, no workers) in its city, and earns energy from it;
+/// the same start twice gives the same state.
+#[test]
+fn an_automation_age_start_builds_energy_sites() {
+    let rules = common::rules();
+    let automation = rules.id_of("age.automation").unwrap();
+    let ordinal = rules.ages[&automation].ordinal;
+    // Every technology but the ages after this one: what a player of this age may know.
+    let later_age = |tech: &DefId| {
+        rules.tech_effects.get(tech).into_iter().flatten().any(|e| {
+            e.effect == rom_rules::TechEffectKind::SetAge
+                && e.target_def_id
+                    .and_then(|a| rules.ages.get(&a))
+                    .is_some_and(|a| a.ordinal > ordinal)
+        })
+    };
+    let techs: Vec<DefId> = rules
+        .techs
+        .keys()
+        .copied()
+        .filter(|t| !later_age(t))
+        .collect();
+    // A site that earns a resource by itself, which no unit gathers: energy.
+    let energy_site = |t: &rom_rules::EntityType| {
+        t.gather_site.as_ref().is_some_and(|s| {
+            s.self_income > 0
+                && s.slots_max == 0
+                && !rules
+                    .entity_types
+                    .values()
+                    .any(|u| u.harvester.iter().any(|h| h.resource_id == s.resource_id))
+        })
+    };
+    let finished_energy = |w: &World| {
+        w.entities()
+            .filter(|e| {
+                e.owner == ME
+                    && e.build_progress.is_none()
+                    && energy_site(&w.rules().entity_types[&e.type_id])
+            })
+            .count()
+    };
+    let play = || {
+        let (mut world, mut brains) =
+            common::plain_in(&rules, 3, &[("balanced", "tougher")], automation, &techs);
+        let mut built = None;
+        for _ in 0..30 {
+            common::run(&mut world, &mut brains, 200);
+            if finished_energy(&world) > 0 {
+                built = Some(world.tick());
+                break;
+            }
+        }
+        let built = built.unwrap_or_else(|| panic!("no energy site by tick {}", world.tick()));
+        common::run(&mut world, &mut brains, 1200);
+        assert!(income(&world, energy_site) > 0, "no energy income");
+        (built, world.hash(), brains[0].save())
+    };
+    assert_eq!(play(), play());
+}
