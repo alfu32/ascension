@@ -38,6 +38,23 @@ impl Side {
         }
     }
 
+    /// The hover ring's colour: the side's, lightened by a third, so it reads apart from the
+    /// selection ring of the same side drawn just inside it.
+    pub fn hover_colour(self) -> [u8; 4] {
+        let [r, g, b, a] = self.colour();
+        let light = |c: u8| (u16::from(c) + (255 - u16::from(c)) / 3) as u8;
+        [light(r), light(g), light(b), a]
+    }
+
+    /// The side of `owner` in a table indexed by player id (as [`crate::HudSnapshot::sides`]):
+    /// nobody's for player 0, the person's own for a player the table does not list.
+    pub fn of_owner(sides: &[Side], owner: u8) -> Side {
+        match owner {
+            0 => Self::Neutral,
+            _ => sides.get(usize::from(owner)).copied().unwrap_or(Self::Own),
+        }
+    }
+
     /// The word the help line starts with.
     pub fn word(self) -> &'static str {
         match self {
@@ -158,7 +175,7 @@ impl HudFlash {
 /// coloured by the side the snapshot gives it, when both name the same entity.
 pub fn hover_ring(pointed: Option<u32>, pointer: Option<&HudPointer>) -> Option<(u32, [u8; 4])> {
     let pointer = pointer?;
-    (pointed? == pointer.entity).then(|| (pointer.entity, pointer.side.colour()))
+    (pointed? == pointer.entity).then(|| (pointer.entity, pointer.side.hover_colour()))
 }
 
 /// What the world draws for the pointer this frame: the hover ring and the lit flashes, each
@@ -222,6 +239,21 @@ mod tests {
     }
 
     #[test]
+    fn the_hover_colour_is_the_sides_lightened_and_owners_map_to_sides() {
+        for side in [Side::Own, Side::Ally, Side::Enemy, Side::Neutral] {
+            let (base, hover) = (side.colour(), side.hover_colour());
+            assert_ne!(base, hover, "{side:?}");
+            assert!((0..3).all(|i| hover[i] >= base[i]), "{side:?} lightened");
+        }
+        let sides = [Side::Neutral, Side::Own, Side::Enemy, Side::Ally];
+        assert_eq!(Side::of_owner(&sides, 0), Side::Neutral);
+        assert_eq!(Side::of_owner(&sides, 1), Side::Own);
+        assert_eq!(Side::of_owner(&sides, 2), Side::Enemy);
+        assert_eq!(Side::of_owner(&sides, 3), Side::Ally);
+        assert_eq!(Side::of_owner(&[], 4), Side::Own);
+    }
+
+    #[test]
     fn a_flash_is_lit_twice_then_gone() {
         let lit: Vec<bool> = (0..FLASH_TICKS + 3)
             .map(|age_ticks| {
@@ -256,7 +288,7 @@ mod tests {
         };
         assert_eq!(
             hover_ring(Some(7), Some(&pointer)),
-            Some((7, Side::Enemy.colour()))
+            Some((7, Side::Enemy.hover_colour()))
         );
         assert_eq!(hover_ring(Some(8), Some(&pointer)), None);
         assert_eq!(hover_ring(None, Some(&pointer)), None);

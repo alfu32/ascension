@@ -4004,6 +4004,11 @@ fn the_side_of_the_hovered_entity_follows_the_relation_not_the_team_colour() {
     // Nothing under the pointer: nothing to say.
     point_at(&mut fx, None);
     assert_eq!(fx.hud_snapshot().pointer, None);
+    // The selection rings' table: by relation, whatever the team colours.
+    assert_eq!(
+        fx.hud_snapshot().sides,
+        vec![Side::Neutral, Side::Own, Side::Enemy, Side::Ally]
+    );
 }
 
 #[test]
@@ -4125,4 +4130,24 @@ fn the_target_of_a_right_click_order_flashes_twice_in_the_orders_colour() {
         .sum();
     assert!(lit > 0);
     assert!(fx.hud_snapshot().flashes.is_empty());
+}
+
+#[test]
+fn only_the_render_threads_pointed_pick_names_the_hovered_entity() {
+    let mut fx = fixture();
+    let t = fx.armed_other_than_builder();
+    let foe = fx.spawn(t, 2, 12, 12);
+    point_at(&mut fx, Some(foe));
+    // A planet hover that found nothing (the pointer is on a ship in space) leaves it.
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Hover {
+            entity: None,
+            world_point: (3.0, 3.0),
+            surface: flat_surface((3.0, 3.0)),
+        },
+    );
+    assert_eq!(fx.hud_snapshot().pointer.map(|p| p.entity), Some(foe.0));
+    point_at(&mut fx, None);
+    assert_eq!(fx.hud_snapshot().pointer, None);
 }

@@ -240,8 +240,8 @@ impl OverlayGeometry {
 }
 
 /// Adds the pointer's marks to a frame's overlay (task 151): the hovered entity's outline in its
-/// side's colour, a ring a little outside the selection ring (corner brackets beyond the outline
-/// of a building), and the flashing ring of an order's target. Sized to the entity as drawn,
+/// side's lighter hover tint, a ring a little outside the selection ring and one line thicker
+/// (corner brackets beyond the outline of a building), and the flashing ring of an order's target. Sized to the entity as drawn,
 /// ships held at their floor above the planet included. Allocates nothing.
 pub(crate) fn pointer_marks(
     views: &[EntityView],
@@ -276,7 +276,7 @@ pub(crate) fn pointer_marks(
                     out.rect_outline(origin, (-w - pad, -h - pad), (w + pad, h + pad), colour);
                 }
             } else {
-                for pad in [0.32, 0.4] {
+                for pad in [0.3, 0.36, 0.42] {
                     out.brackets(origin, (-w - pad, -h - pad), (w + pad, h + pad), colour);
                 }
             }
@@ -285,7 +285,9 @@ pub(crate) fn pointer_marks(
             let extras: &[f32] = if flash {
                 &[0.0, 0.05, 0.1, 0.15]
             } else {
-                &[0.0, 0.04, 0.08]
+                // One line more than the selection ring, in a lighter tint: the two read apart
+                // even when both are the same side's colour.
+                &[0.0, 0.035, 0.07, 0.105]
             };
             for extra in extras {
                 out.ring(origin, radius + extra, colour);
@@ -452,7 +454,9 @@ pub fn build_overlays_on(
             continue;
         };
         let view = &views[index];
-        let colour = rgba(owner_color(view.owner));
+        // The side's colour, not the team's: an own selection is green whatever its team
+        // colour, an inspected enemy red (task 151).
+        let colour = crate::Side::of_owner(&hud.sides, view.owner).colour();
         let origin = Origin {
             ground,
             face: view.face,
@@ -933,7 +937,22 @@ mod tests {
         assert_eq!(out.lines.len(), RING_SEGMENTS * 3);
         // The health bar is drawn on the 2D batch, not here.
         assert!(out.tris.is_empty());
-        assert!(out.lines.iter().all(|l| l.colour == rgba(owner_color(1))));
+        // Green for an own selection whatever the team colour (task 151), red for an enemy's.
+        assert!(
+            out.lines
+                .iter()
+                .all(|l| l.colour == crate::Side::Own.colour())
+        );
+        let inspected = HudSnapshot {
+            sides: vec![crate::Side::Neutral, crate::Side::Enemy],
+            ..hud.clone()
+        };
+        build_overlays(&[unit(1)], &|_, _| 0.0, &inspected, 0.0, &mut out);
+        assert!(
+            out.lines
+                .iter()
+                .all(|l| l.colour == crate::Side::Enemy.colour())
+        );
         // An unselected unit draws nothing.
         build_overlays(&[unit(2)], &|_, _| 0.0, &hud, 0.0, &mut out);
         assert!(out.lines.is_empty() && out.tris.is_empty());
@@ -949,7 +968,7 @@ mod tests {
         };
         let mut out = OverlayGeometry::default();
         build_overlays(&[ship], &|_, _| 2.0, &hud, 0.0, &mut out);
-        let selection = rgba(owner_color(ship.owner));
+        let selection = crate::Side::Own.colour();
         let rings: Vec<_> = out.lines.iter().filter(|l| l.colour == selection).collect();
         assert_eq!(rings.len(), RING_SEGMENTS * 3);
         assert!(rings.iter().all(|l| (l.a[1] - (8.0 + LIFT)).abs() < 0.001));

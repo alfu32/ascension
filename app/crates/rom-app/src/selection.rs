@@ -987,10 +987,10 @@ impl Controller {
                 button,
                 modifiers,
             } => self.hud_click(world, region, index, button, modifiers),
-            PickEvent::Hover {
-                surface, entity, ..
-            } => {
-                self.hovered = entity.map(EntityId);
+            // The entity under the pointer comes from `Pointed` alone (task 151): the render
+            // thread's one pick a frame, on the planet and in space. A hover's own entity is the
+            // planet picker's, which knows nothing of ships in space.
+            PickEvent::Hover { surface, .. } => {
                 let at = self.pos_of(surface);
                 self.hover(world, at);
             }
@@ -3627,6 +3627,7 @@ impl Controller {
         let rules = world.rules();
         hud.data_tab = self.data_tab;
         hud.pointer = self.pointer_info(world);
+        hud.sides = self.sides(world);
         hud.flashes = self.hud_flashes(world);
         hud.help = self.wealth_help(world).unwrap_or_default();
         // Task 142: the question a delete asks, and the ground pick.

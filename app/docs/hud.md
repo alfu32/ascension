@@ -522,9 +522,14 @@ and whose is it.
   same pick.
 - **Outline by side.** `HudSnapshot::pointer` (`HudPointer`, filled by
   `rom-app/src/selection/pointer.rs`) names the entity, its `Side` and the line of help. The
-  world draws a ring a little outside the selection ring (corner brackets round a building),
-  in the side's colour whatever the team colours: own green, ally cyan, enemy red, neutral
-  grey. On the surface and in orbit it is overlay geometry (`overlay::pointer_marks`); in system
+  world draws a ring a little outside the selection ring and one line thicker (corner
+  brackets round a building), in the side's colour lightened by a third, whatever the team
+  colours: own green, ally cyan, enemy red, neutral grey.
+- **Selection rings by side.** Selection rings and outlines take the same side colours
+  (`HudSnapshot::sides`, each player's side indexed by id), not the team colour: an own
+  selection is green, an inspected enemy red, nature grey, on the surface, in orbit, in system
+  space and on the star map. Health bars, borders, the minimap and city names keep the team
+  colour, which tells players apart. On the surface and in orbit it is overlay geometry (`overlay::pointer_marks`); in system
   space a ring outside the ship's marker, on the star map round its mark.
 - **The order badge.** While the selection can act on the entity, a 30-pixel tile above and right
   of the pointer (clear of the arrow and of the space tooltip), framed in the side's colour, shows the order a right click gives: attack, build (an

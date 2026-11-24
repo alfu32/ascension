@@ -1556,7 +1556,7 @@ fn render_loop(shared: &Shared) {
         } else {
             0.0
         };
-        scene.set_space_state(&space_snapshot, &hud_snapshot.selected);
+        scene.set_space_state(&space_snapshot, &hud_snapshot.selected, &hud_snapshot.sides);
         // The world is not drawn where the HUD will cover it with opaque frame pixels.
         scene.hud_cover = match &hud {
             Some(hud) if hud_visible && review.is_none() && !hud.needs_rebake(hud_layout.scale) => {

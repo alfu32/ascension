@@ -127,6 +127,9 @@ pub struct HudSnapshot {
     pub pointer: Option<crate::HudPointer>,
     /// Targets of orders just given by a right click, flashing (task 151).
     pub flashes: Vec<crate::HudFlash>,
+    /// Each player's side as the person sees them, indexed by player id: selection rings take
+    /// their colour from it, never from the team colour (task 151).
+    pub sides: Vec<crate::Side>,
 }
 
 /// The dialog that tells a new age's story (task 133): drawn over the world and the HUD until
@@ -255,6 +258,7 @@ impl Default for HudSnapshot {
             age_dialog: None,
             pointer: None,
             flashes: Vec::new(),
+            sides: Vec::new(),
         }
     }
 }

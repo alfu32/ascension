@@ -6,7 +6,7 @@
 # under the pointer and "Enemy · Corvettes (…) · hp" on the help line.
 #   rise-of-man --universe --style map.many_worlds --seed 1 --players 2 --ai none --zoom-all \
 #     --sun fixed --view system --size 1280x800 --speed 1 \
-#     --script app/docs/tasks/151-system-script.txt --after 30 --screenshot app/docs/img/151-system.png
+#     --script app/docs/tasks/151-system-script.txt --after 35 --screenshot app/docs/img/151-system.png
 0 grant-age age.galactic
 0 place-space 1 unit.corvette 52,-9
 0 place-space 2 unit.corvette 60,-4

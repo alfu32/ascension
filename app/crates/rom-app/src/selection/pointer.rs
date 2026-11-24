@@ -341,6 +341,28 @@ impl Controller {
         })
     }
 
+    /// Every player's side as the person sees them, indexed by player id, for the selection
+    /// rings (task 151).
+    pub(super) fn sides(&self, world: &World) -> Vec<Side> {
+        let me = self.me();
+        let team_of = |id: PlayerId| world.players().find(|p| p.id == id).map(|p| p.team);
+        let last = world.players().map(|p| p.id.0).max().unwrap_or(0);
+        (0..=last)
+            .map(|n| {
+                let id = PlayerId(n);
+                if id == me {
+                    Side::Own
+                } else if n == 0 || team_of(id).is_none() {
+                    Side::Neutral
+                } else if team_of(id) == team_of(me) {
+                    Side::Ally
+                } else {
+                    Side::Enemy
+                }
+            })
+            .collect()
+    }
+
     /// Remembers that a right click gave an order against `target`: its ring flashes, red for an
     /// attack, green for a friendly order.
     pub(super) fn flash(&mut self, world: &World, target: EntityId, hostile: bool) {

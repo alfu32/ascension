@@ -119,6 +119,8 @@ const STAR_FILL: f32 = 0.35;
 pub(super) struct SpaceState {
     snapshot: Arc<SpaceSnapshot>,
     pub(super) selected: Vec<u32>,
+    /// Each player's side, indexed by player id: the selection rings' colours (task 151).
+    sides: Vec<crate::Side>,
     hover: Option<SpaceHover>,
     /// The ships above the loaded globe as it draws them, in the planet frame.
     orbital: Vec<OrbitalShip>,
@@ -456,12 +458,20 @@ impl Scene {
     }
 
     /// Keeps what is in space and the selected entity ids for the next draw.
-    pub(crate) fn set_space_state(&mut self, snapshot: &Arc<SpaceSnapshot>, selected: &[u32]) {
+    pub(crate) fn set_space_state(
+        &mut self,
+        snapshot: &Arc<SpaceSnapshot>,
+        selected: &[u32],
+        sides: &[crate::Side],
+    ) {
         if !Arc::ptr_eq(&self.space_state.snapshot, snapshot) {
             self.space_state.snapshot = Arc::clone(snapshot);
         }
         if self.space_state.selected != selected {
             self.space_state.selected = selected.to_vec();
+        }
+        if self.space_state.sides != sides {
+            self.space_state.sides = sides.to_vec();
         }
     }
 
@@ -1209,11 +1219,12 @@ impl Scene {
                         ));
                     }
                     if selected {
+                        let [r, g, b, _] = crate::Side::of_owner(&state.sides, ship.owner).colour();
                         let ring = annulus(
                             [at[0], 0.6, at[2]],
                             ring_radius,
                             (per_pixel * 3.0).max(thickness * 0.7),
-                            [63, 208, 255, mark],
+                            [r, g, b, mark],
                             28,
                         );
                         overlay.tris.extend(ring);
@@ -1230,7 +1241,7 @@ impl Scene {
                         overlay.tris.extend(annulus(
                             [at[0], 0.65, at[2]],
                             ring_radius + per_pixel * gap,
-                            (per_pixel * 3.0).max(thickness * 0.8),
+                            (per_pixel * 4.0).max(thickness),
                             [r, g, b, mark],
                             32,
                         ));
@@ -1432,11 +1443,13 @@ impl Scene {
                         .tris
                         .extend(chevron([at[0], 3.0, at[2]], dir, size, [r, g, b, a]));
                     if state.selected.binary_search(&transit.id).is_ok() {
+                        let [r, g, b, _] =
+                            crate::Side::of_owner(&state.sides, transit.owner).colour();
                         overlay.tris.extend(annulus(
                             lifted,
                             size * 1.2,
                             size * 0.15,
-                            [63, 208, 255, a],
+                            [r, g, b, a],
                             28,
                         ));
                     }
@@ -1818,8 +1831,10 @@ impl Scene {
                     }
                 }
                 if chosen {
+                    let [r, g, b, _] =
+                        crate::Side::of_owner(&self.space_state.sides, mark.owner).colour();
                     overlay.tris.extend(face(
-                        annulus(at, icon * 2.0, icon * 0.3, [63, 208, 255, 255], 28),
+                        annulus(at, icon * 2.0, icon * 0.3, [r, g, b, 255], 28),
                         at,
                     ));
                 }
@@ -1833,7 +1848,7 @@ impl Scene {
                     .iter()
                     .find_map(|id| self.pointer_marks.flash_of(*id));
                 for ([r, g, b, _], radius) in hovered
-                    .map(|c| (c, 2.5))
+                    .map(|c| (c, 2.6))
                     .into_iter()
                     .chain(flashed.map(|c| (c, 3.0)))
                 {
