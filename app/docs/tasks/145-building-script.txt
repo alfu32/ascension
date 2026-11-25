@@ -1,0 +1,5 @@
+# Task 145: a building's portrait. Player one's capital is selected: the selection panel, headed
+# by the city's name, shows the city's own model in the player's age and colour.
+#   rise-of-man --universe --seed 1 --sun fixed --players 2 --ai none --size 1280x800 \
+#     --script app/docs/tasks/145-building-script.txt --after 4 --screenshot app/docs/img/145-building.png
+5 click city

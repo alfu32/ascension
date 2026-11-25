@@ -1,0 +1,10 @@
+# Task 145: a foreign unit's portrait. Two spearmen of player two stand south-east of the city and
+# the first is clicked: the selection panel shows it as foreign, its portrait in its owner's
+# colour (portraits are kept by model and owner).
+#   rise-of-man --universe --seed 1 --sun fixed --players 2 --ai none --size 1280x800 --speed 1 \
+#     --script app/docs/tasks/145-foreign-script.txt --after 6 --screenshot app/docs/img/145-foreign.png
+0 place 1 unit.spearman @-4,6
+0 place 2 unit.spearman @3,6
+0 place 2 unit.spearman @5,7
+0 cam wheel 3 640,420
+1 click foe1

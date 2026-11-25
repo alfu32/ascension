@@ -1,0 +1,17 @@
+# Task 145: a space fleet's portraits. Galactic age; corvettes, frigates, cruisers and
+# battleships are put into the orbit of the home planet and all selected: each cell shows its
+# class's own model, with its count; the camera backs off to see the orbit.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1280x800 \
+#     --script app/docs/tasks/145-fleet-script.txt --after 20 --screenshot app/docs/img/145-fleet.png
+0 grant-age age.galactic
+0 place-orbit 1 unit.corvette @-12,-14
+0 place-orbit 1 unit.corvette @-9,-16
+0 place-orbit 1 unit.corvette @-6,-13
+0 place-orbit 1 unit.space_frigate @-12,-19
+0 place-orbit 1 unit.space_frigate @-8,-21
+0 place-orbit 1 unit.space_cruiser @-13,-24
+0 place-orbit 1 unit.space_cruiser @-9,-26
+0 place-orbit 1 unit.battleship @-11,-29
+1 cam wheel -4 640,400
+100 speed 1
+100 ships

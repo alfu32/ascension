@@ -408,6 +408,11 @@ pub struct HudQueue {
 pub struct HudCard {
     /// Atlas icon name of the placeholder pictogram.
     pub icon: String,
+    /// The composed model of its owner's faction and age (an index of
+    /// [`crate::SceneLooks::models`]) whose rendered portrait replaces `icon` (task 145).
+    pub model: Option<u16>,
+    /// Its owner, whose colour the portrait wears.
+    pub owner: u8,
     /// Display name.
     pub name: String,
     /// True for an entity of another owner: shown, but without orders.
@@ -441,8 +446,10 @@ pub struct HudCard {
 /// One tile of the multi-selection grid.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HudTile {
-    /// Atlas icon name.
+    /// Atlas icon name; stands in until the model's picture is rendered.
     pub icon: String,
+    /// The composed model whose rendered picture the tile shows (task 145).
+    pub model: Option<u16>,
     /// Display name.
     pub name: String,
     /// Number of selected entities of the type.

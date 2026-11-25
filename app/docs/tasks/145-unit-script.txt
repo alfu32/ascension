@@ -1,0 +1,9 @@
+# Task 145: one unit's portrait. Industrial age; a light tank stands south of the city and is
+# selected: the selection panel's large tile shows its own model, rendered for the portrait.
+#   rise-of-man --universe --seed 1 --sun fixed --players 2 --ai none --size 1280x800 \
+#     --script app/docs/tasks/145-unit-script.txt --after 4 --screenshot app/docs/img/145-unit.png
+0 grant-age age.industrial
+0 place 1 unit.light_tank @0,9
+0 place 1 unit.rifleman @-2,9
+0 cam wheel 3 640,420
+10 click army1

@@ -3760,6 +3760,19 @@ impl Controller {
         selected.sort_unstable();
         hud.selected = selected;
         let known_capitals = world.known_capitals(me);
+        // The model a type is drawn with for its owner (task 145): the faction and age of the
+        // owner's look, as in the world view.
+        let looks: BTreeMap<PlayerId, (DefId, DefId)> = world
+            .players()
+            .map(|p| (p.id, (p.faction, p.age)))
+            .collect();
+        let model_of = |owner: PlayerId, kind: DefId| {
+            let (faction, age) = looks.get(&owner)?;
+            self.models
+                .as_deref()?
+                .resolve_any(kind, *faction, *age)
+                .map(|m| m.index)
+        };
         let card = |e: &Entity, foreign: bool| {
             let et = &rules.entity_types[&e.type_id];
             let attack = et.weapons.iter().map(|w| w.damage).max();
@@ -3770,6 +3783,8 @@ impl Controller {
                 .map(|_| format!("{} / {}", world.occupants(e.id).len(), e.gather_slots));
             HudCard {
                 icon: icon_of(et).to_owned(),
+                model: model_of(e.owner, e.type_id),
+                owner: u8::try_from(e.owner.0).unwrap_or(u8::MAX),
                 name: rules.display_name(e.type_id, faction).to_owned(),
                 foreign,
                 capital: crate::capital_view::is_known_capital(&known_capitals, e.id),
@@ -3812,6 +3827,7 @@ impl Controller {
                             let wet = &rules.entity_types[&w.type_id];
                             HudTile {
                                 icon: icon_of(wet).to_owned(),
+                                model: model_of(w.owner, w.type_id),
                                 name: rules.display_name(w.type_id, faction).to_owned(),
                                 count: 1,
                                 hp_permille: (w.hp.max(0) * 1000 / w.max_hp.max(1)).min(1000)
@@ -3879,6 +3895,7 @@ impl Controller {
                     let et = &rules.entity_types[&type_id];
                     tiles.push(HudTile {
                         icon: icon_of(et).to_owned(),
+                        model: model_of(me, type_id),
                         name: rules.display_name(type_id, faction).to_owned(),
                         count: of_type.len(),
                         hp_permille: (hp.max(0) * 1000 / max.max(1)).min(1000) as u32,

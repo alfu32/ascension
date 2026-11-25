@@ -1,9 +1,10 @@
 //! GPU resources owned exclusively by the render thread.
 use crate::capitals::ScreenEmblem;
-use crate::hud::{HudOverlay, HudPainter, HudSnapshot, HudTexture};
+use crate::hud::{HudOverlay, HudPainter, HudSnapshot, HudTexture, Portrait};
 use crate::hud_layout::{HudLayout, Rect, Region, scale_needs_rebake};
 use crate::hud_minimap::{self, MapMark};
 use crate::hud_text::{Align, TextSize, TextStyle};
+use crate::scene::PictureKind;
 use crate::scene::SpaceLabel;
 use crate::vision::shade_pixels;
 use crate::zoom::{Level, ZoomCamera};
@@ -19,6 +20,8 @@ pub(crate) struct HudGpu {
     glyphs: Texture2D,
     /// Models the scene could not draw: not tried again.
     no_picture: std::collections::BTreeSet<u16>,
+    /// Portraits the scene could not draw: not tried again.
+    no_portrait: std::collections::BTreeSet<Portrait>,
     /// When the batch of pictures on its way back was drawn, and how long drawing took.
     icon_batch: Option<(std::time::Instant, std::time::Duration)>,
 }
@@ -28,9 +31,6 @@ pub(crate) struct HudGpu {
 const EMBLEM_PRIORITY: f32 = -4.5;
 /// Where the city names rank (task 144): after the emblems, before the labels of space.
 const NAME_PRIORITY: f32 = -4.0;
-
-/// Most model pictures rendered in one frame: a full palette page.
-const ICONS_PER_FRAME: usize = 15;
 
 pub(crate) fn upload(
     _rl: &mut RaylibHandle,
@@ -78,12 +78,14 @@ impl HudGpu {
             greyscale,
             glyphs,
             no_picture: Default::default(),
+            no_portrait: Default::default(),
             icon_batch: None,
         })
     }
 
     /// Renders the pictures of the models `snapshot` shows that have none yet (task 91), at
-    /// most a page at a time, and puts them in the atlas textures once read back.
+    /// most a page at a time, and the single selection's portrait (task 145) first, and puts
+    /// them in the atlas textures once read back. One batch is on its way at a time.
     pub(crate) fn bake_model_icons(
         &mut self,
         rl: &mut RaylibHandle,
@@ -97,20 +99,34 @@ impl HudGpu {
         if scene.model_icons_busy() || !scene.has_models() {
             return;
         }
-        let batch: Vec<u16> = self
+        let portrait = self
             .painter
-            .missing_models(snapshot)
-            .into_iter()
-            .filter(|m| !self.no_picture.contains(m))
-            .take(ICONS_PER_FRAME)
-            .collect();
+            .missing_portrait(snapshot)
+            .filter(|p| !self.no_portrait.contains(p));
+        let (kind, batch, edge) = match portrait {
+            Some(p) => (
+                PictureKind::Portrait,
+                vec![(p.model, p.owner)],
+                self.painter.artwork.portrait_edge(),
+            ),
+            None => (
+                PictureKind::Icons,
+                self.painter
+                    .missing_models(snapshot)
+                    .into_iter()
+                    .filter(|m| !self.no_picture.contains(m))
+                    .take(crate::scene::STRIP_CELLS)
+                    .map(|m| (m, crate::scene::ICON_OWNER))
+                    .collect(),
+                self.painter.artwork.model_icon_edge(),
+            ),
+        };
         if batch.is_empty() {
             return;
         }
         let started = std::time::Instant::now();
-        let edge = self.painter.artwork.model_icon_edge();
         let factor = crate::hud_icons::supersample(edge);
-        let done = scene.render_model_icons(rl, thread, &batch, edge * factor);
+        let done = scene.render_model_icons(rl, thread, &batch, edge * factor, kind);
         self.icon_batch = Some((started, started.elapsed()));
         if let Some(done) = done {
             self.store_model_icons(done, snapshot);
@@ -120,7 +136,10 @@ impl HudGpu {
     /// Filters read-back pictures down, outlines them and writes them into the atlas textures.
     fn store_model_icons(&mut self, done: crate::scene::ModelPictures, snapshot: &HudSnapshot) {
         let finishing = std::time::Instant::now();
-        let edge = self.painter.artwork.model_icon_edge();
+        let edge = match done.kind {
+            PictureKind::Icons => self.painter.artwork.model_icon_edge(),
+            PictureKind::Portrait => self.painter.artwork.portrait_edge(),
+        };
         let factor = crate::hud_icons::supersample(edge);
         if done.edge != edge * factor {
             // Drawn for another HUD scale: drawn again at this one.
@@ -128,13 +147,21 @@ impl HudGpu {
         }
         let scale = self.painter.artwork.scale;
         let mut stored = 0;
-        for (model, picture) in done.pictures {
+        for ((model, owner), picture) in done.pictures {
+            let portrait = Portrait { model, owner };
             let Some(raw) = picture else {
-                self.no_picture.insert(model);
+                match done.kind {
+                    PictureKind::Icons => self.no_picture.insert(model),
+                    PictureKind::Portrait => self.no_portrait.insert(portrait),
+                };
                 continue;
             };
             let pixels = crate::hud_icons::finish(&raw, edge, factor, scale);
-            let Some(rect) = self.painter.store_model_icon(model, &pixels, snapshot) else {
+            let rect = match done.kind {
+                PictureKind::Icons => self.painter.store_model_icon(model, &pixels, snapshot),
+                PictureKind::Portrait => self.painter.store_portrait(portrait, &pixels, snapshot),
+            };
+            let Some(rect) = rect else {
                 continue;
             };
             let at = Rectangle::new(rect.x as f32, rect.y as f32, rect.w as f32, rect.h as f32);
@@ -152,8 +179,12 @@ impl HudGpu {
             .icon_batch
             .take()
             .unwrap_or((finishing, std::time::Duration::ZERO));
+        let what = match done.kind {
+            PictureKind::Icons => "model icons",
+            PictureKind::Portrait => "portrait",
+        };
         eprintln!(
-            "rom-render: {stored} model icons ({edge} px, drawn at {}): draw {:.1} ms, \
+            "rom-render: {stored} {what} ({edge} px, drawn at {}): draw {:.1} ms, \
              finish {:.1} ms, ready {:.1} ms after the draw; atlas {}×{}",
             edge * factor,
             draw.as_secs_f32() * 1_000.0,
