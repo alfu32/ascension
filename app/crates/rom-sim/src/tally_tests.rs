@@ -336,4 +336,26 @@ fn the_score_is_the_documented_weighted_sum() {
         + 4 * weight("score.tech")
         + ancient * weight("score.age");
     assert_eq!(w.score(P1), expected);
+    // Its parts (task 160) split the same sum: fighting, economy, research, ascension.
+    let parts = w.score_parts(P1);
+    assert_eq!(
+        parts.military,
+        2 * weight("score.unit_trained") + 5 * weight("score.kill") + weight("score.city_captured")
+    );
+    assert_eq!(
+        parts.economy,
+        1_050 / weight("score.gathered_per")
+            + 3 * weight("score.building_completed")
+            + weight("score.city_founded")
+    );
+    assert_eq!(
+        parts.research,
+        4 * weight("score.tech") + ancient * weight("score.age")
+    );
+    assert_eq!(parts.ascension, 0);
+    assert_eq!(
+        parts.military + parts.economy + parts.research + parts.ascension,
+        w.score(P1)
+    );
+    assert_eq!(w.score_parts(P2), crate::ScoreParts::default());
 }

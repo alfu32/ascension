@@ -1,0 +1,10 @@
+# Task 160: the age on the top bar and the live rankings in a match of four (universe match,
+# seed 1, --sun fixed, 1280 x 800, --players 4, the default computer players). Player one starts
+# in the Classical age, the computer players in the Ancient age; the game runs at four times the
+# speed so the computer players gather, build and train and the scores part. The top bar reads
+# "AGE 2 OF 14 · CLASSICAL AGE" over the clock; the rankings panel at the right lists the four
+# players, the own row lit. Shot as img/160-rankings.png.
+#   --universe --seed 1 --players 4 --sun fixed --size 1280x800
+#   --script docs/tasks/160-rankings-script.txt --screenshot <file> --after 40
+0 grant-age age.classical
+1 speed 400

@@ -64,6 +64,7 @@ the right, the minimap to the bottom centre. Rectangles are `x, y, w, h`.
 | Research block | 990, 10, 325, 110 | up to three rows: icon, tech name, progress bar (cyan), percent; empty rows hidden |
 | Clock | 1352, 38, 62, 62 | game time `mm:ss` (or `h:mm:ss`) |
 | Buttons | 1432, 42, 50, 50 · 1486 · 1540 · 1594 (same size) | diplomacy, chat, menu, pause; menu opens the game menu (Esc too), pause holds or releases the simulation |
+| Age | 1342, 13, 306, 24 | the person's age over the clock and the buttons, gold: `AGE 10 OF 14 · FUSION AGE` (task 160) |
 
 ### Bottom left (x 0–612)
 
@@ -402,6 +403,68 @@ a planet it brought to life and no city stands there.
   closed; its rollover (`HudPalette::tab_notes`) and a click on it say why ("You did not bring
   Earth to life: only a planet you brought to life is painted", or that a city stands there,
   or, at the system and star-map levels, to paint on a globe).
+
+## The age, live rankings and what a button improves (task 160)
+
+Owner, 2026-11-25: "the age the player is into clearly marked on the hud or on the mini stat
+rankings", "realtime mini stat rankings of all the players in the game on the hud", and the hover
+indication "to also show what it improves".
+
+- **The age.** The top bar names the person's age in gold over the clock and the four buttons
+  (design 1342, 13, 306 × 24, the empty band of that block above them): "AGE 10 OF 14 · FUSION
+  AGE", counted from one as the new-age dialog counts, the age's name from the rules
+  (`HudSnapshot::age`, `rom-app/src/ranking_view.rs`). The snapshot is rebuilt every tick, so it
+  changes the tick an advance completes.
+- **Rankings.** A panel at the right edge of the world, 12 design pixels under the top bar and
+  320 wide (`HudSnapshot::rankings`, `HudPainter::rankings`): a row per player, best score
+  first, ties by id, each with its colour, name ("You" for the person, as the diplomacy tab
+  names players), its age's short name (`assets/text/ages.toml`), its score with thousands
+  separators and three thin bars, military (red), economy (green) and research (cyan). The
+  numbers are the match report's: `World::score` and its parts `World::score_parts` (task 160,
+  read-only): military = units trained, kills and cities captured; economy = resources gathered,
+  buildings and cities founded; research = technologies and the highest age. Each bar is the
+  player's part as a share of the best player's. The person's row is lit gold; a defeated
+  player's row is grey and reads "Defeated"; an ascended one reads "Ascended" in cyan. A legend
+  of the bars and "F8 HIDES" close the panel. Only what the match report shows is shown: ages
+  and scores are public, nothing else about another player.
+  - It is worked out once per game second (`RankingBoard`, kept by the simulation thread) and
+    published with every HUD snapshot; drawing it formats nothing, and HUD text that fits its
+    field is drawn without a copy (the painter reuses one glyph buffer).
+  - It never reaches the bottom panels: rows that would go below the top of the bottom right
+    chrome are left out (only on very small windows). It is not a HUD surface: the pointer
+    passes through it to the world.
+  - **F8** shows or hides it (shown by default; free in the game, the menu, the chat and the
+    camera keys: F2–F7 and F9 are taken). The game menu's key line says so ("F8 rankings") and
+    the panel's legend ends with "F8 HIDES". Script: `rankings` toggles it.
+- **What a button improves.** Hovering a build, train or research button opens a panel over the
+  help line (its bottom on the line's top, as wide as its longest line) listing what the
+  definition does, from data (`rom-app/src/effects.rs`, one function from a definition id to
+  lines, `HudButton::effects`):
+  - an age advance: "Advances to Fusion Age";
+  - an upgrade: "Upgrades Spearmen → Hoplites";
+  - a building or unit: its main stats as the player would have them now ("Hit points 120 ·
+    armour 1", "Attack 6 · range 5 tiles" or "· melee", "Holds 10", "Gathers Food",
+    "Population 1");
+  - each modifier row: "+10 % gathering: Food", "+25 % hit points: City, Automated Colony",
+    "+1 armour: Stone Wall", "+2 tiles border: Temple", "-4 % research time", "Gains mine
+    detection: infantry"; rows that differ only by target share a line. The target is the type
+    named by the row or the types its tag marks for the player when they are one or two, else
+    the tag in words; a resource stat names its resource. Amounts read in their units: tiles for
+    distances, seconds for ticks, percent for `pct` and `mul` rows;
+  - other effects: "Enables market trading", "Grants …", "Reveals the map", "Becomes Humanity",
+    "Ascends: leaves the material plane";
+  - "Unlocks Theology", "Unlocks Smelter, Fort, Pikemen +21 more": what it (or the age it
+    reaches) is a prerequisite of for the player, types first, three named.
+  - a single upgrade also says what the new type improves: "Hit points 100 → 115 · armour 2",
+    "Attack 9 → 10 · melee"; a type that keeps its name reads "Improves Levies".
+  With more than seven lines the first six are shown and "+N more" in grey. The words for each
+  stat are a presentation table by stat key (like the resource artwork); a stat not in it reads
+  as its key in words.
+
+Screenshots (`rise-of-man --universe --seed 1 --sun fixed --size 1280x800`, the exact lines in each
+script): `img/160-rankings.png` (`tasks/160-rankings-script.txt`, four players),
+`img/160-research-hint.png` (`tasks/160-research-hint-script.txt`) and `img/160-upgrade-hint.png`
+(`tasks/160-upgrade-hint-script.txt`).
 
 ## Game menu (task 63)
 

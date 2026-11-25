@@ -56,6 +56,8 @@
 //! screenshot shows what hovering it shows (task 151); `<entity>` is `city`, `builderN`, `#id`
 //! or a live name.
 //!
+//! `rankings` shows or hides the rankings panel, as F8 does (task 160).
+//!
 //! `save <name>`, `quicksave` and `menu [main|save|load]` write a save or open the in-match menu;
 //! `end-page report` opens the match report instead of the end dialog when the match ends
 //! (task 117).
@@ -129,6 +131,8 @@ pub enum ScriptAction {
     Menu(crate::sim_thread::MenuPage),
     /// Input for the render thread, as the window would send it.
     Input(Vec<rom_render::InputEvent>),
+    /// Show or hide the rankings panel, as F8 does (task 160).
+    ToggleRankings,
     /// The player orders the ascension at its library (task 76).
     Ascend(rom_sim::PlayerId),
     /// The person writes a line to a channel (tasks 76 and 94).
@@ -263,6 +267,10 @@ impl Script {
                 }
                 (Some(tick), Some("craft")) => {
                     actions.push((tick, ScriptAction::SelectCraft));
+                    continue;
+                }
+                (Some(tick), Some("rankings")) => {
+                    actions.push((tick, ScriptAction::ToggleRankings));
                     continue;
                 }
                 (Some(tick), Some("researchers")) => {
