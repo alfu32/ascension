@@ -400,11 +400,12 @@ impl Render for WorldView {
             )
         });
         // A hand over what a double click enters (a planet, a star, a system); a crosshair while
-        // a click fires at the ground.
+        // a click fires at the ground or at what the pointer rests on.
         let cursor = if self.bridge.pointer_hand() {
             CursorStyle::PointingHand
-        } else if self.sim.aiming() {
-            // Attack ground is armed (task 142).
+        } else if self.sim.aiming() || self.bridge.pointer_attack() {
+            // Attack ground is armed (task 142), or a right click attacks what the pointer
+            // rests on (task 151).
             CursorStyle::Crosshair
         } else {
             CursorStyle::Arrow

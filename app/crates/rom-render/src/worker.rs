@@ -153,6 +153,8 @@ struct Shared {
     zoom_all: AtomicBool,
     /// Whether the pointer rests on something a double click enters (a hand cursor).
     pointer_hand: AtomicBool,
+    /// Whether a right click where the pointer rests gives an attack (a crosshair, task 151).
+    pointer_attack: AtomicBool,
     space: Mutex<Arc<SpaceSnapshot>>,
     ship_scales: Mutex<Arc<ShipScales>>,
     view_state: Mutex<ViewState>,
@@ -286,6 +288,12 @@ impl RenderBridge {
     /// Whether the pointer rests on something a double click enters; the window shows a hand.
     pub fn pointer_hand(&self) -> bool {
         self.shared.pointer_hand.load(Ordering::Relaxed)
+    }
+
+    /// Whether a right click where the pointer rests attacks what is under it (task 151); the
+    /// window shows a crosshair.
+    pub fn pointer_attack(&self) -> bool {
+        self.shared.pointer_attack.load(Ordering::Relaxed)
     }
 
     /// What the camera looks at now.
@@ -591,6 +599,7 @@ impl Shared {
             zoom_out: AtomicBool::new(false),
             zoom_all: AtomicBool::new(false),
             pointer_hand: AtomicBool::new(false),
+            pointer_attack: AtomicBool::new(false),
             space: Mutex::new(Arc::new(SpaceSnapshot::default())),
             ship_scales: Mutex::new(Arc::new(ShipScales::default())),
             view_state: Mutex::new(ViewState::default()),
@@ -708,6 +717,8 @@ fn render_loop(shared: &Shared) {
     let mut counted_at: Option<Instant> = None;
     let mut blended: Vec<EntityView> = Vec::new();
     let mut picker = PickController::default();
+    // The entity the simulation thread was last told the pointer rests on (task 151).
+    let mut pointed_sent: Option<u32> = None;
     let mut over_hud = false;
     let mut map_size = (0_u32, 0_u32);
     let mut review: Option<Arc<Review>> = None;
@@ -1093,6 +1104,65 @@ fn render_loop(shared: &Shared) {
             let ground = |x: f32, y: f32| surface.map_or(0.0, |s| s.height(x, y));
             let now_ms = frame_start.duration_since(started).as_millis() as u64;
             for event in events {
+                // A script's pointer on an entity: wherever the entity is drawn now (task 151).
+                let event = match event {
+                    InputEvent::PointAt { entity, dx, dy } => {
+                        let in_space = zoom
+                            .as_ref()
+                            .is_some_and(|z| z.level() >= Level::System && !z.pans_planet());
+                        let at = match (zoom.as_ref(), orbit.as_ref()) {
+                            (Some(zoom), Some(orbit)) if in_space => {
+                                let ships = ship_points(
+                                    zoom,
+                                    orbit,
+                                    &space_snapshot,
+                                    &ship_scales,
+                                    (canvas.width, canvas.height),
+                                    centre_of(&canvas, hud_visible),
+                                    render_per_canvas(
+                                        layout,
+                                        shared.render_scale.load(Ordering::Relaxed),
+                                    ),
+                                );
+                                let view = zoom.space_view_at(
+                                    orbit,
+                                    (canvas.width, canvas.height),
+                                    centre_of(&canvas, hud_visible),
+                                );
+                                ships
+                                    .iter()
+                                    .find(|s| s.id == entity)
+                                    .and_then(|s| view.project(s.at))
+                                    .map(|(x, y, _)| (x, y))
+                            }
+                            _ => PickContext {
+                                layout: canvas,
+                                view: current_view(&camera, orbit.as_ref(), &canvas, hud_visible),
+                                entities: &blended,
+                                ground: &ground,
+                                globe: globe.as_deref(),
+                                hud: &hud_snapshot,
+                                hud_visible,
+                                map_size,
+                                now_ms,
+                            }
+                            .screen_of(entity),
+                        };
+                        match at {
+                            Some((x, y)) => InputEvent::PointerMoved {
+                                x: x + dx,
+                                y: y + dy,
+                            },
+                            None => {
+                                eprintln!(
+                                    "rom-render: entity {entity} is not on screen to point at"
+                                );
+                                continue;
+                            }
+                        }
+                    }
+                    other => other,
+                };
                 // With "middle drag: pan" the two middle-button jobs trade places everywhere.
                 let event = turn.map_event(event);
                 let mut ask = camera_request(event, &canvas, hud_visible, &hud_snapshot);
@@ -1401,6 +1471,63 @@ fn render_loop(shared: &Shared) {
         } else {
             &blended
         };
+        // What the pointer rests on in space: highlighted, named and explained, with a hand
+        // cursor over what a double click enters.
+        let pointing = match (zoom.as_ref(), orbit.as_ref()) {
+            (Some(zoom), Some(orbit)) if !over_hud => space_hover(
+                zoom,
+                orbit,
+                &space_snapshot,
+                &ship_scales,
+                &canvas,
+                hud_visible,
+                render_per_canvas(layout, shared.render_scale.load(Ordering::Relaxed)),
+            ),
+            _ => None,
+        };
+        // The entity under the pointer, picked once a frame (task 151): the ship under it in
+        // space, else what is drawn under it on the planet or in its orbit. Only what is drawn
+        // can be pointed at, so the fog hides what it hides.
+        let in_space = zoom
+            .as_ref()
+            .is_some_and(|z| z.level() >= Level::System && !z.pans_planet());
+        let pointed = match pointing {
+            Some((SpaceHover::Ship(id), _)) => Some(id),
+            _ if in_space => None,
+            _ => {
+                let surface = scene.surface();
+                let ground = |x: f32, y: f32| surface.map_or(0.0, |s| s.height(x, y));
+                picker.pointed(&PickContext {
+                    layout: canvas,
+                    view: current_view(&camera, orbit.as_ref(), &canvas, hud_visible),
+                    entities: drawn,
+                    ground: &ground,
+                    globe: globe.as_deref(),
+                    hud: &hud_snapshot,
+                    hud_visible,
+                    map_size,
+                    now_ms: 0,
+                })
+            }
+        };
+        if pointed != pointed_sent {
+            pointed_sent = pointed;
+            picks_sent += 1;
+            lock(&shared.response).pick_sent(picks_sent);
+            let _ = lock(&shared.pick_tx).send(PickEvent::Pointed { entity: pointed });
+        }
+        let agreed = hud_snapshot
+            .pointer
+            .as_ref()
+            .filter(|p| Some(p.entity) == pointed);
+        shared.pointer_attack.store(
+            agreed.and_then(|p| p.badge) == Some(crate::OrderBadge::Attack),
+            Ordering::Relaxed,
+        );
+        scene.set_pointer_marks(
+            crate::pointer::hover_ring(pointed, hud_snapshot.pointer.as_ref()),
+            &hud_snapshot.flashes,
+        );
         scene.prepare_entities(
             drawn,
             shared.start_markers.load(Ordering::Relaxed),
@@ -1429,27 +1556,13 @@ fn render_loop(shared: &Shared) {
         } else {
             0.0
         };
-        scene.set_space_state(&space_snapshot, &hud_snapshot.selected);
+        scene.set_space_state(&space_snapshot, &hud_snapshot.selected, &hud_snapshot.sides);
         // The world is not drawn where the HUD will cover it with opaque frame pixels.
         scene.hud_cover = match &hud {
             Some(hud) if hud_visible && review.is_none() && !hud.needs_rebake(hud_layout.scale) => {
                 hud.opaque_cover(&hud_layout)
             }
             _ => Vec::new(),
-        };
-        // What the pointer rests on in space: highlighted, named and explained, with a hand
-        // cursor over what a double click enters.
-        let pointing = match (zoom.as_ref(), orbit.as_ref()) {
-            (Some(zoom), Some(orbit)) if !over_hud => space_hover(
-                zoom,
-                orbit,
-                &space_snapshot,
-                &ship_scales,
-                (canvas.width, canvas.height),
-                centre_of(&canvas, hud_visible),
-                render_per_canvas(layout, shared.render_scale.load(Ordering::Relaxed)),
-            ),
-            _ => None,
         };
         scene.set_space_hover(pointing.map(|(hover, _)| hover));
         shared.pointer_hand.store(
@@ -1467,20 +1580,33 @@ fn render_loop(shared: &Shared) {
                 if let (Some((hover, (x, y))), Some(_)) = (pointing, zoom.pointer()) {
                     let ratio = size.0 as f32 / layout.0.max(1) as f32;
                     let ships = !hud_snapshot.selected.is_empty();
-                    let (name, action) = space_hover_help(
+                    let (mut name, action) = space_hover_help(
                         zoom.scene(),
                         hover,
                         zoom.surface_body(),
                         ships,
                         &space_snapshot,
                     );
-                    for (row, text) in [name, action].into_iter().enumerate() {
+                    // A ship is named by the snapshot, in its side's colour (task 151).
+                    let mut name_colour = [255, 240, 200, 255];
+                    if let SpaceHover::Ship(id) = hover
+                        && let Some(pointer) =
+                            hud_snapshot.pointer.as_ref().filter(|p| p.entity == id)
+                    {
+                        name.clone_from(&pointer.text);
+                        name_colour = pointer.side.colour();
+                    }
+                    for (row, (text, colour)) in
+                        [(name, name_colour), (action, [255, 240, 200, 255])]
+                            .into_iter()
+                            .enumerate()
+                    {
                         scene.push_space_label(crate::scene::SpaceLabel {
                             icon: None,
                             text,
                             x: (x + 18.0) * ratio,
                             y: (y + 28.0) * ratio + row as f32 * 17.0 * ratio,
-                            colour: [255, 240, 200, 255],
+                            colour,
                             priority: -5.0 - row as f32,
                         });
                     }
@@ -1581,6 +1707,8 @@ fn render_loop(shared: &Shared) {
                         .map(|c| (c.name.clone(), c.about.clone()));
                     HudOverlay {
                         hover,
+                        pointed,
+                        pointer_at: picker.pointer().map(|(x, y)| (x * ratio, y * ratio)),
                         minimap_city,
                         drag_box: picker
                             .drag_rect()
@@ -2291,14 +2419,16 @@ fn space_hover(
     orbit: &OrbitCamera,
     space: &SpaceSnapshot,
     scales: &ShipScales,
-    canvas: (f32, f32),
-    centre_y: f32,
+    layout: &HudLayout,
+    hud_visible: bool,
     render_per_canvas: f32,
 ) -> Option<(SpaceHover, (f32, f32))> {
     let cursor = zoom.pointer()?;
     if zoom.level() < Level::System || zoom.pans_planet() || zoom.dragging() {
         return None;
     }
+    let canvas = (layout.width, layout.height);
+    let centre_y = centre_of(layout, hud_visible);
     let view = zoom.space_view_at(orbit, canvas, centre_y);
     let ships = ship_points(
         zoom,
@@ -2309,7 +2439,8 @@ fn space_hover(
         centre_y,
         render_per_canvas,
     );
-    let hover = crate::space::nearest_ship(&view, &ships, cursor, 0.0)
+    let slack = crate::PICK_SLACK * layout.scale.max(0.25);
+    let hover = crate::space::nearest_ship(&view, &ships, cursor, slack)
         .map(SpaceHover::Ship)
         .or_else(|| {
             zoom.target_at(&view, cursor.0, cursor.1)
@@ -2418,6 +2549,7 @@ struct OwnedSpaceContext<'a> {
     markers: Vec<(crate::zoom::Target, (f32, f32, f32))>,
     scene: &'a crate::universe::UniverseScene,
     outermost: f32,
+    slack: f32,
 }
 
 impl OwnedSpaceContext<'_> {
@@ -2429,6 +2561,7 @@ impl OwnedSpaceContext<'_> {
             markers: &self.markers,
             scene: self.scene,
             outermost: self.outermost,
+            slack: self.slack,
         }
     }
 }
@@ -2453,6 +2586,7 @@ fn space_context<'a>(
         outermost: zoom
             .system_id()
             .map_or(1.0, |s| zoom.scene().system_outermost(s)),
+        slack: crate::PICK_SLACK * canvas.scale.max(0.25),
     }
 }
 

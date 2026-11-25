@@ -1723,6 +1723,7 @@ fn task_30_scripts_reach_the_capture_states_without_a_window() {
                     },
                     ScriptAction::Speed(_)
                     | ScriptAction::Input(_)
+                    | ScriptAction::PointAt { .. }
                     | ScriptAction::Save(_)
                     | ScriptAction::QuickSave
                     | ScriptAction::Menu(_)
@@ -2176,6 +2177,7 @@ fn wealth_screenshot_script_reaches_capture_without_a_window() {
                 }
                 ScriptAction::Speed(_)
                 | ScriptAction::Input(_)
+                | ScriptAction::PointAt { .. }
                 | ScriptAction::Save(_)
                 | ScriptAction::QuickSave
                 | ScriptAction::Menu(_)
@@ -2392,6 +2394,7 @@ fn orbital_review_script_trains_launches_selects_and_bombards_through_picks() {
                 }
                 ScriptAction::Speed(_)
                 | ScriptAction::Input(_)
+                | ScriptAction::PointAt { .. }
                 | ScriptAction::Save(_)
                 | ScriptAction::QuickSave
                 | ScriptAction::Menu(_)
@@ -2698,6 +2701,7 @@ fn colony_script_run() -> (crate::match_setup::Match, Controller, BodyId, u64) {
                 | ScriptAction::ChatFrom(..)
                 | ScriptAction::ChatKeys(_)
                 | ScriptAction::Visit(_)
+                | ScriptAction::PointAt { .. }
                 | ScriptAction::Look(_) => {}
             }
         }
@@ -2867,6 +2871,7 @@ fn orbital_combat_script(
                 }
                 ScriptAction::Speed(_)
                 | ScriptAction::Input(_)
+                | ScriptAction::PointAt { .. }
                 | ScriptAction::Save(_)
                 | ScriptAction::QuickSave
                 | ScriptAction::Menu(_)
@@ -3924,4 +3929,225 @@ fn a_group_walks_in_the_formation_picked_square_until_then() {
     fx.rclick(None, (25.0, 25.0), false);
     fx.step(1);
     assert_eq!(subject(&fx, a).0, None);
+}
+
+// ----- task 151: what the pointer rests on ---------------------------------------------------
+
+fn point_at(fx: &mut Fx, entity: Option<EntityId>) {
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Pointed {
+            entity: entity.map(|e| e.0),
+        },
+    );
+}
+
+fn badge_on(fx: &mut Fx, entity: EntityId) -> Option<rom_render::OrderBadge> {
+    point_at(fx, Some(entity));
+    fx.hud_snapshot().pointer.expect("pointed at").badge
+}
+
+#[test]
+fn the_side_of_the_hovered_entity_follows_the_relation_not_the_team_colour() {
+    use rom_render::Side;
+    let rules = Arc::new(crate::terrain::load_rules().expect("rules"));
+    let id = |key: &str| rules.id_of(key).expect("definition");
+    // Player 3 shares player 1's team.
+    let player = |n: u32, team: u32| Player {
+        id: PlayerId(n),
+        team,
+        age: id("age.ancient"),
+        faction: id("nation.romans"),
+        resources: rules.resources.keys().map(|r| (*r, 1000)).collect(),
+        techs: Default::default(),
+    };
+    let map = MapGrid::new(64, 64, vec![id("ter.plain"); 64 * 64]).expect("map");
+    let players = vec![player(0, 0), player(1, 1), player(2, 2), player(3, 1)];
+    let world = World::new(rules.clone(), map, 1, players).expect("world");
+    let mut fx = Fx {
+        world,
+        rules,
+        ctl: Controller::new(),
+    };
+    let t = fx.armed_other_than_builder();
+    let own = fx.spawn(t, 1, 10, 10);
+    let ally = fx.spawn(t, 3, 12, 10);
+    let foe = fx.spawn(t, 2, 14, 10);
+    let node_t = fx.find(|et| et.node.is_some());
+    let nature = fx.spawn(node_t, 0, 16, 10);
+    for (entity, side, word) in [
+        (own, Side::Own, "Yours · "),
+        (ally, Side::Ally, "Ally · "),
+        (foe, Side::Enemy, "Enemy · "),
+        (nature, Side::Neutral, "Neutral · "),
+    ] {
+        point_at(&mut fx, Some(entity));
+        let pointer = fx.hud_snapshot().pointer.expect("pointed at");
+        assert_eq!(pointer.entity, entity.0);
+        assert_eq!(pointer.side, side, "{word}");
+        assert!(pointer.text.starts_with(word), "{}", pointer.text);
+    }
+    // The enemy's line names its kind, its people and its health.
+    point_at(&mut fx, Some(foe));
+    let romans = fx.key("nation.romans");
+    let e = fx.world.entity(foe).expect("foe");
+    assert_eq!(
+        fx.hud_snapshot().pointer.expect("pointed at").text,
+        format!(
+            "Enemy · {} ({}) · {}/{}",
+            fx.rules.display_name(t, romans),
+            fx.rules.def(romans).name,
+            e.hp,
+            e.max_hp
+        )
+    );
+    // Nothing under the pointer: nothing to say.
+    point_at(&mut fx, None);
+    assert_eq!(fx.hud_snapshot().pointer, None);
+    // The selection rings' table: by relation, whatever the team colours.
+    assert_eq!(
+        fx.hud_snapshot().sides,
+        vec![Side::Neutral, Side::Own, Side::Enemy, Side::Ally]
+    );
+}
+
+#[test]
+fn the_right_click_badge_names_the_order_per_target_kind() {
+    use rom_render::OrderBadge;
+    let mut fx = fixture();
+    let t = fx.armed_other_than_builder();
+    let soldier = fx.spawn(t, 1, 10, 10);
+    let foe = fx.spawn(t, 2, 12, 12);
+    let friend = fx.spawn(t, 1, 14, 10);
+    // Nothing selected: the side shows, no badge.
+    assert_eq!(badge_on(&mut fx, foe), None);
+    fx.click(soldier, false);
+    assert_eq!(badge_on(&mut fx, foe), Some(OrderBadge::Attack));
+    let pointer = fx.hud_snapshot().pointer.expect("pointed at");
+    assert_eq!(pointer.hint, "Right-click: attack");
+    // A right click on an own soldier is a move there: no badge, no hint.
+    assert_eq!(badge_on(&mut fx, friend), None);
+    assert_eq!(fx.hud_snapshot().pointer.expect("pointed at").hint, "");
+    // A gather site for a worker that gathers its resource.
+    let worker_t = fx.find(|et| et.movement.is_some() && !et.harvester.is_empty());
+    let resource = fx.rules.entity_types[&worker_t].harvester[0].resource_id;
+    let site_t = fx.find(|et| {
+        et.class == EntityClass::Building
+            && et
+                .gather_site
+                .as_ref()
+                .is_some_and(|g| g.resource_id == resource)
+    });
+    let worker = fx.spawn(worker_t, 1, 30, 10);
+    let site = fx.spawn(site_t, 1, 34, 10);
+    fx.click(worker, false);
+    assert_eq!(badge_on(&mut fx, site), Some(OrderBadge::Gather));
+    // A builder: a construction site is built; an unarmed builder walks to an enemy instead of
+    // attacking it, so no badge.
+    let bt = fx.mover();
+    let building = fx.rules.production[&bt]
+        .iter()
+        .find(|r| r.mode == ProductionMode::Construct)
+        .unwrap()
+        .product_def_id;
+    let builder = fx.spawn(bt, 1, 40, 40);
+    fx.world
+        .submit(Command {
+            player: PLAYER,
+            executor: builder,
+            kind: "construct".into(),
+            subject: Some(building),
+            target_entity: None,
+            target_pos: Some(at(46, 46)),
+            queue: false,
+            text: None,
+        })
+        .expect("construct");
+    fx.step(1);
+    let construction = fx
+        .world
+        .entities()
+        .find(|e| e.build_progress.is_some())
+        .expect("site")
+        .id;
+    fx.click(builder, false);
+    assert_eq!(badge_on(&mut fx, construction), Some(OrderBadge::Build));
+    if fx.rules.entity_types[&bt].weapons.is_empty() {
+        assert_eq!(badge_on(&mut fx, foe), None);
+    }
+    // A mixed selection shows the first badge any of them would take: the soldier attacks.
+    fx.boxed(&[builder, soldier], true);
+    assert_eq!(badge_on(&mut fx, foe), Some(OrderBadge::Attack));
+    // The badge agrees with the order the right click then gives.
+    fx.click(worker, false);
+    assert_eq!(badge_on(&mut fx, site), Some(OrderBadge::Gather));
+    fx.rclick(Some(site), (34.5, 10.5), false);
+    fx.step(1);
+    assert_eq!(fx.kinds(worker)[0], "harvest");
+}
+
+#[test]
+fn the_target_of_a_right_click_order_flashes_twice_in_the_orders_colour() {
+    let mut fx = fixture();
+    let t = fx.armed_other_than_builder();
+    let soldier = fx.spawn(t, 1, 10, 10);
+    let foe = fx.spawn(t, 2, 12, 12);
+    fx.click(soldier, false);
+    fx.rclick(Some(foe), (12.5, 12.5), false);
+    let flashes = fx.hud_snapshot().flashes;
+    assert_eq!(flashes.len(), 1);
+    assert_eq!((flashes[0].entity, flashes[0].hostile), (foe.0, true));
+    // Ground orders do not flash; the move marker stays theirs.
+    fx.rclick(None, (20.0, 12.0), false);
+    assert_eq!(fx.hud_snapshot().flashes.len(), 1);
+    // A friendly order flashes green.
+    let worker_t = fx.find(|et| et.movement.is_some() && !et.harvester.is_empty());
+    let resource = fx.rules.entity_types[&worker_t].harvester[0].resource_id;
+    let site_t = fx.find(|et| {
+        et.class == EntityClass::Building
+            && et
+                .gather_site
+                .as_ref()
+                .is_some_and(|g| g.resource_id == resource)
+    });
+    let worker = fx.spawn(worker_t, 1, 30, 10);
+    let site = fx.spawn(site_t, 1, 34, 10);
+    fx.click(worker, false);
+    fx.rclick(Some(site), (34.5, 10.5), false);
+    let flashes = fx.hud_snapshot().flashes;
+    assert!(flashes.iter().any(|f| f.entity == site.0 && !f.hostile));
+    // Two flashes, then gone.
+    let lit: usize = (0..rom_render::pointer::FLASH_TICKS)
+        .map(|_| {
+            fx.step(1);
+            usize::from(
+                fx.hud_snapshot()
+                    .flashes
+                    .iter()
+                    .any(|f| f.entity == site.0 && f.lit()),
+            )
+        })
+        .sum();
+    assert!(lit > 0);
+    assert!(fx.hud_snapshot().flashes.is_empty());
+}
+
+#[test]
+fn only_the_render_threads_pointed_pick_names_the_hovered_entity() {
+    let mut fx = fixture();
+    let t = fx.armed_other_than_builder();
+    let foe = fx.spawn(t, 2, 12, 12);
+    point_at(&mut fx, Some(foe));
+    // A planet hover that found nothing (the pointer is on a ship in space) leaves it.
+    fx.ctl.handle(
+        &mut fx.world,
+        PickEvent::Hover {
+            entity: None,
+            world_point: (3.0, 3.0),
+            surface: flat_surface((3.0, 3.0)),
+        },
+    );
+    assert_eq!(fx.hud_snapshot().pointer.map(|p| p.entity), Some(foe.0));
+    point_at(&mut fx, None);
+    assert_eq!(fx.hud_snapshot().pointer, None);
 }

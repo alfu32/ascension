@@ -305,6 +305,9 @@ impl OrderSink<'_> {
 pub struct Controller {
     selection: Vec<EntityId>,
     hovered: Option<EntityId>,
+    /// Targets of orders given by a right click lately, whether hostile, and the tick: their
+    /// rings flash (task 151).
+    flashes: Vec<(EntityId, bool, u64)>,
     blocked_notices: BTreeSet<rom_sim::OrderId>,
     routes: BTreeMap<EntityId, RouteView>,
     foreign: Option<EntityId>,
@@ -984,14 +987,15 @@ impl Controller {
                 button,
                 modifiers,
             } => self.hud_click(world, region, index, button, modifiers),
-            PickEvent::Hover {
-                surface, entity, ..
-            } => {
-                self.hovered = entity.map(EntityId);
+            // The entity under the pointer comes from `Pointed` alone (task 151): the render
+            // thread's one pick a frame, on the planet and in space. A hover's own entity is the
+            // planet picker's, which knows nothing of ships in space.
+            PickEvent::Hover { surface, .. } => {
                 let at = self.pos_of(surface);
                 self.hover(world, at);
             }
             PickEvent::HoverExit => self.hovered = None,
+            PickEvent::Pointed { entity } => self.hovered = entity.map(EntityId),
             PickEvent::Hotkey { ch, modifiers } => self.hotkey(world, ch, modifiers),
             PickEvent::Escape => {
                 self.placement = None;
@@ -1587,7 +1591,6 @@ impl Controller {
         entity: Option<u32>,
         mods: Modifiers,
     ) {
-        let me = self.me();
         if self.placement.take().is_some() {
             return;
         }
@@ -1597,177 +1600,37 @@ impl Controller {
             self.attack_ground(world, target, mods.shift);
             return;
         }
-        let rules = world.rules().clone();
-        enum Kind {
-            Ground,
-            Board(EntityId),
-            Enemy(EntityId),
-            Site(EntityId),
-            Gather(EntityId, DefId),
-            Carry(EntityId, u32),
-            Trade(EntityId),
-            Airfield(Pos),
-        }
-        // An own airfield is a landing place only for aircraft (task 123).
-        let flyers = self
-            .own_selected(world)
-            .iter()
-            .any(|e| world.is_aircraft_type(e.type_id));
-        let kind = entity
-            .map(EntityId)
-            .and_then(|id| world.entity(id))
-            .map_or(Kind::Ground, |e| {
-                let et = &rules.entity_types[&e.type_id];
-                if let Some(node) = et
-                    .node
-                    .as_ref()
-                    .filter(|n| n.claim_mode == rom_rules::ClaimMode::Carry)
-                    && e.container_id.is_none()
-                    && let Some(tag) = node.claim_tag_id
-                {
-                    Kind::Carry(e.id, tag)
-                } else if Self::is_enemy(world, me, e) {
-                    Kind::Enemy(e.id)
-                } else if e.owner == me && e.build_progress.is_some() {
-                    Kind::Site(e.id)
-                } else if e.owner == me
-                    && world.is_carrier_type(e.type_id)
-                    && (world.is_landed(e.id) || world.orbit(e.id).is_some())
-                {
-                    Kind::Board(e.id)
-                } else if flyers
-                    && e.owner == me
-                    && !e.neutralised
-                    && world.is_airfield_type(e.type_id)
-                {
-                    Kind::Airfield(e.pos)
-                } else if e.owner != PlayerId(0)
-                    && e.build_progress.is_none()
-                    && et.territory.as_ref().is_some_and(|t| t.is_city)
-                {
-                    Kind::Trade(e.id)
-                } else if let (true, Some(site)) = (e.owner == me, et.gather_site.as_ref()) {
-                    Kind::Gather(e.id, site.resource_id)
-                } else {
-                    Kind::Ground
-                }
-            });
-        // A damaged own building (finished, not struck down) that builders can mend.
-        let mend = entity
-            .map(EntityId)
-            .and_then(|id| world.entity(id))
-            .filter(|e| {
-                e.owner == me
-                    && rules.entity_types[&e.type_id].class == EntityClass::Building
-                    && e.build_progress.is_none()
-                    && !e.neutralised
-                    && e.hp < e.max_hp
-            })
-            .map(|e| e.id);
-        let mut selected: Vec<EntityId> = self.own_selected(world).iter().map(|e| e.id).collect();
-        // An order given to a gather building applies to every worker inside it.
-        let inside: Vec<EntityId> = selected
-            .iter()
-            .flat_map(|id| world.occupants(*id))
-            .filter(|id| !selected.contains(id))
-            .collect();
-        selected.extend(inside);
+        let (kind, mend) = self.right_target(world, entity);
         // A group walks in the formation picked for it (task 143).
         let formation = self.group_formation(world);
         let mut issued = false;
-        for id in selected {
-            let Some(e) = world.entity(id) else {
+        let mut flash: Option<bool> = None;
+        for id in self.right_executors(world) {
+            let Some(order) =
+                self.right_order(world, &kind, mend, id, target, formation, mods.shift)
+            else {
                 continue;
             };
-            let et = &rules.entity_types[&e.type_id];
-            let can_move = et.movement.is_some();
-            let armed = !et.weapons.is_empty();
-            let queue = mods.shift;
-            let orbiting_here = world.orbit(id).is_some_and(|o| o.body == target.body);
-            match &kind {
-                Kind::Board(ship)
-                    if *ship != id
-                        && et.class == EntityClass::Unit
-                        && !world.is_spacecraft_type(et.id) =>
-                {
-                    issued |= self.submit(world, id, "enter", None, Some(*ship), None, queue);
-                }
-                // A ship above this planet moves within its orbit to above the clicked point; it
-                // comes down only with the Land button.
-                Kind::Ground if orbiting_here => {
-                    let kind = if self.patrol {
-                        "patrol"
-                    } else if self.attack_move && armed {
-                        "attack_move"
-                    } else {
-                        "move"
-                    };
-                    issued |= self.submit(world, id, kind, formation, None, Some(target), queue);
-                }
-                // A landed carrier sends its passengers to the clicked point.
-                Kind::Ground if world.is_landed(id) => {
-                    if !world.passengers(id).is_empty() {
-                        issued |= self.submit(world, id, "unload", None, None, Some(target), queue);
-                    }
-                }
-                // Aircraft sent to an own airfield land on it (task 123).
-                Kind::Airfield(field)
-                    if world.is_aircraft_type(et.id) && !self.patrol && !self.attack_move =>
-                {
-                    issued |= self.submit(world, id, "land", None, None, Some(*field), queue);
-                }
-                Kind::Carry(node, tag)
-                    if et.class == EntityClass::Unit && rules.has_tag(et.id, *tag) =>
-                {
-                    issued |= self.submit(world, id, "carry", None, Some(*node), None, queue);
-                }
-                Kind::Trade(city) if et.trader.as_ref().is_some_and(|t| t.runs_routes) => {
-                    issued |= self.submit(world, id, "trade", None, Some(*city), None, queue);
-                }
-                Kind::Enemy(foe) if armed && can_move => {
-                    issued |= self.submit(world, id, "attack", None, Some(*foe), None, queue);
-                }
-                Kind::Site(site) if et.builder.is_some() => {
-                    issued |= self.submit(world, id, "repair", None, Some(*site), None, queue);
-                }
-                // Builders mend a damaged own building for free, a gather building too: they go
-                // back to work there by themselves once it is whole (task 140).
-                _ if et.builder.is_some()
-                    && et.movement.is_some()
-                    && let Some(building) = mend =>
-                {
-                    issued |= self.submit(world, id, "repair", None, Some(building), None, queue);
-                }
-                Kind::Gather(site, resource)
-                    if et.harvester.iter().any(|h| h.resource_id == *resource) =>
-                {
-                    issued |= self.submit(world, id, "harvest", None, Some(*site), None, queue);
-                }
-                _ if can_move => {
-                    let kind = if self.patrol {
-                        "patrol"
-                    } else if self.attack_move && armed {
-                        "attack_move"
-                    } else {
-                        "move"
-                    };
-                    issued |= self.submit(world, id, kind, formation, None, Some(target), queue);
-                }
-                _ => {
-                    if et.producer.as_ref().is_some_and(|p| p.has_rally) {
-                        // A gather site becomes the rally target: new workers harvest there.
-                        let site = match &kind {
-                            Kind::Gather(site, _) if *site != id => Some(*site),
-                            _ => None,
-                        };
-                        let at = site.is_none().then_some(target);
-                        issued |= self.submit(world, id, "set_rally", None, site, at, false);
-                    }
-                }
+            let given = self.submit(
+                world,
+                id,
+                order.kind,
+                order.subject,
+                order.target_entity,
+                order.target_pos,
+                order.queue,
+            );
+            issued |= given;
+            if given && let Some(badge) = order.badge {
+                flash = Some(flash.unwrap_or(false) || badge.hostile());
             }
         }
+        // The target of an order given on an entity flashes (task 151).
+        if let (Some(hostile), Some(target)) = (flash, entity.map(EntityId)) {
+            self.flash(world, target, hostile);
+        }
         if issued {
-            let kind = if matches!(kind, Kind::Enemy(_)) {
+            let kind = if matches!(kind, pointer::RightTarget::Enemy(_)) {
                 MarkerKind::Attack
             } else {
                 MarkerKind::Move
@@ -2099,7 +1962,10 @@ impl Controller {
                 world.body(body).is_some_and(|b| Some(b.system) != here)
             };
             if let (Some(foe), true) = (foe, armed) {
-                self.submit(world, id, "attack", None, Some(foe), None, mods.shift);
+                if self.submit(world, id, "attack", None, Some(foe), None, mods.shift) {
+                    // The ship attacked flashes red (task 151).
+                    self.flash(world, foe, true);
+                }
             } else if let Some(body) = body.map(BodyId) {
                 if elsewhere(world, body)
                     && let Some(at) = world.body_position(body)
@@ -3760,6 +3626,9 @@ impl Controller {
         let me = self.me();
         let rules = world.rules();
         hud.data_tab = self.data_tab;
+        hud.pointer = self.pointer_info(world);
+        hud.sides = self.sides(world);
+        hud.flashes = self.hud_flashes(world);
         hud.help = self.wealth_help(world).unwrap_or_default();
         // Task 142: the question a delete asks, and the ground pick.
         if let Some((ids, _)) = self
@@ -4482,5 +4351,6 @@ fn rejection_message(
 }
 
 mod formations;
+mod pointer;
 #[cfg(test)]
 mod tests;

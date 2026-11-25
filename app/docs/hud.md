@@ -504,6 +504,56 @@ Screenshots (self-ending scripted runs, `rise-of-man --universe --players 2 --ai
 (`tasks/144-renamed-script.txt`), `img/144-alert.png` (`tasks/144-alert-script.txt`) and
 `img/144-minimap.png` (`tasks/144-minimap-script.txt`).
 
+## The pointer: side, order badge, target flash (task 151)
+
+What the pointer rests on in the world answers two questions at a glance: is it on something,
+and whose is it.
+
+- **One pick a frame.** The render thread picks the entity under the pointer once a frame
+  (`PickController::pointed`, `PickContext::entity_at`, allocation-free; in space the ship
+  under it, `space::nearest_ship`) and tells the simulation thread with
+  `PickEvent::Pointed` whenever the answer changes, even when the pointer stands still and the
+  entity moves. Only what is drawn can be picked, so the fog hides what it hides.
+- **A pick that forgives a little.** A pointer on no pick box still takes the entity whose
+  drawn box is nearest on screen within `PICK_SLACK` = 8 design pixels (scaled with the HUD:
+  6 pixels at 1280 × 800, 8 at 1672 × 941); a box under the pointer always wins, nearest to the
+  camera first; ties go by id. In space the slack is added to each ship's pick box, which
+  already follows its drawn size (tasks 96 and 105). Clicks, right clicks and the hover use the
+  same pick.
+- **Outline by side.** `HudSnapshot::pointer` (`HudPointer`, filled by
+  `rom-app/src/selection/pointer.rs`) names the entity, its `Side` and the line of help. The
+  world draws a ring a little outside the selection ring and one line thicker (corner
+  brackets round a building), in the side's colour lightened by a third, whatever the team
+  colours: own green, ally cyan, enemy red, neutral grey.
+- **Selection rings by side.** Selection rings and outlines take the same side colours
+  (`HudSnapshot::sides`, each player's side indexed by id), not the team colour: an own
+  selection is green, an inspected enemy red, nature grey, on the surface, in orbit, in system
+  space and on the star map. Health bars, borders, the minimap and city names keep the team
+  colour, which tells players apart. On the surface and in orbit it is overlay geometry (`overlay::pointer_marks`); in system
+  space a ring outside the ship's marker, on the star map round its mark.
+- **The order badge.** While the selection can act on the entity, a 30-pixel tile above and right
+  of the pointer (clear of the arrow and of the space tooltip), framed in the side's colour, shows the order a right click gives: attack, build (an
+  own site), repair (a damaged own building), gather (an own gather site), carry (a relic),
+  board (a carrier), trade (a city), land (an airfield), rally (a gather site for a producer).
+  The badge and the right click share one decision (`Controller::right_order`), so the badge
+  never promises an order the click does not give. Open ground: no badge. The window's cursor
+  is a crosshair while the badge is an attack (`RenderBridge::pointer_attack`).
+- **The help line** reads "Enemy · Corvette (Ashscale Brood) · 80/100", "Yours · Spearman ·
+  100/100", "Enemy · City (…) · Ostia · 900/900"; its second line is what a right click does
+  ("Right-click: attack", or a carry's or trade route's own line), else the simulation's own
+  help. In space the tooltip under the pointer names a ship the same way, in its side's colour.
+- **Target flash.** When a right click gives an order on an entity, its ring flashes twice
+  (`HudFlash`, 12 ticks: lit, dark, lit, dark) in the order's colour, red for an attack, green
+  for a friendly order; ground orders keep the move marker. Ships in space flash as units do.
+- Nothing above reaches the journal: presentation only.
+
+Screenshots (`rise-of-man --universe --players 2 --ai none --seed 1 --sun fixed --size 1280x800`,
+the exact lines in each script): `img/151-enemy.png` (`tasks/151-enemy-script.txt`),
+`img/151-own.png` (`tasks/151-own-script.txt`), `img/151-miss.png` (`tasks/151-miss-script.txt`),
+`img/151-system.png` (`tasks/151-system-script.txt`) and `img/151-orbit.png`
+(`tasks/151-orbit-script.txt`). A script's `point <entity> [dx,dy]` puts the pointer on an
+entity as it is drawn.
+
 ## Sound (task 125)
 
 What plays when is in `docs/sound.md`. In the HUD: a click on any HUD button (a quiet click), the

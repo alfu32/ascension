@@ -1,0 +1,15 @@
+# Task 151: an enemy ship under the pointer in the planet's orbit, replayed by --script (universe
+# mode, seed 1, --players 2 --ai none --sun fixed, 1280 x 800). A corvette of each player flies
+# into orbit over the city, far enough apart not to fight; the camera backs off four wheel steps
+# to see the orbit; then the game crawls (a tick every five seconds), the own corvette is
+# selected and the pointer put on the enemy one: a red ring round it at its height, the attack
+# badge, the help line naming it.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1280x800 \
+#     --script app/docs/tasks/151-orbit-script.txt --after 20 --screenshot app/docs/img/151-orbit.png
+0 grant-age age.galactic
+0 place-orbit 1 unit.corvette @-24,-6
+0 place-orbit 2 unit.corvette @24,-6
+1 cam wheel -4 640,400
+100 speed 1
+100 ships
+101 point foeship1

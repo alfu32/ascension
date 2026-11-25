@@ -1,0 +1,15 @@
+# Task 151: an enemy under the pointer on the planet, replayed by --script (universe mode, seed 1,
+# --sun fixed, 1280 x 800, --players 2 --ai none, the game crawling at --speed 1 so nobody moves).
+# Two spearmen of player one stand south-west of the city, two of player two south-east; the
+# first own spearman is selected and the pointer put on the first enemy: a red ring round it (the
+# enemy's side, whatever its team colour), the attack badge beside the pointer framed in red, the
+# help line "Enemy · Spearman (…) · hp" with "Right-click: attack", and a crosshair cursor.
+#   rise-of-man --universe --seed 1 --sun fixed --players 2 --ai none --size 1280x800 --speed 1 \
+#     --script app/docs/tasks/151-enemy-script.txt --after 15 --screenshot app/docs/img/151-enemy.png
+0 place 1 unit.spearman @-4,6
+0 place 1 unit.spearman @-2,7
+0 place 2 unit.spearman @3,6
+0 place 2 unit.spearman @5,7
+0 cam wheel 3 640,420
+1 click army1
+2 point foe1

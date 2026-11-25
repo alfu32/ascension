@@ -51,6 +51,11 @@
 //! aboard a carrier; `craftN` names the N-th of them for `click` and `rclick`, `aircraftN` the N-th
 //! of player one's aircraft (task 123).
 //!
+//! `point <entity> [dx,dy]` moves the pointer onto an entity as it is drawn now (the centre of
+//! its pick box, offset by `dx`, `dy` canvas pixels), on the planet, in orbit or in space, so a
+//! screenshot shows what hovering it shows (task 151); `<entity>` is `city`, `builderN`, `#id`
+//! or a live name.
+//!
 //! `save <name>`, `quicksave` and `menu [main|save|load]` write a save or open the in-match menu;
 //! `end-page report` opens the match report instead of the end dialog when the match ends
 //! (task 117).
@@ -136,6 +141,9 @@ pub enum ScriptAction {
     Visit(u32),
     /// The camera turns the planet shown to centre a tile (`look F:x,y`, task 77).
     Look(SurfacePos),
+    /// The pointer moves onto an entity as it is drawn, offset by `dx`, `dy` canvas pixels
+    /// (`point <entity> [dx,dy]`, task 151). `target` is `#id` or a live name.
+    PointAt { target: String, dx: f32, dy: f32 },
 }
 
 /// Orders the ascension at a finished library of `player` (task 76): what pressing the button
@@ -297,6 +305,24 @@ impl Script {
                     let (_, at) = point(words.get(2).copied().unwrap_or(""), context, offset)
                         .map_err(|error| format!("line {}: {error}", number + 1))?;
                     actions.push((tick, ScriptAction::Look(at)));
+                    continue;
+                }
+                (Some(tick), Some("point")) => {
+                    let at_line = |error: String| format!("line {}: {error}", number + 1);
+                    let word = words
+                        .get(2)
+                        .copied()
+                        .ok_or_else(|| at_line("point needs an entity".into()))?;
+                    let target = if dynamic_name(word) {
+                        word.to_owned()
+                    } else {
+                        format!("#{}", entity(word, context).map_err(at_line)?)
+                    };
+                    let (dx, dy) = match words.get(3) {
+                        Some(pair) => pixel_pair(pair).map_err(at_line)?,
+                        None => (0.0, 0.0),
+                    };
+                    actions.push((tick, ScriptAction::PointAt { target, dx, dy }));
                     continue;
                 }
                 (Some(tick), Some("visit")) => {
@@ -693,19 +719,22 @@ fn parse_line(
     Ok((tick, event))
 }
 
+/// A pair of pixel numbers, `x,y`.
+fn pixel_pair(word: &str) -> Result<(f32, f32), String> {
+    let (x, y) = word
+        .split_once(',')
+        .ok_or_else(|| format!("expected x,y in pixels, got {word:?}"))?;
+    let parse = |t: &str| {
+        t.parse::<f32>()
+            .map_err(|_| format!("bad number {t:?} in {word:?}"))
+    };
+    Ok((parse(x)?, parse(y)?))
+}
+
 /// The input events of a `cam` line.
 fn camera_input(words: &[&str]) -> Result<Vec<rom_render::InputEvent>, String> {
     use rom_render::{InputEvent, Key};
-    let pixel = |word: &str| -> Result<(f32, f32), String> {
-        let (x, y) = word
-            .split_once(',')
-            .ok_or_else(|| format!("expected x,y in pixels, got {word:?}"))?;
-        let parse = |t: &str| {
-            t.parse::<f32>()
-                .map_err(|_| format!("bad number {t:?} in {word:?}"))
-        };
-        Ok((parse(x)?, parse(y)?))
-    };
+    let pixel = pixel_pair;
     let shift = Modifiers {
         shift: words.contains(&"shift") || words.contains(&"rotate"),
         ..Modifiers::default()
@@ -814,7 +843,7 @@ fn camera_input(words: &[&str]) -> Result<Vec<rom_render::InputEvent>, String> {
 fn dynamic_name(word: &str) -> bool {
     [
         "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy", "gather",
-        "landing", "colony", "landed", "foecity", "aircraft", "army", "foe",
+        "landing", "colony", "landed", "foecity", "foeship", "aircraft", "army", "foe",
     ]
     .iter()
     .any(|prefix| {
@@ -953,7 +982,7 @@ pub fn live_pick(
     }
     let (name, n) = [
         "relic", "temple", "market", "city", "carrier", "trader", "ship", "enemy", "gather",
-        "craft", "landed", "foecity", "aircraft", "army", "foe",
+        "craft", "landed", "foecity", "foeship", "aircraft", "army", "foe",
     ]
     .iter()
     .find_map(|name| {
@@ -979,6 +1008,15 @@ pub fn live_pick(
                     .node
                     .as_ref()
                     .is_some_and(|n| n.claim_mode == ClaimMode::Carry);
+            }
+            if name == "foeship" {
+                let own = world.players().find(|p| p.id == player).map(|p| p.team);
+                return e.owner != rom_sim::PlayerId(0)
+                    && world.is_spacecraft_type(e.type_id)
+                    && world
+                        .players()
+                        .find(|p| p.id == e.owner)
+                        .is_some_and(|p| Some(p.team) != own);
             }
             if name == "enemy" || name == "foecity" || name == "foe" {
                 let own = world.players().find(|p| p.id == player).map(|p| p.team);

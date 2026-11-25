@@ -19,8 +19,6 @@ use crate::orbit::{OrbitCamera, dir_from_lon_lat};
 pub const DRAG_PIXELS: f32 = 6.0;
 /// Longest time between two clicks that make a double click.
 pub const DOUBLE_CLICK_MS: u64 = 400;
-/// Extra reach, in pixels, around a projected entity that still counts as a hit.
-const HIT_PADDING: f32 = 5.0;
 /// Farthest distance a terrain ray is followed, in tiles.
 const RAY_LIMIT: f32 = 6000.0;
 /// Pointer movement, in tiles, that sends a new placement hover.
@@ -156,6 +154,13 @@ pub enum PickEvent {
     },
     /// The pointer left the world view.
     HoverExit,
+    /// The entity the pointer rests on changed (task 151): the render thread picks once a
+    /// frame, on the planet, in orbit and in space, and says so whenever the answer changes, even
+    /// when the pointer stands still and the entity moves.
+    Pointed {
+        /// Entity under the pointer, if any.
+        entity: Option<u32>,
+    },
     /// A letter or digit key.
     Hotkey {
         /// The character, lower case.
@@ -401,44 +406,53 @@ pub fn flat_surface(point: (f32, f32)) -> SurfacePos {
     }
 }
 
-/// Convex hull of `points` (monotone chain), counter-clockwise in a y-up sense.
-fn convex_hull(mut points: Vec<(f32, f32)>) -> Vec<(f32, f32)> {
-    points.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    points.dedup();
+/// Convex hull of the first `n` of `points` (monotone chain), counter-clockwise in a y-up
+/// sense, written into `hull`; returns its length. Sorts `points` in place; allocates nothing.
+fn convex_hull(points: &mut [(f32, f32); 8], hull: &mut [(f32, f32); 16]) -> usize {
+    points.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let mut unique = 0;
+    for i in 0..points.len() {
+        if unique == 0 || points[i] != points[unique - 1] {
+            points[unique] = points[i];
+            unique += 1;
+        }
+    }
+    let points = &points[..unique];
     if points.len() < 3 {
-        return points;
+        hull[..points.len()].copy_from_slice(points);
+        return points.len();
     }
     let turn = |o: (f32, f32), a: (f32, f32), b: (f32, f32)| {
         (a.0 - o.0) * (b.1 - o.1) - (a.1 - o.1) * (b.0 - o.0)
     };
-    let mut hull: Vec<(f32, f32)> = Vec::new();
+    let mut len = 0;
     for pass in 0..2 {
-        let start = hull.len();
-        let iter: Box<dyn Iterator<Item = &(f32, f32)>> = if pass == 0 {
-            Box::new(points.iter())
-        } else {
-            Box::new(points.iter().rev())
-        };
-        for &p in iter {
-            while hull.len() >= start + 2
-                && turn(hull[hull.len() - 2], hull[hull.len() - 1], p) <= 0.0
-            {
-                hull.pop();
+        let start = len;
+        for k in 0..points.len() {
+            let p = if pass == 0 {
+                points[k]
+            } else {
+                points[points.len() - 1 - k]
+            };
+            while len >= start + 2 && turn(hull[len - 2], hull[len - 1], p) <= 0.0 {
+                len -= 1;
             }
-            hull.push(p);
+            hull[len] = p;
+            len += 1;
         }
-        hull.pop();
+        len -= 1;
     }
-    hull
+    len
 }
 
-/// True when `p` is inside the convex polygon or within `pad` of its outline.
-fn near_hull(hull: &[(f32, f32)], p: (f32, f32), pad: f32) -> bool {
+/// Distance in pixels from `p` to the convex polygon `hull`: 0 inside it.
+fn hull_distance(hull: &[(f32, f32)], p: (f32, f32)) -> f32 {
     match hull.len() {
-        0 => false,
-        1 => (hull[0].0 - p.0).hypot(hull[0].1 - p.1) <= pad,
+        0 => f32::INFINITY,
+        1 => (hull[0].0 - p.0).hypot(hull[0].1 - p.1),
         n => {
-            let mut inside = true;
+            let mut inside = n > 2;
+            let mut nearest = f32::INFINITY;
             for i in 0..n {
                 let (a, b) = (hull[i], hull[(i + 1) % n]);
                 let edge = (b.0 - a.0, b.1 - a.1);
@@ -452,11 +466,9 @@ fn near_hull(hull: &[(f32, f32)], p: (f32, f32), pad: f32) -> bool {
                 } else {
                     0.0
                 };
-                if (to.0 - edge.0 * t).hypot(to.1 - edge.1 * t) <= pad {
-                    return true;
-                }
+                nearest = nearest.min((to.0 - edge.0 * t).hypot(to.1 - edge.1 * t));
             }
-            inside
+            if inside { 0.0 } else { nearest }
         }
     }
 }
@@ -614,20 +626,26 @@ impl PickContext<'_> {
     }
 
     /// The entity under canvas pixel (`x`, `y`): the one nearest to the camera whose projected
-    /// box covers the pixel.
+    /// box covers the pixel. When no box covers it, the entity whose box is nearest on screen,
+    /// within [`crate::PICK_SLACK`] design pixels at the HUD's scale; ties by id (task 151).
+    /// Allocates nothing, so the render thread can ask once a frame.
     pub fn entity_at(&self, x: f32, y: f32) -> Option<u32> {
-        let mut best: Option<(f32, u32)> = None;
-        for entity in self.entities {
+        let slack = crate::PICK_SLACK * self.layout.scale.max(0.25);
+        let mut on: Option<(f32, u32)> = None;
+        let mut near: Option<(f32, u32)> = None;
+        let mut projected = [(0.0_f32, 0.0_f32); 8];
+        let mut hull = [(0.0_f32, 0.0_f32); 16];
+        'entities: for entity in self.entities {
             let (centre, corners) = self.box_of(entity);
-            let projected: Vec<_> = corners
-                .iter()
-                .filter_map(|c| self.view.project(*c))
-                .collect();
-            if projected.len() < corners.len() {
-                continue;
+            for (slot, corner) in projected.iter_mut().zip(corners) {
+                match self.view.project(corner) {
+                    Some((px, py, _)) => *slot = (px, py),
+                    None => continue 'entities,
+                }
             }
-            let hull = convex_hull(projected.iter().map(|p| (p.0, p.1)).collect());
-            if !near_hull(&hull, (x, y), HIT_PADDING) {
+            let n = convex_hull(&mut projected, &mut hull);
+            let distance = hull_distance(&hull[..n], (x, y));
+            if distance > slack {
                 continue;
             }
             let Some((_, _, depth)) = self.view.project(centre) else {
@@ -636,11 +654,23 @@ impl PickContext<'_> {
             if self.hidden_by_planet(centre) {
                 continue;
             }
-            if best.is_none_or(|(nearest, _)| depth < nearest) {
-                best = Some((depth, entity.id));
+            if distance <= 0.0 {
+                if on.is_none_or(|(nearest, _)| depth < nearest) {
+                    on = Some((depth, entity.id));
+                }
+            } else if near.is_none_or(|(d, id)| distance < d || (distance == d && entity.id < id)) {
+                near = Some((distance, entity.id));
             }
         }
-        best.map(|(_, id)| id)
+        on.or(near).map(|(_, id)| id)
+    }
+
+    /// Where entity `id` stands on the canvas: the centre of its pick box, if it is drawn and
+    /// in front of the camera (a script points at it, task 151).
+    pub fn screen_of(&self, id: u32) -> Option<(f32, f32)> {
+        let index = self.entities.binary_search_by_key(&id, |e| e.id).ok()?;
+        let centre = self.centre_of(&self.entities[index]);
+        self.view.project(centre).map(|(x, y, _)| (x, y))
     }
 
     /// True when the planet's own surface lies between the eye and `point` (an entity on the far
@@ -777,6 +807,17 @@ impl PickController {
     /// Where the pointer is, in canvas pixels.
     pub fn pointer(&self) -> Option<(f32, f32)> {
         self.pointer
+    }
+
+    /// The entity under the pointer this frame (task 151): none with no pointer, over the HUD,
+    /// while the ground is dragged or a selection box is drawn.
+    pub fn pointed(&self, ctx: &PickContext) -> Option<u32> {
+        let (x, y) = self.pointer?;
+        if self.pan.is_some() || self.press.is_some_and(|p| p.dragging) || self.over_hud(ctx, x, y)
+        {
+            return None;
+        }
+        ctx.entity_at(x, y)
     }
 
     /// The HUD element under the pointer, for rollover help.
@@ -1715,6 +1756,136 @@ mod tests {
         // The world just above the bottom groups is not HUD.
         let (ax, ay) = layout().world_area().centre();
         assert!(hud_target(&layout(), &hud, (200, 200), ax, ay).is_none());
+    }
+
+    /// The projected pick box of `entity` as a hull, and its centre on screen.
+    fn screen_hull(
+        ctx: &PickContext,
+        entity: &EntityView,
+    ) -> ([(f32, f32); 16], usize, (f32, f32)) {
+        let (centre, corners) = ctx.box_of(entity);
+        let (cx, cy, _) = ctx.view.project(centre).expect("visible");
+        let mut projected = [(0.0, 0.0); 8];
+        for (slot, c) in projected.iter_mut().zip(corners) {
+            let (x, y, _) = ctx.view.project(c).expect("visible");
+            *slot = (x, y);
+        }
+        let mut hull = [(0.0, 0.0); 16];
+        let n = convex_hull(&mut projected, &mut hull);
+        (hull, n, (cx, cy))
+    }
+
+    /// The pixel where the projected pick box of `entity` ends, going right from its centre.
+    fn right_edge(ctx: &PickContext, entity: &EntityView) -> (f32, f32) {
+        let (hull, n, (mut x, y)) = screen_hull(ctx, entity);
+        while hull_distance(&hull[..n], (x, y)) <= 0.0 {
+            x += 0.25;
+        }
+        (x, y)
+    }
+
+    #[test]
+    fn a_pointer_just_beside_a_unit_picks_it_within_the_slack() {
+        let hud = HudSnapshot::default();
+        let entities = vec![unit_view(4, 50.0, 60.0)];
+        let ctx = context(&entities, &hud, &camera());
+        let slack = crate::PICK_SLACK * ctx.layout.scale;
+        let (edge, y) = right_edge(&ctx, &entities[0]);
+        assert_eq!(ctx.entity_at(edge - 1.0, y), Some(4), "on the box");
+        assert_eq!(ctx.entity_at(edge + slack - 0.5, y), Some(4));
+        assert_eq!(ctx.entity_at(edge + slack + 0.5, y), None);
+        // The slack follows the HUD scale: half the scale, half the pixels.
+        let mut small = context(&entities, &hud, &camera());
+        small.layout.scale = ctx.layout.scale / 2.0;
+        assert_eq!(small.entity_at(edge + slack / 2.0 - 0.5, y), Some(4));
+        assert_eq!(small.entity_at(edge + slack / 2.0 + 0.5, y), None);
+    }
+
+    #[test]
+    fn the_box_under_the_pointer_beats_a_nearer_one_beside_it_and_ties_go_by_id() {
+        let hud = HudSnapshot::default();
+        // Unit 2 east of unit 1, as far as leaves a gap narrower than two slacks between their
+        // boxes on screen: points there are beside both.
+        let mut checked = false;
+        for step in 0..60 {
+            let entities = vec![
+                unit_view(1, 50.0, 60.0),
+                unit_view(2, 50.8 + step as f32 * 0.02, 60.0),
+            ];
+            let ctx = context(&entities, &hud, &camera());
+            let slack = crate::PICK_SLACK * ctx.layout.scale;
+            let (one, n1, a) = screen_hull(&ctx, &entities[0]);
+            let (two, n2, b) = screen_hull(&ctx, &entities[1]);
+            let samples: Vec<_> = (0..=800)
+                .map(|i| {
+                    let t = i as f32 / 800.0;
+                    let p = (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+                    (
+                        p,
+                        hull_distance(&one[..n1], p),
+                        hull_distance(&two[..n2], p),
+                    )
+                })
+                .collect();
+            let on_one = samples
+                .iter()
+                .find(|(_, d1, d2)| *d1 <= 0.0 && *d2 > 0.0 && *d2 <= slack);
+            let between = samples
+                .iter()
+                .find(|(_, d1, d2)| *d1 > 0.0 && *d2 > 0.0 && *d2 < *d1 && *d1 <= slack);
+            let (Some((p, ..)), Some((q, ..))) = (on_one, between) else {
+                continue;
+            };
+            // On unit 1's box and beside unit 2's: the box under the pointer wins.
+            assert_eq!(ctx.entity_at(p.0, p.1), Some(1));
+            // On neither box, beside both: the nearer box on screen.
+            assert_eq!(ctx.entity_at(q.0, q.1), Some(2));
+            checked = true;
+            break;
+        }
+        assert!(checked, "no spacing put a point beside both boxes");
+        // Two units drawn in one place, the pointer beside both: the lower id.
+        let twins = vec![unit_view(3, 50.0, 60.0), unit_view(5, 50.0, 60.0)];
+        let ctx = context(&twins, &hud, &camera());
+        let (edge, y) = right_edge(&ctx, &twins[0]);
+        assert_eq!(ctx.entity_at(edge + 1.0, y), Some(3));
+    }
+
+    #[test]
+    fn the_pointed_entity_is_none_over_the_hud_and_while_dragging() {
+        let hud = HudSnapshot::default();
+        let entities = vec![unit_view(4, 50.0, 60.0)];
+        let ctx = context(&entities, &hud, &camera());
+        let (x, y, _) = ctx
+            .view
+            .project(pick_box(&entities[0], FLAT).0)
+            .expect("visible");
+        let mut picker = PickController::default();
+        let mut cam = camera();
+        assert_eq!(picker.pointed(&ctx), None, "no pointer yet");
+        picker.handle(InputEvent::PointerMoved { x, y }, &ctx, &mut cam);
+        assert_eq!(picker.pointed(&ctx), Some(4));
+        // Over the HUD's bottom panels nothing in the world is pointed at.
+        picker.handle(
+            InputEvent::PointerMoved { x: 100.0, y: 900.0 },
+            &ctx,
+            &mut cam,
+        );
+        assert_eq!(picker.pointed(&ctx), None);
+        // A selection box being dragged points at nothing.
+        let mods = Modifiers::default();
+        picker.handle(
+            InputEvent::ButtonDown {
+                button: PointerButton::Left,
+                x: x - 40.0,
+                y: y - 40.0,
+                mods,
+            },
+            &ctx,
+            &mut cam,
+        );
+        picker.handle(InputEvent::PointerMoved { x, y }, &ctx, &mut cam);
+        assert_eq!(picker.pointed(&ctx), None);
     }
 
     #[test]

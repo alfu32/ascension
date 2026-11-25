@@ -1,0 +1,12 @@
+# Task 151: an own unit under the pointer on the planet: the scene of 151-enemy-script.txt, the
+# pointer on the second own spearman: a green ring round it, no badge (a right click on an own
+# soldier is a move there), the help line "Yours · Spearman · hp".
+#   rise-of-man --universe --seed 1 --sun fixed --players 2 --ai none --size 1280x800 --speed 1 \
+#     --script app/docs/tasks/151-own-script.txt --after 15 --screenshot app/docs/img/151-own.png
+0 place 1 unit.spearman @-4,6
+0 place 1 unit.spearman @-2,7
+0 place 2 unit.spearman @3,6
+0 place 2 unit.spearman @5,7
+0 cam wheel 3 640,420
+1 click army1
+2 point army2

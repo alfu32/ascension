@@ -36,6 +36,7 @@ mod orbit;
 mod overlay;
 pub mod pick;
 mod pixels;
+pub mod pointer;
 pub mod projectiles;
 mod readback;
 mod response;
@@ -81,6 +82,7 @@ pub use orbit::{
 };
 pub use overlay::{Line3, OverlayGeometry, build_overlays, build_overlays_on};
 pub use pixels::rgba_to_bgra_flipped;
+pub use pointer::{HudFlash, HudPointer, OrderBadge, PICK_SLACK, Side};
 pub use projectiles::{ProjectileKind, ShotView, flight_span};
 pub use response::ResponseTimes;
 pub use review::{Review, SheetView, WorldLabel};
