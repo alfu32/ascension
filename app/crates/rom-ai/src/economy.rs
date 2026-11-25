@@ -757,13 +757,14 @@ pub(crate) fn assign(
         }
     }
 
-    trade(plan);
+    trade(plan, unreachable);
 }
 
 /// The other end of a route for a trader: for one that flies through space (task 68's
 /// freighter), an own city on another planet of its star system; for one that walks, the
-/// own city farthest from its home city on its planet, far enough for a route.
-fn route_for(view: &View<'_>, trader: &Entity) -> Option<EntityId> {
+/// own city farthest from its home city on its planet, far enough for a route. A city traders
+/// found no way to lately (`unreachable`) is passed over (task 153).
+fn route_for(view: &View<'_>, trader: &Entity, unreachable: &BTreeSet<u32>) -> Option<EntityId> {
     if view.world.is_spacecraft_type(trader.type_id) {
         let here = view
             .world
@@ -795,7 +796,7 @@ fn route_for(view: &View<'_>, trader: &Entity) -> Option<EntityId> {
         .min_by_key(|c| (view.distance(trader.pos, c.pos), c.id))?;
     cities
         .iter()
-        .filter(|c| c.id != home.id)
+        .filter(|c| c.id != home.id && !unreachable.contains(&c.id.0))
         .map(|c| (view.distance(home.pos, c.pos), c.id))
         .filter(|(distance, _)| *distance >= minimum && *distance < u64::MAX / 4)
         .max()
@@ -843,7 +844,7 @@ pub(crate) fn traders<'a>(view: &View<'a>) -> Vec<&'a Entity> {
         .collect()
 }
 
-fn trade(plan: &mut Plan<'_>) {
+fn trade(plan: &mut Plan<'_>, unreachable: &BTreeSet<u32>) {
     let running = plan.view.world.trade_routes(plan.view.me).count() as i64;
     let mut room = plan.view.caravan_limit() - running;
     for trader in traders(&plan.view) {
@@ -853,7 +854,7 @@ fn trade(plan: &mut Plan<'_>) {
         if !operational(trader) || !plan.view.is_idle(trader) {
             continue;
         }
-        if let Some(target) = route_for(&plan.view, trader) {
+        if let Some(target) = route_for(&plan.view, trader, unreachable) {
             if !plan.order(trader.id, "trade", None, Some(target), None) {
                 return;
             }

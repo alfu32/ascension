@@ -160,9 +160,10 @@ target, goal, the tick of the last change and its strength when it set off
   holds land is a target and the ratio is waived. With nothing known and no
   scout out, a large main army goes looking itself.
 - **Advance.** Attack-move to the target, in formation when the difficulty
-  `uses_formations` (the formation row's width to depth and spacing, close
-  fighters in front and ranged behind across the line of advance). Members
-  already near the goal fight there; reinforcements stream out. A target
+  `uses_formations`: every member is sent to the one point naming a formation
+  chosen by its row, and the simulation lays the group out (since task 153; see
+  "Armies and fleets in formation" below). Members already near the goal fight
+  there; reinforcements stream out. A target
   gone, taken or forgotten gives the next one, or home; an advance that has
   not come within reach after four minutes, or not reached its target after
   six, marks it unreachable for a while. At a neutralised city the army goes
@@ -241,7 +242,9 @@ leads them as the army `Navy`.
   easiest level stays ashore) and the player has water near its capital (beside a dock, or
   within the capital's border), and an enemy can be reached from it by water: enemy warships
   remembered on the same sea, or an enemy building with water the navy can sail to within a
-  warship's reach of it (a shore target). The dock itself is the construction manager's: it
+  warship's reach of it (a shore target) whose defences a warship the player can train
+  outranges at the ground (task 153: before, a shore target alone called for a navy whose
+  ships could not shell it, and they waited at the harbour all match). The dock itself is the construction manager's: it
   wishes for every building that trains fighters when the player has none.
 - **How many.** `sea.navy_share_pct` (default 20) of the military target, or the enemy fleet
   seen times `mil.attack_ratio_pct` when that is more (at most twice the share: an arms race
@@ -1279,6 +1282,93 @@ player had 10 workers under arms against raiders far from its towns, and its wor
 `rom playthrough --seed 1` (the simulation's own bot, no brain): `hash=572e8c1fd9800f8c` and
 ascension `ascended_tick=59544 hash=f787a8ee44aec6a6` on the main this task started from, unchanged.
 
+## Armies and fleets in formation, and a firmer win (task 153)
+
+**Formations by their rows** (`formations.rs`). Where the difficulty `uses_formations`, an order
+that moves a group names a formation chosen from the `formation` rows by shape and numbers, never
+by key, and every member is sent to one point: the simulation lays the group out (task 143),
+ranks facing from the group's centre to the point, ranged and support members behind when the
+row's `ranged_behind` says so, the group kept to its slowest member. Only rows that lay out
+straight ranks are chosen (line, double line, the blocks); rows that put ranged members behind
+and keep to the slowest are preferred when there are any.
+
+- **Attack** (the main army's advance and assault, ships contesting a body or striking an
+  orbit): the row with the most members in its front rank whose front is no wider than the
+  frontage and no deeper than wide; a group that mixes close fighters with ranged or support
+  members needs two ranks at least. Ties go to the spacing nearest the members' own that is not
+  tighter (`spacing_pct` 100 or more, the smallest), then the id. With the seeded rows a wave of
+  up to 13 walking soldiers forms one line, up to 26 a double line, more a square block; a
+  mixed wave a double line or a block.
+- **Frontage**: 12 tiles (twice `SLACK`, so every place stands within reach of the goal and a
+  member waiting at its place is not sent on), narrowed to the open ground at the goal: from the
+  goal across the way in from the members' centre, tile by tile to either side until ground the
+  most common member type cannot stand on (terrain only; buildings are the simulation's lattice
+  fallback). When nothing wider than deep fits, the narrowest row: a column through a gap.
+  Nothing else measures a narrow way: the path search does not report its width.
+- **Hold** (the main army holding a captured enemy capital, warships holding an own claimed
+  body): the row as wide as deep for the group, the square.
+- **Fleets**: warships on `orbit` and `travel` take the same choice with no frontage limit: line
+  abreast to strike or contest, the square to hold. Claiming ships and transports go alone.
+- **Not in formation**: the answer to intruders (a formation walks at its slowest member's
+  pace, and an answer that comes late loses the workers it is for: a version that answered in
+  formation drew duel seed 9), scouts, raiders, supply wagons, militia, the navy at sea.
+
+A wave sent off over several thoughts (the order budget) is laid out batch by batch about the
+same point; a member that arrives alone goes to the point itself.
+
+**Duel seed 14** (moderate won at tick 103 472 on main), traced with `rom duel --trace` and
+temporary prints of the order budget:
+
+- **The order budget was spent on orders that failed.** From tick 21 000 the moderate player had
+  three orders a thought and used them all: two to five a thought were `trade` orders to a city
+  no trader could reach and `guard` orders to a capital its home guard could not reach (both
+  `no_path`, given again every thought because nothing remembered the failure), the rest market
+  sales. The navy, ordered last, got none for 43 000 ticks: sixteen warships waited at the
+  harbour beside a shore target. Now a city traders find no way to is not a route's end for a
+  minute (`heed_failures`, `memory.unreachable`, `economy::route_for`), and a capital (or city)
+  its guard found no way to is not guarded for two minutes: the guard waits at the rally point.
+- **The main army waited for a full wave against nobody.** With the warships holding a third of
+  the army's population, the land army stayed at 14 of the 16 a wave waits for from tick 86 000,
+  while the easiest player had no soldier left. Fixed by the two causes below rather than by a
+  smaller wave (that would also change the easiest level).
+
+Seed 14 alone, with only the budget fixed: won at tick 62 320. Two more weaknesses showed in
+the seeds that grew slower while formations went in (seed 9 at 100 443, then drawn):
+
+- **A gathering army drawn into an enemy town.** The easiest player's temple stood seventeen
+  tiles from the moderate player's rally point; the gathered main army went after it by itself
+  (automatic attacks), piecemeal, and died there before it ever set off. Members of an army that
+  gathers (or retreats) and went after something by themselves farther than twelve tiles from
+  the rally point are now called back (`army::regroup`, `CHASE_SLACK`).
+- **A navy that could not fight.** A shore target warranted a navy even when no warship the
+  player could train outranged its defences at the ground (triremes cannot shell the coast at
+  all), so a fifth of the military target (9 to 14 ships in seed 9) waited at the harbour all
+  match. A shore target now calls for a navy only when a trainable warship outranges the
+  defences there (`navy::shore_defence`); enemy warships seen call for one as before.
+
+### Measured (task 153)
+
+`rom duel --seeds 1..20 --jobs 2` (conquest, flat two-player maps, 108 000-tick limit):
+
+| Profiles | Main before (0.0.134) | Budget fix only (trial) | Task 153 |
+| --- | --- | --- | --- |
+| `balanced:moderate,balanced:easiest` | 20–0, mean tick 57 678, slowest 103 472 (seed 14) | 20–0, mean tick 55 410, slowest 75 589 (seed 15) | 20–0, mean tick 47 463, slowest 62 598 (seed 13); seed 14 at 47 189 |
+| `balanced:moderate,balanced:moderate` | 11–9, no draws | | 9–10, one draw (seed 4), mean tick 54 795 |
+
+Seed 4 of the mirror is not a stall: both players fought a war of attrition from tick 42 000
+(each fell to 30 to 60 population, its army to a few soldiers while its navy kept its ships),
+the first rebuilt and at the limit was taking the other's last city (population 135 against 13).
+The easiest level's own changes are the budget fix (it wasted orders the same way) and the
+recall; it does not use formations or keep a navy. Against it the moderate player now wins eight
+and a half game minutes sooner on average. `rom first-attack --seeds 1..8` gives the easiest level
+the same numbers as main (first wave 48:01 / 52:20 with 5 units, first building hit 48:30 / 51:46,
+two seeds without an attack in an hour); moderate's first wave comes at 18:33 / 23:16 (was 21:59 /
+24:24), its first hit at 22:52 / 26:15 (was 17:28 / 26:00).
+
+`rom fight-matrix`: `strengths=270 unanswered=0` (it fights without brains). `rom playthrough
+--seed 1` (the simulation's own bot): `hash=d20c41789bf78ef0`, ascension `ascended_tick=59544
+hash=388f8f410f80705f`, as on main.
+
 ## Simulation gaps found in part 2, and what task 65 did with them
 
 - **Closed: `explore`, `patrol`, `guard`.** `explore` walks to the nearest tile
@@ -1311,12 +1401,10 @@ ascension `ascended_tick=59544 hash=f787a8ee44aec6a6` on the main this task star
 - **Closed: formation movement at the slowest speed.** `move`, `attack_move`
   and `patrol` may name a formation as subject; the orders one player gives in
   one tick with one formation walk at the slowest member's speed
-  (`order.pace`) when the formation `keeps_slowest`. A brain that
-  `uses_formations` names its line formation when the army advances; it gives
-  each member its own point, so the simulation's layout of a group sent to one
-  point (task 143) applies only where the advance has no direction and sends
-  them all to the goal: they then stand in one rank about it. The line row's
-  `spacing_pct` is 130 since then, so the advance's ranks stand 30 % wider.
+  (`order.pace`) when the formation `keeps_slowest`. Since task 153 a brain that
+  `uses_formations` sends the whole advance to one point and lets the
+  simulation lay it out (task 143); before, it gave each member its own point
+  of a line it worked out itself.
 - **Closed: start fairness in map generation** (see "Fair starts" below).
 - **Left out: garrisoning to heal** (optional in the card): `enter` still boards
   carriers only.
@@ -1424,6 +1512,11 @@ fighters stood near the stand-in's capital then.
   stood, twice alike); `managers.rs` `an_automation_age_start_builds_energy_sites` (a reactor and
   energy income, twice alike); `military.rs` `a_raided_city_calls_up_militia_and_stands_them_down`
   (at most half the workers, never in an army, all stood down once quiet, twice alike).
+- Task 153: `military.rs` `an_advance_marches_in_formation_with_the_ranged_behind` (one point,
+  a formation with `ranged_behind`, the ranged members' places behind the close fighters', twice
+  alike) and `a_walled_in_capital_does_not_eat_the_order_budget`; `space.rs`
+  `a_fleet_travels_in_formation` (line abreast, a place of its own for every ship, twice alike);
+  `formations.rs` unit tests of the choice.
 - `crates/rom-ai/tests/ages.rs` — the second age in the ordinary run; every
   profile to the third age on seeds 1–5 with
   `cargo test --release -p rom-ai --test ages -- --ignored`.

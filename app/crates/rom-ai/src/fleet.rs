@@ -13,6 +13,7 @@
 use crate::{
     Weights,
     army::fighters,
+    formations::{self, Purpose},
     memory::{Job, Memory, Phase, Role, Voyage},
     plan::{Act, Plan, Wish},
     view::{self, View, operational},
@@ -560,9 +561,17 @@ fn city_room(view: &View<'_>) -> bool {
         .is_some_and(|city| view.line_count(city) < view.city_limit())
 }
 
-/// Sends a ship toward a body: an orbit order in its system, a route journey otherwise.
-/// Returns whether it is there (in orbit of a habitable body, or beside a resource body).
-fn fly(plan: &mut Plan<'_>, ship: &Entity, body: BodyId, reach: u64) -> bool {
+/// Sends a ship toward a body: an orbit order in its system, a route journey otherwise, in
+/// `formation` when one is given (the ships sent together in one thought are laid out about the
+/// body or the point they jump to, task 153). Returns whether it is there (in orbit of a
+/// habitable body, or beside a resource body).
+fn fly(
+    plan: &mut Plan<'_>,
+    ship: &Entity,
+    body: BodyId,
+    reach: u64,
+    formation: Option<DefId>,
+) -> bool {
     let view = &plan.view;
     if view.world.orbit(ship.id).is_some_and(|o| o.body == body) {
         return true;
@@ -595,9 +604,9 @@ fn fly(plan: &mut Plan<'_>, ship: &Entity, body: BodyId, reach: u64) -> bool {
         return false;
     }
     if here == there {
-        plan.order(ship.id, "orbit", None, Some(marker), None);
+        plan.order(ship.id, "orbit", formation, Some(marker), None);
     } else if let Some(at) = jump_target(view.world, view.me, body) {
-        plan.order(ship.id, "travel", None, None, Some(at));
+        plan.order(ship.id, "travel", formation, None, Some(at));
     }
     false
 }
@@ -719,7 +728,13 @@ pub(crate) fn command(
         .collect();
     // No strike on an enemy world during the difficulty's grace period.
     let strikes = tick >= difficulty.grace_ticks.max(0) as u64;
-    escort(plan, memory, &warships, &systems, strikes);
+    escort(
+        plan,
+        memory,
+        &warships,
+        &systems,
+        (strikes, difficulty.uses_formations),
+    );
     colonise(plan, memory, &transports, &systems, weights, tick);
 }
 
@@ -820,7 +835,7 @@ fn claim(plan: &mut Plan<'_>, memory: &mut Memory, claimers: &[&Entity], systems
             }
         };
         let reach = presence_reach(&plan.view, body);
-        fly(plan, ship, body, reach);
+        fly(plan, ship, body, reach, None);
     }
 }
 
@@ -866,7 +881,7 @@ fn escort(
     memory: &mut Memory,
     ships: &[&Entity],
     systems: &BTreeSet<u32>,
-    strikes: bool,
+    (strikes, uses_formations): (bool, bool),
 ) {
     let mut army = memory.armies.remove(&Role::Escort).unwrap_or_default();
     army.members.retain(|id| exists(&plan.view, *id));
@@ -926,8 +941,22 @@ fn escort(
         return;
     };
     let reach = presence_reach(view, target);
+    // In formation where the difficulty uses them (task 153): line abreast to contest a body
+    // or strike an orbit, a square to hold an own claim. Ships are not hemmed in by ground, so
+    // the line may be as wide as the fleet.
+    let purpose = if Some(target) == guarded && Some(target) != enemy_world {
+        Purpose::Hold
+    } else {
+        Purpose::Attack
+    };
+    let formation = uses_formations
+        .then(|| {
+            let types: Vec<DefId> = ships.iter().map(|s| s.type_id).collect();
+            formations::choose(view.rules, &types, purpose, i64::MAX)
+        })
+        .flatten();
     for ship in ships.iter().copied() {
-        if !fly(plan, ship, target, reach) {
+        if !fly(plan, ship, target, reach, formation) {
             continue;
         }
         // A carrier over its target launches its craft.
@@ -1115,7 +1144,7 @@ fn colonise(
             0 => {
                 // Troops board only a landed ship (task 68): it comes down near a home city.
                 if !(plan.view.world.is_landed(ship.id) && ship.pos.body == home_body) {
-                    if !fly(plan, ship, home_body, 0) {
+                    if !fly(plan, ship, home_body, 0, None) {
                         continue;
                     }
                     if !ship.orders().front().is_some_and(|o| o.kind == "land")
@@ -1152,7 +1181,7 @@ fn colonise(
                     }
                     continue;
                 }
-                if fly(plan, ship, body, 0) {
+                if fly(plan, ship, body, 0, None) {
                     next(memory, 2);
                 }
             }

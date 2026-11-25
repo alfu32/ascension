@@ -8,12 +8,13 @@
 
 use crate::{
     Weights,
+    formations::{self, Purpose},
     memory::{Army, EnemySighting, Memory, Phase, Role},
     plan::{Act, Plan, RETRY_TICKS, Wish},
     production::{army_pop, dps_against, is_military, needs_escort, rally_point},
     view::{self, CELL, Cell, View, cell_of, operational},
 };
-use rom_rules::{AiDifficulty, DefId, EntityClass, FormationShape, ProductionMode};
+use rom_rules::{AiDifficulty, DefId, EntityClass, ProductionMode};
 use rom_sim::{BodyId, Entity, EntityId, Pos, Topology, integer_sqrt};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -27,6 +28,9 @@ const MAX_WAVE: usize = 16;
 const MIN_RAID: usize = 3;
 /// Idle units farther than this from where they belong are called back, in milli-tiles.
 const SLACK: u64 = 6000;
+/// A gathering member that went after something by itself farther than this from the rally
+/// point is called back, in milli-tiles.
+const CHASE_SLACK: u64 = 2 * SLACK;
 /// How far beyond its weapon's reach a unit turns on a target, in milli-tiles.
 const FOCUS_SLACK: u64 = 2000;
 /// A sighting this recent counts as an enemy present now.
@@ -574,70 +578,94 @@ fn front(view: &View<'_>, members: &[&Entity], goal: Option<Pos>) -> Option<Pos>
 }
 
 /// Whether a unit is already doing what it would be told: fighting, or walking to `goal`
-/// with `kind`.
-fn on_its_way(e: &Entity, kind: &str, goal: Pos) -> bool {
+/// with `kind`. Sent in formation, its point is its place about the goal (task 153).
+fn on_its_way(view: &View<'_>, e: &Entity, kind: &str, goal: Pos) -> bool {
     e.orders().front().is_some_and(|o| {
-        o.automatic || o.kind == "attack" || (o.kind == kind && o.target_pos == Some(goal))
+        o.automatic
+            || o.kind == "attack"
+            || (o.kind == kind
+                && o.target_pos.is_some_and(|p| {
+                    p == goal
+                        || (o
+                            .subject
+                            .is_some_and(|f| view.rules.formations.contains_key(&f))
+                            && view.distance(p, goal) <= SLACK)
+                }))
     })
 }
 
-/// Where each unit of an advancing army goes: ranks across the line of advance, the
-/// formation's width to depth, close fighters in front and ranged units behind when the
-/// formation says so. Without a usable direction everyone goes to the goal itself.
-fn formation(view: &View<'_>, units: &[&Entity], goal: Pos, from: Pos) -> Vec<(EntityId, Pos)> {
-    let rules = view.rules;
-    let shape = rules
-        .formations
-        .values()
-        .find(|f| f.shape == FormationShape::Line)
-        .or_else(|| rules.formations.values().next());
-    let (dx, dy) = (
-        i64::from(goal.x) - i64::from(from.x),
-        i64::from(goal.y) - i64::from(from.y),
-    );
-    let length = integer_sqrt((dx * dx + dy * dy) as u128) as i64;
-    let Some(shape) = shape.filter(|_| {
-        from.body == goal.body && from.face == goal.face && length >= 2000 && units.len() > 1
-    }) else {
-        return units.iter().map(|e| (e.id, goal)).collect();
-    };
-    let reach = |e: &Entity| {
-        rules.entity_types[&e.type_id]
-            .weapons
-            .iter()
-            .map(|w| w.range_max)
-            .max()
-            .unwrap_or(0)
-    };
-    let mut order: Vec<&Entity> = units.to_vec();
-    if shape.ranged_behind {
-        order.sort_by_key(|e| (reach(e) > 0, e.id));
+/// The widest front an army forms up on, in milli-tiles: every place stands within `SLACK`
+/// of the goal, so a member waiting at its place is not sent on to the goal itself.
+const FRONTAGE: i64 = 2 * SLACK as i64;
+
+/// The formation a group of `units` takes for `purpose` at `goal`, when the difficulty
+/// `uses_formations`. The front is at most `FRONTAGE` wide, and no wider than
+/// the open ground across the way at the goal (measured for the most common member type, tile
+/// by tile to either side until ground it cannot stand on).
+fn formation_for(
+    view: &View<'_>,
+    cmd: &Command<'_>,
+    units: &[&Entity],
+    purpose: Purpose,
+    goal: Pos,
+) -> Option<DefId> {
+    if !cmd.difficulty.uses_formations || units.len() < 2 {
+        return None;
     }
-    let spacing = order
+    let types: Vec<DefId> = units.iter().map(|e| e.type_id).collect();
+    let frontage = open_ground(view, units, goal).min(FRONTAGE);
+    formations::choose(view.rules, &types, purpose, frontage)
+}
+
+/// The width of open ground across the way into `goal`, up to `FRONTAGE`, for the most common
+/// member type: from the goal along the line across the way from the members' centre, tile
+/// by tile to either side until a tile that type cannot stand on. Members on another face are
+/// left out; without a way to measure, the ground counts as open.
+fn open_ground(view: &View<'_>, units: &[&Entity], goal: Pos) -> i64 {
+    let near: Vec<&&Entity> = units
         .iter()
-        .filter_map(|e| rules.entity_types[&e.type_id].movement.as_ref())
-        .map(|m| m.formation_spacing)
-        .max()
-        .unwrap_or(750)
-        * shape.spacing_pct.max(10)
-        / 100;
-    let n = order.len() as i64;
-    // Width over depth is the rank ratio: width² = n × ratio.
-    let width =
-        (integer_sqrt((n * shape.rank_ratio_pct.max(100) / 100) as u128) as i64).clamp(1, n);
-    let (ux, uy) = (dx * 1000 / length, dy * 1000 / length);
-    order
+        .filter(|e| e.pos.body == goal.body && e.pos.face == goal.face)
+        .collect();
+    if near.is_empty() {
+        return FRONTAGE;
+    }
+    let n = near.len() as i64;
+    let (cx, cy) = near.iter().fold((0_i64, 0_i64), |(x, y), e| {
+        (x + i64::from(e.pos.x), y + i64::from(e.pos.y))
+    });
+    let (dx, dy) = (i64::from(goal.x) - cx / n, i64::from(goal.y) - cy / n);
+    let length = integer_sqrt((dx * dx + dy * dy) as u128) as i64;
+    if length < 1000 {
+        return FRONTAGE;
+    }
+    let mut kinds: BTreeMap<DefId, usize> = BTreeMap::new();
+    for e in units {
+        *kinds.entry(e.type_id).or_default() += 1;
+    }
+    let Some(kind) = kinds
         .iter()
-        .enumerate()
-        .map(|(i, e)| {
-            let (rank, file) = (i as i64 / width, i as i64 % width);
-            let across = (2 * file - (width - 1)) * spacing / 2;
-            let back = rank * spacing;
-            let x = (-uy * across - ux * back) / 1000;
-            let y = (ux * across - uy * back) / 1000;
-            (e.id, view.world.offset(goal, x, y))
-        })
-        .collect()
+        .max_by_key(|(t, count)| (**count, std::cmp::Reverse(**t)))
+        .map(|(t, _)| *t)
+    else {
+        return FRONTAGE;
+    };
+    // Across the way: the direction of travel turned a quarter.
+    let (ax, ay) = (-dy * 1000 / length, dx * 1000 / length);
+    let side = |sign: i64| {
+        (1..=FRONTAGE / 2000)
+            .take_while(|step| {
+                passable(
+                    view,
+                    kind,
+                    view.world.offset(goal, sign * ax * step, sign * ay * step),
+                )
+            })
+            .count() as i64
+    };
+    if !passable(view, kind, goal) {
+        return FRONTAGE;
+    }
+    (side(1) + side(-1) + 1) * 1000
 }
 
 /// Sends units to a goal with `kind`, skipping those already on their way or idle there.
@@ -645,14 +673,15 @@ fn send(plan: &mut Plan<'_>, units: &[(EntityId, Pos)], kind: &str) {
     send_as(plan, units, kind, None);
 }
 
-/// As `send`, naming a formation: the simulation keeps one batch to its slowest member.
+/// As `send`, naming a formation: the simulation lays out the units sent to one point in this
+/// thought about it and keeps them to their slowest member (task 143).
 fn send_as(plan: &mut Plan<'_>, units: &[(EntityId, Pos)], kind: &str, formation: Option<DefId>) {
     for (id, goal) in units {
         let Some(e) = plan.view.world.entity(*id) else {
             continue;
         };
         if plan.view.busy.contains(id)
-            || on_its_way(e, kind, *goal)
+            || on_its_way(&plan.view, e, kind, *goal)
             || (e.orders().is_empty() && plan.view.distance(e.pos, *goal) <= SLACK)
         {
             continue;
@@ -663,8 +692,25 @@ fn send_as(plan: &mut Plan<'_>, units: &[(EntityId, Pos)], kind: &str, formation
     }
 }
 
-/// Calls idle members far from the rally point back to it.
+/// Calls idle members far from the rally point back to it, and members that went after
+/// something by themselves far beyond it (task 153: a gathering army drawn piecemeal into an
+/// enemy town near its rally point was lost there before it ever set off).
 fn regroup(plan: &mut Plan<'_>, units: &[&Entity], rally: Pos) {
+    let chasing: Vec<EntityId> = units
+        .iter()
+        .filter(|e| {
+            e.pos.body == rally.body
+                && plan.view.distance(e.pos, rally) > CHASE_SLACK
+                && e.orders().front().is_some_and(|o| o.automatic)
+                && !plan.view.busy.contains(&e.id)
+        })
+        .map(|e| e.id)
+        .collect();
+    for id in chasing {
+        if !plan.order(id, "move", None, None, Some(rally)) {
+            return;
+        }
+    }
     let idle: Vec<(EntityId, Pos)> = units
         .iter()
         .filter(|e| {
@@ -1109,14 +1155,27 @@ fn set_stance(plan: &mut Plan<'_>, units: &[&Entity], behavior: &str) {
     }
 }
 
+/// Whether own units found no way to an entity lately (`Memory::unreachable`).
+fn shut_off(memory: &Memory, id: EntityId, tick: u64) -> bool {
+    memory
+        .unreachable
+        .get(&id.0)
+        .is_some_and(|until| *until > tick)
+}
+
 /// Puts the home guard beside the capital: the simulation's `guard` then fights off what
-/// comes near it without further orders.
-fn guard_capital(plan: &mut Plan<'_>, units: &[&Entity]) -> bool {
+/// comes near it without further orders. A capital its guard found no way to lately (walled
+/// in by its own buildings) is not guarded for a while: the guard waits at the rally point
+/// instead of failing its orders thought after thought (task 153).
+fn guard_capital(plan: &mut Plan<'_>, memory: &Memory, units: &[&Entity]) -> bool {
+    let tick = plan.view.tick;
     let Some(capital) = plan.view.world.capital(plan.view.me).filter(|c| {
-        plan.view
-            .cities
-            .iter()
-            .any(|city| city.id == *c && city.complete)
+        !shut_off(memory, *c, tick)
+            && plan
+                .view
+                .cities
+                .iter()
+                .any(|city| city.id == *c && city.complete)
     }) else {
         return false;
     };
@@ -1173,7 +1232,9 @@ fn lead(
                 plan.view
                     .cities
                     .iter()
-                    .filter(|c| c.complete && c.pos.body == goal.body)
+                    .filter(|c| {
+                        c.complete && c.pos.body == goal.body && !shut_off(memory, c.id, tick)
+                    })
                     .min_by_key(|c| (plan.view.distance(c.pos, goal), c.id))
                     .map(|c| c.id)
             });
@@ -1193,6 +1254,8 @@ fn lead(
                     }
                 }
                 (_, _, Some(goal)) => {
+                    // Each at its own speed: a formation keeps to its slowest member, and an
+                    // answer that comes late loses the workers it was for.
                     let orders: Vec<_> = units.iter().map(|e| (e.id, goal)).collect();
                     send(plan, &orders, "attack_move");
                 }
@@ -1203,7 +1266,7 @@ fn lead(
         Phase::Gather => {
             if role == Role::Defend {
                 set_stance(plan, units, "defensive");
-                if !guard_capital(plan, units)
+                if !guard_capital(plan, memory, units)
                     && let Some(rally) = rally
                 {
                     regroup(plan, units, rally);
@@ -1802,51 +1865,44 @@ fn advance(
         .and_then(|t| memory.enemies.get(&t))
         .filter(|e| e.building && e.pos == goal)
         .map_or(goal, |e| stand_off(&plan.view, e, side));
-    let goals = if cmd.difficulty.uses_formations {
-        let from = units
-            .iter()
-            .max_by_key(|e| (plan.view.distance(e.pos, goal), e.id))
-            .map_or(goal, |e| e.pos);
-        // Units already near the goal keep fighting where they are.
-        let marching: Vec<&Entity> = units
-            .iter()
-            .copied()
-            .filter(|e| plan.view.distance(e.pos, goal) > THREAT_REACH)
-            .collect();
-        let mut goals = formation(&plan.view, &marching, goal, from);
-        goals.extend(
-            units
-                .iter()
-                .filter(|e| plan.view.distance(e.pos, goal) <= THREAT_REACH)
-                .map(|e| (e.id, goal)),
-        );
-        goals.sort_by_key(|(id, _)| *id);
-        goals
+    // In formation (task 153): every member is sent to the one point and the simulation gives
+    // each its place, a front facing the goal with ranged and support members behind; a
+    // captured capital the army holds is held in a square.
+    let purpose = if army.target.is_none() && held_capital(&plan.view) == Some(goal) {
+        Purpose::Hold
     } else {
-        units.iter().map(|e| (e.id, goal)).collect()
+        Purpose::Attack
     };
-    // A unit with a formation place keeps it until it arrives: re-sending it each thought to
-    // a recomputed place would only cost orders.
-    let fresh: Vec<(EntityId, Pos)> = goals
-        .into_iter()
-        .filter(|(id, _)| {
-            plan.view.world.entity(*id).is_some_and(|e| {
-                !e.orders().front().is_some_and(|o| {
-                    o.kind == "attack_move"
-                        && o.target_pos
-                            .is_some_and(|p| plan.view.distance(p, goal) <= THREAT_REACH)
-                })
+    let marching: Vec<&Entity> = units
+        .iter()
+        .copied()
+        .filter(|e| plan.view.distance(e.pos, goal) > THREAT_REACH)
+        .collect();
+    // The members still marching set the formation; those already at the goal fight there.
+    let subject = formation_for(
+        &plan.view,
+        cmd,
+        if marching.len() >= 2 {
+            &marching
+        } else {
+            units
+        },
+        purpose,
+        goal,
+    );
+    // A unit with a place there keeps it until it arrives: re-sending it each thought to a
+    // place laid out again would only cost orders.
+    let fresh: Vec<(EntityId, Pos)> = units
+        .iter()
+        .filter(|e| {
+            !e.orders().front().is_some_and(|o| {
+                o.kind == "attack_move"
+                    && o.target_pos
+                        .is_some_and(|p| plan.view.distance(p, goal) <= THREAT_REACH)
             })
         })
+        .map(|e| (e.id, goal))
         .collect();
-    // Marching in formation, the batch keeps to its slowest member when the rules say so.
-    let subject = cmd
-        .difficulty
-        .uses_formations
-        .then(|| line_formation(plan.view.rules))
-        .flatten()
-        .filter(|f| plan.view.rules.formations[f].keeps_slowest);
-
     send_as(plan, &fresh, "attack_move", subject);
 }
 
@@ -1870,16 +1926,6 @@ fn stand_off(view: &View<'_>, building: &EnemySighting, from: Pos) -> Pos {
     }
     view.world
         .offset(goal, dx * reach / length, dy * reach / length)
-}
-
-/// The formation armies march in: the first line formation, or the first of any shape.
-fn line_formation(rules: &rom_rules::Rules) -> Option<DefId> {
-    rules
-        .formations
-        .values()
-        .find(|f| f.shape == FormationShape::Line)
-        .or_else(|| rules.formations.values().next())
-        .map(|f| f.id)
 }
 
 /// The unit type that does most damage to a building of `target` per resource, among
