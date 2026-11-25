@@ -238,8 +238,8 @@ fn place(
             face: 0,
             x,
             y: z,
-            // Units face south, towards the camera.
-            facing_deg: 90.0,
+            // Units face south, towards the camera; buildings stand as they are drawn.
+            facing_deg: if building { 0.0 } else { 90.0 },
             altitude: 0.0,
             shot: None,
             spacecraft: false,

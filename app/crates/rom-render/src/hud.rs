@@ -33,9 +33,9 @@ pub struct HudResearch {
 }
 
 pub use crate::hud_model::{
-    ButtonState, HudButton, HudCard, HudCityRadius, HudMarker, HudPalette, HudPlacement, HudQueue,
-    HudQueueItem, HudSelection, HudTile, IconMark, MarkerKind, PaletteTab, ResearchCell,
-    ResearchOverview, ResearchTrack, SLOT_KEYS,
+    ButtonState, HudButton, HudCard, HudCityRadius, HudLineSite, HudMarker, HudPalette,
+    HudPlacement, HudQueue, HudQueueItem, HudSelection, HudTile, IconMark, MarkerKind, PaletteTab,
+    ResearchCell, ResearchOverview, ResearchTrack, SLOT_KEYS,
 };
 use crate::pick::HudTarget;
 
@@ -100,6 +100,8 @@ pub struct HudSnapshot {
     pub trade_targets: Vec<u32>,
     /// The building footprint being placed.
     pub placement: Option<HudPlacement>,
+    /// The fortification line or minefield being dragged, site by site (task 147b).
+    pub line: Vec<HudLineSite>,
     /// A brush is in hand: the left button paints along its drag instead of selecting (task 150).
     pub painting: bool,
     /// Recent blasts of area weapons on the shown surface (task 75).
@@ -236,6 +238,7 @@ impl Default for HudSnapshot {
             selected: Vec::new(),
             markers: Vec::new(),
             placement: None,
+            line: Vec::new(),
             painting: false,
             data_tab: 0,
             overview: ResearchOverview::default(),

@@ -60,6 +60,7 @@ fn rename(w: &mut World, player: PlayerId, city: EntityId, text: &str) -> Result
         target_pos: None,
         queue: false,
         text: Some(text.into()),
+        facing: None,
     })
     .map(|_| ())
 }

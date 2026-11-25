@@ -278,6 +278,17 @@ thick green/red contour and an owner-colour translucent ghost at the future
 building's height. Fresh construction sites retain a dashed contour and the
 ghost until their first construction work.
 
+Walls and minefields are dragged (task 147b). With a wall, palisade or defensive line armed,
+the left button pressed on the ground starts a line and the drag draws it along the ground:
+each site shows its footprint and an upright pane along the line, green where it can stand and
+red where not, and the help line gives the count and the price of the whole line. G, or a right
+click while the button is held, drops a gate (three tiles along the line) at the pointer; the
+release builds the line, the selected builders taking it in order, one stretch each. A press on
+an own wall continues the line from it. The tool stays armed for the next line until Escape or
+a right click. A minefield type drags a rectangle of mines. Every segment and gate faces along
+its line, diagonals included: its model turns with it and a diagonal one is stretched to meet
+its neighbours.
+
 The CPU HUD preview includes all five button states and a sample research
 overview. It uses the same artwork and quad composition as the GPU HUD:
 `cargo run -p rom-render --example hud_preview -- docs/img/hud-states-preview.png 1672 941`.

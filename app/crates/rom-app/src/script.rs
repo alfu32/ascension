@@ -175,6 +175,7 @@ pub fn ascend(
             target_pos: None,
             queue: false,
             text: None,
+            facing: None,
         })
         .map(|_| ())
         .map_err(|e| format!("ascend: {e}"))

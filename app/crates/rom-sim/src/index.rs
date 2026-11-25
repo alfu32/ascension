@@ -131,6 +131,21 @@ impl World {
             })
     }
 
+    /// Constructions submitted and not yet sited, as type, placement and facing (task 147).
+    pub(crate) fn queued_sites(&self) -> impl Iterator<Item = (DefId, crate::Pos, u16)> + '_ {
+        self.pending
+            .iter()
+            .map(|(o, _)| o)
+            .filter(|o| o.kind == "construct" && o.target_entity.is_none())
+            .map(|o| {
+                (
+                    o.subject.expect("construction subject"),
+                    o.target_pos.expect("placement"),
+                    o.facing,
+                )
+            })
+    }
+
     /// Live entities (not in transit) whose type passes `types`, of every player.
     pub(crate) fn entities_of_types<'a>(
         &'a self,

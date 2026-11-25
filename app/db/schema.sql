@@ -1398,6 +1398,7 @@ CREATE TABLE vision_memory (
   entity_type_id INTEGER NOT NULL,
   owner_id  INTEGER NOT NULL,
   pos_x INTEGER NOT NULL, pos_y INTEGER NOT NULL, pos_face INTEGER NOT NULL, pos_body INTEGER NOT NULL,
+  facing    INTEGER NOT NULL DEFAULT 0,  -- task 147, format 21
   PRIMARY KEY (body_id, player_id, tile, entity_id)
 ) STRICT, WITHOUT ROWID;
 
@@ -1601,6 +1602,7 @@ CREATE TABLE "order" (
   move_request INTEGER, move_repaths INTEGER,
   pace          INTEGER,                 -- formation pace: walking speed cap (milli-tiles/s)
   engaged_id    INTEGER,                 -- guard: the enemy it is fighting off
+  facing        INTEGER NOT NULL DEFAULT 0, -- a construction's facing, degrees (task 147, format 21)
   UNIQUE (place, executor_id, seq)
 ) STRICT;
 CREATE INDEX order_by_player ON "order"(player_id, status);

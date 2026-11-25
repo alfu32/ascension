@@ -61,6 +61,7 @@ fn order(
         target_pos: pos,
         queue: false,
         text: None,
+        facing: None,
     }
 }
 

@@ -226,7 +226,7 @@ impl World {
         // player's land is checked below.
         let pos = self.placement(player, city, at, true)?;
         let geo = self.geo(pos.body);
-        let bounds = footprint(&self.rules.entity_types[&city], pos);
+        let bounds = footprint(&self.rules.entity_types[&city], pos, 0);
         if geo.footprint_tiles(pos.face, bounds).any(|t| {
             self.territory_owner_on_body(pos.body, t.face, t.x, t.y)
                 .is_some_and(|owner| owner != player)

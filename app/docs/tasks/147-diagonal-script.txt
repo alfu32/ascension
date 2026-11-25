@@ -1,0 +1,25 @@
+# Task 147b: a diagonal stone wall with its gate, dragged and built. The builders are boxed,
+# the wall armed, the line dragged from north-west to south-east of the city with G at its
+# middle, and released; the builders take it in order and the game runs fast while they build.
+# Each segment and the gate turn along the line, stretched to meet on the diagonal.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/147-diagonal-script.txt --after 12 --screenshot app/docs/img/147-diagonal.png
+0 grant-age age.medieval
+0 grant-tech tech.age.classical
+0 grant-tech tech.age.medieval
+0 grant res.timber 3000
+0 grant res.metal 3000
+5 box builders
+8 hud tab 0
+10 hud arrow 1
+11 hud arrow 1
+12 hud slot 2
+20 brush-down @-4,3
+24 brush-move @0,7
+26 key g
+30 brush-move @6,13
+32 brush-up
+34 escape
+40 speed 1000
+1800 speed 100
+1810 cam wheel 4 800,430

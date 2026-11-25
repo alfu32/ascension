@@ -582,6 +582,69 @@ pub fn build_overlays_on(
             }
         }
     }
+    // The line being dragged (task 147b): each site's footprint on the ground and an upright
+    // pane along its facing, green where it can stand and red where not; a gate's pane is
+    // open in the middle.
+    for site in &hud.line {
+        let origin = Origin {
+            ground,
+            face: site.face,
+            x: site.x as f32 / 1000.0,
+            y: site.y as f32 / 1000.0,
+            altitude: 0.0,
+        };
+        let (line, fill) = if site.valid {
+            (GREEN, [60, 220, 80, 95])
+        } else {
+            (RED, [235, 60, 50, 110])
+        };
+        let (w, h) = (
+            f32::from(site.width.max(1)) / 2.0,
+            f32::from(site.height.max(1)) / 2.0,
+        );
+        let at = |x: f32, y: f32, z: f32| origin.at(x, y, LIFT + z);
+        out.quad(
+            [
+                at(-w, -h, 0.03),
+                at(w, -h, 0.03),
+                at(w, h, 0.03),
+                at(-w, h, 0.03),
+            ],
+            fill,
+        );
+        out.rect_outline(origin, (-w, -h), (w, h), line);
+        if site.length == 0 {
+            continue;
+        }
+        let (sin, cos) = f32::from(site.facing).to_radians().sin_cos();
+        let stretch = crate::scene::diagonal_stretch(f32::from(site.facing));
+        let half = f32::from(site.length) / 2.0 * stretch;
+        let mut pane = rgba(owner_color(site.owner));
+        pane[3] = 70;
+        let spans: &[(f32, f32)] = if site.gate {
+            &[(-1.0, -0.6), (0.6, 1.0)]
+        } else {
+            &[(-1.0, 1.0)]
+        };
+        for &(a, b) in spans {
+            let (a, b) = (a * half, b * half);
+            let (p, q) = ((a * cos, a * sin), (b * cos, b * sin));
+            out.quad(
+                [
+                    at(p.0, p.1, 0.0),
+                    at(q.0, q.1, 0.0),
+                    at(q.0, q.1, 1.1),
+                    at(p.0, p.1, 1.1),
+                ],
+                pane,
+            );
+            out.line(at(p.0, p.1, 1.1), at(q.0, q.1, 1.1), line);
+        }
+        if site.gate {
+            let (p, q) = ((-half * cos, -half * sin), (half * cos, half * sin));
+            out.line(at(p.0, p.1, 1.4), at(q.0, q.1, 1.4), line);
+        }
+    }
     if let Some(p) = &hud.placement {
         let (cx, cy) = (p.x as f32 / 1000.0, p.y as f32 / 1000.0);
         let origin = Origin {

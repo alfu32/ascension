@@ -2161,7 +2161,7 @@ pub fn snapshot_on(
                 face: building.pos.face,
                 x: building.pos.x as f32 / 1000.0,
                 y: building.pos.y as f32 / 1000.0,
-                facing_deg: 0.0,
+                facing_deg: f32::from(building.facing),
                 altitude: 0.0,
                 shot: None,
                 spacecraft: false,
@@ -2171,7 +2171,7 @@ pub fn snapshot_on(
                 cloud: None,
                 hp_frac: 1.0,
                 building: true,
-                footprint: (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h)),
+                footprint: turned_view(et, building.facing, &clamp_u8),
                 radius: et.radius as f32 / 1000.0,
                 carrying: false,
                 kept: 0,
@@ -2212,7 +2212,7 @@ pub fn snapshot_on(
             face: wreck.pos.face,
             x: wreck.pos.x as f32 / 1000.0,
             y: wreck.pos.y as f32 / 1000.0,
-            facing_deg: 0.0,
+            facing_deg: f32::from(wreck.facing),
             altitude: 0.0,
             shot: None,
             spacecraft: false,
@@ -2223,7 +2223,7 @@ pub fn snapshot_on(
             // No health bar over what is no longer there.
             hp_frac: 1.0,
             building: true,
-            footprint: (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h)),
+            footprint: turned_view(et, wreck.facing, &clamp_u8),
             radius: et.radius as f32 / 1000.0,
             carrying: false,
             kept: 0,
@@ -2472,6 +2472,12 @@ pub fn travel_ticks(
     Some((distance * rate / weapon.projectile_speed.max(1) as u64).max(1))
 }
 
+/// A building's footprint as drawn: turned with its facing (task 147).
+fn turned_view(et: &rom_rules::EntityType, facing: u16, clamp_u8: &dyn Fn(i64) -> u8) -> (u8, u8) {
+    let (w, h) = rom_sim::turned_footprint(et.footprint_w, et.footprint_h, facing);
+    (clamp_u8(w), clamp_u8(h))
+}
+
 fn view_of(
     entity: &Entity,
     et: &rom_rules::EntityType,
@@ -2495,7 +2501,11 @@ fn view_of(
         cloud: None,
         hp_frac: (entity.hp as f32 / et.hp.max(1) as f32).clamp(0.0, 1.0),
         building: et.class == EntityClass::Building,
-        footprint: (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h)),
+        footprint: if et.class == EntityClass::Building {
+            turned_view(et, entity.facing, clamp_u8)
+        } else {
+            (clamp_u8(et.footprint_w), clamp_u8(et.footprint_h))
+        },
         radius: et.radius as f32 / 1000.0,
         carrying: false,
         kept: 0,
@@ -2783,6 +2793,7 @@ mod tests {
                 target_pos: Some(goal),
                 queue: false,
                 text: None,
+                facing: None,
             })
             .expect("move");
         let mut seen = Vec::new();
@@ -2833,6 +2844,7 @@ mod tests {
                 target_pos: None,
                 queue: false,
                 text: None,
+                facing: None,
             })
             .expect("attack");
         let mut fought = Vec::new();
@@ -3184,6 +3196,7 @@ mod terrain_knowledge_tests {
                     target_pos: None,
                     queue: false,
                     text: None,
+                    facing: None,
                 })
                 .unwrap();
             for _ in 0..10 {
@@ -3545,6 +3558,7 @@ mod save_tests {
                     target_pos: Some(Pos::flat(33_500, 34_000)),
                     queue: false,
                     text: None,
+                    facing: None,
                 })
                 .expect("move");
             world
@@ -3557,6 +3571,7 @@ mod save_tests {
                     target_pos: None,
                     queue: false,
                     text: None,
+                    facing: None,
                 })
                 .expect("attack");
             let mut motions = Motions::default();

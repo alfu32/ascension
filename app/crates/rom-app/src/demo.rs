@@ -153,6 +153,7 @@ impl DemoDriver {
                 target_pos: Some(target),
                 queue: false,
                 text: None,
+                facing: None,
             };
             if let Err(error) = world.submit(command) {
                 errors.push(error);
@@ -248,6 +249,7 @@ impl DemoDriver {
                     target_pos: Some(target),
                     queue: false,
                     text: None,
+                    facing: None,
                 };
                 match world.submit(command) {
                     Ok(_) => return true,

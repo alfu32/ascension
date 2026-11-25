@@ -79,21 +79,25 @@ fn command(
         target_pos,
         queue,
         text: None,
+        facing: None,
     })
     .map(|_| ())
 }
 fn walk(w: &mut World, executor: EntityId, x: i32, y: i32) {
     command(w, executor, "move", None, None, Some(at(x, y)), false).unwrap();
 }
-/// A wall of `segment` across the map at row `y`, with `gate` at column `gate_x`.
+/// A palisade across the map at row `y`, with its three-tile gate centred at column `gate_x`.
 fn wall_across(w: &mut World, owner: PlayerId, width: i32, y: i32, gate_x: Option<i32>) {
     for x in 0..width {
-        let key = if Some(x) == gate_x {
-            "bld.palisade_gate"
-        } else {
-            "bld.palisade"
-        };
-        spawn(w, key, owner, x, y);
+        match gate_x {
+            Some(g) if x == g => {
+                spawn(w, "bld.palisade_gate", owner, x, y);
+            }
+            Some(g) if (x - g).abs() == 1 => {}
+            _ => {
+                spawn(w, "bld.palisade", owner, x, y);
+            }
+        }
     }
 }
 fn sees(w: &World, player: PlayerId, target: EntityId) -> bool {
@@ -173,31 +177,44 @@ fn line_sites_follow_the_drag_with_the_gate_nearest_its_point() {
     spawn(&mut w, "bld.city", P1, 25, 25);
     let palisade = id(&w, "bld.palisade");
     let gate = id(&w, "bld.palisade_gate");
+    let bare = w
+        .line_sites(P1, palisade, &[at(20, 32), at(30, 35), at(30, 40)], &[])
+        .unwrap();
+    // 11 tiles along the first stretch, then 5 more down the second (the corner once).
+    assert_eq!(bare.len(), 16);
+    for pair in bare.windows(2) {
+        let (a, b) = (pair[0].pos, pair[1].pos);
+        assert!((a.x - b.x).abs() <= 1000 && (a.y - b.y).abs() <= 1000 && a != b);
+    }
+    assert_eq!(bare[0].pos, at(20, 32));
+    assert_eq!(bare[10].pos, at(30, 35));
+    assert_eq!(bare[15].pos, at(30, 40));
+    // The second stretch runs down: its segments face along +y (90°).
+    assert_eq!(bare[12].facing, 90);
+    assert_eq!(bare[0].facing, crate::math::facing_of(1000, 0));
+    // A gate is three tiles wide along the line (task 147b): it takes the place of the three
+    // segments nearest its point, centred where the line runs straight, and faces the line.
     let sites = w
         .line_sites(
             P1,
             palisade,
             &[at(20, 32), at(30, 35), at(30, 40)],
-            &[at(25, 34)],
+            &[at(30, 38)],
         )
         .unwrap();
-    // 11 tiles along the first stretch, then 5 more down the second (the corner once).
-    assert_eq!(sites.len(), 16);
-    for pair in sites.windows(2) {
-        let (a, b) = (pair[0].pos, pair[1].pos);
-        assert!((a.x - b.x).abs() <= 1000 && (a.y - b.y).abs() <= 1000 && a != b);
-    }
+    assert_eq!(sites.len(), 14);
     assert_eq!(sites[0].pos, at(20, 32));
-    assert_eq!(sites[10].pos, at(30, 35));
-    assert_eq!(sites[15].pos, at(30, 40));
-    let gates: Vec<Pos> = sites
-        .iter()
-        .filter(|s| s.subject == gate)
-        .map(|s| s.pos)
-        .collect();
+    let gates: Vec<&crate::LineSite> = sites.iter().filter(|s| s.subject == gate).collect();
     assert_eq!(gates.len(), 1);
-    let (g, want) = (gates[0], at(25, 34));
-    assert!((g.x - want.x).abs() <= 1000 && (g.y - want.y).abs() <= 1000);
+    assert_eq!((gates[0].pos, gates[0].facing), (at(30, 38), 90));
+    for y in 37..=39 {
+        assert!(
+            !sites
+                .iter()
+                .any(|s| s.subject == palisade && s.pos == at(30, y)),
+            "no segment under the gate at row {y}"
+        );
+    }
     assert!(sites.iter().all(|s| s.check.is_ok()), "inside the borders");
     // The second stretch runs down: its segments face along +y (90°).
     assert_eq!(sites[12].facing, 90);
@@ -258,8 +275,9 @@ fn a_line_is_built_by_construct_orders_and_its_builder_is_not_shut_in() {
         )
         .unwrap();
     }
-    // Ten segments of 10 timber and a gate of 30, without a ramp.
-    assert_eq!(before - w.players[&P1].resources[&timber], 12 * 10 + 30);
+    // Ten segments of 10 timber and a three-tile gate of 30 in their place, without a ramp.
+    assert_eq!(sites.len(), 11);
+    assert_eq!(before - w.players[&P1].resources[&timber], 10 * 10 + 30);
     ticks(&mut w, 1);
     // Every site is laid at once (the citizen was standing on one and stepped aside).
     let laid = |w: &World| {
@@ -451,14 +469,11 @@ fn aircraft_pass_over_mines_and_mines_block_nobody() {
 #[test]
 fn walls_gates_and_mines_are_saved_as_ordinary_state() {
     let mut w = world_sized(24, 40, "age.industrial", &[]);
-    for x in 0..24 {
-        let key = if x == 12 {
-            "bld.checkpoint"
-        } else {
-            "bld.defensive_line"
-        };
-        spawn(&mut w, key, P1, x, 20);
+    for x in (0..24).filter(|x| !(11..=13).contains(x)) {
+        spawn(&mut w, "bld.defensive_line", P1, x, 20);
     }
+    // The checkpoint spans three tiles along the line.
+    spawn(&mut w, "bld.checkpoint", P1, 12, 20);
     spawn(&mut w, "bld.minefield", P1, 12, 24);
     let own = spawn(&mut w, "unit.priest", P1, 4, 10);
     let enemy = spawn(&mut w, "unit.priest", P2, 6, 10);
@@ -497,7 +512,8 @@ fn scenario() -> u64 {
         )
         .unwrap();
     for site in &sites {
-        w.place_for_setup(site.subject, P1, site.pos).unwrap();
+        w.place_turned_for_setup(site.subject, P1, site.pos, site.facing)
+            .unwrap();
     }
     let mines = w
         .minefield_sites(P1, id(&w, "bld.minefield"), at(10, 30), at(22, 31))
@@ -548,4 +564,143 @@ fn scenario() -> u64 {
 #[test]
 fn fortification_scenario_runs_alike_twice() {
     assert_eq!(scenario(), scenario());
+}
+
+#[test]
+fn a_gate_turns_its_footprint_with_its_facing() {
+    let mut w = world_sized(40, 40, "age.ancient", &[]);
+    let palisade = id(&w, "bld.palisade");
+    let gate = id(&w, "bld.palisade_gate");
+    let free = |w: &World, x: i32, y: i32| w.placement(P1, palisade, at(x, y), true).is_ok();
+    // Facing 0: three tiles across.
+    let across = w.place_turned_for_setup(gate, P1, at(10, 10), 0).unwrap();
+    assert!(!free(&w, 9, 10) && !free(&w, 11, 10) && free(&w, 10, 9) && free(&w, 10, 11));
+    // A quarter turn: three tiles down.
+    let down = w.place_turned_for_setup(gate, P1, at(20, 10), 90).unwrap();
+    assert_eq!(w.entity(down).unwrap().facing, 90);
+    assert!(!free(&w, 20, 9) && !free(&w, 20, 11) && free(&w, 19, 10) && free(&w, 21, 10));
+    // A diagonal: the square of its length, corners included.
+    let diagonal = w.place_turned_for_setup(gate, P1, at(30, 30), 45).unwrap();
+    for (x, y) in [(29, 29), (31, 31), (31, 29), (29, 31)] {
+        assert!(!free(&w, x, y), "diagonal gate covers {:?}", (x, y));
+    }
+    assert!(free(&w, 32, 32));
+    // Facings snap to multiples of 45 degrees, and so does what construct is given.
+    assert_eq!(crate::snap_facing(100), 90);
+    assert_eq!(crate::snap_facing(340), 0);
+    assert_eq!(crate::turned_footprint(3, 1, 270), (1, 3));
+    assert_eq!(crate::turned_footprint(3, 1, 135), (3, 3));
+    // Its own team walks through every tile of a turned gate; the enemy through none.
+    for g in [across, diagonal] {
+        let p = w.entity(g).unwrap().pos;
+        let tile = w.surfaces[0]
+            .geo
+            .index_of(crate::geometry::Tile::new(0, p.x / 1000 + 1, p.y / 1000))
+            .unwrap() as u32;
+        assert_eq!(w.surfaces[0].pathing.gates.get(&tile), Some(&1));
+    }
+}
+
+/// A diagonal palisade with a gate, laid by construct orders with their facings by three
+/// builders; optionally saved and restored half built.
+fn diagonal_line(save_at: Option<u64>) -> (u64, World) {
+    let mut w = world_sized(48, 48, "age.ancient", &["tech.military.1"]);
+    spawn(&mut w, "bld.city", P1, 36, 10);
+    let citizens: Vec<EntityId> = (0..3)
+        .map(|n| spawn(&mut w, "unit.citizen", P1, 30 + n, 14))
+        .collect();
+    let sites = w
+        .line_sites(
+            P1,
+            id(&w, "bld.palisade"),
+            &[at(22, 10), at(34, 22)],
+            &[at(28, 16)],
+        )
+        .unwrap();
+    assert!(sites.iter().all(|s| s.check.is_ok()), "{sites:?}");
+    let gate = id(&w, "bld.palisade_gate");
+    assert_eq!(
+        sites
+            .iter()
+            .filter(|s| s.subject == gate)
+            .map(|s| s.facing)
+            .collect::<Vec<_>>(),
+        vec![45]
+    );
+    for (n, chunk) in sites.chunks(sites.len().div_ceil(3)).enumerate() {
+        for (k, site) in chunk.iter().enumerate() {
+            let player = P1;
+            w.submit(Command {
+                player,
+                executor: citizens[n],
+                kind: "construct".into(),
+                subject: Some(site.subject),
+                target_entity: None,
+                target_pos: Some(site.pos),
+                queue: k > 0,
+                text: None,
+                facing: Some(site.facing),
+            })
+            .unwrap();
+        }
+    }
+    // An enemy walks round the line's end; an own citizen through its gate.
+    let enemy = spawn(&mut w, "unit.priest", P2, 20, 20);
+    walk(&mut w, enemy, 34, 12);
+    for tick in 0..4000 {
+        if save_at == Some(tick) {
+            w = World::restore(w.rules().clone(), w.snapshot()).unwrap();
+        }
+        w.step();
+    }
+    (w.hash(), w)
+}
+
+#[test]
+fn a_diagonal_line_with_its_gate_runs_alike_twice_and_across_a_save() {
+    let (first, w) = diagonal_line(None);
+    let (second, _) = diagonal_line(None);
+    assert_eq!(first, second);
+    let (restored, _) = diagonal_line(Some(30));
+    assert_eq!(first, restored, "a save half way changes nothing");
+    let gate = w
+        .entities()
+        .find(|e| e.type_id == id(&w, "bld.palisade_gate"))
+        .unwrap();
+    assert_eq!((gate.facing, gate.build_progress), (45, None));
+    let segments = w
+        .entities()
+        .filter(|e| e.type_id == id(&w, "bld.palisade") && e.build_progress.is_none())
+        .count();
+    assert_eq!(segments + 3, 13, "the line stands");
+}
+
+/// Task 147b: a town walled all round is no refuge: an attack-moving column finds no way in,
+/// stops at the wall and breaks through it.
+#[test]
+fn an_army_breaks_through_a_wall_that_rings_its_target() {
+    let mut w = world_sized(48, 48, "age.classical", &[]);
+    let city = spawn(&mut w, "bld.city", P1, 24, 24);
+    let ring = [at(16, 16), at(32, 16), at(32, 32), at(16, 32), at(16, 16)];
+    let sites = w
+        .line_sites(P1, id(&w, "bld.stone_wall"), &ring, &[])
+        .unwrap();
+    for site in &sites {
+        w.place_turned_for_setup(site.subject, P1, site.pos, site.facing)
+            .unwrap();
+    }
+    let walls = sites.len();
+    let raiders: Vec<EntityId> = (0..4)
+        .map(|n| spawn(&mut w, "unit.catapult", P2, 22 + n * 2, 44))
+        .collect();
+    let target = w.entity(city).unwrap().pos;
+    for r in &raiders {
+        command(&mut w, *r, "attack_move", None, None, Some(target), false).unwrap();
+    }
+    ticks(&mut w, 3000);
+    let standing = w
+        .entities()
+        .filter(|e| e.type_id == id(&w, "bld.stone_wall"))
+        .count();
+    assert!(standing < walls, "a breach: {standing} of {walls} stand");
 }

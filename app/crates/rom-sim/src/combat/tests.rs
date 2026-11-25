@@ -75,6 +75,7 @@ fn command(
         target_pos: point,
         queue: false,
         text: None,
+        facing: None,
     }
 }
 fn attack(w: &mut World, id: EntityId, target: EntityId) {

@@ -268,6 +268,7 @@ fn vision_across_an_edge_matches_brute_force() {
             target_pos: Some(to),
             queue: false,
             text: None,
+            facing: None,
         })
         .unwrap();
     }

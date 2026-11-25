@@ -135,6 +135,7 @@ impl World {
             target_pos,
             queue: false,
             text: None,
+            facing: None,
         };
         let goal = match rally {
             Rally::Point(pos) => pos,

@@ -435,6 +435,7 @@ impl Brain {
             &mut wishes,
         );
         construction::wishes(&plan.view, &self.weights, &eco, &needed, &mut wishes);
+        crate::fortify::wishes(&plan.view, &self.weights, memory, &mut wishes);
         plan.city_terrains = eco.stuck_terrains(&plan.view);
         let sea = navy::Sea::new(&plan.view, memory, &self.weights, d);
         production::wishes(

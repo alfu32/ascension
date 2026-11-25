@@ -53,6 +53,8 @@ pub struct Wreck {
     pub type_id: rom_rules::DefId,
     /// Its owner.
     pub owner: PlayerId,
+    /// Its facing (task 147).
+    pub facing: u16,
 }
 
 /// A firing decision, rolled after all executors have advanced.
@@ -266,7 +268,7 @@ impl World {
         // Out of reach across a sphere or on another body counts as infinitely far.
         let geo = self.geo(pos.body);
         if et.class == EntityClass::Building {
-            geo.closest_in_bounds(pos.face, footprint(et, pos), from)
+            geo.closest_in_bounds(pos.face, footprint(et, pos, e.facing), from)
                 .map_or(u64::MAX, |(_, squared)| crate::integer_sqrt(squared))
         } else {
             geo.distance(from, pos)
@@ -570,7 +572,7 @@ impl World {
                 let target = self.entity(target_id).expect("target");
                 let et = &self.rules.entity_types[&target.type_id];
                 let bounds = (et.class == EntityClass::Building && aim.drone.is_none())
-                    .then(|| footprint(et, target_pos));
+                    .then(|| footprint(et, target_pos, target.facing));
                 let goal = if let Some(b) = bounds {
                     let p = self.entity(id).expect("attacker").pos;
                     self.geo(target_pos.body)
@@ -910,7 +912,7 @@ impl World {
         let et = &self.rules.entity_types[&e.type_id];
         let geo = self.geo(e.pos.body);
         if et.class == EntityClass::Building {
-            geo.closest_in_bounds(e.pos.face, footprint(et, e.pos), from)
+            geo.closest_in_bounds(e.pos.face, footprint(et, e.pos, e.facing), from)
                 .map_or(u64::MAX, |(_, squared)| crate::integer_sqrt(squared))
         } else {
             geo.distance(from, e.pos)
@@ -1021,13 +1023,15 @@ impl World {
                 self.leave_stain(id);
             }
             if complete && self.rules.entity_types[&type_id].class == EntityClass::Building {
-                let pos = self.entity(id).expect("dead entity").pos;
+                let dead = self.entity(id).expect("dead entity");
+                let (pos, facing) = (dead.pos, dead.facing);
                 self.wrecks.push(Wreck {
                     id,
                     tick: self.tick,
                     pos,
                     type_id,
                     owner,
+                    facing,
                 });
             }
             if let Some(killer) = killer {

@@ -84,6 +84,7 @@ fn command(w: &World, executor: EntityId, kind: &str, target: Option<EntityId>) 
         target_pos: None,
         queue: false,
         text: None,
+        facing: None,
     }
 }
 fn capture(w: &mut World) -> EntityId {
@@ -684,6 +685,7 @@ fn neutralisation_cancels_production_and_assimilation_pauses_queued_work() {
         subject: Some(unit_type),
         target_entity: None,
         target_pos: None,
+        facing: 0,
         status: crate::OrderStatus::Queued,
         progress_ticks: 0,
         issued_tick: w.tick(),

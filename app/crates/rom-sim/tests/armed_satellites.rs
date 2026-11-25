@@ -111,6 +111,7 @@ fn order(w: &mut World, executor: EntityId, kind: &str, subject: Option<DefId>, 
         target_pos: pos,
         queue: false,
         text: None,
+        facing: None,
     })
     .unwrap();
 }

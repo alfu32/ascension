@@ -202,18 +202,24 @@ impl Rules {
                     ),
                 });
             }
-            // Task 147: fortifications and minefields are one-tile buildings; a segment's gate
-            // is a gate, and a gate names none.
+            // Task 147: segments and minefields are one-tile buildings, a gate one tile deep
+            // and an odd number of tiles along its line (task 147b: it centres on a line's
+            // tile); a segment's gate is a gate, and a gate names none.
+            let gate = entity.fortification.as_ref().is_some_and(|f| f.gate);
+            let shape_ok = if gate {
+                entity.footprint_w >= 1 && entity.footprint_w % 2 == 1 && entity.footprint_h == 1
+            } else {
+                entity.footprint_w == 1 && entity.footprint_h == 1
+            };
             if (entity.fortification.is_some() || entity.minefield.is_some())
                 && (entity.class != crate::EntityClass::Building
-                    || entity.footprint_w != 1
-                    || entity.footprint_h != 1
+                    || !shape_ok
                     || (entity.fortification.is_some() && entity.minefield.is_some()))
             {
                 problems.push(Problem {
                     message: format!(
-                        "{} must be a building of one tile, and a fortification or a minefield, \
-                         not both",
+                        "{} must be a building of one tile (a gate: an odd number of tiles \
+                         along its line, one deep), and a fortification or a minefield, not both",
                         self.label(entity.id)
                     ),
                 });

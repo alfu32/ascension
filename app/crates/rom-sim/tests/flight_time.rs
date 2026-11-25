@@ -82,6 +82,7 @@ fn one_shot(rules: &Arc<Rules>, shooter: &str, target: &str, gap: i32) -> (u64, 
         target_pos: None,
         queue: false,
         text: None,
+        facing: None,
     })
     .unwrap();
     let weapon = rules.entity_types[&rules.id_of(shooter).unwrap()].weapons[0].clone();

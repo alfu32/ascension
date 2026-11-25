@@ -1,0 +1,48 @@
+# Task 147b: an enemy hit by a mine. Player one's riflemen stand behind a minefield south of
+# the city, hidden from player two; player two's knights charge the riflemen across it and set
+# the mines off.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/147-mine-script.txt --after 4 --screenshot app/docs/img/147-mine.png
+0 grant-age age.modern
+0 place 1 bld.minefield @-5,9
+0 place 1 bld.minefield @-4,9
+0 place 1 bld.minefield @-3,9
+0 place 1 bld.minefield @-2,9
+0 place 1 bld.minefield @-1,9
+0 place 1 bld.minefield @0,9
+0 place 1 bld.minefield @1,9
+0 place 1 bld.minefield @2,9
+0 place 1 bld.minefield @3,9
+0 place 1 bld.minefield @4,9
+0 place 1 bld.minefield @5,9
+0 place 1 bld.minefield @-5,10
+0 place 1 bld.minefield @-4,10
+0 place 1 bld.minefield @-3,10
+0 place 1 bld.minefield @-2,10
+0 place 1 bld.minefield @-1,10
+0 place 1 bld.minefield @0,10
+0 place 1 bld.minefield @1,10
+0 place 1 bld.minefield @2,10
+0 place 1 bld.minefield @3,10
+0 place 1 bld.minefield @4,10
+0 place 1 bld.minefield @5,10
+0 place 1 bld.minefield @-5,11
+0 place 1 bld.minefield @-4,11
+0 place 1 bld.minefield @-3,11
+0 place 1 bld.minefield @-2,11
+0 place 1 bld.minefield @-1,11
+0 place 1 bld.minefield @0,11
+0 place 1 bld.minefield @1,11
+0 place 1 bld.minefield @2,11
+0 place 1 bld.minefield @3,11
+0 place 1 bld.minefield @4,11
+0 place 1 bld.minefield @5,11
+0 place 1 unit.rifleman @-3,6
+0 place 1 unit.rifleman @0,6
+0 place 1 unit.rifleman @3,6
+0 place 2 unit.knight @-4,15
+0 place 2 unit.knight @-2,15
+0 place 2 unit.knight @0,15
+0 place 2 unit.knight @2,15
+0 place 2 unit.knight @4,15
+20 cam wheel 2 800,600

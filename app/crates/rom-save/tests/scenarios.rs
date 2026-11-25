@@ -647,6 +647,7 @@ fn an_ascension_under_way_then_an_ascended_player_descending() {
         target_pos: None,
         queue: false,
         text: None,
+        facing: None,
     })
     .unwrap();
     ticks(&mut w, 100);
@@ -666,6 +667,7 @@ fn an_ascension_under_way_then_an_ascended_player_descending() {
             target_pos: Some(Pos::flat(30_500, 30_500)),
             queue: false,
             text: None,
+            facing: None,
         })
         .unwrap();
     });
@@ -767,6 +769,7 @@ fn a_moon_brought_to_life_saved_in_the_middle_of_its_painting() {
         target_pos: None,
         queue: false,
         text: None,
+        facing: None,
     };
     let marker = w.body_marker(MOON).unwrap();
     w.submit(Command {
@@ -1046,4 +1049,87 @@ fn shots_at_the_ground_in_flight_and_a_site_deleted_after_the_load() {
     check("ground", &rules, w, 300, move |w| {
         order(w, site, "delete", None, None);
     });
+}
+
+/// Task 147b: turned gates and segments, constructions queued with their facings (format 21)
+/// and an enemy's turned gate remembered in the fog all come back from a save.
+#[test]
+fn a_turned_wall_with_queued_segments_and_a_remembered_gate() {
+    let rules = rules_with(
+        "UPDATE et_territory SET border_radius=16000, economic_radius=16000 WHERE is_city=1;",
+    );
+    let players = (0..=2)
+        .map(|n| Player {
+            id: PlayerId(n),
+            team: n,
+            faction: rules.id_of("nation.romans").unwrap(),
+            age: rules.id_of("age.ancient").unwrap(),
+            resources: rules.resources.keys().map(|r| (*r, 5_000)).collect(),
+            techs: BTreeMap::from([(rules.id_of("tech.military.1").unwrap(), 1)]),
+        })
+        .collect();
+    let plain = rules.id_of("ter.plain").unwrap();
+    let mut w = World::new(
+        rules.clone(),
+        MapGrid::new(64, 64, vec![plain; 64 * 64]).unwrap(),
+        1,
+        players,
+    )
+    .unwrap();
+    let flat = |x: i32, y: i32| Pos::flat(x * 1000 + 500, y * 1000 + 500);
+    w.place_for_setup(id(&w, "bld.city"), P1, flat(20, 20))
+        .unwrap();
+    let gate = id(&w, "bld.palisade_gate");
+    // An enemy gate seen once, then left in the fog: its memory keeps its facing.
+    let far = w
+        .place_turned_for_setup(gate, P2, flat(50, 50), 45)
+        .unwrap();
+    let scout = w
+        .place_for_setup(id(&w, "unit.scout"), P1, flat(47, 47))
+        .unwrap();
+    ticks(&mut w, 2);
+    order(&mut w, scout, "move", None, Some(flat(10, 10)));
+    ticks(&mut w, 400);
+    let citizen = w
+        .place_for_setup(id(&w, "unit.citizen"), P1, flat(24, 26))
+        .unwrap();
+    let sites = w
+        .line_sites(
+            P1,
+            id(&w, "bld.palisade"),
+            &[flat(28, 16), flat(28, 30)],
+            &[flat(28, 23)],
+        )
+        .unwrap();
+    for (n, site) in sites.iter().enumerate() {
+        w.submit(Command {
+            subject: Some(site.subject),
+            target_pos: Some(site.pos),
+            queue: n > 0,
+            facing: Some(site.facing),
+            ..command(&w, citizen, "construct")
+        })
+        .unwrap();
+    }
+    ticks(&mut w, 120);
+    let turned = |w: &World| {
+        w.entities()
+            .filter(|e| e.type_id == gate && e.owner == P1)
+            .map(|e| e.facing)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(turned(&w), vec![90], "the gate site faces down the line");
+    let remembered = |w: &World| {
+        w.visible_entities(P1)
+            .iter()
+            .any(|s| matches!(s, rom_sim::Sighting::Remembered(b) if b.id == far && b.facing == 45))
+    };
+    assert!(remembered(&w), "the enemy gate is remembered turned");
+    let path = temp_path("turned_wall");
+    rom_save::save(&path, &w, &info(&w), &ai()).unwrap();
+    let (loaded, _, _) = rom_save::load(&path, &rules).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    assert_eq!(turned(&loaded), vec![90]);
+    assert!(remembered(&loaded));
+    check("turned_wall", &rules, w, 1500, |_| {});
 }

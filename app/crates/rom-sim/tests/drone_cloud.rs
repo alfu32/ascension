@@ -117,6 +117,7 @@ fn order(
         target_pos: pos,
         queue: false,
         text: None,
+        facing: None,
     })
     .unwrap_or_else(|e| panic!("{kind}: {e}"));
 }
@@ -402,6 +403,7 @@ fn the_operator_keeps_its_distance_and_issues_new_drones() {
                 target_pos: None,
                 queue: true,
                 text: None,
+                facing: None,
             })
             .unwrap();
         }

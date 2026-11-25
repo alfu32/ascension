@@ -233,8 +233,10 @@ impl World {
         }
         let entity = self.entity(producer).expect("producer");
         let et = &self.rules.entity_types[&entity.type_id];
-        let (across, down) = (et.footprint_w * 500 + 1, et.footprint_h * 500 + 1);
-        let bounds = crate::construction::footprint(et, entity.pos);
+        let (w, h) =
+            crate::construction::turned_footprint(et.footprint_w, et.footprint_h, entity.facing);
+        let (across, down) = (w * 500 + 1, h * 500 + 1);
+        let bounds = crate::construction::footprint(et, entity.pos, entity.facing);
         // The gate side first: just outside the footprint's right, left, bottom or top edge;
         // on a sphere the first of these always exists, across a face edge if need be.
         let geo = self.geo(entity.pos.body);
@@ -310,6 +312,7 @@ impl World {
                             target_pos: None,
                             queue: false,
                             text: None,
+                            facing: None,
                         })
                         .is_err()
                 {

@@ -391,6 +391,7 @@ mod tests {
             target_pos: pos,
             queue: false,
             text: None,
+            facing: None,
         };
         w.place_for_setup(id("bld.city"), PlayerId(1), at(20_500, 34_500))
             .unwrap();

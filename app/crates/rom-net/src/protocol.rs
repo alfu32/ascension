@@ -507,6 +507,9 @@ pub struct WireCommand {
     /// Free text: a city's new name (task 144).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
+    /// A construction's facing in degrees (task 147).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facing: Option<u16>,
 }
 
 impl From<&Command> for WireCommand {
@@ -520,6 +523,7 @@ impl From<&Command> for WireCommand {
             target_pos: command.target_pos.map(WirePos::from),
             queue: command.queue,
             text: command.text.clone(),
+            facing: command.facing,
         }
     }
 }
@@ -535,6 +539,7 @@ impl From<WireCommand> for Command {
             target_pos: command.target_pos.map(Pos::from),
             queue: command.queue,
             text: command.text,
+            facing: command.facing,
         }
     }
 }
@@ -624,6 +629,7 @@ mod tests {
             target_pos: Some(Pos::on(BodyId(4), 3, -1200, 560)),
             queue: true,
             text: None,
+            facing: None,
         };
         // A city's new name crosses the wire as the order's text (task 144).
         let rename = Command {
@@ -635,6 +641,7 @@ mod tests {
             target_pos: None,
             queue: false,
             text: Some("Nova Roma".into()),
+            facing: None,
         };
         let journal = Journal {
             tick: 41,

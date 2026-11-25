@@ -147,6 +147,7 @@ impl World {
         self.rallies.remove(&id);
         let e = self.entity(id).expect("transferred entity");
         let (old, type_id, site, pos) = (e.owner, e.type_id, e.build_progress.is_some(), e.pos);
+        let facing = e.facing;
         self.types.remove(old, type_id, id, site);
         self.index_entity(owner, type_id, id, site);
         self.entities[id.0 as usize]
@@ -159,8 +160,8 @@ impl World {
             let (before, after) = (self.side_of(old), self.side_of(owner));
             let slot = self.slot(pos.body);
             let pathing = &mut self.surfaces[slot].pathing;
-            pathing.occupy(et, pos.face, footprint(et, pos), false, before);
-            pathing.occupy(et, pos.face, footprint(et, pos), true, after);
+            pathing.occupy(et, pos.face, footprint(et, pos, facing), false, before);
+            pathing.occupy(et, pos.face, footprint(et, pos, facing), true, after);
         }
         self.refresh_entity_stats(id);
         self.refresh_site(id);

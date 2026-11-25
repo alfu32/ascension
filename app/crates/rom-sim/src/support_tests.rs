@@ -81,6 +81,7 @@ fn order(w: &mut World, executor: EntityId, kind: &str, target: Option<EntityId>
         target_pos: None,
         queue: false,
         text: None,
+        facing: None,
     })
     .unwrap();
 }
@@ -265,6 +266,7 @@ fn an_idle_builder_goes_to_the_nearest_unfinished_site_then_to_repair() {
             target_pos: Some(at(x, 30)),
             queue,
             text: None,
+            facing: None,
         })
         .unwrap();
     }
@@ -331,6 +333,7 @@ fn scenario() -> u64 {
             target_pos: Some(at(x, 20)),
             queue,
             text: None,
+            facing: None,
         })
         .unwrap();
     }

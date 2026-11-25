@@ -226,6 +226,7 @@ mod tests {
                 target_pos: None,
                 queue: true,
                 text: None,
+                facing: None,
             })
             .unwrap();
             w.step();

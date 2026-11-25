@@ -9,6 +9,7 @@
 //! near, and is spent on the first enemy ground unit over it.
 
 use crate::combat::Blast;
+use crate::construction::{footprint, snap_facing};
 use crate::math::facing_of;
 use crate::{EntityId, PlayerId, Pos, SimError, World};
 use rom_rules::{DefId, EntityClass, Layer};
@@ -93,38 +94,81 @@ impl World {
             }
         }
         let centres: Vec<Pos> = tiles.iter().map(|i| geo.index_centre(*i)).collect();
-        let mut subjects = vec![segment; centres.len()];
+        let n = centres.len();
+        // The line's direction at each tile: towards the next, the last towards its previous.
+        let facings: Vec<u16> = (0..n)
+            .map(|i| {
+                let before = centres[i.saturating_sub(1)];
+                let after = centres[(i + 1).min(n - 1)];
+                geo.vector(centres[i], after)
+                    .filter(|v| *v != (0, 0))
+                    .or_else(|| geo.vector(before, centres[i]))
+                    .map_or(0, |(dx, dy)| facing_of(dx, dy))
+            })
+            .collect();
+        // Gates span their footprint along the line (task 147b): each is centred on the site
+        // nearest its point where the line runs straight for the gate's width, if there is
+        // one, and takes the place of every segment its footprint covers.
+        let mut gates_laid: Vec<(usize, u16, [i64; 4])> = Vec::new();
         if let Some(gate) = gate_type {
+            let gate_et = &self.rules.entity_types[&gate];
+            let half = (gate_et.footprint_w.max(1) as usize - 1) / 2;
+            let straight = |i: usize| {
+                i >= half
+                    && i + half < n
+                    && (i - half..i + half).all(|k| {
+                        geo.vector(centres[k], centres[k + 1])
+                            == geo.vector(centres[i - half], centres[i - half + 1])
+                    })
+            };
             for at in gates {
-                let nearest = centres
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, c)| geo.distance_squared(*c, *at).map(|d| (d, i)))
+                let nearest = (0..n)
+                    .filter_map(|i| {
+                        let d = geo.distance_squared(centres[i], *at)?;
+                        Some((!straight(i), d, i))
+                    })
                     .min();
-                if let Some((_, i)) = nearest {
-                    subjects[i] = gate;
+                let Some((_, _, i)) = nearest else {
+                    continue;
+                };
+                if gates_laid.iter().any(|(_, _, b)| inside(*b, centres[i])) {
+                    continue;
                 }
+                let facing = if half > 0 && i >= half && i + half < n {
+                    geo.vector(centres[i - half], centres[i + half])
+                        .map_or(facings[i], |(dx, dy)| snap_facing(facing_of(dx, dy)))
+                } else {
+                    facings[i]
+                };
+                let bounds = footprint(gate_et, centres[i], facing);
+                gates_laid.push((i, facing, bounds));
             }
         }
-        Ok(centres
-            .iter()
-            .enumerate()
-            .map(|(i, &pos)| {
-                let before = centres[i.saturating_sub(1)];
-                let after = centres[(i + 1).min(centres.len() - 1)];
-                let facing = geo
-                    .vector(pos, after)
-                    .filter(|v| *v != (0, 0))
-                    .or_else(|| geo.vector(before, pos))
-                    .map_or(0, |(dx, dy)| facing_of(dx, dy));
-                LineSite {
-                    subject: subjects[i],
+        let covered = |pos: Pos| gates_laid.iter().any(|(_, _, b)| inside(*b, pos));
+        let mut out = Vec::with_capacity(n);
+        for (i, &pos) in centres.iter().enumerate() {
+            if let Some(&(_, facing, _)) = gates_laid.iter().find(|(g, _, _)| *g == i) {
+                let gate = gate_type.expect("a gate was laid");
+                out.push(LineSite {
+                    subject: gate,
                     pos,
                     facing,
-                    check: self.placement(player, subjects[i], pos, false).map(|_| ()),
-                }
-            })
-            .collect())
+                    check: self
+                        .placement_turned(player, gate, pos, facing, false)
+                        .map(|_| ()),
+                });
+            } else if !covered(pos) {
+                out.push(LineSite {
+                    subject: segment,
+                    pos,
+                    facing: facings[i],
+                    check: self
+                        .placement_turned(player, segment, pos, facings[i], false)
+                        .map(|_| ()),
+                });
+            }
+        }
+        Ok(out)
     }
 
     /// The sites of a minefield of `mine` (a type with an `et_minefield` row) over the
@@ -277,6 +321,12 @@ impl World {
             self.despawn(mine).expect("spent mine");
         }
     }
+}
+
+/// Whether a tile centre lies inside footprint bounds.
+fn inside(b: [i64; 4], pos: Pos) -> bool {
+    let (x, y) = (i64::from(pos.x), i64::from(pos.y));
+    b[0] < x && x < b[2] && b[1] < y && y < b[3]
 }
 
 /// The tiles of the eight-connected line from `a` to `b`, both included.

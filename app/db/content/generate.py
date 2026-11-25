@@ -1566,6 +1566,7 @@ FORTIFICATION_TRACK = 'military.1'      # the palisade's research, as the barrac
 FORTIFICATION_SIGHT = 3000              # a sentry on the wall
 FORTIFICATION_TICKS_PER_AGE = 10        # build ticks a later age of a kind adds
 GATE_HP_PCT, GATE_PRICE_PCT, GATE_TICKS_PCT = 150, 300, 200
+GATE_WIDTH = 3  # tiles along the line, one deep (owner, 2026-11-25: "3 times wide")
 # The minefield: one mine per tile, hidden from enemies, spent on the first enemy ground unit
 # over it. Its damage grows by MINE_DAMAGE_PER_AGE with every age after its first.
 MINEFIELD = dict(key='minefield', name='Minefield', age='industrial', hp=100, damage=140,
@@ -1594,9 +1595,9 @@ def fortifications(definition, row, tag, need, produce, cost, modifier):
         definition('entity_type', 'bld.' + gate, gate_name)
     definition('entity_type', 'bld.' + MINEFIELD['key'], MINEFIELD['name'])
 
-    def building(full, hp, armour, ticks, first, sight, previous):
+    def building(full, hp, armour, ticks, first, sight, previous, width=1):
         row('entity_type', id=Ref(full), **{'class': 'building'}, ui_group='fortification', hp=hp, armor=armour,
-            armor_class_id=Ref('structure', 'armor_class'), los=sight, footprint_w=1, footprint_h=1,
+            armor_class_id=Ref('structure', 'armor_class'), los=sight, footprint_w=width, footprint_h=1,
             build_ticks=ticks, ramp_mode='none', limit_scope='none', limit_count=0,
             upgrades_from_id=Ref(previous) if previous else None, first_age_id=Ref('age.' + AGES[first]))
         need(full, 'age.' + AGES[first])
@@ -1611,8 +1612,9 @@ def fortifications(definition, row, tag, need, produce, cost, modifier):
         first, last = AGES.index(first), AGES.index(last)
         for full, pct, price_pct, ticks_pct, old in (('bld.' + seg, 100, 100, 100, old_seg),
                                                      ('bld.' + gate, GATE_HP_PCT, GATE_PRICE_PCT, GATE_TICKS_PCT, old_gate)):
+            # A gate is GATE_WIDTH tiles along its line, one deep (task 147b).
             building(full, hp * pct // 100, armour, ticks * ticks_pct // 100, first, FORTIFICATION_SIGHT,
-                     'bld.' + old if old else None)
+                     'bld.' + old if old else None, GATE_WIDTH if full == 'bld.' + gate else 1)
             tag(full, 'building', 'mechanical', 'fortification')
             cost(full, {r: n * price_pct // 100 for r, n in prices.items()})
             if first == 0:

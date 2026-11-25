@@ -56,6 +56,7 @@ fn order(executor: EntityId, kind: &str, subject: Option<DefId>, pos: Option<Pos
         target_pos: pos,
         queue: true,
         text: None,
+        facing: None,
     }
 }
 

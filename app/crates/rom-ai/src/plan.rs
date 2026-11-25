@@ -26,13 +26,21 @@ pub(crate) enum Act {
     Research(DefId),
     /// Construct one building of a type.
     Construct(DefId),
+    /// Lay a town's fortification line of a segment type (task 147b).
+    Line(DefId),
+    /// Lay a town's minefield of a mine type (task 147b).
+    Minefield(DefId),
 }
 
 impl Act {
     /// The definition the act is about.
     pub fn subject(self) -> DefId {
         match self {
-            Act::Train(def) | Act::Research(def) | Act::Construct(def) => def,
+            Act::Train(def)
+            | Act::Research(def)
+            | Act::Construct(def)
+            | Act::Line(def)
+            | Act::Minefield(def) => def,
         }
     }
 }
@@ -173,6 +181,7 @@ impl<'a> Plan<'a> {
             target_pos,
             queue: false,
             text: None,
+            facing: None,
         });
         true
     }
@@ -242,6 +251,8 @@ impl<'a> Plan<'a> {
             Act::Train(unit) => self.train(unit, wish.reserve),
             Act::Research(tech) => self.research(tech, wish.reserve),
             Act::Construct(building) => self.construct(building, wish, memory),
+            Act::Line(segment) => crate::fortify::lay_line(self, memory, segment),
+            Act::Minefield(mine) => crate::fortify::lay_mines(self, memory, mine),
         }
     }
 
@@ -357,7 +368,7 @@ impl<'a> Plan<'a> {
 
     /// Own units that could start building `building` now: not already building. A builder
     /// that does not move (an automated colony) is left to its governor.
-    fn builders(&self, building: DefId) -> Vec<&'a Entity> {
+    pub(crate) fn builders(&self, building: DefId) -> Vec<&'a Entity> {
         self.view
             .producers(ProductionMode::Construct, building)
             .into_iter()

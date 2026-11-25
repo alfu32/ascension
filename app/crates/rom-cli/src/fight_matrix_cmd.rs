@@ -484,6 +484,7 @@ pub(crate) fn fight_on(
                             target_pos: Some(goals[i]),
                             queue: false,
                             text: None,
+                            facing: None,
                         })
                         .map_err(|e| e.to_string())?;
                 }

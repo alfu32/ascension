@@ -259,7 +259,7 @@ impl World {
                         geometry::footprint_contains(
                             e.pos.body,
                             e.pos.face,
-                            footprint(&self.rules.entity_types[&e.type_id], e.pos),
+                            footprint(&self.rules.entity_types[&e.type_id], e.pos, e.facing),
                             pos,
                         )
                     }),

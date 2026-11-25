@@ -2753,9 +2753,32 @@ interface, the drawing of joined segments and the computer player's use of them 
   detected mines can be attacked like any building.
 - **Not a town's building.** Segments, gates and mines do not widen a city's economic radius
   (`city.radius_per_building`).
-- **PART B: nothing new.** Walls, gates and mines are ordinary buildings; the save format stays
-  20 and the state hash covers them as any entity.
-- **The computer player** reads none of this yet. Its construction manager builds the first of a
+- **PART B: nothing new in 147a.** Walls, gates and mines are ordinary buildings; the state
+  hash covers them as any entity. Part 147b adds the facings below (format 21).
+- **Part 147b (owner, 2026-11-25: "i want the gates wider ... 3 times wide ... problem will be
+  with the orientation").** A building keeps a **facing** (`Entity::facing`, degrees clockwise
+  from the face's x axis, a multiple of 45): `construct` carries it (`Command::facing`, snapped;
+  `Order::facing`, hashed when not 0), the site and the building keep it, and so do the fog's
+  memory of a building (`RememberedBuilding::facing`) and a wreck. The footprint turns with it
+  (`rom_sim::turned_footprint`): a quarter turn swaps the sides, a diagonal covers the square of
+  the longer side. Every use of a building's footprint takes its facing (placement and overlap,
+  path occupancy and gates, approach, reach). The **gates are 3 × 1** (`GATE_WIDTH` in the
+  generator; validation allows a gate of an odd width, one tile deep, segments and mines stay
+  one tile): `World::line_sites` centres a gate on the line's tile nearest its point where the
+  line runs straight for the gate's width (else on the nearest tile), faces it along the line
+  and leaves out the segments its footprint covers; on a diagonal a gate covers 3 × 3 tiles.
+  `World::check_placement_facing` and `place_turned_for_setup` are the turned forms of the
+  preview and setup calls. **Save format 21**: `"order".facing` and `vision_memory.facing`;
+  formats 13 to 20 load with both 0. The render turns a building's model by its facing and
+  stretches a diagonal one by √2 along its x, so a diagonal line's segments meet.
+  Measured: `rom playthrough --seed 1` hash `abee291cb764153a`, ascension `1ee55ed65a7c141b`
+  (before: `acc4db242db8a622`, `91692088c29e53a3`); with the gates set back to one tile in the
+  same build both come back exactly, so the move is the playthrough bot's gate standing three
+  tiles wide. Rules fingerprint `f6ba40204370fc84` (gate footprints, gate models, the order
+  table). The gate models keep the art direction's team colour share: a part widened across
+  the gate is structure, with the team colour on its middle tile only.
+- **The computer player (147b)**: see `computer-player.md`, "Fortifications and minefields".
+- **The computer player (147a)** read none of this. Its construction manager builds the first of a
   building line it has none of at a low score when nothing better waits, so it may lay one
   segment, one gate and one mine in a match; no data column keeps a constructible building out
   of its catalogue without also keeping it from people. Part 147b teaches it lines and mines.

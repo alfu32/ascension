@@ -176,6 +176,7 @@ pub fn rename_order(me: PlayerId, city: EntityId, name: String) -> Command {
         target_pos: None,
         queue: false,
         text: Some(name),
+        facing: None,
     }
 }
 

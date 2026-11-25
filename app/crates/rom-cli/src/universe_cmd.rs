@@ -340,6 +340,7 @@ fn orbit(world: &mut World, ship: EntityId, body: BodyId) -> Result<(), rom_sim:
         target_pos: None,
         queue: false,
         text: None,
+        facing: None,
     })?;
     Ok(())
 }
@@ -448,6 +449,7 @@ fn send_scouts(world: &mut World, scouts: &mut [Scout]) -> Result<(), rom_sim::S
                     }),
                     queue: false,
                     text: None,
+                    facing: None,
                 })?;
                 scout.destination = Some(destination);
             }
@@ -516,6 +518,7 @@ fn send_idle(world: &mut World, units: &[EntityId], rng: &mut SimRng) {
             target_pos: Some(target),
             queue: false,
             text: None,
+            facing: None,
         });
     }
 }

@@ -303,7 +303,9 @@ impl World {
             .values()
             .filter(|et| et.class == rom_rules::EntityClass::Building)
             .fold((0, 0), |(w, h), et| {
-                (w.max(et.footprint_w.max(0)), h.max(et.footprint_h.max(0)))
+                // A building may face any way (task 147): its longer side may run either way.
+                let side = et.footprint_w.max(et.footprint_h).max(0);
+                (w.max(side), h.max(side))
             });
         let max_leash = Self::max_leash_of(&rules);
         // Minefield types, in id order (task 147); rules with one name how far mines are seen.
@@ -459,6 +461,15 @@ impl World {
         self.surface(a.body)?.geo.distance(a, b)
     }
 
+    /// The local vector from `a` to `b` in milli-tiles in the frame of `a`'s face, across face
+    /// edges on a sphere; None between bodies or out of reach (as [`World::distance`]).
+    pub fn vector(&self, a: Pos, b: Pos) -> Option<(i64, i64)> {
+        if a.body != b.body {
+            return None;
+        }
+        self.surface(a.body)?.geo.vector(a, b)
+    }
+
     /// Steps a position by a local vector in milli-tiles, crossing face edges; a position
     /// on a body without a surface is returned unchanged.
     pub fn offset(&self, pos: Pos, dx: i64, dy: i64) -> Pos {
@@ -530,6 +541,18 @@ impl World {
         pos: Pos,
         site: bool,
     ) -> Result<EntityId, SimError> {
+        self.spawn_turned(type_id, owner, pos, site, 0)
+    }
+
+    /// [`World::spawn_entity`] facing `facing`: a building's footprint turns with it (task 147).
+    pub(crate) fn spawn_turned(
+        &mut self,
+        type_id: DefId,
+        owner: PlayerId,
+        pos: Pos,
+        site: bool,
+        facing: u16,
+    ) -> Result<EntityId, SimError> {
         let hp = self
             .rules
             .entity_type(type_id)
@@ -556,7 +579,7 @@ impl World {
             type_id,
             owner,
             pos,
-            facing: 0,
+            facing,
             hp,
             max_hp: hp,
             los: 0,
@@ -592,7 +615,7 @@ impl World {
         let et = &self.rules.entity_types[&type_id];
         surface
             .pathing
-            .occupy(et, pos.face, footprint(et, pos), true, side);
+            .occupy(et, pos.face, footprint(et, pos, facing), true, side);
         self.avoid.set(id, Motion::of(&self.rules, type_id), pos);
         if et.gather_site.is_some() {
             self.economy.sites.insert(id);
@@ -613,7 +636,7 @@ impl World {
     /// Updates grids and indexes after an entity's type changed from `old`.
     pub(crate) fn retyped(&mut self, id: EntityId, old: DefId) {
         let entity = self.entity(id).expect("retyped entity");
-        let (pos, new) = (entity.pos, entity.type_id);
+        let (pos, new, facing) = (entity.pos, entity.type_id, entity.facing);
         let (owner, site) = (entity.owner, entity.build_progress.is_some());
         self.types.remove(owner, old, id, site);
         self.index_entity(owner, new, id, site);
@@ -621,9 +644,15 @@ impl World {
         let side = self.side_of(owner);
         let pathing = &mut self.surfaces[slot].pathing;
         let before = &self.rules.entity_types[&old];
-        pathing.occupy(before, pos.face, footprint(before, pos), false, side);
+        pathing.occupy(
+            before,
+            pos.face,
+            footprint(before, pos, facing),
+            false,
+            side,
+        );
         let after = &self.rules.entity_types[&new];
-        pathing.occupy(after, pos.face, footprint(after, pos), true, side);
+        pathing.occupy(after, pos.face, footprint(after, pos, facing), true, side);
         let motion = self
             .walks(id)
             .then(|| Motion::of(&self.rules, new))
@@ -735,9 +764,13 @@ impl World {
         let surface = &mut self.surfaces[slot];
         surface.spatial.remove(id, entity.pos);
         let et = &self.rules.entity_types[&entity.type_id];
-        surface
-            .pathing
-            .occupy(et, entity.pos.face, footprint(et, entity.pos), false, side);
+        surface.pathing.occupy(
+            et,
+            entity.pos.face,
+            footprint(et, entity.pos, entity.facing),
+            false,
+            side,
+        );
         self.avoid.set(id, None, entity.pos);
         self.economy.idle.remove(&id);
         self.economy.dirty.remove(&id);
@@ -976,6 +1009,12 @@ impl World {
         } else {
             None
         };
+        // Only a construction keeps a facing (task 147).
+        let facing = if command.kind == "construct" {
+            command.facing.unwrap_or(0)
+        } else {
+            0
+        };
         self.pending.push((
             Order {
                 id,
@@ -985,6 +1024,7 @@ impl World {
                 subject: command.subject,
                 target_entity: command.target_entity,
                 target_pos: command.target_pos,
+                facing,
                 status: OrderStatus::Queued,
                 progress_ticks: 0,
                 issued_tick: self.tick,

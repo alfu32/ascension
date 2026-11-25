@@ -362,6 +362,7 @@ fn the_orbital_survey_shows_every_building_of_the_planet_and_no_unit() {
                 target_pos: None,
                 queue: true,
                 text: None,
+                facing: None,
             })
         };
         // The survey needs a satellite.
@@ -375,6 +376,7 @@ fn the_orbital_survey_shows_every_building_of_the_planet_and_no_unit() {
                 target_pos: None,
                 queue: true,
                 text: None,
+                facing: None,
             })
         };
         assert!(research(&mut w).is_err(), "no satellite yet");

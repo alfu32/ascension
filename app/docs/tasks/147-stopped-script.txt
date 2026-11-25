@@ -1,0 +1,47 @@
+# Task 147b: an enemy stopped by a wall. Player one's pikemen stand in a ring of stone wall
+# with no gate, south of the city; player two's knights, beyond it, charge them and find no way
+# in: they crowd at the wall and hack at it.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/147-stopped-script.txt --after 9 --screenshot app/docs/img/147-stopped.png
+0 grant-age age.medieval
+0 place 1 bld.stone_wall @-5,4
+0 place 1 bld.stone_wall @-4,4
+0 place 1 bld.stone_wall @-3,4
+0 place 1 bld.stone_wall @-2,4
+0 place 1 bld.stone_wall @-1,4
+0 place 1 bld.stone_wall @0,4
+0 place 1 bld.stone_wall @1,4
+0 place 1 bld.stone_wall @2,4
+0 place 1 bld.stone_wall @3,4
+0 place 1 bld.stone_wall @4,4
+0 place 1 bld.stone_wall @5,4
+0 place 1 bld.stone_wall @-5,5
+0 place 1 bld.stone_wall @5,5
+0 place 1 bld.stone_wall @-5,6
+0 place 1 bld.stone_wall @5,6
+0 place 1 bld.stone_wall @-5,7
+0 place 1 bld.stone_wall @5,7
+0 place 1 bld.stone_wall @-5,8
+0 place 1 bld.stone_wall @5,8
+0 place 1 bld.stone_wall @-5,9
+0 place 1 bld.stone_wall @5,9
+0 place 1 bld.stone_wall @-5,10
+0 place 1 bld.stone_wall @-4,10
+0 place 1 bld.stone_wall @-3,10
+0 place 1 bld.stone_wall @-2,10
+0 place 1 bld.stone_wall @-1,10
+0 place 1 bld.stone_wall @0,10
+0 place 1 bld.stone_wall @1,10
+0 place 1 bld.stone_wall @2,10
+0 place 1 bld.stone_wall @3,10
+0 place 1 bld.stone_wall @4,10
+0 place 1 bld.stone_wall @5,10
+0 place 1 unit.pikeman @-2,7
+0 place 1 unit.pikeman @0,7
+0 place 1 unit.pikeman @2,7
+0 place 2 unit.knight @-4,17
+0 place 2 unit.knight @-2,17
+0 place 2 unit.knight @0,17
+0 place 2 unit.knight @2,17
+0 place 2 unit.knight @4,17
+20 cam wheel 2 800,600

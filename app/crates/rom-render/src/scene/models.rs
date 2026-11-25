@@ -138,6 +138,18 @@ fn placed_scale(t: &Matrix) -> f32 {
 
 /// How many times its own size a model whose longest extent across or deep is `own` tiles is
 /// drawn when its view gives it the extent `size` (`ModelRef::size`); 1 when either is empty.
+/// How much a building facing `facing_deg` is stretched along its x (task 147): a model that
+/// spans its tiles along x spans the diagonal of their square when turned by 45 degrees, so a
+/// diagonal wall's segments meet.
+pub(crate) fn diagonal_stretch(facing_deg: f32) -> f32 {
+    let octant = (facing_deg.rem_euclid(360.0) / 45.0).round() as i32;
+    if octant % 2 == 1 {
+        std::f32::consts::SQRT_2
+    } else {
+        1.0
+    }
+}
+
 pub(crate) fn drawn_factor(own: f32, size: [f32; 3]) -> f32 {
     let drawn = size[0].max(size[2]);
     if own > 0.0 && drawn > 0.0 && (drawn - own).abs() > own * 1e-4 {
@@ -395,10 +407,15 @@ impl ModelGpu {
                 continue;
             };
             let frame = entity_frame(view, ground);
-            // Buildings keep the ground frame (their footprint is not turned); units face their
-            // heading with the model's front (+z).
+            // Buildings turn with their facing (task 147: a wall runs along its line, its model's
+            // x along the facing); units face their heading with the model's front (+z).
             let (x_axis, z_axis) = if view.building {
-                (frame.ex, frame.ey)
+                let along = diagonal_stretch(view.facing_deg);
+                let x = heading_of(&frame, view.facing_deg);
+                (
+                    x.map(|v| v * along),
+                    heading_of(&frame, view.facing_deg + 90.0),
+                )
             } else {
                 let h = heading_of(&frame, view.facing_deg);
                 let u = frame.up;

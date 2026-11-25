@@ -64,7 +64,11 @@ impl World {
         }
         let (at, bounds) = (
             site.pos,
-            footprint(&self.rules.entity_types[&site.type_id], site.pos),
+            footprint(
+                &self.rules.entity_types[&site.type_id],
+                site.pos,
+                site.facing,
+            ),
         );
         order.progress_ticks = order.progress_ticks.saturating_add(1);
         if !self.approach(worker, order, at, bounds) {
@@ -286,6 +290,7 @@ impl World {
                         target_pos: None,
                         queue: false,
                         text: None,
+                        facing: None,
                     })
                     .is_ok()
             {
@@ -357,6 +362,7 @@ impl World {
                     target_pos: None,
                     queue: false,
                     text: None,
+                    facing: None,
                 };
                 if self.submit(command).is_ok() {
                     claims.entry(site).or_default().insert(id);

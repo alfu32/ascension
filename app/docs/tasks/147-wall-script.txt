@@ -1,9 +1,9 @@
 # Task 147a: a medieval curtain wall south of the city with its gatehouse in the middle, as
-# placed before tick one (the drag that lays it is part 147b). Pikemen of player one stand
+# placed before tick one (the drag that lays it is part 147b; the gatehouse is three tiles wide). Pikemen of player one stand
 # inside; at tick 10 they (with the builders boxed beside them) are sent to a point beyond the
 # wall: they file out through the gatehouse, the only way through for their side.
-#   rise-of-man --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
-#     --script app/docs/tasks/147-wall-script.txt --after 20 --screenshot app/docs/img/147-wall.png
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/147-wall-script.txt --after 4 --screenshot app/docs/img/147-wall.png
 0 grant-age age.medieval
 0 place 1 bld.stone_wall @-10,7
 0 place 1 bld.stone_wall @-9,7
@@ -14,9 +14,7 @@
 0 place 1 bld.stone_wall @-4,7
 0 place 1 bld.stone_wall @-3,7
 0 place 1 bld.stone_wall @-2,7
-0 place 1 bld.stone_wall @-1,7
 0 place 1 bld.wall_gate @0,7
-0 place 1 bld.stone_wall @1,7
 0 place 1 bld.stone_wall @2,7
 0 place 1 bld.stone_wall @3,7
 0 place 1 bld.stone_wall @4,7
