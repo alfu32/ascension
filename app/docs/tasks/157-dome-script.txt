@@ -1,0 +1,26 @@
+# Task 157: a citadel's Energy Shield flares under fire (universe match, seed 1, --sun fixed,
+# 1280 x 800, --players 2 --ai none). Both players are in the Fusion age; player two has every
+# research of it (the three shields among them) and its starting energy, a city 46 tiles east of
+# player one's and a citadel between them, beyond the reach of player one's fusion tanks. Its
+# pool charges (from ten seconds in, full twenty seconds later; the game runs at four times the
+# speed meanwhile); then the tanks drive toward it and, once they see it, are ordered to attack
+# it: it fires on them, their shots strike its dome (the citadel stands in the city's area too,
+# but the nearest pool takes the blows), which flares on the side facing them. Shot as img/157-dome.png.
+#   --universe --seed 1 --players 2 --ai none --sun fixed --size 1280x800
+#   --script docs/tasks/157-dome-script.txt --screenshot <file> --after <seconds>
+0 grant-age age.fusion
+0 research-all 2
+0 place 2 bld.city @46,0
+0 place 2 bld.citadel @29,6
+0 place 1 unit.fusion_tank @6,-3
+0 place 1 unit.fusion_tank @6,0
+0 place 1 unit.fusion_tank @6,3
+0 place 1 unit.fusion_tank @5,6
+0 place 1 unit.fusion_tank @5,-6
+2 speed 400
+700 speed 100
+701 box-near army1 10
+703 rclick @24,3
+705 cam follow
+740 rclick enemy1
+760 cam wheel 2 640,330

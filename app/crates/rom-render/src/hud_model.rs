@@ -267,6 +267,47 @@ pub struct HudWreck {
     pub seed: u32,
 }
 
+/// The Energy Shield of a city or a fort on the shown surface (task 157): a dome over what it
+/// covers, as bright as its pool is full.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HudShield {
+    /// The shield building's id; varies the shimmer.
+    pub id: u32,
+    /// Surface face.
+    pub face: u8,
+    /// Centre in milli-tiles.
+    pub x: i32,
+    /// Centre in milli-tiles.
+    pub y: i32,
+    /// How far from the centre it covers, milli-tiles.
+    pub reach: i32,
+    /// Its pool now, per mille of the full pool.
+    pub charge: u16,
+}
+
+/// A blow a shield's dome took on the shown surface (task 157): it flares where it was struck.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HudShieldHit {
+    /// The shield building's id (as [`HudShield`]).
+    pub id: u32,
+    /// The dome's face, centre and reach (as [`HudShield`]).
+    pub face: u8,
+    /// Centre of the dome in milli-tiles.
+    pub x: i32,
+    /// Centre of the dome in milli-tiles.
+    pub y: i32,
+    /// Reach of the dome in milli-tiles.
+    pub reach: i32,
+    /// Where the struck entity stood, milli-tiles from the dome's centre along its face's axes
+    /// (0, 0 when it stood on another face).
+    pub at: (i32, i32),
+    /// Where the blow came from, milli-tiles from the dome's centre along its face's axes; `None`
+    /// when unknown or on another face. The dome flares on its side facing it.
+    pub from: Option<(i32, i32)>,
+    /// Game ticks since the blow.
+    pub age_ticks: u32,
+}
+
 /// A stain left on the ground where a building or unit was destroyed (task 80): soot, ash and
 /// churned earth, and a building's debris, fading over the stain's life.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

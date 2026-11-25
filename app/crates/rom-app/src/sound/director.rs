@@ -64,6 +64,12 @@ const ERROR_GAIN: f32 = 0.5;
 const WEAPON_GAIN: f32 = 0.5;
 const MOVING_GAIN: f32 = 0.35;
 const HAMMER_GAIN: f32 = 0.3;
+/// Shields (task 157): a projectile shot down, a blow on a dome, a charged dome's hum.
+const ZAP_GAIN: f32 = 0.45;
+const SHIELD_HIT_GAIN: f32 = 0.5;
+const HUM_GAIN: f32 = 0.3;
+/// At most this many shield sounds start in one pass.
+const SHIELD_SOUNDS_PER_PASS: usize = 3;
 const AMBIENT_GAIN: f32 = 0.9;
 
 const LINE_PRIORITY: u8 = 240;
@@ -135,13 +141,16 @@ impl Known {
     }
 }
 
-/// One loop the activity asks for: a type's sound for an event, at a level and pan.
+/// One loop the activity asks for: a type's sound for an event, at a level and pan; or, with
+/// `file`, that file in the buildings' category (a shield's hum, task 157, keyed by its type and
+/// `SoundEvent::Active`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Want {
     key: (DefId, SoundEvent),
     gain: f32,
     pan: f32,
     count: u32,
+    file: Option<SoundId>,
 }
 
 /// The sound director of one match view.
@@ -169,6 +178,12 @@ pub struct Director {
     /// Construction sites: their progress and when they last hammered.
     sites: BTreeMap<u32, (u32, Option<Instant>)>,
     hammer: Vec<SoundId>,
+    /// Shield sounds (task 157): the zap of a projectile shot down, the blow on a dome, the hum
+    /// of a charged dome; and the newest interception and blow already heard.
+    zap: Vec<SoundId>,
+    shield_hit: Vec<SoundId>,
+    hum: Vec<SoundId>,
+    shields_heard: (u64, u64),
     /// The world's tick at the last look, and when that was.
     moved: Option<(u64, Instant)>,
 }
@@ -217,6 +232,10 @@ impl Director {
             beds: [(None, 0.0); BED_SLOTS],
             sites: BTreeMap::new(),
             hammer: family("act.hammer_wood"),
+            zap: family("act.shield_zap"),
+            shield_hit: family("act.shield_hit"),
+            hum: family("act.shield_hum"),
+            shields_heard: (0, 0),
             moved: None,
         }
     }
@@ -365,6 +384,7 @@ impl Director {
         let listener = ear.map(|ear| Hearing::of(&ear));
         if let (Some(ear), Some(hearing)) = (ear.as_ref(), listener.as_ref()) {
             self.shots(&engine, &book, world, snapshot, ear, hearing, now);
+            self.shield_sounds(&engine, world, snapshot, ear, hearing, now);
         }
         if self
             .activity_at
@@ -593,6 +613,79 @@ impl Director {
         }
     }
 
+    /// Projectiles shot down and blows on domes in view since the last look (task 157), heard
+    /// at the shield that stopped them: the nearest few.
+    fn shield_sounds(
+        &mut self,
+        engine: &AudioEngine,
+        world: &World,
+        snapshot: &EntitySnapshot,
+        ear: &Ear,
+        hearing: &Hearing,
+        now: Instant,
+    ) {
+        let (zapped, struck) = self.shields_heard;
+        let newest = (
+            world
+                .interceptions()
+                .iter()
+                .map(|i| i.tick)
+                .max()
+                .unwrap_or(zapped),
+            world
+                .shield_hits()
+                .iter()
+                .map(|h| h.tick)
+                .max()
+                .unwrap_or(struck),
+        );
+        if newest == self.shields_heard {
+            return;
+        }
+        self.shields_heard = (newest.0.max(zapped), newest.1.max(struck));
+        // The first look only remembers.
+        if (zapped, struck) == (0, 0) {
+            return;
+        }
+        let at = |id: EntityId| {
+            snapshot
+                .entities
+                .binary_search_by_key(&id.0, |v| v.id)
+                .ok()
+                .map(|i| hearing.place(ear, &snapshot.entities[i]))
+        };
+        let mut heard: Vec<(f32, f32, bool)> = Vec::new();
+        for i in world.interceptions().iter().filter(|i| i.tick > zapped) {
+            if let Some(p) = at(i.shield).filter(|p| p.gain > AUDIBLE) {
+                heard.push((p.gain * ZAP_GAIN, p.pan, true));
+            }
+        }
+        for h in world.shield_hits().iter().filter(|h| h.tick > struck) {
+            if let Some(p) = at(h.shield).filter(|p| p.gain > AUDIBLE) {
+                heard.push((p.gain * SHIELD_HIT_GAIN, p.pan, false));
+            }
+        }
+        heard.sort_by(|a, b| b.0.total_cmp(&a.0));
+        for (gain, pan, zap) in heard.into_iter().take(SHIELD_SOUNDS_PER_PASS) {
+            let (files, name) = if zap {
+                (&self.zap, "act.shield_zap")
+            } else {
+                (&self.shield_hit, "act.shield_hit")
+            };
+            if self
+                .started
+                .get(name)
+                .is_some_and(|at| now.duration_since(*at) < FAMILY_INTERVAL)
+            {
+                continue;
+            }
+            let Some(id) = variant(files) else { continue };
+            self.started.insert(name, now);
+            let placement = Placement { gain, pan };
+            engine.play_as(Category::Buildings, id, placement, activity_priority(gain));
+        }
+    }
+
     /// Moving units and construction sites in view: the loops units ask for, and the hammering
     /// of the sites. Buildings ask for no loop.
     #[allow(clippy::too_many_arguments)]
@@ -656,6 +749,7 @@ impl Director {
                 gain: 0.0,
                 pan: 0.0,
                 count: 0,
+                file: None,
             });
             want.count += 1;
             if p.gain > want.gain {
@@ -664,6 +758,35 @@ impl Director {
             }
         }
         self.sites = sites;
+        // A charged dome hums (task 157): the loudest of each shield type in view.
+        if let Some(&hum) = self.hum.first() {
+            for view in snapshot.entities.iter().filter(|v| v.building) {
+                let charged = world
+                    .shield_view(EntityId(view.id))
+                    .is_some_and(|s| s.max > 0 && s.pool > 0);
+                if !charged {
+                    continue;
+                }
+                let p = hearing.place(ear, view);
+                if p.gain <= AUDIBLE {
+                    continue;
+                }
+                let key = (DefId(u32::from(view.kind)), SoundEvent::Active);
+                let want = wants.entry(key).or_insert(Want {
+                    key,
+                    gain: 0.0,
+                    pan: 0.0,
+                    count: 0,
+                    file: Some(hum),
+                });
+                want.count += 1;
+                if p.gain * HUM_GAIN / MOVING_GAIN > want.gain {
+                    // Scaled back by the moving loops' gain applied below.
+                    want.gain = p.gain * HUM_GAIN / MOVING_GAIN;
+                    want.pan = p.pan;
+                }
+            }
+        }
         hammering.sort_by(|a, b| b.0.total_cmp(&a.0));
         for (gain, pan) in hammering.into_iter().take(2) {
             if let Some(id) = variant(&self.hammer) {
@@ -699,11 +822,17 @@ impl Director {
             }
         }
         for (key, want) in &wanted {
-            let Some(cue) = book.of(key.0, key.1) else {
-                continue;
+            let (file, gain, category) = match want.file {
+                Some(file) => (Some(file), 1.0, Category::Buildings),
+                None => {
+                    let Some(cue) = book.of(key.0, key.1) else {
+                        continue;
+                    };
+                    (cue.variants.first().copied(), cue.gain, cue.category)
+                }
             };
             let placement = Placement {
-                gain: want.gain * cue.gain,
+                gain: want.gain * gain,
                 pan: want.pan,
             };
             let at = match self.loops.iter().position(|s| *s == Some(*key)) {
@@ -717,12 +846,7 @@ impl Director {
                 },
             };
             // The cue's first file: a loop keeps its file while it plays.
-            engine.set_loop_as(
-                cue.category,
-                BED_SLOTS + at,
-                cue.variants.first().copied(),
-                placement,
-            );
+            engine.set_loop_as(category, BED_SLOTS + at, file, placement);
         }
     }
 

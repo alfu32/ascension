@@ -6,7 +6,7 @@ mod common;
 
 use rom_ai::{Brain, Job};
 use rom_geo::CubeSurface;
-use rom_rules::{BodyKind, FormationShape, Rules};
+use rom_rules::{BodyKind, DefId, FormationShape, Rules};
 use rom_sim::{
     BodyId, BodyInfo, PlanetSurface, Player, PlayerId, Pos, RouteInfo, SystemInfo, UniverseSetup,
     World,
@@ -45,6 +45,11 @@ fn world(rules: &Arc<Rules>) -> World {
 
 /// The world of `world`, with the ground of the planets `more` generated too.
 fn world_with(rules: &Arc<Rules>, more: &[BodyId]) -> World {
+    world_of(rules, more, &|_| true)
+}
+
+/// The world of `world_with`, player one with only the technologies `keep` lets through.
+fn world_of(rules: &Arc<Rules>, more: &[BodyId], keep: &dyn Fn(DefId) -> bool) -> World {
     let players = (0..=2)
         .map(|p| Player {
             id: PlayerId(p),
@@ -57,7 +62,12 @@ fn world_with(rules: &Arc<Rules>, more: &[BodyId]) -> World {
                 BTreeMap::new()
             },
             techs: if p == 1 {
-                rules.techs.keys().map(|k| (*k, 1)).collect()
+                rules
+                    .techs
+                    .keys()
+                    .filter(|k| keep(**k))
+                    .map(|k| (*k, 1))
+                    .collect()
             } else {
                 BTreeMap::new()
             },
@@ -387,8 +397,16 @@ fn the_warship_class_follows_the_enemy_ships_seen() {
         }
         out
     };
+    // Without the city shields (task 157): their pools keep the city standing, so the cruisers
+    // strike the spaceport first, which this test is not about.
+    let shields = |t: DefId| {
+        rules
+            .modifiers_from(t)
+            .iter()
+            .any(|m| m.stat_key.starts_with("intercept.") || m.stat_key == "shield_pool")
+    };
     let pick = |enemy: &str| {
-        let mut w = world(&rules);
+        let mut w = world_of(&rules, &[], &|t| !shields(t));
         let over = Pos::on(HOME, 0, 40_500, 8_500);
         let kind = rules.id_of(enemy).unwrap();
         for n in 0..3 {

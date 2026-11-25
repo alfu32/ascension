@@ -448,6 +448,26 @@ CREATE TABLE et_minefield (
   damage_class_id INTEGER NOT NULL REFERENCES damage_class(id)
 ) STRICT;
 
+-- Task 157: a building its owner's researches may give a shield. What the shield does comes from
+-- entity stats of the building that modifiers raise: `intercept.<damage class key>` (percent of
+-- the projectiles of that class, thrown at whatever of its owner's it covers, that it shoots
+-- down in flight) and `shield_pool` (percent of its hit points held as a pool that takes every
+-- damage to what it covers before hit points). It covers what stands within `cover` milli-tiles
+-- of its footprint and, a city, its whole economic radius (the city area). The pool recharges
+-- `recharge_pct` of itself every `recharge_period_ticks` once `recharge_delay_ticks` have passed
+-- without a hit, paying `recharge_cost` of `recharge_resource_id` per 100 points restored; without
+-- that much in store it does not recharge.
+CREATE TABLE et_shield (
+  entity_type_id        INTEGER PRIMARY KEY REFERENCES entity_type(id),
+  cover                 INTEGER NOT NULL DEFAULT 0 CHECK (cover >= 0),
+  recharge_delay_ticks  INTEGER NOT NULL DEFAULT 0 CHECK (recharge_delay_ticks >= 0),
+  recharge_period_ticks INTEGER NOT NULL DEFAULT 20 CHECK (recharge_period_ticks > 0),
+  recharge_pct          INTEGER NOT NULL DEFAULT 0 CHECK (recharge_pct BETWEEN 0 AND 100),
+  recharge_resource_id  INTEGER REFERENCES resource(id),
+  recharge_cost         INTEGER NOT NULL DEFAULT 0 CHECK (recharge_cost >= 0),
+  CHECK (recharge_cost = 0 OR recharge_resource_id IS NOT NULL)
+) STRICT;
+
 CREATE TABLE et_inhibitor (            -- jump inhibitor (task 70): holds enemy ships where it stands
   entity_type_id INTEGER PRIMARY KEY REFERENCES entity_type(id),
   reach          TEXT NOT NULL DEFAULT 'system' CHECK (reach IN ('system')),
@@ -1529,6 +1549,15 @@ CREATE TABLE entity_flag (
 CREATE TABLE entity_flight (
   entity_id INTEGER PRIMARY KEY,
   climbed   INTEGER NOT NULL CHECK (climbed >= 0)
+) STRICT;
+
+-- The pool of a shield (task 157, format 23): the points it holds now and the tick it last
+-- took damage (it recharges `et_shield.recharge_delay_ticks` after that). Only shields whose
+-- pool has been charged have a row.
+CREATE TABLE entity_shield (
+  entity_id INTEGER PRIMARY KEY,
+  pool      INTEGER NOT NULL CHECK (pool >= 0),
+  hit_tick  INTEGER NOT NULL CHECK (hit_tick >= 0)
 ) STRICT;
 
 -- The grid of a drone operator (tasks 120 and 128, format 17): where its centre is (on the

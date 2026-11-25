@@ -732,6 +732,7 @@ def generate():
     nuclear_reactor(definition, row, tag, need, produce, cost, sql.append)
     militia(definition, row, tag, need, weapon)
     fortifications(definition, row, tag, need, produce, cost, modifier)
+    shields(definition, row, tag, need, cost, modifier, sql.append)
     # Library grid: one row per age, the advance in column 0 and the tracks in 1-4,
     # three ages per page. Other research is listed by the age it needs.
     grid_columns = ['age'] + list(TRACKS)
@@ -744,6 +745,9 @@ def generate():
             produce('bld.' + building, key, 'research', 'projects' if kind == 'project' else 'research')
     # Task 147's research takes the next free place, so no earlier button moves.
     produce('bld.' + MINE_DETECTORS['building'], MINE_DETECTORS['key'], 'research', 'research')
+    # Task 157's researches take the next free places at the city.
+    for key, *_ in SHIELDS:
+        produce('bld.' + SHIELD_RESEARCH_AT, key, 'research', 'research')
     # Upgraded producers retain their whole palette, including subsequent upgrades.
     for base, steps in building_variants:
         for key, _ in steps:
@@ -1663,6 +1667,62 @@ def fortifications(definition, row, tag, need, produce, cost, modifier):
     need(d['key'], 'age.' + d['age'])
     cost(d['key'], d['prices'])
     modifier(d['key'], 'mine_detection', 1, 'add', MINE_DETECTOR_TAG)
+
+
+# Task 157 (owner, 2026-11-25): "cities and forts (their upgrades in their line) should have their
+# own shield gained through research, in the freedom age they can research missile shield, the
+# upgrade to laser shield and energy shield", and "make the shields expensive to research". Each
+# research costs at least as much as the advance into its age (Freedom 1 750 food and knowledge,
+# 1 800 ticks; Automation 2 000 and 2 000 ticks; Fusion 2 250 and 2 200 ticks) in metal and knowledge (and energy for
+# the Energy Shield), and takes longer. Key, name, age, price, research ticks, the research before
+# it, the interception it adds by damage class (percent; the stats `intercept.<class>` add up over
+# the researches), the pool it adds (percent of the building's hit points).
+SHIELDS = [
+    ('tech.missile_shield', 'Missile Shield', 'information', {'metal': 2000, 'knowledge': 2000}, 2000, None,
+     {'explosive': 35}, 0),
+    ('tech.laser_shield', 'Laser Shield', 'automation', {'metal': 2500, 'knowledge': 2500}, 2400,
+     'tech.missile_shield', {'explosive': 20, 'bullet': 35, 'kinetic': 30}, 0),
+    ('tech.energy_shield', 'Energy Shield', 'fusion', {'metal': 3000, 'knowledge': 3000, 'energy': 800}, 2800,
+     'tech.laser_shield', {}, 50),
+]
+# Who holds a shield: every type of the city line and the fort line, found by their tags, and what
+# it covers beyond its footprint (milli-tiles): a city covers its city area (its economic radius,
+# which the simulation adds), a fort four tiles around it.
+SHIELD_COVER = {'city': 0, 'fort': 4000}
+# Where the researches are made: the city, every player's first building.
+SHIELD_RESEARCH_AT = 'city'
+# The pool recharges RECHARGE_PCT of itself every RECHARGE_PERIOD ticks once RECHARGE_DELAY ticks
+# passed without a hit (empty to full in 20 s), paying RECHARGE_COST energy per 100 points.
+SHIELD_RECHARGE = dict(delay=200, period=20, pct=5, resource='energy', cost=10)
+INTERCEPTED_CLASSES = ('explosive', 'bullet', 'kinetic')
+
+
+def shields(definition, row, tag, need, cost, modifier, emit):
+    """Task 157: the three shield researches, their stats and the shield component of the city and
+    fort lines. Written after every other definition so earlier ids stay."""
+    for dc in INTERCEPTED_CLASSES:
+        row('stat', key='intercept.' + dc, scope='entity',
+            note=f'percent of the {dc} projectiles thrown at what a shield covers that it shoots down (task 157)')
+    row('stat', key='shield_pool', scope='entity',
+        note="percent of a shield building's hit points its pool holds (task 157)")
+    r = SHIELD_RECHARGE
+    for target, cover in SHIELD_COVER.items():
+        emit('INSERT INTO et_shield(entity_type_id,cover,recharge_delay_ticks,recharge_period_ticks,recharge_pct,'
+             f"recharge_resource_id,recharge_cost) SELECT def_id,{cover},{r['delay']},{r['period']},{r['pct']},"
+             f"{val(Ref('res.' + r['resource']))},{r['cost']} FROM def_tag WHERE tag_id={val(Ref(target, 'tag'))} "
+             'ORDER BY def_id;')
+    for key, name, age, prices, ticks, before, intercepts, pool in SHIELDS:
+        definition('tech', key, name)
+        row('tech', id=Ref(key), kind='upgrade', track='', level=0, research_ticks=ticks)
+        need(key, 'age.' + age)
+        if before:
+            need(key, before, 1)
+        cost(key, prices)
+        for target in SHIELD_COVER:
+            for dc, pct in intercepts.items():
+                modifier(key, 'intercept.' + dc, pct, 'add', target)
+            if pool:
+                modifier(key, 'shield_pool', pool, 'add', target)
 
 
 # Automated sites whose key and name are not "auto_<site>" / "Automated <Site>"

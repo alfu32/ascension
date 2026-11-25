@@ -1135,3 +1135,60 @@ fn a_turned_wall_with_queued_segments_and_a_remembered_gate() {
     assert!(remembered(&loaded));
     check("turned_wall", &rules, w, 1500, |_| {});
 }
+
+/// Task 157: a city's Energy Shield holds a pool, part spent under fire and recharging, saved
+/// and loaded with the tick of its last blow; both worlds recharge it alike.
+#[test]
+fn a_city_shield_pool_under_fire() {
+    let rules = rules();
+    let plain = rules.id_of("ter.plain").unwrap();
+    let players = (0..=2)
+        .map(|n| Player {
+            id: PlayerId(n),
+            team: n,
+            faction: rules.id_of("nation.romans").unwrap(),
+            age: rules.id_of("age.fusion").unwrap(),
+            resources: rules.resources.keys().map(|r| (*r, 100_000)).collect(),
+            techs: if n == 2 {
+                [
+                    "tech.missile_shield",
+                    "tech.laser_shield",
+                    "tech.energy_shield",
+                ]
+                .into_iter()
+                .map(|key| (rules.id_of(key).unwrap(), 1))
+                .collect()
+            } else {
+                BTreeMap::new()
+            },
+        })
+        .collect();
+    let mut w = World::new(
+        rules.clone(),
+        MapGrid::new(64, 64, vec![plain; 64 * 64]).unwrap(),
+        5,
+        players,
+    )
+    .unwrap();
+    let flat = |x: i32, y: i32| Pos::flat(x * 1000, y * 1000);
+    let city = w
+        .place_for_setup(id(&w, "bld.city"), PlayerId(2), flat(30, 30))
+        .unwrap();
+    ticks(&mut w, 700);
+    let full = w.shield_view(city).unwrap().pool;
+    assert!(full > 0);
+    let gun = w
+        .place_for_setup(id(&w, "unit.machine_gunner"), PlayerId(1), flat(36, 30))
+        .unwrap();
+    order(&mut w, gun, "attack", Some(city), None);
+    run_until(&mut w, 2000, |w| {
+        w.shield_view(city).is_some_and(|s| s.pool < full - 100)
+    });
+    w.despawn(gun).unwrap();
+    ticks(&mut w, 230);
+    assert!(
+        w.shield_pools()
+            .any(|(id, p)| id == city && p.pool < full && p.hit_tick > 0)
+    );
+    check("city_shield", &rules, w, 600, |_| {});
+}

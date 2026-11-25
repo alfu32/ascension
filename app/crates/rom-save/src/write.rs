@@ -217,6 +217,12 @@ fn write_all(
             params![id.0, *climbed as i64],
         )?;
     }
+    for (id, pool) in &s.shields {
+        tx.execute(
+            "INSERT INTO entity_shield VALUES (?,?,?)",
+            params![id.0, pool.pool, pool.hit_tick as i64],
+        )?;
+    }
     for (id, cloud) in &s.clouds {
         let join = cloud
             .joining

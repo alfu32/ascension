@@ -122,6 +122,9 @@ pub struct World {
     pub(crate) max_leash: i64,
     /// The minefield types of the rules, in id order (task 147).
     pub(crate) mine_types: Vec<DefId>,
+    /// Shield pools (hashed, saved), the shield types of the rules and the recent
+    /// interceptions and blows on pools for the views (task 157).
+    pub(crate) shield: crate::shields::ShieldState,
     /// Recent blasts of area weapons, for the views (task 75; not hashed, not saved).
     pub(crate) blasts: Vec<crate::combat::Blast>,
     /// Buildings that fell lately, for the views (task 75; not hashed, not saved).
@@ -322,6 +325,7 @@ impl World {
         {
             return Err(SimError::InvalidRules("mine.detection_radius"));
         }
+        let shield = crate::shields::ShieldState::of(&rules);
         let stain_rules = crate::stains::StainRules::of(&rules);
         // Rules with a market need a complete, valid set of market constants (task 107).
         let market_rules = crate::market::MarketRules::of(&rules);
@@ -370,6 +374,7 @@ impl World {
             max_footprint,
             max_leash,
             mine_types,
+            shield,
             blasts: Vec::new(),
             wrecks: Vec::new(),
             strikes: Vec::new(),
@@ -748,6 +753,7 @@ impl World {
         self.rallies.remove(&id);
         self.governors_paused.remove(&id);
         self.flight.remove(&id);
+        self.shield.pools.remove(&id);
         // An operator's death ends its grid and the drones it sent (task 128).
         if self.clouds.remove(&id).is_some() {
             self.hits.retain(|h| h.attacker != id);
@@ -1203,11 +1209,13 @@ impl World {
         self.raise_attack_alerts();
         self.apply_attrition();
         self.remove_dead();
+        self.recharge_shields();
         if !self.ascension.completing.is_empty() {
             self.complete_ascensions();
         }
         self.fade_stains();
         self.forget_blasts();
+        self.forget_shield_events();
         self.forget_alerts();
         self.update_captures();
         self.remember_touched();

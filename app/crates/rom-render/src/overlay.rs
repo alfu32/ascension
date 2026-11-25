@@ -7,6 +7,7 @@ use crate::entities::{EntityView, FlatGround, Footing, building_height, owner_co
 use crate::hud::{HudSnapshot, MarkerKind};
 
 mod effects;
+mod shields;
 
 /// A coloured line segment.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -35,6 +36,9 @@ pub struct OverlayGeometry {
     pub lines: Vec<Line3>,
     /// The placement fill and other flat shapes.
     pub tris: Vec<Tri3>,
+    /// See-through surfaces drawn after everything else in the overlay without writing depth,
+    /// so what is inside shows: the shield domes (task 157).
+    pub glass: Vec<Tri3>,
 }
 
 const RING_SEGMENTS: usize = 28;
@@ -325,6 +329,7 @@ pub fn build_overlays_on(
 ) {
     out.lines.clear();
     out.tris.clear();
+    out.glass.clear();
     let gold = [250, 214, 41, 255];
     // Patrols: a dashed cyan path, all the way round the planet for a ship in orbit.
     for patrol in &hud.patrols {
@@ -449,6 +454,7 @@ pub fn build_overlays_on(
         out.building_ghost(origin, view, rgba(owner_color(view.owner)), true);
     }
     effects::bombardment(out, ground, right, views, hud);
+    shields::domes(out, ground, right, views, hud);
     for id in &hud.selected {
         let Ok(index) = views.binary_search_by_key(id, |v| v.id) else {
             continue;

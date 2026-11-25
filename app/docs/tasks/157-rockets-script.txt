@@ -1,0 +1,21 @@
+# Task 157: a city's shield shoots down rockets (universe match, seed 1, --sun fixed, 1280 x 800,
+# --players 2 --ai none). Player one is in the Automation age with the Missile Shield and the
+# Laser Shield (55 % of explosive projectiles); eight rocket batteries of player two stand east
+# of its city and fire on it by themselves, a scout spotting for them. Shot as
+# img/157-rockets.png a few seconds in: rockets burst in white-blue flashes three quarters of the
+# way to the city, the others land.
+#   --universe --seed 1 --players 2 --ai none --sun fixed --size 1280x800
+#   --script docs/tasks/157-rockets-script.txt --screenshot <file> --after <seconds>
+0 grant-age age.automation
+0 grant-tech tech.missile_shield
+0 grant-tech tech.laser_shield
+0 place 2 unit.rocket_artillery @9,-6
+0 place 2 unit.rocket_artillery @9,-3
+0 place 2 unit.rocket_artillery @9,0
+0 place 2 unit.rocket_artillery @9,3
+0 place 2 unit.rocket_artillery @9,6
+0 place 2 unit.rocket_artillery @11,-4
+0 place 2 unit.rocket_artillery @11,0
+0 place 2 unit.rocket_artillery @11,4
+0 place 2 unit.scout @6,-7
+2 cam wheel 2 760,330

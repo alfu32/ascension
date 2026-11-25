@@ -108,6 +108,10 @@ pub struct HudSnapshot {
     pub blasts: Vec<crate::HudBlast>,
     /// Buildings that fell lately on the shown surface (task 75).
     pub wrecks: Vec<crate::HudWreck>,
+    /// Energy Shield domes on the shown surface (task 157).
+    pub shields: Vec<crate::HudShield>,
+    /// Recent blows on those domes (task 157).
+    pub shield_hits: Vec<crate::HudShieldHit>,
     /// Stains left where buildings and units were destroyed, on the shown surface where the
     /// player sees now (task 80).
     pub stains: Vec<crate::HudStain>,
@@ -252,6 +256,8 @@ impl Default for HudSnapshot {
             patrols: Vec::new(),
             blasts: Vec::new(),
             wrecks: Vec::new(),
+            shields: Vec::new(),
+            shield_hits: Vec::new(),
             stains: Vec::new(),
             stain_life_ticks: 0,
             banner: Vec::new(),
