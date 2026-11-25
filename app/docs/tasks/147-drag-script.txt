@@ -1,0 +1,22 @@
+# Task 147b: a stone wall dragged with a gate. The builders are boxed, the wall is armed from
+# the fortification page of the build menu, the left button pressed west of the city and the
+# line dragged east; G drops the three-tile gate at the pointer half way; the shot is taken
+# with the button still held: each site's footprint and pane, the gate open in the middle, and
+# the count and price of the line in the help line.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1600x900 \
+#     --script app/docs/tasks/147-drag-script.txt --after 3 --screenshot app/docs/img/147-drag.png
+0 grant-age age.medieval
+0 grant-tech tech.age.classical
+0 grant-tech tech.age.medieval
+5 box builders
+8 hud tab 0
+10 hud arrow 1
+11 hud arrow 1
+12 hud slot 2
+20 brush-down @-9,8
+24 brush-move @-4,8
+28 brush-move @0,8
+30 key g
+34 brush-move @5,8
+38 brush-move @9,8
+15 cam wheel 2 800,560

@@ -22,8 +22,8 @@ fn at(x: i32, y: i32) -> Pos {
     Pos::flat(x * 1000 + 500, y * 1000 + 500)
 }
 
-/// Player 1's town at the west of a plain, player 2's at the east, and a scout of player 1
-/// beside it, so player 1 knows the way.
+/// Player 1's town at the west of a plain, player 2's at the east, and a spearman of player 2
+/// standing east of player 1's town: the enemy has come that way.
 fn run(age: &str, techs: &[&str], ticks: u64) -> World {
     let rules: Arc<Rules> = common::rules();
     let plain = id(&rules, "ter.plain");
@@ -61,7 +61,8 @@ fn run(age: &str, techs: &[&str], ticks: u64) -> World {
         w.spawn(id(&rules, "unit.citizen"), P1, at(24 + dx, 48 + dy))
             .unwrap();
     }
-    w.spawn(id(&rules, "unit.scout"), P1, at(86, 48)).unwrap();
+    w.spawn(id(&rules, "unit.spearman"), P2, at(33, 48))
+        .unwrap();
     let mut brain = Brain::new(rules, P1, "balanced", "moderate", 5).unwrap();
     for _ in 0..ticks {
         brain.step(&mut w);

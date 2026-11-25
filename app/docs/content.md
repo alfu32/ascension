@@ -145,7 +145,7 @@ per-city limits). Page = command-palette page.
 | Airfield | military | 5 | Military 6 | aircraft |
 | Spaceport | military | 7 (task 130; its look and stats of age 10) | — | from age 7 Satellites, Space Probes and the Orbital Survey; starships from age 10 |
 | Ground Battery | military | 10 | — | fires on enemy ships and craft in the orbit above (14 tiles to their ground point) |
-| Palisade, Palisade Gate | fortification | 0 | Military 1 | a line of one-tile segments with gates (task 147); becomes the Stone Wall at age 1 |
+| Palisade, Palisade Gate | fortification | 0 | Military 1 | a line of one-tile segments with three-tile gates (tasks 147, 147b), turned along the line; becomes the Stone Wall at age 1 |
 | Stone Wall, Wall Gate | fortification | 1–4 | — | the same, stronger each age; becomes the Defensive Line at age 5 |
 | Defensive Line, Checkpoint | fortification | 5–9 | — | trench, wire and tank traps; stronger each age |
 | Minefield | fortification | 5 | — | one hidden mine a tile, spent on the first enemy over it (Mine Detectors at the barracks find them) |

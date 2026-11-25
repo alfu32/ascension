@@ -4247,26 +4247,19 @@ fn a_wall_is_dragged_with_a_gate_and_its_builders_take_it_in_order() {
             .collect::<Vec<_>>()
     };
     // The nearer builder takes the first stretch, the other the rest, each in line order.
-    let first: Vec<_> = fx
-        .world
-        .entity(builders[0])
-        .unwrap()
-        .orders()
-        .iter()
-        .filter_map(|o| o.subject)
-        .collect();
-    let second: Vec<_> = fx
-        .world
-        .entity(builders[1])
-        .unwrap()
-        .orders()
-        .iter()
-        .filter_map(|o| o.subject)
-        .collect();
-    assert_eq!(
-        first.len() + second.len() + sites(&fx, palisade).len() + sites(&fx, gate).len() >= 9,
-        true
-    );
+    let stretch = |fx: &Fx, builder: EntityId| {
+        fx.world
+            .entity(builder)
+            .unwrap()
+            .orders()
+            .iter()
+            .filter_map(|o| o.target_pos.map(|p| p.x / 1000))
+            .collect::<Vec<_>>()
+    };
+    let (west, east) = (stretch(&fx, builders[0]), stretch(&fx, builders[1]));
+    assert!(!west.is_empty() && !east.is_empty(), "{west:?} {east:?}");
+    assert!(west.windows(2).all(|p| p[0] <= p[1]) && east.windows(2).all(|p| p[0] <= p[1]));
+    assert!(west.iter().max() < east.iter().min(), "{west:?} {east:?}");
     assert_eq!(sites(&fx, gate), vec![(20, 0)]);
     assert_eq!(sites(&fx, palisade).len(), 8);
     // The tool stays armed: a press on the wall's end continues it, leaving that end out.

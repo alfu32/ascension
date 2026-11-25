@@ -3010,6 +3010,22 @@ impl Controller {
                     checked_age: None,
                 });
                 self.attack_move = false;
+                // A wall or a minefield is dragged (task 147b): say how.
+                if let Some(kind) = lines::line_kind(world, def) {
+                    let name = rules.def(def).name.clone();
+                    self.say(
+                        world,
+                        match kind {
+                            lines::LineKind::Segments => format!(
+                                "{name}: press and drag along the ground, G drops a gate, \
+                                 Escape to stop"
+                            ),
+                            lines::LineKind::Mines => {
+                                format!("{name}: drag a rectangle of mines, Escape to stop")
+                            }
+                        },
+                    );
+                }
             }
             Action::Train(def) | Action::Research(def) => {
                 let (kind, count) = if matches!(action, Action::Train(_)) {

@@ -1,5 +1,5 @@
-//! Fortification lines and minefields (task 147b). Once an enemy's buildings are known on a
-//! town's planet, a town is given one short line across the way from there, beyond its
+//! Fortification lines and minefields (task 147b). Once enemy soldiers have come inside a
+//! town's borders, the town is given one short line across the way they came, beyond its
 //! economic radius, with a gate in the middle: a line open at both ends, clear of every own
 //! building, resource and gather site, so the player never walls itself in. A town with its
 //! line gets a small minefield before the gate once mines can be laid. What is a segment, a
@@ -99,16 +99,21 @@ fn has(view: &View<'_>, city: &City, work: Work) -> bool {
     })
 }
 
-/// The unit vector (per mille) from a town towards the nearest enemy building it remembers on
-/// its planet, if one is near enough to give a way.
+/// The unit vector (per mille) from a town towards the nearest enemy soldier it remembers
+/// inside its borders: a town lays its line once the enemy has come, across the way it came.
 fn approach(view: &View<'_>, memory: &Memory, city: &City) -> Option<(i64, i64)> {
     let (dx, dy) = memory
         .enemies
         .iter()
-        .filter(|(_, s)| s.building && s.pos.body == city.pos.body)
+        .filter(|(_, s)| {
+            !s.building
+                && s.pos.body == city.pos.body
+                && crate::production::is_military(view.rules, s.type_id)
+        })
         .filter_map(|(id, s)| {
             let v = view.world.vector(city.pos, s.pos)?;
-            Some((v.0 * v.0 + v.1 * v.1, *id, v))
+            let squared = v.0 * v.0 + v.1 * v.1;
+            (squared <= city.border * city.border).then_some((squared, *id, v))
         })
         .min()
         .map(|(_, _, v)| v)?;
@@ -116,17 +121,43 @@ fn approach(view: &View<'_>, memory: &Memory, city: &City) -> Option<(i64, i64)>
     (length > 0).then(|| (dx * 1000 / length, dy * 1000 / length))
 }
 
-/// The first complete town (in id order) that wants `work`, and its way to the enemy.
+/// The own gate nearest a town, on its planet.
+fn own_gate(view: &View<'_>, city: &City) -> Option<Pos> {
+    view.own
+        .iter()
+        .filter(|e| {
+            e.pos.body == city.pos.body
+                && view
+                    .rules
+                    .entity_types
+                    .get(&e.type_id)
+                    .and_then(|t| t.fortification.as_ref())
+                    .is_some_and(|f| f.gate)
+        })
+        .filter_map(|e| Some((view.world.distance(city.pos, e.pos)?, e.id)))
+        .min()
+        .and_then(|(_, id)| view.world.entity(id))
+        .map(|e| e.pos)
+}
+
+/// The first complete town (in id order) that wants `work`, and its way to the enemy: for a
+/// line the way the enemy came, for mines the way through its line's gate.
 fn town<'v>(view: &'v View<'_>, memory: &Memory, work: Work) -> Option<(&'v City, (i64, i64))> {
     view.cities.iter().filter(|c| c.complete).find_map(|city| {
-        let wanted = match work {
-            Work::Line => !has(view, city, Work::Line),
-            Work::Mines => has(view, city, Work::Line) && !has(view, city, Work::Mines),
+        let way = match work {
+            Work::Line if !has(view, city, Work::Line) => approach(view, memory, city)?,
+            Work::Mines if !has(view, city, Work::Mines) => {
+                let gate = own_gate(view, city)?;
+                let (dx, dy) = view.world.vector(city.pos, gate)?;
+                let length = integer_sqrt((dx * dx + dy * dy) as u128) as i64;
+                if length == 0 || length as i64 > city.radius + NEAR {
+                    return None;
+                }
+                (dx * 1000 / length, dy * 1000 / length)
+            }
+            _ => return None,
         };
-        if !wanted {
-            return None;
-        }
-        approach(view, memory, city).map(|way| (city, way))
+        Some((city, way))
     })
 }
 
@@ -218,22 +249,7 @@ fn mine_sites(
     mine: DefId,
 ) -> Option<Vec<LineSite>> {
     let world = view.world;
-    let gate = view
-        .own
-        .iter()
-        .filter(|e| {
-            e.pos.body == city.pos.body
-                && view
-                    .rules
-                    .entity_types
-                    .get(&e.type_id)
-                    .and_then(|t| t.fortification.as_ref())
-                    .is_some_and(|f| f.gate)
-        })
-        .filter_map(|e| Some((world.distance(city.pos, e.pos)?, e.id)))
-        .min()
-        .and_then(|(_, id)| world.entity(id))?
-        .pos;
+    let gate = own_gate(view, city)?;
     let (px, py) = (-uy, ux);
     let corner = |ahead: i64, side: i64| {
         world.offset(

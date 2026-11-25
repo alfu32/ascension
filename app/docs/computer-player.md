@@ -1535,3 +1535,35 @@ Measured (20 seeds, balanced:moderate against balanced:easiest): 18–0 with 2 d
 14), mean tick 52052. The same rules without the construct rows of the seven new types give 20–0,
 mean tick 52405, as before the task: the draws come from the players' one palisade and gate (their
 first wave in seed 5 is lost after the match has drifted), not from the simulation.
+
+**Part 147b** (`crates/rom-ai/src/fortify.rs`). The construction manager still leaves walls,
+gates and mines out of its catalogue (they are no single building); a manager of their own lays
+them as lines, by data (`et_fortification`, `et_minefield`) and as keenly as the profile's
+`mil.defense_share_pct` says (none at 0):
+
+- **A line where the enemy came.** A complete town with no line or line site near it, inside
+  whose borders the player remembers an enemy soldier (`EnemySighting` of a military unit, the
+  nearest), gets one: nine tiles straight across the way from the town to that soldier, 3, 5, 2
+  or 7 tiles beyond its economic radius (the first that fits inside its borders), the gate at its
+  middle (`World::line_sites`, each site with its facing). Every site must pass the placement
+  check and keep 2.5 tiles from the player's own buildings (other than fortifications), every
+  resource and every gather site, so a line never shuts a way the player uses; it is open at both
+  ends, so it never walls the player in (and the boxed-in rule of task 152 stays). Score 150 +
+  defence share, below every building the construction manager wants; never saved for. The
+  whole line is paid at once and ordered at once (one `construct` a site, queued), the two
+  nearest builders taking a stretch each; other builders join as for any site. No line where no
+  fitting place is found (the segment type waits `RETRY_TICKS`).
+- **Mines before the gate.** A town with its line and no mines, once a minefield type can be
+  built, lays a rectangle of at most 15 mines 2.5 to 3.5 tiles beyond its gate (score 140 +
+  defence share), under the same clearances.
+- **Enemy walls** are ordinary buildings to the army: a column whose way is shut walks to the
+  nearest reachable point and takes the wall as a target in reach (a rom-sim test rings a town and
+  sees siege breach it). Mine Detectors is researched as any side technology, by its worth.
+- Lines are not rebuilt by the rebuild manager (task 152): the construction catalogue it uses
+  leaves them out.
+
+Measured (20 seeds, balanced:moderate against balanced:easiest): 20–0, mean tick 46979 (main
+before 147b: 20–0, 47463). A first version that laid a line as soon as an enemy building was
+known lost seed 19 (19–1, mean 54099): lines are now a response to enemies come near.
+Tests: `crates/rom-ai/tests/fortify.rs` (a line with its gate across the way in, turned along
+it, twice alike; mines before the gate).
