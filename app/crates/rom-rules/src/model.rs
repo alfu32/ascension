@@ -1320,6 +1320,8 @@ pub struct EntityType {
     pub fortification: Option<Fortification>,
     /// Attached `et_minefield` row: a hidden mine spent on the first enemy over it (task 147).
     pub minefield: Option<Minefield>,
+    /// Attached `et_shield` row: a shield its owner's researches give it (task 157).
+    pub shield: Option<Shield>,
     /// Attached `et_colony` row and its `et_colony_site` rows: an automated colony.
     pub colony: Option<Colony>,
     /// Attached `et_market` row: its owner trades resources here (task 107).
@@ -1618,6 +1620,25 @@ pub struct Minefield {
     pub damage: i64,
     /// The `damage_class_id` column.
     pub damage_class_id: u32,
+}
+/// One `et_shield` row: a building whose researches give it a shield (task 157). What the shield
+/// stops is in the entity stats `intercept.<damage class>` and `shield_pool`.
+#[derive(Debug, Clone)]
+pub struct Shield {
+    /// The `entity_type_id` column.
+    pub entity_type_id: DefId,
+    /// Milli-tiles beyond its footprint it covers; a city covers its economic radius too.
+    pub cover: i64,
+    /// Ticks without a hit before its pool recharges.
+    pub recharge_delay_ticks: i64,
+    /// Ticks between two recharges.
+    pub recharge_period_ticks: i64,
+    /// Percent of the full pool each recharge restores.
+    pub recharge_pct: i64,
+    /// What recharging draws; `None` when it is free.
+    pub recharge_resource_id: Option<DefId>,
+    /// Of that resource per 100 points restored.
+    pub recharge_cost: i64,
 }
 /// One `et_detector` row: a jump detector (task 118).
 #[derive(Debug, Clone)]

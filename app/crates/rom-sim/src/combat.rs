@@ -745,7 +745,8 @@ impl World {
             )
         });
         for shot in shots.drain(..) {
-            if self.rng.range(0, 100) < shot.accuracy {
+            // A hit that struck true may still be shot down by a shield (task 157).
+            if self.rng.range(0, 100) < shot.accuracy && !self.intercepted(&shot.hit) {
                 self.hits.push(shot.hit);
             }
         }
@@ -907,7 +908,7 @@ impl World {
 
     /// Distance from `from` to an entity's footprint (a building) or edge (a unit), in
     /// milli-tiles; `u64::MAX` when out of reach.
-    fn edge_distance(&self, from: Pos, id: EntityId) -> u64 {
+    pub(crate) fn edge_distance(&self, from: Pos, id: EntityId) -> u64 {
         let e = self.entity(id).expect("measured entity");
         let et = &self.rules.entity_types[&e.type_id];
         let geo = self.geo(e.pos.body);
@@ -940,9 +941,12 @@ impl World {
     }
 
     fn damage_entity(&mut self, target: EntityId, damage: i64, hit: &PendingHit) {
+        // Shields' pools that cover the target take the damage first (task 157); the blow is
+        // felt all the same.
+        let through = self.absorb(target, damage, hit.attacker);
         let entity = self.entities[target.0 as usize].as_mut().expect("victim");
         let alive = entity.hp > 0;
-        entity.hp = entity.hp.saturating_sub(damage);
+        entity.hp = entity.hp.saturating_sub(through);
         if alive && entity.hp <= 0 {
             entity.killer = Some(hit.owner);
         }

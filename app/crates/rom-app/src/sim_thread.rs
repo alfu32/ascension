@@ -2308,6 +2308,13 @@ fn recent_shot(
         .max_by_key(|(fired, w)| (*fired, std::cmp::Reverse(w.slot)))?;
     let kind = projectile_kind(weapon.projectile)?;
     let since = world.tick().checked_sub(fired)?;
+    // A shot a shield shot down (task 157) flies its whole way's time, cut short.
+    let downed = world
+        .interceptions()
+        .iter()
+        .rev()
+        .find(|i| i.attacker == entity.id && i.weapon_id == weapon.id && i.tick == fired);
+    let cut = downed.map(|_| rom_render::INTERCEPT_AT);
     if since > SHOT_WINDOW + MAX_DRAWN_TRAVEL {
         return None;
     }
@@ -2335,8 +2342,9 @@ fn recent_shot(
             Some(orbit) if weapon.orbit_only => orbit.pos,
             _ => entity.pos,
         };
-        let travel = match flying {
-            Some((_, land, _, Some(_))) => land - fired,
+        let travel = match (flying, downed) {
+            (Some((_, land, _, Some(_))), _) => land - fired,
+            (_, Some(i)) => i.land_tick.saturating_sub(fired),
             _ => {
                 let rate = world
                     .rules()
@@ -2362,6 +2370,7 @@ fn recent_shot(
             fired_tick: fired,
             land_tick: fired + travel,
             count: u8::try_from(weapon.shots.clamp(1, 255)).unwrap_or(1),
+            cut,
         });
     }
     let aimed = flying
@@ -2400,6 +2409,7 @@ fn recent_shot(
     let landing = flying.filter(|&(at, _, _, _)| Some(at) == aimed.map(|id| id.0));
     let travel = match (landing, target) {
         (Some((_, land, _, _)), _) => land - fired,
+        _ if downed.is_some() => downed.map_or(0, |i| i.land_tick.saturating_sub(fired)),
         (None, Some(t)) if weapon.projectile_speed > 0 => travel_ticks(world, entity, weapon, t)?,
         _ => 0,
     };
@@ -2417,6 +2427,7 @@ fn recent_shot(
         fired_tick: fired,
         land_tick: fired + travel,
         count: u8::try_from(weapon.shots.clamp(1, 255)).unwrap_or(1),
+        cut,
     })
 }
 

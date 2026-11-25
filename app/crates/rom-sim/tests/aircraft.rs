@@ -41,9 +41,16 @@ fn planet(rules: &Rules) -> PlanetSurface {
     }
 }
 
-/// One system with the home planet of both players, in `age` with every technology, and a city
-/// of player one.
+/// One system with the home planet of both players, in `age` with every technology but the
+/// city shields (task 157: a shield over the airfield would stop the shots these tests aim at
+/// aircraft on the ground), and a city of player one.
 fn world(rules: &Arc<Rules>, age: &str) -> World {
+    let shield = |t: &rom_rules::DefId| {
+        rules
+            .modifiers_from(*t)
+            .iter()
+            .any(|m| m.stat_key.starts_with("intercept.") || m.stat_key == "shield_pool")
+    };
     let players = (0..=2)
         .map(|p| Player {
             id: PlayerId(p),
@@ -54,7 +61,12 @@ fn world(rules: &Arc<Rules>, age: &str) -> World {
             techs: if p == 0 {
                 BTreeMap::new()
             } else {
-                rules.techs.keys().map(|k| (*k, 1)).collect()
+                rules
+                    .techs
+                    .keys()
+                    .filter(|k| !shield(k))
+                    .map(|k| (*k, 1))
+                    .collect()
             },
         })
         .collect();

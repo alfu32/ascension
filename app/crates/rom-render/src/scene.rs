@@ -2147,6 +2147,25 @@ fn draw_overlay(world: &mut impl RaylibDraw3D, overlay: &OverlayGeometry) {
             colour,
         );
     }
+    if overlay.glass.is_empty() {
+        return;
+    }
+    // SAFETY: the render thread has an active GL context; the batch is flushed before and after
+    // so only these draws see the depth mask and culling changed here.
+    unsafe {
+        raylib::ffi::rlDrawRenderBatchActive();
+        raylib::ffi::rlDisableDepthMask();
+        raylib::ffi::rlDisableBackfaceCulling();
+    }
+    for tri in &overlay.glass {
+        draw_tri(world, tri);
+    }
+    // SAFETY: as above.
+    unsafe {
+        raylib::ffi::rlDrawRenderBatchActive();
+        raylib::ffi::rlEnableBackfaceCulling();
+        raylib::ffi::rlEnableDepthMask();
+    }
 }
 
 impl Scene {

@@ -546,6 +546,8 @@ pub struct Snapshot {
     pub flight: Vec<(EntityId, u64)>,
     /// The grids of drone operators, in operator id order (tasks 120, 128).
     pub clouds: Vec<(EntityId, crate::Cloud)>,
+    /// The pools of shields, in id order (task 157).
+    pub shields: Vec<(EntityId, crate::ShieldPool)>,
     /// Dormant surfaces of resource bodies not yet brought to life, in body order (task 77).
     pub dormant: Vec<(BodyId, crate::DormantSurface)>,
     /// Bodies brought to life, in body order (task 77).
@@ -1067,6 +1069,7 @@ impl World {
             governors_paused: self.governors_paused.iter().copied().collect(),
             flight: self.flight.iter().map(|(id, c)| (*id, *c)).collect(),
             clouds: self.clouds.iter().map(|(id, c)| (*id, *c)).collect(),
+            shields: self.shield_pools().collect(),
             dormant: self.life.dormant.iter().map(|(b, d)| (*b, *d)).collect(),
             living: self
                 .life
@@ -1122,6 +1125,7 @@ impl World {
             governors_paused,
             flight,
             clouds,
+            shields,
             dormant,
             living,
             market,
@@ -1534,6 +1538,15 @@ impl World {
                 return Err(bad("aircraft climbed past its flight height"));
             }
             world.flight.insert(id, climbed);
+        }
+        for (id, pool) in shields {
+            let shield = world
+                .entity(id)
+                .is_some_and(|e| world.rules.entity_types[&e.type_id].shield.is_some());
+            if !shield || pool.pool < 0 {
+                return Err(bad("shield pool of an entity that is not a shield"));
+            }
+            world.shield.pools.insert(id, pool);
         }
         for (id, cloud) in clouds {
             let full = world

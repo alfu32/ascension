@@ -1143,6 +1143,24 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
     } else {
         Vec::new()
     };
+    // Saves before format 23 (task 157) had no shields.
+    let shields = if format >= 23 {
+        query_vec(
+            conn,
+            "SELECT entity_id, pool, hit_tick FROM entity_shield ORDER BY entity_id",
+            |r| {
+                Ok((
+                    EntityId(uint(r, 0, "shield")?),
+                    rom_sim::ShieldPool {
+                        pool: int(r, 1)?,
+                        hit_tick: uint(r, 2, "shield hit tick")?,
+                    },
+                ))
+            },
+        )?
+    } else {
+        Vec::new()
+    };
     // Saves before format 16 (task 120) have no drone operators; format 16 saves load with every
     // grid full and facing east (task 128).
     let clouds = if format >= 17 {
@@ -1354,6 +1372,7 @@ fn snapshot(conn: &Connection, rules: &Rules) -> Result<Snapshot, SaveError> {
         governors_paused: flags(conn, "governor_paused")?,
         flight,
         clouds,
+        shields,
         history,
         contacts,
         capitals_known,

@@ -700,6 +700,50 @@ def explosion_large(r):
     return rumble + blast + thump + debris(r, n, 10, 0.2, 1.4) * 0.6
 
 
+def shield_zap(r):
+    """A projectile shot down by a city's shield (task 157): a hard electric crack, a bright
+    falling sizzle and a small pop of the projectile breaking up."""
+    n = n_of(0.55)
+    t = np.arange(n) / SR
+    crack = highpass(r.standard_normal(n), 2500) * env_ad(n, 0.0005, 0.012)
+    f = r.uniform(1800, 2300) * np.exp(-t / 0.09) + r.uniform(500, 650)
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    sizzle = (np.sin(ph) + 0.5 * np.sign(np.sin(3 * ph))) * (0.6 + 0.4 * np.sin(2 * np.pi * 120 * t))
+    sizzle = cfilter(sizzle, hi=9000) * env_ad(n, 0.002, 0.09) * 0.45
+    pop = lowpass(r.standard_normal(n), 1800) * env_ad(n, 0.004, 0.05) * 0.35
+    return crack + sizzle + np.roll(pop, n_of(0.01))
+
+
+def shield_hit(r):
+    """A blow on an energy dome (task 157): a soft low thump through the field, a glassy ring
+    that wavers and a fading electric shimmer."""
+    n = n_of(1.4)
+    t = np.arange(n) / SR
+    thump = np.sin(2 * np.pi * (90 - 40 * np.minimum(t, 0.25)) * t) * env_ad(n, 0.003, 0.12)
+    ring = np.zeros(n)
+    base = r.uniform(380, 460)
+    for k, a in [(1.0, 1.0), (2.01, 0.5), (2.98, 0.3), (4.2, 0.15)]:
+        ring += a * np.sin(2 * np.pi * base * k * t + r.uniform(0, 6))
+    ring *= (1 + 0.25 * np.sin(2 * np.pi * 7 * t)) * env_ad(n, 0.005, 0.35) * 0.35
+    shimmer = bandpass(r.standard_normal(n), 3000, 9000) * env_ad(n, 0.01, 0.25) * 0.12
+    return thump + ring + shimmer
+
+
+def shield_hum(seed=31, seconds=8.0):
+    """A charged energy dome at rest (task 157): a soft electric drone, beating slowly, with a
+    faint high whine and the crackle of the field."""
+    r = rng(seed)
+    n = n_of(seconds)
+    t = np.arange(n) / SR
+    out = np.zeros(n)
+    for f, a in [(60, 1.0), (60.5, 0.7), (120, 0.45), (180, 0.25), (240.25, 0.15)]:
+        out += a * np.sin(2 * np.pi * qf(f, seconds) * t + r.uniform(0, 6))
+    out *= 0.8 + 0.2 * wander(r, n, 5)
+    whine = np.sin(2 * np.pi * qf(2400, seconds) * t) * 0.02 * wander(r, n, 7, 0.3, 1.0)
+    crackle = cnoise(r, n, 2000, 8000) * 0.05 * wander(r, n, 9, 0.2, 1.0)
+    return out + whine + crackle
+
+
 def crossbow(r):
     """A crossbow: the trigger, a hard snap of the short bow and the bolt away."""
     n = n_of(0.7)
@@ -1222,6 +1266,10 @@ def main():
     variants("act.hoe_soil", hoe_soil, 43, 3, peak=0.8)
     variants("act.explosion_small", explosion_small, 39, 3)
     variants("act.explosion_large", explosion_large, 16, 2)
+    # Task 157: city and fort shields.
+    variants("act.shield_zap", shield_zap, 44, 3)
+    variants("act.shield_hit", shield_hit, 45, 2)
+    save("act.shield_hum", shield_hum(), "loop", peak=0.85, rms=0.12)
 
     ui = dict(peak=0.6)
     variants("ui.click", click, 70, 3, **ui)

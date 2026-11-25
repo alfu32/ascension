@@ -2887,3 +2887,87 @@ stars one age later. Rows only: no schema change and no code; both lint views st
   a probe, a transport and a frigate through its Train tab) and `img/155-fusion-system.png` (the
   same ships in the system view: the frigate and the transport sent to the home planet's moon,
   which they claim, the probe still in its planet's orbit).
+
+## City and fort shields (task 157)
+
+Owner (chat, 2026-11-25): "cities and forts (their upgrades in their line) should have their own
+shield gained through research, in the freedom age they can research missile shield, the upgrade
+to laser shield and energy shield", "make the shields expensive to research"; with task 158: a
+city's shield covers its city area. **Schema change (authorised by the card):** one component
+table, four stats, one save table; both lint views stay empty and the seed loads.
+
+- **`et_shield(entity_type_id, cover, recharge_delay_ticks, recharge_period_ticks, recharge_pct,
+  recharge_resource_id, recharge_cost)`**: a building its owner's researches may give a shield.
+  The rules loader puts it in `EntityType::shield`; validation refuses it on anything but a
+  building, a period below one tick and a recharge resource that is not a resource. The
+  generator (`shields()`, written after every other definition so every earlier id stays)
+  gives it to every type tagged `city` or `fort` (`SHIELD_COVER`): the city, the automated colony
+  (a city, tag `city`) and the whole fort line (fort, star fort, fortress, citadel, found by the
+  tag their upgrades carry). The tower line (bastion, bunker, defence turret) is not the fort
+  line and holds none.
+- **What it covers**: what stands within `cover` milli-tiles of its footprint (forts: **4 000**,
+  four tiles round them) and, for a city type, its whole economic radius (the city area, which
+  grows with its buildings whatever task 158's option says). A target is measured by its
+  position (a building by its centre); in orbit or aboard, nothing is covered.
+- **Stats (entity scope)**: `intercept.explosive`, `intercept.bullet`, `intercept.kinetic` — the
+  percent of the projectiles of that damage class thrown at whatever of the shield's owner's it
+  covers that the shield shoots down; the simulation reads `intercept.<damage class key>`, so a
+  new class is shot down by adding its stat and modifiers, never by code. `shield_pool` — the
+  percent of the building's (effective) hit points its pool holds.
+- **The researches** (kind `upgrade`, at the city: research page, columns 2 to 4, the next free
+  places; each needs the one before). Their modifiers target the tags `city` and `fort` and add
+  up:
+
+  | Research | Age | Price | Ticks | Adds | The advance into its age |
+  | --- | --- | --- | --- | --- | --- |
+  | Missile Shield `tech.missile_shield` | Freedom (`age.information`) | 2 000 metal, 2 000 knowledge | 2 000 | `intercept.explosive` 35 | 1 750 food, 1 750 knowledge, 1 800 ticks |
+  | Laser Shield `tech.laser_shield` | Automation | 2 500 metal, 2 500 knowledge | 2 400 | `intercept.explosive` +20 (55), `intercept.bullet` 35, `intercept.kinetic` 30 | 2 000, 2 000, 2 000 |
+  | Energy Shield `tech.energy_shield` | Fusion | 3 000 metal, 3 000 knowledge, 800 energy | 2 800 | `shield_pool` 50 | 2 250, 2 250, 2 200 |
+
+  Each is dearer and longer than the advance into its age, and the first two also than the
+  advance out of it (Automation 2 000/2 000/2 000 ticks, Fusion 2 250/2 250/2 200).
+- **Interception** (`rom-sim/src/shields.rs`, `World::intercepted`, called in `fire_shots` for
+  each shot that struck true, in the shots' geometric order): a hit of a weapon that throws a
+  projectile (`projectile_speed` > 0, a reach, not consumed: the rule `attack_ground` already
+  uses) at an entity of a player (or, a shot at the ground, at a point) that a working shield
+  of that player (of any enemy of the shooter, for the ground) covers is rolled against the largest
+  `intercept.<class>` of the covering shields (the nearest of those shields, by the distance to
+  its footprint, shoots) with the simulation's one generator; on a success it is
+  not queued. Light and rail slugs (beams, railguns: `projectile_speed` 0) hit at once and cannot
+  be shot down, so the space frigate's and the space cruiser's bombardment from orbit pass every
+  shield; the orbital bomber's shells and the battleship's plasma are shot down. Shots at a
+  drone of a grid are not. No roll is made where no covering shield has a share, so worlds
+  without the researches draw the same numbers as before. A working shield is a finished,
+  standing building of a shield type, not neutralised, on a surface.
+- **The pool**: `World::absorb`, called in `damage_entity` (every hit and splash): the charged
+  pools of the target's owner's shields that cover it, the nearest first (by the distance to the
+  shield's footprint, then by id: a fort standing in a city area takes the blows on itself
+  before the city's dome does), take the damage before hit points; the blow still counts as an attack (alerts, retaliation). Every covering pool, empty or
+  not, restarts its recharge delay. `recharge_shields` (each tick after the dead are removed):
+  each shield, in id order, at a multiple of its `recharge_period_ticks` (**20**, a second), with
+  a pool now (`shield_pool` × its hit points), not hit for `recharge_delay_ticks` (**200**, ten
+  seconds), gains `recharge_pct` (**5**, empty to full in 20 s) of its full pool, paying
+  `recharge_cost` (**10**) of `recharge_resource_id` (**energy**) per 100 points, both rounded up;
+  without that much in store it does not recharge. A pool starts empty and charges the same way.
+- **State**: `World::shield.pools` (shield → pool points and the tick of its last blow), hashed
+  once not empty (other worlds keep their hashes) and saved: **save format 23**, table
+  `entity_shield(entity_id, pool, hit_tick)`; formats 13 to 22 load with no pool (one guard, no
+  other compatibility code). `World::interceptions()` and `World::shield_hits()` are reports for
+  the views, kept 60 ticks (after the would-be landing), not hashed, not saved;
+  `World::shield_view(id)` gives the pool, its full size and the reach a dome is drawn to.
+- **Views** (`rom-app`, `rom-render`): a shot shot down is drawn flying its whole way's time
+  (`ShotView::cut`) and stopped three quarters along (`INTERCEPT_AT`) with a white-blue burst and
+  sparks; an Energy Shield's dome (`HudShield`, `overlay/shields.rs`) spans what it covers, a
+  translucent cap 0.4 of its reach high (at most 9 tiles, but 1.2 times the building under it
+  and never above its reach), as bright as its pool is full, shimmering, drawn without writing
+  depth (`OverlayGeometry::glass`) so what is inside shows; a blow on it flares on the side facing
+  where it came from (`HudShieldHit`: `ShieldHit::from`, the attacker's position, from the struck
+  point 0.6 of the way to the rim toward it, up on the dome). Sounds: `docs/sound.md`.
+- **Computer players**: nothing new; they weigh the researches by their usual scores (`rom-ai`,
+  `research::worth`: modifiers of an entity stat by the army share, less a twentieth of the
+  price), so the dear shields come late.
+- **Screenshots** (the game's own paths, `--script`): `img/157-rockets.png`
+  (`tasks/157-rockets-script.txt`: rocket batteries fire on a city with the Missile and Laser
+  Shields; shot-down rockets burst three quarters of the way) and `img/157-dome.png`
+  (`tasks/157-dome-script.txt`: fusion tanks attack a citadel standing in its city's area; its
+  Energy Shield dome flares on the side facing them).

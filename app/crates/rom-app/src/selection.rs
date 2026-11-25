@@ -1511,6 +1511,63 @@ impl Controller {
             .collect();
     }
 
+    /// The Energy Shield domes the player sees on the planet shown and the blows they took
+    /// lately (task 157).
+    fn shields(&self, world: &World, hud: &mut rom_render::HudSnapshot) {
+        let me = self.me();
+        let body = self.view.planet;
+        let tick = world.tick();
+        let sees = |pos: Pos| {
+            world.is_visible_on_body(
+                me,
+                pos.body,
+                pos.face,
+                pos.x.div_euclid(1000),
+                pos.y.div_euclid(1000),
+            )
+        };
+        let dome = |id: rom_sim::EntityId| {
+            let e = world
+                .entity(id)
+                .filter(|e| e.pos.body == body && sees(e.pos))?;
+            let view = world.shield_view(id).filter(|v| v.max > 0)?;
+            Some((e.pos, view))
+        };
+        let clamp = |v: i64| i32::try_from(v).unwrap_or(i32::MAX);
+        hud.shields.clear();
+        hud.shields
+            .extend(world.shield_pools().filter_map(|(id, _)| {
+                let (pos, view) = dome(id)?;
+                Some(rom_render::HudShield {
+                    id: id.0,
+                    face: pos.face,
+                    x: pos.x,
+                    y: pos.y,
+                    reach: clamp(view.reach),
+                    charge: (view.pool.clamp(0, view.max) * 1000 / view.max.max(1)) as u16,
+                })
+            }));
+        hud.shield_hits.clear();
+        hud.shield_hits
+            .extend(world.shield_hits().iter().filter_map(|hit| {
+                let (pos, view) = dome(hit.shield)?;
+                // Offsets from the dome's centre on its face; a point on another face has none.
+                let offset = |p: Pos| {
+                    (p.body == pos.body && p.face == pos.face).then(|| (p.x - pos.x, p.y - pos.y))
+                };
+                Some(rom_render::HudShieldHit {
+                    id: hit.shield.0,
+                    face: pos.face,
+                    x: pos.x,
+                    y: pos.y,
+                    reach: clamp(view.reach),
+                    at: offset(hit.at).unwrap_or((0, 0)),
+                    from: hit.from.and_then(offset),
+                    age_ticks: tick.saturating_sub(hit.tick).min(u64::from(u32::MAX)) as u32,
+                })
+            }));
+    }
+
     /// The patrols of the selected units on the planet shown: between their ends on the ground,
     /// all the way round the great circle through them in orbit.
     fn patrols(&self, world: &World) -> Vec<rom_render::HudPatrol> {
@@ -4013,6 +4070,7 @@ impl Controller {
         hud.patrols = self.patrols(world);
         let tick = world.tick();
         self.bombardment(world, hud);
+        self.shields(world, hud);
         hud.markers = self
             .markers
             .iter()

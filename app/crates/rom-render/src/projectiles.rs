@@ -122,6 +122,11 @@ struct Look {
 const BEAM_COLOUR: [u8; 3] = [90, 210, 255];
 const PLASMA_COLOUR: [u8; 3] = [200, 110, 255];
 const RAIL_COLOUR: [u8; 3] = [190, 230, 255];
+/// The flash of a projectile a shield shot down (task 157).
+const SHIELD_COLOUR: [u8; 3] = [120, 215, 255];
+/// The share of its way at which a projectile a shield shoots down is drawn hit (task 157;
+/// the simulation only says that it was).
+pub const INTERCEPT_AT: f32 = 0.75;
 
 impl ProjectileKind {
     /// Every kind, in a fixed order.
@@ -264,6 +269,9 @@ pub struct ShotView {
     pub land_tick: u64,
     /// Projectiles of one shot (`et_weapon.shots`).
     pub count: u8,
+    /// The share of its way at which a shield shot it down (task 157); `None` when it reaches
+    /// its target.
+    pub cut: Option<f32>,
 }
 
 /// The ticks, in the render thread's simulation time, at which a shot of `kind` fired at
@@ -291,9 +299,14 @@ struct Flight {
     fired: u64,
     kind: ProjectileKind,
     target: Option<u32>,
-    /// Render ticks of leaving the muzzle and of reaching the target.
+    /// Render ticks of leaving the muzzle and of reaching the target, or of being shot down.
     start: f64,
     end: f64,
+    /// Render ticks of the whole way to the target.
+    span: f64,
+    /// The share of its way at which a shield shot it down (task 157); 1 when it reaches its
+    /// target.
+    cut: f32,
     from: [f32; 3],
     to: [f32; 3],
     /// Away from the ground under the shooter.
@@ -334,10 +347,15 @@ impl Flight {
         }))
     }
 
-    /// Share of its way done at render tick `now`.
+    /// Share of its way done at render tick `now`: no farther than where it was shot down.
     fn progress(&self, now: f64) -> f32 {
-        let span = (self.end - self.start).max(1e-6);
-        ((now - self.start) / span).clamp(0.0, 1.0) as f32
+        let span = self.span.max(1e-6);
+        (((now - self.start) / span) as f32).clamp(0.0, self.cut)
+    }
+
+    /// Whether a shield shot it down on its way (task 157).
+    fn intercepted(&self) -> bool {
+        self.cut < 1.0
     }
 
     fn scale(&self) -> f32 {
@@ -485,7 +503,10 @@ impl Projectiles {
         let aloft = is_aloft(view) || target.is_some_and(is_aloft) || shot.altitude > 0.0;
         let ship = |v: &EntityView| is_aloft(v) && v.spacecraft;
         let large = ship(view) || target.is_some_and(ship) || shot.altitude > 0.0;
-        let (start, end) = flight_span(shot.kind, shot.fired_tick, shot.land_tick);
+        let (start, whole) = flight_span(shot.kind, shot.fired_tick, shot.land_tick);
+        // A projectile a shield shot down ends where it was hit (task 157).
+        let cut = shot.cut.map_or(1.0, |c| c.clamp(0.0, 1.0));
+        let end = start + (whole - start) * f64::from(cut);
         if now >= end + IMPACT_TICKS {
             return;
         }
@@ -496,6 +517,8 @@ impl Projectiles {
             target: shot.target,
             start,
             end,
+            span: whole - start,
+            cut,
             from,
             to,
             up: ground.frame(view.face, view.x, view.y).up,
@@ -879,8 +902,69 @@ fn trail(f: &Flight, t: f32, scale: f32, out: &mut ProjectileGeometry) {
     }
 }
 
+/// The flash of a projectile a shield shot down (task 157), `age` (0 to 1) of the way through:
+/// a hard white-blue burst where it was hit, sparks thrown off and a glow fading.
+fn shot_down(f: &Flight, age: f32, out: &mut ProjectileGeometry) {
+    let scale = f.scale();
+    let at = f.point(f.cut);
+    let fade = (1.0 - age).clamp(0.0, 1.0);
+    if age < 0.5 {
+        let flash = 1.0 - age / 0.5;
+        star(
+            &mut out.glow,
+            at,
+            1.0 * scale * (0.5 + age),
+            f.up,
+            SHIELD_COLOUR,
+            flash,
+        );
+        star(
+            &mut out.glow,
+            at,
+            0.35 * scale,
+            f.up,
+            [245, 252, 255],
+            flash,
+        );
+    }
+    for k in 0..8 {
+        let ray = normalize([
+            f.noise(k * 3 + 40) - 0.5,
+            f.noise(k * 3 + 41) - 0.5,
+            f.noise(k * 3 + 42) - 0.5,
+        ]);
+        let reach = 1.2 * scale * (0.3 + age);
+        let end: [f32; 3] = std::array::from_fn(|i| at[i] + ray[i] * reach);
+        out.lines.push(Line3 {
+            a: at,
+            b: end,
+            colour: [200, 240, 255, (255.0 * fade) as u8],
+        });
+        ribbon(
+            &mut out.glow,
+            at,
+            end,
+            0.04 * scale,
+            f.up,
+            with_alpha(SHIELD_COLOUR, 0.7 * fade),
+        );
+    }
+    puff(
+        &mut out.smoke,
+        at,
+        0.6 * scale * (0.5 + age),
+        f.up,
+        [120, 130, 140],
+        0.35 * fade,
+    );
+}
+
 /// The effect of the flight `f` where it landed, `age` (0 to 1) of the way through.
 fn landed(f: &Flight, age: f32, out: &mut ProjectileGeometry) {
+    if f.intercepted() {
+        shot_down(f, age, out);
+        return;
+    }
     let look = f.kind.look();
     let scale = f.scale();
     let at = f.to;
@@ -1337,6 +1421,7 @@ mod tests {
             fired_tick: fired,
             land_tick: land,
             count: 1,
+            cut: None,
         }
     }
 

@@ -19,7 +19,7 @@ except the global cues under `ui.` and the ambience under `ambient.`.
 | `bld.<building>.<event>[.<n>]` | a building's acknowledgment, work loop and cues | mono 44.1 kHz, q3 |
 | `ui.…` | interface cues and the announcer (`ui.announcer.*`, spoken) | mono, q3 (announcer as voices) |
 | `ambient.…` | ambience beds: 24 s loops | stereo 44.1 kHz, q3 |
-| `act.…` | shared activity: soft footsteps on grass, work at gather sites, impacts, a rotor (task 119) | mono 44.1 kHz, q3 |
+| `act.…` | shared activity: soft footsteps on grass, work at gather sites, impacts, a rotor (task 119), shields (task 157) | mono 44.1 kHz, q3 |
 
 `<n>` numbers the variations of a sound heard often (shots, blows): play one at random. The
 mixer counts variations of one sound together for its limits.
@@ -225,6 +225,12 @@ camera, panned by screen position; a zoomed-out view hears a tenth at most):
   little louder for many (at most 1.4×); the eight loudest play; they fade out when the world
   stands still.
 - Construction sites hammer (`act.hammer_wood`) while their work goes on, the nearest two.
+- Shields (task 157): a projectile a city's or fort's shield shoots down zaps
+  (`act.shield_zap`, three variations) and a blow on an Energy Shield's dome thumps and rings
+  (`act.shield_hit`, two), heard at the shield, the nearest three a pass; a charged dome in view
+  hums (`act.shield_hum`, an 8 s loop in an activity slot, the loudest of each shield type).
+  Synthesised in `tools/sounds/synth.py` (`shield_zap`, `shield_hit`, `shield_hum`) and baked
+  alone ("Baking only new types").
 
 **Ambience** follows the camera, cross-fading every 0.1 s: each `ambience` bed at the square
 root of its share of the 25 ground points (the fields: points within 7 tiles of a food gather

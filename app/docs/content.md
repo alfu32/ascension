@@ -275,6 +275,7 @@ units ride starships; workers landed on a planet found its colony).
 | Deep Space Tracking Station | Total Network (13) | task 130: every capital, city, planet and system |
 | Library | Unification (10, exists) | task 130 adds: the capital system of each player met |
 | each gather site | Automation (8) | converts the site to its automated version |
+| City | Missile Shield (7), Laser Shield (8), Energy Shield (9) | task 157: every city and fort of their lines shoots down explosive projectiles thrown at what it covers (`intercept.explosive` 35 %, then 55 %), then bullets and kinetic shells too (35 %, 30 %); the Energy Shield adds a pool of half its hit points that takes damage first and recharges from energy (`database.md`, "City and fort shields") |
 
 ## 7. Simulation and interface rules this content needs
 

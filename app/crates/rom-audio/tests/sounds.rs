@@ -36,7 +36,8 @@ fn every_sound_decodes() {
             || name.ends_with(".active")
             || name.starts_with("act.footsteps_grass")
             || name == "act.saw"
-            || name == "act.rotor";
+            || name == "act.rotor"
+            || name == "act.shield_hum";
         if looped {
             // Loops carry loop points inside padding of their own wrap-around.
             assert!(

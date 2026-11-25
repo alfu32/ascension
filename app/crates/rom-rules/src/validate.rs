@@ -254,6 +254,22 @@ impl Rules {
                     ),
                 });
             }
+            // Task 157: a shield stands on a building; what recharging draws is a resource.
+            if let Some(shield) = &entity.shield
+                && (entity.class != crate::EntityClass::Building
+                    || shield.recharge_period_ticks < 1
+                    || shield
+                        .recharge_resource_id
+                        .is_some_and(|r| !self.resources.contains_key(&r)))
+            {
+                problems.push(Problem {
+                    message: format!(
+                        "shield {} must be a building with a recharge period, recharging from a \
+                         resource",
+                        self.label(entity.id)
+                    ),
+                });
+            }
             if entity.keeper.as_ref().is_some_and(|k| k.capacity < 1) {
                 problems.push(Problem {
                     message: format!("keeper {} capacity must be positive", self.label(entity.id)),

@@ -311,6 +311,16 @@ impl World {
                 hash.u32(cloud.rebuild);
             }
         }
+        // Hashed only once a shield holds a pool, so other worlds keep their hashes (task 157).
+        if !self.shield.pools.is_empty() {
+            hash.bytes(b"shields");
+            hash.u64(self.shield.pools.len() as u64);
+            for (id, pool) in &self.shield.pools {
+                hash.u32(id.0);
+                hash.bytes(&pool.pool.to_le_bytes());
+                hash.u64(pool.hit_tick);
+            }
+        }
         // Hashed only once a player has traded, so other worlds keep their hashes (task 107).
         if !self.market.is_empty() {
             hash.bytes(b"market");
