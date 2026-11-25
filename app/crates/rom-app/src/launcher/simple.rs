@@ -69,6 +69,8 @@ pub(super) const FIELDS: &[(&str, &str)] = &[
     ("style", "map.many_worlds"),
     // Start placement: blank keeps the rules' default (task 112).
     ("placement", ""),
+    // Whether the city area limits building (task 158): on or off.
+    ("city_area", "on"),
     // Starting age (an ordinal), a setup script (a file) and, in Play, watching the computers
     // (task 112's presets and the forms' script choice); blank or "false" leave them off.
     ("age", ""),
@@ -284,6 +286,11 @@ impl Simple {
         let placement = self.get("placement").trim();
         if !placement.is_empty() {
             form.set("start-placement", placement);
+        }
+        match self.get("city_area") {
+            "on" => {}
+            "off" => form.set("city-area", "off"),
+            _ => return Err("City area: on or off".into()),
         }
         form.set("ai", self.computers(computers));
         if watch {
@@ -670,6 +677,15 @@ mod tests {
         // A blank placement leaves the rules' default.
         let options = Simple::default().options(Mode::Play, &mix(), 1).unwrap();
         assert_eq!(options.start_placement, None);
+        // Task 158: the city area is on unless the form turns it off, in every mode that
+        // starts a match.
+        assert_eq!(options.city_area, rom_sim::CityArea::LimitsBuilding);
+        for mode in [Mode::Play, Mode::Host, Mode::Serve] {
+            let mut simple = Simple::default();
+            simple.set("city_area", "off");
+            let options = simple.options(mode, &mix(), 1).unwrap();
+            assert_eq!(options.city_area, rom_sim::CityArea::Free, "{mode:?}");
+        }
     }
 
     #[test]

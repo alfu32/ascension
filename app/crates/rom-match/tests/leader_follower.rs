@@ -31,6 +31,7 @@ fn settings() -> MatchSettings {
         script,
         ai: Some(Vec::new()),
         humans: vec![PLAYER_ONE],
+        ..MatchSettings::default()
     }
 }
 

@@ -200,3 +200,36 @@ fn a_format_20_save_loads_without_facings() {
     assert_eq!(old.hash(), w.hash());
     std::fs::remove_file(&path).unwrap();
 }
+
+/// Task 158: the city area option is saved and comes back (the hash with it); a format 21 save
+/// (before the option) loads with the city area limiting building.
+#[test]
+fn the_city_area_option_is_saved_and_a_format_21_save_limits_building() {
+    use rom_sim::CityArea;
+    let rules = rules();
+    let mut w = World::battle_scenario(rules.clone(), 3, 4).unwrap();
+    w.set_city_area(CityArea::Free).unwrap();
+    ticks(&mut w, 30);
+    let path = temp_path("city-area");
+    rom_save::save(&path, &w, &info(&w), &ai()).unwrap();
+    let (loaded, _, _) = rom_save::load(&path, &rules).unwrap();
+    assert_eq!(loaded.match_options().city_area, CityArea::Free);
+    assert_eq!(loaded.hash(), w.hash());
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "ALTER TABLE match DROP COLUMN city_area; UPDATE match SET format = 21;",
+        )
+        .unwrap();
+    }
+    let (old, _, _) = rom_save::load(&path, &rules).unwrap();
+    assert_eq!(old.match_options().city_area, CityArea::LimitsBuilding);
+    assert_ne!(old.hash(), w.hash(), "the option is part of the hash");
+    // The default saves and loads as itself.
+    let plain = World::battle_scenario(rules.clone(), 3, 4).unwrap();
+    rom_save::save(&path, &plain, &info(&plain), &ai()).unwrap();
+    let (back, _, _) = rom_save::load(&path, &rules).unwrap();
+    assert_eq!(back.match_options().city_area, CityArea::LimitsBuilding);
+    assert_eq!(back.hash(), plain.hash());
+    std::fs::remove_file(&path).unwrap();
+}

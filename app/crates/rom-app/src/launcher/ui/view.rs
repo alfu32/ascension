@@ -213,6 +213,35 @@ impl Launcher {
         )
     }
 
+    /// Whether the city area limits building (task 158).
+    fn city_area_field(&self, cx: &mut Context<Self>) -> AnyElement {
+        let current = match self.config.simple.get("city_area") {
+            "off" => "off",
+            _ => "on",
+        };
+        let sentence = if current == "on" {
+            "Buildings of a city stand inside its area, the ring that grows with them."
+        } else {
+            "Buildings may stand anywhere in your borders; the area still grows, and a city's shield covers only it."
+        };
+        let items = vec![
+            ("on".to_owned(), "Limits building".to_owned()),
+            ("off".to_owned(), "Anywhere in the borders".to_owned()),
+        ];
+        style::field(
+            "City area",
+            Some(sentence.into()),
+            self.segmented(
+                "city-area",
+                items,
+                current,
+                Rc::new(|this, key, _, cx| this.simple_change("city_area", key.to_owned(), cx)),
+                cx,
+            ),
+        )
+        .into_any_element()
+    }
+
     fn drop_field(&self, cx: &mut Context<Self>) -> AnyElement {
         let current = self.config.simple.get("drop").to_owned();
         let items = simple::drop_choices()
@@ -352,6 +381,7 @@ impl Launcher {
                         ))
                     }),
             )
+            .child(self.city_area_field(cx))
             .child(style::heading("Setup"))
             .child(self.setup_fields(cx))
             .into_any_element()

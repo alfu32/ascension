@@ -67,6 +67,7 @@ fn world(rules: &Arc<Rules>) -> World {
     .with_match_options(MatchOptions {
         elimination: Elimination::Conquest,
         victories: [VictoryRule::Conquest].into(),
+        ..Default::default()
     })
     .unwrap();
     let id = |key| rules.id_of(key).unwrap();
