@@ -15,6 +15,11 @@ upgrade chains, never by key) a shield of its own:
 | **Laser Shield** (upgrade) | Automation (age 8) | point-defence lasers: a larger share, and bullets and orbital bombardment shells too |
 | **Energy Shield** (upgrade) | Fusion (age 9) | a shield pool (a share of the building's hit points) that takes every kind of damage first and recharges while not hit, drawing energy (`res.energy`); a dome over the building, flaring where it is hit; interception as the laser shield stays |
 
+The owner (chat, 2026-11-25): "make the shields expensive to research". The three researches
+are among the dearest of their ages: each costs at least as much as that age's advance itself
+(the age research), in the age's expensive resources (metal, knowledge, and energy for the
+Energy Shield), and takes long to research; say the numbers beside the age advance's.
+
 Numbers (shares, pool, recharge, energy per period, research costs and times): say them, tuned
 so a city still falls to a proper siege of its age (the counter rule, card 71: the fight
 matrix keeps `unanswered=0`, and bombardment of task 75 still flattens a city, slower).
