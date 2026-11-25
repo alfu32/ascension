@@ -29,6 +29,20 @@ if small, else a note), seed and schema (authorised), model files, sounds. Imple
   other agents work there. The computer player must not be harmed: it ignores the new
   buildings until 147b (its build plan picks by score; make sure walls and mines score nothing
   for it, through data if possible, else report).
+- **147b additions (owner, chat, 2026-11-25)**, verbatim: "i dislike the way walls are built, i
+  want to be able to do segments easily. i want the gates wider ... 3 times wide ... problem
+  will be with the orientation (same as for wall elements when later they beget a vertical
+  plane that traits its orientation)." So 147b also:
+  - makes building a wall **easy**: press and drag draws the line (a ghost follows the ground
+    with the price), release builds it; a click on a placed wall's end continues it; the
+    selected builders take the segments in order;
+  - makes **gates 3 tiles wide** (along the line, one tile deep), dropped into the line while
+    dragging (a click or the G key at the pointer), replacing the 3 segments there;
+  - gives segments and gates an **orientation**: a building's facing becomes saved, hashed
+    state set by `construct` (rom-sim: a facing on the order or on the site; the footprint of a
+    rotated building follows it; save format bump), so a wall's vertical plane runs along the
+    line, diagonals included, and every later kind (stone, defensive line, shield, task 156)
+    keeps it when it changes with the age. `rom-sim` and `rom-save` are therefore in 147b too.
 - **147b — the drag placement and drawing, the computer player** (after 151 and 152 merge):
   `rom-app` (drag a line, gates on the line, drag a rectangle for mines), `rom-render` (joined
   segments, minefield shown to its owner only), `rom-ai` (builds walls and mines through data;
