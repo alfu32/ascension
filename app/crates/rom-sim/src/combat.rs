@@ -418,9 +418,19 @@ impl World {
             }
         }
         if order.kind == "attack_move" || patrol {
+            // In orbit it keeps to the orbit: an enemy in the system's space gone out of its
+            // reach is let go (task 154).
+            let beyond = |target: EntityId| {
+                self.orbit(id).is_some()
+                    && self.entity(target).is_some_and(|t| {
+                        t.pos.body == self.entity(id).expect("attacker").pos.body
+                            && !self.can_fire_at(id, target)
+                    })
+            };
             if order.target_entity.is_some_and(|target| {
                 self.entity(target)
                     .is_none_or(|e| e.hp <= 0 || e.container_id.is_some())
+                    || beyond(target)
             }) {
                 order.target_entity = None;
                 order.movement = None;
@@ -475,21 +485,31 @@ impl World {
             order.status = OrderStatus::Done;
             return;
         }
+        let target_id = target.id;
+        // A ship in orbit leaves it only for an attack on what is in its system's space; on an
+        // attack move or a patrol it keeps to the orbit (task 154).
+        let orbiting = self.orbit(id).is_some();
+        let leaves = orbiting && order.kind == "attack" && self.leaves_orbit_for(id, target_id);
         if order.automatic
-            && self.combat_behavior(id) == "stand_ground"
-            && !self.can_fire_at(id, target.id)
+            && (self.combat_behavior(id) == "stand_ground" || (orbiting && !leaves))
+            && !self.can_fire_at(id, target_id)
         {
             order.status = OrderStatus::Done;
             return;
         }
-        let target_id = target.id;
         let target_pos = self.aim_pos(id, target_id);
-        if let Some(home) = order.home.filter(|_| !patrol)
+        // The leash bounds a chase: a ship firing from its orbit at its planet is not chasing.
+        if let Some(home) = order.home.filter(|_| !patrol && (!orbiting || leaves))
             && self
                 .geo(home.body)
                 .distance(target_pos, home)
                 .is_none_or(|d| d > 6000)
         {
+            // Still in its orbit, a ship is home already.
+            if orbiting {
+                order.status = OrderStatus::Done;
+                return;
+            }
             order.kind = "move".into();
             order.target_entity = None;
             order.target_pos = Some(home);
@@ -498,8 +518,7 @@ impl World {
         }
         let attacker = self.entity(id).expect("attacker");
         let type_id = attacker.type_id;
-        let movable =
-            self.rules.entity_types[&type_id].movement.is_some() && self.orbit(id).is_none();
+        let movable = self.rules.entity_types[&type_id].movement.is_some() && (!orbiting || leaves);
         let move_allowed =
             movable && !(order.automatic && self.combat_behavior(id) == "stand_ground");
         // In orbit an ordered attack carries the ship's ground point toward its target.
@@ -571,6 +590,9 @@ impl World {
                     order.movement = None;
                 }
                 let exempt = bounds.map(|b| TileRect::covering(target_pos.face, b));
+                if self.orbit(id).is_some() {
+                    self.leave_orbit_to_fight(id, order);
+                }
                 self.walk(id, order, goal, exempt, false);
                 walked = true;
                 aim = aim_from(self, self.entity(id).expect("attacker").pos);
@@ -676,6 +698,30 @@ impl World {
             });
             return;
         }
+    }
+
+    /// A ship leaves its orbit to close on an enemy in its system's space (task 154). After an
+    /// attack it made by itself it goes back to that orbit, over the same point, unless an order
+    /// waits behind the attack (a station it holds, which takes it back).
+    fn leave_orbit_to_fight(&mut self, id: EntityId, order: &Order) {
+        let Some(point) = self.orbit(id).map(|o| o.pos) else {
+            return;
+        };
+        self.leave_orbit(id);
+        let queue = &self.entities[id.0 as usize].as_ref().expect("ship").orders;
+        if !order.automatic || !queue.is_empty() {
+            return;
+        }
+        let mut back = Order::internal(order.player, id, "orbit", None, Some(point));
+        back.id = crate::OrderId(self.next_order_id);
+        back.issued_tick = self.tick;
+        back.status = OrderStatus::Queued;
+        self.next_order_id = self.next_order_id.checked_add(1).expect("order ids");
+        self.entities[id.0 as usize]
+            .as_mut()
+            .expect("ship")
+            .orders
+            .push_back(back);
     }
 
     /// Assigns the single RNG's rolls in geometric order, independent of entity ids.

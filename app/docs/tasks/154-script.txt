@@ -1,0 +1,17 @@
+# Task 154: two fleets in the orbit of the home planet, both firing, replayed by --script (universe
+# mode, seed 1, --players 2 --ai none --sun fixed, 1280 x 800). Three ships of player one and
+# three of player two fly into orbit over the city, near enough to see each other; nobody orders
+# an attack: they find each other and fire by themselves. The camera backs off four wheel steps
+# to see the orbit, and the game slows to a crawl while they fight.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --sun fixed --size 1280x800 \
+#     --script app/docs/tasks/154-script.txt --after 20 --screenshot app/docs/img/154-orbit-fight.png
+0 grant-age age.galactic
+0 place-orbit 1 unit.space_frigate @-6,-8
+0 place-orbit 1 unit.space_frigate @-6,-4
+0 place-orbit 1 unit.corvette @-6,-6
+0 place-orbit 2 unit.corvette @6,-8
+0 place-orbit 2 unit.space_cruiser @6,-6
+0 place-orbit 2 unit.corvette @6,-4
+1 speed 100
+1 cam wheel -4 640,400
+40 speed 5
