@@ -15,6 +15,12 @@ upgrade chains, never by key) a shield of its own:
 | **Laser Shield** (upgrade) | Automation (age 8) | point-defence lasers: a larger share, and bullets and orbital bombardment shells too |
 | **Energy Shield** (upgrade) | Fusion (age 9) | a shield pool (a share of the building's hit points) that takes every kind of damage first and recharges while not hit, drawing energy (`res.energy`); a dome over the building, flaring where it is hit; interception as the laser shield stays |
 
+**Coverage** (owner, chat, 2026-11-25, with task 158): a city's shield covers its **city area**
+(its economic radius, which keeps growing with the city's buildings even when the setup option
+of task 158 lets buildings stand outside it): projectiles aimed at anything own inside the area
+are intercepted, and the Energy Shield's dome spans the area with one pool for the city. A fort
+(and its upgrades) shields itself and a small radius around it (say it).
+
 The owner (chat, 2026-11-25): "make the shields expensive to research". The three researches
 are among the dearest of their ages: each costs at least as much as that age's advance itself
 (the age research), in the age's expensive resources (metal, knowledge, and energy for the
