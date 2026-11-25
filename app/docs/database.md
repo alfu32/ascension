@@ -2198,6 +2198,8 @@ node and enemy-city rows) is unchanged, and so is wall placement. The economic r
 untouched: it grows with the buildings inside it, is drawn, and is what a city's shield covers
 (task 157); a building outside every area belongs to no city (`city_id` NULL). Hashed only when
 off; saved in `match.city_area` (format 22). No seed row: the option is not in `match_option`.
+Pictures: `img/158-setup-city-area.png` (the Play form), `img/158-farm-outside-city-area.png`
+(a farm built outside the dashed ring, `docs/tasks/158-farm-script.txt`).
 
 `resource.first_age_id` is a discovery gate. Terrain-to-resource associations
 come from existing `et_gather_site.resource_id`, `needs_node_terrain_id` and
