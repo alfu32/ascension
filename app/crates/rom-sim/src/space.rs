@@ -492,8 +492,10 @@ impl World {
         }
         Ok(())
     }
-    pub(crate) fn advance_orbit(&mut self, id: EntityId, order: &mut Order) {
-        let orbit_body = order
+    /// The planet an `orbit` order puts its ship in the orbit of; `None` for a body held from
+    /// its system's space.
+    fn orbit_body(&self, order: &Order) -> Option<BodyId> {
+        order
             .target_pos
             .filter(|p| {
                 self.body(p.body)
@@ -510,16 +512,12 @@ impl World {
                         .then_some(*body)
                     })
                 })
-            });
-        if orbit_body.is_some_and(|body| self.orbit(id).is_some_and(|o| o.body == body)) {
-            order.movement = None;
-            // A leg of a freighter's route ends in orbit; a player's order keeps holding.
-            if order.automatic {
-                order.status = OrderStatus::Done;
-            }
-            return;
-        }
-        self.leave_orbit(id);
+            })
+    }
+
+    /// Where an `orbit` order holds in its system's space, how near counts as there, and
+    /// whether that is a ship's own place in a formation holding a body (task 143).
+    fn orbit_goal(&self, order: &Order, orbit_body: Option<BodyId>) -> Option<(Pos, i64, bool)> {
         let goal = orbit_body
             .and_then(|body| self.body_position(body))
             .or(order.target_pos)
@@ -528,11 +526,7 @@ impl World {
                     .target_entity
                     .and_then(|t| self.entity(t))
                     .map(|e| e.pos)
-            });
-        let Some(goal) = goal else {
-            order.status = OrderStatus::Failed("target_gone".into());
-            return;
-        };
+            })?;
         let mut reach = self
             .rules
             .constant("space.orbit_reach")
@@ -553,6 +547,48 @@ impl World {
         {
             reach = reach.min(node.claim_radius);
         }
+        Some((goal, reach, place))
+    }
+
+    /// Whether a ship's only order holds a station a player gave it and it is there (task 154):
+    /// in the orbit it was sent to, or in its system's space within the orbit reach of the body
+    /// or place it holds. It fires on what comes near like an idle one.
+    pub(crate) fn holds_station(&self, e: &Entity) -> bool {
+        let Some(order) = e.orders.front().filter(|_| e.orders.len() == 1) else {
+            return false;
+        };
+        if order.kind != "orbit" || order.automatic {
+            return false;
+        }
+        if self.orbit(e.id).is_some() {
+            return true;
+        }
+        if self.orbit_body(order).is_some() || self.system_space(e.pos.body).is_none() {
+            return false;
+        }
+        let reach = self
+            .rules
+            .constant("space.orbit_reach")
+            .expect("space reach");
+        self.orbit_goal(order, None)
+            .is_some_and(|(goal, _, _)| self.geo(e.pos.body).within(e.pos, goal, reach))
+    }
+
+    pub(crate) fn advance_orbit(&mut self, id: EntityId, order: &mut Order) {
+        let orbit_body = self.orbit_body(order);
+        if orbit_body.is_some_and(|body| self.orbit(id).is_some_and(|o| o.body == body)) {
+            order.movement = None;
+            // A leg of a freighter's route ends in orbit; a player's order keeps holding.
+            if order.automatic {
+                order.status = OrderStatus::Done;
+            }
+            return;
+        }
+        self.leave_orbit(id);
+        let Some((goal, reach, place)) = self.orbit_goal(order, orbit_body) else {
+            order.status = OrderStatus::Failed("target_gone".into());
+            return;
+        };
         let pos = self.entity(id).expect("ship").pos;
         if place && order.movement.is_some() {
             if self.walk(id, order, goal, None, false) == crate::movement::Walk::Arrived {

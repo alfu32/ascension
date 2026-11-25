@@ -35,10 +35,45 @@ impl World {
     pub(crate) fn combat_behavior(&self, id: EntityId) -> &str {
         let e = self.entity(id).expect("combat entity");
         let et = &self.rules.entity_types[&e.type_id];
-        if et.class == EntityClass::Building || et.movement.is_none() || self.orbit(id).is_some() {
+        if et.class == EntityClass::Building || et.movement.is_none() {
             return "stand_ground";
         }
-        &self.rules.stances[&e.stance].behavior
+        let behavior = &self.rules.stances[&e.stance].behavior;
+        // In orbit an orbital craft or a ship bound to the orbit holds over its point (task
+        // 68) unless told to hold fire; another ship fights by its stance and leaves the orbit
+        // for what it closes on in its system's space (task 154).
+        if self.orbit(id).is_some() && !self.may_leave_orbit(e.type_id) && behavior != "hold_fire" {
+            return "stand_ground";
+        }
+        behavior
+    }
+
+    /// Whether a ship of this type in orbit may leave it to fight: not an orbital craft (it
+    /// leaves only by coming down) and not bound to its orbit.
+    fn may_leave_orbit(&self, type_id: DefId) -> bool {
+        !self.is_craft_type(type_id) && !self.is_orbit_bound(type_id)
+    }
+
+    /// Whether `id`, in orbit, leaves that orbit to close on `target` (task 154): a ship free to
+    /// leave it and a target in its system's space or in another planet's orbit there. What is
+    /// on its planet or in its orbit it fights from where it holds.
+    pub(crate) fn leaves_orbit_for(&self, id: EntityId, target: EntityId) -> bool {
+        let (Some(orbit), Some(e), Some(t)) =
+            (self.orbit(id), self.entity(id), self.entity(target))
+        else {
+            return false;
+        };
+        self.may_leave_orbit(e.type_id)
+            && t.pos.body == e.pos.body
+            && self.orbit(target).is_none_or(|o| o.body != orbit.body)
+    }
+
+    /// Whether `id` answers `target` only from where it is, within its reach: standing its
+    /// ground, or in orbit at what it does not leave the orbit for (or, `leave` false, at
+    /// anything).
+    fn fires_in_place(&self, id: EntityId, target: EntityId, behavior: &str, leave: bool) -> bool {
+        behavior == "stand_ground"
+            || (self.orbit(id).is_some() && !(leave && self.leaves_orbit_for(id, target)))
     }
 
     fn acquisition_due(&self) -> bool {
@@ -46,7 +81,14 @@ impl World {
         self.tick.is_multiple_of(10)
     }
 
-    pub(crate) fn acquire_target(&self, id: EntityId, behavior: &str) -> Option<EntityId> {
+    /// The enemy `id` takes on by itself with `behavior`, nearest first; `leave` lets a ship in
+    /// orbit take one it must leave the orbit for.
+    pub(crate) fn acquire_target(
+        &self,
+        id: EntityId,
+        behavior: &str,
+        leave: bool,
+    ) -> Option<EntityId> {
         let e = self.entity(id).expect("combat entity");
         if e.owner == PlayerId(0) && self.players[&e.owner].team == 0 {
             return None;
@@ -67,11 +109,20 @@ impl World {
         let range = match behavior {
             "stand_ground" => weapon_range,
             "defensive" => weapon_range.saturating_add(3000),
-            _ => self
-                .rules
-                .constant("unit.respond_range")
-                .expect("respond range")
-                .max(0) as u64,
+            _ => {
+                let respond = self
+                    .rules
+                    .constant("unit.respond_range")
+                    .expect("respond range")
+                    .max(0) as u64;
+                // In a system's space (and from its orbits) no less than the weapons reach: a
+                // ship never ignores what it could hit where it is (task 154).
+                if self.system_space(e.pos.body).is_some() {
+                    respond.max(weapon_range)
+                } else {
+                    respond
+                }
+            }
         };
         // Include target extents in the broad phase, then test exact edge distance.
         let extent = self
@@ -151,7 +202,8 @@ impl World {
                         .weapons
                         .iter()
                         .any(|w| self.weapon_can_target(id, w, target))
-                    || (behavior == "stand_ground" && !self.can_fire_at(id, target))
+                    || (self.fires_in_place(id, target, behavior, leave)
+                        && !self.can_fire_at(id, target))
                 {
                     return None;
                 }
@@ -184,8 +236,11 @@ impl World {
             .map(|(_, _, _, _, _, _, _, id)| id)
     }
 
+    /// Gives `id` an automatic attack on `target`. A ship holding a station keeps its order
+    /// behind the attack and goes back to it afterwards (task 154).
     fn automatic_attack(&mut self, id: EntityId, target: EntityId, home: Option<Pos>) {
-        let owner = self.entity(id).expect("attacker").owner;
+        let e = self.entity(id).expect("attacker");
+        let (owner, holding) = (e.owner, self.holds_station(e));
         if self
             .submit(Command {
                 player: owner,
@@ -202,6 +257,17 @@ impl World {
             let order = &mut self.pending.last_mut().expect("submitted attack").0;
             order.automatic = true;
             order.home = home;
+            if holding {
+                let (order, _) = self.pending.pop().expect("submitted attack");
+                let orders = &mut self.entities[id.0 as usize]
+                    .as_mut()
+                    .expect("attacker")
+                    .orders;
+                for held in orders.iter_mut() {
+                    held.status = crate::OrderStatus::Queued;
+                }
+                orders.push_front(order);
+            }
         }
     }
 
@@ -244,7 +310,7 @@ impl World {
                 && self.can_fire_at(id, *target)
         });
         if ready && aim.is_none() && (old.is_some() || self.acquisition_due()) {
-            aim = self.acquire_target(id, "stand_ground");
+            aim = self.acquire_target(id, "stand_ground", false);
         }
         if aim != old {
             self.entities[id.0 as usize].as_mut().expect("turret").aim = aim;
@@ -253,16 +319,6 @@ impl World {
             let mut order = crate::Order::internal(owner, id, "attack", Some(target), None);
             self.advance_combat(id, &mut order);
         }
-    }
-
-    /// Whether an entity's only order is to hold the orbit it is in: it fires on what comes
-    /// into reach like an idle one (task 75), and the attack replaces the hold.
-    fn holds_orbit(&self, e: &crate::Entity) -> bool {
-        e.orders.len() == 1
-            && e.orders
-                .front()
-                .is_some_and(|o| o.kind == "orbit" && !o.automatic)
-            && self.orbit(e.id).is_some()
     }
 
     pub(crate) fn acquire_idle(&mut self) {
@@ -275,7 +331,7 @@ impl World {
         let ids: Vec<_> = self
             .entities()
             .filter(|e| {
-                (e.orders.is_empty() || self.holds_orbit(e))
+                (e.orders.is_empty() || self.holds_station(e))
                     && !self.is_turret(e)
                     && e.build_progress.is_none()
                     && e.container_id.is_none()
@@ -285,7 +341,7 @@ impl World {
             .collect();
         for id in ids {
             let behavior = self.combat_behavior(id);
-            if let Some(target) = self.acquire_target(id, behavior) {
+            if let Some(target) = self.acquire_target(id, behavior, true) {
                 let home =
                     (behavior == "defensive").then(|| self.entity(id).expect("attacker").pos);
                 self.automatic_attack(id, target, home);
@@ -308,7 +364,7 @@ impl World {
                             .is_none_or(|t| self.entity(t).is_none_or(|t| t.hp <= 0))
                 })
             })
-            .filter_map(|e| Some((e.id, self.acquire_target(e.id, "aggressive")?)))
+            .filter_map(|e| Some((e.id, self.acquire_target(e.id, "aggressive", false)?)))
             .collect();
         for (id, target) in found {
             let order = self.entities[id.0 as usize]
@@ -322,25 +378,38 @@ impl World {
         }
     }
 
+    /// An idle unit, or a ship holding a station, struck by an enemy answers at once (task 154:
+    /// in orbit and in space too): aggressive and defensive ones whatever the distance, one
+    /// standing its ground (or holding an orbit against what is on its planet or in that orbit)
+    /// only within its reach. Hold fire, raid and raze stances do not answer by themselves.
     pub(crate) fn retaliate(&mut self, id: EntityId, attacker: EntityId) {
         let e = self.entity(id).expect("damaged entity");
         if e.hp <= 0
-            || !e.orders.is_empty()
+            || !(e.orders.is_empty() || self.holds_station(e))
+            || self.is_turret(e)
             || e.work_site.is_some()
             || e.build_progress.is_some()
             || self.pending.iter().any(|(o, _)| o.executor == id)
             || !self.enemies(e.owner, self.entity(attacker).expect("attacker").owner)
-            || !matches!(self.combat_behavior(id), "aggressive" | "defensive")
         {
             return;
         }
-        if !self.rules.entity_types[&e.type_id].weapons.iter().any(|w| {
-            self.layer_row(&w.targets, attacker).is_some()
-                || self.drone_row(&w.targets, attacker).is_some()
-        }) {
+        let behavior = self.combat_behavior(id);
+        if !matches!(behavior, "aggressive" | "defensive" | "stand_ground") {
             return;
         }
-        let home = (self.combat_behavior(id) == "defensive").then_some(e.pos);
+        let answers = if self.fires_in_place(id, attacker, behavior, true) {
+            self.can_fire_at(id, attacker)
+        } else {
+            self.rules.entity_types[&e.type_id].weapons.iter().any(|w| {
+                self.layer_row(&w.targets, attacker).is_some()
+                    || self.drone_row(&w.targets, attacker).is_some()
+            })
+        };
+        if !answers {
+            return;
+        }
+        let home = (behavior == "defensive").then_some(e.pos);
         self.automatic_attack(id, attacker, home);
     }
 }

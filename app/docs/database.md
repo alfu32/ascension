@@ -1026,6 +1026,41 @@ Schema and save format (deliberate; both lint views stay empty, the seed loads):
   300 / 35, satellite 220 / 20); sight modifier rows; arrow speed on three weapons.
   No PART A column was added.
 
+## Ships fight back (task 154)
+
+No schema change; the rules of automatic fire for ships, in `rom-sim` (`stance.rs`,
+`combat.rs`, `space.rs`):
+
+- **Stance in orbit.** A ship in orbit fights by its combat stance (it stood its ground
+  whatever its stance before, hold fire included). An orbital craft or a ship bound to its
+  orbit (the satellite) still stands its ground there, unless told to hold fire.
+- **Acquisition.** An idle ship, or one holding a station (its only order a player's `orbit`
+  and it is there: in that orbit, or in the system's space within `space.orbit_reach` of the
+  body or formation place it holds), looks for enemies every ten ticks as on the ground:
+  aggressive within `unit.respond_range`, defensive within its reach + 3 tiles, stand ground
+  within its reach, hold fire never. In a system's space and from its orbits, aggressive
+  looks no less far than its weapons reach (the battleship's 13 tiles beat the 12 of
+  `unit.respond_range`). Ships in one orbit all stand at the planet's position in the system
+  plane, so they always find each other; what is on the planet below (`orbit_only`
+  weapons) a ship in orbit takes on only within reach.
+- **Fire back.** An idle unit or a ship holding a station answers the enemy that strikes it
+  at once (not at the next ten-tick round): aggressive and defensive whatever the distance,
+  stand ground (and a ship in orbit against what is on its planet or in its orbit) only
+  within its reach, hold fire never. A unit with other orders keeps them (moving units keep
+  moving), as on the ground; raid and raze stances do not answer by themselves, as before.
+  Stand ground answering at once is new on the ground too; aggressive and defensive units
+  there already did.
+- **Leaving the orbit.** A ship in orbit (not a craft, not bound to the orbit) leaves it on
+  an attack, ordered or automatic, at an enemy in the system's space or in another planet's
+  orbit that it cannot reach from where it is, and closes on it. After an automatic attack
+  it goes back to that orbit over the same ground point (an automatic `orbit` order queued
+  behind the attack). On an attack move or a patrol in orbit it keeps to the orbit and lets
+  such an enemy go once out of reach. Defensive: still in orbit it is home, and does not
+  chase beyond six tiles of the planet.
+- **Holding a station.** The automatic attack of a ship holding a station goes in front of
+  its `orbit` order, which stays queued and takes it back to the station afterwards (until
+  task 154 the attack replaced the hold).
+
 ## Routes and jumps (task 70)
 
 Owner's choice (2026-11-16, 2026-11-17): ships keep flying freely inside a star system; the
