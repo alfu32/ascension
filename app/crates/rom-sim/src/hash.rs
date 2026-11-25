@@ -500,6 +500,11 @@ impl StateHash {
         for rule in &v.options.victories {
             self.u32(*rule as u32);
         }
+        // Only when the setup lets buildings stand outside the city areas (task 158), so matches
+        // with the default keep their hashes.
+        if v.options.city_area == crate::CityArea::Free {
+            self.bytes(b"city_area_free");
+        }
         self.u64(v.statuses.len() as u64);
         for (player, status) in &v.statuses {
             self.u32(player.0);

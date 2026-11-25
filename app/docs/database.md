@@ -2188,6 +2188,19 @@ the placement preview turns red when no selected builder stands on the site's
 body, and clicking says so. Carrying units across space: see "Carriers, landing
 and colonies" above.
 
+**City area as a setup option (task 158, owner 2026-11-25).** `rom_sim::MatchOptions::city_area`
+(`CityArea::LimitsBuilding`, the default, or `Free`; `--city-area on|off` on the game, `rom
+duel`, `rom ai-match` and `rom serve`, the setup screen's **City area**, the network setup's
+`MatchSetup.city_area`). Off (`Free`), an `in_city_radius` row passes inside one complete own
+city area **or** when every footprint tile lies in the owner's borders, and its refusal is
+`NotInOwnTerritory`; every other row (the building's own `in_own_territory`, terrain, spacing,
+node and enemy-city rows) is unchanged, and so is wall placement. The economic radius is
+untouched: it grows with the buildings inside it, is drawn, and is what a city's shield covers
+(task 157); a building outside every area belongs to no city (`city_id` NULL). Hashed only when
+off; saved in `match.city_area` (format 22). No seed row: the option is not in `match_option`.
+Pictures: `img/158-setup-city-area.png` (the Play form), `img/158-farm-outside-city-area.png`
+(a farm built outside the dashed ring, `docs/tasks/158-farm-script.txt`).
+
 `resource.first_age_id` is a discovery gate. Terrain-to-resource associations
 come from existing `et_gather_site.resource_id`, `needs_node_terrain_id` and
 `on_terrain` placement rows. A terrain with several yields is known from the
@@ -2228,6 +2241,8 @@ back. No SQL runs in `rom-sim`.
 - **Rally points.** `entity_rally(entity_id, target_entity_id | x, y, face, body)`
   (task 64). Not part of the state hash while no producer has one, so worlds
   without rally points keep their hashes.
+- **City area option of task 158 (format 22).** `match.city_area` (`on` or `off`). Formats 13
+  to 21 load with `on`, the rule they were played under.
 - **City names of task 144 (format 20).** `city.name` (see "City names"). Formats 13 to 19
   load with their cities named from their owners' lists in id order.
 - **Drone grids of task 128 (format 17).** `entity_drone_cloud(entity_id, body, face, x, y,

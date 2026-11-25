@@ -2,7 +2,7 @@
 //! every follower build the same world from the same settings.
 
 use rom_mapgen::{GeneratedMap, SpherePlanet, Universe};
-use rom_sim::PlayerId;
+use rom_sim::{CityArea, PlayerId};
 
 use crate::computer::{ComputerPlayers, Spec};
 use crate::content::{
@@ -39,6 +39,8 @@ pub struct MatchSettings {
     pub ai: Option<Vec<Spec>>,
     /// The players people play; every other player is a computer (unless `ai` is `None`).
     pub humans: Vec<PlayerId>,
+    /// Whether the city area limits building (task 158); on by default.
+    pub city_area: CityArea,
 }
 
 /// The map, planet or universe a match was built on.
@@ -117,6 +119,10 @@ impl MatchSettings {
         if self.map != MapKind::Universe {
             self.script.apply_grants(&mut game.world)?;
         }
+        // The setup's city area option (task 158), before the computer players look at the world.
+        game.world
+            .set_city_area(self.city_area)
+            .map_err(|error| format!("the city area option: {error}"))?;
         // The match ends when no human is left in it (task 117).
         game.world
             .set_humans(&self.humans)

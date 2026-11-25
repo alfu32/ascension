@@ -720,3 +720,133 @@ fn territory_scenario_is_deterministic() {
     }
     assert_eq!(run(), run());
 }
+
+/// Task 158: a world whose city area is 12,000 milli-tiles, inside a border of 24,000, with the
+/// setup's city area option.
+fn city_area_world(city_area: crate::CityArea, sql: &str) -> (World, EntityId) {
+    let mut w = world(&format!(
+        "UPDATE et_territory SET economic_radius=12000 WHERE is_city=1; {sql}"
+    ));
+    w.set_city_area(city_area).unwrap();
+    let city = place(&mut w, "bld.city", P1, at(20_500, 30_500));
+    (w, city)
+}
+
+/// Task 158: with the option on (the default) a farm outside the city area is refused; off, it
+/// is accepted anywhere inside the borders and nowhere else, belongs to no city, and the area
+/// does not reach out to it.
+#[test]
+fn a_farm_stands_anywhere_in_the_borders_when_the_city_area_is_free() {
+    let outside = at(36_000, 30_000);
+    let (mut on, city) = city_area_world(crate::CityArea::LimitsBuilding, "");
+    assert!(!on.geo(outside.body).within(
+        on.entity(city).unwrap().pos,
+        outside,
+        on.city_economic_radius(city)
+    ));
+    assert_eq!(on.territory_owner(36, 30), Some(P1));
+    assert_eq!(
+        construct(&mut on, P1, "bld.farm", outside),
+        Err(SimError::NotInCityRadius)
+    );
+    let (mut off, _) = city_area_world(crate::CityArea::Free, "");
+    construct(&mut off, P1, "bld.farm", outside).unwrap();
+    // Inside the area as before.
+    construct(&mut off, P1, "bld.farm", at(28_000, 31_000)).unwrap();
+    // Beyond the borders it is still refused, now for the borders.
+    assert_eq!(owner(&off, 50, 30), None);
+    assert_eq!(
+        construct(&mut off, P1, "bld.farm", at(50_000, 30_000)),
+        Err(SimError::NotInOwnTerritory)
+    );
+    // Another player's land is refused too, and so are the other rules (here: the terrain).
+    place(&mut off, "bld.city", P2, at(20_500, 6_500));
+    assert_eq!(owner(&off, 20, 10), Some(P2));
+    assert!(
+        construct(&mut off, P1, "bld.farm", at(20_000, 10_000)).is_err(),
+        "foreign land"
+    );
+    let mut desert = world_on(
+        rules("UPDATE et_territory SET economic_radius=12000 WHERE is_city=1;"),
+        |x, _| if x >= 34 { "ter.desert" } else { "ter.plain" },
+    );
+    desert.set_city_area(crate::CityArea::Free).unwrap();
+    place(&mut desert, "bld.city", P1, at(20_500, 30_500));
+    assert_eq!(desert.territory_owner(36, 30), Some(P1));
+    assert_eq!(
+        construct(&mut desert, P1, "bld.farm", outside),
+        Err(SimError::NotOnTerrain)
+    );
+    // Built, the outside farm belongs to no city.
+    for _ in 0..3_000 {
+        off.step();
+    }
+    let farms: Vec<_> = off
+        .entities()
+        .filter(|e| e.type_id == id(&off, "bld.farm") && e.owner == P1)
+        .map(|e| (e.pos, e.build_progress.is_none(), e.city_id))
+        .collect();
+    assert!(
+        farms.contains(&(at(36_000, 30_000), true, None)),
+        "{farms:?}"
+    );
+    assert!(
+        farms
+            .iter()
+            .any(|(pos, built, city)| *pos == at(28_000, 31_000) && *built && city.is_some()),
+        "{farms:?}"
+    );
+    check(&off);
+}
+
+/// Task 158: with the city area free, the area still grows with the city's buildings inside it,
+/// exactly as with the option on.
+#[test]
+fn the_city_area_still_grows_when_it_does_not_limit_building() {
+    let growth = "UPDATE game_constant SET value=3000 WHERE key='city.radius_per_building'; UPDATE game_constant SET value=8000 WHERE key='city.radius_from_buildings_max';";
+    let radii = |city_area| {
+        let (mut w, city) = city_area_world(city_area, growth);
+        let mut seen = vec![w.city_economic_radius(city)];
+        place(&mut w, "bld.farm", P1, at(24_000, 30_500));
+        seen.push(w.city_economic_radius(city));
+        place(&mut w, "bld.granary", P1, at(24_000, 34_500));
+        seen.push(w.city_economic_radius(city));
+        // Outside the area, in the borders: no growth.
+        place(&mut w, "bld.farm", P1, at(36_000, 30_000));
+        seen.push(w.city_economic_radius(city));
+        assert_eq!(w.city_economic_radius(city), recount(&w, city));
+        seen
+    };
+    let free = radii(crate::CityArea::Free);
+    assert_eq!(free, [12_000, 15_000, 18_000, 18_000]);
+    assert_eq!(free, radii(crate::CityArea::LimitsBuilding));
+}
+
+/// Task 158: the option is part of the match hash once it is off (the default leaves the hash
+/// as it was), it is set only before the first tick, and a match with it off repeats.
+#[test]
+fn the_city_area_option_is_hashed_and_repeats() {
+    let (on, _) = city_area_world(crate::CityArea::LimitsBuilding, "");
+    let (plain, _) = {
+        let mut w = world("UPDATE et_territory SET economic_radius=12000 WHERE is_city=1;");
+        let city = place(&mut w, "bld.city", P1, at(20_500, 30_500));
+        (w, city)
+    };
+    assert_eq!(on.hash(), plain.hash(), "the default is not hashed");
+    let (off, _) = city_area_world(crate::CityArea::Free, "");
+    assert_ne!(off.hash(), on.hash());
+    fn run() -> u64 {
+        let (mut w, _) = city_area_world(crate::CityArea::Free, "");
+        construct(&mut w, P1, "bld.farm", at(36_000, 30_000)).unwrap();
+        construct(&mut w, P1, "bld.farm", at(28_000, 31_000)).unwrap();
+        for _ in 0..1_500 {
+            w.step();
+        }
+        assert_eq!(
+            w.set_city_area(crate::CityArea::LimitsBuilding),
+            Err(SimError::InvalidOptions)
+        );
+        w.hash()
+    }
+    assert_eq!(run(), run());
+}

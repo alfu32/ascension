@@ -56,6 +56,7 @@ controls! {
     ("universe", 0, "false", "Generate star systems; also implied by sphere unless isolated.", true),
     ("style", 0, "", "The map: Planet, Solar, Cluster, Sector, Quadrant or Galaxy. None chosen: Cluster.", false),
     ("start-placement", 0, "", "Where players start in a universe: separate home worlds (default), or players of different races together on as few home planets as fairness allows. Ignored on flat maps and single planets.", false),
+    ("city-area", 0, "on", "City area limits building: on, farms, mines and the other buildings of a city stand inside a city's area (its ring); off, anywhere inside your borders. The area still grows with the city's buildings and is what a city's shield covers.", false),
     ("seed", 0, "1", "Map seed (unsigned integer). Random chooses a fresh seed.", false),
     ("players", 0, "4", "Number of players, at least 1; factions override this count.", false),
     ("factions", 0, "", "One faction per player, in selection order; blank uses the default mix.", false),
@@ -588,6 +589,7 @@ mod tests {
             ("universe", "true"),
             ("style", "test.style"),
             ("start-placement", "together"),
+            ("city-area", "off"),
             ("seed", "44"),
             ("players", "2"),
             ("factions", "test.a,test.b"),
@@ -712,7 +714,7 @@ mod tests {
             );
         }
         assert!(CONTROLS.iter().any(|c| c.flag == "script"));
-        assert_eq!(CONTROLS.len(), 68);
+        assert_eq!(CONTROLS.len(), 69);
     }
 
     #[test]

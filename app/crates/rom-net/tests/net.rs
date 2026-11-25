@@ -565,3 +565,36 @@ fn the_match_ends_when_no_human_is_left() {
     assert_eq!(server.status().phase, "finished");
     server.stop();
 }
+
+/// Task 158: a server whose plan turns the city area off sets up every machine's world with it:
+/// the client's hashes (which include the option) agree with the leader's, run twice alike.
+#[test]
+fn the_city_area_option_reaches_every_machine() {
+    let _one = one_at_a_time();
+    let run = |name: &str| {
+        let mut config = config(
+            name,
+            MatchPlan {
+                city_area: Some("off".into()),
+                ..plan(1, "map.solar")
+            },
+        );
+        config.wait_for_clients = true;
+        config.speed = 10_000;
+        let server = Server::start(config).unwrap();
+        let key = server.add_keys(1, false).unwrap().remove(0);
+        let report = spawn(ClientOptions {
+            ticks: Some(600),
+            ..client(&server, name, Credential::Key(key))
+        })
+        .join()
+        .unwrap();
+        let status = until(&server, "the hashes", |s| s.hash_checks >= 5);
+        server.stop();
+        assert_eq!(report.tick, 600, "{report:?}");
+        assert_eq!((report.desyncs, report.snapshots), (0, 0), "{report:?}");
+        assert_eq!(status.desyncs, 0, "{status:?}");
+        report.hash
+    };
+    assert_eq!(run("city-area-a"), run("city-area-b"));
+}

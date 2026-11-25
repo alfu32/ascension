@@ -16,6 +16,36 @@ pub enum Elimination {
     SuddenDeath,
 }
 
+/// Whether a city's area limits where buildings stand (setup option, task 158).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum CityArea {
+    /// A building placed `in_city_radius` stands inside one of its owner's city areas.
+    #[default]
+    LimitsBuilding,
+    /// Such a building may also stand anywhere inside its owner's borders. The city areas still
+    /// grow with their buildings and are still what a city's shield covers.
+    Free,
+}
+
+impl CityArea {
+    /// The setup's spelling: `on` (the area limits building) or `off`.
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::LimitsBuilding => "on",
+            Self::Free => "off",
+        }
+    }
+
+    /// Reads `on` or `off`.
+    pub fn parse(text: &str) -> Option<Self> {
+        match text.trim().to_ascii_lowercase().as_str() {
+            "on" => Some(Self::LimitsBuilding),
+            "off" => Some(Self::Free),
+            _ => None,
+        }
+    }
+}
+
 /// Match settings supplied during world construction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchOptions {
@@ -23,6 +53,8 @@ pub struct MatchOptions {
     pub elimination: Elimination,
     /// Enabled rule families; their thresholds and durations come from victory rows.
     pub victories: BTreeSet<VictoryRule>,
+    /// Whether the city area limits building (task 158); on by default.
+    pub city_area: CityArea,
 }
 
 impl Default for MatchOptions {
@@ -30,6 +62,7 @@ impl Default for MatchOptions {
         Self {
             elimination: Elimination::Capital,
             victories: [VictoryRule::Conquest, VictoryRule::Territory].into(),
+            city_area: CityArea::LimitsBuilding,
         }
     }
 }
@@ -150,6 +183,15 @@ impl World {
         }
         self.victory.options = options;
         Ok(self)
+    }
+
+    /// Sets the city area option of the setup (task 158), before the first tick.
+    pub fn set_city_area(&mut self, city_area: CityArea) -> Result<(), SimError> {
+        if self.tick != 0 {
+            return Err(SimError::InvalidOptions);
+        }
+        self.victory.options.city_area = city_area;
+        Ok(())
     }
 
     /// Settings selected when the world was built.

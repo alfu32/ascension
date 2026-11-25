@@ -1,0 +1,14 @@
+# Task 158: with the city area option off, the starting builders put a farm outside the city's
+# area (its ring, 16 tiles) but inside the borders, through the palette and a click as a person
+# would; once it stands, the city is selected so its ring shows beside the farm.
+#   rise-of-man --universe --seed 1 --players 2 --ai none --city-area off --size 1600x1000
+#     --script app/docs/tasks/158-farm-script.txt --after 14 --screenshot farm.png
+0 grant res.timber 5000
+0 speed 2000
+1 box builders
+2 hud tab 0
+3 hud slot 1
+4 click @22,0
+1400 speed 100
+1401 click city
+1402 cam wheel -3

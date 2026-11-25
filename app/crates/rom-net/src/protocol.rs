@@ -4,7 +4,7 @@
 
 use rom_mapgen::StartPlacement;
 use rom_match::{ContentRequest, Entry, Journal, MapKind, MatchSettings, ScriptSetup, Spec};
-use rom_sim::{BodyId, Command, EntityId, PlayerId, Pos};
+use rom_sim::{BodyId, CityArea, Command, EntityId, PlayerId, Pos};
 use serde::{Deserialize, Serialize};
 
 /// The protocol's version: both ends must speak the same one.
@@ -401,6 +401,9 @@ pub struct MatchSetup {
     /// `separate` or `together`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start_placement: Option<String>,
+    /// Whether the city area limits building (task 158): `on` or `off`; absent is on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub city_area: Option<String>,
     /// Every player starts in the age of this ordinal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub age: Option<i64>,
@@ -428,6 +431,12 @@ impl MatchSetup {
             ),
             None => None,
         };
+        let city_area = match &self.city_area {
+            Some(text) => {
+                CityArea::parse(text).ok_or_else(|| format!("unknown city area {text:?}"))?
+            }
+            None => CityArea::default(),
+        };
         let ai = self
             .ai
             .iter()
@@ -448,6 +457,7 @@ impl MatchSetup {
             script: ScriptSetup::scan(&self.script)?,
             ai: Some(ai),
             humans: self.humans.iter().map(|p| PlayerId(*p)).collect(),
+            city_area,
         })
     }
 }
@@ -701,6 +711,7 @@ mod tests {
             map: MapSpec::Universe,
             home_size: None,
             start_placement: Some("together".into()),
+            city_area: Some("off".into()),
             age: Some(2),
             script: String::new(),
             ai: vec!["builder:tough".into()],
@@ -717,6 +728,23 @@ mod tests {
         assert_eq!(
             settings.content.start_placement,
             Some(StartPlacement::Together)
+        );
+        assert_eq!(settings.city_area, CityArea::Free);
+        // A setup without the option (an older host's) keeps the city area limiting building.
+        let older: MatchSetup =
+            serde_json::from_str(&text.replace(",\"city_area\":\"off\"", "")).unwrap();
+        assert_eq!(older.city_area, None);
+        assert_eq!(
+            older.to_settings().unwrap().city_area,
+            CityArea::LimitsBuilding
+        );
+        assert!(
+            MatchSetup {
+                city_area: Some("maybe".into()),
+                ..setup
+            }
+            .to_settings()
+            .is_err()
         );
     }
 }

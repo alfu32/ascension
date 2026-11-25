@@ -54,10 +54,10 @@ pub fn replay(settings: &MatchSettings, ticks: u64) -> Result<Replay, String> {
 }
 
 /// `rom replay-hash --seed N --ticks T [--universe] [--players N] [--style KEY]
-/// [--ai profile:difficulty,…]`.
+/// [--ai profile:difficulty,…] [--city-area on|off]`.
 pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::error::Error>> {
     let usage = "usage: rom replay-hash --seed <n> --ticks <n> [--universe] [--players <n>] \
-                 [--style <key>] [--ai <profile:difficulty,...>]";
+                 [--style <key>] [--ai <profile:difficulty,...>] [--city-area <on|off>]";
     let mut settings = MatchSettings {
         content: ContentRequest {
             players: 2,
@@ -68,6 +68,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
         script: ScriptSetup::default(),
         ai: Some(Vec::new()),
         humans: Vec::new(),
+        city_area: Default::default(),
     };
     let (mut seed, mut ticks) = (None, None);
     while let Some(flag) = args.next() {
@@ -83,6 +84,7 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<(), Box<dyn std::er
             "--ticks" => ticks = Some(value.parse::<u64>()?),
             "--players" => settings.content.players = value.parse()?,
             "--style" => settings.content.style = Some(value),
+            "--city-area" => settings.city_area = crate::ai_match_cmd::parse_city_area(&value)?,
             "--ai" => {
                 settings.ai = Some(
                     value
@@ -134,6 +136,7 @@ mod tests {
             script: ScriptSetup::default(),
             ai: Some(Vec::new()),
             humans: Vec::new(),
+            city_area: Default::default(),
         };
         let first = replay(&settings, 600).unwrap();
         assert_eq!(first.checks, 6);

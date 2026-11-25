@@ -6,7 +6,7 @@ use std::path::PathBuf;
 pub const USAGE: &str = "usage: rise-of-man [--bench <seconds>] [--screenshot <file.png>] \
 [--size <width>x<height>] [--scale <percent>] [--style <key>] [--seed <n>] [--players <n>] [--factions <key,key,...>] [--ai <profile:difficulty,...|none>] [--watch] \
 [--map-size <width>x<height>] [--sphere <n>] [--single-planet] [--orbit <lon_deg>,<lat_deg>,<distance>,<heading_deg>] [--camera <x>,<y>,<distance>,<yaw_deg>,<pitch_deg>] [--boxes <n>] [--demo] \
-[--universe] [--start-placement <separate|together>] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-chrome] [--no-hud] [--hud-scale <percent>] [--stats] \
+[--universe] [--start-placement <separate|together>] [--city-area <on|off>] [--zoom-all] [--zoom-out] [--age <ordinal>] [--view <surface|globe|system|starmap>[,home]] [--speed <percent>] [--stress-units <n>] [--after <seconds>] [--start-markers] [--no-chrome] [--no-hud] [--hud-scale <percent>] [--stats] \
 [--sun <orbit|fixed|low|midnight>] [--graticule <on|off>] [--grass <on|off>] [--detail <min|medium|max|ultra>] [--projectiles <on|off>] [--look-at <terrain>[+<terrain>][,<distance>]] \
 [--mute] [--volume <percent>] [--music-volume <percent>] [--units-volume <percent>] [--buildings-volume <percent>] [--environment-volume <percent>] [--announcements-volume <percent>] [--mute-unfocused <on|off>] \
 [--middle-drag <turn|pan>] [--invert-horizontal-turn] [--invert-vertical-turn] \
@@ -74,6 +74,8 @@ pub struct Options {
     pub style: Option<String>,
     /// Where players start in a universe; `None` takes the rules' default.
     pub start_placement: Option<rom_mapgen::StartPlacement>,
+    /// Whether the city area limits building (`--city-area on|off`, task 158).
+    pub city_area: rom_sim::CityArea,
     /// Map seed.
     pub seed: u64,
     /// Number of players.
@@ -244,6 +246,7 @@ impl Default for Options {
             screenshot: None,
             style: None,
             start_placement: None,
+            city_area: rom_sim::CityArea::LimitsBuilding,
             seed: 1,
             players: 4,
             factions: None,
@@ -352,6 +355,7 @@ impl Options {
             } else {
                 vec![crate::selection::PLAYER]
             },
+            city_area: self.city_area,
         }
     }
 }
@@ -396,6 +400,11 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
                     Some(rom_mapgen::StartPlacement::parse(&text).ok_or_else(|| {
                         format!("--start-placement expects separate or together, got {text:?}")
                     })?);
+            }
+            "--city-area" => {
+                let text = value("--city-area")?;
+                options.city_area = rom_sim::CityArea::parse(&text)
+                    .ok_or_else(|| format!("--city-area expects on or off, got {text:?}"))?;
             }
             "--seed" => options.seed = number("--seed", &value("--seed")?)?,
             "--players" => {
@@ -706,9 +715,10 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
 /// what a save keeps so loading can regenerate the same terrain, planets and looks. Window,
 /// camera and automation options are left out.
 pub fn match_arguments(arguments: &[String]) -> Vec<String> {
-    const WITH_VALUE: [&str; 10] = [
+    const WITH_VALUE: [&str; 11] = [
         "--style",
         "--start-placement",
+        "--city-area",
         "--seed",
         "--players",
         "--factions",
@@ -1298,6 +1308,32 @@ mod tests {
         assert_eq!(
             match_arguments(&given),
             ["--start-placement", "together", "--seed", "3"]
+        );
+    }
+
+    /// Task 158: the city area option parses, defaults to on and is kept with the match.
+    #[test]
+    fn city_area_parses_and_reaches_the_match() {
+        use rom_sim::CityArea;
+        assert_eq!(
+            parse(args(&[])).unwrap().city_area,
+            CityArea::LimitsBuilding
+        );
+        let off = parse(args(&["--city-area", "off"])).unwrap();
+        assert_eq!(off.city_area, CityArea::Free);
+        assert_eq!(
+            off.match_settings(rom_match::ScriptSetup::default())
+                .city_area,
+            CityArea::Free
+        );
+        assert_eq!(
+            parse(args(&["--city-area", "on"])).unwrap().city_area,
+            CityArea::LimitsBuilding
+        );
+        assert!(parse(args(&["--city-area", "maybe"])).is_err());
+        assert_eq!(
+            match_arguments(&args(&["--city-area", "off", "--stats"])),
+            ["--city-area", "off"]
         );
     }
 

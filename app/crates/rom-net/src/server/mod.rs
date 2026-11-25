@@ -72,6 +72,8 @@ pub struct MatchPlan {
     pub home_size: Option<u32>,
     /// `separate` or `together`.
     pub start_placement: Option<String>,
+    /// `on` (the city area limits building, the default) or `off` (task 158).
+    pub city_area: Option<String>,
     /// Every player starts in the age of this ordinal.
     pub age: Option<i64>,
     /// Script setup lines (tests).
@@ -92,6 +94,7 @@ impl Default for MatchPlan {
             map: MapSpec::Universe,
             home_size: None,
             start_placement: None,
+            city_area: None,
             age: None,
             script: String::new(),
             humans: 2,

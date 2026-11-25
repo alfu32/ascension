@@ -36,7 +36,8 @@ the bundled set alike:
       "fields": { "style": "map.many_worlds", "opponents": "3", "difficulty": "moderate" } } ] }
 ```
 
-`fields` may hold `style`, `opponents`, `difficulty`, `placement`, `seed`, `speed`, `age` (an
+`fields` may hold `style`, `opponents`, `difficulty`, `placement`, `city_area` (`on` or `off`,
+task 158), `seed`, `speed`, `age` (an
 ordinal), `script` (a bundled script's name, or a file) and `watch`; anything else is refused.
 `icon` names a HUD icon (`assets/hud/icons/`), `picture` a launcher capture (`tiles/<name>`,
 `maps/<style key>`); an imported preset without one shows a generic picture. Import skips a
@@ -59,7 +60,9 @@ lines (camera, clicks) run on the host's game only.
 for a race with many), opponents (stepper) and difficulty (choices), for Host the network
 (remote players stepper, port, what happens when a player drops), and the map: picture cards
 of the six map styles with a line each from the rules (systems, share of the galaxy), start
-placement, seed, speed, starting age and start script. Back is plain, the final button gold;
+placement, seed, speed, **City area** (task 158: *Limits building*, the default, or *Anywhere in
+the borders*; `--city-area on|off`, the advanced Game group's switch of the same name), starting
+age and start script. Back is plain, the final button gold;
 the reason it is off stays beside it.
 
 **Advanced.** The workflows are a carousel of picture cards (Play, Play on one planet, Demo,
