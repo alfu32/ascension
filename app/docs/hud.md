@@ -305,8 +305,8 @@ Every build, train and research button has a picture of its own, chosen from dat
 | Modifiers only | what the first modifier improves, with the chevron: a resource's icon for `income.<resource>`, the model of its target type or of the first type of a narrow tag (at most four types), else the stat's icon |
 | Anything else | one icon per kind: `tech_upgrade`, `tech_project`, `tech_government`, `tech_evolution` |
 
-The production queue uses the same pictures. Selection portraits and tiles keep the generic
-pictograms. Hover and help are unchanged.
+The production queue uses the same pictures, and so do the selection panel's tiles and the
+workers inside a building (task 145, below). Hover and help are unchanged.
 
 Model pictures are rendered on the render thread (`scene/icons.rs`): the models a snapshot's
 palette and queue name are drawn side by side into one strip through an orthographic camera at a
@@ -329,6 +329,33 @@ drawn at 136; the shelf adds 3 rows (108 px) to the atlas, 2048 × 467 → 2048 
 session costs about 16 ms of drawing on the render thread (the driver's first use of the strip),
 later ones 0.1–4 ms, plus 0.5–4 ms to finish 1–15 pictures; pictures are ready about 20–30 ms
 after they are drawn.
+
+## Selection portraits (task 145)
+
+The selection panel shows the selected types' own models instead of generic pictograms; counts,
+health bars and clicks on a cell (select only that type) are unchanged.
+
+- **Picture of a type.** The app resolves each selected type's composed model as the world view
+  draws it: the owner's faction and age through `ModelBook::resolve_any`
+  (`HudTile::model`, `HudCard::model` and `HudCard::owner`). A type without a model keeps its
+  generic pictogram.
+- **Tiles.** A multi-selection cell and a worker inside a building use the palette's model
+  pictures (the 160-slot shelf above, player one's colour): 44 design pixels in the cell's
+  top left, the `xn` count at the top right and the health bar beneath as before. The models the
+  tiles show count as shown, so their slots are not reused while on screen.
+- **Single selection.** The large tile shows a portrait: the same three-quarter view, light and
+  outline, rendered at 84 design pixels (four times larger, then filtered down) in the owner's
+  colour, so a foreign unit wears its own colour. Portraits are keyed by model and owner and
+  kept in their own shelf of 6 slots below the model pictures in the HUD atlas; when it is full
+  the oldest portrait not shown is replaced, so selecting back and forth draws nothing again.
+  Until the portrait is ready (a frame or two after the first selection) the tile shows the
+  model's smaller picture when it has one, else the pictogram.
+- **When.** On first use: a portrait goes before a batch of palette pictures, one batch at a time
+  on the render thread. Nothing is drawn while every shown picture is in the atlas.
+- **GPU memory (task 121).** Two render targets are kept and reused: the palette strip, always
+  15 cells wide whatever the batch (only the cells drawn are read back), and one square portrait
+  target; each is made again only when the HUD scale changes. Pictures go into the existing atlas
+  textures with `UpdateTexture`; no texture is made per picture or per frame.
 
 ## The ascended palette (task 114)
 

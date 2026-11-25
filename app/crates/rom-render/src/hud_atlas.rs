@@ -512,6 +512,11 @@ pub const SOURCES: &[(&str, &str)] = &[
 pub const ICON_DESIGN_SIZE: f32 = 44.0;
 /// Model pictures (task 91) the atlas keeps room for, in a shelf below the artwork.
 pub const MODEL_ICON_SLOTS: usize = 160;
+/// Edge of the single selection's portrait (task 145) in design pixels when baked.
+pub const PORTRAIT_DESIGN_SIZE: f32 = 84.0;
+/// Portraits the atlas keeps room for, in a shelf below the model pictures: the one shown and
+/// the last few, so selecting back and forth draws nothing again.
+pub const PORTRAIT_SLOTS: usize = 6;
 /// Largest atlas width the packer will use.
 const MAX_ATLAS_WIDTH: u32 = 8192;
 /// Transparent pixels kept around every entry so filtering never bleeds neighbours in.
@@ -573,9 +578,10 @@ pub struct AtlasImage {
     pub scale: f32,
     rects: BTreeMap<&'static str, AtlasRect>,
     shelf: Shelf,
+    portraits: Shelf,
 }
 
-/// The shelf of model pictures below the artwork: square cells in rows.
+/// A shelf of model pictures below the artwork: square cells in rows.
 #[derive(Clone, Copy, Debug)]
 struct Shelf {
     /// Top of the first row.
@@ -589,6 +595,40 @@ struct Shelf {
 /// Edge in pixels of an icon baked at HUD `scale`: vector icons and model pictures alike.
 pub fn icon_edge(scale: f32) -> u32 {
     (ICON_DESIGN_SIZE * scale).ceil().max(8.0) as u32
+}
+
+/// Edge in pixels of a portrait baked at HUD `scale`.
+pub fn portrait_edge(scale: f32) -> u32 {
+    (PORTRAIT_DESIGN_SIZE * scale).ceil().max(16.0) as u32
+}
+
+impl Shelf {
+    /// A shelf of cells of `edge` pixels whose first row starts at `y`, in an atlas `width`
+    /// pixels wide.
+    fn new(y: u32, edge: u32, width: u32) -> Self {
+        let columns = ((width - PADDING) / (edge + PADDING)).max(1);
+        Self { y, edge, columns }
+    }
+
+    /// Bottom of a shelf of `slots` cells.
+    fn bottom(&self, slots: usize) -> u32 {
+        self.y + (slots as u32).div_ceil(self.columns) * (self.edge + PADDING)
+    }
+
+    /// Cell `slot` of a shelf of `slots` cells.
+    fn cell(&self, slot: usize, slots: usize) -> Option<AtlasRect> {
+        if slot >= slots {
+            return None;
+        }
+        let (row, column) = (slot as u32 / self.columns, slot as u32 % self.columns);
+        let pitch = self.edge + PADDING;
+        Some(AtlasRect {
+            x: PADDING + column * pitch,
+            y: self.y + row * pitch,
+            w: self.edge,
+            h: self.edge,
+        })
+    }
 }
 
 impl AtlasImage {
@@ -609,20 +649,17 @@ impl AtlasImage {
 
     /// The rectangle of model picture slot `slot` (below [`MODEL_ICON_SLOTS`]).
     pub fn model_slot(&self, slot: usize) -> Option<AtlasRect> {
-        if slot >= MODEL_ICON_SLOTS {
-            return None;
-        }
-        let (row, column) = (
-            slot as u32 / self.shelf.columns,
-            slot as u32 % self.shelf.columns,
-        );
-        let pitch = self.shelf.edge + PADDING;
-        Some(AtlasRect {
-            x: PADDING + column * pitch,
-            y: self.shelf.y + row * pitch,
-            w: self.shelf.edge,
-            h: self.shelf.edge,
-        })
+        self.shelf.cell(slot, MODEL_ICON_SLOTS)
+    }
+
+    /// Edge in pixels of a portrait (task 145).
+    pub fn portrait_edge(&self) -> u32 {
+        self.portraits.edge
+    }
+
+    /// The rectangle of portrait slot `slot` (below [`PORTRAIT_SLOTS`]).
+    pub fn portrait_slot(&self, slot: usize) -> Option<AtlasRect> {
+        self.portraits.cell(slot, PORTRAIT_SLOTS)
     }
 
     /// Copies straight RGBA `pixels` (`rect.w × rect.h`) into the atlas at `rect`.
@@ -747,16 +784,11 @@ fn bake_sources(sources: &[(&'static str, &str)], scale: f32) -> Result<AtlasIma
         x += item.width + PADDING;
         row_height = row_height.max(item.height);
     }
-    // The model shelf: room for every picture slot, in rows as wide as the atlas.
-    let edge = icon_edge(scale);
-    let columns = ((width - PADDING) / (edge + PADDING)).max(1);
-    let rows = (MODEL_ICON_SLOTS as u32).div_ceil(columns);
-    let shelf = Shelf {
-        y: y + row_height + PADDING,
-        edge,
-        columns,
-    };
-    let height = shelf.y + rows * (edge + PADDING);
+    // The model shelf: room for every picture slot, in rows as wide as the atlas; the
+    // portraits' below it.
+    let shelf = Shelf::new(y + row_height + PADDING, icon_edge(scale), width);
+    let portraits = Shelf::new(shelf.bottom(MODEL_ICON_SLOTS), portrait_edge(scale), width);
+    let height = portraits.bottom(PORTRAIT_SLOTS);
     let mut rgba = vec![0_u8; width as usize * height as usize * 4];
     let mut rects = BTreeMap::new();
     for (item, (px, py)) in baked.iter().zip(placements) {
@@ -783,6 +815,7 @@ fn bake_sources(sources: &[(&'static str, &str)], scale: f32) -> Result<AtlasIma
         scale,
         rects,
         shelf,
+        portraits,
     })
 }
 
@@ -866,8 +899,9 @@ mod tests {
         }
     }
 
-    /// Every model picture slot lies inside the atlas, clear of the artwork and of the other
-    /// slots, at the smallest and largest HUD scales; the atlas stays within 8192 pixels.
+    /// Every model picture and portrait slot lies inside the atlas, clear of the artwork and of
+    /// the other slots, at the smallest and largest HUD scales; the atlas stays within 8192
+    /// pixels.
     #[test]
     fn model_pictures_fit_the_atlas() {
         for scale in [0.25, 2.5] {
@@ -879,17 +913,25 @@ mod tests {
             let art: Vec<_> = atlas.entries().map(|(_, r)| r).collect();
             let slots: Vec<_> = (0..MODEL_ICON_SLOTS)
                 .map(|i| atlas.model_slot(i).expect("slot"))
+                .chain((0..PORTRAIT_SLOTS).map(|i| atlas.portrait_slot(i).expect("portrait")))
                 .collect();
             assert!(atlas.model_slot(MODEL_ICON_SLOTS).is_none());
+            assert!(atlas.portrait_slot(PORTRAIT_SLOTS).is_none());
+            assert!(portrait_edge(scale) > icon_edge(scale));
             for (i, slot) in slots.iter().enumerate() {
-                assert_eq!((slot.w, slot.h), (icon_edge(scale), icon_edge(scale)));
+                let edge = if i < MODEL_ICON_SLOTS {
+                    icon_edge(scale)
+                } else {
+                    portrait_edge(scale)
+                };
+                assert_eq!((slot.w, slot.h), (edge, edge));
                 assert!(slot.x + slot.w <= atlas.width && slot.y + slot.h <= atlas.height);
                 assert!(art.iter().all(|a| !a.overlaps(slot)), "slot {i} at {scale}");
                 assert!(slots[i + 1..].iter().all(|b| !b.overlaps(slot)), "slot {i}");
             }
             // Writing a picture lands where the slot says.
             let mut atlas = atlas;
-            let slot = slots[MODEL_ICON_SLOTS - 1];
+            let slot = slots[slots.len() - 1];
             let picture = vec![7_u8; (slot.w * slot.h * 4) as usize];
             atlas.write(slot, &picture);
             let at = ((slot.y * atlas.width + slot.x) * 4) as usize;

@@ -1,0 +1,20 @@
+# Task 145: a mixed army's portraits. Industrial age; riflemen, machine gunners, a light tank,
+# medics, supply trucks and field guns stand south of the city; one box (eight tiles
+# around the first soldier) selects them: each cell of the selection panel shows its type's own
+# model in the player's look and colour, with its count and health bar.
+#   rise-of-man --universe --seed 1 --sun fixed --players 2 --ai none --size 1280x800 \
+#     --script app/docs/tasks/145-army-script.txt --after 4 --screenshot app/docs/img/145-army.png
+0 grant-age age.industrial
+0 place 1 unit.rifleman @-2,9
+0 place 1 unit.rifleman @0,9
+0 place 1 unit.rifleman @2,9
+0 place 1 unit.machine_gunner @-1,11
+0 place 1 unit.machine_gunner @1,11
+0 place 1 unit.light_tank @3,12
+0 place 1 unit.medic @-2,12
+0 place 1 unit.medic @0,13
+0 place 1 unit.supply_truck @-3,14
+0 place 1 unit.supply_truck @2,14
+0 place 1 unit.field_gun @-4,11
+0 cam wheel 3 640,420
+10 box-near army1 8

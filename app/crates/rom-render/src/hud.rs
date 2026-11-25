@@ -332,6 +332,15 @@ impl HudOverlay {
     }
 }
 
+/// A portrait of the single selection (task 145): a model in its owner's colour.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Portrait {
+    /// The composed model.
+    pub model: u16,
+    /// The owner whose colour it wears.
+    pub owner: u8,
+}
+
 /// CPU artwork and font atlases with the common HUD composition code.
 pub struct HudPainter {
     /// Baked vector artwork.
@@ -344,6 +353,9 @@ pub struct HudPainter {
     scale: f32,
     /// The atlas slot holding each model's picture (task 91).
     model_slots: BTreeMap<u16, usize>,
+    /// The portraits in the atlas (task 145), by model and owner colour, and their slots,
+    /// oldest stored first.
+    portrait_slots: Vec<(Portrait, usize)>,
     /// The fully opaque parts of each frame piece, in its own pixels (task 108).
     cover: Vec<Vec<AtlasRect>>,
 }
@@ -442,6 +454,7 @@ impl HudPainter {
             quads: Vec::new(),
             scale,
             model_slots: BTreeMap::new(),
+            portrait_slots: Vec::new(),
             cover,
         })
     }
@@ -473,15 +486,23 @@ impl HudPainter {
         out
     }
 
-    /// The models the palette and the queue of `h` show, in order, each once.
+    /// The models the palette, the queue and the selection's tiles of `h` show, in order, each
+    /// once.
     pub fn shown_models(h: &HudSnapshot) -> Vec<u16> {
         let buttons = h
             .palette
             .iter()
             .flat_map(|p| p.buttons.iter().map(|b| b.model));
         let rows = h.queue.iter().flat_map(|q| q.items.iter().map(|i| i.model));
+        let tiles: Vec<Option<u16>> = match &h.selection {
+            HudSelection::None => Vec::new(),
+            HudSelection::Single(card) => card.inside.iter().take(12).map(|t| t.model).collect(),
+            HudSelection::Multiple { tiles, .. } => {
+                tiles.iter().take(12).map(|t| t.model).collect()
+            }
+        };
         let mut models: Vec<u16> = Vec::new();
-        for model in buttons.chain(rows).flatten() {
+        for model in tiles.into_iter().chain(buttons).chain(rows).flatten() {
             if !models.contains(&model) {
                 models.push(model);
             }
@@ -539,6 +560,70 @@ impl HudPainter {
             self.model_slots.remove(&model);
             return None;
         }
+        self.artwork.write(rect, pixels);
+        hud_atlas::write_rect(
+            &mut self.greyscale,
+            self.artwork.width,
+            rect,
+            &hud_atlas::greyscale(pixels),
+        );
+        Some(rect)
+    }
+
+    /// The portrait the single selection of `h` shows (task 145), if its type has a model.
+    pub fn shown_portrait(h: &HudSnapshot) -> Option<Portrait> {
+        match &h.selection {
+            HudSelection::Single(card) => card.model.map(|model| Portrait {
+                model,
+                owner: card.owner,
+            }),
+            _ => None,
+        }
+    }
+
+    /// The portrait `h` shows when it has not been rendered yet.
+    pub fn missing_portrait(&self, h: &HudSnapshot) -> Option<Portrait> {
+        Self::shown_portrait(h).filter(|p| self.portrait(*p).is_none())
+    }
+
+    /// Where `portrait` is in the atlas, once it has been stored.
+    pub fn portrait(&self, portrait: Portrait) -> Option<AtlasRect> {
+        let (_, slot) = self.portrait_slots.iter().find(|(p, _)| *p == portrait)?;
+        self.artwork.portrait_slot(*slot)
+    }
+
+    /// Stores `portrait` (straight RGBA, [`AtlasImage::portrait_edge`] a side) in the atlas and
+    /// its greyscale copy: in a free slot, or else in the oldest one `h` does not show. Returns
+    /// the rectangle written, for the textures.
+    pub fn store_portrait(
+        &mut self,
+        portrait: Portrait,
+        pixels: &[u8],
+        h: &HudSnapshot,
+    ) -> Option<AtlasRect> {
+        let slot = match self.portrait_slots.iter().position(|(p, _)| *p == portrait) {
+            Some(at) => self.portrait_slots.remove(at).1,
+            None => {
+                let free = (0..hud_atlas::PORTRAIT_SLOTS)
+                    .find(|s| self.portrait_slots.iter().all(|(_, used)| used != s));
+                match free {
+                    Some(slot) => slot,
+                    None => {
+                        let shown = Self::shown_portrait(h);
+                        let at = self
+                            .portrait_slots
+                            .iter()
+                            .position(|(p, _)| Some(*p) != shown)?;
+                        self.portrait_slots.remove(at).1
+                    }
+                }
+            }
+        };
+        let rect = self.artwork.portrait_slot(slot)?;
+        if pixels.len() != rect.w as usize * rect.h as usize * 4 {
+            return None;
+        }
+        self.portrait_slots.push((portrait, slot));
         self.artwork.write(rect, pixels);
         hud_atlas::write_rect(
             &mut self.greyscale,
@@ -1332,16 +1417,25 @@ impl HudPainter {
                 }
                 let tile = l.map(R, Rect::new(1008.0, 708.0, 104.0, 94.0));
                 self.art("chrome/tile", tile);
-                let icon = 64.0 * s;
-                self.art(
-                    &card.icon,
+                // Its own model's portrait (task 145); until that is rendered, the smaller
+                // picture of the model, else the pictogram.
+                let centred = |edge: f32| {
                     Rect::new(
-                        tile.x + (tile.w - icon) / 2.0,
-                        tile.y + (tile.h - icon) / 2.0,
-                        icon,
-                        icon,
-                    ),
-                );
+                        tile.x + (tile.w - edge) / 2.0,
+                        tile.y + (tile.h - edge) / 2.0,
+                        edge,
+                        edge,
+                    )
+                };
+                match Self::shown_portrait(h).and_then(|p| self.portrait(p)) {
+                    Some(r) => self.quads.push(HudQuad {
+                        texture: HudTexture::Artwork,
+                        source: Rect::new(r.x as f32, r.y as f32, r.w as f32, r.h as f32),
+                        dest: centred(hud_atlas::PORTRAIT_DESIGN_SIZE * s),
+                        colour: WHITE,
+                    }),
+                    None => self.picture(&card.icon, card.model, centred(64.0 * s)),
+                }
                 let name_area = l.map(R, Rect::new(995.0, 808.0, 125.0, 18.0));
                 // A capital says so in its title (task 131), or under it when the title has no
                 // room for it.
@@ -1410,10 +1504,11 @@ impl HudPainter {
                 for (i, worker) in card.inside.iter().take(12).enumerate() {
                     let r = l.inside_tile(i);
                     self.art("chrome/tile", r);
-                    let icon = 20.0 * s;
-                    self.art(
+                    let icon = 24.0 * s;
+                    self.picture(
                         &worker.icon,
-                        Rect::new(r.x + (r.w - icon) / 2.0, r.y + 3.0 * s, icon, icon),
+                        worker.model,
+                        Rect::new(r.x + (r.w - icon) / 2.0, r.y + 2.0 * s, icon, icon),
                     );
                     let fraction = worker.hp_permille as f32 / 1000.0;
                     self.bar(
@@ -1469,10 +1564,12 @@ impl HudPainter {
                 for (i, tile) in tiles.iter().take(12).enumerate() {
                     let r = l.multi_tile(i);
                     self.art("chrome/tile", r);
-                    let icon = 36.0 * s;
-                    self.art(
+                    // The type's own model (task 145), the pictogram until it is rendered.
+                    let icon = 44.0 * s;
+                    self.picture(
                         &tile.icon,
-                        Rect::new(r.x + (r.w - icon) / 2.0, r.y + 5.0 * s, icon, icon),
+                        tile.model,
+                        Rect::new(r.x + 6.0 * s, r.y + 3.0 * s, icon, icon),
                     );
                     if tile.count > 1 {
                         self.text(
@@ -2229,6 +2326,8 @@ mod capital_card_tests {
     fn card(name: &str, capital: bool) -> HudCard {
         HudCard {
             icon: "icons/pic_house".to_owned(),
+            model: None,
+            owner: 1,
             name: name.to_owned(),
             foreign: false,
             capital,
@@ -2439,5 +2538,134 @@ mod capital_card_tests {
                 q.dest
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod portrait_tests {
+    use super::*;
+
+    fn tile(model: Option<u16>, count: usize) -> HudTile {
+        HudTile {
+            icon: "icons/pic_shield".to_owned(),
+            model,
+            name: "Spearmen".to_owned(),
+            count,
+            hp_permille: 1000,
+        }
+    }
+
+    fn single(model: Option<u16>, owner: u8) -> HudSnapshot {
+        HudSnapshot {
+            selection: HudSelection::Single(Box::new(HudCard {
+                icon: "icons/pic_shield".to_owned(),
+                model,
+                owner,
+                name: "Spearman".to_owned(),
+                hp: (10, 10),
+                ..HudCard::default()
+            })),
+            ..HudSnapshot::default()
+        }
+    }
+
+    /// Artwork quads whose source lies in `rect`.
+    fn quads_from(p: &mut HudPainter, l: &HudLayout, h: &HudSnapshot, rect: AtlasRect) -> usize {
+        p.compose(l, h)
+            .iter()
+            .filter(|q| {
+                matches!(q.texture, HudTexture::Artwork)
+                    && q.source.x as u32 == rect.x
+                    && q.source.y as u32 == rect.y
+            })
+            .count()
+    }
+
+    /// The multi-selection's tiles ask for their types' pictures and show them once stored, the
+    /// count badge and health bar still drawn; a type without a model keeps its pictogram.
+    #[test]
+    fn tiles_show_their_models_pictures() {
+        let l = HudLayout::new(1280, 800, None);
+        let mut p = HudPainter::bake(l.scale).expect("artwork bakes");
+        let h = HudSnapshot {
+            selection: HudSelection::Multiple {
+                total: 5,
+                tiles: vec![tile(Some(7), 3), tile(None, 2)],
+            },
+            ..HudSnapshot::default()
+        };
+        assert_eq!(HudPainter::shown_models(&h), vec![7]);
+        assert_eq!(p.missing_models(&h), vec![7]);
+        let edge = p.artwork.model_icon_edge() as usize;
+        let rect = p
+            .store_model_icon(7, &vec![9; edge * edge * 4], &h)
+            .expect("stored");
+        assert!(p.missing_models(&h).is_empty());
+        assert_eq!(quads_from(&mut p, &l, &h, rect), 1);
+        let texts = p
+            .compose(&l, &h)
+            .iter()
+            .filter(|q| matches!(q.texture, HudTexture::Glyphs))
+            .count();
+        assert!(texts > 0, "the counts are still written");
+    }
+
+    /// The single selection's portrait is keyed by model and owner, drawn larger than a tile's
+    /// picture once stored, and the oldest portrait not shown makes room when the shelf is full.
+    #[test]
+    fn the_single_selection_shows_its_portrait() {
+        let l = HudLayout::new(1280, 800, None);
+        let mut p = HudPainter::bake(l.scale).expect("artwork bakes");
+        let h = single(Some(4), 2);
+        let wanted = Portrait { model: 4, owner: 2 };
+        assert_eq!(p.missing_portrait(&h), Some(wanted));
+        assert_eq!(p.missing_portrait(&single(None, 2)), None);
+        let edge = p.artwork.portrait_edge() as usize;
+        let pixels = vec![5; edge * edge * 4];
+        let rect = p.store_portrait(wanted, &pixels, &h).expect("stored");
+        assert_eq!(p.missing_portrait(&h), None);
+        // Another owner's same model is another portrait.
+        assert!(p.missing_portrait(&single(Some(4), 3)).is_some());
+        let drawn: Vec<HudQuad> = p
+            .compose(&l, &h)
+            .iter()
+            .filter(|q| q.source.x as u32 == rect.x && q.source.y as u32 == rect.y)
+            .cloned()
+            .collect();
+        assert_eq!(drawn.len(), 1);
+        assert!(drawn[0].dest.w > p.artwork.model_icon_edge() as f32);
+        // Fill the shelf while model 4 is shown: it stays, the oldest other one goes.
+        for model in 10..10 + hud_atlas::PORTRAIT_SLOTS as u16 {
+            let other = Portrait { model, owner: 1 };
+            assert!(p.store_portrait(other, &pixels, &h).is_some());
+        }
+        assert!(p.portrait(wanted).is_some(), "the shown portrait is kept");
+        assert!(
+            p.portrait(Portrait {
+                model: 10,
+                owner: 1
+            })
+            .is_none()
+        );
+        assert!(
+            p.portrait(Portrait {
+                model: 11,
+                owner: 1
+            })
+            .is_some()
+        );
+    }
+
+    /// Until the portrait is rendered the tile shows the model's smaller picture if it has one.
+    #[test]
+    fn the_portrait_falls_back_to_the_small_picture() {
+        let l = HudLayout::new(1280, 800, None);
+        let mut p = HudPainter::bake(l.scale).expect("artwork bakes");
+        let h = single(Some(4), 1);
+        let edge = p.artwork.model_icon_edge() as usize;
+        let rect = p
+            .store_model_icon(4, &vec![3; edge * edge * 4], &h)
+            .expect("stored");
+        assert_eq!(quads_from(&mut p, &l, &h, rect), 1);
     }
 }
