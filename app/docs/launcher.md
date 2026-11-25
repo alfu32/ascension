@@ -20,7 +20,7 @@ on one plain row beneath. **Import …** and **Export …** read and write a pre
 
 **Presets.** The bundled tiles are `assets/launcher/presets.json`: Quick match (Planet, one easy
 opponent), Classic (Cluster, three moderate), Galactic war (Quadrant, seven tougher), Start in
-space (Cluster, the Starfaring Age, with that age's rich-start script), Sandbox (the last age,
+space (Cluster, the Spacefaring Age, with that age's rich-start script), Sandbox (the last age,
 everything researched, plenty of all, no opponents), Peaceful build (no opponents), Big battle
 (the 200-against-200 script, one opponent) and Watch the computers (four computers on one
 planet, you watch). Play keeps the person's own race and name. A preset sets only the Play

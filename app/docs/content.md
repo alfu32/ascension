@@ -31,15 +31,15 @@ The content is too large to type by hand row by row. It is **generated**:
 | 0 | Ancient | `age.ancient` | planetary |
 | 1 | Classical | `age.classical` | planetary |
 | 2 | Medieval | `age.medieval` | planetary |
-| 3 | Gunpowder | `age.gunpowder` | planetary |
+| 3 | Discovery (called Gunpowder until task 155) | `age.gunpowder` | planetary |
 | 4 | Enlightenment | `age.enlightenment` | planetary |
 | 5 | Industrial | `age.industrial` | planetary |
 | 6 | Modern | `age.modern` | planetary |
 | 7 | Freedom (called Information until task 146) | `age.information` | planetary |
 | 8 | Automation | `age.automation` | planetary |
-| 9 | Fusion | `age.fusion` | interplanetary (home system seen, view only) |
-| 10 | Starfaring | `age.starfaring` | interplanetary |
-| 11 | Expansion | `age.expansion` | interstellar |
+| 9 | Fusion | `age.fusion` | interplanetary (the home system: frigates, transports, colonies; task 155) |
+| 10 | Spacefaring (called Starfaring until task 155) | `age.starfaring` | interplanetary |
+| 11 | Starfaring (called Expansion until task 155) | `age.expansion` | interstellar (jumps) |
 | 12 | Abundance | `age.abundance` | interstellar |
 | 13 | Galactic Empires | `age.galactic` | interstellar |
 
@@ -203,8 +203,8 @@ hit-point percentage. The first step of each line needs only its age and buildin
 | Fighters | Airfield | Biplanes (5), Fighters (6), Jet Fighters (7), Drone Fighters (8), Interceptors (9) |
 | Bombers | Airfield | Bombers (6), Strategic Bombers (7), Drone Bombers (8) |
 | Rotorcraft | Airfield | Attack Helicopters (6), Gunship Helicopters (7), Hover Gunships (8) |
-| Starships | Spaceport | Survey Ship (10), Corvettes (10), Space Frigates (11), Space Cruisers (12), Battleships (13) |
-| Transport | Spaceport | Transport Ships (10): unarmed, carries 20 population; every other starship carries 1 (10) or 2 (11+) |
+| Starships | Spaceport | Space Frigates (9; stats and look of 10, task 155), Corvettes (10), Survey Ship (11; stats and look of 10, task 155), Space Cruisers (11), Battleships (12) |
+| Transport | Spaceport | Transport Ships (9; stats and look of 10, task 155): unarmed, carries 20 population; every other starship carries 1 (10) or 2 (11+) |
 | Orbital watch | Spaceport | Satellites (7; 10 until task 130): 96 tiles of sight from the orbit above the spaceport; armed since task 134 against what orbits their planet within 80 tiles (20 kinetic a second: a probe falls in under four seconds, two satellites destroy each other in seven, a starship's armour stops most of it); Space Probes (7, task 130): unarmed, 40 tiles of sight, 8 tiles a second, sweeps the planet on a patrol. Both bound to their planet's orbit |
 | Orbital craft | Airfield | Orbital Fighters (10), Orbital Bombers (10): climb from the air to their planet's orbit by themselves and come back down; leave the planet only aboard a carrier |
 | Carrier | Spaceport | Carriers (10): carries 10 orbital craft and launches them into the orbit it holds |

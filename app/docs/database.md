@@ -279,6 +279,8 @@ holds its arrays.
 `age.view_range` governs the planetary camera's ground half-width only.
 Fusion remains rank 0 with zero range (whole globe); starfaring is rank 1
 (home system); expansion and later ages rank 2 (star map and route travel).
+(Since task 138 fusion is rank 1 too, and since task 155 its ships move in the home system;
+see "The space ages split by distance".)
 The numeric ranks are the rules contract; code does not branch on the keys.
 
 `et_weapon.orbit_only INTEGER NOT NULL DEFAULT 0 CHECK (orbit_only IN (0,1))`
@@ -2812,3 +2814,76 @@ interface, the drawing of joined segments and the computer player's use of them 
   for each era (`bld.palisade@medieval` is the curtain wall's, `@industrial` the trench line's,
   and so on: 41 files in all). **Sounds**: the `post` family (`tools/sounds/assign.py`: walls, gates
   and mines are manned like a guard post), baked for the new types only.
+
+## The space ages split by distance (task 155)
+
+Owner (2026-11-25): "spaceports should also build space probes earlyer so that we can explore
+and colonize the solar system, frigates should also be maybe interesting to have earlier than
+starfaring age ... which honestly comes too soon. i'd rename it spacefaring age and the
+expansion age i'd make into starfaring age." The own star system is reached first, the other
+stars one age later. Rows only: no schema change and no code; both lint views stay empty.
+
+- **Names.** `age.starfaring` is shown as the **Spacefaring Age** (10) and `age.expansion` as the
+  **Starfaring Age** (11); their advances are "Advance to Spacefaring" and "Advance to
+  Starfaring" (`AGE_NAMES` in the generator). With them (owner, GitHub issue #160: "Please
+  rename the gunpowder age to the age of discovery") `age.gunpowder` is shown as the **Age of
+  Discovery** (3), its advance "Advance to Discovery", its dialog subtitle "powder, sail and new
+  coasts" (it was "the first age of discovery"). The keys stay, so saves, the server, scripts and
+  the music keys are unchanged; the music's files and published titles stay too (`music.md`).
+  The age dialog's texts (`assets/text/ages.toml`, `ages-story.md`) follow the new names.
+- **Fusion (9): the home system.** The fusion age has been map-scale rank 1 since task 138, so
+  its ships may launch and move within the home system (`World::space_age`) and nothing in the
+  code changes. The spaceport (information age since task 130) now also trains the **space
+  frigate** and the **transport ship** in the fusion age, and citizens may build the **ground
+  battery**: the frigate bombards from orbit, and the battery is its answer on the ground (task
+  71's rule), as the satellite (armed since task 134) is in orbit. Their `prerequisite` rows
+  name `age.fusion`; their `first_age_id`, stats and looks stay those of the spacefaring age
+  (`BUILDABLE_FROM` in the generator, which since this task holds units too, as the spaceport
+  and the satellite did for task 130). A fusion transport carries settlers to another planet
+  of the home system and they found a city there (task 54); a fusion frigate claims a resource
+  body by presence like any starship with the claim tag; the computer player does both by data
+  (`computer-player.md`, "Space").
+- **The space probe** stays bound to its planet's orbit (`orbit_bound`, task 130). The other
+  planets and bodies of the home system are explored by the frigate and the transport; a probe
+  that leaves its orbit would need a code rule or a new unit type with its own model.
+- **Spacefaring (10)**: corvettes, carriers, orbital craft, the space freighter, the Deep Space
+  Survey, as before.
+- **Starfaring (11): jumps.** A `travel` order (a jump along a route) is refused below map-scale
+  rank 2 (`SimError::CannotEnterSpace`), and rank 2 is first seeded at `age.expansion`. So the
+  research that opens the jumps is the age's own advance, **Advance to Starfaring**
+  (`tech.age.expansion`, library, page `research_4`, column 0 row 1): 2 750 food and 2 750
+  knowledge, 2 600 ticks, after the four track researches of level 11. A separate research
+  would need a new rule key read by the travel check in `rom-sim`; it was not added. The
+  **survey ship**, a picket for jump arrivals, moves to this age (its prerequisite; stats,
+  `first_age_id` and look stay), and with it its **Survey Sensor Array** (spaceport research,
+  now 850 ticks, 1 200 wealth and 600 knowledge; was 800, 1 100 and 550 in the spacefaring age).
+  Enhanced Sensors and the jump inhibitor were already of this age, interstellar trade is of
+  abundance; the jump detector (task 118) stays in the fusion age (it warns of foreign ships).
+  The spaceport's research grid follows the order of the ages: Deep Space Survey moves to
+  column 1, Enhanced Sensors to 2, the Survey Sensor Array to 3.
+- **Balance.** The advance into the Spacefaring Age costs half as much again
+  (`AGE_ADVANCE_PCT`): 3 750 food and 3 750 knowledge (was 2 500 each) and 3 600 research ticks
+  (was 2 400). No other price or time changes.
+- **Tests** (`rom-sim/tests/space_ages.rs`, each run twice for equal hashes): a fusion-age
+  player builds a spaceport with citizens, trains a probe, a frigate and a transport (the
+  corvette and the survey ship are refused), may not jump, carries three citizens to the
+  neighbour planet of its system and founds a city there; a spacefaring frigate flies within its
+  system but may not jump until the library's Advance to Starfaring is done, then jumps.
+  Two tests followed the data: the rally-point test of task 142 trains a corvette where it
+  trained a survey ship, and the descent's food in the ascension test is 53 415 (was 52 290: 90 %
+  of the 1 250 more food the advance costs).
+- **Measured.** `rom playthrough --seed 1` hash `3a9c0ad61891fb60`, ascension `6cd649b9b902f276`
+  (before: `abee291cb764153a`, `1ee55ed65a7c141b`). The ages up to fusion are reached on the same
+  ticks (fusion 33 416); spacefaring 38 904 (was 38 184), starfaring 43 720 (43 000), abundance
+  48 536 (47 816), galactic 53 304 (52 584): the bot spends 720 more ticks on the dearer advance
+  (its science research shortens the 1 200 extra ticks). With the advance's old price and time
+  in the same build every age tick comes back exactly; the hash still moves (`bd16b5ba7bd25279`)
+  with the other rows. Fight matrix 270 strengths, 0 unanswered (its rosters follow
+  `first_age_id`, which did not move); duel balanced:moderate against balanced:easiest 20–0, mean
+  tick 46 979 (unchanged: those matches end long before the space ages). Screenshots (universe seed 1,
+  `--players 2 --ai none --sun fixed`, scripts `tasks/155-*-script.txt`):
+  `img/155-spacefaring-dialog.png` (the library's advance from the fusion age: the new-age dialog
+  names the Spacefaring Age), `img/155-fusion-spaceport.png` (a fusion-age spaceport has trained
+  a probe, a transport and a frigate through its Train tab) and `img/155-fusion-system.png` (the
+  same ships in the system view: the frigate and the transport sent to the home planet's moon,
+  which they claim, the probe still in its planet's orbit).

@@ -1,0 +1,17 @@
+# Task 155, shot as img/155-spacefaring-dialog.png: the Spacefaring Age (key age.starfaring,
+# called the Starfaring Age until task 155) reached in a universe match (seed 1, --sun fixed,
+# 1280 x 800, --players 2 --ai none): player one starts in the Fusion age with its research done,
+# the library researches the advance at ten times the speed and the new-age dialog names the
+# Spacefaring Age. Run with
+#   --universe --seed 1 --players 2 --ai none --sun fixed --size 1280x800
+#   --script docs/tasks/155-spacefaring-script.txt --screenshot <file> --after <seconds>
+0 grant-age age.fusion
+0 research-all 1
+0 grant res.food 50000
+0 grant res.knowledge 50000
+0 place 1 bld.library @9,0
+1 speed 100
+5 researchers
+6 hud tab 3
+7 hud slot 0
+8 speed 1000

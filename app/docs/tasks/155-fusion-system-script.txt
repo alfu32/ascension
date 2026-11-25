@@ -1,0 +1,23 @@
+# Task 155, shot as img/155-fusion-system.png with --view system,home: the same Fusion-age start
+# as 155-fusion-spaceport-script.txt (the spaceport trains a probe, a transport and a frigate),
+# then every ship of player one is ordered to the nearest resource body of the home system. The
+# probe stays in its planet's orbit (it is bound to it); the frigate and the transport fly out.
+#   --universe --seed 1 --players 2 --ai none --sun fixed --size 1280x800 --view system,home
+#   --script docs/tasks/155-fusion-system-script.txt --screenshot <file> --after <seconds>
+0 grant-age age.fusion
+0 grant res.food 100000
+0 grant res.timber 100000
+0 grant res.metal 100000
+0 grant res.wealth 100000
+0 grant res.knowledge 100000
+0 grant res.oil 100000
+0 grant res.energy 100000
+0 place 1 bld.spaceport @-10,0
+5 producers
+7 hud tab 2
+8 hud slot 9
+9 hud slot 5
+10 hud slot 2
+11 speed 400
+1300 ships
+1302 orbit rock1

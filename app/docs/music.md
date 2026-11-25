@@ -42,7 +42,7 @@ What every piece does, following the owner's rules:
   unison or in octaves, in its own rhythm; augmented in Enlightenment, Modern and Fusion) and
   again at the very end. Abundance ends with it once without its last note, as the brief asks.
 - **Symphonic, strings first.** String sections carry melody and accompaniment; woodwinds and
-  horns blend; brass is sparing (a trumpet doubling a line inside a tutti, the Gunpowder consort,
+  horns blend; brass is sparing (a trumpet doubling a line inside a tutti, the Discovery consort,
   the Modern march's last repetition), never calls for their own sake.
 - **No cartoonish contrasts.** Changes of mood happen by degrees: tempo ramps, expression
   hairpins, harmony that darkens or brightens a chord at a time (Enlightenment's minor-to-major
@@ -52,7 +52,7 @@ What every piece does, following the owner's rules:
   identical repetition; the machine is a canon. Cymbals and gongs appear once or twice a piece.
 - **Each ending prepares the next opening** (the hand-over in each age's brief): the open fifth
   at the end of Ancient becomes Classical's lyre; Classical thins to the bare fifth of
-  Medieval's organum; Medieval ends dark and Gunpowder rises out of a low E♭; Gunpowder's E♭
+  Medieval's organum; Medieval ends dark and Discovery rises out of a low E♭; Discovery's E♭
   minor opens Enlightenment; and so on to Abundance's unanswered B♭, which Galactic answers.
 - **Styles evoked, never quoted.** No existing score is reproduced; the period styles are written
   from their conventions (organum, pavane and galliard, Alberti bass, process canon, overtone
@@ -204,7 +204,11 @@ age. The release artist is **Ascension RTS** (the owner, 2026-11-23). Made by
 `app/tools/music/album.py` from the same scores and samples; the 29 game files are not touched.
 The movements carry the ages' names as the game shows them: track 9 is "Freedom Age" (the
 Information age's name in the game since task 146), made from the `information.*` pieces, whose
-file names stay as they are.
+file names stay as they are. Since task 155 (owner, 2026-11-25) the game calls age 10 (the
+`starfaring.*` pieces) the Spacefaring Age and age 11 (the `expansion.*` pieces) the Starfaring
+Age, and (issue #160) age 3 (the `gunpowder.*` pieces) the Age of Discovery; the album was
+published before, and its tracks 5, 12 and 13 keep the titles they were released with,
+"Gunpowder Age", "Starfaring Age" and "Age of Expansion", as do the files.
 
 **Form of a movement.** The age's main theme, its interlude, then the theme's ending. The theme
 is split in the score at its hand-over (`handover_at` in the cue sheet, the ending that "prepares
@@ -217,10 +221,10 @@ the split moves back to the nearest musical seam:
 
 | Movement | Theme split | Why |
 | --- | --- | --- |
-| Gunpowder | 36 eighths before the hand-over | the ending begins with the call across the water and lets the galliard resume before the cannon, instead of starting on the cannon |
+| Discovery (`gunpowder.theme`) | 36 eighths before the hand-over | the ending begins with the call across the water and lets the galliard resume before the cannon, instead of starting on the cannon |
 | Enlightenment | 33 eighths before (the woodwind dialogue's pick-up) | the body ends on the Allegro's first full cadence; the ending builds through the dialogue into the tutti phrase Industrial quotes |
 | Freedom (`information.theme`) | 64 eighths before the final statement (the breakdown) | the ending grows from the strings alone through the third hook into the tutti, rather than starting on the tutti |
-| Starfaring | at the final statement | the hand-over marker falls on the choir's held E♭, four eighths into its last phrase |
+| Spacefaring (`starfaring.theme`) | at the final statement | the hand-over marker falls on the choir's held E♭, four eighths into its last phrase |
 | Automation | at the hand-over, with a link | four bars (`scores/links/automation_link.py`) build the machine and the canon back up from the interlude to the tutti E♭ the ending starts with |
 
 **Interlude length.** Every movement plays its whole interlude: theme and interlude together

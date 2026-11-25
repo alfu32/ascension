@@ -144,11 +144,11 @@ INSERT INTO order_kind(key,needs,target,note) VALUES
 -- ── defs ────────────────────────────────────────────────────────────────────
 INSERT INTO def(kind,key,name,sort) VALUES
  ('age','age.ancient','Ancient Age',0), ('age','age.classical','Classical Age',1),
- ('age','age.medieval','Medieval Age',2), ('age','age.gunpowder','Gunpowder Age',3),
+ ('age','age.medieval','Medieval Age',2), ('age','age.gunpowder','Age of Discovery',3),
  ('age','age.enlightenment','Enlightenment Age',4), ('age','age.industrial','Industrial Age',5),
  ('age','age.modern','Modern Age',6), ('age','age.information','Freedom Age',7),
  ('age','age.automation','Automation Age',8), ('age','age.fusion','Fusion Age',9),
- ('age','age.starfaring','Starfaring Age',10), ('age','age.expansion','Age of Expansion',11),
+ ('age','age.starfaring','Spacefaring Age',10), ('age','age.expansion','Starfaring Age',11),
  ('age','age.abundance','Age of Abundance',12), ('age','age.galactic','Galactic Empires',13);
 INSERT INTO age(id,ordinal,era,map_scale)
  SELECT id, sort,
@@ -2703,7 +2703,7 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.age.medieval'),(SELECT id FROM def WHERE key='res.food'),500,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.age.medieval'),(SELECT id FROM def WHERE key='res.knowledge'),500,0);
 INSERT INTO tech_effect(tech_id,effect,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.medieval'),'set_age',(SELECT id FROM def WHERE key='age.medieval'));
-INSERT INTO def(kind,key,name) VALUES ('tech','tech.age.gunpowder','Advance to Gunpowder');
+INSERT INTO def(kind,key,name) VALUES ('tech','tech.age.gunpowder','Advance to Discovery');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.age.gunpowder'),'age','',3,1000);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.age.gunpowder'),(SELECT id FROM def WHERE key='res.food'),750,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.age.gunpowder'),(SELECT id FROM def WHERE key='res.knowledge'),750,0);
@@ -2738,12 +2738,12 @@ INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.age.fusion'),(SELECT id FROM def WHERE key='res.food'),2250,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.age.fusion'),(SELECT id FROM def WHERE key='res.knowledge'),2250,0);
 INSERT INTO tech_effect(tech_id,effect,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.fusion'),'set_age',(SELECT id FROM def WHERE key='age.fusion'));
-INSERT INTO def(kind,key,name) VALUES ('tech','tech.age.starfaring','Advance to Starfaring');
-INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.age.starfaring'),'age','',10,2400);
-INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.age.starfaring'),(SELECT id FROM def WHERE key='res.food'),2500,0);
-INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.age.starfaring'),(SELECT id FROM def WHERE key='res.knowledge'),2500,0);
+INSERT INTO def(kind,key,name) VALUES ('tech','tech.age.starfaring','Advance to Spacefaring');
+INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.age.starfaring'),'age','',10,3600);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.age.starfaring'),(SELECT id FROM def WHERE key='res.food'),3750,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.age.starfaring'),(SELECT id FROM def WHERE key='res.knowledge'),3750,0);
 INSERT INTO tech_effect(tech_id,effect,target_def_id) VALUES ((SELECT id FROM def WHERE key='tech.age.starfaring'),'set_age',(SELECT id FROM def WHERE key='age.starfaring'));
-INSERT INTO def(kind,key,name) VALUES ('tech','tech.age.expansion','Advance to Expansion');
+INSERT INTO def(kind,key,name) VALUES ('tech','tech.age.expansion','Advance to Starfaring');
 INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.age.expansion'),'age','',11,2600);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.age.expansion'),(SELECT id FROM def WHERE key='res.food'),2750,0);
 INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.age.expansion'),(SELECT id FROM def WHERE key='res.knowledge'),2750,0);
@@ -3366,9 +3366,9 @@ INSERT INTO placement_rule(entity_type_id,rule,ref_def_id) VALUES ((SELECT id FR
 INSERT INTO et_detector(entity_type_id,scope,radius,enabled) VALUES ((SELECT id FROM def WHERE key='bld.jump_detector'),'system',0,1);
 INSERT INTO et_detector(entity_type_id,scope,radius,enabled) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),'radius',40000,0);
 INSERT INTO def(kind,key,name) VALUES ('tech','tech.survey_sensor_array','Survey Sensor Array');
-INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.survey_sensor_array'),'upgrade','',0,800);
-INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.survey_sensor_array'),(SELECT id FROM def WHERE key='res.wealth'),1100,0);
-INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.survey_sensor_array'),(SELECT id FROM def WHERE key='res.knowledge'),550,0);
+INSERT INTO tech(id,kind,track,level,research_ticks) VALUES ((SELECT id FROM def WHERE key='tech.survey_sensor_array'),'upgrade','',0,850);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.survey_sensor_array'),(SELECT id FROM def WHERE key='res.wealth'),1200,0);
+INSERT INTO cost(def_id,resource_id,amount,ramp) VALUES ((SELECT id FROM def WHERE key='tech.survey_sensor_array'),(SELECT id FROM def WHERE key='res.knowledge'),600,0);
 INSERT INTO modifier(source_def_id,target_def_id,stat_key,op,value) VALUES ((SELECT id FROM def WHERE key='tech.survey_sensor_array'),(SELECT id FROM def WHERE key='unit.survey_ship'),'detector','set',1);
 INSERT INTO game_constant(key,value,unit,note) VALUES ('air.takeoff_run',3000,'milli-tiles','ground an aircraft rolls along its heading while taking off, and glides over while landing');
 UPDATE et_movement SET takeoff_ticks=60,landing_radius=1400 WHERE entity_type_id=(SELECT id FROM def WHERE key='unit.biplane');
@@ -3887,8 +3887,7 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.age.expansion'),'research','research_4',0,1);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.fusion_plant'),(SELECT id FROM def WHERE key='tech.superconducting_grid'),'research','research',1,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.unification'),'research','projects',1,0);
-INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='tech.survey_sensor_array'),'research','research',1,0);
-INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='tech.deep_space_survey'),'research','research',2,0);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='tech.deep_space_survey'),'research','research',1,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='tech.up.beam_trooper'),'research','research_2',3,1);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.vehicle_plant'),(SELECT id FROM def WHERE key='tech.up.grav_tank'),'research','research',4,1);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.12'),'research','research_4',1,2);
@@ -3897,7 +3896,8 @@ INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_ro
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.science.12'),'research','research_4',4,2);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.age.abundance'),'research','research_4',0,2);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.fusion_plant'),(SELECT id FROM def WHERE key='tech.stellar_collectors'),'research','research',2,0);
-INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='tech.enhanced_sensors'),'research','research',3,0);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='tech.enhanced_sensors'),'research','research',2,0);
+INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='tech.survey_sensor_array'),'research','research',3,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.spaceport'),(SELECT id FROM def WHERE key='tech.long_range_imaging'),'research','research',4,0);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.barracks'),(SELECT id FROM def WHERE key='tech.up.shock_marine'),'research','research_2',4,1);
 INSERT INTO production(producer_type_id,product_def_id,mode,ui_page,ui_col,ui_row) VALUES ((SELECT id FROM def WHERE key='bld.library'),(SELECT id FROM def WHERE key='tech.military.13'),'research','research_5',1,0);
@@ -4280,9 +4280,9 @@ INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FR
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.up.hover_gunship'),(SELECT id FROM def WHERE key='age.automation'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.up.hover_gunship'),(SELECT id FROM def WHERE key='tech.up.gunship_helicopter'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.hover_gunship'),(SELECT id FROM def WHERE key='tech.up.hover_gunship'),1);
-INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),(SELECT id FROM def WHERE key='age.starfaring'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.survey_ship'),(SELECT id FROM def WHERE key='age.expansion'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.corvette'),(SELECT id FROM def WHERE key='age.starfaring'),0);
-INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),(SELECT id FROM def WHERE key='age.starfaring'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.space_frigate'),(SELECT id FROM def WHERE key='age.fusion'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.space_cruiser'),(SELECT id FROM def WHERE key='age.expansion'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.battleship'),(SELECT id FROM def WHERE key='age.abundance'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.citizen'),(SELECT id FROM def WHERE key='age.ancient'),0);
@@ -4308,7 +4308,7 @@ INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FR
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.up.cargo_drone'),(SELECT id FROM def WHERE key='tech.up.lorry'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.cargo_drone'),(SELECT id FROM def WHERE key='tech.up.cargo_drone'),1);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.priest'),(SELECT id FROM def WHERE key='age.classical'),0);
-INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),(SELECT id FROM def WHERE key='age.starfaring'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.transport_ship'),(SELECT id FROM def WHERE key='age.fusion'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.military.1'),(SELECT id FROM def WHERE key='age.ancient'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.military.2'),(SELECT id FROM def WHERE key='age.classical'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.military.2'),(SELECT id FROM def WHERE key='tech.military.1'),1);
@@ -4543,7 +4543,7 @@ INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FR
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.orbital_fighter'),(SELECT id FROM def WHERE key='age.starfaring'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.orbital_bomber'),(SELECT id FROM def WHERE key='age.starfaring'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.carrier'),(SELECT id FROM def WHERE key='age.starfaring'),0);
-INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.ground_battery'),(SELECT id FROM def WHERE key='age.starfaring'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.ground_battery'),(SELECT id FROM def WHERE key='age.fusion'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.space_freighter'),(SELECT id FROM def WHERE key='age.starfaring'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.satellite'),(SELECT id FROM def WHERE key='age.information'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.jump_inhibitor'),(SELECT id FROM def WHERE key='age.expansion'),0);
@@ -4564,7 +4564,7 @@ INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FR
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.fire_control'),(SELECT id FROM def WHERE key='age.information'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.armour_belts'),(SELECT id FROM def WHERE key='age.fusion'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='bld.jump_detector'),(SELECT id FROM def WHERE key='age.fusion'),0);
-INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.survey_sensor_array'),(SELECT id FROM def WHERE key='age.starfaring'),0);
+INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.survey_sensor_array'),(SELECT id FROM def WHERE key='age.expansion'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.drone_operator'),(SELECT id FROM def WHERE key='age.information'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='unit.space_probe'),(SELECT id FROM def WHERE key='age.information'),0);
 INSERT INTO prerequisite(def_id,requires_def_id,alt_group) VALUES ((SELECT id FROM def WHERE key='tech.orbital_survey'),(SELECT id FROM def WHERE key='age.information'),0);

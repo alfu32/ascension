@@ -1,0 +1,23 @@
+# Task 155: a Fusion-age spaceport trains a space probe, a transport and a space frigate through
+# its Train tab (universe match, seed 1, --sun fixed, 1280 x 800, --players 2 --ai none). Player
+# one starts in the Fusion age with a spaceport; it is selected (`producers`) and the probe
+# (slot 9), the transport (slot 5) and the frigate (slot 2) are queued at four times the speed.
+# Shot as img/155-fusion-spaceport.png in the planet view (the spaceport's Train tab);
+# 155-fusion-system-script.txt continues it in the system view.
+#   --universe --seed 1 --players 2 --ai none --sun fixed --size 1280x800
+#   --script docs/tasks/155-fusion-spaceport-script.txt --screenshot <file> --after <seconds>
+0 grant-age age.fusion
+0 grant res.food 100000
+0 grant res.timber 100000
+0 grant res.metal 100000
+0 grant res.wealth 100000
+0 grant res.knowledge 100000
+0 grant res.oil 100000
+0 grant res.energy 100000
+0 place 1 bld.spaceport @-10,0
+5 producers
+7 hud tab 2
+8 hud slot 9
+9 hud slot 5
+10 hud slot 2
+11 speed 400

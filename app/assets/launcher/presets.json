@@ -24,7 +24,7 @@
     },
     {
       "name": "Start in space",
-      "line": "The Starfaring Age, ships from the start.",
+      "line": "The Spacefaring Age, ships from the start.",
       "icon": "tech_ascension",
       "picture": "tiles/space",
       "fields": {

@@ -1,4 +1,4 @@
-# Test start: the Gunpowder Age (age 3), everything researchable in it already researched, and plenty
+# Test start: the Age of Discovery (age 3, key age.gunpowder), everything researchable in it already researched, and plenty
 # of every resource for player one (all applied before the first tick).
 # Use: env -u WAYLAND_DISPLAY target/release/rise-of-man <your usual options> --script docs/tasks/rich-start-03-gunpowder-script.txt
 # Researched: every technology unlocked by this age at any building, the age advances up to it,

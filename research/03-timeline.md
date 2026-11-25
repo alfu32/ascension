@@ -8,21 +8,21 @@ the reference game's span; 8–13 are new. Names are working titles.
 | 0 | Ancient | history | planet | cities, farms, first soldiers |
 | 1 | Classical | history | planet | metal, temples and **priests**, stables, siege |
 | 2 | Medieval | history | planet | castles, heavy cavalry |
-| 3 | Gunpowder | history | planet | firearms, cannon, ocean ships — the first *age of discovery* |
+| 3 | Discovery | history | planet | firearms, cannon, ocean ships — the first *age of discovery* |
 | 4 | Enlightenment | history | planet | line infantry, universities at full strength |
 | 5 | Industrial | history | planet | oil, factories, **medics**, first aircraft |
 | 6 | Modern | history | planet | tanks, carriers, missiles |
 | 7 | Information | history | planet | **drone warfare**: air, naval and ground-support drones, repair drones |
 | 8 | Automation | near future | planet | AI command and robots: workers and soldiers become machines; gather sites run unattended; **nations merge into continental blocs** |
-| 9 | Fusion | near future | planet | new resource **energy**; vehicles that fly, dive or reach near orbit; light and heavy armour in every medium |
-| 10 | Starfaring | stellar | **interstellar** | spacetime drive, the **spaceport**; each player's view **zooms out** to space on arrival — the second age of discovery; blocs unite as **Humanity** |
-| 11 | Expansion | stellar | interstellar | colonies on other worlds, trade lanes, fleets |
+| 9 | Fusion | near future | home system | new resource **energy**; vehicles that fly, dive or reach near orbit; light and heavy armour in every medium; the **spaceport**'s frigates and transports reach the other worlds of the home star, and the first **colonies** there |
+| 10 | Spacefaring | stellar | home system | the whole fleet, the resource worlds of the home system claimed — the second age of discovery; blocs unite as **Humanity** |
+| 11 | Starfaring | stellar | **interstellar** | the jump to other stars along routes; colonies on their worlds, trade lanes, fleets |
 | 12 | Abundance | stellar | interstellar | **all costs are zero**, production still takes time |
 | 13 | Galactic Empires | galactic | interstellar | rival human empires; empire-scale wonders |
 
 ## The discovery template, used twice
 
-| Age of sail (age 3) | Starfaring (age 10) |
+| Age of sail (age 3) | Spacefaring and Starfaring (ages 10–11) |
 | --- | --- |
 | land | planetary terrain |
 | ocean | open space |

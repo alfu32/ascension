@@ -261,8 +261,8 @@ was not opened, its order is tested).
 | Tier rank | Camera and reach | First seeded age |
 | --- | --- | --- |
 | 0, planetary | home planet, positive `view_range` limits ground half-width; zero shows the globe | ancient; fusion has zero range |
-| 1, interplanetary | home system seen from fusion (view only: the spaceport trains only orbit-bound satellites and probes until starfaring); ships may move and orbit within that system from starfaring | fusion |
-| 2, interstellar | star map and route travel between systems | expansion |
+| 1, interplanetary | home system seen from fusion (task 138); since task 155 ships move and orbit within it from fusion too: the space frigate and the transport, which founds colonies on its other planets | fusion |
+| 2, interstellar | star map and route travel (jumps) between systems | expansion (shown as the Starfaring Age since task 155) |
 
 Research updates the existing camera's limit immediately without moving it.
 Starting zoom-out and mouse-wheel zoom obey the same limits. The code reads
@@ -319,8 +319,9 @@ orbital ship only when they have an `orbit` target layer (task 58, below).
   age offering only satellites and space probes (a fast orbital scout, 40 tiles of sight,
   that sweeps the planet on a patrol) and the Orbital Survey (every building on the home
   planet, no units); both ships go up into the home planet's orbit before the space age and
-  never leave it. Its other ships still arrive in the starfaring age. See `database.md`,
-  "Capitals revealed by research".
+  never leave it. Its other ships still arrive in the starfaring age (since task 155 the space
+  frigate and the transport in the fusion age). See `database.md`, "Capitals revealed by
+  research" and "The space ages split by distance".
 - **Sight from orbit** grows with altitude and hull size (16 to 28 tiles, the survey
   ship more); see `database.md`, "Sight".
 
@@ -472,7 +473,7 @@ same planet as the freighter"), `img/trade-route-card.png` (route, pay and next 
   university still becomes one through the lab's upgrade research; and once Automated Colonies
   is researched a lab may also be built directly beside any city, one per city (owner,
   2026-11-17), while in a colony's area the governor builds five. **The survey ship** has a line of its own: the spaceport trains it beside the
-  corvette in every age from starfaring on.
+  corvette in every age from starfaring on (from expansion since task 155).
 
 Screenshots (universe seed 1, `--ai none`, `--sun fixed`, scripts `tasks/73-*-script.txt`):
 `img/auto-colony-sites.png` (an automated colony on Gamma Canis Minoris I, the planet next to
@@ -655,7 +656,7 @@ first if they are in the air — carries them between planets and systems, and
 other starships take ground units only; the carrier takes craft only (container
 tags).
 
-The **ground battery** (starfaring building) fires on enemy ships and craft
+The **ground battery** (starfaring building; built from fusion since task 155) fires on enemy ships and craft
 orbiting above it within fourteen tiles of their ground point (twenty since task 75), so it shoots at
 a carrier descending onto ground near it all the way down; the laser battery
 fires up as well, less accurately. Shots between the ground and orbit, and
@@ -663,7 +664,7 @@ between craft and ships in orbit, are drawn as orange tracers.
 
 ### Carrying, landing and colonies (task 54)
 
-Starships carry ground units: the **transport ship** (starfaring age, unarmed)
+Starships carry ground units: the **transport ship** (starfaring age, built from fusion since task 155; unarmed)
 takes twenty population, every other starship one or two squads. Units board
 by walking up to a ship that has landed (since task 68 only then: a ship in
 orbit takes nobody aboard and sets nobody down). Selecting a carrier lists who

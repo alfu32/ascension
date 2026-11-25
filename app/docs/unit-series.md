@@ -204,6 +204,11 @@ the orbital craft. The roles use the damage matrix as it is: `kinetic` is the an
 | Orbital Fighters (unchanged) | starfaring (10) | dogfighter: air, orbit and space | explosive 40, 5 tiles, every 20 ticks | 420, 4 | 5000 | 220, 80 | 1 | — |
 | Orbital Bombers (unchanged) | starfaring (10) | strikes ground from orbit; close-in attacker of big ships | explosive 30, 4 tiles; kinetic bombardment | 520, 4 | 4000 | 260, 100 | 1 | — |
 
+Since task 155 (owner, 2026-11-25) the frigate and the transport are built from the fusion age
+(9) and the survey ship from expansion (11, shown as the Starfaring Age); their stats and looks
+stay those of starfaring (10, shown as the Spacefaring Age). See `database.md`, "The space ages
+split by distance".
+
 Why the changes:
 
 - **Earlier ages for the frigate, cruiser and battleship.** In the chain each hull arrived one
