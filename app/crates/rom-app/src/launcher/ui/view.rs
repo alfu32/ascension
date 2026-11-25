@@ -271,10 +271,7 @@ impl Launcher {
             .gap(px(16.))
             .child(style::field(
                 "Gathering rate",
-                Some(
-                    "The share of every income from the world: gatherers, farms, claimed bodies, trade. Units and building stay as fast."
-                        .into(),
-                ),
+                Some("Of every income from the world. Units and building keep their speed.".into()),
                 segmented(self, "gather_rate", &rom_sim::EconomyPace::GATHER_RATES, cx),
             ))
             .child(style::field(

@@ -1,0 +1,16 @@
+# Task 159: the HUD's income rates at a slow gathering rate. Five farms stand beside the city
+# before the first tick; the idle starting builders take them as they would in play, and the
+# resource bar's food rate (+N per income period) shows what reaches the stock. Run the same
+# script at the usual pace for comparison:
+#   rise-of-man --universe --seed 1 --players 2 --ai none --gather-rate 10 --research-time 400
+#     --size 1600x1000 --script app/docs/tasks/159-hud-script.txt --after 9 --screenshot slow.png
+#   rise-of-man --universe --seed 1 --players 2 --ai none
+#     --size 1600x1000 --script app/docs/tasks/159-hud-script.txt --after 9 --screenshot usual.png
+0 place 1 bld.farm @9,0
+0 place 1 bld.farm @-9,0
+0 place 1 bld.farm @0,9
+0 place 1 bld.farm @0,-9
+0 place 1 bld.farm @9,9
+0 speed 1000
+900 speed 100
+901 box builders

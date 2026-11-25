@@ -2237,6 +2237,11 @@ report's options line, `report.json`'s `gather_rate` and `research_time`.
 - Hashed only off the defaults (the options and the remainders), so default matches keep their
   hashes; the rules fingerprint is unchanged. No seed row.
 
+Pictures: `img/159-setup-economy-pace.png` (the Play form at 10 % gathering, 400 % research
+time), `img/159-hud-rate-gathering-10.png` and `img/159-hud-rate-gathering-100.png` (the same
+five farmers at the same moment: food +5 against +50 a period, commerce 5/7 against 50/70;
+`docs/tasks/159-hud-script.txt`).
+
 `resource.first_age_id` is a discovery gate. Terrain-to-resource associations
 come from existing `et_gather_site.resource_id`, `needs_node_terrain_id` and
 `on_terrain` placement rows. A terrain with several yields is known from the
