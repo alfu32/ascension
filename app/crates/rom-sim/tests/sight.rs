@@ -72,6 +72,7 @@ fn command(player: PlayerId, executor: EntityId, kind: &str) -> Command {
         target_pos: None,
         queue: false,
         text: None,
+        facing: None,
     }
 }
 

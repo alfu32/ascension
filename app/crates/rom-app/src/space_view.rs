@@ -1047,6 +1047,7 @@ mod transit_tests {
                 target_pos: Some(target),
                 queue: false,
                 text: None,
+                facing: None,
             })
             .unwrap();
         let (mut departed, mut arrived, mut seen_in_transit) = (None, None, false);
@@ -1180,6 +1181,7 @@ mod strike_tests {
                     target_pos: Some(target),
                     queue: false,
                     text: None,
+                    facing: None,
                 })
                 .unwrap();
         }
@@ -1278,6 +1280,7 @@ mod resource_body_tests {
                 target_pos: None,
                 queue: false,
                 text: None,
+                facing: None,
             })
             .unwrap();
         let mut lines = Vec::new();
@@ -1421,6 +1424,7 @@ mod trade_tests {
                     target_pos: None,
                     queue: false,
                     text: None,
+                    facing: None,
                 })
                 .unwrap();
         };

@@ -176,7 +176,10 @@ impl World {
         }
         if mode == ProductionMode::Construct {
             let pos = command.target_pos.ok_or(SimError::WrongTargetShape)?;
-            let pos = self.check_placement(command.player, subject, pos)?;
+            // A building's facing turns its footprint (task 147); it is kept snapped.
+            let facing = crate::construction::snap_facing(command.facing.unwrap_or(0));
+            command.facing = (facing != 0).then_some(facing);
+            let pos = self.check_placement_facing(command.player, subject, pos, facing)?;
             self.check_city_limit(command.player, subject, pos)?;
             command.target_pos = Some(pos);
         }

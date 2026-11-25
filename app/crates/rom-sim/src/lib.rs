@@ -65,6 +65,7 @@ pub use ascension::AscensionProject;
 pub use capture::CaptureCountdown;
 pub use city_names::{RENAME_CITY, clean_city_name};
 pub use combat::{BLAST_MEMORY_TICKS, Blast, Wreck};
+pub use construction::{snap_facing, turned_footprint};
 pub use drones::{Cloud, Joining, TURN_PER_TICK};
 pub use entity::{Entity, EntityId, Player, PlayerId};
 pub use fortification::{LineSite, MAX_LINE_SITES};

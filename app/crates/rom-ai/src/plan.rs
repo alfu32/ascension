@@ -173,6 +173,7 @@ impl<'a> Plan<'a> {
             target_pos,
             queue: false,
             text: None,
+            facing: None,
         });
         true
     }

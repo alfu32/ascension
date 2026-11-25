@@ -129,7 +129,7 @@ impl World {
                 (
                     e.id,
                     e.pos,
-                    footprint(&self.rules.entity_types[&e.type_id], e.pos),
+                    footprint(&self.rules.entity_types[&e.type_id], e.pos, e.facing),
                 )
             });
         let Some((keeper, at, bounds)) = keeper else {
@@ -268,6 +268,7 @@ impl World {
             target_pos: None,
             queue: false,
             text: None,
+            facing: None,
         })?;
         let mut info = route.info;
         info.per_trip_income = self.delivery_income(player, route.resource, info.per_trip_income);
@@ -631,6 +632,7 @@ impl World {
             footprint(
                 &self.rules.entity_types[&destination.type_id],
                 destination.pos,
+                destination.facing,
             ),
         );
         order.progress_ticks = order.progress_ticks.saturating_add(1);

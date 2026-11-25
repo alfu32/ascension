@@ -219,6 +219,7 @@ fn order(player: PlayerId, executor: EntityId, kind: &str, subject: Option<DefId
         target_pos: None,
         queue: false,
         text: None,
+        facing: None,
     }
 }
 

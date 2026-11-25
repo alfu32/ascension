@@ -74,6 +74,7 @@ fn order(w: &mut World, executor: EntityId, kind: &str) -> Result<(), SimError> 
         target_pos: None,
         queue: false,
         text: None,
+        facing: None,
     })
     .map(|_| ())
 }
@@ -88,6 +89,7 @@ fn walk(w: &mut World, executor: EntityId, x: i32, y: i32) {
         target_pos: Some(at(x, y)),
         queue: false,
         text: None,
+        facing: None,
     })
     .unwrap();
 }
@@ -155,6 +157,7 @@ fn a_working_citizen_called_up_leaves_its_site() {
         target_pos: None,
         queue: false,
         text: None,
+        facing: None,
     })
     .unwrap();
     ticks(&mut w, 200);
@@ -256,6 +259,7 @@ fn fight(age: &str, a: &str, b: &str) -> (usize, usize) {
             target_pos: Some(at(target, 47)),
             queue: false,
             text: None,
+            facing: None,
         })
         .unwrap();
     }
@@ -313,6 +317,7 @@ fn scenario() -> u64 {
             target_pos: Some(at(25, 30)),
             queue: false,
             text: None,
+            facing: None,
         })
         .unwrap();
     }

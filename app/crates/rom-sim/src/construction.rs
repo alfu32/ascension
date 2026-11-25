@@ -3,15 +3,27 @@
 use crate::{EntityId, Order, OrderStatus, PlayerId, Pos, SimError, World};
 use rom_rules::{DefId, EntityClass, EntityType};
 
-pub(crate) fn footprint(et: &EntityType, pos: Pos) -> [i64; 4] {
+/// A facing snapped to the nearest multiple of 45 degrees, in `0..360` (task 147).
+pub fn snap_facing(facing: u16) -> u16 {
+    ((u32::from(facing % 360) + 22) / 45 * 45 % 360) as u16
+}
+
+/// A footprint of `w` by `h` tiles turned to `facing` (task 147), as tiles across and down: a
+/// quarter turn swaps the sides, a diagonal covers the square of the longer side.
+pub fn turned_footprint(w: i64, h: i64, facing: u16) -> (i64, i64) {
+    match snap_facing(facing) / 45 % 4 {
+        0 => (w, h),
+        2 => (h, w),
+        _ => (w.max(h), w.max(h)),
+    }
+}
+
+/// The bounds of a building of type `et` centred at `pos` and facing `facing`.
+pub(crate) fn footprint(et: &EntityType, pos: Pos, facing: u16) -> [i64; 4] {
+    let (w, h) = turned_footprint(et.footprint_w, et.footprint_h, facing);
     let x = i64::from(pos.x);
     let y = i64::from(pos.y);
-    [
-        x - et.footprint_w * 500,
-        y - et.footprint_h * 500,
-        x + et.footprint_w * 500,
-        y + et.footprint_h * 500,
-    ]
+    [x - w * 500, y - h * 500, x + w * 500, y + h * 500]
 }
 
 fn overlaps(a: [i64; 4], b: [i64; 4]) -> bool {
@@ -21,6 +33,16 @@ fn overlaps(a: [i64; 4], b: [i64; 4]) -> bool {
 impl World {
     /// Puts a footprint on whole tiles nearest to `pos`; other entities keep their point.
     pub(crate) fn snap_placement(&self, subject: DefId, pos: Pos) -> Result<Pos, SimError> {
+        self.snap_turned(subject, pos, 0)
+    }
+
+    /// [`World::snap_placement`] for a building facing `facing` (task 147).
+    pub(crate) fn snap_turned(
+        &self,
+        subject: DefId,
+        pos: Pos,
+        facing: u16,
+    ) -> Result<Pos, SimError> {
         let et = &self.rules.entity_types[&subject];
         let geo = &self
             .surface(pos.body)
@@ -34,12 +56,13 @@ impl World {
             ((i64::from(coordinate) - size * 500 + 500).div_euclid(1000) * 1000 + size * 500) as i32
         };
         let requested = pos;
+        let (w, h) = turned_footprint(et.footprint_w, et.footprint_h, facing);
         let pos = Pos {
-            x: snap(pos.x, et.footprint_w),
-            y: snap(pos.y, et.footprint_h),
+            x: snap(pos.x, w),
+            y: snap(pos.y, h),
             ..pos
         };
-        let fits = geo.footprint_fits(footprint(et, pos));
+        let fits = geo.footprint_fits(footprint(et, pos, facing));
         if geo.is_flat() {
             return if fits {
                 Ok(pos)
@@ -73,8 +96,24 @@ impl World {
         if self.rules.entity_type(type_id).is_none() {
             return Err(SimError::UnknownType(type_id));
         }
-        let pos = self.snap_placement(type_id, pos)?;
-        self.spawn(type_id, owner, pos)
+        self.place_turned_for_setup(type_id, owner, pos, 0)
+    }
+
+    /// [`World::place_for_setup`] facing `facing`, snapped to a multiple of 45 degrees: a
+    /// building's footprint turns with it (task 147).
+    pub fn place_turned_for_setup(
+        &mut self,
+        type_id: DefId,
+        owner: PlayerId,
+        pos: Pos,
+        facing: u16,
+    ) -> Result<EntityId, SimError> {
+        if self.rules.entity_type(type_id).is_none() {
+            return Err(SimError::UnknownType(type_id));
+        }
+        let facing = snap_facing(facing);
+        let pos = self.snap_turned(type_id, pos, facing)?;
+        self.spawn_turned(type_id, owner, pos, false, facing)
     }
 
     /// Whether `player` may place a building of type `subject` centred near `pos`: map bounds,
@@ -90,6 +129,18 @@ impl World {
         self.placement(player, subject, pos, false)
     }
 
+    /// [`World::check_placement`] for a building facing `facing` (task 147), snapped to a
+    /// multiple of 45 degrees as `construct` snaps it.
+    pub fn check_placement_facing(
+        &self,
+        player: PlayerId,
+        subject: DefId,
+        pos: Pos,
+        facing: u16,
+    ) -> Result<Pos, SimError> {
+        self.placement_turned(player, subject, pos, snap_facing(facing), false)
+    }
+
     /// `check_placement`, optionally leaving out the territory rules (`in_own_territory`,
     /// `in_city_radius`).
     pub(crate) fn placement(
@@ -97,6 +148,18 @@ impl World {
         player: PlayerId,
         subject: DefId,
         pos: Pos,
+        ignore_territory: bool,
+    ) -> Result<Pos, SimError> {
+        self.placement_turned(player, subject, pos, 0, ignore_territory)
+    }
+
+    /// [`World::placement`] for a building facing `facing`.
+    pub(crate) fn placement_turned(
+        &self,
+        player: PlayerId,
+        subject: DefId,
+        pos: Pos,
+        facing: u16,
         ignore_territory: bool,
     ) -> Result<Pos, SimError> {
         let et = self
@@ -107,8 +170,8 @@ impl World {
         if let Some(age) = self.placement_discovery_age(player, subject) {
             return Err(SimError::ResourceAgeRequired(age));
         }
-        let pos = self.snap_placement(subject, pos)?;
-        let bounds = footprint(et, pos);
+        let pos = self.snap_turned(subject, pos, facing)?;
+        let bounds = footprint(et, pos, facing);
         let surface = self.surf(pos.body);
         for tile in surface.geo.footprint_tiles(pos.face, bounds) {
             let index = surface.geo.index_of(tile).expect("checked bounds");
@@ -118,10 +181,13 @@ impl World {
         }
         // Footprints lie within one face, so only footprints on the same face can overlap.
         if self.building_overlaps(pos, bounds)
-            || self.queued_constructions().any(|(_, other, at)| {
+            || self.queued_sites().any(|(other, at, turned)| {
                 at.face == pos.face
                     && at.body == pos.body
-                    && overlaps(bounds, footprint(&self.rules.entity_types[&other], at))
+                    && overlaps(
+                        bounds,
+                        footprint(&self.rules.entity_types[&other], at, turned),
+                    )
             })
         {
             return Err(SimError::PlacementOverlap);
@@ -155,7 +221,7 @@ impl World {
                         && e.pos.body == pos.body
                         && overlaps(
                             bounds,
-                            footprint(&self.rules.entity_types[&e.type_id], e.pos),
+                            footprint(&self.rules.entity_types[&e.type_id], e.pos, e.facing),
                         )
                 }) {
                     return true;
@@ -197,7 +263,11 @@ impl World {
         }
         let (at, bounds) = (
             site.pos,
-            footprint(&self.rules.entity_types[&site.type_id], site.pos),
+            footprint(
+                &self.rules.entity_types[&site.type_id],
+                site.pos,
+                site.facing,
+            ),
         );
         let inside: Vec<(EntityId, Pos, u32)> = self
             .entities()
@@ -233,11 +303,12 @@ impl World {
     pub(crate) fn create_site(&mut self, order: &mut Order) {
         let subject = order.subject.expect("construction subject");
         let id = self
-            .spawn_entity(
+            .spawn_turned(
                 subject,
                 order.player,
                 order.target_pos.expect("placement"),
                 true,
+                order.facing,
             )
             .expect("accepted site fits map and entity id capacity");
         let pct = self
@@ -271,7 +342,7 @@ impl World {
             order.status = OrderStatus::Done;
             return;
         }
-        let (site_id, at, bounds) = (site.id, site.pos, footprint(et, site.pos));
+        let (site_id, at, bounds) = (site.id, site.pos, footprint(et, site.pos, site.facing));
         let total = self
             .rules
             .build_ticks(site.type_id, &self.players[&site.owner].active_sources())
@@ -309,7 +380,7 @@ impl World {
                 return;
             }
             let at = site.pos;
-            let bounds = footprint(&self.rules.entity_types[&site.type_id], at);
+            let bounds = footprint(&self.rules.entity_types[&site.type_id], at, site.facing);
             if self.approach(builder, order, at, bounds) {
                 self.restore_city(site_id, order.player);
                 order.status = OrderStatus::Done;
@@ -339,7 +410,11 @@ impl World {
             .build_ticks(site.type_id, &self.players[&site.owner].active_sources())
             .clamp(0, i64::from(u32::MAX)) as u32;
         order.total_ticks = Some(u64::from(total));
-        let bounds = footprint(&self.rules.entity_types[&site.type_id], site.pos);
+        let bounds = footprint(
+            &self.rules.entity_types[&site.type_id],
+            site.pos,
+            site.facing,
+        );
         if !self.approach(builder, order, site.pos, bounds) {
             return;
         }

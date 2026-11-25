@@ -297,6 +297,7 @@ mod tests {
                     target_pos: Some(at),
                     queue: false,
                     text: None,
+                    facing: None,
                 })
                 .unwrap();
         }
@@ -406,6 +407,7 @@ mod tests {
                     target_pos: Some(target),
                     queue: false,
                     text: None,
+                    facing: None,
                 })
                 .unwrap();
         }

@@ -682,6 +682,7 @@ mod tests {
             target_pos: None,
             queue: false,
             text: None,
+            facing: None,
         }
     }
     #[test]

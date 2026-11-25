@@ -409,7 +409,11 @@ impl World {
             if et.class == EntityClass::Building {
                 return self
                     .geo(target.pos.body)
-                    .closest_in_bounds(target.pos.face, footprint(et, target.pos), e.pos)
+                    .closest_in_bounds(
+                        target.pos.face,
+                        footprint(et, target.pos, target.facing),
+                        e.pos,
+                    )
                     .map_or(target.pos, |(closest, _)| closest);
             }
             return target.pos;

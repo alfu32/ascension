@@ -77,6 +77,7 @@ impl World {
                 target_pos: Some(target),
                 queue: false,
                 text: None,
+                facing: None,
             })?;
         }
         Ok(world)
@@ -124,6 +125,7 @@ impl World {
                     target_pos: Some(Pos::flat(target, y)),
                     queue: false,
                     text: None,
+                    facing: None,
                 })?;
             }
         }
@@ -246,6 +248,7 @@ impl World {
                 target_pos: Some(target),
                 queue: false,
                 text: None,
+                facing: None,
             })?;
         }
         Ok(world)
@@ -311,6 +314,7 @@ impl World {
                     target_pos: Some(target),
                     queue: false,
                     text: None,
+                    facing: None,
                 })?;
             }
         }
@@ -394,6 +398,7 @@ impl World {
                 target_pos: None,
                 queue: false,
                 text: None,
+                facing: None,
             })?;
         }
         Ok(world)
@@ -753,6 +758,7 @@ impl Playthrough {
                         target_pos: pos,
                         queue: false,
                         text: None,
+                        facing: None,
                     })
                     .is_ok()
                 {
@@ -805,6 +811,7 @@ impl Playthrough {
             target_pos: None,
             queue: false,
             text: None,
+            facing: None,
         })?;
         let limit = self.world.tick() + self.world.ascension_duration(player, tech) + 100;
         while !self.world.is_ascended(player) {
@@ -827,6 +834,7 @@ impl Playthrough {
             target_pos: Some(site),
             queue: false,
             text: None,
+            facing: None,
         })?;
         self.world.step();
         if self.world.is_ascended(player) {
@@ -876,6 +884,7 @@ impl Playthrough {
                     let candidate = crate::construction::footprint(
                         &self.world.rules.entity_types[&subject],
                         pos,
+                        0,
                     );
                     // Leave a tile-wide lane between footprints so completed
                     // buildings cannot enclose a builder or block later sites.
@@ -888,6 +897,7 @@ impl Playthrough {
                                 let other = crate::construction::footprint(
                                     &self.world.rules.entity_types[&e.type_id],
                                     e.pos,
+                                    e.facing,
                                 );
                                 candidate[0] - 1000 < other[2]
                                     && other[0] < candidate[2] + 1000
@@ -1018,6 +1028,7 @@ impl World {
                 target_pos: None,
                 queue: false,
                 text: None,
+                facing: None,
             })?;
         }
         for (n, trader) in traders.into_iter().enumerate() {
@@ -1031,6 +1042,7 @@ impl World {
                 target_pos: None,
                 queue: false,
                 text: None,
+                facing: None,
             })?;
         }
         Ok(w)
@@ -1182,6 +1194,7 @@ mod content_tests {
             target_pos: Some(pos),
             queue: true,
             text: None,
+            facing: None,
         };
         let before = a.world.hash();
         assert_eq!(a.world.submit(order.clone()), Err(SimError::Locked));
@@ -1216,6 +1229,7 @@ mod content_tests {
             target_pos: None,
             queue: true,
             text: None,
+            facing: None,
         };
         assert_eq!(a.world.submit(order.clone()), Err(SimError::Locked));
         a.world
@@ -1275,6 +1289,7 @@ mod content_tests {
                     target_pos: None,
                     queue: false,
                     text: None,
+                    facing: None,
                 })
                 .unwrap();
             a.world.step();
@@ -1289,6 +1304,7 @@ mod content_tests {
                     target_pos: None,
                     queue: true,
                     text: None,
+                    facing: None,
                 })
                 .unwrap();
             for _ in 0..700 {
@@ -1353,7 +1369,8 @@ mod content_tests {
                 target_entity: None,
                 target_pos: None,
                 queue: true,
-                text: None
+                text: None,
+                facing: None
             }),
             Err(SimError::Obsolete)
         );
@@ -1394,6 +1411,7 @@ mod content_tests {
                     target_pos: None,
                     queue: true,
                     text: None,
+                    facing: None,
                 })
                 .unwrap();
             for _ in 0..400 {

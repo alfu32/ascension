@@ -421,6 +421,7 @@ mod match_tests {
                     target_pos: None,
                     queue: false,
                     text: None,
+                    facing: None,
                 })
                 .unwrap();
             for _ in 0..10 {

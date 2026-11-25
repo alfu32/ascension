@@ -112,6 +112,11 @@ impl StateHash {
             self.bytes(&[7]);
             self.u32(engaged.0);
         }
+        // A construction's facing (task 147), fed only when turned.
+        if order.facing != 0 {
+            self.bytes(&[8]);
+            self.bytes(&order.facing.to_le_bytes());
+        }
         self.u64(order.progress_ticks);
         self.u64(order.issued_tick);
         self.optional(order.total_ticks, Self::u64);
@@ -804,6 +809,10 @@ impl StateHash {
                 self.u32(b.type_id.0);
                 self.u32(b.owner.0);
                 self.pos(b.pos);
+                // Fed only when turned (task 147).
+                if b.facing != 0 {
+                    self.bytes(&b.facing.to_le_bytes());
+                }
             }
         }
         self.u64(vision.touched.len() as u64);
@@ -1007,6 +1016,7 @@ mod tests {
             target_pos: Some(Pos::default()),
             queue: true,
             text: None,
+            facing: None,
         };
         world.submit(command).unwrap();
         world.step();

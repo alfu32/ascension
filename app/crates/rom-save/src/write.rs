@@ -423,7 +423,7 @@ fn write_surfaces(tx: &Transaction, s: &Snapshot) -> Result<(), SaveError> {
             for (tile, b) in &v.memory {
                 let p = pos(b.pos);
                 tx.execute(
-                    "INSERT INTO vision_memory VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    "INSERT INTO vision_memory VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                     params![
                         body,
                         v.player.0,
@@ -435,6 +435,7 @@ fn write_surfaces(tx: &Transaction, s: &Snapshot) -> Result<(), SaveError> {
                         p[1],
                         p[2],
                         p[3],
+                        b.facing,
                     ],
                 )?;
             }
@@ -565,7 +566,7 @@ fn write_order(
     let m = o.movement.as_ref();
     let origin = opos(m.map(|m| m.origin));
     let goal = opos(m.map(|m| m.goal));
-    tx.prepare_cached(&format!("INSERT INTO \"order\" VALUES ({})", marks(48)))?
+    tx.prepare_cached(&format!("INSERT INTO \"order\" VALUES ({})", marks(49)))?
         .execute(params![
             *ord,
             place,
@@ -615,6 +616,7 @@ fn write_order(
             m.map(|m| m.repaths),
             o.pace,
             o.engaged.map(|e| e.0),
+            o.facing,
         ])?;
     for (n, (resource, amount)) in o.payment.iter().enumerate() {
         tx.execute(

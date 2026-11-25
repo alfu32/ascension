@@ -704,6 +704,7 @@ mod tests {
                 target_pos: Some(at),
                 queue: false,
                 text: None,
+                facing: None,
             })
             .unwrap();
         world.step();

@@ -506,6 +506,31 @@ pub struct HudMarker {
     pub from: Option<(u8, i32, i32)>,
 }
 
+/// One site of a fortification line or minefield being dragged (task 147b).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HudLineSite {
+    /// Face of a sphere planet (0 on a flat map).
+    pub face: u8,
+    /// Centre, east, in milli-tiles.
+    pub x: i32,
+    /// Centre, south, in milli-tiles.
+    pub y: i32,
+    /// Footprint across and down in tiles, turned with the facing.
+    pub width: u8,
+    /// See `width`.
+    pub height: u8,
+    /// Footprint length along the facing in tiles (a gate's width; 0 for a mine).
+    pub length: u8,
+    /// Facing in degrees, clockwise from the face's x axis.
+    pub facing: u16,
+    /// Owner colour of the future building.
+    pub owner: u8,
+    /// A gate (drawn open in the middle).
+    pub gate: bool,
+    /// Whether it can be placed now.
+    pub valid: bool,
+}
+
 /// The building footprint being placed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HudPlacement {

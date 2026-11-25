@@ -156,6 +156,7 @@ fn city_names_are_saved_and_a_format_19_save_names_its_cities() {
     let (city, _) = listed[0];
     w.submit(rom_sim::Command {
         text: Some("Caput Mundi".into()),
+        facing: None,
         ..command(&w, city, rom_sim::RENAME_CITY)
     })
     .unwrap();
@@ -175,5 +176,27 @@ fn city_names_are_saved_and_a_format_19_save_names_its_cities() {
         .map(|(id, name)| (id, name.to_owned()))
         .collect();
     assert_eq!(named, listed);
+    std::fs::remove_file(&path).unwrap();
+}
+
+/// Task 147b: a format 20 save (before facings on construction orders and in the fog's
+/// memory) loads with every such facing 0.
+#[test]
+fn a_format_20_save_loads_without_facings() {
+    let rules = rules();
+    let mut w = World::battle_scenario(rules.clone(), 3, 4).unwrap();
+    ticks(&mut w, 30);
+    let path = temp_path("format20");
+    rom_save::save(&path, &w, &info(&w), &ai()).unwrap();
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "ALTER TABLE \"order\" DROP COLUMN facing; ALTER TABLE vision_memory DROP COLUMN facing;
+             UPDATE match SET format = 20;",
+        )
+        .unwrap();
+    }
+    let (old, _, _) = rom_save::load(&path, &rules).unwrap();
+    assert_eq!(old.hash(), w.hash());
     std::fs::remove_file(&path).unwrap();
 }

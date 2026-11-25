@@ -29,6 +29,9 @@ pub struct Command {
     pub queue: bool,
     /// Free text: the new name of a `rename_city` order (task 144); None for every other kind.
     pub text: Option<String>,
+    /// A construction's facing in degrees, as [`crate::Entity::facing`], snapped to a multiple
+    /// of 45; None faces 0 (task 147). Every other kind ignores it.
+    pub facing: Option<u16>,
 }
 
 /// Order lifecycle; terminal states are counted and immediately discarded.
@@ -65,6 +68,8 @@ pub struct Order {
     pub target_entity: Option<EntityId>,
     /// Optional point; travel uses only `body`, the destination star id.
     pub target_pos: Option<Pos>,
+    /// A construction's facing, snapped to a multiple of 45 degrees (task 147); 0 otherwise.
+    pub facing: u16,
     /// Current lifecycle state.
     pub status: OrderStatus,
     /// Number of ticks this order has advanced.
@@ -107,6 +112,7 @@ impl Order {
             subject: None,
             target_entity,
             target_pos,
+            facing: 0,
             status: OrderStatus::Active,
             progress_ticks: 0,
             issued_tick: 0,

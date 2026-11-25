@@ -119,6 +119,7 @@ fn order(executor: EntityId, kind: &str) -> Command {
         target_pos: None,
         queue: false,
         text: None,
+        facing: None,
     }
 }
 

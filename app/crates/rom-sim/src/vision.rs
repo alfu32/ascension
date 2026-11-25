@@ -27,6 +27,8 @@ pub struct RememberedBuilding {
     pub owner: PlayerId,
     /// Its position when last seen.
     pub pos: Pos,
+    /// Its facing (task 147): it turns its footprint and its model.
+    pub facing: u16,
 }
 
 /// One entry of what a player knows about: a live entity, or a building in the fog.
@@ -467,6 +469,7 @@ impl World {
                     type_id: e.type_id,
                     owner: e.owner,
                     pos: e.pos,
+                    facing: e.facing,
                 })
                 .collect();
             self.ensure_vision_on(slot, player);

@@ -348,6 +348,7 @@ fn support_walks_with_an_attack_move_and_builders_mend_on_right_click() {
             target_pos: None,
             queue: false,
             text: None,
+            facing: None,
         })
         .expect("attack");
     for _ in 0..400 {
@@ -537,6 +538,7 @@ fn right_click_site_helps_build() {
             target_pos: Some(at(30, 30)),
             queue: false,
             text: None,
+            facing: None,
         })
         .expect("construct");
     fx.step(1);
@@ -830,6 +832,7 @@ fn placement_check_reports_valid_and_invalid() {
         target_pos: Some(pos),
         queue: false,
         text: None,
+        facing: None,
     };
     assert!(fx.world.submit(command(free)).is_ok());
     assert_eq!(
@@ -3341,6 +3344,7 @@ fn painter_world(alive: bool) -> (World, BodyId, BodyId) {
                 target_pos: None,
                 queue: false,
                 text: None,
+                facing: None,
             })
             .expect("bring life");
         world.step();
@@ -4061,6 +4065,7 @@ fn the_right_click_badge_names_the_order_per_target_kind() {
             target_pos: Some(at(46, 46)),
             queue: false,
             text: None,
+            facing: None,
         })
         .expect("construct");
     fx.step(1);

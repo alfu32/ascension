@@ -388,7 +388,7 @@ impl World {
             .expect("ward");
         let ward_type = &self.rules.entity_types[&ward_entity.type_id];
         if ward_type.class == EntityClass::Building {
-            let bounds = crate::construction::footprint(ward_type, ward);
+            let bounds = crate::construction::footprint(ward_type, ward, ward_entity.facing);
             if self.approach(id, order, ward, bounds) {
                 order.movement = None;
             }

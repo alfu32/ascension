@@ -234,6 +234,7 @@ fn orbital_craft_climb_to_orbit_and_board_a_carrier() {
         target_pos: None,
         queue: false,
         text: None,
+        facing: None,
     })
     .unwrap();
     for _ in 0..40 {
@@ -271,6 +272,7 @@ fn into_orbit(w: &mut World, key: &str, owner: PlayerId, over: Pos) -> rom_sim::
         target_pos: Some(over),
         queue: false,
         text: None,
+        facing: None,
     })
     .unwrap();
     for _ in 0..4000 {
@@ -411,6 +413,7 @@ fn the_warship_class_follows_the_enemy_ships_seen() {
                     target_pos: None,
                     queue: false,
                     text: None,
+                    facing: None,
                 })
                 .unwrap();
             } else {

@@ -47,6 +47,7 @@ mod stains;
 use globe_eye::{GlobeEye, GlobeFrame};
 use globe_eye::{clear_depth, cover_depth, eye_clip_planes};
 pub(crate) use icons::{ICON_OWNER, ModelPictures, PictureKind, STRIP_CELLS};
+pub(crate) use models::diagonal_stretch;
 pub(crate) use space::{OrbitalShip, SpaceLabel};
 
 /// Width of the ground in tiles.

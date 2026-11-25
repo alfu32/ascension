@@ -907,6 +907,7 @@ impl Controller {
             target_pos,
             queue,
             text: None,
+            facing: None,
         };
         match world.submit(command) {
             Ok(_) => {
@@ -1167,6 +1168,7 @@ impl Controller {
             target_pos: Some(at),
             queue: false,
             text: None,
+            facing: None,
         };
         match world.submit(command) {
             Ok(_) => {
@@ -1198,6 +1200,7 @@ impl Controller {
             target_pos: None,
             queue: false,
             text: None,
+            facing: None,
         };
         match world.submit(command) {
             Ok(_) => {
@@ -1298,6 +1301,7 @@ impl Controller {
             target_pos: Some(at),
             queue: false,
             text: None,
+            facing: None,
         };
         match world.submit(command) {
             Ok(_) => {
@@ -3244,6 +3248,7 @@ impl Controller {
                 target_pos: None,
                 queue: true,
                 text: None,
+                facing: None,
             })
             .collect();
         if self.submit(world, id, "stop", None, None, None, false) && !keep.is_empty() {

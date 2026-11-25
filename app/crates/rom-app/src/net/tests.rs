@@ -333,6 +333,7 @@ fn measure(name: &str, ticks: u64, jitter: Option<Duration>) -> Measured {
             target_pos: Some(pos),
             queue: false,
             text: None,
+            facing: None,
         })
         .find(|c| trial.game.world.submit(c.clone()).is_ok())
         .expect("a unit that walks");

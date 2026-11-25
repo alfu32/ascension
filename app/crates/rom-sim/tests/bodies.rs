@@ -130,6 +130,7 @@ fn command(w: &World, unit: EntityId, kind: &str) -> Command {
         target_pos: None,
         queue: false,
         text: None,
+        facing: None,
     }
 }
 

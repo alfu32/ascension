@@ -174,7 +174,11 @@ impl World {
     /// The square around a landed ship's landing disc: where its passengers come out and where
     /// troops board it (at least its own footprint).
     pub(crate) fn landed_bounds(&self, ship: &Entity) -> [i64; 4] {
-        let own = footprint(&self.rules.entity_types[&ship.type_id], ship.pos);
+        let own = footprint(
+            &self.rules.entity_types[&ship.type_id],
+            ship.pos,
+            ship.facing,
+        );
         let r = self.landing_radius(ship.id);
         let (x, y) = (i64::from(ship.pos.x), i64::from(ship.pos.y));
         [
@@ -674,6 +678,7 @@ impl World {
                         target_pos: Some(goal),
                         queue: false,
                         text: None,
+                        facing: None,
                     });
                 }
             }

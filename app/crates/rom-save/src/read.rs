@@ -227,6 +227,8 @@ fn flags(conn: &Connection, flag: &str) -> Result<Vec<EntityId>, SaveError> {
 }
 
 fn orders(conn: &Connection, place: &str) -> Result<Vec<(i64, bool, OrderSnapshot)>, SaveError> {
+    // Saves before format 21 (task 147) carry no facing: every order faces 0.
+    let format: i64 = conn.query_row("SELECT format FROM match", [], |r| r.get(0))?;
     let mut payments: BTreeMap<i64, Vec<(DefId, i64)>> = BTreeMap::new();
     let mut stmt =
         conn.prepare("SELECT ord, resource_id, amount FROM order_payment ORDER BY ord, seq")?;
@@ -303,6 +305,11 @@ fn orders(conn: &Connection, place: &str) -> Result<Vec<(i64, bool, OrderSnapsho
                 subject: ouint(row, 10, "order subject")?.map(DefId),
                 target_entity: ouint(row, 11, "order target")?.map(EntityId),
                 target_pos: opos_at(row, 12)?,
+                facing: if format >= 21 {
+                    uint(row, 48, "order facing")?
+                } else {
+                    0
+                },
                 home: opos_at(row, 16)?,
                 progress_ticks: u(int(row, 20)?),
                 total_ticks: oint(row, 21)?.map(u),
@@ -608,9 +615,14 @@ fn surfaces(conn: &Connection) -> Result<Vec<SurfaceSnapshot>, SaveError> {
             .vision
             .push(v);
     }
+    // Saves before format 21 (task 147) remember every building facing 0.
+    let format: i64 = conn.query_row("SELECT format FROM match", [], |r| r.get(0))?;
+    let facing_column = if format >= 21 { "facing" } else { "0" };
     for (body, player, tile, memory) in query_vec(
         conn,
-        "SELECT body_id, player_id, tile, entity_id, entity_type_id, owner_id, pos_x, pos_y, pos_face, pos_body FROM vision_memory ORDER BY body_id, player_id, tile, entity_id",
+        &format!(
+            "SELECT body_id, player_id, tile, entity_id, entity_type_id, owner_id, pos_x, pos_y, pos_face, pos_body, {facing_column} FROM vision_memory ORDER BY body_id, player_id, tile, entity_id"
+        ),
         |r| {
             Ok((
                 uint::<u32>(r, 0, "body")?,
@@ -621,6 +633,7 @@ fn surfaces(conn: &Connection) -> Result<Vec<SurfaceSnapshot>, SaveError> {
                     type_id: DefId(uint(r, 4, "type")?),
                     owner: PlayerId(uint(r, 5, "owner")?),
                     pos: pos_at(r, 6)?,
+                    facing: uint(r, 10, "memory facing")?,
                 },
             ))
         },

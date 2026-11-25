@@ -66,6 +66,7 @@ fn move_command(executor: EntityId, target: Pos, queue: bool) -> Command {
         target_pos: Some(target),
         queue,
         text: None,
+        facing: None,
     }
 }
 
@@ -79,6 +80,7 @@ fn untargeted(executor: EntityId, kind: &str, queue: bool) -> Command {
         target_pos: None,
         queue,
         text: None,
+        facing: None,
     }
 }
 

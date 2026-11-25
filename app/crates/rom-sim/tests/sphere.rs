@@ -84,6 +84,7 @@ fn order(w: &World, unit: EntityId, kind: &str, pos: Pos, queue: bool) -> Comman
         target_pos: Some(pos),
         queue,
         text: None,
+        facing: None,
     }
 }
 
@@ -583,6 +584,7 @@ fn oil_placement_obeys_radius_and_whole_footprint_borders_at_edges_and_corners()
                         target_pos: Some(target),
                         queue: false,
                         text: None,
+                        facing: None,
                     });
                     if let Some(error) = &expected {
                         assert_eq!(
@@ -659,6 +661,7 @@ fn resource_discovery_tracks_each_players_age_and_research_without_restarting() 
             target_pos: Some(site),
             queue: false,
             text: None,
+            facing: None,
         };
         assert_eq!(w.submit(construct.clone()), Err(SimError::Locked));
         w.submit(Command {
@@ -670,6 +673,7 @@ fn resource_discovery_tracks_each_players_age_and_research_without_restarting() 
             target_pos: None,
             queue: false,
             text: None,
+            facing: None,
         })
         .unwrap();
         for _ in 0..10 {

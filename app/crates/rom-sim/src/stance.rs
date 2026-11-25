@@ -251,6 +251,7 @@ impl World {
                 target_pos: None,
                 queue: false,
                 text: None,
+                facing: None,
             })
             .is_ok()
         {

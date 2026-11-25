@@ -113,6 +113,8 @@ pub struct OrderSnapshot {
     pub target_entity: Option<EntityId>,
     /// Point target.
     pub target_pos: Option<Pos>,
+    /// A construction's facing (task 147); 0 otherwise.
+    pub facing: u16,
     /// Lifecycle state.
     pub status: OrderStatus,
     /// Ticks advanced.
@@ -659,6 +661,7 @@ fn order_snapshot(o: &Order) -> OrderSnapshot {
         subject: o.subject,
         target_entity: o.target_entity,
         target_pos: o.target_pos,
+        facing: o.facing,
         status: o.status.clone(),
         progress_ticks: o.progress_ticks,
         issued_tick: o.issued_tick,
@@ -697,6 +700,7 @@ fn order_from(o: OrderSnapshot) -> Order {
         subject: o.subject,
         target_entity: o.target_entity,
         target_pos: o.target_pos,
+        facing: o.facing,
         status: o.status,
         progress_ticks: o.progress_ticks,
         issued_tick: o.issued_tick,
@@ -1331,6 +1335,7 @@ impl World {
         for id in &ids {
             let e = world.entity(*id).expect("restored entity");
             let (type_id, pos, container) = (e.type_id, e.pos, e.container_id);
+            let facing = e.facing;
             let side = world.side_of(e.owner);
             let Some(slot) = world.slot_of(pos.body) else {
                 return Err(bad("entity on a body without a surface"));
@@ -1342,9 +1347,13 @@ impl World {
                 world.surfaces[slot].spatial.insert(*id, pos);
             }
             let et = &rules.entity_types[&type_id];
-            world.surfaces[slot]
-                .pathing
-                .occupy(et, pos.face, footprint(et, pos), true, side);
+            world.surfaces[slot].pathing.occupy(
+                et,
+                pos.face,
+                footprint(et, pos, facing),
+                true,
+                side,
+            );
             let motion = (container.is_none() && world.walks(*id))
                 .then(|| Motion::of(&rules, type_id))
                 .flatten();
